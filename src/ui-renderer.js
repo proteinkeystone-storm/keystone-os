@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPad, getOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog } from './pads-loader.js';
-// pads-data.js reste le fallback embarqué — pads-loader.js le charge si disponible
+import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
 import {
     initGridEngine, getSavedOrder,
@@ -980,6 +980,9 @@ function _buildModal(pad, tool) {
     const inner = document.getElementById('modal-inner');
     if (!inner) return;
 
+    // ── Artefacts → rendu spécialisé ───────────────────────────
+    if (pad.type === 'artifact') { _buildArtifactModal(inner, pad, tool); return; }
+
     const fieldsHTML = pad.fields.map(_buildField).join('');
     const engine     = getActiveEngine();
     const apiKey     = loadKey(ENGINE_TO_PROVIDER[engine] || 'anthropic');
@@ -1168,6 +1171,156 @@ function _buildModal(pad, tool) {
     _updatePromptPreview(pad);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// MODAL — Artefact (Sprint 3)
+// ═══════════════════════════════════════════════════════════════
+function _buildArtifactModal(inner, pad, tool) {
+    const engine    = getActiveEngine();
+    const apiKey    = loadKey(ENGINE_TO_PROVIDER[engine] || 'anthropic');
+    const hasKey    = !!apiKey;
+
+    const _nomenId  = tool?.id  || pad.id;
+    const _catCode  = _nomenId.split('-')[1] || '';
+    const _catLabel = _CAT_LABELS[_catCode] || _catCode;
+
+    // Prévisualisation des composants attendus
+    const schema     = pad.artifact_config?.output_schema || {};
+    const schemaKeys = Object.entries(schema);
+    const chipPreview = schemaKeys.length
+        ? schemaKeys.map(([, def]) =>
+            `<span class="artifact-schema-chip">${COMP_ICONS[def.component] || '◈'} ${def.label}</span>`
+          ).join('')
+        : '<span style="color:var(--text-muted);font-size:11px">Aucun composant défini</span>';
+
+    const generateBtn = hasKey
+        ? `<button class="btn-generate" id="btn-generate">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+               Générer l'artefact
+           </button>`
+        : `<button class="no-api-hint" id="no-api-link" type="button">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+               Configurer une clé API pour générer
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0;opacity:.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+           </button>`;
+
+    inner.innerHTML = `
+        <div class="modal-handle"></div>
+
+        <div class="modal-head">
+            <div class="modal-ico">${ICONS[pad.icon] || ICONS['zap']}</div>
+            <div class="modal-meta">
+                <div class="modal-code">${_nomenId} — ${_catLabel}</div>
+                <div class="modal-title">${pad.title}</div>
+                <div class="modal-subtitle">${pad.subtitle}</div>
+                <div class="modal-engine-chip">
+                    <div class="modal-engine-dot" style="background:#6496ff"></div>
+                    Artefact JSON · <strong>${pad.ai_optimized}</strong>
+                </div>
+            </div>
+            <div class="modal-rating">
+                <div class="modal-rating-lbl">Note</div>
+                <div class="modal-rating-stars" id="modal-rating-stars">
+                    <span class="rating-star" data-v="1">★</span>
+                    <span class="rating-star" data-v="2">★</span>
+                    <span class="rating-star" data-v="3">★</span>
+                    <span class="rating-star" data-v="4">★</span>
+                    <span class="rating-star" data-v="5">★</span>
+                </div>
+            </div>
+            <button class="modal-close" id="modal-close-btn" aria-label="Fermer">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+            <!-- GAUCHE : contexte + bouton génération -->
+            <div class="modal-form">
+                ${pad.notice ? `<div class="tool-notice open">${_renderNotice(pad.notice)}</div>` : ''}
+                <div class="artifact-compose-zone">
+                    <div class="artifact-compose-label">
+                        <span style="color:#6496ff;font-size:13px">◈</span>
+                        Composants attendus
+                    </div>
+                    <div class="artifact-schema-chips">${chipPreview}</div>
+                </div>
+                <div class="form-field full" style="margin-bottom:0">
+                    <label class="form-label" style="font-size:11px;letter-spacing:.04em;color:var(--text-muted)">
+                        Contexte additionnel <span style="font-weight:400;text-transform:none">(optionnel)</span>
+                    </label>
+                    <textarea id="artifact-context" class="form-textarea"
+                              placeholder="Adresse, superficie, budget, données spécifiques à injecter…"
+                              style="min-height:110px;resize:vertical"></textarea>
+                </div>
+                ${generateBtn}
+            </div>
+
+            <!-- DROITE : zone rendu composants -->
+            <div class="modal-result-zone">
+                <div class="result-lbl" id="result-lbl">Résultat de l'artefact</div>
+
+                <div class="artifact-empty-state" id="artifact-empty-state">
+                    <div class="artifact-empty-icon">🔷</div>
+                    <p>Appuyez sur <strong>"Générer l'artefact"</strong><br>pour lancer l'analyse IA</p>
+                </div>
+
+                <div id="artifact-result" style="display:none"></div>
+
+                <div class="result-actions" id="artifact-actions" style="display:none">
+                    <button class="action-btn" id="btn-artifact-copy-json">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copier JSON brut
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // ── Étoiles de notation ──────────────────────────────────────
+    const _ratingKey  = 'ks_rating_' + (pad.id || pad.padKey);
+    const savedRating = parseInt(localStorage.getItem(_ratingKey) || '0', 10);
+    const starsEl     = document.getElementById('modal-rating-stars');
+    if (starsEl) {
+        starsEl.querySelectorAll('.rating-star').forEach(s =>
+            s.classList.toggle('on', parseInt(s.dataset.v, 10) <= savedRating)
+        );
+        starsEl.addEventListener('click', e => {
+            const star = e.target.closest('.rating-star');
+            if (!star) return;
+            e.stopPropagation();
+            const val = parseInt(star.dataset.v, 10);
+            localStorage.setItem(_ratingKey, val);
+            starsEl.querySelectorAll('.rating-star').forEach(s =>
+                s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val)
+            );
+        });
+    }
+
+    // ── Fermeture ────────────────────────────────────────────────
+    document.getElementById('modal-close-btn')?.addEventListener('click', closeTool);
+
+    // ── Génération ───────────────────────────────────────────────
+    if (hasKey) {
+        document.getElementById('btn-generate')?.addEventListener('click', () => _handleGenerate(pad));
+    } else {
+        document.getElementById('no-api-link')?.addEventListener('click', () => {
+            closeTool();
+            setTimeout(() => openSettingsTo('acc-api'), 120);
+        });
+    }
+
+    // ── Copier JSON brut ─────────────────────────────────────────
+    document.getElementById('btn-artifact-copy-json')?.addEventListener('click', () => {
+        const raw = document.getElementById('artifact-result')?.dataset.rawJson || '';
+        navigator.clipboard.writeText(raw).then(() => {
+            const btn = document.getElementById('btn-artifact-copy-json');
+            if (!btn) return;
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copié !';
+            btn.classList.add('active');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2000);
+        });
+    });
+}
+
 function _buildField(f) {
     const spanCls = f.span === 'full' ? ' full' : '';
     const req     = f.required ? ' <span class="req">*</span>' : '';
@@ -1308,39 +1461,79 @@ function _saveToLibrary(pad, prompt) {
 }
 
 async function _handleGenerate(pad) {
-    const form = document.getElementById('tool-form');
-    const formData = {};
-    if (form) {
-        form.querySelectorAll('[name]').forEach(el => { formData[el.name] = el.value.trim(); });
+    const isArtifact = pad.type === 'artifact';
+    const engine     = getActiveEngine();
+    const apiKey     = loadKey(ENGINE_TO_PROVIDER[engine] || 'anthropic');
+    const btn        = document.getElementById('btn-generate');
+
+    // ── Construction du prompt ───────────────────────────────────
+    let prompt;
+    if (isArtifact) {
+        // Preamble (schéma JSON forcé) + instructions métier du moteur actif
+        const preamble      = pad.artifact_config?.json_preamble || '';
+        const instructions  = pad.engines?.prompts?.[engine] || pad.system_prompt || '';
+        const extraContext  = document.getElementById('artifact-context')?.value?.trim() || '';
+        prompt = preamble
+            + (instructions ? '\n\n' + instructions : '')
+            + (extraContext  ? '\n\nContexte additionnel :\n' + extraContext : '');
+    } else {
+        const form     = document.getElementById('tool-form');
+        const formData = {};
+        form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = el.value.trim(); });
+        // Utilise le prompt du moteur actif ; fallback sur system_prompt (rétro-compat)
+        const tpl = pad.engines?.prompts?.[engine] || pad.system_prompt || '';
+        prompt = _interpolate(tpl, formData);
     }
 
-    const engine    = getActiveEngine();
-    const apiKey    = loadKey(ENGINE_TO_PROVIDER[engine] || 'anthropic');
-    const prompt    = _interpolate(pad.system_prompt, formData);
-    const btn       = document.getElementById('btn-generate');
-    const contentEl = document.getElementById('result-content');
-    const copyBtn   = document.getElementById('btn-copy');
+    // ── Refs UI selon le mode ────────────────────────────────────
+    const contentEl      = isArtifact ? null : document.getElementById('result-content');
+    const artifactResult = isArtifact ? document.getElementById('artifact-result')      : null;
+    const emptyState     = isArtifact ? document.getElementById('artifact-empty-state') : null;
+    const copyBtn        = isArtifact ? null : document.getElementById('btn-copy');
+    const resultLbl      = document.getElementById('result-lbl');
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Génération en cours…';
-    contentEl.className = 'result-content show';
-    contentEl.textContent = '';
-    if (copyBtn) copyBtn.style.display = 'none';
 
-    // DST — génération en cours (P2, permanent jusqu'à fin)
+    if (contentEl) { contentEl.className = 'result-content show'; contentEl.textContent = ''; }
+    if (copyBtn)   copyBtn.style.display = 'none';
+
     setKeystoneStatus(`Génération en cours avec ${engine}…`, 'info', 0, 2);
 
     try {
         const result = await ApiHandler.callEngine(engine, prompt, apiKey);
-        _typewriter(contentEl, result);
-        // DST — succès (P2, 5s) puis retour au message de bienvenue
+
+        if (isArtifact) {
+            // ── Rendu composants ─────────────────────────────────
+            if (emptyState) emptyState.style.display = 'none';
+            if (resultLbl)  resultLbl.textContent = 'Résultat de l\'artefact';
+            artifactResult.style.display = 'block';
+            artifactResult.dataset.rawJson = result; // pour le bouton "Copier JSON"
+            renderArtifactResult(artifactResult, result, pad.artifact_config?.output_schema || {});
+            const actions = document.getElementById('artifact-actions');
+            if (actions) actions.style.display = 'flex';
+        } else {
+            // ── Rendu texte ──────────────────────────────────────
+            _typewriter(contentEl, result);
+        }
+
         setKeystoneStatus(`${pad.title} — Réponse générée avec succès.`, 'info', 5000, 2);
+
     } catch (err) {
-        contentEl.textContent = `❌  Erreur : ${err.message}`;
+        if (isArtifact) {
+            if (emptyState) emptyState.style.display = 'none';
+            artifactResult.style.display = 'block';
+            artifactResult.innerHTML = `<div class="artifact-error"><span class="artifact-error-icon">❌</span> ${err.message}</div>`;
+        } else {
+            contentEl.textContent = `❌  Erreur : ${err.message}`;
+        }
         setKeystoneStatus(`Erreur de génération : ${err.message}`, 'alert', 6000, 2);
+
     } finally {
         btn.disabled = false;
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Générer avec ${engine}`;
+        btn.innerHTML = isArtifact
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Régénérer l'artefact`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Générer avec ${engine}`;
         if (copyBtn) copyBtn.style.display = 'flex';
     }
 }

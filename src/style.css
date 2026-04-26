@@ -3638,3 +3638,227 @@ html.light-mode .btn-save-vault-secondary {
   color: var(--text) !important;
   border-color: rgba(13,27,62,.12);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ARTIFACT RENDERER — Sprint 3
+   Composants visuels JSON : Gauge · StatusBadge · RichText ·
+   KeyPointsList · DataCard
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Modal artifact ── */
+.artifact-compose-zone {
+  background: rgba(100,150,255,.06);
+  border: 1px solid rgba(100,150,255,.15);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.artifact-compose-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.artifact-schema-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.artifact-schema-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: rgba(100,150,255,.1);
+  border: 1px solid rgba(100,150,255,.2);
+  border-radius: 20px;
+  font-size: 11px;
+  color: #6496ff;
+  font-weight: 600;
+}
+
+/* ── Empty state (avant génération) ── */
+.artifact-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 220px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  gap: 4px;
+}
+.artifact-empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .6; }
+
+/* ── Grille de composants ── */
+.artifact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+/* ── Carte base ── */
+.artifact-card {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  will-change: transform, opacity;
+}
+.artifact-card--full { grid-column: 1 / -1; }
+.artifact-card-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* ── Gauge ── */
+.gauge-track {
+  height: 6px;
+  background: rgba(255,255,255,.1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.gauge-fill {
+  height: 100%;
+  border-radius: 99px;
+  width: 0%;
+}
+.gauge-footer {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.gauge-value {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  line-height: 1;
+}
+.gauge-unit  { font-size: 12px; font-weight: 600; opacity: .7; }
+.gauge-pct   { font-size: 11px; margin-left: auto; }
+
+/* ── Status Badge ── */
+.artifact-status-badge { display: flex; flex-direction: column; justify-content: center; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  align-self: flex-start;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Rich Text ── */
+.rich-text-body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Key Points ── */
+.kp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.kp-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.kp-icon { flex-shrink: 0; font-size: 11px; margin-top: 3px; }
+
+/* ── Data Card ── */
+.artifact-data-card { display: flex; flex-direction: column; justify-content: center; }
+.dc-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.dc-number {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--gold);
+  line-height: 1;
+}
+.dc-unit   { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.dc-prefix { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+/* ── Carte manquante / erreur ── */
+.artifact-missing {
+  border-color: rgba(224,92,92,.2);
+  background: rgba(224,92,92,.04);
+}
+.artifact-missing-hint {
+  font-size: 12px;
+  color: #e05c5c;
+  opacity: .7;
+}
+.artifact-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(224,92,92,.08);
+  border: 1px solid rgba(224,92,92,.2);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--text);
+  width: 100%;
+}
+.artifact-error-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.artifact-raw {
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  padding: 10px;
+  background: rgba(0,0,0,.2);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ── Light mode ── */
+html.light-mode .artifact-card {
+  background: rgba(13,27,62,.03);
+  border-color: rgba(13,27,62,.08);
+}
+html.light-mode .gauge-track { background: rgba(13,27,62,.1); }
+html.light-mode .artifact-raw { background: rgba(13,27,62,.05); }

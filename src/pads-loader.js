@@ -250,17 +250,19 @@ function _indexByPadKey(pads) {
     const map = {};
     pads.forEach(pad => {
         const key = pad.padKey || pad.id;
-        // Normalise la structure pour être compatible avec PADS_DATA
         map[key] = {
-            id:           pad.id,
-            padKey:       pad.padKey || pad.id,
-            title:        pad.title        || '',
-            subtitle:     pad.subtitle     || '',
-            ai_optimized: pad.ai_optimized || 'Claude',
-            icon:         pad.icon         || 'zap',
-            notice:       pad.notice       || '',
-            fields:       pad.fields       || [],
-            system_prompt:pad.system_prompt|| '',
+            id:              pad.id,
+            padKey:          pad.padKey          || pad.id,
+            type:            pad.type            || 'tool',
+            title:           pad.title           || '',
+            subtitle:        pad.subtitle        || '',
+            ai_optimized:    pad.ai_optimized    || 'Claude',
+            icon:            pad.icon            || 'zap',
+            notice:          pad.notice          || '',
+            fields:          pad.fields          || [],
+            system_prompt:   pad.system_prompt   || '',
+            engines:         pad.engines         || null,
+            artifact_config: pad.artifact_config || null,
         };
     });
     return map;
