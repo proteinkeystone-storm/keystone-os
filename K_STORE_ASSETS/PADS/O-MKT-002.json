@@ -1,0 +1,18 @@
+{
+  "id": "O-MKT-002",
+  "padKey": "A8",
+  "title": "Brief Photo / 3D",
+  "subtitle": "Brief créatif professionnel en 2 min",
+  "ai_optimized": "ChatGPT",
+  "icon": "brief",
+  "notice": "1. Choisissez \"Pack complet\" pour obtenir un brief exhaustif transmissible directement au prestataire.\n2. Décrivez précisément la direction artistique souhaitée — c'est ce qui évite les allers-retours.\n3. Le brief inclut un planning de production suggéré à valider avec votre prestataire.\n4. Sauvegardez en bibliothèque pour constituer votre référentiel de briefs par programme.",
+  "fields": [
+    { "id": "nom_programme", "label": "Programme",               "type": "text",     "placeholder": "ex: Résidence Azur", "required": true },
+    { "id": "type_support",  "label": "Type de support",         "type": "select",   "options": ["Photographies réelles","Images 3D / Rendu","Vidéo promotionnelle","Visite virtuelle 360°","Drone / Aérien","Pack complet"], "required": true },
+    { "id": "stade",         "label": "Stade du projet",         "type": "select",   "options": ["Terrain seul","Permis obtenu (plans)","Chantier en cours","Livraison imminente","Livré"] },
+    { "id": "ambiance",      "label": "Direction artistique",    "type": "select",   "options": ["Luxe & Prestige","Moderne & Épuré","Méditerranéen & Chaleureux","Éco & Nature","Urbain & Dynamique"] },
+    { "id": "cible",         "label": "Usage & Diffusion",       "type": "text",     "placeholder": "ex: Plaquette, réseaux sociaux, site web" },
+    { "id": "sujets",        "label": "Priorités & Contraintes", "type": "textarea", "placeholder": "Vues à valoriser, budget, délais, formats...", "span": "full" }
+  ],
+  "system_prompt": "Tu es un directeur artistique expert en communication immobilière neuf.\n\nBrief pour :\n- Programme : {{nom_programme}}\n- Support : {{type_support}}\n- Stade : {{stade}}\n- Direction artistique : {{ambiance}}\n- Usage : {{cible}}\n- Priorités : {{sujets}}\n\nLe brief inclut : 1) Direction artistique (palette, ambiance, références) 2) Liste des prises de vues / angles (numérotés) 3) Consignes lumière 4) Livrables (formats, résolutions, délais) 5) 3 références visuelles décrites 6) Planning de production suggéré."
+}

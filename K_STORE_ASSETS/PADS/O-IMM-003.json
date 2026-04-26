@@ -1,0 +1,17 @@
+{
+  "id": "O-IMM-003",
+  "padKey": "A3",
+  "title": "Emails Acquéreurs",
+  "subtitle": "Communication chantier personnalisée",
+  "ai_optimized": "Claude",
+  "icon": "mail",
+  "notice": "1. Le prénom du client est important — l'IA l'utilisera pour personnaliser le ton.\n2. Soyez précis dans \"Informations à transmettre\" : montants, dates, pièces demandées.\n3. Vous obtiendrez 2 variantes : formelle et chaleureuse. Choisissez selon le profil client.\n4. Après génération, relisez et ajoutez les éléments contractuels spécifiques à votre dossier.",
+  "fields": [
+    { "id": "nom_client",     "label": "Prénom du client",         "type": "text",     "placeholder": "ex: Marie", "required": true },
+    { "id": "nom_programme",  "label": "Programme",                "type": "text",     "placeholder": "ex: Les Jardins du Midi", "required": true },
+    { "id": "type_info",      "label": "Objet de l'email",         "type": "select",   "options": ["Avancement chantier","Date de livraison confirmée","Visite cloisons","Demande pièces","Appel de fonds","Remise clés","Relance sans réponse"], "required": true },
+    { "id": "date_evenement", "label": "Date / Échéance",          "type": "text",     "placeholder": "ex: 15 mai 2026" },
+    { "id": "infos_chantier", "label": "Informations à transmettre","type": "textarea","placeholder": "Détails, avancement %, montant, pièces demandées...", "span": "full" }
+  ],
+  "system_prompt": "Tu es un conseiller clientèle expert en promotion immobilière.\n\nEmail pour :\n- Client : {{nom_client}}\n- Programme : {{nom_programme}}\n- Objet : {{type_info}}\n- Date / Échéance : {{date_evenement}}\n- Informations : {{infos_chantier}}\n\nProduis 2 variantes :\n1. FORMELLE — ton corporate, structuré\n2. CHALEUREUSE — ton humain, empathique\n\nChaque email : introduction personnalisée, corps structuré, clôture soignée."
+}

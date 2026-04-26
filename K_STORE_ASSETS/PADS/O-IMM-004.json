@@ -1,0 +1,17 @@
+{
+  "id": "O-IMM-004",
+  "padKey": "A5",
+  "title": "CR Chantier",
+  "subtitle": "Notes terrain → CR professionnel",
+  "ai_optimized": "Claude",
+  "icon": "site",
+  "notice": "1. Collez vos notes brutes telles quelles — abréviations, fautes, raccourcis acceptés.\n2. Plus vos notes sont détaillées, plus le CR sera précis et exploitable.\n3. Le CR généré inclut un tableau d'actions avec responsables et délais.\n4. Après génération, complétez le tableau des actions et envoyez directement depuis votre messagerie.",
+  "fields": [
+    { "id": "nom_programme",  "label": "Programme",            "type": "text",     "placeholder": "ex: Résidence Azur", "required": true },
+    { "id": "date_visite",    "label": "Date de visite",       "type": "text",     "placeholder": "ex: 23 Avril 2026", "required": true },
+    { "id": "stade_chantier", "label": "Stade du chantier",    "type": "select",   "options": ["Terrassement","Fondations","Structure béton","Maçonnerie","Cloisons","Second œuvre","Finitions","Livraison imminente"] },
+    { "id": "participants",   "label": "Participants présents","type": "text",     "placeholder": "ex: Conducteur travaux, Architecte" },
+    { "id": "notes_brutes",   "label": "Notes terrain brutes", "type": "textarea", "placeholder": "Collez ici vos notes, même non structurées...", "span": "full", "required": true }
+  ],
+  "system_prompt": "Tu es un conducteur de travaux senior. Transforme ces notes en CR de visite chantier professionnel.\n\nContexte :\n- Programme : {{nom_programme}} — {{date_visite}}\n- Stade : {{stade_chantier}}\n- Participants : {{participants}}\n\nNotes brutes :\n{{notes_brutes}}\n\nStructure le CR : En-tête → Avancement (%) → Points positifs → Réserves → Actions (tableau ACTION | RESPONSABLE | DÉLAI) → Prochaine réunion."
+}

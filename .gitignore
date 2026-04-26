@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Chrome dev data
+.chrome-keystone/
+
+# Claude Code
+.claude/
+
+# SKILLS (doc interne, pas de code)
+SKILLS.txt
+
+# Launchers locaux (spécifiques à chaque machine)
+Lancer_KEYSTONE.bat
+Lancer_KEYSTONE.command

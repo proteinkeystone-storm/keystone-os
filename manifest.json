@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/web-manifest-combined.json",
+  "name": "Keystone OS",
+  "short_name": "Keystone",
+  "description": "Votre pôle d'intelligence artificielle pour la promotion immobilière.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/?ks_launch=1",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#07102a",
+  "theme_color": "#07102a",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "./LOGOS/Logo puce fond bleu.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./LOGOS/Logo puce fond bleu.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ouvrir le Dashboard",
+      "short_name": "Dashboard",
+      "description": "Accéder au dashboard Keystone OS",
+      "url": "/?ks_launch=1",
+      "icons": [{ "src": "./LOGOS/Logo puce fond bleu.svg", "sizes": "any" }]
+    }
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

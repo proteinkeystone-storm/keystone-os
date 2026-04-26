@@ -1,0 +1,18 @@
+{
+  "id": "O-IMM-005",
+  "padKey": "A6",
+  "title": "Analyste Foncier",
+  "subtitle": "Dossier foncier complet en 5 minutes",
+  "ai_optimized": "Claude",
+  "icon": "foncier",
+  "notice": "1. Vérifiez le zonage PLU avant toute analyse — c'est le point bloquant n°1.\n2. Renseignez le prix même approximatif : l'analyse de charge foncière est la plus-value principale.\n3. L'IA produit une recommandation GO/NO-GO — à compléter avec votre expertise terrain.\n4. Utilisez le résultat comme base de note interne ou de présentation aux associés.",
+  "fields": [
+    { "id": "commune",         "label": "Commune / Secteur",       "type": "text",     "placeholder": "ex: Ollioules, Var (83)", "required": true },
+    { "id": "surface_terrain", "label": "Surface terrain (m²)",    "type": "number",   "placeholder": "ex: 1500", "required": true },
+    { "id": "plu",             "label": "Zone PLU",                "type": "select",   "options": ["UA (Centre-ville)","UB (Pavillonnaire)","UC (Résidentiel)","UD (Mixte)","AU (À urbaniser)","N (Naturelle)","A (Agricole)","Inconnue"] },
+    { "id": "prix_foncier",    "label": "Prix du terrain (€)",     "type": "number",   "placeholder": "ex: 350000" },
+    { "id": "ces",             "label": "CES / Gabarit connu",     "type": "text",     "placeholder": "ex: CES 0.5, R+3 max, recul 5m" },
+    { "id": "contexte",        "label": "Contexte & Observations", "type": "textarea", "placeholder": "Environnement, servitudes, risques, accès...", "span": "full" }
+  ],
+  "system_prompt": "Tu es un analyste foncier expert en promotion immobilière dans le Sud de la France.\n\nFoncier :\n- Commune : {{commune}}\n- Surface : {{surface_terrain}} m²\n- Zone PLU : {{plu}}\n- Prix : {{prix_foncier}} €\n- Gabarit : {{ces}}\n- Contexte : {{contexte}}\n\nAnalyse : 1) Potentiel constructible estimé 2) Faisabilité réglementaire 3) Analyse financière (charge foncière / m² SHAB) 4) Risques identifiés 5) Recommandation GO / NO-GO argumentée."
+}

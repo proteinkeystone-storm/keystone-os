@@ -1,0 +1,18 @@
+{
+  "id": "O-MKT-001",
+  "padKey": "A4",
+  "title": "Posts Réseaux Sociaux",
+  "subtitle": "Facebook · Instagram · LinkedIn",
+  "ai_optimized": "Gemini",
+  "icon": "social",
+  "notice": "1. Sélectionnez \"Les 3 réseaux\" pour obtenir une version adaptée à chaque plateforme.\n2. Décrivez le visuel avec précision — l'IA adapte le texte à l'image suggérée.\n3. Gemini est recommandé pour ce type de contenu créatif multiplateforme.\n4. Fréquence conseillée : 2-3 posts/semaine. Sauvegardez en bibliothèque pour créer votre calendrier éditorial.",
+  "fields": [
+    { "id": "nom_programme", "label": "Programme",           "type": "text",     "placeholder": "ex: Résidence Azur", "required": true },
+    { "id": "reseau",        "label": "Réseau(x) cible(s)",  "type": "select",   "options": ["Facebook uniquement","Instagram uniquement","LinkedIn uniquement","Facebook + Instagram","Les 3 réseaux"], "required": true },
+    { "id": "type_post",     "label": "Type de contenu",     "type": "select",   "options": ["Lancement programme","Avancement chantier","Témoignage client","Conseil investissement","Portes ouvertes","Livraison / Remise clés"] },
+    { "id": "ton",           "label": "Ton / Ambiance",      "type": "select",   "options": ["Professionnel & Expert","Humain & Proche","Inspirant & Premium","Éducatif & Pédagogique"] },
+    { "id": "visuel",        "label": "Description du visuel","type": "text",    "placeholder": "ex: Vue terrasse avec mer en fond" },
+    { "id": "accroche",      "label": "Message clé & infos", "type": "textarea", "placeholder": "Chiffres, date, prix, avancement...", "span": "full" }
+  ],
+  "system_prompt": "Tu es un expert en marketing digital immobilier et social media.\n\nPosts pour :\n- Programme : {{nom_programme}}\n- Réseau(x) : {{reseau}}\n- Contenu : {{type_post}}\n- Ton : {{ton}}\n- Visuel : {{visuel}}\n- Message clé : {{accroche}}\n\nPour chaque réseau : post adapté + hashtags (5-15) + suggestion emoji + variante story."
+}

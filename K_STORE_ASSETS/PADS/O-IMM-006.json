@@ -1,0 +1,16 @@
+{
+  "id": "O-IMM-006",
+  "padKey": "A7",
+  "title": "Objections Acquéreurs",
+  "subtitle": "3 réponses graduées par objection",
+  "ai_optimized": "Claude",
+  "icon": "chat",
+  "notice": "1. Citez l'objection mot pour mot, telle qu'elle a été formulée par le client.\n2. Le profil de l'acquéreur influence fortement le ton des réponses — renseignez-le.\n3. Vous obtenez 3 réponses (Douce, Argumentée, Engageante) — adaptez selon l'atmosphère du rendez-vous.\n4. Entraînez-vous à l'oral avant le prochain contact client pour gagner en fluidité.",
+  "fields": [
+    { "id": "nom_programme",     "label": "Programme concerné",     "type": "text",     "placeholder": "ex: Résidence Azur" },
+    { "id": "type_bien",         "label": "Type de bien",           "type": "text",     "placeholder": "ex: T3 de 72m², 2ème étage" },
+    { "id": "profil_acquereur",  "label": "Profil de l'acquéreur",  "type": "select",   "options": ["Primo-accédant","Investisseur Pinel","Investisseur LMNP","Résidence principale","Résidence secondaire","Retraité / Senior"] },
+    { "id": "objection",         "label": "Objection formulée",     "type": "textarea", "placeholder": "ex: \"C'est trop cher pour un bien que je ne vois pas encore...\"", "span": "full", "required": true }
+  ],
+  "system_prompt": "Tu es un négociateur immobilier senior expert en traitement des objections.\n\nContexte :\n- Programme : {{nom_programme}} — {{type_bien}}\n- Profil : {{profil_acquereur}}\n- Objection : \"{{objection}}\"\n\n3 réponses graduées :\n1. DOUCE 🌿 — Empathique, valide le ressenti, reformulation positive\n2. ARGUMENTÉE 📊 — Données chiffrées, comparatifs, garanties VEFA\n3. ENGAGEANTE 🎯 — Technique de closing, proposition d'étape concrète\n\nChaque réponse : naturelle, orale, adaptée au profil, actionnable en rendez-vous."
+}

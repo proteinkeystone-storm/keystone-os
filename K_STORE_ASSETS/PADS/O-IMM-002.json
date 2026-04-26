@@ -1,0 +1,19 @@
+{
+  "id": "O-IMM-002",
+  "padKey": "A2",
+  "title": "Annonces Commerciales",
+  "subtitle": "3 versions de textes percutants",
+  "ai_optimized": "ChatGPT",
+  "icon": "ad",
+  "notice": "1. Renseignez le programme, la ville et les atouts — c'est l'essentiel.\n2. Le prompt génère 3 versions d'annonces (Luxe, Investissement, Lifestyle).\n3. Dans votre IA, demandez : \"Raccourcis la version 2 à 40 mots\" ou \"Adapte pour SeLoger\".\n4. Tip : copiez la version retenue directement dans votre logiciel de diffusion.",
+  "fields": [
+    { "id": "nom_programme", "label": "Nom du programme",  "type": "text",   "placeholder": "ex: Résidence Azur", "required": true },
+    { "id": "ville",         "label": "Ville / Quartier",  "type": "text",   "placeholder": "ex: Marseille 8ème", "required": true },
+    { "id": "type_bien",     "label": "Type de bien",      "type": "select", "options": ["Appartement T2","Appartement T3","Appartement T4","T5 et plus","Villa","Penthouse"] },
+    { "id": "surface",       "label": "Surface (m²)",      "type": "number", "placeholder": "ex: 68" },
+    { "id": "prix",          "label": "Prix (€)",          "type": "number", "placeholder": "ex: 245000" },
+    { "id": "dispositif",    "label": "Dispositif fiscal", "type": "select", "options": ["Aucun","Pinel","Pinel+","LMNP","Déficit foncier","Malraux"] },
+    { "id": "atouts",        "label": "Atouts & points forts", "type": "textarea", "placeholder": "Vue mer, terrasse, parking, livraison T4 2026...", "span": "full" }
+  ],
+  "system_prompt": "Tu es un copywriter expert en immobilier neuf. Rédige 3 versions d'annonces commerciales percutantes.\n\nBien :\n- Programme : {{nom_programme}} — {{ville}}\n- Type : {{type_bien}} de {{surface}}m² — {{prix}} €\n- Dispositif fiscal : {{dispositif}}\n- Atouts : {{atouts}}\n\nPour chaque version : 1 accroche (max 10 mots), 1 description (50 mots max), 1 call-to-action.\n1. LUXE & PRESTIGE — ton premium, vocabulaire élégant\n2. INVESTISSEMENT — ROI, rentabilité, avantages fiscaux\n3. LIFESTYLE — émotion, mode de vie, bien-être"
+}
