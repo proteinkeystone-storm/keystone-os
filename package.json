@@ -1,0 +1,13 @@
+{
+  "name": "keystone-os",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Keystone OS — Pôle IA pour la promotion immobilière",
+  "type": "module",
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

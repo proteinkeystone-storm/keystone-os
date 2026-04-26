@@ -1,8 +1,8 @@
 import { loadVault, isVaultEmpty }             from './vault.js';
-import { renderDashboard, initSettings }       from './ui-renderer.js';
+import { renderDashboard, initSettings, initTools } from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';
 import { initLockScreen }                     from './lockscreen.js';
-import { loadPads, fetchRemoteCatalog, addLifetimePurchase } from './pads-loader.js';
+import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
 import { initOnboarding }                     from './onboarding.js';
 
 // ── Démarrage complet du dashboard ─────────────────────────────
@@ -31,8 +31,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 2. Chargement des PADs (nécessaire aussi pour le catalogue d'onboarding)
     const pads = await loadPads();
 
-    // 2b. Catalogue distant — fire & forget (SWR, pas bloquant pour le boot)
-    fetchRemoteCatalog().catch(() => {});
+    // 2b. Catalogue local en priorité (rapide, même origine) — légèrement bloquant
+    //     pour que getArtefactList() soit disponible avant le premier render.
+    await fetchRemoteCatalog().catch(() => {});
+
+    // 2c. Injection des listes dynamiques dans le renderer (Master Renderer)
+    initTools(getToolList(), getArtefactList());
 
     // 3. Sprint 5.2 — Vault vide + jamais onboardé → Onboarding
     const onboarded = localStorage.getItem('ks_onboarded');
@@ -86,7 +90,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ── Sprint 4 — Re-render barre Key-Store dès que le catalogue arrive ─
+    // (SWR revalidation après 5 min) — réinjecte les artefacts mis à jour
     window.addEventListener('ks-catalog-loaded', () => {
+        initTools(getToolList(), getArtefactList());
         renderDashboard();
     });
 });

@@ -1,9 +1,10 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "remoteUrl": "https://raw.githubusercontent.com/proteinkeystone-storm/keystone-os/main/K_STORE_ASSETS/catalog.json",
   "pads": [
     "O-IMM-001", "O-IMM-002", "O-IMM-003",
     "O-MKT-001", "O-MKT-002",
-    "O-IMM-004", "O-IMM-005", "O-IMM-006"
+    "O-ANL-001", "O-ANL-002",
+    "O-ADM-001"
   ]
 }

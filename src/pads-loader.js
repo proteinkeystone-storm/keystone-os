@@ -50,6 +50,39 @@ export async function loadPads() {
     }
 }
 
+// ── Liste dynamique des outils (compatible format TOOLS) ────────
+/**
+ * Dérive le tableau TOOLS depuis le cache PAD.
+ * Chaque PAD JSON devient une entrée { id, padKey, name, desc, icon, engine }.
+ */
+export function getToolList() {
+    const cache = _padsCache || PADS_DATA;
+    return Object.values(cache).map(pad => ({
+        id:     pad.id,
+        padKey: pad.padKey || pad.id,
+        name:   pad.title    || pad.id,
+        desc:   pad.subtitle || '',
+        icon:   pad.icon     || 'zap',
+        engine: pad.ai_optimized || 'Claude',
+    }));
+}
+
+// ── Liste dynamique des artefacts (depuis catalog.json) ─────────
+/**
+ * Dérive le tableau ARTEFACTS depuis le catalogue chargé.
+ * Filtre les entrées dont l'ID commence par 'A-'.
+ */
+export function getArtefactList() {
+    if (!_catalogCache?.tools) return [];
+    return _catalogCache.tools
+        .filter(t => t.id.startsWith('A-'))
+        .map(t => ({
+            id:   t.id,
+            name: t.title || t.id,
+            icon: t.icon  || 'zap',
+        }));
+}
+
 // ── Accès direct à un pad par padKey ou NOMEN-K id ─────────────
 export function getPad(keyOrId) {
     const cache = _padsCache || PADS_DATA;

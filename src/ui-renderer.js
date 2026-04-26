@@ -32,35 +32,22 @@ const ICONS = {
     'table':   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
 };
 
-// ── Données dashboard — NOMEN-K : [TYPE]-[CAT]-[NUM] ─────────
+// ── Données dashboard — pilotées par PAD JSONs + catalog.json ───
+// TOOLS    : peuplé au boot via initTools() depuis pads-loader.getToolList()
+// ARTEFACTS: peuplé au boot via initTools() depuis pads-loader.getArtefactList()
 // ID_KSTORE immuable · USER_LABEL modifiable · SKU canonique affiché en Shell
-// padKey → clé dans le pads-loader (formulaires complets chargés depuis JSON)
-const TOOLS = [
-    // Outils Immobilier
-    { id:'O-IMM-001', padKey:'A1', name:'Notices VEFA',          desc:'Générez vos notices descriptives en 15 sec',   icon:'vefa',    engine:'Claude'   },
-    { id:'O-IMM-002', padKey:'A2', name:'Annonces Commerciales', desc:'Textes de vente percutants en 30 sec',          icon:'ad',      engine:'ChatGPT'  },
-    { id:'O-IMM-003', padKey:'A3', name:'Emails Acquéreurs',     desc:'Communication chantier personnalisée',          icon:'mail',    engine:'Claude'   },
-    // Outils Marketing
-    { id:'O-MKT-001', padKey:'A4', name:'Posts Réseaux Sociaux', desc:'Facebook · Instagram · LinkedIn',              icon:'social',  engine:'Gemini'   },
-    { id:'O-MKT-002', padKey:'A8', name:'Brief Photo / 3D',      desc:'Brief créatif professionnel en 2 minutes',     icon:'brief',   engine:'ChatGPT'  },
-    // Outils Analyse
-    { id:'O-ANL-001', padKey:'A5', name:'CR Chantier',           desc:'Notes terrain → CR professionnel',             icon:'site',    engine:'Claude'   },
-    { id:'O-ANL-002', padKey:'A6', name:'Analyste Foncier',      desc:'Dossier foncier complet en 5 minutes',         icon:'foncier', engine:'Claude'   },
-    // Outils Admin
-    { id:'O-ADM-001', padKey:'A7', name:'Objections Acquéreurs', desc:'3 réponses graduées par objection',            icon:'chat',    engine:'Claude'   },
-];
+let TOOLS     = [];
+let ARTEFACTS = [];
 
-const ARTEFACTS = [
-    // Artefacts Key-Store — Immobilier
-    { id:'A-IMM-001', name:'Sentinel Immo',    icon:'zap'   },
-    { id:'A-IMM-002', name:'Tableau des Lots', icon:'table' },
-    { id:'A-IMM-003', name:'Qualification',    icon:'chat'  },
-    // Artefacts Key-Store — Analyse
-    { id:'A-ANL-001', name:'Simulateur Pinel', icon:'calc'  },
-    { id:'A-ANL-002', name:'Calculatrice',     icon:'calc'  },
-    // Artefacts Key-Store — Admin
-    { id:'A-ADM-001', name:'FAQ Client',       icon:'brief' },
-];
+/**
+ * Initialise les tableaux TOOLS et ARTEFACTS depuis les données chargées.
+ * Appelé dans main.js après loadPads() + fetchRemoteCatalog().
+ * Idempotent : si les listes sont vides, conserve les valeurs existantes.
+ */
+export function initTools(toolList = [], artefactList = []) {
+    if (toolList.length)     TOOLS     = toolList;
+    if (artefactList.length) ARTEFACTS = artefactList;
+}
 
 // ── Providers API ─────────────────────────────────────────────
 const API_PROVIDERS = [

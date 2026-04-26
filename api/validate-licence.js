@@ -1,51 +1,67 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Vercel Function · Validation de Licence v1.0
+   KEYSTONE OS — Vercel Function · Validation de Licence v2.0
    POST /api/validate-licence  { key: "XXXX-XXXX-XXXX-XXXX" }
    ─────────────────────────────────────────────────────────────
-   En production : brancher sur Stripe Entitlements, LemonSqueezy,
-   ou votre propre base de données de licences.
+   Stockage : Vercel KV (Redis)
+   Fallback  : table en mémoire si KV non configuré (dev / démo)
    ─────────────────────────────────────────────────────────────
    Réponse succès :
-     { valid: true, plan: string, owner: string, ownedAssets: string[] }
+     { valid: true, plan: string, owner: string, ownedAssets: string[] | null }
    Réponse échec :
      { valid: false, error: string }
    ═══════════════════════════════════════════════════════════════ */
 
-// ── Catalogue des plans ─────────────────────────────────────────
+import { kv } from '@vercel/kv';
+
+// ── Catalogue des plans — IDs NOMEN-K canoniques ────────────────
 const PLANS = {
   STARTER: {
     label: 'Starter',
-    ownedAssets: ['O-IMM-001', 'O-IMM-002', 'O-MKT-001'],
+    ownedAssets: [
+      'O-IMM-001',   // Notices VEFA
+      'O-IMM-002',   // Annonces Commerciales
+      'O-IMM-003',   // Emails Acquéreurs
+      'O-MKT-001',   // Posts Réseaux Sociaux
+      'O-MKT-002',   // Brief Photo / 3D
+    ],
   },
   PRO: {
     label: 'Pro',
     ownedAssets: [
-      'O-IMM-001', 'O-IMM-002', 'O-IMM-003', 'O-IMM-004',
-      'O-IMM-005', 'O-IMM-006',
+      'O-IMM-001', 'O-IMM-002', 'O-IMM-003',
       'O-MKT-001', 'O-MKT-002',
-      'O-ANL-001', 'O-ANL-002',
-      'O-ADM-001',
+      'O-ANL-001',   // CR Chantier
+      'O-ANL-002',   // Analyste Foncier
+      'O-ADM-001',   // Objections Acquéreurs
       'A-IMM-001', 'A-IMM-002', 'A-IMM-003',
     ],
   },
-  ENTERPRISE: {
-    label: 'Enterprise',
-    ownedAssets: null, // null = accès total (mode démo)
+  MAX: {
+    label: 'Max',
+    ownedAssets: null, // null = accès total
   },
 };
 
-// ── Table de licences (à remplacer par appel BDD en production) ─
-// Format : 'CLE-EN-CLAIR' → { plan, owner }
-const LICENCE_DB = {
-  // Licences de test / démo
-  'DEMO-KEYS-TONE-2026': { plan: 'PRO',        owner: 'Démonstration' },
-  'PROM-ETHE-IMMO-2026': { plan: 'PRO',        owner: 'Prométhée Immobilier' },
-  'STAR-TERK-EYSTONE-S': { plan: 'STARTER',    owner: 'Client Starter' },
-  'ENTR-PRISE-FULL-ACC': { plan: 'ENTERPRISE', owner: 'Accès Total' },
+// ── Table fallback (développement / démo sans KV) ───────────────
+const _DEMO_DB = {
+  'DEMO-KEYS-TONE-2026': { plan: 'PRO',     owner: 'Démonstration',         active: true },
+  'STAR-TERK-EYSTONE-S': { plan: 'STARTER', owner: 'Client Starter',        active: true },
+  'MAXI-KEYS-TONE-FULL': { plan: 'MAX',     owner: 'Accès Total',           active: true },
 };
 
-export default function handler(req, res) {
-  // CORS pour les appels depuis Vercel Preview
+// ── Helper : lecture KV avec fallback en mémoire ────────────────
+async function _lookupLicence(normalizedKey) {
+  try {
+    const record = await kv.get(`licence:${normalizedKey}`);
+    return record || null;
+  } catch {
+    // KV non disponible (dev local, env vars absentes) → fallback
+    return _DEMO_DB[normalizedKey] || null;
+  }
+}
+
+// ── Handler principal ───────────────────────────────────────────
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -55,7 +71,6 @@ export default function handler(req, res) {
 
   const { key } = req.body || {};
 
-  // ── Validation du format ────────────────────────────────────
   if (!key || typeof key !== 'string') {
     return res.status(400).json({ valid: false, error: 'Clé manquante' });
   }
@@ -69,21 +84,30 @@ export default function handler(req, res) {
     });
   }
 
-  // ── Lookup dans la base ─────────────────────────────────────
-  const record = LICENCE_DB[normalized];
+  const record = await _lookupLicence(normalized);
+
   if (!record) {
-    return res.status(200).json({
-      valid: false,
-      error: 'Clé de licence non reconnue',
-    });
+    return res.status(200).json({ valid: false, error: 'Clé de licence non reconnue' });
+  }
+
+  if (record.active === false) {
+    return res.status(200).json({ valid: false, error: 'Licence révoquée ou expirée' });
   }
 
   const plan = PLANS[record.plan];
+  if (!plan) {
+    return res.status(200).json({ valid: false, error: 'Plan inconnu' });
+  }
+
+  // Si la licence a des ownedAssets personnalisés, ils priment sur le plan
+  const ownedAssets = record.ownedAssets !== undefined
+    ? record.ownedAssets
+    : plan.ownedAssets;
 
   return res.status(200).json({
     valid:       true,
     plan:        plan.label,
     owner:       record.owner,
-    ownedAssets: plan.ownedAssets, // null = Enterprise (tout accessible)
+    ownedAssets,
   });
 }
