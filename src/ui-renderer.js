@@ -3,7 +3,7 @@
    Modules : Dashboard · Settings · Modal renderTool · S-CORE-LOGIC
    ═══════════════════════════════════════════════════════════════ */
 
-import { getPad, getOwnedIds, getCatalogEntry } from './pads-loader.js';
+import { getPad, getOwnedIds, getCatalogEntry, getCatalog } from './pads-loader.js';
 // pads-data.js reste le fallback embarqué — pads-loader.js le charge si disponible
 import { ApiHandler } from './api-handler.js';
 import {
@@ -249,13 +249,20 @@ export function renderDashboard() {
 
         // Mise à jour du compteur Key-Store
         const ksCountEl = document.querySelector('.suggest-section .sec-kstore-badge');
-        if (ksCountEl && (lockedTools.length + lockedArts.length) > 0) {
-            ksCountEl.textContent = `Key-Store · ${lockedTools.length + lockedArts.length} disponibles`;
+        if (ksCountEl) {
+            const total = lockedTools.length + lockedArts.length;
+            ksCountEl.textContent = total > 0
+                ? `Key-Store · ${total} disponibles`
+                : 'Key-Store';
         }
     }
 
-    // Bouton catalogue Key-Store (header)
-    document.getElementById('kstore-catalog-btn')?.addEventListener('click', _openKStoreCatalog);
+    // Bouton catalogue → panneau K-Store (Sprint 5 : remplace le toast)
+    const kstoreBtn = document.getElementById('kstore-catalog-btn');
+    if (kstoreBtn) kstoreBtn.onclick = _openKStorePanel;
+
+    // Badge pulse si nouveaux outils depuis la dernière visite
+    _checkKStorePulse();
 
     renderHeroDate();
 }
@@ -294,23 +301,230 @@ function _renderRestoreBtn(padsEl, activeTools = TOOLS) {
     }
 }
 
-// ── Key-Store catalog placeholder ──────────────────────────────
-function _openKStoreCatalog() {
-    // Placeholder : bannière slide-down jusqu'à l'intégration du catalogue complet
-    let toast = document.getElementById('ks-toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'ks-toast';
-        document.body.appendChild(toast);
-    }
-    toast.className = 'ks-toast ks-toast-open';
-    toast.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:14px;height:14px;flex-shrink:0;color:var(--gold)"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        <span>Key-Store — Catalogue complet <em>bientôt disponible</em></span>
-        <button onclick="this.closest('.ks-toast').classList.remove('ks-toast-open')" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:13px;padding:0 4px">✕</button>
+// ═══════════════════════════════════════════════════════════════
+// K-STORE PANEL — Sprint 5
+// Panneau slide-in avec recherche, filtres, grille catalogue
+// ═══════════════════════════════════════════════════════════════
+const LS_CATALOG_CHECK = 'ks_last_catalog_check';
+const _KS_CAT_LABELS   = { IMM:'Immobilier', MKT:'Marketing', ANL:'Analyse', ADM:'Admin' };
+
+let _ksPanelReady = false;
+let _ksSearch     = '';
+let _ksCat        = '';
+let _ksPlan       = '';
+let _ksDebounce   = null;
+
+function _openKStorePanel() {
+    _buildKStorePanel();
+    document.getElementById('ks-panel')?.classList.add('open');
+    document.getElementById('ks-backdrop-panel')?.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Marque la visite → supprime le pulse
+    localStorage.setItem(LS_CATALOG_CHECK, new Date().toISOString().split('T')[0]);
+    document.getElementById('kstore-catalog-btn')?.classList.remove('pulse');
+
+    _renderKStoreItems();
+}
+
+function _closeKStorePanel() {
+    document.getElementById('ks-panel')?.classList.remove('open');
+    document.getElementById('ks-backdrop-panel')?.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function _buildKStorePanel() {
+    if (_ksPanelReady) return;
+    _ksPanelReady = true;
+
+    const bd = document.createElement('div');
+    bd.id = 'ks-backdrop-panel';
+    bd.className = 'ks-backdrop';
+    bd.addEventListener('click', _closeKStorePanel);
+    document.body.appendChild(bd);
+
+    const panel = document.createElement('div');
+    panel.id = 'ks-panel';
+    panel.className = 'ks-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Key-Store');
+    panel.innerHTML = `
+        <div class="ks-head">
+            <div>
+                <div class="ks-head-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                         style="width:14px;height:14px;opacity:.8;flex-shrink:0">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                    KEY-STORE
+                </div>
+                <div class="ks-head-sub" id="ks-head-sub">Catalogue des outils disponibles</div>
+            </div>
+            <button id="ks-close-btn" class="ks-close" aria-label="Fermer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     style="width:14px;height:14px">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="ks-search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 class="ks-search-icon">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input id="ks-search-input" class="ks-search-input"
+                   type="search" placeholder="Rechercher un outil…" autocomplete="off">
+        </div>
+
+        <div class="ks-filters">
+            <div class="ks-filter-row">
+                <span class="ks-filter-label">CATÉGORIE</span>
+                <div class="ks-filter-chips" data-filter="cat">
+                    <button class="ks-chip-filter active" data-value="">TOUS</button>
+                    <button class="ks-chip-filter" data-value="IMM">IMMO</button>
+                    <button class="ks-chip-filter" data-value="MKT">MKT</button>
+                    <button class="ks-chip-filter" data-value="ANL">ANALYSE</button>
+                    <button class="ks-chip-filter" data-value="ADM">ADMIN</button>
+                </div>
+            </div>
+            <div class="ks-filter-row">
+                <span class="ks-filter-label">PLAN</span>
+                <div class="ks-filter-chips" data-filter="plan">
+                    <button class="ks-chip-filter active" data-value="">TOUS</button>
+                    <button class="ks-chip-filter" data-value="STARTER">STARTER</button>
+                    <button class="ks-chip-filter" data-value="PRO">PRO</button>
+                    <button class="ks-chip-filter" data-value="ENTERPRISE">ENTERPRISE</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="ks-grid" class="ks-grid"></div>
     `;
-    clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => toast.classList.remove('ks-toast-open'), 4000);
+    document.body.appendChild(panel);
+
+    panel.querySelector('#ks-close-btn').addEventListener('click', _closeKStorePanel);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeKStorePanel(); });
+
+    panel.querySelector('#ks-search-input').addEventListener('input', e => {
+        _ksSearch = e.target.value.toLowerCase().trim();
+        clearTimeout(_ksDebounce);
+        _ksDebounce = setTimeout(_renderKStoreItems, 180);
+    });
+
+    panel.querySelectorAll('.ks-filter-chips').forEach(group => {
+        group.addEventListener('click', e => {
+            const chip = e.target.closest('.ks-chip-filter');
+            if (!chip) return;
+            group.querySelectorAll('.ks-chip-filter').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            if (group.dataset.filter === 'cat')  _ksCat  = chip.dataset.value;
+            if (group.dataset.filter === 'plan') _ksPlan = chip.dataset.value;
+            _renderKStoreItems();
+        });
+    });
+
+    panel.querySelector('#ks-grid').addEventListener('click', e => {
+        const btn = e.target.closest('.ks-item-btn');
+        if (!btn) return;
+        const item = [...TOOLS, ...ARTEFACTS].find(x => x.id === btn.dataset.id);
+        if (item) {
+            _closeKStorePanel();
+            setTimeout(() => _openMarketplaceInfo(item), 220);
+        }
+    });
+}
+
+function _renderKStoreItems() {
+    const grid = document.getElementById('ks-grid');
+    if (!grid) return;
+
+    const ownedIds = getOwnedIds();
+    const all      = [...TOOLS, ...ARTEFACTS];
+
+    const filtered = all.filter(item => {
+        const cat = getCatalogEntry(item.id);
+
+        if (_ksSearch) {
+            const hay = [item.name, item.desc || '', cat?.subtitle || '',
+                         cat?.longDesc || '', ...(cat?.tags || [])].join(' ').toLowerCase();
+            if (!hay.includes(_ksSearch)) return false;
+        }
+
+        if (_ksCat) {
+            if (item.id.split('-')[1] !== _ksCat) return false;
+        }
+
+        if (_ksPlan) {
+            if (!cat || cat.plan !== _ksPlan) return false;
+        }
+
+        return true;
+    });
+
+    const sub = document.getElementById('ks-head-sub');
+    if (sub) {
+        sub.textContent = `${filtered.length} outil${filtered.length !== 1 ? 's' : ''} trouvé${filtered.length !== 1 ? 's' : ''}`;
+    }
+
+    if (filtered.length === 0) {
+        grid.innerHTML = `<div class="ks-empty">Aucun outil ne correspond à votre recherche.</div>`;
+        return;
+    }
+
+    grid.innerHTML = filtered.map(item => {
+        const cat     = getCatalogEntry(item.id);
+        const isOwned = ownedIds === null || ownedIds.includes(item.id);
+        const isArt   = item.id.startsWith('A-');
+        const catLbl  = _KS_CAT_LABELS[item.id.split('-')[1]] || '';
+
+        return `
+        <div class="ks-item${isOwned ? ' ks-item--owned' : ''}${cat?.isNew ? ' ks-item--new' : ''}">
+            <div class="ks-item-icon">${ICONS[item.icon] || ICONS['zap']}</div>
+            <div class="ks-item-body">
+                <div class="ks-item-meta">
+                    ${item.id} · ${catLbl}${isArt ? ' · Artefact' : ''}
+                    ${cat?.isNew ? '<span class="ks-new-dot">● NEW</span>' : ''}
+                </div>
+                <div class="ks-item-name">${cat?.title || item.name}</div>
+                <div class="ks-item-desc">${cat?.subtitle || item.desc || ''}</div>
+                <div class="ks-item-chips">
+                    ${cat?.plan  ? `<span class="ks-chip ks-chip-plan">${cat.plan}</span>` : ''}
+                    ${cat?.price ? `<span class="ks-chip ks-chip-price">${cat.price} €/mois</span>` : ''}
+                    ${(cat?.ai_optimized || item.engine)
+                        ? `<span class="ks-chip ks-chip-eng">${cat?.ai_optimized || item.engine} ✦</span>`
+                        : ''}
+                </div>
+            </div>
+            <div class="ks-item-action">
+                ${isOwned
+                    ? `<span class="ks-item-owned-badge">✓ Inclus</span>`
+                    : `<button class="ks-item-btn" data-id="${item.id}">Voir →</button>`}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function _checkKStorePulse() {
+    const catalog = getCatalog();
+    if (!catalog) return;
+
+    const lastCheck = localStorage.getItem(LS_CATALOG_CHECK);
+    const hasNew    = catalog.tools.some(t => t.isNew)
+                      && (!lastCheck || catalog.updatedAt > lastCheck);
+
+    const badge = document.getElementById('kstore-catalog-btn');
+    if (!badge) return;
+
+    if (hasNew) {
+        badge.classList.add('pulse');
+    } else {
+        badge.classList.remove('pulse');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════

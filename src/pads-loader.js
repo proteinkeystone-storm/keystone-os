@@ -132,6 +132,9 @@ export async function fetchRemoteCatalog(url) {
     return _doFetchCatalog(targetUrl);
 }
 
+/** Retourne le catalogue complet (synchrone, null si pas encore chargé). */
+export function getCatalog() { return _catalogCache; }
+
 /** Retourne l'entrée catalogue d'un outil/artefact par NOMEN-K ID (synchrone). */
 export function getCatalogEntry(id) {
     if (!_catalogCache?.tools) return null;
