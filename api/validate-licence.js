@@ -59,10 +59,11 @@ const _DEMO_DB = {
 async function _lookupLicence(normalizedKey) {
   try {
     const record = await kv.get(`licence:${normalizedKey}`);
-    return record || null;
+    // KV actif mais clé absente → vérifie les licences démo embarquées
+    return record ?? _DEMO_DB[normalizedKey] ?? null;
   } catch {
-    // KV non disponible (dev local, env vars absentes) → fallback
-    return _DEMO_DB[normalizedKey] || null;
+    // KV non disponible (dev local sans env vars) → fallback complet
+    return _DEMO_DB[normalizedKey] ?? null;
   }
 }
 
