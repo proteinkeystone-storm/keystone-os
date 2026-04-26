@@ -1054,15 +1054,68 @@ html.light-mode .pad-card--locked::after {
 /* ══ SUGGEST SECTION (ex Artefacts — Key-Store suggestions) ═══════ */
 .suggest-section { margin-bottom: 48px; }
 
-/* Section locked-tools : grille responsive qui wrap, pas de scroll horizontal */
+/* Section suggest — grille auto-fill, s'adapte au nombre d'outils */
 #arts-container {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 13px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
   overflow-x: visible;
   padding-bottom: 0;
   scroll-snap-type: none;
 }
+
+/* Carte compacte Key-Store suggest */
+.suggest-card {
+  background: var(--navy2);
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 14px;
+  padding: 14px 13px 12px;
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: border-color .2s, transform .2s;
+  opacity: 0;
+  animation: rise .45s cubic-bezier(.16,1,.3,1) forwards;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+.suggest-card:hover {
+  border-color: rgba(201,168,76,.35);
+  transform: translateY(-2px);
+}
+.suggest-card-icon { color: var(--gold); opacity: .55; }
+.suggest-card-icon svg { width: 20px; height: 20px; display: block; }
+.suggest-card-name {
+  font-size: 12px; font-weight: 700; color: rgba(255,255,255,.65);
+  line-height: 1.3; flex: 1;
+}
+.suggest-card-cta {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .05em;
+  color: var(--gold); background: rgba(201,168,76,.1);
+  border: 1px solid rgba(201,168,76,.28);
+  border-radius: 7px; padding: 4px 9px;
+  cursor: pointer; white-space: nowrap;
+  transition: background .18s, border-color .18s;
+  font-family: inherit;
+}
+.suggest-card:hover .suggest-card-cta {
+  background: rgba(201,168,76,.18);
+  border-color: rgba(201,168,76,.5);
+}
+.suggest-card-new {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 7px; font-weight: 900; letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #07102a; background: var(--gold);
+  border-radius: 4px; padding: 2px 6px;
+}
+
+html.light-mode .suggest-card {
+  background: rgba(13,27,62,.03);
+  border-color: rgba(13,27,62,.08);
+}
+html.light-mode .suggest-card-name { color: rgba(13,27,62,.7); }
+html.light-mode .suggest-card-cta { color: var(--gold); }
 
 /* Badge KSTORE remplace le compteur numérique */
 .sec-kstore-badge {
@@ -2029,11 +2082,10 @@ html.light-mode .no-api-hint:hover { border-color: rgba(160,120,40,.35); }
 /* ══ RESPONSIVE ══════════════════════════════════════════════════ */
 @media (max-width: 960px) {
   .pads-grid { grid-template-columns: repeat(2, 1fr); }
-  #arts-container { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
   .pads-grid { grid-template-columns: 1fr; }
-  #arts-container { grid-template-columns: 1fr; }
+  #arts-container { grid-template-columns: repeat(2, 1fr); }
   .settings-panel { width: 100%; }
   .wrap { padding: 0 16px; }
 }

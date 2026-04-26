@@ -199,56 +199,36 @@ export function renderDashboard() {
 
     // ── BARRE KEY-STORE — Outils suggérés / verrouillés ────────
     if (artsEl) {
-        // Outils verrouillés (non possédés) — cartes avec overlay cadenas
-        const lockedToolCards = lockedTools.map(t => {
-            const cat = getCatalogEntry(t.id);
+        // Tri : nouveaux outils en premier, puis ordre déclaratif
+        const sortedLocked = [...lockedTools, ...lockedArts].sort((a, b) => {
+            const aNew = !!getCatalogEntry(a.id)?.isNew;
+            const bNew = !!getCatalogEntry(b.id)?.isNew;
+            return (bNew ? 1 : 0) - (aNew ? 1 : 0);
+        });
+
+        // Cartes compactes — pictogramme + nom + CTA
+        const suggestCards = sortedLocked.map(item => {
+            const cat    = getCatalogEntry(item.id);
+            const isNew  = !!cat?.isNew;
+            const icon   = ICONS[item.icon] || ICONS['zap'];
+            const label  = item.name || item.title || item.id;
             return `
-            <div class="pad-card pad-card--locked" data-id="${t.id}"
-                 role="button" tabindex="0" aria-label="Débloquer ${t.name}">
-                <div class="pad-icon">${ICONS[t.icon]}</div>
-                <div class="pad-name">${t.name}</div>
-                <div class="pad-desc">${cat?.subtitle || t.desc}</div>
-                <div class="pad-badge badge-kstore">Key-Store${cat?.plan ? ` · ${cat.plan}` : ''}</div>
-                ${cat?.price ? `<div class="pad-price-tag">${cat.price} €<span class="pad-price-unit">/mois</span></div>` : ''}
-                <div class="pad-lock-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                         style="width:16px;height:16px">
-                        <rect x="3" y="11" width="18" height="11" rx="2"/>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                </div>
-                <div class="pad-sku">${t.id}</div>
+            <div class="suggest-card" data-id="${item.id}"
+                 role="button" tabindex="0" aria-label="Découvrir ${label}">
+                ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
+                <div class="suggest-card-icon">${icon}</div>
+                <div class="suggest-card-name">${label}</div>
+                <button class="suggest-card-cta">Essayer gratuitement</button>
             </div>`;
         }).join('');
 
-        // Artefacts Key-Store (non possédés) — format compact horizontal
-        const lockedArtCards = lockedArts.map(a => `
-            <div class="art-card ks-suggest" data-id="${a.id}"
-                 role="button" tabindex="0" aria-label="Voir ${a.name} dans le Key-Store">
-                <div class="art-code">${a.id}</div>
-                <div class="art-icon">${ICONS[a.icon] || ICONS['zap']}</div>
-                <div class="art-name">${a.name}</div>
-                <button class="art-kstore-btn" title="Voir dans le Key-Store">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-                         style="width:10px;height:10px">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                        <line x1="3" y1="6" x2="21" y2="6"/>
-                        <path d="M16 10a4 4 0 0 1-8 0"/>
-                    </svg>
-                    Key-Store
-                </button>
-            </div>`).join('');
+        artsEl.innerHTML = suggestCards;
 
-        artsEl.innerHTML = lockedToolCards + lockedArtCards;
-
-        // Délégation de clic — ouvre la modale MarketplaceInfo
+        // Délégation de clic — ouvre le panneau K-Store
         artsEl.addEventListener('click', e => {
-            const lockedCard = e.target.closest('.pad-card--locked');
-            const artCard    = e.target.closest('.art-card.ks-suggest');
-            const card = lockedCard || artCard;
+            const card = e.target.closest('.suggest-card');
             if (!card) return;
-            const item = [...TOOLS, ...ARTEFACTS].find(x => x.id === card.dataset.id);
-            if (item) _openMarketplaceInfo(item);
+            _openKStorePanel();
         });
 
         // Mise à jour du compteur Key-Store
