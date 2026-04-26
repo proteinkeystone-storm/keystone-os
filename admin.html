@@ -682,6 +682,111 @@
       width: 100%;
     }
     .type-choice-btn:hover { border-color: var(--gold); background: var(--gold-dim); }
+
+    /* ── ARTIFACT COMPONENT SELECTOR ───────────────────────────── */
+    .component-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .comp-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 14px;
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      min-width: 68px;
+    }
+    .comp-btn .comp-icon { font-size: 18px; line-height: 1; }
+    .comp-btn:hover { border-color: var(--gold); color: var(--text); }
+    .comp-btn.active {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* ── COMPONENT CONFIG PANEL ────────────────────────────────── */
+    .comp-config-panel {
+      display: none;
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .comp-config-panel.active { display: block; }
+    .comp-config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    /* ── ARTIFACT FIELD ROW ─────────────────────────────────────── */
+    .artifact-field-row {
+      background: var(--navy-2);
+      border: 1px solid rgba(100,150,255,0.2);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+    .artifact-field-row:hover { border-color: rgba(100,150,255,0.4); }
+    .artifact-field-base {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    /* ── SCHEMA PANEL (Moteurs / Artefact) ──────────────────────── */
+    .schema-panel {
+      background: var(--navy);
+      border: 1px solid rgba(100,150,255,0.25);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .schema-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .schema-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6496ff;
+    }
+    .schema-code {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 11px;
+      color: #a8c4ff;
+      line-height: 1.7;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .preamble-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(100,150,255,0.1);
+      border: 1px solid rgba(100,150,255,0.25);
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #6496ff;
+      letter-spacing: 0.08em;
+    }
   </style>
 </head>
 <body>
@@ -715,7 +820,7 @@
 
   <nav class="admin-tabs">
     <button class="tab-btn active" data-tab="licences">Licences</button>
-    <button class="tab-btn" data-tab="tools">Outils</button>
+    <button class="tab-btn" data-tab="tools">La Fabrique</button>
     <button class="tab-btn" data-tab="catalog">Catalogue</button>
     <button class="tab-btn" data-tab="monitoring">Monitoring</button>
   </nav>
