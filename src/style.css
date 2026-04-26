@@ -987,7 +987,8 @@ html.light-mode .ks-frigo-text  { color: rgba(140,100,30,.9); }
   font-size: 16px; font-weight: 700;
   letter-spacing: -.02em; color: var(--tx1); margin-bottom: 2px;
 }
-.mkt-desc { font-size: 12px; color: var(--tx3); line-height: 1.5; }
+.mkt-subtitle { font-size: 12px; color: var(--tx3); line-height: 1.5; }
+.mkt-desc     { font-size: 12px; color: var(--tx3); line-height: 1.5; }
 .mkt-close {
   position: absolute; top: 16px; right: 16px;
   background: rgba(255,255,255,.06); border: none;
@@ -1040,32 +1041,88 @@ html.light-mode .ks-frigo-text  { color: rgba(140,100,30,.9); }
   font-size: 12px; color: var(--tx2);
 }
 
-.mkt-actions {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 18px 20px 20px;
+/* ── Pricing columns ─────────────────────────────────────────── */
+.mkt-pricing {
+  display: flex; gap: 10px;
+  padding: 14px 20px 0;
+}
+.mkt-price-col {
+  flex: 1; display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 14px 12px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+}
+.mkt-price-col--lifetime {
+  background: rgba(201,168,76,.06);
+  border-color: rgba(201,168,76,.25);
+}
+.mkt-price-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tx3);
+}
+.mkt-price-amount {
+  font-size: 22px; font-weight: 900; color: var(--tx1);
+  letter-spacing: -0.03em; line-height: 1;
+}
+.mkt-price-per {
+  font-size: 11px; font-weight: 500; color: var(--tx3);
+  letter-spacing: 0;
+}
+.mkt-price-plan {
+  font-size: 11px; color: var(--tx3); margin-bottom: 4px;
+}
+.mkt-btn-unlock {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; margin-top: auto;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 8px;
+  color: var(--tx1); font-size: 12px; font-weight: 700;
+  text-decoration: none;
+  transition: background .18s, border-color .18s;
+}
+.mkt-btn-unlock:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.25); }
+.mkt-btn-lifetime {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; margin-top: auto;
+  background: linear-gradient(135deg, var(--gold) 0%, #b8882a 100%);
+  border-radius: 8px;
+  color: #07102a; font-size: 12px; font-weight: 800;
+  text-decoration: none;
+  transition: opacity .18s, transform .12s;
+}
+.mkt-btn-lifetime:hover { opacity: .9; transform: translateY(-1px); }
+.mkt-btn-lifetime:active { transform: translateY(0); }
+
+/* ── Trial zone ──────────────────────────────────────────────── */
+.mkt-trial-zone {
+  padding: 12px 20px 20px;
 }
 .mkt-btn-try {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 16px;
-  background: rgba(255,255,255,.07);
-  border: 1px solid rgba(255,255,255,.12);
+  width: 100%; padding: 11px 16px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
   border-radius: 10px;
   color: var(--tx1); font-size: 13px; font-weight: 600;
   cursor: pointer;
   transition: background .18s, border-color .18s;
 }
-.mkt-btn-try:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); }
-.mkt-btn-unlock {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 11px 16px;
-  background: linear-gradient(135deg, var(--gold) 0%, #b8882a 100%);
+.mkt-btn-try:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.18); }
+.mkt-trial-used {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
   border-radius: 10px;
-  color: #07102a; font-size: 13px; font-weight: 700;
-  text-decoration: none;
-  transition: opacity .18s, transform .12s;
+  color: var(--tx3); font-size: 12px;
 }
-.mkt-btn-unlock:hover { opacity: .92; transform: translateY(-1px); }
-.mkt-btn-unlock:active { transform: translateY(0); }
+
+/* ── Engine chip row in body ─────────────────────────────────── */
+.mkt-engine-row {
+  margin-bottom: 10px;
+}
 
 /* Light mode overrides */
 html.light-mode .mkt-modal {
@@ -1080,6 +1137,24 @@ html.light-mode .mkt-btn-try {
   color: var(--tx1);
 }
 html.light-mode .mkt-btn-try:hover { background: rgba(13,27,62,.1); }
+html.light-mode .mkt-price-col {
+  background: rgba(13,27,62,.03);
+  border-color: rgba(13,27,62,.1);
+}
+html.light-mode .mkt-price-col--lifetime {
+  background: rgba(201,168,76,.05);
+  border-color: rgba(201,168,76,.3);
+}
+html.light-mode .mkt-btn-unlock {
+  background: rgba(13,27,62,.07);
+  border-color: rgba(13,27,62,.15);
+  color: var(--tx1);
+}
+html.light-mode .mkt-btn-unlock:hover { background: rgba(13,27,62,.13); }
+html.light-mode .mkt-trial-used {
+  background: rgba(13,27,62,.03);
+  border-color: rgba(13,27,62,.08);
+}
 html.light-mode .pad-card--locked::after {
   background: linear-gradient(135deg, rgba(201,168,76,.06) 0%, transparent 60%);
 }
@@ -1226,6 +1301,180 @@ html.light-mode .sec-kstore-badge {
 }
 .ks-head-sub { font-size: 10px; color: rgba(255,255,255,.32); margin-top: 3px; }
 
+/* ── K-Store Tabs ────────────────────────────────────────────── */
+.ks-tabs {
+  display: flex; gap: 4px;
+  padding: 10px 16px 0; flex-shrink: 0;
+}
+.ks-tab {
+  flex: 1; padding: 7px 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  color: var(--tx3); font-size: 11px; font-weight: 600;
+  letter-spacing: .03em; text-transform: uppercase;
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.ks-tab:hover { background: rgba(255,255,255,.06); color: var(--tx2); }
+.ks-chip-contact {
+  border-style: dashed !important;
+  border-color: rgba(255,255,255,.2) !important;
+  color: var(--tx2) !important;
+}
+.ks-chip-contact:hover {
+  background: rgba(255,255,255,.08) !important;
+  border-color: rgba(255,255,255,.35) !important;
+  color: var(--tx1) !important;
+}
+.ks-tab.active {
+  background: rgba(201,168,76,.12);
+  border-color: rgba(201,168,76,.3);
+  color: var(--gold);
+}
+
+/* ── Plans View ──────────────────────────────────────────────── */
+.ks-plans-view {
+  flex: 1; overflow-y: auto; padding: 14px 14px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.ks-plans-grid {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ks-plan-card {
+  position: relative;
+  padding: 16px 16px 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  transition: border-color .2s;
+}
+.ks-plan-card--recommended {
+  border-color: rgba(201,168,76,.35);
+  background: rgba(201,168,76,.05);
+}
+.ks-plan-card--active {
+  border-color: var(--plan-color, rgba(255,255,255,.2));
+  background: rgba(255,255,255,.03);
+}
+.ks-plan-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  background: rgba(201,168,76,.2);
+  border: 1px solid rgba(201,168,76,.35);
+  border-radius: 20px;
+  color: var(--gold); font-size: 9px; font-weight: 800;
+  letter-spacing: .07em; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.ks-plan-badge--active {
+  background: rgba(var(--plan-color, 201,168,76), .15);
+  border-color: rgba(255,255,255,.15);
+  color: var(--tx2);
+}
+.ks-plan-name {
+  font-size: 15px; font-weight: 900; color: var(--tx1);
+  letter-spacing: -0.02em;
+}
+.ks-plan-price {
+  font-size: 24px; font-weight: 900; color: var(--tx1);
+  letter-spacing: -0.03em; margin: 4px 0 2px;
+}
+.ks-plan-per { font-size: 12px; font-weight: 500; color: var(--tx3); }
+.ks-plan-contact { font-size: 18px; font-weight: 700; color: var(--tx2); }
+.ks-plan-tagline {
+  font-size: 11px; color: var(--tx3); margin-bottom: 10px;
+}
+.ks-plan-list {
+  list-style: none; padding: 0; margin: 0 0 12px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ks-plan-list li {
+  font-size: 11px; color: var(--tx2);
+  padding-left: 14px; position: relative;
+}
+.ks-plan-list li::before {
+  content: '✓'; position: absolute; left: 0;
+  color: var(--plan-color, var(--gold)); font-size: 10px; font-weight: 700;
+}
+.ks-plan-cta {
+  display: flex; align-items: center; justify-content: center;
+  padding: 9px 14px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 9px;
+  color: var(--tx1); font-size: 12px; font-weight: 700;
+  text-decoration: none; text-align: center;
+  transition: background .18s, border-color .18s;
+}
+.ks-plan-card--recommended .ks-plan-cta {
+  background: linear-gradient(135deg, var(--gold) 0%, #b8882a 100%);
+  border-color: transparent; color: #07102a;
+}
+.ks-plan-cta:hover { background: rgba(255,255,255,.14); }
+.ks-plan-card--recommended .ks-plan-cta:hover { opacity: .9; }
+.ks-plan-active-label {
+  font-size: 11px; color: var(--tx3); text-align: center; padding: 6px 0 2px;
+}
+.ks-plan-card--contact {
+  border-style: dashed;
+  border-color: rgba(255,255,255,.15);
+  background: rgba(255,255,255,.02);
+}
+.ks-plan-cta--contact {
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-style: dashed !important;
+  color: var(--tx2) !important;
+}
+.ks-plan-cta--contact:hover {
+  background: rgba(255,255,255,.08) !important;
+  color: var(--tx1) !important;
+}
+
+/* ── À la carte section ──────────────────────────────────────── */
+.ks-plans-custom {
+  padding: 14px 16px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+}
+.ks-plans-custom-title {
+  font-size: 11px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tx2); margin-bottom: 2px;
+}
+.ks-plans-custom-sub {
+  font-size: 10px; color: var(--tx3); margin-bottom: 12px;
+}
+.ks-plans-custom-list { display: flex; flex-direction: column; gap: 8px; }
+.ks-custom-item {
+  display: flex; align-items: center; gap: 10px;
+}
+.ks-custom-item-info { flex: 1; min-width: 0; }
+.ks-custom-item-name { font-size: 12px; font-weight: 600; color: var(--tx1); }
+.ks-custom-item-sub  { font-size: 10px; color: var(--tx3); }
+.ks-custom-item-price {
+  font-size: 13px; font-weight: 800; color: var(--gold);
+  white-space: nowrap;
+}
+.ks-custom-item-btn {
+  padding: 5px 11px;
+  background: rgba(201,168,76,.12);
+  border: 1px solid rgba(201,168,76,.25);
+  border-radius: 7px;
+  color: var(--gold); font-size: 11px; font-weight: 700;
+  text-decoration: none; white-space: nowrap;
+  transition: background .15s;
+}
+.ks-custom-item-btn:hover { background: rgba(201,168,76,.2); }
+
+/* Light mode */
+html.light-mode .ks-tab { border-color: rgba(13,27,62,.1); color: var(--tx3); }
+html.light-mode .ks-tab.active { background: rgba(201,168,76,.08); }
+html.light-mode .ks-plan-card { background: rgba(13,27,62,.03); border-color: rgba(13,27,62,.1); }
+html.light-mode .ks-plan-card--recommended { background: rgba(201,168,76,.04); }
+html.light-mode .ks-plans-custom { background: rgba(13,27,62,.02); border-color: rgba(13,27,62,.07); }
+html.light-mode .ks-plan-cta { background: rgba(13,27,62,.07); border-color: rgba(13,27,62,.12); color: var(--tx1); }
+
 .ks-close {
   background: rgba(255,255,255,.07); border: none;
   border-radius: 8px; width: 30px; height: 30px;
@@ -1234,6 +1483,34 @@ html.light-mode .sec-kstore-badge {
   transition: background .18s;
 }
 .ks-close:hover { background: rgba(255,255,255,.14); color: var(--tx1); }
+
+/* Category dropdown */
+.ks-cat-select-wrap {
+  position: relative; display: inline-flex; align-items: center;
+}
+.ks-cat-select {
+  appearance: none; -webkit-appearance: none;
+  padding: 6px 32px 6px 12px;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 20px;
+  color: var(--tx1); font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  outline: none;
+}
+.ks-cat-select:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.2); }
+.ks-cat-select:focus { border-color: rgba(201,168,76,.4); background: rgba(201,168,76,.08); }
+.ks-cat-select option { background: #0d1b3e; color: #fff; text-transform: none; font-weight: 500; }
+.ks-cat-chevron {
+  position: absolute; right: 10px; pointer-events: none;
+  width: 11px; height: 11px; color: var(--tx3);
+}
+html.light-mode .ks-cat-select {
+  background: rgba(13,27,62,.06); border-color: rgba(13,27,62,.15); color: var(--tx1);
+}
+html.light-mode .ks-cat-select option { background: #f5f7ff; color: #0d1b3e; }
 
 /* Search */
 .ks-search-wrap {

@@ -325,13 +325,53 @@ function _renderRestoreBtn(padsEl, activeTools = TOOLS) {
 // Panneau slide-in avec recherche, filtres, grille catalogue
 // ═══════════════════════════════════════════════════════════════
 const LS_CATALOG_CHECK = 'ks_last_catalog_check';
-const _KS_CAT_LABELS   = { IMM:'Immobilier', MKT:'Marketing', ANL:'Analyse', ADM:'Admin' };
+const _KS_CAT_LABELS   = {
+    IMM:'Immobilier', MKT:'Marketing', ANL:'Analyse', ADM:'Admin',
+    JUR:'Juridique', PRD:'Productivité', COM:'Communauté', DIV:'Divertissement',
+};
 
 let _ksPanelReady = false;
 let _ksSearch     = '';
 let _ksCat        = '';
 let _ksPlan       = '';
 let _ksDebounce   = null;
+let _ksView       = 'catalogue'; // 'catalogue' | 'plans'
+
+const KS_PLANS = [
+    {
+        id: 'STARTER',
+        name: 'Starter',
+        price: 49,
+        tagline: 'Les essentiels pour votre stratégie digitale',
+        color: '#63b3ed',
+        cta: 'Démarrer Starter',
+    },
+    {
+        id: 'PRO',
+        name: 'Pro',
+        price: 99,
+        tagline: 'Analyse avancée et pilotage complet',
+        color: 'var(--gold)',
+        recommended: true,
+        cta: 'Passer en Pro',
+    },
+    {
+        id: 'MAX',
+        name: 'Max',
+        price: 149,
+        tagline: 'Accès intégral à tous les outils',
+        color: '#c084fc',
+        cta: 'Passer en Max',
+    },
+    {
+        id: 'SUR_MESURE',
+        name: 'Sur Mesure',
+        price: null,
+        tagline: 'Solution personnalisée selon vos besoins',
+        color: 'rgba(255,255,255,.25)',
+        contact: true,
+    },
+];
 
 function _openKStorePanel() {
     _buildKStorePanel();
@@ -390,44 +430,82 @@ function _buildKStorePanel() {
             </button>
         </div>
 
-        <div class="ks-search-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 class="ks-search-icon">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input id="ks-search-input" class="ks-search-input"
-                   type="search" placeholder="Rechercher un outil…" autocomplete="off">
+        <div class="ks-tabs">
+            <button class="ks-tab active" data-view="catalogue">Catalogue</button>
+            <button class="ks-tab" data-view="plans">Plans & Tarifs</button>
         </div>
 
-        <div class="ks-filters">
-            <div class="ks-filter-row">
-                <span class="ks-filter-label">CATÉGORIE</span>
-                <div class="ks-filter-chips" data-filter="cat">
-                    <button class="ks-chip-filter active" data-value="">TOUS</button>
-                    <button class="ks-chip-filter" data-value="IMM">IMMO</button>
-                    <button class="ks-chip-filter" data-value="MKT">MKT</button>
-                    <button class="ks-chip-filter" data-value="ANL">ANALYSE</button>
-                    <button class="ks-chip-filter" data-value="ADM">ADMIN</button>
+        <div id="ks-catalogue-view">
+            <div class="ks-search-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     class="ks-search-icon">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input id="ks-search-input" class="ks-search-input"
+                       type="search" placeholder="Rechercher un outil…" autocomplete="off">
+            </div>
+
+            <div class="ks-filters">
+                <div class="ks-filter-row">
+                    <span class="ks-filter-label">CATÉGORIE</span>
+                    <div class="ks-cat-select-wrap">
+                        <select id="ks-cat-select" class="ks-cat-select">
+                            <option value="">Toutes les catégories</option>
+                            <option value="IMM">Immobilier</option>
+                            <option value="JUR">Juridique</option>
+                            <option value="ANL">Analyse</option>
+                            <option value="PRD">Productivité</option>
+                            <option value="COM">Communauté</option>
+                            <option value="DIV">Divertissement</option>
+                        </select>
+                        <svg class="ks-cat-chevron" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2.2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ks-filter-row">
+                    <span class="ks-filter-label">PLAN</span>
+                    <div class="ks-filter-chips" data-filter="plan">
+                        <button class="ks-chip-filter active" data-value="STARTER">STARTER</button>
+                        <button class="ks-chip-filter" data-value="PRO">PRO</button>
+                        <button class="ks-chip-filter" data-value="MAX">MAX</button>
+                        <button class="ks-chip-filter ks-chip-contact" data-value="SUR_MESURE">SUR MESURE</button>
+                    </div>
                 </div>
             </div>
-            <div class="ks-filter-row">
-                <span class="ks-filter-label">PLAN</span>
-                <div class="ks-filter-chips" data-filter="plan">
-                    <button class="ks-chip-filter active" data-value="">TOUS</button>
-                    <button class="ks-chip-filter" data-value="STARTER">STARTER</button>
-                    <button class="ks-chip-filter" data-value="PRO">PRO</button>
-                    <button class="ks-chip-filter" data-value="ENTERPRISE">ENTERPRISE</button>
-                </div>
-            </div>
+
+            <div id="ks-grid" class="ks-grid"></div>
         </div>
 
-        <div id="ks-grid" class="ks-grid"></div>
+        <div id="ks-plans-view" class="ks-plans-view" hidden></div>
     `;
     document.body.appendChild(panel);
 
     panel.querySelector('#ks-close-btn').addEventListener('click', _closeKStorePanel);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeKStorePanel(); });
+
+    // Tabs — Catalogue / Plans
+    panel.querySelectorAll('.ks-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            _ksView = tab.dataset.view;
+            document.getElementById('ks-catalogue-view').hidden = _ksView !== 'catalogue';
+            document.getElementById('ks-plans-view').hidden     = _ksView !== 'plans';
+            const sub = document.getElementById('ks-head-sub');
+            if (sub) sub.textContent = _ksView === 'plans'
+                ? 'Choisissez le plan adapté à votre activité'
+                : 'Catalogue des outils disponibles';
+            if (_ksView === 'plans') _renderKStorePlans();
+        });
+    });
+
+    panel.querySelector('#ks-cat-select').addEventListener('change', e => {
+        _ksCat = e.target.value;
+        _renderKStoreItems();
+    });
 
     panel.querySelector('#ks-search-input').addEventListener('input', e => {
         _ksSearch = e.target.value.toLowerCase().trim();
@@ -439,6 +517,15 @@ function _buildKStorePanel() {
         group.addEventListener('click', e => {
             const chip = e.target.closest('.ks-chip-filter');
             if (!chip) return;
+
+            // SUR MESURE → mailto, pas de filtre
+            if (chip.dataset.value === 'SUR_MESURE') {
+                const sub = encodeURIComponent('Keystone OS — Demande Sur Mesure');
+                const body = encodeURIComponent('Bonjour,\n\nJe souhaite en savoir plus sur une offre sur mesure.\n\nNom / Société :\nBesoins :\nNombre d\'utilisateurs :\n\nCordialement,');
+                window.open(`mailto:protein.keystone@gmail.com?subject=${sub}&body=${body}`);
+                return;
+            }
+
             group.querySelectorAll('.ks-chip-filter').forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
             if (group.dataset.filter === 'cat')  _ksCat  = chip.dataset.value;
@@ -478,7 +565,8 @@ function _renderKStoreItems() {
         }
 
         if (_ksCat) {
-            if (item.id.split('-')[1] !== _ksCat) return false;
+            const itemCat = cat?.category || item.id.split('-')[1];
+            if (itemCat !== _ksCat) return false;
         }
 
         if (_ksPlan) {
@@ -502,7 +590,7 @@ function _renderKStoreItems() {
         const cat     = getCatalogEntry(item.id);
         const isOwned = ownedIds === null || ownedIds.includes(item.id);
         const isArt   = item.id.startsWith('A-');
-        const catLbl  = _KS_CAT_LABELS[item.id.split('-')[1]] || '';
+        const catLbl  = _KS_CAT_LABELS[cat?.category || item.id.split('-')[1]] || '';
 
         return `
         <div class="ks-item${isOwned ? ' ks-item--owned' : ''}${cat?.isNew ? ' ks-item--new' : ''}">
@@ -531,6 +619,84 @@ function _renderKStoreItems() {
     }).join('');
 }
 
+async function _renderKStorePlans() {
+    const view = document.getElementById('ks-plans-view');
+    if (!view) return;
+
+    // Toujours tenter le catalog local — source de vérité pour is_custom
+    // (le catalog GitHub peut être en retard après un push)
+    let allTools = getCatalog()?.tools || [];
+    try {
+        const local = await fetch('/K_STORE_ASSETS/catalog.json').then(r => r.json());
+        if (local?.tools?.length) allTools = local.tools;
+    } catch {}
+
+    const ownedIds    = getOwnedIds();
+    const currentPlan = localStorage.getItem('ks_plan') || null;
+
+    // Outils publiés groupés par plan (cumulatif : MAX inclut PRO inclut STARTER)
+    const _planOrder = ['STARTER', 'PRO', 'MAX'];
+    const byPlan = id => {
+        const idx = _planOrder.indexOf(id);
+        if (idx === -1) return [];
+        return allTools
+            .filter(t => t.published && !t.is_custom && _planOrder.indexOf(t.plan) >= 0 && _planOrder.indexOf(t.plan) <= idx)
+            .map(t => t.title);
+    };
+
+    const _contactMailto = () => {
+        const sub  = encodeURIComponent('Keystone OS — Demande Sur Mesure');
+        const body = encodeURIComponent('Bonjour,\n\nJe souhaite en savoir plus sur une offre sur mesure.\n\nNom / Société :\nBesoins :\nNombre d\'utilisateurs :\n\nCordialement,');
+        return `mailto:protein.keystone@gmail.com?subject=${sub}&body=${body}`;
+    };
+
+    view.innerHTML = `
+        <div class="ks-plans-grid">
+            ${KS_PLANS.map(plan => {
+                const tools    = byPlan(plan.id);
+                const isActive = currentPlan === plan.id || (plan.id === 'MAX' && ownedIds === null);
+
+                if (plan.contact) {
+                    return `
+                    <div class="ks-plan-card ks-plan-card--contact" style="--plan-color:${plan.color}">
+                        <div class="ks-plan-name">${plan.name}</div>
+                        <div class="ks-plan-price"><span class="ks-plan-contact">Sur devis</span></div>
+                        <div class="ks-plan-tagline">${plan.tagline}</div>
+                        <ul class="ks-plan-list">
+                            <li>Outils personnalisés</li>
+                            <li>Intégrations sur mesure</li>
+                            <li>Support dédié</li>
+                            <li>Formation équipe</li>
+                        </ul>
+                        <a class="ks-plan-cta ks-plan-cta--contact" href="${_contactMailto()}">
+                            Envoyer une demande →
+                        </a>
+                    </div>`;
+                }
+
+                return `
+                <div class="ks-plan-card${plan.recommended ? ' ks-plan-card--recommended' : ''}${isActive ? ' ks-plan-card--active' : ''}"
+                     style="--plan-color:${plan.color}">
+                    ${plan.recommended ? '<div class="ks-plan-badge">RECOMMANDÉ</div>' : ''}
+                    ${isActive        ? '<div class="ks-plan-badge ks-plan-badge--active">VOTRE PLAN</div>' : ''}
+                    <div class="ks-plan-name">${plan.name}</div>
+                    <div class="ks-plan-price">
+                        ${plan.price ? `${plan.price} €<span class="ks-plan-per">/mois</span>` : ''}
+                    </div>
+                    <div class="ks-plan-tagline">${plan.tagline}</div>
+                    <ul class="ks-plan-list">
+                        ${tools.map(t => `<li>${t}</li>`).join('')}
+                    </ul>
+                    ${isActive
+                        ? `<div class="ks-plan-active-label">Plan actif</div>`
+                        : `<a class="ks-plan-cta" href="https://proteinstudio.fr/keystone?plan=${plan.id.toLowerCase()}"
+                              target="_blank" rel="noopener noreferrer">${plan.cta} →</a>`}
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+}
+
 function _checkKStorePulse() {
     const catalog = getCatalog();
     if (!catalog) return;
@@ -552,8 +718,27 @@ function _checkKStorePulse() {
 // ═══════════════════════════════════════════════════════════════
 // MARKETPLACE INFO MODAL — affiché au clic d'un outil verrouillé
 // ═══════════════════════════════════════════════════════════════
+// ── Trial — 1 génération gratuite par outil ─────────────────────
+const LS_TRIAL_PREFIX = 'ks_trial_';
+
+function _getTrialState(id) {
+    try { return JSON.parse(localStorage.getItem(LS_TRIAL_PREFIX + id) || 'null'); } catch { return null; }
+}
+function _hasTrialLeft(id) {
+    const state = _getTrialState(id);
+    return state !== null && state.uses < 1;
+}
+function _consumeTrial(id) {
+    const state = _getTrialState(id) || { uses: 0 };
+    state.uses = (state.uses || 0) + 1;
+    localStorage.setItem(LS_TRIAL_PREFIX + id, JSON.stringify(state));
+}
+function _startTrial(id) {
+    const existing = _getTrialState(id);
+    if (!existing) localStorage.setItem(LS_TRIAL_PREFIX + id, JSON.stringify({ uses: 0, startedAt: Date.now() }));
+}
+
 function _openMarketplaceInfo(item) {
-    // Nettoyage si déjà ouverte
     document.getElementById('ks-mkt-backdrop')?.remove();
     document.getElementById('ks-mkt-modal')?.remove();
 
@@ -562,24 +747,40 @@ function _openMarketplaceInfo(item) {
     backdrop.className = 'mkt-backdrop';
 
     const catCode    = (item.id || '').split('-')[1] || '';
-    const catLabel   = { IMM:'IMMOBILIER', MKT:'MARKETING', ANL:'ANALYSE', ADM:'ADMIN', ART:'ARTEFACT' }[catCode] || catCode;
+    const catLabels  = { IMM:'Immobilier', MKT:'Marketing', ANL:'Analyse', ADM:'Admin', ART:'Artefact' };
+    const catLabel   = catLabels[catCode] || catCode;
     const isArtefact = (item.id || '').startsWith('A-');
 
-    // Données catalogue enrichies (disponibles si le fetch est arrivé)
-    const cat       = getCatalogEntry(item.id);
-    const longDesc  = cat?.longDesc || null;
-    const plan      = cat?.plan     || null;
-    const price     = cat?.price    || null;
-    const aiEngine  = cat?.ai_optimized || item.engine || null;
-    const isNew     = cat?.isNew    || false;
-    const priceStr  = price ? `${price} €/mois` : (cat ? 'Sur devis' : '');
+    const cat          = getCatalogEntry(item.id);
+    const longDesc     = cat?.longDesc || null;
+    const plan         = cat?.plan     || null;
+    const price        = cat?.price    || null;
+    const lifetimePrice= cat?.lifetimePrice || null;
+    const aiEngine     = cat?.ai_optimized || item.engine || null;
+    const isNew        = cat?.isNew    || false;
+
+    // URLs de conversion avec ID de l'outil
+    const baseUrl       = `https://proteinstudio.fr/keystone?id=${encodeURIComponent(item.id)}`;
+    const unlockUrl     = `${baseUrl}&plan=${encodeURIComponent(plan || 'starter')}`;
+    const lifetimeUrl   = `${baseUrl}&plan=lifetime`;
+
+    // État du trial pour cet outil
+    const trialState    = _getTrialState(item.id);
+    const trialUsed     = trialState !== null && trialState.uses >= 1;
+    const trialAvail    = !isArtefact && !trialUsed;
+
+    const _feat = txt => `<div class="mkt-feat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             style="width:12px;height:12px;flex-shrink:0;color:var(--gold)">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>${txt}</div>`;
 
     const modal = document.createElement('div');
     modal.id = 'ks-mkt-modal';
     modal.className = 'mkt-modal';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', `Débloquer ${item.name}`);
+    modal.setAttribute('aria-label', `Découvrir ${cat?.title || item.name}`);
     modal.innerHTML = `
         <div class="mkt-head">
             <div class="mkt-icon">${ICONS[item.icon] || ICONS['zap']}</div>
@@ -589,70 +790,64 @@ function _openMarketplaceInfo(item) {
                     ${isNew ? '<span class="mkt-new-badge">NOUVEAU</span>' : ''}
                 </div>
                 <div class="mkt-title">${cat?.title || item.name}</div>
-                <div class="mkt-desc">${cat?.subtitle || item.desc || ''}</div>
+                <div class="mkt-subtitle">${cat?.subtitle || item.desc || ''}</div>
             </div>
             <button class="mkt-close" aria-label="Fermer">✕</button>
         </div>
+
         <div class="mkt-body">
-            <div class="mkt-info-row">
-                <div class="mkt-badge-ks">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                         style="width:12px;height:12px;flex-shrink:0">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                    ${isArtefact ? 'Artefact Key-Store' : 'Outil Key-Store'}
-                </div>
-                ${plan     ? `<div class="mkt-chip mkt-chip-plan">Plan ${plan}</div>` : ''}
-                ${priceStr ? `<div class="mkt-chip mkt-chip-price">${priceStr}</div>` : ''}
-                ${aiEngine ? `<div class="mkt-chip mkt-chip-engine">${aiEngine} ✦</div>` : ''}
-            </div>
+            ${aiEngine ? `<div class="mkt-engine-row"><span class="mkt-chip mkt-chip-engine">${aiEngine} ✦</span></div>` : ''}
+
             <p class="mkt-explain">
-                ${longDesc
-                    ? longDesc
-                    : `Cet outil n'est pas inclus dans votre licence actuelle.<br>Débloquez-le pour bénéficier d'un accès complet ou essayez-le gratuitement.`}
+                ${longDesc || `Cet outil n'est pas inclus dans votre licence actuelle. Débloquez-le pour un accès illimité ou essayez-le gratuitement.`}
             </p>
+
             <div class="mkt-features">
-                <div class="mkt-feat">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         style="width:13px;height:13px;flex-shrink:0;color:var(--gold)">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    Accès illimité au formulaire IA
-                </div>
-                <div class="mkt-feat">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         style="width:13px;height:13px;flex-shrink:0;color:var(--gold)">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    Sauvegarde dans la bibliothèque de prompts
-                </div>
-                <div class="mkt-feat">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         style="width:13px;height:13px;flex-shrink:0;color:var(--gold)">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    Mises à jour automatiques via Key-Store
-                </div>
+                ${_feat('Accès illimité au formulaire IA')}
+                ${_feat('Sauvegarde dans la bibliothèque de prompts')}
+                ${_feat('Mises à jour automatiques via Key-Store')}
+                ${lifetimePrice ? _feat('Achat définitif disponible — aucun abonnement requis') : ''}
             </div>
         </div>
-        <div class="mkt-actions">
-            <button class="mkt-btn-try" id="mkt-btn-try"
-                    title="Tester cet outil (usage limité — 1 génération)">
+
+        <div class="mkt-pricing">
+            ${price ? `
+            <div class="mkt-price-col">
+                <div class="mkt-price-label">Abonnement</div>
+                <div class="mkt-price-amount">${price} €<span class="mkt-price-per">/mois</span></div>
+                ${plan ? `<div class="mkt-price-plan">Plan ${plan}</div>` : ''}
+                <a class="mkt-btn-unlock" href="${unlockUrl}" target="_blank" rel="noopener noreferrer">
+                    Débloquer →
+                </a>
+            </div>` : ''}
+            ${lifetimePrice ? `
+            <div class="mkt-price-col mkt-price-col--lifetime">
+                <div class="mkt-price-label">À vie</div>
+                <div class="mkt-price-amount">${lifetimePrice} €<span class="mkt-price-per"> une fois</span></div>
+                <div class="mkt-price-plan">Accès permanent</div>
+                <a class="mkt-btn-lifetime" href="${lifetimeUrl}" target="_blank" rel="noopener noreferrer">
+                    Acheter à vie →
+                </a>
+            </div>` : ''}
+        </div>
+
+        <div class="mkt-trial-zone">
+            ${trialAvail ? `
+            <button class="mkt-btn-try" id="mkt-btn-try">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                     style="width:14px;height:14px;flex-shrink:0">
+                     style="width:13px;height:13px;flex-shrink:0">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                Essayer gratuitement
-            </button>
-            <a class="mkt-btn-unlock"
-               href="https://proteinstudio.fr/keystone" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     style="width:14px;height:14px;flex-shrink:0">
-                    <rect x="3" y="11" width="18" height="11" rx="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                Essayer gratuitement — 1 génération offerte
+            </button>` : isArtefact ? '' : `
+            <div class="mkt-trial-used">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     style="width:13px;height:13px;flex-shrink:0">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                Débloquer cet outil →
-            </a>
+                Essai déjà utilisé — Débloquez pour un accès illimité
+            </div>`}
         </div>
     `;
 
@@ -676,10 +871,10 @@ function _openMarketplaceInfo(item) {
     backdrop.addEventListener('click', _close);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') _close(); }, { once: true });
 
-    // Essai limité : ouvre l'outil en mode trial (passe la garde B2B)
-    modal.querySelector('#mkt-btn-try').addEventListener('click', () => {
+    modal.querySelector('#mkt-btn-try')?.addEventListener('click', () => {
+        _startTrial(item.id);
         _close();
-        if (!isArtefact) setTimeout(() => openTool(item.id, { trial: true }), 320);
+        setTimeout(() => openTool(item.id, { trial: true }), 320);
     });
 }
 
@@ -731,8 +926,15 @@ let currentPad = null;
 
 export function openTool(padId, opts = {}) {
     // ── Garde B2B — outil verrouillé ? ───────────────────────────
-    const ownedIds = getOwnedIds();
-    if (!opts.trial && ownedIds !== null && !ownedIds.includes(padId)) {
+    const ownedIds    = getOwnedIds();
+    const lifetimeIds = getLifetimeIds();
+    const isAccessible = ownedIds === null
+        || ownedIds.includes(padId)
+        || lifetimeIds.includes(padId)
+        || opts.trial
+        || _hasTrialLeft(padId);
+
+    if (!isAccessible) {
         const item = [...TOOLS, ...ARTEFACTS].find(x => x.id === padId);
         if (item) _openMarketplaceInfo(item);
         return;

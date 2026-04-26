@@ -2,7 +2,7 @@ import { loadVault, isVaultEmpty }             from './vault.js';
 import { renderDashboard, initSettings }       from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';
 import { initLockScreen }                     from './lockscreen.js';
-import { loadPads, fetchRemoteCatalog }       from './pads-loader.js';
+import { loadPads, fetchRemoteCatalog, addLifetimePurchase } from './pads-loader.js';
 import { initOnboarding }                     from './onboarding.js';
 
 // ── Démarrage complet du dashboard ─────────────────────────────
@@ -17,6 +17,16 @@ function _boot() {
 window.addEventListener('DOMContentLoaded', async () => {
     // 1. Vault en premier — source de vérité USB, écrase le localStorage
     loadVault();
+
+    // Sprint C — Activation URL post-paiement (?ks_activate=O-IMM-001)
+    const _p = new URLSearchParams(window.location.search);
+    const _activateId = _p.get('ks_activate');
+    if (_activateId) {
+        addLifetimePurchase(_activateId);
+        const _clean = new URL(window.location.href);
+        _clean.searchParams.delete('ks_activate');
+        window.history.replaceState({}, '', _clean);
+    }
 
     // 2. Chargement des PADs (nécessaire aussi pour le catalogue d'onboarding)
     const pads = await loadPads();

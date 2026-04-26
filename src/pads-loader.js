@@ -188,7 +188,8 @@ export function getCatalogEntry(id) {
 
 async function _doFetchCatalog(primaryUrl) {
     // Tente l'URL distante en premier, puis le catalogue local Vercel en fallback
-    const candidates = [primaryUrl, '/K_STORE_ASSETS/catalog.json'].filter(Boolean);
+    // Local d'abord (toujours synchronisé avec le déploiement), remote ensuite (SWR)
+    const candidates = ['/K_STORE_ASSETS/catalog.json', primaryUrl].filter(Boolean);
 
     for (const url of candidates) {
         try {
