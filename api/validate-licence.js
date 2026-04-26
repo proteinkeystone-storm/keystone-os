@@ -11,7 +11,13 @@
      { valid: false, error: string }
    ═══════════════════════════════════════════════════════════════ */
 
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+// Client Redis — lit KV_REST_API_URL + KV_REST_API_TOKEN (injectées par Upstash/Vercel)
+const kv = new Redis({
+  url:   process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
 // ── Catalogue des plans — IDs NOMEN-K canoniques ────────────────
 const PLANS = {
