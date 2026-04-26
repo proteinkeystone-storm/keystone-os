@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "updatedAt": "2026-04-26",
   "tools": [
     {
@@ -14,6 +14,7 @@
       "icon": "vefa",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": true,
       "tags": ["immobilier", "vefa", "notice", "juridique", "contrat"]
     },
     {
@@ -28,6 +29,7 @@
       "icon": "ad",
       "ai_optimized": "ChatGPT",
       "isNew": false,
+      "published": true,
       "tags": ["immobilier", "annonce", "vente", "portail", "copywriting"]
     },
     {
@@ -42,6 +44,7 @@
       "icon": "mail",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": true,
       "tags": ["immobilier", "email", "chantier", "acquéreur", "suivi"]
     },
     {
@@ -56,6 +59,7 @@
       "icon": "social",
       "ai_optimized": "Gemini",
       "isNew": false,
+      "published": true,
       "tags": ["marketing", "réseaux sociaux", "facebook", "instagram", "linkedin"]
     },
     {
@@ -70,6 +74,7 @@
       "icon": "brief",
       "ai_optimized": "ChatGPT",
       "isNew": false,
+      "published": true,
       "tags": ["marketing", "photo", "3D", "brief", "créatif"]
     },
     {
@@ -84,6 +89,7 @@
       "icon": "site",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": true,
       "tags": ["analyse", "chantier", "cr", "réserves", "suivi travaux"]
     },
     {
@@ -98,6 +104,7 @@
       "icon": "foncier",
       "ai_optimized": "Claude",
       "isNew": true,
+      "published": true,
       "tags": ["analyse", "foncier", "urbanisme", "bilan", "faisabilité"]
     },
     {
@@ -112,6 +119,7 @@
       "icon": "chat",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": true,
       "tags": ["admin", "commercial", "objection", "vente", "argumentation"]
     },
     {
@@ -126,6 +134,7 @@
       "icon": "zap",
       "ai_optimized": "Claude",
       "isNew": true,
+      "published": false,
       "tags": ["artefact", "seo", "monitoring", "présence digitale", "ranking"]
     },
     {
@@ -140,6 +149,7 @@
       "icon": "table",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": false,
       "tags": ["artefact", "lots", "grille de vente", "disponibilités", "export"]
     },
     {
@@ -154,6 +164,7 @@
       "icon": "chat",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": false,
       "tags": ["artefact", "qualification", "scoring", "acquéreur", "CRM"]
     },
     {
@@ -168,6 +179,7 @@
       "icon": "calc",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": false,
       "tags": ["artefact", "pinel", "fiscal", "investissement", "simulation"]
     },
     {
@@ -182,6 +194,7 @@
       "icon": "calc",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": false,
       "tags": ["artefact", "bilan", "promoteur", "calcul", "marge"]
     },
     {
@@ -196,6 +209,7 @@
       "icon": "brief",
       "ai_optimized": "Claude",
       "isNew": false,
+      "published": false,
       "tags": ["artefact", "faq", "client", "communication", "admin"]
     }
   ]

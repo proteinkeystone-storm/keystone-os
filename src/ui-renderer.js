@@ -139,9 +139,13 @@ export function renderDashboard() {
     // null = mode démo : tout est accessible · sinon : filtre par licence
     const ownedIds   = getOwnedIds();
     const ownedTools = TOOLS.filter(t => ownedIds === null || ownedIds.includes(t.id));
-    const lockedTools= ownedIds !== null ? TOOLS.filter(t => !ownedIds.includes(t.id)) : [];
+    const lockedTools= ownedIds !== null
+        ? TOOLS.filter(t => !ownedIds.includes(t.id) && getCatalogEntry(t.id)?.published !== false)
+        : [];
     const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => ownedIds.includes(a.id)) : [];
-    const lockedArts = ARTEFACTS.filter(a => ownedIds === null || !ownedIds.includes(a.id));
+    const lockedArts = ARTEFACTS.filter(a =>
+        (ownedIds === null || !ownedIds.includes(a.id)) && getCatalogEntry(a.id)?.published !== false
+    );
 
     const padsEl = document.getElementById('pads-container');
     const artsEl = document.getElementById('arts-container');
@@ -263,6 +267,11 @@ export function renderDashboard() {
 
     // Badge pulse si nouveaux outils depuis la dernière visite
     _checkKStorePulse();
+
+    // Si le catalogue vient de charger et que le panneau est ouvert, rafraîchir la liste
+    if (document.getElementById('ks-panel')?.classList.contains('open')) {
+        _renderKStoreItems();
+    }
 
     renderHeroDate();
 }
@@ -448,6 +457,9 @@ function _renderKStoreItems() {
 
     const filtered = all.filter(item => {
         const cat = getCatalogEntry(item.id);
+
+        // Masquer les outils non publiés (prototypes, en cours de validation)
+        if (cat && cat.published === false) return false;
 
         if (_ksSearch) {
             const hay = [item.name, item.desc || '', cat?.subtitle || '',
