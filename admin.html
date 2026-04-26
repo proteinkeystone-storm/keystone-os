@@ -523,6 +523,165 @@
     #toast.show { transform: translateY(0); opacity: 1; }
     #toast.success { border-color: var(--success); color: var(--success); }
     #toast.error   { border-color: var(--danger);  color: var(--danger); }
+
+    /* ── TYPE BADGES ───────────────────────────────────────────── */
+    .type-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .type-badge-tool     { color: var(--gold); background: var(--gold-dim); border-color: var(--border); }
+    .type-badge-artifact { color: #6496ff; background: rgba(100,150,255,0.1); border-color: rgba(100,150,255,0.25); }
+
+    /* ── EDITOR TABS ───────────────────────────────────────────── */
+    .editor-tabs-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+    .editor-tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .editor-tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .editor-tab-btn:hover:not(.active) { color: var(--text); }
+    .editor-tab-content { display: none; }
+    .editor-tab-content.active { display: block; }
+
+    /* ── ENGINE TABS ───────────────────────────────────────────── */
+    .engine-tabs-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .engine-tab-btn {
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .engine-tab-btn.active {
+      background: color-mix(in srgb, var(--eng-color, var(--gold)) 15%, transparent);
+      border-color: color-mix(in srgb, var(--eng-color, var(--gold)) 40%, transparent);
+      color: var(--eng-color, var(--gold));
+    }
+    .engine-tab-btn:hover:not(.active) { border-color: var(--gold); color: var(--text); }
+
+    .engine-panel { display: none; }
+    .engine-panel.active { display: block; }
+
+    .engine-hint {
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .engine-tokens {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .engine-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      border: 1px solid;
+    }
+
+    /* ── CARD PREVIEW ──────────────────────────────────────────── */
+    .pad-card-preview {
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+    .preview-icon { font-size: 22px; display: block; margin-bottom: 10px; }
+    .preview-title {
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      margin: 10px 0 4px;
+    }
+    .preview-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── FIELD BUILDER ─────────────────────────────────────────── */
+    .field-row {
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color 0.15s;
+    }
+    .field-row:hover { border-color: rgba(201,168,76,0.35); }
+    .field-row-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 120px 1fr;
+      gap: 12px;
+    }
+
+    /* ── TYPE SELECTOR ─────────────────────────────────────────── */
+    .type-radio {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 14px;
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      flex: 1;
+    }
+    .type-radio.active { border-color: var(--gold); }
+    .type-radio small { font-size: 11px; color: var(--text-muted); text-align: center; }
+
+    /* ── NEW PAD TYPE CHOICE ────────────────────────────────────── */
+    .type-choice-btn {
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      color: var(--text);
+      font-family: inherit;
+      text-align: center;
+      width: 100%;
+    }
+    .type-choice-btn:hover { border-color: var(--gold); background: var(--gold-dim); }
   </style>
 </head>
 <body>
