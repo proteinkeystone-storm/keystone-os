@@ -93,7 +93,9 @@ function _buildVaultSource() {
         prefs[key] = key === 'photo' ? raw : _b64(raw);
     });
 
-    const savedOrder = localStorage.getItem('ks_pad_order') || '';
+    const savedOrder    = localStorage.getItem('ks_pad_order') || '';
+    const ownedAssets   = localStorage.getItem('ks_owned_assets') || '';
+    const lifetimePurch = localStorage.getItem('ks_lifetime_purchases') || '';
     const hiddenPads = {};
     Object.keys(localStorage).forEach(k => {
         if (k.startsWith('ks_pad_hidden_') || k.startsWith('ks_pad_label_'))
@@ -111,6 +113,10 @@ const VAULT = {
     api: ${JSON.stringify(api, null, 8)},
     prefs: ${JSON.stringify(prefs, null, 8)},
     licence: { key:'', plan:'', owner:'' },
+    ownership: {
+        owned:    ${JSON.stringify(ownedAssets)},
+        lifetime: ${JSON.stringify(lifetimePurch)},
+    },
 };
 
 const PREFS_MAP = {
@@ -135,6 +141,8 @@ export function loadVault() {
         try { localStorage.setItem(lsKey, key === 'photo' ? value : atob(value)); } catch(e) {}
     });
     ${savedOrder ? `try { if (!localStorage.getItem('ks_pad_order')) localStorage.setItem('ks_pad_order', ${JSON.stringify(savedOrder)}); } catch(e) {}` : ''}
+    if (VAULT.ownership?.owned    && !localStorage.getItem('ks_owned_assets'))    { try { localStorage.setItem('ks_owned_assets', VAULT.ownership.owned); } catch(e) {} }
+    if (VAULT.ownership?.lifetime && !localStorage.getItem('ks_lifetime_purchases')) { try { localStorage.setItem('ks_lifetime_purchases', VAULT.ownership.lifetime); } catch(e) {} }
     ${Object.entries(hiddenPads).map(([k, v]) =>
         `try { if (!localStorage.getItem(${JSON.stringify(k)})) localStorage.setItem(${JSON.stringify(k)}, atob(${JSON.stringify(v)})); } catch(e) {}`
     ).join('\n    ')}

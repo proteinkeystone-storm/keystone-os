@@ -63,6 +63,18 @@ window.addEventListener('DOMContentLoaded', async () => {
         renderDashboard();
     });
 
+    // ── Sprint A — Hot reload après achat à vie ──────────────────
+    window.addEventListener('ks-lifetime-activated', e => {
+        renderDashboard();
+        const dstText = document.getElementById('dst-text');
+        if (dstText) {
+            dstText.textContent = `✓ Outil acquis définitivement — accès permanent garanti.`;
+            setTimeout(() => {
+                dstText.textContent = 'Votre pôle de promotion immobilière est prêt.';
+            }, 5000);
+        }
+    });
+
     // ── Sprint 4 — Re-render barre Key-Store dès que le catalogue arrive ─
     window.addEventListener('ks-catalog-loaded', () => {
         renderDashboard();

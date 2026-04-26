@@ -60,15 +60,16 @@ export function getPad(keyOrId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// OWNERSHIP — Classification owned / suggested
+// OWNERSHIP — Classification owned / suggested / frigo
 // ═══════════════════════════════════════════════════════════════
-const LS_OWNED = 'ks_owned_assets';
+const LS_OWNED    = 'ks_owned_assets';
+const LS_LIFETIME = 'ks_lifetime_purchases';
 
 /**
- * Retourne le tableau des IDs possédés, ou null (= mode démo, tout accessible).
+ * Retourne le tableau des IDs possédés via abonnement, ou null (= mode démo).
  * null   → vault vide / fresh install → mode démo, tous les pads sont actifs
- * []     → licence vide → rien n'est accessible
- * [...]  → liste des IDs achetés
+ * []     → abonnement expiré / révoqué
+ * [...]  → liste des IDs sous abonnement actif
  */
 export function getOwnedIds() {
     const raw = localStorage.getItem(LS_OWNED);
@@ -76,34 +77,78 @@ export function getOwnedIds() {
     try { return JSON.parse(raw); } catch { return null; }
 }
 
-/** Persiste la liste des IDs possédés (appelé après activation licence). */
+/** Persiste la liste des IDs d'abonnement (appelé après activation licence). */
 export function setOwnedIds(ids) {
     localStorage.setItem(LS_OWNED, JSON.stringify(Array.isArray(ids) ? ids : []));
 }
 
 /**
+ * Retourne le tableau des IDs achetés à vie (jamais null — [] par défaut).
+ * Ces IDs restent accessibles même si l'abonnement expire (Mode Frigo).
+ */
+export function getLifetimeIds() {
+    const raw = localStorage.getItem(LS_LIFETIME);
+    if (!raw) return [];
+    try { return JSON.parse(raw); } catch { return []; }
+}
+
+/** Persiste la liste des achats à vie. */
+export function setLifetimeIds(ids) {
+    localStorage.setItem(LS_LIFETIME, JSON.stringify(Array.isArray(ids) ? ids : []));
+}
+
+/**
+ * Ajoute un ID à la liste permanente et déclenche un hot reload.
+ * Idempotent : sans effet si l'ID est déjà dans la liste.
+ */
+export function addLifetimePurchase(id) {
+    const current = getLifetimeIds();
+    if (current.includes(id)) return;
+    setLifetimeIds([...current, id]);
+    window.dispatchEvent(new CustomEvent('ks-lifetime-activated', { detail: { id } }));
+}
+
+/**
+ * Mode Frigo : abonnement expiré ou vide, mais des achats à vie existent.
+ * L'utilisateur garde l'accès à ses outils permanents.
+ */
+export function isFrigoMode() {
+    const ownedIds    = getOwnedIds();
+    const lifetimeIds = getLifetimeIds();
+    return ownedIds !== null && ownedIds.length === 0 && lifetimeIds.length > 0;
+}
+
+/**
  * Sépare les pads chargés en deux groupes :
- *   owned     → affiché dans la grille principale (interactif)
- *   suggested → affiché dans la barre Key-Store (verrouillé)
- * @returns {{ owned: Object, suggested: Object }}
+ *   owned     → abonnement actif OU achat à vie (lifetime: true si définitif)
+ *   suggested → dans le catalogue mais non possédés (locked)
+ * + flag frigo pour l'UI
+ * @returns {{ owned: Object, suggested: Object, frigo: boolean }}
  */
 export function classifyPads() {
-    const all      = _padsCache || PADS_DATA;
-    const ownedIds = getOwnedIds();
+    const all         = _padsCache || PADS_DATA;
+    const ownedIds    = getOwnedIds();
+    const lifetimeIds = getLifetimeIds();
 
-    // Mode démo : tout est dans owned, rien dans suggested
-    if (ownedIds === null) return { owned: all, suggested: {} };
+    // Mode démo : tout est dans owned
+    if (ownedIds === null) return { owned: all, suggested: {}, frigo: false };
 
     const owned     = {};
     const suggested = {};
+
     Object.entries(all).forEach(([key, pad]) => {
-        if (ownedIds.includes(pad.id)) {
-            owned[key] = pad;
+        const inSubscription = ownedIds.includes(pad.id);
+        const inLifetime     = lifetimeIds.includes(pad.id);
+
+        if (inSubscription || inLifetime) {
+            owned[key] = inLifetime ? { ...pad, lifetime: true } : pad;
         } else {
             suggested[key] = { ...pad, locked: true };
         }
     });
-    return { owned, suggested };
+
+    const frigo = ownedIds.length === 0 && lifetimeIds.length > 0;
+    return { owned, suggested, frigo };
 }
 
 // ═══════════════════════════════════════════════════════════════

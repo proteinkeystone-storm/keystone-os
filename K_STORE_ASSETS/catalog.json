@@ -15,6 +15,7 @@
       "ai_optimized": "Claude",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["immobilier", "vefa", "notice", "juridique", "contrat"]
     },
     {
@@ -30,6 +31,7 @@
       "ai_optimized": "ChatGPT",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["immobilier", "annonce", "vente", "portail", "copywriting"]
     },
     {
@@ -45,6 +47,7 @@
       "ai_optimized": "Claude",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["immobilier", "email", "chantier", "acquéreur", "suivi"]
     },
     {
@@ -60,6 +63,7 @@
       "ai_optimized": "Gemini",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["marketing", "réseaux sociaux", "facebook", "instagram", "linkedin"]
     },
     {
@@ -75,6 +79,7 @@
       "ai_optimized": "ChatGPT",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["marketing", "photo", "3D", "brief", "créatif"]
     },
     {
@@ -90,6 +95,7 @@
       "ai_optimized": "Claude",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["analyse", "chantier", "cr", "réserves", "suivi travaux"]
     },
     {
@@ -105,6 +111,7 @@
       "ai_optimized": "Claude",
       "isNew": true,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["analyse", "foncier", "urbanisme", "bilan", "faisabilité"]
     },
     {
@@ -120,6 +127,7 @@
       "ai_optimized": "Claude",
       "isNew": false,
       "published": true,
+      "lifetimePrice": 149,
       "tags": ["admin", "commercial", "objection", "vente", "argumentation"]
     },
     {

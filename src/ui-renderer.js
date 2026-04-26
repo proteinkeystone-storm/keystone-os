@@ -3,7 +3,7 @@
    Modules : Dashboard · Settings · Modal renderTool · S-CORE-LOGIC
    ═══════════════════════════════════════════════════════════════ */
 
-import { getPad, getOwnedIds, getCatalogEntry, getCatalog } from './pads-loader.js';
+import { getPad, getOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog } from './pads-loader.js';
 // pads-data.js reste le fallback embarqué — pads-loader.js le charge si disponible
 import { ApiHandler } from './api-handler.js';
 import {
@@ -135,17 +135,45 @@ export function renderDashboard() {
         return;
     }
 
-    // ── Classification owned / locked (B2B READY) ─────────────
-    // null = mode démo : tout est accessible · sinon : filtre par licence
-    const ownedIds   = getOwnedIds();
-    const ownedTools = TOOLS.filter(t => ownedIds === null || ownedIds.includes(t.id));
-    const lockedTools= ownedIds !== null
-        ? TOOLS.filter(t => !ownedIds.includes(t.id) && getCatalogEntry(t.id)?.published !== false)
+    // ── Classification owned / locked (B2B + Lifetime) ────────
+    const ownedIds    = getOwnedIds();
+    const lifetimeIds = getLifetimeIds();
+
+    // Un outil est accessible si : mode démo OU abonnement actif OU achat à vie
+    const _isOwned    = id => ownedIds === null || ownedIds.includes(id) || lifetimeIds.includes(id);
+    const _isLifetime = id => lifetimeIds.includes(id);
+
+    const ownedTools = TOOLS.filter(t => _isOwned(t.id));
+    const lockedTools = ownedIds !== null
+        ? TOOLS.filter(t => !_isOwned(t.id) && getCatalogEntry(t.id)?.published !== false)
         : [];
-    const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => ownedIds.includes(a.id)) : [];
+    const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => _isOwned(a.id)) : [];
     const lockedArts = ARTEFACTS.filter(a =>
-        (ownedIds === null || !ownedIds.includes(a.id)) && getCatalogEntry(a.id)?.published !== false
+        (ownedIds === null || !_isOwned(a.id)) && getCatalogEntry(a.id)?.published !== false
     );
+
+    // ── Bannière Mode Frigo ────────────────────────────────────
+    const _existingBanner = document.getElementById('ks-frigo-banner');
+    if (isFrigoMode()) {
+        if (!_existingBanner) {
+            const _banner = document.createElement('div');
+            _banner.id = 'ks-frigo-banner';
+            _banner.className = 'ks-frigo-banner';
+            _banner.innerHTML = `
+                <span class="ks-frigo-text">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                         style="width:14px;height:14px;flex-shrink:0">
+                        <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07"/>
+                    </svg>
+                    Mode Frigo — Abonnement expiré · Vos achats définitifs restent actifs
+                </span>
+                <a href="https://proteinstudio.fr/keystone" target="_blank" rel="noopener"
+                   class="ks-frigo-cta">Renouveler →</a>`;
+            document.querySelector('.pads-section')?.before(_banner);
+        }
+    } else {
+        _existingBanner?.remove();
+    }
 
     const padsEl = document.getElementById('pads-container');
     const artsEl = document.getElementById('arts-container');
@@ -166,12 +194,14 @@ export function renderDashboard() {
         // Cartes outils possédés (interactives, drag & drop)
         const toolCards = visibleTools.map(t => {
             const label = getUserLabel(t.id) || t.name;
+            const lt    = _isLifetime(t.id);
             return `
-            <div class="pad-card" data-id="${t.id}" data-engine="${t.engine}" draggable="true">
+            <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}" draggable="true">
                 <div class="pad-icon">${ICONS[t.icon]}</div>
                 <div class="pad-name">${label}</div>
                 <div class="pad-desc">${t.desc}</div>
                 <div class="pad-badge badge-available">Disponible</div>
+                ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
                 <div class="pad-arrow">↗</div>
                 <div class="pad-sku">${t.id}</div>
             </div>`;
