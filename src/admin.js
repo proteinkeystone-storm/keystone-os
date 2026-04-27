@@ -93,8 +93,16 @@ const ICON_MAP = {
   table: '📊', default: '⚙️',
 };
 
+// ── API Base URL (Cloudflare Worker) ──────────────────────────
+// En développement local (localhost), les appels restent relatifs.
+// En production, toutes les requêtes API pointent vers le Worker CF.
+const CF_WORKER_URL = 'https://keystone-os-api.keystone-os.workers.dev';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? ''           // dev local → chemin relatif (proxy ou wrangler dev)
+  : CF_WORKER_URL; // production → Worker Cloudflare
+
 // ── State ──────────────────────────────────────────────────────
-let adminToken   = sessionStorage.getItem('ks_admin_token') || '';
+let adminToken   = localStorage.getItem('ks_admin_token') || '';
 let catalogData  = null;
 let padsCache    = {};
 let editingPadId = null;
@@ -162,7 +170,7 @@ async function api(endpoint, method = 'GET', body = null) {
     headers: { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
   };
   if (body !== null) opts.body = JSON.stringify(body);
-  const res  = await fetch(endpoint, opts);
+  const res  = await fetch(`${API_BASE}${endpoint}`, opts);
   if (res.status === 401) { logout(); throw new Error('Session expirée'); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
@@ -180,7 +188,7 @@ async function tryLogin() {
   const prev = adminToken; adminToken = secret;
   try {
     await api('/api/licence/list');
-    sessionStorage.setItem('ks_admin_token', secret);
+    localStorage.setItem('ks_admin_token', secret);
     showAdmin();
   } catch {
     adminToken = prev;
@@ -189,7 +197,7 @@ async function tryLogin() {
   }
 }
 function logout() {
-  sessionStorage.removeItem('ks_admin_token');
+  localStorage.removeItem('ks_admin_token');
   adminToken = '';
   adminScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
@@ -207,8 +215,11 @@ logoutBtn.addEventListener('click', logout);
 
 // ── Tab routing ────────────────────────────────────────────────
 const TAB_RENDERERS = {
-  licences: renderLicences, tools: renderTools,
-  catalog: renderCatalog,   monitoring: renderMonitoring,
+  licences:  renderLicences,
+  tools:     renderTools,
+  catalog:   renderCatalog,
+  monitoring: renderMonitoring,
+  settings:  renderSettings,
 };
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -1473,8 +1484,222 @@ async function renderMonitoring(panel) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// TAB 5 — RÉGLAGES · RGPD
+// ══════════════════════════════════════════════════════════════════
+async function renderSettings(panel) {
+  panel.innerHTML = `
+    <div class="section-header">
+      <h2 class="section-title">Réglages <span>· Confidentialité & RGPD</span></h2>
+    </div>
+
+    <!-- ── Politique de confidentialité ── -->
+    <div class="rgpd-section">
+      <div class="rgpd-section-title">
+        🔒 Données traitées par Keystone OS
+        <span class="rgpd-chip">RGPD Art. 13</span>
+      </div>
+      <table class="rgpd-table">
+        <tr>
+          <td>Responsable</td>
+          <td>Protein Studio / Stéphane Benedetti</td>
+        </tr>
+        <tr>
+          <td>Base légale</td>
+          <td>Exécution d'un contrat (Art. 6.1.b RGPD)</td>
+        </tr>
+        <tr>
+          <td>Données stockées</td>
+          <td>Clé de licence, nom propriétaire, adresse e-mail collaborateur, token d'appareil, horodatages</td>
+        </tr>
+        <tr>
+          <td>Données IA</td>
+          <td>Les prompts envoyés aux moteurs IA (Claude, GPT-4o, etc.) sont traités par les API tierces selon leurs propres politiques. Aucune donnée IA n'est conservée côté Keystone OS.</td>
+        </tr>
+        <tr>
+          <td>Hébergement</td>
+          <td>Cloudflare D1 — Région EU-West (WEUR). Aucun stockage hors UE.</td>
+        </tr>
+        <tr>
+          <td>Durée de conservation</td>
+          <td>Durée de la relation commerciale + 3 ans (obligations légales)</td>
+        </tr>
+        <tr>
+          <td>Droits RGPD</td>
+          <td>Accès, rectification, effacement, portabilité — exercer via ce panneau ou par e-mail à l'administrateur.</td>
+        </tr>
+      </table>
+      <div class="rgpd-notice">
+        Les clés API des moteurs IA sont chiffrées en AES-256-GCM avant stockage.<br>
+        L'accès admin est protégé par un secret Bearer Token (non transmis en clair).<br>
+        Toutes les communications transitent via HTTPS/TLS 1.3.
+      </div>
+    </div>
+
+    <!-- ── Export ── -->
+    <div class="rgpd-section">
+      <div class="rgpd-section-title">📦 Portabilité des données</div>
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">
+        Téléchargez l'intégralité des données stockées (licences + appareils) au format JSON.
+        Ce fichier peut être remis à un utilisateur sur demande (droit de portabilité, Art. 20 RGPD).
+      </p>
+      <button class="btn btn-secondary" id="btn-export-data">
+        ↓ Exporter toutes les données (JSON)
+      </button>
+      <p id="export-status" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+    </div>
+
+    <!-- ── Devices en attente ── -->
+    <div class="rgpd-section">
+      <div class="rgpd-section-title">📱 Appareils en attente d'approbation</div>
+      <div id="devices-pending-container">
+        <div class="loading" style="padding:24px 0">Chargement…</div>
+      </div>
+    </div>
+
+    <!-- ── Zone de suppression ── -->
+    <div class="rgpd-danger-zone">
+      <div class="rgpd-danger-title">⚠ Zone de suppression — Effacement sur demande (Art. 17 RGPD)</div>
+      <p style="font-size:12px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">
+        Supprimez toutes les données d'un tenant (appareils + révocation de licences).
+        Cette action est <strong style="color:#e05c5c">irréversible</strong>.
+      </p>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div class="form-group" style="flex:1">
+          <label class="form-label">Tenant ID</label>
+          <input type="text" class="form-input" id="purge-tenant-id"
+                 placeholder="default" style="font-family:'SF Mono',monospace">
+        </div>
+        <button class="btn btn-danger" id="btn-purge-tenant" style="flex-shrink:0">
+          Supprimer les données
+        </button>
+      </div>
+      <p id="purge-status" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+    </div>`;
+
+  // ── Export handler ────────────────────────────────────────────
+  panel.querySelector('#btn-export-data').addEventListener('click', async () => {
+    const btn    = panel.querySelector('#btn-export-data');
+    const status = panel.querySelector('#export-status');
+    btn.disabled = true; btn.textContent = '…';
+    status.textContent = '';
+    try {
+      const [licencesData, devicesData] = await Promise.all([
+        api('/api/licence/list'),
+        api('/api/admin/devices'),
+      ]);
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        exporter:   'Keystone OS Admin Panel',
+        licences:   licencesData.licences || [],
+        devices:    devicesData.devices   || [],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `keystone-export-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      status.style.color = 'var(--success)';
+      status.textContent = `✓ Export réussi — ${payload.licences.length} licences, ${payload.devices.length} appareils.`;
+    } catch (err) {
+      status.style.color = 'var(--danger)';
+      status.textContent = `Erreur : ${err.message}`;
+    } finally {
+      btn.disabled = false; btn.textContent = '↓ Exporter toutes les données (JSON)';
+    }
+  });
+
+  // ── Devices en attente ────────────────────────────────────────
+  try {
+    const { devices = [], pending = 0 } = await api('/api/admin/devices?approved=false');
+    const container = panel.querySelector('#devices-pending-container');
+    if (pending === 0) {
+      container.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">Aucun appareil en attente d\'approbation.</p>';
+    } else {
+      container.innerHTML = `
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+          ${pending} appareil(s) en attente d\'approbation admin.
+        </p>
+        <table class="data-table">
+          <thead><tr>
+            <th>Label</th><th>Email</th><th>Type</th><th>Demandé le</th><th>Action</th>
+          </tr></thead>
+          <tbody id="pending-devices-tbody"></tbody>
+        </table>`;
+      const tbody = container.querySelector('#pending-devices-tbody');
+      devices.forEach(d => {
+        const tr = document.createElement('tr');
+        const date = d.createdAt ? new Date(d.createdAt).toLocaleDateString('fr-FR') : '—';
+        tr.innerHTML = `
+          <td>${esc(d.label||'—')}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${esc(d.email||'—')}</td>
+          <td><span class="badge badge-plan-starter">${esc(d.type||'tablet')}</span></td>
+          <td style="font-size:12px;color:var(--text-muted)">${date}</td>
+          <td>
+            <button class="btn btn-primary btn-sm" data-device-id="${esc(d.id)}" data-action="approve">
+              Approuver
+            </button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+      tbody.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-action="approve"]');
+        if (!btn) return;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          const result = await api('/api/device/approve', 'POST', {
+            deviceId: btn.dataset.deviceId, approvedBy: 'admin',
+          });
+          toast(`✓ Approuvé. Token : ${result.token}`, 'success');
+          // Rafraîchir la section
+          renderSettings(panel);
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false; btn.textContent = 'Approuver';
+        }
+      });
+    }
+  } catch (err) {
+    panel.querySelector('#devices-pending-container').innerHTML =
+      `<p style="font-size:12px;color:var(--danger)">${esc(err.message)}</p>`;
+  }
+
+  // ── Purge handler ─────────────────────────────────────────────
+  panel.querySelector('#btn-purge-tenant').addEventListener('click', async () => {
+    const tenantId = panel.querySelector('#purge-tenant-id').value.trim();
+    const btn      = panel.querySelector('#btn-purge-tenant');
+    const status   = panel.querySelector('#purge-status');
+    if (!tenantId) { status.style.color='var(--danger)'; status.textContent='Tenant ID requis.'; return; }
+
+    const confirmed = confirm(
+      `Supprimer TOUTES les données du tenant "${tenantId}" ?\n\n` +
+      `• Tous les appareils seront supprimés\n` +
+      `• Toutes les licences seront révoquées\n\n` +
+      `Cette action est IRRÉVERSIBLE.`
+    );
+    if (!confirmed) return;
+
+    btn.disabled = true; btn.textContent = '…';
+    status.textContent = '';
+    try {
+      await api('/api/admin/purge-tenant', 'POST', { tenantId });
+      status.style.color = 'var(--success)';
+      status.textContent = `✓ Données du tenant "${tenantId}" supprimées.`;
+      toast(`Tenant "${tenantId}" purgé`, 'error');
+    } catch (err) {
+      status.style.color = 'var(--danger)';
+      status.textContent = `Erreur : ${err.message}`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Supprimer les données';
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════
+// Auto-login si le token est mémorisé (localStorage persiste entre sessions)
 if (adminToken) {
   api('/api/licence/list').then(() => showAdmin()).catch(() => logout());
 }

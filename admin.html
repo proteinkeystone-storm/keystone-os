@@ -829,53 +829,117 @@
       font-size: 12px; padding: 36px 16px; line-height: 1.8;
     }
 
-    /* ── Artifact Components (mirroir de style.css pour le Preview admin) ── */
-    .artifact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* ── Artifact Components — Apple Premium Luxe (miroir style.css) ── */
+    .artifact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .artifact-card {
-      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
-      border-radius: 10px; padding: 12px 14px;
+      background: linear-gradient(135deg,rgba(255,255,255,.065) 0%,rgba(255,255,255,.022) 100%);
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 14px; padding: 14px 16px;
+      box-shadow: 0 2px 20px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.06);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      transition: box-shadow .2s, border-color .2s;
+    }
+    .artifact-card:hover {
+      border-color: rgba(201,168,76,.22);
+      box-shadow: 0 4px 28px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.09);
     }
     .artifact-card--full { grid-column: 1 / -1; }
     .artifact-card-label {
-      font-size: 9px; font-weight: 700; letter-spacing: .06em;
-      text-transform: uppercase; color: rgba(180,200,255,.5); margin-bottom: 8px;
+      font-size: 9px; font-weight: 800; letter-spacing: .1em;
+      text-transform: uppercase; color: rgba(201,168,76,.55); margin-bottom: 11px;
     }
+    /* Gauge */
     .gauge-track {
-      height: 5px; background: rgba(255,255,255,.08);
-      border-radius: 99px; overflow: hidden; margin-bottom: 6px;
+      height: 8px; background: rgba(255,255,255,.07);
+      border-radius: 99px; overflow: hidden; margin-bottom: 10px;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.3);
     }
     .gauge-fill { height: 100%; border-radius: 99px; width: 0%; }
-    .gauge-footer { display: flex; align-items: baseline; gap: 4px; }
-    .gauge-value { font-size: 22px; font-weight: 900; letter-spacing: -.04em; line-height: 1; }
-    .gauge-unit { font-size: 11px; opacity: .6; }
-    .gauge-pct { font-size: 10px; margin-left: auto; }
+    .gauge-footer { display: flex; align-items: baseline; gap: 5px; }
+    .gauge-value { font-size: 28px; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
+    .gauge-unit { font-size: 12px; opacity: .55; margin-left: 2px; }
+    .gauge-pct { font-size: 10px; margin-left: auto; opacity: .45; }
+    /* Status Badge */
+    .artifact-status-badge { display: flex; flex-direction: column; justify-content: center; }
     .status-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 5px 12px; border-radius: 99px; border: 1px solid;
-      font-size: 12px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 16px; border-radius: 99px; border: 1px solid;
+      font-size: 13px; font-weight: 700; align-self: flex-start;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     }
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .rich-text-body { font-size: 12px; line-height: 1.65; white-space: pre-wrap; color: rgba(255,255,255,.85); }
-    .kp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-    .kp-item { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,.85); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor; }
+    /* Rich Text */
+    .rich-text-body { font-size: 12px; line-height: 1.72; white-space: pre-wrap; color: rgba(255,255,255,.86); }
+    /* Key Points */
+    .kp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .kp-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,.86); }
     .kp-icon { flex-shrink: 0; font-size: 10px; margin-top: 2px; }
+    /* Data Card */
     .artifact-data-card { display: flex; flex-direction: column; justify-content: center; }
     .dc-value { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
-    .dc-number { font-size: 26px; font-weight: 900; letter-spacing: -.04em; color: var(--gold); line-height: 1; }
-    .dc-unit { font-size: 12px; color: rgba(255,255,255,.45); }
-    .dc-prefix { font-size: 12px; color: rgba(255,255,255,.45); }
-    .artifact-missing { border-color: rgba(224,92,92,.2) !important; }
+    .dc-number {
+      font-size: 30px; font-weight: 900; letter-spacing: -.05em; line-height: 1;
+      background: linear-gradient(135deg,#e8cb82 0%,#c9a84c 55%,#a07828 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .dc-unit   { font-size: 12px; color: rgba(255,255,255,.42); }
+    .dc-prefix { font-size: 12px; color: rgba(255,255,255,.42); }
+    /* States */
+    .artifact-missing { border-color: rgba(224,92,92,.22) !important; background: rgba(224,92,92,.05) !important; }
     .artifact-missing-hint { font-size: 11px; color: #e05c5c; opacity: .7; }
     .artifact-error {
       display: flex; align-items: flex-start; gap: 10px;
-      padding: 12px 14px; background: rgba(224,92,92,.08);
-      border: 1px solid rgba(224,92,92,.2); border-radius: 10px; font-size: 12px;
+      padding: 14px 16px; background: rgba(224,92,92,.07);
+      border: 1px solid rgba(224,92,92,.2); border-radius: 12px; font-size: 12px;
     }
     .artifact-raw {
       font-family: 'SF Mono', monospace; font-size: 11px;
       color: rgba(180,200,255,.5); white-space: pre-wrap; word-break: break-all;
       margin: 6px 0 0; padding: 8px; background: rgba(0,0,0,.2);
       border-radius: 6px; max-height: 160px; overflow-y: auto;
+    }
+
+    /* ── RÉGLAGES · RGPD ─────────────────────────────────────────── */
+    .rgpd-section {
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin-bottom: 18px;
+    }
+    .rgpd-section-title {
+      font-size: 13px; font-weight: 900; letter-spacing: -.02em;
+      color: var(--text); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .rgpd-chip {
+      display: inline-block; padding: 2px 8px;
+      background: var(--gold-dim); border: 1px solid var(--border);
+      border-radius: 6px; font-size: 9px; font-weight: 800;
+      color: var(--gold); letter-spacing: .1em; text-transform: uppercase;
+    }
+    .rgpd-table {
+      width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.5;
+    }
+    .rgpd-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,.07); vertical-align: top; }
+    .rgpd-table tr:last-child td { border-bottom: none; }
+    .rgpd-table td:first-child { color: var(--text-muted); font-weight: 700; width: 140px; white-space: nowrap; }
+    .rgpd-table td:last-child  { color: var(--text); }
+    .rgpd-notice {
+      font-size: 12px; color: var(--text-muted); line-height: 1.65;
+      border-top: 1px solid var(--border); padding-top: 14px; margin-top: 12px;
+    }
+    .rgpd-danger-zone {
+      background: rgba(224,92,92,.06);
+      border: 1px solid rgba(224,92,92,.18);
+      border-radius: 12px; padding: 18px 20px;
+      margin-top: 0;
+    }
+    .rgpd-danger-title {
+      font-size: 12px; font-weight: 800; color: #e05c5c;
+      letter-spacing: .04em; text-transform: uppercase;
+      margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
     }
   </style>
 </head>
@@ -913,13 +977,15 @@
     <button class="tab-btn" data-tab="tools">La Fabrique</button>
     <button class="tab-btn" data-tab="catalog">Catalogue</button>
     <button class="tab-btn" data-tab="monitoring">Monitoring</button>
+    <button class="tab-btn" data-tab="settings">⚙ Réglages · RGPD</button>
   </nav>
 
   <main class="admin-content">
-    <div id="tab-licences" class="tab-panel active"></div>
-    <div id="tab-tools"    class="tab-panel"></div>
-    <div id="tab-catalog"  class="tab-panel"></div>
+    <div id="tab-licences"   class="tab-panel active"></div>
+    <div id="tab-tools"      class="tab-panel"></div>
+    <div id="tab-catalog"    class="tab-panel"></div>
     <div id="tab-monitoring" class="tab-panel"></div>
+    <div id="tab-settings"   class="tab-panel"></div>
   </main>
 </div>
 

@@ -26,7 +26,7 @@ mode = "smart"
 [[d1_databases]]
 binding      = "DB"
 database_name = "keystone-os"
-database_id  = "REPLACE_WITH_YOUR_D1_ID"
+database_id  = "f5d21b1a-74a5-436f-849a-e971ab9d44ac"
 
 # ── Variables publiques (non-secrètes) ─────────────────────────
 [vars]

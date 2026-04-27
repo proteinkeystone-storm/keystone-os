@@ -3698,44 +3698,65 @@ html.light-mode .btn-save-vault-secondary {
 }
 .artifact-empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .6; }
 
+/* ══ ARTIFACT COMPONENTS — Apple Premium Luxe v2.0 ══════════════ */
+
 /* ── Grille de composants ── */
 .artifact-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 14px;
   padding-bottom: 8px;
 }
 
-/* ── Carte base ── */
+/* ── Carte base — Glassmorphism ── */
 .artifact-card {
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 12px;
-  padding: 14px 16px;
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,.065) 0%,
+    rgba(255,255,255,.022) 100%
+  );
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow:
+    0 2px 24px rgba(0,0,0,.38),
+    0 1px 0 rgba(255,255,255,.06) inset;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   will-change: transform, opacity;
+  transition: box-shadow .22s ease, border-color .22s ease;
+}
+.artifact-card:hover {
+  border-color: rgba(201,168,76,.22);
+  box-shadow:
+    0 4px 32px rgba(0,0,0,.45),
+    0 1px 0 rgba(255,255,255,.09) inset;
 }
 .artifact-card--full { grid-column: 1 / -1; }
 .artifact-card-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .05em;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 10px;
+  color: rgba(201,168,76,.55);
+  margin-bottom: 12px;
 }
 
 /* ── Gauge ── */
 .gauge-track {
-  height: 6px;
-  background: rgba(255,255,255,.1);
+  height: 8px;
+  background: rgba(255,255,255,.07);
   border-radius: 99px;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.3);
 }
 .gauge-fill {
   height: 100%;
   border-radius: 99px;
   width: 0%;
+  /* glow via filter sur la couleur inline */
+  filter: drop-shadow(0 0 6px currentColor);
 }
 .gauge-footer {
   display: flex;
@@ -3743,40 +3764,43 @@ html.light-mode .btn-save-vault-secondary {
   gap: 5px;
 }
 .gauge-value {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 900;
-  letter-spacing: -.04em;
+  letter-spacing: -.05em;
   line-height: 1;
 }
-.gauge-unit  { font-size: 12px; font-weight: 600; opacity: .7; }
-.gauge-pct   { font-size: 11px; margin-left: auto; }
+.gauge-unit  { font-size: 12px; font-weight: 600; opacity: .55; margin-left: 2px; }
+.gauge-pct   { font-size: 11px; margin-left: auto; opacity: .45; letter-spacing: -.01em; }
 
 /* ── Status Badge ── */
 .artifact-status-badge { display: flex; flex-direction: column; justify-content: center; }
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 7px 16px;
   border-radius: 99px;
   border: 1px solid;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -.01em;
   align-self: flex-start;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
 }
 
 /* ── Rich Text ── */
 .rich-text-body {
   font-size: 13px;
-  line-height: 1.7;
-  color: var(--text);
+  line-height: 1.75;
+  color: rgba(244,241,235,.88);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -3788,15 +3812,15 @@ html.light-mode .btn-save-vault-secondary {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 .kp-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 9px;
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--text);
+  line-height: 1.55;
+  color: rgba(244,241,235,.88);
 }
 .kp-icon { flex-shrink: 0; font-size: 11px; margin-top: 3px; }
 
@@ -3809,19 +3833,22 @@ html.light-mode .btn-save-vault-secondary {
   flex-wrap: wrap;
 }
 .dc-number {
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 900;
-  letter-spacing: -.04em;
-  color: var(--gold);
+  letter-spacing: -.05em;
   line-height: 1;
+  background: linear-gradient(135deg, #e8cb82 0%, #c9a84c 55%, #a07828 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.dc-unit   { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-.dc-prefix { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.dc-unit   { font-size: 14px; font-weight: 600; color: var(--tx2); }
+.dc-prefix { font-size: 14px; font-weight: 600; color: var(--tx2); }
 
 /* ── Carte manquante / erreur ── */
 .artifact-missing {
-  border-color: rgba(224,92,92,.2);
-  background: rgba(224,92,92,.04);
+  border-color: rgba(224,92,92,.22) !important;
+  background: rgba(224,92,92,.05) !important;
 }
 .artifact-missing-hint {
   font-size: 12px;
@@ -3832,24 +3859,25 @@ html.light-mode .btn-save-vault-secondary {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 16px;
-  background: rgba(224,92,92,.08);
+  padding: 16px 18px;
+  background: rgba(224,92,92,.07);
   border: 1px solid rgba(224,92,92,.2);
-  border-radius: 12px;
+  border-radius: 14px;
   font-size: 13px;
   color: var(--text);
   width: 100%;
+  box-shadow: 0 2px 16px rgba(224,92,92,.08);
 }
-.artifact-error-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.artifact-error-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
 .artifact-raw {
   font-family: 'SF Mono', 'Fira Mono', monospace;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--tx2);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
-  padding: 10px;
-  background: rgba(0,0,0,.2);
+  padding: 10px 12px;
+  background: rgba(0,0,0,.25);
   border-radius: 8px;
   max-height: 240px;
   overflow-y: auto;
@@ -3857,8 +3885,18 @@ html.light-mode .btn-save-vault-secondary {
 
 /* ── Light mode ── */
 html.light-mode .artifact-card {
-  background: rgba(13,27,62,.03);
-  border-color: rgba(13,27,62,.08);
+  background: rgba(255,255,255,.72);
+  border-color: rgba(13,27,62,.09);
+  box-shadow: 0 2px 20px rgba(13,27,62,.08), 0 1px 0 rgba(255,255,255,.9) inset;
 }
-html.light-mode .gauge-track { background: rgba(13,27,62,.1); }
-html.light-mode .artifact-raw { background: rgba(13,27,62,.05); }
+html.light-mode .artifact-card-label { color: rgba(160,120,40,.6); }
+html.light-mode .gauge-track { background: rgba(13,27,62,.08); }
+html.light-mode .gauge-fill  { filter: none; }
+html.light-mode .rich-text-body { color: rgba(13,27,62,.85); }
+html.light-mode .kp-item { color: rgba(13,27,62,.85); }
+html.light-mode .dc-number {
+  background: linear-gradient(135deg, #a07828, #c9a84c);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+html.light-mode .artifact-raw { background: rgba(13,27,62,.05); color: rgba(13,27,62,.55); }

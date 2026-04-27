@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Cloudflare Worker · Router principal v1.0
+   KEYSTONE OS — Cloudflare Worker · Router principal v1.1
    EU data residency : D1 weur · AES-GCM · Multi-tenant ready
 
    Routes :
@@ -16,13 +16,16 @@
    POST /api/device/revoke      Admin  — révoquer
 
    ── Admin ─────────────────────────────────────────────────────
-   GET  /api/admin/devices      Admin — liste des appareils
-   GET  /api/admin/health       Admin — santé du Worker + D1
+   GET  /api/admin/devices        Admin — liste des appareils
+   GET  /api/admin/health         Admin — santé du Worker + D1
+   GET  /api/admin/export         Admin — export RGPD (portabilité)
+   POST /api/admin/purge-tenant   Admin — effacement RGPD (Art.17)
    ═══════════════════════════════════════════════════════════════ */
 
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
+import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
 
 // ── Router ────────────────────────────────────────────────────
@@ -51,9 +54,11 @@ export default {
       if (path === '/api/device/revoke'    && method === 'POST') return handleDeviceRevoke(request, env);
 
       // ── Admin ────────────────────────────────────────────────
-      if (path === '/api/admin/devices'    && method === 'GET')  return handleDeviceList(request, env);
+      if (path === '/api/admin/devices'      && method === 'GET')  return handleDeviceList(request, env);
+      if (path === '/api/admin/export'       && method === 'GET')  return handleExport(request, env);
+      if (path === '/api/admin/purge-tenant' && method === 'POST') return handlePurgeTenant(request, env);
 
-      if (path === '/api/admin/health'     && method === 'GET') {
+      if (path === '/api/admin/health'       && method === 'GET') {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
         // Vérifie la connexion D1
         const test = await env.DB.prepare('SELECT COUNT(*) as n FROM licences').first();
