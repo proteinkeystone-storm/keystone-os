@@ -2323,6 +2323,18 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
 }
 .action-btn:hover { border-color: rgba(201,168,76,.3); color: var(--gold); background: rgba(201,168,76,.04); }
 .action-btn.active { border-color: rgba(201,168,76,.4); color: var(--gold); background: rgba(201,168,76,.06); }
+/* Variante PDF — accent gold plein */
+.action-btn--gold {
+  background: rgba(201,168,76,.10);
+  border-color: rgba(201,168,76,.35);
+  color: var(--gold);
+  font-weight: 600;
+}
+.action-btn--gold:hover {
+  background: rgba(201,168,76,.18);
+  border-color: rgba(201,168,76,.6);
+  box-shadow: 0 0 12px rgba(201,168,76,.18);
+}
 
 /* Notice drawer */
 .tool-notice {
