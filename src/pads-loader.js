@@ -9,6 +9,11 @@ import { PADS_DATA } from './pads-data.js';
 const PADS_BASE    = './K_STORE_ASSETS/PADS';
 const CATALOG_TTL  = 5 * 60 * 1000; // 5 minutes
 
+// ── Cloudflare Worker — source canonique en production ─────────
+const CF_WORKER    = 'https://keystone-os-api.keystone-os.workers.dev';
+const IS_LOCAL     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const CF_API       = IS_LOCAL ? '' : CF_WORKER;
+
 // Cache PADs (session)
 let _padsCache = null;
 
@@ -21,12 +26,25 @@ let _remoteUrl        = null; // lu depuis manifest.json au premier loadPads()
 export async function loadPads() {
     if (_padsCache) return _padsCache;
 
+    // 1. Worker CF (D1) — source prioritaire en production
+    if (CF_API) {
+        try {
+            const res  = await fetch(`${CF_API}/api/pads?tenantId=default`, { cache: 'no-store' });
+            if (res.ok) {
+                const { pads = [] } = await res.json();
+                if (pads.length > 0) {
+                    _padsCache = _indexByPadKey(pads);
+                    return _padsCache;
+                }
+            }
+        } catch (_) { /* fallback → fichiers statiques */ }
+    }
+
+    // 2. Fichiers JSON statiques (source locale / USB / fallback)
     try {
-        // 1. Tente de charger depuis les JSON (source canonique USB)
         const manifest = await _fetchJSON(`${PADS_BASE}/manifest.json`);
         if (!manifest?.pads?.length) throw new Error('manifest vide');
 
-        // Mémorise l'URL distante du catalogue si présente
         if (manifest.remoteUrl) _remoteUrl = manifest.remoteUrl;
 
         const results = await Promise.allSettled(
@@ -39,12 +57,11 @@ export async function loadPads() {
 
         if (loaded.length === 0) throw new Error('aucun pad chargé');
 
-        // Convertir le tableau en map padKey → pad (compatible PADS_DATA)
         _padsCache = _indexByPadKey(loaded);
         return _padsCache;
 
     } catch (_) {
-        // 2. Fallback silencieux — données embarquées dans pads-data.js
+        // 3. Fallback ultime — données embarquées dans pads-data.js
         _padsCache = PADS_DATA;
         return _padsCache;
     }

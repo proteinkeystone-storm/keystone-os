@@ -73,3 +73,25 @@ CREATE TABLE IF NOT EXISTS api_keys_vault (
 );
 
 CREATE INDEX IF NOT EXISTS idx_vault_tenant ON api_keys_vault(tenant_id);
+
+-- ── PADs (outils & artefacts) ─────────────────────────────────
+-- Remplace le stockage par fichiers JSON statiques.
+-- L'admin panel écrit ici ; pads-loader.js lit ici en priorité.
+CREATE TABLE IF NOT EXISTS pads (
+  id         TEXT PRIMARY KEY,              -- NOMEN-K : O-IMM-001
+  tenant_id  TEXT NOT NULL DEFAULT 'default',
+  data       TEXT NOT NULL,                -- JSON complet du PAD
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pads_tenant ON pads(tenant_id);
+
+-- ── Catalogue ─────────────────────────────────────────────────
+-- Un seul enregistrement par tenant (JSON blob du catalog.json).
+CREATE TABLE IF NOT EXISTS catalog (
+  tenant_id  TEXT PRIMARY KEY DEFAULT 'default',
+  data       TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);

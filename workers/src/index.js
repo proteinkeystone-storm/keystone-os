@@ -26,6 +26,10 @@ import { handleList, handleActivate, handleRevoke, handleValidate }   from './ro
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
 import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
+import { handleListPads, handleSavePad, handleDeletePad,
+         handleGetCatalog, handleSaveCatalog }                         from './routes/pads.js';
+import { handleListKeys, handleSaveKey, handleDeleteKey,
+         handleGetKey }                                                 from './routes/vault.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
 
 // ── Router ────────────────────────────────────────────────────
@@ -53,10 +57,26 @@ export default {
       if (path === '/api/device/login'     && method === 'POST') return handleLogin(request, env);
       if (path === '/api/device/revoke'    && method === 'POST') return handleDeviceRevoke(request, env);
 
+      // ── PADs ─────────────────────────────────────────────────
+      if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);
+      if (path === '/api/admin/pad'          && method === 'POST')   return handleSavePad(request, env);
+      if (path === '/api/admin/pad'          && method === 'DELETE') return handleDeletePad(request, env);
+      if (path === '/api/admin/catalog'      && method === 'GET')    return handleGetCatalog(request, env);
+      if (path === '/api/admin/catalog'      && method === 'POST')   return handleSaveCatalog(request, env);
+
+      // ── Vault (clés API) ─────────────────────────────────────
+      if (path === '/api/admin/keys'         && method === 'GET')    return handleListKeys(request, env);
+      if (path === '/api/admin/keys'         && method === 'POST')   return handleSaveKey(request, env);
+      if (path === '/api/admin/keys'         && method === 'DELETE') return handleDeleteKey(request, env);
+      if (path.startsWith('/api/admin/keys/') && method === 'GET') {
+        const provider = path.split('/').pop();
+        return handleGetKey(request, env, provider);
+      }
+
       // ── Admin ────────────────────────────────────────────────
-      if (path === '/api/admin/devices'      && method === 'GET')  return handleDeviceList(request, env);
-      if (path === '/api/admin/export'       && method === 'GET')  return handleExport(request, env);
-      if (path === '/api/admin/purge-tenant' && method === 'POST') return handlePurgeTenant(request, env);
+      if (path === '/api/admin/devices'      && method === 'GET')    return handleDeviceList(request, env);
+      if (path === '/api/admin/export'       && method === 'GET')    return handleExport(request, env);
+      if (path === '/api/admin/purge-tenant' && method === 'POST')   return handlePurgeTenant(request, env);
 
       if (path === '/api/admin/health'       && method === 'GET') {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);

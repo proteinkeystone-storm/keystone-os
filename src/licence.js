@@ -17,7 +17,12 @@ import { setOwnedIds } from './pads-loader.js';
 const LS_KEY   = 'ks_licence_key';
 const LS_PLAN  = 'ks_licence_plan';
 const LS_OWNER = 'ks_licence_owner';
-const API_URL  = '/api/validate-licence';
+
+// ── Worker Cloudflare — endpoint de validation ─────────────────
+const CF_WORKER = 'https://keystone-os-api.keystone-os.workers.dev';
+const API_URL   = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '/api/licence/validate'          // dev local (wrangler dev sur :8787 proxifié)
+  : `${CF_WORKER}/api/licence/validate`; // production Vercel → Worker CF
 
 // ═══════════════════════════════════════════════════════════════
 // VALIDATE — appelle la Vercel Function ou simulation locale

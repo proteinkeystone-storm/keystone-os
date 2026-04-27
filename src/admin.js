@@ -219,6 +219,7 @@ const TAB_RENDERERS = {
   tools:     renderTools,
   catalog:   renderCatalog,
   monitoring: renderMonitoring,
+  devices:   renderDevices,
   settings:  renderSettings,
 };
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1297,23 +1298,8 @@ async function saveFromEditor(editorContainer, originalId, isNew, padType) {
 
   btn.disabled = true; btn.textContent = '…';
   try {
-    await api('/api/admin/file-write', 'POST', {
-      path:    `K_STORE_ASSETS/PADS/${pad.id}.json`,
-      content: JSON.stringify(pad, null, 2),
-      message: `Admin: ${isNew ? 'create' : 'update'} ${pad.id}.json`,
-    });
-
-    if (isNew || pad.id !== originalId) {
-      const manifest = await fetchJSON('/K_STORE_ASSETS/PADS/manifest.json');
-      if (!manifest.pads.includes(pad.id)) {
-        manifest.pads.push(pad.id);
-        await api('/api/admin/file-write', 'POST', {
-          path:    'K_STORE_ASSETS/PADS/manifest.json',
-          content: JSON.stringify(manifest, null, 2),
-          message: `Admin: add ${pad.id} to manifest`,
-        });
-      }
-    }
+    // Sauvegarde dans Cloudflare D1 (remplace l'ancien file-write)
+    await api('/api/admin/pad', 'POST', { ...pad, tenantId: 'default' });
 
     padsCache[pad.id] = pad;
     editingPadId      = pad.id;
@@ -1424,8 +1410,8 @@ async function saveCatalog(panel) {
   btn.disabled = true; btn.textContent = '…';
   catalogData.updatedAt = new Date().toISOString().slice(0,10);
   try {
-    await api('/api/admin/file-write','POST',{ path:'K_STORE_ASSETS/catalog.json', content:JSON.stringify(catalogData,null,2), message:'Admin: update catalog.json' });
-    toast('catalog.json sauvegardé ✓');
+    await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+    toast('Catalogue sauvegardé ✓');
   } catch(err) { toast(err.message,'error'); }
   finally { btn.disabled=false; btn.textContent='Sauvegarder'; }
 }
@@ -1439,8 +1425,8 @@ function showRawCatalogEditor(panel) {
     try { catalogData=JSON.parse(jsonStr); } catch { errEl.textContent='JSON invalide'; return; }
     btn.disabled=true; btn.textContent='…';
     try {
-      await api('/api/admin/file-write','POST',{ path:'K_STORE_ASSETS/catalog.json', content:JSON.stringify(catalogData,null,2), message:'Admin: update catalog.json (raw)' });
-      closeModal(); toast('catalog.json sauvegardé ✓'); renderCatalog(panel);
+      await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+      closeModal(); toast('Catalogue sauvegardé ✓'); renderCatalog(panel);
     } catch(err) { errEl.textContent=err.message; btn.disabled=false; btn.textContent='Sauvegarder'; }
   });
 }
@@ -1484,7 +1470,119 @@ async function renderMonitoring(panel) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// TAB 5 — RÉGLAGES · RGPD
+// TAB 5 — APPAREILS (Devices)
+// ══════════════════════════════════════════════════════════════════
+async function renderDevices(panel) {
+  try {
+    const { devices = [], total = 0, pending = 0, approved = 0 } = await api('/api/admin/devices');
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Appareils <span>(${total})</span></h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-filter-all"    data-filter="">Tous (${total})</button>
+          <button class="btn btn-secondary btn-sm" id="btn-filter-pending" data-filter="false"
+                  style="${pending>0?'border-color:var(--gold);color:var(--gold)':''}">
+            En attente (${pending})
+          </button>
+          <button class="btn btn-secondary btn-sm" id="btn-filter-approved" data-filter="true">
+            Approuvés (${approved})
+          </button>
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-devices">↻</button>
+        </div>
+      </div>
+      ${total === 0
+        ? '<div class="empty-state"><div class="icon">📱</div><p>Aucun appareil enregistré</p></div>'
+        : `<table class="data-table">
+            <thead><tr>
+              <th>Label</th><th>Email</th><th>Type</th><th>Statut</th>
+              <th>Approuvé par</th><th>Dernière connexion</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="devices-tbody"></tbody>
+          </table>`}`;
+
+    if (total > 0) {
+      const tbody = panel.querySelector('#devices-tbody');
+      _renderDeviceRows(tbody, devices);
+
+      tbody.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const deviceId = btn.dataset.deviceId;
+        if (btn.dataset.action === 'approve') {
+          btn.disabled = true; btn.textContent = '…';
+          try {
+            const res = await api('/api/device/approve', 'POST', { deviceId, approvedBy: 'admin' });
+            toast(`✓ Approuvé — Token : ${res.token}`, 'success');
+            renderDevices(panel);
+          } catch (err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Approuver'; }
+        }
+        if (btn.dataset.action === 'revoke') {
+          if (!confirm(`Révoquer l'appareil "${btn.dataset.label}" ?`)) return;
+          btn.disabled = true; btn.textContent = '…';
+          try {
+            await api('/api/device/revoke', 'POST', { deviceId });
+            toast('Appareil révoqué', 'error');
+            renderDevices(panel);
+          } catch (err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Révoquer'; }
+        }
+      });
+
+      // Filtres
+      panel.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const filter = btn.dataset.filter;
+          const url    = filter === '' ? '/api/admin/devices' : `/api/admin/devices?approved=${filter}`;
+          const data   = await api(url);
+          const tbody  = panel.querySelector('#devices-tbody');
+          if (tbody) _renderDeviceRows(tbody, data.devices || []);
+          panel.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+    }
+
+    panel.querySelector('#btn-refresh-devices')?.addEventListener('click', () => renderDevices(panel));
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+function _renderDeviceRows(tbody, devices) {
+  tbody.innerHTML = '';
+  if (!devices.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">Aucun appareil dans ce filtre</td></tr>';
+    return;
+  }
+  devices.forEach(d => {
+    const tr = document.createElement('tr');
+    const lastSeen = d.lastSeen ? new Date(d.lastSeen).toLocaleString('fr-FR') : '—';
+    const created  = d.createdAt ? new Date(d.createdAt).toLocaleDateString('fr-FR') : '—';
+    tr.innerHTML = `
+      <td>
+        <div style="font-weight:600">${esc(d.label||'—')}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Créé le ${created}</div>
+      </td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(d.email||'—')}</td>
+      <td><span class="badge badge-plan-starter">${esc(d.type||'tablet')}</span></td>
+      <td>
+        <span class="badge ${d.approved ? 'badge-active' : 'badge-revoked'}">
+          ${d.approved ? '✓ Approuvé' : '⏳ En attente'}
+        </span>
+      </td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(d.approvedBy||'—')}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${lastSeen}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        ${!d.approved
+          ? `<button class="btn btn-primary btn-sm" data-action="approve" data-device-id="${esc(d.id)}">Approuver</button>`
+          : ''}
+        <button class="btn btn-danger btn-sm" data-action="revoke"
+                data-device-id="${esc(d.id)}" data-label="${esc(d.label)}">Révoquer</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB 6 — RÉGLAGES · RGPD
 // ══════════════════════════════════════════════════════════════════
 async function renderSettings(panel) {
   panel.innerHTML = `
@@ -1546,6 +1644,43 @@ async function renderSettings(panel) {
         ↓ Exporter toutes les données (JSON)
       </button>
       <p id="export-status" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+    </div>
+
+    <!-- ── Vault : Clés API Moteurs IA ── -->
+    <div class="rgpd-section" id="vault-section">
+      <div class="rgpd-section-title">
+        🔑 Coffre-fort API — Clés Moteurs IA
+        <span class="rgpd-chip">AES-256-GCM</span>
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.65;margin-bottom:16px">
+        Stockez les clés API de chaque moteur de manière chiffrée dans le Worker.
+        Les clés ne sont <strong>jamais</strong> transmises en clair côté client.
+      </p>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label class="form-label">Moteur</label>
+          <select class="form-input" id="vault-provider">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT-4o)</option>
+            <option value="google">Google (Gemini)</option>
+            <option value="mistral">Mistral</option>
+            <option value="perplexity">Perplexity</option>
+            <option value="grok">Grok (xAI)</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2;min-width:200px">
+          <label class="form-label">Clé API</label>
+          <input type="password" class="form-input" id="vault-api-key"
+                 placeholder="sk-…  ou  AIza…" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" id="btn-vault-save" style="flex-shrink:0">
+          Chiffrer &amp; Sauvegarder
+        </button>
+      </div>
+      <div id="vault-status" style="font-size:12px;min-height:16px;margin-bottom:12px"></div>
+      <div id="vault-configured">
+        <div class="loading" style="padding:8px 0;font-size:12px">Chargement des clés configurées…</div>
+      </div>
     </div>
 
     <!-- ── Devices en attente ── -->
@@ -1692,6 +1827,84 @@ async function renderSettings(panel) {
       status.textContent = `Erreur : ${err.message}`;
     } finally {
       btn.disabled = false; btn.textContent = 'Supprimer les données';
+    }
+  });
+
+  // ── Vault : chargement des clés configurées ───────────────────
+  async function _loadVaultKeys() {
+    const container = panel.querySelector('#vault-configured');
+    try {
+      const { keys = [], configured = [] } = await api('/api/admin/keys');
+      if (keys.length === 0) {
+        container.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Aucune clé configurée pour l\'instant.</p>';
+        return;
+      }
+      const providers = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', mistral: 'Mistral', perplexity: 'Perplexity', grok: 'Grok' };
+      container.innerHTML = `
+        <table class="data-table" style="margin-top:4px">
+          <thead><tr>
+            <th>Moteur</th><th>Label</th><th>Enregistré le</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${keys.map(k => `
+              <tr>
+                <td><span class="badge badge-plan-pro">${esc(providers[k.provider] || k.provider)}</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">${esc(k.label || k.provider)}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${k.savedAt ? new Date(k.savedAt).toLocaleDateString('fr-FR') : '—'}</td>
+                <td>
+                  <button class="btn btn-danger btn-sm" data-action="delete-key"
+                          data-provider="${esc(k.provider)}">Supprimer</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+      container.querySelector('tbody').addEventListener('click', async e => {
+        const btn = e.target.closest('[data-action="delete-key"]');
+        if (!btn) return;
+        const provider = btn.dataset.provider;
+        if (!confirm(`Supprimer la clé "${provider}" du coffre ?`)) return;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await api('/api/admin/keys', 'DELETE', { provider, tenantId: 'default' });
+          toast(`Clé "${provider}" supprimée`, 'error');
+          _loadVaultKeys();
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Supprimer'; }
+      });
+    } catch (err) {
+      container.innerHTML = `<p style="font-size:12px;color:var(--danger)">${esc(err.message)}</p>`;
+    }
+  }
+  _loadVaultKeys();
+
+  // ── Vault : save handler ──────────────────────────────────────
+  panel.querySelector('#btn-vault-save').addEventListener('click', async () => {
+    const providerEl = panel.querySelector('#vault-provider');
+    const keyEl      = panel.querySelector('#vault-api-key');
+    const statusEl   = panel.querySelector('#vault-status');
+    const btn        = panel.querySelector('#btn-vault-save');
+
+    const provider = providerEl.value;
+    const apiKey   = keyEl.value.trim();
+    if (!apiKey) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = 'La clé API ne peut pas être vide.';
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = '…';
+    statusEl.textContent = '';
+    try {
+      await api('/api/admin/keys', 'POST', { provider, apiKey, label: providerEl.options[providerEl.selectedIndex].text, tenantId: 'default' });
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✓ Clé "${provider}" chiffrée et sauvegardée.`;
+      keyEl.value = '';
+      _loadVaultKeys();
+    } catch (err) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `Erreur : ${err.message}`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Chiffrer & Sauvegarder';
     }
   });
 }
