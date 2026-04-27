@@ -1588,6 +1588,9 @@ function toggleTool(el, tool, quota) {
 function launchApp() {
   localStorage.setItem('ks_tools', JSON.stringify([..._selectedTools]));
   localStorage.setItem('ks_onboarded', '1'); // Évite le double onboarding du dashboard
+  // Synchronise la photo : ks_avatar (landing) → ks_user_photo (dashboard)
+  const avatar = localStorage.getItem('ks_avatar');
+  if (avatar) localStorage.setItem('ks_user_photo', avatar);
   const flash = document.createElement('div');
   flash.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;z-index:9999;pointer-events:none;transition:opacity .35s ease';
   document.body.appendChild(flash);
