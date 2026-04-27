@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Admin Panel · src/admin.js v3.0
-   La Fabrique — Sprint 1+2 : Dual-mode, Artifact Components,
-   Auto-Schema, Prompt de Lissage
+   KEYSTONE OS — Admin Panel · src/admin.js v4.0
+   La Fabrique — Sprint Rectif : Preview WYSIWYG, Drag & Drop,
+   Schema live, Sandbox JSON
    ═══════════════════════════════════════════════════════════════ */
+
+import { renderArtifactResult } from './artifact-renderer.js';
 
 // ── Engine Registry ────────────────────────────────────────────
 const ENGINES = [
@@ -96,6 +98,7 @@ let adminToken   = sessionStorage.getItem('ks_admin_token') || '';
 let catalogData  = null;
 let padsCache    = {};
 let editingPadId = null;
+let _dragSrc     = null;
 
 // ── DOM refs ───────────────────────────────────────────────────
 const loginScreen  = document.getElementById('login-screen');
@@ -482,19 +485,22 @@ function openPadEditor(id, panel) {
 // ── Editor shell ───────────────────────────────────────────────
 function renderEditor(container, pad, isNew) {
   const fieldCount = (pad.fields || []).length;
+  const isArtifact = pad.type === 'artifact';
   container.innerHTML = `
     <div id="card-preview"></div>
     <div class="editor-tabs-bar">
       <button class="editor-tab-btn active" data-etab="identity">Identité</button>
       <button class="editor-tab-btn" data-etab="fields">
-        ${pad.type === 'artifact' ? 'Composants' : 'Champs'}
+        ${isArtifact ? 'Composants' : 'Champs'}
         <span class="field-count">(${fieldCount})</span>
       </button>
       <button class="editor-tab-btn" data-etab="engines">Moteurs</button>
+      ${isArtifact ? '<button class="editor-tab-btn" data-etab="preview" style="color:#6496ff">◉ Aperçu</button>' : ''}
     </div>
     <div id="etab-identity" class="editor-tab-content active"></div>
     <div id="etab-fields"   class="editor-tab-content"></div>
     <div id="etab-engines"  class="editor-tab-content"></div>
+    ${isArtifact ? '<div id="etab-preview" class="editor-tab-content"></div>' : ''}
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
       <p class="form-error" id="editor-err" style="flex:1;margin:0"></p>
       <button class="btn btn-primary" id="btn-editor-save">Sauvegarder →</button>
@@ -504,9 +510,11 @@ function renderEditor(container, pad, isNew) {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.editor-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
       container.querySelectorAll('.editor-tab-content').forEach(c => c.classList.toggle('active', c.id === `etab-${btn.dataset.etab}`));
-      // Refresh schema when switching to Moteurs on an artifact
-      if (btn.dataset.etab === 'engines' && pad.type === 'artifact') {
+      if (btn.dataset.etab === 'engines' && isArtifact) {
         refreshArtifactSchema(container);
+      }
+      if (btn.dataset.etab === 'preview' && isArtifact) {
+        renderPreviewTab(container.querySelector('#etab-preview'), container);
       }
     });
   });
@@ -752,6 +760,7 @@ function renderArtifactFieldsTab(el, pad, rootContainer) {
     const row = createArtifactFieldRow({ id:'', label:'', component:'gauge', config:{} }, rootContainer);
     fc.appendChild(row);
     updateFieldCount(rootContainer);
+    _triggerDynamicRefresh(rootContainer);
     row.querySelector('.field-label-input')?.focus();
   });
 }
@@ -759,9 +768,9 @@ function renderArtifactFieldsTab(el, pad, rootContainer) {
 function createArtifactFieldRow(field, rootContainer) {
   const activeComp = field.component || 'gauge';
   const div = document.createElement('div');
-  div.className = 'artifact-field-row';
+  div.className  = 'artifact-field-row';
+  div.draggable  = true;
 
-  // Component selector buttons
   const compBtns = ARTIFACT_COMPONENTS.map(c => `
     <button class="comp-btn ${c.id === activeComp ? 'active' : ''}" data-comp="${c.id}" type="button">
       <span class="comp-icon">${c.icon}</span>
@@ -769,6 +778,7 @@ function createArtifactFieldRow(field, rootContainer) {
     </button>`).join('');
 
   div.innerHTML = `
+    <div class="artifact-drag-handle" title="Glisser pour réorganiser">⠿</div>
     <div style="margin-bottom:10px">
       <div class="form-label" style="margin-bottom:8px">Composant de rendu</div>
       <div class="component-selector">${compBtns}</div>
@@ -791,23 +801,65 @@ function createArtifactFieldRow(field, rootContainer) {
       <button class="btn btn-danger btn-sm field-delete-btn">✕ Supprimer</button>
     </div>`;
 
-  // Auto-generate ID from label
+  // ── Auto-ID depuis le label ───────────────────────────────
   const labelInput = div.querySelector('.field-label-input');
   const idInput    = div.querySelector('.field-id-input');
-  labelInput.addEventListener('input', () => { if (!idInput.dataset.manual) idInput.value = slugify(labelInput.value); });
+  labelInput.addEventListener('input', () => {
+    if (!idInput.dataset.manual) idInput.value = slugify(labelInput.value);
+    _triggerDynamicRefresh(rootContainer);
+  });
   idInput.addEventListener('input', () => { idInput.dataset.manual = '1'; });
 
-  // Component switching
+  // ── Sélection du composant ────────────────────────────────
   div.querySelector('.component-selector').addEventListener('click', e => {
     const btn = e.target.closest('.comp-btn');
     if (!btn) return;
     div.querySelectorAll('.comp-btn').forEach(b => b.classList.toggle('active', b === btn));
     div.querySelectorAll('.comp-config-panel').forEach(p => p.classList.toggle('active', p.dataset.forComp === btn.dataset.comp));
+    _triggerDynamicRefresh(rootContainer);
   });
 
+  // ── Config inputs → refresh live ─────────────────────────
+  div.querySelector('#comp-configs').addEventListener('input', () => _triggerDynamicRefresh(rootContainer));
+  div.querySelector('#comp-configs').addEventListener('change', () => _triggerDynamicRefresh(rootContainer));
+
+  // ── Supprimer ─────────────────────────────────────────────
   div.querySelector('.field-delete-btn').addEventListener('click', () => {
     div.remove();
     updateFieldCount(rootContainer);
+    _triggerDynamicRefresh(rootContainer);
+  });
+
+  // ── Drag & Drop ───────────────────────────────────────────
+  div.addEventListener('dragstart', e => {
+    e.dataTransfer.effectAllowed = 'move';
+    _dragSrc = div;
+    setTimeout(() => div.classList.add('dragging'), 0);
+  });
+  div.addEventListener('dragend', () => {
+    div.classList.remove('dragging');
+    div.closest('#fields-container')?.querySelectorAll('.artifact-field-row')
+      .forEach(r => r.classList.remove('drag-over'));
+    _dragSrc = null;
+    updateFieldCount(rootContainer);
+    _triggerDynamicRefresh(rootContainer);
+  });
+  div.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (div !== _dragSrc) div.classList.add('drag-over');
+  });
+  div.addEventListener('dragleave', () => div.classList.remove('drag-over'));
+  div.addEventListener('drop', e => {
+    e.preventDefault();
+    div.classList.remove('drag-over');
+    if (!_dragSrc || _dragSrc === div) return;
+    const parent  = div.parentNode;
+    const rows    = [...parent.querySelectorAll('.artifact-field-row')];
+    const srcIdx  = rows.indexOf(_dragSrc);
+    const dstIdx  = rows.indexOf(div);
+    parent.insertBefore(_dragSrc, srcIdx < dstIdx ? div.nextSibling : div);
+    _triggerDynamicRefresh(rootContainer);
   });
 
   return div;
@@ -1044,6 +1096,123 @@ function refreshArtifactSchema(rootContainer) {
   }
 
   schemaEl.textContent = result.preamble;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// APERÇU WYSIWYG — Sprint Rectif
+// ══════════════════════════════════════════════════════════════════
+
+function _triggerDynamicRefresh(rootContainer) {
+  if (!rootContainer) return;
+  refreshArtifactSchema(rootContainer);
+  const previewTab = rootContainer.querySelector('#etab-preview');
+  if (previewTab?.classList.contains('active')) {
+    _refreshPreviewRender(previewTab, rootContainer);
+  }
+}
+
+function renderPreviewTab(el, rootContainer) {
+  if (!el) return;
+  const fields     = collectArtifactFields(rootContainer);
+  const sampleJson = generateSampleJson(fields);
+  const sampleStr  = JSON.stringify(sampleJson, null, 2);
+
+  el.innerHTML = `
+    <div class="preview-split">
+      <div class="preview-sandbox">
+        <div class="form-label" style="font-size:10px;letter-spacing:.05em;color:var(--text-muted)">
+          JSON de test
+          <span style="font-weight:400;text-transform:none;font-size:11px"> — simulez une réponse IA</span>
+        </div>
+        <textarea id="sandbox-json" class="form-textarea sandbox-input" spellcheck="false">${esc(sampleStr)}</textarea>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-secondary btn-sm" id="btn-sample-reset">↺ Régénérer l'exemple</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.6">
+          Modifiez les valeurs pour tester vos composants en temps réel.<br>
+          Le rendu se met à jour instantanément.
+        </p>
+      </div>
+      <div class="preview-render-panel">
+        <div class="preview-render-label">⬡ Aperçu de l'artefact</div>
+        <div id="preview-container"></div>
+      </div>
+    </div>`;
+
+  _refreshPreviewRender(el, rootContainer);
+
+  let debTimer;
+  el.querySelector('#sandbox-json').addEventListener('input', () => {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(() => _refreshPreviewRender(el, rootContainer), 200);
+  });
+
+  el.querySelector('#btn-sample-reset').addEventListener('click', () => {
+    const freshFields = collectArtifactFields(rootContainer);
+    const newSample   = generateSampleJson(freshFields);
+    el.querySelector('#sandbox-json').value = JSON.stringify(newSample, null, 2);
+    _refreshPreviewRender(el, rootContainer);
+  });
+}
+
+function _refreshPreviewRender(previewTabEl, rootContainer) {
+  const container = previewTabEl?.querySelector('#preview-container');
+  if (!container) return;
+
+  const jsonStr = previewTabEl.querySelector('#sandbox-json')?.value || '{}';
+  const fields  = collectArtifactFields(rootContainer);
+
+  if (fields.length === 0) {
+    container.innerHTML = '<div class="preview-empty">Ajoutez des composants dans l\'onglet<br><strong>"Composants"</strong> pour voir l\'aperçu ici.</div>';
+    return;
+  }
+
+  const outputSchema = {};
+  fields.forEach(f => {
+    if (!f.id) return;
+    const comp = ARTIFACT_COMPONENTS.find(c => c.id === f.component);
+    if (!comp) return;
+    outputSchema[f.id] = {
+      component: f.component,
+      label:     f.label,
+      type:      comp.jsonType || 'string',
+      config:    f.config || {},
+    };
+  });
+
+  renderArtifactResult(container, jsonStr, outputSchema);
+}
+
+function generateSampleJson(fields) {
+  const obj = {};
+  fields.forEach(f => {
+    if (!f.id) return;
+    switch (f.component) {
+      case 'gauge': {
+        const min = parseFloat(f.config?.min ?? 0);
+        const max = parseFloat(f.config?.max ?? 100);
+        obj[f.id] = Math.round(min + (max - min) * 0.72);
+        break;
+      }
+      case 'status_badge': {
+        const vals = (f.config?.values || 'Faible,Moyen,Élevé').split(',').map(s => s.trim());
+        obj[f.id] = vals[Math.floor(vals.length / 2)] || vals[0];
+        break;
+      }
+      case 'rich_text':
+        obj[f.id] = `Analyse détaillée pour "${f.label}". Ce texte illustre le rendu d'un composant de contenu long avec les informations contextuelles pertinentes générées par l'IA.`;
+        break;
+      case 'key_points_list':
+        obj[f.id] = [`${f.label} — point fort #1`, `${f.label} — point fort #2`, `${f.label} — point fort #3`];
+        break;
+      case 'data_card':
+        obj[f.id] = f.config?.unit?.includes('€') ? 4250 : f.config?.unit?.includes('%') ? 87 : 1250;
+        break;
+      default:
+        obj[f.id] = 'valeur';
+    }
+  });
+  return obj;
 }
 
 // ── Collect engines ─────────────────────────────────────────────

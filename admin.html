@@ -787,6 +787,96 @@
       color: #6496ff;
       letter-spacing: 0.08em;
     }
+
+    /* ── Drag & Drop ────────────────────────────────────────── */
+    .artifact-field-row { position: relative; padding-left: 30px; }
+    .artifact-drag-handle {
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      cursor: grab; color: rgba(100,150,255,.3); font-size: 18px; line-height: 1;
+      transition: color .15s; user-select: none;
+    }
+    .artifact-field-row:hover .artifact-drag-handle { color: rgba(100,150,255,.75); }
+    .artifact-field-row.dragging { opacity: .35; }
+    .artifact-field-row.drag-over {
+      border-color: #6496ff !important;
+      box-shadow: 0 0 0 2px rgba(100,150,255,.15);
+    }
+
+    /* ── Preview Split ────────────────────────────────────── */
+    .preview-split {
+      display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px;
+    }
+    .preview-sandbox { display: flex; flex-direction: column; gap: 8px; }
+    .sandbox-input {
+      font-family: 'SF Mono', 'Fira Code', monospace !important;
+      font-size: 12px !important; min-height: 200px; flex: 1; resize: vertical;
+      color: #a8c4ff !important; background: var(--navy) !important;
+      border-color: rgba(100,150,255,.3) !important;
+    }
+    .preview-render-panel {
+      background: rgba(7,16,42,.7);
+      border: 1px solid rgba(100,150,255,.2);
+      border-radius: 12px; padding: 16px;
+      overflow-y: auto; max-height: 560px;
+    }
+    .preview-render-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: #6496ff;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
+    }
+    .preview-empty {
+      text-align: center; color: rgba(180,200,255,.35);
+      font-size: 12px; padding: 36px 16px; line-height: 1.8;
+    }
+
+    /* ── Artifact Components (mirroir de style.css pour le Preview admin) ── */
+    .artifact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .artifact-card {
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .artifact-card--full { grid-column: 1 / -1; }
+    .artifact-card-label {
+      font-size: 9px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: rgba(180,200,255,.5); margin-bottom: 8px;
+    }
+    .gauge-track {
+      height: 5px; background: rgba(255,255,255,.08);
+      border-radius: 99px; overflow: hidden; margin-bottom: 6px;
+    }
+    .gauge-fill { height: 100%; border-radius: 99px; width: 0%; }
+    .gauge-footer { display: flex; align-items: baseline; gap: 4px; }
+    .gauge-value { font-size: 22px; font-weight: 900; letter-spacing: -.04em; line-height: 1; }
+    .gauge-unit { font-size: 11px; opacity: .6; }
+    .gauge-pct { font-size: 10px; margin-left: auto; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 99px; border: 1px solid;
+      font-size: 12px; font-weight: 700;
+    }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .rich-text-body { font-size: 12px; line-height: 1.65; white-space: pre-wrap; color: rgba(255,255,255,.85); }
+    .kp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+    .kp-item { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,.85); }
+    .kp-icon { flex-shrink: 0; font-size: 10px; margin-top: 2px; }
+    .artifact-data-card { display: flex; flex-direction: column; justify-content: center; }
+    .dc-value { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+    .dc-number { font-size: 26px; font-weight: 900; letter-spacing: -.04em; color: var(--gold); line-height: 1; }
+    .dc-unit { font-size: 12px; color: rgba(255,255,255,.45); }
+    .dc-prefix { font-size: 12px; color: rgba(255,255,255,.45); }
+    .artifact-missing { border-color: rgba(224,92,92,.2) !important; }
+    .artifact-missing-hint { font-size: 11px; color: #e05c5c; opacity: .7; }
+    .artifact-error {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; background: rgba(224,92,92,.08);
+      border: 1px solid rgba(224,92,92,.2); border-radius: 10px; font-size: 12px;
+    }
+    .artifact-raw {
+      font-family: 'SF Mono', monospace; font-size: 11px;
+      color: rgba(180,200,255,.5); white-space: pre-wrap; word-break: break-all;
+      margin: 6px 0 0; padding: 8px; background: rgba(0,0,0,.2);
+      border-radius: 6px; max-height: 160px; overflow-y: auto;
+    }
   </style>
 </head>
 <body>
