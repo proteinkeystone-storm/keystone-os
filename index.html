@@ -718,79 +718,12 @@ nav.scrolled {
   letter-spacing: .05em; cursor: pointer;
 }
 
-/* ═══════════════════════════════════════════
-   STRIPE MODAL
-═══════════════════════════════════════════ */
-.modal-overlay {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,8,20,.85);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0; pointer-events: none; transition: opacity .25s;
-}
-.modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal-box {
-  background: #050D20;
-  border: 0.5px solid rgba(255,255,255,.12);
-  border-radius: 20px; padding: 40px;
-  width: min(460px, 90vw); position: relative;
-  box-shadow: 0 16px 80px rgba(26,0,51,.8), 0 4px 24px rgba(0,0,0,.5);
-  transform: scale(0.95); opacity: 0;
-  transition: transform .3s cubic-bezier(.22,1,.36,1), opacity .25s ease;
-}
-.modal-overlay.open .modal-box { transform: scale(1); opacity: 1; }
-.modal-close {
-  position: absolute; top: 16px; right: 16px;
-  background: rgba(255,255,255,.06); border: 0.5px solid var(--border);
-  border-radius: 50%; width: 30px; height: 30px;
-  color: var(--white-2); cursor: pointer; font-size: .8rem;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .2s;
-}
-.modal-close:hover { background: rgba(255,255,255,.12); }
-.modal-plan-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--gold-dim); border: 0.5px solid var(--border-g);
-  border-radius: 100px; padding: 5px 12px;
-  font-size: .68rem; font-weight: 700; color: var(--gold);
-  letter-spacing: .08em; text-transform: uppercase; margin-bottom: 20px;
-}
-.modal-price {
-  font-size: 2.4rem; font-weight: 900; color: #fff;
-  letter-spacing: -.04em; margin-bottom: 24px;
-}
-.modal-price span { font-size: .9rem; font-weight: 400; color: var(--white-2); }
-.stripe-form { display: flex; flex-direction: column; gap: 12px; }
-.stripe-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stripe-field label {
-  display: block; font-size: .68rem; font-weight: 600;
-  letter-spacing: .08em; text-transform: uppercase;
-  color: var(--white-2); margin-bottom: 6px;
-}
-.stripe-field input {
-  width: 100%; background: rgba(255,255,255,.05);
-  border: 0.5px solid rgba(255,255,255,.12); border-radius: 8px;
-  padding: 11px 14px; font-size: .88rem; color: #fff; outline: none;
-  transition: border-color .2s, box-shadow .2s;
-}
-.stripe-field input::placeholder { color: rgba(255,255,255,.22); }
-.stripe-field input:focus {
-  border-color: rgba(212,175,55,.4);
-  box-shadow: 0 0 0 3px rgba(212,175,55,.09);
-}
-.stripe-submit {
-  width: 100%; background: var(--gold-grad); color: #000814;
-  border: none; border-radius: 10px; padding: 14px;
-  font-size: .88rem; font-weight: 700; cursor: pointer; margin-top: 8px;
-  box-shadow: var(--bevel-gold);
-  transition: box-shadow .25s, transform .15s;
-}
-.stripe-submit:hover { box-shadow: var(--bevel-gold-hover); transform: translateY(-1px); }
-.stripe-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-.stripe-secure {
-  font-size: .68rem; color: var(--white-2); text-align: center;
-  margin-top: 10px; opacity: .6;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
+/* Stripe Checkout — Sprint 6 (placeholder) */
+.plan-cta:disabled {
+  opacity: .45; cursor: not-allowed;
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.1);
+  box-shadow: none; transform: none;
 }
 
 /* ═══════════════════════════════════════════
@@ -1197,7 +1130,7 @@ nav.scrolled {
           <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts sur-mesure</li>
           <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Support prioritaire</li>
         </ul>
-        <button class="plan-cta" onclick="openStripe('Start','49')">Démarrer — 49€/mois</button>
+        <button class="plan-cta" disabled>Bientôt disponible</button>
         <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
       </div>
       <!-- PRO -->
@@ -1216,7 +1149,7 @@ nav.scrolled {
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Éligible Artefacts sur-mesure</strong> <span style="font-size:.7rem;opacity:.6">(sur devis)</span></li>
           <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Support prioritaire</li>
         </ul>
-        <button class="plan-cta" onclick="openStripe('Pro','79')">Activer ma licence Pro</button>
+        <button class="plan-cta" disabled>Bientôt disponible</button>
         <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
       </div>
       <!-- MAX -->
@@ -1234,7 +1167,7 @@ nav.scrolled {
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Éligible Artefacts sur-mesure</strong> <span style="font-size:.7rem;opacity:.6">(sur devis)</span></li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Support prioritaire dédié</strong></li>
         </ul>
-        <button class="plan-cta" onclick="openStripe('Max','149')">Obtenir ma licence Max</button>
+        <button class="plan-cta" disabled>Bientôt disponible</button>
         <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
       </div>
     </div>
@@ -1291,43 +1224,7 @@ nav.scrolled {
 </div>
 
 <!-- STRIPE MODAL -->
-<div class="modal-overlay" id="stripe-modal">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeStripe()">✕</button>
-    <div class="modal-plan-badge">
-      <svg width="12" height="12"><use href="#ico-zap"/></svg>
-      <span id="stripe-plan-name">Pro</span>
-    </div>
-    <div class="modal-price"><span>Total mensuel — </span><span id="stripe-plan-price">79</span>€</div>
-    <div class="stripe-form">
-      <div class="stripe-field">
-        <label>Titulaire de la carte</label>
-        <input type="text" id="s-name" placeholder="Jean Dupont">
-      </div>
-      <div class="stripe-field">
-        <label>Numéro de carte</label>
-        <input type="text" id="s-card" placeholder="1234 5678 9012 3456" maxlength="19">
-      </div>
-      <div class="stripe-row">
-        <div class="stripe-field">
-          <label>Expiration</label>
-          <input type="text" id="s-exp" placeholder="MM/AA" maxlength="5">
-        </div>
-        <div class="stripe-field">
-          <label>CVC</label>
-          <input type="text" id="s-cvc" placeholder="123" maxlength="3">
-        </div>
-      </div>
-      <button class="stripe-submit" id="stripe-submit-btn" onclick="processPayment()">
-        Confirmer — <span id="stripe-btn-price">79</span>€/mois
-      </button>
-      <div class="stripe-secure">
-        <svg width="11" height="11"><use href="#ico-lock"/></svg>
-        Paiement sécurisé · Données chiffrées SSL
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Stripe Checkout — intégration prévue (Sprint 6) -->
 
 <!-- ONBOARDING -->
 <div class="onboarding-overlay" id="onboarding-overlay">
@@ -1450,21 +1347,6 @@ document.getElementById('act-key').addEventListener('keydown', e => {
     const v = e.target.value;
     if (v.endsWith('-')) e.target.value = v.slice(0, -1);
   }
-});
-
-/* ═══════════════════════════════════════════
-   STRIPE CARD FORMAT
-═══════════════════════════════════════════ */
-const sCard = document.getElementById('s-card');
-sCard && sCard.addEventListener('input', function() {
-  let v = this.value.replace(/\D/g, '');
-  this.value = v.match(/.{1,4}/g)?.join(' ')?.substring(0, 19) || v;
-});
-const sExp = document.getElementById('s-exp');
-sExp && sExp.addEventListener('input', function() {
-  let v = this.value.replace(/\D/g, '');
-  if (v.length >= 2) v = v.substring(0, 2) + '/' + v.substring(2, 4);
-  this.value = v;
 });
 
 /* ═══════════════════════════════════════════
@@ -1630,53 +1512,10 @@ function loadPreview(file) {
 }
 
 /* ═══════════════════════════════════════════
-   STRIPE MODAL
-═══════════════════════════════════════════ */
-let _stripePlan = 'Start', _stripePrice = '49';
-
-function openStripe(plan, price) {
-  _stripePlan = plan; _stripePrice = price;
-  document.getElementById('stripe-plan-name').textContent = plan;
-  document.getElementById('stripe-plan-price').textContent = price;
-  document.getElementById('stripe-btn-price').textContent = price;
-  document.getElementById('stripe-modal').classList.add('open');
-}
-function closeStripe() {
-  document.getElementById('stripe-modal').classList.remove('open');
-}
-document.getElementById('stripe-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeStripe();
-});
-
-function processPayment() {
-  const btn  = document.getElementById('stripe-submit-btn');
-  const card = document.getElementById('s-card').value.replace(/\s/g, '');
-  if (card.length < 16) { alert('Numéro de carte invalide.'); return; }
-  btn.disabled = true;
-  btn.textContent = 'Traitement en cours…';
-  setTimeout(() => {
-    const prefix = _stripePlan.toUpperCase().substring(0, 3);
-    const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
-    const key = `${prefix}${seg()}-${seg()}-${seg()}-${seg()}`.substring(0, 19);
-    closeStripe();
-    btn.disabled = false;
-    btn.textContent = `Confirmer — ${_stripePrice}€/mois`;
-    document.getElementById('act-key').value = key;
-    document.getElementById('activate').scrollIntoView({ behavior: 'smooth' });
-    setTimeout(() => {
-      const el = document.getElementById('act-key');
-      el.style.borderColor = 'rgba(212,175,55,.5)';
-      el.style.boxShadow = '0 0 0 3px rgba(212,175,55,.12)';
-      setTimeout(() => { el.style.borderColor = ''; el.style.boxShadow = ''; }, 2000);
-    }, 600);
-  }, 2200);
-}
-
-/* ═══════════════════════════════════════════
    KEYBOARD
 ═══════════════════════════════════════════ */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeStripe(); closeLegal(); }
+  if (e.key === 'Escape') { closeLegal(); }
 });
 
 /* ═══════════════════════════════════════════
