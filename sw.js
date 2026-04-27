@@ -13,11 +13,10 @@ const CACHE_NAME    = 'keystone-v2';
 const SHELL_VERSION = '20260428';
 
 // ── Assets du Shell — mis en cache à l'installation ─────────────
-// Note : '/' n'est PAS pré-caché — les navigations doivent toujours
-// passer par le réseau pour que les rewrites Vercel (/ → landing.html)
-// s'appliquent correctement.
+// Note : '/' n'est PAS pré-caché — Vercel sert index.html (landing)
+// directement comme fichier racine, les navigations vont au réseau.
 const SHELL_ASSETS = [
-  '/index.html',
+  '/app.html',
   '/src/main.js',
   '/src/ui-renderer.js',
   '/src/vault.js',
@@ -117,11 +116,11 @@ self.addEventListener('fetch', event => {
   }
 
   // ── 4. Navigations HTML → Network-First ─────────────────────
-  //    Permet aux rewrites Vercel (/ → landing.html, /app → index.html)
-  //    de fonctionner correctement. Pas de cache sur les documents HTML.
+  //    Vercel sert / → index.html (landing) et /app → app.html (dashboard)
+  //    Pas de cache sur les documents HTML pour éviter le stale routing.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html'))
+      fetch(request).catch(() => caches.match('/app.html'))
     );
     return;
   }

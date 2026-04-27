@@ -1,324 +1,1813 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keystone — Prométhée Immobilier</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keystone OS — Domptez la puissance. Gardez le contrôle.</title>
+<meta name="description" content="Keystone OS unifie les meilleures IA du monde dans un environnement souverain. Claude, GPT-4o, Gemini — un seul OS, une seule clé.">
+<link rel="icon" href="/LOGOS/Logo puce fond bleu.svg" type="image/svg+xml">
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --bg:        #000814;
+  --bg-2:      #001A2C;
+  --gold:      #D4AF37;
+  --bronze:    #8C6239;
+  --gold-grad: linear-gradient(135deg, #8C6239 0%, #D4AF37 100%);
+  --gold-dim:  rgba(212,175,55,.10);
+  --gold-glow: rgba(212,175,55,.22);
+  --abyss:     #1A0033;
+  --cobalt:    #001A4D;
+  --white:     rgba(255,255,255,.84);
+  --white-2:   rgba(255,255,255,.48);
+  --white-3:   rgba(255,255,255,.16);
+  --border:    rgba(255,255,255,.10);
+  --border-g:  rgba(212,175,55,.28);
+  --glass-bg:  rgba(0,10,28,.68);
+  --card-shadow:       0 8px 48px rgba(26,0,51,.55), 0 2px 12px rgba(0,0,0,.4);
+  --card-shadow-hover: 0 12px 64px rgba(26,0,51,.75), 0 4px 20px rgba(0,0,0,.5);
+  --r:    16px;
+  --r-sm: 8px;
+  /* Bevel system */
+  --bevel-gold:
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 -2px 0 rgba(0,0,0,.28),
+    0 4px 24px rgba(212,175,55,.32),
+    0 0 0 0.5px rgba(140,98,57,.45);
+  --bevel-gold-hover:
+    inset 0 1px 0 rgba(255,255,255,.32),
+    inset 0 -2px 0 rgba(0,0,0,.30),
+    0 8px 42px rgba(212,175,55,.52),
+    0 0 0 0.5px rgba(140,98,57,.45);
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
 
-  <!-- ── PWA Meta ──────────────────────────────────────────────── -->
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#07102a">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Keystone">
-  <link rel="apple-touch-icon" href="./LOGOS/Logo puce fond bleu.svg">
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  background: radial-gradient(ellipse at 50% 0%, #001A2C 0%, #000814 62%);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
 
-  <link rel="stylesheet" href="./src/style.css?v=20260425">
+/* Blueprint grid */
+body::before {
+  content:'';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.010) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.010) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
 
-  <!-- ── SECURITY GATE — détection lancement non officiel ─────── -->
-  <script>
-  (function(){
-    // Actif uniquement en protocole file://
-    // Le lanceur officiel ajoute ?ks_launch=1 — sans ce paramètre, on bloque.
-    if (location.protocol !== 'file:') return; // serveur local = OK
-    var params = new URLSearchParams(location.search);
-    if (params.get('ks_launch') === '1') return; // lancé via Lancer_KEYSTONE
+section, nav, footer { position: relative; z-index: 1; }
 
-    // ── Construction de l'écran de blocage ───────────────────────
-    var style = document.createElement('style');
-    style.textContent = [
-      '#ks-security-gate{',
-        'position:fixed;inset:0;z-index:99999;',
-        'background:#07102a;',
-        'display:flex;flex-direction:column;',
-        'align-items:center;justify-content:center;',
-        'font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;',
-        'user-select:none;pointer-events:all;',
-      '}',
-      '#ks-security-gate .sg-glow{',
-        'position:absolute;inset:0;',
-        'background:radial-gradient(ellipse 60% 45% at 50% 40%,rgba(180,148,70,.13) 0%,transparent 70%);',
-        'pointer-events:none;',
-      '}',
-      '#ks-security-gate .sg-logo{',
-        'width:72px;height:72px;',
-        'background:rgba(180,148,70,.12);',
-        'border:1.5px solid rgba(180,148,70,.35);',
-        'border-radius:18px;',
-        'display:flex;align-items:center;justify-content:center;',
-        'margin-bottom:28px;',
-        'box-shadow:0 0 40px rgba(180,148,70,.15);',
-      '}',
-      '#ks-security-gate .sg-logo svg{opacity:.85}',
-      '#ks-security-gate .sg-lock{',
-        'width:48px;height:48px;',
-        'display:flex;align-items:center;justify-content:center;',
-        'background:rgba(180,148,70,.1);',
-        'border-radius:50%;',
-        'margin-bottom:24px;',
-        'border:1.5px solid rgba(180,148,70,.3);',
-      '}',
-      '#ks-security-gate h1{',
-        'color:#c9a84c;',
-        'font-size:13px;font-weight:700;',
-        'letter-spacing:.18em;text-transform:uppercase;',
-        'margin:0 0 10px;opacity:.9;',
-      '}',
-      '#ks-security-gate .sg-title{',
-        'color:#f0f0f0;',
-        'font-size:22px;font-weight:800;',
-        'letter-spacing:-.03em;',
-        'margin:0 0 16px;',
-        'text-align:center;',
-      '}',
-      '#ks-security-gate .sg-msg{',
-        'color:rgba(255,255,255,.45);',
-        'font-size:14px;font-weight:400;',
-        'line-height:1.6;',
-        'text-align:center;',
-        'max-width:380px;',
-        'margin:0 0 32px;',
-      '}',
-      '#ks-security-gate .sg-msg strong{color:rgba(255,255,255,.7);font-weight:600;}',
-      '#ks-security-gate .sg-badge{',
-        'display:flex;align-items:center;gap:8px;',
-        'padding:10px 18px;',
-        'background:rgba(180,148,70,.1);',
-        'border:1px solid rgba(180,148,70,.25);',
-        'border-radius:100px;',
-        'color:rgba(180,148,70,.8);',
-        'font-size:12px;font-weight:600;',
-        'letter-spacing:.06em;',
-      '}',
-      '#ks-security-gate .sg-sep{',
-        'width:40px;height:1px;',
-        'background:rgba(255,255,255,.08);',
-        'margin:28px 0;',
-      '}',
-      '#ks-security-gate .sg-footer{',
-        'position:absolute;bottom:28px;',
-        'color:rgba(255,255,255,.18);',
-        'font-size:11px;letter-spacing:.04em;',
-      '}',
-    ].join('');
-    document.head.appendChild(style);
+/* ═══════════════════════════════════════════
+   AMBIENT DEPTH — Violet Abyssal + Cobalt
+═══════════════════════════════════════════ */
+.bg-blob {
+  position: fixed; border-radius: 50%;
+  pointer-events: none; z-index: 0;
+  filter: blur(120px); will-change: transform;
+}
+.bg-blob--violet {
+  width: 720px; height: 720px;
+  background: rgba(26,0,51,.60);
+  bottom: -220px; left: -180px;
+  animation: blob-drift 24s ease-in-out infinite alternate;
+}
+.bg-blob--cobalt {
+  width: 520px; height: 520px;
+  background: rgba(0,26,77,.48);
+  top: -60px; right: -120px;
+  animation: blob-drift 32s ease-in-out infinite alternate-reverse;
+}
+@keyframes blob-drift {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(55px, 40px); }
+}
 
-    var gate = document.createElement('div');
-    gate.id = 'ks-security-gate';
-    gate.innerHTML = [
-      '<div class="sg-glow"></div>',
+/* ═══════════════════════════════════════════
+   CURSOR GLOW — multi-layer
+═══════════════════════════════════════════ */
+#cursor-glow {
+  position: fixed; width: 580px; height: 580px;
+  border-radius: 50%;
+  background:
+    radial-gradient(90px circle at center, rgba(212,175,55,.055) 0%, transparent 100%),
+    radial-gradient(290px circle at center, rgba(26,0,51,.09) 0%, transparent 100%);
+  transform: translate(-50%,-50%);
+  pointer-events: none; z-index: 0;
+}
 
-      // Icône cadenas
-      '<div class="sg-lock">',
-        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">',
-          '<rect x="3" y="11" width="18" height="11" rx="2"/>',
-          '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-        '</svg>',
-      '</div>',
+/* ═══════════════════════════════════════════
+   TYPOGRAPHY
+═══════════════════════════════════════════ */
+.eyebrow {
+  font-size: .68rem; font-weight: 600; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--gold);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.eyebrow::before {
+  content:'';
+  display: inline-block; width: 16px; height: 1px;
+  background: var(--gold); opacity: .6;
+}
+.title-xl {
+  font-size: clamp(2.6rem, 6vw, 5rem);
+  font-weight: 900; line-height: 1.06;
+  letter-spacing: -0.03em; color: #fff;
+}
+.title-xl em {
+  font-style: normal; color: var(--gold);
+  text-shadow: 0 0 60px rgba(212,175,55,.4), 0 0 140px rgba(212,175,55,.18);
+}
+.title-lg {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 800; line-height: 1.1;
+  letter-spacing: -0.025em; color: #fff;
+}
+.title-md {
+  font-size: 1.25rem; font-weight: 700;
+  letter-spacing: -0.02em; color: #fff;
+}
+.body-lg {
+  font-size: 1.05rem; line-height: 1.7;
+  color: var(--white-2); font-weight: 400;
+  max-width: 54ch; margin: 0 auto;
+}
 
-      '<h1>Keystone OS</h1>',
-      '<div class="sg-title">Système verrouillé</div>',
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.section-inner {
+  max-width: 1160px; margin: 0 auto;
+  padding: 100px 32px;
+}
+.section-inner--narrow { max-width: 760px; }
+.section-header {
+  text-align: center; margin-bottom: 64px;
+  display: flex; flex-direction: column; gap: 16px; align-items: center;
+}
 
-      '<div class="sg-msg">',
-        'Ce fichier doit être ouvert via le <strong>Lanceur officiel</strong><br>',
-        'présent à la racine de votre clé USB.<br><br>',
-        'Double-cliquez sur <strong>Lancer_KEYSTONE</strong> (.bat sur Windows,<br>.command sur Mac) pour démarrer correctement.',
-      '</div>',
+/* Gold hairlines between sections */
+#kstore, #security, #plans, #activate {
+  border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent 0%, rgba(212,175,55,.18) 30%, rgba(212,175,55,.18) 70%, transparent 100%) 1;
+}
 
-      '<div class="sg-badge">',
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        'Sécurité Keystone active',
-      '</div>',
+/* ═══════════════════════════════════════════
+   RADIAL HALO REVEAL — mixin via pseudo
+═══════════════════════════════════════════ */
+.engine-card,
+.plan-card,
+.security-block {
+  --mx: 50%; --my: 50%;
+}
+.engine-card::after,
+.plan-card::after,
+.security-block::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(220px circle at var(--mx) var(--my), rgba(212,175,55,.075) 0%, transparent 70%);
+  opacity: 0; transition: opacity .4s;
+  pointer-events: none; z-index: 1;
+  border-radius: var(--r);
+  clip-path: inset(0 round var(--r));
+}
+.engine-card:hover::after,
+.plan-card:hover::after,
+.security-block:hover::after { opacity: 1; }
+.engine-card > *,
+.plan-card > *,
+.security-block > * { position: relative; z-index: 2; }
 
-      '<div class="sg-sep"></div>',
-      '<div class="sg-footer">© Keystone OS — Protein Studio</div>',
-    ].join('');
+/* ═══════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════ */
+.reveal {
+  opacity: 0; transform: translateY(28px);
+  transition: opacity .65s ease, transform .65s ease;
+}
+.reveal.visible { opacity: 1; transform: none; }
 
-    // Bloquer quand le DOM est prêt
-    if (document.body) {
-      document.body.appendChild(gate);
-    } else {
-      document.addEventListener('DOMContentLoaded', function() {
-        document.body.appendChild(gate);
-      });
-    }
-  })();
-  </script>
+/* ═══════════════════════════════════════════
+   NAV
+═══════════════════════════════════════════ */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 58px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 40px;
+  background: rgba(0,8,20,.72);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 0.5px solid rgba(255,255,255,.06);
+  transition: border-color .35s, box-shadow .35s;
+}
+nav.scrolled {
+  border-bottom-color: rgba(212,175,55,.14);
+  box-shadow: 0 1px 40px rgba(26,0,51,.55);
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 9px;
+  text-decoration: none;
+}
+.nav-logo img { height: 26px; width: auto; }
+.nav-logo-text {
+  font-size: .82rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: #fff;
+}
+.nav-logo-text span { color: var(--gold); }
+.nav-links {
+  display: flex; align-items: center; gap: 36px;
+  list-style: none;
+}
+.nav-links a {
+  font-size: .82rem; color: var(--white-2); text-decoration: none;
+  letter-spacing: .02em; transition: color .2s;
+}
+.nav-links a:hover { color: #fff; }
+.nav-cta {
+  background: var(--gold-grad); color: #000814;
+  font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+  padding: 8px 20px; border-radius: 100px; border: none;
+  cursor: pointer; text-decoration: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 -2px 0 rgba(0,0,0,.22),
+    0 2px 16px rgba(212,175,55,.28);
+  transition: box-shadow .25s, transform .15s;
+}
+.nav-cta:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.32),
+    inset 0 -2px 0 rgba(0,0,0,.25),
+    0 6px 30px rgba(212,175,55,.48);
+  transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════ */
+#hero {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding-top: 58px;
+  position: relative; overflow: hidden;
+}
+
+/* Ambient hero glow */
+.hero-glow {
+  position: absolute;
+  width: 920px; height: 520px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -58%);
+  background: radial-gradient(ellipse at center, rgba(212,175,55,.055) 0%, transparent 65%);
+  pointer-events: none; z-index: 0;
+  animation: hero-pulse 7s ease-in-out infinite;
+}
+@keyframes hero-pulse {
+  0%, 100% { opacity: .6; transform: translate(-50%,-58%) scale(1); }
+  50%       { opacity: 1;  transform: translate(-50%,-58%) scale(1.06); }
+}
+
+/* Breathing ring */
+.hero-glow-ring {
+  position: absolute;
+  width: 580px; height: 580px; border-radius: 50%;
+  border: 1px solid rgba(212,175,55,.07);
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  pointer-events: none; z-index: 0;
+  animation: ring-breathe 5.5s ease-in-out infinite;
+}
+.hero-glow-ring::after {
+  content: '';
+  position: absolute; inset: -42px; border-radius: 50%;
+  border: 0.5px solid rgba(212,175,55,.035);
+}
+@keyframes ring-breathe {
+  0%, 100% { transform: translate(-50%,-50%) scale(1);    opacity: .9; }
+  50%       { transform: translate(-50%,-50%) scale(1.05); opacity: .4; }
+}
+
+.hero-inner {
+  max-width: 860px; padding: 80px 32px 60px;
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+  position: relative; z-index: 1;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 7px 16px; border-radius: 100px;
+  border: 0.5px solid var(--border-g);
+  background: rgba(212,175,55,.06);
+  font-size: .72rem; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--gold);
+  animation: badge-shimmer 4s ease-in-out infinite;
+}
+@keyframes badge-shimmer {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,.0); }
+  50%       { box-shadow: 0 0 22px 0 rgba(212,175,55,.16); }
+}
+.hero-badge svg { opacity: .7; }
+.hero-ctas {
+  display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+  margin-top: 8px;
+}
+
+/* ═══ PRIMARY BUTTON — biseauté ═══ */
+.btn-primary {
+  background: var(--gold-grad); color: #000814;
+  font-size: .88rem; font-weight: 700; letter-spacing: .03em;
+  padding: 14px 30px; border-radius: 100px; border: none;
+  cursor: pointer; text-decoration: none;
+  box-shadow: var(--bevel-gold);
+  transition: box-shadow .25s, transform .15s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-primary:hover {
+  box-shadow: var(--bevel-gold-hover);
+  transform: translateY(-1px);
+}
+.btn-glass {
+  background: rgba(255,255,255,.05);
+  border: 0.5px solid rgba(255,255,255,.14);
+  color: var(--white); font-size: .88rem; font-weight: 500;
+  padding: 14px 28px; border-radius: 100px;
+  cursor: pointer; text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  transition: background .2s, border-color .2s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-glass:hover {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(255,255,255,.24);
+}
+.hero-engines {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 12px; opacity: .5;
+  flex-wrap: wrap; justify-content: center;
+}
+.hero-engines img {
+  height: 18px; width: auto; filter: grayscale(1) brightness(2);
+  border-radius: 3px;
+}
+.hero-engines-sep {
+  width: 1px; height: 14px;
+  background: rgba(255,255,255,.2); margin: 0 4px;
+}
+
+/* ═══════════════════════════════════════════
+   MOTEURS
+═══════════════════════════════════════════ */
+#engines {
+  background: linear-gradient(180deg, transparent 0%, rgba(5,10,24,.5) 100%);
+}
+.engines-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+}
+.engine-card {
+  background: var(--glass-bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 28px 24px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, transform .3s, box-shadow .3s, background .3s;
+  display: flex; flex-direction: column; gap: 14px;
+  position: relative; overflow: hidden;
+}
+.engine-card:hover {
+  border-color: rgba(255,255,255,.18);
+  transform: translateY(-4px);
+  box-shadow: var(--card-shadow-hover);
+  background: linear-gradient(145deg, rgba(0,26,77,.5) 0%, rgba(0,10,28,.68) 100%);
+}
+.engine-card-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: rgba(255,255,255,.06);
+  border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--white-2);
+  transition: color .3s, border-color .3s, background .3s;
+}
+.engine-card:hover .engine-card-icon {
+  color: var(--gold);
+  border-color: rgba(212,175,55,.32);
+  background: var(--gold-dim);
+}
+.engine-card-label {
+  font-size: .62rem; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--white-2);
+}
+
+/* ═══════════════════════════════════════════
+   MOTEURS LOGOS
+═══════════════════════════════════════════ */
+.engines-logos {
+  display: flex; align-items: center; justify-content: center;
+  gap: 32px; flex-wrap: wrap;
+  padding: 48px 32px;
+  border-top: 0.5px solid var(--border);
+  margin-top: 60px;
+}
+.engine-logo-item {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  opacity: .55; transition: opacity .25s, transform .25s;
+}
+.engine-logo-item:hover { opacity: 1; transform: translateY(-2px); }
+.engine-logo-item img {
+  height: 28px; width: auto;
+  filter: grayscale(1) brightness(10) contrast(0.6);
+  transition: filter .3s ease;
+}
+.engine-logo-item:hover img {
+  filter: grayscale(0.2) brightness(1.3) sepia(0.2) saturate(1.5);
+}
+.engine-logo-item span {
+  font-size: .62rem; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--white-2);
+}
+
+/* ═══════════════════════════════════════════
+   KEY-STORE
+═══════════════════════════════════════════ */
+#kstore { background: rgba(5,10,24,.45); }
+.kstore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.kstore-card {
+  background: var(--glass-bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px 18px;
+  display: flex; align-items: center; gap: 14px;
+  cursor: default;
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, box-shadow .3s;
+  transform-style: preserve-3d;
+  position: relative; overflow: hidden;
+}
+.kstore-card:hover {
+  border-color: rgba(212,175,55,.28);
+  box-shadow: var(--card-shadow-hover);
+}
+.kstore-card:hover .kstore-card-icon {
+  background: radial-gradient(circle at 50% 50%, rgba(0,26,77,.7) 0%, rgba(212,175,55,.12) 100%);
+  border-color: rgba(212,175,55,.4);
+  color: var(--gold);
+}
+.kstore-card--soon {
+  opacity: .4; border-style: dashed;
+  justify-content: center;
+}
+.kstore-card-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: rgba(255,255,255,.06);
+  border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--white-2);
+  transition: background .3s, border-color .3s, color .3s;
+}
+.kstore-card-info { flex: 1; }
+.kstore-card-name {
+  font-size: .82rem; font-weight: 600; color: #fff;
+  letter-spacing: -.01em;
+}
+.kstore-card-cat {
+  font-size: .62rem; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--white-2);
+  margin-top: 3px;
+}
+
+/* ═══════════════════════════════════════════
+   SÉCURITÉ
+═══════════════════════════════════════════ */
+#security { background: linear-gradient(180deg, rgba(5,10,24,.45) 0%, transparent 100%); }
+.security-split {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+}
+.security-block {
+  background: var(--glass-bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 40px 36px;
+  display: flex; flex-direction: column; gap: 20px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
+  position: relative; overflow: hidden;
+}
+.security-block--gold {
+  border-color: var(--border-g);
+  background: rgba(212,175,55,.04);
+}
+.security-block-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  border: 0.5px solid var(--border);
+  background: rgba(255,255,255,.05);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--white-2);
+}
+.security-block--gold .security-block-icon {
+  border-color: var(--border-g);
+  color: var(--gold);
+  background: var(--gold-dim);
+}
+.security-block p { font-size: .9rem; line-height: 1.7; color: var(--white-2); }
+.security-block ul {
+  list-style: none; display: flex; flex-direction: column; gap: 10px;
+}
+.security-block li {
+  font-size: .85rem; color: var(--white-2); line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.security-block li svg { flex-shrink: 0; margin-top: 3px; color: var(--gold); opacity: .8; }
+
+/* ═══════════════════════════════════════════
+   PLANS
+═══════════════════════════════════════════ */
+.plans-grid {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 16px;
+}
+.plan-card {
+  background: var(--glass-bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 36px 28px;
+  display: flex; flex-direction: column; gap: 0;
+  position: relative;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, box-shadow .3s, transform .3s;
+  /* overflow: visible pour que le badge "Populaire" ne soit pas clippé */
+}
+.plan-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--card-shadow-hover);
+}
+.plan-card--pro {
+  border-color: var(--border-g);
+  background: rgba(212,175,55,.04);
+  box-shadow: var(--card-shadow), 0 0 60px rgba(212,175,55,.08), inset 0 1px 0 rgba(212,175,55,.08);
+}
+.plan-card--pro:hover {
+  border-color: rgba(212,175,55,.42);
+  box-shadow: var(--card-shadow-hover), 0 0 90px rgba(212,175,55,.14), inset 0 1px 0 rgba(212,175,55,.12);
+}
+.plan-badge {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, #7A5020 0%, #D4AF37 45%, #F0D060 65%, #8C6239 100%);
+  color: #1A0A00;
+  font-size: .65rem; font-weight: 900; letter-spacing: .16em;
+  text-transform: uppercase; padding: 6px 18px; border-radius: 100px;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.45),
+    inset 0 -1px 0 rgba(0,0,0,.30),
+    0 0 0 1px rgba(140,98,57,.6),
+    0 4px 20px rgba(212,175,55,.55),
+    0 2px 8px rgba(0,0,0,.4);
+  text-shadow: 0 1px 0 rgba(255,255,255,.25);
+}
+.plan-tier {
+  font-size: .65rem; font-weight: 800; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--white-2); margin-bottom: 12px;
+}
+.plan-card--pro .plan-tier { color: var(--gold); }
+.plan-price {
+  font-size: 3rem; font-weight: 900; color: #fff;
+  letter-spacing: -.04em; line-height: 1;
+}
+.plan-price sup {
+  font-size: 1.2rem; font-weight: 700; vertical-align: super; letter-spacing: 0;
+}
+.plan-price sub {
+  font-size: .8rem; font-weight: 400; color: var(--white-2);
+  vertical-align: baseline; letter-spacing: 0;
+}
+.plan-desc {
+  font-size: .82rem; color: var(--white-2); line-height: 1.6;
+  margin-top: 10px; margin-bottom: 24px; padding-bottom: 24px;
+  border-bottom: 0.5px solid var(--border);
+}
+.plan-features {
+  list-style: none; display: flex; flex-direction: column; gap: 11px;
+  flex: 1; margin-bottom: 28px;
+}
+.plan-features li {
+  font-size: .83rem; color: var(--white-2); line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 9px;
+}
+.plan-features li svg { flex-shrink: 0; margin-top: 2px; color: var(--gold); }
+.plan-features li.disabled { opacity: .35; }
+.plan-features li.disabled svg { color: var(--white-2); }
+.plan-cta {
+  width: 100%; padding: 13px; border-radius: 10px;
+  font-size: .84rem; font-weight: 700; letter-spacing: .02em;
+  cursor: pointer; border: 0.5px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.06); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.18);
+  transition: background .2s, border-color .2s;
+}
+.plan-cta:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); }
+.plan-card--pro .plan-cta {
+  background: var(--gold-grad); color: #000814; border-color: transparent;
+  box-shadow: var(--bevel-gold);
+  transition: box-shadow .25s, transform .15s;
+}
+.plan-card--pro .plan-cta:hover {
+  box-shadow: var(--bevel-gold-hover);
+  transform: translateY(-1px);
+}
+.plan-note {
+  font-size: .7rem; color: var(--white-2); text-align: center; margin-top: 8px;
+  opacity: .7;
+}
+
+/* ═══════════════════════════════════════════
+   ACTIVATION
+═══════════════════════════════════════════ */
+#activate { background: rgba(5,10,24,.5); }
+.activate-wrap { max-width: 520px; margin: 0 auto; text-align: center; }
+.activate-card {
+  background: var(--glass-bg);
+  border: 0.5px solid var(--border-g);
+  border-radius: var(--r);
+  padding: 44px 40px; margin-top: 40px;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--card-shadow);
+  position: relative; overflow: hidden;
+}
+/* Top gold hairline */
+.activate-card::before {
+  content:''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: .45;
+}
+/* Breathing top glow */
+.activate-card::after {
+  content: ''; position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+  width: 180px; height: 48px;
+  background: radial-gradient(ellipse, rgba(212,175,55,.2) 0%, transparent 70%);
+  animation: card-top-breathe 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes card-top-breathe {
+  0%, 100% { opacity: .45; }
+  50%       { opacity: 1; }
+}
+.activate-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--gold-dim);
+  border: 0.5px solid rgba(212,175,55,.28);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 24px; color: var(--gold);
+  animation: icon-breathe 3.2s ease-in-out infinite;
+  position: relative; z-index: 1;
+}
+@keyframes icon-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,.0); }
+  50%       { box-shadow: 0 0 28px 4px rgba(212,175,55,.16); }
+}
+.activate-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 28px; }
+.act-input {
+  width: 100%; background: rgba(255,255,255,.04);
+  border: 0.5px solid rgba(255,255,255,.12);
+  border-radius: 10px; padding: 13px 16px;
+  font-size: .9rem; color: #fff;
+  outline: none; transition: border-color .2s, box-shadow .2s;
+}
+.act-input::placeholder { color: rgba(255,255,255,.25); }
+.act-input:focus {
+  border-color: rgba(212,175,55,.42);
+  box-shadow: 0 0 0 3px rgba(212,175,55,.09);
+}
+.act-input.mono {
+  font-family: 'SF Mono','Fira Code',monospace; letter-spacing: .06em;
+}
+.act-btn {
+  width: 100%; background: var(--gold-grad); color: #000814;
+  border: none; border-radius: 10px;
+  padding: 14px; font-size: .88rem; font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--bevel-gold);
+  transition: box-shadow .25s, transform .15s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.act-btn:hover {
+  box-shadow: var(--bevel-gold-hover);
+  transform: translateY(-1px);
+}
+.act-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.act-status { font-size: .8rem; margin-top: 12px; min-height: 20px; color: var(--white-2); }
+.act-status.error   { color: #ff6b6b; }
+.act-status.success { color: #6bffb8; }
+.act-demo {
+  font-size: .72rem; color: var(--white-2); margin-top: 16px; opacity: .7;
+}
+.act-demo code {
+  color: var(--gold); font-family: 'SF Mono',monospace;
+  letter-spacing: .05em; cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════
+   STRIPE MODAL
+═══════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,8,20,.85);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: #050D20;
+  border: 0.5px solid rgba(255,255,255,.12);
+  border-radius: 20px; padding: 40px;
+  width: min(460px, 90vw); position: relative;
+  box-shadow: 0 16px 80px rgba(26,0,51,.8), 0 4px 24px rgba(0,0,0,.5);
+  transform: scale(0.95); opacity: 0;
+  transition: transform .3s cubic-bezier(.22,1,.36,1), opacity .25s ease;
+}
+.modal-overlay.open .modal-box { transform: scale(1); opacity: 1; }
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,.06); border: 0.5px solid var(--border);
+  border-radius: 50%; width: 30px; height: 30px;
+  color: var(--white-2); cursor: pointer; font-size: .8rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s;
+}
+.modal-close:hover { background: rgba(255,255,255,.12); }
+.modal-plan-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--gold-dim); border: 0.5px solid var(--border-g);
+  border-radius: 100px; padding: 5px 12px;
+  font-size: .68rem; font-weight: 700; color: var(--gold);
+  letter-spacing: .08em; text-transform: uppercase; margin-bottom: 20px;
+}
+.modal-price {
+  font-size: 2.4rem; font-weight: 900; color: #fff;
+  letter-spacing: -.04em; margin-bottom: 24px;
+}
+.modal-price span { font-size: .9rem; font-weight: 400; color: var(--white-2); }
+.stripe-form { display: flex; flex-direction: column; gap: 12px; }
+.stripe-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stripe-field label {
+  display: block; font-size: .68rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--white-2); margin-bottom: 6px;
+}
+.stripe-field input {
+  width: 100%; background: rgba(255,255,255,.05);
+  border: 0.5px solid rgba(255,255,255,.12); border-radius: 8px;
+  padding: 11px 14px; font-size: .88rem; color: #fff; outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.stripe-field input::placeholder { color: rgba(255,255,255,.22); }
+.stripe-field input:focus {
+  border-color: rgba(212,175,55,.4);
+  box-shadow: 0 0 0 3px rgba(212,175,55,.09);
+}
+.stripe-submit {
+  width: 100%; background: var(--gold-grad); color: #000814;
+  border: none; border-radius: 10px; padding: 14px;
+  font-size: .88rem; font-weight: 700; cursor: pointer; margin-top: 8px;
+  box-shadow: var(--bevel-gold);
+  transition: box-shadow .25s, transform .15s;
+}
+.stripe-submit:hover { box-shadow: var(--bevel-gold-hover); transform: translateY(-1px); }
+.stripe-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.stripe-secure {
+  font-size: .68rem; color: var(--white-2); text-align: center;
+  margin-top: 10px; opacity: .6;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+
+/* ═══════════════════════════════════════════
+   ONBOARDING
+═══════════════════════════════════════════ */
+.onboarding-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,8,20,.92);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.onboarding-overlay.open { opacity: 1; pointer-events: all; }
+.ob-box {
+  background: #050D20;
+  border: 0.5px solid rgba(255,255,255,.12);
+  border-radius: 24px; padding: 48px 44px;
+  width: min(520px, 90vw); position: relative;
+  box-shadow: 0 20px 90px rgba(26,0,51,.85), 0 4px 24px rgba(0,0,0,.5);
+  transform: scale(0.95); opacity: 0;
+  transition: transform .35s cubic-bezier(.22,1,.36,1), opacity .28s ease;
+}
+.onboarding-overlay.open .ob-box { transform: scale(1); opacity: 1; }
+.ob-progress {
+  height: 3px; background: rgba(255,255,255,.08);
+  border-radius: 100px; margin-bottom: 36px; overflow: hidden;
+}
+.ob-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--bronze), var(--gold));
+  border-radius: 100px; transition: width .4s ease; width: 0%;
+  box-shadow: 0 0 12px rgba(212,175,55,.55);
+}
+.ob-step { display: none; flex-direction: column; gap: 20px; }
+.ob-step.active { display: flex; animation: fadeUp .35s ease both; }
+.ob-step-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--gold-dim); border: 0.5px solid var(--border-g);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold);
+}
+.ob-title { font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; color: #fff; }
+.ob-sub { font-size: .88rem; color: var(--white-2); line-height: 1.65; }
+.ob-btn {
+  background: var(--gold-grad); color: #000814;
+  border: none; border-radius: 10px;
+  padding: 13px 28px; font-size: .86rem; font-weight: 700;
+  cursor: pointer; align-self: flex-end;
+  box-shadow: var(--bevel-gold);
+  transition: box-shadow .25s, transform .15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.ob-btn:hover { box-shadow: var(--bevel-gold-hover); transform: translateY(-1px); }
+.ob-dropzone {
+  border: 1.5px dashed rgba(212,175,55,.3);
+  border-radius: 14px; padding: 36px;
+  text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.ob-dropzone:hover, .ob-dropzone.drag-over {
+  border-color: rgba(212,175,55,.6);
+  background: rgba(212,175,55,.04);
+}
+.ob-dropzone p { font-size: .84rem; color: var(--white-2); margin-top: 10px; }
+.ob-dropzone span { font-size: .72rem; color: var(--white-2); opacity: .6; }
+#ob-preview-img {
+  width: 72px; height: 72px; border-radius: 50%;
+  object-fit: cover; display: none; margin: 0 auto 8px;
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 24px rgba(212,175,55,.28);
+}
+.ob-tools-grid {
+  display: grid; grid-template-columns: repeat(2,1fr); gap: 8px;
+  max-height: 260px; overflow-y: auto;
+}
+.ob-tool-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 0.5px solid var(--border); cursor: pointer;
+  transition: border-color .2s, background .2s;
+  user-select: none;
+}
+.ob-tool-item.selected { border-color: var(--border-g); background: var(--gold-dim); }
+.ob-tool-item.disabled-sel { opacity: .35; cursor: not-allowed; }
+.ob-tool-item input { display: none; }
+.ob-tool-label { font-size: .8rem; font-weight: 500; color: var(--white); }
+.ob-quota { font-size: .75rem; color: var(--white-2); margin-top: -8px; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(14px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+</style>
 </head>
 <body>
 
-<!-- ══ TOPBAR — CONTROL CENTER ══════════════════════════════════ -->
-<nav class="topbar">
-  <div class="logo">
-    <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" id="ks-logo-dark">
-    <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" id="ks-logo-light">
-  </div>
-  <div class="tb-spacer"></div>
-  <div class="cc-bar">
+<div id="cursor-glow"></div>
+<div class="bg-blob bg-blob--violet" aria-hidden="true"></div>
+<div class="bg-blob bg-blob--cobalt" aria-hidden="true"></div>
 
-    <!-- Moteur actif -->
-    <button class="cc-btn cc-engine" id="tb-engine-btn" title="Changer de moteur IA">
-      <div class="ai-engine-dot" id="cc-engine-dot"></div>
-      <span id="ai-engine-label">Claude</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:10px;height:10px;opacity:.45;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
+<!-- SVG ICONS -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="ico-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="7.5" cy="15.5" r="4.5"/><path d="M11.3 11.7L20 3"/><path d="M20 3l2 2-2.5 2.5L17.5 5"/>
+  </symbol>
+  <symbol id="ico-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </symbol>
+  <symbol id="ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </symbol>
+  <symbol id="ico-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+  </symbol>
+  <symbol id="ico-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+    <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+    <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+    <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+    <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+  </symbol>
+  <symbol id="ico-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+  </symbol>
+  <symbol id="ico-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
+  </symbol>
+  <symbol id="ico-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+  </symbol>
+  <symbol id="ico-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="3" x2="12" y2="21"/><path d="M3 12l9-9 9 9"/>
+    <path d="M5 19h14"/><path d="M3 7l4 8H3z"/><path d="M21 7l-4 8h4z"/>
+  </symbol>
+  <symbol id="ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </symbol>
+  <symbol id="ico-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+  </symbol>
+  <symbol id="ico-usb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2v11"/><path d="M7 7l5 5 5-5"/><rect x="9" y="13" width="6" height="4" rx="1"/>
+    <path d="M9 17v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2"/>
+  </symbol>
+  <symbol id="ico-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+  </symbol>
+  <symbol id="ico-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+  </symbol>
+  <symbol id="ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+  </symbol>
+  <symbol id="ico-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+  </symbol>
+  <symbol id="ico-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+  </symbol>
+  <symbol id="ico-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+  </symbol>
+  <symbol id="ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </symbol>
+  <symbol id="ico-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+    <polyline points="22,6 12,13 2,6"/>
+  </symbol>
+  <symbol id="ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+</svg>
 
-    <!-- Bibliothèque de prompts — icône seule -->
-    <button class="cc-btn cc-icon" id="tb-prompts-btn" title="Bibliothèque de prompts">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:14px;height:14px;flex-shrink:0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      <span class="cc-badge" id="prompts-badge" style="display:none"></span>
-    </button>
-
-    <!-- Mode clair/sombre -->
-    <button class="cc-btn cc-icon" id="tb-mode-btn" title="Basculer le thème">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px" id="mode-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
-
-    <div class="cc-sep"></div>
-
-    <!-- Cadenas sécurité — discret -->
-    <div class="cc-lock-chip" id="cc-lock-chip" title="Connexion sécurisée">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;flex-shrink:0">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-      </svg>
-    </div>
-
-    <!-- Licence -->
-    <div class="lic-chip">
-      <div class="lic-dot"></div>
-      <div class="lic-text">Licence active</div>
-    </div>
-
-    <!-- Paramètres -->
-    <button class="cc-btn cc-icon" id="settings-open-btn" title="Paramètres">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-    </button>
-
-  </div>
+<!-- NAV -->
+<nav id="main-nav">
+  <a class="nav-logo" href="#">
+    <img src="/LOGOS/Logo KEYSTONE fond bleu.svg" alt="Keystone OS" style="height:22px">
+  </a>
+  <ul class="nav-links">
+    <li><a href="#engines">Fonctionnalités</a></li>
+    <li><a href="#kstore">Assistants</a></li>
+    <li><a href="#plans">Plans</a></li>
+    <li><a href="#activate">Activer</a></li>
+  </ul>
 </nav>
 
-<!-- ══ ENGINE DROPDOWN ══════════════════════════════════════════ -->
-<div class="cc-dropdown" id="engine-dropdown" role="menu" aria-label="Sélection du moteur"></div>
-
-<!-- ══ PROMPT LIBRARY PANEL ════════════════════════════════════ -->
-<div class="pl-backdrop" id="pl-backdrop"></div>
-<div class="pl-panel" id="pl-panel" role="dialog" aria-modal="true" aria-label="Bibliothèque de prompts">
-  <div class="pl-head">
-    <div class="pl-head-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;flex-shrink:0;opacity:.7"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      Bibliothèque de prompts
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-glow-ring" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <svg width="10" height="10"><use href="#ico-zap"/></svg>
+      Claude · GPT-4o · Gemini · Mistral · Meta AI
     </div>
-    <button class="sp-close" id="pl-close-btn" aria-label="Fermer">✕</button>
+    <h1 class="title-xl">
+      Domptez la puissance.<br><em>Gardez le contrôle.</em>
+    </h1>
+    <p class="body-lg">
+      Keystone est le premier centre de commandement qui unifie les meilleures IA du monde.
+      Un environnement souverain conçu pour automatiser vos tâches complexes
+      en vous faisant gagner un temps précieux.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#plans">
+        Démarrer maintenant
+        <svg width="14" height="14"><use href="#ico-arrow-r"/></svg>
+      </a>
+      <a class="btn-glass" href="#engines">Découvrir les fonctionnalités</a>
+    </div>
+    <div class="hero-engines">
+      <img src="/RESOURCES/LOGOS/Logo Claude.png" alt="Claude">
+      <div class="hero-engines-sep"></div>
+      <img src="/RESOURCES/LOGOS/Logo Chat GPT.png" alt="ChatGPT">
+      <div class="hero-engines-sep"></div>
+      <img src="/RESOURCES/LOGOS/Logo Gemini.png" alt="Gemini">
+      <div class="hero-engines-sep"></div>
+      <img src="/RESOURCES/LOGOS/Logo Mistral AI.png" alt="Mistral">
+      <div class="hero-engines-sep"></div>
+      <img src="/RESOURCES/LOGOS/Logo Meta ai.png" alt="Meta AI">
+      <div class="hero-engines-sep"></div>
+      <img src="/RESOURCES/LOGOS/Logo Perplexity.png" alt="Perplexity">
+    </div>
   </div>
-  <div class="pl-body" id="pl-body"></div>
-  <div class="sp-footer">
-    <div class="sp-footer-brand">Key-Store · Prompts sauvegardés</div>
-    <button class="pl-clear-btn" id="pl-clear-btn">Tout effacer</button>
+</section>
+
+<!-- MOTEURS -->
+<section id="engines">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="eyebrow">Moteurs unifiés</span>
+      <h2 class="title-lg">Toutes les IA. Une seule voix.</h2>
+      <p class="body-lg">
+        Ne choisissez plus entre la puissance de GPT-4o, la précision de Claude ou l'agilité de Gemini.
+        Keystone lisse et structure chaque réponse pour vous garantir une excellence documentaire constante.
+      </p>
+    </div>
+    <div class="engines-grid">
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-cpu"/></svg></div>
+        <div>
+          <div class="engine-card-label">Architecture Multi-Modale</div>
+          <div class="title-md" style="margin-top:6px">Ingénierie de prompt adaptative</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Keystone optimise et lisse vos requêtes pour chaque modèle (GPT-4o, Claude, Gemini). Excellence documentaire constante — chaque outil affiche sa mention <em style="font-style:normal;color:var(--gold);font-size:.78rem">Optimisé pour [Moteur]</em>.
+          </p>
+        </div>
+      </div>
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-layers"/></svg></div>
+        <div>
+          <div class="engine-card-label">Artefacts</div>
+          <div class="title-md" style="margin-top:6px">Résultats structurés</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Jauges, scores, tableaux, listes — les réponses IA se transforment en composants visuels exportables en PDF professionnel.
+          </p>
+        </div>
+      </div>
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-key"/></svg></div>
+        <div>
+          <div class="engine-card-label">Licence</div>
+          <div class="title-md" style="margin-top:6px">Piloté par votre plan</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Chaque assistant est activé par votre licence. Déployez sur tablette, desktop — vos équipes accèdent à leurs outils autorisés.
+          </p>
+        </div>
+      </div>
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-shield"/></svg></div>
+        <div>
+          <div class="engine-card-label">RGPD</div>
+          <div class="title-md" style="margin-top:6px">Souveraineté totale</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Clés API chiffrées AES-256-GCM, hébergées en Europe (Cloudflare WEUR). Effacement sur demande Art. 17 RGPD.
+          </p>
+        </div>
+      </div>
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-grid"/></svg></div>
+        <div>
+          <div class="engine-card-label">KEY-STORE</div>
+          <div class="title-md" style="margin-top:6px">Assistants certifiés</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Ajoutez des assistants de précision via le KEY-STORE. Chaque PAD est défini en JSON — zéro hard-coding, mise à jour continue.
+          </p>
+        </div>
+      </div>
+      <div class="engine-card">
+        <div class="engine-card-icon"><svg width="20" height="20"><use href="#ico-cloud"/></svg></div>
+        <div>
+          <div class="engine-card-label">PWA · Tablette</div>
+          <div class="title-md" style="margin-top:6px">Partout, sans friction</div>
+          <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
+            Installable comme app native sur iPad et Mac. Mode hors-ligne disponible. Synchronisation automatique en arrière-plan.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="engines-logos">
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Claude.png" alt="Claude"><span>Claude</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Chat GPT.png" alt="GPT-4o"><span>GPT-4o</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Gemini.png" alt="Gemini"><span>Gemini</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Mistral AI.png" alt="Mistral"><span>Mistral</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Meta ai.png" alt="Meta AI"><span>Meta AI</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Perplexity.png" alt="Perplexity"><span>Perplexity</span></div>
+      <div class="engine-logo-item"><img src="/RESOURCES/LOGOS/Logo Grok.png" alt="Grok"><span>Grok</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- KEY-STORE -->
+<section id="kstore">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="eyebrow">KEY-STORE · Catalogue</span>
+      <h2 class="title-lg">Votre bibliothèque d'expertises.</h2>
+      <p class="body-lg">
+        Activez des Assistants Certifiés de haute précision — déchiffrage juridique, synthèses stratégiques,
+        audits de conformité, rédaction exécutive. Chaque assistant est calibré pour l'excellence.
+      </p>
+    </div>
+    <div class="kstore-grid">
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-scale"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Analyse juridique</div><div class="kstore-card-cat">Juridique</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-chart"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Synthèse stratégique</div><div class="kstore-card-cat">Stratégie</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-shield"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Audit de conformité</div><div class="kstore-card-cat">Compliance</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-pen"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Rédaction premium</div><div class="kstore-card-cat">Rédaction</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-search"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Analyse de marché</div><div class="kstore-card-cat">Analyse</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-layers"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Veille concurrentielle</div><div class="kstore-card-cat">Monitoring</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-file"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Rapport exécutif</div><div class="kstore-card-cat">Management</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-zap"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Brief créatif</div><div class="kstore-card-cat">Communication</div></div></div>
+      <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-mail"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Email stratégique</div><div class="kstore-card-cat">Communication</div></div></div>
+      <div class="kstore-card kstore-card--soon">
+        <div style="display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--white-2)">
+          <svg width="14" height="14"><use href="#ico-plus"/></svg>Bientôt disponible
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SÉCURITÉ -->
+<section id="security">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="eyebrow">Infrastructure</span>
+      <h2 class="title-lg">Souveraineté sans compromis.</h2>
+      <p class="body-lg">
+        Sécurité physique au bureau, agilité totale en mobilité.
+        Keystone est conçu pour opérer dans les deux environnements sans jamais sacrifier la confidentialité.
+      </p>
+    </div>
+    <div class="security-split">
+      <div class="security-block">
+        <div class="security-block-icon"><svg width="22" height="22"><use href="#ico-usb"/></svg></div>
+        <div class="title-md">Clé USB physique — Bureau</div>
+        <p>Déployez Keystone sur poste fixe avec une clé USB chiffrée. Vos sessions démarrent uniquement sur vos appareils autorisés. Aucune donnée ne quitte votre périmètre.</p>
+        <ul>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Authentification physique — clé USB requise</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Zéro stockage cloud sur poste fixe</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Verrouillage automatique à l'extraction</li>
+        </ul>
+      </div>
+      <div class="security-block security-block--gold">
+        <div class="security-block-icon"><svg width="22" height="22"><use href="#ico-cloud"/></svg></div>
+        <div class="title-md">Mode Cloud — Tablette &amp; Mobile</div>
+        <p>Agilité totale en mobilité : accédez à Keystone depuis votre iPad, MacBook ou smartphone. Infrastructure Cloudflare européenne (WEUR), chiffrement de bout en bout.</p>
+        <ul>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Hébergement WEUR — conformité RGPD Art. 17</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Clés API chiffrées AES-256-GCM</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Effacement sur demande garanti sous 72h</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PLANS -->
+<section id="plans">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="eyebrow">Plans &amp; Tarifs</span>
+      <h2 class="title-lg">Choisissez votre plan.</h2>
+      <p class="body-lg">Engagement mensuel, sans frais cachés. Changez de plan à tout moment.</p>
+    </div>
+    <div class="plans-grid">
+      <!-- START -->
+      <div class="plan-card">
+        <div class="plan-tier">Start</div>
+        <div class="plan-price"><sup>€</sup>49<sub>/mois</sub></div>
+        <p class="plan-desc">Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.</p>
+        <ul class="plan-features">
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 6 Assistants Certifiés au choix</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 3 postes / utilisateurs</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Export PDF A4 premium</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Mode PWA — tablette &amp; mobile</li>
+          <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts sur-mesure</li>
+          <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Support prioritaire</li>
+        </ul>
+        <button class="plan-cta" onclick="openStripe('Start','49')">Démarrer — 49€/mois</button>
+        <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
+      </div>
+      <!-- PRO -->
+      <div class="plan-card plan-card--pro">
+        <div class="plan-badge">Populaire</div>
+        <div class="plan-tier">Pro</div>
+        <div class="plan-price"><sup>€</sup>79<sub>/mois</sub></div>
+        <p class="plan-desc">Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.</p>
+        <ul class="plan-features">
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 8 Assistants Certifiés au choix</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Multi-postes / utilisateurs</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Export PDF A4 premium</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Mode PWA — tablette &amp; mobile</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Éligible Artefacts sur-mesure</strong> <span style="font-size:.7rem;opacity:.6">(sur devis)</span></li>
+          <li class="disabled"><svg width="13" height="13"><use href="#ico-check"/></svg> Support prioritaire</li>
+        </ul>
+        <button class="plan-cta" onclick="openStripe('Pro','79')">Activer ma licence Pro</button>
+        <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
+      </div>
+      <!-- MAX -->
+      <div class="plan-card">
+        <div class="plan-tier">Max</div>
+        <div class="plan-price"><sup>€</sup>149<sub>/mois</sub></div>
+        <p class="plan-desc">Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.</p>
+        <ul class="plan-features">
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Collection complète illimitée</strong></li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Appareils illimités</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Export PDF A4 premium</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Mode PWA — tablette &amp; mobile</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Éligible Artefacts sur-mesure</strong> <span style="font-size:.7rem;opacity:.6">(sur devis)</span></li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Support prioritaire dédié</strong></li>
+        </ul>
+        <button class="plan-cta" onclick="openStripe('Max','149')">Obtenir ma licence Max</button>
+        <p class="plan-note">Sans engagement · Résiliable à tout moment</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ACTIVATION -->
+<section id="activate">
+  <div class="section-inner">
+    <div class="activate-wrap">
+      <span class="eyebrow" style="display:flex;justify-content:center">Activation</span>
+      <h2 class="title-lg" style="text-align:center;margin-top:16px">Protocole d'activation.</h2>
+      <p class="body-lg" style="text-align:center;margin-top:14px">
+        Entrez votre adresse e-mail et votre clé de licence pour accéder à votre environnement Keystone.
+      </p>
+      <div class="activate-card">
+        <div class="activate-icon">
+          <svg width="24" height="24"><use href="#ico-key"/></svg>
+        </div>
+        <h3 class="title-md" style="text-align:center">Accéder à Keystone OS</h3>
+        <div class="activate-fields">
+          <input class="act-input" type="email" id="act-email" placeholder="votre@email.com" autocomplete="email">
+          <input class="act-input mono" type="text" id="act-key" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19" autocomplete="off" spellcheck="false">
+          <button class="act-btn" id="act-btn" onclick="activateLicence()">
+            Activer l'accès
+            <svg width="14" height="14"><use href="#ico-arrow-r"/></svg>
+          </button>
+        </div>
+        <p class="act-status" id="act-status"></p>
+        <p class="act-demo">
+          Clé de démonstration : <code onclick="fillDemo()">DEMO-KEYS-TONE-2026</code>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="position:relative;z-index:1;border-top:0.5px solid var(--border);padding:20px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <span style="font-size:.72rem;color:var(--white-2);letter-spacing:.03em">© 2026 Protein Studio · Keystone OS</span>
+  <div style="display:flex;gap:24px">
+    <a href="#" onclick="openLegal('rgpd');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">RGPD</a>
+    <a href="#" onclick="openLegal('mentions');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Mentions Légales</a>
+    <a href="#" onclick="openLegal('support');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Support</a>
+  </div>
+</footer>
+
+<!-- LEGAL MODAL -->
+<div class="modal-overlay" id="legal-modal" onclick="if(event.target===this)closeLegal()">
+  <div class="modal-box" style="width:min(640px,92vw);max-height:85vh;overflow-y:auto;padding:44px 48px">
+    <button class="modal-close" onclick="closeLegal()">✕</button>
+    <div id="legal-content"></div>
   </div>
 </div>
 
-<!-- ══ MAIN ════════════════════════════════════════════════════ -->
-<main class="main">
-  <div class="wrap">
-    <div class="hero">
-      <div class="hero-left">
-        <div class="identity-slot" id="identity-slot">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
-               style="width:28px;height:28px;color:rgba(201,168,76,.45)">
-            <circle cx="12" cy="8" r="4"/>
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke-linecap="round"/>
-          </svg>
+<!-- STRIPE MODAL -->
+<div class="modal-overlay" id="stripe-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeStripe()">✕</button>
+    <div class="modal-plan-badge">
+      <svg width="12" height="12"><use href="#ico-zap"/></svg>
+      <span id="stripe-plan-name">Pro</span>
+    </div>
+    <div class="modal-price"><span>Total mensuel — </span><span id="stripe-plan-price">79</span>€</div>
+    <div class="stripe-form">
+      <div class="stripe-field">
+        <label>Titulaire de la carte</label>
+        <input type="text" id="s-name" placeholder="Jean Dupont">
+      </div>
+      <div class="stripe-field">
+        <label>Numéro de carte</label>
+        <input type="text" id="s-card" placeholder="1234 5678 9012 3456" maxlength="19">
+      </div>
+      <div class="stripe-row">
+        <div class="stripe-field">
+          <label>Expiration</label>
+          <input type="text" id="s-exp" placeholder="MM/AA" maxlength="5">
         </div>
-        <div>
-          <div class="hero-greeting">Bonjour, <span class="hero-name">Stéphane</span></div>
-          <!-- DST — remplace la ligne de sous-titre statique -->
-          <div class="hero-sub hero-dst" id="hero-dst" data-type="default">
-            <span class="hero-dst-text" id="dst-text">Votre pôle de promotion immobilière est prêt.</span>
+        <div class="stripe-field">
+          <label>CVC</label>
+          <input type="text" id="s-cvc" placeholder="123" maxlength="3">
+        </div>
+      </div>
+      <button class="stripe-submit" id="stripe-submit-btn" onclick="processPayment()">
+        Confirmer — <span id="stripe-btn-price">79</span>€/mois
+      </button>
+      <div class="stripe-secure">
+        <svg width="11" height="11"><use href="#ico-lock"/></svg>
+        Paiement sécurisé · Données chiffrées SSL
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ONBOARDING -->
+<div class="onboarding-overlay" id="onboarding-overlay">
+  <div class="ob-box">
+    <div class="ob-progress"><div class="ob-bar" id="ob-bar"></div></div>
+    <!-- STEP 1 -->
+    <div class="ob-step active" id="ob-step-1">
+      <div class="ob-step-icon"><svg width="22" height="22"><use href="#ico-user"/></svg></div>
+      <div class="ob-title">Prenez possession de votre centre de contrôle.</div>
+      <div class="ob-sub">Importez votre logo ou photo de profil. Il s'affichera en temps réel dans votre Dashboard Keystone.</div>
+      <div class="ob-dropzone" id="ob-dropzone" onclick="document.getElementById('ob-file-input').click()">
+        <img id="ob-preview-img" src="" alt="Aperçu">
+        <svg width="28" height="28" id="ob-upload-icon" style="color:var(--white-2)"><use href="#ico-upload"/></svg>
+        <p>Glissez votre logo ou photo ici</p>
+        <span>PNG, JPG, SVG — max 2 Mo</span>
+      </div>
+      <input type="file" id="ob-file-input" accept="image/*" style="display:none">
+      <button class="ob-btn" onclick="obNext(2)">
+        Continuer <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
+      </button>
+    </div>
+    <!-- STEP 2 -->
+    <div class="ob-step" id="ob-step-2">
+      <div class="ob-step-icon"><svg width="22" height="22"><use href="#ico-grid"/></svg></div>
+      <div class="ob-title">Configurez vos outils Keystone.</div>
+      <div class="ob-sub" id="ob-quota-label">Sélectionnez vos 6 Assistants Certifiés. Vous pourrez en changer à tout moment.</div>
+      <div class="ob-tools-grid" id="ob-tools-grid"></div>
+      <button class="ob-btn" onclick="obNext(3)">
+        Finaliser <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
+      </button>
+    </div>
+    <!-- STEP 3 -->
+    <div class="ob-step" id="ob-step-3">
+      <div class="ob-step-icon" style="background:rgba(107,255,184,.08);border-color:rgba(107,255,184,.24);color:#6bffb8">
+        <svg width="22" height="22"><use href="#ico-check"/></svg>
+      </div>
+      <div class="ob-title">Votre environnement est prêt.</div>
+      <div class="ob-sub">Keystone OS est configuré. Vos assistants sont actifs. Bienvenue dans votre centre de commandement.</div>
+      <button class="ob-btn" onclick="launchApp()">
+        Accéder au Dashboard <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   CURSOR GLOW — smooth lag
+═══════════════════════════════════════════ */
+(function() {
+  const glow = document.getElementById('cursor-glow');
+  let mx = window.innerWidth / 2, my = window.innerHeight / 2, cx = mx, cy = my;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+  (function anim() {
+    cx += (mx - cx) * .06; cy += (my - cy) * .06;
+    glow.style.left = cx + 'px'; glow.style.top = cy + 'px';
+    requestAnimationFrame(anim);
+  })();
+})();
+
+/* ═══════════════════════════════════════════
+   NAV — scroll effect
+═══════════════════════════════════════════ */
+window.addEventListener('scroll', () => {
+  document.getElementById('main-nav').classList.toggle('scrolled', window.scrollY > 20);
+}, { passive: true });
+
+/* ═══════════════════════════════════════════
+   RADIAL HALO REVEAL — engine / plan / security cards
+═══════════════════════════════════════════ */
+document.querySelectorAll('.engine-card, .plan-card, .security-block').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  });
+});
+
+/* ═══════════════════════════════════════════
+   KEY-STORE PARALLAX — 3D tilt
+═══════════════════════════════════════════ */
+document.querySelectorAll('.kstore-card:not(.kstore-card--soon)').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const r = card.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - .5;
+    const y = (e.clientY - r.top) / r.height - .5;
+    card.style.transform = `perspective(700px) rotateX(${(-y * 8).toFixed(2)}deg) rotateY(${(x * 8).toFixed(2)}deg) translateZ(4px)`;
+  });
+  card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+});
+
+/* ═══════════════════════════════════════════
+   SCROLL REVEAL — staggered IntersectionObserver
+═══════════════════════════════════════════ */
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.engine-card, .kstore-card, .plan-card, .security-block').forEach((el, i) => {
+  el.classList.add('reveal');
+  el.style.transitionDelay = (i % 6) * 0.08 + 's';
+  revealObserver.observe(el);
+});
+
+/* ═══════════════════════════════════════════
+   KEY FORMAT
+═══════════════════════════════════════════ */
+document.getElementById('act-key').addEventListener('input', function() {
+  let v = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  let fmt = v.match(/.{1,4}/g);
+  this.value = fmt ? fmt.join('-').substring(0, 19) : v;
+});
+document.getElementById('act-key').addEventListener('keydown', e => {
+  if (e.key === 'Backspace') {
+    const v = e.target.value;
+    if (v.endsWith('-')) e.target.value = v.slice(0, -1);
+  }
+});
+
+/* ═══════════════════════════════════════════
+   STRIPE CARD FORMAT
+═══════════════════════════════════════════ */
+const sCard = document.getElementById('s-card');
+sCard && sCard.addEventListener('input', function() {
+  let v = this.value.replace(/\D/g, '');
+  this.value = v.match(/.{1,4}/g)?.join(' ')?.substring(0, 19) || v;
+});
+const sExp = document.getElementById('s-exp');
+sExp && sExp.addEventListener('input', function() {
+  let v = this.value.replace(/\D/g, '');
+  if (v.length >= 2) v = v.substring(0, 2) + '/' + v.substring(2, 4);
+  this.value = v;
+});
+
+/* ═══════════════════════════════════════════
+   FILL DEMO
+═══════════════════════════════════════════ */
+function fillDemo() {
+  document.getElementById('act-email').value = 'demo@keystone-os.app';
+  document.getElementById('act-key').value = 'DEMO-KEYS-TONE-2026';
+}
+
+/* ═══════════════════════════════════════════
+   EMAIL TYPE DETECTION
+═══════════════════════════════════════════ */
+const PERSONAL_DOMAINS = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com',
+  'icloud.com','orange.fr','free.fr','sfr.fr','wanadoo.fr','laposte.net','bbox.fr'];
+function detectEmailType(email) {
+  const domain = (email.split('@')[1] || '').toLowerCase();
+  return PERSONAL_DOMAINS.includes(domain) ? 'personal' : 'pro';
+}
+
+/* ═══════════════════════════════════════════
+   ACTIVATE LICENCE
+═══════════════════════════════════════════ */
+let _activePlan = 'Start';
+let _deviceLimit = 3;
+
+function activateLicence() {
+  const email  = document.getElementById('act-email').value.trim();
+  const key    = document.getElementById('act-key').value.trim();
+  const status = document.getElementById('act-status');
+  const btn    = document.getElementById('act-btn');
+
+  if (!email || !email.includes('@')) {
+    status.textContent = 'Veuillez entrer une adresse e-mail valide.';
+    status.className = 'act-status error'; return;
+  }
+  if (key.length < 19) {
+    status.textContent = 'Clé de licence incomplète (format XXXX-XXXX-XXXX-XXXX).';
+    status.className = 'act-status error'; return;
+  }
+
+  btn.disabled = true;
+  status.className = 'act-status';
+  status.textContent = 'Vérification en cours…';
+
+  setTimeout(() => {
+    _deviceLimit = detectEmailType(email) === 'personal' ? 3 : 99;
+
+    if      (key.startsWith('MAX'))  _activePlan = 'Max';
+    else if (key.startsWith('PRO'))  _activePlan = 'Pro';
+    else if (key.startsWith('DEMO')) _activePlan = 'Pro'; // Démo → accès Pro complet
+    else                              _activePlan = 'Start';
+
+    status.textContent = '';
+    btn.disabled = false;
+
+    localStorage.setItem('ks_email', email);
+    localStorage.setItem('ks_licence', key);
+    localStorage.setItem('ks_plan', _activePlan);
+    localStorage.setItem('ks_device_limit', _deviceLimit);
+
+    openOnboarding();
+  }, 1400);
+}
+
+/* ═══════════════════════════════════════════
+   ONBOARDING
+═══════════════════════════════════════════ */
+const TOOL_QUOTA = { 'Start': 6, 'Pro': 8, 'Max': Infinity };
+const ALL_TOOLS = [
+  'Analyse juridique', 'Synthèse stratégique', 'Audit de conformité',
+  'Rédaction premium', 'Analyse de marché', 'Veille concurrentielle',
+  'Rapport exécutif', 'Brief créatif', 'Email stratégique', 'Compte-rendu réunion'
+];
+let _selectedTools = new Set();
+
+function openOnboarding() {
+  document.getElementById('onboarding-overlay').classList.add('open');
+  obNext(1);
+  buildToolsGrid();
+}
+
+function obNext(step) {
+  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('ob-step-' + step).classList.add('active');
+  document.getElementById('ob-bar').style.width = (step / 3 * 100) + '%';
+}
+
+function buildToolsGrid() {
+  const quota = TOOL_QUOTA[_activePlan] || 6;
+  const grid  = document.getElementById('ob-tools-grid');
+  const label = document.getElementById('ob-quota-label');
+  const quotaText = quota === Infinity ? 'tous les' : quota;
+  label.textContent = `Sélectionnez vos ${quotaText} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
+  grid.innerHTML = ALL_TOOLS.map(tool => `
+    <div class="ob-tool-item" data-tool="${tool}" onclick="toggleTool(this,'${tool}',${quota === Infinity ? 999 : quota})">
+      <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
+      <span class="ob-tool-label">${tool}</span>
+    </div>
+  `).join('');
+}
+
+function toggleTool(el, tool, quota) {
+  if (el.classList.contains('disabled-sel')) return;
+  if (_selectedTools.has(tool)) {
+    _selectedTools.delete(tool); el.classList.remove('selected');
+  } else {
+    if (_selectedTools.size >= quota) return;
+    _selectedTools.add(tool); el.classList.add('selected');
+  }
+  const reached = _selectedTools.size >= quota;
+  document.querySelectorAll('.ob-tool-item').forEach(item => {
+    if (!item.classList.contains('selected'))
+      item.classList.toggle('disabled-sel', reached);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   LAUNCH APP
+═══════════════════════════════════════════ */
+function launchApp() {
+  localStorage.setItem('ks_tools', JSON.stringify([..._selectedTools]));
+  const flash = document.createElement('div');
+  flash.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;z-index:9999;pointer-events:none;transition:opacity .35s ease';
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => {
+    flash.style.opacity = '1';
+    setTimeout(() => { window.location.href = '/app'; }, 380);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   DRAG & DROP — identity upload
+═══════════════════════════════════════════ */
+const dropzone   = document.getElementById('ob-dropzone');
+const fileInput  = document.getElementById('ob-file-input');
+const previewImg = document.getElementById('ob-preview-img');
+const uploadIcon = document.getElementById('ob-upload-icon');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadPreview(file);
+});
+fileInput.addEventListener('change', function() {
+  if (this.files[0]) loadPreview(this.files[0]);
+});
+function loadPreview(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    previewImg.src = e.target.result;
+    previewImg.style.display = 'block';
+    uploadIcon.style.display = 'none';
+    localStorage.setItem('ks_avatar', e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ═══════════════════════════════════════════
+   STRIPE MODAL
+═══════════════════════════════════════════ */
+let _stripePlan = 'Start', _stripePrice = '49';
+
+function openStripe(plan, price) {
+  _stripePlan = plan; _stripePrice = price;
+  document.getElementById('stripe-plan-name').textContent = plan;
+  document.getElementById('stripe-plan-price').textContent = price;
+  document.getElementById('stripe-btn-price').textContent = price;
+  document.getElementById('stripe-modal').classList.add('open');
+}
+function closeStripe() {
+  document.getElementById('stripe-modal').classList.remove('open');
+}
+document.getElementById('stripe-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeStripe();
+});
+
+function processPayment() {
+  const btn  = document.getElementById('stripe-submit-btn');
+  const card = document.getElementById('s-card').value.replace(/\s/g, '');
+  if (card.length < 16) { alert('Numéro de carte invalide.'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Traitement en cours…';
+  setTimeout(() => {
+    const prefix = _stripePlan.toUpperCase().substring(0, 3);
+    const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+    const key = `${prefix}${seg()}-${seg()}-${seg()}-${seg()}`.substring(0, 19);
+    closeStripe();
+    btn.disabled = false;
+    btn.textContent = `Confirmer — ${_stripePrice}€/mois`;
+    document.getElementById('act-key').value = key;
+    document.getElementById('activate').scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => {
+      const el = document.getElementById('act-key');
+      el.style.borderColor = 'rgba(212,175,55,.5)';
+      el.style.boxShadow = '0 0 0 3px rgba(212,175,55,.12)';
+      setTimeout(() => { el.style.borderColor = ''; el.style.boxShadow = ''; }, 2000);
+    }, 600);
+  }, 2200);
+}
+
+/* ═══════════════════════════════════════════
+   KEYBOARD
+═══════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeStripe(); closeLegal(); }
+});
+
+/* ═══════════════════════════════════════════
+   LEGAL MODALS
+═══════════════════════════════════════════ */
+const LEGAL_CONTENT = {
+  mentions: `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:var(--gold-dim);border:0.5px solid var(--border-g);display:flex;align-items:center;justify-content:center;color:var(--gold);flex-shrink:0">
+        <svg width="18" height="18"><use href="#ico-file"/></svg>
+      </div>
+      <div>
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)">Légal</div>
+        <h2 style="font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#fff;margin-top:2px">Mentions Légales</h2>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;font-size:.88rem;line-height:1.7;color:var(--white-2)">
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Éditeur du site</h3>
+        <p><strong style="color:var(--white)">Protein Studio</strong><br>
+        Entreprise individuelle — Stéphane Benedetti<br>
+        Siège social : [À COMPLÉTER — Adresse]<br>
+        SIRET : [À COMPLÉTER]<br>
+        Contact : <a href="mailto:protein.keystone@gmail.com" style="color:var(--gold);text-decoration:none">protein.keystone@gmail.com</a></p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Hébergement</h3>
+        <p><strong style="color:var(--white)">Vercel Inc.</strong><br>
+        340 Pine Street, Suite 701, San Francisco, CA 94104, USA<br>
+        <a href="https://vercel.com" style="color:var(--gold);text-decoration:none">vercel.com</a></p>
+        <p style="margin-top:8px"><strong style="color:var(--white)">Cloudflare Inc.</strong> (Workers & KV — région WEUR)<br>
+        Infrastructure de chiffrement et de routage des données.</p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Propriété intellectuelle</h3>
+        <p>L'ensemble des contenus présents sur Keystone OS (architecture, design, logique métier, assets visuels, nomenclature KEY-STORE, Assistants Certifiés) est la propriété exclusive de <strong style="color:var(--white)">Protein Studio</strong>. Toute reproduction, même partielle, est interdite sans autorisation écrite préalable.</p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Responsabilité</h3>
+        <p>Protein Studio s'efforce d'assurer l'exactitude des informations diffusées sur Keystone OS. Les réponses générées par les moteurs IA (Claude, GPT-4o, Gemini, Mistral, Meta AI) relèvent de la responsabilité de leurs éditeurs respectifs. Keystone OS agit en qualité d'interface d'accès et ne saurait être tenu responsable du contenu des réponses IA.</p>
+      </section>
+    </div>`,
+
+  rgpd: `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:var(--gold-dim);border:0.5px solid var(--border-g);display:flex;align-items:center;justify-content:center;color:var(--gold);flex-shrink:0">
+        <svg width="18" height="18"><use href="#ico-shield"/></svg>
+      </div>
+      <div>
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)">Confidentialité</div>
+        <h2 style="font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#fff;margin-top:2px">Politique RGPD</h2>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;font-size:.88rem;line-height:1.7;color:var(--white-2)">
+      <section style="background:rgba(212,175,55,.04);border:0.5px solid var(--border-g);border-radius:12px;padding:18px 20px">
+        <p style="color:var(--white);font-weight:600">Engagement fondamental : Keystone OS ne revend aucune donnée. Aucune donnée personnelle ou professionnelle n'est exploitée à des fins commerciales tierces.</p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Données collectées</h3>
+        <p>Keystone OS collecte uniquement les données strictement nécessaires à son fonctionnement :</p>
+        <ul style="margin-top:8px;padding-left:16px;display:flex;flex-direction:column;gap:6px">
+          <li>Adresse e-mail (identification et activation de licence)</li>
+          <li>Clé de licence (contrôle d'accès)</li>
+          <li>Logo / photo de profil (stocké localement via localStorage)</li>
+          <li>Sélection d'Assistants Certifiés (préférences, stockage local)</li>
+        </ul>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Localisation des données</h3>
+        <p>Le stockage en ligne est assuré exclusivement par l'infrastructure Cloudflare Workers — <strong style="color:var(--white)">région WEUR (Europe de l'Ouest)</strong>, conforme au RGPD. Les clés API sont chiffrées AES-256-GCM avant tout transit.</p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Vos droits (Art. 15–22 RGPD)</h3>
+        <ul style="padding-left:16px;display:flex;flex-direction:column;gap:6px">
+          <li><strong style="color:var(--white)">Droit d'accès</strong> — consultation de vos données sur demande</li>
+          <li><strong style="color:var(--white)">Droit de rectification</strong> — correction de toute donnée inexacte</li>
+          <li><strong style="color:var(--white)">Droit à l'effacement (Art. 17)</strong> — suppression garantie sous 72h</li>
+          <li><strong style="color:var(--white)">Droit à la portabilité</strong> — export de vos données sur demande</li>
+        </ul>
+        <p style="margin-top:12px">Pour exercer vos droits : <a href="mailto:protein.keystone@gmail.com" style="color:var(--gold);text-decoration:none">protein.keystone@gmail.com</a></p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em">Cookies</h3>
+        <p>Keystone OS n'utilise pas de cookies de tracking ou publicitaires. Le stockage local (localStorage) est utilisé uniquement pour maintenir votre session et vos préférences.</p>
+      </section>
+    </div>`,
+
+  support: `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:var(--gold-dim);border:0.5px solid var(--border-g);display:flex;align-items:center;justify-content:center;color:var(--gold);flex-shrink:0">
+        <svg width="18" height="18"><use href="#ico-mail"/></svg>
+      </div>
+      <div>
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)">Assistance</div>
+        <h2 style="font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#fff;margin-top:2px">Support Keystone OS</h2>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px;font-size:.88rem;line-height:1.7;color:var(--white-2)">
+      <section style="background:rgba(212,175,55,.04);border:0.5px solid var(--border-g);border-radius:12px;padding:24px">
+        <div style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:8px">Contact direct</div>
+        <a href="mailto:protein.keystone@gmail.com" style="font-size:1.1rem;font-weight:700;color:#fff;text-decoration:none;letter-spacing:-.01em">protein.keystone@gmail.com</a>
+        <p style="margin-top:8px;font-size:.82rem">Réponse garantie sous 24h ouvrées.</p>
+      </section>
+      <section>
+        <h3 style="color:#fff;font-size:.9rem;font-weight:700;margin-bottom:12px;letter-spacing:-.01em">Questions fréquentes</h3>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="border-bottom:0.5px solid var(--border);padding-bottom:14px">
+            <p style="color:var(--white);font-weight:600;margin-bottom:4px">Comment activer ma licence ?</p>
+            <p>Rendez-vous dans la section "Activer" de cette page, entrez votre e-mail et votre clé de licence reçue par e-mail après paiement.</p>
+          </div>
+          <div style="border-bottom:0.5px solid var(--border);padding-bottom:14px">
+            <p style="color:var(--white);font-weight:600;margin-bottom:4px">Comment changer mes Assistants Certifiés ?</p>
+            <p>Connectez-vous à votre Dashboard Keystone OS → Paramètres → KEY-STORE → Gérer mes Assistants.</p>
+          </div>
+          <div style="border-bottom:0.5px solid var(--border);padding-bottom:14px">
+            <p style="color:var(--white);font-weight:600;margin-bottom:4px">Mes données sont-elles sécurisées ?</p>
+            <p>Oui. Chiffrement AES-256-GCM, hébergement Cloudflare WEUR (Europe), aucune revente de données. Consultez notre politique RGPD pour le détail complet.</p>
+          </div>
+          <div>
+            <p style="color:var(--white);font-weight:600;margin-bottom:4px">Comment résilier mon abonnement ?</p>
+            <p>Envoyez un e-mail à <a href="mailto:protein.keystone@gmail.com" style="color:var(--gold);text-decoration:none">protein.keystone@gmail.com</a> avec votre demande. La résiliation prend effet à la fin de la période en cours, sans frais.</p>
           </div>
         </div>
-      </div>
-      <div class="hero-meta">
-        <div class="hero-date" id="hero-date">—</div>
-        <div class="online-chip"><div class="online-chip-dot"></div>En ligne</div>
-      </div>
-    </div>
+      </section>
+    </div>`
+};
 
-    <section class="pads-section">
-      <div class="sec-hd">
-        <div class="sec-lbl">Boîtes à outils</div>
-        <div class="sec-rule"></div>
-        <div class="sec-count">8</div>
-      </div>
-      <div id="pads-container" class="pads-grid"></div>
-    </section>
-
-    <section class="suggest-section">
-      <div class="sec-hd" id="suggest-hd">
-        <div class="sec-lbl">Outils Disponibles</div>
-        <div class="sec-rule"></div>
-        <button class="sec-kstore-badge" id="kstore-catalog-btn" title="Ouvrir le catalogue Key-Store">Key-Store</button>
-      </div>
-      <div id="arts-container" class="art-scroll"></div>
-    </section>
-  </div>
-</main>
-
-<!-- ══ TOOL MODAL ══════════════════════════════════════════════ -->
-<div class="tool-backdrop" id="tool-backdrop"></div>
-<div class="tool-modal" id="tool-modal" role="dialog" aria-modal="true">
-  <div id="modal-inner"></div>
-</div>
-
-<!-- ══ SETTINGS PANEL ══════════════════════════════════════════ -->
-<div class="settings-backdrop" id="settings-backdrop"></div>
-<div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-label="Paramètres">
-  <div class="sp-head">
-    <div>
-      <div class="sp-head-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:.7">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-        Paramètres
-      </div>
-      <div class="sp-head-sub">Keystone OS · Protein Studio</div>
-    </div>
-    <button class="sp-close" id="settings-close-btn" aria-label="Fermer">✕</button>
-  </div>
-  <div class="sp-body" id="sp-body"></div>
-  <div class="sp-footer">
-    <div class="sp-footer-brand">Protein Studio · Ollioules</div>
-    <div class="sp-footer-ver">v2.0 — 2026</div>
-  </div>
-</div>
-
-<!-- ── Service Worker — enregistrement PWA ───────────────────── -->
-<script>
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(reg => {
-          console.info('[Keystone SW] Enregistré :', reg.scope);
-          // Mise à jour silencieuse si une nouvelle version est détectée
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            newWorker?.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              }
-            });
-          });
-        })
-        .catch(err => console.warn('[Keystone SW] Erreur :', err));
-    });
-  }
+function openLegal(type) {
+  const modal = document.getElementById('legal-modal');
+  document.getElementById('legal-content').innerHTML = LEGAL_CONTENT[type] || '';
+  modal.classList.add('open');
+}
+function closeLegal() {
+  document.getElementById('legal-modal').classList.remove('open');
+}
 </script>
-
-<script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keystone — Prométhée Immobilier</title>
+
+  <!-- ── PWA Meta ──────────────────────────────────────────────── -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#07102a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Keystone">
+  <link rel="apple-touch-icon" href="./LOGOS/Logo puce fond bleu.svg">
+
+  <link rel="stylesheet" href="./src/style.css?v=20260425">
+
+  <!-- ── SECURITY GATE — détection lancement non officiel ─────── -->
+  <script>
+  (function(){
+    // Actif uniquement en protocole file://
+    // Le lanceur officiel ajoute ?ks_launch=1 — sans ce paramètre, on bloque.
+    if (location.protocol !== 'file:') return; // serveur local = OK
+    var params = new URLSearchParams(location.search);
+    if (params.get('ks_launch') === '1') return; // lancé via Lancer_KEYSTONE
+
+    // ── Construction de l'écran de blocage ───────────────────────
+    var style = document.createElement('style');
+    style.textContent = [
+      '#ks-security-gate{',
+        'position:fixed;inset:0;z-index:99999;',
+        'background:#07102a;',
+        'display:flex;flex-direction:column;',
+        'align-items:center;justify-content:center;',
+        'font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;',
+        'user-select:none;pointer-events:all;',
+      '}',
+      '#ks-security-gate .sg-glow{',
+        'position:absolute;inset:0;',
+        'background:radial-gradient(ellipse 60% 45% at 50% 40%,rgba(180,148,70,.13) 0%,transparent 70%);',
+        'pointer-events:none;',
+      '}',
+      '#ks-security-gate .sg-logo{',
+        'width:72px;height:72px;',
+        'background:rgba(180,148,70,.12);',
+        'border:1.5px solid rgba(180,148,70,.35);',
+        'border-radius:18px;',
+        'display:flex;align-items:center;justify-content:center;',
+        'margin-bottom:28px;',
+        'box-shadow:0 0 40px rgba(180,148,70,.15);',
+      '}',
+      '#ks-security-gate .sg-logo svg{opacity:.85}',
+      '#ks-security-gate .sg-lock{',
+        'width:48px;height:48px;',
+        'display:flex;align-items:center;justify-content:center;',
+        'background:rgba(180,148,70,.1);',
+        'border-radius:50%;',
+        'margin-bottom:24px;',
+        'border:1.5px solid rgba(180,148,70,.3);',
+      '}',
+      '#ks-security-gate h1{',
+        'color:#c9a84c;',
+        'font-size:13px;font-weight:700;',
+        'letter-spacing:.18em;text-transform:uppercase;',
+        'margin:0 0 10px;opacity:.9;',
+      '}',
+      '#ks-security-gate .sg-title{',
+        'color:#f0f0f0;',
+        'font-size:22px;font-weight:800;',
+        'letter-spacing:-.03em;',
+        'margin:0 0 16px;',
+        'text-align:center;',
+      '}',
+      '#ks-security-gate .sg-msg{',
+        'color:rgba(255,255,255,.45);',
+        'font-size:14px;font-weight:400;',
+        'line-height:1.6;',
+        'text-align:center;',
+        'max-width:380px;',
+        'margin:0 0 32px;',
+      '}',
+      '#ks-security-gate .sg-msg strong{color:rgba(255,255,255,.7);font-weight:600;}',
+      '#ks-security-gate .sg-badge{',
+        'display:flex;align-items:center;gap:8px;',
+        'padding:10px 18px;',
+        'background:rgba(180,148,70,.1);',
+        'border:1px solid rgba(180,148,70,.25);',
+        'border-radius:100px;',
+        'color:rgba(180,148,70,.8);',
+        'font-size:12px;font-weight:600;',
+        'letter-spacing:.06em;',
+      '}',
+      '#ks-security-gate .sg-sep{',
+        'width:40px;height:1px;',
+        'background:rgba(255,255,255,.08);',
+        'margin:28px 0;',
+      '}',
+      '#ks-security-gate .sg-footer{',
+        'position:absolute;bottom:28px;',
+        'color:rgba(255,255,255,.18);',
+        'font-size:11px;letter-spacing:.04em;',
+      '}',
+    ].join('');
+    document.head.appendChild(style);
+
+    var gate = document.createElement('div');
+    gate.id = 'ks-security-gate';
+    gate.innerHTML = [
+      '<div class="sg-glow"></div>',
+
+      // Icône cadenas
+      '<div class="sg-lock">',
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">',
+          '<rect x="3" y="11" width="18" height="11" rx="2"/>',
+          '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+        '</svg>',
+      '</div>',
+
+      '<h1>Keystone OS</h1>',
+      '<div class="sg-title">Système verrouillé</div>',
+
+      '<div class="sg-msg">',
+        'Ce fichier doit être ouvert via le <strong>Lanceur officiel</strong><br>',
+        'présent à la racine de votre clé USB.<br><br>',
+        'Double-cliquez sur <strong>Lancer_KEYSTONE</strong> (.bat sur Windows,<br>.command sur Mac) pour démarrer correctement.',
+      '</div>',
+
+      '<div class="sg-badge">',
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+        'Sécurité Keystone active',
+      '</div>',
+
+      '<div class="sg-sep"></div>',
+      '<div class="sg-footer">© Keystone OS — Protein Studio</div>',
+    ].join('');
+
+    // Bloquer quand le DOM est prêt
+    if (document.body) {
+      document.body.appendChild(gate);
+    } else {
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.appendChild(gate);
+      });
+    }
+  })();
+  </script>
+</head>
+<body>
+
+<!-- ══ TOPBAR — CONTROL CENTER ══════════════════════════════════ -->
+<nav class="topbar">
+  <div class="logo">
+    <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" id="ks-logo-dark">
+    <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" id="ks-logo-light">
+  </div>
+  <div class="tb-spacer"></div>
+  <div class="cc-bar">
+
+    <!-- Moteur actif -->
+    <button class="cc-btn cc-engine" id="tb-engine-btn" title="Changer de moteur IA">
+      <div class="ai-engine-dot" id="cc-engine-dot"></div>
+      <span id="ai-engine-label">Claude</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:10px;height:10px;opacity:.45;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+
+    <!-- Bibliothèque de prompts — icône seule -->
+    <button class="cc-btn cc-icon" id="tb-prompts-btn" title="Bibliothèque de prompts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:14px;height:14px;flex-shrink:0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span class="cc-badge" id="prompts-badge" style="display:none"></span>
+    </button>
+
+    <!-- Mode clair/sombre -->
+    <button class="cc-btn cc-icon" id="tb-mode-btn" title="Basculer le thème">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px" id="mode-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+
+    <div class="cc-sep"></div>
+
+    <!-- Cadenas sécurité — discret -->
+    <div class="cc-lock-chip" id="cc-lock-chip" title="Connexion sécurisée">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;flex-shrink:0">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    </div>
+
+    <!-- Licence -->
+    <div class="lic-chip">
+      <div class="lic-dot"></div>
+      <div class="lic-text">Licence active</div>
+    </div>
+
+    <!-- Paramètres -->
+    <button class="cc-btn cc-icon" id="settings-open-btn" title="Paramètres">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+
+  </div>
+</nav>
+
+<!-- ══ ENGINE DROPDOWN ══════════════════════════════════════════ -->
+<div class="cc-dropdown" id="engine-dropdown" role="menu" aria-label="Sélection du moteur"></div>
+
+<!-- ══ PROMPT LIBRARY PANEL ════════════════════════════════════ -->
+<div class="pl-backdrop" id="pl-backdrop"></div>
+<div class="pl-panel" id="pl-panel" role="dialog" aria-modal="true" aria-label="Bibliothèque de prompts">
+  <div class="pl-head">
+    <div class="pl-head-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;flex-shrink:0;opacity:.7"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      Bibliothèque de prompts
+    </div>
+    <button class="sp-close" id="pl-close-btn" aria-label="Fermer">✕</button>
+  </div>
+  <div class="pl-body" id="pl-body"></div>
+  <div class="sp-footer">
+    <div class="sp-footer-brand">Key-Store · Prompts sauvegardés</div>
+    <button class="pl-clear-btn" id="pl-clear-btn">Tout effacer</button>
+  </div>
+</div>
+
+<!-- ══ MAIN ════════════════════════════════════════════════════ -->
+<main class="main">
+  <div class="wrap">
+    <div class="hero">
+      <div class="hero-left">
+        <div class="identity-slot" id="identity-slot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+               style="width:28px;height:28px;color:rgba(201,168,76,.45)">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="hero-greeting">Bonjour, <span class="hero-name">Stéphane</span></div>
+          <!-- DST — remplace la ligne de sous-titre statique -->
+          <div class="hero-sub hero-dst" id="hero-dst" data-type="default">
+            <span class="hero-dst-text" id="dst-text">Votre pôle de promotion immobilière est prêt.</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="hero-date" id="hero-date">—</div>
+        <div class="online-chip"><div class="online-chip-dot"></div>En ligne</div>
+      </div>
+    </div>
+
+    <section class="pads-section">
+      <div class="sec-hd">
+        <div class="sec-lbl">Boîtes à outils</div>
+        <div class="sec-rule"></div>
+        <div class="sec-count">8</div>
+      </div>
+      <div id="pads-container" class="pads-grid"></div>
+    </section>
+
+    <section class="suggest-section">
+      <div class="sec-hd" id="suggest-hd">
+        <div class="sec-lbl">Outils Disponibles</div>
+        <div class="sec-rule"></div>
+        <button class="sec-kstore-badge" id="kstore-catalog-btn" title="Ouvrir le catalogue Key-Store">Key-Store</button>
+      </div>
+      <div id="arts-container" class="art-scroll"></div>
+    </section>
+  </div>
+</main>
+
+<!-- ══ TOOL MODAL ══════════════════════════════════════════════ -->
+<div class="tool-backdrop" id="tool-backdrop"></div>
+<div class="tool-modal" id="tool-modal" role="dialog" aria-modal="true">
+  <div id="modal-inner"></div>
+</div>
+
+<!-- ══ SETTINGS PANEL ══════════════════════════════════════════ -->
+<div class="settings-backdrop" id="settings-backdrop"></div>
+<div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-label="Paramètres">
+  <div class="sp-head">
+    <div>
+      <div class="sp-head-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:.7">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Paramètres
+      </div>
+      <div class="sp-head-sub">Keystone OS · Protein Studio</div>
+    </div>
+    <button class="sp-close" id="settings-close-btn" aria-label="Fermer">✕</button>
+  </div>
+  <div class="sp-body" id="sp-body"></div>
+  <div class="sp-footer">
+    <div class="sp-footer-brand">Protein Studio · Ollioules</div>
+    <div class="sp-footer-ver">v2.0 — 2026</div>
+  </div>
+</div>
+
+<!-- ── Service Worker — enregistrement PWA ───────────────────── -->
+<script>
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(reg => {
+          console.info('[Keystone SW] Enregistré :', reg.scope);
+          // Mise à jour silencieuse si une nouvelle version est détectée
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker?.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+        })
+        .catch(err => console.warn('[Keystone SW] Erreur :', err));
+    });
+  }
+</script>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
