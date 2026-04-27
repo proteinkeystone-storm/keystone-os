@@ -337,7 +337,7 @@ const KS_PLANS = [
     {
         id: 'PRO',
         name: 'Pro',
-        price: 99,
+        price: 79,
         tagline: 'Analyse avancée et pilotage complet',
         color: 'var(--gold)',
         recommended: true,

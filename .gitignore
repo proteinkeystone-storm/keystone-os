@@ -15,3 +15,8 @@ SKILLS.txt
 # Launchers locaux (spécifiques à chaque machine)
 Lancer_KEYSTONE.bat
 Lancer_KEYSTONE.command
+
+# Workers (Cloudflare — build artifacts & deps)
+workers/node_modules/
+workers/.wrangler/
+workers/package-lock.json
