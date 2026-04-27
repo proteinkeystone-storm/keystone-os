@@ -9,12 +9,14 @@
    · Clés API et prefs → localStorage client (jamais en cache SW)
    ═══════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME    = 'keystone-v1';
-const SHELL_VERSION = '20260425';
+const CACHE_NAME    = 'keystone-v2';
+const SHELL_VERSION = '20260428';
 
 // ── Assets du Shell — mis en cache à l'installation ─────────────
+// Note : '/' n'est PAS pré-caché — les navigations doivent toujours
+// passer par le réseau pour que les rewrites Vercel (/ → landing.html)
+// s'appliquent correctement.
 const SHELL_ASSETS = [
-  '/',
   '/index.html',
   '/src/main.js',
   '/src/ui-renderer.js',
@@ -114,7 +116,17 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── 4. Shell statique → Cache-First avec fallback réseau ─────
+  // ── 4. Navigations HTML → Network-First ─────────────────────
+  //    Permet aux rewrites Vercel (/ → landing.html, /app → index.html)
+  //    de fonctionner correctement. Pas de cache sur les documents HTML.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // ── 5. Assets statiques → Cache-First avec fallback réseau ───
   event.respondWith(
     caches.match(request).then(cached => {
       if (cached) return cached;
@@ -125,9 +137,6 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(c => c.put(request, clone));
         }
         return res;
-      }).catch(() => {
-        // Fallback ultime : page racine si navigation
-        if (request.mode === 'navigate') return caches.match('/index.html');
       });
     })
   );
