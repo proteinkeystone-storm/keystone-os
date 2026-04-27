@@ -1587,6 +1587,7 @@ function toggleTool(el, tool, quota) {
 ═══════════════════════════════════════════ */
 function launchApp() {
   localStorage.setItem('ks_tools', JSON.stringify([..._selectedTools]));
+  localStorage.setItem('ks_onboarded', '1'); // Évite le double onboarding du dashboard
   const flash = document.createElement('div');
   flash.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;z-index:9999;pointer-events:none;transition:opacity .35s ease';
   document.body.appendChild(flash);
