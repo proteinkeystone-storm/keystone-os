@@ -913,6 +913,10 @@ function _openRestorePanel(padsEl, triggerBtn) {
 let currentPad = null;
 
 export function openTool(padId, opts = {}) {
+    // ── Fermer la barre d'édition flottante si active ────────────
+    // (évite que Renommer/Masquer/Supprimer restent visibles par-dessus le modal)
+    dismissEditMode();
+
     // ── Garde B2B — outil verrouillé ? ───────────────────────────
     const ownedIds    = getOwnedIds();
     const lifetimeIds = getLifetimeIds();
