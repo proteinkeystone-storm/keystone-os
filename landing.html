@@ -12,16 +12,22 @@
 ═══════════════════════════════════════════ */
 :root {
   --bg:        #000814;
-  --bg-2:      #050A18;
+  --bg-2:      #001A2C;
   --gold:      #D4AF37;
+  --bronze:    #8C6239;
+  --gold-grad: linear-gradient(135deg, #8C6239 0%, #D4AF37 100%);
   --gold-dim:  rgba(212,175,55,.10);
-  --gold-glow: rgba(212,175,55,.18);
-  --white:     rgba(255,255,255,.82);
-  --white-2:   rgba(255,255,255,.46);
+  --gold-glow: rgba(212,175,55,.22);
+  --abyss:     #1A0033;
+  --cobalt:    #001A4D;
+  --white:     rgba(255,255,255,.84);
+  --white-2:   rgba(255,255,255,.48);
   --white-3:   rgba(255,255,255,.16);
-  --border:    rgba(255,255,255,.07);
-  --border-g:  rgba(212,175,55,.24);
-  --glass-bg:  rgba(10,17,40,.62);
+  --border:    rgba(255,255,255,.10);
+  --border-g:  rgba(212,175,55,.28);
+  --glass-bg:  rgba(0,10,28,.68);
+  --card-shadow: 0 8px 48px rgba(26,0,51,.55), 0 2px 12px rgba(0,0,0,.4);
+  --card-shadow-hover: 0 12px 64px rgba(26,0,51,.75), 0 4px 20px rgba(0,0,0,.5);
   --r:         16px;
   --r-sm:      8px;
 }
@@ -30,7 +36,7 @@ html { scroll-behavior:smooth; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
-  background: var(--bg);
+  background: radial-gradient(ellipse at 50% 0%, #001A2C 0%, #000814 62%);
   color: var(--white);
   min-height: 100vh;
   overflow-x: hidden;
@@ -143,13 +149,17 @@ nav {
 }
 .nav-links a:hover { color: #fff; }
 .nav-cta {
-  background: var(--gold); color: #000814;
+  background: var(--gold-grad); color: #000814;
   font-size: .8rem; font-weight: 700; letter-spacing: .04em;
   padding: 8px 20px; border-radius: 100px; border: none;
   cursor: pointer; text-decoration: none;
-  transition: opacity .2s, box-shadow .2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 2px 14px rgba(212,175,55,.22);
+  transition: box-shadow .25s, transform .15s;
 }
-.nav-cta:hover { opacity: .88; box-shadow: 0 0 20px rgba(212,175,55,.3); }
+.nav-cta:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 22px rgba(212,175,55,.4);
+  transform: translateY(-1px);
+}
 
 /* ═══════════════════════════════════════════
    HERO
@@ -178,14 +188,18 @@ nav {
   margin-top: 8px;
 }
 .btn-primary {
-  background: var(--gold); color: #000814;
+  background: var(--gold-grad); color: #000814;
   font-size: .88rem; font-weight: 700; letter-spacing: .03em;
   padding: 14px 30px; border-radius: 100px; border: none;
   cursor: pointer; text-decoration: none;
-  transition: opacity .2s, box-shadow .2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 24px rgba(212,175,55,.28);
+  transition: box-shadow .25s, transform .15s;
   display: inline-flex; align-items: center; gap: 8px;
 }
-.btn-primary:hover { opacity: .88; box-shadow: 0 0 28px rgba(212,175,55,.35); }
+.btn-primary:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 6px 36px rgba(212,175,55,.45);
+  transform: translateY(-1px);
+}
 .btn-glass {
   background: rgba(255,255,255,.05);
   border: 0.5px solid rgba(255,255,255,.14);
@@ -230,14 +244,17 @@ nav {
   border: 0.5px solid var(--border);
   border-radius: var(--r);
   padding: 28px 24px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: border-color .25s, transform .25s;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, transform .3s, box-shadow .3s;
   display: flex; flex-direction: column; gap: 14px;
 }
 .engine-card:hover {
-  border-color: rgba(255,255,255,.16);
-  transform: translateY(-3px);
+  border-color: rgba(255,255,255,.18);
+  transform: translateY(-4px);
+  box-shadow: var(--card-shadow-hover);
+  background: linear-gradient(145deg, rgba(0,26,77,.5) 0%, rgba(0,10,28,.68) 100%);
 }
 .engine-card-icon {
   width: 44px; height: 44px; border-radius: 12px;
@@ -276,7 +293,7 @@ nav {
 }
 
 /* ═══════════════════════════════════════════
-   K-STORE
+   KEY-STORE
 ═══════════════════════════════════════════ */
 #kstore { background: rgba(5,10,24,.45); }
 .kstore-grid {
@@ -291,10 +308,20 @@ nav {
   padding: 20px 18px;
   display: flex; align-items: center; gap: 14px;
   cursor: default;
-  transition: border-color .25s, transform .3s;
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, transform .3s, box-shadow .3s;
   transform-style: preserve-3d;
+  position: relative; overflow: hidden;
 }
-.kstore-card:hover { border-color: rgba(255,255,255,.16); }
+.kstore-card:hover {
+  border-color: rgba(212,175,55,.25);
+  box-shadow: var(--card-shadow-hover);
+}
+.kstore-card:hover .kstore-card-icon {
+  background: radial-gradient(circle at 50% 50%, rgba(0,26,77,.7) 0%, rgba(212,175,55,.12) 100%);
+  border-color: rgba(212,175,55,.4);
+  color: var(--gold);
+}
 .kstore-card--soon {
   opacity: .4; border-style: dashed;
   justify-content: center;
@@ -305,6 +332,7 @@ nav {
   border: 0.5px solid var(--border);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; color: var(--white-2);
+  transition: background .3s, border-color .3s, color .3s;
 }
 .kstore-card-info { flex: 1; }
 .kstore-card-name {
@@ -330,7 +358,8 @@ nav {
   border-radius: var(--r);
   padding: 40px 36px;
   display: flex; flex-direction: column; gap: 20px;
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
 }
 .security-block--gold {
   border-color: var(--border-g);
@@ -371,8 +400,13 @@ nav {
   padding: 36px 28px;
   display: flex; flex-direction: column; gap: 0;
   position: relative;
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  transition: border-color .25s;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--card-shadow);
+  transition: border-color .3s, box-shadow .3s, transform .3s;
+}
+.plan-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--card-shadow-hover);
 }
 .plan-card--pro {
   border-color: var(--border-g);
@@ -381,9 +415,10 @@ nav {
 .plan-card--pro:hover { border-color: rgba(212,175,55,.4); }
 .plan-badge {
   position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-  background: var(--gold); color: #000814;
+  background: var(--gold-grad); color: #000814;
   font-size: .62rem; font-weight: 800; letter-spacing: .1em;
   text-transform: uppercase; padding: 5px 14px; border-radius: 100px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 12px rgba(212,175,55,.35);
 }
 .plan-tier {
   font-size: .65rem; font-weight: 800; letter-spacing: .18em;
@@ -427,10 +462,12 @@ nav {
 }
 .plan-cta:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); }
 .plan-card--pro .plan-cta {
-  background: var(--gold); color: #000814; border-color: transparent;
+  background: var(--gold-grad); color: #000814; border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 20px rgba(212,175,55,.3);
 }
 .plan-card--pro .plan-cta:hover {
-  opacity: .9; box-shadow: 0 0 24px rgba(212,175,55,.3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 6px 32px rgba(212,175,55,.5);
+  transform: translateY(-1px);
 }
 .plan-note {
   font-size: .7rem; color: var(--white-2); text-align: center; margin-top: 8px;
@@ -451,6 +488,7 @@ nav {
   padding: 44px 40px;
   margin-top: 40px;
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--card-shadow);
   position: relative; overflow: hidden;
 }
 .activate-card::before {
@@ -480,14 +518,19 @@ nav {
   letter-spacing: .06em;
 }
 .act-btn {
-  width: 100%; background: var(--gold); color: #000814;
+  width: 100%; background: var(--gold-grad); color: #000814;
   border: none; border-radius: 10px;
   padding: 14px; font-size: .88rem; font-weight: 700;
-  cursor: pointer; transition: opacity .2s, box-shadow .2s;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 20px rgba(212,175,55,.28);
+  transition: box-shadow .25s, transform .15s;
   display: flex; align-items: center; justify-content: center; gap: 7px;
 }
-.act-btn:hover { opacity: .9; box-shadow: 0 0 20px rgba(212,175,55,.3); }
-.act-btn:disabled { opacity: .5; cursor: not-allowed; }
+.act-btn:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 6px 32px rgba(212,175,55,.45);
+  transform: translateY(-1px);
+}
+.act-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .act-status {
   font-size: .8rem; margin-top: 12px; min-height: 20px; color: var(--white-2);
 }
@@ -536,6 +579,12 @@ nav {
   border-radius: 20px; padding: 40px;
   width: min(460px, 90vw);
   position: relative;
+  box-shadow: 0 16px 80px rgba(26,0,51,.75), 0 4px 24px rgba(0,0,0,.5);
+  transform: scale(0.95); opacity: 0;
+  transition: transform .3s cubic-bezier(.22,1,.36,1), opacity .25s ease;
+}
+.modal-overlay.open .modal-box {
+  transform: scale(1); opacity: 1;
 }
 .modal-close {
   position: absolute; top: 16px; right: 16px;
@@ -574,13 +623,18 @@ nav {
 .stripe-field input::placeholder { color: rgba(255,255,255,.22); }
 .stripe-field input:focus { border-color: rgba(212,175,55,.4); }
 .stripe-submit {
-  width: 100%; background: var(--gold); color: #000814;
+  width: 100%; background: var(--gold-grad); color: #000814;
   border: none; border-radius: 10px; padding: 14px;
   font-size: .88rem; font-weight: 700; cursor: pointer;
-  margin-top: 8px; transition: opacity .2s, box-shadow .2s;
+  margin-top: 8px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 20px rgba(212,175,55,.28);
+  transition: box-shadow .25s, transform .15s;
 }
-.stripe-submit:hover { opacity: .9; box-shadow: 0 0 20px rgba(212,175,55,.3); }
-.stripe-submit:disabled { opacity: .5; cursor: not-allowed; }
+.stripe-submit:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 6px 32px rgba(212,175,55,.45);
+  transform: translateY(-1px);
+}
+.stripe-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .stripe-secure {
   font-size: .68rem; color: var(--white-2); text-align: center;
   margin-top: 10px; opacity: .6; display: flex; align-items: center;
@@ -604,6 +658,12 @@ nav {
   border-radius: 24px; padding: 48px 44px;
   width: min(520px, 90vw);
   position: relative;
+  box-shadow: 0 20px 90px rgba(26,0,51,.8), 0 4px 24px rgba(0,0,0,.5);
+  transform: scale(0.95); opacity: 0;
+  transition: transform .35s cubic-bezier(.22,1,.36,1), opacity .28s ease;
+}
+.onboarding-overlay.open .ob-box {
+  transform: scale(1); opacity: 1;
 }
 .ob-progress {
   height: 3px; background: rgba(255,255,255,.08);
@@ -628,13 +688,17 @@ nav {
 }
 .ob-sub { font-size: .88rem; color: var(--white-2); line-height: 1.65; }
 .ob-btn {
-  background: var(--gold); color: #000814;
+  background: var(--gold-grad); color: #000814;
   border: none; border-radius: 10px;
   padding: 13px 28px; font-size: .86rem; font-weight: 700;
   cursor: pointer; align-self: flex-end;
-  transition: opacity .2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 4px 18px rgba(212,175,55,.26);
+  transition: box-shadow .25s, transform .15s;
 }
-.ob-btn:hover { opacity: .9; }
+.ob-btn:hover {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 6px 28px rgba(212,175,55,.42);
+  transform: translateY(-1px);
+}
 
 /* Drop zone */
 .ob-dropzone {
@@ -771,8 +835,7 @@ nav {
 <!-- ═════════════════ NAV ═════════════════ -->
 <nav>
   <a class="nav-logo" href="#">
-    <img src="/LOGOS/Logo puce fond bleu.svg" alt="Keystone OS">
-    <span class="nav-logo-text">KEYSTONE <span>OS</span></span>
+    <img src="/LOGOS/Logo KEYSTONE blanc.svg" alt="Keystone OS" style="height:22px">
   </a>
   <ul class="nav-links">
     <li><a href="#engines">Fonctionnalités</a></li>
@@ -891,10 +954,10 @@ nav {
           <svg width="20" height="20"><use href="#ico-grid"/></svg>
         </div>
         <div>
-          <div class="engine-card-label">K-Store</div>
+          <div class="engine-card-label">KEY-STORE</div>
           <div class="title-md" style="margin-top:6px">Assistants certifiés</div>
           <p style="font-size:.84rem;color:var(--white-2);margin-top:8px;line-height:1.6">
-            Ajoutez des assistants de précision via le K-Store. Chaque PAD est défini en JSON — zéro hard-coding, mise à jour continue.
+            Ajoutez des assistants de précision via le KEY-STORE. Chaque PAD est défini en JSON — zéro hard-coding, mise à jour continue.
           </p>
         </div>
       </div>
@@ -946,11 +1009,11 @@ nav {
   </div>
 </section>
 
-<!-- ═════════════════ K-STORE ═════════════════ -->
+<!-- ═════════════════ KEY-STORE ═════════════════ -->
 <section id="kstore">
   <div class="section-inner">
     <div class="section-header">
-      <span class="eyebrow">K-Store · Catalogue</span>
+      <span class="eyebrow">KEY-STORE · Catalogue</span>
       <h2 class="title-lg">Votre bibliothèque d'expertises.</h2>
       <p class="body-lg">
         Activez des Assistants Certifiés de haute précision — déchiffrage juridique, synthèses stratégiques,
@@ -1181,15 +1244,14 @@ nav {
 </section>
 
 <!-- ═════════════════ COPYRIGHT ═════════════════ -->
-<div style="position:relative;z-index:1;border-top:0.5px solid var(--border);padding:20px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-  <span style="font-size:.72rem;color:var(--white-2)">© 2026 Protein Studio · Keystone OS · Tous droits réservés</span>
+<footer style="position:relative;z-index:1;border-top:0.5px solid var(--border);padding:20px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <span style="font-size:.72rem;color:var(--white-2);letter-spacing:.03em">© 2026 Protein Studio · Keystone OS</span>
   <div style="display:flex;gap:24px">
-    <a href="/app" style="font-size:.72rem;color:var(--white-2);text-decoration:none">Dashboard</a>
-    <a href="#plans" style="font-size:.72rem;color:var(--white-2);text-decoration:none">Plans</a>
-    <a href="#activate" style="font-size:.72rem;color:var(--white-2);text-decoration:none">Activer</a>
-    <a href="/admin" style="font-size:.72rem;color:var(--white-2);text-decoration:none">Admin</a>
+    <a href="#" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">RGPD</a>
+    <a href="#" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Mentions Légales</a>
+    <a href="#" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Support</a>
   </div>
-</div>
+</footer>
 
 <!-- ═════════════════ STRIPE MODAL ═════════════════ -->
 <div class="modal-overlay" id="stripe-modal">
@@ -1294,7 +1356,7 @@ nav {
 })();
 
 /* ═══════════════════════════════════════════
-   K-STORE PARALLAX
+   KEY-STORE PARALLAX
 ═══════════════════════════════════════════ */
 document.querySelectorAll('.kstore-card:not(.kstore-card--soon)').forEach(card => {
   card.addEventListener('mousemove', e => {
