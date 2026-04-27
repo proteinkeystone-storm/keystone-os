@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════════
+# KEYSTONE OS — Cloudflare Worker · wrangler.toml
+# ═══════════════════════════════════════════════════════════════
+# Déploiement :
+#   1. npm install
+#   2. wrangler login
+#   3. wrangler d1 create keystone-os --location weur
+#      → copiez le database_id généré dans [[d1_databases]] ci-dessous
+#   4. wrangler d1 execute keystone-os --file=./src/db/schema.sql
+#   5. wrangler secret put KS_ADMIN_SECRET
+#   6. wrangler secret put KS_ENCRYPTION_KEY    (min 32 chars aléatoires)
+#   7. wrangler deploy
+# ═══════════════════════════════════════════════════════════════
+
+name            = "keystone-os-api"
+main            = "src/index.js"
+compatibility_date = "2025-04-01"
+
+# Placement "smart" : Cloudflare choisit la région la plus proche des données D1
+[placement]
+mode = "smart"
+
+# ── Base de données D1 (EU — Western Europe) ──────────────────
+# Après `wrangler d1 create keystone-os --location weur`
+# remplacez REPLACE_WITH_YOUR_D1_ID par l'ID retourné
+[[d1_databases]]
+binding      = "DB"
+database_name = "keystone-os"
+database_id  = "REPLACE_WITH_YOUR_D1_ID"
+
+# ── Variables publiques (non-secrètes) ─────────────────────────
+[vars]
+KS_ALLOWED_ORIGIN = "https://keystone-os.vercel.app"
+# Remplacez par votre domaine final (ex: https://app.keystoneos.fr)
+
+# ── Secrets à définir via `wrangler secret put` ───────────────
+# KS_ADMIN_SECRET   — même valeur que dans Vercel
+# KS_ENCRYPTION_KEY — clé 32+ chars pour chiffrer les clés API
+
+# ── Environnement de développement local ─────────────────────
+[dev]
+port = 8787
+local_protocol = "http"

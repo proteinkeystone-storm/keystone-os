@@ -1,0 +1,14 @@
+{
+  "name": "keystone-os-workers",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev":      "wrangler dev",
+    "deploy":   "wrangler deploy",
+    "db:init":  "wrangler d1 execute keystone-os --file=./src/db/schema.sql",
+    "db:local": "wrangler d1 execute keystone-os --local --file=./src/db/schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.101.0"
+  }
+}
