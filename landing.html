@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keystone OS — L'IA au service des professionnels de l'immobilier</title>
+  <meta name="description" content="Keystone OS est l'OS modulaire propulsé par l'IA pour les professionnels de l'immobilier. Analysez, rédigez et pilotez vos dossiers en quelques secondes.">
+  <meta property="og:title" content="Keystone OS — L'IA Immobilière">
+  <meta property="og:description" content="L'OS modulaire propulsé par l'IA pour les professionnels de l'immobilier.">
+  <meta property="og:image" content="/LOGOS/Logo KEYSTONE blanc.svg">
+  <link rel="icon" href="/LOGOS/Logo puce fond bleu.svg" type="image/svg+xml">
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       RESET & TOKENS
+    ═══════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:      #07102a;
+      --navy-2:    #0d1b3e;
+      --navy-3:    #142050;
+      --gold:      #c9a84c;
+      --gold-2:    #e8cb82;
+      --gold-dim:  rgba(201,168,76,.12);
+      --gold-glow: rgba(201,168,76,.22);
+      --text:      #e8eaf0;
+      --tx2:       rgba(232,234,240,.65);
+      --tx3:       rgba(232,234,240,.38);
+      --border:    rgba(201,168,76,.16);
+      --r:         14px;
+      --r-sm:      8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--navy);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      letter-spacing: -0.01em;
+      overflow-x: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       NOISE TEXTURE OVERLAY
+    ═══════════════════════════════════════════════════════════ */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      background-size: 200px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       NAV
+    ═══════════════════════════════════════════════════════════ */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6vw;
+      height: 64px;
+      background: rgba(7,16,42,.8);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      border-bottom: 1px solid rgba(201,168,76,.08);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo-hex {
+      font-size: 22px;
+      color: var(--gold);
+      line-height: 1;
+    }
+
+    .nav-logo-text {
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--text);
+    }
+
+    .nav-logo-text span {
+      color: var(--gold);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-link {
+      font-size: 13px;
+      color: var(--tx2);
+      text-decoration: none;
+      padding: 7px 14px;
+      border-radius: var(--r-sm);
+      transition: color .2s, background .2s;
+    }
+    .nav-link:hover { color: var(--text); background: rgba(255,255,255,.05); }
+
+    .nav-cta {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--gold);
+      padding: 8px 18px;
+      border-radius: 20px;
+      text-decoration: none;
+      transition: background .2s, box-shadow .2s;
+    }
+    .nav-cta:hover {
+      background: var(--gold-2);
+      box-shadow: 0 4px 20px rgba(201,168,76,.35);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       HERO
+    ═══════════════════════════════════════════════════════════ */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 120px 6vw 80px;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    /* Orbes de lumière */
+    .hero-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+    }
+    .hero-orb-1 {
+      width: 600px; height: 600px;
+      background: rgba(201,168,76,.07);
+      top: -100px; left: -200px;
+      animation: orb-drift 18s ease-in-out infinite alternate;
+    }
+    .hero-orb-2 {
+      width: 400px; height: 400px;
+      background: rgba(64,80,180,.09);
+      top: 20%; right: -100px;
+      animation: orb-drift 22s ease-in-out infinite alternate-reverse;
+    }
+    .hero-orb-3 {
+      width: 300px; height: 300px;
+      background: rgba(201,168,76,.05);
+      bottom: 0; left: 40%;
+      animation: orb-drift 14s ease-in-out infinite alternate;
+    }
+
+    @keyframes orb-drift {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(40px, 30px) scale(1.08); }
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: var(--gold-dim);
+      border: 1px solid rgba(201,168,76,.28);
+      border-radius: 20px;
+      padding: 5px 14px;
+      margin-bottom: 28px;
+      animation: fade-up .6s ease both;
+    }
+
+    .hero-title {
+      font-size: clamp(38px, 7vw, 76px);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.06;
+      color: var(--text);
+      max-width: 880px;
+      animation: fade-up .7s .1s ease both;
+    }
+
+    .hero-title .grad {
+      background: linear-gradient(135deg, var(--gold-2) 0%, var(--gold) 55%, #a07828 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 2.2vw, 20px);
+      color: var(--tx2);
+      max-width: 600px;
+      margin: 20px auto 40px;
+      line-height: 1.65;
+      animation: fade-up .7s .2s ease both;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      animation: fade-up .7s .3s ease both;
+    }
+
+    .btn-primary-lg {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+      background: linear-gradient(135deg, var(--gold-2), var(--gold));
+      padding: 14px 28px;
+      border-radius: 24px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      font-family: inherit;
+    }
+    .btn-primary-lg:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(201,168,76,.38);
+    }
+
+    .btn-ghost-lg {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.14);
+      padding: 14px 28px;
+      border-radius: 24px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+      font-family: inherit;
+    }
+    .btn-ghost-lg:hover { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.22); }
+
+    /* ── App mockup ── */
+    .hero-mockup {
+      position: relative;
+      margin-top: 64px;
+      width: min(900px, 90vw);
+      animation: fade-up .8s .4s ease both;
+    }
+
+    .mockup-window {
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow:
+        0 40px 120px rgba(0,0,0,.6),
+        0 0 0 1px rgba(201,168,76,.10),
+        inset 0 1px 0 rgba(255,255,255,.05);
+    }
+
+    .mockup-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,.03);
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mockup-dot:nth-child(1) { background: #ff5f57; }
+    .mockup-dot:nth-child(2) { background: #ffbd2e; }
+    .mockup-dot:nth-child(3) { background: #28c840; }
+    .mockup-url {
+      flex: 1;
+      margin: 0 12px;
+      height: 22px;
+      background: rgba(255,255,255,.06);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      color: var(--tx3);
+    }
+
+    .mockup-body {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      min-height: 340px;
+    }
+
+    .mockup-sidebar {
+      background: rgba(255,255,255,.02);
+      border-right: 1px solid rgba(255,255,255,.05);
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .mockup-sidebar-item {
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(255,255,255,.04);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--tx2);
+    }
+    .mockup-sidebar-item.active {
+      background: var(--gold-dim);
+      color: var(--gold);
+      border: 1px solid rgba(201,168,76,.22);
+    }
+    .mockup-sidebar-dot {
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      background: currentColor;
+      opacity: .4;
+      flex-shrink: 0;
+    }
+
+    .mockup-main {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      align-content: start;
+    }
+
+    .mockup-card {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 10px;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mockup-card-icon {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--gold-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+
+    .mockup-card-title {
+      height: 10px;
+      border-radius: 4px;
+      background: rgba(255,255,255,.12);
+    }
+
+    .mockup-card-sub {
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,.06);
+      width: 70%;
+    }
+
+    .mockup-glow {
+      position: absolute;
+      bottom: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 100px;
+      background: rgba(201,168,76,.15);
+      filter: blur(40px);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       SECTION HELPERS
+    ═══════════════════════════════════════════════════════════ */
+    section {
+      position: relative;
+      padding: 100px 6vw;
+    }
+
+    .section-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 46px);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .section-sub {
+      font-size: 17px;
+      color: var(--tx2);
+      max-width: 520px;
+      line-height: 1.65;
+    }
+
+    .section-header {
+      max-width: 640px;
+      margin: 0 auto 56px;
+      text-align: center;
+    }
+    .section-header .section-sub { margin: 0 auto; }
+
+    /* ═══════════════════════════════════════════════════════════
+       FEATURES
+    ═══════════════════════════════════════════════════════════ */
+    #features { background: rgba(255,255,255,.015); }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 20px;
+      padding: 28px 26px;
+      transition: border-color .3s, transform .3s;
+    }
+    .feature-card:hover {
+      border-color: rgba(201,168,76,.3);
+      transform: translateY(-3px);
+    }
+
+    .feature-icon {
+      width: 48px; height: 48px;
+      border-radius: 14px;
+      background: var(--gold-dim);
+      border: 1px solid rgba(201,168,76,.24);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 18px;
+    }
+
+    .feature-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--tx2);
+      line-height: 1.65;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       TOOLS PREVIEW
+    ═══════════════════════════════════════════════════════════ */
+    #tools .section-header { margin-bottom: 40px; }
+
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+      max-width: 1100px;
+      margin: 0 auto 48px;
+    }
+
+    .tool-chip {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      transition: border-color .25s, background .25s;
+      cursor: default;
+    }
+    .tool-chip:hover { border-color: var(--border); background: rgba(201,168,76,.05); }
+
+    .tool-chip-icon {
+      width: 32px; height: 32px;
+      background: var(--gold-dim);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .tool-chip-name {
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+    }
+
+    .tool-chip-cat {
+      font-size: 10px;
+      color: var(--tx3);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       HOW IT WORKS
+    ═══════════════════════════════════════════════════════════ */
+    #how { background: rgba(255,255,255,.015); }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .step-num {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--gold-2), var(--gold));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--navy);
+      letter-spacing: -0.04em;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .step-desc {
+      font-size: 13px;
+      color: var(--tx2);
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       ENGINES
+    ═══════════════════════════════════════════════════════════ */
+    .engines-strip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .engine-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 20px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tx2);
+    }
+
+    .engine-badge img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       PLANS
+    ═══════════════════════════════════════════════════════════ */
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      max-width: 940px;
+      margin: 0 auto;
+    }
+
+    .plan-card {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 22px;
+      padding: 32px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      transition: border-color .3s, transform .3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .plan-card:hover {
+      border-color: rgba(201,168,76,.3);
+      transform: translateY(-4px);
+    }
+
+    .plan-card.featured {
+      background: linear-gradient(145deg, rgba(201,168,76,.12) 0%, rgba(201,168,76,.04) 100%);
+      border-color: rgba(201,168,76,.38);
+    }
+
+    .plan-featured-badge {
+      position: absolute;
+      top: 18px; right: 18px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--navy);
+      background: var(--gold);
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    .plan-name {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+
+    .plan-price {
+      font-size: 40px;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .plan-price span {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--tx2);
+      letter-spacing: -0.01em;
+    }
+
+    .plan-desc {
+      font-size: 13px;
+      color: var(--tx2);
+      line-height: 1.55;
+      margin-bottom: 24px;
+      margin-top: 8px;
+    }
+
+    .plan-divider {
+      height: 1px;
+      background: rgba(255,255,255,.07);
+      margin-bottom: 22px;
+    }
+
+    .plan-features {
+      list-style: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      margin-bottom: 28px;
+    }
+
+    .plan-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: 13px;
+      color: var(--tx2);
+    }
+
+    .plan-check {
+      color: var(--gold);
+      flex-shrink: 0;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .plan-btn {
+      display: block;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 13px 20px;
+      border-radius: 14px;
+      text-decoration: none;
+      transition: all .2s;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .plan-btn-outline {
+      background: transparent;
+      border: 1px solid rgba(201,168,76,.35);
+      color: var(--gold);
+    }
+    .plan-btn-outline:hover {
+      background: var(--gold-dim);
+      border-color: rgba(201,168,76,.6);
+    }
+
+    .plan-btn-fill {
+      background: linear-gradient(135deg, var(--gold-2), var(--gold));
+      color: var(--navy);
+    }
+    .plan-btn-fill:hover {
+      box-shadow: 0 6px 24px rgba(201,168,76,.35);
+      transform: translateY(-1px);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       LICENCE ACTIVATION
+    ═══════════════════════════════════════════════════════════ */
+    #activate {
+      background: rgba(255,255,255,.015);
+    }
+
+    .activate-box {
+      max-width: 560px;
+      margin: 0 auto;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 40px 36px;
+      text-align: center;
+    }
+
+    .activate-icon {
+      font-size: 40px;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    .activate-title {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .activate-sub {
+      font-size: 14px;
+      color: var(--tx2);
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    .activate-input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .activate-input {
+      flex: 1;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      padding: 13px 16px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      letter-spacing: 0.05em;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .activate-input::placeholder { color: var(--tx3); }
+    .activate-input:focus { border-color: rgba(201,168,76,.4); }
+
+    .activate-btn {
+      background: linear-gradient(135deg, var(--gold-2), var(--gold));
+      border: none;
+      border-radius: 12px;
+      padding: 13px 22px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--navy);
+      cursor: pointer;
+      transition: box-shadow .2s, transform .2s;
+      font-family: inherit;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .activate-btn:hover {
+      box-shadow: 0 6px 24px rgba(201,168,76,.35);
+      transform: translateY(-1px);
+    }
+    .activate-btn:disabled { opacity: .6; cursor: default; transform: none; }
+
+    .activate-status {
+      margin-top: 14px;
+      font-size: 13px;
+      min-height: 20px;
+      line-height: 1.5;
+    }
+    .activate-status.ok    { color: #4caf80; }
+    .activate-status.error { color: #e05c5c; }
+
+    .activate-demo {
+      margin-top: 16px;
+      font-size: 11px;
+      color: var(--tx3);
+    }
+    .activate-demo code {
+      background: rgba(255,255,255,.06);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: 'SF Mono', monospace;
+      color: var(--gold);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════════════════════════ */
+    .footer {
+      padding: 48px 6vw 32px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .footer-logo {
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--text);
+    }
+
+    .footer-copy {
+      font-size: 12px;
+      color: var(--tx3);
+      margin-top: 4px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .footer-link {
+      font-size: 12px;
+      color: var(--tx2);
+      text-decoration: none;
+      transition: color .2s;
+    }
+    .footer-link:hover { color: var(--gold); }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 680px) {
+      .nav-links { display: none; }
+      .mockup-body { grid-template-columns: 1fr; }
+      .mockup-sidebar { display: none; }
+      .mockup-main { grid-template-columns: 1fr 1fr; }
+      .activate-input-row { flex-direction: column; }
+      .hero-title { font-size: 36px; }
+      section { padding: 70px 5vw; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ NAV ═══ -->
+<nav class="nav">
+  <a class="nav-logo" href="/">
+    <span class="nav-logo-hex">⬡</span>
+    <span class="nav-logo-text">KEYSTONE <span>OS</span></span>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="#features">Fonctionnalités</a>
+    <a class="nav-link" href="#tools">Outils</a>
+    <a class="nav-link" href="#plans">Plans</a>
+    <a class="nav-link" href="#activate">Activer</a>
+    <a class="nav-cta" href="/app">Accéder au Dashboard</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════ HERO ══ -->
+<section class="hero">
+  <div class="hero-orb hero-orb-1"></div>
+  <div class="hero-orb hero-orb-2"></div>
+  <div class="hero-orb hero-orb-3"></div>
+
+  <div class="hero-eyebrow">
+    ⬡ &nbsp;Propulsé par Claude · GPT-4o · Gemini · Mistral
+  </div>
+
+  <h1 class="hero-title">
+    L'intelligence artificielle<br>
+    <span class="grad">au service de votre métier</span>
+  </h1>
+
+  <p class="hero-sub">
+    Keystone OS est l'OS modulaire qui regroupe vos outils IA dans un seul tableau de bord.
+    Analyses, rédactions, artefacts visuels — en quelques secondes.
+  </p>
+
+  <div class="hero-actions">
+    <a class="btn-primary-lg" href="/app">
+      ⚡ Accéder au Dashboard
+    </a>
+    <a class="btn-ghost-lg" href="#activate">
+      Activer une licence →
+    </a>
+  </div>
+
+  <!-- Mockup app -->
+  <div class="hero-mockup">
+    <div class="mockup-window">
+      <div class="mockup-bar">
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-url">keystone-os.vercel.app</div>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-sidebar">
+          <div class="mockup-sidebar-item active">
+            <div class="mockup-sidebar-dot"></div> Dashboard
+          </div>
+          <div class="mockup-sidebar-item">
+            <div class="mockup-sidebar-dot"></div> Artefacts
+          </div>
+          <div class="mockup-sidebar-item">
+            <div class="mockup-sidebar-dot"></div> Moteurs IA
+          </div>
+          <div class="mockup-sidebar-item">
+            <div class="mockup-sidebar-dot"></div> Bibliothèque
+          </div>
+          <div class="mockup-sidebar-item">
+            <div class="mockup-sidebar-dot"></div> Réglages
+          </div>
+        </div>
+        <div class="mockup-main">
+          <div class="mockup-card">
+            <div class="mockup-card-icon">📊</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-card-icon">✍️</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-card-icon">🔍</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-card-icon">📋</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-card-icon">💰</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-card-icon">📍</div>
+            <div class="mockup-card-title"></div>
+            <div class="mockup-card-sub"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup-glow"></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ FEATURES ══ -->
+<section id="features">
+  <div class="section-header">
+    <p class="section-eyebrow">Pourquoi Keystone OS</p>
+    <h2 class="section-title">Un OS, tous vos outils IA</h2>
+    <p class="section-sub">
+      Fini les onglets épars et les copier-coller. Un seul endroit, tous les moteurs IA, pilotés par votre licence.
+    </p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">Multi-moteurs unifiés</div>
+      <p class="feature-desc">
+        Claude, GPT-4o, Gemini, Mistral, Perplexity — sélectionnez le meilleur modèle pour chaque tâche sans quitter le dashboard.
+      </p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔷</div>
+      <div class="feature-title">Artefacts visuels</div>
+      <p class="feature-desc">
+        Jauges, scores, pastilles, listes — les réponses IA se transforment en composants visuels exportables en PDF professionnel.
+      </p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔑</div>
+      <div class="feature-title">Piloté par licence</div>
+      <p class="feature-desc">
+        Chaque outil est activé par votre licence. Déployez sur tablette, desktop ou mobile — vos équipes accèdent à leurs outils autorisés uniquement.
+      </p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <div class="feature-title">Sécurité & RGPD</div>
+      <p class="feature-desc">
+        Clés API chiffrées AES-256-GCM, données hébergées en Europe (Cloudflare WEUR), effacement sur demande Art. 17 RGPD.
+      </p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📦</div>
+      <div class="feature-title">K-Store modulaire</div>
+      <p class="feature-desc">
+        Ajoutez de nouveaux outils via le K-Store sans mise à jour. Vos PADs JSON définissent chaque outil — zéro hard-coding.
+      </p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📱</div>
+      <div class="feature-title">PWA · Tablette ready</div>
+      <p class="feature-desc">
+        Installable comme application native sur iPad et Mac. Mode hors-ligne pour les contextes sans réseau. Synchronisation automatique.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════ OUTILS ══ -->
+<section id="tools">
+  <div class="section-header">
+    <p class="section-eyebrow">K-Store · Catalogue</p>
+    <h2 class="section-title">Des outils pour chaque étape</h2>
+    <p class="section-sub">
+      Analyse de marché, rédaction, qualification, monitoring — chaque outil est un PAD intelligent, activé par votre plan.
+    </p>
+  </div>
+  <div class="tools-grid">
+    <div class="tool-chip">
+      <div class="tool-chip-icon">📊</div>
+      <div>
+        <div class="tool-chip-name">Analyse de marché</div>
+        <div class="tool-chip-cat">Analyse</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">✍️</div>
+      <div>
+        <div class="tool-chip-name">Rédaction d'annonce</div>
+        <div class="tool-chip-cat">Marketing</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">🏢</div>
+      <div>
+        <div class="tool-chip-name">Fiche immeuble</div>
+        <div class="tool-chip-cat">Analyse</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">📍</div>
+      <div>
+        <div class="tool-chip-name">Scoring localisation</div>
+        <div class="tool-chip-cat">Artefact</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">💰</div>
+      <div>
+        <div class="tool-chip-name">Évaluation rapide</div>
+        <div class="tool-chip-cat">Artefact</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">📋</div>
+      <div>
+        <div class="tool-chip-name">Compte-rendu visite</div>
+        <div class="tool-chip-cat">Rédaction</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">🔍</div>
+      <div>
+        <div class="tool-chip-name">Veille concurrentielle</div>
+        <div class="tool-chip-cat">Monitoring</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">📧</div>
+      <div>
+        <div class="tool-chip-name">Email client</div>
+        <div class="tool-chip-cat">Communication</div>
+      </div>
+    </div>
+    <div class="tool-chip">
+      <div class="tool-chip-icon">⚖️</div>
+      <div>
+        <div class="tool-chip-name">Analyse juridique</div>
+        <div class="tool-chip-cat">Admin</div>
+      </div>
+    </div>
+    <div class="tool-chip" style="border-style: dashed; opacity: .5;">
+      <div class="tool-chip-icon" style="background: rgba(255,255,255,.04);">＋</div>
+      <div>
+        <div class="tool-chip-name">Bientôt disponible</div>
+        <div class="tool-chip-cat">K-Store</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center">
+    <p class="section-eyebrow" style="margin-bottom:24px">Moteurs IA intégrés</p>
+    <div class="engines-strip">
+      <div class="engine-badge"><img src="/LOGOS/Logo Claude.png" alt="Claude"> Claude</div>
+      <div class="engine-badge"><img src="/LOGOS/Logo Chat GPT.png" alt="GPT-4o"> GPT-4o</div>
+      <div class="engine-badge"><img src="/LOGOS/Logo Gemini.png" alt="Gemini"> Gemini</div>
+      <div class="engine-badge" style="padding-left:12px">🟠 Mistral</div>
+      <div class="engine-badge" style="padding-left:12px">🔵 Perplexity</div>
+      <div class="engine-badge" style="padding-left:12px">⚫ Grok</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ HOW IT WORKS -->
+<section id="how">
+  <div class="section-header">
+    <p class="section-eyebrow">Comment ça marche</p>
+    <h2 class="section-title">3 étapes pour démarrer</h2>
+  </div>
+  <div class="steps-grid">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Activez votre licence</div>
+        <p class="step-desc">Entrez votre clé au format XXXX-XXXX-XXXX-XXXX. Vos outils autorisés apparaissent instantanément dans le Dashboard.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Configurez vos moteurs</div>
+        <p class="step-desc">Ajoutez vos clés API (Claude, GPT-4o, Gemini…) dans le Coffre-fort chiffré. Choisissez le moteur par défaut pour chaque outil.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Générez & Exportez</div>
+        <p class="step-desc">Remplissez les champs, appuyez sur Générer. Obtenez une réponse structurée. Exportez en PDF ou copiez pour votre CRM.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════ PLANS ══ -->
+<section id="plans">
+  <div class="section-header">
+    <p class="section-eyebrow">Plans & Tarifs</p>
+    <h2 class="section-title">Choisissez votre plan</h2>
+    <p class="section-sub">
+      Démarrez gratuitement, montez en puissance selon vos besoins. Engagement mensuel, sans frais cachés.
+    </p>
+  </div>
+  <div class="plans-grid">
+
+    <!-- Starter -->
+    <div class="plan-card">
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">Gratuit<span> / mois</span></div>
+      <p class="plan-desc">Pour découvrir Keystone OS et tester vos premiers outils IA.</p>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><span class="plan-check">◆</span> 3 outils inclus (PADs de base)</li>
+        <li><span class="plan-check">◆</span> 1 moteur IA (Claude)</li>
+        <li><span class="plan-check">◆</span> Export texte</li>
+        <li><span class="plan-check">◆</span> 1 utilisateur</li>
+        <li style="opacity:.4"><span class="plan-check">—</span> Artefacts visuels</li>
+        <li style="opacity:.4"><span class="plan-check">—</span> Export PDF</li>
+      </ul>
+      <a class="plan-btn plan-btn-outline" href="/app">Commencer →</a>
+    </div>
+
+    <!-- Pro -->
+    <div class="plan-card featured">
+      <div class="plan-featured-badge">Populaire</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">49 €<span> / mois</span></div>
+      <p class="plan-desc">Pour les professionnels qui veulent exploiter l'IA au quotidien.</p>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><span class="plan-check">◆</span> Tous les outils du K-Store</li>
+        <li><span class="plan-check">◆</span> 6 moteurs IA inclus</li>
+        <li><span class="plan-check">◆</span> Artefacts visuels complets</li>
+        <li><span class="plan-check">◆</span> Export PDF A4 premium</li>
+        <li><span class="plan-check">◆</span> 3 appareils / utilisateurs</li>
+        <li><span class="plan-check">◆</span> Bibliothèque de prompts</li>
+      </ul>
+      <a class="plan-btn plan-btn-fill" href="#activate">Activer ma licence</a>
+    </div>
+
+    <!-- Max -->
+    <div class="plan-card">
+      <div class="plan-name">Max</div>
+      <div class="plan-price">149 €<span> / mois</span></div>
+      <p class="plan-desc">Pour les équipes et agences qui veulent déployer à grande échelle.</p>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><span class="plan-check">◆</span> Tout le plan Pro</li>
+        <li><span class="plan-check">◆</span> Outils sur mesure (PADs custom)</li>
+        <li><span class="plan-check">◆</span> Appareils illimités</li>
+        <li><span class="plan-check">◆</span> Panel Admin complet</li>
+        <li><span class="plan-check">◆</span> Onboarding dédié</li>
+        <li><span class="plan-check">◆</span> Support prioritaire</li>
+      </ul>
+      <a class="plan-btn plan-btn-outline" href="mailto:contact@proteinstudio.fr">Nous contacter</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ LICENCE ACTIVATION -->
+<section id="activate">
+  <div class="activate-box">
+    <span class="activate-icon">🔑</span>
+    <h2 class="activate-title">Activer ma licence</h2>
+    <p class="activate-sub">
+      Entrez votre clé de licence pour déverrouiller vos outils et accéder au Dashboard.
+    </p>
+    <div class="activate-input-row">
+      <input
+        class="activate-input"
+        type="text"
+        id="landing-licence-key"
+        placeholder="XXXX-XXXX-XXXX-XXXX"
+        maxlength="19"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button class="activate-btn" id="landing-activate-btn">Activer →</button>
+    </div>
+    <p class="activate-status" id="landing-status"></p>
+    <p class="activate-demo">
+      Pas encore de clé ? Utilisez <code>DEMO-KEYS-TONE-2026</code> pour explorer en mode démo.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════ FOOTER ══ -->
+<footer class="footer">
+  <div class="footer-brand">
+    <span class="nav-logo-hex">⬡</span>
+    <div>
+      <div class="footer-logo">KEYSTONE OS</div>
+      <div class="footer-copy">© 2026 Protein Studio · Tous droits réservés</div>
+    </div>
+  </div>
+  <div class="footer-links">
+    <a class="footer-link" href="/app">Dashboard</a>
+    <a class="footer-link" href="#plans">Plans</a>
+    <a class="footer-link" href="#activate">Activer</a>
+    <a class="footer-link" href="mailto:contact@proteinstudio.fr">Contact</a>
+    <a class="footer-link" href="/admin">Admin</a>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════ SCRIPT ACTIVATION ══ -->
+<script>
+(function () {
+  const CF_WORKER = 'https://keystone-os-api.keystone-os.workers.dev';
+  const LS_KEY    = 'ks_licence_key';
+  const LS_PLAN   = 'ks_licence_plan';
+  const LS_OWNED  = 'ks_owned_assets';
+
+  // ── Format auto XXXX-XXXX-XXXX-XXXX ──────────────────────────
+  const input = document.getElementById('landing-licence-key');
+  input.addEventListener('input', () => {
+    const v = input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const parts = [];
+    for (let i = 0; i < v.length && i < 16; i += 4) parts.push(v.slice(i, i + 4));
+    input.value = parts.join('-');
+  });
+
+  // ── Activation ────────────────────────────────────────────────
+  document.getElementById('landing-activate-btn').addEventListener('click', activate);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') activate(); });
+
+  async function activate() {
+    const btn    = document.getElementById('landing-activate-btn');
+    const status = document.getElementById('landing-status');
+    const key    = input.value.trim();
+    if (!key) { status.className = 'activate-status error'; status.textContent = 'Veuillez saisir une clé.'; return; }
+
+    btn.disabled = true; btn.textContent = '…';
+    status.className = 'activate-status'; status.textContent = 'Validation en cours…';
+
+    try {
+      let data;
+
+      // Mode dégradé (file:// ou hors-ligne)
+      if (location.protocol === 'file:' || !navigator.onLine) {
+        data = _simulateLocal(key);
+      } else {
+        const res = await fetch(`${CF_WORKER}/api/licence/validate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key }),
+        });
+        data = await res.json();
+      }
+
+      if (!data.valid) throw new Error(data.error || 'Licence invalide');
+
+      // Persistance
+      localStorage.setItem(LS_KEY, key);
+      if (data.plan) localStorage.setItem(LS_PLAN, data.plan);
+      localStorage.setItem(LS_OWNED, JSON.stringify(data.ownedAssets ?? null));
+
+      status.className = 'activate-status ok';
+      status.textContent = `✓ Licence activée — Plan ${data.plan}. Redirection…`;
+
+      setTimeout(() => { window.location.href = '/app'; }, 1400);
+
+    } catch (err) {
+      status.className = 'activate-status error';
+      status.textContent = err.message;
+      btn.disabled = false; btn.textContent = 'Activer →';
+    }
+  }
+
+  function _simulateLocal(key) {
+    const u = key.toUpperCase();
+    if (u === 'DEMO-KEYS-TONE-2026') return { valid: true, plan: 'Enterprise (démo)', ownedAssets: null };
+    if (/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(u)) return { valid: true, plan: 'Pro (simulé)', ownedAssets: null };
+    return { valid: false, error: 'Format invalide — attendu : XXXX-XXXX-XXXX-XXXX' };
+  }
+
+  // ── Si déjà connecté → montrer un message discret ─────────────
+  if (localStorage.getItem(LS_KEY)) {
+    const plan = localStorage.getItem(LS_PLAN) || 'actif';
+    const s = document.getElementById('landing-status');
+    s.className = 'activate-status ok';
+    s.textContent = `✓ Licence ${plan} déjà activée — Dashboard disponible.`;
+  }
+})();
+</script>
+
+</body>
+</html>

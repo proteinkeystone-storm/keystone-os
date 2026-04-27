@@ -5,7 +5,7 @@
   "description": "Votre pôle d'intelligence artificielle pour la promotion immobilière.",
   "lang": "fr",
   "dir": "ltr",
-  "start_url": "/?ks_launch=1",
+  "start_url": "/app?ks_launch=1",
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
@@ -31,7 +31,7 @@
       "name": "Ouvrir le Dashboard",
       "short_name": "Dashboard",
       "description": "Accéder au dashboard Keystone OS",
-      "url": "/?ks_launch=1",
+      "url": "/app?ks_launch=1",
       "icons": [{ "src": "./LOGOS/Logo puce fond bleu.svg", "sizes": "any" }]
     }
   ],

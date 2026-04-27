@@ -4,8 +4,9 @@
   "version": 2,
 
   "rewrites": [
-    { "source": "/",      "destination": "/index.html" },
-    { "source": "/admin", "destination": "/admin.html" }
+    { "source": "/",       "destination": "/landing.html" },
+    { "source": "/app",    "destination": "/index.html"   },
+    { "source": "/admin",  "destination": "/admin.html"   }
   ],
 
   "headers": [
