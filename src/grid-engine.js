@@ -31,29 +31,23 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP (HTML5 natif)
+// DRAG & DROP (HTML5 natif — poignée dédiée uniquement)
 // ═══════════════════════════════════════════════════════════════
-let _dragSrc = null;
+let _dragSrc        = null;
+let _dragFromHandle = false; // vrai ssi pointerdown sur .pad-drag-handle
 
 function _setupDragDrop(container) {
     container.addEventListener('dragstart', e => {
+        // Le drag n'est autorisé QUE si initié depuis la poignée
+        if (!_dragFromHandle) { e.preventDefault(); return; }
+        _dragFromHandle = false;
+
         const card = e.target.closest('.pad-card');
         if (!card) return;
 
-        // Si le long-press est actif, vérifier si c'est un vrai drag (mouvement) ou un drag
-        // fantôme que le browser génère sur un simple hold (sans mouvement significatif).
-        if (_longPressTimer) {
-            const dx = Math.abs(e.clientX - _lpStartX);
-            const dy = Math.abs(e.clientY - _lpStartY);
-            if (dx < LP_THRESHOLD && dy < LP_THRESHOLD) {
-                // Pas de mouvement → drag fantôme du browser, on bloque
-                e.preventDefault();
-                return;
-            }
-            // Mouvement intentionnel → vrai drag, annuler le long-press
-            _cancelLongPress();
-            card.classList.remove('pad-pressing');
-        }
+        // Annuler tout long-press en cours (l'utilisateur a clairement glissé)
+        _cancelLongPress();
+        card.classList.remove('pad-pressing');
 
         _dragSrc = card;
         card.classList.add('dragging');
@@ -126,6 +120,13 @@ function _setupEditMode(container, onPadChanged, onDeactivate) {
         if (e.button !== 0) return; // clic gauche uniquement
         const card = e.target.closest('.pad-card');
         if (!card || card.classList.contains('pad-renaming')) return; // pas pendant un rename
+
+        // Mémoriser si l'appui est sur la poignée (pour autoriser le drag)
+        _dragFromHandle = !!e.target.closest('.pad-drag-handle');
+
+        // Ne pas démarrer le long-press depuis la poignée (c'est pour le drag)
+        if (_dragFromHandle) return;
+
         _editTriggered = false;
         _lpStartX = e.clientX;
         _lpStartY = e.clientY;

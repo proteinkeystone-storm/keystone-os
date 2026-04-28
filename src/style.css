@@ -673,9 +673,26 @@ html.light-mode #ks-logo-light { display: block; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── DRAG & DROP ─────────────────────────────────────────── */
-.pad-card[draggable="true"] { cursor: grab; }
-.pad-card[draggable="true"]:active { cursor: grabbing; }
+/* ── DRAG & DROP — poignée dédiée ────────────────────────── */
+/* La carte garde cursor:pointer ; seule la poignée est "grab" */
+.pad-drag-handle {
+  position: absolute;
+  bottom: 13px; left: 13px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab;
+  color: rgba(201,168,76,.18);
+  border-radius: 4px;
+  opacity: 0;
+  transition: color .2s, background .2s, opacity .2s;
+  z-index: 2;
+}
+.pad-card:hover .pad-drag-handle { opacity: 1; }
+.pad-drag-handle:hover {
+  color: rgba(201,168,76,.65);
+  background: rgba(201,168,76,.07);
+}
+.pad-drag-handle:active { cursor: grabbing; }
 
 .pad-card.dragging {
   opacity: .35; transform: scale(.96) !important;

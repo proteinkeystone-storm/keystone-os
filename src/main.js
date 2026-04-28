@@ -38,7 +38,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 2c. Injection des listes dynamiques dans le renderer (Master Renderer)
     initTools(getToolList(), getArtefactList());
 
-    // 3. Sprint 5.2 — Vault vide + jamais onboardé → Onboarding
+    // 3a. Migration : si onboardé AVANT l'introduction de ks_user_selection
+    //     (aucune sélection ET aucun outil désactivé) → forcer un re-onboarding
+    //     pour que l'utilisateur configure son dashboard. Ne s'exécute qu'une fois.
+    {
+        const _ob  = localStorage.getItem('ks_onboarded');
+        const _sel = localStorage.getItem('ks_user_selection');
+        const _hasDeact = Object.keys(localStorage).some(k => k.startsWith('ks_deactivated_'));
+        if (_ob && !_sel && !_hasDeact) {
+            localStorage.removeItem('ks_onboarded');
+        }
+    }
+
+    // 3b. Sprint 5.2 — Vault vide + jamais onboardé → Onboarding
     const onboarded = localStorage.getItem('ks_onboarded');
     if (isVaultEmpty() && !onboarded) {
         const catalog = Object.values(pads).map(p => ({
