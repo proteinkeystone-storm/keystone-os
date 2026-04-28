@@ -194,7 +194,7 @@ export function renderDashboard() {
             const lt    = _isLifetime(t.id);
             return `
             <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}">
-                <div class="pad-drag-handle" draggable="true" title="Déplacer">
+                <div class="pad-drag-handle" title="Déplacer pour réorganiser">
                     <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
                         <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
                         <circle cx="3" cy="8"   r="1.3"/><circle cx="7" cy="8"   r="1.3"/>
@@ -213,7 +213,14 @@ export function renderDashboard() {
 
         // Artefacts possédés (dans la grille principale, si achetés)
         const ownedArtCards = ownedArts.map(a => `
-            <div class="pad-card pad-card--artefact" data-id="${a.id}" draggable="true">
+            <div class="pad-card pad-card--artefact" data-id="${a.id}">
+                <div class="pad-drag-handle" title="Déplacer pour réorganiser">
+                    <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
+                        <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
+                        <circle cx="3" cy="8"   r="1.3"/><circle cx="7" cy="8"   r="1.3"/>
+                        <circle cx="3" cy="13.5" r="1.3"/><circle cx="7" cy="13.5" r="1.3"/>
+                    </svg>
+                </div>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
                 <div class="pad-name">${a.name}</div>
                 <div class="pad-badge badge-artefact">Artefact</div>

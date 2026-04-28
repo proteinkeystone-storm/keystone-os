@@ -31,69 +31,97 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP (HTML5 natif — poignée dédiée)
-// Pattern MDN : mousedown sur la poignée active draggable sur la carte.
-// Les cartes commencent à draggable="false" — voir ui-renderer.js.
+// DRAG & DROP (Pointer Events — 100 % custom, zéro HTML5 drag)
+// Pattern : pointerdown sur la poignée → setPointerCapture →
+//           pointermove réordonne live → pointerup persiste l'ordre.
 // ═══════════════════════════════════════════════════════════════
-let _dragSrc = null;
+const DRAG_THRESHOLD = 5; // px avant d'activer le drag réel
 
 function _setupDragDrop(container) {
-    // dragstart ne vient QUE de la poignée (draggable="true" posé dans le template)
-    container.addEventListener('dragstart', e => {
+    container.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;                          // clic gauche uniquement
         const handle = e.target.closest('.pad-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
+        if (!handle) return;
+        const src = handle.closest('.pad-card');
+        if (!src) return;
 
-        const card = handle.closest('.pad-card');
-        if (!card) { e.preventDefault(); return; }
-
+        // On prend la main : pas de long press, pas de sélection texte
+        e.preventDefault();
+        e.stopPropagation();
         _cancelLongPress();
-        card.classList.remove('pad-pressing');
-        _dragSrc = card;
-        card.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', card.dataset.id);
+        src.classList.remove('pad-pressing');
 
-        // Image de glissement = la carte entière, curseur calé sur le point de clic
-        const r = card.getBoundingClientRect();
-        e.dataTransfer.setDragImage(card, e.clientX - r.left, e.clientY - r.top);
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let active   = false;
+
+        try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+
+        const onMove = ev => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+
+            if (!active) {
+                if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+                active = true;
+                src.classList.add('dragging');
+                document.body.classList.add('ks-dragging');
+            }
+
+            // Carte sous le curseur (en ignorant la source qui peut être dragging)
+            src.style.pointerEvents = 'none';
+            const elUnder = document.elementFromPoint(ev.clientX, ev.clientY);
+            src.style.pointerEvents = '';
+            const target  = elUnder?.closest?.('.pad-card');
+
+            container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+            if (!target || target === src || !container.contains(target)) return;
+
+            // Réorganisation live : si curseur dépasse le centre, on swap
+            const r = target.getBoundingClientRect();
+            const cards  = [...container.querySelectorAll('.pad-card')];
+            const srcIdx = cards.indexOf(src);
+            const tgtIdx = cards.indexOf(target);
+            if (srcIdx < 0 || tgtIdx < 0) return;
+
+            const before = (ev.clientY < r.top + r.height / 2)
+                        || (Math.abs(ev.clientY - (r.top + r.height/2)) < 4 && ev.clientX < r.left + r.width / 2);
+
+            if (srcIdx < tgtIdx && !before)      target.after(src);
+            else if (srcIdx > tgtIdx && before)  target.before(src);
+            else if (srcIdx > tgtIdx && !before) target.after(src);
+            else if (srcIdx < tgtIdx && before)  target.before(src);
+
+            target.classList.add('drag-over');
+        };
+
+        const cleanup = () => {
+            try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            handle.removeEventListener('pointermove',   onMove);
+            handle.removeEventListener('pointerup',     onUp);
+            handle.removeEventListener('pointercancel', onUp);
+            window.removeEventListener('pointerup',     onUp);
+            window.removeEventListener('pointercancel', onUp);
+
+            container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            src.classList.remove('dragging');
+            document.body.classList.remove('ks-dragging');
+            if (active) _persistOrder(container);
+        };
+
+        const onUp = () => cleanup();
+
+        handle.addEventListener('pointermove',   onMove);
+        handle.addEventListener('pointerup',     onUp);
+        handle.addEventListener('pointercancel', onUp);
+        // Filet de sécurité si le pointer capture saute
+        window.addEventListener('pointerup',     onUp,     { once: true });
+        window.addEventListener('pointercancel', onUp,     { once: true });
     });
 
-    container.addEventListener('dragend', () => {
-        _dragSrc?.classList.remove('dragging');
-        container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        if (_dragSrc) _persistOrder(container);
-        _dragSrc = null;
-    });
-
-    container.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const card = e.target.closest('.pad-card');
-        if (!card || card === _dragSrc) return;
-        container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        card.classList.add('drag-over');
-    });
-
-    container.addEventListener('dragleave', e => {
-        const card = e.target.closest('.pad-card');
-        if (card && !card.contains(e.relatedTarget)) card.classList.remove('drag-over');
-    });
-
-    container.addEventListener('drop', e => {
-        e.preventDefault();
-        const target = e.target.closest('.pad-card');
-        if (!target || !_dragSrc || target === _dragSrc) return;
-        target.classList.remove('drag-over');
-
-        const cards  = [...container.querySelectorAll('.pad-card')];
-        const srcIdx = cards.indexOf(_dragSrc);
-        const tgtIdx = cards.indexOf(target);
-
-        if (srcIdx < tgtIdx) target.after(_dragSrc);
-        else                  target.before(_dragSrc);
-
-        _persistOrder(container);
-    });
+    // Annule complètement le HTML5 drag natif (sécurité)
+    container.addEventListener('dragstart', e => e.preventDefault());
 }
 
 function _persistOrder(container) {

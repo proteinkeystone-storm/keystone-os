@@ -673,26 +673,38 @@ html.light-mode #ks-logo-light { display: block; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── DRAG & DROP — poignée dédiée ────────────────────────── */
-/* La carte garde cursor:pointer ; seule la poignée est "grab" */
+/* ── DRAG & DROP — poignée d'angle TOUJOURS visible ────────── */
+/* Badge gold en haut-droit · Affordance "grab" claire et permanente */
 .pad-drag-handle {
   position: absolute;
-  bottom: 13px; left: 13px;
-  width: 22px; height: 22px;
+  top: 8px; right: 8px;
+  width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
   cursor: grab;
-  color: rgba(201,168,76,.18);
-  border-radius: 4px;
-  opacity: 0;
-  transition: color .2s, background .2s, opacity .2s;
-  z-index: 2;
+  color: rgba(212,175,55,.55);
+  background: rgba(212,175,55,.08);
+  border: 1px solid rgba(212,175,55,.22);
+  border-radius: 6px;
+  opacity: .65;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: opacity .18s, color .18s, background .18s, border-color .18s, transform .12s;
+  z-index: 3;
 }
 .pad-card:hover .pad-drag-handle { opacity: 1; }
 .pad-drag-handle:hover {
-  color: rgba(201,168,76,.65);
-  background: rgba(201,168,76,.07);
+  color: rgba(212,175,55,1);
+  background: rgba(212,175,55,.18);
+  border-color: rgba(212,175,55,.55);
+  transform: scale(1.06);
 }
-.pad-drag-handle:active { cursor: grabbing; }
+.pad-drag-handle:active { cursor: grabbing; transform: scale(.94); }
+.pad-drag-handle svg { pointer-events: none; }
+
+/* Pendant le drag : curseur grabbing partout, pas de sélection texte */
+body.ks-dragging,
+body.ks-dragging * { cursor: grabbing !important; user-select: none !important; }
 
 .pad-card.dragging {
   opacity: .35; transform: scale(.96) !important;
