@@ -3,7 +3,7 @@
    Modules : Dashboard · Settings · Modal renderTool · S-CORE-LOGIC
    ═══════════════════════════════════════════════════════════════ */
 
-import { getPad, getOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog } from './pads-loader.js';
+import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
 import {
@@ -367,6 +367,10 @@ const KS_PLANS = [
     },
 ];
 
+// Quotas par plan (nombre max d'assistants simultanément déployés)
+const PLAN_QUOTAS  = { STARTER: 6, PRO: 8, MAX: Infinity };
+const _PLAN_ORDER  = ['STARTER', 'PRO', 'MAX'];
+
 function _openKStorePanel() {
     _buildKStorePanel();
     document.getElementById('ks-panel')?.classList.add('open');
@@ -529,14 +533,50 @@ function _buildKStorePanel() {
     });
 
     panel.querySelector('#ks-grid').addEventListener('click', e => {
-        const btn = e.target.closest('.ks-item-btn');
-        if (!btn) return;
-        const item = [...TOOLS, ...ARTEFACTS].find(x => x.id === btn.dataset.id);
-        if (item) {
-            _closeKStorePanel();
-            setTimeout(() => _openMarketplaceInfo(item), 220);
+        // Bouton "Obtenir" → activation avec animation
+        const obtBtn = e.target.closest('.ks-item-btn[data-action="obtenir"]');
+        if (obtBtn && !obtBtn.disabled) { _activateKStoreItem(obtBtn.dataset.id, obtBtn); return; }
+
+        // Bouton "Upgrade" → switcher sur l'onglet Plans
+        const upBtn = e.target.closest('.ks-item-btn[data-action="upgrade"]');
+        if (upBtn) {
+            panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
+            panel.querySelector('.ks-tab[data-view="plans"]')?.classList.add('active');
+            _ksView = 'plans';
+            document.getElementById('ks-catalogue-view').hidden = true;
+            document.getElementById('ks-plans-view').hidden     = false;
+            _renderKStorePlans();
+            return;
         }
     });
+}
+
+// ── Activation d'un outil depuis le KEY-STORE ─────────────────
+function _activateKStoreItem(id, btn) {
+    if (!btn || btn.classList.contains('ks-item-btn--loading')) return;
+
+    // 1. Loading visual
+    btn.classList.add('ks-item-btn--loading');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="ks-spinner"></span>`;
+
+    // 2. Halo radial sur la carte
+    const card = btn.closest('.ks-item');
+    card?.classList.add('ks-item--activating');
+
+    setTimeout(() => {
+        // 3. Persistance
+        const owned = getOwnedIds();
+        if (owned === null || owned.includes(id)) {
+            reactivatePad(id); // demo OU réactivation d'un outil désactivé
+        } else {
+            setOwnedIds([...owned, id]);
+        }
+
+        // 4. Rafraîchissement synchrone des deux surfaces
+        renderDashboard();
+        _renderKStoreItems();
+    }, 660);
 }
 
 function _renderKStoreItems() {
@@ -580,14 +620,49 @@ function _renderKStoreItems() {
         return;
     }
 
+    // — Calcul du quota utilisateur ——————————————————————————————
+    const userPlan    = localStorage.getItem('ks_plan');
+    const userPlanIdx = userPlan ? _PLAN_ORDER.indexOf(userPlan) : 2; // démo → MAX
+    const quota       = (ownedIds !== null && userPlan) ? (PLAN_QUOTAS[userPlan] ?? Infinity) : Infinity;
+    const activeCount = ownedIds === null
+        ? TOOLS.filter(t => !isPadDeactivated(t.id)).length  // démo : déployés = non-désactivés
+        : ownedIds.filter(i => !isPadDeactivated(i)).length;
+
     grid.innerHTML = filtered.map(item => {
-        const cat     = getCatalogEntry(item.id);
-        const isOwned = ownedIds === null || ownedIds.includes(item.id);
-        const isArt   = item.id.startsWith('A-');
-        const catLbl  = _KS_CAT_LABELS[cat?.category || item.id.split('-')[1]] || '';
+        const cat          = getCatalogEntry(item.id);
+        const isArt        = item.id.startsWith('A-');
+        const catLbl       = _KS_CAT_LABELS[cat?.category || item.id.split('-')[1]] || '';
+        const toolPlanIdx  = _PLAN_ORDER.indexOf(cat?.plan || 'STARTER');
+
+        // — État du bouton —————————————————————————————————————
+        let btnHTML;
+        if (ownedIds === null) {
+            // Mode démo : tous les outils sont "possédés"
+            btnHTML = !isPadDeactivated(item.id)
+                ? `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Déployé</span>`
+                : `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Obtenir</button>`;
+        } else {
+            const isOwned  = ownedIds.includes(item.id);
+            const isActive = isOwned && !isPadDeactivated(item.id);
+
+            if (isActive) {
+                btnHTML = `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Déployé</span>`;
+            } else if (toolPlanIdx > userPlanIdx) {
+                btnHTML = `<button class="ks-item-btn ks-item-btn--locked" data-action="upgrade" data-id="${item.id}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Upgrade</button>`;
+            } else if (!isOwned && activeCount >= quota) {
+                btnHTML = `<button class="ks-item-btn ks-item-btn--quota" disabled>Quota atteint</button>`;
+            } else {
+                btnHTML = `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Obtenir</button>`;
+            }
+        }
+
+        const isDeployed = ownedIds === null
+            ? !isPadDeactivated(item.id)
+            : ownedIds.includes(item.id) && !isPadDeactivated(item.id);
 
         return `
-        <div class="ks-item${isOwned ? ' ks-item--owned' : ''}${cat?.isNew ? ' ks-item--new' : ''}">
+        <div class="ks-item${isDeployed ? ' ks-item--deployed' : ''}${cat?.isNew ? ' ks-item--new' : ''}" data-id="${item.id}">
             <div class="ks-item-icon">${ICONS[item.icon] || ICONS['zap']}</div>
             <div class="ks-item-body">
                 <div class="ks-item-meta">
@@ -604,11 +679,7 @@ function _renderKStoreItems() {
                         : ''}
                 </div>
             </div>
-            <div class="ks-item-action">
-                ${isOwned
-                    ? `<span class="ks-item-owned-badge">✓ Inclus</span>`
-                    : `<button class="ks-item-btn" data-id="${item.id}">Voir →</button>`}
-            </div>
+            <div class="ks-item-action">${btnHTML}</div>
         </div>`;
     }).join('');
 }
