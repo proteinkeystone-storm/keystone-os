@@ -95,11 +95,18 @@ const ICON_MAP = {
 
 // ── API Base URL (Cloudflare Worker) ──────────────────────────
 // En développement local (localhost), les appels restent relatifs.
-// En production, toutes les requêtes API pointent vers le Worker CF.
+// Toutes les requêtes API pointent vers le Worker Cloudflare, y compris
+// en local (le preview statique n'a pas de backend, donc inutile de proxy
+// vers `''`). Pour utiliser un Worker local (`wrangler dev` sur :8787),
+// pose `?api=local` dans l'URL ou définis ks_admin_api_base en localStorage.
 const CF_WORKER_URL = 'https://keystone-os-api.keystone-os.workers.dev';
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? ''           // dev local → chemin relatif (proxy ou wrangler dev)
-  : CF_WORKER_URL; // production → Worker Cloudflare
+const _override     = new URLSearchParams(location.search).get('api');
+const _customBase   = localStorage.getItem('ks_admin_api_base');
+const API_BASE      = _customBase
+                    ? _customBase
+                    : _override === 'local'
+                      ? 'http://localhost:8787'
+                      : CF_WORKER_URL;
 
 // ── State ──────────────────────────────────────────────────────
 let adminToken   = localStorage.getItem('ks_admin_token') || '';

@@ -17,7 +17,7 @@ const VALID_PROVIDERS = ['anthropic', 'openai', 'google', 'mistral', 'perplexity
 // ── GET /api/admin/keys ────────────────────────────────────────
 // Retourne la liste des providers configurés (pas les valeurs).
 export async function handleListKeys(request, env) {
-  const origin   = getAllowedOrigin(env);
+  const origin   = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const url      = new URL(request.url);
@@ -42,7 +42,7 @@ export async function handleListKeys(request, env) {
 // ── POST /api/admin/keys ───────────────────────────────────────
 // Chiffre et stocke une clé API. Un seul enregistrement par provider/tenant.
 export async function handleSaveKey(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body = await parseBody(request);
@@ -86,7 +86,7 @@ export async function handleSaveKey(request, env) {
 
 // ── DELETE /api/admin/keys ─────────────────────────────────────
 export async function handleDeleteKey(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const { provider, tenantId = 'default' } = await parseBody(request);
@@ -104,7 +104,7 @@ export async function handleDeleteKey(request, env) {
 // ── GET /api/admin/keys/:provider ─────────────────────────────
 // Déchiffre et retourne la valeur brute (usage serveur uniquement).
 export async function handleGetKey(request, env, provider) {
-  const origin   = getAllowedOrigin(env);
+  const origin   = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const url      = new URL(request.url);

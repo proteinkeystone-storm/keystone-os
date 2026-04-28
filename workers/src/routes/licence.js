@@ -12,7 +12,7 @@ import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/aut
 
 // ── GET /api/licence/list ─────────────────────────────────────
 export async function handleList(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const url         = new URL(request.url);
@@ -33,7 +33,7 @@ export async function handleList(request, env) {
 
 // ── POST /api/licence/activate ────────────────────────────────
 export async function handleActivate(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body = await parseBody(request);
@@ -72,7 +72,7 @@ export async function handleActivate(request, env) {
 
 // ── POST /api/licence/revoke ──────────────────────────────────
 export async function handleRevoke(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const { key } = await parseBody(request);
@@ -97,7 +97,7 @@ export async function handleRevoke(request, env) {
 // Endpoint utilisateur — pas besoin du secret admin
 // Vérifie la clé + retourne les assets autorisés
 export async function handleValidate(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   const body   = await parseBody(request);
   const key    = (body.key || '').toUpperCase().trim();
 

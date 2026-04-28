@@ -15,7 +15,7 @@ import { json, err, requireAdmin, parseBody, getAllowedOrigin, generateId } from
 // Retourne uniquement les messages actifs (non révoqués, non expirés)
 // ciblés sur ce tenant + cette licence (ou 'all').
 export async function handleListPublic(request, env) {
-    const origin   = getAllowedOrigin(env);
+    const origin   = getAllowedOrigin(env, request);
     const url      = new URL(request.url);
     const tenantId = url.searchParams.get('tenantId') || 'default';
     const licence  = url.searchParams.get('licence')  || '';
@@ -46,7 +46,7 @@ export async function handleListPublic(request, env) {
 // Admin — crée un nouveau message.
 // Body : { tenantId, target, title?, body, level?, ctaLabel?, ctaUrl?, expiresAt?, createdBy? }
 export async function handleCreate(request, env) {
-    const origin = getAllowedOrigin(env);
+    const origin = getAllowedOrigin(env, request);
     if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
     const b = await parseBody(request);
@@ -85,7 +85,7 @@ export async function handleCreate(request, env) {
 // ── GET /api/admin/messages ───────────────────────────────────
 // Admin — liste tous les messages (actifs + expirés + révoqués) pour le panel.
 export async function handleListAdmin(request, env) {
-    const origin = getAllowedOrigin(env);
+    const origin = getAllowedOrigin(env, request);
     if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
     const url      = new URL(request.url);
@@ -119,7 +119,7 @@ export async function handleListAdmin(request, env) {
 // Admin — révoque un message (soft delete, preserve l'historique).
 // Body : { id }
 export async function handleRevoke(request, env) {
-    const origin = getAllowedOrigin(env);
+    const origin = getAllowedOrigin(env, request);
     if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
     const { id } = await parseBody(request);

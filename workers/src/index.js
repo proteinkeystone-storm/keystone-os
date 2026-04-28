@@ -39,7 +39,7 @@ import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './l
 // ── Router ────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
-    const origin = getAllowedOrigin(env);
+    const origin = getAllowedOrigin(env, request);
 
     // ── Preflight CORS ────────────────────────────────────────
     if (request.method === 'OPTIONS') {

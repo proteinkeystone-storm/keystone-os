@@ -11,7 +11,7 @@ import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/aut
 // ── GET /api/admin/export ─────────────────────────────────────
 // Retourne toutes les licences + devices (RGPD portabilité Art.20)
 export async function handleExport(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const [licencesRes, devicesRes] = await Promise.all([
@@ -31,7 +31,7 @@ export async function handleExport(request, env) {
 // Supprime tous les appareils et révoque toutes les licences d'un tenant.
 // Action RGPD Art. 17 — droit à l'effacement.
 export async function handlePurgeTenant(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const { tenantId } = await parseBody(request);

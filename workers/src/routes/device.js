@@ -22,7 +22,7 @@ import {
 // Appelé depuis la tablette du collaborateur.
 // Crée un device en attente, retourne l'ID pour le suivi.
 export async function handleRegister(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   const body   = await parseBody(request);
   const { email, label, type = 'tablet', tenantId = 'default' } = body;
 
@@ -64,7 +64,7 @@ export async function handleRegister(request, env) {
 // Admin uniquement. Approuve le device et retourne le token
 // à transmettre au collaborateur (par email ou SMS).
 export async function handleApprove(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body = await parseBody(request);
@@ -98,7 +98,7 @@ export async function handleApprove(request, env) {
 // ── POST /api/device/login ────────────────────────────────────
 // Le collaborateur entre son token → obtient les assets de son tenant.
 export async function handleLogin(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   const body   = await parseBody(request);
   const token  = (body.token || '').trim();
 
@@ -137,7 +137,7 @@ export async function handleLogin(request, env) {
 
 // ── POST /api/device/revoke ───────────────────────────────────
 export async function handleRevoke(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const { deviceId } = await parseBody(request);
@@ -155,7 +155,7 @@ export async function handleRevoke(request, env) {
 
 // ── GET /api/admin/devices ────────────────────────────────────
 export async function handleList(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const url    = new URL(request.url);

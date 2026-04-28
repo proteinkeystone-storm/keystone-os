@@ -76,7 +76,16 @@ export async function parseBody(request) {
   catch { return {}; }
 }
 
-// ── Origine autorisée ─────────────────────────────────────────
-export function getAllowedOrigin(env) {
-  return env.KS_ALLOWED_ORIGIN || '*';
+// ── Origine autorisée (multi-origin via CSV) ─────────────────
+// KS_ALLOWED_ORIGIN peut contenir une seule URL ou plusieurs séparées
+// par virgule. Si l'origin de la requête figure dans la liste, on la
+// renvoie ; sinon on fallback sur le premier élément (ou '*' si non défini).
+// Permet de servir Vercel prod + localhost dev en parallèle.
+export function getAllowedOrigin(env, request) {
+  const config = (env.KS_ALLOWED_ORIGIN || '*').trim();
+  if (config === '*') return '*';
+  const allowed = config.split(',').map(s => s.trim()).filter(Boolean);
+  const reqOrigin = request?.headers?.get('Origin') || '';
+  if (reqOrigin && allowed.includes(reqOrigin)) return reqOrigin;
+  return allowed[0] || '*';
 }

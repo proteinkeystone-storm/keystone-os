@@ -29,9 +29,11 @@ database_name = "keystone-os"
 database_id  = "f5d21b1a-74a5-436f-849a-e971ab9d44ac"
 
 # ── Variables publiques (non-secrètes) ─────────────────────────
+# CSV multi-origin : production + dev local. Le Worker renvoie
+# l'origin qui correspond à celle de la requête (fallback sur le 1er).
 [vars]
-KS_ALLOWED_ORIGIN = "https://keystone-os.vercel.app"
-# Remplacez par votre domaine final (ex: https://app.keystoneos.fr)
+KS_ALLOWED_ORIGIN = "https://keystone-os.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:8787"
+# Remplacez/complétez par votre domaine final (ex: https://app.keystoneos.fr)
 
 # ── Secrets à définir via `wrangler secret put` ───────────────
 # KS_ADMIN_SECRET   — même valeur que dans Vercel

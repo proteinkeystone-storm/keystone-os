@@ -15,7 +15,7 @@ import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/aut
 // Retourne tous les PADs d'un tenant sous forme de tableau JSON.
 // Utilisé par pads-loader.js côté dashboard.
 export async function handleListPads(request, env) {
-  const origin   = getAllowedOrigin(env);
+  const origin   = getAllowedOrigin(env, request);
   const url      = new URL(request.url);
   const tenantId = url.searchParams.get('tenantId') || 'default';
 
@@ -35,7 +35,7 @@ export async function handleListPads(request, env) {
 // ── POST /api/admin/pad ────────────────────────────────────────
 // Upsert d'un PAD. Le corps = objet PAD complet (id requis).
 export async function handleSavePad(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body = await parseBody(request);
@@ -58,7 +58,7 @@ export async function handleSavePad(request, env) {
 
 // ── DELETE /api/admin/pad ──────────────────────────────────────
 export async function handleDeletePad(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const { id } = await parseBody(request);
@@ -75,7 +75,7 @@ export async function handleDeletePad(request, env) {
 
 // ── GET /api/admin/catalog ─────────────────────────────────────
 export async function handleGetCatalog(request, env) {
-  const origin   = getAllowedOrigin(env);
+  const origin   = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const url      = new URL(request.url);
@@ -97,7 +97,7 @@ export async function handleGetCatalog(request, env) {
 
 // ── POST /api/admin/catalog ────────────────────────────────────
 export async function handleSaveCatalog(request, env) {
-  const origin = getAllowedOrigin(env);
+  const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body     = await parseBody(request);
