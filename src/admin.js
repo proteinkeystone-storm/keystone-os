@@ -1943,23 +1943,61 @@ async function renderMessaging(panel) {
         : `<table class="data-table">
             <thead><tr>
               <th>Statut</th><th>Niveau</th><th>Cible</th><th>Message</th>
-              <th>CTA</th><th>Expire</th><th>Créé</th><th>Actions</th>
+              <th>CTA</th><th>Expire</th><th>Créé</th><th style="min-width:230px">Actions</th>
             </tr></thead>
             <tbody>${messages.map(_renderMessageRow).join('')}</tbody>
           </table>`}
     `;
 
-    panel.querySelector('#btn-new-msg').addEventListener('click', () => showCreateMessageModal(panel));
+    // Map id -> message pour edition (eviter de re-fetcher)
+    const byId = Object.fromEntries(messages.map(m => [m.id, m]));
 
+    panel.querySelector('#btn-new-msg').addEventListener('click', () => showMessageModal(panel));
+
+    // Modifier
+    panel.querySelectorAll('[data-action="edit-msg"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msg = byId[btn.dataset.id];
+        if (msg) showMessageModal(panel, msg);
+      });
+    });
+
+    // Révoquer (soft)
     panel.querySelectorAll('[data-action="revoke-msg"]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Révoquer ce message ?')) return;
-        btn.disabled = true; btn.textContent = '…';
+        if (!confirm('Révoquer ce message ?\n\nIl reste en base et peut être republié plus tard.')) return;
+        btn.disabled = true;
         try {
-          await api('/api/admin/messages', 'DELETE', { id: btn.dataset.id });
+          await api('/api/admin/messages/revoke', 'POST', { id: btn.dataset.id });
           toast('Message révoqué', 'error');
           renderMessaging(panel);
-        } catch (err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Révoquer'; }
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+      });
+    });
+
+    // Republier
+    panel.querySelectorAll('[data-action="republish-msg"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Republier ce message ?\n\nIl redevient visible pour les utilisateurs (sans expiration).')) return;
+        btn.disabled = true;
+        try {
+          await api('/api/admin/messages/republish', 'POST', { id: btn.dataset.id, expiresAt: null });
+          toast('Message republié ✓');
+          renderMessaging(panel);
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+      });
+    });
+
+    // Supprimer (hard delete)
+    panel.querySelectorAll('[data-action="delete-msg"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Supprimer définitivement ce message ?\n\nCette action est irréversible.')) return;
+        btn.disabled = true;
+        try {
+          await api('/api/admin/messages', 'DELETE', { id: btn.dataset.id });
+          toast('Message supprimé', 'error');
+          renderMessaging(panel);
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
       });
     });
 
@@ -1971,6 +2009,8 @@ async function renderMessaging(panel) {
 function _renderMessageRow(m) {
   const statusColor = m.status === 'active' ? '#4caf80'
                     : m.status === 'expired' ? 'var(--text-muted)' : '#e05c5c';
+  const statusLabel = m.status === 'active'  ? 'Actif'
+                    : m.status === 'expired' ? 'Expiré' : 'Révoqué';
   const levelBadge  = m.level === 'urgent' ? '🔴 Urgent'
                     : m.level === 'promo'  ? '🟢 Promo' : '🔵 Info';
   const fullBody = m.title ? `${m.title} — ${m.body}` : m.body;
@@ -1982,12 +2022,21 @@ function _renderMessageRow(m) {
     ? new Date(m.expires_at.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
     : '<span style="color:var(--text-muted)">∞</span>';
   const created = new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+
+  // Boutons d'action selon le statut
+  const editBtn = `<button class="btn btn-sm btn-msg-action" data-action="edit-msg" data-id="${esc(m.id)}" title="Modifier le contenu">✏ Modifier</button>`;
+  const delBtn  = `<button class="btn btn-sm btn-msg-action" data-action="delete-msg"   data-id="${esc(m.id)}" title="Supprimer définitivement" style="color:#e05c5c;border-color:rgba(224,92,92,.35)">🗑 Supprimer</button>`;
+  const revBtn  = `<button class="btn btn-sm btn-msg-action" data-action="revoke-msg"   data-id="${esc(m.id)}" title="Révoquer (soft)" style="color:#e0a25c">⏸ Révoquer</button>`;
+  const repBtn  = `<button class="btn btn-sm btn-msg-action" data-action="republish-msg" data-id="${esc(m.id)}" title="Republier" style="color:#4caf80;border-color:rgba(76,175,128,.35)">▶ Republier</button>`;
+
+  // active: edit + revoke + delete
+  // revoked / expired: edit + republish + delete
   const actions = m.status === 'active'
-    ? `<button class="btn btn-sm" data-action="revoke-msg" data-id="${esc(m.id)}" style="color:#e05c5c">Révoquer</button>`
-    : '<span style="color:var(--text-muted);font-size:11px">—</span>';
+    ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${editBtn}${revBtn}${delBtn}</div>`
+    : `<div style="display:flex;gap:6px;flex-wrap:wrap">${editBtn}${repBtn}${delBtn}</div>`;
 
   return `<tr>
-    <td><span style="color:${statusColor};text-transform:capitalize;font-weight:600">${m.status}</span></td>
+    <td><span style="color:${statusColor};font-weight:600">${statusLabel}</span></td>
     <td>${levelBadge}</td>
     <td><code style="font-size:11px;color:var(--text-muted)">${esc(m.target)}</code></td>
     <td title="${esc(fullBody)}" style="max-width:340px">${esc(truncated)}</td>
@@ -1998,40 +2047,57 @@ function _renderMessageRow(m) {
   </tr>`;
 }
 
-function showCreateMessageModal(panel) {
+/**
+ * Modal Création / Édition de message.
+ * @param {HTMLElement} panel — panneau admin pour rerender après save
+ * @param {Object|null} existing — message à éditer, null = création
+ */
+function showMessageModal(panel, existing = null) {
+  const isEdit = !!existing;
   // Helper pour générer une expiration ISO (datetime UTC sans Z)
   const toISO = d => d.toISOString().slice(0, 19).replace('T', ' ');
 
-  openModal('Nouveau message', `
+  // Pré-calcul valeurs par défaut
+  const v = existing || {};
+  const tgt = v.target || 'all';
+  const tgtIsLicence = typeof tgt === 'string' && tgt.startsWith('licence:');
+  const tgtSelectVal = tgt === 'all' || tgt === 'tenant:default' ? tgt : 'custom-licence';
+  const tgtLicenceVal = tgtIsLicence ? tgt.slice('licence:'.length) : '';
+
+  const hasCta = !!(v.cta_label && v.cta_url);
+
+  openModal(isEdit ? 'Modifier le message' : 'Nouveau message', `
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Cible</label>
         <select id="msg-target" class="form-input">
-          <option value="all">Tous les utilisateurs (broadcast)</option>
-          <option value="tenant:default">Tenant : Protein Studio (default)</option>
-          <option value="custom-licence">Licence individuelle…</option>
+          <option value="all"             ${tgtSelectVal==='all'?'selected':''}>Tous les utilisateurs (broadcast)</option>
+          <option value="tenant:default"  ${tgtSelectVal==='tenant:default'?'selected':''}>Tenant : Protein Studio (default)</option>
+          <option value="custom-licence"  ${tgtSelectVal==='custom-licence'?'selected':''}>Licence individuelle…</option>
         </select>
         <input type="text" id="msg-target-licence" class="form-input"
                placeholder="ex : XXXX-XXXX-XXXX-XXXX"
-               style="display:none;margin-top:8px">
+               value="${esc(tgtLicenceVal)}"
+               style="display:${tgtSelectVal==='custom-licence'?'block':'none'};margin-top:8px">
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Niveau</label>
           <select id="msg-level" class="form-input">
-            <option value="info">🔵 Info</option>
-            <option value="promo">🟢 Promo</option>
-            <option value="urgent">🔴 Urgent</option>
+            <option value="info"   ${(v.level||'info')==='info'?'selected':''}>🔵 Info</option>
+            <option value="promo"  ${v.level==='promo'?'selected':''}>🟢 Promo</option>
+            <option value="urgent" ${v.level==='urgent'?'selected':''}>🔴 Urgent</option>
           </select>
         </div>
         <div>
           <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Durée d'affichage</label>
           <select id="msg-duration" class="form-input">
-            <option value="permanent">∞ Jusqu'à dismiss</option>
+            <option value="permanent" ${!v.expires_at?'selected':''}>∞ Jusqu'à dismiss</option>
             <option value="1h">1 heure</option>
             <option value="24h">24 heures</option>
             <option value="7d">7 jours</option>
+            ${isEdit && v.expires_at ? `<option value="keep" selected>Conserver l'expiration actuelle (${esc(v.expires_at)})</option>` : ''}
           </select>
         </div>
       </div>
@@ -2040,6 +2106,7 @@ function showCreateMessageModal(panel) {
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Titre (optionnel)</label>
         <input type="text" id="msg-title" class="form-input"
                placeholder="Maintenance prévue"
+               value="${esc(v.title || '')}"
                maxlength="60">
       </div>
 
@@ -2047,32 +2114,32 @@ function showCreateMessageModal(panel) {
         <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Corps du message *</label>
         <textarea id="msg-body" class="form-input" rows="3" maxlength="500"
                   placeholder="Une courte phrase qui apparaîtra sous &quot;Bonjour, [prénom]&quot;…"
-                  style="resize:vertical;font-family:inherit"></textarea>
+                  style="resize:vertical;font-family:inherit">${esc(v.body || '')}</textarea>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
-          <span id="msg-body-count">0</span> / 500 caractères
+          <span id="msg-body-count">${(v.body || '').length}</span> / 500 caractères
         </div>
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:12px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="msg-cta-toggle" style="margin:0">
+          <input type="checkbox" id="msg-cta-toggle" style="margin:0" ${hasCta?'checked':''}>
           <span>Ajouter un bouton CTA cliquable</span>
         </label>
-        <div id="msg-cta-fields" style="display:none;margin-top:12px;gap:12px;grid-template-columns:1fr 2fr">
+        <div id="msg-cta-fields" style="display:${hasCta?'grid':'none'};margin-top:12px;gap:12px;grid-template-columns:1fr 2fr">
           <div>
             <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Libellé bouton</label>
-            <input type="text" id="msg-cta-label" class="form-input" placeholder="Découvrir" maxlength="30">
+            <input type="text" id="msg-cta-label" class="form-input" placeholder="Découvrir" maxlength="30" value="${esc(v.cta_label || '')}">
           </div>
           <div>
             <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">URL ou route</label>
-            <input type="text" id="msg-cta-url" class="form-input" placeholder="https://… ou /app">
+            <input type="text" id="msg-cta-url" class="form-input" placeholder="https://… ou /app" value="${esc(v.cta_url || '')}">
           </div>
         </div>
       </div>
     </div>
   `, `
     <button class="btn btn-secondary" id="btn-cancel-msg">Annuler</button>
-    <button class="btn btn-primary"   id="btn-send-msg">Envoyer</button>
+    <button class="btn btn-primary"   id="btn-send-msg">${isEdit ? 'Enregistrer' : 'Envoyer'}</button>
   `);
 
   // Wire up dynamic fields
@@ -2104,34 +2171,67 @@ function showCreateMessageModal(panel) {
       target = 'licence:' + k;
     }
 
-    let expiresAt = null;
+    // Calcul de expiresAt
     const dur = document.getElementById('msg-duration').value;
-    if (dur !== 'permanent') {
+    let expiresAt;
+    if (dur === 'keep') {
+      // En édition : conserver la valeur actuelle (ne pas envoyer le champ)
+      expiresAt = undefined;
+    } else if (dur === 'permanent') {
+      expiresAt = null;
+    } else {
       const ms = dur === '1h' ? 3600e3 : dur === '24h' ? 86400e3 : 7 * 86400e3;
       expiresAt = toISO(new Date(Date.now() + ms));
     }
 
-    const payload = {
-      tenantId: 'default',
-      target,
-      title:    document.getElementById('msg-title').value.trim() || null,
-      body,
-      level:    document.getElementById('msg-level').value,
-      expiresAt,
-    };
-    if (ctaToggle.checked) {
-      const lbl = document.getElementById('msg-cta-label').value.trim();
-      const url = document.getElementById('msg-cta-url').value.trim();
-      if (lbl && url) { payload.ctaLabel = lbl; payload.ctaUrl = url; }
-    }
+    const ctaLabel = ctaToggle.checked ? document.getElementById('msg-cta-label').value.trim() : '';
+    const ctaUrl   = ctaToggle.checked ? document.getElementById('msg-cta-url').value.trim()   : '';
 
-    try {
-      await api('/api/admin/messages', 'POST', payload);
-      closeModal();
-      toast('Message envoyé ✓');
-      renderMessaging(panel);
-    } catch (err) {
-      toast(err.message, 'error');
+    if (isEdit) {
+      // PATCH — n'envoyer que les champs explicitement présents
+      const payload = {
+        id:    existing.id,
+        target,
+        title: document.getElementById('msg-title').value.trim() || null,
+        body,
+        level: document.getElementById('msg-level').value,
+        // CTA : toujours synchronisé (vide = retire le CTA)
+        ctaLabel: ctaToggle.checked && ctaLabel ? ctaLabel : null,
+        ctaUrl:   ctaToggle.checked && ctaUrl   ? ctaUrl   : null,
+      };
+      if (expiresAt !== undefined) payload.expiresAt = expiresAt;
+
+      try {
+        await api('/api/admin/messages', 'PATCH', payload);
+        closeModal();
+        toast('Message modifié ✓');
+        renderMessaging(panel);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    } else {
+      // POST création
+      const payload = {
+        tenantId: 'default',
+        target,
+        title:    document.getElementById('msg-title').value.trim() || null,
+        body,
+        level:    document.getElementById('msg-level').value,
+        expiresAt: expiresAt === undefined ? null : expiresAt,
+      };
+      if (ctaToggle.checked && ctaLabel && ctaUrl) {
+        payload.ctaLabel = ctaLabel;
+        payload.ctaUrl   = ctaUrl;
+      }
+
+      try {
+        await api('/api/admin/messages', 'POST', payload);
+        closeModal();
+        toast('Message envoyé ✓');
+        renderMessaging(panel);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
     }
   });
 }

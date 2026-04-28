@@ -33,7 +33,10 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
-         handleRevoke     as handleMsgRevoke }                          from './routes/messages.js';
+         handleUpdate     as handleMsgUpdate,
+         handleDelete     as handleMsgDelete,
+         handleRevoke     as handleMsgRevoke,
+         handleRepublish  as handleMsgRepublish }                       from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
 
 // ── Router ────────────────────────────────────────────────────
@@ -47,7 +50,7 @@ export default {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin'  : origin,
-          'Access-Control-Allow-Methods' : 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods' : 'GET, POST, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers' : 'Content-Type, Authorization',
         },
       });
@@ -87,10 +90,13 @@ export default {
       }
 
       // ── Messagerie ───────────────────────────────────────────
-      if (path === '/api/messages'           && method === 'GET')    return handleMsgListPublic(request, env);
-      if (path === '/api/admin/messages'     && method === 'GET')    return handleMsgListAdmin(request, env);
-      if (path === '/api/admin/messages'     && method === 'POST')   return handleMsgCreate(request, env);
-      if (path === '/api/admin/messages'     && method === 'DELETE') return handleMsgRevoke(request, env);
+      if (path === '/api/messages'                   && method === 'GET')    return handleMsgListPublic(request, env);
+      if (path === '/api/admin/messages'             && method === 'GET')    return handleMsgListAdmin(request, env);
+      if (path === '/api/admin/messages'             && method === 'POST')   return handleMsgCreate(request, env);
+      if (path === '/api/admin/messages'             && method === 'PATCH')  return handleMsgUpdate(request, env);
+      if (path === '/api/admin/messages'             && method === 'DELETE') return handleMsgDelete(request, env);
+      if (path === '/api/admin/messages/revoke'      && method === 'POST')   return handleMsgRevoke(request, env);
+      if (path === '/api/admin/messages/republish'   && method === 'POST')   return handleMsgRepublish(request, env);
 
       // ── Admin ────────────────────────────────────────────────
       if (path === '/api/admin/devices'      && method === 'GET')    return handleDeviceList(request, env);
