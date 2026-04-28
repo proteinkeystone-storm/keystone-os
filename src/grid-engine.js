@@ -31,9 +31,14 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP (Pointer Events — 100 % custom, zéro HTML5 drag)
-// Pattern : pointerdown sur la poignée → setPointerCapture →
-//           pointermove réordonne live → pointerup persiste l'ordre.
+// DRAG & DROP — Ghost pattern, leap-frog distance-based
+// ─────────────────────────────────────────────────────────────
+//  · ghost (clone) suit le curseur en position:fixed
+//  · src reste en DOM avec class .dragging (visuel : effacé)
+//  · à chaque pointermove : on cherche la carte LA PLUS PROCHE du curseur
+//    (distance euclidienne au centre) → permet le leap-frog multi-cran
+//  · src est inséré before/after selon position X relative au centre
+//  · pointerup → ghost retiré, ordre persisté
 // ═══════════════════════════════════════════════════════════════
 const DRAG_THRESHOLD = 5; // px avant d'activer le drag réel
 
@@ -45,15 +50,21 @@ function _setupDragDrop(container) {
         const src = handle.closest('.pad-card');
         if (!src) return;
 
-        // On prend la main : pas de long press, pas de sélection texte
         e.preventDefault();
         e.stopPropagation();
         _cancelLongPress();
         src.classList.remove('pad-pressing');
 
-        const startX = e.clientX;
-        const startY = e.clientY;
-        let active   = false;
+        const startX  = e.clientX;
+        const startY  = e.clientY;
+        const sRect   = src.getBoundingClientRect();
+        const offsetX = startX - sRect.left;
+        const offsetY = startY - sRect.top;
+        const W       = sRect.width;
+        const H       = sRect.height;
+
+        let active = false;
+        let ghost  = null;
 
         try { handle.setPointerCapture(e.pointerId); } catch (_) {}
 
@@ -64,36 +75,67 @@ function _setupDragDrop(container) {
             if (!active) {
                 if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
                 active = true;
-                src.classList.add('dragging');
                 document.body.classList.add('ks-dragging');
+                src.classList.add('dragging');
+
+                // Ghost = clone visuel qui suit le curseur 1:1
+                ghost = src.cloneNode(true);
+                ghost.classList.remove('dragging', 'pad-pressing', 'editing');
+                ghost.classList.add('pad-card-ghost');
+                ghost.style.cssText =
+                    `position:fixed;top:0;left:0;width:${W}px;height:${H}px;` +
+                    `pointer-events:none;z-index:10000;margin:0;will-change:transform;`;
+                document.body.appendChild(ghost);
             }
 
-            // Carte sous le curseur (en ignorant la source qui peut être dragging)
-            src.style.pointerEvents = 'none';
-            const elUnder = document.elementFromPoint(ev.clientX, ev.clientY);
-            src.style.pointerEvents = '';
-            const target  = elUnder?.closest?.('.pad-card');
+            // Position du ghost : suit le curseur sans aucune latence
+            ghost.style.transform =
+                `translate3d(${ev.clientX - offsetX}px, ${ev.clientY - offsetY}px, 0) scale(1.03)`;
 
-            container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            // Cible = carte LA PLUS PROCHE du curseur (autorise le leap-frog)
+            const cards = [...container.querySelectorAll('.pad-card')].filter(c => c !== src);
+            if (!cards.length) return;
 
-            if (!target || target === src || !container.contains(target)) return;
+            let best = null, bestDist = Infinity;
+            for (const c of cards) {
+                const r  = c.getBoundingClientRect();
+                const cx = r.left + r.width / 2;
+                const cy = r.top  + r.height / 2;
+                const d  = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+                if (d < bestDist) { bestDist = d; best = c; }
+            }
+            if (!best) return;
 
-            // Réorganisation live : si curseur dépasse le centre, on swap
-            const r = target.getBoundingClientRect();
-            const cards  = [...container.querySelectorAll('.pad-card')];
-            const srcIdx = cards.indexOf(src);
-            const tgtIdx = cards.indexOf(target);
-            if (srcIdx < 0 || tgtIdx < 0) return;
+            // Insertion before/after selon position X relative au centre de la cible
+            const r = best.getBoundingClientRect();
+            const before = ev.clientX < r.left + r.width / 2;
 
-            const before = (ev.clientY < r.top + r.height / 2)
-                        || (Math.abs(ev.clientY - (r.top + r.height/2)) < 4 && ev.clientX < r.left + r.width / 2);
+            const willMove = before
+                ? (best.previousElementSibling !== src)
+                : (best.nextElementSibling     !== src);
 
-            if (srcIdx < tgtIdx && !before)      target.after(src);
-            else if (srcIdx > tgtIdx && before)  target.before(src);
-            else if (srcIdx > tgtIdx && !before) target.after(src);
-            else if (srcIdx < tgtIdx && before)  target.before(src);
+            if (!willMove) return;
 
-            target.classList.add('drag-over');
+            // FLIP : capture les positions, fait le move, anime les deltas
+            const movables = cards; // toutes les cartes sauf src
+            const before_  = new Map();
+            for (const c of movables) before_.set(c, c.getBoundingClientRect());
+
+            if (before) best.before(src); else best.after(src);
+
+            for (const c of movables) {
+                const o = before_.get(c);
+                const n = c.getBoundingClientRect();
+                const dx = o.left - n.left;
+                const dy = o.top  - n.top;
+                if (dx === 0 && dy === 0) continue;
+                c.style.transition = 'none';
+                c.style.transform  = `translate(${dx}px, ${dy}px)`;
+                // Force reflow puis enclenche la transition retour à 0
+                void c.offsetWidth;
+                c.style.transition = 'transform .26s cubic-bezier(.25,.8,.25,1)';
+                c.style.transform  = '';
+            }
         };
 
         const cleanup = () => {
@@ -104,23 +146,27 @@ function _setupDragDrop(container) {
             window.removeEventListener('pointerup',     onUp);
             window.removeEventListener('pointercancel', onUp);
 
-            container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            src.classList.remove('dragging');
             document.body.classList.remove('ks-dragging');
+            src.classList.remove('dragging');
+            ghost?.remove();
+            ghost = null;
+            // Nettoie les inline styles du FLIP sur les cartes
+            container.querySelectorAll('.pad-card').forEach(c => {
+                c.style.transition = '';
+                c.style.transform  = '';
+            });
             if (active) _persistOrder(container);
         };
-
         const onUp = () => cleanup();
 
         handle.addEventListener('pointermove',   onMove);
         handle.addEventListener('pointerup',     onUp);
         handle.addEventListener('pointercancel', onUp);
-        // Filet de sécurité si le pointer capture saute
         window.addEventListener('pointerup',     onUp,     { once: true });
         window.addEventListener('pointercancel', onUp,     { once: true });
     });
 
-    // Annule complètement le HTML5 drag natif (sécurité)
+    // Sécurité : aucune drag native HTML5
     container.addEventListener('dragstart', e => e.preventDefault());
 }
 

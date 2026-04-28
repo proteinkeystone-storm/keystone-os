@@ -207,7 +207,6 @@ export function renderDashboard() {
                 <div class="pad-badge badge-available">Disponible</div>
                 ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
                 <div class="pad-arrow">↗</div>
-                <div class="pad-sku">${t.id}</div>
             </div>`;
         }).join('');
 
@@ -225,7 +224,6 @@ export function renderDashboard() {
                 <div class="pad-name">${a.name}</div>
                 <div class="pad-badge badge-artefact">Artefact</div>
                 <div class="pad-arrow">↗</div>
-                <div class="pad-sku">${a.id}</div>
             </div>`).join('');
 
         padsEl.innerHTML = toolCards + ownedArtCards;

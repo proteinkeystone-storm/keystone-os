@@ -706,19 +706,31 @@ html.light-mode #ks-logo-light { display: block; }
 body.ks-dragging,
 body.ks-dragging * { cursor: grabbing !important; user-select: none !important; }
 
+/* Carte source pendant le drag : effacée, garde sa place */
 .pad-card.dragging {
-  opacity: .35; transform: scale(.96) !important;
-  border-color: rgba(201,168,76,.2) !important;
+  opacity: .18 !important;
+  transform: scale(.96) !important;
+  border-color: rgba(212,175,55,.22) !important;
   box-shadow: none !important;
   animation: none !important;
+  transition: opacity .12s ease;
 }
-.pad-card.drag-over {
-  border-color: rgba(201,168,76,.7) !important;
+
+/* Ghost — clone qui suit le curseur 1:1 */
+.pad-card-ghost {
+  opacity: .92;
+  border: 1px solid rgba(212,175,55,.55) !important;
   box-shadow:
-    0 0 0 2px rgba(201,168,76,.25),
-    0 14px 44px rgba(13,27,62,.4) !important;
-  transform: scale(1.025) !important;
+    0 28px 80px rgba(212,175,55,.30),
+    0 12px 36px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.08) !important;
+  transition: none !important;
+  animation: none !important;
+  border-radius: var(--r, 16px);
 }
+
+/* Note : les transitions FLIP sont posées en inline depuis grid-engine.js
+   pour éviter de cumuler avec les transitions hover de la carte. */
 
 /* ── EDIT MODE (long press / right click) ────────────────── */
 @keyframes editing-pulse {

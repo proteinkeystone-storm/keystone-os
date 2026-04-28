@@ -1451,12 +1451,19 @@ function activateLicence() {
    ONBOARDING
 ═══════════════════════════════════════════ */
 const TOOL_QUOTA = { 'Start': 6, 'Pro': 8, 'Max': Infinity };
+// Source de vérité : IDs NOMEN-K immuables + USER_LABEL canonique
+// Doit refléter K_STORE_ASSETS/PADS/manifest.json
 const ALL_TOOLS = [
-  'Analyse juridique', 'Synthèse stratégique', 'Audit de conformité',
-  'Rédaction premium', 'Analyse de marché', 'Veille concurrentielle',
-  'Rapport exécutif', 'Brief créatif', 'Email stratégique', 'Compte-rendu réunion'
+  { id: 'O-IMM-001', name: 'Notices VEFA' },
+  { id: 'O-IMM-002', name: 'Annonces Commerciales' },
+  { id: 'O-IMM-003', name: 'Emails Acquéreurs' },
+  { id: 'O-MKT-001', name: 'Posts Réseaux Sociaux' },
+  { id: 'O-MKT-002', name: 'Brief Photo / 3D' },
+  { id: 'O-ANL-001', name: 'CR Chantier' },
+  { id: 'O-ANL-002', name: 'Analyste Foncier' },
+  { id: 'O-ADM-001', name: 'Objections Acquéreurs' },
 ];
-let _selectedTools = new Set();
+let _selectedTools = new Set(); // IDs NOMEN-K
 
 function openOnboarding() {
   document.getElementById('onboarding-overlay').classList.add('open');
@@ -1477,20 +1484,20 @@ function buildToolsGrid() {
   const quotaText = quota === Infinity ? 'tous les' : quota;
   label.textContent = `Sélectionnez vos ${quotaText} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
   grid.innerHTML = ALL_TOOLS.map(tool => `
-    <div class="ob-tool-item" data-tool="${tool}" onclick="toggleTool(this,'${tool}',${quota === Infinity ? 999 : quota})">
+    <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota === Infinity ? 999 : quota})">
       <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
-      <span class="ob-tool-label">${tool}</span>
+      <span class="ob-tool-label">${tool.name}</span>
     </div>
   `).join('');
 }
 
-function toggleTool(el, tool, quota) {
+function toggleTool(el, id, quota) {
   if (el.classList.contains('disabled-sel')) return;
-  if (_selectedTools.has(tool)) {
-    _selectedTools.delete(tool); el.classList.remove('selected');
+  if (_selectedTools.has(id)) {
+    _selectedTools.delete(id); el.classList.remove('selected');
   } else {
     if (_selectedTools.size >= quota) return;
-    _selectedTools.add(tool); el.classList.add('selected');
+    _selectedTools.add(id); el.classList.add('selected');
   }
   const reached = _selectedTools.size >= quota;
   document.querySelectorAll('.ob-tool-item').forEach(item => {
@@ -1503,7 +1510,21 @@ function toggleTool(el, tool, quota) {
    LAUNCH APP
 ═══════════════════════════════════════════ */
 function launchApp() {
-  localStorage.setItem('ks_tools', JSON.stringify([..._selectedTools]));
+  const selectedIds = [..._selectedTools];
+  // ks_user_selection = source de vérité du Dashboard (filtre par ID)
+  // ks_tools = legacy / compat
+  if (selectedIds.length > 0) {
+    localStorage.setItem('ks_user_selection', JSON.stringify(selectedIds));
+    localStorage.setItem('ks_tools',          JSON.stringify(selectedIds));
+    // Désactive ceux non sélectionnés (synchro avec le système Pad)
+    ALL_TOOLS.forEach(t => {
+      if (!_selectedTools.has(t.id)) localStorage.setItem('ks_deactivated_' + t.id, '1');
+      else                            localStorage.removeItem('ks_deactivated_' + t.id);
+    });
+  } else {
+    localStorage.removeItem('ks_user_selection');
+    localStorage.removeItem('ks_tools');
+  }
   localStorage.setItem('ks_onboarded', '1'); // Évite le double onboarding du dashboard
   // Synchronise la photo : ks_avatar (landing) → ks_user_photo (dashboard)
   const avatar = localStorage.getItem('ks_avatar');
