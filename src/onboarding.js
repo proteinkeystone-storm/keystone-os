@@ -416,6 +416,14 @@ function _complete() {
             }
         });
 
+    // Sauvegarder la sélection comme source de vérité du dashboard
+    // (null = aucune sélection = afficher tous les outils disponibles)
+    if (_s.selected.size > 0) {
+        localStorage.setItem('ks_user_selection', JSON.stringify([..._s.selected]));
+    } else {
+        localStorage.removeItem('ks_user_selection');
+    }
+
     // Sauvegarder le nom/photo si pas déjà fait
     if (_s.name)  localStorage.setItem('ks_user_name',  _s.name);
     if (_s.photo) localStorage.setItem('ks_user_photo', _s.photo);

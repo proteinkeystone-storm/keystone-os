@@ -182,6 +182,11 @@ function _triggerEditMode(card, onPadChanged, onDeactivate) {
             Renommer
         </button>
         <div class="pad-edit-bar-sep"></div>
+        <button class="pad-edit-bar-btn" data-action="hide">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            Masquer
+        </button>
+        <div class="pad-edit-bar-sep"></div>
         <button class="pad-edit-bar-btn danger" data-action="delete">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
             Désactiver
@@ -201,6 +206,21 @@ function _triggerEditMode(card, onPadChanged, onDeactivate) {
         e.stopPropagation();
         _dismissEditBar();
         _startRename(card);
+    });
+
+    // Masquer : l'outil reste actif (quota occupé) mais disparaît de la vue
+    bar.querySelector('[data-action="hide"]').addEventListener('click', e => {
+        e.stopPropagation();
+        _dismissEditBar();
+        hidePad(card.dataset.id);
+        card.classList.add('pad-removing');
+        setTimeout(() => {
+            const grid = card.closest('.pads-grid');
+            card.remove();
+            if (grid) _persistOrder(grid);
+            _refreshSectionCount();
+            onPadChanged?.();
+        }, 380);
     });
 
     bar.querySelector('[data-action="delete"]').addEventListener('click', e => {
@@ -317,6 +337,14 @@ function _confirmDeactivate(card, onPadChanged, onDeactivate) {
     overlay.querySelector('.confirm').addEventListener('click', e => {
         e.stopPropagation();
         deactivatePad(id);
+        // Synchroniser ks_user_selection : libérer la place de quota
+        try {
+            const raw = localStorage.getItem('ks_user_selection');
+            if (raw) {
+                const sel = JSON.parse(raw).filter(x => x !== id);
+                localStorage.setItem('ks_user_selection', JSON.stringify(sel));
+            }
+        } catch (_) {}
         card.classList.add('pad-removing');
         setTimeout(() => {
             const grid = card.closest('.pads-grid');

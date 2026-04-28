@@ -1680,6 +1680,14 @@ html.light-mode .ks-cat-select option { background: #f5f7ff; color: #0d1b3e; }
 }
 .ks-item-btn--locked:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); color: var(--tx2); }
 
+/* Masqué — actif mais hors vue, réactivable (bleu-gris discret) */
+.ks-item-btn--hidden {
+  background: rgba(99,179,237,.07);
+  border: 1px solid rgba(99,179,237,.25);
+  color: #63b3ed;
+}
+.ks-item-btn--hidden:hover { background: rgba(99,179,237,.16); border-color: rgba(99,179,237,.45); }
+
 /* Quota atteint — grisé, désactivé */
 .ks-item-btn--quota {
   background: rgba(255,255,255,.03);

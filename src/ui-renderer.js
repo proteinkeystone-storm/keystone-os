@@ -177,8 +177,14 @@ export function renderDashboard() {
         // Ajouter les outils pas encore dans l'ordre sauvegardé
         ownedTools.forEach(t => { if (!orderedTools.find(x => x.id === t.id)) orderedTools.push(t); });
 
-        // Filtrer les pads masqués par l'utilisateur
-        const visibleTools = orderedTools.filter(t => !isPadHidden(t.id));
+        // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
+        const _userSelRaw = localStorage.getItem('ks_user_selection');
+        const _userSel    = _userSelRaw ? JSON.parse(_userSelRaw) : null;
+
+        // Filtrer : pas masqué + respecte la sélection initiale
+        const visibleTools = orderedTools.filter(t =>
+            !isPadHidden(t.id) && (_userSel === null || _userSel.includes(t.id))
+        );
 
         // Cartes outils possédés (interactives, drag & drop)
         const toolCards = visibleTools.map(t => {
@@ -533,11 +539,20 @@ function _buildKStorePanel() {
     });
 
     panel.querySelector('#ks-grid').addEventListener('click', e => {
-        // Bouton "Obtenir" → activation avec animation
+        // "Déployer" → activation avec animation halo
         const obtBtn = e.target.closest('.ks-item-btn[data-action="obtenir"]');
         if (obtBtn && !obtBtn.disabled) { _activateKStoreItem(obtBtn.dataset.id, obtBtn); return; }
 
-        // Bouton "Upgrade" → switcher sur l'onglet Plans
+        // "Réactiver" → unhide immédiat (quota reste occupé, pas d'animation lourde)
+        const reactBtn = e.target.closest('.ks-item-btn[data-action="reactiver"]');
+        if (reactBtn) {
+            restorePad(reactBtn.dataset.id);
+            renderDashboard();
+            _renderKStoreItems();
+            return;
+        }
+
+        // "Upgrade" → onglet Plans & Tarifs
         const upBtn = e.target.closest('.ks-item-btn[data-action="upgrade"]');
         if (upBtn) {
             panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
@@ -565,14 +580,22 @@ function _activateKStoreItem(id, btn) {
     card?.classList.add('ks-item--activating');
 
     setTimeout(() => {
-        // 3. Persistance — nettoyer les deux mécanismes (déactivation + masquage)
+        // 3. Persistance
         const owned = getOwnedIds();
         if (owned === null || owned.includes(id)) {
-            reactivatePad(id); // retire ks_deactivated_ (onboarding + edit bar)
-            restorePad(id);    // retire ks_hidden_   (migration ancien onboarding)
+            reactivatePad(id); // retire ks_deactivated_
+            restorePad(id);    // retire ks_hidden_ (si l'outil était masqué)
         } else {
             setOwnedIds([...owned, id]);
         }
+        // Ajouter à ks_user_selection (source de vérité du dashboard)
+        try {
+            const raw = localStorage.getItem('ks_user_selection');
+            if (raw) {
+                const sel = JSON.parse(raw);
+                if (!sel.includes(id)) localStorage.setItem('ks_user_selection', JSON.stringify([...sel, id]));
+            }
+        } catch (_) {}
 
         // 4. Rafraîchissement synchrone des deux surfaces
         renderDashboard();
@@ -621,12 +644,20 @@ function _renderKStoreItems() {
         return;
     }
 
+    // — ks_user_selection : source de vérité de la sélection onboarding ———
+    const _ksUserSel = (() => {
+        try { return JSON.parse(localStorage.getItem('ks_user_selection')); } catch { return null; }
+    })();
+
     // — Calcul du quota utilisateur ——————————————————————————————
     const userPlan    = localStorage.getItem('ks_plan');
     const userPlanIdx = userPlan ? _PLAN_ORDER.indexOf(userPlan) : 2; // démo → MAX
     const quota       = (ownedIds !== null && userPlan) ? (PLAN_QUOTAS[userPlan] ?? Infinity) : Infinity;
+    // Quota : outil masqué = toujours actif, outil désactivé = libère une place
     const activeCount = ownedIds === null
-        ? TOOLS.filter(t => !isPadDeactivated(t.id)).length  // démo : déployés = non-désactivés
+        ? (_ksUserSel !== null
+            ? _ksUserSel.filter(id => !isPadDeactivated(id)).length
+            : TOOLS.filter(t => !isPadDeactivated(t.id)).length)
         : ownedIds.filter(i => !isPadDeactivated(i)).length;
 
     grid.innerHTML = filtered.map(item => {
@@ -636,35 +667,46 @@ function _renderKStoreItems() {
         const toolPlanIdx  = _PLAN_ORDER.indexOf(cat?.plan || 'STARTER');
 
         // — État du bouton —————————————————————————————————————
-        // Un outil est "actif sur le dashboard" s'il n'est ni désactivé ni masqué
-        const _isOnDashboard = id =>
-            !isPadDeactivated(id) && !isPadHidden(id);
+        // Logique tristate : Actif / Masqué / Déployer
+        const _inSel        = _ksUserSel === null || _ksUserSel.includes(item.id);
+        const _notDeact     = !isPadDeactivated(item.id);
+        const _notHidden    = !isPadHidden(item.id);
 
         let btnHTML;
         if (ownedIds === null) {
             // Mode démo : tous les outils sont possédés
-            btnHTML = _isOnDashboard(item.id)
-                ? `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Actif</span>`
-                : `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Déployer</button>`;
-        } else {
-            const isOwned  = ownedIds.includes(item.id);
-            const isActive = isOwned && _isOnDashboard(item.id);
-
-            if (isActive) {
+            if (_inSel && _notDeact && _notHidden) {
                 btnHTML = `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Actif</span>`;
-            } else if (toolPlanIdx > userPlanIdx) {
+            } else if (_inSel && _notDeact && !_notHidden) {
+                // Masqué : occupe une place quota, réactivable
+                btnHTML = `<button class="ks-item-btn ks-item-btn--hidden" data-action="reactiver" data-id="${item.id}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;flex-shrink:0"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Réactiver</button>`;
+            } else {
+                // Non sélectionné ou désactivé → disponible dans le KEY-STORE
+                btnHTML = `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Déployer</button>`;
+            }
+        } else {
+            const isOwned = ownedIds.includes(item.id);
+            if (isOwned && _notDeact && _notHidden) {
+                btnHTML = `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Actif</span>`;
+            } else if (isOwned && _notDeact && !_notHidden) {
+                btnHTML = `<button class="ks-item-btn ks-item-btn--hidden" data-action="reactiver" data-id="${item.id}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;flex-shrink:0"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Réactiver</button>`;
+            } else if (!isOwned && toolPlanIdx > userPlanIdx) {
                 btnHTML = `<button class="ks-item-btn ks-item-btn--locked" data-action="upgrade" data-id="${item.id}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Upgrade</button>`;
             } else if (!isOwned && activeCount >= quota) {
-                btnHTML = `<button class="ks-item-btn ks-item-btn--quota" disabled>Quota atteint</button>`;
+                btnHTML = `<button class="ks-item-btn ks-item-btn--quota" disabled>Quota atteint — Plan ${userPlan}</button>`;
             } else {
                 btnHTML = `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Déployer</button>`;
             }
         }
 
         const isDeployed = ownedIds === null
-            ? _isOnDashboard(item.id)
-            : ownedIds.includes(item.id) && _isOnDashboard(item.id);
+            ? (_inSel && _notDeact && _notHidden)
+            : ownedIds.includes(item.id) && _notDeact && _notHidden;
 
         return `
         <div class="ks-item${isDeployed ? ' ks-item--deployed' : ''}${cat?.isNew ? ' ks-item--new' : ''}" data-id="${item.id}">
