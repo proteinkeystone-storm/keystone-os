@@ -709,6 +709,7 @@ html.light-mode #ks-logo-light { display: block; }
   to   { box-shadow: 0 0 0 5px rgba(201,168,76,.4), inset 0 0 0 0 rgba(201,168,76,0); }
 }
 .pad-card.pad-pressing {
+  opacity: 1 !important;
   transform: scale(1.035) translateY(-2px) !important;
   border-color: rgba(201,168,76,.55) !important;
   animation: lp-progress 3s linear forwards !important;

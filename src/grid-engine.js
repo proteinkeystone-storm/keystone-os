@@ -37,6 +37,8 @@ let _dragSrc = null;
 
 function _setupDragDrop(container) {
     container.addEventListener('dragstart', e => {
+        // Bloquer le drag si un long-press est en cours (évite l'opacité 0.4 du dragging)
+        if (_longPressTimer) { e.preventDefault(); return; }
         const card = e.target.closest('.pad-card');
         if (!card) return;
         _dragSrc = card;

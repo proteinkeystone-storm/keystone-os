@@ -131,8 +131,15 @@ export function renderDashboard() {
     const _isOwned    = id => ownedIds === null || ownedIds.includes(id) || lifetimeIds.includes(id);
     const _isLifetime = id => lifetimeIds.includes(id);
 
+    // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
+    const _userSelRaw = localStorage.getItem('ks_user_selection');
+    const _userSel    = _userSelRaw ? JSON.parse(_userSelRaw) : null;
+
     // Exclure les outils désactivés (retournés dans le catalogue KEY-STORE)
-    const ownedTools = TOOLS.filter(t => _isOwned(t.id) && !isPadDeactivated(t.id));
+    // En mode démo, appliquer la sélection onboarding dès cette couche
+    const ownedTools = ownedIds === null
+        ? TOOLS.filter(t => !isPadDeactivated(t.id) && (_userSel === null || _userSel.includes(t.id)))
+        : TOOLS.filter(t => _isOwned(t.id) && !isPadDeactivated(t.id));
     const lockedTools = ownedIds !== null
         ? TOOLS.filter(t => !_isOwned(t.id) && getCatalogEntry(t.id)?.published !== false)
         : [];
@@ -177,14 +184,8 @@ export function renderDashboard() {
         // Ajouter les outils pas encore dans l'ordre sauvegardé
         ownedTools.forEach(t => { if (!orderedTools.find(x => x.id === t.id)) orderedTools.push(t); });
 
-        // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
-        const _userSelRaw = localStorage.getItem('ks_user_selection');
-        const _userSel    = _userSelRaw ? JSON.parse(_userSelRaw) : null;
-
-        // Filtrer : pas masqué + respecte la sélection initiale
-        const visibleTools = orderedTools.filter(t =>
-            !isPadHidden(t.id) && (_userSel === null || _userSel.includes(t.id))
-        );
+        // Filtrer : uniquement les outils non masqués (la sélection onboarding est déjà appliquée en amont)
+        const visibleTools = orderedTools.filter(t => !isPadHidden(t.id));
 
         // Cartes outils possédés (interactives, drag & drop)
         const toolCards = visibleTools.map(t => {
