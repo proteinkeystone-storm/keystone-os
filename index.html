@@ -534,7 +534,34 @@ nav.scrolled {
    PLANS
 ═══════════════════════════════════════════ */
 .plans-grid {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 16px;
+  display: grid; grid-template-columns: repeat(3,1fr) auto; gap: 16px;
+}
+/* Carte sur-mesure */
+.plan-card--surmesure {
+  border-color: rgba(212,175,55,.3);
+  background: linear-gradient(135deg, rgba(212,175,55,.06) 0%, rgba(212,175,55,.02) 100%);
+  cursor: pointer; min-width: 190px;
+}
+.plan-card--surmesure:hover {
+  border-color: rgba(212,175,55,.55);
+  box-shadow: var(--card-shadow-hover), 0 0 60px rgba(212,175,55,.12);
+}
+.plan-card--surmesure .plan-cta-sm {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: auto;
+  padding: 8px 14px; border-radius: 8px;
+  background: rgba(212,175,55,.15); border: 1px solid rgba(212,175,55,.3);
+  color: var(--gold); font-size: .75rem; font-weight: 700; cursor: pointer;
+  transition: background .2s, border-color .2s;
+  text-decoration: none;
+}
+.plan-card--surmesure:hover .plan-cta-sm {
+  background: rgba(212,175,55,.25); border-color: rgba(212,175,55,.55);
+}
+.surmesure-ico {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: rgba(212,175,55,.1); border: 1px solid rgba(212,175,55,.2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold); margin-bottom: 20px;
 }
 .plan-card {
   background: var(--glass-bg);
@@ -1061,9 +1088,17 @@ nav.scrolled {
       <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-file"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Rapport exécutif</div><div class="kstore-card-cat">Management</div></div></div>
       <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-zap"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Brief créatif</div><div class="kstore-card-cat">Communication</div></div></div>
       <div class="kstore-card"><div class="kstore-card-icon"><svg width="16" height="16"><use href="#ico-mail"/></svg></div><div class="kstore-card-info"><div class="kstore-card-name">Email stratégique</div><div class="kstore-card-cat">Communication</div></div></div>
-      <div class="kstore-card kstore-card--soon">
-        <div style="display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--white-2)">
-          <svg width="14" height="14"><use href="#ico-plus"/></svg>Bientôt disponible
+      <div class="kstore-card kstore-card--surmesure" onclick="document.getElementById('plans')?.scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+        <div class="kstore-card-icon surmesure-ico">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+            <line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/>
+            <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="kstore-card-info">
+          <div class="kstore-card-name">Conception sur-mesure</div>
+          <div class="kstore-card-cat" style="color:var(--gold);opacity:.8">Plans PRO · MAX</div>
         </div>
       </div>
     </div>
@@ -1211,7 +1246,7 @@ nav.scrolled {
   <div style="display:flex;gap:24px">
     <a href="#" onclick="openLegal('rgpd');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">RGPD</a>
     <a href="#" onclick="openLegal('mentions');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Mentions Légales</a>
-    <a href="#" onclick="openLegal('support');return false;" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Support</a>
+    <a href="mailto:protein.keystone@gmail.com" style="font-size:.72rem;color:var(--white-2);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color=''">Support</a>
   </div>
 </footer>
 

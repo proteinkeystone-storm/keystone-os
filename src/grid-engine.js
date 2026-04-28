@@ -4,25 +4,29 @@
    Principes : ID_KSTORE immuable / USER_LABEL modifiable
    ═══════════════════════════════════════════════════════════════ */
 
-const LS_ORDER  = 'ks_grid_order';
-const LS_LABEL  = 'ks_label_';
-const LS_HIDDEN = 'ks_hidden_';
+const LS_ORDER       = 'ks_grid_order';
+const LS_LABEL       = 'ks_label_';
+const LS_HIDDEN      = 'ks_hidden_';
+const LS_DEACTIVATED = 'ks_deactivated_';
 
 // ── LocalStorage helpers ─────────────────────────────────────
-export const getSavedOrder  = ()        => JSON.parse(localStorage.getItem(LS_ORDER) || 'null');
-export const saveOrder      = ids       => localStorage.setItem(LS_ORDER, JSON.stringify(ids));
-export const getUserLabel   = id        => localStorage.getItem(LS_LABEL + id) || null;
-export const saveUserLabel  = (id, lbl) => lbl ? localStorage.setItem(LS_LABEL + id, lbl) : localStorage.removeItem(LS_LABEL + id);
-export const isPadHidden    = id        => localStorage.getItem(LS_HIDDEN + id) === '1';
-export const hidePad        = id        => localStorage.setItem(LS_HIDDEN + id, '1');
-export const restorePad     = id        => localStorage.removeItem(LS_HIDDEN + id);
+export const getSavedOrder     = ()        => JSON.parse(localStorage.getItem(LS_ORDER) || 'null');
+export const saveOrder         = ids       => localStorage.setItem(LS_ORDER, JSON.stringify(ids));
+export const getUserLabel      = id        => localStorage.getItem(LS_LABEL + id) || null;
+export const saveUserLabel     = (id, lbl) => lbl ? localStorage.setItem(LS_LABEL + id, lbl) : localStorage.removeItem(LS_LABEL + id);
+export const isPadHidden       = id        => localStorage.getItem(LS_HIDDEN + id) === '1';
+export const hidePad           = id        => localStorage.setItem(LS_HIDDEN + id, '1');
+export const restorePad        = id        => localStorage.removeItem(LS_HIDDEN + id);
+export const isPadDeactivated  = id        => localStorage.getItem(LS_DEACTIVATED + id) === '1';
+export const deactivatePad     = id        => localStorage.setItem(LS_DEACTIVATED + id, '1');
+export const reactivatePad     = id        => localStorage.removeItem(LS_DEACTIVATED + id);
 
 // ── Init ─────────────────────────────────────────────────────
 let _editTriggered = false;
 
-export function initGridEngine(container, onOpen, onPadChanged) {
+export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
     _setupDragDrop(container);
-    _setupEditMode(container, onPadChanged);
+    _setupEditMode(container, onPadChanged, onDeactivate);
     _setupClickDelegate(container, onOpen);
 }
 
@@ -92,13 +96,13 @@ let _lpStartX = 0;
 let _lpStartY = 0;
 const LP_THRESHOLD = 8; // px — déplacement max toléré avant d'annuler le long press
 
-function _setupEditMode(container, onPadChanged) {
+function _setupEditMode(container, onPadChanged, onDeactivate) {
     // Clic droit
     container.addEventListener('contextmenu', e => {
         const card = e.target.closest('.pad-card');
         if (!card) return;
         e.preventDefault();
-        _triggerEditMode(card, onPadChanged);
+        _triggerEditMode(card, onPadChanged, onDeactivate);
     });
 
     // Long press — pointer events (mobile + desktop)
@@ -112,7 +116,7 @@ function _setupEditMode(container, onPadChanged) {
         _longPressTimer = setTimeout(() => {
             navigator.vibrate?.(120);
             _editTriggered = true;
-            _triggerEditMode(card, onPadChanged);
+            _triggerEditMode(card, onPadChanged, onDeactivate);
         }, 3000);
     });
 
@@ -145,7 +149,7 @@ let _activeEditCard      = null;
 let _floatBar            = null;
 let _floatScrollHandler  = null;
 
-function _triggerEditMode(card, onPadChanged) {
+function _triggerEditMode(card, onPadChanged, onDeactivate) {
     _cancelLongPress();
     if (_activeEditCard === card) { _dismissEditBar(); return; } // toggle
     _dismissEditBar();
@@ -169,8 +173,8 @@ function _triggerEditMode(card, onPadChanged) {
         </button>
         <div class="pad-edit-bar-sep"></div>
         <button class="pad-edit-bar-btn danger" data-action="delete">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            Supprimer
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+            Désactiver
         </button>
     `;
 
@@ -206,7 +210,7 @@ function _triggerEditMode(card, onPadChanged) {
     bar.querySelector('[data-action="delete"]').addEventListener('click', e => {
         e.stopPropagation();
         _dismissEditBar();
-        _confirmDelete(card, onPadChanged);
+        _confirmDeactivate(card, onPadChanged, onDeactivate);
     });
 
     // Reset flag après un court délai pour ne pas bloquer les clicks suivants
@@ -293,18 +297,18 @@ function _startRename(card) {
     }, { once: true });
 }
 
-// ── Delete (Soft) ─────────────────────────────────────────────
-function _confirmDelete(card, onPadChanged) {
+// ── Désactiver (retire du dashboard + retourne dans KEY-STORE) ─
+function _confirmDeactivate(card, onPadChanged, onDeactivate) {
     const id   = card.dataset.id;
     const name = card.querySelector('.pad-name')?.textContent || id;
 
     const overlay = document.createElement('div');
     overlay.className = 'pad-confirm-overlay';
     overlay.innerHTML = `
-        <div class="pad-confirm-msg">Masquer<br><strong>${name}</strong> ?</div>
+        <div class="pad-confirm-msg" style="font-size:11px;line-height:1.5;">Désactiver<br><strong>${name}</strong> ?<br><span style="font-size:9.5px;opacity:.6;font-weight:400">L'outil retourne dans le catalogue KEY-STORE.</span></div>
         <div class="pad-confirm-btns">
             <button class="pad-confirm-btn cancel">Annuler</button>
-            <button class="pad-confirm-btn confirm">Masquer</button>
+            <button class="pad-confirm-btn confirm">Désactiver</button>
         </div>
     `;
 
@@ -316,13 +320,15 @@ function _confirmDelete(card, onPadChanged) {
     });
     overlay.querySelector('.confirm').addEventListener('click', e => {
         e.stopPropagation();
-        hidePad(id);
+        deactivatePad(id);
         card.classList.add('pad-removing');
         setTimeout(() => {
+            const grid = card.closest('.pads-grid');
             card.remove();
-            _persistOrder(card.closest('.pads-grid'));
+            if (grid) _persistOrder(grid);
             _refreshSectionCount();
             onPadChanged?.();
+            onDeactivate?.(id);
         }, 380);
     });
 }

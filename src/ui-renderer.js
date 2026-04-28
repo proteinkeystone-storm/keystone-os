@@ -9,7 +9,7 @@ import { ApiHandler } from './api-handler.js';
 import {
     initGridEngine, getSavedOrder,
     getUserLabel, isPadHidden, restorePad,
-    dismissEditMode,
+    dismissEditMode, isPadDeactivated, deactivatePad, reactivatePad,
 } from './grid-engine.js';
 import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -131,7 +131,8 @@ export function renderDashboard() {
     const _isOwned    = id => ownedIds === null || ownedIds.includes(id) || lifetimeIds.includes(id);
     const _isLifetime = id => lifetimeIds.includes(id);
 
-    const ownedTools = TOOLS.filter(t => _isOwned(t.id));
+    // Exclure les outils désactivés (retournés dans le catalogue KEY-STORE)
+    const ownedTools = TOOLS.filter(t => _isOwned(t.id) && !isPadDeactivated(t.id));
     const lockedTools = ownedIds !== null
         ? TOOLS.filter(t => !_isOwned(t.id) && getCatalogEntry(t.id)?.published !== false)
         : [];
@@ -212,7 +213,12 @@ export function renderDashboard() {
         if (countEl) countEl.textContent = visibleTools.length + ownedArts.length;
 
         _renderRestoreBtn(padsEl, ownedTools);
-        initGridEngine(padsEl, openTool, () => _renderRestoreBtn(padsEl, ownedTools));
+        initGridEngine(
+            padsEl,
+            openTool,
+            () => _renderRestoreBtn(padsEl, ownedTools),
+            (id) => { /* onDeactivate: pad est maintenant dans KEY-STORE comme "Disponible" */ renderDashboard(); }
+        );
     }
 
     // ── BARRE KEY-STORE — Outils suggérés / verrouillés ────────
@@ -1598,6 +1604,7 @@ const ACC_ICONS = {
     rgpd:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
     lock:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
     usb:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M12 2v8M8 6l4-4 4 4M8 10h8a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2z"/><circle cx="12" cy="20" r="2"/><line x1="12" y1="16" x2="12" y2="18"/></svg>`,
+    support: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
 };
 
 // ── Rendu du logo IA — variantes dark / light ─────────────────
@@ -1830,6 +1837,30 @@ function _renderSettingsBody() {
                             Forcer la sauvegarde
                         </button>
                     </div>
+                </div>`,
+        },
+        {
+            id: 'acc-support', icon: ACC_ICONS.support, title: 'Support',
+            open: false,
+            content: `
+                <div style="display:flex;flex-direction:column;gap:14px;padding:4px 0">
+                    <p style="font-size:12px;line-height:1.6;color:var(--tx2);margin:0">
+                        Une question, un bug, ou une demande spécifique ? L'équipe Keystone vous répond par e-mail.
+                    </p>
+                    <a href="mailto:protein.keystone@gmail.com"
+                       style="display:inline-flex;align-items:center;gap:10px;padding:10px 16px;
+                              background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.22);
+                              border-radius:8px;text-decoration:none;color:var(--gold);
+                              font-size:12px;font-weight:700;letter-spacing:-.01em;
+                              transition:background .18s,border-color .18s"
+                       onmouseover="this.style.background='rgba(201,168,76,.15)';this.style.borderColor='rgba(201,168,76,.4)'"
+                       onmouseout="this.style.background='rgba(201,168,76,.08)';this.style.borderColor='rgba(201,168,76,.22)'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                        protein.keystone@gmail.com
+                    </a>
+                    <p style="font-size:10.5px;color:var(--tx3);margin:0;line-height:1.5">
+                        Réponse sous 48h (jours ouvrés). Pour les licences PRO &amp; MAX, le support est prioritaire.
+                    </p>
                 </div>`,
         },
     ];
@@ -2243,10 +2274,14 @@ function _renderPromptLibraryBody() {
 
     body.innerHTML = lib.map((entry, idx) => {
         const date = new Date(entry.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+        const label = entry.label || `${entry.id} · ${entry.title}`;
         return `
         <div class="pl-entry" data-idx="${idx}">
             <div class="pl-entry-hd">
-                <span class="pl-entry-tag">${entry.id} · ${entry.title}</span>
+                <span class="pl-entry-tag pl-entry-rename" data-idx="${idx}" title="Cliquer pour renommer" contenteditable="false">${label}</span>
+                <span class="pl-entry-edit-ico" data-idx="${idx}" title="Renommer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;pointer-events:none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </span>
                 <span class="pl-entry-date">${date}</span>
             </div>
             <div class="pl-entry-text">${entry.prompt}</div>
@@ -2257,6 +2292,39 @@ function _renderPromptLibraryBody() {
         </div>`;
     }).join('');
 
+    // ── Rename : clic sur le titre ou l'icône crayon ────────────
+    body.querySelectorAll('.pl-entry-rename, .pl-entry-edit-ico').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            const idx = parseInt(el.dataset.idx, 10);
+            const tag = body.querySelector(`.pl-entry-rename[data-idx="${idx}"]`);
+            if (!tag || tag.contentEditable === 'true') return;
+            tag.contentEditable = 'true';
+            tag.classList.add('editing');
+            tag.focus();
+            // Sélectionner tout le texte
+            const range = document.createRange();
+            range.selectNodeContents(tag);
+            window.getSelection()?.removeAllRanges();
+            window.getSelection()?.addRange(range);
+
+            const _save = () => {
+                tag.contentEditable = 'false';
+                tag.classList.remove('editing');
+                const newLabel = tag.textContent.trim();
+                if (!newLabel) { _renderPromptLibraryBody(); return; }
+                const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
+                if (lib[idx]) { lib[idx].label = newLabel; localStorage.setItem('ks_library', JSON.stringify(lib)); }
+            };
+            tag.addEventListener('blur', _save, { once: true });
+            tag.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); tag.blur(); }
+                if (e.key === 'Escape') { tag.contentEditable = 'false'; tag.classList.remove('editing'); _renderPromptLibraryBody(); }
+            });
+        });
+    });
+
+    // ── Copy / Delete ────────────────────────────────────────────
     body.querySelectorAll('.pl-entry-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const idx = parseInt(btn.dataset.idx, 10);
@@ -2264,7 +2332,7 @@ function _renderPromptLibraryBody() {
             if (btn.dataset.action === 'copy') {
                 navigator.clipboard.writeText(lib[idx]?.prompt || '').then(() => {
                     btn.textContent = '✓ Copié !';
-                    setTimeout(() => { btn.textContent = '📋 Copier'; }, 2000);
+                    setTimeout(() => { btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000);
                 });
             } else {
                 lib.splice(idx, 1);
