@@ -135,11 +135,12 @@ export function renderDashboard() {
     const _userSelRaw = localStorage.getItem('ks_user_selection');
     const _userSel    = _userSelRaw ? JSON.parse(_userSelRaw) : null;
 
-    // Exclure les outils désactivés (retournés dans le catalogue KEY-STORE)
-    // En mode démo, appliquer la sélection onboarding dès cette couche
-    const ownedTools = ownedIds === null
-        ? TOOLS.filter(t => !isPadDeactivated(t.id) && (_userSel === null || _userSel.includes(t.id)))
-        : TOOLS.filter(t => _isOwned(t.id) && !isPadDeactivated(t.id));
+    // Exclure les outils désactivés + appliquer la sélection onboarding (toutes branches)
+    const ownedTools = TOOLS.filter(t =>
+        _isOwned(t.id) &&
+        !isPadDeactivated(t.id) &&
+        (_userSel === null || _userSel.includes(t.id))
+    );
     const lockedTools = ownedIds !== null
         ? TOOLS.filter(t => !_isOwned(t.id) && getCatalogEntry(t.id)?.published !== false)
         : [];

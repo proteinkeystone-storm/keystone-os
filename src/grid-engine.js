@@ -37,10 +37,24 @@ let _dragSrc = null;
 
 function _setupDragDrop(container) {
     container.addEventListener('dragstart', e => {
-        // Bloquer le drag si un long-press est en cours (évite l'opacité 0.4 du dragging)
-        if (_longPressTimer) { e.preventDefault(); return; }
         const card = e.target.closest('.pad-card');
         if (!card) return;
+
+        // Si le long-press est actif, vérifier si c'est un vrai drag (mouvement) ou un drag
+        // fantôme que le browser génère sur un simple hold (sans mouvement significatif).
+        if (_longPressTimer) {
+            const dx = Math.abs(e.clientX - _lpStartX);
+            const dy = Math.abs(e.clientY - _lpStartY);
+            if (dx < LP_THRESHOLD && dy < LP_THRESHOLD) {
+                // Pas de mouvement → drag fantôme du browser, on bloque
+                e.preventDefault();
+                return;
+            }
+            // Mouvement intentionnel → vrai drag, annuler le long-press
+            _cancelLongPress();
+            card.classList.remove('pad-pressing');
+        }
+
         _dragSrc = card;
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
