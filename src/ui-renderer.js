@@ -193,7 +193,7 @@ export function renderDashboard() {
             const label = getUserLabel(t.id) || t.name;
             const lt    = _isLifetime(t.id);
             return `
-            <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}" draggable="true">
+            <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}" draggable="false">
                 <div class="pad-drag-handle" title="Déplacer">
                     <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
                         <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>

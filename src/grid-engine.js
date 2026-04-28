@@ -31,24 +31,29 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP (HTML5 natif — poignée dédiée uniquement)
+// DRAG & DROP (HTML5 natif — poignée dédiée)
+// Pattern MDN : mousedown sur la poignée active draggable sur la carte.
+// Les cartes commencent à draggable="false" — voir ui-renderer.js.
 // ═══════════════════════════════════════════════════════════════
-let _dragSrc        = null;
-let _dragFromHandle = false; // vrai ssi pointerdown sur .pad-drag-handle
+let _dragSrc = null;
 
 function _setupDragDrop(container) {
+    // mousedown sur la poignée → activer draggable sur la carte parente
+    container.addEventListener('mousedown', e => {
+        const handle = e.target.closest('.pad-drag-handle');
+        if (!handle) return;
+        const card = handle.closest('.pad-card');
+        if (card) card.setAttribute('draggable', 'true');
+    });
+
     container.addEventListener('dragstart', e => {
-        // Le drag n'est autorisé QUE si initié depuis la poignée
-        if (!_dragFromHandle) { e.preventDefault(); return; }
-        _dragFromHandle = false;
-
         const card = e.target.closest('.pad-card');
-        if (!card) return;
-
-        // Annuler tout long-press en cours (l'utilisateur a clairement glissé)
+        // Refuser si la carte n'a pas été activée par la poignée
+        if (!card || card.getAttribute('draggable') !== 'true') {
+            e.preventDefault(); return;
+        }
         _cancelLongPress();
         card.classList.remove('pad-pressing');
-
         _dragSrc = card;
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
@@ -57,6 +62,7 @@ function _setupDragDrop(container) {
 
     container.addEventListener('dragend', () => {
         _dragSrc?.classList.remove('dragging');
+        _dragSrc?.setAttribute('draggable', 'false'); // remettre à false
         container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
         _persistOrder(container);
         _dragSrc = null;
@@ -121,11 +127,8 @@ function _setupEditMode(container, onPadChanged, onDeactivate) {
         const card = e.target.closest('.pad-card');
         if (!card || card.classList.contains('pad-renaming')) return; // pas pendant un rename
 
-        // Mémoriser si l'appui est sur la poignée (pour autoriser le drag)
-        _dragFromHandle = !!e.target.closest('.pad-drag-handle');
-
-        // Ne pas démarrer le long-press depuis la poignée (c'est pour le drag)
-        if (_dragFromHandle) return;
+        // Ne pas démarrer le long-press depuis la poignée (réservée au drag)
+        if (e.target.closest('.pad-drag-handle')) return;
 
         _editTriggered = false;
         _lpStartX = e.clientX;
