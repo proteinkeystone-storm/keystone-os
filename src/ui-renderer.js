@@ -733,11 +733,7 @@ function _renderKStoreItems() {
                 <div class="ks-item-name">${cat?.title || item.name}</div>
                 <div class="ks-item-desc">${cat?.subtitle || item.desc || ''}</div>
                 <div class="ks-item-chips">
-                    ${cat?.plan  ? `<span class="ks-chip ks-chip-plan">${cat.plan}</span>` : ''}
-                    ${cat?.price ? `<span class="ks-chip ks-chip-price">${cat.price} €/mois</span>` : ''}
-                    ${(cat?.ai_optimized || item.engine)
-                        ? `<span class="ks-chip ks-chip-eng">${cat?.ai_optimized || item.engine} ✦</span>`
-                        : ''}
+                    ${cat?.plan ? `<span class="ks-chip ks-chip-plan">${cat.plan}</span>` : ''}
                 </div>
             </div>
             <div class="ks-item-action">${btnHTML}</div>
