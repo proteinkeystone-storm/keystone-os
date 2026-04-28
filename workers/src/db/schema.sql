@@ -95,3 +95,29 @@ CREATE TABLE IF NOT EXISTS catalog (
   updated_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
+
+-- ── Messages Admin → Client ──────────────────────────────────
+-- Ciblage par tenant, par licence individuelle, ou broadcast (target='all').
+-- Affichés dans la zone DST du dashboard avec priorité P1.
+-- expires_at : ISO datetime ou NULL (= permanent jusqu'à révocation).
+-- cta_label / cta_url : optionnels — bouton cliquable dans le message.
+-- level : info | promo | urgent (style visuel côté client).
+CREATE TABLE IF NOT EXISTS messages (
+  id           TEXT PRIMARY KEY,                  -- UUID v4
+  tenant_id    TEXT NOT NULL DEFAULT 'default',
+  target       TEXT NOT NULL DEFAULT 'all',       -- 'all' | 'licence:KEY-XXXX' | 'tenant:xxx'
+  title        TEXT,                              -- titre court (optionnel)
+  body         TEXT NOT NULL,                     -- corps du message
+  level        TEXT DEFAULT 'info',               -- info | promo | urgent
+  cta_label    TEXT,                              -- texte du bouton CTA (optionnel)
+  cta_url      TEXT,                              -- URL ou route interne (#/key-store, /app, etc.)
+  expires_at   TEXT,                              -- ISO date (NULL = permanent)
+  revoked      INTEGER DEFAULT 0,                 -- 1 = révoqué par admin
+  created_at   TEXT DEFAULT (datetime('now')),
+  created_by   TEXT,                              -- email/id de l'admin auteur
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_tenant   ON messages(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_messages_target   ON messages(target);
+CREATE INDEX IF NOT EXISTS idx_messages_active   ON messages(revoked, expires_at);

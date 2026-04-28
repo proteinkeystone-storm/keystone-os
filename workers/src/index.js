@@ -30,6 +30,10 @@ import { handleListPads, handleSavePad, handleDeletePad,
          handleGetCatalog, handleSaveCatalog }                         from './routes/pads.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
+import { handleListPublic as handleMsgListPublic,
+         handleCreate     as handleMsgCreate,
+         handleListAdmin  as handleMsgListAdmin,
+         handleRevoke     as handleMsgRevoke }                          from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
 
 // ── Router ────────────────────────────────────────────────────
@@ -38,7 +42,16 @@ export default {
     const origin = getAllowedOrigin(env);
 
     // ── Preflight CORS ────────────────────────────────────────
-    if (request.method === 'OPTIONS') return corsOk(origin);
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin'  : origin,
+          'Access-Control-Allow-Methods' : 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers' : 'Content-Type, Authorization',
+        },
+      });
+    }
 
     const url    = new URL(request.url);
     const path   = url.pathname;
@@ -72,6 +85,12 @@ export default {
         const provider = path.split('/').pop();
         return handleGetKey(request, env, provider);
       }
+
+      // ── Messagerie ───────────────────────────────────────────
+      if (path === '/api/messages'           && method === 'GET')    return handleMsgListPublic(request, env);
+      if (path === '/api/admin/messages'     && method === 'GET')    return handleMsgListAdmin(request, env);
+      if (path === '/api/admin/messages'     && method === 'POST')   return handleMsgCreate(request, env);
+      if (path === '/api/admin/messages'     && method === 'DELETE') return handleMsgRevoke(request, env);
 
       // ── Admin ────────────────────────────────────────────────
       if (path === '/api/admin/devices'      && method === 'GET')    return handleDeviceList(request, env);

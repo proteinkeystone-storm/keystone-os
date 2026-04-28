@@ -4,6 +4,8 @@ import { initDST, initDSTAdminBridge }        from './dst.js';
 import { initLockScreen }                     from './lockscreen.js';
 import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
 import { initOnboarding }                     from './onboarding.js';
+import { runSystemCoach }                     from './system-coach.js';
+import { initInbox }                          from './inbox.js';
 
 // ── Démarrage complet du dashboard ─────────────────────────────
 function _boot() {
@@ -12,6 +14,10 @@ function _boot() {
     initDST();
     initDSTAdminBridge();
     initLockScreen();
+    // Inbox push (admin) — priorité P1, fetch toutes les 5 min
+    initInbox();
+    // Coach système — règles locales, P2, cooldown 24h, après 1.5s
+    setTimeout(runSystemCoach, 1500);
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -79,6 +85,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // ── Sprint A — Hot reload après achat à vie ──────────────────
     window.addEventListener('ks-lifetime-activated', e => {
+        // Marqueur pour le Coach (règle 'lifetime-welcome')
+        localStorage.setItem('ks_last_lifetime_ts', String(Date.now()));
         renderDashboard();
         const dstText = document.getElementById('dst-text');
         if (dstText) {

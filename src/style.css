@@ -255,6 +255,59 @@ body::after {
 html.light-mode .hero-dst[data-type="info"]  .hero-dst-text { color: var(--gold); }
 html.light-mode .hero-dst[data-type="alert"] .hero-dst-text { color: #c04040; }
 
+/* ── INBOX — CTA + Dismiss à droite du DST ──────────────────── */
+.hero-dst { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ks-inbox-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 4px;
+}
+.ks-inbox-cta-btn {
+  display: inline-flex; align-items: center;
+  padding: 4px 11px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: -.005em;
+  font-family: inherit;
+  color: #07111f;
+  background: linear-gradient(135deg, #d4bc82, #c9a84c);
+  border: none; border-radius: 999px;
+  cursor: pointer;
+  transition: opacity .15s, transform .12s;
+  box-shadow: 0 2px 8px rgba(212,175,55,.22);
+}
+.ks-inbox-cta-btn:hover  { opacity: .92; transform: translateY(-1px); }
+.ks-inbox-cta-btn:active { transform: translateY(0); }
+.ks-inbox-cta-close {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1; font-family: inherit;
+  color: rgba(255,255,255,.45);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+  padding: 0;
+}
+.ks-inbox-cta-close:hover {
+  color: rgba(255,255,255,.9);
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.18);
+}
+.ks-inbox-cta[data-level="urgent"] .ks-inbox-cta-btn {
+  background: linear-gradient(135deg, #e88a7a, #d35a4a);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(224,90,80,.30);
+}
+.ks-inbox-cta[data-level="promo"] .ks-inbox-cta-btn {
+  background: linear-gradient(135deg, #82d4bc, #4cc9a8);
+  color: #07111f;
+  box-shadow: 0 2px 8px rgba(76,201,168,.22);
+}
+html.light-mode .ks-inbox-cta-close {
+  color: rgba(13,27,62,.5);
+  background: rgba(13,27,62,.04);
+  border-color: rgba(13,27,62,.12);
+}
+
 /* Spacer topbar restauré */
 .tb-spacer { flex: 1; }
 

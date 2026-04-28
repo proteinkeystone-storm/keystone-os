@@ -215,12 +215,13 @@ logoutBtn.addEventListener('click', logout);
 
 // ── Tab routing ────────────────────────────────────────────────
 const TAB_RENDERERS = {
-  licences:  renderLicences,
-  tools:     renderTools,
-  catalog:   renderCatalog,
+  licences:   renderLicences,
+  tools:      renderTools,
+  catalog:    renderCatalog,
+  messaging:  renderMessaging,
   monitoring: renderMonitoring,
-  devices:   renderDevices,
-  settings:  renderSettings,
+  devices:    renderDevices,
+  settings:   renderSettings,
 };
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -1905,6 +1906,225 @@ async function renderSettings(panel) {
       statusEl.textContent = `Erreur : ${err.message}`;
     } finally {
       btn.disabled = false; btn.textContent = 'Chiffrer & Sauvegarder';
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — MESSAGERIE
+// Push de messages dans la zone DST du dashboard client
+// ══════════════════════════════════════════════════════════════════
+async function renderMessaging(panel) {
+  try {
+    const { messages = [], total = 0 } = await api('/api/admin/messages');
+    const active   = messages.filter(m => m.status === 'active').length;
+    const expired  = messages.filter(m => m.status === 'expired').length;
+    const revoked  = messages.filter(m => m.status === 'revoked').length;
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Messagerie <span>(${total})</span></h2>
+        <button class="btn btn-primary" id="btn-new-msg">+ Nouveau message</button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="stat-label">Actifs</div><div class="stat-value" style="color:#4caf80">${active}</div></div>
+        <div class="stat-card"><div class="stat-label">Expirés</div><div class="stat-value" style="color:var(--text-muted)">${expired}</div></div>
+        <div class="stat-card"><div class="stat-label">Révoqués</div><div class="stat-value" style="color:#e05c5c">${revoked}</div></div>
+      </div>
+      ${total === 0
+        ? '<div class="empty-state"><div class="icon">✉</div><p>Aucun message envoyé</p></div>'
+        : `<table class="data-table">
+            <thead><tr>
+              <th>Statut</th><th>Niveau</th><th>Cible</th><th>Message</th>
+              <th>CTA</th><th>Expire</th><th>Créé</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${messages.map(_renderMessageRow).join('')}</tbody>
+          </table>`}
+    `;
+
+    panel.querySelector('#btn-new-msg').addEventListener('click', () => showCreateMessageModal(panel));
+
+    panel.querySelectorAll('[data-action="revoke-msg"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Révoquer ce message ?')) return;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await api('/api/admin/messages', 'DELETE', { id: btn.dataset.id });
+          toast('Message révoqué', 'error');
+          renderMessaging(panel);
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Révoquer'; }
+      });
+    });
+
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+function _renderMessageRow(m) {
+  const statusColor = m.status === 'active' ? '#4caf80'
+                    : m.status === 'expired' ? 'var(--text-muted)' : '#e05c5c';
+  const levelBadge  = m.level === 'urgent' ? '🔴 Urgent'
+                    : m.level === 'promo'  ? '🟢 Promo' : '🔵 Info';
+  const fullBody = m.title ? `${m.title} — ${m.body}` : m.body;
+  const truncated = fullBody.length > 80 ? fullBody.slice(0, 78) + '…' : fullBody;
+  const cta = m.cta_label
+    ? `<a href="${esc(m.cta_url || '#')}" target="_blank" rel="noopener" style="color:var(--gold);font-size:11px">${esc(m.cta_label)} ↗</a>`
+    : '<span style="color:var(--text-muted);font-size:11px">—</span>';
+  const expires = m.expires_at
+    ? new Date(m.expires_at.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+    : '<span style="color:var(--text-muted)">∞</span>';
+  const created = new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+  const actions = m.status === 'active'
+    ? `<button class="btn btn-sm" data-action="revoke-msg" data-id="${esc(m.id)}" style="color:#e05c5c">Révoquer</button>`
+    : '<span style="color:var(--text-muted);font-size:11px">—</span>';
+
+  return `<tr>
+    <td><span style="color:${statusColor};text-transform:capitalize;font-weight:600">${m.status}</span></td>
+    <td>${levelBadge}</td>
+    <td><code style="font-size:11px;color:var(--text-muted)">${esc(m.target)}</code></td>
+    <td title="${esc(fullBody)}" style="max-width:340px">${esc(truncated)}</td>
+    <td>${cta}</td>
+    <td style="font-size:11px">${expires}</td>
+    <td style="font-size:11px;color:var(--text-muted)">${created}</td>
+    <td>${actions}</td>
+  </tr>`;
+}
+
+function showCreateMessageModal(panel) {
+  // Helper pour générer une expiration ISO (datetime UTC sans Z)
+  const toISO = d => d.toISOString().slice(0, 19).replace('T', ' ');
+
+  openModal('Nouveau message', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Cible</label>
+        <select id="msg-target" class="form-input">
+          <option value="all">Tous les utilisateurs (broadcast)</option>
+          <option value="tenant:default">Tenant : Protein Studio (default)</option>
+          <option value="custom-licence">Licence individuelle…</option>
+        </select>
+        <input type="text" id="msg-target-licence" class="form-input"
+               placeholder="ex : XXXX-XXXX-XXXX-XXXX"
+               style="display:none;margin-top:8px">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Niveau</label>
+          <select id="msg-level" class="form-input">
+            <option value="info">🔵 Info</option>
+            <option value="promo">🟢 Promo</option>
+            <option value="urgent">🔴 Urgent</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Durée d'affichage</label>
+          <select id="msg-duration" class="form-input">
+            <option value="permanent">∞ Jusqu'à dismiss</option>
+            <option value="1h">1 heure</option>
+            <option value="24h">24 heures</option>
+            <option value="7d">7 jours</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Titre (optionnel)</label>
+        <input type="text" id="msg-title" class="form-input"
+               placeholder="Maintenance prévue"
+               maxlength="60">
+      </div>
+
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Corps du message *</label>
+        <textarea id="msg-body" class="form-input" rows="3" maxlength="500"
+                  placeholder="Une courte phrase qui apparaîtra sous &quot;Bonjour, [prénom]&quot;…"
+                  style="resize:vertical;font-family:inherit"></textarea>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          <span id="msg-body-count">0</span> / 500 caractères
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="msg-cta-toggle" style="margin:0">
+          <span>Ajouter un bouton CTA cliquable</span>
+        </label>
+        <div id="msg-cta-fields" style="display:none;margin-top:12px;gap:12px;grid-template-columns:1fr 2fr">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Libellé bouton</label>
+            <input type="text" id="msg-cta-label" class="form-input" placeholder="Découvrir" maxlength="30">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">URL ou route</label>
+            <input type="text" id="msg-cta-url" class="form-input" placeholder="https://… ou /app">
+          </div>
+        </div>
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" id="btn-cancel-msg">Annuler</button>
+    <button class="btn btn-primary"   id="btn-send-msg">Envoyer</button>
+  `);
+
+  // Wire up dynamic fields
+  const targetSel    = document.getElementById('msg-target');
+  const licenceField = document.getElementById('msg-target-licence');
+  targetSel.addEventListener('change', () => {
+    licenceField.style.display = targetSel.value === 'custom-licence' ? 'block' : 'none';
+  });
+
+  const ctaToggle = document.getElementById('msg-cta-toggle');
+  const ctaFields = document.getElementById('msg-cta-fields');
+  ctaToggle.addEventListener('change', () => {
+    ctaFields.style.display = ctaToggle.checked ? 'grid' : 'none';
+  });
+
+  const bodyEl  = document.getElementById('msg-body');
+  const countEl = document.getElementById('msg-body-count');
+  bodyEl.addEventListener('input', () => { countEl.textContent = bodyEl.value.length; });
+
+  document.getElementById('btn-cancel-msg').addEventListener('click', closeModal);
+  document.getElementById('btn-send-msg').addEventListener('click', async () => {
+    const body = bodyEl.value.trim();
+    if (!body) { toast('Le corps du message est requis', 'error'); return; }
+
+    let target = targetSel.value;
+    if (target === 'custom-licence') {
+      const k = licenceField.value.trim();
+      if (!k) { toast('Saisis la clé de licence', 'error'); return; }
+      target = 'licence:' + k;
+    }
+
+    let expiresAt = null;
+    const dur = document.getElementById('msg-duration').value;
+    if (dur !== 'permanent') {
+      const ms = dur === '1h' ? 3600e3 : dur === '24h' ? 86400e3 : 7 * 86400e3;
+      expiresAt = toISO(new Date(Date.now() + ms));
+    }
+
+    const payload = {
+      tenantId: 'default',
+      target,
+      title:    document.getElementById('msg-title').value.trim() || null,
+      body,
+      level:    document.getElementById('msg-level').value,
+      expiresAt,
+    };
+    if (ctaToggle.checked) {
+      const lbl = document.getElementById('msg-cta-label').value.trim();
+      const url = document.getElementById('msg-cta-url').value.trim();
+      if (lbl && url) { payload.ctaLabel = lbl; payload.ctaUrl = url; }
+    }
+
+    try {
+      await api('/api/admin/messages', 'POST', payload);
+      closeModal();
+      toast('Message envoyé ✓');
+      renderMessaging(panel);
+    } catch (err) {
+      toast(err.message, 'error');
     }
   });
 }
