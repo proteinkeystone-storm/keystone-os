@@ -702,6 +702,20 @@ html.light-mode #ks-logo-light { display: block; }
   animation: editing-pulse .9s ease infinite !important;
 }
 
+/* ── LONG PRESS FEEDBACK ─────────────────────────────────── */
+@keyframes lp-progress {
+  from { box-shadow: 0 0 0 0 rgba(201,168,76,0),   inset 0 0 0 0 rgba(201,168,76,0); }
+  40%  { box-shadow: 0 0 0 3px rgba(201,168,76,.2), inset 0 0 0 0 rgba(201,168,76,0); }
+  to   { box-shadow: 0 0 0 5px rgba(201,168,76,.4), inset 0 0 0 0 rgba(201,168,76,0); }
+}
+.pad-card.pad-pressing {
+  transform: scale(1.035) translateY(-2px) !important;
+  border-color: rgba(201,168,76,.55) !important;
+  animation: lp-progress 3s linear forwards !important;
+  transition: transform .18s, border-color .18s !important;
+  cursor: wait !important;
+}
+
 /* ── REMOVE ANIMATION ────────────────────────────────────── */
 @keyframes pad-remove {
   to { opacity: 0; transform: scale(.88) translateY(8px); }

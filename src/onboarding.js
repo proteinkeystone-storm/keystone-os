@@ -3,6 +3,8 @@
    First-launch tunnel · 5 slides Apple-style
    ═══════════════════════════════════════════════════════════════ */
 
+import { deactivatePad, reactivatePad, restorePad } from './grid-engine.js';
+
 const LS_ONBOARDED  = 'ks_onboarded';
 const MAX_SELECT    = 8;
 
@@ -398,15 +400,19 @@ function _fillLaunch(el) {
 // COMPLETION
 // ═══════════════════════════════════════════════════════════════
 function _complete() {
-    // Appliquer la sélection : masquer les O-* non sélectionnés
+    // Appliquer la sélection : déplacer les O-* non sélectionnés vers le KEY-STORE
+    // On utilise ks_deactivated_ (et non ks_hidden_) pour que le KEY-STORE les affiche
+    // correctement avec un bouton "Déployer" plutôt que "✓ Actif".
     _s.catalog
         .filter(t => t.id.startsWith('O-'))
         .forEach(t => {
+            // Toujours nettoyer l'ancien mécanisme ks_hidden_ (migrations)
+            restorePad(t.id);
             if (_s.selected.has(t.id)) {
-                localStorage.removeItem('ks_hidden_' + t.id);
+                reactivatePad(t.id); // garantit qu'il n'est pas déjà désactivé
             } else if (_s.selected.size > 0) {
-                // Seulement masquer si l'user a fait une vraie sélection
-                localStorage.setItem('ks_hidden_' + t.id, '1');
+                // Seulement désactiver si l'user a fait une vraie sélection
+                deactivatePad(t.id);
             }
         });
 

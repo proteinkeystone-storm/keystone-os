@@ -113,23 +113,38 @@ function _setupEditMode(container, onPadChanged, onDeactivate) {
         _editTriggered = false;
         _lpStartX = e.clientX;
         _lpStartY = e.clientY;
+        // Feedback visuel dès le début de l'appui
+        card.classList.add('pad-pressing');
         _longPressTimer = setTimeout(() => {
             navigator.vibrate?.(120);
+            card.classList.remove('pad-pressing');
             _editTriggered = true;
             _triggerEditMode(card, onPadChanged, onDeactivate);
         }, 3000);
     });
 
     // Annuler si relâché avant 3s
-    container.addEventListener('pointerup',    _cancelLongPress);
-    container.addEventListener('pointercancel',_cancelLongPress);
+    container.addEventListener('pointerup', e => {
+        const card = e.target.closest('.pad-card');
+        card?.classList.remove('pad-pressing');
+        _cancelLongPress();
+    });
+    container.addEventListener('pointercancel', e => {
+        const card = e.target.closest('.pad-card');
+        card?.classList.remove('pad-pressing');
+        _cancelLongPress();
+    });
 
     // Annuler uniquement si déplacement significatif (évite les micro-tremblements)
     container.addEventListener('pointermove', e => {
         if (!_longPressTimer) return;
         const dx = Math.abs(e.clientX - _lpStartX);
         const dy = Math.abs(e.clientY - _lpStartY);
-        if (dx > LP_THRESHOLD || dy > LP_THRESHOLD) _cancelLongPress();
+        if (dx > LP_THRESHOLD || dy > LP_THRESHOLD) {
+            const card = e.target.closest('.pad-card');
+            card?.classList.remove('pad-pressing');
+            _cancelLongPress();
+        }
     });
 
     // Dismiss edit bar au clic extérieur (capture phase)
@@ -167,11 +182,6 @@ function _triggerEditMode(card, onPadChanged, onDeactivate) {
             Renommer
         </button>
         <div class="pad-edit-bar-sep"></div>
-        <button class="pad-edit-bar-btn" data-action="hide">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            Masquer
-        </button>
-        <div class="pad-edit-bar-sep"></div>
         <button class="pad-edit-bar-btn danger" data-action="delete">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
             Désactiver
@@ -191,20 +201,6 @@ function _triggerEditMode(card, onPadChanged, onDeactivate) {
         e.stopPropagation();
         _dismissEditBar();
         _startRename(card);
-    });
-
-    bar.querySelector('[data-action="hide"]').addEventListener('click', e => {
-        e.stopPropagation();
-        _dismissEditBar();
-        hidePad(card.dataset.id);
-        card.classList.add('pad-removing');
-        setTimeout(() => {
-            const grid = card.closest('.pads-grid');
-            card.remove();
-            if (grid) _persistOrder(grid);
-            _refreshSectionCount();
-            onPadChanged?.();
-        }, 380);
     });
 
     bar.querySelector('[data-action="delete"]').addEventListener('click', e => {
