@@ -38,33 +38,30 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 let _dragSrc = null;
 
 function _setupDragDrop(container) {
-    // mousedown sur la poignée → activer draggable sur la carte parente
-    container.addEventListener('mousedown', e => {
-        const handle = e.target.closest('.pad-drag-handle');
-        if (!handle) return;
-        const card = handle.closest('.pad-card');
-        if (card) card.setAttribute('draggable', 'true');
-    });
-
+    // dragstart ne vient QUE de la poignée (draggable="true" posé dans le template)
     container.addEventListener('dragstart', e => {
-        const card = e.target.closest('.pad-card');
-        // Refuser si la carte n'a pas été activée par la poignée
-        if (!card || card.getAttribute('draggable') !== 'true') {
-            e.preventDefault(); return;
-        }
+        const handle = e.target.closest('.pad-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+
+        const card = handle.closest('.pad-card');
+        if (!card) { e.preventDefault(); return; }
+
         _cancelLongPress();
         card.classList.remove('pad-pressing');
         _dragSrc = card;
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', card.dataset.id);
+
+        // Image de glissement = la carte entière, curseur calé sur le point de clic
+        const r = card.getBoundingClientRect();
+        e.dataTransfer.setDragImage(card, e.clientX - r.left, e.clientY - r.top);
     });
 
     container.addEventListener('dragend', () => {
         _dragSrc?.classList.remove('dragging');
-        _dragSrc?.setAttribute('draggable', 'false'); // remettre à false
         container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        _persistOrder(container);
+        if (_dragSrc) _persistOrder(container);
         _dragSrc = null;
     });
 

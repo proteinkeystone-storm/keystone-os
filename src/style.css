@@ -3111,7 +3111,7 @@ html.light-mode .sp-theme-card.active .sp-theme-name { color: var(--gold); }
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #07111f;
+  background: radial-gradient(ellipse at 50% 0%, #001A2C 0%, #000814 62%);
   opacity: 0;
   transition: opacity .4s ease;
 }
@@ -3274,8 +3274,8 @@ html.light-mode .sp-theme-card.active .sp-theme-name { color: var(--gold); }
 .ob-title {
   font-family: -apple-system, 'SF Pro Display', 'Inter', sans-serif;
   font-size: clamp(28px, 5vw, 38px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 900;
+  letter-spacing: -0.02em;
   color: #ffffff;
   line-height: 1.1;
   margin: 0;

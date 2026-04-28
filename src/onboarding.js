@@ -386,7 +386,7 @@ function _fillLaunch(el) {
                 }
             </p>
             <button class="ob-btn-launch" id="ob-launch-btn">
-                Activer mon intelligence immobilière
+                Lancer mon espace de travail
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             </button>
             <button class="ob-btn-ghost ob-back-launch" id="ob-back-5">← Modifier la sélection</button>
