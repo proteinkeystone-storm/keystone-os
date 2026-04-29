@@ -1,19 +1,21 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Pads Data Module
-   Source canonique : K_STORE_ASSETS/PADS/IMMOBILIER/
+   KEYSTONE OS — Pads Data Module (canonique embarqué)
+   Source de vérité unique pour le mode démo et le fallback offline.
+   Synchronisé avec K_STORE_ASSETS/PADS/*.json
    ═══════════════════════════════════════════════════════════════ */
 
 export const PADS_DATA = {
 
     A1: {
-        id: 'O-IMM-001', padKey: 'A1', title: 'Notices VEFA',
+        id: 'O-IMM-001', padKey: 'A1',
+        title: 'Notices VEFA',
         subtitle: 'Notice descriptive conforme RE 2020 — 2026',
         ai_optimized: 'Claude', icon: 'vefa',
         notice: `1. Remplissez chaque champ avec précision — la qualité du prompt dépend du niveau de détail.\n2. Copiez le prompt généré et collez-le dans Claude.ai, ChatGPT ou votre IA préférée.\n3. Demandez ensuite à l'IA : "Rédige une 2ème version plus luxueuse" ou "Ajoute une section sur les extérieurs".\n4. Avec une clé API configurée dans ⚙️, la réponse s'affiche directement ici.`,
         fields: [
-            { id: 'nom_programme', label: 'Nom du programme',           type: 'text',     placeholder: 'ex: Les Jardins du Midi', required: true, span: 'full' },
+            { id: 'nom_programme', label: 'Nom du programme',           type: 'text',     placeholder: 'ex: Les Jardins du Midi',            required: true, span: 'full' },
             { id: 'type_logement', label: 'Type de logement',           type: 'select',   options: ['T2','T3','T4','T5','Villa','Penthouse'], required: true },
-            { id: 'surface',       label: 'Surface habitable (m²)',     type: 'number',   placeholder: 'ex: 75', required: true },
+            { id: 'surface',       label: 'Surface habitable (m²)',     type: 'number',   placeholder: 'ex: 75',                              required: true },
             { id: 'etage',         label: 'Étage / Situation',          type: 'text',     placeholder: 'ex: 3ème étage, vue dégagée' },
             { id: 'orientation',   label: 'Orientation principale',     type: 'select',   options: ['Sud','Sud-Est','Sud-Ouest','Est','Ouest','Nord-Est','Nord-Ouest','Nord'] },
             { id: 'sols',          label: 'Revêtements sols',           type: 'select',   options: ['Carrelage grand format','Parquet chêne naturel','Béton ciré','Marbre','Travertin'] },
@@ -75,7 +77,8 @@ PLAN DE RÉDACTION OBLIGATOIRE :
     },
 
     A2: {
-        id: 'A2', title: 'Annonces Commerciales',
+        id: 'O-IMM-002', padKey: 'A2',
+        title: 'Annonces Commerciales',
         subtitle: '3 versions de textes percutants',
         ai_optimized: 'ChatGPT', icon: 'ad',
         notice: `1. Renseignez le programme, la ville et les atouts — c'est l'essentiel.\n2. Le prompt génère 3 versions d'annonces (Luxe, Investissement, Lifestyle).\n3. Dans votre IA, demandez : "Raccourcis la version 2 à 40 mots" ou "Adapte pour SeLoger".\n4. Tip : copiez la version retenue directement dans votre logiciel de diffusion.`,
@@ -103,7 +106,8 @@ Pour chaque version : 1 accroche (max 10 mots), 1 description (50 mots max), 1 c
     },
 
     A3: {
-        id: 'A3', title: 'Emails Acquéreurs',
+        id: 'O-IMM-003', padKey: 'A3',
+        title: 'Emails Acquéreurs',
         subtitle: 'Communication chantier personnalisée',
         ai_optimized: 'Claude', icon: 'mail',
         notice: `1. Le prénom du client est important — l'IA l'utilisera pour personnaliser le ton.\n2. Soyez précis dans "Informations à transmettre" : montants, dates, pièces demandées.\n3. Vous obtiendrez 2 variantes : formelle et chaleureuse. Choisissez selon le profil client.\n4. Après génération, relisez et ajoutez les éléments contractuels spécifiques à votre dossier.`,
@@ -131,7 +135,8 @@ Chaque email : introduction personnalisée, corps structuré, clôture soignée.
     },
 
     A4: {
-        id: 'A4', title: 'Posts Réseaux Sociaux',
+        id: 'O-MKT-001', padKey: 'A4',
+        title: 'Posts Réseaux Sociaux',
         subtitle: 'Facebook · Instagram · LinkedIn',
         ai_optimized: 'Gemini', icon: 'social',
         notice: `1. Sélectionnez "Les 3 réseaux" pour obtenir une version adaptée à chaque plateforme.\n2. Décrivez le visuel avec précision — l'IA adapte le texte à l'image suggérée.\n3. Gemini est recommandé pour ce type de contenu créatif multiplateforme.\n4. Fréquence conseillée : 2-3 posts/semaine. Sauvegardez en bibliothèque pour créer votre calendrier éditorial.`,
@@ -157,7 +162,8 @@ Pour chaque réseau : post adapté + hashtags (5-15) + suggestion emoji + varian
     },
 
     A5: {
-        id: 'A5', title: 'CR Chantier',
+        id: 'O-ANL-001', padKey: 'A5',
+        title: 'CR Chantier',
         subtitle: 'Notes terrain → CR professionnel',
         ai_optimized: 'Claude', icon: 'site',
         notice: `1. Collez vos notes brutes telles quelles — abréviations, fautes, raccourcis acceptés.\n2. Plus vos notes sont détaillées, plus le CR sera précis et exploitable.\n3. Le CR généré inclut un tableau d'actions avec responsables et délais.\n4. Après génération, complétez le tableau des actions et envoyez directement depuis votre messagerie.`,
@@ -182,7 +188,8 @@ Structure le CR : En-tête → Avancement (%) → Points positifs → Réserves 
     },
 
     A6: {
-        id: 'A6', title: 'Analyste Foncier',
+        id: 'O-ANL-002', padKey: 'A6',
+        title: 'Analyste Foncier',
         subtitle: 'Dossier foncier complet en 5 minutes',
         ai_optimized: 'Claude', icon: 'foncier',
         notice: `1. Vérifiez le zonage PLU avant toute analyse — c'est le point bloquant n°1.\n2. Renseignez le prix même approximatif : l'analyse de charge foncière est la plus-value principale.\n3. L'IA produit une recommandation GO/NO-GO — à compléter avec votre expertise terrain.\n4. Utilisez le résultat comme base de note interne ou de présentation aux associés.`,
@@ -208,7 +215,8 @@ Analyse : 1) Potentiel constructible estimé 2) Faisabilité réglementaire 3) A
     },
 
     A7: {
-        id: 'A7', title: 'Objections Acquéreurs',
+        id: 'O-ADM-001', padKey: 'A7',
+        title: 'Objections Acquéreurs',
         subtitle: '3 réponses graduées par objection',
         ai_optimized: 'Claude', icon: 'chat',
         notice: `1. Citez l'objection mot pour mot, telle qu'elle a été formulée par le client.\n2. Le profil de l'acquéreur influence fortement le ton des réponses — renseignez-le.\n3. Vous obtenez 3 réponses (Douce, Argumentée, Engageante) — adaptez selon l'atmosphère du rendez-vous.\n4. Entraînez-vous à l'oral avant le prochain contact client pour gagner en fluidité.`,
@@ -234,7 +242,8 @@ Chaque réponse : naturelle, orale, adaptée au profil, actionnable en rendez-vo
     },
 
     A8: {
-        id: 'A8', title: 'Brief Photo / 3D',
+        id: 'O-MKT-002', padKey: 'A8',
+        title: 'Brief Photo / 3D',
         subtitle: 'Brief créatif professionnel en 2 min',
         ai_optimized: 'ChatGPT', icon: 'brief',
         notice: `1. Choisissez "Pack complet" pour obtenir un brief exhaustif transmissible directement au prestataire.\n2. Décrivez précisément la direction artistique souhaitée — c'est ce qui évite les allers-retours.\n3. Le brief inclut un planning de production suggéré à valider avec votre prestataire.\n4. Sauvegardez en bibliothèque pour constituer votre référentiel de briefs par programme.`,
@@ -258,4 +267,45 @@ Brief pour :
 
 Le brief inclut : 1) Direction artistique (palette, ambiance, références) 2) Liste des prises de vues / angles (numérotés) 3) Consignes lumière 4) Livrables (formats, résolutions, délais) 5) 3 références visuelles décrites 6) Planning de production suggéré.`,
     },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CATALOGUE EMBARQUÉ — outils + artefacts (mode démo / fallback)
+// ═══════════════════════════════════════════════════════════════
+export const CATALOG_DATA = {
+    version: '2.0',
+    updatedAt: '2026-04-29',
+    tools: [
+        // ── 8 OUTILS PRINCIPAUX ────────────────────────────────────
+        { id:'O-IMM-001', padKey:'A1', title:'Notices VEFA',          subtitle:'Générez vos notices descriptives en 15 sec',     category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa',    ai_optimized:'Claude',  isNew:false, published:true, tags:['immobilier','vefa','notice','juridique','contrat'],
+          longDesc:"Générez des notices descriptives VEFA conformes RE 2020 en quelques secondes. L'IA produit un document structuré, prêt à intégrer dans vos contrats. Gagne 45 à 90 minutes par dossier." },
+        { id:'O-IMM-002', padKey:'A2', title:'Annonces Commerciales', subtitle:'Textes de vente percutants en 30 sec',           category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'ad',      ai_optimized:'ChatGPT', isNew:false, published:true, tags:['immobilier','annonce','vente','portail','copywriting'],
+          longDesc:"Rédigez des annonces immobilières percutantes calibrées pour SeLoger, Bien'ici et Logic-Immo. L'IA adapte le ton selon le type de bien et la cible." },
+        { id:'O-IMM-003', padKey:'A3', title:'Emails Acquéreurs',     subtitle:'Communication chantier personnalisée',           category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'mail',    ai_optimized:'Claude',  isNew:false, published:true, tags:['immobilier','email','chantier','acquéreur','suivi'],
+          longDesc:"Générez des emails de suivi chantier professionnels et rassurants. L'IA adapte le contenu à l'avancement réel et au profil acquéreur. Réduit les appels entrants de 30 %." },
+        { id:'O-MKT-001', padKey:'A4', title:'Posts Réseaux Sociaux', subtitle:'Facebook · Instagram · LinkedIn',                category:'COM', plan:'STARTER', price:29, lifetimePrice:149, icon:'social',  ai_optimized:'Gemini',  isNew:false, published:true, tags:['marketing','réseaux sociaux','facebook','instagram','linkedin'],
+          longDesc:"Posts engageants pour vos réseaux sociaux : choisissez réseau, ton et objectif. L'IA adapte format, hashtags et CTA selon la plateforme." },
+        { id:'O-MKT-002', padKey:'A8', title:'Brief Photo / 3D',      subtitle:'Brief créatif professionnel en 2 minutes',       category:'PRD', plan:'STARTER', price:29, lifetimePrice:149, icon:'brief',   ai_optimized:'ChatGPT', isNew:false, published:true, tags:['marketing','photo','3D','brief','créatif'],
+          longDesc:"Briefs créatifs détaillés pour vos prestataires photo et 3D. L'IA structure angles, ambiance et livrables. Évite les allers-retours." },
+        { id:'O-ANL-001', padKey:'A5', title:'CR Chantier',           subtitle:'Notes terrain → CR professionnel',               category:'IMM', plan:'PRO',     price:49, lifetimePrice:149, icon:'site',    ai_optimized:'Claude',  isNew:false, published:true, tags:['analyse','chantier','cr','réserves','suivi travaux'],
+          longDesc:"Transformez vos notes brutes en comptes-rendus structurés. L'IA organise réserves, points d'attention, actions et délais." },
+        { id:'O-ANL-002', padKey:'A6', title:'Analyste Foncier',      subtitle:'Dossier foncier complet en 5 minutes',           category:'IMM', plan:'PRO',     price:49, lifetimePrice:149, icon:'foncier', ai_optimized:'Claude',  isNew:true,  published:true, tags:['analyse','foncier','urbanisme','bilan','faisabilité'],
+          longDesc:"Analyse de terrain : faisabilité réglementaire, potentiel constructible, bilan prévisionnel et risques. Présentable en comité d'engagement." },
+        { id:'O-ADM-001', padKey:'A7', title:'Objections Acquéreurs', subtitle:'3 réponses graduées par objection',              category:'IMM', plan:'PRO',     price:39, lifetimePrice:149, icon:'chat',    ai_optimized:'Claude',  isNew:false, published:true, tags:['admin','commercial','objection','vente','argumentation'],
+          longDesc:"Réponses calibrées aux objections fréquentes : prix, délais, charges, emplacement. 3 niveaux : douce, affirmée, closing." },
+
+        // ── 6 ARTEFACTS (en proposition K-Store) ───────────────────
+        { id:'A-IMM-001', padKey:null, title:'Sentinel Immo',           subtitle:'Monitoring ranking SEO & présence digitale',  category:'IMM', plan:'PRO', price:79, icon:'zap',   ai_optimized:'Claude', isNew:true,  published:true, tags:['artefact','seo','monitoring','présence digitale','ranking'],
+          longDesc:"Surveillez la présence digitale de vos programmes : SEO, mentions, comparatif concurrentiel. Alertes auto + rapport hebdo." },
+        { id:'A-IMM-002', padKey:null, title:'Tableau des Lots',        subtitle:'Grille de vente interactive et exportable',   category:'IMM', plan:'PRO', price:59, icon:'table', ai_optimized:'Claude', isNew:false, published:true, tags:['artefact','lots','grille de vente','disponibilités','export'],
+          longDesc:"Tableau des lots en temps réel : disponibilités, options, réservations. Codes couleurs, filtres, export PDF/Excel." },
+        { id:'A-IMM-003', padKey:null, title:'Qualification Acquéreur', subtitle:'Scoring et profil acheteur automatisé',       category:'IMM', plan:'PRO', price:59, icon:'chat',  ai_optimized:'Claude', isNew:false, published:true, tags:['artefact','qualification','scoring','acquéreur','CRM'],
+          longDesc:"Qualifiez vos prospects en 2 minutes : scoring auto basé sur profil, capacité financière et projet. Recommandation de lot." },
+        { id:'A-ANL-001', padKey:null, title:'Simulateur Pinel',        subtitle:'Calcul fiscal interactif Pinel / Pinel+',     category:'ANL', plan:'MAX', price:99, lifetimePrice:299, icon:'calc', ai_optimized:'Claude', isNew:false, is_custom:true, published:true, tags:['artefact','pinel','fiscal','investissement','simulation'],
+          longDesc:"Simulez l'économie d'impôt Pinel/Pinel+ pour vos investisseurs. Fiche récap PDF personnalisée." },
+        { id:'A-ANL-002', padKey:null, title:'Calculatrice Promoteur',  subtitle:'Bilan opérateur simplifié en temps réel',     category:'ANL', plan:'STARTER', price:19, lifetimePrice:49, icon:'calc', ai_optimized:'Claude', isNew:false, is_custom:true, published:true, tags:['artefact','bilan','promoteur','calcul','marge'],
+          longDesc:"Bilan promoteur en temps réel : prix de revient, marge, charges financières, TVA. Export PDF." },
+        { id:'A-ADM-001', padKey:null, title:'FAQ Client',              subtitle:'Base de réponses dynamique par programme',    category:'ADM', plan:'PRO', price:59, icon:'brief', ai_optimized:'Claude', isNew:false, published:true, tags:['artefact','faq','client','communication','admin'],
+          longDesc:"Base de FAQ par programme. L'IA suggère les questions fréquentes et les actualise selon les échanges acquéreurs." },
+    ],
 };

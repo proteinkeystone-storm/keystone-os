@@ -7,6 +7,32 @@ import { initOnboarding }                     from './onboarding.js';
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
 
+// ═══════════════════════════════════════════════════════════════
+// VERSION CHECK — auto-cleanup à chaque déploiement
+// ═══════════════════════════════════════════════════════════════
+// Bumper APP_VERSION à chaque déploiement qui change la structure
+// localStorage / la signature des outils. Au boot, si la version
+// stockée diffère, on reset les clés problématiques sans toucher
+// aux préférences utilisateur (clés API, photo, nom...).
+const APP_VERSION = '2026-04-29-c';
+(() => {
+    const stored = localStorage.getItem('ks_app_version');
+    if (stored !== APP_VERSION) {
+        // Reset uniquement les clés liées aux licences/sélection (cause de l'affichage cassé).
+        // On préserve : clés API, prénom, photo, lock, ordre grille, dark mode.
+        ['ks_owned_assets','ks_user_selection','ks_inbox_cache']
+            .forEach(k => localStorage.removeItem(k));
+        // Reset des éventuels flags ks_deactivated_* (outils masqués)
+        Object.keys(localStorage)
+            .filter(k => k.startsWith('ks_deactivated_'))
+            .forEach(k => localStorage.removeItem(k));
+        // Force le mode démo : skip l'onboarding et affiche directement les 8 outils
+        localStorage.setItem('ks_onboarded', '1');
+        localStorage.setItem('ks_app_version', APP_VERSION);
+        console.info('[Keystone] Mise à jour appliquée :', APP_VERSION);
+    }
+})();
+
 // ── Démarrage complet du dashboard ─────────────────────────────
 function _boot() {
     renderDashboard();
