@@ -27,33 +27,46 @@ export const PADS_DATA = {
             { id: 'annexes',       label: 'Annexes incluses',           type: 'select',   options: ['Cave + Parking standard','Cave + Parking IRVE (borne de recharge)','Parking IRVE seul','Cave seule','Local vélo sécurisé','Aucune annexe'] },
             { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full' },
         ],
-        system_prompt: `Rôle : Expert Designer de documents immobiliers.
-Mission : Rédiger une Notice VEFA 2026 ET générer le code visuel pour un PDF de haute qualité.
+        system_prompt: `Rôle : Designer de documents print et Expert VEFA.
+Mission : Générer le code HTML/CSS d'une notice VEFA 2026 formatée pour une impression multi-pages A4.
 
-DONNÉES DU LOT :
-- Programme : {{nom_programme}}
-- Lot : {{type_logement}} de {{surface}} m²
+DONNÉES DU PROGRAMME :
+- Programme : {{nom_programme}} | Lot : {{type_logement}} | Surface : {{surface}} m²
 - Situation : {{etage}} — Orientation {{orientation}}
-- Sols : {{sols}}
-- Cuisine : {{cuisine}}
-- Chauffage : {{chauffage}}
+- Norme : {{re2020}}
+- Énergie : Chauffage décarboné — {{chauffage}}
+- Performance : Classe A
 - Confort d'été : {{confort_ete}}
 - Isolation : {{isolation}}
+- Sols : {{sols}}
+- Cuisine : {{cuisine}}
 - Annexes : {{annexes}}
 - Spécificités : {{specificites}}
-- Conformité RE 2020 : {{re2020}}
 
-CONSIGNES DE MISE EN PAGE :
-- Utilise un style moderne et épuré (typographie sans-serif type Helvetica/Roboto).
-- Crée une mise en page structurée avec des encadrés pour les points clés (RE 2020, DPE A).
-- Utilise une palette de couleurs sobre (Gris anthracite et un bleu ou vert émeraude pour les titres).
-- Ajoute un pied de page avec la mention "Notice descriptive - Document contractuel".
+CONSIGNES DE FORMATAGE "PRINT" :
+- Sauts de page : utilise la propriété CSS \`break-before: page;\` sur chaque titre de section (H2) pour forcer le début d'une nouvelle page.
+- Format A4 : définis le corps du document à \`width: 210mm;\` avec des marges de 20mm.
+- Style moderne : fond blanc, typographie sans-serif (ex : 'Inter' ou 'Helvetica'), et une couleur d'accent (Bleu nuit ou Vert canard) pour les bandeaux de titres.
+- Pied de page fixe : ajoute un pied de page sur chaque page avec : "Notice Descriptive Contractuelle - {{nom_programme}} - Page X/N".
 
-RÉDACTION TECHNIQUE :
-- Intégrer toutes les normes 2026 (RE 2020 Seuil 2025, Chauffage décarboné, Confort d'été).
+CONTENU À RÉDIGER (6 SECTIONS DISTINCTES) :
+- Page 1 : Couverture & Synthèse RE 2020 (Inclure les indicateurs IC Construction et Confort d'été DH < 1250h).
+- Page 2 : Structure & Enveloppe (Béton bas carbone, isolation biosourcée, menuiseries alu).
+- Page 3 : Équipements Techniques (Réseau de chaleur, VMC double-flux, domotique).
+- Page 4 : Finitions Intérieures (Carrelage 120x60, Parquet, Peinture lisse).
+- Page 5 : Annexes & Mobilité (Parking pré-équipé IRVE, Cave).
+- Page 6 : Mentions Légales & Signatures (Garanties et Art. R*261-25).
 
-SORTIE ATTENDUE :
-Génère un bloc de code HTML et CSS (inline) complet. Ce code doit simuler une page A4 élégante. Je dois pouvoir copier ce code, l'enregistrer en .html et l'imprimer en PDF avec une mise en page parfaite.`,
+SORTIE : donne-moi un seul bloc de code HTML (incluant le CSS dans une balise \`<style>\`).
+
+COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire HTML en fin de document) :
+1. Copiez le code généré.
+2. Collez-le dans un éditeur (CodePen ou un fichier .html sur le bureau).
+3. Faites Ctrl + P (ou Cmd + P).
+4. TRÈS IMPORTANT — dans les paramètres d'impression du navigateur :
+   - Activez "Graphiques d'arrière-plan" (pour voir les couleurs et bandeaux).
+   - Désactivez "En-têtes et pieds de page" du navigateur (pour ne pas voir l'URL du site en haut de page).
+   - Vérifiez que l'échelle est bien à 100 %.`,
     },
 
     A2: {
