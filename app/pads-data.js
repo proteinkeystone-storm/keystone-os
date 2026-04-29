@@ -27,53 +27,33 @@ export const PADS_DATA = {
             { id: 'annexes',       label: 'Annexes incluses',           type: 'select',   options: ['Cave + Parking standard','Cave + Parking IRVE (borne de recharge)','Parking IRVE seul','Cave seule','Local vélo sécurisé','Aucune annexe'] },
             { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full' },
         ],
-        system_prompt: `Rôle : Expert en ingénierie immobilière. Rédige une notice descriptive contractuelle VEFA.
+        system_prompt: `Rôle : Expert Designer de documents immobiliers.
+Mission : Rédiger une Notice VEFA 2026 ET générer le code visuel pour un PDF de haute qualité.
 
-INSTRUCTIONS DE FORMATAGE (CRUCIAL) :
-- Ne cite aucune source web.
-- Ne fais aucune introduction ni conclusion — commence directement par le titre.
-- Utilise des titres en gras et des listes à puces pour une clarté maximale.
-- Le document doit être prêt à être imprimé au format PDF.
-
-PARAMÈTRES DU LOT :
+DONNÉES DU LOT :
 - Programme : {{nom_programme}}
-- Typologie : {{type_logement}} de {{surface}} m²
+- Lot : {{type_logement}} de {{surface}} m²
 - Situation : {{etage}} — Orientation {{orientation}}
-- Matériaux Sols : {{sols}}
+- Sols : {{sols}}
 - Cuisine : {{cuisine}}
 - Chauffage : {{chauffage}}
 - Confort d'été : {{confort_ete}}
 - Isolation : {{isolation}}
 - Annexes : {{annexes}}
-- Extérieur & spécificités : {{specificites}}
+- Spécificités : {{specificites}}
+- Conformité RE 2020 : {{re2020}}
 
-RÉGLEMENTATION 2026 :
-- Conformité RE 2020 — {{re2020}}
-- Chauffage décarboné (PAC ou équivalent), sans gaz.
-- Confort d'été optimisé (Indice DH conforme).
-- Performance énergétique : Classe A.
+CONSIGNES DE MISE EN PAGE :
+- Utilise un style moderne et épuré (typographie sans-serif type Helvetica/Roboto).
+- Crée une mise en page structurée avec des encadrés pour les points clés (RE 2020, DPE A).
+- Utilise une palette de couleurs sobre (Gris anthracite et un bleu ou vert émeraude pour les titres).
+- Ajoute un pied de page avec la mention "Notice descriptive - Document contractuel".
 
-PLAN DE RÉDACTION OBLIGATOIRE :
+RÉDACTION TECHNIQUE :
+- Intégrer toutes les normes 2026 (RE 2020 Seuil 2025, Chauffage décarboné, Confort d'été).
 
-**NOTICE DESCRIPTIVE DE VENTE (Art. R*261-25 du CCH)**
-
-**1. GROS ŒUVRE ET ISOLATION**
-(Détails sur les murs, planchers et isolation {{isolation}})
-
-**2. MENUISERIES ET FERMETURES**
-(Vitrage argon, rupture pont thermique, occultations — {{confort_ete}})
-
-**3. ÉQUIPEMENTS TECHNIQUES ET DOMOTIQUE**
-({{chauffage}}, VMC Hygro B, pilotage intelligent des consommations)
-
-**4. FINITIONS INTÉRIEURES**
-(Sols : {{sols}} — Peintures lisses — Équipements sanitaires haut de gamme)
-
-**5. PARTIES COMMUNES ET SERVICES**
-(Sécurité, mobilité douce, locaux vélos, biodiversité — Annexes : {{annexes}})
-
-**6. GARANTIES LÉGALES**
-(Parfait achèvement, Biennale, Décennale)`,
+SORTIE ATTENDUE :
+Génère un bloc de code HTML et CSS (inline) complet. Ce code doit simuler une page A4 élégante. Je dois pouvoir copier ce code, l'enregistrer en .html et l'imprimer en PDF avec une mise en page parfaite.`,
     },
 
     A2: {
