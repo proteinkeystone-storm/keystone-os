@@ -825,6 +825,11 @@ body.ks-dragging * { cursor: grabbing !important; user-select: none !important; 
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* Filet de sécurité : la barre d'édition ne doit JAMAIS s'afficher
+   par-dessus un modal d'outil ouvert (peu importe le z-index). */
+body:has(.tool-modal.open) .pad-edit-bar,
+body:has(.ks-panel.open) .pad-edit-bar { display: none !important; }
+
 .pad-edit-bar {
   position: fixed;
   z-index: 9500;

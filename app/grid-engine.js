@@ -189,7 +189,8 @@ function _persistOrder(container) {
 let _longPressTimer = null;
 let _lpStartX = 0;
 let _lpStartY = 0;
-const LP_THRESHOLD = 8; // px — déplacement max toléré avant d'annuler le long press
+const LP_DURATION  = 1500; // ms — long press déclenché après 1.5s
+const LP_THRESHOLD = 14;   // px — déplacement max toléré avant d'annuler le long press
 
 function _setupEditMode(container, onPadChanged, onDeactivate) {
     // Clic droit
@@ -209,6 +210,10 @@ function _setupEditMode(container, onPadChanged, onDeactivate) {
         // Ne pas démarrer le long-press depuis la poignée (réservée au drag)
         if (e.target.closest('.pad-drag-handle')) return;
 
+        // Reset complet — évite les timers stackés et les états pad-pressing rémanents
+        _cancelLongPress();
+        container.querySelectorAll('.pad-card.pad-pressing').forEach(c => c.classList.remove('pad-pressing'));
+
         _editTriggered = false;
         _lpStartX = e.clientX;
         _lpStartY = e.clientY;
@@ -219,7 +224,7 @@ function _setupEditMode(container, onPadChanged, onDeactivate) {
             card.classList.remove('pad-pressing');
             _editTriggered = true;
             _triggerEditMode(card, onPadChanged, onDeactivate);
-        }, 3000);
+        }, LP_DURATION);
     });
 
     // Annuler si relâché avant 3s
@@ -473,6 +478,9 @@ function _setupClickDelegate(container, onOpen) {
         if (card.classList.contains('editing'))      return;
         if (card.classList.contains('pad-renaming')) return;
         if (card.querySelector('.pad-confirm-overlay')) return;
+        // Sécurité : dismiss toute barre d'édition résiduelle avant d'ouvrir un modal
+        // (évite que la barre flotte par-dessus le modal d'outil avec son z-index 9500)
+        _dismissEditBar();
         onOpen(card.dataset.id);
     });
 }
