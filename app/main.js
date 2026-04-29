@@ -14,14 +14,14 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-04-29-c';
+const APP_VERSION = '2026-04-29-d';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
     if (stored !== APP_VERSION) {
-        // Reset uniquement les clés liées aux licences/sélection (cause de l'affichage cassé).
-        // On préserve : clés API, prénom, photo, lock, ordre grille, dark mode.
-        ['ks_owned_assets','ks_user_selection','ks_inbox_cache']
-            .forEach(k => localStorage.removeItem(k));
+        // Reset uniquement les clés liées aux licences (cause de l'affichage cassé).
+        // On préserve : clés API, prénom, photo, lock, ordre grille, dark mode,
+        // ainsi que ks_user_selection (préférence utilisateur sélection onboarding).
+        ['ks_owned_assets','ks_inbox_cache'].forEach(k => localStorage.removeItem(k));
         // Reset des éventuels flags ks_deactivated_* (outils masqués)
         Object.keys(localStorage)
             .filter(k => k.startsWith('ks_deactivated_'))

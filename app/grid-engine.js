@@ -106,9 +106,17 @@ function _setupDragDrop(container) {
             }
             if (!best) return;
 
-            // Insertion before/after selon position X relative au centre de la cible
-            const r = best.getBoundingClientRect();
-            const before = ev.clientX < r.left + r.width / 2;
+            // Insertion before/after — prend en compte X ET Y pour gérer
+            // les déplacements verticaux (haut/bas) et horizontaux (gauche/droite).
+            const r  = best.getBoundingClientRect();
+            const cx = r.left + r.width  / 2;
+            const cy = r.top  + r.height / 2;
+            // Si la cible est sur une autre rangée que le curseur (différence Y > height/2),
+            // on décide before/after sur Y. Sinon, on décide sur X.
+            const verticalMove = Math.abs(ev.clientY - cy) > r.height / 2;
+            const before = verticalMove
+                ? (ev.clientY < cy)
+                : (ev.clientX < cx);
 
             const willMove = before
                 ? (best.previousElementSibling !== src)

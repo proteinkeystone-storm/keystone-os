@@ -132,23 +132,41 @@ export function renderDashboard() {
     const _isLifetime = id => lifetimeIds.includes(id);
 
     // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
-    // En mode démo (ownedIds === null), on ignore _userSel et on affiche TOUS les outils
+    // La sélection s'applique aussi en mode démo : si l'utilisateur a coché 4 outils,
+    // seuls ces 4 sont visibles dans la grille principale.
     const _userSelRaw = localStorage.getItem('ks_user_selection');
-    const _userSel    = (_userSelRaw && ownedIds !== null) ? JSON.parse(_userSelRaw) : null;
+    let _userSel = null;
+    if (_userSelRaw) {
+        try {
+            const parsed = JSON.parse(_userSelRaw);
+            if (Array.isArray(parsed) && parsed.length > 0) _userSel = parsed;
+        } catch (_) {}
+    }
 
-    // Exclure les outils désactivés + appliquer la sélection onboarding (licences uniquement)
+    // Exclure les outils désactivés + appliquer la sélection onboarding
+    const _isSelected = id => _userSel === null || _userSel.includes(id);
+
     const ownedTools = TOOLS.filter(t =>
         _isOwned(t.id) &&
         !isPadDeactivated(t.id) &&
-        (_userSel === null || _userSel.includes(t.id))
+        _isSelected(t.id)
     );
-    const lockedTools = ownedIds !== null
-        ? TOOLS.filter(t => !_isOwned(t.id) && getCatalogEntry(t.id)?.published !== false)
-        : [];
-    const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => _isOwned(a.id)) : [];
-    const lockedArts = ARTEFACTS.filter(a =>
-        (ownedIds === null || !_isOwned(a.id)) && getCatalogEntry(a.id)?.published !== false
-    );
+    // Sont "verrouillés/suggérés" : ceux pas owned OU (mode démo + onboarding) non sélectionnés
+    const lockedTools = TOOLS.filter(t => {
+        const notOwned     = !_isOwned(t.id);
+        const notSelected  = !_isSelected(t.id);
+        return (notOwned || notSelected) && getCatalogEntry(t.id)?.published !== false;
+    });
+
+    // Artefacts : en mode démo, toujours dans la section "Outils disponibles" (suggested).
+    // En mode licence, dans la grille principale s'ils sont owned.
+    const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => _isOwned(a.id) && _isSelected(a.id)) : [];
+    const lockedArts = ARTEFACTS.filter(a => {
+        const notOwned    = !_isOwned(a.id);
+        const notSelected = !_isSelected(a.id);
+        const inDemoMode  = ownedIds === null;
+        return (inDemoMode || notOwned || notSelected) && getCatalogEntry(a.id)?.published !== false;
+    });
 
     // ── Bannière Mode Frigo ────────────────────────────────────
     const _existingBanner = document.getElementById('ks-frigo-banner');
@@ -251,6 +269,10 @@ export function renderDashboard() {
             return (bNew ? 1 : 0) - (aNew ? 1 : 0);
         });
 
+        // En mode démo, le CTA est "Ajouter au tableau" (l'outil est dispo, juste non sélectionné).
+        // En mode licence, le CTA reste "Essayer gratuitement" (vrai upsell).
+        const ctaLabel = (ownedIds === null) ? 'Ajouter' : 'Essayer gratuitement';
+
         // Cartes compactes — pictogramme + nom + CTA
         const suggestCards = sortedLocked.map(item => {
             const cat    = getCatalogEntry(item.id);
@@ -263,7 +285,7 @@ export function renderDashboard() {
                 ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
-                <button class="suggest-card-cta">Essayer gratuitement</button>
+                <button class="suggest-card-cta">${ctaLabel}</button>
             </div>`;
         }).join('');
 
