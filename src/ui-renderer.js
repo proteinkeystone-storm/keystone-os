@@ -132,10 +132,11 @@ export function renderDashboard() {
     const _isLifetime = id => lifetimeIds.includes(id);
 
     // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
+    // En mode démo (ownedIds === null), on ignore _userSel et on affiche TOUS les outils
     const _userSelRaw = localStorage.getItem('ks_user_selection');
-    const _userSel    = _userSelRaw ? JSON.parse(_userSelRaw) : null;
+    const _userSel    = (_userSelRaw && ownedIds !== null) ? JSON.parse(_userSelRaw) : null;
 
-    // Exclure les outils désactivés + appliquer la sélection onboarding (toutes branches)
+    // Exclure les outils désactivés + appliquer la sélection onboarding (licences uniquement)
     const ownedTools = TOOLS.filter(t =>
         _isOwned(t.id) &&
         !isPadDeactivated(t.id) &&
