@@ -47,11 +47,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 3. Sprint 5.2 — Vault vide + jamais onboardé → Onboarding
     const onboarded = localStorage.getItem('ks_onboarded');
     if (isVaultEmpty() && !onboarded) {
-        const catalog = Object.values(pads).map(p => ({
-            id:   p.id,
-            name: p.title,
-            desc: p.subtitle || '',
-        }));
+        // Outils PADs + Artefacts catalog (propositions suggérées)
+        const toolItems = getToolList();
+        const artefactItems = getArtefactList();
+        const catalog = [...toolItems, ...artefactItems];
         initOnboarding(catalog, _boot);
         return;
     }

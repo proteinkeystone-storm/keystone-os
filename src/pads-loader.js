@@ -94,9 +94,11 @@ export function getArtefactList() {
     return _catalogCache.tools
         .filter(t => t.id.startsWith('A-'))
         .map(t => ({
-            id:   t.id,
-            name: t.title || t.id,
-            icon: t.icon  || 'zap',
+            id:     t.id,
+            name:   t.title    || t.id,
+            desc:   t.subtitle || '',
+            icon:   t.icon     || 'zap',
+            engine: t.ai_optimized || 'Claude',
         }));
 }
 

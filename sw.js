@@ -9,8 +9,8 @@
    · Clés API et prefs → localStorage client (jamais en cache SW)
    ═══════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME    = 'keystone-v4';
-const SHELL_VERSION = '20260429-1';
+const CACHE_NAME    = 'keystone-v5';
+const SHELL_VERSION = '20260429-2';
 
 // ── Assets du Shell — mis en cache à l'installation ─────────────
 // Note : '/' n'est PAS pré-caché — Vercel sert index.html (landing)

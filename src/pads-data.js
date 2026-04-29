@@ -6,32 +6,72 @@
 export const PADS_DATA = {
 
     A1: {
-        id: 'A1', title: 'Notices VEFA',
-        subtitle: 'Notice descriptive professionnelle',
+        id: 'O-IMM-001', padKey: 'A1', title: 'Notices VEFA',
+        subtitle: 'Notice descriptive conforme RE 2020 — 2026',
         ai_optimized: 'Claude', icon: 'vefa',
         notice: `1. Remplissez chaque champ avec précision — la qualité du prompt dépend du niveau de détail.\n2. Copiez le prompt généré et collez-le dans Claude.ai, ChatGPT ou votre IA préférée.\n3. Demandez ensuite à l'IA : "Rédige une 2ème version plus luxueuse" ou "Ajoute une section sur les extérieurs".\n4. Avec une clé API configurée dans ⚙️, la réponse s'affiche directement ici.`,
         fields: [
-            { id: 'nom_programme', label: 'Nom du programme',     type: 'text',     placeholder: 'ex: Les Jardins du Midi', required: true, span: 'full' },
-            { id: 'type_logement', label: 'Type de logement',     type: 'select',   options: ['T2','T3','T4','T5','Villa','Penthouse'], required: true },
-            { id: 'surface',       label: 'Surface habitable (m²)',type: 'number',   placeholder: 'ex: 75', required: true },
-            { id: 'etage',         label: 'Étage / Situation',    type: 'text',     placeholder: 'ex: 3ème étage, vue mer' },
-            { id: 'orientation',   label: 'Orientation principale',type: 'select',   options: ['Sud','Sud-Est','Sud-Ouest','Est','Ouest','Nord-Est','Nord-Ouest','Nord'] },
-            { id: 'sols',          label: 'Revêtements sols',     type: 'select',   options: ['Carrelage grand format','Parquet chêne naturel','Béton ciré','Marbre','Travertin'] },
-            { id: 'cuisine',       label: 'Cuisine',              type: 'select',   options: ['Entièrement équipée','Partiellement équipée','Non équipée'] },
-            { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, garage, cave, domotique...', span: 'full' },
+            { id: 'nom_programme', label: 'Nom du programme',           type: 'text',     placeholder: 'ex: Les Jardins du Midi', required: true, span: 'full' },
+            { id: 'type_logement', label: 'Type de logement',           type: 'select',   options: ['T2','T3','T4','T5','Villa','Penthouse'], required: true },
+            { id: 'surface',       label: 'Surface habitable (m²)',     type: 'number',   placeholder: 'ex: 75', required: true },
+            { id: 'etage',         label: 'Étage / Situation',          type: 'text',     placeholder: 'ex: 3ème étage, vue dégagée' },
+            { id: 'orientation',   label: 'Orientation principale',     type: 'select',   options: ['Sud','Sud-Est','Sud-Ouest','Est','Ouest','Nord-Est','Nord-Ouest','Nord'] },
+            { id: 'sols',          label: 'Revêtements sols',           type: 'select',   options: ['Carrelage grand format','Parquet chêne naturel','Béton ciré','Marbre','Travertin'] },
+            { id: 'cuisine',       label: 'Cuisine',                    type: 'select',   options: ['Entièrement équipée','Partiellement équipée (attentes)','Non équipée'] },
+            { id: 'chauffage',     label: 'Mode de chauffage',          type: 'select',   options: ['PAC collective','PAC individuelle','Réseau de chaleur urbain (CPCU)','Plancher chauffant électrique','Pompe à chaleur air/air'], required: true },
+            { id: 're2020',        label: 'Conformité RE 2020',         type: 'select',   options: ['Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)','Seuil 2028 (IC construction ≤ 415 kgCO₂eq/m²)','Seuil 2031 (Objectif bas carbone)'], required: true },
+            { id: 'confort_ete',   label: 'Confort d\'été',             type: 'select',   options: ['Brise-soleil orientables (BSO)','Volets roulants motorisés','Double vitrage à contrôle solaire','BSO + Volets motorisés','Sans dispositif spécifique'] },
+            { id: 'isolation',     label: 'Type d\'isolation',          type: 'select',   options: ['Biosourcée (laine de bois, chanvre, ouate)','Synthétique (PSE, laine de verre)','Mixte biosourcée + synthétique','ITI béton banché renforcé'] },
+            { id: 'annexes',       label: 'Annexes incluses',           type: 'select',   options: ['Cave + Parking standard','Cave + Parking IRVE (borne de recharge)','Parking IRVE seul','Cave seule','Local vélo sécurisé','Aucune annexe'] },
+            { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full' },
         ],
-        system_prompt: `Tu es un expert en rédaction immobilière VEFA. Rédige une notice descriptive professionnelle et valorisante.
+        system_prompt: `Rôle : Expert en ingénierie immobilière. Rédige une notice descriptive contractuelle VEFA.
 
-Logement :
+INSTRUCTIONS DE FORMATAGE (CRUCIAL) :
+- Ne cite aucune source web.
+- Ne fais aucune introduction ni conclusion — commence directement par le titre.
+- Utilise des titres en gras et des listes à puces pour une clarté maximale.
+- Le document doit être prêt à être imprimé au format PDF.
+
+PARAMÈTRES DU LOT :
 - Programme : {{nom_programme}}
-- Type : {{type_logement}} de {{surface}}m²
-- Situation : {{etage}}
-- Orientation : {{orientation}}
-- Revêtements sols : {{sols}}
+- Typologie : {{type_logement}} de {{surface}} m²
+- Situation : {{etage}} — Orientation {{orientation}}
+- Matériaux Sols : {{sols}}
 - Cuisine : {{cuisine}}
-- Spécificités : {{specificites}}
+- Chauffage : {{chauffage}}
+- Confort d'été : {{confort_ete}}
+- Isolation : {{isolation}}
+- Annexes : {{annexes}}
+- Extérieur & spécificités : {{specificites}}
 
-Structure la notice avec : Présentation générale, Prestations & Finitions, Équipements, Conclusion valorisante. Ton professionnel, précis et vendeur.`,
+RÉGLEMENTATION 2026 :
+- Conformité RE 2020 — {{re2020}}
+- Chauffage décarboné (PAC ou équivalent), sans gaz.
+- Confort d'été optimisé (Indice DH conforme).
+- Performance énergétique : Classe A.
+
+PLAN DE RÉDACTION OBLIGATOIRE :
+
+**NOTICE DESCRIPTIVE DE VENTE (Art. R*261-25 du CCH)**
+
+**1. GROS ŒUVRE ET ISOLATION**
+(Détails sur les murs, planchers et isolation {{isolation}})
+
+**2. MENUISERIES ET FERMETURES**
+(Vitrage argon, rupture pont thermique, occultations — {{confort_ete}})
+
+**3. ÉQUIPEMENTS TECHNIQUES ET DOMOTIQUE**
+({{chauffage}}, VMC Hygro B, pilotage intelligent des consommations)
+
+**4. FINITIONS INTÉRIEURES**
+(Sols : {{sols}} — Peintures lisses — Équipements sanitaires haut de gamme)
+
+**5. PARTIES COMMUNES ET SERVICES**
+(Sécurité, mobilité douce, locaux vélos, biodiversité — Annexes : {{annexes}})
+
+**6. GARANTIES LÉGALES**
+(Parfait achèvement, Biennale, Décennale)`,
     },
 
     A2: {
