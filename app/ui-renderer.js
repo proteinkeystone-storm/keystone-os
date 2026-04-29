@@ -269,9 +269,11 @@ export function renderDashboard() {
             return (bNew ? 1 : 0) - (aNew ? 1 : 0);
         });
 
-        // En mode démo, le CTA est "Ajouter au tableau" (l'outil est dispo, juste non sélectionné).
-        // En mode licence, le CTA reste "Essayer gratuitement" (vrai upsell).
-        const ctaLabel = (ownedIds === null) ? 'Ajouter' : 'Essayer gratuitement';
+        // En mode démo : pastille "Bientôt" grisée (les outils ne sont pas encore activables).
+        // En mode licence : "Essayer gratuitement" (vrai upsell).
+        const isDemo = (ownedIds === null);
+        const ctaLabel = isDemo ? 'Bientôt' : 'Essayer gratuitement';
+        const ctaClass = isDemo ? 'suggest-card-cta suggest-card-cta--soon' : 'suggest-card-cta';
 
         // Cartes compactes — pictogramme + nom + CTA
         const suggestCards = sortedLocked.map(item => {
@@ -285,7 +287,7 @@ export function renderDashboard() {
                 ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
-                <button class="suggest-card-cta">${ctaLabel}</button>
+                <button class="${ctaClass}" ${isDemo ? 'disabled' : ''}>${ctaLabel}</button>
             </div>`;
         }).join('');
 

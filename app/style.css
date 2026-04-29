@@ -1342,6 +1342,18 @@ html.light-mode .pad-card--locked::after {
   background: rgba(201,168,76,.18);
   border-color: rgba(201,168,76,.5);
 }
+/* Variante "Bientôt" — pastille grisée, non interactive (mode démo) */
+.suggest-card-cta--soon {
+  color: rgba(255,255,255,.42) !important;
+  background: rgba(255,255,255,.05) !important;
+  border-color: rgba(255,255,255,.1) !important;
+  cursor: default !important;
+  pointer-events: none;
+}
+.suggest-card:hover .suggest-card-cta--soon {
+  background: rgba(255,255,255,.05) !important;
+  border-color: rgba(255,255,255,.1) !important;
+}
 .suggest-card-new {
   position: absolute; top: 8px; right: 8px;
   font-size: 7px; font-weight: 900; letter-spacing: .1em;
@@ -1462,6 +1474,10 @@ html.light-mode .sec-kstore-badge {
   flex: 1; overflow-y: auto; padding: 14px 14px 20px;
   display: flex; flex-direction: column; gap: 14px;
 }
+/* L'attribut HTML [hidden] doit gagner sur display:flex (sinon le panneau
+   Plans s'affiche en bas du Catalogue). */
+.ks-plans-view[hidden],
+#ks-catalogue-view[hidden] { display: none !important; }
 .ks-plans-grid {
   display: flex; flex-direction: column; gap: 10px;
 }

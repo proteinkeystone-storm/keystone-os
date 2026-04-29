@@ -295,7 +295,7 @@ export const CATALOG_DATA = {
           longDesc:"Réponses calibrées aux objections fréquentes : prix, délais, charges, emplacement. 3 niveaux : douce, affirmée, closing." },
 
         // ── 6 ARTEFACTS (en proposition K-Store) ───────────────────
-        { id:'A-IMM-001', padKey:null, title:'Sentinel Immo',           subtitle:'Monitoring ranking SEO & présence digitale',  category:'IMM', plan:'PRO', price:79, icon:'zap',   ai_optimized:'Claude', isNew:true,  published:true, tags:['artefact','seo','monitoring','présence digitale','ranking'],
+        { id:'A-IMM-001', padKey:null, title:'Sentinelle',              subtitle:'Monitoring ranking SEO & présence digitale',  category:'IMM', plan:'PRO', price:79, icon:'zap',   ai_optimized:'Claude', isNew:true,  published:true, tags:['artefact','seo','monitoring','présence digitale','ranking'],
           longDesc:"Surveillez la présence digitale de vos programmes : SEO, mentions, comparatif concurrentiel. Alertes auto + rapport hebdo." },
         { id:'A-IMM-002', padKey:null, title:'Tableau des Lots',        subtitle:'Grille de vente interactive et exportable',   category:'IMM', plan:'PRO', price:59, icon:'table', ai_optimized:'Claude', isNew:false, published:true, tags:['artefact','lots','grille de vente','disponibilités','export'],
           longDesc:"Tableau des lots en temps réel : disponibilités, options, réservations. Codes couleurs, filtres, export PDF/Excel." },
