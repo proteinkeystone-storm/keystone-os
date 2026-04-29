@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="Keystone">
   <link rel="apple-touch-icon" href="./LOGOS/Logo puce fond bleu.svg">
 
-  <link rel="stylesheet" href="./src/style.css?v=20260425">
+  <link rel="stylesheet" href="./src/style.css?v=20260429-2">
 
   <!-- ── SECURITY GATE — détection lancement non officiel ─────── -->
   <script>
@@ -300,10 +300,20 @@
 <!-- ── Service Worker — enregistrement PWA ───────────────────── -->
 <script>
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // Auto-reload une seule fois quand un nouveau SW prend le contrôle
+    let _reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_reloading) return;
+      _reloading = true;
+      location.reload();
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .then(reg => {
           console.info('[Keystone SW] Enregistré :', reg.scope);
+          // Force un check de mise à jour à chaque chargement
+          reg.update().catch(() => {});
           // Mise à jour silencieuse si une nouvelle version est détectée
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
