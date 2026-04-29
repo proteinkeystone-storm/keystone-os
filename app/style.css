@@ -1478,6 +1478,14 @@ html.light-mode .sec-kstore-badge {
    Plans s'affiche en bas du Catalogue). */
 .ks-plans-view[hidden],
 #ks-catalogue-view[hidden] { display: none !important; }
+
+/* Le panneau Catalogue est lui-même un flex column qui occupe toute la
+   hauteur restante du panneau Key-Store ; sans ça, .ks-grid (flex:1
+   overflow-y:auto) déborde au lieu de scroller. */
+#ks-catalogue-view {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
 .ks-plans-grid {
   display: flex; flex-direction: column; gap: 10px;
 }
