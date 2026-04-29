@@ -5,9 +5,25 @@
   "description": "Keystone OS — Pôle IA pour la promotion immobilière",
   "type": "module",
   "dependencies": {
-    "@upstash/redis": "^1.34.0"
+    "@upstash/redis": "^1.34.0",
+    "puppeteer": "^24.42.0"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "main": "sw.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/proteinkeystone-storm/keystone-os.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/proteinkeystone-storm/keystone-os/issues"
+  },
+  "homepage": "https://github.com/proteinkeystone-storm/keystone-os#readme"
 }
