@@ -2470,7 +2470,7 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
 
 /* ── Prompt preview ──────────────────────────────────────────── */
 .prompt-text {
-  flex: 1; min-height: 100px;
+  flex: 1; min-height: 100px; max-height: calc(100% - 80px);
   padding: 14px 16px;
   background: rgba(255,255,255,.03);
   border: 1px solid var(--bd);
@@ -2479,6 +2479,8 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
   color: var(--text);
   white-space: pre-wrap; word-break: break-word;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201,168,76,.15) transparent;
   transition: border-color .2s;
 }
 
@@ -2492,9 +2494,10 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
   margin-left: 1px;
 }
 
-/* Action buttons row */
+/* Action buttons row — toujours visibles en bas de la zone résultat */
 .result-actions {
   display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+  margin-top: auto; padding-top: 8px;
 }
 .action-btn {
   display: flex; align-items: center; gap: 6px;
