@@ -2425,19 +2425,26 @@ function _renderPromptLibraryBody() {
         return;
     }
 
+    // Échappement HTML — indispensable car les prompts peuvent contenir
+    // <style>, <script>, <div>... qui seraient interprétés comme HTML réel
+    // et masqueraient les boutons Copier/Supprimer.
+    const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+
     body.innerHTML = lib.map((entry, idx) => {
         const date = new Date(entry.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
         const label = entry.label || `${entry.id} · ${entry.title}`;
         return `
         <div class="pl-entry" data-idx="${idx}">
             <div class="pl-entry-hd">
-                <span class="pl-entry-tag pl-entry-rename" data-idx="${idx}" title="Cliquer pour renommer" contenteditable="false">${label}</span>
+                <span class="pl-entry-tag pl-entry-rename" data-idx="${idx}" title="Cliquer pour renommer" contenteditable="false">${_esc(label)}</span>
                 <span class="pl-entry-edit-ico" data-idx="${idx}" title="Renommer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;pointer-events:none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </span>
-                <span class="pl-entry-date">${date}</span>
+                <span class="pl-entry-date">${_esc(date)}</span>
             </div>
-            <div class="pl-entry-text">${entry.prompt}</div>
+            <div class="pl-entry-text">${_esc(entry.prompt)}</div>
             <div class="pl-entry-actions">
                 <button class="pl-entry-btn" data-action="copy" data-idx="${idx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button>
                 <button class="pl-entry-btn danger" data-action="delete" data-idx="${idx}">Supprimer</button>
