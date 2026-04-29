@@ -5,6 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Keystone — Prométhée Immobilier</title>
 
+  <!-- ── KILL SWITCH PRIORITAIRE — exécuté avant tout fetch ────────
+       URL spéciales qui forcent un reset complet :
+       · ?ks_reset=1 → vide tout (SW, caches, localStorage ks_*) puis recharge
+       · ?demo=1     → mode démo pur (vide ks_owned_assets/ks_user_selection)
+  ─────────────────────────────────────────────────────────────── -->
+  <script>
+  (function(){
+    var p = new URLSearchParams(location.search);
+
+    // Kill complet — efface TOUT
+    if (p.get('ks_reset') === '1') {
+      try {
+        Object.keys(localStorage).filter(k => k.startsWith('ks_')).forEach(k => localStorage.removeItem(k));
+      } catch(e){}
+      var done = function(){ location.replace(location.pathname); };
+      var p1 = ('serviceWorker' in navigator)
+        ? navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))).catch(() => {})
+        : Promise.resolve();
+      var p2 = ('caches' in window)
+        ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).catch(() => {})
+        : Promise.resolve();
+      Promise.all([p1, p2]).then(done, done);
+      document.documentElement.innerHTML = '<body style="background:#07102a;color:#d4af37;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Reset en cours…</body>';
+      return;
+    }
+
+    // Mode démo pur — efface uniquement la licence/sélection
+    if (p.get('demo') === '1') {
+      try {
+        ['ks_owned_assets','ks_lifetime_purchases','ks_user_selection','ks_licence_key','ks_onboarded']
+          .forEach(k => localStorage.removeItem(k));
+        localStorage.setItem('ks_onboarded','1');
+      } catch(e){}
+      // Continue le chargement normal — la page suivante sera en mode démo
+    }
+  })();
+  </script>
+
   <!-- ── PWA Meta ──────────────────────────────────────────────── -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#07102a">
@@ -297,35 +335,18 @@
   </div>
 </div>
 
-<!-- ── Service Worker — enregistrement PWA ───────────────────── -->
+<!-- ── Service Worker DÉSACTIVÉ — kill switch d'urgence 2026-04-29 ──
+     Le SW résident causait des problèmes de cache tenace. On le tue
+     et on bloque tout nouvel enregistrement.
+─────────────────────────────────────────────────────────────────── -->
 <script>
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    // Auto-reload une seule fois quand un nouveau SW prend le contrôle
-    let _reloading = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (_reloading) return;
-      _reloading = true;
-      location.reload();
-    });
-
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(reg => {
-          console.info('[Keystone SW] Enregistré :', reg.scope);
-          // Force un check de mise à jour à chaque chargement
-          reg.update().catch(() => {});
-          // Mise à jour silencieuse si une nouvelle version est détectée
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            newWorker?.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              }
-            });
-          });
-        })
-        .catch(err => console.warn('[Keystone SW] Erreur :', err));
-    });
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(r => r.unregister());
+    }).catch(() => {});
+    if ('caches' in window) {
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+    }
   }
 </script>
 
