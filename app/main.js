@@ -14,7 +14,7 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-05-04-engines-fix';
+const APP_VERSION = '2026-05-04-onboarding-fix';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
     if (stored !== APP_VERSION) {
@@ -26,8 +26,9 @@ const APP_VERSION = '2026-05-04-engines-fix';
         Object.keys(localStorage)
             .filter(k => k.startsWith('ks_deactivated_'))
             .forEach(k => localStorage.removeItem(k));
-        // Force le mode démo : skip l'onboarding et affiche directement les 8 outils
-        localStorage.setItem('ks_onboarded', '1');
+        // Pour les utilisateurs existants (stored !== null), skip l'onboarding.
+        // Les nouveaux utilisateurs (stored === null) doivent passer par l'onboarding.
+        if (stored !== null) localStorage.setItem('ks_onboarded', '1');
         localStorage.setItem('ks_app_version', APP_VERSION);
         console.info('[Keystone] Mise à jour appliquée :', APP_VERSION);
     }
