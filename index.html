@@ -1458,7 +1458,7 @@ function activateLicence() {
 
     if      (key.startsWith('MAX'))  _activePlan = 'Max';
     else if (key.startsWith('PRO'))  _activePlan = 'Pro';
-    else if (key.startsWith('DEMO')) _activePlan = 'Pro'; // Démo → accès Pro complet
+    else if (key.startsWith('DEMO')) _activePlan = 'Demo'; // Démo → 1 seul outil sélectionnable
     else                              _activePlan = 'Start';
 
     status.textContent = '';
@@ -1476,7 +1476,7 @@ function activateLicence() {
 /* ═══════════════════════════════════════════
    ONBOARDING
 ═══════════════════════════════════════════ */
-const TOOL_QUOTA = { 'Start': 6, 'Pro': 8, 'Max': Infinity };
+const TOOL_QUOTA = { 'Demo': 1, 'Start': 6, 'Pro': 8, 'Max': Infinity };
 // Source de vérité : IDs NOMEN-K immuables + USER_LABEL canonique
 // Doit refléter K_STORE_ASSETS/PADS/manifest.json
 const ALL_TOOLS = [
@@ -1512,6 +1512,17 @@ function obNext(step) {
     const v = document.getElementById('ob-name-input')?.value.trim();
     if (v) localStorage.setItem('ks_user_name', v);
   }
+  // Avant le finaliser : exiger au moins 1 outil (mode Démo notamment)
+  if (step === 4 && _selectedTools.size === 0) {
+    const lbl = document.getElementById('ob-quota-label');
+    if (lbl) {
+      lbl.style.color = '#ff8a80';
+      lbl.textContent = _activePlan === 'Demo'
+        ? 'Sélectionnez 1 outil pour démarrer votre démonstration.'
+        : 'Sélectionnez au moins 1 outil pour continuer.';
+    }
+    return;
+  }
   document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   document.getElementById('ob-step-' + step).classList.add('active');
   document.getElementById('ob-bar').style.width = (step / 4 * 100) + '%';
@@ -1522,7 +1533,10 @@ function buildToolsGrid() {
   const grid  = document.getElementById('ob-tools-grid');
   const label = document.getElementById('ob-quota-label');
   const quotaText = quota === Infinity ? 'tous les' : quota;
-  label.textContent = `Sélectionnez vos ${quotaText} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
+  label.style.color = '';
+  label.textContent = _activePlan === 'Demo'
+    ? `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`
+    : `Sélectionnez vos ${quotaText} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
   grid.innerHTML = ALL_TOOLS.map(tool => `
     <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota === Infinity ? 999 : quota})">
       <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
@@ -1554,7 +1568,21 @@ function launchApp() {
   const nameVal = document.getElementById('ob-name-input')?.value.trim();
   if (nameVal) localStorage.setItem('ks_user_name', nameVal);
 
-  const selectedIds = [..._selectedTools];
+  let selectedIds = [..._selectedTools];
+
+  // Mode Démo : on contraint strictement à 1 outil et on active la logique
+  // de licence côté Dashboard (sinon ownedIds === null = full access).
+  if (_activePlan === 'Demo') {
+    selectedIds = selectedIds.slice(0, 1);
+    if (selectedIds.length > 0) {
+      localStorage.setItem('ks_owned_assets', JSON.stringify(selectedIds));
+    } else {
+      localStorage.removeItem('ks_owned_assets');
+    }
+  } else {
+    // Plans payants : nettoie un éventuel reliquat Demo pour repartir clean
+    localStorage.removeItem('ks_owned_assets');
+  }
   // ks_user_selection = source de vérité du Dashboard (filtre par ID)
   // ks_tools = legacy / compat
   if (selectedIds.length > 0) {

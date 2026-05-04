@@ -14,7 +14,7 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-05-04-onboarding-restore';
+const APP_VERSION = '2026-05-04-demo-quota-1';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
     if (stored === APP_VERSION) return;

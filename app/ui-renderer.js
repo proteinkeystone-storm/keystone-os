@@ -275,11 +275,18 @@ export function renderDashboard() {
             return (bNew ? 1 : 0) - (aNew ? 1 : 0);
         });
 
-        // En mode démo : pastille "Bientôt" grisée (les outils ne sont pas encore activables).
-        // En mode licence : "Essayer gratuitement" (vrai upsell).
-        const isDemo = (ownedIds === null);
-        const ctaLabel = isDemo ? 'Bientôt' : 'Essayer gratuitement';
-        const ctaClass = isDemo ? 'suggest-card-cta suggest-card-cta--soon' : 'suggest-card-cta';
+        // 3 modes possibles :
+        //  • démo libre (ownedIds === null) → "Bientôt" grisé
+        //  • plan Démo (1 outil)            → "Voir les plans" (renvoi onglet Abonnements)
+        //  • plan payant                     → "Essayer gratuitement"
+        const isDemoFree = (ownedIds === null);
+        const isDemoPlan = (localStorage.getItem('ks_plan') || '').toUpperCase() === 'DEMO';
+        const ctaLabel = isDemoPlan ? 'Voir les plans'
+                                    : (isDemoFree ? 'Bientôt' : 'Essayer gratuitement');
+        const ctaClass = isDemoFree && !isDemoPlan
+            ? 'suggest-card-cta suggest-card-cta--soon'
+            : 'suggest-card-cta';
+        const ctaDisabled = isDemoFree && !isDemoPlan;
 
         // Cartes compactes — pictogramme + nom + CTA
         const suggestCards = sortedLocked.map(item => {
@@ -293,17 +300,19 @@ export function renderDashboard() {
                 ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
-                <button class="${ctaClass}" ${isDemo ? 'disabled' : ''}>${ctaLabel}</button>
+                <button class="${ctaClass}" ${ctaDisabled ? 'disabled' : ''}>${ctaLabel}</button>
             </div>`;
         }).join('');
 
         artsEl.innerHTML = suggestCards;
 
-        // Délégation de clic — ouvre le panneau K-Store
+        // Délégation de clic — ouvre le panneau K-Store.
+        // En plan Démo (1 outil), un clic sur un autre outil renvoie
+        // directement vers l'onglet Abonnements/Plans.
         artsEl.addEventListener('click', e => {
             const card = e.target.closest('.suggest-card');
             if (!card) return;
-            _openKStorePanel();
+            _openKStorePanel(isDemoPlan ? 'plans' : 'catalogue');
         });
 
         // Mise à jour du compteur Key-Store
@@ -419,12 +428,13 @@ const KS_PLANS = [
 ];
 
 // Quotas par plan (nombre max d'assistants simultanément déployés)
-const PLAN_QUOTAS  = { STARTER: 6, PRO: 8, MAX: Infinity };
-const _PLAN_ORDER  = ['STARTER', 'PRO', 'MAX'];
+const PLAN_QUOTAS  = { DEMO: 1, STARTER: 6, PRO: 8, MAX: Infinity };
+const _PLAN_ORDER  = ['DEMO', 'STARTER', 'PRO', 'MAX'];
 
-function _openKStorePanel() {
+function _openKStorePanel(view = 'catalogue') {
     _buildKStorePanel();
-    document.getElementById('ks-panel')?.classList.add('open');
+    const panel = document.getElementById('ks-panel');
+    panel?.classList.add('open');
     document.getElementById('ks-backdrop-panel')?.classList.add('open');
     document.body.style.overflow = 'hidden';
 
@@ -432,7 +442,19 @@ function _openKStorePanel() {
     localStorage.setItem(LS_CATALOG_CHECK, new Date().toISOString().split('T')[0]);
     document.getElementById('kstore-catalog-btn')?.classList.remove('pulse');
 
-    _renderKStoreItems();
+    // Vue cible (catalogue par défaut, "plans" pour les renvois Démo)
+    if (panel && view === 'plans') {
+        panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
+        panel.querySelector('.ks-tab[data-view="plans"]')?.classList.add('active');
+        _ksView = 'plans';
+        const cat = document.getElementById('ks-catalogue-view');
+        const pln = document.getElementById('ks-plans-view');
+        if (cat) cat.hidden = true;
+        if (pln) pln.hidden = false;
+        _renderKStorePlans();
+    } else {
+        _renderKStoreItems();
+    }
 }
 
 function _closeKStorePanel() {
@@ -695,8 +717,10 @@ function _renderKStoreItems() {
     })();
 
     // — Calcul du quota utilisateur ——————————————————————————————
-    const userPlan    = localStorage.getItem('ks_plan');
-    const userPlanIdx = userPlan ? _PLAN_ORDER.indexOf(userPlan) : 2; // démo → MAX
+    // Normalisation de la casse — la landing stocke 'Demo'/'Pro'/'Start'/'Max'
+    // mais le catalogue et l'ordre interne sont en MAJUSCULES.
+    const userPlan    = (localStorage.getItem('ks_plan') || '').toUpperCase();
+    const userPlanIdx = userPlan ? _PLAN_ORDER.indexOf(userPlan) : 3; // pas de plan → MAX (démo libre)
     const quota       = (ownedIds !== null && userPlan) ? (PLAN_QUOTAS[userPlan] ?? Infinity) : Infinity;
     // Quota : outil masqué = toujours actif, outil désactivé = libère une place
     const activeCount = ownedIds === null
@@ -709,7 +733,7 @@ function _renderKStoreItems() {
         const cat          = getCatalogEntry(item.id);
         const isArt        = item.id.startsWith('A-');
         const catLbl       = _KS_CAT_LABELS[cat?.category || item.id.split('-')[1]] || '';
-        const toolPlanIdx  = _PLAN_ORDER.indexOf(cat?.plan || 'STARTER');
+        const toolPlanIdx  = _PLAN_ORDER.indexOf((cat?.plan || 'STARTER').toUpperCase());
 
         // — État du bouton —————————————————————————————————————
         // Logique tristate : Actif / Masqué / Déployer
