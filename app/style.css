@@ -2730,8 +2730,41 @@ html.light-mode .no-api-hint:hover { border-color: rgba(160,120,40,.35); }
   /* Settings drawer */
   .settings-panel { width: 100%; }
 
-  /* Topbar : laisse plus d'espace au logo, masque les bonus */
-  .topbar { padding: 0 12px; gap: 8px; }
+  /* ─── Topbar mobile : masque le décoratif, compacte les boutons utiles ───
+     Sur smartphone, on retire les éléments purement informatifs
+     (.cc-lock-chip, .lic-chip "Licence active", .cc-sep) pour
+     libérer de la largeur et garantir l'accès à Settings.
+     Les 4 boutons utiles (Engine, Prompts, Mode, Settings) restent
+     visibles et tapables sans menu burger. */
+  .topbar          { padding: 0 8px; gap: 6px; }
+  .topbar .logo img { height: 24px !important; }
+  .tb-spacer       { display: none; } /* le mx-auto naturel du flex suffit */
+
+  .cc-bar          { gap: 4px; flex: 1; justify-content: flex-end; }
+  .cc-lock-chip,
+  .lic-chip,
+  .cc-sep          { display: none !important; }
+
+  /* Boutons icône plus compacts (28×28 au lieu de 36×36) */
+  .cc-btn.cc-icon  { width: 30px; height: 30px; padding: 0; flex-shrink: 0; }
+  .cc-btn.cc-icon svg { width: 14px; height: 14px; }
+
+  /* Engine selector : on garde le label mais on coupe à 50px max */
+  .cc-engine       {
+    max-width: 88px;
+    padding: 0 8px; height: 30px;
+    overflow: hidden;
+  }
+  #ai-engine-label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 48px;
+  }
+
+  /* Zone tactile minimale : le hit-target reste 44×44 grâce au padding */
+  .cc-btn::before  {
+    content: ''; position: absolute; inset: -7px;
+  }
+  .cc-btn          { position: relative; }
 }
 
 /* Conserve un fallback pour les très petits écrans */
