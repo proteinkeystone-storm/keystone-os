@@ -1,4 +1,4 @@
-import { loadVault, isVaultEmpty }             from './vault.js';
+import { loadVault }                            from './vault.js';
 import { renderDashboard, initSettings, initTools } from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';
 import { initLockScreen }                     from './lockscreen.js';
@@ -14,24 +14,24 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-05-04-onboarding-fix';
+const APP_VERSION = '2026-05-04-onboarding-restore';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
-    if (stored !== APP_VERSION) {
-        // Reset uniquement les clés liées aux licences (cause de l'affichage cassé).
-        // On préserve : clés API, prénom, photo, lock, ordre grille, dark mode,
-        // ainsi que ks_user_selection (préférence utilisateur sélection onboarding).
-        ['ks_owned_assets','ks_inbox_cache'].forEach(k => localStorage.removeItem(k));
-        // Reset des éventuels flags ks_deactivated_* (outils masqués)
-        Object.keys(localStorage)
-            .filter(k => k.startsWith('ks_deactivated_'))
-            .forEach(k => localStorage.removeItem(k));
-        // Pour les utilisateurs existants (stored !== null), skip l'onboarding.
-        // Les nouveaux utilisateurs (stored === null) doivent passer par l'onboarding.
-        if (stored !== null) localStorage.setItem('ks_onboarded', '1');
-        localStorage.setItem('ks_app_version', APP_VERSION);
-        console.info('[Keystone] Mise à jour appliquée :', APP_VERSION);
-    }
+    if (stored === APP_VERSION) return;
+
+    // Caches volatils à purger (licences, inbox).
+    ['ks_owned_assets','ks_inbox_cache'].forEach(k => localStorage.removeItem(k));
+    // Flags ks_deactivated_* (outils masqués) — repartent propres.
+    Object.keys(localStorage)
+        .filter(k => k.startsWith('ks_deactivated_'))
+        .forEach(k => localStorage.removeItem(k));
+    // Réafficher l'onboarding à chaque montée de version : le nom, la photo
+    // et la sélection précédente sont conservés et pré-remplis dans les slides.
+    // Le bouton "Accéder directement au Dashboard →" permet de skipper.
+    localStorage.removeItem('ks_onboarded');
+
+    localStorage.setItem('ks_app_version', APP_VERSION);
+    console.info('[Keystone] Mise à jour appliquée :', APP_VERSION);
 })();
 
 // ── Démarrage complet du dashboard ─────────────────────────────
@@ -71,9 +71,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 2c. Injection des listes dynamiques dans le renderer (Master Renderer)
     initTools(getToolList(), getArtefactList());
 
-    // 3. Sprint 5.2 — Vault vide + jamais onboardé → Onboarding
+    // 3. Onboarding affiché dès que le flag ks_onboarded est absent.
+    // Le bloc VERSION CHECK le supprime à chaque montée de version pour
+    // que l'utilisateur puisse découvrir/redécouvrir le tunnel personnalisé.
+    // Les anciennes valeurs (nom, photo, sélection) sont pré-remplies.
     const onboarded = localStorage.getItem('ks_onboarded');
-    if (isVaultEmpty() && !onboarded) {
+    if (!onboarded) {
         // Outils PADs + Artefacts catalog (propositions suggérées)
         const toolItems = getToolList();
         const artefactItems = getArtefactList();
