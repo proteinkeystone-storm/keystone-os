@@ -440,6 +440,15 @@ async function renderTools(panel) {
       catch { padsCache[id] = null; }
     }));
 
+    // Merge avec les données D1 (source de vérité après toute sauvegarde admin).
+    // Les prompts des moteurs alternatifs (GPT-4o, Gemini…) ne sont pas dans
+    // les fichiers JSON statiques — ils sont stockés en base uniquement.
+    try {
+      const d1Data = await api('/api/pads?tenantId=default', 'GET');
+      const d1Pads = d1Data.pads || [];
+      d1Pads.forEach(p => { if (p?.id) padsCache[p.id] = p; });
+    } catch { /* silencieux si le Worker n'est pas joignable */ }
+
     const toolCount = padIds.filter(id => (padsCache[id]?.type || 'tool') === 'tool').length;
     const arteCount = padIds.length - toolCount;
 
@@ -1309,12 +1318,22 @@ async function saveFromEditor(editorContainer, originalId, isNew, padType) {
     // Sauvegarde dans Cloudflare D1 (remplace l'ancien file-write)
     await api('/api/admin/pad', 'POST', { ...pad, tenantId: 'default' });
 
-    padsCache[pad.id] = pad;
-    editingPadId      = pad.id;
+    editingPadId = pad.id;
     toast(`${pad.id}.json sauvegardé ✓`);
 
     const panel = document.getElementById('tab-tools');
     await renderTools(panel);
+
+    // renderTools efface padsCache et re-charge depuis les fichiers JSON statiques,
+    // lesquels ne contiennent pas les prompts des moteurs alternatifs (GPT-4o, Gemini…).
+    // On restaure le pad fraîchement sauvegardé pour que l'éditeur affiche les bonnes données.
+    padsCache[pad.id] = pad;
+    const editorSlot  = panel.querySelector('#pad-editor');
+    if (editorSlot) {
+      renderEditor(editorSlot, pad, false);
+      // Revenir sur l'onglet Moteurs (l'utilisateur venait de le modifier)
+      editorSlot.querySelector('[data-etab="engines"]')?.click();
+    }
   } catch (err) {
     errEl.textContent = err.message;
     toast(err.message, 'error');

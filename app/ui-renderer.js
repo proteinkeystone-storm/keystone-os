@@ -98,6 +98,12 @@ const ENGINE_TO_PROVIDER = {
     'Grok':'xai','Perplexity':'perplexity','Mistral':'mistral','Llama':'meta',
 };
 
+// Correspondance label dashboard → ID admin (clés dans engines.prompts côté D1)
+const ENGINE_LABEL_TO_ID = {
+    'Claude':'claude','ChatGPT':'gpt4o','Gemini':'gemini',
+    'Grok':'grok','Perplexity':'perplexity','Mistral':'mistral','Llama':'llama',
+};
+
 // ── Topbar engine chip ────────────────────────────────────────
 export function updateEngineChip(label) {
     const el = document.getElementById('ai-engine-label');
@@ -1642,12 +1648,17 @@ async function _handleGenerate(pad) {
     const btn        = document.getElementById('btn-generate');
 
     // ── Construction du prompt ───────────────────────────────────
+    // Résolution de la clé de prompt : on essaie l'ID court (ex: 'claude', 'gpt4o')
+    // puis le label complet (ex: 'Claude', 'ChatGPT') pour compatibilité ascendante.
+    const engineId   = ENGINE_LABEL_TO_ID[engine] || engine.toLowerCase();
+    const enginePrompt = (p) =>
+        p?.engines?.prompts?.[engineId] || p?.engines?.prompts?.[engine] || p?.system_prompt || '';
+
     let prompt;
     if (isArtifact) {
-        // Preamble (schéma JSON forcé) + instructions métier du moteur actif
-        const preamble      = pad.artifact_config?.json_preamble || '';
-        const instructions  = pad.engines?.prompts?.[engine] || pad.system_prompt || '';
-        const extraContext  = document.getElementById('artifact-context')?.value?.trim() || '';
+        const preamble     = pad.artifact_config?.json_preamble || '';
+        const instructions = enginePrompt(pad);
+        const extraContext = document.getElementById('artifact-context')?.value?.trim() || '';
         prompt = preamble
             + (instructions ? '\n\n' + instructions : '')
             + (extraContext  ? '\n\nContexte additionnel :\n' + extraContext : '');
@@ -1655,9 +1666,7 @@ async function _handleGenerate(pad) {
         const form     = document.getElementById('tool-form');
         const formData = {};
         form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = el.value.trim(); });
-        // Utilise le prompt du moteur actif ; fallback sur system_prompt (rétro-compat)
-        const tpl = pad.engines?.prompts?.[engine] || pad.system_prompt || '';
-        prompt = _interpolate(tpl, formData);
+        prompt = _interpolate(enginePrompt(pad), formData);
     }
 
     // ── Refs UI selon le mode ────────────────────────────────────

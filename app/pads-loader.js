@@ -1,11 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Pads Loader v2.0 (data embarquée, no-fetch)
-   Source de vérité : pads-data.js (PADS_DATA + CATALOG_DATA)
-   Aucun fetch externe en mode démo → fonctionne partout, hors-ligne,
-   sans CORS, sans cache SW, sans dépendance réseau.
+   KEYSTONE OS — Pads Loader v2.1
+   Source de base : pads-data.js (embarqué, offline-first).
+   Enrichissement : merge non-bloquant depuis D1 via Worker API
+   pour récupérer les engines.prompts sauvegardés par l'admin.
    ═══════════════════════════════════════════════════════════════ */
 
 import { PADS_DATA, CATALOG_DATA } from './pads-data.js';
+
+const CF_API = 'https://keystone-os-api.keystone-os.workers.dev';
 
 let _padsCache    = null;
 let _catalogCache = null;
@@ -14,14 +16,31 @@ let _catalogCache = null;
 _padsCache    = PADS_DATA;
 _catalogCache = CATALOG_DATA;
 
-// ── Chargement principal — async pour compat, mais instant ──────
+// ── Chargement principal ─────────────────────────────────────────
 export async function loadPads() {
-    // Données embarquées = source de vérité.
-    // Notify catalog-loaded sur le tick suivant pour les listeners.
+    // 1. Données embarquées disponibles immédiatement (offline-first).
     queueMicrotask(() => {
         window.dispatchEvent(new CustomEvent('ks-catalog-loaded', { detail: _catalogCache }));
     });
+
+    // 2. Enrichissement non-bloquant depuis D1 : merge engines.prompts
+    //    (les prompts moteurs alternatifs ne sont pas dans pads-data.js).
+    _enrichFromD1().catch(() => {});
+
     return _padsCache;
+}
+
+async function _enrichFromD1() {
+    const res = await fetch(`${CF_API}/api/pads?tenantId=default`);
+    if (!res.ok) return;
+    const { pads } = await res.json();
+    if (!Array.isArray(pads)) return;
+    pads.forEach(d1Pad => {
+        if (!d1Pad?.id || !_padsCache[d1Pad.id]) return;
+        // On ne merge que le champ engines (prompts moteurs) pour ne pas
+        // écraser les métadonnées d'UI embarquées (plan, price, icon…).
+        if (d1Pad.engines) _padsCache[d1Pad.id] = { ..._padsCache[d1Pad.id], engines: d1Pad.engines };
+    });
 }
 
 // ── Liste dynamique des outils ──────────────────────────────────
