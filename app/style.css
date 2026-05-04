@@ -2671,100 +2671,193 @@ html.light-mode .no-api-hint:hover { border-color: rgba(160,120,40,.35); }
   .pads-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ───────────────────────────────────────────────────────────────
-   SPRINT 1 — MOBILE / SMARTPHONE
-   Linéarisation full stack : tout devient une colonne unique,
-   les modals passent en fullscreen, et le grain texture est
-   retiré pour libérer 100% de la largeur utile.
-   ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   SPRINT 1 — RÉFONTE MOBILE (smartphone)
+   v2 : centrage des icônes, lisibilité (textes ↑), modal corrigé,
+        anti-zoom inputs iOS, safe-area insets.
+   ═══════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  /* 1.1 — Suppression du masque visuel (grain texture global) */
-  body::after { display: none; }
 
-  /* Conteneur principal full-width, padding minimal */
+  /* ─── 1.1 · Suppression du masque visuel (grain texture) ───── */
+  body::after { display: none; }
   .wrap { max-width: 100%; padding: 0 12px; }
 
-  /* 1.2 — Linéarisation : tous les grids en 1 colonne */
+  /* ─── 1.2 · Linéarisation : grids en 1 colonne ─────────────── */
   .pads-grid       { grid-template-columns: 1fr !important; gap: 12px; }
   #arts-container  { grid-template-columns: 1fr !important; gap: 10px; }
-
-  /* 1.2 — Formulaires d'outil : 1 champ = 1 ligne */
-  .form-grid       { grid-template-columns: 1fr !important; gap: 10px; }
+  .form-grid       { grid-template-columns: 1fr !important; gap: 12px; }
   .form-field.full { grid-column: span 1 !important; }
 
-  /* 1.3 — Tool modal en fullscreen + form/result empilés verticalement
-            (le DOM ordonne déjà form puis result-zone, donc le "Prompt
-            généré" se place naturellement sous le formulaire). */
-  .tool-modal {
-    top: 0 !important; left: 0 !important;
-    transform: none !important;
-    width: 100vw !important; height: 100vh !important;
-    max-height: 100vh;
-    border-radius: 0;
-    border: none;
-  }
-  .tool-modal.open { transform: none !important; }
+  /* ═════════════════════════════════════════════════════════════
+     LISIBILITÉ — Toutes les tailles de texte ré-haussées pour
+     iPhone. Le projet n'utilise pas de rem, on cible explicitement
+     chaque sélecteur clé.
+     ═════════════════════════════════════════════════════════════ */
+  .pad-name        { font-size: 15px !important; }
+  .pad-desc        { font-size: 12.5px !important; line-height: 1.5; }
+  .pad-badge       { font-size: 10px; }
 
-  .modal-body { flex-direction: column; overflow-y: auto; }
+  .sec-hd-title    { font-size: 13px; }
+  .sec-count       { font-size: 12px; }
+  .sec-kstore-badge{ font-size: 12px; }
+
+  .hero-greeting   { font-size: 22px !important; }
+  .hero-name       { font-size: 22px !important; }
+  .hero-sub        { font-size: 13px !important; line-height: 1.5; }
+  .hero-dst-text   { font-size: 13px !important; }
+
+  .suggest-card-name { font-size: 12.5px !important; }
+  .suggest-card-cta  { font-size: 11.5px !important; padding: 7px 10px; }
+
+  /* Plans tab */
+  .ks-plan-name    { font-size: 17px !important; }
+  .ks-plan-price   { font-size: 28px !important; }
+  .ks-plan-desc    { font-size: 13px !important; }
+  .ks-plan-list li { font-size: 13px !important; }
+  .ks-plan-cta     { font-size: 14px !important; padding: 13px 16px !important; }
+  .ks-plan-note    { font-size: 11px !important; }
+
+  /* ═════════════════════════════════════════════════════════════
+     MODAL OUTIL — bottom-sheet pleine hauteur, animation slide-up,
+     un seul scroll-container, safe-area insets iOS.
+     ═════════════════════════════════════════════════════════════ */
+  .tool-modal {
+    inset: 0 !important;
+    top: 0 !important; left: 0 !important;
+    width: 100vw !important;
+    /* 100vh = fallback ; 100dvh = ajusté quand la URL bar bouge sur iOS */
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-width: 100vw;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0 !important;
+    border: none !important;
+    /* État FERMÉ : décalé hors-écran par le bas (slide-up reveal) */
+    transform: translateY(100%) !important;
+    opacity: 1 !important;
+    transition: transform .35s cubic-bezier(.16,1,.3,1) !important;
+  }
+  .tool-modal.open {
+    transform: translateY(0) !important;
+  }
+
+  /* Backdrop : le modal couvrant 100% rend le backdrop inutile */
+  .tool-backdrop { display: none !important; }
+
+  /* Header sticky en haut, safe-area top pour la notch */
+  .modal-head {
+    padding: max(14px, env(safe-area-inset-top)) 14px 12px 14px;
+    gap: 10px;
+    position: sticky; top: 0; z-index: 2;
+    background: #0e1933;
+  }
+  .modal-title    { font-size: 18px !important; }
+  .modal-subtitle { font-size: 12.5px !important; }
+  .modal-code     { font-size: 9.5px; }
+  .modal-rating   { display: none; }
+  .modal-close    {
+    width: 36px !important; height: 36px !important;
+    font-size: 18px !important;
+    flex-shrink: 0;
+  }
+  .modal-ico      { width: 44px !important; height: 44px !important; }
+
+  /* Body en un SEUL container scrollable (form puis result en colonne) */
+  .modal-body {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    /* safe-area bottom pour le pouce / barre home iOS */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
   .modal-form,
   .modal-result-zone {
     width: 100% !important;
-    flex: 0 0 auto;
-    border-right: none;
-    padding: 16px 14px;
+    flex: 0 0 auto !important;
+    overflow: visible !important; /* pas de double-scroll */
+    border-right: none !important;
+    padding: 14px 14px !important;
   }
-  .modal-form { border-bottom: 1px solid var(--bd); }
+  .modal-form { border-bottom: 1px solid var(--bd) !important; }
 
-  /* Header de modal compacté */
-  .modal-head { padding: 12px 14px 10px; gap: 10px; }
-  .modal-title { font-size: 17px; }
-  .modal-subtitle { font-size: 11px; }
-  .modal-rating { display: none; } /* 5 étoiles non prioritaires sur mobile */
+  /* ═════════════════════════════════════════════════════════════
+     FORMULAIRES — anti-zoom iOS (inputs ≥ 16px) + lisibilité
+     ═════════════════════════════════════════════════════════════ */
+  .form-label    { font-size: 13px !important; }
+  .form-input,
+  .form-select,
+  .form-textarea {
+    font-size: 16px !important; /* 16px = anti-zoom iOS Safari */
+    padding: 11px 13px !important;
+  }
+  .form-textarea { min-height: 100px; }
 
-  /* Panneaux latéraux droite (prompt-library, key-store) en plein écran */
+  /* Bouton "Générer" plus large + texte plus visible */
+  .btn-generate {
+    font-size: 14px !important;
+    padding: 14px !important;
+    min-height: 48px;
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     PANNEAUX LATÉRAUX (Prompt-Library, Key-Store) — full-width
+     ═════════════════════════════════════════════════════════════ */
   .pl-panel,
-  .ks-panel  { width: 100vw !important; max-width: 100vw; }
-  .pl-panel  { box-shadow: none; border-left: none; }
-  .ks-panel  { box-shadow: none; border-left: none; }
+  .ks-panel  {
+    width: 100vw !important;
+    max-width: 100vw;
+    box-shadow: none;
+    border-left: none;
+  }
+  .settings-panel { width: 100% !important; }
 
-  /* Settings drawer */
-  .settings-panel { width: 100%; }
+  /* ═════════════════════════════════════════════════════════════
+     TOPBAR — décoratif masqué, icônes CENTRÉES, hit-area 44×44
+     ═════════════════════════════════════════════════════════════ */
+  .topbar           { padding: 0 10px; gap: 6px; }
+  .topbar .logo img { height: 26px !important; }
+  .tb-spacer        { display: none; }
 
-  /* ─── Topbar mobile : masque le décoratif, compacte les boutons utiles ───
-     Sur smartphone, on retire les éléments purement informatifs
-     (.cc-lock-chip, .lic-chip "Licence active", .cc-sep) pour
-     libérer de la largeur et garantir l'accès à Settings.
-     Les 4 boutons utiles (Engine, Prompts, Mode, Settings) restent
-     visibles et tapables sans menu burger. */
-  .topbar          { padding: 0 8px; gap: 6px; }
-  .topbar .logo img { height: 24px !important; }
-  .tb-spacer       { display: none; } /* le mx-auto naturel du flex suffit */
-
-  .cc-bar          { gap: 4px; flex: 1; justify-content: flex-end; }
+  .cc-bar           { gap: 6px; flex: 1; justify-content: flex-end; }
   .cc-lock-chip,
   .lic-chip,
-  .cc-sep          { display: none !important; }
+  .cc-sep           { display: none !important; }
 
-  /* Boutons icône plus compacts (28×28 au lieu de 36×36) */
-  .cc-btn.cc-icon  { width: 30px; height: 30px; padding: 0; flex-shrink: 0; }
-  .cc-btn.cc-icon svg { width: 14px; height: 14px; }
-
-  /* Engine selector : on garde le label mais on coupe à 50px max */
-  .cc-engine       {
-    max-width: 88px;
-    padding: 0 8px; height: 30px;
-    overflow: hidden;
+  /* ── Boutons icône : centrés, 36×36 (zone tactile Apple HIG) ── */
+  .cc-btn.cc-icon   {
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0;
   }
-  #ai-engine-label {
+  .cc-btn.cc-icon svg { width: 16px; height: 16px; }
+
+  /* Engine selector : label visible, ellipsis si trop long */
+  .cc-engine        {
+    max-width: 110px;
+    padding: 0 10px !important;
+    height: 36px !important;
+    font-size: 12.5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #ai-engine-label  {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    max-width: 48px;
+    max-width: 64px;
   }
+}
 
-  /* Zone tactile minimale : le hit-target reste 44×44 grâce au padding */
-  .cc-btn::before  {
-    content: ''; position: absolute; inset: -7px;
-  }
-  .cc-btn          { position: relative; }
+/* iPhone SE (320px) — exception pour la cale topbar */
+@media (max-width: 360px) {
+  .cc-engine       { max-width: 88px; }
+  #ai-engine-label { max-width: 44px; }
+  .topbar .logo img { height: 22px !important; }
 }
 
 /* Conserve un fallback pour les très petits écrans */
