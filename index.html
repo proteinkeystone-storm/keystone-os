@@ -858,6 +858,145 @@ nav.scrolled {
   from { opacity:0; transform: translateY(14px); }
   to   { opacity:1; transform: translateY(0); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDING PAGE — RESPONSIVE MOBILE (≤ 768px)
+   Logo réduit, nav scrollable horizontalement, grids en 1 colonne,
+   tailles de texte iPhone-friendly, padding ajusté.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  body { font-size: 15px; }
+
+  /* ─── NAV : logo plus petit, liens scrollables horizontalement ─── */
+  #main-nav {
+    padding: 12px 14px !important;
+    gap: 8px;
+  }
+  .nav-logo img      { height: 22px !important; }
+  .nav-logo-text     { font-size: 14px !important; }
+  .nav-links {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 14px;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a {
+    font-size: 13px !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ─── HERO ─── */
+  .hero-inner   { padding: 80px 18px 56px !important; }
+  .hero-badge   { font-size: 10px !important; padding: 5px 10px !important; }
+  .title-xl,
+  .hero-title   { font-size: clamp(32px, 8vw, 44px) !important; line-height: 1.08 !important; }
+  .body-lg      { font-size: 15px !important; line-height: 1.55; }
+  .hero-ctas    {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px !important;
+  }
+  .hero-ctas .btn,
+  .hero-ctas a  {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px !important;
+    font-size: 14px !important;
+  }
+  .hero-engines {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px !important;
+  }
+  .hero-engines img       { height: 22px !important; }
+  .hero-engines-sep       { display: none; }
+
+  /* ─── SECTION HEADERS / EYEBROWS ─── */
+  .section-header   { padding: 0 18px !important; margin-bottom: 32px !important; }
+  .eyebrow          { font-size: 11px !important; }
+  .title-lg         { font-size: clamp(26px, 6.5vw, 34px) !important; line-height: 1.15 !important; }
+
+  /* ─── GRIDS : 1 COLONNE PARTOUT ─── */
+  /* Engines (Claude / ChatGPT / Gemini …) */
+  #engines .engines-grid,
+  .engines-grid     {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 0 18px;
+  }
+  .engine-card      { padding: 22px 20px !important; }
+  .engine-card-label { font-size: 14px !important; }
+
+  /* Key-Store / artefacts */
+  #kstore [style*="grid-template-columns"],
+  .kstore-grid      {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 0 18px;
+  }
+
+  /* Sécurité / Two-column blocks (Clé USB physique / Mode Cloud) */
+  #security [style*="grid-template-columns"],
+  .security-grid,
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+    padding: 0 18px;
+  }
+  .security-block   {
+    padding: 24px 22px !important;
+  }
+  .security-block h3,
+  .security-block .block-title { font-size: 18px !important; line-height: 1.25 !important; }
+  .security-block p,
+  .security-block .block-body  { font-size: 14px !important; line-height: 1.6; }
+  .security-block li           { font-size: 13.5px !important; line-height: 1.55; }
+
+  /* Plans (Start / Pro / Max) */
+  .plans-grid {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    padding: 0 18px;
+  }
+  .plan-card          { padding: 28px 24px !important; }
+  .plan-tier          { font-size: 12px !important; }
+  .plan-price         { font-size: 44px !important; }
+  .plan-desc          { font-size: 14px !important; line-height: 1.5; }
+  .plan-features li   { font-size: 13.5px !important; line-height: 1.7; }
+  .plan-cta           {
+    padding: 14px 20px !important;
+    font-size: 14px !important;
+    width: 100%;
+  }
+  .plan-note          { font-size: 11px !important; }
+
+  /* ─── ACTIVATION (login) ─── */
+  #activate           { padding: 60px 0 !important; }
+  .act-card           { padding: 28px 22px !important; margin: 0 14px; }
+  .act-input          { font-size: 16px !important; padding: 14px 16px !important; }
+  .act-btn            { padding: 14px 20px !important; font-size: 14px !important; min-height: 48px; }
+  .act-demo           { font-size: 12.5px !important; }
+
+  /* ─── FOOTER ─── */
+  footer              {
+    padding: 18px 18px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  /* ─── ONBOARDING POPUP (déjà responsive en partie) ─── */
+  .ob-box             {
+    padding: 32px 24px !important;
+    width: min(94vw, 480px) !important;
+  }
+  .ob-title           { font-size: 1.15rem !important; }
+  .ob-sub             { font-size: .85rem !important; }
+  .ob-tools-grid      { grid-template-columns: 1fr !important; }
+}
 </style>
 </head>
 <body>
