@@ -13,13 +13,17 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-05-04-sprint1-prompt-height';
+const APP_VERSION = '2026-05-04-sprint2-jwt-pbkdf2';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
     if (stored === APP_VERSION) return;
 
     // Cache inbox uniquement (peut contenir d'anciennes structures).
     localStorage.removeItem('ks_inbox_cache');
+    // Sprint 2 — la clé en clair n'est plus tolérée. Si elle traîne en
+    // localStorage depuis une version pré-Sprint-2, on la supprime
+    // (l'utilisateur sera invité à rééactiver pour obtenir un JWT).
+    localStorage.removeItem('ks_licence');
     // Flags ks_deactivated_* (outils masqués) — repartent propres.
     Object.keys(localStorage)
         .filter(k => k.startsWith('ks_deactivated_'))

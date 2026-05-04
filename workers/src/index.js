@@ -23,6 +23,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
+import { handleActivateV2, handleMe }                                  from './routes/licence-public.js';
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
 import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
@@ -66,6 +67,10 @@ export default {
       if (path === '/api/licence/activate' && method === 'POST') return handleActivate(request, env);
       if (path === '/api/licence/revoke'   && method === 'POST') return handleRevoke(request, env);
       if (path === '/api/licence/validate' && method === 'POST') return handleValidate(request, env);
+
+      // ── Licences v2 (Sprint 2 — public, hashed, JWT, fingerprint) ──
+      if (path === '/api/licence/v2/activate' && method === 'POST') return handleActivateV2(request, env);
+      if (path === '/api/licence/v2/me'       && method === 'GET')  return handleMe(request, env);
 
       // ── Devices ─────────────────────────────────────────────
       if (path === '/api/device/register'  && method === 'POST') return handleRegister(request, env);

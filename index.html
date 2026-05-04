@@ -1568,12 +1568,54 @@ function detectEmailType(email) {
 }
 
 /* ═══════════════════════════════════════════
-   ACTIVATE LICENCE
-═══════════════════════════════════════════ */
-let _activePlan = 'Start';
+   ACTIVATE LICENCE — Sprint 2 sécurisé
+   ═══════════════════════════════════════════
+   La validation se fait CÔTÉ SERVEUR (Cloudflare Worker) :
+   • Pas de comparaison de clé en JS (impossible à inspecter)
+   • PBKDF2-600k + HMAC blind index côté DB
+   • JWT HS256 reçu en retour, stocké en localStorage
+   • First-Use device fingerprinting
+   • Rate limiting exponentiel anti brute-force
+   ═══════════════════════════════════════════ */
+const KEYSTONE_API = 'https://keystone-os-api.keystone-os.workers.dev';
+let _activePlan  = 'Start';
 let _deviceLimit = 3;
 
-function activateLicence() {
+/**
+ * Empreinte appareil — combinaison stable de signaux navigateur,
+ * hashée en SHA-256 pour garder une longueur fixe et anonymiser.
+ */
+async function _computeDeviceFingerprint() {
+  // Canvas signal — diffère selon GPU/police/anti-aliasing
+  let canvasSignal = '';
+  try {
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#069';
+    ctx.fillText('keystone-os \u{1F511}', 2, 2);
+    canvasSignal = c.toDataURL().slice(-80);
+  } catch (_) {}
+
+  const parts = [
+    canvasSignal,
+    navigator.userAgent,
+    navigator.language || '',
+    navigator.languages ? navigator.languages.join(',') : '',
+    `${screen.width}x${screen.height}x${screen.colorDepth}`,
+    Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    navigator.hardwareConcurrency || 0,
+    navigator.platform || '',
+  ];
+
+  const data = new TextEncoder().encode(parts.join('|'));
+  const buf  = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function activateLicence() {
   const email  = document.getElementById('act-email').value.trim();
   const key    = document.getElementById('act-key').value.trim();
   const status = document.getElementById('act-status');
@@ -1592,24 +1634,55 @@ function activateLicence() {
   status.className = 'act-status';
   status.textContent = 'Vérification en cours…';
 
-  setTimeout(() => {
+  try {
+    const fingerprint = await _computeDeviceFingerprint();
+
+    const res = await fetch(`${KEYSTONE_API}/api/licence/v2/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, email, fingerprint }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      status.textContent = data.error || 'Activation refusée.';
+      status.className   = 'act-status error';
+      btn.disabled       = false;
+      return;
+    }
+
+    // ── Succès : on stocke le JWT et le plan, JAMAIS la clé en clair ──
+    _activePlan  = (data.plan || 'STARTER');
     _deviceLimit = detectEmailType(email) === 'personal' ? 3 : 99;
 
-    if      (key.startsWith('MAX'))  _activePlan = 'Max';
-    else if (key.startsWith('PRO'))  _activePlan = 'Pro';
-    else if (key.startsWith('DEMO')) _activePlan = 'Demo'; // Démo → 1 seul outil sélectionnable
-    else                              _activePlan = 'Start';
+    // Capitalisation pour rester compatible avec TOOL_QUOTA / ks_plan
+    // (Demo, Start, Pro, Max — voir bloc onboarding)
+    const planUI = ({
+      DEMO:    'Demo',
+      STARTER: 'Start',
+      PRO:     'Pro',
+      MAX:     'Max',
+    })[_activePlan.toUpperCase()] || 'Start';
+    _activePlan = planUI;
+
+    localStorage.setItem('ks_email',        email);
+    localStorage.setItem('ks_jwt',          data.jwt);     // ← JWT au lieu de la clé
+    localStorage.setItem('ks_plan',         planUI);
+    localStorage.setItem('ks_device_limit', _deviceLimit);
+    localStorage.setItem('ks_device_fp',    fingerprint);
+
+    // Nettoyage : si une ancienne version stockait la clé en clair
+    localStorage.removeItem('ks_licence');
 
     status.textContent = '';
     btn.disabled = false;
-
-    localStorage.setItem('ks_email', email);
-    localStorage.setItem('ks_licence', key);
-    localStorage.setItem('ks_plan', _activePlan);
-    localStorage.setItem('ks_device_limit', _deviceLimit);
-
     openOnboarding();
-  }, 1400);
+  } catch (e) {
+    status.textContent = 'Connexion impossible. Vérifiez votre réseau.';
+    status.className   = 'act-status error';
+    btn.disabled       = false;
+  }
 }
 
 /* ═══════════════════════════════════════════
