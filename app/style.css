@@ -2877,6 +2877,35 @@ html.light-mode .no-api-hint:hover { border-color: rgba(160,120,40,.35); }
   }
 
   /* ═════════════════════════════════════════════════════════════
+     ZONE PROMPT GÉNÉRÉ — height explicite (le flex:1 du desktop
+     ne marche plus en display:block sur mobile, donc la zone
+     s'effondrait à 1 ligne).
+     ═════════════════════════════════════════════════════════════ */
+  .prompt-empty-state {
+    min-height: 180px !important;
+    flex: 0 0 auto !important;
+    padding: 24px 18px !important;
+  }
+  .prompt-empty-hint { font-size: 13px !important; line-height: 1.6; }
+
+  .prompt-text {
+    flex: 0 0 auto !important;
+    min-height: 240px !important;   /* ~10 lignes visibles d'emblée */
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;   /* laisse le scroll outer (.tool-modal) gérer */
+    font-size: 14px !important;     /* +2px pour la lisibilité smartphone */
+    line-height: 1.65 !important;
+    padding: 16px 18px !important;
+  }
+  /* Le label "Prompt généré" plus visible */
+  .result-lbl {
+    font-size: 12px !important;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  /* ═════════════════════════════════════════════════════════════
      FORMULAIRES — anti-zoom iOS (inputs ≥ 16px) + lisibilité
      ═════════════════════════════════════════════════════════════ */
   .form-label    { font-size: 13px !important; }
