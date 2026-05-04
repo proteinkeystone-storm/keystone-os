@@ -838,6 +838,21 @@ nav.scrolled {
 .ob-tool-item input { display: none; }
 .ob-tool-label { font-size: .8rem; font-weight: 500; color: var(--white); }
 .ob-quota { font-size: .75rem; color: var(--white-2); margin-top: -8px; }
+.ob-input {
+  width: 100%; box-sizing: border-box;
+  background: rgba(255,255,255,.04);
+  border: 0.5px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+  font-size: .92rem; color: #fff;
+  font-family: inherit; letter-spacing: -.005em;
+  transition: border-color .2s, background .2s;
+}
+.ob-input:focus {
+  outline: none;
+  border-color: rgba(212,175,55,.55);
+  background: rgba(212,175,55,.04);
+}
+.ob-input::placeholder { color: var(--white-2); opacity: .55; }
 
 @keyframes fadeUp {
   from { opacity:0; transform: translateY(14px); }
@@ -1265,8 +1280,19 @@ nav.scrolled {
 <div class="onboarding-overlay" id="onboarding-overlay">
   <div class="ob-box">
     <div class="ob-progress"><div class="ob-bar" id="ob-bar"></div></div>
-    <!-- STEP 1 -->
+    <!-- STEP 1 — Nom -->
     <div class="ob-step active" id="ob-step-1">
+      <div class="ob-step-icon"><svg width="22" height="22"><use href="#ico-user"/></svg></div>
+      <div class="ob-title">Bienvenue dans Keystone.</div>
+      <div class="ob-sub">Comment devons-nous vous appeler ? Votre prénom apparaîtra dans le Dashboard pour personnaliser votre pôle.</div>
+      <input class="ob-input" id="ob-name-input" type="text"
+        placeholder="Votre prénom…" maxlength="40" autocomplete="given-name">
+      <button class="ob-btn" onclick="obNext(2)">
+        Continuer <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
+      </button>
+    </div>
+    <!-- STEP 2 — Photo -->
+    <div class="ob-step" id="ob-step-2">
       <div class="ob-step-icon"><svg width="22" height="22"><use href="#ico-user"/></svg></div>
       <div class="ob-title">Prenez possession de votre centre de contrôle.</div>
       <div class="ob-sub">Importez votre logo ou photo de profil. Il s'affichera en temps réel dans votre Dashboard Keystone.</div>
@@ -1277,22 +1303,22 @@ nav.scrolled {
         <span>PNG, JPG, SVG — max 2 Mo</span>
       </div>
       <input type="file" id="ob-file-input" accept="image/*" style="display:none">
-      <button class="ob-btn" onclick="obNext(2)">
+      <button class="ob-btn" onclick="obNext(3)">
         Continuer <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
       </button>
     </div>
-    <!-- STEP 2 -->
-    <div class="ob-step" id="ob-step-2">
+    <!-- STEP 3 — Outils -->
+    <div class="ob-step" id="ob-step-3">
       <div class="ob-step-icon"><svg width="22" height="22"><use href="#ico-grid"/></svg></div>
       <div class="ob-title">Configurez vos outils Keystone.</div>
       <div class="ob-sub" id="ob-quota-label">Sélectionnez vos 6 Assistants Certifiés. Vous pourrez en changer à tout moment.</div>
       <div class="ob-tools-grid" id="ob-tools-grid"></div>
-      <button class="ob-btn" onclick="obNext(3)">
+      <button class="ob-btn" onclick="obNext(4)">
         Finaliser <svg width="13" height="13"><use href="#ico-arrow-r"/></svg>
       </button>
     </div>
-    <!-- STEP 3 -->
-    <div class="ob-step" id="ob-step-3">
+    <!-- STEP 4 — Done -->
+    <div class="ob-step" id="ob-step-4">
       <div class="ob-step-icon" style="background:rgba(107,255,184,.08);border-color:rgba(107,255,184,.24);color:#6bffb8">
         <svg width="22" height="22"><use href="#ico-check"/></svg>
       </div>
@@ -1469,12 +1495,26 @@ function openOnboarding() {
   document.getElementById('onboarding-overlay').classList.add('open');
   obNext(1);
   buildToolsGrid();
+  // Pré-remplir le nom si déjà connu (re-onboarding après bump de version)
+  const nameInput = document.getElementById('ob-name-input');
+  if (nameInput) {
+    nameInput.value = localStorage.getItem('ks_user_name') || '';
+    setTimeout(() => nameInput.focus(), 350);
+    nameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') obNext(2);
+    }, { once: false });
+  }
 }
 
 function obNext(step) {
+  // Sauvegarde du nom au passage de l'étape 1 → 2
+  if (step === 2) {
+    const v = document.getElementById('ob-name-input')?.value.trim();
+    if (v) localStorage.setItem('ks_user_name', v);
+  }
   document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   document.getElementById('ob-step-' + step).classList.add('active');
-  document.getElementById('ob-bar').style.width = (step / 3 * 100) + '%';
+  document.getElementById('ob-bar').style.width = (step / 4 * 100) + '%';
 }
 
 function buildToolsGrid() {
@@ -1510,6 +1550,10 @@ function toggleTool(el, id, quota) {
    LAUNCH APP
 ═══════════════════════════════════════════ */
 function launchApp() {
+  // Filet de sécurité : sauve le nom si l'utilisateur a sauté l'étape via clavier
+  const nameVal = document.getElementById('ob-name-input')?.value.trim();
+  if (nameVal) localStorage.setItem('ks_user_name', nameVal);
+
   const selectedIds = [..._selectedTools];
   // ks_user_selection = source de vérité du Dashboard (filtre par ID)
   // ks_tools = legacy / compat
