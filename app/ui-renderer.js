@@ -385,39 +385,60 @@ let _ksPlan       = '';
 let _ksDebounce   = null;
 let _ksView       = 'catalogue'; // 'catalogue' | 'plans'
 
+// Source de vérité dupliquée depuis index.html (section #plans).
+// À mettre à jour conjointement si la grille tarifaire évolue.
 const KS_PLANS = [
     {
         id: 'STARTER',
-        name: 'Starter',
+        name: 'Start',
         price: 49,
-        tagline: 'Les essentiels pour votre stratégie digitale',
         color: '#63b3ed',
-        cta: 'Démarrer Starter',
+        desc: `Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.`,
+        features: [
+            { text: '6 Assistants Certifiés au choix' },
+            { text: '3 postes / utilisateurs' },
+            { text: 'Tous les moteurs IA inclus' },
+            { text: 'Artefacts visuels complets' },
+            { text: 'Export PDF A4 premium' },
+            { text: 'Mode PWA — tablette & mobile' },
+            { text: 'Artefacts sur-mesure', disabled: true },
+            { text: 'Support prioritaire',  disabled: true },
+        ],
     },
     {
         id: 'PRO',
         name: 'Pro',
         price: 79,
-        tagline: 'Analyse avancée et pilotage complet',
         color: 'var(--gold)',
         recommended: true,
-        cta: 'Passer en Pro',
+        desc: `Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.`,
+        features: [
+            { text: '8 Assistants Certifiés au choix' },
+            { text: 'Multi-postes / utilisateurs' },
+            { text: 'Tous les moteurs IA inclus' },
+            { text: 'Artefacts visuels complets' },
+            { text: 'Export PDF A4 premium' },
+            { text: 'Mode PWA — tablette & mobile' },
+            { html: '<strong>Éligible Artefacts sur-mesure</strong> <span class="ks-plan-feature-note">(sur devis)</span>' },
+            { text: 'Support prioritaire', disabled: true },
+        ],
     },
     {
         id: 'MAX',
         name: 'Max',
         price: 149,
-        tagline: 'Accès intégral à tous les outils',
         color: '#c084fc',
-        cta: 'Passer en Max',
-    },
-    {
-        id: 'SUR_MESURE',
-        name: 'Sur Mesure',
-        price: null,
-        tagline: 'Solution personnalisée selon vos besoins',
-        color: 'rgba(255,255,255,.25)',
-        contact: true,
+        desc: `Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.`,
+        features: [
+            { html: '<strong>Collection complète illimitée</strong>' },
+            { text: 'Appareils illimités' },
+            { text: 'Tous les moteurs IA inclus' },
+            { text: 'Artefacts visuels complets' },
+            { text: 'Export PDF A4 premium' },
+            { text: 'Mode PWA — tablette & mobile' },
+            { html: '<strong>Éligible Artefacts sur-mesure</strong> <span class="ks-plan-feature-note">(sur devis)</span>' },
+            { html: '<strong>Support prioritaire dédié</strong>' },
+        ],
     },
 ];
 
@@ -561,7 +582,7 @@ function _buildKStorePanel() {
             document.getElementById('ks-plans-view').hidden     = _ksView !== 'plans';
             const sub = document.getElementById('ks-head-sub');
             if (sub) sub.textContent = _ksView === 'plans'
-                ? 'Choisissez le plan adapté à votre activité'
+                ? 'Choisissez votre plan'
                 : 'Catalogue des outils disponibles';
             if (_ksView === 'plans') _renderKStorePlans();
         });
@@ -790,78 +811,41 @@ function _renderKStoreItems() {
     }).join('');
 }
 
-async function _renderKStorePlans() {
+function _renderKStorePlans() {
     const view = document.getElementById('ks-plans-view');
     if (!view) return;
 
-    // Toujours tenter le catalog local — source de vérité pour is_custom
-    // (le catalog GitHub peut être en retard après un push)
-    let allTools = getCatalog()?.tools || [];
-    try {
-        const local = await fetch('/K_STORE_ASSETS/catalog.json').then(r => r.json());
-        if (local?.tools?.length) allTools = local.tools;
-    } catch {}
-
     const ownedIds    = getOwnedIds();
-    const currentPlan = localStorage.getItem('ks_plan') || null;
+    const currentPlan = (localStorage.getItem('ks_plan') || '').toUpperCase();
 
-    // Outils publiés groupés par plan (cumulatif : MAX inclut PRO inclut STARTER)
-    const _planOrder = ['STARTER', 'PRO', 'MAX'];
-    const byPlan = id => {
-        const idx = _planOrder.indexOf(id);
-        if (idx === -1) return [];
-        return allTools
-            .filter(t => t.published && !t.is_custom && _planOrder.indexOf(t.plan) >= 0 && _planOrder.indexOf(t.plan) <= idx)
-            .map(t => t.title);
-    };
-
-    const _contactMailto = () => {
-        const sub  = encodeURIComponent('Keystone OS — Demande Sur Mesure');
-        const body = encodeURIComponent('Bonjour,\n\nJe souhaite en savoir plus sur une offre sur mesure.\n\nNom / Société :\nBesoins :\nNombre d\'utilisateurs :\n\nCordialement,');
-        return `mailto:protein.keystone@gmail.com?subject=${sub}&body=${body}`;
+    const renderFeature = f => {
+        const inner = f.html ? f.html : f.text;
+        return `<li${f.disabled ? ' class="disabled"' : ''}>${inner}</li>`;
     };
 
     view.innerHTML = `
+        <div class="ks-plans-intro">
+            Engagement mensuel, sans frais cachés. Changez de plan à tout moment.
+        </div>
         <div class="ks-plans-grid">
             ${KS_PLANS.map(plan => {
-                const tools    = byPlan(plan.id);
-                const isActive = currentPlan === plan.id || (plan.id === 'MAX' && ownedIds === null);
-
-                if (plan.contact) {
-                    return `
-                    <div class="ks-plan-card ks-plan-card--contact" style="--plan-color:${plan.color}">
-                        <div class="ks-plan-name">${plan.name}</div>
-                        <div class="ks-plan-price"><span class="ks-plan-contact">Sur devis</span></div>
-                        <div class="ks-plan-tagline">${plan.tagline}</div>
-                        <ul class="ks-plan-list">
-                            <li>Outils personnalisés</li>
-                            <li>Intégrations sur mesure</li>
-                            <li>Support dédié</li>
-                            <li>Formation équipe</li>
-                        </ul>
-                        <a class="ks-plan-cta ks-plan-cta--contact" href="${_contactMailto()}">
-                            Envoyer une demande →
-                        </a>
-                    </div>`;
-                }
-
+                const isActive = currentPlan === plan.id
+                              || (plan.id === 'MAX' && ownedIds === null);
                 return `
                 <div class="ks-plan-card${plan.recommended ? ' ks-plan-card--recommended' : ''}${isActive ? ' ks-plan-card--active' : ''}"
                      style="--plan-color:${plan.color}">
-                    ${plan.recommended ? '<div class="ks-plan-badge">RECOMMANDÉ</div>' : ''}
+                    ${plan.recommended ? '<div class="ks-plan-badge">POPULAIRE</div>' : ''}
                     ${isActive        ? '<div class="ks-plan-badge ks-plan-badge--active">VOTRE PLAN</div>' : ''}
-                    <div class="ks-plan-name">${plan.name}</div>
+                    <div class="ks-plan-name">${plan.name.toUpperCase()}</div>
                     <div class="ks-plan-price">
-                        ${plan.price ? `${plan.price} €<span class="ks-plan-per">/mois</span>` : ''}
+                        <span class="ks-plan-currency">€</span>${plan.price}<span class="ks-plan-per">/mois</span>
                     </div>
-                    <div class="ks-plan-tagline">${plan.tagline}</div>
+                    <p class="ks-plan-desc">${plan.desc}</p>
                     <ul class="ks-plan-list">
-                        ${tools.map(t => `<li>${t}</li>`).join('')}
+                        ${plan.features.map(renderFeature).join('')}
                     </ul>
-                    ${isActive
-                        ? `<div class="ks-plan-active-label">Plan actif</div>`
-                        : `<a class="ks-plan-cta" href="https://proteinstudio.fr/keystone?plan=${plan.id.toLowerCase()}"
-                              target="_blank" rel="noopener noreferrer">${plan.cta} →</a>`}
+                    <button class="ks-plan-cta" disabled>Bientôt disponible</button>
+                    <p class="ks-plan-note">Sans engagement · Résiliable à tout moment</p>
                 </div>`;
             }).join('')}
         </div>

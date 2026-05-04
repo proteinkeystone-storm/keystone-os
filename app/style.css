@@ -1585,6 +1585,45 @@ html.light-mode .sec-kstore-badge {
   color: var(--tx1) !important;
 }
 
+/* ── Nouveaux styles plans (alignement landing page) ─────────── */
+.ks-plans-intro {
+  font-size: 12px; color: var(--tx3); text-align: center;
+  margin: 4px 0 14px; padding: 0 8px; line-height: 1.5;
+}
+.ks-plan-currency {
+  font-size: 14px; font-weight: 700; color: var(--tx2);
+  vertical-align: top; margin-right: 1px;
+}
+.ks-plan-desc {
+  font-size: 11px; color: var(--tx3); line-height: 1.5;
+  margin: 6px 0 12px; min-height: 33px;
+}
+.ks-plan-list li.disabled {
+  opacity: .35; text-decoration: line-through;
+}
+.ks-plan-list li.disabled::before { color: var(--tx3); }
+.ks-plan-list li strong {
+  color: var(--tx1); font-weight: 700;
+}
+.ks-plan-feature-note {
+  font-size: 9.5px; color: var(--tx3); opacity: .75;
+  margin-left: 2px;
+}
+.ks-plan-cta:disabled {
+  opacity: .55; cursor: not-allowed;
+  background: rgba(255,255,255,.05);
+  border-color: rgba(255,255,255,.08);
+}
+.ks-plan-card--recommended .ks-plan-cta:disabled {
+  background: linear-gradient(135deg, rgba(201,168,76,.55) 0%, rgba(184,136,42,.55) 100%);
+  color: rgba(7,16,42,.7);
+}
+.ks-plan-cta:disabled:hover { background: rgba(255,255,255,.05); }
+.ks-plan-note {
+  font-size: 10px; color: var(--tx3);
+  text-align: center; margin: 8px 0 0; opacity: .8;
+}
+
 /* ── À la carte section ──────────────────────────────────────── */
 .ks-plans-custom {
   padding: 14px 16px;
