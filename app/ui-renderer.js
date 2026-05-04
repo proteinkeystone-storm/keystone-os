@@ -13,7 +13,7 @@ import {
 } from './grid-engine.js';
 import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
-import { initOnboarding, needsOnboarding }    from './onboarding.js';
+// Onboarding entièrement délégué à la landing page (index.html).
 import { exportVault, linkVaultFile, scheduleAutoSave, isVaultLinked } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
@@ -123,12 +123,6 @@ function renderHeroDate() {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 export function renderDashboard() {
-    // ── Premier lancement → tunnel d'onboarding ────────────────
-    if (needsOnboarding()) {
-        initOnboarding([...TOOLS, ...ARTEFACTS], renderDashboard);
-        return;
-    }
-
     // ── Classification owned / locked (B2B + Lifetime) ────────
     const ownedIds    = getOwnedIds();
     const lifetimeIds = getLifetimeIds();

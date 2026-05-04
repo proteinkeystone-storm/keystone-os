@@ -3,7 +3,6 @@ import { renderDashboard, initSettings, initTools } from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';
 import { initLockScreen }                     from './lockscreen.js';
 import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
-import { initOnboarding }                     from './onboarding.js';
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
 
@@ -14,21 +13,23 @@ import { initInbox }                          from './inbox.js';
 // localStorage / la signature des outils. Au boot, si la version
 // stockée diffère, on reset les clés problématiques sans toucher
 // aux préférences utilisateur (clés API, photo, nom...).
-const APP_VERSION = '2026-05-04-demo-quota-1';
+const APP_VERSION = '2026-05-04-cleanup-double-onboarding';
 (() => {
     const stored = localStorage.getItem('ks_app_version');
     if (stored === APP_VERSION) return;
 
-    // Caches volatils à purger (licences, inbox).
-    ['ks_owned_assets','ks_inbox_cache'].forEach(k => localStorage.removeItem(k));
+    // Cache inbox uniquement (peut contenir d'anciennes structures).
+    localStorage.removeItem('ks_inbox_cache');
     // Flags ks_deactivated_* (outils masqués) — repartent propres.
     Object.keys(localStorage)
         .filter(k => k.startsWith('ks_deactivated_'))
         .forEach(k => localStorage.removeItem(k));
-    // Réafficher l'onboarding à chaque montée de version : le nom, la photo
-    // et la sélection précédente sont conservés et pré-remplis dans les slides.
-    // Le bouton "Accéder directement au Dashboard →" permet de skipper.
-    localStorage.removeItem('ks_onboarded');
+
+    // ⚠ Ne JAMAIS effacer ks_onboarded ni ks_owned_assets ici :
+    //  • la landing page (index.html) est la source de vérité du tunnel
+    //    d'onboarding — c'est elle qui les pose après activation.
+    //  • Les supprimer relance un second onboarding obsolète côté /app
+    //    et écrase la sélection Démo (1 outil).
 
     localStorage.setItem('ks_app_version', APP_VERSION);
     console.info('[Keystone] Mise à jour appliquée :', APP_VERSION);
@@ -71,21 +72,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 2c. Injection des listes dynamiques dans le renderer (Master Renderer)
     initTools(getToolList(), getArtefactList());
 
-    // 3. Onboarding affiché dès que le flag ks_onboarded est absent.
-    // Le bloc VERSION CHECK le supprime à chaque montée de version pour
-    // que l'utilisateur puisse découvrir/redécouvrir le tunnel personnalisé.
-    // Les anciennes valeurs (nom, photo, sélection) sont pré-remplies.
-    const onboarded = localStorage.getItem('ks_onboarded');
-    if (!onboarded) {
-        // Outils PADs + Artefacts catalog (propositions suggérées)
-        const toolItems = getToolList();
-        const artefactItems = getArtefactList();
-        const catalog = [...toolItems, ...artefactItems];
-        initOnboarding(catalog, _boot);
-        return;
-    }
-
-    // 4. Lancement direct si déjà onboardé ou vault configuré
+    // 3. L'onboarding est intégralement géré par la landing page (index.html).
+    // Si l'utilisateur arrive sur /app sans avoir activé sa licence, on le
+    // laisse voir le dashboard vide — pas de second tunnel ici.
     _boot();
 
     // ── Sprint 3 — Hot Reload après activation de licence ───────
