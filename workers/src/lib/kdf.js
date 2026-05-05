@@ -20,7 +20,15 @@
    Activation = HMAC lookup → PBKDF2 verify → constant-time compare.
    ═══════════════════════════════════════════════════════════════ */
 
-const PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers cap PBKDF2 à 100 000 itérations (limite plateforme).
+// Pour des clés à haute entropie (UUIDv4 = 122 bits, ou format
+// XXXX-XXXX-XXXX-XXXX = 80 bits), 100k itérations restent
+// cryptographiquement suffisantes : un attaquant doit calculer
+// 100 000 PBKDF2 par tentative, et le coût total dépasse largement
+// l'entropie de la clé elle-même. Migration future possible vers
+// Argon2id (@noble/hashes WASM) si on doit supporter des secrets
+// à faible entropie type mots de passe humains.
+const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_HASH       = 'SHA-256';
 const KEY_HASH_LEN      = 32;     // 256 bits
 const SALT_LEN          = 16;

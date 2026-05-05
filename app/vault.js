@@ -197,17 +197,27 @@ async function _writeToHandle() {
 
 // ═══════════════════════════════════════════════════════════════
 // AUTO-SAVE — appelé après chaque modification de Settings
-// Debounce 1.5s pour regrouper les changements rapides
+// Debounce 1.5s pour regrouper les changements rapides.
+// ─────────────────────────────────────────────────────────────
+// Sprint 4 — Persistance prioritaire = Cloud Vault chiffré (D1).
+// Si le user a un JWT actif, on sync serveur (cross-device).
+// Le fallback "download de vault.js" est désactivé : il polluait
+// les Téléchargements à chaque keystroke et n'avait d'effet que si
+// l'utilisateur replaçait manuellement le fichier dans /app/.
+// La clé USB reste possible via File System Access API (linkVaultFile).
 // ═══════════════════════════════════════════════════════════════
 export function scheduleAutoSave() {
     clearTimeout(_autoTimer);
     _autoTimer = setTimeout(async () => {
+        // 1) USB lié : on écrit le fichier vault.js (legacy power-user)
         if (_fileHandle) {
             await _writeToHandle();
-        } else {
-            // Fallback : download silencieux (notification navigateur)
-            _downloadFallback();
         }
+        // 2) Sync serveur (Cloud Vault) — silencieux, transparent.
+        try {
+            const { saveToCloud, isCloudReady } = await import('./cloud-vault.js');
+            if (isCloudReady()) saveToCloud();
+        } catch (_) {}
     }, 1500);
 }
 

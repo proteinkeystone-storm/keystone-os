@@ -145,11 +145,16 @@ export async function handleActivateV2(request, env) {
   }
 
   // ── Étape 5 : First-Use device binding (Sprint 2.2) ──────────
-  // Plan DEMO = bypass (multi-device pour démos / commerciaux)
-  const isDemo      = (licence.plan || '').toUpperCase() === 'DEMO';
+  // Plan DEMO/ADMIN = bypass (multi-device pour démos, commerciaux,
+  // et l'admin qui doit accéder depuis tous ses appareils).
+  // Plan BETA = binding normal (1 testeur = 1 appareil).
+  const planUp    = (licence.plan || '').toUpperCase();
+  const isDemo    = planUp === 'DEMO';
+  const isAdmin   = planUp === 'ADMIN';
+  const bypassBind = isDemo || isAdmin;
   let   deviceBound = false;
 
-  if (!isDemo) {
+  if (!bypassBind) {
     if (!licence.device_fingerprint) {
       // Première activation → on binde
       await env.DB.prepare(`
@@ -179,6 +184,7 @@ export async function handleActivateV2(request, env) {
     email:    email || licence.owner,
     fp:       fp,                // lié à l'empreinte
     isDemo,
+    isAdmin,
   }, env);
 
   return json({

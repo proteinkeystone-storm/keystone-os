@@ -5,6 +5,7 @@ import { initLockScreen }                     from './lockscreen.js';
 import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
+import { loadFromCloud, saveToCloud, isCloudReady } from './cloud-vault.js';
 
 // ═══════════════════════════════════════════════════════════════
 // VERSION CHECK — auto-cleanup à chaque déploiement
@@ -66,6 +67,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         window.history.replaceState({}, '', _clean);
     }
 
+    // 1bis. Sprint 4 — Cloud Vault sync : si JWT présent, on hydrate
+    //       localStorage AVANT d'instancier l'UI. Cross-device garanti.
+    if (isCloudReady()) {
+        try { await loadFromCloud(); } catch (_) {}
+    }
+
     // 2. Chargement des PADs (nécessaire aussi pour le catalogue d'onboarding)
     const pads = await loadPads();
 
@@ -85,8 +92,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('ks-licence-activated', e => {
         const { plan, ownedAssets } = e.detail || {};
 
+        // Sprint 4 — On vient juste d'obtenir le JWT, hydrate le vault
+        // distant (clés API saisies sur un autre appareil) puis re-render.
+        loadFromCloud()
+            .catch(() => {})
+            .finally(() => renderDashboard());
+
         // Re-render complet du dashboard avec les nouveaux droits
-        renderDashboard();
 
         // Feedback dans la DST
         const dstText = document.getElementById('dst-text');
