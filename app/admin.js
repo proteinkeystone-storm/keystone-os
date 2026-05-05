@@ -1383,7 +1383,17 @@ function showNewPadTypeModal(panel) {
 // ══════════════════════════════════════════════════════════════════
 async function renderCatalog(panel) {
   try {
-    catalogData = await fetchJSON('/K_STORE_ASSETS/catalog.json');
+    // 1. On tente de charger la version persistée en D1 (source de vérité)
+    let loaded = null;
+    try {
+      const res = await api('/api/admin/catalog?tenantId=default');
+      if (res && res.catalog) loaded = res.catalog;
+    } catch (_) { /* fallback ci-dessous */ }
+
+    // 2. Fallback sur le fichier statique si rien en D1 (1ère utilisation)
+    if (!loaded) loaded = await fetchJSON('/K_STORE_ASSETS/catalog.json');
+
+    catalogData = loaded;
     const items = catalogData.tools || [];
     panel.innerHTML = `
       <div class="section-header">
