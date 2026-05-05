@@ -679,25 +679,28 @@ html.light-mode #ks-logo-light { display: block; }
   gap: 13px;
 }
 
-/* ── Palette par catégorie d'outil (data-palette) ────────────── */
+/* ── Palette par PLAN (data-palette) ──────────────────────────
+   slate=DEMO · blue=STARTER · indigo=PRO · violet=MAX · amber=Artefacts */
+.pad-card[data-palette="slate"]   { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12);--tool-bd:rgba(148,163,184,.25); }
 .pad-card[data-palette="blue"]    { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  --tool-bd:rgba(56,189,248,.25); }
-.pad-card[data-palette="emerald"] { --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
-.pad-card[data-palette="amber"]   { --tool-c:#fbbf24; --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
+.pad-card[data-palette="indigo"]  { --tool-c:#818cf8; --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 .pad-card[data-palette="violet"]  { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
+.pad-card[data-palette="amber"]   { --tool-c:#fbbf24; --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
+.pad-card[data-palette="emerald"] { --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
 .pad-card[data-palette="rose"]    { --tool-c:#fb7185; --tool-bg:rgba(251,113,133,.12); --tool-bd:rgba(251,113,133,.25); }
 .pad-card[data-palette="cyan"]    { --tool-c:#22d3ee; --tool-bg:rgba(34,211,238,.12);  --tool-bd:rgba(34,211,238,.25); }
 .pad-card[data-palette="green"]   { --tool-c:#4ade80; --tool-bg:rgba(74,222,128,.12);  --tool-bd:rgba(74,222,128,.25); }
-.pad-card[data-palette="indigo"]  { --tool-c:#818cf8; --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 
 /* Light mode : pastels plus saturés */
+html.light-mode .pad-card[data-palette="slate"]   { --tool-c:#475569; --tool-bg:#f1f5f9; --tool-bd:#e2e8f0; }
 html.light-mode .pad-card[data-palette="blue"]    { --tool-c:#0284c7; --tool-bg:#e0f2fe; --tool-bd:#bae6fd; }
-html.light-mode .pad-card[data-palette="emerald"] { --tool-c:#059669; --tool-bg:#d1fae5; --tool-bd:#a7f3d0; }
-html.light-mode .pad-card[data-palette="amber"]   { --tool-c:#d97706; --tool-bg:#fef3c7; --tool-bd:#fde68a; }
+html.light-mode .pad-card[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-bg:#e0e7ff; --tool-bd:#c7d2fe; }
 html.light-mode .pad-card[data-palette="violet"]  { --tool-c:#7c3aed; --tool-bg:#ede9fe; --tool-bd:#ddd6fe; }
+html.light-mode .pad-card[data-palette="amber"]   { --tool-c:#d97706; --tool-bg:#fef3c7; --tool-bd:#fde68a; }
+html.light-mode .pad-card[data-palette="emerald"] { --tool-c:#059669; --tool-bg:#d1fae5; --tool-bd:#a7f3d0; }
 html.light-mode .pad-card[data-palette="rose"]    { --tool-c:#e11d48; --tool-bg:#ffe4e6; --tool-bd:#fecdd3; }
 html.light-mode .pad-card[data-palette="cyan"]    { --tool-c:#0891b2; --tool-bg:#cffafe; --tool-bd:#a5f3fc; }
 html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:#dcfce7; --tool-bd:#bbf7d0; }
-html.light-mode .pad-card[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-bg:#e0e7ff; --tool-bd:#c7d2fe; }
 
 .pad-card {
   background: var(--navy2);
@@ -1025,7 +1028,7 @@ body:has(.ks-panel.open) .pad-edit-bar { display: none !important; }
 
 /* ── Badge À vie sur les cartes possédées définitivement ────────── */
 .pad-lifetime-badge {
-  position: absolute; bottom: 16px; right: 22px;
+  position: absolute; bottom: 18px; left: 24px;
   font-size: 7.5px; font-weight: 900; letter-spacing: .12em;
   color: var(--tool-c, var(--gold)); background: var(--tool-bg, rgba(99,102,241,.12));
   border: 1px solid var(--tool-bd, rgba(99,102,241,.3));
@@ -1314,9 +1317,9 @@ html.light-mode .pad-card--locked::after {
 }
 
 .pad-arrow {
-  position: absolute; top: 22px; right: 22px;
+  position: absolute; bottom: 18px; right: 20px;
   font-size: 16px; color: var(--tx3);
-  font-weight: 300;
+  font-weight: 300; line-height: 1;
   transition: color .2s ease, transform .2s ease;
   pointer-events: none;
 }
@@ -1336,6 +1339,7 @@ html.light-mode .pad-card--locked::after {
 }
 
 /* Palette suggest-card (mêmes teintes que pad-card) */
+.suggest-card[data-palette="slate"]   { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12);--tool-bd:rgba(148,163,184,.25); }
 .suggest-card[data-palette="blue"]    { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  --tool-bd:rgba(56,189,248,.25); }
 .suggest-card[data-palette="emerald"] { --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
 .suggest-card[data-palette="amber"]   { --tool-c:#fbbf24; --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
@@ -1345,6 +1349,7 @@ html.light-mode .pad-card--locked::after {
 .suggest-card[data-palette="green"]   { --tool-c:#4ade80; --tool-bg:rgba(74,222,128,.12);  --tool-bd:rgba(74,222,128,.25); }
 .suggest-card[data-palette="indigo"]  { --tool-c:#818cf8; --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 
+html.light-mode .suggest-card[data-palette="slate"]   { --tool-c:#475569; --tool-bg:#f1f5f9; --tool-bd:#e2e8f0; }
 html.light-mode .suggest-card[data-palette="blue"]    { --tool-c:#0284c7; --tool-bg:#e0f2fe; --tool-bd:#bae6fd; }
 html.light-mode .suggest-card[data-palette="emerald"] { --tool-c:#059669; --tool-bg:#d1fae5; --tool-bd:#a7f3d0; }
 html.light-mode .suggest-card[data-palette="amber"]   { --tool-c:#d97706; --tool-bg:#fef3c7; --tool-bd:#fde68a; }
@@ -2387,6 +2392,7 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
 .modal-handle { display: none; }
 
 /* Palette par modal (data-palette propagé depuis pad-card) */
+.tool-modal[data-palette="slate"]   { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12);--tool-bd:rgba(148,163,184,.25); }
 .tool-modal[data-palette="blue"]    { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  --tool-bd:rgba(56,189,248,.25); }
 .tool-modal[data-palette="emerald"] { --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
 .tool-modal[data-palette="amber"]   { --tool-c:#fbbf24; --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
@@ -2396,6 +2402,7 @@ html.light-mode .sp-user-remove-btn { background: rgba(255,60,60,.04); }
 .tool-modal[data-palette="green"]   { --tool-c:#4ade80; --tool-bg:rgba(74,222,128,.12);  --tool-bd:rgba(74,222,128,.25); }
 .tool-modal[data-palette="indigo"]  { --tool-c:#818cf8; --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 
+html.light-mode .tool-modal[data-palette="slate"]   { --tool-c:#475569; --tool-bg:#f1f5f9; --tool-bd:#e2e8f0; }
 html.light-mode .tool-modal[data-palette="blue"]    { --tool-c:#0284c7; --tool-bg:#e0f2fe; --tool-bd:#bae6fd; }
 html.light-mode .tool-modal[data-palette="emerald"] { --tool-c:#059669; --tool-bg:#d1fae5; --tool-bd:#a7f3d0; }
 html.light-mode .tool-modal[data-palette="amber"]   { --tool-c:#d97706; --tool-bg:#fef3c7; --tool-bd:#fde68a; }

@@ -33,28 +33,28 @@ const ICONS = {
     'table':   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
 };
 
-// ── Palette par catégorie d'outil (id prefix-based) ───────────
-// Style "SaaS Premium" : chaque catégorie a sa teinte pastel propre.
-// Mappage déterministe : un outil garde toujours la même couleur.
-const _PALETTE_BY_PREFIX = {
-    'O-IMM': 'blue',     // Immobilier
-    'O-MKT': 'amber',    // Marketing
-    'O-COM': 'violet',   // Communication
-    'O-ANL': 'emerald',  // Analyse
-    'O-FIN': 'green',    // Finance
-    'O-PRO': 'rose',     // Production
-    'O-LEG': 'cyan',     // Légal
-    'A-':    'violet',   // Artefacts
+// ── Palette par PLAN (et par type) ────────────────────────────
+// Logique : la teinte sert d'aide visuelle pour repérer le plan
+// nécessaire à un outil + différencier les Artefacts des Outils.
+//   • DEMO    → slate (gris) — outil démo gratuit
+//   • STARTER → blue (sky)   — plan Start
+//   • PRO     → indigo       — plan Pro (recommandé)
+//   • MAX     → violet       — plan Max
+//   • Artefact (id A-*)      → amber (ambre) — distinct des outils
+const _PALETTE_BY_PLAN = {
+    'DEMO':    'slate',
+    'STARTER': 'blue',
+    'PRO':     'indigo',
+    'MAX':     'violet',
 };
 function getToolPalette(id) {
     if (!id) return 'indigo';
-    for (const prefix in _PALETTE_BY_PREFIX) {
-        if (id.startsWith(prefix)) return _PALETTE_BY_PREFIX[prefix];
-    }
-    // Fallback : hash léger sur l'id pour distribuer entre 6 couleurs
-    const colors = ['blue','amber','violet','emerald','rose','cyan'];
-    let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-    return colors[Math.abs(h) % colors.length];
+    // Artefacts : couleur dédiée (ambre) pour les distinguer des outils
+    if (id.startsWith('A-')) return 'amber';
+    // Outils : palette basée sur le plan déclaré dans le catalogue
+    const cat  = getCatalogEntry(id);
+    const plan = (cat?.plan || '').toUpperCase();
+    return _PALETTE_BY_PLAN[plan] || 'indigo';
 }
 
 // ── Données dashboard — pilotées par PAD JSONs + catalog.json ───
