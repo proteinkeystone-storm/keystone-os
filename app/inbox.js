@@ -136,8 +136,7 @@ function _ensureCTAButton() {
     _ctaEl.className = 'ks-inbox-cta';
     _ctaEl.style.display = 'none';
     _ctaEl.innerHTML = `
-        <button class="ks-inbox-cta-btn"   type="button" data-action="cta"></button>
-        <button class="ks-inbox-cta-close" type="button" data-action="dismiss" title="Marquer comme lu" aria-label="Marquer comme lu">×</button>
+        <button class="ks-inbox-cta-btn" type="button" data-action="cta"></button>
     `;
     dst.appendChild(_ctaEl);
 
@@ -148,17 +147,11 @@ function _ensureCTAButton() {
         if (!m) return;
 
         if (btn.dataset.action === 'cta' && m.cta_url) {
-            // Lien externe → nouvel onglet ; ancre/route interne → même onglet
             if (/^https?:\/\//i.test(m.cta_url)) {
                 window.open(m.cta_url, '_blank', 'noopener');
             } else {
                 window.location.href = m.cta_url;
             }
-        } else if (btn.dataset.action === 'dismiss') {
-            _markDismissed(m.id);
-            _messages = _messages.filter(x => x.id !== m.id);
-            _saveToCache(_messages);
-            _renderActive();
         }
     });
 }

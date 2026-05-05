@@ -269,20 +269,7 @@ export function renderDashboard() {
             return (bNew ? 1 : 0) - (aNew ? 1 : 0);
         });
 
-        // 3 modes possibles :
-        //  • démo libre (ownedIds === null) → "Bientôt" grisé
-        //  • plan Démo (1 outil)            → "Voir les plans" (renvoi onglet Abonnements)
-        //  • plan payant                     → "Essayer gratuitement"
-        const isDemoFree = (ownedIds === null);
-        const isDemoPlan = (localStorage.getItem('ks_plan') || '').toUpperCase() === 'DEMO';
-        const ctaLabel = isDemoPlan ? 'Voir les plans'
-                                    : (isDemoFree ? 'Bientôt' : 'Essayer gratuitement');
-        const ctaClass = isDemoFree && !isDemoPlan
-            ? 'suggest-card-cta suggest-card-cta--soon'
-            : 'suggest-card-cta';
-        const ctaDisabled = isDemoFree && !isDemoPlan;
-
-        // Cartes compactes — pictogramme + nom + CTA
+        // Cartes compactes — pictogramme + nom (sans CTA)
         const suggestCards = sortedLocked.map(item => {
             const cat    = getCatalogEntry(item.id);
             const isNew  = !!cat?.isNew;
@@ -294,7 +281,6 @@ export function renderDashboard() {
                 ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
-                <button class="${ctaClass}" ${ctaDisabled ? 'disabled' : ''}>${ctaLabel}</button>
             </div>`;
         }).join('');
 

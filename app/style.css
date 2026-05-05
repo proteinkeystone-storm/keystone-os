@@ -277,7 +277,8 @@ html.light-mode .hero-dst[data-type="alert"] .hero-dst-text { color: #c04040; }
 }
 .ks-inbox-cta-btn:hover  { opacity: .92; transform: translateY(-1px); }
 .ks-inbox-cta-btn:active { transform: translateY(0); }
-.ks-inbox-cta-close {
+.ks-inbox-cta-close { display: none !important; }
+.ks-inbox-cta-close-legacy {
   width: 18px; height: 18px;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 14px; line-height: 1; font-family: inherit;
@@ -627,16 +628,14 @@ html.light-mode .engine-logo-light { display: block !important; }
   letter-spacing: -.03em;
 }
 
-.hero-text { min-width: 0; }
 .hero-greeting {
   font-size: 26px; font-weight: 900;
   letter-spacing: -0.025em; line-height: 1.15;
   margin-bottom: 5px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .hero-name { color: var(--gold); }
-.hero-sub  { font-size: 13px; color: var(--tx2); }
+.hero-sub  { font-size: 13px; color: var(--tx2); min-height: 1.5em; }
 
 /* Dual logo dark/light */
 #ks-logo-light { display: none; }
