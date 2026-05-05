@@ -810,8 +810,9 @@ function _renderKStoreItems() {
             ? (_inSel && _notDeact && _notHidden)
             : ownedIds.includes(item.id) && _notDeact && _notHidden;
 
+        const pal = getToolPalette(item.id);
         return `
-        <div class="ks-item${isDeployed ? ' ks-item--deployed' : ''}${cat?.isNew ? ' ks-item--new' : ''}" data-id="${item.id}">
+        <div class="ks-item${isDeployed ? ' ks-item--deployed' : ''}${cat?.isNew ? ' ks-item--new' : ''}" data-id="${item.id}" data-palette="${pal}">
             <div class="ks-item-icon">${ICONS[item.icon] || ICONS['zap']}</div>
             <div class="ks-item-body">
                 <div class="ks-item-meta">
