@@ -379,6 +379,7 @@ const KS_PLANS = [
         name: 'Start',
         price: 49,
         color: '#63b3ed',
+        stripeUrl: 'https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00',
         desc: `Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.`,
         features: [
             { text: '6 Assistants Certifiés au choix' },
@@ -397,6 +398,7 @@ const KS_PLANS = [
         price: 79,
         color: 'var(--gold)',
         recommended: true,
+        stripeUrl: 'https://buy.stripe.com/28E7sLgo9gl21g9eFCf7i01',
         desc: `Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.`,
         features: [
             { text: '8 Assistants Certifiés au choix' },
@@ -414,6 +416,7 @@ const KS_PLANS = [
         name: 'Max',
         price: 149,
         color: '#c084fc',
+        stripeUrl: 'https://buy.stripe.com/9B6eVd0pb7Ow4sl7daf7i02',
         desc: `Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.`,
         features: [
             { html: '<strong>Collection complète illimitée</strong>' },
@@ -830,7 +833,10 @@ function _renderKStorePlans() {
                     <ul class="ks-plan-list">
                         ${plan.features.map(renderFeature).join('')}
                     </ul>
-                    <button class="ks-plan-cta" disabled>Bientôt disponible</button>
+                    ${isActive
+                        ? `<button class="ks-plan-cta" disabled style="opacity:.7;cursor:default">Votre plan actuel ✓</button>`
+                        : `<a class="ks-plan-cta" href="${plan.stripeUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Choisir ${plan.name}</a>`
+                    }
                     <p class="ks-plan-note">Sans engagement · Résiliable à tout moment</p>
                 </div>`;
             }).join('')}
