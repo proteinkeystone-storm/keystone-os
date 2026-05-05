@@ -54,7 +54,7 @@ function _boot() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-    // 1. Vault en premier — source de vérité USB, écrase le localStorage
+    // 1. Vault local en premier — restore préférences depuis localStorage
     loadVault();
 
     // Sprint C — Activation URL post-paiement (?ks_activate=O-IMM-001)

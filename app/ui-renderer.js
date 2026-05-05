@@ -14,7 +14,7 @@ import {
 import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
-import { exportVault, linkVaultFile, scheduleAutoSave, isVaultLinked } from './vault.js';
+import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
 
@@ -1278,7 +1278,7 @@ function _buildModal(pad, tool) {
             const val = parseInt(star.dataset.v, 10);
             localStorage.setItem(_ratingKey, val);
             stars.forEach(s => s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val));
-            // Sync cloud (cross-device) + USB si lié
+            // Sync cloud (cross-device)
             import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
         });
     }
@@ -1469,7 +1469,7 @@ function _buildArtifactModal(inner, pad, tool) {
             starsEl.querySelectorAll('.rating-star').forEach(s =>
                 s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val)
             );
-            // Sync cloud (cross-device) + USB si lié
+            // Sync cloud (cross-device)
             import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
         });
     }
@@ -1971,51 +1971,6 @@ function _renderSettingsBody() {
             content: `<div class="sp-placeholder">Vos clés API et données de profil sont stockées localement dans votre navigateur (localStorage). Aucune donnée n'est transmise à nos serveurs.</div>`,
         },
         {
-            id: 'acc-usb', icon: ACC_ICONS.usb, title: 'Télécommande USB',
-            open: false,
-            content: `
-                <div class="sp-usb-zone">
-                    <div id="usb-state-unlinked">
-                        ${!('showSaveFilePicker' in window) ? `
-                        <div class="sp-usb-desc" style="background:rgba(201,169,110,.08);border:1px solid rgba(201,169,110,.25);border-radius:8px;padding:12px 14px;margin-bottom:12px">
-                            <strong style="color:var(--gold)">ℹ️ Fonctionnalité non disponible sur ce navigateur</strong><br>
-                            Le liage clé USB nécessite Chrome, Edge ou Opera (API File System Access).<br><br>
-                            <strong style="color:var(--text)">Bonne nouvelle :</strong> vos données sont déjà synchronisées
-                            automatiquement via le <strong>Cloud Vault chiffré</strong> (AES-256, cross-device).
-                            La clé USB n'est plus nécessaire.
-                        </div>` : ''}
-                        <div class="sp-usb-desc">
-                            Liez votre fichier <code>vault.js</code> une seule fois.
-                            Keystone sauvegardera ensuite vos préférences et clés API
-                            <strong>automatiquement</strong> à chaque modification — sans aucune action de votre part.
-                        </div>
-                        <div class="sp-usb-steps">
-                            <div class="sp-usb-step"><span class="sp-usb-num">1</span>Cliquez "Lier ma clé USB" et sélectionnez <code>vault.js</code></div>
-                            <div class="sp-usb-step"><span class="sp-usb-num">2</span>Modifiez vos paramètres — la sauvegarde est automatique</div>
-                            <div class="sp-usb-step"><span class="sp-usb-num">3</span>Au prochain démarrage, tout est restauré instantanément</div>
-                        </div>
-                        <button class="btn-save-vault" id="btn-link-vault">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                            Lier ma clé USB
-                        </button>
-                    </div>
-                    <div id="usb-state-linked" style="display:none">
-                        <div class="sp-usb-linked-badge">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><polyline points="20 6 9 17 4 12"/></svg>
-                            Clé USB liée — sauvegarde automatique active
-                        </div>
-                        <div class="sp-usb-desc" style="margin-top:10px">
-                            Chaque modification de vos paramètres est enregistrée directement
-                            sur votre clé USB dans les 2 secondes.
-                        </div>
-                        <button class="btn-save-vault btn-save-vault-secondary" id="btn-force-save">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Forcer la sauvegarde
-                        </button>
-                    </div>
-                </div>`,
-        },
-        {
             id: 'acc-support', icon: ACC_ICONS.support, title: 'Support',
             open: false,
             content: `
@@ -2151,64 +2106,6 @@ function _renderSettingsBody() {
             localStorage.setItem('ks_lock_style', card.dataset.style);
             window.dispatchEvent(new Event('ks-lock-settings-changed'));
         });
-    });
-
-    // 🔗 Lier la clé USB (File System Access API)
-    const _refreshUsbUI = () => {
-        const linked   = isVaultLinked();
-        const unlinked = body.querySelector('#usb-state-unlinked');
-        const linkedEl = body.querySelector('#usb-state-linked');
-        if (unlinked) unlinked.style.display = linked ? 'none' : '';
-        if (linkedEl) linkedEl.style.display = linked ? '' : 'none';
-    };
-    _refreshUsbUI();
-
-    body.querySelector('#btn-link-vault')?.addEventListener('click', async () => {
-        const btn = body.querySelector('#btn-link-vault');
-        const restoreLabel = () => { if (btn) btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Lier ma clé USB`; };
-
-        // Détection navigateur — File System Access API = Chrome/Edge/Opera uniquement
-        if (!('showSaveFilePicker' in window)) {
-            const isSafari   = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-            const isFirefox  = /firefox/i.test(navigator.userAgent);
-            const browser    = isSafari ? 'Safari' : isFirefox ? 'Firefox' : 'votre navigateur';
-            const msg = `Le liage clé USB n'est pas pris en charge par ${browser}.\n\n` +
-                        `Cette fonctionnalité utilise l'API File System Access, disponible uniquement sur :\n` +
-                        `  • Google Chrome\n  • Microsoft Edge\n  • Opera\n\n` +
-                        `✅ Bonne nouvelle : vos données sont déjà synchronisées automatiquement\n` +
-                        `dans le Cloud Vault chiffré (cross-device, AES-256).\n\n` +
-                        `La clé USB n'est plus nécessaire — vos préférences vous suivent\n` +
-                        `automatiquement sur tous vos appareils connectés à votre licence.`;
-            alert(msg);
-            restoreLabel();
-            return;
-        }
-
-        if (btn) btn.textContent = 'Sélectionnez vault.js…';
-        const ok = await linkVaultFile();
-        if (ok) _refreshUsbUI();
-        else restoreLabel();
-    });
-
-    body.querySelector('#btn-force-save')?.addEventListener('click', () => {
-        const btn = body.querySelector('#btn-force-save');
-        exportVault();
-        if (btn) {
-            const orig = btn.innerHTML;
-            btn.innerHTML = '✓ Sauvegardé';
-            btn.classList.add('saved');
-            setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('saved'); }, 2000);
-        }
-    });
-
-    // Statut live depuis vault.js
-    window.addEventListener('ks-vault-status', e => {
-        const badge = body.querySelector('.sp-usb-linked-badge');
-        if (!badge) return;
-        if (e.detail.state === 'saved') {
-            badge.classList.add('flash');
-            setTimeout(() => badge.classList.remove('flash'), 800);
-        }
     });
 
     // ── Activation de licence (Sprint 3) ─────────────────────────

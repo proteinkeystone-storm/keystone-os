@@ -492,7 +492,7 @@ nav.scrolled {
 ═══════════════════════════════════════════ */
 #security { background: linear-gradient(180deg, rgba(5,10,24,.45) 0%, transparent 100%); }
 .security-split {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+  display: grid; grid-template-columns: minmax(0, 720px); justify-content: center; gap: 24px;
 }
 .security-block {
   background: var(--glass-bg);
@@ -939,7 +939,7 @@ nav.scrolled {
     padding: 0 18px;
   }
 
-  /* Sécurité / Two-column blocks (Clé USB physique / Mode Cloud) */
+  /* Sécurité — bloc Cloud Vault */
   #security [style*="grid-template-columns"],
   .security-grid,
   [style*="grid-template-columns: 1fr 1fr"] {
@@ -1267,29 +1267,21 @@ nav.scrolled {
       <span class="eyebrow">Infrastructure</span>
       <h2 class="title-lg">Souveraineté sans compromis.</h2>
       <p class="body-lg">
-        Sécurité physique au bureau, agilité totale en mobilité.
-        Keystone est conçu pour opérer dans les deux environnements sans jamais sacrifier la confidentialité.
+        Une infrastructure européenne chiffrée de bout en bout, conçue pour vous suivre partout
+        sans jamais sacrifier la confidentialité de vos données.
       </p>
     </div>
     <div class="security-split">
-      <div class="security-block">
-        <div class="security-block-icon"><svg width="22" height="22"><use href="#ico-usb"/></svg></div>
-        <div class="title-md">Clé USB physique — Bureau</div>
-        <p>Déployez Keystone sur poste fixe avec une clé USB chiffrée. Vos sessions démarrent uniquement sur vos appareils autorisés. Aucune donnée ne quitte votre périmètre.</p>
-        <ul>
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Authentification physique — clé USB requise</li>
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Zéro stockage cloud sur poste fixe</li>
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Verrouillage automatique à l'extraction</li>
-        </ul>
-      </div>
       <div class="security-block security-block--gold">
         <div class="security-block-icon"><svg width="22" height="22"><use href="#ico-cloud"/></svg></div>
-        <div class="title-md">Mode Cloud — Tablette &amp; Mobile</div>
-        <p>Agilité totale en mobilité : accédez à Keystone depuis votre iPad, MacBook ou smartphone. Infrastructure Cloudflare européenne (WEUR), chiffrement de bout en bout.</p>
+        <div class="title-md">Cloud Vault chiffré — Multi-appareils</div>
+        <p>Accédez à Keystone depuis votre Mac, iPad ou smartphone. Vos préférences, clés API et notations vous suivent automatiquement, où que vous soyez. Infrastructure Cloudflare européenne (WEUR), chiffrement de bout en bout.</p>
         <ul>
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Hébergement WEUR — conformité RGPD Art. 17</li>
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Clés API chiffrées AES-256-GCM</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Hébergement 100% européen (WEUR) — conformité RGPD Art. 17</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Clés API et données chiffrées AES-256-GCM</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> Synchronisation automatique cross-device</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Effacement sur demande garanti sous 72h</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> JWT signé HS256 · TTL 30 jours · device fingerprinting</li>
         </ul>
       </div>
     </div>
