@@ -33,6 +33,30 @@ const ICONS = {
     'table':   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
 };
 
+// ── Palette par catégorie d'outil (id prefix-based) ───────────
+// Style "SaaS Premium" : chaque catégorie a sa teinte pastel propre.
+// Mappage déterministe : un outil garde toujours la même couleur.
+const _PALETTE_BY_PREFIX = {
+    'O-IMM': 'blue',     // Immobilier
+    'O-MKT': 'amber',    // Marketing
+    'O-COM': 'violet',   // Communication
+    'O-ANL': 'emerald',  // Analyse
+    'O-FIN': 'green',    // Finance
+    'O-PRO': 'rose',     // Production
+    'O-LEG': 'cyan',     // Légal
+    'A-':    'violet',   // Artefacts
+};
+function getToolPalette(id) {
+    if (!id) return 'indigo';
+    for (const prefix in _PALETTE_BY_PREFIX) {
+        if (id.startsWith(prefix)) return _PALETTE_BY_PREFIX[prefix];
+    }
+    // Fallback : hash léger sur l'id pour distribuer entre 6 couleurs
+    const colors = ['blue','amber','violet','emerald','rose','cyan'];
+    let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return colors[Math.abs(h) % colors.length];
+}
+
 // ── Données dashboard — pilotées par PAD JSONs + catalog.json ───
 // TOOLS    : peuplé au boot via initTools() depuis pads-loader.getToolList()
 // ARTEFACTS: peuplé au boot via initTools() depuis pads-loader.getArtefactList()
@@ -211,8 +235,9 @@ export function renderDashboard() {
         const toolCards = visibleTools.map(t => {
             const label = getUserLabel(t.id) || t.name;
             const lt    = _isLifetime(t.id);
+            const pal   = getToolPalette(t.id);
             return `
-            <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}">
+            <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}" data-palette="${pal}">
                 <div class="pad-drag-handle" title="Déplacer pour réorganiser">
                     <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
                         <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
@@ -221,17 +246,18 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[t.icon]}</div>
+                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${label}</div>
                 <div class="pad-desc">${t.desc}</div>
-                <div class="pad-badge badge-available">Disponible</div>
                 ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
-                <div class="pad-arrow">↗</div>
             </div>`;
         }).join('');
 
         // Artefacts possédés (dans la grille principale, si achetés)
-        const ownedArtCards = ownedArts.map(a => `
-            <div class="pad-card pad-card--artefact" data-id="${a.id}">
+        const ownedArtCards = ownedArts.map(a => {
+            const pal = getToolPalette(a.id);
+            return `
+            <div class="pad-card pad-card--artefact" data-id="${a.id}" data-palette="${pal}">
                 <div class="pad-drag-handle" title="Déplacer pour réorganiser">
                     <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
                         <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
@@ -240,10 +266,11 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
-                <div class="pad-name">${a.name}</div>
-                <div class="pad-badge badge-artefact">Artefact</div>
                 <div class="pad-arrow">↗</div>
-            </div>`).join('');
+                <div class="pad-name">${a.name}</div>
+                <div class="pad-desc">Artefact</div>
+            </div>`;
+        }).join('');
 
         padsEl.innerHTML = toolCards + ownedArtCards;
 
@@ -275,12 +302,14 @@ export function renderDashboard() {
             const isNew  = !!cat?.isNew;
             const icon   = ICONS[item.icon] || ICONS['zap'];
             const label  = item.name || item.title || item.id;
+            const pal    = getToolPalette(item.id);
             return `
-            <div class="suggest-card" data-id="${item.id}"
+            <div class="suggest-card" data-id="${item.id}" data-palette="${pal}"
                  role="button" tabindex="0" aria-label="Découvrir ${label}">
                 ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
+                <div class="suggest-card-arrow">↗</div>
             </div>`;
         }).join('');
 
@@ -1109,7 +1138,11 @@ export function openTool(padId, opts = {}) {
 
     _buildModal(currentPad, tool);
 
-    document.getElementById('tool-modal')?.classList.add('open');
+    const _modal = document.getElementById('tool-modal');
+    if (_modal) {
+        _modal.setAttribute('data-palette', getToolPalette(padId));
+        _modal.classList.add('open');
+    }
     document.getElementById('tool-backdrop')?.classList.add('open');
     document.body.style.overflow = 'hidden';
 }
