@@ -1558,6 +1558,31 @@ function fillDemo() {
 }
 
 /* ═══════════════════════════════════════════
+   AUTO-FILL POST STRIPE — ?ks_key=XXXX-XXXX-...
+   Quand le client revient de Stripe Checkout,
+   son URL contient sa clé fraîchement générée
+   par le webhook serveur. On pré-remplit + scroll.
+═══════════════════════════════════════════ */
+(() => {
+  const params = new URLSearchParams(location.search);
+  const k = params.get('ks_key');
+  if (!k) return;
+  const keyEl = document.getElementById('act-key');
+  if (keyEl) {
+    keyEl.value = k.toUpperCase();
+    keyEl.dispatchEvent(new Event('input'));
+  }
+  // Nettoyer l'URL (la clé reste sensible — ne pas la laisser traîner dans l'historique)
+  const clean = new URL(location.href);
+  clean.searchParams.delete('ks_key');
+  history.replaceState({}, '', clean);
+  // Scroll vers la section d'activation
+  setTimeout(() => {
+    document.getElementById('activate')?.scrollIntoView({ behavior: 'smooth' });
+  }, 400);
+})();
+
+/* ═══════════════════════════════════════════
    EMAIL TYPE DETECTION
 ═══════════════════════════════════════════ */
 const PERSONAL_DOMAINS = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com',
