@@ -26,8 +26,8 @@ const PRICE_LOOKUP_TO_PLAN = {
   ks_max:     'MAX',
 };
 
-// URL du tunnel d'activation côté front (landing Vercel)
-const ACTIVATE_BASE = 'https://keystone-os-inky.vercel.app/?ks_key=';
+// URL du tunnel d'activation côté front (domaine officiel)
+const ACTIVATE_BASE = 'https://protein-keystone.com/?ks_key=';
 
 // ───────────────────────────────────────────────────────────────
 async function _alreadyProcessed(env, eventId) {
