@@ -6,6 +6,33 @@
 <title>Keystone OS — Domptez la puissance. Gardez le contrôle.</title>
 <meta name="description" content="Keystone OS unifie les meilleures IA du monde dans un environnement souverain. Claude, GPT-4o, Gemini — un seul OS, une seule clé.">
 <link rel="icon" href="/LOGOS/Logo puce fond bleu.svg" type="image/svg+xml">
+
+<!-- ── AUTO-REDIRECT vers /app si licence deja active ────────────
+     Si l'utilisateur revient sur la landing alors qu'il a deja un JWT
+     valide et est onboarded, on l'envoie directement au dashboard.
+     Bypass possible via ?logout=1, ?ks_key=, ?ks_reset=1, ?demo=1.
+─────────────────────────────────────────────────────────────── -->
+<script>
+(function(){
+  var p = new URLSearchParams(location.search);
+  // Bypass : laisser passer les flux d'activation, reset, demo, logout
+  if (p.get('ks_key') || p.get('ks_reset') === '1' ||
+      p.get('demo')   === '1' || p.get('logout') === '1') return;
+
+  var jwt        = localStorage.getItem('ks_jwt');
+  var onboarded  = localStorage.getItem('ks_onboarded');
+  if (!jwt || onboarded !== '1') return;
+
+  // Verif rapide expiration (sans valider la signature, juste UX)
+  try {
+    var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    if (payload.exp && payload.exp * 1000 < Date.now()) return; // expire → laisse voir landing
+  } catch(_) { return; }
+
+  // Tout est bon → vers le dashboard
+  location.replace('/app');
+})();
+</script>
 <style>
 /* ═══════════════════════════════════════════
    TOKENS

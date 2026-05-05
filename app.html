@@ -57,6 +57,42 @@
 
   <link rel="stylesheet" href="./app/style.css">
 
+  <!-- ── AUTH GUARD — protection /app sans licence valide ──────────
+       Bloque l'acces direct au dashboard pour les visiteurs non-actives.
+       Verifie la presence d'un JWT non expire en localStorage.
+       Sans JWT → redirection vers la landing pour activer une licence.
+  ─────────────────────────────────────────────────────────────── -->
+  <script>
+  (function(){
+    var p   = new URLSearchParams(location.search);
+    // Bypass autorise pour le flux d'activation post-paiement
+    if (p.get('ks_key')) return;
+    // Bypass kill-switch (deja gere plus haut, mais double secu)
+    if (p.get('ks_reset') === '1') return;
+
+    var jwt = localStorage.getItem('ks_jwt');
+    if (!jwt) {
+      location.replace('/?logout=1');
+      return;
+    }
+    // Verif expiration cote client (UX). La validation reelle est cote
+    // Worker sur chaque appel API — un JWT bidouille ne donne aucun acces.
+    try {
+      var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('ks_jwt');
+        localStorage.removeItem('ks_onboarded');
+        location.replace('/?logout=1');
+        return;
+      }
+    } catch(_) {
+      localStorage.removeItem('ks_jwt');
+      location.replace('/?logout=1');
+      return;
+    }
+  })();
+  </script>
+
   <!-- ── SECURITY GATE — détection lancement non officiel ─────── -->
   <script>
   (function(){
