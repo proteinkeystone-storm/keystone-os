@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Keystone OS — Dossier Technique &amp; Opérationnel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --gold: #c9a96e;
+    --gold-light: #e8c98a;
+    --dark: #0a0e14;
+    --dark2: #111720;
+    --dark3: #1a2233;
+    --border: #1f2a37;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --green: #22c55e;
+    --blue: #3b82f6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  /* ── Cover page ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 60px 40px;
+    background: linear-gradient(160deg, #0a0e14 0%, #111d2e 50%, #0a1520 100%);
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+  }
+
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -200px; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(201,169,110,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cover-badge {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    opacity: 0.8;
+  }
+
+  .cover-logo {
+    width: 80px; height: 80px;
+    border: 2px solid var(--gold);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 32px;
+    font-size: 32px;
+    background: rgba(201,169,110,0.08);
+  }
+
+  .cover h1 {
+    font-size: 52px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    color: #f1f5f9;
+    margin-bottom: 8px;
+  }
+
+  .cover h1 span { color: var(--gold); }
+
+  .cover-sub {
+    font-size: 18px;
+    color: var(--muted);
+    margin-bottom: 60px;
+    font-weight: 300;
+  }
+
+  .cover-meta {
+    display: flex;
+    gap: 60px;
+    margin-top: 20px;
+  }
+
+  .cover-meta-item { text-align: center; }
+  .cover-meta-item .label { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+  .cover-meta-item .value { font-size: 15px; color: var(--text); font-weight: 500; margin-top: 4px; }
+
+  .cover-line {
+    width: 120px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 40px auto;
+  }
+
+  .cover-footer {
+    position: absolute;
+    bottom: 40px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  /* ── Layout ── */
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 50px 50px;
+  }
+
+  /* ── Section headers ── */
+  .section {
+    margin-bottom: 40px;
+    page-break-inside: avoid;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-number {
+    width: 28px; height: 28px;
+    background: rgba(201,169,110,0.15);
+    border: 1px solid var(--gold);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--gold);
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+    letter-spacing: 0.3px;
+  }
+
+  .section-icon {
+    margin-left: auto;
+    font-size: 20px;
+    opacity: 0.4;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+
+  th {
+    background: rgba(201,169,110,0.08);
+    color: var(--gold);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 8px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(31,42,55,0.6);
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.01); }
+
+  td.label-col {
+    color: var(--muted);
+    font-weight: 500;
+    width: 35%;
+    font-size: 12px;
+  }
+
+  td.mono {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 11px;
+    color: #a5f3fc;
+    word-break: break-all;
+  }
+
+  td.url {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 11px;
+    color: var(--gold-light);
+  }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-green { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+  .badge-gold  { background: rgba(201,169,110,0.12); color: var(--gold); border: 1px solid rgba(201,169,110,0.25); }
+  .badge-blue  { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
+  .badge-red   { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+
+  /* ── Code blocks ── */
+  .code-block {
+    background: #060a0f;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 11px;
+    color: #a5f3fc;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* ── Key display ── */
+  .key-box {
+    background: #060a0f;
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    font-weight: 600;
+    text-align: center;
+    margin: 8px 0;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 4px 0;
+  }
+
+  .pipeline-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    position: relative;
+  }
+
+  .pipeline-step::before {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 36px;
+    width: 2px;
+    height: calc(100% - 8px);
+    background: linear-gradient(180deg, var(--gold), transparent);
+    opacity: 0.3;
+  }
+
+  .pipeline-step:last-child::before { display: none; }
+
+  .step-dot {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(201,169,110,0.1);
+    border: 2px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  .step-content {
+    padding: 8px 0 20px;
+  }
+
+  .step-title {
+    font-weight: 600;
+    color: #f1f5f9;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+
+  .step-desc {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* ── Sprint timeline ── */
+  .sprint-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .sprint-card {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sprint-card.done { border-left: 3px solid #22c55e; }
+  .sprint-card.pending { border-left: 3px solid #f59e0b; }
+
+  .sprint-card::after {
+    content: attr(data-number);
+    position: absolute;
+    top: -10px; right: -5px;
+    font-size: 60px;
+    font-weight: 900;
+    color: rgba(255,255,255,0.03);
+    line-height: 1;
+  }
+
+  .sprint-num {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .sprint-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 8px;
+  }
+
+  .sprint-items {
+    list-style: none;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .sprint-items li::before { content: '→ '; color: var(--gold); }
+
+  /* ── Two columns ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* ── Alert box ── */
+  .alert {
+    background: rgba(201,169,110,0.06);
+    border: 1px solid rgba(201,169,110,0.2);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .alert strong { color: var(--gold); }
+
+  /* ── Page break ── */
+  .page-break { page-break-before: always; padding-top: 50px; }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #0a0e14; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover { min-height: auto; padding: 80px 40px; }
+    .no-print { display: none !important; }
+  }
+
+  /* ── TOC ── */
+  .toc { margin-bottom: 40px; }
+  .toc-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px dashed rgba(31,42,55,0.8);
+    font-size: 13px;
+  }
+  .toc-num { color: var(--gold); font-weight: 600; width: 24px; }
+  .toc-name { color: var(--text); flex: 1; }
+  .toc-dots { flex: 1; border-bottom: 1px dotted var(--border); margin: 0 8px; }
+  .toc-page { color: var(--muted); font-size: 12px; }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 40px 0;
+  }
+
+  .confidential {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #fca5a5;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     COVER PAGE
+════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-badge">Protein Studio · Document Interne</div>
+  <div class="cover-logo">⚙️</div>
+  <h1>Keystone <span>OS</span></h1>
+  <div class="cover-sub">Dossier Technique &amp; Opérationnel Complet</div>
+  <div class="cover-line"></div>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="label">Version</div>
+      <div class="value">Sprint 5 — Live</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Date</div>
+      <div class="value">Mai 2026</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Auteur</div>
+      <div class="value">Stéphane Benedetti</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Statut</div>
+      <div class="value" style="color:#4ade80">● Production</div>
+    </div>
+  </div>
+  <div class="confidential">🔒 Confidentiel — Usage strictement personnel</div>
+  <div class="cover-footer">Protein Studio · Pôle de promotion immobilière augmentée par l'IA</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- Section 1 — URLs & Accès -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">1</div>
+      <div class="section-title">URLs &amp; Points d'accès</div>
+      <div class="section-icon">🌐</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Domaines &amp; Services</div>
+      <table>
+        <thead><tr><th>Service</th><th>URL</th><th>Statut</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label-col">🏠 Landing / Application</td>
+            <td class="url">https://protein-keystone.com</td>
+            <td><span class="badge badge-green">✓ Live</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">⚙️ Admin Keystone</td>
+            <td class="url">https://protein-keystone.com/admin.html</td>
+            <td><span class="badge badge-red">🔒 Privé</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">🔁 Alias Vercel (fallback)</td>
+            <td class="url">https://keystone-os-inky.vercel.app</td>
+            <td><span class="badge badge-blue">Actif</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">⚡ API Worker Cloudflare</td>
+            <td class="url">https://keystone-os-api.keystone-os.workers.dev</td>
+            <td><span class="badge badge-green">✓ Live</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">📧 Email expéditeur</td>
+            <td class="url">noreply@protein-keystone.com</td>
+            <td><span class="badge badge-green">✓ Vérifié</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">🛒 Stripe Starter (49€/mois)</td>
+            <td class="url">https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00</td>
+            <td><span class="badge badge-green">✓ Live</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">🛒 Stripe Pro (79€/mois)</td>
+            <td class="url">https://buy.stripe.com/28E7sLgo9gl21g9eFCf7i01</td>
+            <td><span class="badge badge-green">✓ Live</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">🛒 Stripe Max (149€/mois)</td>
+            <td class="url">https://buy.stripe.com/9B6eVd0pb7Ow4sl7daf7i02</td>
+            <td><span class="badge badge-green">✓ Live</span></td>
+          </tr>
+          <tr>
+            <td class="label-col">📂 Dépôt GitHub</td>
+            <td class="url">github.com/proteinkeystone-storm/keystone-os</td>
+            <td><span class="badge badge-blue">main</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 2 — Secrets & Clés -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">2</div>
+      <div class="section-title">Secrets &amp; Variables d'environnement</div>
+      <div class="section-icon">🔐</div>
+    </div>
+
+    <div class="alert">
+      <strong>⚠️ Important :</strong> Ces secrets sont stockés dans Cloudflare Workers (via <code>wrangler secret put</code>) et dans les variables d'environnement Vercel. Ne jamais les committer dans GitHub.
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Worker Cloudflare (8 secrets)</div>
+        <table>
+          <tbody>
+            <tr>
+              <td class="label-col"><code>KS_ADMIN_SECRET</code></td>
+              <td class="muted" style="color:#94a3b8">Mot de passe panel admin</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_ENCRYPTION_KEY</code></td>
+              <td class="muted" style="color:#94a3b8">Clé AES-256 vault chiffré</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_JWT_SECRET</code></td>
+              <td class="muted" style="color:#94a3b8">Signature JWT HS256 (30j)</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_LOOKUP_PEPPER</code></td>
+              <td class="muted" style="color:#94a3b8">HMAC blind index licences</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_RESEND_KEY</code></td>
+              <td class="muted" style="color:#94a3b8">API Key Resend (re_...)</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_RESEND_FROM</code></td>
+              <td style="font-size:11px;color:#a5f3fc">Keystone OS &lt;noreply@<br>protein-keystone.com&gt;</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_STRIPE_SECRET</code></td>
+              <td class="muted" style="color:#94a3b8">Clé restreinte Stripe (rk_live_...)</td>
+            </tr>
+            <tr>
+              <td class="label-col"><code>KS_STRIPE_WEBHOOK_SECRET</code></td>
+              <td class="muted" style="color:#94a3b8">whsec_EFxlCC3a5W5K...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Stripe — Lookup Keys (plans)</div>
+        <table>
+          <thead><tr><th>Plan</th><th>lookup_key Stripe</th><th>Prix</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-blue">STARTER</span></td>
+              <td class="mono">ks_starter</td>
+              <td style="color:#4ade80;font-weight:600">49€/mois</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-gold">PRO</span></td>
+              <td class="mono">ks_pro</td>
+              <td style="color:#4ade80;font-weight:600">79€/mois</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">MAX</span></td>
+              <td class="mono">ks_max</td>
+              <td style="color:#4ade80;font-weight:600">149€/mois</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:16px">
+          <div class="card-title">Plans spéciaux (Admin)</div>
+          <table>
+            <tbody>
+              <tr>
+                <td class="label-col"><span class="badge badge-gold">ADMIN</span></td>
+                <td style="font-size:12px;color:#94a3b8">Accès total, multi-appareils, lifetime</td>
+              </tr>
+              <tr>
+                <td class="label-col"><span class="badge badge-blue">DEMO</span></td>
+                <td style="font-size:12px;color:#94a3b8">Accès complet, sans binding device</td>
+              </tr>
+              <tr>
+                <td class="label-col"><span class="badge badge-green">BETA</span></td>
+                <td style="font-size:12px;color:#94a3b8">1 appareil, accès complet, gratuit</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 3 — Infrastructure -->
+  <div class="section page-break">
+    <div class="section-header">
+      <div class="section-number">3</div>
+      <div class="section-title">Infrastructure Technique</div>
+      <div class="section-icon">🏗️</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stack Complète</div>
+      <table>
+        <thead><tr><th>Composant</th><th>Technologie</th><th>Détail</th><th>Coût</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label-col">Frontend / Landing</td>
+            <td><span class="badge badge-blue">Vercel</span></td>
+            <td style="font-size:11px">Auto-deploy GitHub push · projet <code>keystone-os</code></td>
+            <td style="color:#4ade80">Gratuit</td>
+          </tr>
+          <tr>
+            <td class="label-col">Backend API</td>
+            <td><span class="badge badge-gold">Cloudflare Workers</span></td>
+            <td style="font-size:11px">Edge computing · Worker <code>keystone-os-api</code> · v<code>b4a760e5</code></td>
+            <td style="color:#4ade80">Gratuit</td>
+          </tr>
+          <tr>
+            <td class="label-col">Base de données</td>
+            <td><span class="badge badge-gold">Cloudflare D1</span></td>
+            <td style="font-size:11px">SQLite · WEUR · ID: <code>f5d21b1a-74a5-...</code></td>
+            <td style="color:#4ade80">Gratuit</td>
+          </tr>
+          <tr>
+            <td class="label-col">Paiements</td>
+            <td><span class="badge badge-blue">Stripe</span></td>
+            <td style="font-size:11px">Abonnements mensuels · Webhook auto-delivery</td>
+            <td style="color:#f59e0b">2.9% + 0.30€</td>
+          </tr>
+          <tr>
+            <td class="label-col">Emails transactionnels</td>
+            <td><span class="badge badge-blue">Resend</span></td>
+            <td style="font-size:11px">Domaine custom vérifié · Région Ireland</td>
+            <td style="color:#4ade80">Gratuit (3000/mois)</td>
+          </tr>
+          <tr>
+            <td class="label-col">Domaine officiel</td>
+            <td><span class="badge badge-gold">Vercel Registrar</span></td>
+            <td style="font-size:11px"><code>protein-keystone.com</code> · Expire Mai 2027</td>
+            <td style="color:#f59e0b">$11.25/an</td>
+          </tr>
+          <tr>
+            <td class="label-col">Code source</td>
+            <td><span class="badge badge-blue">GitHub</span></td>
+            <td style="font-size:11px">Repo: <code>proteinkeystone-storm/keystone-os</code> · branch: <code>main</code></td>
+            <td style="color:#4ade80">Gratuit</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Base de données D1 — Tables</div>
+      <table>
+        <thead><tr><th>Table</th><th>Description</th><th>Colonnes clés</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">licences</td>
+            <td>Licences actives + métadonnées</td>
+            <td style="font-size:11px">key, owner, plan, is_active, lookup_hmac, key_hash, salt, stripe_*</td>
+          </tr>
+          <tr>
+            <td class="mono">activation_attempts</td>
+            <td>Log tentatives activation (rate-limit)</td>
+            <td style="font-size:11px">lookup_hmac, ip, created_at</td>
+          </tr>
+          <tr>
+            <td class="mono">devices</td>
+            <td>Appareils enregistrés</td>
+            <td style="font-size:11px">fingerprint, licence_key, status, token</td>
+          </tr>
+          <tr>
+            <td class="mono">user_vaults</td>
+            <td>Vault chiffré cross-device (Sprint 4)</td>
+            <td style="font-size:11px">sub (JWT), ciphertext (AES-256-GCM), iv, size_bytes</td>
+          </tr>
+          <tr>
+            <td class="mono">stripe_events</td>
+            <td>Idempotence webhooks Stripe (Sprint 5)</td>
+            <td style="font-size:11px">id (evt_xxx), type, received_at, status</td>
+          </tr>
+          <tr>
+            <td class="mono">pads</td>
+            <td>Templates PADs (prompts IA)</td>
+            <td style="font-size:11px">id, title, content, plan_required</td>
+          </tr>
+          <tr>
+            <td class="mono">api_keys</td>
+            <td>Clés API moteurs IA (vault admin)</td>
+            <td style="font-size:11px">provider, key_enc, created_at</td>
+          </tr>
+          <tr>
+            <td class="mono">messages</td>
+            <td>Messagerie admin → utilisateurs</td>
+            <td style="font-size:11px">id, title, body, plan_target, published_at</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 4 — Pipeline Stripe -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">4</div>
+      <div class="section-title">Pipeline Paiement — Stripe Webhook</div>
+      <div class="section-icon">💳</div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Flux complet (automatique)</div>
+        <div class="pipeline">
+          <div class="pipeline-step">
+            <div class="step-dot">💳</div>
+            <div class="step-content">
+              <div class="step-title">Client paie sur Stripe</div>
+              <div class="step-desc">Via Payment Link (Starter / Pro / Max)</div>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-dot">⚡</div>
+            <div class="step-content">
+              <div class="step-title">Webhook → Worker</div>
+              <div class="step-desc">POST /api/stripe/webhook · Signature HMAC vérifiée · Idempotence via stripe_events</div>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-dot">🔑</div>
+            <div class="step-content">
+              <div class="step-title">Génération clé licence</div>
+              <div class="step-desc">Format XXXX-XXXX-XXXX-XXXX · CSPRNG · Hashée PBKDF2 100k iterations + blind index HMAC</div>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-dot">🗄️</div>
+            <div class="step-content">
+              <div class="step-title">Insertion D1</div>
+              <div class="step-desc">Clé + hash + plan + stripe_customer_id + stripe_subscription_id + email</div>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-dot">📧</div>
+            <div class="step-content">
+              <div class="step-title">Email Resend</div>
+              <div class="step-desc">De: noreply@protein-keystone.com · BCC: protein.keystone@gmail.com · Lien activation direct</div>
+            </div>
+          </div>
+          <div class="pipeline-step">
+            <div class="step-dot">✅</div>
+            <div class="step-content">
+              <div class="step-title">Activation client</div>
+              <div class="step-desc">Clic lien → protein-keystone.com/?ks_key=XXXX → auto-remplissage → JWT 30j → vault sync</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="card-title">Events Stripe traités</div>
+          <table>
+            <tbody>
+              <tr>
+                <td class="mono" style="font-size:10px">checkout.session.completed</td>
+                <td style="font-size:11px;color:#94a3b8">Génère + envoie clé</td>
+              </tr>
+              <tr>
+                <td class="mono" style="font-size:10px">customer.subscription.deleted</td>
+                <td style="font-size:11px;color:#94a3b8">Désactive licence (is_active=0)</td>
+              </tr>
+              <tr>
+                <td class="mono" style="font-size:10px">customer.subscription.updated</td>
+                <td style="font-size:11px;color:#94a3b8">Upgrade/downgrade plan</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">Sécurité API</div>
+          <table>
+            <tbody>
+              <tr>
+                <td class="label-col">Authentification</td>
+                <td style="font-size:12px">JWT HS256 · TTL 30 jours · stocké localStorage</td>
+              </tr>
+              <tr>
+                <td class="label-col">Hachage clés</td>
+                <td style="font-size:12px">PBKDF2-SHA256 · 100 000 iterations + sel aléatoire</td>
+              </tr>
+              <tr>
+                <td class="label-col">Recherche</td>
+                <td style="font-size:12px">HMAC blind index (lookup_pepper) — pas de clé en clair en DB</td>
+              </tr>
+              <tr>
+                <td class="label-col">Vault chiffré</td>
+                <td style="font-size:12px">AES-256-GCM · IV aléatoire · max 64 KB</td>
+              </tr>
+              <tr>
+                <td class="label-col">CORS</td>
+                <td style="font-size:12px">Multi-origin whitelist · preflight OPTIONS</td>
+              </tr>
+              <tr>
+                <td class="label-col">Rate-limit</td>
+                <td style="font-size:12px">Tentatives activation loggées par IP</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 5 — Sprints -->
+  <div class="section page-break">
+    <div class="section-header">
+      <div class="section-number">5</div>
+      <div class="section-title">Historique des Sprints</div>
+      <div class="section-icon">🚀</div>
+    </div>
+
+    <div class="sprint-grid">
+      <div class="sprint-card done" data-number="1">
+        <div class="sprint-num">Sprint 1</div>
+        <div class="sprint-title">Architecture de base</div>
+        <ul class="sprint-items">
+          <li>Router Cloudflare Worker</li>
+          <li>Base D1 — table licences</li>
+          <li>API licence CRUD (list, activate, revoke, validate)</li>
+          <li>Admin panel HTML/CSS/JS</li>
+          <li>Landing page + interface app</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-green">✓ Complété</span></div>
+      </div>
+
+      <div class="sprint-card done" data-number="2">
+        <div class="sprint-num">Sprint 2</div>
+        <div class="sprint-title">Sécurité avancée</div>
+        <ul class="sprint-items">
+          <li>JWT HS256 (WebCrypto natif)</li>
+          <li>PBKDF2-SHA256 100k iterations</li>
+          <li>HMAC blind index (lookup_pepper)</li>
+          <li>Device fingerprinting</li>
+          <li>Bypass binding ADMIN/DEMO</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-green">✓ Complété</span></div>
+      </div>
+
+      <div class="sprint-card done" data-number="3">
+        <div class="sprint-num">Sprint 3</div>
+        <div class="sprint-title">Persistance &amp; UX</div>
+        <ul class="sprint-items">
+          <li>Clés API sauvegardées (localStorage)</li>
+          <li>Mot de passe admin persistant</li>
+          <li>Auto-fill ?ks_key= URL param</li>
+          <li>CSS plan-cta (boutons Stripe)</li>
+          <li>Clean URL post-activation</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-green">✓ Complété</span></div>
+      </div>
+
+      <div class="sprint-card done" data-number="4">
+        <div class="sprint-num">Sprint 4</div>
+        <div class="sprint-title">Vault Cloud Cross-device</div>
+        <ul class="sprint-items">
+          <li>Table user_vaults en D1</li>
+          <li>GET /api/vault/load · POST /api/vault/save</li>
+          <li>AES-256-GCM côté serveur</li>
+          <li>Auto-sync localStorage 1.5s debounce</li>
+          <li>Fonctionne iOS Safari (ITP), multi-device</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-green">✓ Complété</span></div>
+      </div>
+
+      <div class="sprint-card done" data-number="5">
+        <div class="sprint-num">Sprint 5</div>
+        <div class="sprint-title">Stripe Webhook + Email</div>
+        <ul class="sprint-items">
+          <li>Webhook HMAC-SHA256 pur WebCrypto</li>
+          <li>Auto-génération clé post-paiement</li>
+          <li>Email Resend (domaine custom)</li>
+          <li>protein-keystone.com configuré + vérifié</li>
+          <li>Annulation → is_active=0 automatique</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-green">✓ Complété — LIVE</span></div>
+      </div>
+
+      <div class="sprint-card pending" data-number="6">
+        <div class="sprint-num">Sprint 6 — À venir</div>
+        <div class="sprint-title">Growth &amp; One-time payments</div>
+        <ul class="sprint-items">
+          <li>Outils en paiement one-time</li>
+          <li>Dashboard analytics licences</li>
+          <li>Email de relance (invoice.payment_failed)</li>
+          <li>Premier client Prométhée Immobilier</li>
+          <li>Portail client self-service</li>
+        </ul>
+        <div style="margin-top:10px"><span class="badge badge-gold">⏳ Planifié</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 6 — Architecture fichiers -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">6</div>
+      <div class="section-title">Architecture des fichiers</div>
+      <div class="section-icon">📁</div>
+    </div>
+
+    <div class="code-block">KEYSTONE_OS/
+├── index.html                          ← Landing + App principale (SPA)
+├── admin.html                          ← Panel Admin Keystone
+├── app.html                            ← Interface application
+├── sw.js                               ← Service Worker (offline)
+│
+├── app/                                ← Modules JavaScript frontend
+│   ├── main.js                         ← Boot + orchestration + vault sync
+│   ├── licence.js                      ← Activation licence + JWT
+│   ├── cloud-vault.js                  ← Sync cross-device AES-GCM
+│   ├── vault.js                        ← Stockage local + auto-save
+│   ├── admin.js                        ← Logique panel admin
+│   ├── api-handler.js                  ← Appels moteurs IA
+│   ├── ui-renderer.js                  ← Rendu interface
+│   ├── grid-engine.js                  ← Moteur grille PADs
+│   ├── pads-loader.js                  ← Chargement PADs depuis API
+│   ├── pads-data.js                    ← Données PADs locales
+│   ├── lockscreen.js                   ← Écran veille
+│   ├── inbox.js                        ← Messagerie
+│   ├── system-coach.js                 ← Coach IA système
+│   ├── artifact-renderer.js            ← Rendu artefacts
+│   ├── pdf-export.js                   ← Export PDF
+│   └── dst.js                          ← Utilitaires
+│
+└── workers/                            ← Backend Cloudflare Worker
+    ├── wrangler.toml                   ← Config déploiement CF
+    └── src/
+        ├── index.js                    ← Router principal
+        ├── routes/
+        │   ├── licence.js              ← API licences (admin)
+        │   ├── licence-public.js       ← Activation v2 + /me (JWT)
+        │   ├── vault-user.js           ← Vault load/save
+        │   ├── stripe-webhook.js       ← Pipeline paiement complet
+        │   ├── device.js               ← Gestion appareils
+        │   ├── pads.js                 ← API PADs + catalogue
+        │   ├── vault.js                ← Vault clés API (admin)
+        │   ├── messages.js             ← Messagerie admin
+        │   └── admin.js                ← Export RGPD + purge
+        ├── lib/
+        │   ├── auth.js                 ← CORS + JWT + requireAdmin
+        │   ├── kdf.js                  ← PBKDF2 + HMAC blind index
+        │   ├── crypto.js               ← AES-256-GCM
+        │   ├── keygen.js               ← Génération clés XXXX-XXXX
+        │   ├── stripe.js               ← Vérification webhook Stripe
+        │   └── email-resend.js         ← Client Resend + template HTML
+        └── db/
+            ├── schema.sql              ← Schéma initial D1
+            ├── migration_sprint4.sql   ← Table user_vaults
+            └── migration_sprint5.sql   ← Stripe + stripe_events</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 7 — Comptes & Accès -->
+  <div class="section page-break">
+    <div class="section-header">
+      <div class="section-number">7</div>
+      <div class="section-title">Comptes &amp; Services liés</div>
+      <div class="section-icon">👤</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Comptes à conserver actifs</div>
+      <table>
+        <thead><tr><th>Service</th><th>Email / Compte</th><th>Usage</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label-col">☁️ Cloudflare</td>
+            <td style="font-size:12px">Compte protein studio</td>
+            <td style="font-size:12px">Workers + D1 + déploiement API</td>
+          </tr>
+          <tr>
+            <td class="label-col">▲ Vercel</td>
+            <td style="font-size:12px">storms-projects-01b49fbc</td>
+            <td style="font-size:12px">Frontend + domaine protein-keystone.com</td>
+          </tr>
+          <tr>
+            <td class="label-col">🐙 GitHub</td>
+            <td style="font-size:12px">proteinkeystone-storm</td>
+            <td style="font-size:12px">Code source + CI/CD Vercel</td>
+          </tr>
+          <tr>
+            <td class="label-col">💳 Stripe</td>
+            <td style="font-size:12px">protein.keystone@gmail.com</td>
+            <td style="font-size:12px">Paiements + webhook + Payment Links</td>
+          </tr>
+          <tr>
+            <td class="label-col">📧 Resend</td>
+            <td style="font-size:12px">protein.keystone@gmail.com</td>
+            <td style="font-size:12px">Envoi emails transactionnels</td>
+          </tr>
+          <tr>
+            <td class="label-col">📬 Gmail (notifs)</td>
+            <td style="font-size:12px">protein.keystone@gmail.com</td>
+            <td style="font-size:12px">BCC toutes les clés livrées + reply-to client</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert" style="margin-top:16px">
+      <strong>📌 Note ICANN :</strong> Un email de vérification domaine de la part de Vercel/ICANN doit arriver sur protein.keystone@gmail.com. Cliquer le lien de confirmation dans les 15 jours pour éviter la suspension du domaine.
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 8 — Format clés -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">8</div>
+      <div class="section-title">Format des clés de licence</div>
+      <div class="section-icon">🔑</div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Format standard</div>
+        <div class="key-box">XXXX-XXXX-XXXX-XXXX</div>
+        <div style="margin-top:12px;font-size:12px;color:#94a3b8;line-height:1.8">
+          • 16 caractères + 3 tirets<br>
+          • Alphabet 32 chars (sans I, O, 0, 1, L pour éviter confusions)<br>
+          • Généré via CSPRNG (crypto.getRandomValues)<br>
+          • Stocké uniquement en forme hachée en base
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Commandes de gestion</div>
+        <div class="code-block" style="font-size:10.5px"># Redéployer le Worker
+cd workers && npx wrangler deploy
+
+# Mettre à jour un secret
+npx wrangler secret put NOM_SECRET
+
+# Appliquer migration DB
+npx wrangler d1 execute keystone-os \
+  --file=./src/db/migration_sprint5.sql \
+  --remote
+
+# Voir les logs Worker
+npx wrangler tail keystone-os-api
+
+# Push vers production
+git push origin main</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Section 9 — Checklist opérationnelle -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">9</div>
+      <div class="section-title">Checklist opérationnelle</div>
+      <div class="section-icon">✅</div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Infrastructure — Tout est vert</div>
+        <table>
+          <tbody>
+            <tr><td style="font-size:13px">✅</td><td>Worker Cloudflare déployé (v b4a760e5)</td></tr>
+            <tr><td>✅</td><td>D1 connectée + toutes migrations appliquées</td></tr>
+            <tr><td>✅</td><td>Domaine protein-keystone.com actif + vérifié Vercel</td></tr>
+            <tr><td>✅</td><td>DNS Resend configurés (DKIM + MX + SPF)</td></tr>
+            <tr><td>✅</td><td>Email expéditeur noreply@protein-keystone.com</td></tr>
+            <tr><td>✅</td><td>Webhook Stripe enregistré + secret configuré</td></tr>
+            <tr><td>✅</td><td>3 Payment Links Stripe actifs (Starter/Pro/Max)</td></tr>
+            <tr><td>✅</td><td>CORS multi-origin (protein-keystone.com + Vercel)</td></tr>
+            <tr><td>✅</td><td>ACTIVATE_BASE → https://protein-keystone.com</td></tr>
+            <tr><td>✅</td><td>Auto-fill ?ks_key= URL fonctionnel</td></tr>
+            <tr><td>✅</td><td>Vault cloud chiffré cross-device (Sprint 4)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Actions restantes (non bloquantes)</div>
+        <table>
+          <tbody>
+            <tr><td style="font-size:13px">⏳</td><td>Vérifier email ICANN (domaine)</td></tr>
+            <tr><td>⏳</td><td>Test end-to-end pipeline Stripe complet</td></tr>
+            <tr><td>⏳</td><td>Distribuer clés Admin + 10 clés Beta</td></tr>
+            <tr><td>⏳</td><td>Connecter premier client Prométhée Immobilier</td></tr>
+            <tr><td>⏳</td><td>Sprint 6 — one-time payments + analytics</td></tr>
+            <tr><td>⏳</td><td>Email relance invoice.payment_failed</td></tr>
+            <tr><td>⏳</td><td>Portail client self-service</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding:40px 0 20px;color:#475569;font-size:11px;border-top:1px solid #1f2a37;margin-top:40px">
+    <div style="color:var(--gold);font-size:13px;font-weight:600;margin-bottom:6px">Keystone OS</div>
+    Document généré le 5 Mai 2026 · Version Sprint 5 · Protein Studio<br>
+    Stéphane Benedetti · protein.keystone@gmail.com · protein-keystone.com<br><br>
+    <span style="color:#2d3748;font-size:10px">🔒 Document confidentiel — Ne pas diffuser</span>
+  </div>
+
+</div>
+
+<!-- Print button (no-print) -->
+<div class="no-print" style="position:fixed;bottom:30px;right:30px;z-index:1000">
+  <button onclick="window.print()" style="
+    background:linear-gradient(135deg,#c9a96e,#e8c98a);
+    color:#0a0e14;
+    border:none;
+    border-radius:12px;
+    padding:14px 28px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    box-shadow:0 4px 20px rgba(201,169,110,0.4);
+    font-family:-apple-system,sans-serif;
+    letter-spacing:0.3px;
+  ">⬇️ Exporter en PDF</button>
+</div>
+
+</body>
+</html>

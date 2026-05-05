@@ -149,7 +149,9 @@ html.light-mode .engine-select-name   { color: var(--text); }
 html.light-mode .modal-title       { color: var(--text); }
 html.light-mode .modal-close       { color: var(--tx2); background: rgba(13,27,62,.05); border-color: rgba(13,27,62,.1); }
 html.light-mode .modal-close:hover { background: rgba(13,27,62,.1); color: var(--text); }
-html.light-mode .rating-star       { color: rgba(13,27,62,.12); }
+html.light-mode .rating-star       { color: rgba(13,27,62,.18); }
+html.light-mode .rating-star.on    { color: var(--gold); }
+html.light-mode .rating-star:hover { color: var(--gold2); }
 html.light-mode .cc-btn.cc-icon    { color: rgba(13,27,62,.45); }
 html.light-mode .form-input::placeholder,
 html.light-mode .form-textarea::placeholder { color: rgba(13,27,62,.25); }

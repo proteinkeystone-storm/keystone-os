@@ -1278,6 +1278,8 @@ function _buildModal(pad, tool) {
             const val = parseInt(star.dataset.v, 10);
             localStorage.setItem(_ratingKey, val);
             stars.forEach(s => s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val));
+            // Sync cloud (cross-device) + USB si lié
+            import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
         });
     }
 
@@ -1467,6 +1469,8 @@ function _buildArtifactModal(inner, pad, tool) {
             starsEl.querySelectorAll('.rating-star').forEach(s =>
                 s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val)
             );
+            // Sync cloud (cross-device) + USB si lié
+            import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
         });
     }
 
@@ -1972,6 +1976,14 @@ function _renderSettingsBody() {
             content: `
                 <div class="sp-usb-zone">
                     <div id="usb-state-unlinked">
+                        ${!('showSaveFilePicker' in window) ? `
+                        <div class="sp-usb-desc" style="background:rgba(201,169,110,.08);border:1px solid rgba(201,169,110,.25);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+                            <strong style="color:var(--gold)">ℹ️ Fonctionnalité non disponible sur ce navigateur</strong><br>
+                            Le liage clé USB nécessite Chrome, Edge ou Opera (API File System Access).<br><br>
+                            <strong style="color:var(--text)">Bonne nouvelle :</strong> vos données sont déjà synchronisées
+                            automatiquement via le <strong>Cloud Vault chiffré</strong> (AES-256, cross-device).
+                            La clé USB n'est plus nécessaire.
+                        </div>` : ''}
                         <div class="sp-usb-desc">
                             Liez votre fichier <code>vault.js</code> une seule fois.
                             Keystone sauvegardera ensuite vos préférences et clés API
@@ -2153,10 +2165,29 @@ function _renderSettingsBody() {
 
     body.querySelector('#btn-link-vault')?.addEventListener('click', async () => {
         const btn = body.querySelector('#btn-link-vault');
+        const restoreLabel = () => { if (btn) btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Lier ma clé USB`; };
+
+        // Détection navigateur — File System Access API = Chrome/Edge/Opera uniquement
+        if (!('showSaveFilePicker' in window)) {
+            const isSafari   = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            const isFirefox  = /firefox/i.test(navigator.userAgent);
+            const browser    = isSafari ? 'Safari' : isFirefox ? 'Firefox' : 'votre navigateur';
+            const msg = `Le liage clé USB n'est pas pris en charge par ${browser}.\n\n` +
+                        `Cette fonctionnalité utilise l'API File System Access, disponible uniquement sur :\n` +
+                        `  • Google Chrome\n  • Microsoft Edge\n  • Opera\n\n` +
+                        `✅ Bonne nouvelle : vos données sont déjà synchronisées automatiquement\n` +
+                        `dans le Cloud Vault chiffré (cross-device, AES-256).\n\n` +
+                        `La clé USB n'est plus nécessaire — vos préférences vous suivent\n` +
+                        `automatiquement sur tous vos appareils connectés à votre licence.`;
+            alert(msg);
+            restoreLabel();
+            return;
+        }
+
         if (btn) btn.textContent = 'Sélectionnez vault.js…';
         const ok = await linkVaultFile();
         if (ok) _refreshUsbUI();
-        else if (btn) btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Lier ma clé USB`;
+        else restoreLabel();
     });
 
     body.querySelector('#btn-force-save')?.addEventListener('click', () => {

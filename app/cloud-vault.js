@@ -35,8 +35,11 @@ function _snapshot() {
         if (v != null) prefs[k] = v;
     });
     // Pad customisations (ks_pad_hidden_*, ks_pad_label_*)
+    // Notations utilisateur (ks_rating_*) — sync cross-device
     Object.keys(localStorage).forEach(k => {
-        if (k.startsWith('ks_pad_hidden_') || k.startsWith('ks_pad_label_')) {
+        if (k.startsWith('ks_pad_hidden_') ||
+            k.startsWith('ks_pad_label_')  ||
+            k.startsWith('ks_rating_')) {
             prefs[k] = localStorage.getItem(k);
         }
     });
