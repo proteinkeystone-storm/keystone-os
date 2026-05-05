@@ -1779,7 +1779,7 @@ const ACC_ICONS = {
 function _engineLogoHTML(p, size = 20) {
     if (!p.logo) {
         const letter = p.label ? p.label.charAt(0) : '?';
-        return `<span style="width:${size}px;height:${size}px;border-radius:4px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.2);display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:var(--gold);letter-spacing:-.02em;">${letter}</span>`;
+        return `<span style="width:${size}px;height:${size}px;border-radius:4px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.2);display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:var(--gold);letter-spacing:-.02em;">${letter}</span>`;
     }
     const lightImg = p.logoLight
         ? `<img src="${p.logoLight}" alt="${p.label}" class="engine-logo-img engine-logo-light" style="width:${size}px;height:${size}px;object-fit:contain;">`
@@ -1980,12 +1980,12 @@ function _renderSettingsBody() {
                     </p>
                     <a href="mailto:protein.keystone@gmail.com"
                        style="display:inline-flex;align-items:center;gap:10px;padding:10px 16px;
-                              background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.22);
+                              background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);
                               border-radius:8px;text-decoration:none;color:var(--gold);
                               font-size:12px;font-weight:700;letter-spacing:-.01em;
                               transition:background .18s,border-color .18s"
-                       onmouseover="this.style.background='rgba(201,168,76,.15)';this.style.borderColor='rgba(201,168,76,.4)'"
-                       onmouseout="this.style.background='rgba(201,168,76,.08)';this.style.borderColor='rgba(201,168,76,.22)'">
+                       onmouseover="this.style.background='rgba(99,102,241,.15)';this.style.borderColor='rgba(99,102,241,.4)'"
+                       onmouseout="this.style.background='rgba(99,102,241,.08)';this.style.borderColor='rgba(99,102,241,.22)'">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                         protein.keystone@gmail.com
                     </a>
@@ -2506,7 +2506,7 @@ function _updateIdentityZone() {
     } else {
         // Pictogramme neutre si aucune photo renseignée
         slot.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
-            style="width:28px;height:28px;color:rgba(201,168,76,.45)">
+            style="width:28px;height:28px;color:rgba(99,102,241,.45)">
             <circle cx="12" cy="8" r="4"/>
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke-linecap="round"/>
         </svg>`;
