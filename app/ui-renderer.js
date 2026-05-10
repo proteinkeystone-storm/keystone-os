@@ -1363,9 +1363,12 @@ function _buildModal(pad, tool) {
         document.getElementById('btn-copy')?.addEventListener('click', _copyResult);
     }
 
+    // Custom selects — init après injection du HTML
+    const toolForm = document.getElementById('tool-form');
+    if (toolForm) _initCustomSelects(toolForm);
+
     // Prompt live — écoute tous les champs du formulaire
     // data-dirty : marque un champ comme "touché" pour activer le highlight si vide
-    const toolForm = document.getElementById('tool-form');
     toolForm?.addEventListener('input', e => {
         e.target.dataset.dirty = '1';
         _updatePromptPreview(pad);
@@ -1581,26 +1584,103 @@ function _buildArtifactModal(inner, pad, tool) {
     });
 }
 
+const _CHEVRON_SVG = `<svg class="ks-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6l4 4 4-4"/></svg>`;
+
 function _buildField(f) {
     const spanCls = f.span === 'full' ? ' full' : '';
     const req     = f.required ? ' <span class="req">*</span>' : '';
     let input = '';
 
     if (f.type === 'select') {
-        const opts = (f.options || []).map(o => `<option value="${o}">${o}</option>`).join('');
-        input = `<select class="form-select" id="f-${f.id}" name="${f.id}" style="-webkit-appearance:none;appearance:none;">${opts}</select>`;
+        const defaultVal = (f.options || [])[0] || '';
+        const opts = (f.options || []).map((o, i) =>
+            `<div class="ks-opt" data-val="${o}"${i === 0 ? ' data-selected' : ''} role="option">${o}</div>`
+        ).join('');
+        input = `
+            <div class="ks-select" data-field="${f.id}">
+                <div class="ks-select-trigger" id="ks-wrap-${f.id}">
+                    <button type="button" class="ks-select-btn" aria-haspopup="listbox" aria-expanded="false" id="ks-btn-${f.id}">
+                        <span class="ks-select-val">${defaultVal}</span>
+                    </button>
+                    ${_CHEVRON_SVG}
+                </div>
+                <div class="ks-select-list" role="listbox" hidden id="ks-list-${f.id}">${opts}</div>
+                <input type="hidden" id="f-${f.id}" name="${f.id}" value="${defaultVal}">
+            </div>`;
     } else if (f.type === 'textarea') {
-        input = `<textarea class="form-textarea" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" style="-webkit-appearance:none;appearance:none;"></textarea>`;
+        input = `<textarea class="form-textarea" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}"></textarea>`;
     } else {
-        input = `<input class="form-input" type="${f.type}" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''} style="-webkit-appearance:none;appearance:none;">`;
+        input = `<input class="form-input" type="${f.type}" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
     }
 
     return `
         <div class="form-field${spanCls}">
-            <label class="form-label" for="f-${f.id}" style="text-transform:none;letter-spacing:normal;font-size:14px;font-weight:500;">${f.label}${req}</label>
+            <label class="form-label" for="${f.type === 'select' ? 'ks-btn-' : 'f-'}${f.id}" style="text-transform:none;letter-spacing:normal;font-size:14px;font-weight:500;">${f.label}${req}</label>
             ${input}
         </div>
     `;
+}
+
+// ── Custom select — init des événements après injection HTML ───
+function _initCustomSelects(container) {
+    // Close all open selects
+    const _closeAll = () => {
+        container.querySelectorAll('.ks-select-btn[aria-expanded="true"]').forEach(btn => {
+            btn.setAttribute('aria-expanded', 'false');
+            btn.closest('.ks-select').querySelector('.ks-select-list').hidden = true;
+            btn.closest('.ks-select-trigger')?.classList.remove('open');
+        });
+    };
+
+    container.querySelectorAll('.ks-select').forEach(wrap => {
+        const btn     = wrap.querySelector('.ks-select-btn');
+        const trigger = wrap.querySelector('.ks-select-trigger');
+        const list    = wrap.querySelector('.ks-select-list');
+        const hidden  = wrap.querySelector('input[type="hidden"]');
+        if (!btn || !list || !hidden) return;
+
+        // Toggle open/close
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const isOpen = btn.getAttribute('aria-expanded') === 'true';
+            _closeAll();
+            if (!isOpen) {
+                btn.setAttribute('aria-expanded', 'true');
+                list.hidden = false;
+                trigger?.classList.add('open');
+                // Position check — ouvre vers le haut si trop bas
+                const rect = list.getBoundingClientRect();
+                if (rect.bottom > window.innerHeight - 16) {
+                    list.style.top = 'auto';
+                    list.style.bottom = 'calc(100% + 4px)';
+                } else {
+                    list.style.top = '';
+                    list.style.bottom = '';
+                }
+            }
+        });
+
+        // Pick an option
+        list.addEventListener('click', e => {
+            const opt = e.target.closest('.ks-opt');
+            if (!opt) return;
+            const val = opt.dataset.val;
+            // Update display + hidden value
+            btn.querySelector('.ks-select-val').textContent = val;
+            hidden.value = val;
+            // Mark selected
+            list.querySelectorAll('.ks-opt').forEach(o => delete o.dataset.selected);
+            opt.dataset.selected = '';
+            // Mark dirty + dispatch change for prompt preview
+            hidden.dataset.dirty = '1';
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            // Close
+            _closeAll();
+        });
+    });
+
+    // Global click closes all selects
+    document.addEventListener('click', _closeAll, { capture: true, once: false });
 }
 
 // ── État de suivi pour la transition empty → ready ────────────

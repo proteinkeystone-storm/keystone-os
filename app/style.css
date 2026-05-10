@@ -2569,7 +2569,7 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 .form-input::placeholder,
 .form-textarea::placeholder { color: rgba(255,255,255,.22); }
 
-/* Select — flèche custom (chevron SVG blanc) */
+/* .form-select conservé pour settings/admin (hors modal tool) */
 .form-select {
   cursor: pointer;
   padding-right: 38px;
@@ -2587,6 +2587,96 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 .form-hint {
   font-size: 12px; color: rgba(156,163,175,1); line-height: 1.5;
 }
+
+/* ── Custom Select (remplace <select> natif) ─────────────────── */
+.ks-select { position: relative; width: 100%; }
+
+.ks-select-btn {
+  width: 100%; padding: 9px 36px 9px 13px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 6px;
+  font-family: inherit; font-size: 14px; color: var(--text);
+  cursor: pointer; text-align: left;
+  transition: border-color .15s, box-shadow .15s;
+  outline: none;
+}
+.ks-select-btn:hover { border-color: rgba(255,255,255,.18); }
+.ks-select-btn:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+.ks-select-btn[aria-expanded="true"] {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.18);
+}
+
+.ks-select-val { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ks-chevron {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; flex-shrink: 0;
+  color: rgba(255,255,255,.35);
+  transition: transform .18s;
+  pointer-events: none;
+}
+.ks-select-btn[aria-expanded="true"] ~ .ks-chevron,
+.ks-select-btn[aria-expanded="true"] .ks-chevron { transform: translateY(-50%) rotate(180deg); }
+
+/* Wrapper for button + chevron */
+.ks-select-trigger { position: relative; width: 100%; }
+.ks-select-trigger .ks-chevron {
+  position: absolute; right: 11px; top: 50%;
+  transform: translateY(-50%);
+  transition: transform .18s;
+  pointer-events: none;
+}
+.ks-select-trigger.open .ks-chevron { transform: translateY(-50%) rotate(180deg); }
+
+/* Dropdown list */
+.ks-select-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: #1c2234;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.3);
+  z-index: 500;
+  overflow: hidden;
+  padding: 4px;
+  max-height: 220px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99,102,241,.2) transparent;
+}
+.ks-select-list[hidden] { display: none !important; }
+
+.ks-opt {
+  padding: 8px 12px;
+  font-size: 14px; color: rgba(248,250,252,.85);
+  cursor: pointer; border-radius: 5px;
+  transition: background .1s, color .1s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ks-opt:hover { background: rgba(255,255,255,.07); color: #fff; }
+.ks-opt[data-selected] {
+  color: #818cf8;
+  background: rgba(99,102,241,.12);
+  font-weight: 500;
+}
+
+/* Light mode */
+html.light-mode .ks-select-btn {
+  background: #fff; border-color: rgba(17,24,39,.18); color: var(--text);
+}
+html.light-mode .ks-select-btn:focus,
+html.light-mode .ks-select-btn[aria-expanded="true"] {
+  border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+}
+html.light-mode .ks-chevron { color: rgba(17,24,39,.45); }
+html.light-mode .ks-select-list {
+  background: #fff; border-color: rgba(17,24,39,.12);
+  box-shadow: 0 8px 24px rgba(17,24,39,.12);
+}
+html.light-mode .ks-opt { color: rgba(17,24,39,.8); }
+html.light-mode .ks-opt:hover { background: rgba(17,24,39,.05); color: #0f172a; }
+html.light-mode .ks-opt[data-selected] { color: #4f46e5; background: rgba(79,70,229,.07); }
 
 /* Generate button — solid indigo-500 (Tailwind UI primary) */
 .btn-generate {
