@@ -253,13 +253,10 @@ body::after {
 }
 
 /* Couleurs selon data-type — default = identique à .hero-sub */
-.hero-dst[data-type="default"] .hero-dst-text { color: var(--text); }
-.hero-dst[data-type="info"]    .hero-dst-text { color: var(--gold); opacity: .92; }
-.hero-dst[data-type="alert"]   .hero-dst-text { color: #e07070; }
+.hero-dst .hero-dst-text { color: var(--text) !important; opacity: 1 !important; }
 
 /* Light mode */
-html.light-mode .hero-dst[data-type="info"]  .hero-dst-text { color: var(--gold); }
-html.light-mode .hero-dst[data-type="alert"] .hero-dst-text { color: #c04040; }
+html.light-mode .hero-dst .hero-dst-text { color: var(--text) !important; opacity: 1 !important; }
 
 /* ── INBOX — CTA + Dismiss à droite du DST ──────────────────── */
 .hero-dst { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
