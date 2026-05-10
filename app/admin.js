@@ -5,6 +5,14 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { renderArtifactResult } from './artifact-renderer.js';
+import { KSTORE_CATEGORIES }    from './kstore-mock-catalog.js';
+
+// ── Moteurs IA disponibles (fiches Key-Store) ──────────────────
+// Sert au select "Optimisé pour" + checkboxes "Moteurs compatibles".
+const KSTORE_AI_ENGINES = [
+  'Claude', 'GPT-5', 'Gemini', 'Mistral',
+  'Perplexity', 'Grok', 'Meta AI', 'Llama',
+];
 
 // ── Engine Registry ────────────────────────────────────────────
 const ENGINES = [
@@ -1399,16 +1407,26 @@ async function renderCatalog(panel) {
       <div class="section-header">
         <h2 class="section-title">Catalogue <span>(${items.length} entrées)</span></h2>
         <div style="display:flex;gap:10px">
+          <button class="btn btn-secondary" id="btn-new-app">+ Nouvelle app</button>
           <button class="btn btn-secondary" id="btn-raw-catalog">JSON brut</button>
           <button class="btn btn-primary"   id="btn-save-catalog">Sauvegarder</button>
         </div>
       </div>
       <table class="data-table">
-        <thead><tr><th>ID</th><th>Titre</th><th>Plan</th><th>Prix</th><th>Lifetime</th><th>Publié</th><th>Nouveau</th></tr></thead>
+        <thead><tr>
+          <th>ID</th><th>Titre</th><th>Plan</th><th>Prix</th><th>Lifetime</th>
+          <th>Publié</th><th>Nouveau</th><th style="text-align:center">Fiche Key-Store</th>
+        </tr></thead>
         <tbody id="catalog-tbody"></tbody>
       </table>`;
     const tbody = panel.querySelector('#catalog-tbody');
     items.forEach((item, idx) => {
+      // Indicateur visuel : fiche complétée si longDesc + category + ai_optimized présents
+      const ficheComplete = !!(item.longDesc && item.category && item.ai_optimized);
+      const ficheBadge    = ficheComplete
+        ? '<span style="color:#34d399;font-size:11px">● Complétée</span>'
+        : '<span style="color:#f59e0b;font-size:11px">○ À compléter</span>';
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><code style="font-size:11px;color:var(--gold)">${esc(item.id)}</code></td>
@@ -1427,7 +1445,12 @@ async function renderCatalog(panel) {
         <td><label class="toggle-switch"><input data-idx="${idx}" data-field="published" type="checkbox" ${item.published?'checked':''}>
           <span class="toggle-slider"></span></label></td>
         <td><label class="toggle-switch"><input data-idx="${idx}" data-field="isNew" type="checkbox" ${item.isNew?'checked':''}>
-          <span class="toggle-slider"></span></label></td>`;
+          <span class="toggle-slider"></span></label></td>
+        <td style="text-align:center;white-space:nowrap">
+          <button class="btn btn-secondary btn-ks-fiche" data-idx="${idx}"
+                  style="padding:5px 10px;font-size:12px;gap:6px">📝 Éditer</button>
+          <div style="margin-top:3px">${ficheBadge}</div>
+        </td>`;
       tbody.appendChild(tr);
     });
     panel.querySelectorAll('[data-idx][data-field]').forEach(el => {
@@ -1436,6 +1459,10 @@ async function renderCatalog(panel) {
         catalogData.tools[idx][field] = el.type==='checkbox' ? el.checked : el.type==='number' ? (el.value===''?undefined:+el.value) : el.value;
       });
     });
+    panel.querySelectorAll('.btn-ks-fiche').forEach(btn => {
+      btn.addEventListener('click', () => openKStoreFicheEditor(+btn.dataset.idx, panel));
+    });
+    panel.querySelector('#btn-new-app').addEventListener('click', () => createNewKStoreApp(panel));
     panel.querySelector('#btn-save-catalog').addEventListener('click', () => saveCatalog(panel));
     panel.querySelector('#btn-raw-catalog').addEventListener('click', () => showRawCatalogEditor(panel));
   } catch (err) {
@@ -1466,6 +1493,224 @@ function showRawCatalogEditor(panel) {
       closeModal(); toast('Catalogue sauvegardé ✓'); renderCatalog(panel);
     } catch(err) { errEl.textContent=err.message; btn.disabled=false; btn.textContent='Sauvegarder'; }
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FICHE KEY-STORE — Éditeur de page détail par app
+// (longDesc, catégorie, sous-catégorie, moteurs IA, copyright, screenshots)
+// ══════════════════════════════════════════════════════════════════
+function openKStoreFicheEditor(idx, panel) {
+  const item = catalogData.tools[idx];
+  if (!item) return;
+
+  // ── Construction du HTML du formulaire ──
+  // Selects catégorie + sous-catégorie (la liste sub dépend du parent).
+  const catOptions = KSTORE_CATEGORIES.map(c =>
+    `<option value="${c.id}" ${item.category===c.id?'selected':''}>${esc(c.label)}</option>`
+  ).join('');
+
+  const buildSubOptions = (catId, currentSub) => {
+    const cat = KSTORE_CATEGORIES.find(c => c.id === catId);
+    if (!cat || !cat.sub) return '<option value="">— (pas de sous-catégorie)</option>';
+    return '<option value="">— (toutes)</option>' + cat.sub.map(s =>
+      `<option value="${s.id}" ${currentSub===s.id?'selected':''}>#${esc(s.label)}</option>`
+    ).join('');
+  };
+
+  // Selects "Optimisé pour" + "Compatibles"
+  const aiOptOptions = KSTORE_AI_ENGINES.map(e =>
+    `<option ${item.ai_optimized===e?'selected':''}>${esc(e)}</option>`
+  ).join('');
+
+  const compat = Array.isArray(item.ai_compatible) ? item.ai_compatible : [];
+  const aiCmpChecks = KSTORE_AI_ENGINES.map(e => `
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;
+                  padding:5px 10px;border:1px solid var(--bd);border-radius:6px;
+                  cursor:pointer;background:rgba(255,255,255,.02)">
+      <input type="checkbox" value="${esc(e)}" class="ks-ai-cmp" ${compat.includes(e)?'checked':''}>
+      ${esc(e)}
+    </label>
+  `).join('');
+
+  // Slots screenshots (Commit 3 : drag-and-drop fonctionnel)
+  const shotIds = Array.isArray(item.screenshots) ? item.screenshots : [];
+  const shotSlot = (i) => {
+    const sid = shotIds[i];
+    const preview = sid
+      ? `<img src="/api/screenshot/${esc(sid)}" alt=""
+              style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      : `<div style="display:flex;align-items:center;justify-content:center;height:100%;
+                     color:rgba(255,255,255,.4);font-size:11px;text-align:center;padding:10px">
+           Capture ${i+1}<br><span style="opacity:.6">(à venir — Commit 3)</span>
+         </div>`;
+    return `
+      <div class="ks-shot-slot" data-shot="${i}"
+           style="position:relative;aspect-ratio:16/10;background:rgba(255,255,255,.04);
+                  border:1.5px dashed rgba(255,255,255,.12);border-radius:8px;
+                  overflow:hidden">${preview}</div>`;
+  };
+
+  const formHTML = `
+    <div style="display:grid;gap:18px;font-size:13px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <label class="form-label">ID</label>
+          <input class="form-input" id="ksf-id" type="text" value="${esc(item.id||'')}" readonly
+                 style="opacity:.7;cursor:not-allowed">
+          <p class="form-hint" style="margin-top:4px;opacity:.5">L'ID est immuable.</p>
+        </div>
+        <div>
+          <label class="form-label">Sous-titre (punchline)</label>
+          <input class="form-input" id="ksf-subtitle" type="text" value="${esc(item.subtitle||'')}"
+                 placeholder="ex: Notice descriptive conforme RE 2020">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <label class="form-label">Catégorie</label>
+          <select class="form-select" id="ksf-category">
+            <option value="">— Choisir —</option>
+            ${catOptions}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Sous-catégorie</label>
+          <select class="form-select" id="ksf-subcategory">
+            ${buildSubOptions(item.category, item.subcategory)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Description longue</label>
+        <textarea class="form-textarea" id="ksf-longdesc" rows="5"
+                  placeholder="Décrivez ce que fait l'app, pour qui, pourquoi c'est utile…">${esc(item.longDesc||'')}</textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <label class="form-label">Optimisé pour (moteur principal)</label>
+          <select class="form-select" id="ksf-ai-opt">
+            <option value="">— Choisir —</option>
+            ${aiOptOptions}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Copyright</label>
+          <input class="form-input" id="ksf-copyright" type="text"
+                 value="${esc(item.copyright || '© 2026-2027 Protein Studio')}">
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Moteurs IA compatibles</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px" id="ksf-ai-cmp-wrap">
+          ${aiCmpChecks}
+        </div>
+        <p class="form-hint" style="opacity:.55;margin-top:4px">
+          De 1 à ${KSTORE_AI_ENGINES.length} moteurs — laisser vide pour "aucun précisé".
+        </p>
+      </div>
+
+      <div>
+        <label class="form-label">Captures d'écran (3 max)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px">
+          ${shotSlot(0)}${shotSlot(1)}${shotSlot(2)}
+        </div>
+        <p class="form-hint" style="opacity:.55;margin-top:4px">
+          Drag-and-drop fonctionnel après le Commit 3 (upload backend).
+        </p>
+      </div>
+    </div>
+  `;
+
+  openModal(
+    `Fiche Key-Store — ${esc(item.title || item.id)}`,
+    formHTML,
+    `<button class="btn btn-secondary" id="ksf-cancel">Annuler</button>
+     <button class="btn btn-primary"   id="ksf-save">Enregistrer la fiche</button>`
+  );
+
+  // Wire-up : changement catégorie → reconstruit la liste sous-catégorie
+  const catSel = document.getElementById('ksf-category');
+  const subSel = document.getElementById('ksf-subcategory');
+  catSel.addEventListener('change', () => {
+    subSel.innerHTML = buildSubOptions(catSel.value, null);
+  });
+
+  // Bouton annuler / save
+  document.getElementById('ksf-cancel').addEventListener('click', closeModal);
+  document.getElementById('ksf-save').addEventListener('click', async () => {
+    const btn = document.getElementById('ksf-save');
+    btn.disabled = true; btn.textContent = '…';
+
+    // Update local catalogData
+    item.subtitle      = document.getElementById('ksf-subtitle').value.trim();
+    item.category      = catSel.value || undefined;
+    item.subcategory   = subSel.value || undefined;
+    item.longDesc      = document.getElementById('ksf-longdesc').value.trim();
+    item.ai_optimized  = document.getElementById('ksf-ai-opt').value || undefined;
+    item.copyright     = document.getElementById('ksf-copyright').value.trim();
+    item.ai_compatible = Array.from(document.querySelectorAll('.ks-ai-cmp:checked')).map(c => c.value);
+
+    // Conserve screenshots existants tels quels (édition Commit 3)
+    if (Array.isArray(item.screenshots) && item.screenshots.length === 0) {
+      delete item.screenshots;
+    }
+
+    // Persistance D1
+    try {
+      catalogData.updatedAt = new Date().toISOString().slice(0,10);
+      await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+      closeModal();
+      toast('Fiche enregistrée ✓');
+      renderCatalog(panel);
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Enregistrer la fiche';
+    }
+  });
+}
+
+// ── Création d'une nouvelle app vide ───────────────────────────
+function createNewKStoreApp(panel) {
+  // Demande un id à l'utilisateur (avec génération suggérée)
+  const suggestedId = `O-CUSTOM-${String(Date.now()).slice(-6)}`;
+  const id = prompt(
+    'Identifiant unique de la nouvelle app\n' +
+    '(format conseillé : O-XXX-001 — lettres majuscules / chiffres / tirets)',
+    suggestedId
+  );
+  if (!id) return;
+
+  const trimmed = id.trim();
+  if (!/^[A-Z0-9-]+$/i.test(trimmed)) {
+    toast('Identifiant invalide (lettres, chiffres, tirets uniquement)', 'error');
+    return;
+  }
+  if (catalogData.tools.some(t => t.id === trimmed)) {
+    toast('Cet identifiant existe déjà', 'error');
+    return;
+  }
+
+  // Push entry vide + ouvre l'éditeur
+  const newApp = {
+    id: trimmed,
+    title: 'Nouvelle app',
+    subtitle: '',
+    plan: 'STARTER',
+    price: 0,
+    published: false,
+    isNew: true,
+    copyright: '© 2026-2027 Protein Studio',
+    ai_compatible: [],
+  };
+  catalogData.tools.push(newApp);
+
+  // Re-render la table puis ouvre l'éditeur sur la nouvelle ligne
+  renderCatalog(panel);
+  setTimeout(() => openKStoreFicheEditor(catalogData.tools.length - 1, panel), 60);
 }
 
 // ══════════════════════════════════════════════════════════════════
