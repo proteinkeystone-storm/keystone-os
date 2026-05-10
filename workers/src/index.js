@@ -31,6 +31,8 @@ import { handleRegister, handleApprove, handleLogin,
 import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
 import { handleListPads, handleSavePad, handleDeletePad,
          handleGetCatalog, handleSaveCatalog }                         from './routes/pads.js';
+import { handleUploadScreenshot, handleGetScreenshot,
+         handleDeleteScreenshot, handleListScreenshotsByApp }          from './routes/screenshots.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleListPublic as handleMsgListPublic,
@@ -93,6 +95,18 @@ export default {
       if (path === '/api/admin/pad'          && method === 'DELETE') return handleDeletePad(request, env);
       if (path === '/api/admin/catalog'      && method === 'GET')    return handleGetCatalog(request, env);
       if (path === '/api/admin/catalog'      && method === 'POST')   return handleSaveCatalog(request, env);
+
+      // ── Screenshots (fiches Key-Store) ───────────────────────
+      if (path === '/api/admin/screenshot'   && method === 'POST')   return handleUploadScreenshot(request, env);
+      if (path === '/api/admin/screenshots'  && method === 'GET')    return handleListScreenshotsByApp(request, env);
+      if (path.startsWith('/api/screenshot/') && method === 'GET') {
+        const id = path.split('/').pop();
+        return handleGetScreenshot(request, env, id);
+      }
+      if (path.startsWith('/api/admin/screenshot/') && method === 'DELETE') {
+        const id = path.split('/').pop();
+        return handleDeleteScreenshot(request, env, id);
+      }
 
       // ── Vault (clés API) ─────────────────────────────────────
       if (path === '/api/admin/keys'         && method === 'GET')    return handleListKeys(request, env);
