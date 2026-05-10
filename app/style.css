@@ -5247,3 +5247,19 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     background-position: center;
     background-color: rgba(255,255,255,.04);
 }
+
+/* ── Icône d'app remplie (page détail) ─────────────────────── */
+.ksfs-detail-icon--filled {
+    background-size: cover;
+    background-position: center;
+    background-color: transparent;
+}
+
+/* ── Assistance (lien mailto) ──────────────────────────────── */
+.ksfs-detail-meta-support {
+    color: #c7d2fe;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .12s ease;
+}
+.ksfs-detail-meta-support:hover { color: #fff; text-decoration: underline; }

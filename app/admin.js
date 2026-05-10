@@ -1570,9 +1570,44 @@ function openKStoreFicheEditor(idx, panel) {
       </div>`;
   };
 
+  // ── Icône (pictogramme de profil app) ──
+  let currentIconId = item.iconId || null;
+  const iconPreviewHTML = () => currentIconId
+    ? `<img src="${API_BASE}/api/screenshot/${esc(currentIconId)}" alt=""
+            style="width:100%;height:100%;object-fit:cover;border-radius:18px;pointer-events:none">
+       <button type="button" id="ksf-icon-delete"
+               style="position:absolute;top:4px;right:4px;width:22px;height:22px;
+                      border-radius:50%;background:rgba(0,0,0,.78);color:#fff;
+                      border:0;cursor:pointer;font-size:11px"
+               title="Retirer l'icône">✕</button>`
+    : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                   height:100%;color:rgba(255,255,255,.45);font-size:10px;
+                   text-align:center;padding:8px;gap:4px;pointer-events:none">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+              style="width:24px;height:24px;opacity:.6">
+           <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/>
+           <path d="M7 20a5 5 0 0 1 10 0"/>
+         </svg>
+         <div>Icône</div>
+       </div>`;
+
   const formHTML = `
     <div style="display:grid;gap:18px;font-size:13px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <!-- Bandeau icône + ID + sous-titre -->
+      <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:14px;align-items:end">
+        <div>
+          <label class="form-label">Icône</label>
+          <div id="ksf-icon-slot"
+               style="position:relative;width:100px;height:100px;
+                      background:rgba(255,255,255,.04);
+                      border:1.5px dashed rgba(255,255,255,.12);
+                      border-radius:18px;overflow:hidden;cursor:pointer;
+                      transition:border-color .12s ease, background .12s ease">
+            ${iconPreviewHTML()}
+          </div>
+          <input type="file" id="ksf-icon-input" accept="image/jpeg,image/png,image/webp,image/gif"
+                 style="display:none">
+        </div>
         <div>
           <label class="form-label">ID</label>
           <input class="form-input" id="ksf-id" type="text" value="${esc(item.id||'')}" readonly
@@ -1602,11 +1637,48 @@ function openKStoreFicheEditor(idx, panel) {
         </div>
       </div>
 
-      <div>
-        <label class="form-label">Description longue</label>
-        <textarea class="form-textarea" id="ksf-longdesc" rows="5"
-                  placeholder="Décrivez ce que fait l'app, pour qui, pourquoi c'est utile…">${esc(item.longDesc||'')}</textarea>
-      </div>
+      <!-- Bloc texte explicatif (titre + texte éditables) -->
+      <fieldset style="border:1px solid var(--bd);border-radius:8px;padding:14px 14px 12px;
+                       margin:0;background:rgba(255,255,255,.02)">
+        <legend style="font-size:11px;font-weight:600;color:var(--gold);padding:0 6px;
+                       text-transform:uppercase;letter-spacing:.04em">
+          Bloc texte explicatif
+        </legend>
+        <div style="display:grid;gap:10px">
+          <div>
+            <label class="form-label">Titre du bloc</label>
+            <input class="form-input" id="ksf-desc-title" type="text"
+                   value="${esc(item.descTitle || 'Bloc texte explicatif pour cette application')}"
+                   placeholder="Bloc texte explicatif pour cette application">
+          </div>
+          <div>
+            <label class="form-label">Texte (paragraphes séparés par une ligne vide)</label>
+            <textarea class="form-textarea" id="ksf-longdesc" rows="6"
+                      placeholder="Décrivez ce que fait l'app, pour qui, pourquoi c'est utile…">${esc(item.longDesc||'')}</textarea>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Bloc RGPD (titre + texte éditables) -->
+      <fieldset style="border:1px solid var(--bd);border-radius:8px;padding:14px 14px 12px;
+                       margin:0;background:rgba(255,255,255,.02)">
+        <legend style="font-size:11px;font-weight:600;color:var(--gold);padding:0 6px;
+                       text-transform:uppercase;letter-spacing:.04em">
+          Bloc RGPD / Confidentialité
+        </legend>
+        <div style="display:grid;gap:10px">
+          <div>
+            <label class="form-label">Titre du bloc</label>
+            <input class="form-input" id="ksf-rgpd-title" type="text"
+                   value="${esc(item.rgpdTitle || 'Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU')}">
+          </div>
+          <div>
+            <label class="form-label">Texte (paragraphes séparés par une ligne vide)</label>
+            <textarea class="form-textarea" id="ksf-rgpd-text" rows="5"
+                      placeholder="Indiquez votre politique de confidentialité…">${esc(item.rgpdText || 'Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l\'Union Européenne. Aucune donnée saisie n\'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d\'IA que vous avez explicitement configuré.')}</textarea>
+          </div>
+        </div>
+      </fieldset>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
@@ -1791,6 +1863,78 @@ function openKStoreFicheEditor(idx, panel) {
     if (file && pendingSlotIdx >= 0) uploadToSlot(file, pendingSlotIdx);
   });
 
+  // ── Upload / delete icône (pictogramme) ───────────────────────
+  const iconSlot  = document.getElementById('ksf-icon-slot');
+  const iconInput = document.getElementById('ksf-icon-input');
+
+  const refreshIconSlot = () => { iconSlot.innerHTML = iconPreviewHTML(); };
+
+  const uploadIcon = async (file) => {
+    if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) {
+      toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 3 Mo)', 'error');
+      return;
+    }
+    iconSlot.style.opacity = '.5';
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const res = await api('/api/admin/screenshot', 'POST', {
+        appId: item.id + ':icon',  // namespace dédié
+        mime: file.type, dataBase64, tenantId: 'default',
+      });
+      if (!res?.id) throw new Error('Réponse upload invalide');
+
+      // Best-effort : delete l'ancienne icône
+      if (currentIconId) {
+        api(`/api/admin/screenshot/${encodeURIComponent(currentIconId)}`, 'DELETE').catch(() => {});
+      }
+      currentIconId = res.id;
+      iconSlot.style.opacity = '';
+      refreshIconSlot();
+      toast('Icône uploadée ✓');
+    } catch (err) {
+      iconSlot.style.opacity = '';
+      toast(err.message || 'Erreur upload icône', 'error');
+    }
+  };
+
+  iconSlot.addEventListener('click', (e) => {
+    if (e.target.closest('#ksf-icon-delete')) {
+      if (currentIconId) {
+        api(`/api/admin/screenshot/${encodeURIComponent(currentIconId)}`, 'DELETE').catch(() => {});
+      }
+      currentIconId = null;
+      refreshIconSlot();
+      toast('Icône supprimée');
+      return;
+    }
+    iconInput.value = '';
+    iconInput.click();
+  });
+  iconSlot.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    iconSlot.style.borderColor = '#6366f1';
+    iconSlot.style.background  = 'rgba(99,102,241,.08)';
+  });
+  iconSlot.addEventListener('dragleave', () => {
+    iconSlot.style.borderColor = '';
+    iconSlot.style.background  = '';
+  });
+  iconSlot.addEventListener('drop', (e) => {
+    e.preventDefault();
+    iconSlot.style.borderColor = '';
+    iconSlot.style.background  = '';
+    const file = e.dataTransfer?.files?.[0];
+    if (file) uploadIcon(file);
+  });
+  iconInput.addEventListener('change', () => {
+    const file = iconInput.files?.[0];
+    if (file) uploadIcon(file);
+  });
+
   // Bouton annuler / save
   document.getElementById('ksf-cancel').addEventListener('click', closeModal);
   document.getElementById('ksf-save').addEventListener('click', async () => {
@@ -1802,9 +1946,16 @@ function openKStoreFicheEditor(idx, panel) {
     item.category      = catSel.value || undefined;
     item.subcategory   = subSel.value || undefined;
     item.longDesc      = document.getElementById('ksf-longdesc').value.trim();
+    item.descTitle     = document.getElementById('ksf-desc-title').value.trim() || undefined;
+    item.rgpdTitle     = document.getElementById('ksf-rgpd-title').value.trim() || undefined;
+    item.rgpdText      = document.getElementById('ksf-rgpd-text').value.trim() || undefined;
     item.ai_optimized  = document.getElementById('ksf-ai-opt').value || undefined;
     item.copyright     = document.getElementById('ksf-copyright').value.trim();
     item.ai_compatible = Array.from(document.querySelectorAll('.ks-ai-cmp:checked')).map(c => c.value);
+
+    // Icône (pictogramme de profil app)
+    if (currentIconId) item.iconId = currentIconId;
+    else               delete item.iconId;
 
     // Persiste les screenshots (filtre les slots vides)
     const cleanShots = shotIds.filter(Boolean);

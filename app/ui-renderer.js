@@ -529,6 +529,10 @@ function _ksNormalizeD1(d1) {
         punchline     : d1.subtitle || d1.punchline || '',
         shortDesc     : d1.subtitle || d1.shortDesc || d1.longDesc || '',
         longDesc      : d1.longDesc,
+        descTitle     : d1.descTitle,
+        rgpdTitle     : d1.rgpdTitle,
+        rgpdText      : d1.rgpdText,
+        iconId        : d1.iconId,                // ← upload icône (screenshot id)
         price         : d1.price ?? 0,
         icon          : d1.icon,
         ai_optimized  : d1.ai_optimized,
@@ -977,9 +981,12 @@ function _renderAppCardSmall(app) {
         : '00,00 €';
     const action   = app.real && !isOwned ? 'obtenir' : 'soon';
 
+    const iconStyle = app.iconId
+        ? `background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.iconId)}');background-size:cover;background-position:center`
+        : '';
     return `
         <article class="ksfs-app-card" data-app-id="${app.id}">
-            <div class="ksfs-app-icon"></div>
+            <div class="ksfs-app-icon" style="${iconStyle}"></div>
             <div class="ksfs-app-body">
                 <div class="ksfs-app-name">${app.title}</div>
                 <div class="ksfs-app-desc">${app.shortDesc || ''}</div>
@@ -1069,20 +1076,37 @@ function _renderKStoreAppDetail(appId) {
         }
     }
 
-    // ── Bloc texte descriptif ──
-    const longDescParts = app.real
-        ? [
-            `Cette application Keystone OS a été pensée pour des professionnels exigeants. ${app.punchline || ''}`,
-            `Elle s'intègre nativement dans votre flux de travail et exploite les modèles d'IA les plus récents pour produire des livrables prêts à l'emploi en quelques secondes.`,
-            `Le résultat est calibré pour le contexte ${catLabel.toLowerCase()} et reste sous votre contrôle éditorial à 100 %.`,
-          ]
-        : [
-            `Cette application n'est pas encore disponible — la coquille vous permet de visualiser la structure de la fiche détail. Le contenu réel sera ajouté ultérieurement.`,
-            `Brève description placeholder. Brève description placeholder. Brève description placeholder.`,
-            `Brève description placeholder. Brève description placeholder. Brève description placeholder.`,
-          ];
+    // ── Blocs texte : 100% éditables depuis l'admin (avec fallbacks) ──
+    const DEFAULT_DESC_TITLE = 'Bloc texte explicatif pour cette application';
+    const DEFAULT_DESC_TEXT  = app.real
+        ? 'Cette application Keystone OS a été pensée pour des professionnels exigeants. Renseignez la description complète dans l\'admin (Catalogue → 📝 Éditer).'
+        : 'Cette application n\'est pas encore disponible — la coquille vous permet de visualiser la structure de la fiche détail.';
 
-    const rgpdText = `Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l'Union Européenne. Aucune donnée saisie n'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d'IA que vous avez explicitement configuré.`;
+    const DEFAULT_RGPD_TITLE = 'Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU';
+    const DEFAULT_RGPD_TEXT  = 'Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l\'Union Européenne. Aucune donnée saisie n\'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d\'IA que vous avez explicitement configuré.';
+
+    const descTitle = app.descTitle || DEFAULT_DESC_TITLE;
+    const descText  = app.longDesc  || DEFAULT_DESC_TEXT;
+    const rgpdTitle = app.rgpdTitle || DEFAULT_RGPD_TITLE;
+    const rgpdText  = app.rgpdText  || DEFAULT_RGPD_TEXT;
+
+    // Multi-paragraphe : on respecte les sauts de ligne saisis dans l'admin
+    const paragraphify = (s) => String(s)
+        .split(/\n\s*\n/)
+        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+
+    // ── Icône d'app (uploadable côté admin via app.iconId) ──
+    const iconHtml = app.iconId
+        ? `<div class="ksfs-detail-icon ksfs-detail-icon--filled"
+                style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.iconId)}')"></div>`
+        : `<div class="ksfs-detail-icon"></div>`;
+
+    // ── Assistance → mailto ──
+    const SUPPORT_EMAIL = 'protein.keystone@gmail.com';
+    const supportSubject = encodeURIComponent(`Keystone OS — Assistance pour ${app.title || app.id}`);
+    const supportBody    = encodeURIComponent(`Bonjour,\n\nJ'ai besoin d'aide concernant l'application "${app.title || app.id}".\n\nCordialement,`);
+    const supportMailto  = `mailto:${SUPPORT_EMAIL}?subject=${supportSubject}&body=${supportBody}`;
 
     content.innerHTML = `
         <div class="ksfs-detail">
@@ -1093,7 +1117,7 @@ function _renderKStoreAppDetail(appId) {
 
             <!-- Header : icône + titre + prix + notes + meta -->
             <header class="ksfs-detail-head">
-                <div class="ksfs-detail-icon"></div>
+                ${iconHtml}
                 <div class="ksfs-detail-head-main">
                     <h1 class="ksfs-detail-title">${app.title}</h1>
                     <p class="ksfs-detail-subtitle">${app.shortDesc || app.punchline || ''}</p>
@@ -1110,7 +1134,8 @@ function _renderKStoreAppDetail(appId) {
                 </div>
 
                 <div class="ksfs-detail-meta">
-                    <div class="ksfs-detail-meta-lbl">Assistance</div>
+                    <a class="ksfs-detail-meta-lbl ksfs-detail-meta-support"
+                       href="${supportMailto}">Assistance</a>
                     <div class="ksfs-detail-meta-block">
                         <div class="ksfs-detail-meta-h">Catégorie</div>
                         <div class="ksfs-detail-meta-v">${catLabel}</div>
@@ -1162,14 +1187,14 @@ function _renderKStoreAppDetail(appId) {
 
             <!-- Bloc texte explicatif -->
             <div class="ksfs-detail-block">
-                <div class="ksfs-detail-block-h">Bloc texte explicatif pour cette application</div>
-                ${longDescParts.map(p => `<p>${p}</p>`).join('')}
+                <div class="ksfs-detail-block-h">${descTitle}</div>
+                ${paragraphify(descText)}
             </div>
 
             <!-- Bloc RGPD -->
             <div class="ksfs-detail-block">
-                <div class="ksfs-detail-block-h">Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU</div>
-                <p>${rgpdText}</p>
+                <div class="ksfs-detail-block-h">${rgpdTitle}</div>
+                ${paragraphify(rgpdText)}
             </div>
 
             <!-- Également pour vous -->
