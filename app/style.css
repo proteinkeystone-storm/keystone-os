@@ -39,9 +39,9 @@
 
 :root {
   /* Surfaces — Tailwind slate-950/900/800 pour la profondeur */
-  --navy:  #1c212f;
-  --navy2: #202638;
-  --navy3: #28304a;
+  --navy:  #131826;
+  --navy2: #1c2234;
+  --navy3: #242d42;
   /* Accent — Tailwind indigo-500/400 */
   --gold:  #6366f1;
   --gold2: #818cf8;
