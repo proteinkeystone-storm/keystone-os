@@ -434,17 +434,10 @@ function _renderRestoreBtn(padsEl, activeTools = TOOLS) {
 // Panneau slide-in avec recherche, filtres, grille catalogue
 // ═══════════════════════════════════════════════════════════════
 const LS_CATALOG_CHECK = 'ks_last_catalog_check';
-const _KS_CAT_LABELS   = {
-    IMM:'Immobilier', MKT:'Marketing', ANL:'Analyse', ADM:'Admin',
-    JUR:'Juridique', PRD:'Productivité', COM:'Communauté', DIV:'Divertissement',
-};
 
 let _ksPanelReady = false;
 let _ksSearch     = '';
-let _ksCat        = '';
-let _ksPlan       = '';
 let _ksDebounce   = null;
-let _ksView       = 'catalogue'; // 'catalogue' | 'plans'
 
 // Source de vérité dupliquée depuis index.html (section #plans).
 // À mettre à jour conjointement si la grille tarifaire évolue.
@@ -505,10 +498,6 @@ const KS_PLANS = [
         ],
     },
 ];
-
-// Quotas par plan (nombre max d'assistants simultanément déployés)
-const PLAN_QUOTAS  = { DEMO: 1, STARTER: 3, PRO: 5, MAX: 7 };
-const _PLAN_ORDER  = ['DEMO', 'STARTER', 'PRO', 'MAX'];
 
 // État courant de la vue Key-Store plein écran.
 // _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
@@ -674,6 +663,21 @@ function _buildKStorePanel() {
             return;
         }
 
+        // Notation (étoiles cliquables sur fiche détail)
+        const star = e.target.closest('.ksfs-detail-star');
+        if (star) {
+            e.stopPropagation();
+            const val = parseInt(star.dataset.rate, 10);
+            const id  = star.dataset.id;
+            const prev = parseInt(localStorage.getItem('ks_rating_' + id) || '0', 10);
+            // Re-clic sur même valeur → retire la note
+            if (prev === val) localStorage.removeItem('ks_rating_' + id);
+            else              localStorage.setItem('ks_rating_' + id, String(val));
+            scheduleAutoSave?.();
+            _renderKStoreItems();
+            return;
+        }
+
         // Bouton acheter / déployer (catalogue OU fiche détail)
         const buyBtn = e.target.closest(
             '.ksfs-buy-btn[data-action="obtenir"], .ksfs-detail-buy[data-action="obtenir"]'
@@ -780,6 +784,28 @@ function _renderKStoreItems() {
         return;
     }
 
+    const search = _ksSearch.trim();
+
+    // ── Recherche globale (Option 4) — ignore le filtre catégorie ──
+    if (search) {
+        const all = KSTORE_MOCK_APPS.filter(a =>
+            (`${a.title} ${a.shortDesc || ''} ${a.punchline || ''}`)
+                .toLowerCase().includes(search)
+        );
+        // Déselectionne la sidebar : la recherche est globale
+        document.querySelectorAll('.ksfs-nav-btn').forEach(b => b.classList.remove('active'));
+        content.innerHTML = `
+            <div class="ksfs-section-head">
+                <h1 class="ksfs-section-title">Résultats</h1>
+                <p class="ksfs-section-sub">${all.length} app${all.length !== 1 ? 's' : ''} pour "${_ksSearch}"</p>
+            </div>
+            ${all.length === 0
+                ? `<div class="ksfs-empty">Aucune app ne correspond à votre recherche.</div>`
+                : `<div class="ksfs-grid">${all.map(_renderAppCardSmall).join('')}</div>`}
+        `;
+        return;
+    }
+
     // Filtre actif sur les apps mockées
     const apps = (() => {
         if (_ksFilter.kind === 'cat') return getMockAppsByCategory(_ksFilter.id);
@@ -787,11 +813,7 @@ function _renderKStoreItems() {
         return KSTORE_MOCK_APPS;
     })();
 
-    const search = _ksSearch.trim();
-    const filtered = search
-        ? apps.filter(a => (`${a.title} ${a.shortDesc || ''} ${a.punchline || ''}`)
-            .toLowerCase().includes(search))
-        : apps;
+    const filtered = apps;
 
     // ── Vue catégorie / sous-catégorie : grille seule ──
     if (_ksFilter.kind !== 'all') {
@@ -813,19 +835,7 @@ function _renderKStoreItems() {
     // ── Vue "all" (catalogue par défaut) : featured rail + sections ──
     const featured = KSTORE_FEATURED_IDS.map(getMockApp).filter(Boolean);
 
-    // Si on tape une recherche, on affiche juste les résultats globaux
-    if (search) {
-        content.innerHTML = `
-            <div class="ksfs-section-head">
-                <h1 class="ksfs-section-title">Résultats</h1>
-                <p class="ksfs-section-sub">${filtered.length} app${filtered.length !== 1 ? 's' : ''} pour "${_ksSearch}"</p>
-            </div>
-            ${filtered.length === 0
-                ? `<div class="ksfs-empty">Aucune app ne correspond à votre recherche.</div>`
-                : `<div class="ksfs-grid">${filtered.map(_renderAppCardSmall).join('')}</div>`}
-        `;
-        return;
-    }
+    // (Recherche globale gérée en amont — voir bloc `if (search)` plus haut.)
 
     // Sections "Pour gagner du temps" — une par catégorie ayant des apps
     const sections = KSTORE_CATEGORIES.map(c => {
@@ -916,8 +926,14 @@ function _renderKStoreAppDetail(appId) {
 
     // ── Note utilisateur (ks_rating_<id>) — fallback à 4,7 si non noté ──
     const rawRating = parseInt(localStorage.getItem('ks_rating_' + appId) || '0', 10);
-    const ratingNum = rawRating > 0 ? rawRating : 4.7;
+    const userRated = rawRating > 0;
+    const ratingNum = userRated ? rawRating : 4.7;
     const ratingStr = ratingNum.toFixed(1).replace('.', ',');
+    const starsHTML = [1,2,3,4,5].map(v =>
+        `<button class="ksfs-detail-star${v <= Math.round(ratingNum) ? ' on' : ''}"
+                 data-rate="${v}" data-id="${appId}"
+                 aria-label="Noter ${v} étoile${v > 1 ? 's' : ''}">★</button>`
+    ).join('');
 
     // ── État d'achat (Notice VEFA seulement pour l'instant) ──
     const ownedIds = getOwnedIds();
@@ -992,6 +1008,10 @@ function _renderKStoreAppDetail(appId) {
                 <div class="ksfs-detail-rating">
                     <div class="ksfs-detail-rating-lbl">Notes</div>
                     <div class="ksfs-detail-rating-val">${ratingStr}<span class="ksfs-detail-rating-max">sur 5</span></div>
+                    <div class="ksfs-detail-stars">${starsHTML}</div>
+                    <div class="ksfs-detail-rating-hint">
+                        ${userRated ? 'Votre note · cliquez pour modifier' : 'Cliquez pour noter cette app'}
+                    </div>
                 </div>
 
                 <div class="ksfs-detail-meta">
