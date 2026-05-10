@@ -24,7 +24,10 @@
 import { dataFabric } from './data-fabric.js';
 
 // ── Config ─────────────────────────────────────────────────────
-const TEMPLATES_BASE = './lib/doc-templates';
+// Résolution via import.meta.url : marche quelle que soit la page
+// qui charge le module (app.html, admin.html, /app rewrite, etc.).
+// → app/lib/doc-engine.js → app/lib/doc-templates/
+const TEMPLATES_BASE = new URL('./doc-templates/', import.meta.url).href;
 
 // CDN Paged.js — le polyfill applique les CSS Paged Media et découpe
 // le HTML en pages A4 dans le DOM cible.
@@ -79,7 +82,7 @@ function _meta(templateId) {
 async function _loadTemplate(templateId) {
   if (_templateCache.has(templateId)) return _templateCache.get(templateId);
   const meta = _meta(templateId);
-  const url  = `${TEMPLATES_BASE}/${meta.file}`;
+  const url  = `${TEMPLATES_BASE}${meta.file}`;
   const res  = await fetch(url);
   if (!res.ok) throw new Error(`DocEngine: chargement template échoué (${res.status}) ${url}`);
   const html = await res.text();
