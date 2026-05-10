@@ -130,6 +130,99 @@ function _findUnfilled(html) {
   return [...new Set(matches)];
 }
 
+// Toolbar de la fenêtre preview : 3 actions (Imprimer, PDF, Fermer).
+// Injectée via DOM API (pas innerHTML pour les events) APRÈS la
+// pagination Paged.js — sinon le wrap body de Paged.js vire nos boutons.
+// SVG outline monochrome 16px (style Heroicons / Phosphor outline).
+function _injectPreviewToolbar(win) {
+  const doc = win.document;
+  if (doc.getElementById('ks-preview-toolbar')) return; // idempotent
+
+  // ── Styles ────────────────────────────────────────────────
+  const style = doc.createElement('style');
+  style.id = 'ks-preview-toolbar-style';
+  style.textContent = `
+    #ks-preview-toolbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 48px;
+      background: rgba(13, 17, 30, 0.92);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; gap: 12px;
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Source Sans 3', sans-serif;
+      color: rgba(255,255,255,0.78);
+    }
+    #ks-preview-toolbar .ks-tt {
+      font-size: 12px; font-weight: 500;
+      letter-spacing: 0.04em;
+      color: rgba(255,255,255,0.55);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #ks-preview-toolbar .ks-acts { display: flex; gap: 4px; flex-shrink: 0; }
+    #ks-preview-toolbar button.ks-act {
+      background: transparent;
+      color: rgba(255,255,255,0.78);
+      border: 1px solid transparent;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 12.5px; font-weight: 500;
+      cursor: pointer;
+      transition: background .12s, color .12s, border-color .12s;
+      font-family: inherit;
+      display: inline-flex; align-items: center; gap: 7px;
+      line-height: 1;
+    }
+    #ks-preview-toolbar button.ks-act:hover {
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+    }
+    #ks-preview-toolbar button.ks-act:active {
+      background: rgba(255,255,255,0.10);
+    }
+    #ks-preview-toolbar button.ks-act-icon {
+      padding: 7px;
+      width: 30px; height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    #ks-preview-toolbar svg { width: 15px; height: 15px; flex-shrink: 0; display: block; }
+    body { padding-top: 48px !important; }
+    @media print {
+      #ks-preview-toolbar, #ks-preview-toolbar-style { display: none !important; }
+      body { padding-top: 0 !important; }
+    }
+  `;
+  doc.head.appendChild(style);
+
+  // ── SVG outline icons (stroke 1.6 ~ Heroicons outline) ────
+  const ICON_PRINT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3.5h12V9"/><rect x="3" y="9" width="18" height="9" rx="1.5"/><path d="M6 14h12v6.5H6z"/><circle cx="17" cy="12" r="0.6" fill="currentColor"/></svg>`;
+  const ICON_DL    = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 19h14"/></svg>`;
+  const ICON_CLOSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+
+  // ── Toolbar DOM ───────────────────────────────────────────
+  const bar = doc.createElement('div');
+  bar.id = 'ks-preview-toolbar';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Actions document');
+  bar.innerHTML = `
+    <div class="ks-tt">Notice descriptive VEFA · Aperçu</div>
+    <div class="ks-acts">
+      <button type="button" class="ks-act" data-act="print">${ICON_PRINT}<span>Imprimer</span></button>
+      <button type="button" class="ks-act" data-act="pdf">${ICON_DL}<span>Télécharger PDF</span></button>
+      <button type="button" class="ks-act ks-act-icon" data-act="close" aria-label="Fermer la fenêtre">${ICON_CLOSE}</button>
+    </div>
+  `;
+  doc.body.appendChild(bar);
+
+  // ── Bindings ──────────────────────────────────────────────
+  // addEventListener directement (pas DOMContentLoaded — déjà passé).
+  const trigger = () => { try { win.focus(); win.print(); } catch (e) { console.warn('[doc-engine] print()', e); } };
+  bar.querySelector('[data-act="print"]').addEventListener('click', trigger);
+  bar.querySelector('[data-act="pdf"]').addEventListener('click', trigger);
+  bar.querySelector('[data-act="close"]').addEventListener('click', () => { try { win.close(); } catch {} });
+}
+
 async function _loadPagedJs() {
   if (window.PagedPolyfill || window.Paged) return;
   if (_pagedJsLoading) return _pagedJsLoading;
@@ -240,84 +333,8 @@ export const docEngine = {
         throw new Error("DocEngine: la fenêtre n'a pas pu s'ouvrir (popup bloquée ?)");
       }
 
-      // Toolbar Keystone : barre d'actions sticky en haut de la preview.
-      // - position: fixed → ne perturbe pas la pagination Paged.js
-      // - @media print { display: none } → masquée dans le PDF généré
-      // - z-index très élevé pour passer au-dessus du contenu Paged.js
-      const TOOLBAR_HTML = `
-<style id="ks-toolbar-style">
-  .ks-toolbar {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: 56px;
-    background: #07102a;
-    border-bottom: 1px solid rgba(184,148,90,.25);
-    box-shadow: 0 2px 12px rgba(0,0,0,.4);
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px; gap: 12px;
-    z-index: 999999;
-    font-family: 'Source Sans 3', 'Helvetica Neue', sans-serif;
-  }
-  .ks-toolbar-title {
-    color: #D4AF7A; font-size: 13px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .ks-toolbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  .ks-btn {
-    background: transparent; color: #fff;
-    border: 1px solid rgba(255,255,255,.14);
-    padding: 8px 14px; border-radius: 6px;
-    font-size: 13px; font-weight: 500;
-    cursor: pointer; transition: all .15s;
-    font-family: inherit;
-    display: inline-flex; align-items: center; gap: 6px;
-  }
-  .ks-btn:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.28); }
-  .ks-btn-primary {
-    background: #B8945A; color: #07102a; border-color: #B8945A;
-  }
-  .ks-btn-primary:hover { background: #D4AF7A; border-color: #D4AF7A; }
-  .ks-btn-icon { font-size: 14px; line-height: 1; }
-  /* Décale le contenu de la page vers le bas pour ne pas être masqué */
-  body { padding-top: 56px !important; }
-  /* À l'impression : toolbar invisible ET on retire le décalage */
-  @media print {
-    .ks-toolbar { display: none !important; }
-    body { padding-top: 0 !important; }
-  }
-</style>
-<div class="ks-toolbar" role="toolbar" aria-label="Actions document">
-  <div class="ks-toolbar-title">Notice Descriptive VEFA · Aperçu Keystone</div>
-  <div class="ks-toolbar-actions">
-    <button class="ks-btn" id="ks-btn-print" type="button">
-      <span class="ks-btn-icon">🖨</span> Imprimer
-    </button>
-    <button class="ks-btn ks-btn-primary" id="ks-btn-pdf" type="button">
-      <span class="ks-btn-icon">📥</span> Télécharger en PDF
-    </button>
-    <button class="ks-btn" id="ks-btn-close" type="button" aria-label="Fermer la fenêtre">
-      <span class="ks-btn-icon">✕</span>
-    </button>
-  </div>
-</div>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const trigger = () => { try { window.focus(); window.print(); } catch(e) {} };
-    document.getElementById('ks-btn-print')?.addEventListener('click', trigger);
-    // "Télécharger PDF" déclenche le même dialog ; l'utilisateur choisit
-    // "Enregistrer comme PDF" comme destination. Pas d'API navigateur
-    // pour pré-sélectionner cette destination, mais on guide via le label.
-    document.getElementById('ks-btn-pdf')?.addEventListener('click', trigger);
-    document.getElementById('ks-btn-close')?.addEventListener('click', () => window.close());
-  });
-</script>`;
-
-      // On injecte la toolbar JUSTE AVANT </body> pour qu'elle soit
-      // dans le DOM final mais en position: fixed (donc hors flux).
-      const htmlWithToolbar = html.replace(/<\/body>/i, TOOLBAR_HTML + '</body>');
-
       win.document.open();
-      win.document.write(htmlWithToolbar);
+      win.document.write(html);
       win.document.close();
 
       // Injection Paged.js dans la fenêtre fille
@@ -330,19 +347,29 @@ export const docEngine = {
         win.document.head.appendChild(s);
       });
 
-      // Si mode print : on déclenche l'impression dès que Paged.js a
-      // fini de paginer. Paged.js émet l'event 'pagedjs-after-paged'
-      // mais selon la version, ce n'est pas garanti — fallback timeout.
+      // Toolbar Keystone : injectée APRÈS pagination Paged.js (sinon
+      // Paged.js wrappe le body et nos boutons disparaissent).
+      // - position: fixed → hors flux, ne perturbe pas la mise en page
+      // - DOM API + addEventListener → boutons réellement fonctionnels
+      // - SVG outline monochrome → look sobre, cohérent
+      // - @media print → invisible dans le PDF généré
+      const injectToolbar = () => _injectPreviewToolbar(win);
+
+      const fireWhenReady = (cb) => {
+        let done = false;
+        const once = () => { if (!done) { done = true; cb(); } };
+        win.addEventListener('pagedjs-after-paged', once, { once: true });
+        // Fallback : si l'event ne se déclenche pas en 4s, on injecte quand même.
+        setTimeout(once, 4000);
+      };
+
       if (mode === 'print') {
-        const triggerPrint = () => {
-          try { win.focus(); win.print(); }
-          catch (e) { console.warn('[doc-engine] print() échec', e); }
-        };
-        let printed = false;
-        const fire = () => { if (!printed) { printed = true; setTimeout(triggerPrint, 250); } };
-        win.addEventListener('pagedjs-after-paged', fire, { once: true });
-        // Fallback : si l'event ne se déclenche pas en 4s, on imprime quand même.
-        setTimeout(fire, 4000);
+        fireWhenReady(() => {
+          injectToolbar();
+          setTimeout(() => { try { win.focus(); win.print(); } catch (e) { console.warn('[doc-engine] print()', e); } }, 250);
+        });
+      } else {
+        fireWhenReady(injectToolbar);
       }
 
       return { html, missing, window: win };
