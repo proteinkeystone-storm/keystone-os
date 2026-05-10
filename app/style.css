@@ -2496,34 +2496,28 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 }
 .modal-form {
   width: 65%; padding: 32px 36px;
-  overflow-y: scroll; flex-shrink: 0;     /* scroll forcé : barre toujours visible */
+  overflow-y: scroll; flex-shrink: 0;
   min-height: 0;
+  height: 100%;                            /* prend toute la hauteur du modal-body */
   border-right: 1px solid var(--bd);
-  scrollbar-width: auto;                   /* Firefox : barre standard */
-  scrollbar-color: rgba(99,102,241,.45) rgba(99,102,241,.06);
-  position: relative;                      /* ancre du fade ci-dessous */
+  scrollbar-width: auto;
+  scrollbar-color: rgba(99,102,241,.55) rgba(99,102,241,.08);
 }
-/* Webkit (Safari, Chrome) — barre 10px, pouce indigo bien visible */
-.modal-form::-webkit-scrollbar              { width: 10px; }
-.modal-form::-webkit-scrollbar-track        { background: rgba(99,102,241,.06); border-radius: 5px; }
-.modal-form::-webkit-scrollbar-thumb        { background: rgba(99,102,241,.40); border-radius: 5px; border: 2px solid var(--navy2); }
-.modal-form::-webkit-scrollbar-thumb:hover  { background: rgba(99,102,241,.65); }
-
-/* Indice visuel "il y a du contenu en dessous" : fade gradient en bas
-   du form. Posé via une div .modal-form-fade ajoutée par JS, ou ici en
-   ::after sur le PARENT modal-body pour ne pas être emporté par le scroll
-   du form lui-même. */
-.modal-body { position: relative; }
-.modal-body::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0;
-  width: 65%;                              /* alignée sur .modal-form (65/35 split) */
-  height: 32px;
-  background: linear-gradient(to bottom, transparent, var(--navy2));
-  pointer-events: none;                    /* on doit pouvoir cliquer à travers */
-  border-radius: 0 0 0 16px;               /* suit l'arrondi de la modale */
-  z-index: 2;
+/* macOS Safari : par défaut, scrollbars cachées (réglage système).
+   -webkit-appearance: none + dimensions explicites = scrollbar
+   PERSISTANTE et visible quel que soit le réglage utilisateur. */
+.modal-form::-webkit-scrollbar              { -webkit-appearance: none; width: 12px; }
+.modal-form::-webkit-scrollbar-track        { background: rgba(99,102,241,.08); }
+.modal-form::-webkit-scrollbar-thumb        {
+  background: rgba(99,102,241,.55);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  min-height: 40px;
+}
+.modal-form::-webkit-scrollbar-thumb:hover  {
+  background: rgba(99,102,241,.85);
+  background-clip: content-box;
 }
 
 /* Result zone — 35% (slot prompt + actions) */
