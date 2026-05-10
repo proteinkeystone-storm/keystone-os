@@ -246,10 +246,7 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[t.icon]}</div>
-                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${label}</div>
-                <div class="pad-desc">${t.desc}</div>
-                ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
             </div>`;
         }).join('');
 
@@ -266,9 +263,7 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
-                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${a.name}</div>
-                <div class="pad-desc">Artefact</div>
             </div>`;
         }).join('');
 
@@ -281,7 +276,19 @@ export function renderDashboard() {
         _renderRestoreBtn(padsEl, ownedTools);
         initGridEngine(
             padsEl,
-            openTool,
+            (padId) => {
+                // Ouvre le Key-Store et scroll vers l'outil concerné
+                _openKStorePanel('catalogue');
+                setTimeout(() => {
+                    const el = document.querySelector(`#ks-grid .ks-item[data-id="${padId}"]`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        el.style.outline = '2px solid var(--gold)';
+                        el.style.borderRadius = '12px';
+                        setTimeout(() => { el.style.outline = ''; el.style.borderRadius = ''; }, 1400);
+                    }
+                }, 280);
+            },
             () => _renderRestoreBtn(padsEl, ownedTools),
             () => renderDashboard()
         );
@@ -1076,9 +1083,15 @@ function _openRestorePanel(padsEl, triggerBtn) {
     `;
 
     const rect = triggerBtn.getBoundingClientRect();
-    panel.style.top  = (rect.bottom + window.scrollY + 8) + 'px';
+    panel.style.top  = (rect.bottom + 8) + 'px';
     panel.style.left = rect.left + 'px';
     document.body.appendChild(panel);
+    // Anti-overflow : repositionne si le panel sort du viewport
+    requestAnimationFrame(() => {
+        const pr = panel.getBoundingClientRect();
+        if (pr.right  > window.innerWidth  - 12) panel.style.left = (window.innerWidth  - pr.width  - 12) + 'px';
+        if (pr.bottom > window.innerHeight - 12) panel.style.top  = (rect.top - pr.height - 8) + 'px';
+    });
 
     panel.querySelectorAll('.restore-item-btn').forEach(b => {
         b.addEventListener('click', () => {
