@@ -1588,16 +1588,16 @@ function _buildField(f) {
 
     if (f.type === 'select') {
         const opts = (f.options || []).map(o => `<option value="${o}">${o}</option>`).join('');
-        input = `<select class="form-select" id="f-${f.id}" name="${f.id}">${opts}</select>`;
+        input = `<select class="form-select" id="f-${f.id}" name="${f.id}" style="-webkit-appearance:none;appearance:none;">${opts}</select>`;
     } else if (f.type === 'textarea') {
-        input = `<textarea class="form-textarea" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}"></textarea>`;
+        input = `<textarea class="form-textarea" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" style="-webkit-appearance:none;appearance:none;"></textarea>`;
     } else {
-        input = `<input class="form-input" type="${f.type}" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
+        input = `<input class="form-input" type="${f.type}" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''} style="-webkit-appearance:none;appearance:none;">`;
     }
 
     return `
         <div class="form-field${spanCls}">
-            <label class="form-label" for="f-${f.id}">${f.label}${req}</label>
+            <label class="form-label" for="f-${f.id}" style="text-transform:none;letter-spacing:normal;font-size:14px;font-weight:500;">${f.label}${req}</label>
             ${input}
         </div>
     `;
