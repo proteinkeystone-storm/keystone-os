@@ -511,8 +511,9 @@ const PLAN_QUOTAS  = { DEMO: 1, STARTER: 3, PRO: 5, MAX: 7 };
 const _PLAN_ORDER  = ['DEMO', 'STARTER', 'PRO', 'MAX'];
 
 // État courant de la vue Key-Store plein écran.
-// _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans', id: string|null }
-let _ksFilter = { kind: 'all', id: null };
+// _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
+let _ksFilter     = { kind: 'all', id: null };
+let _ksPrevFilter = null;   // utilisé pour le bouton retour depuis la vue détail
 
 function _openKStorePanel(view = 'catalogue') {
     _buildKStorePanel();
@@ -667,24 +668,42 @@ function _buildKStorePanel() {
 
     // Délégation : clic sur une card → page détail (Phase B)
     wrap.querySelector('#ksfs-content').addEventListener('click', e => {
-        // Bouton acheter / déployer (Notice VEFA seulement)
-        const buyBtn = e.target.closest('.ksfs-buy-btn[data-action="obtenir"]');
+        // Retour depuis la fiche détail
+        if (e.target.closest('#ksfs-detail-back')) {
+            _backFromKStoreDetail();
+            return;
+        }
+
+        // Bouton acheter / déployer (catalogue OU fiche détail)
+        const buyBtn = e.target.closest(
+            '.ksfs-buy-btn[data-action="obtenir"], .ksfs-detail-buy[data-action="obtenir"]'
+        );
         if (buyBtn && !buyBtn.disabled) {
             e.stopPropagation();
             _activateKStoreItem(buyBtn.dataset.id, buyBtn);
             return;
         }
+
         // Bouton "Bientôt" sur une mock
         const soonBtn = e.target.closest('.ksfs-buy-btn[data-action="soon"]');
         if (soonBtn) { e.stopPropagation(); return; }
 
-        // Card / featured → ouvrir page détail (Phase B placeholder)
+        // Carousel screenshots — navigation prev/next
+        const navPrev = e.target.closest('.ksfs-detail-shot-nav--prev');
+        const navNext = e.target.closest('.ksfs-detail-shot-nav--next');
+        if (navPrev || navNext) {
+            const shots = document.querySelector('.ksfs-detail-shots');
+            if (shots) {
+                const step = shots.clientWidth * 0.8;
+                shots.scrollBy({ left: navPrev ? -step : step, behavior: 'smooth' });
+            }
+            return;
+        }
+
+        // Card / featured → ouvrir page détail
         const card = e.target.closest('[data-app-id]');
         if (card) {
-            const appId = card.dataset.appId;
-            // Phase B : ouverture page détail ; pour l'instant rien (vue catalogue uniquement).
-            // Décommenter quand la phase B sera implémentée :
-            // _openKStoreAppDetail(appId);
+            _openKStoreAppDetail(card.dataset.appId);
         }
     });
 }
@@ -740,6 +759,12 @@ function _renderKStoreItems() {
         )?.classList.add('active');
     } else if (_ksFilter.kind === 'plans') {
         document.querySelector('.ksfs-nav-btn[data-action="plans"]')?.classList.add('active');
+    }
+
+    // Vue Détail App (Phase B) — fiche complète style Mac App Store
+    if (_ksFilter.kind === 'detail') {
+        _renderKStoreAppDetail(_ksFilter.id);
+        return;
     }
 
     // Vue Plans & Tarifs (réutilise le rendu existant)
@@ -860,6 +885,179 @@ function _renderAppCardSmall(app) {
                 </button>
             </div>
         </article>
+    `;
+}
+
+// ── Page Détail App (Phase B) — style Mac App Store ──────────
+function _openKStoreAppDetail(appId) {
+    // Mémorise la vue d'où l'on vient pour le bouton retour
+    if (_ksFilter.kind !== 'detail') _ksPrevFilter = _ksFilter;
+    _ksFilter = { kind: 'detail', id: appId };
+    _renderKStoreItems();
+    // Scroll en haut quand on ouvre une fiche
+    document.querySelector('.ksfs-main')?.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function _backFromKStoreDetail() {
+    _ksFilter = _ksPrevFilter || { kind: 'all', id: null };
+    _ksPrevFilter = null;
+    _renderKStoreItems();
+}
+
+function _renderKStoreAppDetail(appId) {
+    const content = document.getElementById('ksfs-content');
+    if (!content) return;
+
+    const app = getMockApp(appId);
+    if (!app) {
+        content.innerHTML = `<div class="ksfs-empty">App introuvable.</div>`;
+        return;
+    }
+
+    // ── Note utilisateur (ks_rating_<id>) — fallback à 4,7 si non noté ──
+    const rawRating = parseInt(localStorage.getItem('ks_rating_' + appId) || '0', 10);
+    const ratingNum = rawRating > 0 ? rawRating : 4.7;
+    const ratingStr = ratingNum.toFixed(1).replace('.', ',');
+
+    // ── État d'achat (Notice VEFA seulement pour l'instant) ──
+    const ownedIds = getOwnedIds();
+    const isOwned  = app.real && (ownedIds === null || ownedIds.includes(appId));
+    const priceLbl = app.real
+        ? (app.price ?? 0).toFixed(2).replace('.', ',') + ' €'
+        : '00,00 €';
+
+    // ── Méta : catégorie + copyright ──
+    const catLabel  = getCategoryPath(app.category, app.subcategory);
+    const copyright = app.copyright || '© 2026-2027 Protein Studio';
+
+    // ── Moteurs IA (avec fallback) ──
+    const aiOpt = app.ai_optimized || 'Claude';
+    const aiCmp = app.ai_compatible || ['Claude', 'GPT 5', 'Mistral', 'Gemini'];
+
+    // ── Bouton d'action ──
+    const btnAction = (() => {
+        if (!app.real) {
+            return `<button class="ksfs-detail-buy ksfs-detail-buy--soon" disabled>Bientôt</button>`;
+        }
+        if (isOwned) {
+            return `<span class="ksfs-detail-buy ksfs-detail-buy--owned">✓ Actif</span>`;
+        }
+        return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">${priceLbl}</button>`;
+    })();
+
+    // ── "Également pour vous" — 5 apps de la même catégorie (hors self) ──
+    const related = KSTORE_MOCK_APPS
+        .filter(a => a.id !== appId && a.category === app.category)
+        .slice(0, 5);
+    // Compléter avec featured si <5
+    if (related.length < 5) {
+        for (const id of KSTORE_FEATURED_IDS) {
+            if (related.length >= 5) break;
+            if (id === appId || related.some(r => r.id === id)) continue;
+            const f = getMockApp(id); if (f) related.push(f);
+        }
+    }
+
+    // ── Bloc texte descriptif ──
+    const longDescParts = app.real
+        ? [
+            `Cette application Keystone OS a été pensée pour des professionnels exigeants. ${app.punchline || ''}`,
+            `Elle s'intègre nativement dans votre flux de travail et exploite les modèles d'IA les plus récents pour produire des livrables prêts à l'emploi en quelques secondes.`,
+            `Le résultat est calibré pour le contexte ${catLabel.toLowerCase()} et reste sous votre contrôle éditorial à 100 %.`,
+          ]
+        : [
+            `Cette application n'est pas encore disponible — la coquille vous permet de visualiser la structure de la fiche détail. Le contenu réel sera ajouté ultérieurement.`,
+            `Brève description placeholder. Brève description placeholder. Brève description placeholder.`,
+            `Brève description placeholder. Brève description placeholder. Brève description placeholder.`,
+          ];
+
+    const rgpdText = `Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l'Union Européenne. Aucune donnée saisie n'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d'IA que vous avez explicitement configuré.`;
+
+    content.innerHTML = `
+        <div class="ksfs-detail">
+            <button class="ksfs-detail-back" id="ksfs-detail-back" aria-label="Retour">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+
+            <!-- Header : icône + titre + prix + notes + meta -->
+            <header class="ksfs-detail-head">
+                <div class="ksfs-detail-icon"></div>
+                <div class="ksfs-detail-head-main">
+                    <h1 class="ksfs-detail-title">${app.title}</h1>
+                    <p class="ksfs-detail-subtitle">${app.shortDesc || app.punchline || ''}</p>
+                    <div class="ksfs-detail-action-row">${btnAction}</div>
+                </div>
+
+                <div class="ksfs-detail-rating">
+                    <div class="ksfs-detail-rating-lbl">Notes</div>
+                    <div class="ksfs-detail-rating-val">${ratingStr}<span class="ksfs-detail-rating-max">sur 5</span></div>
+                </div>
+
+                <div class="ksfs-detail-meta">
+                    <div class="ksfs-detail-meta-lbl">Assistance</div>
+                    <div class="ksfs-detail-meta-block">
+                        <div class="ksfs-detail-meta-h">Catégorie</div>
+                        <div class="ksfs-detail-meta-v">${catLabel}</div>
+                    </div>
+                    <div class="ksfs-detail-meta-block">
+                        <div class="ksfs-detail-meta-h">Copyright</div>
+                        <div class="ksfs-detail-meta-v">${copyright}</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Carousel screenshots (placeholders blancs) -->
+            <div class="ksfs-detail-shots-wrap">
+                <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--prev" aria-label="Précédent">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <div class="ksfs-detail-shots">
+                    <div class="ksfs-detail-shot"></div>
+                    <div class="ksfs-detail-shot"></div>
+                    <div class="ksfs-detail-shot"></div>
+                </div>
+                <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--next" aria-label="Suivant">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+            </div>
+
+            <!-- Badges moteurs IA -->
+            <div class="ksfs-detail-engines">
+                <div class="ksfs-detail-engine-row">
+                    <span class="ksfs-detail-engine-lbl">Optimisé pour</span>
+                    <span class="ksfs-detail-engine-chip ksfs-detail-engine-chip--optim">${aiOpt}</span>
+                </div>
+                <div class="ksfs-detail-engine-row">
+                    <span class="ksfs-detail-engine-lbl">Moteur AI compatible</span>
+                    ${aiCmp.map(e => `<span class="ksfs-detail-engine-chip">${e}</span>`).join('')}
+                </div>
+            </div>
+
+            <!-- Bloc texte explicatif -->
+            <div class="ksfs-detail-block">
+                <div class="ksfs-detail-block-h">Bloc texte explicatif pour cette application</div>
+                ${longDescParts.map(p => `<p>${p}</p>`).join('')}
+            </div>
+
+            <!-- Bloc RGPD -->
+            <div class="ksfs-detail-block">
+                <div class="ksfs-detail-block-h">Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU</div>
+                <p>${rgpdText}</p>
+            </div>
+
+            <!-- Également pour vous -->
+            ${related.length > 0 ? `
+                <section class="ksfs-detail-related">
+                    <h2 class="ksfs-detail-related-h">Également pour vous :</h2>
+                    <div class="ksfs-featured-rail">
+                        ${related.map(_renderFeaturedCard).join('')}
+                    </div>
+                </section>
+            ` : ''}
+        </div>
     `;
 }
 

@@ -4988,3 +4988,218 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     .ksfs-grid,
     .ksfs-featured-rail { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   KEY-STORE — Page Détail App (Phase B)
+   Style Mac App Store : header app + screenshots + badges + RGPD
+   ═══════════════════════════════════════════════════════════════ */
+.ksfs-detail { position: relative; }
+
+.ksfs-detail-back {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    color: rgba(255,255,255,.7);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    margin-bottom: 18px;
+    transition: background .15s ease, color .15s ease;
+}
+.ksfs-detail-back:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* ── Header app ──────────────────────────────────────────────── */
+.ksfs-detail-head {
+    display: grid;
+    grid-template-columns: 96px 1fr auto auto;
+    gap: 24px 28px;
+    align-items: start;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    margin-bottom: 28px;
+}
+.ksfs-detail-icon {
+    width: 96px; height: 96px;
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.22);
+}
+.ksfs-detail-head-main { min-width: 0; padding-top: 4px; }
+.ksfs-detail-title {
+    font-size: 26px; font-weight: 700; color: #fff;
+    margin: 0 0 6px;
+    letter-spacing: -.01em;
+}
+.ksfs-detail-subtitle {
+    font-size: 14px; color: rgba(255,255,255,.6);
+    margin: 0 0 16px;
+}
+.ksfs-detail-action-row { display: flex; gap: 10px; align-items: center; }
+.ksfs-detail-buy {
+    padding: 7px 22px;
+    border-radius: 999px;
+    background: rgba(99,102,241,.18);
+    color: #c7d2fe;
+    border: 1px solid rgba(99,102,241,.35);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: background .12s ease, transform .12s ease;
+}
+.ksfs-detail-buy:hover { background: rgba(99,102,241,.32); transform: translateY(-1px); }
+.ksfs-detail-buy--owned {
+    background: rgba(34,211,153,.16);
+    color: #6ee7b7;
+    border-color: rgba(34,211,153,.32);
+    cursor: default;
+}
+.ksfs-detail-buy--soon {
+    opacity: .55; cursor: not-allowed;
+}
+
+.ksfs-detail-rating { text-align: left; min-width: 130px; }
+.ksfs-detail-rating-lbl {
+    font-size: 11px; font-weight: 600;
+    color: rgba(255,255,255,.6);
+    margin-bottom: 6px;
+    letter-spacing: .02em;
+}
+.ksfs-detail-rating-val {
+    font-size: 38px; font-weight: 300; color: #fff;
+    line-height: 1;
+    display: flex; align-items: baseline; gap: 8px;
+}
+.ksfs-detail-rating-max {
+    font-size: 12px; color: rgba(255,255,255,.45);
+    font-weight: 400;
+}
+
+.ksfs-detail-meta {
+    min-width: 200px;
+    display: flex; flex-direction: column; gap: 14px;
+    font-size: 12px;
+}
+.ksfs-detail-meta-lbl {
+    color: #fff; font-weight: 600;
+    margin-bottom: 2px;
+}
+.ksfs-detail-meta-h {
+    color: rgba(255,255,255,.55);
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+.ksfs-detail-meta-v {
+    color: rgba(255,255,255,.85);
+    font-size: 12px;
+}
+
+/* ── Screenshots ───────────────────────────────────────────── */
+.ksfs-detail-shots-wrap {
+    position: relative;
+    margin-bottom: 28px;
+}
+.ksfs-detail-shots {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding: 2px 0;
+    scrollbar-width: none;
+}
+.ksfs-detail-shots::-webkit-scrollbar { display: none; }
+.ksfs-detail-shot {
+    flex: 0 0 calc((100% - 32px) / 3);
+    aspect-ratio: 16 / 10;
+    background: #fff;
+    border-radius: 10px;
+    scroll-snap-align: start;
+    box-shadow: 0 2px 14px rgba(0,0,0,.18);
+}
+.ksfs-detail-shot-nav {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: rgba(15,20,33,.92);
+    border: 1px solid rgba(255,255,255,.12);
+    color: rgba(255,255,255,.8);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    z-index: 2;
+    transition: background .15s ease;
+}
+.ksfs-detail-shot-nav:hover { background: rgba(99,102,241,.5); color: #fff; }
+.ksfs-detail-shot-nav--prev { left: -16px; }
+.ksfs-detail-shot-nav--next { right: -16px; }
+
+/* ── Badges moteurs IA ────────────────────────────────────── */
+.ksfs-detail-engines {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-bottom: 28px;
+}
+.ksfs-detail-engine-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    font-size: 11px;
+}
+.ksfs-detail-engine-lbl {
+    color: rgba(255,255,255,.5);
+    margin-right: 4px;
+}
+.ksfs-detail-engine-chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(99,102,241,.15);
+    color: #c7d2fe;
+    border: 1px solid rgba(99,102,241,.3);
+    font-size: 11px; font-weight: 500;
+}
+.ksfs-detail-engine-chip--optim {
+    background: rgba(99,102,241,.22);
+    border-color: rgba(99,102,241,.42);
+}
+
+/* ── Blocs texte explicatif + RGPD ────────────────────────── */
+.ksfs-detail-block {
+    padding: 18px 0;
+    border-top: 1px solid rgba(255,255,255,.07);
+    color: rgba(255,255,255,.7);
+    font-size: 13px;
+    line-height: 1.6;
+}
+.ksfs-detail-block:first-of-type {
+    margin-top: 4px;
+}
+.ksfs-detail-block-h {
+    font-weight: 600;
+    color: rgba(255,255,255,.9);
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.ksfs-detail-block p {
+    margin: 0 0 8px;
+}
+.ksfs-detail-block p:last-child { margin-bottom: 0; }
+
+/* ── Également pour vous ──────────────────────────────────── */
+.ksfs-detail-related {
+    margin-top: 28px;
+    padding-top: 22px;
+    border-top: 1px solid rgba(255,255,255,.07);
+}
+.ksfs-detail-related-h {
+    font-size: 16px; font-weight: 700; color: #fff;
+    margin: 0 0 14px;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+    .ksfs-detail-head {
+        grid-template-columns: 80px 1fr;
+    }
+    .ksfs-detail-icon { width: 80px; height: 80px; }
+    .ksfs-detail-rating,
+    .ksfs-detail-meta { grid-column: span 2; }
+    .ksfs-detail-shot { flex-basis: calc((100% - 16px) / 2); }
+}
+@media (max-width: 720px) {
+    .ksfs-detail-shot { flex-basis: 100%; }
+}
