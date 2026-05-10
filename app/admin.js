@@ -1532,22 +1532,42 @@ function openKStoreFicheEditor(idx, panel) {
     </label>
   `).join('');
 
-  // Slots screenshots (Commit 3 : drag-and-drop fonctionnel)
-  const shotIds = Array.isArray(item.screenshots) ? item.screenshots : [];
+  // Slots screenshots — drag-and-drop fonctionnel
+  // shotIds est cloné pour permettre l'annulation (revert sur cancel modal)
+  const shotIds = Array.isArray(item.screenshots) ? [...item.screenshots] : [];
+
   const shotSlot = (i) => {
     const sid = shotIds[i];
     const preview = sid
       ? `<img src="/api/screenshot/${esc(sid)}" alt=""
-              style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
-      : `<div style="display:flex;align-items:center;justify-content:center;height:100%;
-                     color:rgba(255,255,255,.4);font-size:11px;text-align:center;padding:10px">
-           Capture ${i+1}<br><span style="opacity:.6">(à venir — Commit 3)</span>
+              style="width:100%;height:100%;object-fit:cover;border-radius:8px;
+                     pointer-events:none">
+         <button type="button" class="ks-shot-delete" data-shot="${i}"
+                 style="position:absolute;top:6px;right:6px;width:24px;height:24px;
+                        border-radius:50%;background:rgba(0,0,0,.75);color:#fff;
+                        border:0;cursor:pointer;font-size:12px;line-height:1;
+                        display:flex;align-items:center;justify-content:center"
+                 title="Supprimer cette capture">✕</button>`
+      : `<div class="ks-shot-empty"
+              style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                     height:100%;color:rgba(255,255,255,.45);font-size:11px;text-align:center;
+                     padding:14px;gap:6px;pointer-events:none">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                style="width:22px;height:22px;opacity:.6">
+             <rect x="3" y="3" width="18" height="18" rx="2"/>
+             <circle cx="8.5" cy="8.5" r="1.5"/>
+             <polyline points="21 15 16 10 5 21"/>
+           </svg>
+           <div><strong>Capture ${i+1}</strong></div>
+           <div style="opacity:.75">Glissez une image ici<br>ou cliquez pour parcourir</div>
          </div>`;
     return `
       <div class="ks-shot-slot" data-shot="${i}"
            style="position:relative;aspect-ratio:16/10;background:rgba(255,255,255,.04);
                   border:1.5px dashed rgba(255,255,255,.12);border-radius:8px;
-                  overflow:hidden">${preview}</div>`;
+                  overflow:hidden;cursor:pointer;transition:border-color .12s ease, background .12s ease">
+        ${preview}
+      </div>`;
   };
 
   const formHTML = `
@@ -1615,11 +1635,14 @@ function openKStoreFicheEditor(idx, panel) {
 
       <div>
         <label class="form-label">Captures d'écran (3 max)</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px">
+        <div id="ksf-shots" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px">
           ${shotSlot(0)}${shotSlot(1)}${shotSlot(2)}
         </div>
+        <input type="file" id="ksf-file-input" accept="image/jpeg,image/png,image/webp,image/gif"
+               style="display:none">
         <p class="form-hint" style="opacity:.55;margin-top:4px">
-          Drag-and-drop fonctionnel après le Commit 3 (upload backend).
+          JPG, PNG, WebP ou GIF — 3 Mo max par image. L'upload est immédiat ;
+          n'oubliez pas de cliquer "Enregistrer la fiche" pour valider.
         </p>
       </div>
     </div>
@@ -1639,6 +1662,135 @@ function openKStoreFicheEditor(idx, panel) {
     subSel.innerHTML = buildSubOptions(catSel.value, null);
   });
 
+  // ── Drag-and-drop / click upload des screenshots ──────────────
+  const shotsContainer = document.getElementById('ksf-shots');
+  const fileInput      = document.getElementById('ksf-file-input');
+  let pendingSlotIdx   = -1;   // slot ciblé par le file picker
+
+  // Re-render un slot en place (sans toucher au reste du formulaire)
+  const refreshSlot = (i) => {
+    const old = shotsContainer.querySelector(`.ks-shot-slot[data-shot="${i}"]`);
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = shotSlot(i).trim();
+    old.replaceWith(tmp.firstChild);
+  };
+
+  // Lecture fichier → base64 (sans le préfixe "data:...,")
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => {
+      const r = reader.result;
+      const i = r.indexOf(',');
+      resolve(i >= 0 ? r.slice(i + 1) : r);
+    };
+    reader.onerror = () => reject(new Error('Lecture du fichier échouée'));
+    reader.readAsDataURL(file);
+  });
+
+  // Upload + assign à un slot
+  const uploadToSlot = async (file, slotIdx) => {
+    if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) {
+      toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 3 Mo)', 'error');
+      return;
+    }
+
+    const slotEl = shotsContainer.querySelector(`.ks-shot-slot[data-shot="${slotIdx}"]`);
+    if (slotEl) {
+      slotEl.style.opacity = '.5';
+      slotEl.style.pointerEvents = 'none';
+    }
+
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const res = await api('/api/admin/screenshot', 'POST', {
+        appId: item.id,
+        mime: file.type,
+        dataBase64,
+        tenantId: 'default',
+      });
+      if (!res || !res.id) throw new Error('Réponse upload invalide');
+
+      // Si un screenshot existait déjà sur ce slot, supprime-le côté serveur
+      const oldId = shotIds[slotIdx];
+      if (oldId) {
+        api(`/api/admin/screenshot/${encodeURIComponent(oldId)}`, 'DELETE')
+          .catch(() => { /* best-effort */ });
+      }
+
+      shotIds[slotIdx] = res.id;
+      refreshSlot(slotIdx);
+      toast(`Capture ${slotIdx + 1} uploadée ✓`);
+    } catch (err) {
+      if (slotEl) {
+        slotEl.style.opacity = '';
+        slotEl.style.pointerEvents = '';
+      }
+      toast(err.message || 'Erreur upload', 'error');
+    }
+  };
+
+  // Délégation : clic sur slot / sur bouton supprimer
+  shotsContainer.addEventListener('click', (e) => {
+    // Bouton supprimer
+    const delBtn = e.target.closest('.ks-shot-delete');
+    if (delBtn) {
+      e.stopPropagation();
+      const i = +delBtn.dataset.shot;
+      const id = shotIds[i];
+      if (id) {
+        api(`/api/admin/screenshot/${encodeURIComponent(id)}`, 'DELETE')
+          .catch(() => { /* best-effort */ });
+      }
+      shotIds[i] = undefined;
+      refreshSlot(i);
+      toast(`Capture ${i + 1} supprimée`);
+      return;
+    }
+
+    // Clic sur un slot → ouvre le file picker
+    const slot = e.target.closest('.ks-shot-slot');
+    if (slot) {
+      pendingSlotIdx = +slot.dataset.shot;
+      fileInput.value = '';
+      fileInput.click();
+    }
+  });
+
+  // Drag & drop sur les slots
+  shotsContainer.addEventListener('dragover', (e) => {
+    const slot = e.target.closest('.ks-shot-slot');
+    if (!slot) return;
+    e.preventDefault();
+    slot.style.borderColor = '#6366f1';
+    slot.style.background  = 'rgba(99,102,241,.08)';
+  });
+  shotsContainer.addEventListener('dragleave', (e) => {
+    const slot = e.target.closest('.ks-shot-slot');
+    if (!slot) return;
+    slot.style.borderColor = '';
+    slot.style.background  = '';
+  });
+  shotsContainer.addEventListener('drop', (e) => {
+    const slot = e.target.closest('.ks-shot-slot');
+    if (!slot) return;
+    e.preventDefault();
+    slot.style.borderColor = '';
+    slot.style.background  = '';
+    const file = e.dataTransfer?.files?.[0];
+    if (file) uploadToSlot(file, +slot.dataset.shot);
+  });
+
+  // Sélection via file picker
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file && pendingSlotIdx >= 0) uploadToSlot(file, pendingSlotIdx);
+  });
+
   // Bouton annuler / save
   document.getElementById('ksf-cancel').addEventListener('click', closeModal);
   document.getElementById('ksf-save').addEventListener('click', async () => {
@@ -1654,10 +1806,10 @@ function openKStoreFicheEditor(idx, panel) {
     item.copyright     = document.getElementById('ksf-copyright').value.trim();
     item.ai_compatible = Array.from(document.querySelectorAll('.ks-ai-cmp:checked')).map(c => c.value);
 
-    // Conserve screenshots existants tels quels (édition Commit 3)
-    if (Array.isArray(item.screenshots) && item.screenshots.length === 0) {
-      delete item.screenshots;
-    }
+    // Persiste les screenshots (filtre les slots vides)
+    const cleanShots = shotIds.filter(Boolean);
+    if (cleanShots.length > 0) item.screenshots = cleanShots;
+    else                       delete item.screenshots;
 
     // Persistance D1
     try {

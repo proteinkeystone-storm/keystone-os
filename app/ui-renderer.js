@@ -504,6 +504,75 @@ const KS_PLANS = [
 let _ksFilter     = { kind: 'all', id: null };
 let _ksPrevFilter = null;   // utilisé pour le bouton retour depuis la vue détail
 
+// ═══════════════════════════════════════════════════════════════
+// Source de données unifiée — D1 catalog + mock catalog
+// Les apps D1 (éditées via l'admin) prennent priorité ; le mock sert
+// de placeholder pour les apps non encore éditées.
+// ═══════════════════════════════════════════════════════════════
+
+// Normalise une entrée D1 catalog vers le shape attendu côté front
+function _ksNormalizeD1(d1) {
+    if (!d1) return null;
+    return {
+        id            : d1.id,
+        category      : d1.category,
+        subcategory   : d1.subcategory,
+        title         : d1.title,
+        punchline     : d1.subtitle || d1.punchline || '',
+        shortDesc     : d1.subtitle || d1.shortDesc || d1.longDesc || '',
+        longDesc      : d1.longDesc,
+        price         : d1.price ?? 0,
+        icon          : d1.icon,
+        ai_optimized  : d1.ai_optimized,
+        ai_compatible : d1.ai_compatible,
+        copyright     : d1.copyright,
+        screenshots   : d1.screenshots,           // ← array d'ids /api/screenshot/<id>
+        real          : true,                     // toute entrée D1 = vraie app
+        _fromD1       : true,
+    };
+}
+
+// Fusion mock + D1 : D1 prioritaire pour les champs non vides
+function _ksMergeApp(mock, d1) {
+    if (!mock && !d1) return null;
+    if (!d1)   return mock;
+    if (!mock) return d1;
+    const out = { ...mock };
+    for (const [k, v] of Object.entries(d1)) {
+        if (v !== undefined && v !== null && v !== '') out[k] = v;
+    }
+    out.real = true;
+    return out;
+}
+
+function _ksGetApp(id) {
+    const mock = getMockApp(id);
+    const d1   = _ksNormalizeD1(getCatalogEntry(id));
+    return _ksMergeApp(mock, d1);
+}
+
+// Liste TOUTES les apps (mock + D1, dédupliquées par id, publiées seulement)
+function _ksGetAllApps() {
+    const map = new Map();
+    KSTORE_MOCK_APPS.forEach(m => map.set(m.id, m));
+    const catalog = getCatalog();
+    (catalog?.tools || []).forEach(d1 => {
+        if (d1.published === false) {
+            map.delete(d1.id);  // App dépubliée → masquée même si dans mock
+            return;
+        }
+        map.set(d1.id, _ksMergeApp(map.get(d1.id), _ksNormalizeD1(d1)));
+    });
+    return [...map.values()];
+}
+
+function _ksGetAppsByCategory(catId) {
+    return _ksGetAllApps().filter(a => a.category === catId);
+}
+function _ksGetAppsBySubcategory(subId) {
+    return _ksGetAllApps().filter(a => a.subcategory === subId);
+}
+
 function _openKStorePanel(view = 'catalogue') {
     _buildKStorePanel();
     const wrap = document.getElementById('ks-fullscreen');
@@ -806,7 +875,7 @@ function _renderKStoreItems() {
 
     // ── Recherche globale (Option 4) — ignore le filtre catégorie ──
     if (search) {
-        const all = KSTORE_MOCK_APPS.filter(a =>
+        const all = _ksGetAllApps().filter(a =>
             (`${a.title} ${a.shortDesc || ''} ${a.punchline || ''}`)
                 .toLowerCase().includes(search)
         );
@@ -826,9 +895,9 @@ function _renderKStoreItems() {
 
     // Filtre actif sur les apps mockées
     const apps = (() => {
-        if (_ksFilter.kind === 'cat') return getMockAppsByCategory(_ksFilter.id);
-        if (_ksFilter.kind === 'sub') return getMockAppsBySubcategory(_ksFilter.id);
-        return KSTORE_MOCK_APPS;
+        if (_ksFilter.kind === 'cat') return _ksGetAppsByCategory(_ksFilter.id);
+        if (_ksFilter.kind === 'sub') return _ksGetAppsBySubcategory(_ksFilter.id);
+        return _ksGetAllApps();
     })();
 
     const filtered = apps;
@@ -851,13 +920,13 @@ function _renderKStoreItems() {
     }
 
     // ── Vue "all" (catalogue par défaut) : featured rail + sections ──
-    const featured = KSTORE_FEATURED_IDS.map(getMockApp).filter(Boolean);
+    const featured = KSTORE_FEATURED_IDS.map(_ksGetApp).filter(Boolean);
 
     // (Recherche globale gérée en amont — voir bloc `if (search)` plus haut.)
 
     // Sections "Pour gagner du temps" — une par catégorie ayant des apps
     const sections = KSTORE_CATEGORIES.map(c => {
-        const inCat = getMockAppsByCategory(c.id);
+        const inCat = _ksGetAppsByCategory(c.id);
         return inCat.length > 0 ? { cat: c, apps: inCat } : null;
     }).filter(Boolean);
 
@@ -936,7 +1005,7 @@ function _renderKStoreAppDetail(appId) {
     const content = document.getElementById('ksfs-content');
     if (!content) return;
 
-    const app = getMockApp(appId);
+    const app = _ksGetApp(appId);
     if (!app) {
         content.innerHTML = `<div class="ksfs-empty">App introuvable.</div>`;
         return;
@@ -980,7 +1049,7 @@ function _renderKStoreAppDetail(appId) {
     })();
 
     // ── "Également pour vous" — 5 apps de la même catégorie (hors self) ──
-    const related = KSTORE_MOCK_APPS
+    const related = _ksGetAllApps()
         .filter(a => a.id !== appId && a.category === app.category)
         .slice(0, 5);
     // Compléter avec featured si <5
@@ -988,7 +1057,7 @@ function _renderKStoreAppDetail(appId) {
         for (const id of KSTORE_FEATURED_IDS) {
             if (related.length >= 5) break;
             if (id === appId || related.some(r => r.id === id)) continue;
-            const f = getMockApp(id); if (f) related.push(f);
+            const f = _ksGetApp(id); if (f) related.push(f);
         }
     }
 
@@ -1045,16 +1114,25 @@ function _renderKStoreAppDetail(appId) {
                 </div>
             </header>
 
-            <!-- Carousel screenshots (placeholders blancs) -->
+            <!-- Carousel screenshots — vraies images si présentes dans D1, sinon placeholders -->
             <div class="ksfs-detail-shots-wrap">
                 <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--prev" aria-label="Précédent">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                          style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
                 <div class="ksfs-detail-shots">
-                    <div class="ksfs-detail-shot"></div>
-                    <div class="ksfs-detail-shot"></div>
-                    <div class="ksfs-detail-shot"></div>
+                    ${(() => {
+                        const shots = Array.isArray(app.screenshots) ? app.screenshots : [];
+                        const slots = [];
+                        for (let i = 0; i < Math.max(3, shots.length); i++) {
+                            slots.push(shots[i]
+                                ? `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
+                                        style="background-image:url('/api/screenshot/${encodeURIComponent(shots[i])}')">
+                                  </div>`
+                                : `<div class="ksfs-detail-shot"></div>`);
+                        }
+                        return slots.join('');
+                    })()}
                 </div>
                 <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--next" aria-label="Suivant">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"

@@ -5240,3 +5240,10 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     to   { opacity: 1; transform: translateY(0); }
 }
 #ksfs-content > * { animation: ksfsFadeIn .22s ease-out; }
+
+/* ── Screenshots remplies dans la fiche détail ───────────────── */
+.ksfs-detail-shot--filled {
+    background-size: cover;
+    background-position: center;
+    background-color: rgba(255,255,255,.04);
+}
