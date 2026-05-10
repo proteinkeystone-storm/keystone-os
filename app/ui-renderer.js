@@ -1490,8 +1490,8 @@ function _buildArtifactModal(inner, pad, tool) {
                     <div class="artifact-schema-chips">${chipPreview}</div>
                 </div>
                 <div class="form-field full" style="margin-bottom:0">
-                    <label class="form-label" style="font-size:11px;letter-spacing:.04em;color:var(--text-muted)">
-                        Contexte additionnel <span style="font-weight:400;text-transform:none">(optionnel)</span>
+                    <label class="form-label">
+                        Contexte additionnel <span style="font-weight:400;opacity:.6">(optionnel)</span>
                     </label>
                     <textarea id="artifact-context" class="form-textarea"
                               placeholder="Adresse, superficie, budget, données spécifiques à injecter…"
