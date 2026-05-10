@@ -25,6 +25,17 @@ export const PADS_DATA = {
             { id: 'confort_ete',   label: 'Confort d\'été',             type: 'select',   options: ['Brise-soleil orientables (BSO)','Volets roulants motorisés','Double vitrage à contrôle solaire','BSO + Volets motorisés','Sans dispositif spécifique'] },
             { id: 'isolation',     label: 'Type d\'isolation',          type: 'select',   options: ['Biosourcée (laine de bois, chanvre, ouate)','Synthétique (PSE, laine de verre)','Mixte biosourcée + synthétique','ITI béton banché renforcé'] },
             { id: 'annexes',       label: 'Annexes incluses',           type: 'select',   options: ['Cave + Parking standard','Cave + Parking IRVE (borne de recharge)','Parking IRVE seul','Cave seule','Local vélo sécurisé','Aucune annexe'] },
+            // ── Sprint 1.2 — champs consommés par DocEngine (notice PDF print-ready).
+            // Ne sont PAS référencés dans system_prompt pour ne pas modifier le
+            // comportement copie-colle existant. Apparaîtront dans le formulaire
+            // et seront utilisés par VEFA Studio v2 (Phase P4).
+            { id: 'ville',         label: 'Ville',                      type: 'text',     placeholder: 'ex: Bandol' },
+            { id: 'departement',   label: 'Département',                type: 'text',     placeholder: 'ex: Var (83)' },
+            { id: 'region',        label: 'Région',                     type: 'select',   options: ['Provence-Alpes-Côte d\'Azur','Occitanie','Nouvelle-Aquitaine','Île-de-France','Auvergne-Rhône-Alpes','Bretagne','Pays de la Loire','Hauts-de-France','Grand Est','Bourgogne-Franche-Comté','Normandie','Centre-Val de Loire','Corse','DOM-TOM'] },
+            { id: 'vendeur',       label: 'Vendeur (raison sociale + SIREN)', type: 'text', placeholder: 'ex: SCCV Les Jardins du Midi — SIREN 123 456 789' },
+            { id: 'notaire',       label: 'Notaire instrumentaire',     type: 'text',     placeholder: 'ex: Étude Maître Dupont, Toulon' },
+            { id: 'permis',        label: 'Permis de construire',       type: 'text',     placeholder: 'ex: PC 083 020 25 H 0042 — délivré le 12/03/2025' },
+            { id: 'livraison',     label: 'Date de livraison prévisionnelle', type: 'text', placeholder: 'ex: T4 2027' },
             { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full' },
         ],
         system_prompt: `Rôle : Designer de documents print et Expert VEFA.

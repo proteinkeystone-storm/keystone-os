@@ -26,6 +26,7 @@ import { requireJWT } from '../lib/jwt.js';
 // clauses, scans, programs_history…). Sécurité par défaut : deny.
 const ALLOWED_ENTITIES = new Set([
   'programs',
+  'clauses',   // Sprint 1.2 — bibliothèque de clauses pour DocEngine
 ]);
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;   // 256 KB par entité (cap raisonnable)

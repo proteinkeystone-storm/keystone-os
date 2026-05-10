@@ -34,6 +34,7 @@ const DB_NAME  = 'keystone-data-fabric';
 // Ajouter une entité ICI ET côté Worker à chaque évolution.
 const ALLOWED_ENTITIES = new Set([
   'programs',
+  'clauses',   // Sprint 1.2 — bibliothèque de clauses pour DocEngine
 ]);
 
 // ── Schéma IndexedDB ───────────────────────────────────────────

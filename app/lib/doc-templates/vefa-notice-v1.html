@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<!-- ═══════════════════════════════════════════════════════════════
+     KEYSTONE OS — Template Notice VEFA v1 (Sprint 1.2)
+     SANCTUARISÉ : ce fichier ne doit JAMAIS être envoyé à un LLM.
+
+     Variables d'injection :
+       [[VAR_NAME]]         valeur fournie par le formulaire VEFA
+       [[CLAUSE_KEY]]       contenu HTML rapatrié depuis la table
+                            entities (type='clauses') en D1.
+
+     Liste exhaustive des variables — voir doc-engine.js (TEMPLATES_META).
+     ═══════════════════════════════════════════════════════════════ -->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notice Descriptive VEFA — [[PROGRAMME]] — [[TYPE_LOT]]</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    /* ================================================================
+       DESIGN TOKENS
+    ================================================================ */
+    :root {
+      --navy:        #1B2A4A;
+      --navy-mid:    #2C4170;
+      --navy-pale:   #E8EDF5;
+      --gold:        #B8945A;
+      --gold-light:  #D4AF7A;
+      --text-dark:   #1A1E2E;
+      --text-mid:    #4A5568;
+      --text-light:  #8896A8;
+      --border:      #D1D9E6;
+      --bg:          #FFFFFF;
+      --bg-soft:     #F7F9FC;
+      --green-ok:    #2E7D32;
+      --green-light: #E8F5E9;
+    }
+
+    /* ================================================================
+       RESET & BASE
+    ================================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Source Sans 3', 'Helvetica Neue', Helvetica, sans-serif;
+      font-size: 10pt;
+      color: var(--text-dark);
+      background: #CBD5E1;
+      line-height: 1.55;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ================================================================
+       @PAGE — FORMAT A4 + PIED DE PAGE AUTOMATIQUE
+    ================================================================ */
+    @page {
+      size: A4 portrait;
+      margin: 20mm 20mm 25mm 20mm;
+
+      @bottom-center {
+        content: "Notice Descriptive Contractuelle \2014  [[PROGRAMME]]  \2014  Page " counter(page) " / " counter(pages);
+        font-family: 'Source Sans 3', 'Helvetica Neue', sans-serif;
+        font-size: 7pt;
+        color: #8896A8;
+        border-top: 0.5pt solid #D1D9E6;
+        padding-top: 5pt;
+        width: 170mm;
+        text-align: center;
+        letter-spacing: 0.03em;
+      }
+    }
+
+    /* ================================================================
+       PAGE CONTAINER (screen + print)
+    ================================================================ */
+    @media screen {
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 16mm auto;
+        padding: 20mm;
+        background: white;
+        box-shadow: 0 6px 40px rgba(27, 42, 74, 0.18), 0 1px 4px rgba(0,0,0,0.08);
+        position: relative;
+        overflow: hidden;
+      }
+    }
+
+    @media print {
+      body { background: white; }
+      .page {
+        width: 100%;
+        min-height: auto;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        overflow: visible;
+      }
+      .page + .page {
+        page-break-before: always;
+        break-before: page;
+      }
+      .screen-footer { display: none !important; }
+    }
+
+    /* ================================================================
+       PIED DE PAGE ÉCRAN (simulation)
+    ================================================================ */
+    .screen-footer {
+      text-align: center;
+      font-size: 7pt;
+      color: var(--text-light);
+      border-top: 0.5pt solid var(--border);
+      padding-top: 7pt;
+      margin-top: 18pt;
+      letter-spacing: 0.04em;
+    }
+
+    /* ================================================================
+       PAGE 1 — COUVERTURE
+    ================================================================ */
+    .cover-header {
+      background: var(--navy);
+      margin: -20mm -20mm 0 -20mm;
+      padding: 14mm 20mm 12mm;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .cover-agency-tag {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+      margin-bottom: 5pt;
+    }
+
+    .cover-program-name {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 30pt;
+      font-weight: 600;
+      line-height: 1.1;
+      color: white;
+      max-width: 120mm;
+    }
+
+    .cover-subtitle {
+      font-size: 9pt;
+      color: rgba(255,255,255,0.55);
+      margin-top: 6pt;
+      font-weight: 300;
+      letter-spacing: 0.04em;
+    }
+
+    .cover-badge-row {
+      display: flex;
+      gap: 6pt;
+      margin-top: 12pt;
+      flex-wrap: wrap;
+    }
+    .badge {
+      background: var(--gold);
+      color: white;
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 3pt 8pt;
+    }
+    .badge.outline {
+      background: transparent;
+      border: 1pt solid rgba(200,169,110,0.5);
+      color: var(--gold-light);
+    }
+
+    .cover-meta {
+      text-align: right;
+      font-size: 8pt;
+      color: rgba(255,255,255,0.45);
+      line-height: 2;
+    }
+    .cover-meta strong { color: rgba(255,255,255,0.85); font-weight: 500; }
+
+    .gold-bar {
+      height: 2.5pt;
+      background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 40%, transparent 85%);
+      margin: 0 -20mm;
+    }
+
+    .id-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1pt solid var(--border);
+      margin: 14pt 0;
+    }
+    .id-cell {
+      padding: 8pt 11pt;
+      border-right: 1pt solid var(--border);
+    }
+    .id-cell:last-child { border-right: none; }
+    .id-label {
+      font-size: 6.5pt;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      margin-bottom: 2pt;
+    }
+    .id-value {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 12pt;
+      font-weight: 600;
+      color: var(--navy);
+      line-height: 1.2;
+    }
+    .id-value.large { font-size: 14pt; }
+
+    .re2020-box {
+      background: var(--navy);
+      padding: 12pt 14pt;
+      margin-bottom: 14pt;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .re2020-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10pt;
+      padding-bottom: 6pt;
+      border-bottom: 0.5pt solid rgba(184,148,90,0.3);
+    }
+    .re2020-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 11pt;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+    }
+    .re2020-norm {
+      font-size: 7.5pt;
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .re2020-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8pt;
+    }
+    .re2020-card {
+      background: rgba(255,255,255,0.06);
+      padding: 8pt 9pt;
+      border-left: 2pt solid var(--gold);
+    }
+    .re2020-card-label {
+      font-size: 6.5pt;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4pt;
+      line-height: 1.4;
+    }
+    .re2020-card-value {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 15pt;
+      font-weight: 600;
+      color: white;
+      line-height: 1;
+    }
+    .re2020-card-unit {
+      font-size: 7pt;
+      color: rgba(255,255,255,0.45);
+      margin-top: 2pt;
+    }
+    .classe-a-text {
+      color: #66BB6A;
+      font-size: 18pt;
+      font-weight: 700;
+    }
+    .dh-ok { color: #4FC3F7; }
+
+    .specs-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1pt solid var(--border);
+      margin-bottom: 14pt;
+    }
+    .spec-row { display: contents; }
+    .sk, .sv {
+      padding: 5.5pt 10pt;
+      border-bottom: 0.5pt solid var(--border);
+      font-size: 8.5pt;
+    }
+    .sk {
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 7.5pt;
+      color: var(--text-mid);
+      background: var(--bg-soft);
+      border-right: 1pt solid var(--border);
+    }
+    .sv { color: var(--text-dark); }
+    .sv strong { color: var(--navy); font-weight: 600; }
+
+    /* ================================================================
+       PAGES 2–5 — EN-TÊTE DE SECTION
+    ================================================================ */
+    .section-header {
+      background: var(--navy);
+      margin: -20mm -20mm 0 -20mm;
+      padding: 11mm 20mm 9mm;
+      display: flex;
+      align-items: flex-end;
+      gap: 12pt;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .section-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 52pt;
+      font-weight: 700;
+      color: rgba(255,255,255,0.10);
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .section-titles { flex: 1; }
+    .section-chapter {
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+      margin-bottom: 3pt;
+    }
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 21pt;
+      font-weight: 600;
+      color: white;
+      line-height: 1.15;
+    }
+
+    /* ================================================================
+       TYPOGRAPHIE CONTENU
+    ================================================================ */
+    h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13pt;
+      font-weight: 600;
+      color: var(--navy);
+      margin-top: 16pt;
+      margin-bottom: 7pt;
+      padding-bottom: 3pt;
+      border-bottom: 1pt solid var(--navy-pale);
+      letter-spacing: 0.01em;
+    }
+    h3:first-of-type { margin-top: 4pt; }
+
+    p {
+      font-size: 9.5pt;
+      color: var(--text-dark);
+      margin-bottom: 5pt;
+      text-align: justify;
+      line-height: 1.65;
+    }
+
+    ul.items {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 10pt 0;
+    }
+    ul.items li {
+      font-size: 9.5pt;
+      padding: 4pt 0 4pt 16pt;
+      border-bottom: 0.5pt solid var(--border);
+      position: relative;
+      color: var(--text-dark);
+      line-height: 1.5;
+    }
+    ul.items li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--gold);
+      font-weight: 700;
+    }
+    ul.items li:last-child { border-bottom: none; }
+    ul.items li span.note {
+      font-size: 8pt;
+      color: var(--text-light);
+      font-style: italic;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18pt;
+    }
+    .col-block { min-width: 0; }
+
+    .info-box {
+      background: var(--navy-pale);
+      border-left: 3pt solid var(--navy);
+      padding: 7pt 11pt;
+      margin: 10pt 0;
+    }
+    .info-box p { margin: 0; font-size: 8.5pt; color: var(--navy); text-align: left; }
+    .info-box strong { font-weight: 600; }
+
+    .warning-box {
+      background: #FFF8E7;
+      border-left: 3pt solid var(--gold);
+      padding: 7pt 11pt;
+      margin: 10pt 0;
+    }
+    .warning-box p { margin: 0; font-size: 8.5pt; color: #6B4C0E; text-align: left; }
+
+    .placeholder-box {
+      border: 1.5pt dashed #C0CBD8;
+      padding: 10pt;
+      background: #F0F4F8;
+      color: #9AACBE;
+      font-size: 9pt;
+      text-align: center;
+      font-style: italic;
+      margin: 10pt 0;
+    }
+
+    .perf-row {
+      display: flex;
+      align-items: center;
+      gap: 10pt;
+      background: var(--bg-soft);
+      border: 1pt solid var(--border);
+      padding: 8pt 12pt;
+      margin: 8pt 0;
+    }
+    .perf-label { font-size: 8.5pt; color: var(--text-mid); flex: 1; }
+    .perf-val {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13pt;
+      font-weight: 600;
+      color: var(--navy);
+    }
+    .badge-green {
+      background: var(--green-light);
+      border: 1pt solid #81C784;
+      color: var(--green-ok);
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 2pt 8pt;
+    }
+
+    /* ================================================================
+       PAGE 6 — MENTIONS LÉGALES
+    ================================================================ */
+    .guarantee-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8pt;
+      margin-bottom: 14pt;
+    }
+    .guarantee-card {
+      border: 1pt solid var(--border);
+      padding: 8pt 11pt;
+    }
+    .guarantee-title {
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--navy);
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      margin-bottom: 3pt;
+    }
+    .guarantee-duration {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13pt;
+      font-weight: 600;
+      color: var(--gold);
+      display: block;
+      margin-bottom: 3pt;
+    }
+    .guarantee-desc {
+      font-size: 8pt;
+      color: var(--text-mid);
+      line-height: 1.55;
+    }
+
+    .article-box {
+      background: var(--bg-soft);
+      border: 0.5pt solid var(--border);
+      padding: 9pt 12pt;
+      margin: 10pt 0;
+    }
+    .article-ref {
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--navy);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 5pt;
+    }
+    .article-text {
+      font-size: 7.5pt;
+      color: var(--text-mid);
+      line-height: 1.65;
+      text-align: justify;
+      font-style: italic;
+    }
+
+    .signature-zone {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24pt;
+      margin-top: 16pt;
+    }
+    .sig-block { }
+    .sig-label {
+      font-size: 7.5pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-mid);
+      margin-bottom: 4pt;
+    }
+    .sig-name {
+      font-size: 9pt;
+      color: var(--text-dark);
+      margin-bottom: 2pt;
+    }
+    .sig-area {
+      height: 28pt;
+      border: 0.5pt dashed var(--border);
+      background: var(--bg-soft);
+      margin-top: 5pt;
+    }
+    .sig-date-line {
+      font-size: 7.5pt;
+      color: var(--text-light);
+      margin-top: 5pt;
+    }
+    .legal-section p {
+      font-size: 8.5pt;
+    }
+
+    /* ================================================================
+       UTILITAIRES
+    ================================================================ */
+    .mt-sm  { margin-top: 8pt; }
+    .mt-md  { margin-top: 14pt; }
+    .text-gold { color: var(--gold); }
+    .text-navy { color: var(--navy); font-weight: 600; }
+    .sep { height: 0.5pt; background: var(--border); margin: 12pt 0; }
+  </style>
+</head>
+<body>
+
+<!-- ================================================================
+     PAGE 1 — COUVERTURE & SYNTHÈSE RE 2020
+================================================================ -->
+<div class="page">
+
+  <div class="cover-header">
+    <div>
+      <div class="cover-agency-tag">Notice Descriptive Contractuelle</div>
+      <div class="cover-program-name">Programme<br>[[PROGRAMME]]</div>
+      <div class="cover-subtitle">[[DEPARTEMENT]] — [[REGION]] &nbsp;·&nbsp; Vente en l'État Futur d'Achèvement</div>
+      <div class="cover-badge-row">
+        <span class="badge">[[TYPE_LOT]]</span>
+        <span class="badge outline">RE2020 — [[RE2020_SEUIL]]</span>
+        <span class="badge outline">Classe A</span>
+      </div>
+    </div>
+    <div class="cover-meta">
+      <strong>Réf. document</strong><br>
+      [[REF_DOCUMENT]]<br><br>
+      <strong>Date d'édition</strong><br>
+      [[DATE_EDITION]]<br><br>
+      <strong>Version</strong><br>
+      [[VERSION_DOC]]
+    </div>
+  </div>
+
+  <div class="gold-bar" style="margin-top:0; margin-bottom:14pt;"></div>
+
+  <div class="id-strip">
+    <div class="id-cell">
+      <div class="id-label">Programme</div>
+      <div class="id-value">[[PROGRAMME]]</div>
+    </div>
+    <div class="id-cell">
+      <div class="id-label">Désignation lot</div>
+      <div class="id-value large">[[TYPE_LOT]]</div>
+    </div>
+    <div class="id-cell">
+      <div class="id-label">Surface habitable</div>
+      <div class="id-value large">[[SURFACE]] m²</div>
+    </div>
+    <div class="id-cell">
+      <div class="id-label">Situation / Orientation</div>
+      <div class="id-value">[[ETAGE]] — [[ORIENTATION]]</div>
+    </div>
+  </div>
+
+  <div class="re2020-box">
+    <div class="re2020-head">
+      <div class="re2020-title">Synthèse Réglementation Environnementale RE 2020</div>
+      <div class="re2020-norm">[[RE2020_SEUIL]] · [[RE2020_OBJECTIF]]</div>
+    </div>
+    <div class="re2020-grid">
+      <div class="re2020-card">
+        <div class="re2020-card-label">IC Construction<br>(impact carbone)</div>
+        <div class="re2020-card-value">≤ [[IC_CONSTRUCTION_MAX]]</div>
+        <div class="re2020-card-unit">kgCO₂éq / m² SDP</div>
+      </div>
+      <div class="re2020-card">
+        <div class="re2020-card-label">Confort d'été<br>Degrés-Heures (DH)</div>
+        <div class="re2020-card-value dh-ok">&lt; 1 250</div>
+        <div class="re2020-card-unit">DH — Seuil réglementaire respecté</div>
+      </div>
+      <div class="re2020-card">
+        <div class="re2020-card-label">Classe énergétique<br>DPE &amp; Classe climatique</div>
+        <div class="re2020-card-value"><span class="classe-a-text">A</span> / <span class="classe-a-text">A</span></div>
+        <div class="re2020-card-unit">Performance maximale</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs-2col">
+    <div class="spec-row">
+      <div class="sk">Norme thermique</div>
+      <div class="sv"><strong>RE 2020 — [[RE2020_SEUIL]]</strong> ([[RE2020_OBJECTIF]])</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Système de chauffage</div>
+      <div class="sv">[[CHAUFFAGE]] <span style="color:var(--gold);font-weight:600;">· Décarboné</span></div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Confort d'été</div>
+      <div class="sv">[[CONFORT_ETE]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Isolation</div>
+      <div class="sv">[[ISOLATION]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Revêtements sols</div>
+      <div class="sv">[[SOLS]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Cuisine</div>
+      <div class="sv">[[CUISINE]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Annexes</div>
+      <div class="sv">[[ANNEXES]]</div>
+    </div>
+  </div>
+
+  [[CLAUSE_AVERTISSEMENT_NOTICE]]
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 1 / 6</div>
+</div><!-- /page 1 -->
+
+
+<!-- ================================================================
+     PAGE 2 — STRUCTURE & ENVELOPPE DU BÂTIMENT
+================================================================ -->
+<div class="page">
+
+  <div class="section-header">
+    <div class="section-num">02</div>
+    <div class="section-titles">
+      <div class="section-chapter">Section 2 sur 6</div>
+      <div class="section-title">Structure &amp; Enveloppe du Bâtiment</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <div class="two-col">
+    <div class="col-block">
+
+      <h3>Fondations &amp; Structure porteuse</h3>
+      [[CLAUSE_FONDATIONS]]
+
+      <h3>Maçonnerie &amp; Façades</h3>
+      [[CLAUSE_MACONNERIE]]
+
+      <h3>Isolation thermique</h3>
+      [[CLAUSE_ISOLATION_THERMIQUE]]
+
+    </div>
+    <div class="col-block">
+
+      <h3>Toiture</h3>
+      [[CLAUSE_TOITURE]]
+
+      <h3>Menuiseries extérieures</h3>
+      [[CLAUSE_MENUISERIES_EXT]]
+
+      <h3>Protections solaires — Confort d'été</h3>
+      [[CLAUSE_PROTECTIONS_SOLAIRES]]
+
+      <div class="perf-row">
+        <span class="perf-label">Indicateur RE 2020 — Confort d'été atteint</span>
+        <span class="perf-val" style="color:var(--gold);">DH &lt; 1 250 h</span>
+        <span class="badge-green">✔ Conforme</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 2 / 6</div>
+</div><!-- /page 2 -->
+
+
+<!-- ================================================================
+     PAGE 3 — ÉQUIPEMENTS TECHNIQUES
+================================================================ -->
+<div class="page">
+
+  <div class="section-header">
+    <div class="section-num">03</div>
+    <div class="section-titles">
+      <div class="section-chapter">Section 3 sur 6</div>
+      <div class="section-title">Équipements Techniques</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <div class="two-col">
+    <div class="col-block">
+
+      <h3>Chauffage — [[CHAUFFAGE]]</h3>
+      [[CLAUSE_CHAUFFAGE]]
+
+      <h3>Production d'Eau Chaude Sanitaire</h3>
+      [[CLAUSE_ECS]]
+
+      <h3>Ventilation — VMC Double Flux</h3>
+      [[CLAUSE_VMC]]
+
+    </div>
+    <div class="col-block">
+
+      <h3>Installations Électriques</h3>
+      [[CLAUSE_ELECTRICITE]]
+
+      <h3>Plomberie &amp; Réseau d'Eau</h3>
+      [[CLAUSE_PLOMBERIE]]
+
+      <h3>Domotique &amp; Connectivité</h3>
+      [[CLAUSE_DOMOTIQUE]]
+
+      <div class="perf-row">
+        <span class="perf-label">Performance énergétique globale</span>
+        <span class="perf-val" style="color:#66BB6A; font-size:16pt;">Classe A</span>
+        <span class="badge-green">≤ 50 kWhEP/m²/an</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 3 / 6</div>
+</div><!-- /page 3 -->
+
+
+<!-- ================================================================
+     PAGE 4 — FINITIONS INTÉRIEURES
+================================================================ -->
+<div class="page">
+
+  <div class="section-header">
+    <div class="section-num">04</div>
+    <div class="section-titles">
+      <div class="section-chapter">Section 4 sur 6</div>
+      <div class="section-title">Finitions Intérieures</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <div class="two-col">
+    <div class="col-block">
+
+      <h3>Revêtements de Sol — Pièces de Vie</h3>
+      [[CLAUSE_SOL_PIECES_VIE]]
+
+      <h3>Revêtements de Sol — Chambres</h3>
+      [[CLAUSE_SOL_CHAMBRES]]
+
+      <h3>Salle de Bains &amp; Salle d'Eau</h3>
+      [[CLAUSE_SDB]]
+
+    </div>
+    <div class="col-block">
+
+      <h3>Peintures &amp; Revêtements Muraux</h3>
+      [[CLAUSE_PEINTURES]]
+
+      <h3>Cuisine — [[CUISINE]]</h3>
+      [[CLAUSE_CUISINE]]
+
+      <h3>Menuiseries Intérieures</h3>
+      [[CLAUSE_MENUISERIES_INT]]
+
+    </div>
+  </div>
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 4 / 6</div>
+</div><!-- /page 4 -->
+
+
+<!-- ================================================================
+     PAGE 5 — ANNEXES & MOBILITÉ
+================================================================ -->
+<div class="page">
+
+  <div class="section-header">
+    <div class="section-num">05</div>
+    <div class="section-titles">
+      <div class="section-chapter">Section 5 sur 6</div>
+      <div class="section-title">Annexes &amp; Mobilité</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <div class="two-col">
+    <div class="col-block">
+
+      <h3>Cave Privative</h3>
+      [[CLAUSE_CAVE]]
+
+      <h3>Espaces Extérieurs Privés</h3>
+      [[CLAUSE_EXTERIEURS]]
+
+      <h3>Spécificités du Lot</h3>
+      [[SPECIFICITES_BLOC]]
+
+    </div>
+    <div class="col-block">
+
+      <h3>Parking — Infrastructure IRVE</h3>
+      [[CLAUSE_PARKING_IRVE]]
+
+      <h3>Accès &amp; Sécurité</h3>
+      [[CLAUSE_ACCES_SECURITE]]
+
+      <div class="sep"></div>
+      [[CLAUSE_NOTE_ANNEXES]]
+
+    </div>
+  </div>
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 5 / 6</div>
+</div><!-- /page 5 -->
+
+
+<!-- ================================================================
+     PAGE 6 — MENTIONS LÉGALES & SIGNATURES
+================================================================ -->
+<div class="page">
+
+  <div class="section-header">
+    <div class="section-num">06</div>
+    <div class="section-titles">
+      <div class="section-chapter">Section 6 sur 6</div>
+      <div class="section-title">Mentions Légales &amp; Signatures</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <div class="legal-section">
+
+    <h3>Garanties Légales du Vendeur</h3>
+
+    <div class="guarantee-grid">
+      <div class="guarantee-card">
+        <div class="guarantee-title">Garantie Financière d'Achèvement (GFA)</div>
+        <span class="guarantee-duration">Jusqu'à livraison</span>
+        <div class="guarantee-desc">[[CLAUSE_GFA]]</div>
+      </div>
+      <div class="guarantee-card">
+        <div class="guarantee-title">Garantie de Parfait Achèvement (GPA)</div>
+        <span class="guarantee-duration">1 an</span>
+        <div class="guarantee-desc">[[CLAUSE_GPA]]</div>
+      </div>
+      <div class="guarantee-card">
+        <div class="guarantee-title">Garantie Biennale de Bon Fonctionnement</div>
+        <span class="guarantee-duration">2 ans</span>
+        <div class="guarantee-desc">[[CLAUSE_BIENNALE]]</div>
+      </div>
+      <div class="guarantee-card">
+        <div class="guarantee-title">Garantie Décennale</div>
+        <span class="guarantee-duration">10 ans</span>
+        <div class="guarantee-desc">[[CLAUSE_DECENNALE]]</div>
+      </div>
+    </div>
+
+    <div class="article-box">
+      <div class="article-ref">Article R.261-25 du Code de la Construction et de l'Habitation</div>
+      <div class="article-text">[[CLAUSE_ART_R261_25]]</div>
+    </div>
+
+    <h3>Avertissement &amp; Validation Obligatoire</h3>
+    [[CLAUSE_AVERTISSEMENT_VALIDATION]]
+
+    <h3>Informations Vendeur &amp; Programme</h3>
+    <div class="specs-2col" style="margin-bottom:12pt;">
+      <div class="spec-row">
+        <div class="sk">Vendeur</div>
+        <div class="sv">[[VENDEUR]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Notaire instrumentaire</div>
+        <div class="sv">[[NOTAIRE]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Permis de construire</div>
+        <div class="sv">[[PERMIS]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Date de livraison prévisionnelle</div>
+        <div class="sv">[[LIVRAISON]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Assureur DO</div>
+        <div class="sv">[[ASSUREUR_DO]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">GFA souscrite auprès de</div>
+        <div class="sv">[[GFA_ETABLISSEMENT]]</div>
+      </div>
+    </div>
+
+    <h3>Signatures &amp; Approbation Contractuelle</h3>
+    <div class="signature-zone">
+      <div class="sig-block">
+        <div class="sig-label">Le Vendeur — Promoteur</div>
+        <div class="sig-name">Raison sociale : ____________________________</div>
+        <div class="sig-name">Représenté par : ____________________________</div>
+        <div class="sig-area"></div>
+        <div class="sig-date-line">Fait à ________________ &nbsp;·&nbsp; Le ________________</div>
+      </div>
+      <div class="sig-block">
+        <div class="sig-label">L'Acquéreur(s)</div>
+        <div class="sig-name">Nom(s) : ____________________________</div>
+        <div class="sig-name">Prénom(s) : ____________________________</div>
+        <div class="sig-area"></div>
+        <div class="sig-date-line">Précéder la signature de la mention manuscrite :<br><em>« Lu et approuvé — Notice descriptive reçue »</em></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="screen-footer">Notice Descriptive Contractuelle &mdash; [[PROGRAMME]] &mdash; Page 6 / 6</div>
+</div><!-- /page 6 -->
+
+</body>
+</html>
