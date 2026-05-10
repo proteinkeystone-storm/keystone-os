@@ -411,7 +411,7 @@ const KS_PLANS = [
         stripeUrl: 'https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00',
         desc: `Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.`,
         features: [
-            { text: '6 Assistants Certifiés au choix' },
+            { text: '3 Assistants Certifiés au choix' },
             { text: '3 postes / utilisateurs' },
             { text: 'Tous les moteurs IA inclus' },
             { text: 'Artefacts visuels complets' },
@@ -430,7 +430,7 @@ const KS_PLANS = [
         stripeUrl: 'https://buy.stripe.com/28E7sLgo9gl21g9eFCf7i01',
         desc: `Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.`,
         features: [
-            { text: '8 Assistants Certifiés au choix' },
+            { text: '5 Assistants Certifiés au choix' },
             { text: 'Multi-postes / utilisateurs' },
             { text: 'Tous les moteurs IA inclus' },
             { text: 'Artefacts visuels complets' },
@@ -448,7 +448,7 @@ const KS_PLANS = [
         stripeUrl: 'https://buy.stripe.com/9B6eVd0pb7Ow4sl7daf7i02',
         desc: `Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.`,
         features: [
-            { html: '<strong>Collection complète illimitée</strong>' },
+            { html: '<strong>7 Assistants Certifiés au choix</strong>' },
             { text: 'Appareils illimités' },
             { text: 'Tous les moteurs IA inclus' },
             { text: 'Artefacts visuels complets' },
@@ -461,7 +461,7 @@ const KS_PLANS = [
 ];
 
 // Quotas par plan (nombre max d'assistants simultanément déployés)
-const PLAN_QUOTAS  = { DEMO: 1, STARTER: 6, PRO: 8, MAX: Infinity };
+const PLAN_QUOTAS  = { DEMO: 1, STARTER: 3, PRO: 5, MAX: 7 };
 const _PLAN_ORDER  = ['DEMO', 'STARTER', 'PRO', 'MAX'];
 
 function _openKStorePanel(view = 'catalogue') {

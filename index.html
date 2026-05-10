@@ -1321,7 +1321,7 @@ footer {
         <div class="plan-price"><sup>€</sup>49<sub>/mois</sub></div>
         <p class="plan-desc">Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.</p>
         <ul class="plan-features">
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 6 Assistants Certifiés au choix</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 3 Assistants Certifiés au choix</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> 3 postes / utilisateurs</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
@@ -1340,7 +1340,7 @@ footer {
         <div class="plan-price"><sup>€</sup>79<sub>/mois</sub></div>
         <p class="plan-desc">Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.</p>
         <ul class="plan-features">
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 8 Assistants Certifiés au choix</li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> 5 Assistants Certifiés au choix</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Multi-postes / utilisateurs</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
@@ -1358,7 +1358,7 @@ footer {
         <div class="plan-price"><sup>€</sup>149<sub>/mois</sub></div>
         <p class="plan-desc">Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.</p>
         <ul class="plan-features">
-          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>Collection complète illimitée</strong></li>
+          <li><svg width="13" height="13"><use href="#ico-check"/></svg> <strong>7 Assistants Certifiés au choix</strong></li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Appareils illimités</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Tous les moteurs IA inclus</li>
           <li><svg width="13" height="13"><use href="#ico-check"/></svg> Artefacts visuels complets</li>
@@ -1733,7 +1733,7 @@ async function activateLicence() {
 /* ═══════════════════════════════════════════
    ONBOARDING
 ═══════════════════════════════════════════ */
-const TOOL_QUOTA = { 'Demo': 1, 'Start': 6, 'Pro': 8, 'Max': Infinity };
+const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': 7 };
 // Source de vérité : IDs NOMEN-K immuables + USER_LABEL canonique
 // Doit refléter K_STORE_ASSETS/PADS/manifest.json
 const ALL_TOOLS = [
@@ -1786,16 +1786,15 @@ function obNext(step) {
 }
 
 function buildToolsGrid() {
-  const quota = TOOL_QUOTA[_activePlan] || 6;
+  const quota = TOOL_QUOTA[_activePlan] || 3;
   const grid  = document.getElementById('ob-tools-grid');
   const label = document.getElementById('ob-quota-label');
-  const quotaText = quota === Infinity ? 'tous les' : quota;
   label.style.color = '';
   label.textContent = _activePlan === 'Demo'
     ? `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`
-    : `Sélectionnez vos ${quotaText} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
+    : `Sélectionnez vos ${quota} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
   grid.innerHTML = ALL_TOOLS.map(tool => `
-    <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota === Infinity ? 999 : quota})">
+    <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota})">
       <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
       <span class="ob-tool-label">${tool.name}</span>
     </div>
