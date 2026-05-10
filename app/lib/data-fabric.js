@@ -116,12 +116,25 @@ export const dataFabric = {
 
   /**
    * Liste les objets d'une entité.
+   * - Si l'IDB local contient déjà des données : retour instantané +
+   *   refresh cloud non-bloquant (pattern stale-while-revalidate).
+   * - Si l'IDB est vide ET qu'on est online : on AWAIT le refresh cloud
+   *   avant de répondre. Évite les "0 clauses" en première session
+   *   (nouvelle fenêtre privée, cache effacé, etc.).
    * @param {object} query - { filter: (obj) => bool }
    */
   async list(entity, query = {}) {
     _check(entity);
-    // Refresh non-bloquant en arrière-plan.
-    this._refreshList(entity).catch(() => {});
+    const localCount = await db.entities.where('type').equals(entity).count();
+
+    if (localCount > 0) {
+      // Cache chaud : retour immédiat, refresh en arrière-plan.
+      this._refreshList(entity).catch(() => {});
+    } else if (_isOnline()) {
+      // Cache froid : on attend le cloud (1 round-trip) avant de répondre.
+      await this._refreshList(entity).catch(() => {});
+    }
+
     let rows = await db.entities.where('type').equals(entity).toArray();
     rows = rows.filter(r => !r.deletedAt);
     if (typeof query.filter === 'function') {
