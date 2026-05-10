@@ -533,6 +533,7 @@ function _ksNormalizeD1(d1) {
         rgpdTitle     : d1.rgpdTitle,
         rgpdText      : d1.rgpdText,
         iconId        : d1.iconId,                // ← upload icône (screenshot id)
+        coverId       : d1.coverId,               // ← upload photo de présentation
         price         : d1.price ?? 0,
         icon          : d1.icon,
         ai_optimized  : d1.ai_optimized,
@@ -963,9 +964,12 @@ function _renderKStoreItems() {
 
 // ── Helpers de rendu de cards ─────────────────────────────────
 function _renderFeaturedCard(app) {
+    const coverStyle = app.coverId
+        ? `style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.coverId)}');background-size:cover;background-position:center;background-color:transparent"`
+        : '';
     return `
         <article class="ksfs-feat-card" data-app-id="${app.id}">
-            <div class="ksfs-feat-cover"></div>
+            <div class="ksfs-feat-cover" ${coverStyle}></div>
             <div class="ksfs-feat-cat">${getCategoryLabel(app.category)}</div>
             <div class="ksfs-feat-name">${app.title}</div>
             <div class="ksfs-feat-punch">${app.punchline || ''}</div>

@@ -1571,7 +1571,8 @@ function openKStoreFicheEditor(idx, panel) {
   };
 
   // ── Icône (pictogramme de profil app) ──
-  let currentIconId = item.iconId || null;
+  let currentIconId  = item.iconId  || null;
+  let currentCoverId = item.coverId || null;   // photo de présentation (À la une)
   const iconPreviewHTML = () => currentIconId
     ? `<img src="${API_BASE}/api/screenshot/${esc(currentIconId)}" alt=""
             style="width:100%;height:100%;object-fit:cover;border-radius:18px;pointer-events:none">
@@ -1702,6 +1703,24 @@ function openKStoreFicheEditor(idx, panel) {
         </div>
         <p class="form-hint" style="opacity:.55;margin-top:4px">
           De 1 à ${KSTORE_AI_ENGINES.length} moteurs — laisser vide pour "aucun précisé".
+        </p>
+      </div>
+
+      <!-- Photo de présentation (cover "À la une pour vous") -->
+      <div>
+        <label class="form-label">Photo de présentation (cards "À la une pour vous")</label>
+        <div id="ksf-cover-slot"
+             style="position:relative;aspect-ratio:16/10;max-width:340px;
+                    background:rgba(255,255,255,.04);
+                    border:1.5px dashed rgba(255,255,255,.12);
+                    border-radius:10px;overflow:hidden;cursor:pointer;
+                    transition:border-color .12s ease, background .12s ease;margin-top:6px">
+        </div>
+        <input type="file" id="ksf-cover-input" accept="image/jpeg,image/png,image/webp,image/gif"
+               style="display:none">
+        <p class="form-hint" style="opacity:.55;margin-top:4px">
+          Format 16:10 recommandé. Affichée dans le rail "À la une pour vous"
+          et "Également pour vous" du Key-Store.
         </p>
       </div>
 
@@ -1935,6 +1954,98 @@ function openKStoreFicheEditor(idx, panel) {
     if (file) uploadIcon(file);
   });
 
+  // ── Upload / delete photo de présentation (cover) ─────────────
+  const coverSlot  = document.getElementById('ksf-cover-slot');
+  const coverInput = document.getElementById('ksf-cover-input');
+
+  const coverPreviewHTML = () => currentCoverId
+    ? `<img src="${API_BASE}/api/screenshot/${esc(currentCoverId)}" alt=""
+            style="width:100%;height:100%;object-fit:cover;pointer-events:none">
+       <button type="button" id="ksf-cover-delete"
+               style="position:absolute;top:6px;right:6px;width:24px;height:24px;
+                      border-radius:50%;background:rgba(0,0,0,.78);color:#fff;
+                      border:0;cursor:pointer;font-size:12px"
+               title="Retirer la photo">✕</button>`
+    : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                   height:100%;color:rgba(255,255,255,.45);font-size:11px;text-align:center;
+                   padding:14px;gap:6px;pointer-events:none">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+              style="width:24px;height:24px;opacity:.6">
+           <rect x="3" y="3" width="18" height="18" rx="2"/>
+           <circle cx="8.5" cy="8.5" r="1.5"/>
+           <polyline points="21 15 16 10 5 21"/>
+         </svg>
+         <div><strong>Photo de présentation</strong></div>
+         <div style="opacity:.75">Glissez une image ou cliquez</div>
+       </div>`;
+
+  const refreshCoverSlot = () => { coverSlot.innerHTML = coverPreviewHTML(); };
+  refreshCoverSlot();
+
+  const uploadCover = async (file) => {
+    if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) {
+      toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 3 Mo)', 'error');
+      return;
+    }
+    coverSlot.style.opacity = '.5';
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const res = await api('/api/admin/screenshot', 'POST', {
+        appId: item.id + ':cover',
+        mime: file.type, dataBase64, tenantId: 'default',
+      });
+      if (!res?.id) throw new Error('Réponse upload invalide');
+      if (currentCoverId) {
+        api(`/api/admin/screenshot/${encodeURIComponent(currentCoverId)}`, 'DELETE').catch(() => {});
+      }
+      currentCoverId = res.id;
+      coverSlot.style.opacity = '';
+      refreshCoverSlot();
+      toast('Photo de présentation uploadée ✓');
+    } catch (err) {
+      coverSlot.style.opacity = '';
+      toast(err.message || 'Erreur upload', 'error');
+    }
+  };
+
+  coverSlot.addEventListener('click', (e) => {
+    if (e.target.closest('#ksf-cover-delete')) {
+      if (currentCoverId) {
+        api(`/api/admin/screenshot/${encodeURIComponent(currentCoverId)}`, 'DELETE').catch(() => {});
+      }
+      currentCoverId = null;
+      refreshCoverSlot();
+      toast('Photo de présentation supprimée');
+      return;
+    }
+    coverInput.value = '';
+    coverInput.click();
+  });
+  coverSlot.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    coverSlot.style.borderColor = '#6366f1';
+    coverSlot.style.background  = 'rgba(99,102,241,.08)';
+  });
+  coverSlot.addEventListener('dragleave', () => {
+    coverSlot.style.borderColor = '';
+    coverSlot.style.background  = '';
+  });
+  coverSlot.addEventListener('drop', (e) => {
+    e.preventDefault();
+    coverSlot.style.borderColor = '';
+    coverSlot.style.background  = '';
+    const file = e.dataTransfer?.files?.[0];
+    if (file) uploadCover(file);
+  });
+  coverInput.addEventListener('change', () => {
+    const file = coverInput.files?.[0];
+    if (file) uploadCover(file);
+  });
+
   // Bouton annuler / save
   document.getElementById('ksf-cancel').addEventListener('click', closeModal);
   document.getElementById('ksf-save').addEventListener('click', async () => {
@@ -1956,6 +2067,10 @@ function openKStoreFicheEditor(idx, panel) {
     // Icône (pictogramme de profil app)
     if (currentIconId) item.iconId = currentIconId;
     else               delete item.iconId;
+
+    // Photo de présentation (cover des cards "À la une")
+    if (currentCoverId) item.coverId = currentCoverId;
+    else                delete item.coverId;
 
     // Persiste les screenshots (filtre les slots vides)
     const cleanShots = shotIds.filter(Boolean);
