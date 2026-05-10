@@ -128,6 +128,48 @@ const ENGINE_LABEL_TO_ID = {
     'Grok':'grok','Perplexity':'perplexity','Mistral':'mistral','Llama':'llama',
 };
 
+/**
+ * Résout le prompt système d'un pad selon le moteur actif.
+ * Cherche d'abord le prompt spécifique au moteur sélectionné dans le header,
+ * fallback sur le prompt par défaut (system_prompt).
+ */
+function _resolveEnginePrompt(pad) {
+    if (!pad) return '';
+    const engine   = getActiveEngine();
+    const engineId = ENGINE_LABEL_TO_ID[engine] || engine.toLowerCase();
+    return pad?.engines?.prompts?.[engineId]
+        || pad?.engines?.prompts?.[engine]
+        || pad?.system_prompt
+        || '';
+}
+
+/**
+ * Rafraîchit la modale outil ouverte après un changement de moteur :
+ * - met à jour le label du bouton "Générer avec X"
+ * - re-render le prompt preview avec le prompt du nouveau moteur
+ */
+function _refreshOpenToolForEngine() {
+    if (!currentPad) return;
+    const modal = document.getElementById('tool-modal');
+    if (!modal?.classList.contains('open')) return;
+
+    const engine = getActiveEngine();
+
+    // Label du bouton Générer
+    const btn = document.getElementById('btn-generate');
+    if (btn && !btn.disabled) {
+        // Préserve le SVG, réécrit juste le texte
+        btn.innerHTML = btn.innerHTML.replace(/Générer avec [^<]*/, `Générer avec ${engine}`);
+    }
+
+    // Re-render prompt preview (sauf en mode artifact)
+    if (currentPad.type !== 'artifact') {
+        // Reset typewriter pour réécrire le prompt
+        _promptWasReady = false;
+        _updatePromptPreview(currentPad);
+    }
+}
+
 // ── Topbar engine chip ────────────────────────────────────────
 export function updateEngineChip(label) {
     const el = document.getElementById('ai-engine-label');
@@ -1626,7 +1668,7 @@ function _updatePromptPreview(pad) {
     if (resultLbl) resultLbl.classList.add('result-lbl-ready');
     if (generateBtn) generateBtn.disabled = false; // Activer le bouton Générer
 
-    const newPrompt = _interpolate(pad.system_prompt, formData);
+    const newPrompt = _interpolate(_resolveEnginePrompt(pad), formData);
 
     if (!_promptWasReady) {
         _promptWasReady = true;
@@ -1684,17 +1726,11 @@ async function _handleGenerate(pad) {
     const apiKey     = loadKey(ENGINE_TO_PROVIDER[engine] || 'anthropic');
     const btn        = document.getElementById('btn-generate');
 
-    // ── Construction du prompt ───────────────────────────────────
-    // Résolution de la clé de prompt : on essaie l'ID court (ex: 'claude', 'gpt4o')
-    // puis le label complet (ex: 'Claude', 'ChatGPT') pour compatibilité ascendante.
-    const engineId   = ENGINE_LABEL_TO_ID[engine] || engine.toLowerCase();
-    const enginePrompt = (p) =>
-        p?.engines?.prompts?.[engineId] || p?.engines?.prompts?.[engine] || p?.system_prompt || '';
-
+    // ── Construction du prompt — utilise la helper module-scope ──
     let prompt;
     if (isArtifact) {
         const preamble     = pad.artifact_config?.json_preamble || '';
-        const instructions = enginePrompt(pad);
+        const instructions = _resolveEnginePrompt(pad);
         const extraContext = document.getElementById('artifact-context')?.value?.trim() || '';
         prompt = preamble
             + (instructions ? '\n\n' + instructions : '')
@@ -1703,7 +1739,7 @@ async function _handleGenerate(pad) {
         const form     = document.getElementById('tool-form');
         const formData = {};
         form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = el.value.trim(); });
-        prompt = _interpolate(enginePrompt(pad), formData);
+        prompt = _interpolate(_resolveEnginePrompt(pad), formData);
     }
 
     // ── Refs UI selon le mode ────────────────────────────────────
@@ -2075,6 +2111,7 @@ function _renderSettingsBody() {
             body.querySelectorAll('.engine-select-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             setActiveEngine(item.dataset.engine);
+            _refreshOpenToolForEngine();
         });
     });
 
@@ -2343,6 +2380,8 @@ function _openEngineDropdown(triggerBtn, dropdown) {
             if (document.getElementById('settings-panel')?.classList.contains('open')) {
                 _renderSettingsBody();
             }
+            // Re-render modale outil si ouverte (prompt + label bouton)
+            _refreshOpenToolForEngine();
         });
     });
 }
