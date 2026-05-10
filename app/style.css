@@ -2496,29 +2496,39 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 }
 .modal-form {
   width: 65%; padding: 28px 32px;
-  overflow-y: scroll; flex-shrink: 0;
+  overflow: visible;                       /* le scroll est sur .tool-modal */
+  flex-shrink: 0;
   min-height: 0;
-  /* height: 100% retiré — casse le flex stretch en row layout. La hauteur
-     est déterminée naturellement par align-items: stretch du parent. */
   border-right: 1px solid var(--bd);
+}
+
+/* ── NUKE SCROLL DESKTOP — scroll au niveau de .tool-modal (pattern
+   mobile éprouvé). Le double-scroll imbriqué (modal-form scroll dans
+   tool-modal hidden) était cassé sur Safari/macOS quand les scrollbars
+   système sont en mode "auto-hide". On bascule sur scroll outer + header
+   sticky : visible 100 % du temps, pas de calcul foireux flex/height. */
+.tool-modal {
+  overflow-y: auto !important;
   scrollbar-width: auto;
   scrollbar-color: rgba(99,102,241,.55) rgba(99,102,241,.08);
 }
-/* macOS Safari : par défaut, scrollbars cachées (réglage système).
-   -webkit-appearance: none + dimensions explicites = scrollbar
-   PERSISTANTE et visible quel que soit le réglage utilisateur. */
-.modal-form::-webkit-scrollbar              { -webkit-appearance: none; width: 12px; }
-.modal-form::-webkit-scrollbar-track        { background: rgba(99,102,241,.08); }
-.modal-form::-webkit-scrollbar-thumb        {
+.tool-modal::-webkit-scrollbar              { -webkit-appearance: none; width: 12px; }
+.tool-modal::-webkit-scrollbar-track        { background: rgba(99,102,241,.08); }
+.tool-modal::-webkit-scrollbar-thumb        {
   background: rgba(99,102,241,.55);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: content-box;
   min-height: 40px;
 }
-.modal-form::-webkit-scrollbar-thumb:hover  {
+.tool-modal::-webkit-scrollbar-thumb:hover  {
   background: rgba(99,102,241,.85);
   background-clip: content-box;
+}
+.modal-body { overflow: visible; }         /* on n'imbrique plus de scroll */
+.modal-head {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--navy2);                /* header reste lisible pendant le scroll */
 }
 
 /* Result zone — 35% (slot prompt + actions) */
