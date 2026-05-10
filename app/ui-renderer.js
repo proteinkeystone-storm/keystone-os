@@ -17,6 +17,11 @@ import { lock, unlock, isLocked }              from './lockscreen.js';
 import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
+import {
+    KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS,
+    getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
+    getCategoryLabel, getCategoryPath,
+} from './kstore-mock-catalog.js';
 
 // ── Icônes SVG ────────────────────────────────────────────────
 const ICONS = {
@@ -383,7 +388,7 @@ export function renderDashboard() {
     _checkKStorePulse();
 
     // Si le catalogue vient de charger et que le panneau est ouvert, rafraîchir la liste
-    if (document.getElementById('ks-panel')?.classList.contains('open')) {
+    if (document.getElementById('ks-fullscreen')?.classList.contains('open')) {
         _renderKStoreItems();
     }
 
@@ -505,35 +510,30 @@ const KS_PLANS = [
 const PLAN_QUOTAS  = { DEMO: 1, STARTER: 3, PRO: 5, MAX: 7 };
 const _PLAN_ORDER  = ['DEMO', 'STARTER', 'PRO', 'MAX'];
 
+// État courant de la vue Key-Store plein écran.
+// _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans', id: string|null }
+let _ksFilter = { kind: 'all', id: null };
+
 function _openKStorePanel(view = 'catalogue') {
     _buildKStorePanel();
-    const panel = document.getElementById('ks-panel');
-    panel?.classList.add('open');
-    document.getElementById('ks-backdrop-panel')?.classList.add('open');
+    const wrap = document.getElementById('ks-fullscreen');
+    wrap?.classList.add('open');
     document.body.style.overflow = 'hidden';
 
     // Marque la visite → supprime le pulse
     localStorage.setItem(LS_CATALOG_CHECK, new Date().toISOString().split('T')[0]);
     document.getElementById('kstore-catalog-btn')?.classList.remove('pulse');
 
-    // Vue cible (catalogue par défaut, "plans" pour les renvois Démo)
-    if (panel && view === 'plans') {
-        panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
-        panel.querySelector('.ks-tab[data-view="plans"]')?.classList.add('active');
-        _ksView = 'plans';
-        const cat = document.getElementById('ks-catalogue-view');
-        const pln = document.getElementById('ks-plans-view');
-        if (cat) cat.hidden = true;
-        if (pln) pln.hidden = false;
-        _renderKStorePlans();
+    if (view === 'plans') {
+        _ksFilter = { kind: 'plans', id: null };
     } else {
-        _renderKStoreItems();
+        _ksFilter = { kind: 'all', id: null };
     }
+    _renderKStoreItems();
 }
 
 function _closeKStorePanel() {
-    document.getElementById('ks-panel')?.classList.remove('open');
-    document.getElementById('ks-backdrop-panel')?.classList.remove('open');
+    document.getElementById('ks-fullscreen')?.classList.remove('open');
     document.body.style.overflow = '';
 }
 
@@ -541,168 +541,150 @@ function _buildKStorePanel() {
     if (_ksPanelReady) return;
     _ksPanelReady = true;
 
-    const bd = document.createElement('div');
-    bd.id = 'ks-backdrop-panel';
-    bd.className = 'ks-backdrop';
-    bd.addEventListener('click', _closeKStorePanel);
-    document.body.appendChild(bd);
+    // ── Sidebar (catégories + plans + utilisateur) ──────────────
+    const userLabel = (() => {
+        try { return localStorage.getItem('ks_user_name') || 'Compte Keystone'; }
+        catch { return 'Compte Keystone'; }
+    })();
+    const userInitial = (userLabel || 'K').trim().charAt(0).toUpperCase();
 
-    const panel = document.createElement('div');
-    panel.id = 'ks-panel';
-    panel.className = 'ks-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Key-Store');
-    panel.innerHTML = `
-        <div class="ks-head">
-            <div>
-                <div class="ks-head-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                         style="width:14px;height:14px;opacity:.8;flex-shrink:0">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                        <line x1="3" y1="6" x2="21" y2="6"/>
-                        <path d="M16 10a4 4 0 0 1-8 0"/>
-                    </svg>
-                    KEY-STORE
-                </div>
-                <div class="ks-head-sub" id="ks-head-sub">Catalogue des outils disponibles</div>
-            </div>
-            <button id="ks-close-btn" class="ks-close" aria-label="Fermer">
+    const sidebarHTML = `
+        <div class="ksfs-sidebar-top">
+            <button class="ksfs-back-btn" id="ksfs-back-btn" aria-label="Retour">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div class="ksfs-search-wrap">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     style="width:14px;height:14px">
+                     class="ksfs-search-icon">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input id="ksfs-search" class="ksfs-search-input" type="search"
+                       placeholder="Rechercher" autocomplete="off">
+            </div>
+        </div>
+
+        <div class="ksfs-nav">
+            <div class="ksfs-nav-title">Catégories</div>
+            <ul class="ksfs-nav-list">
+                ${KSTORE_CATEGORIES.map(c => `
+                    <li class="ksfs-nav-item${c.sub ? ' ksfs-nav-item--has-sub' : ''}"
+                        data-cat="${c.id}">
+                        <button class="ksfs-nav-btn" data-action="cat" data-id="${c.id}">
+                            ${c.sub ? `<svg class="ksfs-nav-chev" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2.2"
+                                style="width:10px;height:10px"><polyline points="6 9 12 15 18 9"/></svg>` : ''}
+                            <span>${c.label}</span>
+                        </button>
+                        ${c.sub ? `
+                        <ul class="ksfs-nav-sub">
+                            ${c.sub.map(s => `
+                                <li>
+                                    <button class="ksfs-nav-btn ksfs-nav-btn--sub"
+                                            data-action="sub" data-id="${s.id}">
+                                        #${s.label}
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+
+            <div class="ksfs-nav-title ksfs-nav-title--mt">Boutique</div>
+            <ul class="ksfs-nav-list">
+                <li class="ksfs-nav-item">
+                    <button class="ksfs-nav-btn" data-action="plans">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                             style="width:12px;height:12px;flex-shrink:0;opacity:.8">
+                            <rect x="2" y="6" width="20" height="14" rx="2"/>
+                            <path d="M2 10h20"/>
+                        </svg>
+                        <span>Plans &amp; Tarifs</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="ksfs-sidebar-user">
+            <div class="ksfs-user-avatar">${userInitial}</div>
+            <div class="ksfs-user-meta">
+                <div class="ksfs-user-name">${userLabel}</div>
+                <div class="ksfs-user-sub">Propriétaire du compte</div>
+            </div>
+        </div>
+    `;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'ks-fullscreen';
+    wrap.className = 'ksfs';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-label', 'Key-Store');
+    wrap.innerHTML = `
+        <aside class="ksfs-sidebar">${sidebarHTML}</aside>
+        <main class="ksfs-main">
+            <button id="ksfs-close-btn" class="ksfs-close" aria-label="Fermer le Key-Store">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     style="width:16px;height:16px">
                     <line x1="18" y1="6" x2="6" y2="18"/>
                     <line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
             </button>
-        </div>
-
-        <div class="ks-tabs">
-            <button class="ks-tab active" data-view="catalogue">Catalogue</button>
-            <button class="ks-tab" data-view="plans">Plans & Tarifs</button>
-        </div>
-
-        <div id="ks-catalogue-view">
-            <div class="ks-search-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     class="ks-search-icon">
-                    <circle cx="11" cy="11" r="8"/>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input id="ks-search-input" class="ks-search-input"
-                       type="search" placeholder="Rechercher un outil…" autocomplete="off">
-            </div>
-
-            <div class="ks-filters">
-                <div class="ks-filter-row">
-                    <span class="ks-filter-label">CATÉGORIE</span>
-                    <div class="ks-cat-select-wrap">
-                        <select id="ks-cat-select" class="ks-cat-select">
-                            <option value="">Toutes les catégories</option>
-                            <option value="IMM">Immobilier</option>
-                            <option value="JUR">Juridique</option>
-                            <option value="ANL">Analyse</option>
-                            <option value="PRD">Productivité</option>
-                            <option value="COM">Communauté</option>
-                            <option value="DIV">Divertissement</option>
-                        </select>
-                        <svg class="ks-cat-chevron" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2.2">
-                            <polyline points="6 9 12 15 18 9"/>
-                        </svg>
-                    </div>
-                </div>
-                <div class="ks-filter-row">
-                    <span class="ks-filter-label">PLAN</span>
-                    <div class="ks-filter-chips" data-filter="plan">
-                        <button class="ks-chip-filter active" data-value="STARTER">STARTER</button>
-                        <button class="ks-chip-filter" data-value="PRO">PRO</button>
-                        <button class="ks-chip-filter" data-value="MAX">MAX</button>
-                        <button class="ks-chip-filter ks-chip-contact" data-value="SUR_MESURE">SUR MESURE</button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="ks-grid" class="ks-grid"></div>
-        </div>
-
-        <div id="ks-plans-view" class="ks-plans-view" hidden></div>
+            <div id="ksfs-content" class="ksfs-content"></div>
+        </main>
     `;
-    document.body.appendChild(panel);
+    document.body.appendChild(wrap);
 
-    panel.querySelector('#ks-close-btn').addEventListener('click', _closeKStorePanel);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') _closeKStorePanel(); });
-
-    // Tabs — Catalogue / Plans
-    panel.querySelectorAll('.ks-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            _ksView = tab.dataset.view;
-            document.getElementById('ks-catalogue-view').hidden = _ksView !== 'catalogue';
-            document.getElementById('ks-plans-view').hidden     = _ksView !== 'plans';
-            const sub = document.getElementById('ks-head-sub');
-            if (sub) sub.textContent = _ksView === 'plans'
-                ? 'Choisissez votre plan'
-                : 'Catalogue des outils disponibles';
-            if (_ksView === 'plans') _renderKStorePlans();
-        });
+    // ── Listeners ──────────────────────────────────────────────
+    wrap.querySelector('#ksfs-close-btn').addEventListener('click', _closeKStorePanel);
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && wrap.classList.contains('open')) _closeKStorePanel();
     });
 
-    panel.querySelector('#ks-cat-select').addEventListener('change', e => {
-        _ksCat = e.target.value;
+    wrap.querySelector('#ksfs-back-btn').addEventListener('click', () => {
+        _ksFilter = { kind: 'all', id: null };
         _renderKStoreItems();
     });
 
-    panel.querySelector('#ks-search-input').addEventListener('input', e => {
+    wrap.querySelector('#ksfs-search').addEventListener('input', e => {
         _ksSearch = e.target.value.toLowerCase().trim();
         clearTimeout(_ksDebounce);
         _ksDebounce = setTimeout(_renderKStoreItems, 180);
     });
 
-    panel.querySelectorAll('.ks-filter-chips').forEach(group => {
-        group.addEventListener('click', e => {
-            const chip = e.target.closest('.ks-chip-filter');
-            if (!chip) return;
-
-            // SUR MESURE → mailto, pas de filtre
-            if (chip.dataset.value === 'SUR_MESURE') {
-                const sub = encodeURIComponent('Keystone OS — Demande Sur Mesure');
-                const body = encodeURIComponent('Bonjour,\n\nJe souhaite en savoir plus sur une offre sur mesure.\n\nNom / Société :\nBesoins :\nNombre d\'utilisateurs :\n\nCordialement,');
-                window.open(`mailto:protein.keystone@gmail.com?subject=${sub}&body=${body}`);
-                return;
-            }
-
-            group.querySelectorAll('.ks-chip-filter').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            if (group.dataset.filter === 'cat')  _ksCat  = chip.dataset.value;
-            if (group.dataset.filter === 'plan') _ksPlan = chip.dataset.value;
-            _renderKStoreItems();
-        });
+    // Sidebar — clics catégorie / sous-catégorie / plans
+    wrap.querySelector('.ksfs-nav').addEventListener('click', e => {
+        const btn = e.target.closest('.ksfs-nav-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id     = btn.dataset.id;
+        if (action === 'cat')   _ksFilter = { kind: 'cat', id };
+        if (action === 'sub')   _ksFilter = { kind: 'sub', id };
+        if (action === 'plans') _ksFilter = { kind: 'plans', id: null };
+        _renderKStoreItems();
     });
 
-    panel.querySelector('#ks-grid').addEventListener('click', e => {
-        // "Déployer" → activation avec animation halo
-        const obtBtn = e.target.closest('.ks-item-btn[data-action="obtenir"]');
-        if (obtBtn && !obtBtn.disabled) { _activateKStoreItem(obtBtn.dataset.id, obtBtn); return; }
-
-        // "Réactiver" → unhide immédiat (quota reste occupé, pas d'animation lourde)
-        const reactBtn = e.target.closest('.ks-item-btn[data-action="reactiver"]');
-        if (reactBtn) {
-            restorePad(reactBtn.dataset.id);
-            renderDashboard();
-            _renderKStoreItems();
+    // Délégation : clic sur une card → page détail (Phase B)
+    wrap.querySelector('#ksfs-content').addEventListener('click', e => {
+        // Bouton acheter / déployer (Notice VEFA seulement)
+        const buyBtn = e.target.closest('.ksfs-buy-btn[data-action="obtenir"]');
+        if (buyBtn && !buyBtn.disabled) {
+            e.stopPropagation();
+            _activateKStoreItem(buyBtn.dataset.id, buyBtn);
             return;
         }
+        // Bouton "Bientôt" sur une mock
+        const soonBtn = e.target.closest('.ksfs-buy-btn[data-action="soon"]');
+        if (soonBtn) { e.stopPropagation(); return; }
 
-        // "Upgrade" → onglet Plans & Tarifs
-        const upBtn = e.target.closest('.ks-item-btn[data-action="upgrade"]');
-        if (upBtn) {
-            panel.querySelectorAll('.ks-tab').forEach(t => t.classList.remove('active'));
-            panel.querySelector('.ks-tab[data-view="plans"]')?.classList.add('active');
-            _ksView = 'plans';
-            document.getElementById('ks-catalogue-view').hidden = true;
-            document.getElementById('ks-plans-view').hidden     = false;
-            _renderKStorePlans();
-            return;
+        // Card / featured → ouvrir page détail (Phase B placeholder)
+        const card = e.target.closest('[data-app-id]');
+        if (card) {
+            const appId = card.dataset.appId;
+            // Phase B : ouverture page détail ; pour l'instant rien (vue catalogue uniquement).
+            // Décommenter quand la phase B sera implémentée :
+            // _openKStoreAppDetail(appId);
         }
     });
 }
@@ -744,131 +726,141 @@ function _activateKStoreItem(id, btn) {
     }, 660);
 }
 
+// ── Rendu principal de la vue Key-Store plein écran ────────────
+// Dispatche selon _ksFilter : 'all' | 'cat' | 'sub' | 'plans'
 function _renderKStoreItems() {
-    const grid = document.getElementById('ks-grid');
-    if (!grid) return;
+    const content = document.getElementById('ksfs-content');
+    if (!content) return;
 
-    const ownedIds = getOwnedIds();
-    const all      = [...TOOLS, ...ARTEFACTS];
-
-    const filtered = all.filter(item => {
-        const cat = getCatalogEntry(item.id);
-
-        // Masquer les outils non publiés (prototypes, en cours de validation)
-        if (cat && cat.published === false) return false;
-
-        if (_ksSearch) {
-            const hay = [item.name, item.desc || '', cat?.subtitle || '',
-                         cat?.longDesc || '', ...(cat?.tags || [])].join(' ').toLowerCase();
-            if (!hay.includes(_ksSearch)) return false;
-        }
-
-        if (_ksCat) {
-            const itemCat = cat?.category || item.id.split('-')[1];
-            if (itemCat !== _ksCat) return false;
-        }
-
-        if (_ksPlan) {
-            if (!cat || cat.plan !== _ksPlan) return false;
-        }
-
-        return true;
-    });
-
-    const sub = document.getElementById('ks-head-sub');
-    if (sub) {
-        sub.textContent = `${filtered.length} outil${filtered.length !== 1 ? 's' : ''} trouvé${filtered.length !== 1 ? 's' : ''}`;
+    // Sync sidebar — surligne l'entrée active
+    document.querySelectorAll('.ksfs-nav-btn').forEach(b => b.classList.remove('active'));
+    if (_ksFilter.kind === 'cat' || _ksFilter.kind === 'sub') {
+        document.querySelector(
+            `.ksfs-nav-btn[data-action="${_ksFilter.kind}"][data-id="${_ksFilter.id}"]`
+        )?.classList.add('active');
+    } else if (_ksFilter.kind === 'plans') {
+        document.querySelector('.ksfs-nav-btn[data-action="plans"]')?.classList.add('active');
     }
 
-    if (filtered.length === 0) {
-        grid.innerHTML = `<div class="ks-empty">Aucun outil ne correspond à votre recherche.</div>`;
+    // Vue Plans & Tarifs (réutilise le rendu existant)
+    if (_ksFilter.kind === 'plans') {
+        content.innerHTML = `
+            <div class="ksfs-plans-head">
+                <h1 class="ksfs-plans-title">Plans &amp; Tarifs</h1>
+                <p class="ksfs-plans-sub">Choisissez le plan qui correspond à vos besoins.</p>
+            </div>
+            <div id="ks-plans-view" class="ks-plans-view"></div>
+        `;
+        _renderKStorePlans();
         return;
     }
 
-    // — ks_user_selection : source de vérité de la sélection onboarding ———
-    const _ksUserSel = (() => {
-        try { return JSON.parse(localStorage.getItem('ks_user_selection')); } catch { return null; }
+    // Filtre actif sur les apps mockées
+    const apps = (() => {
+        if (_ksFilter.kind === 'cat') return getMockAppsByCategory(_ksFilter.id);
+        if (_ksFilter.kind === 'sub') return getMockAppsBySubcategory(_ksFilter.id);
+        return KSTORE_MOCK_APPS;
     })();
 
-    // — Calcul du quota utilisateur ——————————————————————————————
-    // Normalisation de la casse — la landing stocke 'Demo'/'Pro'/'Start'/'Max'
-    // mais le catalogue et l'ordre interne sont en MAJUSCULES.
-    const userPlan    = (localStorage.getItem('ks_plan') || '').toUpperCase();
-    const userPlanIdx = userPlan ? _PLAN_ORDER.indexOf(userPlan) : 3; // pas de plan → MAX (démo libre)
-    const quota       = (ownedIds !== null && userPlan) ? (PLAN_QUOTAS[userPlan] ?? Infinity) : Infinity;
-    // Quota : outil masqué = toujours actif, outil désactivé = libère une place
-    const activeCount = ownedIds === null
-        ? (_ksUserSel !== null
-            ? _ksUserSel.filter(id => !isPadDeactivated(id)).length
-            : TOOLS.filter(t => !isPadDeactivated(t.id)).length)
-        : ownedIds.filter(i => !isPadDeactivated(i)).length;
+    const search = _ksSearch.trim();
+    const filtered = search
+        ? apps.filter(a => (`${a.title} ${a.shortDesc || ''} ${a.punchline || ''}`)
+            .toLowerCase().includes(search))
+        : apps;
 
-    grid.innerHTML = filtered.map(item => {
-        const cat          = getCatalogEntry(item.id);
-        const isArt        = item.id.startsWith('A-');
-        const catLbl       = _KS_CAT_LABELS[cat?.category || item.id.split('-')[1]] || '';
-        const toolPlanIdx  = _PLAN_ORDER.indexOf((cat?.plan || 'STARTER').toUpperCase());
-
-        // — État du bouton —————————————————————————————————————
-        // Logique tristate : Actif / Masqué / Déployer
-        const _inSel        = _ksUserSel === null || _ksUserSel.includes(item.id);
-        const _notDeact     = !isPadDeactivated(item.id);
-        const _notHidden    = !isPadHidden(item.id);
-
-        let btnHTML;
-        if (ownedIds === null) {
-            // Mode démo : tous les outils sont possédés
-            if (_inSel && _notDeact && _notHidden) {
-                btnHTML = `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Actif</span>`;
-            } else if (_inSel && _notDeact && !_notHidden) {
-                // Masqué : occupe une place quota, réactivable
-                btnHTML = `<button class="ks-item-btn ks-item-btn--hidden" data-action="reactiver" data-id="${item.id}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;flex-shrink:0"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    Réactiver</button>`;
-            } else {
-                // Non sélectionné ou désactivé → disponible dans le KEY-STORE
-                btnHTML = `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Déployer</button>`;
-            }
-        } else {
-            const isOwned = ownedIds.includes(item.id);
-            if (isOwned && _notDeact && _notHidden) {
-                btnHTML = `<span class="ks-item-btn ks-item-btn--deployed">✓&nbsp;Actif</span>`;
-            } else if (isOwned && _notDeact && !_notHidden) {
-                btnHTML = `<button class="ks-item-btn ks-item-btn--hidden" data-action="reactiver" data-id="${item.id}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;flex-shrink:0"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    Réactiver</button>`;
-            } else if (!isOwned && toolPlanIdx > userPlanIdx) {
-                btnHTML = `<button class="ks-item-btn ks-item-btn--locked" data-action="upgrade" data-id="${item.id}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Upgrade</button>`;
-            } else if (!isOwned && activeCount >= quota) {
-                btnHTML = `<button class="ks-item-btn ks-item-btn--quota" disabled>Quota atteint — Plan ${userPlan}</button>`;
-            } else {
-                btnHTML = `<button class="ks-item-btn ks-item-btn--obtenir" data-action="obtenir" data-id="${item.id}">Déployer</button>`;
-            }
-        }
-
-        const isDeployed = ownedIds === null
-            ? (_inSel && _notDeact && _notHidden)
-            : ownedIds.includes(item.id) && _notDeact && _notHidden;
-
-        const pal = getToolPalette(item.id);
-        return `
-        <div class="ks-item${isDeployed ? ' ks-item--deployed' : ''}${cat?.isNew ? ' ks-item--new' : ''}" data-id="${item.id}" data-palette="${pal}">
-            <div class="ks-item-icon">${ICONS[item.icon] || ICONS['zap']}</div>
-            <div class="ks-item-body">
-                <div class="ks-item-meta">
-                    ${item.id} · ${catLbl}${isArt ? ' · Artefact' : ''}
-                    ${cat?.isNew ? '<span class="ks-new-dot">● NEW</span>' : ''}
-                </div>
-                <div class="ks-item-name">${cat?.title || item.name}</div>
-                <div class="ks-item-desc">${cat?.subtitle || item.desc || ''}</div>
-                <div class="ks-item-chips">
-                    ${cat?.plan ? `<span class="ks-chip ks-chip-plan">${cat.plan}</span>` : ''}
-                </div>
+    // ── Vue catégorie / sous-catégorie : grille seule ──
+    if (_ksFilter.kind !== 'all') {
+        const headerLabel = _ksFilter.kind === 'sub'
+            ? getCategoryLabel(_ksFilter.id)
+            : getCategoryLabel(_ksFilter.id);
+        content.innerHTML = `
+            <div class="ksfs-section-head">
+                <h1 class="ksfs-section-title">${headerLabel}</h1>
+                <p class="ksfs-section-sub">${filtered.length} app${filtered.length !== 1 ? 's' : ''}</p>
             </div>
-            <div class="ks-item-action">${btnHTML}</div>
-        </div>`;
-    }).join('');
+            ${filtered.length === 0
+                ? `<div class="ksfs-empty">Aucune app ne correspond à votre recherche.</div>`
+                : `<div class="ksfs-grid">${filtered.map(_renderAppCardSmall).join('')}</div>`}
+        `;
+        return;
+    }
+
+    // ── Vue "all" (catalogue par défaut) : featured rail + sections ──
+    const featured = KSTORE_FEATURED_IDS.map(getMockApp).filter(Boolean);
+
+    // Si on tape une recherche, on affiche juste les résultats globaux
+    if (search) {
+        content.innerHTML = `
+            <div class="ksfs-section-head">
+                <h1 class="ksfs-section-title">Résultats</h1>
+                <p class="ksfs-section-sub">${filtered.length} app${filtered.length !== 1 ? 's' : ''} pour "${_ksSearch}"</p>
+            </div>
+            ${filtered.length === 0
+                ? `<div class="ksfs-empty">Aucune app ne correspond à votre recherche.</div>`
+                : `<div class="ksfs-grid">${filtered.map(_renderAppCardSmall).join('')}</div>`}
+        `;
+        return;
+    }
+
+    // Sections "Pour gagner du temps" — une par catégorie ayant des apps
+    const sections = KSTORE_CATEGORIES.map(c => {
+        const inCat = getMockAppsByCategory(c.id);
+        return inCat.length > 0 ? { cat: c, apps: inCat } : null;
+    }).filter(Boolean);
+
+    content.innerHTML = `
+        <div class="ksfs-featured">
+            <h2 class="ksfs-featured-title">À la une pour vous :</h2>
+            <div class="ksfs-featured-rail">
+                ${featured.map(_renderFeaturedCard).join('')}
+            </div>
+        </div>
+
+        ${sections.map(({ cat, apps }) => `
+            <section class="ksfs-section">
+                <h2 class="ksfs-section-h">Pour gagner du temps</h2>
+                <div class="ksfs-grid">
+                    ${apps.map(_renderAppCardSmall).join('')}
+                </div>
+            </section>
+        `).join('')}
+    `;
+}
+
+// ── Helpers de rendu de cards ─────────────────────────────────
+function _renderFeaturedCard(app) {
+    return `
+        <article class="ksfs-feat-card" data-app-id="${app.id}">
+            <div class="ksfs-feat-cover"></div>
+            <div class="ksfs-feat-cat">${getCategoryLabel(app.category)}</div>
+            <div class="ksfs-feat-name">${app.title}</div>
+            <div class="ksfs-feat-punch">${app.punchline || ''}</div>
+        </article>
+    `;
+}
+
+function _renderAppCardSmall(app) {
+    const ownedIds = getOwnedIds();
+    const isOwned  = (ownedIds === null) || ownedIds.includes(app.id);
+    const priceLbl = app.real
+        ? (isOwned ? '✓ Actif' : `${(app.price ?? 0).toFixed(2).replace('.', ',')} €`)
+        : '00,00 €';
+    const action   = app.real && !isOwned ? 'obtenir' : 'soon';
+
+    return `
+        <article class="ksfs-app-card" data-app-id="${app.id}">
+            <div class="ksfs-app-icon"></div>
+            <div class="ksfs-app-body">
+                <div class="ksfs-app-name">${app.title}</div>
+                <div class="ksfs-app-desc">${app.shortDesc || ''}</div>
+                <button class="ksfs-buy-btn${isOwned && app.real ? ' ksfs-buy-btn--owned' : ''}"
+                        data-action="${action}" data-id="${app.id}"
+                        ${!app.real ? 'aria-disabled="true"' : ''}>
+                    ${priceLbl}
+                </button>
+            </div>
+        </article>
+    `;
 }
 
 function _renderKStorePlans() {
