@@ -7,7 +7,7 @@
 
 import { PADS_DATA, CATALOG_DATA } from './pads-data.js';
 
-const CF_API = 'https://keystone-os-api.keystone-os.workers.dev';
+export const CF_API = 'https://keystone-os-api.keystone-os.workers.dev';
 
 let _padsCache    = null;
 let _catalogCache = null;
@@ -27,6 +27,9 @@ export async function loadPads() {
     //    (les prompts moteurs alternatifs ne sont pas dans pads-data.js).
     _enrichFromD1().catch(() => {});
 
+    // 3. Catalogue Key-Store édité depuis l'admin (longDesc, screenshots…)
+    _refreshCatalogFromD1().catch(() => {});
+
     return _padsCache;
 }
 
@@ -41,6 +44,40 @@ async function _enrichFromD1() {
         // écraser les métadonnées d'UI embarquées (plan, price, icon…).
         if (d1Pad.engines) _padsCache[d1Pad.id] = { ..._padsCache[d1Pad.id], engines: d1Pad.engines };
     });
+}
+
+// ── Récupère le catalogue Key-Store depuis D1 (route publique) ──
+// Merge non-bloquant : si l'API échoue, on garde la version embarquée.
+async function _refreshCatalogFromD1() {
+    let res;
+    try { res = await fetch(`${CF_API}/api/catalog?tenantId=default`); }
+    catch { return; }
+    if (!res.ok) return;
+
+    let body;
+    try { body = await res.json(); }
+    catch { return; }
+
+    const remote = body?.catalog;
+    if (!remote || !Array.isArray(remote.tools)) return;
+
+    // Merge tool-par-tool : D1 prioritaire mais embarqué = fallback.
+    const byId = new Map();
+    (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
+    remote.tools.forEach(t => {
+        if (!t?.id) return;
+        byId.set(t.id, { ...(byId.get(t.id) || {}), ...t });
+    });
+
+    _catalogCache = {
+        ..._catalogCache,
+        ...remote,
+        tools: [...byId.values()],
+        updatedAt: remote.updatedAt || _catalogCache?.updatedAt,
+    };
+
+    // Notifie l'UI (Key-Store ouvert) qu'il faut éventuellement re-rendre.
+    window.dispatchEvent(new CustomEvent('ks-catalog-loaded', { detail: _catalogCache }));
 }
 
 // ── Liste dynamique des outils ──────────────────────────────────

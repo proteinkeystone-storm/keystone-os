@@ -3,7 +3,7 @@
    Modules : Dashboard · Settings · Modal renderTool · S-CORE-LOGIC
    ═══════════════════════════════════════════════════════════════ */
 
-import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog } from './pads-loader.js';
+import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
 import {
@@ -503,6 +503,14 @@ const KS_PLANS = [
 // _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
 let _ksFilter     = { kind: 'all', id: null };
 let _ksPrevFilter = null;   // utilisé pour le bouton retour depuis la vue détail
+
+// Re-render le Key-Store s'il est ouvert quand le catalogue D1 arrive
+// (édité depuis l'admin → pads-loader dispatche `ks-catalog-loaded`).
+window.addEventListener('ks-catalog-loaded', () => {
+    if (document.getElementById('ks-fullscreen')?.classList.contains('open')) {
+        _renderKStoreItems();
+    }
+});
 
 // ═══════════════════════════════════════════════════════════════
 // Source de données unifiée — D1 catalog + mock catalog
@@ -1127,7 +1135,7 @@ function _renderKStoreAppDetail(appId) {
                         for (let i = 0; i < Math.max(3, shots.length); i++) {
                             slots.push(shots[i]
                                 ? `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
-                                        style="background-image:url('/api/screenshot/${encodeURIComponent(shots[i])}')">
+                                        style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(shots[i])}')">
                                   </div>`
                                 : `<div class="ksfs-detail-shot"></div>`);
                         }

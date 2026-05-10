@@ -30,7 +30,8 @@ import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
 import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
 import { handleListPads, handleSavePad, handleDeletePad,
-         handleGetCatalog, handleSaveCatalog }                         from './routes/pads.js';
+         handleGetCatalog, handleSaveCatalog,
+         handleGetCatalogPublic }                                      from './routes/pads.js';
 import { handleUploadScreenshot, handleGetScreenshot,
          handleDeleteScreenshot, handleListScreenshotsByApp }          from './routes/screenshots.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
@@ -91,6 +92,7 @@ export default {
 
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);
+      if (path === '/api/catalog'            && method === 'GET')    return handleGetCatalogPublic(request, env);
       if (path === '/api/admin/pad'          && method === 'POST')   return handleSavePad(request, env);
       if (path === '/api/admin/pad'          && method === 'DELETE') return handleDeletePad(request, env);
       if (path === '/api/admin/catalog'      && method === 'GET')    return handleGetCatalog(request, env);

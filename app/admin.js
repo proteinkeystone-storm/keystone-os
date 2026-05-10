@@ -1539,7 +1539,7 @@ function openKStoreFicheEditor(idx, panel) {
   const shotSlot = (i) => {
     const sid = shotIds[i];
     const preview = sid
-      ? `<img src="/api/screenshot/${esc(sid)}" alt=""
+      ? `<img src="${API_BASE}/api/screenshot/${esc(sid)}" alt=""
               style="width:100%;height:100%;object-fit:cover;border-radius:8px;
                      pointer-events:none">
          <button type="button" class="ks-shot-delete" data-shot="${i}"

@@ -95,6 +95,38 @@ export async function handleGetCatalog(request, env) {
   }
 }
 
+// ── GET /api/catalog ──────────────────────────────────────────
+// Public — sert le catalogue côté frontend (Key-Store). Pas d'auth.
+// Cache court (60 s) car édité depuis l'admin.
+export async function handleGetCatalogPublic(request, env) {
+  const origin   = getAllowedOrigin(env, request);
+  const url      = new URL(request.url);
+  const tenantId = url.searchParams.get('tenantId') || 'default';
+
+  const row = await env.DB
+    .prepare('SELECT data FROM catalog WHERE tenant_id = ?')
+    .bind(tenantId)
+    .first();
+
+  if (!row) return json({ catalog: null }, 200, origin);
+
+  try {
+    const data = JSON.parse(row.data);
+    return new Response(JSON.stringify({ catalog: data }), {
+      status: 200,
+      headers: {
+        'Content-Type'  : 'application/json',
+        'Cache-Control' : 'public, max-age=60',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  } catch {
+    return err('Catalogue corrompu', 500, origin);
+  }
+}
+
 // ── POST /api/admin/catalog ────────────────────────────────────
 export async function handleSaveCatalog(request, env) {
   const origin = getAllowedOrigin(env, request);
