@@ -664,17 +664,35 @@ function _buildKStorePanel() {
         }
 
         // Notation (étoiles cliquables sur fiche détail)
+        // Update DOM en place — pas de re-render pour éviter le décalage visuel.
         const star = e.target.closest('.ksfs-detail-star');
         if (star) {
             e.stopPropagation();
-            const val = parseInt(star.dataset.rate, 10);
-            const id  = star.dataset.id;
+            const val  = parseInt(star.dataset.rate, 10);
+            const id   = star.dataset.id;
             const prev = parseInt(localStorage.getItem('ks_rating_' + id) || '0', 10);
-            // Re-clic sur même valeur → retire la note
-            if (prev === val) localStorage.removeItem('ks_rating_' + id);
-            else              localStorage.setItem('ks_rating_' + id, String(val));
+            const remove = (prev === val); // re-clic sur la même valeur → retire
+            if (remove) localStorage.removeItem('ks_rating_' + id);
+            else       localStorage.setItem('ks_rating_' + id, String(val));
             scheduleAutoSave?.();
-            _renderKStoreItems();
+
+            // Update visuel local — étoiles, valeur, hint
+            const newRaw  = remove ? 0 : val;
+            const display = newRaw > 0 ? newRaw : 4.7;
+            const rounded = Math.round(display);
+            document.querySelectorAll('.ksfs-detail-star').forEach(s => {
+                s.classList.toggle('on', parseInt(s.dataset.rate, 10) <= rounded);
+            });
+            const valEl = document.querySelector('.ksfs-detail-rating-val');
+            if (valEl) {
+                valEl.firstChild.textContent = display.toFixed(1).replace('.', ',');
+            }
+            const hintEl = document.querySelector('.ksfs-detail-rating-hint');
+            if (hintEl) {
+                hintEl.textContent = newRaw > 0
+                    ? 'Votre note · cliquez pour modifier'
+                    : 'Cliquez pour noter cette app';
+            }
             return;
         }
 
