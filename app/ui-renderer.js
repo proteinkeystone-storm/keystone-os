@@ -246,7 +246,10 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[t.icon]}</div>
+                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${label}</div>
+                <div class="pad-desc">${t.desc}</div>
+                ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
             </div>`;
         }).join('');
 
@@ -263,7 +266,9 @@ export function renderDashboard() {
                     </svg>
                 </div>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
+                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${a.name}</div>
+                <div class="pad-desc">Artefact</div>
             </div>`;
         }).join('');
 
@@ -276,19 +281,7 @@ export function renderDashboard() {
         _renderRestoreBtn(padsEl, ownedTools);
         initGridEngine(
             padsEl,
-            (padId) => {
-                // Ouvre le Key-Store et scroll vers l'outil concerné
-                _openKStorePanel('catalogue');
-                setTimeout(() => {
-                    const el = document.querySelector(`#ks-grid .ks-item[data-id="${padId}"]`);
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        el.style.outline = '2px solid var(--gold)';
-                        el.style.borderRadius = '12px';
-                        setTimeout(() => { el.style.outline = ''; el.style.borderRadius = ''; }, 1400);
-                    }
-                }, 280);
-            },
+            openTool,
             () => _renderRestoreBtn(padsEl, ownedTools),
             () => renderDashboard()
         );
@@ -313,10 +306,9 @@ export function renderDashboard() {
             return `
             <div class="suggest-card" data-id="${item.id}" data-palette="${pal}"
                  role="button" tabindex="0" aria-label="Découvrir ${label}">
-                ${isNew ? '<span class="suggest-card-new">Nouveau</span>' : ''}
                 <div class="suggest-card-icon">${icon}</div>
                 <div class="suggest-card-name">${label}</div>
-                <div class="suggest-card-arrow">↗</div>
+                ${isNew ? '<span class="suggest-card-new">NEW</span>' : ''}
             </div>`;
         }).join('');
 

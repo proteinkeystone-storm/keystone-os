@@ -674,8 +674,8 @@ html.light-mode #ks-logo-light { display: block; }
 .pads-section { margin-bottom: 32px; }
 .pads-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 13px;
 }
 
 /* ── Palette par PLAN (data-palette) ──────────────────────────
@@ -704,10 +704,8 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
 .pad-card {
   background: var(--navy2);
   border: 1px solid var(--bd);
-  border-radius: var(--r);
-  padding: 10px 14px;
-  min-height: 52px;
-  display: flex; align-items: center; gap: 10px;
+  border-radius: var(--r2);
+  padding: 24px;
   cursor: pointer; position: relative; overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
@@ -716,7 +714,7 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
   transition:
     transform .2s ease,
     box-shadow .2s ease,
@@ -745,20 +743,19 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
 /* Badge gold en haut-droit · Affordance "grab" claire et permanente */
 .pad-drag-handle {
   position: absolute;
-  top: 50%; right: 8px;
-  transform: translateY(-50%);
-  width: 22px; height: 22px;
+  top: 8px; right: 8px;
+  width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
   cursor: grab;
-  color: rgba(99,102,241,.5);
-  background: transparent;
-  border: none;
-  border-radius: 5px;
-  opacity: 0;
+  color: rgba(99,102,241,.55);
+  background: rgba(99,102,241,.08);
+  border: 1px solid rgba(99,102,241,.22);
+  border-radius: 6px;
+  opacity: .65;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  transition: opacity .18s, color .18s, background .18s, transform .12s;
+  transition: opacity .18s, color .18s, background .18s, border-color .18s, transform .12s;
   z-index: 3;
 }
 .pad-card:hover .pad-drag-handle { opacity: 1; }
@@ -964,9 +961,9 @@ body:has(.ks-panel.open) .pad-edit-bar { display: none !important; }
 .pad-card:nth-child(7){animation-delay:360ms}
 .pad-card:nth-child(8){animation-delay:410ms}
 
-/* Shell ID — NOMEN-K (masqué en vue compacte) */
+/* Shell ID — NOMEN-K, coin supérieur droit, style fantôme */
 .pad-sku {
-  display: none;
+  position: absolute; top: 14px; right: 14px;
   font-size: 9px; font-weight: 700;
   color: rgba(99,102,241,.3);
   letter-spacing: .06em; font-family: 'SF Mono', 'Consolas', monospace;
@@ -978,32 +975,38 @@ body:has(.ks-panel.open) .pad-edit-bar { display: none !important; }
 /* ── Icône : container coloré pastel (style Tailwind UI) ─────── */
 .pad-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; flex-shrink: 0;
+  width: 44px; height: 44px;
   background: var(--tool-bg, rgba(99,102,241,.1));
   border: 1px solid var(--tool-bd, var(--bd));
-  border-radius: 8px;
+  border-radius: 11px;
   color: var(--tool-c, var(--gold));
+  margin-bottom: 18px;
   transition: transform .2s ease;
 }
 .pad-icon svg {
-  width: 16px; height: 16px; display: block;
+  width: 22px; height: 22px; display: block;
 }
 
 /* Hiérarchie texte : titre fort, description muted ── */
 .pad-name {
-  font-size: 13px; font-weight: 600; color: var(--text);
-  line-height: 1.3; letter-spacing: -.005em;
-  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 14.5px; font-weight: 700; color: var(--text);
+  line-height: 1.3; margin-bottom: 6px; letter-spacing: -.005em;
 }
 .pad-desc {
-  display: none;
+  font-size: 12.5px; color: var(--tx2);
+  line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Badges : masqués sur les cartes possédées (redondant) ─── */
 .pad-badge { display: none; }
 .pad-card--locked .pad-badge,
 .pad-card--artefact .pad-badge {
-  display: none;
+  display: inline-flex; align-items: center;
+  position: absolute; bottom: 14px; left: 24px;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
 }
 .badge-available { background: rgba(34,197,94,.1); color: #22c55e; border: 1px solid rgba(34,197,94,.25); }
 .badge-locked    { background: transparent; color: var(--tx3); border: 1px solid var(--bd); letter-spacing:.08em; }
@@ -1011,12 +1014,23 @@ body:has(.ks-panel.open) .pad-edit-bar { display: none !important; }
 .badge-artefact  { background: rgba(120,100,220,.1); color: #a89de8; border: 1px solid rgba(120,100,220,.2); }
 
 /* ── Prix catalogue sur cartes verrouillées (Sprint 4) ─────────── */
-.pad-price-tag { display: none; }
-.pad-price-unit { display: none; }
+.pad-price-tag {
+  position: absolute; bottom: 36px; right: 14px;
+  font-size: 9px; font-weight: 700;
+  color: rgba(99,102,241,.8);
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+.pad-price-unit { font-weight: 500; opacity: .75; }
 
 /* ── Badge À vie sur les cartes possédées définitivement ────────── */
 .pad-lifetime-badge {
-  display: none;
+  position: absolute; bottom: 18px; left: 24px;
+  font-size: 7.5px; font-weight: 900; letter-spacing: .12em;
+  color: var(--tool-c, var(--gold)); background: var(--tool-bg, rgba(99,102,241,.12));
+  border: 1px solid var(--tool-bd, rgba(99,102,241,.3));
+  border-radius: 5px; padding: 2px 6px;
+  pointer-events: none;
 }
 .pad-card--lifetime { border-color: rgba(99,102,241,.22); }
 .pad-card--lifetime::before { opacity: .6; }
@@ -1071,7 +1085,14 @@ html.light-mode .ks-frigo-text  { color: rgba(140,100,30,.9); }
 .pad-lock-icon svg { display: block; }
 
 /* Enlève la flèche ↗ sur les cartes verrouillées */
-.pad-card--locked .pad-arrow { display: none; }
+.pad-card--locked .pad-arrow {
+  position: absolute; bottom: 18px; right: 20px;
+  font-size: 16px; color: var(--tx3);
+  font-weight: 300; line-height: 1;
+  transition: color .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+.pad-card:hover .pad-arrow { color: var(--tool-c, var(--gold)); transform: translate(2px,-2px); }
 
 /* Artefacts achetés dans la grille — sans draggable */
 .pad-card--artefact { cursor: pointer; }
@@ -1299,7 +1320,14 @@ html.light-mode .pad-card--locked::after {
   background: linear-gradient(135deg, rgba(99,102,241,.06) 0%, transparent 60%);
 }
 
-.pad-arrow { display: none; }
+.pad-arrow {
+  position: absolute; bottom: 18px; right: 20px;
+  font-size: 16px; color: var(--tx3);
+  font-weight: 300; line-height: 1;
+  transition: color .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+.pad-card:hover .pad-arrow { color: var(--tool-c, var(--gold)); transform: translate(2px,-2px); }
 
 /* ══ SUGGEST SECTION (ex Artefacts — Key-Store suggestions) ═══════ */
 .suggest-section { margin-bottom: 48px; }
@@ -1307,8 +1335,8 @@ html.light-mode .pad-card--locked::after {
 /* Section suggest — grille auto-fill, s'adapte au nombre d'outils */
 #arts-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 8px;
   overflow-x: visible;
   padding-bottom: 0;
   scroll-snap-type: none;
@@ -1339,56 +1367,50 @@ html.light-mode .suggest-card[data-palette="indigo"]  { --tool-c:#4f46e5; --tool
 .suggest-card {
   background: var(--navy2);
   border: 1px solid var(--bd);
-  border-radius: var(--r2);
-  padding: 18px 16px 16px;
-  display: flex; flex-direction: column; align-items: flex-start;
-  gap: 10px;
+  border-radius: var(--r);
+  padding: 9px 12px;
+  min-height: 46px;
+  display: flex; flex-direction: row; align-items: center; gap: 9px;
   position: relative;
   cursor: pointer;
   transition: border-color .2s, transform .2s, background .2s;
   opacity: 0;
   animation: rise .45s cubic-bezier(.16,1,.3,1) forwards;
+  overflow: hidden;
 }
 .suggest-card:hover {
   border-color: var(--tool-bd, rgba(99,102,241,.3));
   background: var(--navy3);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .suggest-card-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px;
+  width: 28px; height: 28px; flex-shrink: 0;
   background: var(--tool-bg, rgba(99,102,241,.1));
   border: 1px solid var(--tool-bd, var(--bd));
-  border-radius: 10px;
+  border-radius: 7px;
   color: var(--tool-c, var(--gold));
-  opacity: 1;
   transition: transform .2s ease;
 }
-.suggest-card:hover .suggest-card-icon { transform: scale(1.04); }
-.suggest-card-icon svg { width: 18px; height: 18px; display: block; }
+.suggest-card:hover .suggest-card-icon { transform: scale(1.06); }
+.suggest-card-icon svg { width: 14px; height: 14px; display: block; }
 
 .suggest-card-name {
-  font-size: 13px; font-weight: 700; color: var(--text);
+  font-size: 12px; font-weight: 600; color: var(--text);
   line-height: 1.3; letter-spacing: -.005em;
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.suggest-card-arrow {
-  position: absolute; top: 16px; right: 16px;
-  font-size: 14px; color: var(--tx3); font-weight: 300;
-  transition: color .2s ease, transform .2s ease;
-  pointer-events: none;
-}
-.suggest-card:hover .suggest-card-arrow { color: var(--tool-c, var(--gold)); transform: translate(2px,-2px); }
+.suggest-card-arrow { display: none; }
 
 .suggest-card-new {
-  position: absolute; top: 10px; right: 32px;
-  font-size: 8px; font-weight: 800; letter-spacing: .08em;
-  text-transform: uppercase;
+  font-size: 7px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; flex-shrink: 0;
   color: var(--tool-c, var(--gold));
   background: var(--tool-bg, var(--gold3));
   border: 1px solid var(--tool-bd, rgba(99,102,241,.25));
-  border-radius: 4px; padding: 2px 6px;
+  border-radius: 4px; padding: 1px 5px;
 }
 
 html.light-mode .suggest-card {
@@ -2736,7 +2758,7 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 }
 
 /* ══ RESPONSIVE ══════════════════════════════════════════════════ */
-@media (max-width: 600px) {
+@media (max-width: 960px) {
   .pads-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -2796,7 +2818,8 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
      iPhone. Le projet n'utilise pas de rem, on cible explicitement
      chaque sélecteur clé.
      ═════════════════════════════════════════════════════════════ */
-  .pad-name        { font-size: 12px !important; }
+  .pad-name        { font-size: 15px !important; }
+  .pad-desc        { font-size: 12.5px !important; line-height: 1.5; }
   .pad-badge       { font-size: 10px; }
 
   .sec-hd-title    { font-size: 13px; }
