@@ -239,8 +239,85 @@ export const docEngine = {
       if (!win) {
         throw new Error("DocEngine: la fenêtre n'a pas pu s'ouvrir (popup bloquée ?)");
       }
+
+      // Toolbar Keystone : barre d'actions sticky en haut de la preview.
+      // - position: fixed → ne perturbe pas la pagination Paged.js
+      // - @media print { display: none } → masquée dans le PDF généré
+      // - z-index très élevé pour passer au-dessus du contenu Paged.js
+      const TOOLBAR_HTML = `
+<style id="ks-toolbar-style">
+  .ks-toolbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 56px;
+    background: #07102a;
+    border-bottom: 1px solid rgba(184,148,90,.25);
+    box-shadow: 0 2px 12px rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; gap: 12px;
+    z-index: 999999;
+    font-family: 'Source Sans 3', 'Helvetica Neue', sans-serif;
+  }
+  .ks-toolbar-title {
+    color: #D4AF7A; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ks-toolbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .ks-btn {
+    background: transparent; color: #fff;
+    border: 1px solid rgba(255,255,255,.14);
+    padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .15s;
+    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ks-btn:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.28); }
+  .ks-btn-primary {
+    background: #B8945A; color: #07102a; border-color: #B8945A;
+  }
+  .ks-btn-primary:hover { background: #D4AF7A; border-color: #D4AF7A; }
+  .ks-btn-icon { font-size: 14px; line-height: 1; }
+  /* Décale le contenu de la page vers le bas pour ne pas être masqué */
+  body { padding-top: 56px !important; }
+  /* À l'impression : toolbar invisible ET on retire le décalage */
+  @media print {
+    .ks-toolbar { display: none !important; }
+    body { padding-top: 0 !important; }
+  }
+</style>
+<div class="ks-toolbar" role="toolbar" aria-label="Actions document">
+  <div class="ks-toolbar-title">Notice Descriptive VEFA · Aperçu Keystone</div>
+  <div class="ks-toolbar-actions">
+    <button class="ks-btn" id="ks-btn-print" type="button">
+      <span class="ks-btn-icon">🖨</span> Imprimer
+    </button>
+    <button class="ks-btn ks-btn-primary" id="ks-btn-pdf" type="button">
+      <span class="ks-btn-icon">📥</span> Télécharger en PDF
+    </button>
+    <button class="ks-btn" id="ks-btn-close" type="button" aria-label="Fermer la fenêtre">
+      <span class="ks-btn-icon">✕</span>
+    </button>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const trigger = () => { try { window.focus(); window.print(); } catch(e) {} };
+    document.getElementById('ks-btn-print')?.addEventListener('click', trigger);
+    // "Télécharger PDF" déclenche le même dialog ; l'utilisateur choisit
+    // "Enregistrer comme PDF" comme destination. Pas d'API navigateur
+    // pour pré-sélectionner cette destination, mais on guide via le label.
+    document.getElementById('ks-btn-pdf')?.addEventListener('click', trigger);
+    document.getElementById('ks-btn-close')?.addEventListener('click', () => window.close());
+  });
+</script>`;
+
+      // On injecte la toolbar JUSTE AVANT </body> pour qu'elle soit
+      // dans le DOM final mais en position: fixed (donc hors flux).
+      const htmlWithToolbar = html.replace(/<\/body>/i, TOOLBAR_HTML + '</body>');
+
       win.document.open();
-      win.document.write(html);
+      win.document.write(htmlWithToolbar);
       win.document.close();
 
       // Injection Paged.js dans la fenêtre fille
