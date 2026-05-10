@@ -1,3 +1,6 @@
+// Sprint 1.1 — Data Fabric (Layer 1). Import side-effect : expose
+// window.dataFabric pour les artefacts et le debug console.
+import './lib/data-fabric.js';
 import { loadVault }                            from './vault.js';
 import { renderDashboard, initSettings, initTools } from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';

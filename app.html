@@ -374,18 +374,18 @@
   </div>
 </div>
 
-<!-- ── Service Worker DÉSACTIVÉ — kill switch d'urgence 2026-04-29 ──
-     Le SW résident causait des problèmes de cache tenace. On le tue
-     et on bloque tout nouvel enregistrement.
-─────────────────────────────────────────────────────────────────── -->
+<!-- ── Service Worker (Sprint 1.1 — offline-graceful) ─────────────
+     Cache des assets + fallback offline pour les requêtes API.
+     Les mutations offline sont gérées par dataFabric (IndexedDB),
+     pas par le SW. Versionné via VERSION dans sw.js — bump pour
+     forcer la purge des anciens caches.
+───────────────────────────────────────────────────────────────── -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(regs => {
-      regs.forEach(r => r.unregister());
-    }).catch(() => {});
-    if ('caches' in window) {
-      caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
-    }
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .catch(err => console.warn('[sw] registration failed', err));
+    });
   }
 </script>
 

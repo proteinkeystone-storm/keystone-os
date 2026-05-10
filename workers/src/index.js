@@ -36,6 +36,7 @@ import { handleUploadScreenshot, handleGetScreenshot,
          handleDeleteScreenshot, handleListScreenshotsByApp }          from './routes/screenshots.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
+import { handleDataDispatch }                                           from './routes/data.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -89,6 +90,12 @@ export default {
       if (path === '/api/device/approve'   && method === 'POST') return handleApprove(request, env);
       if (path === '/api/device/login'     && method === 'POST') return handleLogin(request, env);
       if (path === '/api/device/revoke'    && method === 'POST') return handleDeviceRevoke(request, env);
+
+      // ── Data Fabric (Sprint 1.1 — Layer 1) ───────────────────
+      // CRUD générique pour toute entité whitelistée dans routes/data.js
+      if (path.startsWith('/api/data/')) {
+        return handleDataDispatch(request, env, path, method, origin);
+      }
 
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);
