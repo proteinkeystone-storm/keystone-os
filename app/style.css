@@ -253,7 +253,7 @@ body::after {
 }
 
 /* Couleurs selon data-type — default = identique à .hero-sub */
-.hero-dst[data-type="default"] .hero-dst-text { color: var(--tx2); }
+.hero-dst[data-type="default"] .hero-dst-text { color: var(--text); }
 .hero-dst[data-type="info"]    .hero-dst-text { color: var(--gold); opacity: .92; }
 .hero-dst[data-type="alert"]   .hero-dst-text { color: #e07070; }
 
@@ -638,7 +638,7 @@ html.light-mode .engine-logo-light { display: block !important; }
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 .hero-name { color: var(--gold); }
-.hero-sub  { font-size: 13px; color: var(--tx2); min-height: 1.5em; }
+.hero-sub  { font-size: 13px; color: var(--text); min-height: 1.5em; }
 
 /* Dual logo dark/light */
 #ks-logo-light { display: none; }
