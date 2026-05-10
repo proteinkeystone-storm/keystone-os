@@ -105,13 +105,22 @@ html.light-mode .modal-form  { border-right-color: rgba(17,24,39,.08); backgroun
 html.light-mode .form-input,
 html.light-mode .form-select,
 html.light-mode .form-textarea {
-  background: #fff; outline-color: rgba(17,24,39,.18); color: var(--text);
+  background: #fff;
+  border-color: rgba(17,24,39,.18);
+  color: var(--text);
 }
 html.light-mode .form-input:focus,
 html.light-mode .form-select:focus,
-html.light-mode .form-textarea:focus { outline-color: #4f46e5; outline-width: 2px; }
+html.light-mode .form-textarea:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+}
+html.light-mode .form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath stroke='rgba(17,24,39,0.45)' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+}
+html.light-mode .form-select option { background: #fff; color: #0f172a; }
 html.light-mode .form-hint { color: rgba(107,114,128,1); }
-html.light-mode .form-label { color: var(--text); }
+html.light-mode .form-label { color: var(--text) !important; }
 html.light-mode .form-grid { border-bottom-color: rgba(17,24,39,.1); }
 
 html.light-mode .settings-panel,
@@ -162,7 +171,7 @@ html.light-mode .rating-star.on    { color: var(--gold); }
 html.light-mode .rating-star:hover { color: var(--gold2); }
 html.light-mode .cc-btn.cc-icon    { color: rgba(17,24,39,.45); }
 html.light-mode .form-input::placeholder,
-html.light-mode .form-textarea::placeholder { color: rgba(17,24,39,.25); }
+html.light-mode .form-textarea::placeholder { color: rgba(17,24,39,.3); }
 html.light-mode .sp-row            { border-bottom-color: rgba(17,24,39,.06); }
 html.light-mode .sp-row-key        { color: var(--tx2); }
 html.light-mode .sp-row-val        { color: var(--tx3); }
@@ -2486,7 +2495,7 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
   min-height: 0;
 }
 .modal-form {
-  width: 65%; padding: 28px 32px;
+  width: 65%; padding: 32px 36px;
   overflow-y: auto; flex-shrink: 0;
   min-height: 0;
   border-right: 1px solid var(--bd);
@@ -2507,64 +2516,76 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 .modal-result-zone::-webkit-scrollbar { width: 4px; }
 .modal-result-zone::-webkit-scrollbar-thumb { background: rgba(99,102,241,.12); border-radius: 2px; }
 
-/* Form elements — Tailwind UI dark style */
+/* ══════════════════════════════════════════════════════════════
+   FORMULAIRES — Tailwind UI Dark · Flat · No native appearance
+   ══════════════════════════════════════════════════════════════ */
+
 .form-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 24px 20px;
-  padding-bottom: 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 28px 20px;
+  padding-bottom: 28px;
   border-bottom: 1px solid rgba(255,255,255,.07);
 }
-.form-field { display: flex; flex-direction: column; gap: 6px; }
+.form-field { display: flex; flex-direction: column; gap: 8px; }
 .form-field.full { grid-column: span 2; }
 
-/* Label — text-sm font-medium text-white */
+/* Label — text-sm / font-medium / blanc lisible */
 .form-label {
-  font-size: 13px; font-weight: 500; letter-spacing: 0;
-  text-transform: none; color: var(--text);
+  font-size: 14px !important; font-weight: 500 !important;
+  letter-spacing: normal !important; text-transform: none !important;
+  color: var(--text) !important; line-height: 1.4;
 }
-.form-label .req { color: var(--gold); margin-left: 2px; }
+.form-label .req { color: #818cf8; margin-left: 3px; font-weight: 400; }
 
-/* Inputs / Selects — bg-white/5, outline-white/10, indigo focus ring */
-.form-input, .form-select {
-  padding: 8px 12px;
-  background: rgba(255,255,255,.05);
-  outline: 1px solid rgba(255,255,255,.10);
-  outline-offset: -1px;
-  border: none; border-radius: 6px;
-  font-family: inherit; font-size: 13px; color: var(--text);
-  width: 100%;
-  transition: outline .15s;
-}
-.form-input:focus, .form-select:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
-  box-shadow: none;
-}
-.form-input::placeholder { color: rgba(255,255,255,.25); }
-.form-select { cursor: pointer; }
-.form-select option { background: var(--navy2); }
-
-/* Textarea — même traitement */
+/* ── Reset complet de l'apparence native ──────────────────── */
+.form-input,
+.form-select,
 .form-textarea {
-  padding: 8px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  padding: 9px 13px;
   background: rgba(255,255,255,.05);
-  outline: 1px solid rgba(255,255,255,.10);
-  outline-offset: -1px;
-  border: none; border-radius: 6px;
-  font-family: inherit; font-size: 13px; color: var(--text);
-  resize: vertical; min-height: 90px; width: 100%;
-  transition: outline .15s;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 6px;
+  outline: none;
+
+  font-family: inherit; font-size: 14px; color: var(--text);
+  width: 100%; display: block;
+
+  transition: border-color .15s, box-shadow .15s;
 }
+
+/* Focus — anneau indigo */
+.form-input:focus,
+.form-select:focus,
 .form-textarea:focus {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
-  box-shadow: none;
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.18);
 }
-.form-textarea::placeholder { color: rgba(255,255,255,.25); }
+
+/* Placeholders */
+.form-input::placeholder,
+.form-textarea::placeholder { color: rgba(255,255,255,.22); }
+
+/* Select — flèche custom (chevron SVG blanc) */
+.form-select {
+  cursor: pointer;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath stroke='rgba(255,255,255,0.35)' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 14px 14px;
+}
+.form-select option { background: #1c2234; color: var(--text); }
+
+/* Textarea */
+.form-textarea { resize: vertical; min-height: 96px; }
 
 /* Hint text below fields */
 .form-hint {
   font-size: 12px; color: rgba(156,163,175,1); line-height: 1.5;
-  margin-top: -2px;
 }
 
 /* Generate button — solid indigo-500 (Tailwind UI primary) */
@@ -3004,13 +3025,14 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
   /* ═════════════════════════════════════════════════════════════
      FORMULAIRES — anti-zoom iOS (inputs ≥ 16px) + lisibilité
      ═════════════════════════════════════════════════════════════ */
-  .form-label    { font-size: 13px !important; }
+  .form-label    { font-size: 14px !important; }
   .form-input,
   .form-select,
   .form-textarea {
     font-size: 16px !important; /* 16px = anti-zoom iOS Safari */
     padding: 11px 13px !important;
   }
+  .form-select { padding-right: 40px !important; }
   .form-textarea { min-height: 100px; }
 
   /* Bouton "Générer" plus large + texte plus visible */
