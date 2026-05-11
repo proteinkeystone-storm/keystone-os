@@ -230,16 +230,22 @@ secretInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin()
 logoutBtn.addEventListener('click', logout);
 
 // ── Tab routing ────────────────────────────────────────────────
+// ── Tab routing — niveau 1 (top nav) ───────────────────────────
+// Clauses n'est plus un onglet top-level : c'est une sous-section
+// de La Fabrique (cf. FABRIQUE_SUB_TABS plus bas).
 const TAB_RENDERERS = {
   licences:   renderLicences,
   tools:      renderTools,
   catalog:    renderCatalog,
-  clauses:    renderClauses,
   messaging:  renderMessaging,
   monitoring: renderMonitoring,
   devices:    renderDevices,
   settings:   renderSettings,
 };
+
+// Mémoire de la sous-section active dans La Fabrique (persiste
+// pendant la session — pas en localStorage, repart sur 'pads' au reload).
+let fabriqueActiveSubTab = 'pads';
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
@@ -440,7 +446,61 @@ function normalizePad(pad) {
   return p;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TAB 2 — LA FABRIQUE (hub avec sous-onglets)
+// ══════════════════════════════════════════════════════════════════
+// La Fabrique = atelier de production de contenu Keystone. Sous-onglets :
+//   • pads     — éditeur des outils/artefacts (manifeste + D1)
+//   • clauses  — bibliothèque partagée + locales (catalogue VEFA, etc.)
+//   • [futurs] templates HTML sanctuarisés, prompts engine, variables
+//
+// Routage : la sous-nav est rendue par renderTools(), puis on délègue
+// au sous-renderer selon fabriqueActiveSubTab. Chaque sous-renderer
+// reçoit le slot DOM `#fabrique-sub-content` à remplir.
+const FABRIQUE_SUB_TABS = [
+  { id: 'pads',    label: '📐 Pads',      render: renderFabriquePads,    desc: 'Outils & artefacts du dashboard utilisateur' },
+  { id: 'clauses', label: '📚 Clauses',   render: renderFabriqueClauses, desc: 'Bibliothèque de clauses partagées + locales' },
+  // Sprint à venir :
+  // { id: 'templates', label: '📄 Templates', render: renderFabriqueTemplates, desc: 'Templates HTML sanctuarisés (VEFA, etc.)' },
+  // { id: 'prompts',   label: '🤖 Prompts IA', render: renderFabriquePrompts,   desc: 'System prompts par tâche × moteur' },
+  // { id: 'vars',      label: '🧩 Variables',  render: renderFabriqueVars,      desc: 'Registry des [[VAR]] globales' },
+];
+
 async function renderTools(panel) {
+  const subTabsHTML = FABRIQUE_SUB_TABS.map(t => `
+    <button class="fabrique-sub-btn ${t.id === fabriqueActiveSubTab ? 'active' : ''}"
+            data-sub="${t.id}" title="${esc(t.desc)}">
+      ${t.label}
+    </button>`).join('');
+
+  panel.innerHTML = `
+    <div class="fabrique-sub-nav">
+      ${subTabsHTML}
+    </div>
+    <div id="fabrique-sub-content" style="margin-top:18px;"></div>`;
+
+  // Câblage de la sous-nav
+  panel.querySelectorAll('.fabrique-sub-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fabriqueActiveSubTab = btn.dataset.sub;
+      panel.querySelectorAll('.fabrique-sub-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.sub === fabriqueActiveSubTab));
+      const slot = panel.querySelector('#fabrique-sub-content');
+      slot.innerHTML = '<div class="loading">Chargement…</div>';
+      const def = FABRIQUE_SUB_TABS.find(t => t.id === fabriqueActiveSubTab);
+      def?.render(slot);
+    });
+  });
+
+  // Premier rendu : la sous-section mémorisée
+  const slot = panel.querySelector('#fabrique-sub-content');
+  slot.innerHTML = '<div class="loading">Chargement…</div>';
+  const initial = FABRIQUE_SUB_TABS.find(t => t.id === fabriqueActiveSubTab);
+  initial?.render(slot);
+}
+
+// ── Sous-onglet : Pads (ex-renderTools complet) ─────────────────
+async function renderFabriquePads(panel) {
   try {
     const manifest = await fetchJSON('/K_STORE_ASSETS/PADS/manifest.json');
     const padIds   = manifest.pads || [];
@@ -2944,6 +3004,13 @@ function showMessageModal(panel, existing = null) {
 //   DELETE /api/data/clauses/:id?tenant=shared
 
 let _clausesView = 'shared';   // 'shared' | 'all'
+
+// Wrapper pour la sous-nav Fabrique → appelle simplement renderClauses
+// (l'existant). Permet d'évoluer le sous-onglet plus tard sans toucher
+// au renderer historique.
+async function renderFabriqueClauses(panel) {
+  return renderClauses(panel);
+}
 
 async function renderClauses(panel) {
   try {

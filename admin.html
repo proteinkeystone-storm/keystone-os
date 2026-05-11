@@ -140,6 +140,40 @@
     .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
     .tab-btn:hover:not(.active) { color: var(--text); }
 
+    /* ── SOUS-NAV LA FABRIQUE ──────────────────────────────────── */
+    /* Pills horizontales, plus discrètes que la nav top-level.
+       Ton "atelier" : bordure douce, pas de gold (réservé au niveau 1). */
+    .fabrique-sub-nav {
+      display: flex;
+      gap: 6px;
+      padding: 4px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: fit-content;
+    }
+    .fabrique-sub-btn {
+      background: transparent;
+      border: none;
+      border-radius: 7px;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .fabrique-sub-btn:hover:not(.active) {
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+    }
+    .fabrique-sub-btn.active {
+      color: var(--text);
+      background: rgba(212, 175, 55, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.3);
+    }
+
     /* ── CONTENT ───────────────────────────────────────────────── */
     .admin-content {
       flex: 1;
@@ -976,7 +1010,6 @@
     <button class="tab-btn active" data-tab="licences">Licences</button>
     <button class="tab-btn" data-tab="tools">La Fabrique</button>
     <button class="tab-btn" data-tab="catalog">Catalogue</button>
-    <button class="tab-btn" data-tab="clauses">📚 Clauses</button>
     <button class="tab-btn" data-tab="messaging">✉ Messagerie</button>
     <button class="tab-btn" data-tab="monitoring">Monitoring</button>
     <button class="tab-btn" data-tab="devices">📱 Appareils</button>
@@ -987,7 +1020,6 @@
     <div id="tab-licences"   class="tab-panel active"></div>
     <div id="tab-tools"      class="tab-panel"></div>
     <div id="tab-catalog"    class="tab-panel"></div>
-    <div id="tab-clauses"    class="tab-panel"></div>
     <div id="tab-messaging"  class="tab-panel"></div>
     <div id="tab-monitoring" class="tab-panel"></div>
     <div id="tab-devices"    class="tab-panel"></div>
