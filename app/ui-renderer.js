@@ -1769,21 +1769,41 @@ function _buildModal(pad, tool) {
     });
 
     // 📋 Copier le prompt (mode prompt) OU la notice portable (mode doc_export)
-    // Robustesse Safari : 1) timeout sur la génération, 2) fallback execCommand
-    // si navigator.clipboard.writeText() est bloqué par perte de user gesture.
-    document.getElementById('btn-copy-prompt')?.addEventListener('click', async () => {
+    // SAFARI : la copie clipboard ne fonctionne que dans le user gesture
+    // immédiat. Pour éviter "copie bloquée" au 1er clic, on essaie d'abord
+    // de copier depuis le cache SYNC. Si le cache n'est pas prêt, on tombe
+    // en mode async avec fallback execCommand.
+    document.getElementById('btn-copy-prompt')?.addEventListener('click', async (ev) => {
         const btn = document.getElementById('btn-copy-prompt');
         if (!btn) return;
         const origHTML = btn.innerHTML;
         btn.classList.add('active');
 
+        // ── Tentative SYNC : cache déjà prêt → copy immédiat ────────
+        // Préserve le user gesture pour Safari (pas d'await avant copy).
+        if (pad.doc_export) {
+            const form = document.getElementById('tool-form');
+            const formData = {};
+            form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+            const sig = _formSignature(formData);
+            if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
+                // Copy SYNC depuis cache (idéal — pas de await)
+                const ok = _copyToClipboardSync(_portableCache.content);
+                btn.innerHTML = ok ? '✓ Copié !' : '✗ Copie bloquée';
+                setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, ok ? 2000 : 3000);
+                return;
+            }
+            // Cache absent : génère + fallback async
+            btn.innerHTML = '⏳ Génération…';
+        }
+
+        // ── Fallback ASYNC : cache pas prêt ou mode prompt classique ─
         let payload = '';
         try {
             if (pad.doc_export) {
                 const form = document.getElementById('tool-form');
                 const formData = {};
                 form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
-                btn.innerHTML = '⏳ Génération…';
                 const cached = await _prebuildPortableBloc(pad, formData);
                 payload = cached?.content || '';
             } else {
@@ -1799,32 +1819,14 @@ function _buildModal(pad, tool) {
             return;
         }
 
-        // Copy avec fallback Safari (perte user gesture après await)
-        let copied = false;
-        try {
-            await navigator.clipboard.writeText(payload);
-            copied = true;
-        } catch (e) {
-            console.warn('[copy-prompt] clipboard API failed, fallback execCommand', e);
+        const ok = await _copyToClipboardAsync(payload);
+        if (ok) {
+            btn.innerHTML = '✓ Copié !';
+        } else {
+            // Indication explicite + invite à recliquer (cache maintenant prêt)
+            btn.innerHTML = '↻ Cliquez à nouveau';
         }
-        if (!copied) {
-            try {
-                const ta = document.createElement('textarea');
-                ta.value = payload;
-                ta.style.position = 'fixed';
-                ta.style.top = '-1000px';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.focus(); ta.select();
-                copied = document.execCommand('copy');
-                document.body.removeChild(ta);
-            } catch (e) {
-                console.error('[copy-prompt] fallback execCommand failed', e);
-            }
-        }
-
-        btn.innerHTML = copied ? '✓ Copié !' : '✗ Copie bloquée — voir console';
-        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, copied ? 2000 : 3000);
+        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, ok ? 2000 : 3000);
     });
 
     // ⬇ Télécharger .html (doc_export uniquement) — fichier auto-suffisant
@@ -1866,14 +1868,42 @@ function _buildModal(pad, tool) {
         setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2000);
     });
 
-    // 📚 Bibliothèque
-    document.getElementById('btn-library')?.addEventListener('click', () => {
-        const prompt = document.getElementById('prompt-text')?.textContent || '';
-        _saveToLibrary(pad, prompt);
+    // 📚 Bibliothèque — sauvegarde dans localStorage ks_library
+    // Mode prompt : sauve le prompt brut (legacy)
+    // Mode portable : sauve le bloc portable complet (HTML + instructions)
+    //   → re-export possible plus tard sans avoir à re-remplir le formulaire
+    document.getElementById('btn-library')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-library');
         if (!btn) return;
         const orig = btn.textContent;
-        btn.textContent = '✓ Sauvegardé !';
+
+        let payload = '';
+        if (pad.doc_export) {
+            // Mode portable : on tente le cache, sinon génération à la volée
+            const form = document.getElementById('tool-form');
+            const formData = {};
+            form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+            const sig = _formSignature(formData);
+            if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
+                payload = _portableCache.content;
+            } else {
+                btn.textContent = '⏳ …';
+                const cached = await _prebuildPortableBloc(pad, formData);
+                payload = cached?.content || '';
+            }
+        } else {
+            payload = document.getElementById('prompt-text')?.textContent || '';
+        }
+
+        if (!payload || payload.startsWith('Remplissez')) {
+            btn.textContent = '✗ Remplis d\'abord les champs requis';
+            btn.classList.add('active');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2500);
+            return;
+        }
+
+        const ok = _saveToLibrary(pad, payload);
+        btn.textContent = ok ? '✓ Sauvegardé !' : '✗ Erreur';
         btn.classList.add('active');
         setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2000);
     });
@@ -2959,12 +2989,49 @@ function _typewriterPrompt(el, text, fast = false) {
 }
 
 function _saveToLibrary(pad, prompt) {
-    if (!prompt || prompt.startsWith('Remplissez')) return;
+    if (!prompt || prompt.startsWith('Remplissez')) return false;
     const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
     lib.unshift({ id: pad.id, title: pad.title, prompt, date: new Date().toISOString() });
     if (lib.length > 50) lib.splice(50);
     localStorage.setItem('ks_library', JSON.stringify(lib));
     _refreshPromptsBadge();
+    return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CLIPBOARD HELPERS (Safari-safe)
+// ══════════════════════════════════════════════════════════════════
+// _copyToClipboardSync : utilise execCommand, no await — préserve le
+// user gesture. À utiliser en premier dans un handler de click si
+// possible. Renvoie true/false.
+function _copyToClipboardSync(text) {
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return !!ok;
+    } catch (e) {
+        console.warn('[clipboard-sync] échec :', e);
+        return false;
+    }
+}
+
+// _copyToClipboardAsync : essaie navigator.clipboard, fallback execCommand.
+// À utiliser après un await (gesture potentiellement perdu).
+async function _copyToClipboardAsync(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (e) {
+        console.warn('[clipboard-async] navigator.clipboard a échoué, fallback execCommand', e);
+        return _copyToClipboardSync(text);
+    }
 }
 
 async function _handleGenerate(pad) {
