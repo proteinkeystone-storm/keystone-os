@@ -48,23 +48,24 @@ export const promptEngineDemo = {
   },
 
   /** Test cas réel : rédige les "Spécificités" d'un T3 Bandol Vue Mer. */
-  async testRedactSpecificites() {
+  async testRedactSpecificites(engine = 'claude') {
     return this.testTopic(
       'Les spécificités et équipements d\'un appartement T3 neuf à Bandol avec vue mer',
       'Programme : Bandol Vue Mer. Surface : 72 m². Orientation : Sud-Ouest. ' +
       'Terrasse de 18 m² avec brise-vue végétal et arrosage automatique. ' +
       'Domotique connectée préinstallée (volets, chauffage, éclairage). ' +
       'RE2020 Seuil 2031. Vue panoramique sud-ouest. Plancher chauffant électrique.',
+      engine,
     );
   },
 
-  /** Test libre — passe ton propre sujet. */
-  async testTopic(topic, details = '') {
-    console.log(`[demo] → Claude rédige : "${topic}"`);
+  /** Test libre — passe ton propre sujet + engine optionnel (défaut: 'claude'). */
+  async testTopic(topic, details = '', engine = 'claude') {
+    console.log(`[demo] → ${engine} rédige : "${topic}"`);
     const t0 = performance.now();
     const result = await promptEngine.run({
       task   : 'redact-section',
-      engine : 'claude',
+      engine,
       context: { topic, details },
     });
     const dt = ((performance.now() - t0) / 1000).toFixed(2);
