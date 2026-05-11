@@ -1710,6 +1710,9 @@ function _buildModal(pad, tool) {
     const toolForm = document.getElementById('tool-form');
     if (toolForm) _initCustomSelects(toolForm);
 
+    // Sprint P3 — Boutons AI Assist (PromptEngine) sur les champs déclarés
+    if (toolForm) _initAIAssistButtons(toolForm, pad);
+
     // Prompt live — écoute tous les champs du formulaire
     // data-dirty : marque un champ comme "touché" pour activer le highlight si vide
     toolForm?.addEventListener('input', e => {
@@ -1956,10 +1959,29 @@ function _buildField(f) {
         input = `<input class="form-input" type="${f.type}" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}" ${f.required ? 'required' : ''}>`;
     }
 
+    // ── Sprint P3 — Bouton AI Assist (PromptEngine) ─────────────
+    // Si le champ déclare `ai_assist`, on ajoute un bouton qui appelle
+    // le PromptEngine pour rédiger automatiquement. Le binding effectif
+    // se fait dans _initAIAssistButtons() après injection HTML.
+    const aiAssistBtn = f.ai_assist ? `
+        <div class="ai-assist-wrap">
+            <button type="button" class="ai-assist-btn"
+                    data-field-id="${f.id}"
+                    aria-label="Générer avec IA">
+                <span class="ai-assist-icon">✨</span>
+                <span class="ai-assist-label">${f.ai_assist.label || 'Générer avec IA'}</span>
+                <span class="ai-assist-spinner" hidden>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="14 28" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
+                </span>
+            </button>
+            <span class="ai-assist-status" id="ai-status-${f.id}"></span>
+        </div>` : '';
+
     return `
         <div class="form-field${spanCls}">
             <label class="form-label" for="${f.type === 'select' ? 'ks-btn-' : 'f-'}${f.id}" style="text-transform:none;letter-spacing:normal;font-size:14px;font-weight:500;">${f.label}${req}</label>
             ${input}
+            ${aiAssistBtn}
         </div>
     `;
 }
@@ -2024,6 +2046,166 @@ function _initCustomSelects(container) {
 
     // Global click closes all selects
     document.addEventListener('click', _closeAll, { capture: true, once: false });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AI ASSIST (Sprint P3) — boutons "✨ Générer avec IA" par champ
+// ══════════════════════════════════════════════════════════════════
+// Branche un bouton sur chaque champ qui déclare `ai_assist` dans le JSON.
+// Au clic :
+//   1. Collecte les valeurs du formulaire
+//   2. Interpole `topic` avec {var} → texte sujet
+//   3. Construit `details` depuis `include_fields` (sauf vides)
+//   4. Choisit le moteur (active engine si disponible, fallback gemini)
+//   5. Appelle promptEngine.run() — affiche spinner pendant
+//   6. Injecte le texte dans le textarea — déclenche les events 'input'
+//      pour que la prévisualisation du prompt se mette à jour
+//   7. Gestion erreurs : clé manquante (vers Réglages), quota, réseau
+
+// Mapping label dashboard → engine id PromptEngine (cf. prompt-engine.js).
+// Différent de ENGINE_LABEL_TO_ID (qui mappe vers les ids D1 historiques).
+const _ENGINE_LABEL_TO_PROMPT_ENGINE = {
+    'Claude'    : 'claude',
+    'ChatGPT'   : 'gpt',
+    'Gemini'    : 'gemini',
+    'Grok'      : 'grok',
+    'Perplexity': 'perplexity',
+    'Mistral'   : 'mistral',
+    'Llama'     : 'llama',
+};
+
+function _resolveAIEngine() {
+    // 1. Engine actif dans Réglages
+    const activeLabel  = getActiveEngine();
+    const activeEngine = _ENGINE_LABEL_TO_PROMPT_ENGINE[activeLabel] || 'gemini';
+
+    // 2. La clé API du provider correspondant est-elle présente ?
+    const engines = window.promptEngine?.listEngines() || [];
+    const def = engines.find(e => e.id === activeEngine);
+    if (def?.hasApiKey) return activeEngine;
+
+    // 3. Fallback : premier engine avec une clé (préférence Gemini car free tier)
+    const preferred = ['gemini', 'claude', 'gpt', 'mistral', 'grok', 'perplexity', 'llama'];
+    for (const id of preferred) {
+        const e = engines.find(x => x.id === id);
+        if (e?.hasApiKey) return id;
+    }
+    return null;  // Aucune clé dispo
+}
+
+function _initAIAssistButtons(container, pad) {
+    container.querySelectorAll('.ai-assist-btn').forEach(btn => {
+        const fieldId = btn.dataset.fieldId;
+        const fieldDef = pad.fields.find(f => f.id === fieldId);
+        if (!fieldDef?.ai_assist) return;
+
+        btn.addEventListener('click', () => _handleAIAssist(btn, fieldId, fieldDef.ai_assist, pad));
+    });
+}
+
+async function _handleAIAssist(btn, fieldId, aiConfig, pad) {
+    if (btn.disabled) return;
+
+    const textarea = document.getElementById(`f-${fieldId}`);
+    const statusEl = document.getElementById(`ai-status-${fieldId}`);
+    const spinner  = btn.querySelector('.ai-assist-spinner');
+    const iconEl   = btn.querySelector('.ai-assist-icon');
+
+    // ── 1. Engine resolution ───────────────────────────────────
+    if (!window.promptEngine) {
+        _setAIStatus(statusEl, 'PromptEngine indisponible — rechargez la page.', 'error');
+        return;
+    }
+    const engineId = _resolveAIEngine();
+    if (!engineId) {
+        _setAIStatus(statusEl,
+            'Aucune clé API configurée. Ouvrez ⚙ Réglages → Clés API.',
+            'error');
+        return;
+    }
+
+    // ── 2. Collecte form data ──────────────────────────────────
+    const form = document.getElementById('tool-form');
+    const formData = {};
+    form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+    // ── 3. Interpolation du topic ──────────────────────────────
+    // Remplace {var} par formData[var] ou un placeholder lisible si vide.
+    const topic = (aiConfig.topic || `Rédige une section sur ${fieldId}`).replace(
+        /\{(\w+)\}/g,
+        (_, k) => formData[k] || `[${k} à renseigner]`
+    );
+
+    // ── 4. Construction du contexte détaillé ───────────────────
+    const includeFields = aiConfig.include_fields || [];
+    const detailParts = includeFields
+        .map(fid => {
+            const f = pad.fields.find(ff => ff.id === fid);
+            const v = formData[fid];
+            return (f && v) ? `${f.label} : ${v}` : null;
+        })
+        .filter(Boolean);
+
+    // Si l'utilisateur a tapé des mots-clés dans le textarea, on les passe aussi
+    const currentValue = formData[fieldId];
+    if (currentValue) {
+        detailParts.push(`Mots-clés / éléments à intégrer : ${currentValue}`);
+    }
+    const details = detailParts.join('. ');
+
+    // ── 5. UI : passage en mode "loading" ──────────────────────
+    btn.disabled = true;
+    btn.classList.add('loading');
+    iconEl?.setAttribute('hidden', '');
+    spinner?.removeAttribute('hidden');
+    _setAIStatus(statusEl, `${engineId} rédige…`, 'loading');
+
+    try {
+        const result = await window.promptEngine.run({
+            task   : aiConfig.task || 'redact-section',
+            engine : engineId,
+            context: { topic, details },
+        });
+
+        if (!result?.text) {
+            throw new Error('Réponse vide du moteur');
+        }
+
+        // Injecte dans le textarea + déclenche les events pour mettre
+        // à jour le prompt preview (qui écoute 'input').
+        if (textarea) {
+            textarea.value = result.text;
+            textarea.dataset.dirty = '1';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        const outTokens = result.usage?.output_tokens || '?';
+        _setAIStatus(statusEl, `✓ Rédigé par ${engineId} (${outTokens} tokens)`, 'success');
+        // Efface le message après 4s
+        setTimeout(() => _setAIStatus(statusEl, '', null), 4000);
+    } catch (err) {
+        const msg = err?.message || 'Erreur inconnue';
+        // Erreurs courantes traduites en français
+        let friendly = msg;
+        if (/clé API/i.test(msg))      friendly = `Clé ${engineId} manquante — Réglages → Clés API`;
+        else if (/credit|quota|429|insufficient/i.test(msg)) friendly = `Quota ${engineId} épuisé — essayez un autre moteur ou réessayez plus tard`;
+        else if (/network|timeout|fetch/i.test(msg)) friendly = `Problème réseau — vérifiez votre connexion`;
+        else if (/^PromptEngine: /.test(msg)) friendly = msg.replace(/^PromptEngine: /, '');
+        _setAIStatus(statusEl, '✗ ' + friendly, 'error');
+        console.warn('[ai-assist]', err);
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        iconEl?.removeAttribute('hidden');
+        spinner?.setAttribute('hidden', '');
+    }
+}
+
+function _setAIStatus(el, text, kind) {
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'ai-assist-status' + (kind ? ` ai-assist-status-${kind}` : '');
 }
 
 // ── État de suivi pour la transition empty → ready ────────────

@@ -2609,6 +2609,67 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:#4f46e5; --tool-b
 /* Textarea */
 .form-textarea { resize: vertical; min-height: 96px; }
 
+/* ── AI Assist (Sprint P3) — bouton "Générer avec IA" par champ ─ */
+.ai-assist-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.ai-assist-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(99, 130, 255, 0.12), rgba(168, 130, 255, 0.12));
+  border: 1px solid rgba(99, 130, 255, 0.35);
+  border-radius: 8px;
+  color: rgba(180, 195, 255, 1);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.06s;
+  font-family: inherit;
+}
+.ai-assist-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(99, 130, 255, 0.22), rgba(168, 130, 255, 0.22));
+  border-color: rgba(99, 130, 255, 0.6);
+  color: rgba(220, 230, 255, 1);
+}
+.ai-assist-btn:active:not(:disabled) { transform: scale(0.98); }
+.ai-assist-btn:disabled,
+.ai-assist-btn.loading {
+  opacity: 0.7;
+  cursor: progress;
+}
+.ai-assist-icon { font-size: 13px; line-height: 1; }
+.ai-assist-spinner { display: inline-flex; align-items: center; }
+.ai-assist-spinner[hidden] { display: none; }
+.ai-assist-status {
+  font-size: 11.5px;
+  color: rgba(156, 163, 175, 0.85);
+  line-height: 1.4;
+  flex: 1;
+  min-width: 120px;
+}
+.ai-assist-status-loading  { color: rgba(180, 195, 255, 0.95); }
+.ai-assist-status-success  { color: rgba(120, 220, 160, 0.95); }
+.ai-assist-status-error    { color: rgba(255, 130, 130, 0.95); }
+
+/* Mode clair */
+html.light-mode .ai-assist-btn {
+  background: linear-gradient(135deg, rgba(80, 110, 230, 0.08), rgba(150, 110, 230, 0.08));
+  border-color: rgba(80, 110, 230, 0.3);
+  color: rgba(70, 90, 180, 1);
+}
+html.light-mode .ai-assist-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(80, 110, 230, 0.16), rgba(150, 110, 230, 0.16));
+  border-color: rgba(80, 110, 230, 0.55);
+  color: rgba(50, 70, 160, 1);
+}
+
 /* Hint text below fields */
 .form-hint {
   font-size: 12px; color: rgba(156,163,175,1); line-height: 1.5;
