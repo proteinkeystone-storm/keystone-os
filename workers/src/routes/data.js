@@ -18,7 +18,7 @@
    Sécurité : whitelist d'entités. Toute entité hors liste = 400.
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, getAllowedOrigin, parseBody, generateId } from '../lib/auth.js';
+import { json, err, getAllowedOrigin, parseBody, generateId, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
 // ── Whitelist : seules ces entités sont acceptées. ─────────────
@@ -31,14 +31,26 @@ const ALLOWED_ENTITIES = new Set([
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;   // 256 KB par entité (cap raisonnable)
 const MAX_LIST_LIMIT    = 500;
+const SHARED_TENANT     = 'shared';     // Dette B — catalogue partagé en lecture
 
 // ── Extraction tenant depuis JWT ───────────────────────────────
 async function _tenantOf(request, env) {
   const payload = await requireJWT(request, env);
   if (payload?.sub) return payload.sub;
   // Fallback démo : pas de JWT → tenant 'default'.
-  // Permet le mode démo public, à retirer si on durcit la sécurité.
   return 'default';
+}
+
+// Pour les écritures : permet d'override vers 'shared' si admin.
+// Body.tenant ou header X-Tenant-Override = 'shared' déclenche l'override.
+// Toute autre valeur d'override est ignorée (sécurité).
+async function _writeTenant(request, env, body) {
+  const override = (body?.tenant || request.headers.get('X-Tenant-Override') || '').trim();
+  if (override === SHARED_TENANT) {
+    if (!requireAdmin(request, env)) return null;   // refus si pas admin
+    return SHARED_TENANT;
+  }
+  return _tenantOf(request, env);
 }
 
 function _checkEntity(entity, origin) {
@@ -50,6 +62,7 @@ function _checkEntity(entity, origin) {
 
 // Sérialise une row D1 vers le payload renvoyé au client.
 // Convention : on renvoie le data JSON "à plat" + les méta préfixées _.
+// On expose aussi _tenant pour que l'admin distingue local vs shared.
 function _rowToObject(row) {
   let data;
   try { data = JSON.parse(row.data); }
@@ -57,6 +70,7 @@ function _rowToObject(row) {
   return {
     ...data,
     id: row.id,
+    _tenant: row.tenant_id || null,
     _createdAt: row.created_at,
     _updatedAt: row.updated_at,
     _deletedAt: row.deleted_at || null,
@@ -64,11 +78,14 @@ function _rowToObject(row) {
 }
 
 // ── GET /api/data/:entity ──────────────────────────────────────
-// Liste les objets d'une entité pour le tenant courant.
+// Liste les objets d'une entité, UNION (tenant courant ∪ tenant 'shared').
+// Si un même id existe dans les deux, le tenant courant gagne (override
+// local sur le catalogue partagé).
 // Query params :
 //   ?since=<ISO>          → ne renvoie que les objets modifiés après
 //   ?includeDeleted=1     → inclut les soft-deletes (pour la sync)
 //   ?limit=<n>            → max MAX_LIST_LIMIT
+//   ?tenant=shared        → admin : limite la liste au tenant shared
 export async function handleDataList(request, env, entity) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
@@ -78,28 +95,57 @@ export async function handleDataList(request, env, entity) {
   const since = url.searchParams.get('since');
   const includeDeleted = url.searchParams.get('includeDeleted') === '1';
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '200', 10), MAX_LIST_LIMIT);
+  const tenantFilter = url.searchParams.get('tenant');
 
-  let sql = 'SELECT id, data, created_at, updated_at, deleted_at FROM entities WHERE tenant_id=? AND type=?';
-  const binds = [tenantId, entity];
+  // Mode admin : filtrer uniquement sur 'shared' (pour gérer le catalogue)
+  let sql, binds;
+  if (tenantFilter === SHARED_TENANT && requireAdmin(request, env)) {
+    sql = 'SELECT id, data, created_at, updated_at, deleted_at, tenant_id FROM entities WHERE tenant_id = ? AND type = ?';
+    binds = [SHARED_TENANT, entity];
+  } else {
+    // Mode normal : union (tenant courant + shared)
+    sql = `SELECT id, data, created_at, updated_at, deleted_at, tenant_id
+           FROM entities
+           WHERE type = ? AND (tenant_id = ? OR tenant_id = ?)`;
+    binds = [entity, tenantId, SHARED_TENANT];
+  }
   if (since) { sql += ' AND updated_at > ?'; binds.push(since); }
   if (!includeDeleted) sql += ' AND deleted_at IS NULL';
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   binds.push(limit);
 
   const { results } = await env.DB.prepare(sql).bind(...binds).all();
-  const items = (results || []).map(_rowToObject);
+
+  // Déduplication : si un même id existe en current ET shared, on garde
+  // la version current (override local du catalogue partagé).
+  const byId = new Map();
+  for (const row of (results || [])) {
+    const existing = byId.get(row.id);
+    if (!existing) {
+      byId.set(row.id, row);
+    } else if (existing.tenant_id === SHARED_TENANT && row.tenant_id !== SHARED_TENANT) {
+      byId.set(row.id, row);
+    }
+  }
+
+  const items = [...byId.values()].map(_rowToObject);
   return json({ items, total: items.length }, 200, origin);
 }
 
 // ── GET /api/data/:entity/:id ──────────────────────────────────
+// Cherche d'abord dans le tenant courant, fallback sur 'shared'.
 export async function handleDataRead(request, env, entity, id) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
   const tenantId = await _tenantOf(request, env);
 
   const row = await env.DB
-    .prepare('SELECT id, data, created_at, updated_at, deleted_at FROM entities WHERE tenant_id=? AND type=? AND id=?')
-    .bind(tenantId, entity, id)
+    .prepare(`SELECT id, data, created_at, updated_at, deleted_at, tenant_id
+              FROM entities
+              WHERE type = ? AND id = ? AND (tenant_id = ? OR tenant_id = ?)
+              ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END
+              LIMIT 1`)
+    .bind(entity, id, tenantId, SHARED_TENANT, tenantId)
     .first();
 
   if (!row || row.deleted_at) return err('Introuvable', 404, origin);
@@ -108,19 +154,24 @@ export async function handleDataRead(request, env, entity, id) {
 
 // ── POST /api/data/:entity ─────────────────────────────────────
 // Upsert : si body.id existe, on remplace ; sinon on crée.
+// Si body.tenant='shared' (ou header X-Tenant-Override: shared) ET admin
+// authentifié → l'écriture cible le catalogue partagé.
 export async function handleDataWrite(request, env, entity) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
-  const tenantId = await _tenantOf(request, env);
 
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
 
+  const tenantId = await _writeTenant(request, env, body);
+  if (!tenantId) return err('Admin requis pour écrire dans le catalogue partagé', 401, origin);
+
   const id = (typeof body.id === 'string' && body.id.length > 0) ? body.id : generateId();
 
-  // On retire les méta-champs avant de stocker pour ne pas les figer
-  // dans le JSON (ils sont reconstruits par _rowToObject à la lecture).
-  const { id: _ignoredId, _createdAt, _updatedAt, _deletedAt, ...payload } = body;
+  // On retire les méta-champs ET le champ tenant (côté request) avant de
+  // stocker pour ne pas les figer dans le JSON (ils sont reconstruits par
+  // _rowToObject à la lecture).
+  const { id: _ignoredId, tenant: _ignoredTenant, _tenant, _createdAt, _updatedAt, _deletedAt, ...payload } = body;
   const dataJson = JSON.stringify(payload);
 
   if (dataJson.length > MAX_PAYLOAD_BYTES) {
@@ -146,13 +197,16 @@ export async function handleDataWrite(request, env, entity) {
 // ── PATCH /api/data/:entity/:id ────────────────────────────────
 // Merge superficiel (1 niveau). Pour des mises à jour profondes,
 // le client lit + write en POST.
+// Override admin shared : même règles que POST.
 export async function handleDataPatch(request, env, entity, id) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
-  const tenantId = await _tenantOf(request, env);
 
   const patch = await parseBody(request);
   if (!patch || typeof patch !== 'object') return err('Body JSON requis', 400, origin);
+
+  const tenantId = await _writeTenant(request, env, patch);
+  if (!tenantId) return err('Admin requis pour modifier le catalogue partagé', 401, origin);
 
   const row = await env.DB
     .prepare('SELECT data FROM entities WHERE tenant_id=? AND type=? AND id=? AND deleted_at IS NULL')
@@ -164,7 +218,7 @@ export async function handleDataPatch(request, env, entity, id) {
   try { current = JSON.parse(row.data); }
   catch { current = {}; }
 
-  const { id: _i, _createdAt, _updatedAt, _deletedAt, ...patchClean } = patch;
+  const { id: _i, tenant: _t, _tenant, _createdAt, _updatedAt, _deletedAt, ...patchClean } = patch;
   const merged = { ...current, ...patchClean };
   const dataJson = JSON.stringify(merged);
 
@@ -183,10 +237,18 @@ export async function handleDataPatch(request, env, entity, id) {
 // ── DELETE /api/data/:entity/:id ───────────────────────────────
 // Soft delete : on marque deleted_at, on garde la ligne pour la
 // synchro delta cross-device.
+// Override admin shared : header X-Tenant-Override: shared OU query
+// ?tenant=shared (admin only).
 export async function handleDataDelete(request, env, entity, id) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
-  const tenantId = await _tenantOf(request, env);
+
+  // Pour DELETE on n'a pas de body, on lit le tenant override via query ou header.
+  const url = new URL(request.url);
+  const overrideQuery = url.searchParams.get('tenant');
+  const fakeBody = overrideQuery === SHARED_TENANT ? { tenant: SHARED_TENANT } : null;
+  const tenantId = await _writeTenant(request, env, fakeBody);
+  if (!tenantId) return err('Admin requis pour supprimer dans le catalogue partagé', 401, origin);
 
   const now = new Date().toISOString();
   const result = await env.DB.prepare(

@@ -6,6 +6,7 @@
 
 import { renderArtifactResult } from './artifact-renderer.js';
 import { KSTORE_CATEGORIES }    from './kstore-mock-catalog.js';
+import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 
 // ── Moteurs IA disponibles (fiches Key-Store) ──────────────────
 // Sert au select "Optimisé pour" + checkboxes "Moteurs compatibles".
@@ -233,6 +234,7 @@ const TAB_RENDERERS = {
   licences:   renderLicences,
   tools:      renderTools,
   catalog:    renderCatalog,
+  clauses:    renderClauses,
   messaging:  renderMessaging,
   monitoring: renderMonitoring,
   devices:    renderDevices,
@@ -2926,6 +2928,233 @@ function showMessageModal(panel, existing = null) {
       }
     }
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — CLAUSES (catalogue partagé du DocEngine)
+// ══════════════════════════════════════════════════════════════════
+// Stockées en tenant='shared' → lisibles par tous les utilisateurs sans
+// avoir à seeder. Écriture/édition réservée admin.
+//
+// API utilisée :
+//   GET    /api/data/clauses?tenant=shared        liste shared
+//   GET    /api/data/clauses                      union (current + shared)
+//   POST   /api/data/clauses   body={tenant:'shared', ...}
+//   PATCH  /api/data/clauses/:id  body={tenant:'shared', ...}
+//   DELETE /api/data/clauses/:id?tenant=shared
+
+let _clausesView = 'shared';   // 'shared' | 'all'
+
+async function renderClauses(panel) {
+  try {
+    const url = _clausesView === 'shared'
+      ? '/api/data/clauses?tenant=shared&limit=500'
+      : '/api/data/clauses?limit=500';
+    const { items = [] } = await api(url);
+
+    // Groupage simple par préfixe template (ex: vefa_, brochure_…)
+    // Pour l'instant on a juste VEFA, mais on prépare l'extension.
+    const sectorLabels = { IMM: 'Immobilier', COM: 'Communication', ANL: 'Analyse', ADM: 'Admin' };
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Bibliothèque de clauses <span>(${items.length})</span></h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btn-clauses-view-shared" ${_clausesView === 'shared' ? 'disabled' : ''}>Catalogue partagé</button>
+          <button class="btn" id="btn-clauses-view-all"    ${_clausesView === 'all'    ? 'disabled' : ''}>Vue globale (+ locales)</button>
+          <button class="btn" id="btn-clauses-reseed">↻ Re-seed VEFA v1</button>
+          <button class="btn btn-primary" id="btn-clauses-new">+ Nouvelle clause</button>
+        </div>
+      </div>
+
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+        ${_clausesView === 'shared'
+          ? 'Les clauses du <strong>catalogue partagé</strong> sont automatiquement disponibles pour tous les utilisateurs (Prométhée et futurs clients) sans qu\'ils aient à seeder quoi que ce soit.'
+          : 'Vue globale : clauses du catalogue partagé <em>+</em> overrides locaux du tenant courant. Une clause locale (même <code>id</code>) masque celle du catalogue.'}
+      </p>
+
+      ${items.length === 0
+        ? `<div class="empty-state">Aucune clause. Clique sur <strong>↻ Re-seed VEFA v1</strong> pour charger les 30 clauses standards immobilier neuf.</div>`
+        : `<table class="data-table">
+            <thead>
+              <tr>
+                <th>Clé</th>
+                <th>Label</th>
+                <th>Secteur</th>
+                <th>Version</th>
+                <th>Tenant</th>
+                <th>Taille</th>
+                <th>Maj</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(c => {
+                const isShared = c._tenant === 'shared';
+                const tenantBadge = isShared
+                  ? '<span class="badge" style="background:rgba(184,148,90,.15);color:#D4AF7A;border:1px solid rgba(184,148,90,.3)">Partagé</span>'
+                  : '<span class="badge" style="background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3)">Local</span>';
+                return `
+                  <tr>
+                    <td><code style="font-size:12px;color:#a5b4fc">${_esc(c.key || '—')}</code></td>
+                    <td>${_esc(c.label || '—')}</td>
+                    <td>${_esc(sectorLabels[c.secteur] || c.secteur || '—')}</td>
+                    <td>v${c.version ?? 1}</td>
+                    <td>${tenantBadge}</td>
+                    <td style="color:var(--text-muted);font-size:12px">${((c.content || '').length / 1024).toFixed(1)} Ko</td>
+                    <td style="color:var(--text-muted);font-size:11px">${(c._updatedAt || '').slice(0, 10)}</td>
+                    <td style="text-align:right">
+                      <button class="btn-icon" data-act="edit"  data-id="${_esc(c.id)}" title="Éditer">✎</button>
+                      <button class="btn-icon" data-act="bump"  data-id="${_esc(c.id)}" title="Dupliquer en v+1">⎘</button>
+                      <button class="btn-icon" data-act="delete" data-id="${_esc(c.id)}" title="Supprimer">✕</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>`}
+    `;
+
+    // ── Bindings ──────────────────────────────────────────────
+    panel.querySelector('#btn-clauses-view-shared')?.addEventListener('click', () => {
+      _clausesView = 'shared'; renderClauses(panel);
+    });
+    panel.querySelector('#btn-clauses-view-all')?.addEventListener('click', () => {
+      _clausesView = 'all'; renderClauses(panel);
+    });
+    panel.querySelector('#btn-clauses-new')?.addEventListener('click', () => _openClauseEditor(panel));
+    panel.querySelector('#btn-clauses-reseed')?.addEventListener('click', () => _reseedVefaClauses(panel));
+
+    panel.querySelectorAll('[data-act]').forEach(btn => {
+      const act = btn.dataset.act;
+      const id  = btn.dataset.id;
+      const clause = items.find(c => c.id === id);
+      if (!clause) return;
+      if (act === 'edit')   btn.addEventListener('click', () => _openClauseEditor(panel, clause));
+      if (act === 'bump')   btn.addEventListener('click', () => _openClauseEditor(panel, {
+        ...clause,
+        id: (clause.id || '').replace(/_v\d+$/, '') + `_v${(clause.version || 1) + 1}`,
+        version: (clause.version || 1) + 1,
+      }));
+      if (act === 'delete') btn.addEventListener('click', () => _deleteClause(panel, clause));
+    });
+
+  } catch (e) {
+    panel.innerHTML = `<div class="error-state">Erreur : ${_esc(e.message)}</div>`;
+  }
+}
+
+function _openClauseEditor(panel, clause = null) {
+  const isNew = !clause;
+  const data = clause || { id: '', secteur: 'IMM', key: '', label: '', version: 1, content: '' };
+
+  openModal(
+    isNew ? 'Nouvelle clause' : 'Éditer la clause',
+    `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <label class="form-label">ID stable
+          <input type="text" id="cl-id" class="form-input" value="${_esc(data.id)}" placeholder="clause_vefa_GFA_v1" ${clause && !isNew ? 'readonly' : ''}>
+        </label>
+        <label class="form-label">Secteur
+          <select id="cl-secteur" class="form-input">
+            ${['IMM','COM','ANL','ADM'].map(s => `<option value="${s}" ${s === data.secteur ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </label>
+        <label class="form-label">Clé (matche [[CLAUSE_<i>KEY</i>]])
+          <input type="text" id="cl-key" class="form-input" value="${_esc(data.key)}" placeholder="GFA, FONDATIONS, …">
+        </label>
+        <label class="form-label">Version
+          <input type="number" id="cl-version" class="form-input" value="${data.version || 1}" min="1">
+        </label>
+        <label class="form-label" style="grid-column:span 2">Libellé humain
+          <input type="text" id="cl-label" class="form-input" value="${_esc(data.label)}" placeholder="Garantie Financière d'Achèvement">
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <label class="form-label">Contenu HTML (inséré tel quel dans le template)</label>
+          <textarea id="cl-content" class="form-input" style="height:340px;font-family:ui-monospace,monospace;font-size:12px">${_esc(data.content)}</textarea>
+        </div>
+        <div>
+          <label class="form-label">Aperçu live</label>
+          <iframe id="cl-preview" style="width:100%;height:340px;background:#fff;border:1px solid var(--border);border-radius:6px"></iframe>
+        </div>
+      </div>
+    `,
+    `
+      <button class="btn" id="cl-cancel">Annuler</button>
+      <button class="btn btn-primary" id="cl-save">${isNew ? 'Créer' : 'Enregistrer'}</button>
+    `
+  );
+
+  // Preview live
+  const textarea = document.getElementById('cl-content');
+  const iframe   = document.getElementById('cl-preview');
+  const refreshPreview = () => {
+    const html = `<html><head><style>body{font:14px/1.5 -apple-system,sans-serif;padding:14px;color:#1a1e2e}</style></head><body>${textarea.value}</body></html>`;
+    iframe.srcdoc = html;
+  };
+  textarea.addEventListener('input', refreshPreview);
+  refreshPreview();
+
+  document.getElementById('cl-cancel').addEventListener('click', closeModal);
+  document.getElementById('cl-save').addEventListener('click', async () => {
+    const payload = {
+      tenant: 'shared',
+      id     : document.getElementById('cl-id').value.trim(),
+      secteur: document.getElementById('cl-secteur').value,
+      key    : document.getElementById('cl-key').value.trim(),
+      label  : document.getElementById('cl-label').value.trim(),
+      version: parseInt(document.getElementById('cl-version').value, 10) || 1,
+      content: textarea.value,
+    };
+    if (!payload.id || !payload.key) { toast('id et key requis', 'error'); return; }
+    try {
+      await api('/api/data/clauses', 'POST', payload);
+      toast(isNew ? 'Clause créée' : 'Clause mise à jour');
+      closeModal();
+      renderClauses(panel);
+    } catch (e) {
+      toast('Erreur : ' + e.message, 'error');
+    }
+  });
+}
+
+async function _deleteClause(panel, clause) {
+  if (!confirm(`Supprimer la clause "${clause.label || clause.key}" ?\n\n(Soft delete ; les notices déjà générées ne sont pas affectées.)`)) return;
+  try {
+    const queryTenant = clause._tenant === 'shared' ? '?tenant=shared' : '';
+    await api(`/api/data/clauses/${encodeURIComponent(clause.id)}${queryTenant}`, 'DELETE');
+    toast('Clause supprimée');
+    renderClauses(panel);
+  } catch (e) {
+    toast('Erreur : ' + e.message, 'error');
+  }
+}
+
+async function _reseedVefaClauses(panel) {
+  if (!confirm(`Re-seeder ${VEFA_CLAUSES_V1.length} clauses VEFA standard dans le catalogue PARTAGÉ ?\n\nLes clauses existantes au même id seront écrasées par celles du fichier source.`)) return;
+  let ok = 0, ko = 0;
+  for (const clause of VEFA_CLAUSES_V1) {
+    try {
+      await api('/api/data/clauses', 'POST', { tenant: 'shared', ...clause });
+      ok++;
+    } catch (e) {
+      console.warn('[reseed] échec sur', clause.id, e);
+      ko++;
+    }
+  }
+  toast(`Re-seed terminé : ${ok} OK${ko ? `, ${ko} KO` : ''}`, ko ? 'error' : 'success');
+  renderClauses(panel);
+}
+
+// Helper local d'échappement HTML (utilisé seulement dans ce tab —
+// il y en a peut-être déjà un global plus haut mais je m'évite la
+// dépendance pour rester portable si on extrait ce module).
+function _esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ══════════════════════════════════════════════════════════════════
