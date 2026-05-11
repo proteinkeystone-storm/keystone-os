@@ -1534,6 +1534,47 @@ export function openTool(padId, opts = {}) {
     }
     document.getElementById('tool-backdrop')?.classList.add('open');
     document.body.style.overflow = 'hidden';
+
+    // Sprint Bibliothèque v2 — pré-remplissage depuis un snapshot sauvegardé.
+    // Le form a été monté par _buildModal ci-dessus. On déclenche le prefill
+    // après un microtask pour laisser les custom selects s'initialiser.
+    if (opts?.prefillData) {
+        Promise.resolve().then(() => _prefillForm(opts.prefillData));
+    }
+}
+
+// Pré-remplit le formulaire courant depuis un dict {fieldId: value}.
+// Gère inputs standards, textareas, ET custom selects (.ks-select) qui
+// stockent leur valeur dans un input hidden + un label visuel séparé.
+function _prefillForm(formData) {
+    const form = document.getElementById('tool-form');
+    if (!form || !formData) return;
+
+    for (const [fieldId, value] of Object.entries(formData)) {
+        if (value === '' || value === null || value === undefined) continue;
+        const el = form.querySelector(`[name="${fieldId}"]`);
+        if (!el) continue;
+
+        // Custom select : injecter dans le hidden + mettre à jour le label
+        // visuel + marquer l'option sélectionnée. Sinon le user voit
+        // "Sélectionner…" alors que la valeur est en mémoire.
+        if (el.type === 'hidden' && el.closest('.ks-select')) {
+            const wrap   = el.closest('.ks-select');
+            const valEl  = wrap.querySelector('.ks-select-val');
+            el.value = value;
+            if (valEl) valEl.textContent = value;
+            wrap.querySelectorAll('.ks-opt').forEach(o => {
+                if (o.dataset.val === value) o.dataset.selected = '';
+                else delete o.dataset.selected;
+            });
+        } else {
+            el.value = value;
+        }
+        el.dataset.dirty = '1';
+        // Dispatch pour que form-computed + preview réagissent
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
 }
 
 export function closeTool() {
@@ -1882,20 +1923,20 @@ function _buildModal(pad, tool) {
     });
 
     // 📚 Bibliothèque — sauvegarde dans localStorage ks_library
-    // Mode prompt : sauve le prompt brut (legacy)
-    // Mode portable : sauve le bloc portable complet (HTML + instructions)
-    //   → re-export possible plus tard sans avoir à re-remplir le formulaire
+    // v2 : stocke aussi formData pour permettre Recharger (pas seulement Copier).
     document.getElementById('btn-library')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-library');
         if (!btn) return;
         const orig = btn.textContent;
 
+        // Collecte systématique du formData — utile pour Recharger même en mode LLM
+        const form = document.getElementById('tool-form');
+        const formData = {};
+        form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
         let payload = '';
         if (pad.doc_export) {
             // Mode portable : on tente le cache, sinon génération à la volée
-            const form = document.getElementById('tool-form');
-            const formData = {};
-            form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
             const sig = _formSignature(formData);
             if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
                 payload = _portableCache.content;
@@ -1915,7 +1956,7 @@ function _buildModal(pad, tool) {
             return;
         }
 
-        const ok = _saveToLibrary(pad, payload);
+        const ok = _saveToLibrary(pad, payload, formData);
         btn.textContent = ok ? '✓ Sauvegardé !' : '✗ Erreur';
         btn.classList.add('active');
         setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2000);
@@ -3049,10 +3090,36 @@ function _typewriterPrompt(el, text, fast = false) {
     tick();
 }
 
-function _saveToLibrary(pad, prompt) {
+// Sauvegarde une entrée bibliothèque. `prompt` est la string legacy
+// (prompt LLM ou HTML portable). `formData` permet la fonction Recharger
+// (Sprint Bibliothèque v2 — pré-remplit le form sans ressaisie).
+function _saveToLibrary(pad, prompt, formData = null) {
     if (!prompt || prompt.startsWith('Remplissez')) return false;
     const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
-    lib.unshift({ id: pad.id, title: pad.title, prompt, date: new Date().toISOString() });
+
+    // Auto-label : extrait un nom métier depuis les champs significatifs,
+    // pour permettre une lecture rapide dans la liste sans dépendre du `id` du pad.
+    let autoLabel = '';
+    if (formData) {
+        const program = formData.nom_programme || '';
+        const lot     = formData.lot_numero    || '';
+        const acq     = formData.acquereur_nom || '';
+        if (program && lot) autoLabel = `${program} — Lot ${lot}${acq ? ' — ' + acq : ''}`;
+        else if (program && acq) autoLabel = `${program} — ${acq}`;
+        else if (program)        autoLabel = program;
+        else if (acq)            autoLabel = acq;
+    }
+
+    lib.unshift({
+        id      : pad.id,
+        padKey  : pad.padKey || null,
+        icon    : pad.icon   || null,
+        title   : pad.title,
+        prompt,                                  // legacy : string brute (LLM ou portable HTML)
+        formData: formData || null,              // v2 : permet Recharger
+        autoLabel,                               // v2 : label métier auto
+        date    : new Date().toISOString(),
+    });
     if (lib.length > 50) lib.splice(50);
     localStorage.setItem('ks_library', JSON.stringify(lib));
     _refreshPromptsBadge();
@@ -3794,6 +3861,35 @@ function _closePromptLibrary() {
     document.body.style.overflow = '';
 }
 
+// ── Helpers bibliothèque v2 ────────────────────────────────────
+function _libRelativeDate(iso) {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffH  = diffMs / 36e5;
+    const diffD  = diffMs / 864e5;
+    if (diffH < 1)  return 'il y a ' + Math.max(1, Math.round(diffMs / 6e4)) + ' min';
+    if (diffH < 24) return 'il y a ' + Math.round(diffH) + ' h';
+    if (diffD < 7)  return 'il y a ' + Math.round(diffD) + ' j';
+    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Génère un résumé 1-2 lignes du contenu, lisible dans la liste.
+// Privilégie le formData (champs clés) plutôt que le HTML brut.
+function _libSummaryLine(entry) {
+    const fd = entry.formData || {};
+    const parts = [];
+    if (fd.surface_carrez || fd.surface) parts.push((fd.surface_carrez || fd.surface) + ' m²');
+    if (fd.type_logement) parts.push(fd.type_logement);
+    if (fd.prix_ttc)      parts.push(Number(fd.prix_ttc).toLocaleString('fr-FR') + ' € TTC');
+    else if (fd.prix)     parts.push(Number(fd.prix).toLocaleString('fr-FR') + ' €');
+    if (fd.ville)         parts.push(fd.ville);
+    if (parts.length) return parts.join(' · ');
+    // Fallback : tronque le prompt brut (en strippant HTML basique)
+    const stripped = String(entry.prompt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return stripped.slice(0, 140) + (stripped.length > 140 ? '…' : '');
+}
+
 function _renderPromptLibraryBody() {
     const body = document.getElementById('pl-body');
     if (!body) return;
@@ -3804,32 +3900,39 @@ function _renderPromptLibraryBody() {
         body.innerHTML = `
             <div class="pl-empty">
                 <div class="pl-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px;opacity:.35"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-                <div class="pl-empty-txt">Aucun prompt sauvegardé.<br>Utilisez le bouton "Bibliothèque"<br>dans une boîte à outils.</div>
+                <div class="pl-empty-txt">Aucun dossier sauvegardé.<br>Utilisez le bouton "Bibliothèque"<br>dans une boîte à outils.</div>
             </div>`;
         return;
     }
 
-    // Échappement HTML — indispensable car les prompts peuvent contenir
-    // <style>, <script>, <div>... qui seraient interprétés comme HTML réel
-    // et masqueraient les boutons Copier/Supprimer.
     const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
 
     body.innerHTML = lib.map((entry, idx) => {
-        const date = new Date(entry.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-        const label = entry.label || `${entry.id} · ${entry.title}`;
+        const dateRel  = _libRelativeDate(entry.date);
+        const dateAbs  = new Date(entry.date).toLocaleString('fr-FR', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        const label    = entry.label || entry.autoLabel || `${entry.id} · ${entry.title}`;
+        const padTag   = entry.title ? entry.title : entry.id;
+        const summary  = _libSummaryLine(entry);
+        const canReload = !!entry.formData;     // Recharger uniquement si v2
+
         return `
         <div class="pl-entry" data-idx="${idx}">
             <div class="pl-entry-hd">
+                <span class="pl-entry-padtag" title="${_esc(entry.id || '')}">${_esc(padTag)}</span>
                 <span class="pl-entry-tag pl-entry-rename" data-idx="${idx}" title="Cliquer pour renommer" contenteditable="false">${_esc(label)}</span>
                 <span class="pl-entry-edit-ico" data-idx="${idx}" title="Renommer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;pointer-events:none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </span>
-                <span class="pl-entry-date">${_esc(date)}</span>
+                <span class="pl-entry-date" title="${_esc(dateAbs)}">${_esc(dateRel)}</span>
             </div>
-            <div class="pl-entry-text">${_esc(entry.prompt)}</div>
+            <div class="pl-entry-summary">${_esc(summary)}</div>
             <div class="pl-entry-actions">
+                ${canReload ? `<button class="pl-entry-btn pl-entry-btn-primary" data-action="reload" data-idx="${idx}" title="Rouvrir le dossier avec les champs pré-remplis">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    Recharger
+                </button>` : ''}
                 <button class="pl-entry-btn" data-action="copy" data-idx="${idx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button>
                 <button class="pl-entry-btn danger" data-action="delete" data-idx="${idx}">Supprimer</button>
             </div>
@@ -3846,7 +3949,6 @@ function _renderPromptLibraryBody() {
             tag.contentEditable = 'true';
             tag.classList.add('editing');
             tag.focus();
-            // Sélectionner tout le texte
             const range = document.createRange();
             range.selectNodeContents(tag);
             window.getSelection()?.removeAllRanges();
@@ -3868,17 +3970,36 @@ function _renderPromptLibraryBody() {
         });
     });
 
-    // ── Copy / Delete ────────────────────────────────────────────
+    // ── Recharger / Copier / Supprimer ──────────────────────────
     body.querySelectorAll('.pl-entry-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const idx = parseInt(btn.dataset.idx, 10);
-            const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
-            if (btn.dataset.action === 'copy') {
-                navigator.clipboard.writeText(lib[idx]?.prompt || '').then(() => {
+            const idx    = parseInt(btn.dataset.idx, 10);
+            const lib    = JSON.parse(localStorage.getItem('ks_library') || '[]');
+            const entry  = lib[idx];
+            if (!entry) return;
+            const action = btn.dataset.action;
+
+            if (action === 'reload') {
+                // Ferme la bibliothèque, rouvre le pad avec prefill.
+                // L'id stocké est le NOMEN-K (ex: O-IMM-009) — openTool sait
+                // résoudre via TOOLS pour retrouver le padKey.
+                _closePromptLibrary();
+                setTimeout(() => {
+                    openTool(entry.id, { prefillData: entry.formData });
+                }, 150);
+                return;
+            }
+
+            if (action === 'copy') {
+                navigator.clipboard.writeText(entry.prompt || '').then(() => {
                     btn.textContent = '✓ Copié !';
                     setTimeout(() => { btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000);
                 });
-            } else {
+                return;
+            }
+
+            if (action === 'delete') {
+                if (!confirm('Supprimer ce dossier de la bibliothèque ?')) return;
                 lib.splice(idx, 1);
                 localStorage.setItem('ks_library', JSON.stringify(lib));
                 _renderPromptLibraryBody();
