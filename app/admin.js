@@ -1472,7 +1472,7 @@ async function renderCatalog(panel) {
         <h2 class="section-title">Catalogue <span>(${items.length} entrées)</span></h2>
         <div style="display:flex;gap:10px">
           <button class="btn btn-secondary" id="btn-new-app">+ Nouvelle app</button>
-          <button class="btn btn-secondary" id="btn-import-static" title="Détecte les apps présentes dans le fichier statique K_STORE_ASSETS/catalog.json mais absentes de D1, et les ajoute (sans écraser les existantes). Clique ensuite Sauvegarder pour persister.">↻ Importer du fichier statique</button>
+          <button class="btn btn-secondary" id="btn-import-static" title="Compare D1 et K_STORE_ASSETS/catalog.json : ajoute les nouvelles entrées + met à jour celles dont le titre/sous-titre/longDesc/tags ont changé dans le statique. Liste les modifs avant application. Clique ensuite Sauvegarder pour persister.">↻ Synchroniser avec fichier statique</button>
           <button class="btn btn-secondary" id="btn-raw-catalog">JSON brut</button>
           <button class="btn btn-primary"   id="btn-save-catalog">Sauvegarder</button>
         </div>
@@ -1536,9 +1536,36 @@ async function renderCatalog(panel) {
   }
 }
 
-// Detecte les entrees du catalog statique absentes de D1 et les ajoute
-// au catalogData en memoire. Non destructif : ne touche pas aux entrees
-// existantes. Stephane doit ensuite cliquer Sauvegarder pour persister.
+// Champs metadata sync depuis le fichier statique vers D1 (Sprint sync v2).
+// Exclut category/published/price/lifetimePrice/plan car ces champs sont
+// souvent ajustes manuellement en admin D1 (pricing par tenant, etc.).
+const _SYNC_FIELDS = ['title', 'subtitle', 'longDesc', 'icon', 'ai_optimized', 'isNew', 'tags'];
+
+function _diffEntry(staticT, d1T) {
+  const diffs = [];
+  for (const f of _SYNC_FIELDS) {
+    const a = staticT[f];
+    const b = d1T[f];
+    if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) {
+      diffs.push({ field: f, before: b, after: a });
+    }
+  }
+  return diffs;
+}
+
+function _shortVal(v) {
+  if (v === null || v === undefined) return '∅';
+  const s = typeof v === 'string' ? v : JSON.stringify(v);
+  return s.length > 60 ? s.slice(0, 57) + '…' : s;
+}
+
+// Compare D1 (catalogData en memoire) et catalog.json statique :
+//   - ajoute les entrees absentes de D1
+//   - met a jour les champs metadata (titre, sous-titre, longDesc, icon,
+//     ai_optimized, isNew, tags) si differents du statique
+// Le pricing (plan/price/lifetimePrice), la category et published sont
+// PRESERVES car ils peuvent etre ajustes par tenant.
+// Stephane doit ensuite cliquer Sauvegarder pour persister D1.
 async function importMissingFromStatic(panel) {
   const btn = panel.querySelector('#btn-import-static');
   if (!btn) return;
@@ -1547,44 +1574,101 @@ async function importMissingFromStatic(panel) {
   try {
     const staticCatalog = await fetchJSON('/K_STORE_ASSETS/catalog.json');
     const staticTools   = staticCatalog?.tools || [];
-    const existingIds   = new Set((catalogData.tools || []).map(t => t.id));
-    const missing       = staticTools.filter(t => t?.id && !existingIds.has(t.id));
+    const d1ById        = new Map((catalogData.tools || []).map(t => [t.id, t]));
 
-    if (missing.length === 0) {
-      btn.textContent = '✓ Aucun ajout nécessaire';
+    const missing = [];   // entrees absentes de D1
+    const updates = [];   // { staticT, d1T, diffs[] }
+
+    for (const s of staticTools) {
+      if (!s?.id) continue;
+      const d = d1ById.get(s.id);
+      if (!d) {
+        missing.push(s);
+      } else {
+        const diffs = _diffEntry(s, d);
+        if (diffs.length) updates.push({ staticT: s, d1T: d, diffs });
+      }
+    }
+
+    if (missing.length === 0 && updates.length === 0) {
+      btn.textContent = '✓ Tout est à jour';
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2200);
       return;
     }
 
-    if (!confirm(
-      `Ajouter ${missing.length} entrée(s) manquante(s) au catalogue ?\n\n` +
-      missing.map(t => `• ${t.id} — ${t.title || ''}`).join('\n') +
-      `\n\nClique ensuite "Sauvegarder" pour persister en base.`
-    )) {
+    // Construit le résumé textuel pour la confirm()
+    const lines = [];
+    if (missing.length) {
+      lines.push(`AJOUTS (${missing.length}) :`);
+      missing.forEach(t => lines.push(`  • ${t.id} — ${t.title || ''}`));
+      lines.push('');
+    }
+    if (updates.length) {
+      lines.push(`MISES À JOUR (${updates.length}) :`);
+      updates.forEach(u => {
+        lines.push(`  • ${u.d1T.id} — ${u.d1T.title || ''}`);
+        u.diffs.forEach(d => {
+          lines.push(`      ${d.field} : ${_shortVal(d.before)} → ${_shortVal(d.after)}`);
+        });
+      });
+      lines.push('');
+    }
+    lines.push('Note : pricing, category et published sont préservés (jamais écrasés).');
+    lines.push('Clique ensuite "Sauvegarder" pour persister en base.');
+
+    if (!confirm(`Appliquer ces modifications ?\n\n` + lines.join('\n'))) {
       btn.textContent = orig; btn.disabled = false; return;
     }
 
+    // ── Application en memoire ───────────────────────────────────
+    // Ajouts : append a la fin
     catalogData.tools = [...(catalogData.tools || []), ...missing];
-    btn.textContent = `✓ ${missing.length} ajout(s) — Clique Sauvegarder`;
 
-    // On NE peut PAS appeler renderCatalog(panel) ici car il re-fetch D1
-    // et écraserait les ajouts en mémoire. Au lieu de ça on demande un
-    // simple reload après que Stéphane ait cliqué Sauvegarder.
-    // En attendant, on met juste à jour le compteur du titre et on
-    // affiche les nouvelles entrées en append manuel sur la table existante.
+    // Updates : merge champ par champ (on garde les autres champs D1)
+    updates.forEach(u => {
+      const idx = catalogData.tools.indexOf(u.d1T);
+      if (idx < 0) return;
+      u.diffs.forEach(d => { catalogData.tools[idx][d.field] = d.after; });
+    });
+
+    btn.textContent = `✓ ${missing.length + updates.length} modif(s) — Clique Sauvegarder`;
+
+    // ── Refresh visuel ───────────────────────────────────────────
     const titleSpan = panel.querySelector('.section-title span');
     if (titleSpan) titleSpan.textContent = `(${catalogData.tools.length} entrées)`;
 
     const tbody = panel.querySelector('#catalog-tbody');
+
+    // Updates : on met a jour les inputs visibles (title seul est edite
+    // directement dans le tableau ; longDesc/subtitle/etc. sont dans la
+    // fiche K-Store. On refresh seulement title + isNew toggle.)
     if (tbody) {
+      updates.forEach(u => {
+        const idx = catalogData.tools.indexOf(u.d1T);
+        const titleInput = tbody.querySelector(`input[data-idx="${idx}"][data-field="title"]`);
+        if (titleInput) titleInput.value = u.staticT.title || '';
+        const isNewToggle = tbody.querySelector(`input[data-idx="${idx}"][data-field="isNew"]`);
+        if (isNewToggle && 'isNew' in u.staticT) isNewToggle.checked = !!u.staticT.isNew;
+        // Flash visuel sur la row
+        const row = titleInput?.closest('tr');
+        if (row) {
+          row.style.transition = 'background .8s';
+          row.style.background = 'rgba(99,102,241,.18)';
+          setTimeout(() => { row.style.background = ''; }, 1200);
+        }
+      });
+    }
+
+    // Ajouts : append manuel (meme logique que precedemment)
+    if (tbody && missing.length) {
       missing.forEach((item) => {
-        const idx = catalogData.tools.indexOf(item);  // index réel après merge
+        const idx = catalogData.tools.indexOf(item);
         const ficheComplete = !!(item.longDesc && item.category && item.ai_optimized);
         const ficheBadge    = ficheComplete
           ? '<span style="color:#34d399;font-size:11px">● Complétée</span>'
           : '<span style="color:#f59e0b;font-size:11px">○ À compléter</span>';
         const tr = document.createElement('tr');
-        tr.style.background = 'rgba(184,148,90,.08)';   // highlight les nouvelles
+        tr.style.background = 'rgba(184,148,90,.08)';
         tr.innerHTML = `
           <td><code style="font-size:11px;color:var(--gold)">${esc(item.id)}</code> <span style="font-size:10px;color:#34d399">NOUVEAU</span></td>
           <td><input data-idx="${idx}" data-field="title" type="text" class="form-input" value="${esc(item.title||'')}"
@@ -1610,7 +1694,6 @@ async function importMissingFromStatic(panel) {
           </td>`;
         tbody.appendChild(tr);
 
-        // Wire les listeners sur la nouvelle row (sinon les edits ne sont pas captés)
         tr.querySelectorAll('[data-idx][data-field]').forEach(el => {
           el.addEventListener(el.type==='checkbox'?'change':'input', () => {
             const i=+el.dataset.idx; const f=el.dataset.field;
