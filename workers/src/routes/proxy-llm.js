@@ -172,6 +172,10 @@ async function _proxyGemini({ apiKey, model, system, messages, max_tokens }, ori
     generationConfig: {
       maxOutputTokens: max_tokens,
       temperature    : 0.7,
+      // Gemini 2.5+ : par défaut consomme des tokens en "thinking" interne,
+      // ce qui tronque le budget de sortie. On désactive pour les tâches
+      // courtes (redact-section) — réponse directe, plus de tokens utiles.
+      thinkingConfig : { thinkingBudget: 0 },
     },
   };
   if (system) {
