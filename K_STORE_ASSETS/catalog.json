@@ -239,6 +239,22 @@
       "isNew": false,
       "published": false,
       "tags": ["artefact", "faq", "client", "communication", "admin"]
+    },
+    {
+      "id": "A-COM-001",
+      "padKey": null,
+      "title": "Sovereign Dynamic QR",
+      "subtitle": "QR codes dynamiques · stats souveraines · RGPD",
+      "category": "COM",
+      "plan": "PRO",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Générez des QR codes statiques (URL, VCard, Wi-Fi, iCal, texte) et dynamiques (URL modifiable après impression). Chaque scan est tracké de façon souveraine — aucune donnée tierce, RGPD natif. Studio de design pour brander vos QRs. Dashboard stats par campagne. Cas d'usage : bâches chantier, cartes de visite, flyers, événements.",
+      "icon": "zap",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "tags": ["artefact", "qr", "marketing", "tracking", "vcard", "wifi", "sovereign", "rgpd"]
     }
   ]
 }

@@ -38,6 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -103,6 +104,20 @@ export default {
       // BYOK : la clé API est passée dans le body, jamais stockée Worker.
       if (path === '/api/proxy/llm' && method === 'POST') {
         return handleProxyLLM(request, env);
+      }
+
+      // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
+      // Redirect public ultra-rapide (lookup PRIMARY KEY) + log RGPD-safe.
+      if (path.startsWith('/r/') && method === 'GET') {
+        const shortId = path.slice(3);
+        return handleQrRedirect(request, env, shortId);
+      }
+      // CRUD QR — tenant authentifié via X-Tenant-Id (à durcir si besoin)
+      if (path === '/api/qr' && method === 'POST') return handleCreateQr(request, env);
+      if (path === '/api/qr' && method === 'GET')  return handleListQr(request, env);
+      if (path.startsWith('/api/qr/') && method === 'PATCH') {
+        const qrId = path.split('/').pop();
+        return handleUpdateQr(request, env, qrId);
       }
 
       // ── PADs ─────────────────────────────────────────────────

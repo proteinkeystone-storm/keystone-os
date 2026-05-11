@@ -74,6 +74,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'A-COM-001',                      // ← Sprint SDQR-1 — réel, artefact fullscreen
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Sovereign Dynamic QR',
+        punchline: 'QR codes souverains · sans GAFAM',
+        shortDesc: 'Statiques + Dynamiques · stats RGPD · studio design',
+        price: 49,
+        icon: 'zap',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {

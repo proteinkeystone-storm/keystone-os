@@ -602,5 +602,8 @@ export const CATALOG_DATA = {
           longDesc:"Bilan promoteur en temps réel : prix de revient, marge, charges financières, TVA. Export PDF." },
         { id:'A-ADM-001', padKey:null, title:'FAQ Client',              subtitle:'Base de réponses dynamique par programme',    category:'ADM', plan:'PRO', price:59, icon:'brief', ai_optimized:'Claude', isNew:false, published:true, tags:['artefact','faq','client','communication','admin'],
           longDesc:"Base de FAQ par programme. L'IA suggère les questions fréquentes et les actualise selon les échanges acquéreurs." },
+        // ── Sprint SDQR-1 — Artefact à workspace fullscreen ──
+        { id:'A-COM-001', padKey:null, title:'Sovereign Dynamic QR', subtitle:'QR codes dynamiques · stats souveraines · RGPD', category:'COM', plan:'PRO', price:49, lifetimePrice:199, icon:'zap', ai_optimized:'Claude', isNew:true, published:true, tags:['artefact','qr','marketing','tracking','vcard','wifi','sovereign','rgpd'],
+          longDesc:"Générez des QR codes statiques (URL, VCard, Wi-Fi, iCal, texte) et dynamiques (URL modifiable après impression). Chaque scan est tracké de façon souveraine — aucune donnée tierce, RGPD natif. Studio de design pour brander vos QRs (Sprint SDQR-3). Dashboard stats (SDQR-4)." },
     ],
 };
