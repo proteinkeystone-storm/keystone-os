@@ -133,7 +133,14 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
             { id: 'surface',       label: 'Surface (m²)',       type: 'number', placeholder: 'ex: 68' },
             { id: 'prix',          label: 'Prix (€)',           type: 'number', placeholder: 'ex: 245000' },
             { id: 'dispositif',    label: 'Dispositif fiscal',  type: 'select', options: ['Aucun','Pinel','Pinel+','LMNP','Déficit foncier','Malraux'] },
-            { id: 'atouts',        label: 'Atouts & points forts', type: 'textarea', placeholder: 'Vue mer, terrasse, parking, livraison T4 2026...', span: 'full' },
+            { id: 'atouts',        label: 'Atouts & points forts', type: 'textarea', placeholder: 'Vue mer, terrasse, parking, livraison T4 2026...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Polir les atouts',
+                topic: 'Les atouts et points forts d\'un {type_bien} neuf VEFA "{nom_programme}" à {ville}',
+                include_fields: ['nom_programme', 'ville', 'type_bien', 'surface', 'prix', 'dispositif'],
+              }
+            },
         ],
         system_prompt: `Tu es un copywriter expert en immobilier neuf. Rédige 3 versions d'annonces commerciales percutantes.
 
@@ -160,7 +167,14 @@ Pour chaque version : 1 accroche (max 10 mots), 1 description (50 mots max), 1 c
             { id: 'nom_programme',  label: 'Programme',               type: 'text',   placeholder: 'ex: Les Jardins du Midi', required: true },
             { id: 'type_info',      label: 'Objet de l\'email',       type: 'select', options: ['Avancement chantier','Date de livraison confirmée','Visite cloisons','Demande pièces','Appel de fonds','Remise clés','Relance sans réponse'], required: true },
             { id: 'date_evenement', label: 'Date / Échéance',         type: 'text',   placeholder: 'ex: 15 mai 2026' },
-            { id: 'infos_chantier', label: 'Informations à transmettre', type: 'textarea', placeholder: 'Détails, avancement %, montant, pièces demandées...', span: 'full' },
+            { id: 'infos_chantier', label: 'Informations à transmettre', type: 'textarea', placeholder: 'Détails, avancement %, montant, pièces demandées...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Formuler proprement',
+                topic: 'Les informations à transmettre à {nom_client} concernant "{type_info}" pour le programme "{nom_programme}", échéance {date_evenement}',
+                include_fields: ['nom_client', 'nom_programme', 'type_info', 'date_evenement'],
+              }
+            },
         ],
         system_prompt: `Tu es un conseiller clientèle expert en promotion immobilière.
 
@@ -190,7 +204,14 @@ Chaque email : introduction personnalisée, corps structuré, clôture soignée.
             { id: 'type_post',     label: 'Type de contenu',    type: 'select', options: ['Lancement programme','Avancement chantier','Témoignage client','Conseil investissement','Portes ouvertes','Livraison / Remise clés'] },
             { id: 'ton',           label: 'Ton / Ambiance',     type: 'select', options: ['Professionnel & Expert','Humain & Proche','Inspirant & Premium','Éducatif & Pédagogique'] },
             { id: 'visuel',        label: 'Description du visuel', type: 'text', placeholder: 'ex: Vue terrasse avec mer en fond' },
-            { id: 'accroche',      label: 'Message clé & infos', type: 'textarea', placeholder: 'Chiffres, date, prix, avancement...', span: 'full' },
+            { id: 'accroche',      label: 'Message clé & infos', type: 'textarea', placeholder: 'Chiffres, date, prix, avancement...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Polir le message clé',
+                topic: 'Le message clé et les informations à mettre en avant pour un post {type_post} sur {reseau} concernant "{nom_programme}", ton {ton}',
+                include_fields: ['nom_programme', 'reseau', 'type_post', 'ton', 'visuel'],
+              }
+            },
         ],
         system_prompt: `Tu es un expert en marketing digital immobilier et social media.
 
@@ -243,7 +264,14 @@ Structure le CR : En-tête → Avancement (%) → Points positifs → Réserves 
             { id: 'plu',            label: 'Zone PLU',                 type: 'select', options: ['UA (Centre-ville)','UB (Pavillonnaire)','UC (Résidentiel)','UD (Mixte)','AU (À urbaniser)','N (Naturelle)','A (Agricole)','Inconnue'] },
             { id: 'prix_foncier',   label: 'Prix du terrain (€)',      type: 'number', placeholder: 'ex: 350000' },
             { id: 'ces',            label: 'CES / Gabarit connu',      type: 'text',   placeholder: 'ex: CES 0.5, R+3 max, recul 5m' },
-            { id: 'contexte',       label: 'Contexte & Observations',  type: 'textarea', placeholder: 'Environnement, servitudes, risques, accès...', span: 'full' },
+            { id: 'contexte',       label: 'Contexte & Observations',  type: 'textarea', placeholder: 'Environnement, servitudes, risques, accès...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Structurer les observations',
+                topic: 'Le contexte et les observations terrain pour un foncier à {commune}, zone PLU {plu}, surface {surface_terrain} m²',
+                include_fields: ['commune', 'surface_terrain', 'plu', 'prix_foncier', 'ces'],
+              }
+            },
         ],
         system_prompt: `Tu es un analyste foncier expert en promotion immobilière dans le Sud de la France.
 
@@ -297,7 +325,14 @@ Chaque réponse : naturelle, orale, adaptée au profil, actionnable en rendez-vo
             { id: 'stade',         label: 'Stade du projet',        type: 'select', options: ['Terrain seul','Permis obtenu (plans)','Chantier en cours','Livraison imminente','Livré'] },
             { id: 'ambiance',      label: 'Direction artistique',   type: 'select', options: ['Luxe & Prestige','Moderne & Épuré','Méditerranéen & Chaleureux','Éco & Nature','Urbain & Dynamique'] },
             { id: 'cible',         label: 'Usage & Diffusion',      type: 'text',   placeholder: 'ex: Plaquette, réseaux sociaux, site web' },
-            { id: 'sujets',        label: 'Priorités & Contraintes',type: 'textarea', placeholder: 'Vues à valoriser, budget, délais, formats...', span: 'full' },
+            { id: 'sujets',        label: 'Priorités & Contraintes',type: 'textarea', placeholder: 'Vues à valoriser, budget, délais, formats...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Structurer le brief',
+                topic: 'Les priorités et contraintes pour un brief {type_support} sur "{nom_programme}", direction artistique {ambiance}, stade {stade}',
+                include_fields: ['nom_programme', 'type_support', 'stade', 'ambiance', 'cible'],
+              }
+            },
         ],
         system_prompt: `Tu es un directeur artistique expert en communication immobilière neuf.
 
