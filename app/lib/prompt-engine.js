@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — PromptEngine (Sprint P2.1 · Layer 2)
+   KEYSTONE OS — PromptEngine (Sprint P2.2 · Layer 2)
    Bridge unifié vers les LLM tiers, BYOK auto-résolu via vault.
 
    Promesse archi (cf. ARCHITECTURE.md §4) :
@@ -20,7 +20,7 @@
    - PromptEngine résout automatiquement la clé pour l'engine demandé
    - Aucune clé n'apparaît jamais dans un log ou un endpoint Keystone
 
-   Sprint P2.1 = Claude seul. Sprint P2.2 ajoutera les autres.
+   Sprint P2.2 = Claude + Gemini + GPT. Sprint P2.3 ajoutera Mistral, Grok, Perplexity.
    ═══════════════════════════════════════════════════════════════ */
 
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
@@ -35,7 +35,19 @@ const ENGINES = {
     defaultMaxTokens: 1024,
     label           : 'Claude',
   },
-  // Sprint P2.2 : gpt5, gemini, mistral, grok, perplexity, llama
+  gemini: {
+    provider        : 'google',
+    defaultModel    : 'gemini-2.0-flash',
+    defaultMaxTokens: 1024,
+    label           : 'Gemini',
+  },
+  gpt: {
+    provider        : 'openai',
+    defaultModel    : 'gpt-4o-mini',
+    defaultMaxTokens: 1024,
+    label           : 'GPT-4o',
+  },
+  // Sprint P2.3 : mistral, grok, perplexity
 };
 
 // ── Registry des tâches atomiques ──────────────────────────────
@@ -69,6 +81,34 @@ Format de sortie :
 - Pas de listes à puces ni de tableaux.
 - Pas de salutation, pas de signature, pas de phrase d'intro type "Voici le paragraphe…".
 - Tu réponds directement avec le paragraphe, point.`,
+
+      gemini: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Ta mission : rédiger UN SEUL paragraphe court, entre 120 et 200 mots, sur le sujet fourni.
+
+Règles de style :
+- Ton sobre, factuel, professionnel.
+- Aucun superlatif marketing ("exceptionnel", "unique", "incontournable"…).
+- Aucune accroche commerciale ni phrase d'introduction.
+- Niveau de langue adapté à une notice descriptive ou un acte signable.
+- Vocabulaire technique immobilier correct et accessible.
+
+Règles de format — STRICTES :
+- Texte brut uniquement. Zéro HTML, zéro markdown, zéro titre, zéro puce.
+- Commence directement par le contenu du paragraphe.
+- Ne dis pas "Voici", "Bien sûr", "Certainement" ni aucune formule introductive.
+- Termine par un point final. Rien après.`,
+
+      gpt: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
+
+Style : sobre, factuel, sans superlatifs ni marketing. Adapté à une notice contractuelle.
+
+Format de sortie STRICT :
+- Texte brut uniquement (pas de HTML, pas de markdown, pas de puces, pas de titre).
+- Commence directement par le paragraphe. Aucune phrase d'introduction.
+- Aucune signature ni formule de politesse.`,
     },
     buildUserMessage(context) {
       const topic   = context.topic   || context.subject || '';
