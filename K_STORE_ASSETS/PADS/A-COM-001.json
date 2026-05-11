@@ -2,6 +2,7 @@
   "id": "A-COM-001",
   "padKey": null,
   "type": "artifact",
+  "ui_kind": "fullscreen",
   "title": "Sovereign Dynamic QR",
   "subtitle": "QR codes dynamiques · stats souveraines · RGPD",
   "category": "COM",

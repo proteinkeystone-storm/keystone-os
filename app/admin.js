@@ -587,21 +587,35 @@ function openPadEditor(id, panel) {
 function renderEditor(container, pad, isNew) {
   const fieldCount = (pad.fields || []).length;
   const isArtifact = pad.type === 'artifact';
+
+  // Artefacts à UI custom (workspace fullscreen hard-codé, ex: SDQR).
+  // Pas de Composants/Moteurs/Aperçu — la logique vit dans app/<artefact>.js.
+  // Identité seule éditable (métadonnées catalogue).
+  const isCustomUi = isArtifact && pad.ui_kind === 'fullscreen';
+
   container.innerHTML = `
     <div id="card-preview"></div>
-    <div class="editor-tabs-bar">
-      <button class="editor-tab-btn active" data-etab="identity">Identité</button>
-      <button class="editor-tab-btn" data-etab="fields">
-        ${isArtifact ? 'Composants' : 'Champs'}
-        <span class="field-count">(${fieldCount})</span>
-      </button>
-      <button class="editor-tab-btn" data-etab="engines">Moteurs</button>
-      ${isArtifact ? '<button class="editor-tab-btn" data-etab="preview" style="color:#6496ff">◉ Aperçu</button>' : ''}
-    </div>
-    <div id="etab-identity" class="editor-tab-content active"></div>
-    <div id="etab-fields"   class="editor-tab-content"></div>
-    <div id="etab-engines"  class="editor-tab-content"></div>
-    ${isArtifact ? '<div id="etab-preview" class="editor-tab-content"></div>' : ''}
+    ${isCustomUi ? `
+      <div class="editor-tabs-bar">
+        <button class="editor-tab-btn active" data-etab="identity">Identité</button>
+      </div>
+      <div id="etab-identity" class="editor-tab-content active"></div>
+      <div id="etab-customui" class="editor-tab-content active" style="margin-top:16px"></div>
+    ` : `
+      <div class="editor-tabs-bar">
+        <button class="editor-tab-btn active" data-etab="identity">Identité</button>
+        <button class="editor-tab-btn" data-etab="fields">
+          ${isArtifact ? 'Composants' : 'Champs'}
+          <span class="field-count">(${fieldCount})</span>
+        </button>
+        <button class="editor-tab-btn" data-etab="engines">Moteurs</button>
+        ${isArtifact ? '<button class="editor-tab-btn" data-etab="preview" style="color:#6496ff">◉ Aperçu</button>' : ''}
+      </div>
+      <div id="etab-identity" class="editor-tab-content active"></div>
+      <div id="etab-fields"   class="editor-tab-content"></div>
+      <div id="etab-engines"  class="editor-tab-content"></div>
+      ${isArtifact ? '<div id="etab-preview" class="editor-tab-content"></div>' : ''}
+    `}
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
       <p class="form-error" id="editor-err" style="flex:1;margin:0"></p>
       <button class="btn btn-primary" id="btn-editor-save">Sauvegarder →</button>
@@ -610,7 +624,7 @@ function renderEditor(container, pad, isNew) {
   container.querySelectorAll('.editor-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.editor-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-      container.querySelectorAll('.editor-tab-content').forEach(c => c.classList.toggle('active', c.id === `etab-${btn.dataset.etab}`));
+      container.querySelectorAll('.editor-tab-content').forEach(c => c.classList.toggle('active', c.id === `etab-${btn.dataset.etab}` || (isCustomUi && c.id === 'etab-customui')));
       if (btn.dataset.etab === 'engines' && isArtifact) {
         refreshArtifactSchema(container);
       }
@@ -623,14 +637,46 @@ function renderEditor(container, pad, isNew) {
   renderCardPreview(container.querySelector('#card-preview'), pad);
   renderIdentityTab(container.querySelector('#etab-identity'), pad, container);
 
-  if (pad.type === 'artifact') {
+  if (isCustomUi) {
+    renderCustomUiNotice(container.querySelector('#etab-customui'), pad);
+  } else if (pad.type === 'artifact') {
     renderArtifactFieldsTab(container.querySelector('#etab-fields'), pad, container);
+    renderEnginesTab(container.querySelector('#etab-engines'), pad, container);
   } else {
     renderToolFieldsTab(container.querySelector('#etab-fields'), pad, container);
+    renderEnginesTab(container.querySelector('#etab-engines'), pad, container);
   }
 
-  renderEnginesTab(container.querySelector('#etab-engines'), pad, container);
   container.querySelector('#btn-editor-save').addEventListener('click', () => saveFromEditor(container, pad.id, isNew, pad.type));
+}
+
+// Panneau informatif pour les artefacts à UI custom (ui_kind=fullscreen).
+// Liste où vit le code et pourquoi on n'a pas d'éditeur visuel ici.
+function renderCustomUiNotice(el, pad) {
+  if (!el) return;
+  const moduleHint = pad.id === 'A-COM-001' ? 'app/sdqr.js' : 'app/<artefact>.js';
+  el.innerHTML = `
+    <div style="padding:24px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.22);border-left:3px solid rgba(99,102,241,.7);border-radius:8px">
+      <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',serif;font-size:18px;color:#c7d2fe">
+        Artefact à interface custom (workspace fullscreen)
+      </h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-muted);line-height:1.65">
+        Cet artefact n'utilise <strong>pas</strong> le pipeline LLM&nbsp;→&nbsp;JSON&nbsp;→&nbsp;Composants des artefacts génériques.
+        Sa logique métier (UI, parsers, API calls, rendu SVG) est codée en dur dans le module&nbsp;:
+      </p>
+      <code style="display:inline-block;padding:6px 12px;background:rgba(0,0,0,.25);border-radius:4px;color:#a5b4fc;font-size:12.5px;margin-bottom:14px">
+        ${moduleHint}
+      </code>
+      <p style="margin:0 0 8px;font-size:13px;color:var(--text-muted);line-height:1.65">
+        Pour modifier le comportement utilisateur&nbsp;: <strong>éditer le code source</strong> directement.
+        Les onglets <em>Composants / Moteurs / Aperçu</em> ne s'appliquent pas et ont été masqués.
+      </p>
+      <p style="margin:14px 0 0;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);font-size:12px;color:var(--text-muted)">
+        L'onglet <strong>Identité</strong> reste actif pour ajuster le titre, sous-titre, icône, plan tarifaire et tags
+        (métadonnées catalogue uniquement).
+      </p>
+    </div>
+  `;
 }
 
 // ── Card Preview ───────────────────────────────────────────────
