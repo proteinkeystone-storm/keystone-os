@@ -4,7 +4,9 @@
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  // X-Tenant-Id ajouté Sprint SDQR-1 : header custom envoye par sdqr.js
+  // pour identifier le tenant proprietaire des QR codes.
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Tenant-Id',
 };
 
 // ── Réponses JSON ─────────────────────────────────────────────
