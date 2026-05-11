@@ -1,0 +1,14 @@
+{
+  "id": "A-COM-001",
+  "padKey": null,
+  "type": "artifact",
+  "title": "Sovereign Dynamic QR",
+  "subtitle": "QR codes dynamiques · stats souveraines · RGPD",
+  "category": "COM",
+  "icon": "zap",
+  "ai_optimized": "Claude",
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nLa logique métier (parsers, studio design, redirect, stats) vit dans app/sdqr.js et workers/src/routes/qr.js.\nPour modifier le comportement utilisateur : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Générez des QR codes statiques (URL, VCard, Wi-Fi, iCal, texte) et dynamiques (URL modifiable après impression). Chaque scan est tracké de façon souveraine — aucune donnée tierce, RGPD natif. Studio de design pour brander vos QRs. Dashboard stats par campagne. Cas d'usage : bâches chantier, cartes de visite, flyers, événements."
+}
