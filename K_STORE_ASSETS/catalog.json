@@ -131,6 +131,22 @@
       "tags": ["admin", "commercial", "objection", "vente", "argumentation"]
     },
     {
+      "id": "O-IMM-009",
+      "padKey": "A9",
+      "title": "Contrat de Réservation VEFA",
+      "subtitle": "Contrat préliminaire — Art. L.261-15 CCH",
+      "category": "IMM",
+      "plan": "STARTER",
+      "price": 29,
+      "longDesc": "Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Auto-calculs HT/TTC, échéancier R.261-14, dépôt de garantie plafonné, conversion montant en lettres. Réutilise les données du programme déjà saisies.",
+      "icon": "vefa",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "lifetimePrice": 149,
+      "tags": ["immobilier", "vefa", "contrat", "réservation", "juridique", "notaire"]
+    },
+    {
       "id": "A-IMM-001",
       "padKey": null,
       "title": "Sentinelle",

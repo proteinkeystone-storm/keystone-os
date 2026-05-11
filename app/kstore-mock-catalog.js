@@ -48,6 +48,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,                           // ← bouton acheter actif
     },
+    {
+        id: 'O-IMM-009',                      // ← Sprint 4 — réelle, pad A9
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'Contrat de Réservation VEFA',
+        punchline: 'Contrat préliminaire Art. L.261-15 CCH',
+        shortDesc: 'PDF prêt notaire en 5 minutes',
+        price: 29,
+        icon: 'vefa',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {
