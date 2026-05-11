@@ -79,6 +79,18 @@ async function _apiUpdate(id, patch) {
   return (await r.json()).qr;
 }
 
+async function _apiDelete(id) {
+  const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { 'X-Tenant-Id': _tenantId() },
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error || 'API delete error ' + r.status);
+  }
+  return true;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // QR SVG rendering (basic, sans design custom — Sprint SDQR-3)
 // ══════════════════════════════════════════════════════════════════
@@ -344,7 +356,13 @@ async function _openQrDetail(panel, qr) {
         </div>
       </div>
       <div class="sdqr-detail-right">
-        <div class="sdqr-detail-name">${_esc(qr.name || '(sans nom)')}</div>
+        <!-- Nom editable inline (Sprint SDQR-1 quick win) -->
+        <label class="sdqr-field sdqr-field--inline">
+          <span class="sdqr-field-lbl">Nom interne</span>
+          <input type="text" id="sdqr-edit-name" class="sdqr-input sdqr-input--title" value="${_esc(qr.name || '')}" placeholder="Nom interne…">
+          <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-save-name" title="Renommer ce QR">Renommer</button>
+        </label>
+
         <div class="sdqr-detail-meta">
           <span class="sdqr-detail-pill">${_esc(qr.qr_type || 'url')}</span>
           <span class="sdqr-detail-pill ${qr.status === 'archived' ? 'sdqr-detail-pill--off' : ''}">${qr.status === 'archived' ? 'Archivé' : 'Actif'}</span>
@@ -364,6 +382,7 @@ async function _openQrDetail(panel, qr) {
         <div class="sdqr-detail-actions">
           <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
           <a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>
+          ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
         </div>
 
         <div class="sdqr-detail-msg" id="sdqr-detail-msg" hidden></div>
@@ -410,6 +429,39 @@ async function _openQrDetail(panel, qr) {
       _openQrDetail(panel, { ...qr, status: next });
     } catch (e) {
       const msg = content.querySelector('#sdqr-detail-msg');
+      if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
+  // Renommer inline
+  content.querySelector('#sdqr-save-name')?.addEventListener('click', async () => {
+    const newName = content.querySelector('#sdqr-edit-name')?.value.trim();
+    const msg = content.querySelector('#sdqr-detail-msg');
+    if (!newName) {
+      if (msg) { msg.hidden = false; msg.textContent = 'Le nom ne peut pas être vide.'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+      return;
+    }
+    try {
+      await _apiUpdate(qr.id, { name: newName });
+      qr.name = newName;
+      if (msg) { msg.hidden = false; msg.textContent = '✓ Nom mis à jour'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+      await _refreshList(panel);   // reflète le nouveau nom dans la sidebar
+    } catch (e) {
+      if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
+  // Supprimer définitivement (uniquement si archivé — verrou côté API aussi)
+  content.querySelector('#sdqr-delete')?.addEventListener('click', async () => {
+    if (!confirm(`Supprimer définitivement "${qr.name}" ?\n\n• Le QR ne pourra plus rediriger.\n• Les statistiques historiques (scans) sont conservées pour audit.\n• Cette action est irréversible.`)) return;
+    const msg = content.querySelector('#sdqr-detail-msg');
+    try {
+      await _apiDelete(qr.id);
+      _selectedId = null;
+      await _refreshList(panel);
+      panel.querySelector('#sdqr-content').innerHTML = _renderEmptyStudio();
+      panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
+    } catch (e) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });

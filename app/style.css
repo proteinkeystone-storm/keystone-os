@@ -6137,3 +6137,21 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   .sdqr-detail { grid-template-columns: 1fr; }
   .sdqr-form-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Sprint SDQR-1 quick wins : rename + delete ────────────── */
+.sdqr-input--title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.sdqr-btn--danger {
+  background: transparent;
+  border-color: rgba(239,68,68,.32);
+  color: #ff8b8b;
+}
+.sdqr-btn--danger:hover {
+  background: rgba(239,68,68,.10);
+  border-color: rgba(239,68,68,.55);
+  color: #ffb4b4;
+}

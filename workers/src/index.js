@@ -38,7 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -118,6 +118,10 @@ export default {
       if (path.startsWith('/api/qr/') && method === 'PATCH') {
         const qrId = path.split('/').pop();
         return handleUpdateQr(request, env, qrId);
+      }
+      if (path.startsWith('/api/qr/') && method === 'DELETE') {
+        const qrId = path.split('/').pop();
+        return handleDeleteQr(request, env, qrId);
       }
 
       // ── PADs ─────────────────────────────────────────────────

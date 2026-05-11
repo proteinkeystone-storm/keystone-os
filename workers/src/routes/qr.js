@@ -6,7 +6,7 @@
      POST /api/qr           Tenant — crée un QR dynamique
      GET  /api/qr           Tenant — liste les QRs du tenant
      PATCH /api/qr/:id      Tenant — modifie cible / status / nom / tags
-     DELETE /api/qr/:id     Tenant — supprime (soft via status=archived)
+     DELETE /api/qr/:id     Tenant — suppression definitive (cascade)
 
    RGPD : aucune IP brute stockée. country via cf.country, device_kind
    et os_kind dérivés du User-Agent, ua_hash = sha-256(UA) tronqué.
@@ -269,5 +269,52 @@ export async function handleUpdateQr(request, env, qrId) {
     return json({ qr: { ...entity, target_url: body.target_url || null } }, 200, origin);
   } catch (e) {
     return err('Mise à jour échouée : ' + e.message, 500, origin);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DELETE /api/qr/:id — suppression définitive (cascade)
+// Pré-requis : le QR doit etre en status='archived' (double securite
+// contre suppression accidentelle d un QR encore imprime/diffuse).
+// Cascade : entities soft-delete + qr_redirects hard-delete +
+// qr_scans conserves (audit historique, purge via cron policy a part).
+// ══════════════════════════════════════════════════════════════════
+export async function handleDeleteQr(request, env, qrId) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = getTenantId(request);
+
+  const row = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NULL`)
+    .bind(tenantId, qrId).first();
+  if (!row) return err('QR introuvable', 404, origin);
+
+  let entity;
+  try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
+
+  // Double securite : on n autorise la suppression definitive QUE pour
+  // les QR deja archives. Force un archivage explicite d abord.
+  if (entity.status !== 'archived') {
+    return err('Archivez le QR avant de le supprimer définitivement.', 409, origin);
+  }
+
+  try {
+    // 1. Soft-delete entity (preserve l audit / data fabric history)
+    await env.DB
+      .prepare(`UPDATE entities SET deleted_at = datetime('now'), updated_at = datetime('now')
+                WHERE tenant_id = ? AND type = 'qr_codes' AND id = ?`)
+      .bind(tenantId, qrId).run();
+
+    // 2. Hard-delete redirect (libere le short_id, plus de redirection possible)
+    await env.DB
+      .prepare(`DELETE FROM qr_redirects WHERE short_id = ?`)
+      .bind(entity.short_id).run();
+
+    // 3. qr_scans conservés intentionnellement (audit/stats historiques).
+    //    Une purge auto sera ajoutee en SDQR-5 (retention policy par tenant).
+
+    return json({ deleted: true, id: qrId }, 200, origin);
+  } catch (e) {
+    return err('Suppression échouée : ' + e.message, 500, origin);
   }
 }
