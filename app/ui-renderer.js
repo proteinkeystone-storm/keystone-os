@@ -1577,24 +1577,32 @@ function _buildModal(pad, tool) {
     const hasKey     = !!apiKey;
 
     // Le bouton Générer est disabled d'entrée — activé par _updatePromptPreview
-    const requiredCount = pad.fields.filter(f => f.required).length;
-    const generateBtn = hasKey
-        ? `<button class="btn-generate" id="btn-generate" ${requiredCount > 0 ? 'disabled' : ''}>
-               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-               Générer avec ${engine}
-           </button>`
-        : `<button class="no-api-hint" id="no-api-link" type="button">
-               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-               Configurer une clé API pour générer directement
-               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0;opacity:.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-           </button>`;
+    // Sprint C — Si le pad a un doc_export (DocEngine), on supprime le
+    // bouton LLM concurrent. DocEngine produit du PDF print-ready en 1 clic
+    // alors que l'LLM produit du HTML à copier-coller (workflow obsolète).
+    // Pour les autres pads (Annonces, Posts, Emails…), le bouton LLM reste
+    // le seul moyen de générer du contenu — donc on le garde.
+    const hasDocExport = !!pad.doc_export;
 
-    // ── Sprint C — VEFA Studio v3 : bouton "Notice PDF" via DocEngine ─
-    // S'affiche uniquement si le pad déclare `doc_export`. Pas d'appel LLM :
-    // substitution directe du template + clauses partagées (Paged.js).
-    const docExportBtn = pad.doc_export
-        ? `<button class="btn-doc-export" id="btn-doc-export" type="button" title="Générer la notice PDF print-ready (sans IA)">
-               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px;flex-shrink:0">
+    const requiredCount = pad.fields.filter(f => f.required).length;
+    const generateBtn = hasDocExport
+        ? ''  // VEFA-like : remplacé par btn-doc-export
+        : (hasKey
+            ? `<button class="btn-generate" id="btn-generate" ${requiredCount > 0 ? 'disabled' : ''}>
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                   Générer avec ${engine}
+               </button>`
+            : `<button class="no-api-hint" id="no-api-link" type="button">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                   Configurer une clé API pour générer directement
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0;opacity:.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+               </button>`);
+
+    // ── Sprint C — bouton primary "Notice PDF" via DocEngine ──────
+    // Quand présent, c'est LE CTA principal du pad (style btn-generate).
+    const docExportBtn = hasDocExport
+        ? `<button class="btn-generate btn-doc-primary" id="btn-doc-export" type="button" title="Générer la notice PDF print-ready">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0">
                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                    <polyline points="14 2 14 8 20 8"/>
                    <line x1="9" y1="13" x2="15" y2="13"/>
@@ -1602,7 +1610,7 @@ function _buildModal(pad, tool) {
                </svg>
                <span>${pad.doc_export.label || 'Notice PDF'}</span>
                <span class="btn-doc-export-spinner" hidden>
-                   <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="14 28" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
+                   <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="14 28" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
                </span>
            </button>`
         : '';
