@@ -519,13 +519,28 @@ window.addEventListener('ks-catalog-loaded', () => {
 // de placeholder pour les apps non encore éditées.
 // ═══════════════════════════════════════════════════════════════
 
+// Whitelist des codes K-Store (cf. KSTORE_CATEGORIES). Les entrées du
+// catalog interne (CATALOG_DATA / D1) utilisent une taxonomie LEGACY
+// (IMM, COM, ANL, ADM, MKT, PRD) pour le dashboard ; le K-Store, lui,
+// a sa propre taxonomie (BIZ/NEWS/FUN/…) avec sous-cats (BIZ_IMM…).
+// Mélanger les deux fait disparaître les pads du K-Store sidebar.
+const _KSTORE_CAT_CODES = new Set([
+    'BIZ', 'NEWS', 'FUN', 'FIN', 'GFX', 'MED', 'MUS', 'PRD', 'SOC', 'LIF', 'UTL',
+    'BIZ_IMM', 'BIZ_RST', 'BIZ_LSR', 'BIZ_COM',
+]);
+
 // Normalise une entrée D1 catalog vers le shape attendu côté front
 function _ksNormalizeD1(d1) {
     if (!d1) return null;
+    // On ne propage category/subcategory QUE si elles appartiennent à la
+    // taxonomie K-Store. Sinon (cas legacy IMM/COM/ANL/ADM), on les omet
+    // pour laisser celles du mock prendre le dessus dans _ksMergeApp.
+    const safeCategory    = _KSTORE_CAT_CODES.has(d1.category)    ? d1.category    : undefined;
+    const safeSubcategory = _KSTORE_CAT_CODES.has(d1.subcategory) ? d1.subcategory : undefined;
     return {
         id            : d1.id,
-        category      : d1.category,
-        subcategory   : d1.subcategory,
+        category      : safeCategory,
+        subcategory   : safeSubcategory,
         title         : d1.title,
         punchline     : d1.subtitle || d1.punchline || '',
         shortDesc     : d1.subtitle || d1.shortDesc || d1.longDesc || '',
