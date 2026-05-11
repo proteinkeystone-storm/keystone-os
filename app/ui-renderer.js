@@ -1769,36 +1769,62 @@ function _buildModal(pad, tool) {
     });
 
     // 📋 Copier le prompt (mode prompt) OU la notice portable (mode doc_export)
+    // Robustesse Safari : 1) timeout sur la génération, 2) fallback execCommand
+    // si navigator.clipboard.writeText() est bloqué par perte de user gesture.
     document.getElementById('btn-copy-prompt')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-copy-prompt');
         if (!btn) return;
         const origHTML = btn.innerHTML;
+        btn.classList.add('active');
 
         let payload = '';
-        if (pad.doc_export) {
-            // Mode portable : si le cache n'est pas prêt, on le construit à la volée
-            const form = document.getElementById('tool-form');
-            const formData = {};
-            form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
-            btn.classList.add('active');
-            btn.innerHTML = '⏳ Génération…';
-            const cached = await _prebuildPortableBloc(pad, formData);
-            payload = cached?.content || '';
-        } else {
-            payload = document.getElementById('prompt-text')?.textContent || '';
+        try {
+            if (pad.doc_export) {
+                const form = document.getElementById('tool-form');
+                const formData = {};
+                form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+                btn.innerHTML = '⏳ Génération…';
+                const cached = await _prebuildPortableBloc(pad, formData);
+                payload = cached?.content || '';
+            } else {
+                payload = document.getElementById('prompt-text')?.textContent || '';
+            }
+        } catch (e) {
+            console.error('[copy-prompt] erreur build :', e);
         }
 
         if (!payload) {
-            btn.innerHTML = '✗ Erreur';
-            setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
+            btn.innerHTML = '✗ Erreur — voir console';
+            setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2500);
             return;
         }
 
-        await navigator.clipboard.writeText(payload);
-        btn.innerHTML = '✓ Copié !';
-        btn.classList.add('active');
-        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2000);
-        return;
+        // Copy avec fallback Safari (perte user gesture après await)
+        let copied = false;
+        try {
+            await navigator.clipboard.writeText(payload);
+            copied = true;
+        } catch (e) {
+            console.warn('[copy-prompt] clipboard API failed, fallback execCommand', e);
+        }
+        if (!copied) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = payload;
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus(); ta.select();
+                copied = document.execCommand('copy');
+                document.body.removeChild(ta);
+            } catch (e) {
+                console.error('[copy-prompt] fallback execCommand failed', e);
+            }
+        }
+
+        btn.innerHTML = copied ? '✓ Copié !' : '✗ Copie bloquée — voir console';
+        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, copied ? 2000 : 3000);
     });
 
     // ⬇ Télécharger .html (doc_export uniquement) — fichier auto-suffisant
@@ -2579,31 +2605,87 @@ function _formSignature(formData) {
 // Pré-construit le bloc portable et le met en cache.
 // Appelé async par _updatePortableNoticePreview (debounce 500ms),
 // et au moment du clic Copier/Télécharger si pas encore prêt.
+//
+// Robustesse : timeout 10s pour éviter qu'un dataFabric stuck (IDB lock)
+// ou un fetch template bloqué ne fige le bouton "Copier" indéfiniment.
 async function _prebuildPortableBloc(pad, formData) {
     const sig = _formSignature(formData);
     if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
         return _portableCache;  // cache hit
     }
-    if (!window.docEngine) return null;
+    if (!window.docEngine) {
+        console.warn('[portable] window.docEngine non disponible');
+        return null;
+    }
 
     const cfg = pad.doc_export;
     const variables = _buildDocExportVariables(pad, formData);
 
     try {
-        // mode: 'html' → renvoie juste { html, missing }, n'ouvre pas de fenêtre
-        const { html, missing } = await window.docEngine.render({
+        // Timeout 10s pour blinder contre les hangs (IDB lock, fetch stalled, etc.)
+        const renderPromise = window.docEngine.render({
             templateId: cfg.templateId,
             variables,
             mode      : 'html',
         });
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('DocEngine render timeout (10s)')), 10000)
+        );
 
-        const content = _composePortableBloc({ pad, variables, html, missing });
-        _portableCache = { padId: pad.id, signature: sig, content, html };
+        const { html, missing } = await Promise.race([renderPromise, timeoutPromise]);
+
+        // Sprint B2 — Standalone : on injecte une mini-toolbar Imprimer/PDF
+        // directement dans le HTML pour que le fichier .html téléchargé
+        // (ou affiché dans une IA) soit immédiatement actionnable.
+        const standaloneHtml = _injectStandaloneToolbar(html);
+
+        const content = _composePortableBloc({ pad, variables, html: standaloneHtml, missing });
+        _portableCache = { padId: pad.id, signature: sig, content, html: standaloneHtml };
         return _portableCache;
     } catch (e) {
-        console.warn('[portable] erreur de pré-génération', e);
+        console.warn('[portable] erreur de pré-génération :', e?.message || e);
         return null;
     }
+}
+
+// Injecte une mini-toolbar [Imprimer · PDF · Fermer] dans le HTML standalone.
+// Sobre, en haut à droite, masquée à l'impression via @media print.
+// Boutons gérés par un petit script inline (autonome, sans dépendance).
+function _injectStandaloneToolbar(html) {
+    const toolbar = `
+<!-- Toolbar Keystone (injectée pour les fichiers HTML standalone). Cachée à l'impression. -->
+<style>
+  .ks-standalone-toolbar {
+    position: fixed; top: 16px; right: 16px; z-index: 999999;
+    display: flex; gap: 6px; padding: 6px;
+    background: rgba(20, 24, 35, 0.95); border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .ks-standalone-toolbar button {
+    background: transparent; border: none; color: rgba(230,235,245,0.9);
+    padding: 8px 14px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ks-standalone-toolbar button:hover { background: rgba(255,255,255,0.08); }
+  .ks-standalone-toolbar button:active { background: rgba(255,255,255,0.14); }
+  @media print { .ks-standalone-toolbar { display: none !important; } }
+</style>
+<div class="ks-standalone-toolbar" id="ks-toolbar">
+  <button onclick="window.print()" title="Imprimer / Sauver en PDF (Cmd+P)">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Imprimer / PDF
+  </button>
+  <button onclick="document.getElementById('ks-toolbar').style.display='none'" title="Masquer la toolbar">
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+</div>`;
+
+    // Insère juste avant </body> (ou à la fin si pas trouvé)
+    if (html.includes('</body>')) {
+        return html.replace('</body>', toolbar + '\n</body>');
+    }
+    return html + toolbar;
 }
 
 // Construit les variables à partir du formData + dérivées (DATE_EDITION etc.).
@@ -2650,27 +2732,31 @@ function _composePortableBloc({ pad, variables, html, missing }) {
     return `=== NOTICE VEFA PORTABLE — Générée par Keystone OS le ${date} ===
 Programme : ${prog} · Lot : ${lot} · Référence : ${ref}
 ${warn}
-Ce message est auto-suffisant : il contient tout le HTML nécessaire pour
-reproduire à l'identique le PDF généré par Keystone OS. Vous pouvez :
+══════════════════════════════════════════════════════════════════
+COMMENT IMPRIMER CE DOCUMENT EN PDF ?
+══════════════════════════════════════════════════════════════════
 
-▸ OPTION A — Le coller dans une IA (Claude.ai, ChatGPT, Gemini)
-  L'IA affichera le HTML ; demandez-lui ensuite d'ouvrir Cmd+P pour imprimer.
+▸ MÉTHODE RECOMMANDÉE — Sauvegarder en fichier .html
+   1. Copiez TOUT le code HTML entre les balises "=== DÉBUT ===" et "=== FIN ===" ci-dessous.
+   2. Collez-le dans un fichier texte vide, sauvegardez-le sous "notice.html".
+   3. Double-cliquez sur le fichier — il s'ouvre dans votre navigateur.
+   4. Cliquez sur le bouton "Imprimer / PDF" en haut à droite (toolbar Keystone intégrée),
+      OU faites Cmd+P (Mac) / Ctrl+P (Windows).
+   5. Dans la fenêtre d'impression : activez "Graphiques d'arrière-plan",
+      désactivez "En-têtes et pieds de page du navigateur", format A4.
 
-▸ OPTION B — Le sauvegarder en fichier .html
-  Copiez tout le bloc HTML entre les balises ci-dessous, sauvegardez dans
-  un fichier "notice.html", ouvrez-le dans un navigateur, puis Cmd+P
-  (activez "Graphiques d'arrière-plan", désactivez "En-têtes du navigateur").
+▸ ALTERNATIVE — Coller dans Claude.ai (rendu artifact automatique)
+   Claude.ai rend les blocs HTML en artifact interactif (panneau de droite).
+   Collez ce message complet, Claude affiche le HTML, vous imprimez de là.
 
-INSTRUCTIONS POUR L'IA :
-Affiche le code HTML ci-dessous EXACTEMENT TEL QUEL, sans le résumer ni le
-modifier. Une fois affiché, indique à l'utilisateur comment l'imprimer en
-PDF via Cmd+P (Mac) ou Ctrl+P (Windows).
+   ChatGPT / Gemini : capacités de rendu HTML variables — préférez la méthode .html.
 
+══════════════════════════════════════════════════════════════════
 === DÉBUT CODE HTML ===
 ${html}
 === FIN CODE HTML ===
 
-(Notice générée par Keystone OS · keystone-os.com · DocEngine v1)
+(Notice générée par Keystone OS · keystone-os.com · DocEngine v1 · Auto-suffisante)
 `;
 }
 
