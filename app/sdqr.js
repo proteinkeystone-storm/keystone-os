@@ -18,6 +18,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
+import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -26,6 +27,15 @@ let _cachedQrs   = [];         // dernière liste reçue
 let _currentView = 'studio';   // 'studio' | 'stats'
 let _selectedId  = null;       // QR sélectionné dans la sidebar
 let _busy        = false;      // anti-double-click
+
+// État de la fenêtre de création (Sprint SDQR-2)
+let _creating = {
+  mode    : 'dynamic',         // 'static' | 'dynamic'
+  type    : 'url',             // url | text | vcard | wifi | ical
+  payload : {},                // valeurs des champs typés
+  name    : '',
+  tags    : '',
+};
 
 // ── Lazy import du QR encoder ──────────────────────────────────
 async function _loadQrLib() {
@@ -234,14 +244,17 @@ async function _refreshList(panel) {
   listEl.innerHTML = _cachedQrs.map(q => {
     const tags = (q.tags || []).slice(0, 3).map(t => `<span class="sdqr-li-tag">${_esc(t)}</span>`).join('');
     const isSel = q.id === _selectedId;
+    const isDyn = (q.mode || 'dynamic') === 'dynamic';
+    const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
     return `
       <button class="sdqr-li ${isSel ? 'is-selected' : ''}" data-qr-id="${_esc(q.id)}">
         <div class="sdqr-li-hd">
           <span class="sdqr-li-name">${_esc(q.name || '(sans nom)')}</span>
-          <span class="sdqr-li-scans" title="Scans totaux">${q.scans_total || 0}</span>
+          ${isDyn ? `<span class="sdqr-li-scans" title="Scans totaux">${q.scans_total || 0}</span>` : `<span class="sdqr-li-scans sdqr-li-scans--stat" title="QR statique — pas de tracking">∞</span>`}
         </div>
         <div class="sdqr-li-meta">
-          <span class="sdqr-li-type">${_esc(q.qr_type || 'url')}</span>
+          <span class="sdqr-li-type">${typeDef.icon} ${_esc(typeDef.label)}</span>
+          <span class="sdqr-li-mode ${isDyn ? 'sdqr-li-mode--dyn' : 'sdqr-li-mode--stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
           ${q.status === 'archived' ? '<span class="sdqr-li-status">Archivé</span>' : ''}
         </div>
         ${tags ? `<div class="sdqr-li-tags">${tags}</div>` : ''}
@@ -266,26 +279,53 @@ function _openCreateForm(panel) {
   if (!content) return;
   _selectedId = null;
   panel.querySelectorAll('.sdqr-li.is-selected').forEach(el => el.classList.remove('is-selected'));
+
+  // Reset l'état de création à chaque ouverture
+  _creating = { mode: 'dynamic', type: 'url', payload: {}, name: '', tags: '' };
+
   content.innerHTML = `
     <div class="sdqr-form-wrap">
       <div class="sdqr-form-head">
-        <h2 class="sdqr-form-title">Nouveau QR dynamique</h2>
-        <p class="sdqr-form-sub">URL modifiable après création. Sprint 1 → seul le type "URL" est dispo. Plus de types au Sprint 2 (VCard, Wi-Fi, iCal…).</p>
+        <h2 class="sdqr-form-title">Nouveau QR code</h2>
+        <p class="sdqr-form-sub">Choisis le mode et le type, puis remplis les champs. Le QR sera prévisualisé après création.</p>
       </div>
-      <div class="sdqr-form-grid">
-        <label class="sdqr-field">
+
+      <!-- Mode toggle (Statique / Dynamique) -->
+      <div class="sdqr-mode-toggle" id="sdqr-mode-toggle">
+        <button class="sdqr-mode-btn" data-mode="dynamic">
+          <span class="sdqr-mode-dot"></span>
+          <div class="sdqr-mode-txt">
+            <strong>Dynamique</strong>
+            <small>URL modifiable · stats trackées · nécessite connexion</small>
+          </div>
+        </button>
+        <button class="sdqr-mode-btn" data-mode="static">
+          <span class="sdqr-mode-dot"></span>
+          <div class="sdqr-mode-txt">
+            <strong>Statique</strong>
+            <small>Données dans les pixels · offline · non modifiable</small>
+          </div>
+        </button>
+      </div>
+
+      <!-- Cartes de type -->
+      <div class="sdqr-type-cards" id="sdqr-type-cards"></div>
+
+      <!-- Form contextuel selon le type -->
+      <div class="sdqr-form-grid" id="sdqr-form-fields"></div>
+
+      <!-- Méta commune (nom + tags) -->
+      <div class="sdqr-form-grid" style="margin-top:14px">
+        <label class="sdqr-field sdqr-field--full">
           <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
           <input type="text" id="sdqr-f-name" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
-        </label>
-        <label class="sdqr-field">
-          <span class="sdqr-field-lbl">URL de destination <span class="sdqr-req">*</span></span>
-          <input type="url" id="sdqr-f-url" class="sdqr-input" placeholder="https://…">
         </label>
         <label class="sdqr-field sdqr-field--full">
           <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
           <input type="text" id="sdqr-f-tags" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
         </label>
       </div>
+
       <div class="sdqr-form-actions">
         <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-cancel">Annuler</button>
         <button class="sdqr-btn sdqr-btn--primary" id="sdqr-save">
@@ -296,6 +336,15 @@ function _openCreateForm(panel) {
       <div class="sdqr-form-msg" id="sdqr-msg" hidden></div>
     </div>
   `;
+
+  _renderTypeCards(content);
+  _renderModeToggle(content);
+  _renderFormFields(content);
+
+  // Bindings persistants (nom + tags)
+  content.querySelector('#sdqr-f-name')?.addEventListener('input', e => { _creating.name = e.target.value; });
+  content.querySelector('#sdqr-f-tags')?.addEventListener('input', e => { _creating.tags = e.target.value; });
+
   content.querySelector('#sdqr-cancel')?.addEventListener('click', () => {
     content.innerHTML = _renderEmptyStudio();
     panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
@@ -303,43 +352,196 @@ function _openCreateForm(panel) {
   content.querySelector('#sdqr-save')?.addEventListener('click', () => _handleCreate(panel));
 }
 
+// Rend les cartes de type cliquables. La carte active reflète _creating.type.
+// Si on bascule sur un type static-only, force _creating.mode = 'static'.
+function _renderTypeCards(root) {
+  const wrap = root.querySelector('#sdqr-type-cards');
+  if (!wrap) return;
+  wrap.innerHTML = Object.entries(QR_TYPES).map(([id, def]) => {
+    const isActive   = _creating.type === id;
+    const staticOnly = !def.supports.dynamic;
+    return `
+      <button class="sdqr-type-card ${isActive ? 'is-active' : ''}" data-type="${id}">
+        <span class="sdqr-type-ico">${def.icon}</span>
+        <span class="sdqr-type-label">${def.label}</span>
+        <span class="sdqr-type-desc">${def.desc}</span>
+        ${staticOnly ? '<span class="sdqr-type-badge">Statique only</span>' : ''}
+      </button>
+    `;
+  }).join('');
+  wrap.querySelectorAll('.sdqr-type-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const newType = card.dataset.type;
+      _creating.type = newType;
+      _creating.payload = {};                       // reset payload (champs ≠)
+      const def = QR_TYPES[newType];
+      if (!def.supports.dynamic && _creating.mode === 'dynamic') {
+        _creating.mode = 'static';                  // auto-bascule
+      }
+      _renderTypeCards(root);
+      _renderModeToggle(root);
+      _renderFormFields(root);
+    });
+  });
+}
+
+function _renderModeToggle(root) {
+  const wrap = root.querySelector('#sdqr-mode-toggle');
+  if (!wrap) return;
+  const def = QR_TYPES[_creating.type];
+  const dynDisabled = !def?.supports?.dynamic;
+  wrap.querySelectorAll('.sdqr-mode-btn').forEach(btn => {
+    const mode = btn.dataset.mode;
+    btn.classList.toggle('is-active', _creating.mode === mode);
+    if (mode === 'dynamic') {
+      btn.disabled = dynDisabled;
+      btn.title    = dynDisabled ? `Le type ${def?.label} n'existe qu'en mode statique.` : '';
+    }
+    btn.onclick = () => {
+      if (btn.disabled) return;
+      _creating.mode = mode;
+      _renderModeToggle(root);
+    };
+  });
+}
+
+// Rend les champs du form en fonction du type sélectionné.
+// L'URL en mode dynamique = champ "URL de destination" (target_url).
+// L'URL en mode statique = champ "URL" (encodée direct).
+function _renderFormFields(root) {
+  const wrap = root.querySelector('#sdqr-form-fields');
+  if (!wrap) return;
+  const def = QR_TYPES[_creating.type];
+  if (!def) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = def.fields.map(f => _renderField(f)).join('');
+  // Bind change listeners
+  wrap.querySelectorAll('[data-payload-key]').forEach(el => {
+    el.addEventListener('input', () => {
+      const k = el.dataset.payloadKey;
+      _creating.payload[k] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    el.addEventListener('change', () => {
+      const k = el.dataset.payloadKey;
+      _creating.payload[k] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+  });
+  // Toggle password visibility (œil)
+  wrap.querySelectorAll('.sdqr-pw-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = btn.closest('.sdqr-pw-wrap')?.querySelector('input');
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+  });
+}
+
+function _renderField(f) {
+  const span = f.span === 'full' ? ' sdqr-field--full' : '';
+  const req  = f.required ? ' <span class="sdqr-req">*</span>' : '';
+  const val  = _esc(_creating.payload[f.id] ?? f.default ?? '');
+  const ph   = _esc(f.placeholder || '');
+
+  let input = '';
+  if (f.type === 'textarea') {
+    input = `<textarea data-payload-key="${f.id}" class="sdqr-input sdqr-input--textarea" placeholder="${ph}">${val}</textarea>`;
+  } else if (f.type === 'select') {
+    const opts = (f.options || []).map(o =>
+      `<option value="${_esc(o)}" ${o === val ? 'selected' : ''}>${_esc(o)}</option>`
+    ).join('');
+    input = `<select data-payload-key="${f.id}" class="sdqr-input">${opts}</select>`;
+  } else if (f.type === 'checkbox') {
+    input = `<label class="sdqr-checkbox-lbl">
+      <input type="checkbox" data-payload-key="${f.id}" ${val ? 'checked' : ''}>
+      <span>${_esc(f.label)}</span>
+    </label>`;
+    return `<div class="sdqr-field${span}">${input}</div>`;
+  } else if (f.type === 'password') {
+    input = `<div class="sdqr-pw-wrap">
+      <input type="password" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">
+      <button type="button" class="sdqr-pw-toggle" aria-label="Afficher / masquer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>`;
+  } else {
+    input = `<input type="${f.type}" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">`;
+  }
+
+  return `
+    <label class="sdqr-field${span}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      ${input}
+    </label>
+  `;
+}
+
 async function _handleCreate(panel) {
   if (_busy) return;
-  const name = panel.querySelector('#sdqr-f-name')?.value.trim();
-  const url  = panel.querySelector('#sdqr-f-url')?.value.trim();
-  const tags = (panel.querySelector('#sdqr-f-tags')?.value || '')
-                  .split(',').map(s => s.trim()).filter(Boolean);
-  const msg  = panel.querySelector('#sdqr-msg');
+  const msg = panel.querySelector('#sdqr-msg');
+  const def = QR_TYPES[_creating.type];
+  if (!def) return;
 
-  if (!name || !url) {
-    if (msg) { msg.hidden = false; msg.textContent = 'Nom et URL obligatoires.'; msg.className = 'sdqr-form-msg sdqr-form-msg--err'; }
-    return;
+  // Validation : nom + tous les champs required du type sélectionné
+  if (!_creating.name?.trim()) {
+    return _showMsg(msg, 'Le nom interne est obligatoire.', 'err');
   }
+  for (const f of def.fields) {
+    if (f.required && !(_creating.payload[f.id] || '').toString().trim()) {
+      return _showMsg(msg, `Champ obligatoire : ${f.label}`, 'err');
+    }
+  }
+
+  const tags = (_creating.tags || '').split(',').map(s => s.trim()).filter(Boolean);
 
   _busy = true;
   const btn = panel.querySelector('#sdqr-save');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Création…'; }
 
   try {
-    const qr = await _apiCreate({
-      name, target_url: url, tags, type: 'url',
-    });
+    const body = {
+      name    : _creating.name.trim(),
+      tags,
+      type    : _creating.type,
+      mode    : _creating.mode,
+      payload : _creating.payload,
+    };
+    // Mode dynamique URL : target_url = la valeur du champ url
+    if (_creating.mode === 'dynamic' && _creating.type === 'url') {
+      body.target_url = _creating.payload.url || '';
+    }
+    const qr = await _apiCreate(body);
     _selectedId = qr.id;
     await _refreshList(panel);
-    _openQrDetail(panel, { ...qr, target_url: url, scans_total: 0 });
+    _openQrDetail(panel, qr);
   } catch (e) {
-    if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-form-msg sdqr-form-msg--err'; }
+    _showMsg(msg, e.message, 'err');
     if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg> Créer le QR'; }
   } finally {
     _busy = false;
   }
 }
 
+function _showMsg(msgEl, text, kind = 'ok') {
+  if (!msgEl) return;
+  msgEl.hidden = false;
+  msgEl.textContent = text;
+  msgEl.className = `sdqr-form-msg sdqr-form-msg--${kind}`;
+}
+
 async function _openQrDetail(panel, qr) {
   const content = panel.querySelector('#sdqr-content');
   if (!content || !qr) return;
 
-  const redirectUrl = `${CF_API}/r/${qr.short_id}`;
+  const isDynamic   = (qr.mode || 'dynamic') === 'dynamic';
+  const typeDef     = QR_TYPES[qr.qr_type] || QR_TYPES.url;
+  const redirectUrl = qr.short_id ? `${CF_API}/r/${qr.short_id}` : '';
+  // Ce qui est encodé dans les pixels :
+  //   - dynamic URL → l'URL de redirect
+  //   - static *    → le payload encodé (vcard, wifi, ical, text, url direct)
+  const encodedForQr = isDynamic && qr.qr_type === 'url'
+    ? redirectUrl
+    : encodePayload(qr.qr_type, qr.payload || {});
+
+  const summary = previewSummary(qr.qr_type, qr.payload || {});
 
   content.innerHTML = `
     <div class="sdqr-detail">
@@ -349,14 +551,13 @@ async function _openQrDetail(panel, qr) {
             <div class="sdqr-empty-mini">Génération…</div>
           </div>
           <div class="sdqr-detail-shortid">
-            <span class="sdqr-detail-shortid-lbl">URL de redirection</span>
-            <code class="sdqr-detail-shortid-val">${_esc(redirectUrl)}</code>
-            <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-url">Copier</button>
+            <span class="sdqr-detail-shortid-lbl">${isDynamic ? 'URL de redirection' : 'Contenu encodé'}</span>
+            <code class="sdqr-detail-shortid-val">${_esc(isDynamic ? redirectUrl : (encodedForQr.length > 200 ? encodedForQr.slice(0, 200) + '…' : encodedForQr))}</code>
+            <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-payload">Copier</button>
           </div>
         </div>
       </div>
       <div class="sdqr-detail-right">
-        <!-- Nom editable inline (Sprint SDQR-1 quick win) -->
         <label class="sdqr-field sdqr-field--inline">
           <span class="sdqr-field-lbl">Nom interne</span>
           <input type="text" id="sdqr-edit-name" class="sdqr-input sdqr-input--title" value="${_esc(qr.name || '')}" placeholder="Nom interne…">
@@ -364,24 +565,33 @@ async function _openQrDetail(panel, qr) {
         </label>
 
         <div class="sdqr-detail-meta">
-          <span class="sdqr-detail-pill">${_esc(qr.qr_type || 'url')}</span>
+          <span class="sdqr-detail-pill">${typeDef.icon} ${_esc(typeDef.label)}</span>
+          <span class="sdqr-detail-pill ${isDynamic ? 'sdqr-detail-pill--dyn' : 'sdqr-detail-pill--stat'}">${isDynamic ? 'Dynamique' : 'Statique'}</span>
           <span class="sdqr-detail-pill ${qr.status === 'archived' ? 'sdqr-detail-pill--off' : ''}">${qr.status === 'archived' ? 'Archivé' : 'Actif'}</span>
-          <span class="sdqr-detail-stat">${qr.scans_total || 0} scan(s)</span>
+          ${isDynamic ? `<span class="sdqr-detail-stat">${qr.scans_total || 0} scan(s)</span>` : ''}
         </div>
 
+        ${summary ? `<div class="sdqr-detail-summary">${_esc(summary)}</div>` : ''}
+
+        ${isDynamic && qr.qr_type === 'url' ? `
         <label class="sdqr-field sdqr-field--inline">
           <span class="sdqr-field-lbl">URL de destination</span>
           <input type="url" id="sdqr-edit-url" class="sdqr-input" value="${_esc(qr.target_url || '')}">
           <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-save-url" title="Modifier la cible sans regénérer le QR">Mettre à jour</button>
         </label>
-
         <div class="sdqr-detail-notice">
           <strong>Édition dynamique :</strong> tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.
         </div>
+        ` : `
+        <div class="sdqr-detail-notice sdqr-detail-notice--stat">
+          <strong>Mode statique :</strong> les données sont encodées directement dans les pixels du QR.
+          <span style="opacity:.7">Pas de tracking, pas de connexion requise, mais le contenu n'est plus modifiable après création.</span>
+        </div>
+        `}
 
         <div class="sdqr-detail-actions">
           <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
-          <a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>
+          ${isDynamic ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
           ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
         </div>
 
@@ -390,9 +600,9 @@ async function _openQrDetail(panel, qr) {
     </div>
   `;
 
-  // Render le QR SVG (async — qrcode-generator CDN)
+  // Render le QR SVG depuis le contenu encodé (redirect URL ou payload statique)
   try {
-    const svg = await _renderQrSvg(redirectUrl, 280);
+    const svg = await _renderQrSvg(encodedForQr, 280);
     const wrap = content.querySelector('#sdqr-svg-wrap');
     if (wrap) wrap.innerHTML = svg;
   } catch (e) {
@@ -400,10 +610,10 @@ async function _openQrDetail(panel, qr) {
     if (wrap) wrap.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur rendu QR : ${_esc(e.message)}</div>`;
   }
 
-  // Bindings actions
-  content.querySelector('#sdqr-copy-url')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(redirectUrl).then(() => {
-      const b = content.querySelector('#sdqr-copy-url');
+  // Copier (URL redirect OU payload encodé selon mode)
+  content.querySelector('#sdqr-copy-payload')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(isDynamic ? redirectUrl : encodedForQr).then(() => {
+      const b = content.querySelector('#sdqr-copy-payload');
       if (b) { b.textContent = '✓ Copié'; setTimeout(() => { b.textContent = 'Copier'; }, 1500); }
     });
   });

@@ -6155,3 +6155,230 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   border-color: rgba(239,68,68,.55);
   color: #ffb4b4;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR-2 — Mode toggle, type cards, form contextuel
+═══════════════════════════════════════════════════════════════ */
+
+/* Mode toggle (Statique / Dynamique) */
+.sdqr-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sdqr-mode-btn {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  color: rgba(220,225,240,.85);
+  font-family: inherit; text-align: left;
+  cursor: pointer;
+  transition: background .18s, border-color .18s, color .18s;
+}
+.sdqr-mode-btn:hover:not(:disabled) {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.25);
+}
+.sdqr-mode-btn.is-active {
+  background: rgba(184,148,90,.10);
+  border-color: rgba(184,148,90,.45);
+}
+.sdqr-mode-btn:disabled {
+  opacity: .35; cursor: not-allowed;
+}
+.sdqr-mode-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.25);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: border-color .18s, background .18s;
+}
+.sdqr-mode-btn.is-active .sdqr-mode-dot {
+  border-color: var(--gold, #c9a84c);
+  background: var(--gold, #c9a84c);
+  box-shadow: inset 0 0 0 2px #1a1a1a;
+}
+.sdqr-mode-txt strong {
+  display: block;
+  font-size: 13.5px;
+  color: #fff;
+  margin-bottom: 3px;
+}
+.sdqr-mode-btn.is-active .sdqr-mode-txt strong {
+  color: var(--gold, #c9a84c);
+}
+.sdqr-mode-txt small {
+  display: block;
+  font-size: 11.5px;
+  color: rgba(220,225,240,.55);
+  line-height: 1.45;
+}
+
+/* Cartes de type (URL/Texte/vCard/Wi-Fi/iCal) */
+.sdqr-type-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sdqr-type-card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 13px 14px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  color: rgba(220,225,240,.85);
+  font-family: inherit; text-align: left;
+  cursor: pointer;
+  transition: background .18s, border-color .18s, transform .12s;
+}
+.sdqr-type-card:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.25);
+  transform: translateY(-1px);
+}
+.sdqr-type-card.is-active {
+  background: rgba(184,148,90,.10);
+  border-color: rgba(184,148,90,.45);
+}
+.sdqr-type-ico { font-size: 22px; line-height: 1; }
+.sdqr-type-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px; font-weight: 600;
+  color: #fff;
+  margin-top: 2px;
+}
+.sdqr-type-card.is-active .sdqr-type-label { color: var(--gold, #c9a84c); }
+.sdqr-type-desc {
+  font-size: 11px; color: rgba(220,225,240,.55);
+  line-height: 1.35;
+}
+.sdqr-type-badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 9px; font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255,170,40,.12);
+  color: #ffc36a;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* Form contextuel : champs dynamiques */
+.sdqr-input--textarea {
+  min-height: 80px; resize: vertical;
+  font-family: inherit;
+}
+.sdqr-pw-wrap {
+  position: relative;
+  display: flex;
+}
+.sdqr-pw-wrap .sdqr-input { flex: 1; padding-right: 40px; }
+.sdqr-pw-toggle {
+  position: absolute;
+  right: 6px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  color: rgba(220,225,240,.55);
+  border-radius: 5px;
+  transition: color .18s, background .18s;
+}
+.sdqr-pw-toggle:hover {
+  color: var(--gold, #c9a84c);
+  background: rgba(255,255,255,.04);
+}
+.sdqr-checkbox-lbl {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 7px;
+  color: rgba(220,225,240,.85);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.sdqr-checkbox-lbl input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border: 1.5px solid rgba(255,255,255,.25);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-grid; place-content: center;
+  transition: background .18s, border-color .18s;
+}
+.sdqr-checkbox-lbl input[type="checkbox"]:checked {
+  background: var(--gold, #c9a84c);
+  border-color: var(--gold, #c9a84c);
+}
+.sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
+  content: "";
+  width: 9px; height: 5px;
+  border-left: 2px solid #1a1a1a;
+  border-bottom: 2px solid #1a1a1a;
+  transform: rotate(-45deg) translate(0px, -1px);
+}
+
+/* Sidebar — pill mode (Dynamique / Statique) */
+.sdqr-li-mode {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9.5px; font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.sdqr-li-mode--dyn {
+  background: rgba(99,102,241,.12);
+  color: #a5b4fc;
+}
+.sdqr-li-mode--stat {
+  background: rgba(184,148,90,.12);
+  color: #d4b27a;
+}
+.sdqr-li-scans--stat {
+  font-family: inherit;
+  font-size: 13px;
+  color: rgba(220,225,240,.4);
+}
+
+/* Detail — pills mode + summary + notice statique */
+.sdqr-detail-pill--dyn {
+  background: rgba(99,102,241,.10);
+  color: #a5b4fc;
+}
+.sdqr-detail-pill--stat {
+  background: rgba(184,148,90,.10);
+  color: #d4b27a;
+}
+.sdqr-detail-summary {
+  padding: 12px 14px;
+  background: rgba(255,255,255,.02);
+  border-left: 2px solid rgba(184,148,90,.4);
+  border-radius: 4px;
+  color: rgba(220,225,240,.85);
+  font-size: 13px;
+  font-style: italic;
+}
+.sdqr-detail-notice--stat {
+  background: rgba(184,148,90,.06);
+  border-left-color: rgba(184,148,90,.5);
+  color: rgba(220,225,240,.8);
+}
+.sdqr-detail-notice--stat strong { color: #d4b27a; }
+
+/* Messages success */
+.sdqr-form-msg--ok {
+  background: rgba(46,179,124,.10);
+  border: 1px solid rgba(46,179,124,.3);
+  color: #6ee7a7;
+}

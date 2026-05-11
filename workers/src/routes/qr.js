@@ -105,52 +105,69 @@ export async function handleQrRedirect(request, env, shortId) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// POST /api/qr — créer un QR dynamique
+// POST /api/qr — créer un QR (statique ou dynamique)
+// Sprint SDQR-2 : accepte qr_type (url|text|vcard|wifi|ical) + mode
+// (static|dynamic) + payload (objet typé).
+// Mode dynamic : impose qr_type='url' + target_url + génère short_id.
+// Mode static  : pas de short_id, pas de qr_redirects, encode côté client.
 // ══════════════════════════════════════════════════════════════════
+const ALLOWED_TYPES = new Set(['url', 'text', 'vcard', 'wifi', 'ical']);
+
 export async function handleCreateQr(request, env) {
   const origin   = getAllowedOrigin(env, request);
   const tenantId = getTenantId(request);
   const body     = await parseBody(request);
 
-  const name       = (body.name || '').toString().trim();
-  const target_url = (body.target_url || '').toString().trim();
-  const type       = (body.type || 'url').toString();   // url | text | vcard | wifi | ical (Sprint 2)
-  const payload    = body.payload || {};                // payload typé (Sprint 2)
-  const design     = body.design  || {};                // SVG design (Sprint 3)
-  const tags       = Array.isArray(body.tags) ? body.tags.slice(0, 12) : [];
+  const name    = (body.name || '').toString().trim();
+  const type    = (body.type || 'url').toString().toLowerCase();
+  const mode    = (body.mode || 'dynamic').toString().toLowerCase() === 'static' ? 'static' : 'dynamic';
+  const payload = (body.payload && typeof body.payload === 'object') ? body.payload : {};
+  const design  = (body.design  && typeof body.design  === 'object') ? body.design  : {};
+  const tags    = Array.isArray(body.tags) ? body.tags.slice(0, 12) : [];
 
-  if (!name) return err('Le nom est obligatoire', 400, origin);
-  if (!isValidUrl(target_url)) return err('target_url invalide (http/https requis)', 400, origin);
+  if (!name)                  return err('Le nom est obligatoire', 400, origin);
+  if (!ALLOWED_TYPES.has(type)) return err(`Type inconnu : ${type}`, 400, origin);
 
-  // Génère un short_id unique (rare collision → on retry max 3 fois)
-  let short = '';
-  for (let i = 0; i < 3; i++) {
-    const candidate = shortId(8);
-    const exists = await env.DB
-      .prepare('SELECT 1 FROM qr_redirects WHERE short_id = ?')
-      .bind(candidate).first();
-    if (!exists) { short = candidate; break; }
+  // Validation mode/type : seul URL supporte le mode dynamique
+  if (mode === 'dynamic' && type !== 'url') {
+    return err(`Le type "${type}" ne supporte que le mode statique.`, 400, origin);
   }
-  if (!short) return err('Impossible de générer un identifiant unique', 500, origin);
 
-  const id = crypto.randomUUID();
+  const id  = crypto.randomUUID();
   const now = new Date().toISOString();
+  let target_url = '';
+  let short = null;
+
+  if (mode === 'dynamic') {
+    target_url = (body.target_url || payload?.url || '').toString().trim();
+    if (!isValidUrl(target_url)) return err('target_url invalide (http/https requis)', 400, origin);
+
+    // Génère un short_id unique
+    for (let i = 0; i < 3; i++) {
+      const candidate = shortId(8);
+      const exists = await env.DB
+        .prepare('SELECT 1 FROM qr_redirects WHERE short_id = ?')
+        .bind(candidate).first();
+      if (!exists) { short = candidate; break; }
+    }
+    if (!short) return err('Impossible de générer un identifiant unique', 500, origin);
+  }
 
   const entityData = {
     id, tenant_id: tenantId, type: 'qr_codes',
-    name, qr_type: type, payload, design, tags,
+    name, qr_type: type, mode, payload, design, tags,
     short_id: short, status: 'active', created_at: now, updated_at: now,
   };
 
-  // Double écriture transactionnelle simulée (D1 n'a pas de transaction
-  // multi-statement actuellement) : on tente d'abord la table redirects
-  // (la critique), puis l'entité (data fabric).
   try {
-    await env.DB
-      .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, status)
-                VALUES (?, ?, ?, ?, 'active')`)
-      .bind(short, id, tenantId, target_url)
-      .run();
+    // Mode dynamique : crée d'abord l'entrée qr_redirects
+    if (mode === 'dynamic') {
+      await env.DB
+        .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, status)
+                  VALUES (?, ?, ?, ?, 'active')`)
+        .bind(short, id, tenantId, target_url)
+        .run();
+    }
 
     await env.DB
       .prepare(`INSERT INTO entities (id, tenant_id, type, data) VALUES (?, ?, 'qr_codes', ?)`)
@@ -160,7 +177,9 @@ export async function handleCreateQr(request, env) {
     return json({ qr: { ...entityData, target_url } }, 201, origin);
   } catch (e) {
     // Rollback best-effort de qr_redirects si entities échoue
-    await env.DB.prepare('DELETE FROM qr_redirects WHERE short_id = ?').bind(short).run().catch(() => {});
+    if (short) {
+      await env.DB.prepare('DELETE FROM qr_redirects WHERE short_id = ?').bind(short).run().catch(() => {});
+    }
     return err('Création échouée : ' + e.message, 500, origin);
   }
 }
@@ -242,6 +261,9 @@ export async function handleUpdateQr(request, env, qrId) {
     entity.status = body.status;
   }
   if (body.target_url !== undefined) {
+    if (entity.mode === 'static') {
+      return err('Impossible de modifier la cible d\'un QR statique (regénérez un nouveau QR).', 400, origin);
+    }
     if (!isValidUrl(body.target_url)) return err('target_url invalide', 400, origin);
     targetChanged = true;
   }
