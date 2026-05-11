@@ -1644,52 +1644,62 @@ function _buildModal(pad, tool) {
             <button class="modal-close" id="modal-close-btn" aria-label="Fermer">✕</button>
         </div>
 
-        <div class="modal-body">
+        <div class="modal-body${hasDocExport ? ' modal-body--solo' : ''}">
 
-            <!-- FORMULAIRE (gauche) -->
+            <!-- FORMULAIRE (pleine largeur si doc_export, sinon 65%) -->
             <div class="modal-form">
                 <form id="tool-form" class="form-grid" onsubmit="return false">
                     ${fieldsHTML}
                 </form>
+
+                ${hasDocExport ? `
+                <!-- Sprint 4.1 — Warnings inline pour pads doc_export (remplace
+                     l'ancien panneau droit "Notice Portable"). Le résultat
+                     s'ouvre dans une nouvelle fenêtre via DocEngine. -->
+                <div class="form-warnings" id="form-warnings" hidden></div>
+                ` : ''}
+
                 <div class="modal-actions-row">
                     ${generateBtn}
                     ${docExportBtn}
+                    ${hasDocExport ? `
+                    <button class="action-btn action-btn-compact" id="btn-library" type="button" title="Sauvegarder dans la bibliothèque">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                        Bibliothèque
+                    </button>
+                    <button class="action-btn action-btn-compact" id="btn-notice" type="button" title="Notice d'utilisation">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg>
+                        Notice
+                    </button>
+                    ` : ''}
                 </div>
+
+                ${hasDocExport ? `
+                <div class="tool-notice" id="tool-notice">${_renderNotice(pad.notice)}</div>
+                ` : ''}
             </div>
 
-            <!-- ZONE DROITE : Prompt live (mode classique) ou Notice Portable (mode doc_export) -->
-            <!-- data-mode="portable" sur les pads avec doc_export : le panneau affiche
-                 un résumé + offre Copier/Télécharger une version HTML auto-suffisante,
-                 reproductible dans n'importe quelle IA. Mode "prompt" sinon (legacy). -->
-            <div class="modal-result-zone${hasDocExport ? ' result-zone-portable' : ''}" data-mode="${hasDocExport ? 'portable' : 'prompt'}">
+            ${!hasDocExport ? `
+            <!-- ZONE DROITE : Prompt live (pads LLM classiques uniquement) -->
+            <div class="modal-result-zone" data-mode="prompt">
 
-                <div class="result-lbl" id="result-lbl">${hasDocExport ? 'Notice Portable' : 'Prompt généré'}</div>
+                <div class="result-lbl" id="result-lbl">Prompt généré</div>
 
-                <!-- État vide — visible tant que les champs requis ne sont pas remplis -->
                 <div class="prompt-empty-state" id="prompt-empty-state">
                     <div class="prompt-empty-cursor"></div>
                     <div class="prompt-empty-hint" id="prompt-empty-hint">
-                        Remplissez les champs requis<br>pour ${hasDocExport ? 'générer la version portable' : 'générer votre prompt'}
+                        Remplissez les champs requis<br>pour générer votre prompt
                     </div>
                     <div class="prompt-missing-fields" id="prompt-missing-fields"></div>
                 </div>
 
-                <!-- Mode classique : prompt brut -->
                 <pre class="prompt-text" id="prompt-text" style="display:none"></pre>
 
-                <!-- Mode portable : carte résumé compacte (rendue dynamiquement par _updatePromptPreview) -->
-                <div class="portable-card" id="portable-card" style="display:none"></div>
-
                 <div class="result-actions">
-                    <button class="action-btn" id="btn-copy-prompt" title="${hasDocExport ? 'Copier la notice portable (instructions + HTML auto-suffisant)' : 'Copier le prompt'}">
+                    <button class="action-btn" id="btn-copy-prompt" title="Copier le prompt">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        ${hasDocExport ? 'Copier (portable)' : 'Copier le prompt'}
+                        Copier le prompt
                     </button>
-                    ${hasDocExport ? `
-                    <button class="action-btn" id="btn-download-html" title="Télécharger la notice en .html (ouvrable hors-ligne dans tout navigateur)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Télécharger .html
-                    </button>` : ''}
                     <button class="action-btn" id="btn-library" title="Sauvegarder dans la bibliothèque">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                         Bibliothèque
@@ -1715,6 +1725,7 @@ function _buildModal(pad, tool) {
                 </button>` : ''}
 
             </div>
+            ` : ''}
         </div>
     `;
 
@@ -2587,6 +2598,52 @@ function _validateFormSoft(formData) {
 let _portableCache = { padId: null, signature: null, content: null, html: null };
 let _portableTimer = null;
 
+// ══════════════════════════════════════════════════════════════════
+// SPRINT 4.1 — Mode SOLO pour pads doc_export
+// ══════════════════════════════════════════════════════════════════
+// Plus de panneau résultat à droite. Le formulaire prend toute la
+// largeur. La génération PDF déclenche l'ouverture d'une nouvelle
+// fenêtre (Paged.js). On gère uniquement :
+//   - highlight des champs requis manquants (data-dirty)
+//   - banner warnings inline (validation soft)
+//   - état enabled/disabled du bouton "Contrat PDF" / "Notice PDF"
+
+function _updateDocExportSolo(pad, formData, requiredFilled, missingFields) {
+    const form         = document.getElementById('tool-form');
+    const warningsEl   = document.getElementById('form-warnings');
+    const docExportBtn = document.getElementById('btn-doc-export');
+    if (!form) return;
+
+    // ── Highlight des champs requis manquants (uniquement dirty) ──
+    form.querySelectorAll('.field-missing').forEach(el => el.classList.remove('field-missing'));
+    if (!requiredFilled) {
+        missingFields.forEach(f => {
+            const el = form.querySelector(`[name="${f.id}"]`);
+            if (el && el.dataset.dirty) el.classList.add('field-missing');
+        });
+    }
+
+    // ── État du bouton doc_export ─────────────────────────────────
+    if (docExportBtn) docExportBtn.disabled = !requiredFilled;
+
+    // ── Banner warnings (validation soft) ─────────────────────────
+    if (!warningsEl) return;
+    const warnings = requiredFilled ? _validateFormSoft(formData) : [];
+    if (warnings.length === 0) {
+        warningsEl.hidden = true;
+        warningsEl.innerHTML = '';
+        return;
+    }
+    warningsEl.hidden = false;
+    warningsEl.innerHTML = `
+        <div class="form-warnings-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Vérifications — non bloquant
+        </div>
+        <ul>${warnings.map(w => `<li>${w.message}</li>`).join('')}</ul>
+    `;
+}
+
 function _updatePortableNoticePreview(pad, formData, requiredFilled, missingFields, requiredFields) {
     const preview    = document.getElementById('portable-card');
     const promptText = document.getElementById('prompt-text');
@@ -2875,15 +2932,10 @@ ${html}
 }
 
 function _updatePromptPreview(pad) {
-    const form         = document.getElementById('tool-form');
-    const preview      = document.getElementById('prompt-text');
-    const emptyState   = document.getElementById('prompt-empty-state');
-    const missingEl    = document.getElementById('prompt-missing-fields');
-    const resultLbl    = document.getElementById('result-lbl');
-    const generateBtn  = document.getElementById('btn-generate');
-    if (!form || !preview) return;
+    const form = document.getElementById('tool-form');
+    if (!form) return;
 
-    // Collecte des valeurs
+    // Collecte des valeurs (commun)
     const formData = {};
     form.querySelectorAll('[name]').forEach(el => { formData[el.name] = el.value.trim(); });
 
@@ -2892,13 +2944,20 @@ function _updatePromptPreview(pad) {
     const missingFields  = requiredFields.filter(f => !formData[f.id]);
     const requiredFilled = missingFields.length === 0;
 
-    // ── Sprint B2 — Mode "Notice Portable" pour pads avec doc_export ──
-    // Au lieu d'afficher le prompt LLM (devenu inutile depuis DocEngine),
-    // on affiche une carte résumé + on prépare un bloc HTML auto-suffisant
-    // que l'utilisateur peut copier ou télécharger pour imprimer ailleurs.
+    // ── Sprint 4.1 — Mode solo (doc_export) : pas de panneau résultat,
+    // juste highlight des champs manquants + warnings inline. Le résultat
+    // s'ouvre dans une nouvelle fenêtre au clic sur "Contrat PDF".
     if (pad.doc_export) {
-        return _updatePortableNoticePreview(pad, formData, requiredFilled, missingFields, requiredFields);
+        return _updateDocExportSolo(pad, formData, requiredFilled, missingFields);
     }
+
+    // ── Mode classique LLM : panneau prompt à droite ────────────────
+    const preview      = document.getElementById('prompt-text');
+    const emptyState   = document.getElementById('prompt-empty-state');
+    const missingEl    = document.getElementById('prompt-missing-fields');
+    const resultLbl    = document.getElementById('result-lbl');
+    const generateBtn  = document.getElementById('btn-generate');
+    if (!preview) return;
 
     // ── Mise à jour visuelle des champs manquants ──────────────
     // Retirer les anciens highlights

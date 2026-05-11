@@ -11,7 +11,7 @@ export const PADS_DATA = {
         title: 'Notices VEFA',
         subtitle: 'Notice descriptive conforme RE 2020 — 2026',
         ai_optimized: 'Claude', icon: 'vefa',
-        notice: `1. Remplissez chaque champ avec précision — la qualité du prompt dépend du niveau de détail.\n2. Copiez le prompt généré et collez-le dans Claude.ai, ChatGPT ou votre IA préférée.\n3. Demandez ensuite à l'IA : "Rédige une 2ème version plus luxueuse" ou "Ajoute une section sur les extérieurs".\n4. Avec une clé API configurée dans ⚙️, la réponse s'affiche directement ici.`,
+        notice: `1. Remplissez chaque champ avec précision — les données saisies sont substituées dans le template print-ready.\n2. Le champ "Spécificités & équipements" accepte un appel IA (✦) pour rédiger un paragraphe sur mesure.\n3. Cliquez sur "Notice PDF" : le document s'ouvre dans une nouvelle fenêtre, prêt à imprimer ou exporter en PDF.\n4. Génération 100 % déterministe — clauses techniques canoniques en bibliothèque (admin), aucun LLM dans le rendu juridique.`,
         fields: [
             { id: 'nom_programme', label: 'Nom du programme',           type: 'text',     placeholder: 'ex: Les Jardins du Midi',            required: true, span: 'full' },
             { id: 'type_logement', label: 'Type de logement',           type: 'select',   options: ['T2','T3','T4','T5','Villa','Penthouse'], required: true },
@@ -438,19 +438,9 @@ Le brief inclut : 1) Direction artistique (palette, ambiance, références) 2) L
               }
             },
         ],
-        // Pad piloté par DocEngine — pas d'appel LLM principal,
-        // seulement AI Assist optionnel sur clauses_particulieres.
-        system_prompt: `Tu es un juriste expert en VEFA. À partir des données ci-dessous, rédige une note de synthèse à destination du notaire pour préparer l'acte authentique.
-
-DONNÉES :
-- Programme : {{nom_programme}} — Lot {{lot_numero}} ({{type_logement}}, {{surface_carrez}} m² Carrez)
-- Vendeur : {{vendeur_nom}}
-- Acquéreur : {{acquereur_nom}} ({{acquereur_regime}})
-- Prix TTC : {{prix_ttc}} € — Dépôt : {{depot_montant}} € ({{depot_pourcentage}})
-- Livraison : {{livraison}} — Acte : {{date_acte_authentique}}
-- Clauses particulières : {{clauses_particulieres}}
-
-Produire 5 sections : 1) Identification du dossier 2) Points financiers à vérifier 3) Conditions suspensives 4) Clauses particulières à valider 5) Documents à demander avant signature.`,
+        // Pad piloté entièrement par DocEngine — aucun system_prompt
+        // (pas de chemin LLM principal). AI Assist scoped sur le champ
+        // clauses_particulieres uniquement (rédaction d'un paragraphe).
         doc_export: {
             templateId: 'vefa-contrat-v1',
             label: 'Contrat PDF',
