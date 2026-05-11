@@ -2161,15 +2161,34 @@ async function _handleAIAssist(btn, fieldId, aiConfig, pad) {
     _setAIStatus(statusEl, `${engineId} rédige…`, 'loading');
 
     try {
-        const result = await window.promptEngine.run({
-            task   : aiConfig.task || 'redact-section',
-            engine : engineId,
-            context: { topic, details },
-        });
-
-        if (!result?.text) {
-            throw new Error('Réponse vide du moteur');
+        // Retry auto sur 503 (Gemini sature régulièrement) :
+        // 3 tentatives max, backoff 1s puis 3s. Si toujours KO → erreur.
+        let result = null;
+        let lastErr = null;
+        const RETRY_DELAYS = [0, 1500, 3500]; // 1ère immédiate, 2nde après 1.5s, 3ème après 3.5s
+        for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+            if (attempt > 0) {
+                _setAIStatus(statusEl, `Surcharge — nouvelle tentative dans ${RETRY_DELAYS[attempt]/1000}s…`, 'loading');
+                await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+                _setAIStatus(statusEl, `${engineId} rédige (essai ${attempt+1}/3)…`, 'loading');
+            }
+            try {
+                result = await window.promptEngine.run({
+                    task   : aiConfig.task || 'redact-section',
+                    engine : engineId,
+                    context: { topic, details },
+                });
+                if (result?.text) break;       // succès
+                lastErr = new Error('Réponse vide du moteur');
+            } catch (e) {
+                lastErr = e;
+                // On retry uniquement si c'est un 503 (surcharge transitoire).
+                // 400/401/429 (clé invalide / quota) → arrêt immédiat.
+                const msg = e?.message || '';
+                if (!/503|high demand|overload|unavailable/i.test(msg)) throw e;
+            }
         }
+        if (!result?.text) throw lastErr || new Error('Échec après retries');
 
         // Injecte dans le textarea + déclenche les events pour mettre
         // à jour le prompt preview (qui écoute 'input').

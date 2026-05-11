@@ -41,7 +41,7 @@ export const PADS_DATA = {
               // du formulaire + les mots-clés saisis ici. cf. ui-renderer._handleAIAssist().
               ai_assist: {
                 task: 'redact-section',
-                label: '✨ Générer avec IA',
+                label: 'Générer avec IA',
                 topic: 'Les spécificités et équipements d\'un {type_logement} VEFA "{nom_programme}" situé à {ville}',
                 include_fields: ['nom_programme', 'type_logement', 'surface', 'etage', 'orientation',
                                  'sols', 'cuisine', 'chauffage', 're2020', 'confort_ete', 'isolation',

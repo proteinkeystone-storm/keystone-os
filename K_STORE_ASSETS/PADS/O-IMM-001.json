@@ -22,7 +22,7 @@
     { "id": "specificites",    "label": "Spécificités & équipements", "type": "textarea", "placeholder": "Terrasse, domotique, VMC double flux, loggia...", "span": "full",
       "ai_assist": {
         "task": "redact-section",
-        "label": "✨ Générer avec IA",
+        "label": "Générer avec IA",
         "topic": "Les spécificités et équipements d'un {type_logement} VEFA situé à {nom_programme}",
         "include_fields": ["nom_programme", "type_logement", "surface", "etage", "orientation", "sols", "cuisine", "chauffage", "re2020", "confort_ete", "isolation", "annexes"]
       }
