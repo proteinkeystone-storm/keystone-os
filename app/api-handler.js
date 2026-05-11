@@ -1,115 +1,122 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — API Handler v2.0
-   S-CORE-LOGIC-V1 : Aiguillage multi-moteurs
-   Providers : Anthropic · OpenAI · Gemini · xAI · Perplexity · Mistral · Meta/Groq
+   KEYSTONE OS — API Handler v3.0 (Sprint B — refactor PromptEngine)
+   S-CORE-LOGIC-V2 : thin wrapper sur le Worker proxy /api/proxy/llm
+
+   Avant (v2) :
+   ─────────────────────────────────────────────────────────────
+   Chaque moteur avait sa propre fonction avec un fetch direct
+   vers l'API du vendor. CORS bypass via headers spéciaux. Pas
+   de retry, pas de fallback, pas de monitoring centralisé.
+
+   Après (v3) :
+   ─────────────────────────────────────────────────────────────
+   Tous les appels LLM passent par le Worker Cloudflare
+   /api/proxy/llm (même chemin que PromptEngine). Bénéfices :
+   - Retry automatique sur 503 (Gemini sature, ça arrive)
+   - Erreurs uniformisées (format JSON consistant côté Worker)
+   - Un seul endroit où monitorer la consommation LLM
+   - CORS géré une fois, plus de "dangerous-direct-browser-access"
+   - Compatible BYOK : la clé du vault transite, jamais stockée
+
+   API publique inchangée :
+     ApiHandler.callEngine(engineLabel, prompt, apiKey) → text
+     ApiHandler.getSupportedEngines()                   → [labels]
    ═══════════════════════════════════════════════════════════════ */
 
-// ── Appel générique format OpenAI ────────────────────────────
-async function callOpenAIFormat(endpoint, model, prompt, apiKey) {
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model,
-            messages: [
-                { role: 'system', content: 'Tu es un assistant expert en immobilier neuf et promotion immobilière. Réponds toujours en français.' },
-                { role: 'user',   content: prompt },
-            ],
-            max_tokens: 2048,
-            temperature: 0.7,
-        }),
-    });
+const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `Erreur HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    return data.choices[0].message.content;
-}
-
-// ── Configuration moteurs (S-CORE-LOGIC-V1) ─────────────────
-const ENGINE_CONFIG = {
-
-    'Claude': async (prompt, apiKey) => {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json',
-                'anthropic-dangerous-direct-browser-access': 'true',
-            },
-            body: JSON.stringify({
-                model: 'claude-3-5-sonnet-20241022',
-                max_tokens: 2048,
-                system: 'Tu es un assistant expert en immobilier neuf et promotion immobilière. Réponds toujours en français.',
-                messages: [{ role: 'user', content: prompt }],
-            }),
-        });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error?.message || `Erreur HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        return data.content[0].text;
-    },
-
-    'ChatGPT': (prompt, apiKey) =>
-        callOpenAIFormat('https://api.openai.com/v1/chat/completions', 'gpt-4o', prompt, apiKey),
-
-    'Gemini': async (prompt, apiKey) => {
-        // gemini-1.5-pro déprécié en 2026. On utilise 2.5-flash (free tier + rapide).
-        // thinkingBudget=0 pour libérer tous les tokens vers la sortie utile.
-        const model = 'gemini-2.5-flash';
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        maxOutputTokens: 8192,
-                        temperature: 0.7,
-                        thinkingConfig: { thinkingBudget: 0 },
-                    },
-                }),
-            }
-        );
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error?.message || `Erreur HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        return data.candidates[0].content.parts[0].text;
-    },
-
-    'Grok': (prompt, apiKey) =>
-        callOpenAIFormat('https://api.x.ai/v1/chat/completions', 'grok-2-latest', prompt, apiKey),
-
-    'Perplexity': (prompt, apiKey) =>
-        callOpenAIFormat('https://api.perplexity.ai/chat/completions', 'sonar-pro', prompt, apiKey),
-
-    'Mistral': (prompt, apiKey) =>
-        callOpenAIFormat('https://api.mistral.ai/v1/chat/completions', 'mistral-large-latest', prompt, apiKey),
-
-    'Llama': (prompt, apiKey) =>
-        callOpenAIFormat('https://api.groq.com/openai/v1/chat/completions', 'llama-3.1-70b-versatile', prompt, apiKey),
+// Mapping label dashboard → engine id PromptEngine.
+// Cohérent avec _ENGINE_LABEL_TO_PROMPT_ENGINE dans ui-renderer.js.
+const ENGINE_LABEL_TO_ID = {
+    'Claude'    : 'claude',
+    'ChatGPT'   : 'gpt',
+    'Gemini'    : 'gemini',
+    'Grok'      : 'grok',
+    'Perplexity': 'perplexity',
+    'Mistral'   : 'mistral',
+    'Llama'     : 'llama',
 };
 
-// ── Export public ────────────────────────────────────────────
+// JWT cookie pour authentification Worker (cf. cloud-vault.js)
+function _jwt() {
+    try { return localStorage.getItem('ks_jwt') || ''; }
+    catch { return ''; }
+}
+
+// Appel proxy + retry 503 (3 tentatives, backoff 0s/1.5s/3.5s)
+async function _proxyLLMCall({ engineId, prompt, apiKey, maxTokens = 2048 }) {
+    const jwt = _jwt();
+    const headers = { 'Content-Type': 'application/json' };
+    if (jwt) headers.Authorization = `Bearer ${jwt}`;
+
+    const body = JSON.stringify({
+        engine    : engineId,
+        apiKey,
+        // Pas de system message ici : le pad construit déjà son propre
+        // prompt complet avec rôle + instructions + données. On envoie
+        // le tout en USER message — comportement identique à l'ancien
+        // api-handler v2.
+        messages  : [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+    });
+
+    const RETRY_DELAYS = [0, 1500, 3500];
+    let lastErr = null;
+    for (let i = 0; i < RETRY_DELAYS.length; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, RETRY_DELAYS[i]));
+
+        try {
+            const res = await fetch(`${API_BASE}/api/proxy/llm`, {
+                method: 'POST', headers, body,
+            });
+            const data = await res.json().catch(() => null);
+
+            if (res.ok && data?.text) {
+                return data.text;
+            }
+
+            // Erreur HTTP : on retry uniquement sur 503 / surcharge
+            const errMsg = data?.error || `HTTP ${res.status}`;
+            lastErr = new Error(errMsg);
+            if (!/503|high demand|overload|unavailable|temporar/i.test(errMsg)) {
+                throw lastErr;  // Erreur définitive (clé invalide, quota, etc.)
+            }
+            // Sinon : retry au prochain tour
+        } catch (e) {
+            // Erreur réseau / timeout : on retry une fois, sinon out
+            lastErr = e;
+            const msg = e?.message || '';
+            if (!/503|high demand|overload|temporar|network|fetch/i.test(msg)) {
+                throw e;
+            }
+        }
+    }
+
+    throw lastErr || new Error('Aucune réponse après retries');
+}
+
+// ── Export public — API inchangée pour compatibilité ─────────
 export const ApiHandler = {
+    /**
+     * Appelle le moteur via le proxy Worker. Retry 503 automatique.
+     *
+     * @param {string} engineLabel  Label dashboard ("Claude", "Gemini", …)
+     * @param {string} prompt       Prompt complet (rôle + données + instructions)
+     * @param {string} apiKey       Clé API du vault user (BYOK)
+     * @returns {Promise<string>}   Texte généré par le LLM
+     */
     async callEngine(engineLabel, prompt, apiKey) {
-        const fn = ENGINE_CONFIG[engineLabel];
-        if (!fn) throw new Error(`Moteur "${engineLabel}" non reconnu par S-CORE-LOGIC-V1.`);
-        return fn(prompt, apiKey);
+        const engineId = ENGINE_LABEL_TO_ID[engineLabel];
+        if (!engineId) {
+            throw new Error(`Moteur "${engineLabel}" non reconnu (S-CORE-LOGIC-V2).`);
+        }
+        if (!apiKey) {
+            throw new Error(`Clé API ${engineLabel} manquante — Réglages → Clés API.`);
+        }
+        return _proxyLLMCall({ engineId, prompt, apiKey });
     },
 
     getSupportedEngines() {
-        return Object.keys(ENGINE_CONFIG);
+        return Object.keys(ENGINE_LABEL_TO_ID);
     },
 };
