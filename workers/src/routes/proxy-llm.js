@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Proxy LLM (Sprint P2.2)
+   KEYSTONE OS — Proxy LLM (Sprint P2.3)
    Layer 2 · Bridge serveur vers les APIs LLM tierces.
 
    Pourquoi un proxy serveur ?
@@ -19,10 +19,14 @@
      Body : { engine, apiKey, model, system, messages, max_tokens }
      Réponse normalisée : { text, usage, model, stop_reason, engine }
 
-   Engines supportés (P2.2) :
-     claude  → Anthropic Messages API
-     gemini  → Google Generative Language API (v1beta)
-     gpt     → OpenAI Chat Completions API
+   Engines supportés (P2.3) :
+     claude     → Anthropic Messages API           (format propre)
+     gemini     → Google Generative Language API   (format propre)
+     gpt        → OpenAI Chat Completions API      (format OpenAI)
+     mistral    → Mistral AI Chat Completions      (format OpenAI-compat)
+     grok       → xAI Chat Completions             (format OpenAI-compat)
+     perplexity → Perplexity Sonar API             (format OpenAI-compat)
+     llama      → Groq Llama (api.groq.com)        (format OpenAI-compat)
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
@@ -30,9 +34,24 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 // Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
 // L'utilisateur peut override via `body.model`.
 const DEFAULT_MODELS = {
-  claude: 'claude-sonnet-4-5-20250929',
-  gemini: 'gemini-2.5-flash',
-  gpt   : 'gpt-4o-mini',
+  claude    : 'claude-sonnet-4-5-20250929',
+  gemini    : 'gemini-2.5-flash',
+  gpt       : 'gpt-4o-mini',
+  mistral   : 'mistral-small-latest',
+  grok      : 'grok-2-latest',
+  perplexity: 'sonar',
+  llama     : 'llama-3.3-70b-versatile',
+};
+
+// Mapping engine → base URL (pour les APIs OpenAI-compatibles).
+// On ne hardcode que la racine ; le helper _proxyOpenAICompatible
+// ajoute /chat/completions (ou équivalent).
+const OPENAI_COMPAT_ENDPOINTS = {
+  gpt       : 'https://api.openai.com/v1/chat/completions',
+  mistral   : 'https://api.mistral.ai/v1/chat/completions',
+  grok      : 'https://api.x.ai/v1/chat/completions',
+  perplexity: 'https://api.perplexity.ai/chat/completions',
+  llama     : 'https://api.groq.com/openai/v1/chat/completions',
 };
 
 // Cap raisonnable pour éviter qu'un client n'envoie un payload géant
@@ -96,16 +115,23 @@ export async function handleProxyLLM(request, env) {
         max_tokens: cappedMaxTokens,
       }, origin);
 
+    // Tous les engines OpenAI-compatibles passent par le même helper.
+    // Différences gérées dans OPENAI_COMPAT_ENDPOINTS + DEFAULT_MODELS.
     case 'gpt':
-      return _proxyOpenAI({
+    case 'mistral':
+    case 'grok':
+    case 'perplexity':
+    case 'llama':
+      return _proxyOpenAICompatible({
+        engine,
+        endpoint  : OPENAI_COMPAT_ENDPOINTS[engine],
         apiKey,
-        model     : model || DEFAULT_MODELS.gpt,
+        model     : model || DEFAULT_MODELS[engine],
         system    : typeof system === 'string' ? system : undefined,
         messages,
         max_tokens: cappedMaxTokens,
       }, origin);
 
-    // Sprint P2.3 ajoutera mistral, grok, perplexity
     default:
       return err(`Engine '${engine}' pas encore supporté`, 400, origin);
   }
@@ -218,11 +244,22 @@ async function _proxyGemini({ apiKey, model, system, messages, max_tokens }, ori
   }, 200, origin);
 }
 
-// ── OpenAI Chat Completions API ────────────────────────────────
-// Doc : https://platform.openai.com/docs/api-reference/chat
-// Format request : { model, messages (avec role system), max_tokens }
-// Format response : { choices[].message.content, usage, model }
-async function _proxyOpenAI({ apiKey, model, system, messages, max_tokens }, origin) {
+// ── OpenAI-Compatible Chat Completions ─────────────────────────
+// Sert tous les vendors qui parlent le format OpenAI :
+//   gpt        → api.openai.com
+//   mistral    → api.mistral.ai
+//   grok       → api.x.ai
+//   perplexity → api.perplexity.ai
+//   llama      → api.groq.com/openai (Groq sert Llama via une API OpenAI-compat)
+//
+// Format request commun : { model, messages [role system|user|assistant], max_tokens }
+// Format response commun : { choices[].message.content, usage, model }
+//
+// Notes par vendor :
+//   - Perplexity : champ `usage` peut omettre prompt_tokens si requête grounded
+//   - Groq      : utilise `/openai/v1/chat/completions` (compatibilité explicite)
+//   - xAI Grok  : modèles `grok-2-latest`, `grok-3` selon plan
+async function _proxyOpenAICompatible({ engine, endpoint, apiKey, model, system, messages, max_tokens }, origin) {
   const oaiMessages = [];
   if (system) oaiMessages.push({ role: 'system', content: system });
   for (const m of messages) {
@@ -232,15 +269,11 @@ async function _proxyOpenAI({ apiKey, model, system, messages, max_tokens }, ori
     });
   }
 
-  const payload = {
-    model,
-    messages  : oaiMessages,
-    max_tokens,
-  };
+  const payload = { model, messages: oaiMessages, max_tokens };
 
   let res;
   try {
-    res = await fetch('https://api.openai.com/v1/chat/completions', {
+    res = await fetch(endpoint, {
       method : 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -249,7 +282,7 @@ async function _proxyOpenAI({ apiKey, model, system, messages, max_tokens }, ori
       body: JSON.stringify(payload),
     });
   } catch (e) {
-    return err(`Proxy network error (OpenAI): ${e.message}`, 502, origin);
+    return err(`Proxy network error (${engine}): ${e.message}`, 502, origin);
   }
 
   let data;
@@ -257,11 +290,11 @@ async function _proxyOpenAI({ apiKey, model, system, messages, max_tokens }, ori
   catch { data = null; }
 
   if (!res.ok) {
-    const msg = data?.error?.message || res.statusText || 'OpenAI error';
-    return err(`OpenAI [${res.status}] ${msg}`, res.status, origin);
+    const msg = data?.error?.message || data?.detail || res.statusText || `${engine} error`;
+    return err(`${engine} [${res.status}] ${msg}`, res.status, origin);
   }
 
-  const text = data?.choices?.[0]?.message?.content || '';
+  const text  = data?.choices?.[0]?.message?.content || '';
   const usage = data?.usage || {};
   return json({
     text,
@@ -271,6 +304,6 @@ async function _proxyOpenAI({ apiKey, model, system, messages, max_tokens }, ori
       output_tokens: usage.completion_tokens || null,
     },
     stop_reason: data?.choices?.[0]?.finish_reason || null,
-    engine     : 'gpt',
+    engine,
   }, 200, origin);
 }

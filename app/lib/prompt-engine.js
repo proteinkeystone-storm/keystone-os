@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — PromptEngine (Sprint P2.2 · Layer 2)
+   KEYSTONE OS — PromptEngine (Sprint P2.3 · Layer 2)
    Bridge unifié vers les LLM tiers, BYOK auto-résolu via vault.
 
    Promesse archi (cf. ARCHITECTURE.md §4) :
@@ -20,7 +20,7 @@
    - PromptEngine résout automatiquement la clé pour l'engine demandé
    - Aucune clé n'apparaît jamais dans un log ou un endpoint Keystone
 
-   Sprint P2.2 = Claude + Gemini + GPT. Sprint P2.3 ajoutera Mistral, Grok, Perplexity.
+   Sprint P2.3 = 7 moteurs (Claude, Gemini, GPT, Mistral, Grok, Perplexity, Llama).
    ═══════════════════════════════════════════════════════════════ */
 
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
@@ -48,7 +48,32 @@ const ENGINES = {
     defaultMaxTokens: 1024,
     label           : 'GPT-4o',
   },
-  // Sprint P2.3 : mistral, grok, perplexity
+  mistral: {
+    provider        : 'mistral',
+    defaultModel    : 'mistral-small-latest',
+    defaultMaxTokens: 1024,
+    label           : 'Mistral',
+  },
+  grok: {
+    // Vault stocke sous ks_api_xai (xAI = société, Grok = produit).
+    provider        : 'xai',
+    defaultModel    : 'grok-2-latest',
+    defaultMaxTokens: 1024,
+    label           : 'Grok',
+  },
+  perplexity: {
+    provider        : 'perplexity',
+    defaultModel    : 'sonar',
+    defaultMaxTokens: 1024,
+    label           : 'Perplexity',
+  },
+  llama: {
+    // Llama est servi via Groq (api.groq.com). Vault id = 'meta' (Meta = créateur).
+    provider        : 'meta',
+    defaultModel    : 'llama-3.3-70b-versatile',
+    defaultMaxTokens: 1024,
+    label           : 'Llama',
+  },
 };
 
 // ── Registry des tâches atomiques ──────────────────────────────
@@ -101,6 +126,52 @@ Règles de format — STRICTES :
 - Termine par un point final. Rien après.`,
 
       gpt: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
+
+Style : sobre, factuel, sans superlatifs ni marketing. Adapté à une notice contractuelle.
+
+Format de sortie STRICT :
+- Texte brut uniquement (pas de HTML, pas de markdown, pas de puces, pas de titre).
+- Commence directement par le paragraphe. Aucune phrase d'introduction.
+- Aucune signature ni formule de politesse.`,
+
+      // Mistral, Grok, Perplexity, Llama : tous OpenAI-compat. Même prompt
+      // que GPT — la contrainte format stricte fonctionne aussi sur ces modèles.
+      mistral: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
+
+Style : sobre, factuel, sans superlatifs ni marketing. Adapté à une notice contractuelle.
+
+Format de sortie STRICT :
+- Texte brut uniquement (pas de HTML, pas de markdown, pas de puces, pas de titre).
+- Commence directement par le paragraphe. Aucune phrase d'introduction.
+- Aucune signature ni formule de politesse.`,
+
+      grok: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
+
+Style : sobre, factuel, sans superlatifs ni marketing. Adapté à une notice contractuelle.
+
+Format de sortie STRICT :
+- Texte brut uniquement (pas de HTML, pas de markdown, pas de puces, pas de titre).
+- Commence directement par le paragraphe. Aucune phrase d'introduction.
+- Aucune signature ni formule de politesse.`,
+
+      perplexity: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
+
+Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
+
+Style : sobre, factuel, sans superlatifs ni marketing. Adapté à une notice contractuelle.
+
+Format de sortie STRICT :
+- Texte brut uniquement (pas de HTML, pas de markdown, pas de puces, pas de titre, pas de citations sources).
+- Commence directement par le paragraphe. Aucune phrase d'introduction.
+- Aucune signature ni formule de politesse.`,
+
+      llama: `Tu es un rédacteur professionnel français spécialisé en immobilier neuf et en documents contractuels.
 
 Rédige UN SEUL paragraphe (120-200 mots) sur le sujet de l'utilisateur.
 
