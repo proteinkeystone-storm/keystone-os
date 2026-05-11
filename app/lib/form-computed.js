@@ -174,26 +174,32 @@ function _readField(form, fieldId) {
 }
 
 /**
- * Écrit une valeur dans un champ du formulaire et dispatch input/change
- * pour que d'autres listeners (preview, AI Assist, etc.) réagissent.
- * NE re-déclenche PAS le recompute (flag _computedWrite pour éviter loop).
+ * Écrit une valeur dans un champ et dispatch input/change pour que les
+ * autres listeners (preview, AI Assist, etc.) réagissent.
+ * Renvoie true si la valeur a réellement changé.
  */
 function _writeField(form, fieldId, value) {
   const el = form.querySelector(`[name="${fieldId}"]`);
-  if (!el) return;
-  if (el.value === value) return;   // pas de change si idem
+  if (!el) return false;
+  if (el.value === value) return false;
   el.value = value;
-  el._computedWrite = true;          // flag anti-loop
-  // Dispatch sans data-dirty pour éviter le highlight rouge "manquant"
   el.dispatchEvent(new Event('input',  { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
-  setTimeout(() => { el._computedWrite = false; }, 0);
+  return true;
 }
 
 /**
  * Initialise le moteur sur un formulaire donné, pour un pad donné.
- * Renvoie un cleanup() qui retire les listeners (à appeler à la fermeture
- * du modal — actuellement pas critique car le modal est rebuild à chaque ouverture).
+ * Renvoie un cleanup() qui retire les listeners.
+ *
+ * Anti-loop par BFS avec set `visited` :
+ *   - Au déclenchement d'un input utilisateur sur le champ X
+ *   - On applique toutes les règles où X est `from`, ce qui peut écrire
+ *     dans des champs Y1, Y2…
+ *   - On enqueue Y1, Y2 pour cascader leurs propres règles
+ *   - Une règle dont le `to` est déjà dans `visited` est skip
+ *     → évite les retours arrière (ex: prix_ttc → prix_ht → prix_ttc)
+ *   - Un flag _running évite la ré-entrée depuis les dispatchEvent synthétiques
  */
 export function initComputedFields(form, pad) {
   const rules = pad?.computed_fields;
@@ -213,21 +219,47 @@ export function initComputedFields(form, pad) {
     }
   }
 
-  function recomputeFor(sourceFieldId) {
-    const rulesToFire = sourceIndex.get(sourceFieldId);
-    if (!rulesToFire) return;
-    for (const rule of rulesToFire) {
-      const args = rule.from.map(id => _readField(form, id));
-      const value = RECIPES[rule.recipe](args, { rule, form });
-      if (value) _writeField(form, rule.to, value);
+  let _running = false;
+
+  function applyChain(initialSource) {
+    if (_running) return;
+    _running = true;
+    try {
+      const visited = new Set([initialSource]);
+      const queue   = [initialSource];
+
+      while (queue.length) {
+        const src = queue.shift();
+        const rulesToFire = sourceIndex.get(src);
+        if (!rulesToFire) continue;
+
+        for (const rule of rulesToFire) {
+          // Skip si la cible a déjà été écrite (ou est le déclencheur initial)
+          // → empêche les retours arrière (ex: prix_ttc → prix_ht alors qu'on
+          //   est parti de prix_ht).
+          if (visited.has(rule.to)) continue;
+
+          const args  = rule.from.map(id => _readField(form, id));
+          const value = RECIPES[rule.recipe](args, { rule, form });
+          if (!value) continue;
+
+          const wrote = _writeField(form, rule.to, value);
+          if (wrote) {
+            visited.add(rule.to);
+            queue.push(rule.to);   // cascade : ses propres règles vont tirer
+          }
+        }
+      }
+    } finally {
+      _running = false;
     }
   }
 
   function onInput(e) {
     const el = e.target;
     if (!el?.name) return;
-    if (el._computedWrite) return;      // écrit par le moteur → ignore
-    recomputeFor(el.name);
+    if (_running) return;   // ré-entrée depuis dispatchEvent synthétique → ignore
+    applyChain(el.name);
   }
 
   form.addEventListener('input',  onInput);
