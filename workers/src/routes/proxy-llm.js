@@ -31,7 +31,7 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 // L'utilisateur peut override via `body.model`.
 const DEFAULT_MODELS = {
   claude: 'claude-sonnet-4-5-20250929',
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-1.5-flash',
   gpt   : 'gpt-4o-mini',
 };
 

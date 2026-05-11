@@ -36,8 +36,9 @@ const ENGINES = {
     label           : 'Claude',
   },
   gemini: {
+    // gemini-1.5-flash : free tier plus permissif que 2.0-flash
     provider        : 'gemini',
-    defaultModel    : 'gemini-2.0-flash',
+    defaultModel    : 'gemini-1.5-flash',
     defaultMaxTokens: 1024,
     label           : 'Gemini',
   },

@@ -20,3 +20,4 @@ Lancer_KEYSTONE.command
 workers/node_modules/
 workers/.wrangler/
 workers/package-lock.json
+.vercel
