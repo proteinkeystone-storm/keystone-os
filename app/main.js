@@ -4,6 +4,9 @@ import './lib/data-fabric.js';
 // Sprint 1.2 — DocEngine (Layer 2) + démo console window.docEngineDemo.
 import './lib/doc-engine.js';
 import './lib/doc-engine-demo.js';
+// Sprint P2.1 — PromptEngine (Layer 2) + démo console window.promptEngineDemo.
+import './lib/prompt-engine.js';
+import './lib/prompt-engine-demo.js';
 import { loadVault }                            from './vault.js';
 import { renderDashboard, initSettings, initTools } from './ui-renderer.js';
 import { initDST, initDSTAdminBridge }        from './dst.js';

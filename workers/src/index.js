@@ -37,6 +37,7 @@ import { handleUploadScreenshot, handleGetScreenshot,
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
+import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -95,6 +96,13 @@ export default {
       // CRUD générique pour toute entité whitelistée dans routes/data.js
       if (path.startsWith('/api/data/')) {
         return handleDataDispatch(request, env, path, method, origin);
+      }
+
+      // ── Proxy LLM (Sprint P2.1 — Layer 2 / PromptEngine) ─────
+      // Bridge serveur vers les APIs LLM tierces (Anthropic, OpenAI…).
+      // BYOK : la clé API est passée dans le body, jamais stockée Worker.
+      if (path === '/api/proxy/llm' && method === 'POST') {
+        return handleProxyLLM(request, env);
       }
 
       // ── PADs ─────────────────────────────────────────────────
