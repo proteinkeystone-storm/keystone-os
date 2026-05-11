@@ -36,9 +36,9 @@ const ENGINES = {
     label           : 'Claude',
   },
   gemini: {
-    // gemini-1.5-flash : free tier plus permissif que 2.0-flash
+    // gemini-2.5-flash : free tier 2026, 1.5 déprécié, 2.0 quota=0 sur certains comptes
     provider        : 'gemini',
-    defaultModel    : 'gemini-1.5-flash',
+    defaultModel    : 'gemini-2.5-flash',
     defaultMaxTokens: 1024,
     label           : 'Gemini',
   },
