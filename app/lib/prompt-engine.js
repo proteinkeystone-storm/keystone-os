@@ -36,7 +36,7 @@ const ENGINES = {
     label           : 'Claude',
   },
   gemini: {
-    provider        : 'google',
+    provider        : 'gemini',
     defaultModel    : 'gemini-2.0-flash',
     defaultMaxTokens: 1024,
     label           : 'Gemini',
