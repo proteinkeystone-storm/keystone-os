@@ -1524,9 +1524,6 @@ export function openTool(padId, opts = {}) {
         'info', 6000, 2
     );
 
-    // Pastille IA dynamique → moteur recommandé du pad
-    updateEngineChip(currentPad.ai_optimized + ' ✦');
-
     _buildModal(currentPad, tool);
 
     const _modal = document.getElementById('tool-modal');
