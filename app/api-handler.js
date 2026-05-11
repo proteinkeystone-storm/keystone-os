@@ -62,7 +62,9 @@ const ENGINE_CONFIG = {
         callOpenAIFormat('https://api.openai.com/v1/chat/completions', 'gpt-4o', prompt, apiKey),
 
     'Gemini': async (prompt, apiKey) => {
-        const model = 'gemini-1.5-pro';
+        // gemini-1.5-pro déprécié en 2026. On utilise 2.5-flash (free tier + rapide).
+        // thinkingBudget=0 pour libérer tous les tokens vers la sortie utile.
+        const model = 'gemini-2.5-flash';
         const res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
             {
@@ -70,7 +72,11 @@ const ENGINE_CONFIG = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+                    generationConfig: {
+                        maxOutputTokens: 8192,
+                        temperature: 0.7,
+                        thinkingConfig: { thinkingBudget: 0 },
+                    },
                 }),
             }
         );

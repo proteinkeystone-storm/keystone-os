@@ -36,7 +36,18 @@ export const PADS_DATA = {
             { id: 'notaire',       label: 'Notaire instrumentaire',     type: 'text',     placeholder: 'ex: Étude Maître Dupont, Toulon' },
             { id: 'permis',        label: 'Permis de construire',       type: 'text',     placeholder: 'ex: PC 083 020 25 H 0042 — délivré le 12/03/2025' },
             { id: 'livraison',     label: 'Date de livraison prévisionnelle', type: 'text', placeholder: 'ex: T4 2027' },
-            { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full' },
+            { id: 'specificites',  label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia...', span: 'full',
+              // Sprint P3 — AI Assist : génère le paragraphe depuis les autres champs
+              // du formulaire + les mots-clés saisis ici. cf. ui-renderer._handleAIAssist().
+              ai_assist: {
+                task: 'redact-section',
+                label: '✨ Générer avec IA',
+                topic: 'Les spécificités et équipements d\'un {type_logement} VEFA "{nom_programme}" situé à {ville}',
+                include_fields: ['nom_programme', 'type_logement', 'surface', 'etage', 'orientation',
+                                 'sols', 'cuisine', 'chauffage', 're2020', 'confort_ete', 'isolation',
+                                 'annexes', 'ville', 'departement', 'region', 'livraison'],
+              }
+            },
         ],
         system_prompt: `Rôle : Designer de documents print et Expert VEFA.
 Mission : Générer le code HTML/CSS d'une notice VEFA 2026 formatée pour une impression multi-pages A4.
