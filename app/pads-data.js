@@ -441,6 +441,28 @@ Le brief inclut : 1) Direction artistique (palette, ambiance, références) 2) L
         // Pad piloté entièrement par DocEngine — aucun system_prompt
         // (pas de chemin LLM principal). AI Assist scoped sur le champ
         // clauses_particulieres uniquement (rédaction d'un paragraphe).
+        //
+        // ── Sprint 4.2 — Auto-calculs déclaratifs ─────────────────
+        // Le moteur form-computed.js applique chaque règle dès qu'un
+        // champ `from` change. Last-write-wins : l'utilisateur peut
+        // toujours surcharger une valeur calculée en l'éditant après.
+        computed_fields: [
+            // ── TVA bidirectionnelle ────────────────────────────
+            { to: 'prix_ttc',    recipe: 'tva-multiply', from: ['prix_ht',  'tva_taux'] },
+            { to: 'prix_ht',     recipe: 'tva-divide',   from: ['prix_ttc', 'tva_taux'] },
+            { to: 'tva_montant', recipe: 'tva-amount',   from: ['prix_ht',  'tva_taux'] },
+
+            // ── Échéancier R.261-14 depuis prix TTC ─────────────
+            { to: 'ech_fondations', recipe: 'percent', from: ['prix_ttc'], factor: 0.35 },
+            { to: 'ech_hors_eau',   recipe: 'percent', from: ['prix_ttc'], factor: 0.70 },
+            { to: 'ech_achevement', recipe: 'percent', from: ['prix_ttc'], factor: 0.95 },
+
+            // ── Dépôt de garantie depuis prix TTC + pourcentage ─
+            { to: 'depot_montant', recipe: 'percent-from-select', from: ['prix_ttc', 'depot_pourcentage'] },
+
+            // ── Montant en lettres ──────────────────────────────
+            { to: 'depot_montant_lettres', recipe: 'number-to-french-words-eur', from: ['depot_montant'] },
+        ],
         doc_export: {
             templateId: 'vefa-contrat-v1',
             label: 'Contrat PDF',

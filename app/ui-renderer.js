@@ -12,6 +12,7 @@ import {
     dismissEditMode, isPadDeactivated, deactivatePad, reactivatePad,
 } from './grid-engine.js';
 import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
+import { initComputedFields }                    from './lib/form-computed.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -1761,6 +1762,10 @@ function _buildModal(pad, tool) {
 
     // Sprint P3 — Boutons AI Assist (PromptEngine) sur les champs déclarés
     if (toolForm) _initAIAssistButtons(toolForm, pad);
+
+    // Sprint 4.2 — Auto-calculs déclaratifs (HT/TTC, échéancier, lettres)
+    // No-op si pad.computed_fields absent.
+    if (toolForm) initComputedFields(toolForm, pad);
 
     // Sprint C — Bouton Doc Export (DocEngine, génération PDF directe)
     _initDocExportButton(pad);
