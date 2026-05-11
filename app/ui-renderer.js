@@ -2106,23 +2106,27 @@ const _ENGINE_LABEL_TO_PROMPT_ENGINE = {
     'Llama'     : 'llama',
 };
 
-function _resolveAIEngine() {
-    // 1. Engine actif dans Réglages
+// Renvoie la liste ORDONNÉE des moteurs à essayer :
+//   1. L'engine actif des Réglages (si clé présente)
+//   2. Puis Gemini (free tier prioritaire)
+//   3. Puis le reste : claude, gpt, mistral, grok, perplexity, llama
+// Permet à _handleAIAssist d'enchaîner les tentatives sur erreur quota/crédit.
+function _resolveAIEngines() {
     const activeLabel  = getActiveEngine();
     const activeEngine = _ENGINE_LABEL_TO_PROMPT_ENGINE[activeLabel] || 'gemini';
 
-    // 2. La clé API du provider correspondant est-elle présente ?
     const engines = window.promptEngine?.listEngines() || [];
-    const def = engines.find(e => e.id === activeEngine);
-    if (def?.hasApiKey) return activeEngine;
+    const withKey = new Set(engines.filter(e => e.hasApiKey).map(e => e.id));
 
-    // 3. Fallback : premier engine avec une clé (préférence Gemini car free tier)
     const preferred = ['gemini', 'claude', 'gpt', 'mistral', 'grok', 'perplexity', 'llama'];
+
+    const ordered = [];
+    if (withKey.has(activeEngine)) ordered.push(activeEngine);
     for (const id of preferred) {
-        const e = engines.find(x => x.id === id);
-        if (e?.hasApiKey) return id;
+        if (id === activeEngine) continue;       // déjà en tête
+        if (withKey.has(id)) ordered.push(id);
     }
-    return null;  // Aucune clé dispo
+    return ordered;
 }
 
 function _initAIAssistButtons(container, pad) {
@@ -2143,13 +2147,13 @@ async function _handleAIAssist(btn, fieldId, aiConfig, pad) {
     const spinner  = btn.querySelector('.ai-assist-spinner');
     const iconEl   = btn.querySelector('.ai-assist-icon');
 
-    // ── 1. Engine resolution ───────────────────────────────────
+    // ── 1. Engine resolution (liste ordonnée pour fallback) ────
     if (!window.promptEngine) {
         _setAIStatus(statusEl, 'PromptEngine indisponible — rechargez la page.', 'error');
         return;
     }
-    const engineId = _resolveAIEngine();
-    if (!engineId) {
+    const enginesToTry = _resolveAIEngines();
+    if (enginesToTry.length === 0) {
         _setAIStatus(statusEl,
             'Aucune clé API configurée. Ouvrez ⚙ Réglages → Clés API.',
             'error');
@@ -2190,37 +2194,82 @@ async function _handleAIAssist(btn, fieldId, aiConfig, pad) {
     btn.classList.add('loading');
     iconEl?.setAttribute('hidden', '');
     spinner?.removeAttribute('hidden');
-    _setAIStatus(statusEl, `${engineId} rédige…`, 'loading');
+
+    // Pattern d'erreur qui doit déclencher la BASCULE vers le moteur suivant
+    // (quota, crédit, plan, billing). Différent de 503 (sature transitoire).
+    const isQuotaError = (msg) =>
+        /credit|quota|insufficient|429|balance|billing|payment|exceed|too low/i.test(msg);
+    // 503 = retry sur le MÊME moteur (sature temporairement).
+    const isTransient = (msg) =>
+        /503|high demand|overload|unavailable|temporar/i.test(msg);
+
+    let result = null;
+    let usedEngine = null;
+    let lastErr = null;
 
     try {
-        // Retry auto sur 503 (Gemini sature régulièrement) :
-        // 3 tentatives max, backoff 1s puis 3s. Si toujours KO → erreur.
-        let result = null;
-        let lastErr = null;
-        const RETRY_DELAYS = [0, 1500, 3500]; // 1ère immédiate, 2nde après 1.5s, 3ème après 3.5s
-        for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
-            if (attempt > 0) {
-                _setAIStatus(statusEl, `Surcharge — nouvelle tentative dans ${RETRY_DELAYS[attempt]/1000}s…`, 'loading');
-                await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
-                _setAIStatus(statusEl, `${engineId} rédige (essai ${attempt+1}/3)…`, 'loading');
+        // Boucle de fallback sur la liste d'engines disponibles.
+        // Si quota épuisé sur engine N → on bascule sur engine N+1.
+        for (let i = 0; i < enginesToTry.length; i++) {
+            const engineId = enginesToTry[i];
+            const isFallback = i > 0;
+
+            if (isFallback) {
+                const prev = enginesToTry[i - 1];
+                _setAIStatus(statusEl,
+                    `${prev} indisponible — bascule sur ${engineId}…`, 'loading');
+                await new Promise(r => setTimeout(r, 500)); // courte pause visuelle
+            } else {
+                _setAIStatus(statusEl, `${engineId} rédige…`, 'loading');
             }
-            try {
-                result = await window.promptEngine.run({
-                    task   : aiConfig.task || 'redact-section',
-                    engine : engineId,
-                    context: { topic, details },
-                });
-                if (result?.text) break;       // succès
-                lastErr = new Error('Réponse vide du moteur');
-            } catch (e) {
-                lastErr = e;
-                // On retry uniquement si c'est un 503 (surcharge transitoire).
-                // 400/401/429 (clé invalide / quota) → arrêt immédiat.
-                const msg = e?.message || '';
-                if (!/503|high demand|overload|unavailable/i.test(msg)) throw e;
+
+            // Retry interne sur 503 (Gemini sature régulièrement) :
+            // 3 tentatives max, backoff 1.5s puis 3.5s. Sur autre erreur → out.
+            const RETRY_DELAYS = [0, 1500, 3500];
+            let attemptResult = null;
+            let attemptErr = null;
+            for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+                if (attempt > 0) {
+                    _setAIStatus(statusEl,
+                        `${engineId} sature — nouvelle tentative dans ${RETRY_DELAYS[attempt]/1000}s…`, 'loading');
+                    await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+                    _setAIStatus(statusEl, `${engineId} rédige (essai ${attempt+1}/3)…`, 'loading');
+                }
+                try {
+                    attemptResult = await window.promptEngine.run({
+                        task   : aiConfig.task || 'redact-section',
+                        engine : engineId,
+                        context: { topic, details },
+                    });
+                    if (attemptResult?.text) break;
+                    attemptErr = new Error('Réponse vide du moteur');
+                } catch (e) {
+                    attemptErr = e;
+                    const msg = e?.message || '';
+                    if (!isTransient(msg)) break;  // erreur non-transitoire → sortie de la boucle retry
+                }
             }
+
+            if (attemptResult?.text) {
+                result = attemptResult;
+                usedEngine = engineId;
+                break;  // succès → on sort de la boucle fallback
+            }
+
+            // Échec sur cet engine. On bascule UNIQUEMENT si c'est une
+            // erreur quota/crédit. Autres erreurs (clé invalide, network) → out.
+            lastErr = attemptErr;
+            const msg = attemptErr?.message || '';
+            if (!isQuotaError(msg)) {
+                // Cas non récupérable : on n'essaie pas un autre moteur.
+                throw attemptErr;
+            }
+            // Sinon on continue la boucle fallback (i++)
         }
-        if (!result?.text) throw lastErr || new Error('Échec après retries');
+
+        if (!result?.text) {
+            throw lastErr || new Error('Aucun moteur disponible — quotas épuisés sur tous');
+        }
 
         // Injecte dans le textarea + déclenche les events pour mettre
         // à jour le prompt preview (qui écoute 'input').
@@ -2232,15 +2281,21 @@ async function _handleAIAssist(btn, fieldId, aiConfig, pad) {
         }
 
         const outTokens = result.usage?.output_tokens || '?';
-        _setAIStatus(statusEl, `✓ Rédigé par ${engineId} (${outTokens} tokens)`, 'success');
+        const fallbackMark = (usedEngine !== enginesToTry[0]) ? ' (fallback)' : '';
+        _setAIStatus(statusEl,
+            `✓ Rédigé par ${usedEngine}${fallbackMark} (${outTokens} tokens)`, 'success');
         // Efface le message après 4s
         setTimeout(() => _setAIStatus(statusEl, '', null), 4000);
     } catch (err) {
         const msg = err?.message || 'Erreur inconnue';
+        const failedEngine = usedEngine || enginesToTry[0] || '?';
         // Erreurs courantes traduites en français
         let friendly = msg;
-        if (/clé API/i.test(msg))      friendly = `Clé ${engineId} manquante — Réglages → Clés API`;
-        else if (/credit|quota|429|insufficient/i.test(msg)) friendly = `Quota ${engineId} épuisé — essayez un autre moteur ou réessayez plus tard`;
+        if (/clé API/i.test(msg))      friendly = `Clé ${failedEngine} manquante — Réglages → Clés API`;
+        else if (/credit|quota|429|insufficient|balance/i.test(msg)) {
+            const tried = enginesToTry.join(', ');
+            friendly = `Quotas épuisés sur tous les moteurs disponibles (${tried}). Rechargez un compte ou réessayez plus tard.`;
+        }
         else if (/network|timeout|fetch/i.test(msg)) friendly = `Problème réseau — vérifiez votre connexion`;
         else if (/^PromptEngine: /.test(msg)) friendly = msg.replace(/^PromptEngine: /, '');
         _setAIStatus(statusEl, '✗ ' + friendly, 'error');
