@@ -2889,6 +2889,33 @@ html.light-mode .btn-doc-export:hover:not(:disabled) {
   color: var(--tx3, rgba(156,163,175,.65));
 }
 
+/* Validation soft : warnings non bloquants (incohérences détectées) */
+.portable-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 7px;
+}
+.portable-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  color: rgba(245, 200, 100, 0.95);
+  line-height: 1.4;
+}
+.portable-warning strong { color: rgba(255, 220, 130, 1); font-weight: 600; }
+html.light-mode .portable-warnings {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+html.light-mode .portable-warning { color: rgba(180, 100, 0, 0.95); }
+html.light-mode .portable-warning strong { color: rgba(140, 70, 0, 1); }
+
 /* Mode portable : action buttons un peu plus marqués sur Copier (CTA principal du panneau) */
 .modal-result-zone[data-mode="portable"] .action-btn {
   font-size: 11.5px;

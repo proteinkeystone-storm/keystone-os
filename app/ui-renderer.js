@@ -2503,6 +2503,50 @@ let _promptTWTimer   = null;   // typewriter character timer
 let _promptDebounce  = null;   // debounce pour les updates post-ready
 
 // ══════════════════════════════════════════════════════════════════
+// VALIDATION SOFT (Sprint Correctif) — incohérences non bloquantes
+// ══════════════════════════════════════════════════════════════════
+// Détecte les combinaisons de valeurs absurdes (T2 + 200m², etc.)
+// et affiche un warning visible mais non bloquant. L'utilisateur
+// peut quand même générer son document — c'est juste un garde-fou.
+//
+// Renvoie un tableau d'objets { field, message } pour chaque incohérence.
+// À étendre avec d'autres règles métier au fil du temps.
+
+function _validateFormSoft(formData) {
+    const warnings = [];
+
+    // Règle 1 — Type de lot vs surface habitable
+    // T2 standard : 35-55 m². T3 : 55-80 m². T4 : 75-110 m². Penthouse/Villa : variable.
+    const type = formData.type_logement;
+    const surface = parseFloat(formData.surface);
+    if (type && !isNaN(surface) && surface > 0) {
+        const ranges = {
+            'T2'       : { min: 30,  max: 65,  expected: '35-55 m²' },
+            'T3'       : { min: 50,  max: 95,  expected: '55-80 m²' },
+            'T4'       : { min: 70,  max: 130, expected: '75-110 m²' },
+            'T5'       : { min: 95,  max: 180, expected: '95-150 m²' },
+            'Villa'    : { min: 80,  max: 400, expected: '80-300 m²' },
+            'Penthouse': { min: 80,  max: 400, expected: '80-300 m²' },
+        };
+        const r = ranges[type];
+        if (r && (surface < r.min || surface > r.max)) {
+            warnings.push({
+                field: 'surface',
+                message: `Surface inhabituelle pour un ${type} (${r.expected} attendu, ${surface} m² saisis)`,
+            });
+        }
+    }
+
+    // Règle 2 — Surface 0 ou négative
+    if (formData.surface && (isNaN(surface) || surface <= 0)) {
+        warnings.push({ field: 'surface', message: 'Surface invalide' });
+    }
+
+    // (Place pour règles futures : RE2020 vs isolation, etc.)
+    return warnings;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // NOTICE PORTABLE (Sprint B2) — bloc HTML auto-suffisant
 // ══════════════════════════════════════════════════════════════════
 // Pour les pads avec doc_export, on remplace le prompt LLM (obsolète)
@@ -2566,6 +2610,18 @@ function _updatePortableNoticePreview(pad, formData, requiredFilled, missingFiel
     const surface = formData.surface ? `${formData.surface} m²` : '—';
     const ville   = formData.ville || '';
 
+    // Validation soft : détecte les incohérences non bloquantes
+    const warnings = _validateFormSoft(formData);
+    const warningsHTML = warnings.length ? `
+        <div class="portable-warnings">
+            ${warnings.map(w => `
+                <div class="portable-warning">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;flex-shrink:0;color:#f59e0b"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span><strong>${esc(w.field)}</strong> — ${esc(w.message)}</span>
+                </div>
+            `).join('')}
+        </div>` : '';
+
     preview.innerHTML = `
         <div class="portable-summary">
             <div class="portable-summary-row">
@@ -2584,6 +2640,7 @@ function _updatePortableNoticePreview(pad, formData, requiredFilled, missingFiel
                 <span class="portable-summary-key">Template</span>
                 <span class="portable-summary-val">${esc(cfg.templateId)}</span>
             </div>
+            ${warningsHTML}
             <div class="portable-summary-foot">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:11px;height:11px;flex-shrink:0;opacity:.6"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg>
                 Compatible Claude.ai, ChatGPT, Gemini, ou navigateur seul.

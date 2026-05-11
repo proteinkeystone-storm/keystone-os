@@ -7,6 +7,7 @@
 import { renderArtifactResult } from './artifact-renderer.js';
 import { KSTORE_CATEGORIES }    from './kstore-mock-catalog.js';
 import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
+import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
 
 // ── Moteurs IA disponibles (fiches Key-Store) ──────────────────
 // Sert au select "Optimisé pour" + checkboxes "Moteurs compatibles".
@@ -3030,6 +3031,7 @@ async function renderClauses(panel) {
           <button class="btn" id="btn-clauses-view-shared" ${_clausesView === 'shared' ? 'disabled' : ''}>Catalogue partagé</button>
           <button class="btn" id="btn-clauses-view-all"    ${_clausesView === 'all'    ? 'disabled' : ''}>Vue globale (+ locales)</button>
           <button class="btn" id="btn-clauses-reseed">↻ Re-seed VEFA v1</button>
+          <button class="btn" id="btn-clauses-reseed-v2" title="Pousse les 10 clauses techniques en version agnostique (corrige les contradictions PAC/électrique, biosourcé/PSE, etc.)">↻ Re-seed VEFA v2 (correctif)</button>
           <button class="btn btn-primary" id="btn-clauses-new">+ Nouvelle clause</button>
         </div>
       </div>
@@ -3090,7 +3092,8 @@ async function renderClauses(panel) {
       _clausesView = 'all'; renderClauses(panel);
     });
     panel.querySelector('#btn-clauses-new')?.addEventListener('click', () => _openClauseEditor(panel));
-    panel.querySelector('#btn-clauses-reseed')?.addEventListener('click', () => _reseedVefaClauses(panel));
+    panel.querySelector('#btn-clauses-reseed')?.addEventListener('click', () => _reseedVefaClauses(panel, VEFA_CLAUSES_V1, 'v1'));
+    panel.querySelector('#btn-clauses-reseed-v2')?.addEventListener('click', () => _reseedVefaClauses(panel, VEFA_CLAUSES_V2, 'v2'));
 
     panel.querySelectorAll('[data-act]').forEach(btn => {
       const act = btn.dataset.act;
@@ -3199,10 +3202,12 @@ async function _deleteClause(panel, clause) {
   }
 }
 
-async function _reseedVefaClauses(panel) {
-  if (!confirm(`Re-seeder ${VEFA_CLAUSES_V1.length} clauses VEFA standard dans le catalogue PARTAGÉ ?\n\nLes clauses existantes au même id seront écrasées par celles du fichier source.`)) return;
+// Re-seed parametrable : accepte un set de clauses + un label (v1, v2…)
+// Par défaut compatible avec l'appel historique (v1 sans param).
+async function _reseedVefaClauses(panel, clausesSet = VEFA_CLAUSES_V1, versionLabel = 'v1') {
+  if (!confirm(`Re-seeder ${clausesSet.length} clauses VEFA ${versionLabel} dans le catalogue PARTAGÉ ?\n\nLes clauses existantes au même id seront écrasées par celles du fichier source. Pour les keys existantes, fillClauses() prend automatiquement la version max (donc v2 prime sur v1).`)) return;
   let ok = 0, ko = 0;
-  for (const clause of VEFA_CLAUSES_V1) {
+  for (const clause of clausesSet) {
     try {
       await api('/api/data/clauses', 'POST', { tenant: 'shared', ...clause });
       ok++;
@@ -3211,7 +3216,7 @@ async function _reseedVefaClauses(panel) {
       ko++;
     }
   }
-  toast(`Re-seed terminé : ${ok} OK${ko ? `, ${ko} KO` : ''}`, ko ? 'error' : 'success');
+  toast(`Re-seed ${versionLabel} terminé : ${ok} OK${ko ? `, ${ko} KO` : ''}`, ko ? 'error' : 'success');
   renderClauses(panel);
 }
 
