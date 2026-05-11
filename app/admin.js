@@ -1472,6 +1472,7 @@ async function renderCatalog(panel) {
         <h2 class="section-title">Catalogue <span>(${items.length} entrées)</span></h2>
         <div style="display:flex;gap:10px">
           <button class="btn btn-secondary" id="btn-new-app">+ Nouvelle app</button>
+          <button class="btn btn-secondary" id="btn-import-static" title="Détecte les apps présentes dans le fichier statique K_STORE_ASSETS/catalog.json mais absentes de D1, et les ajoute (sans écraser les existantes). Clique ensuite Sauvegarder pour persister.">↻ Importer du fichier statique</button>
           <button class="btn btn-secondary" id="btn-raw-catalog">JSON brut</button>
           <button class="btn btn-primary"   id="btn-save-catalog">Sauvegarder</button>
         </div>
@@ -1529,8 +1530,102 @@ async function renderCatalog(panel) {
     panel.querySelector('#btn-new-app').addEventListener('click', () => createNewKStoreApp(panel));
     panel.querySelector('#btn-save-catalog').addEventListener('click', () => saveCatalog(panel));
     panel.querySelector('#btn-raw-catalog').addEventListener('click', () => showRawCatalogEditor(panel));
+    panel.querySelector('#btn-import-static').addEventListener('click', () => importMissingFromStatic(panel));
   } catch (err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// Detecte les entrees du catalog statique absentes de D1 et les ajoute
+// au catalogData en memoire. Non destructif : ne touche pas aux entrees
+// existantes. Stephane doit ensuite cliquer Sauvegarder pour persister.
+async function importMissingFromStatic(panel) {
+  const btn = panel.querySelector('#btn-import-static');
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Analyse…';
+  try {
+    const staticCatalog = await fetchJSON('/K_STORE_ASSETS/catalog.json');
+    const staticTools   = staticCatalog?.tools || [];
+    const existingIds   = new Set((catalogData.tools || []).map(t => t.id));
+    const missing       = staticTools.filter(t => t?.id && !existingIds.has(t.id));
+
+    if (missing.length === 0) {
+      btn.textContent = '✓ Aucun ajout nécessaire';
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2200);
+      return;
+    }
+
+    if (!confirm(
+      `Ajouter ${missing.length} entrée(s) manquante(s) au catalogue ?\n\n` +
+      missing.map(t => `• ${t.id} — ${t.title || ''}`).join('\n') +
+      `\n\nClique ensuite "Sauvegarder" pour persister en base.`
+    )) {
+      btn.textContent = orig; btn.disabled = false; return;
+    }
+
+    catalogData.tools = [...(catalogData.tools || []), ...missing];
+    btn.textContent = `✓ ${missing.length} ajout(s) — Clique Sauvegarder`;
+
+    // On NE peut PAS appeler renderCatalog(panel) ici car il re-fetch D1
+    // et écraserait les ajouts en mémoire. Au lieu de ça on demande un
+    // simple reload après que Stéphane ait cliqué Sauvegarder.
+    // En attendant, on met juste à jour le compteur du titre et on
+    // affiche les nouvelles entrées en append manuel sur la table existante.
+    const titleSpan = panel.querySelector('.section-title span');
+    if (titleSpan) titleSpan.textContent = `(${catalogData.tools.length} entrées)`;
+
+    const tbody = panel.querySelector('#catalog-tbody');
+    if (tbody) {
+      missing.forEach((item) => {
+        const idx = catalogData.tools.indexOf(item);  // index réel après merge
+        const ficheComplete = !!(item.longDesc && item.category && item.ai_optimized);
+        const ficheBadge    = ficheComplete
+          ? '<span style="color:#34d399;font-size:11px">● Complétée</span>'
+          : '<span style="color:#f59e0b;font-size:11px">○ À compléter</span>';
+        const tr = document.createElement('tr');
+        tr.style.background = 'rgba(184,148,90,.08)';   // highlight les nouvelles
+        tr.innerHTML = `
+          <td><code style="font-size:11px;color:var(--gold)">${esc(item.id)}</code> <span style="font-size:10px;color:#34d399">NOUVEAU</span></td>
+          <td><input data-idx="${idx}" data-field="title" type="text" class="form-input" value="${esc(item.title||'')}"
+                     style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:200px"
+                     onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+          <td><select data-idx="${idx}" data-field="plan" class="form-select" style="padding:4px 8px;font-size:12px;width:auto">
+            ${['STARTER','PRO','MAX'].map(p=>`<option ${item.plan===p?'selected':''}>${p}</option>`).join('')}
+          </select></td>
+          <td><input data-idx="${idx}" data-field="price" type="number" class="form-input" value="${item.price??''}"
+                     style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
+                     onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+          <td><input data-idx="${idx}" data-field="lifetimePrice" type="number" class="form-input" value="${item.lifetimePrice??''}"
+                     style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
+                     onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+          <td><label class="toggle-switch"><input data-idx="${idx}" data-field="published" type="checkbox" ${item.published?'checked':''}>
+            <span class="toggle-slider"></span></label></td>
+          <td><label class="toggle-switch"><input data-idx="${idx}" data-field="isNew" type="checkbox" ${item.isNew?'checked':''}>
+            <span class="toggle-slider"></span></label></td>
+          <td style="text-align:center;white-space:nowrap">
+            <button class="btn btn-secondary btn-ks-fiche" data-idx="${idx}"
+                    style="padding:5px 10px;font-size:12px;gap:6px">📝 Éditer</button>
+            <div style="margin-top:3px">${ficheBadge}</div>
+          </td>`;
+        tbody.appendChild(tr);
+
+        // Wire les listeners sur la nouvelle row (sinon les edits ne sont pas captés)
+        tr.querySelectorAll('[data-idx][data-field]').forEach(el => {
+          el.addEventListener(el.type==='checkbox'?'change':'input', () => {
+            const i=+el.dataset.idx; const f=el.dataset.field;
+            catalogData.tools[i][f] = el.type==='checkbox' ? el.checked : el.type==='number' ? (el.value===''?undefined:+el.value) : el.value;
+          });
+        });
+        tr.querySelector('.btn-ks-fiche')?.addEventListener('click', (e) => {
+          openKStoreFicheEditor(+e.currentTarget.dataset.idx, panel);
+        });
+      });
+    }
+  } catch (err) {
+    btn.textContent = '✗ Erreur — voir console';
+    console.error('[importMissingFromStatic]', err);
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
   }
 }
 async function saveCatalog(panel) {
