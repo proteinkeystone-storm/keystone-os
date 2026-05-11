@@ -66,6 +66,57 @@ const TEMPLATES_META = {
       'ART_R261_25', 'AVERTISSEMENT_VALIDATION',
     ],
   },
+
+  // ── Sprint 4 — Contrat de Réservation VEFA (Art. L.261-15 CCH) ──
+  // Modèle indicatif de contrat préliminaire. Validation notariale
+  // impérative avant signature (cf. clause CONTRAT_AVERTISSEMENT_VALIDATION).
+  'vefa-contrat-v1': {
+    file        : 'vefa-contrat-v1.html',
+    label       : 'Contrat de Réservation VEFA — v1',
+    sector      : 'IMM',
+    pages       : 6,
+    variables   : [
+      // Identification document
+      'REF_DOCUMENT', 'DATE_EDITION', 'VERSION_DOC',
+      // Programme + lot (réutilisés depuis le formulaire A1 quand dispo)
+      'PROGRAMME', 'ADRESSE_PROGRAMME', 'DEPARTEMENT', 'REGION',
+      'LOT_NUMERO', 'TYPE_LOT', 'SURFACE', 'SURFACE_CARREZ',
+      'ETAGE', 'ORIENTATION', 'ANNEXES', 'CADASTRE', 'QUOTE_PARTS',
+      'NOTAIRE', 'LIVRAISON', 'DATE_ACTE_AUTHENTIQUE',
+      // Parties — Vendeur
+      'VENDEUR_NOM', 'VENDEUR_SIREN', 'VENDEUR_RCS',
+      'VENDEUR_CAPITAL', 'VENDEUR_SIEGE', 'VENDEUR_REPRESENTANT',
+      // Parties — Acquéreur
+      'ACQUEREUR_NOM', 'ACQUEREUR_CIVILITE', 'ACQUEREUR_NAISSANCE',
+      'ACQUEREUR_LIEU_NAISSANCE', 'ACQUEREUR_ADRESSE', 'ACQUEREUR_REGIME',
+      // Prix + échéancier
+      'PRIX_HT', 'PRIX_TTC', 'TVA_TAUX', 'TVA_MONTANT',
+      'REPARTITION_FONCIER_BATI',
+      'ECH_FONDATIONS', 'ECH_HORS_EAU', 'ECH_ACHEVEMENT',
+      // Dépôt de garantie + séquestre
+      'DEPOT_MONTANT', 'DEPOT_MONTANT_LETTRES', 'DEPOT_POURCENTAGE',
+      'DEPOT_PLAFOND_LEGAL', 'DEPOT_MODE_VERSEMENT',
+      'SEQUESTRE_ETABLISSEMENT', 'SEQUESTRE_COMPTE',
+      // Conditions suspensives — prêt
+      'PRET_MONTANT', 'PRET_TAUX_MAX', 'PRET_DUREE_MAX', 'PRET_DELAI',
+      // Livraison
+      'PENALITES_RETARD',
+      // Clauses particulières + signatures
+      'CLAUSES_PARTICULIERES_BLOC',
+      'LIEU_SIGNATURE', 'DATE_SIGNATURE', 'NB_EXEMPLAIRES',
+    ],
+    clauses     : [
+      'CONTRAT_AVERTISSEMENT',
+      'CONTRAT_OBJET', 'CONTRAT_DESIGNATION_LOT',
+      'CONTRAT_ETAT_DESCRIPTIF', 'CONTRAT_NOTICE_REFERENCE',
+      'CONTRAT_PRIX', 'CONTRAT_ECHEANCIER', 'CONTRAT_FRAIS_ACTE',
+      'CONTRAT_DEPOT_GARANTIE', 'CONTRAT_SEQUESTRE', 'CONTRAT_RESTITUTION_DEPOT',
+      'CONTRAT_RETRACTATION', 'CONTRAT_COND_SUSP_PRET',
+      'CONTRAT_COND_SUSP_AUTRES', 'CONTRAT_LIVRAISON',
+      'CONTRAT_GARANTIES_LEGALES', 'CONTRAT_LITIGES_DROIT',
+      'CONTRAT_AVERTISSEMENT_VALIDATION',
+    ],
+  },
 };
 
 // ── Cache mémoire ──────────────────────────────────────────────

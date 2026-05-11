@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<!-- ═══════════════════════════════════════════════════════════════
+     KEYSTONE OS — Template Contrat de Réservation VEFA v1 (Sprint 4)
+     SANCTUARISÉ : ce fichier ne doit JAMAIS être envoyé à un LLM.
+
+     Document = modèle indicatif de Contrat Préliminaire de Réservation
+     (Art. L.261-15 et R.261-25-1 du CCH). À valider impérativement par
+     un notaire avant signature. Voir clause CONTRAT_AVERTISSEMENT.
+
+     Variables d'injection : voir TEMPLATES_META.variables dans
+     app/lib/doc-engine.js (liste authoritative).
+     ═══════════════════════════════════════════════════════════════ -->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contrat de Réservation VEFA — [[PROGRAMME]] — [[TYPE_LOT]]</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy:        #1B2A4A;
+      --navy-mid:    #2C4170;
+      --navy-pale:   #E8EDF5;
+      --gold:        #B8945A;
+      --gold-light:  #D4AF7A;
+      --text-dark:   #1A1E2E;
+      --text-mid:    #4A5568;
+      --text-light:  #8896A8;
+      --border:      #D1D9E6;
+      --bg:          #FFFFFF;
+      --bg-soft:     #F7F9FC;
+      --red-alert:   #B91C1C;
+      --red-soft:    #FEF2F2;
+      --green-ok:    #2E7D32;
+      --green-light: #E8F5E9;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Source Sans 3', 'Helvetica Neue', Helvetica, sans-serif;
+      font-size: 10pt;
+      color: var(--text-dark);
+      background: #CBD5E1;
+      line-height: 1.55;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 20mm 20mm 25mm 20mm;
+      @bottom-center {
+        content: "Contrat Préliminaire de Réservation \2014  [[PROGRAMME]] \2014  Lot [[LOT_NUMERO]] \2014  Page " counter(page) " / " counter(pages);
+        font-family: 'Source Sans 3', 'Helvetica Neue', sans-serif;
+        font-size: 7pt;
+        color: #8896A8;
+        border-top: 0.5pt solid #D1D9E6;
+        padding-top: 5pt;
+        width: 170mm;
+        text-align: center;
+        letter-spacing: 0.03em;
+      }
+    }
+
+    @media screen {
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 16mm auto;
+        padding: 20mm;
+        background: white;
+        box-shadow: 0 6px 40px rgba(27, 42, 74, 0.18), 0 1px 4px rgba(0,0,0,0.08);
+        position: relative;
+        overflow: hidden;
+      }
+    }
+
+    @media print {
+      body { background: white; }
+      .page {
+        width: 100%;
+        min-height: auto;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        overflow: visible;
+      }
+      .page + .page {
+        page-break-before: always;
+        break-before: page;
+      }
+      .screen-footer { display: none !important; }
+    }
+
+    .screen-footer {
+      text-align: center;
+      font-size: 7pt;
+      color: var(--text-light);
+      border-top: 0.5pt solid var(--border);
+      padding-top: 7pt;
+      margin-top: 18pt;
+      letter-spacing: 0.04em;
+    }
+
+    /* ─── PAGE 1 : COUVERTURE ─── */
+    .cover-header {
+      background: var(--navy);
+      margin: -20mm -20mm 0 -20mm;
+      padding: 14mm 20mm 12mm;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .cover-agency-tag {
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+      margin-bottom: 5pt;
+    }
+    .cover-doc-type {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 26pt;
+      font-weight: 600;
+      line-height: 1.1;
+      color: white;
+      max-width: 130mm;
+    }
+    .cover-program-line {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 14pt;
+      color: var(--gold-light);
+      margin-top: 8pt;
+      font-style: italic;
+    }
+    .cover-subtitle {
+      font-size: 9pt;
+      color: rgba(255,255,255,0.55);
+      margin-top: 6pt;
+      font-weight: 300;
+      letter-spacing: 0.04em;
+    }
+    .cover-badge-row {
+      display: flex;
+      gap: 6pt;
+      margin-top: 14pt;
+      flex-wrap: wrap;
+    }
+    .badge {
+      background: var(--gold);
+      color: white;
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 3pt 8pt;
+    }
+    .badge.outline {
+      background: transparent;
+      border: 1pt solid rgba(200,169,110,0.5);
+      color: var(--gold-light);
+    }
+    .cover-meta {
+      text-align: right;
+      font-size: 8pt;
+      color: rgba(255,255,255,0.45);
+      line-height: 2;
+    }
+    .cover-meta strong { color: rgba(255,255,255,0.85); font-weight: 500; }
+
+    .gold-bar {
+      height: 2.5pt;
+      background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 40%, transparent 85%);
+      margin: 0 -20mm;
+    }
+
+    /* ─── PARTIES (Vendeur / Réservataire) ─── */
+    .parties-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10pt;
+      margin: 14pt 0;
+    }
+    .party-card {
+      border: 1pt solid var(--border);
+      padding: 10pt 12pt;
+      background: var(--bg-soft);
+    }
+    .party-label {
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 6pt;
+      border-bottom: 0.5pt solid var(--border);
+      padding-bottom: 4pt;
+    }
+    .party-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 14pt;
+      font-weight: 600;
+      color: var(--navy);
+      line-height: 1.2;
+      margin-bottom: 4pt;
+    }
+    .party-meta {
+      font-size: 8.5pt;
+      color: var(--text-mid);
+      line-height: 1.5;
+    }
+    .party-meta strong { color: var(--text-dark); font-weight: 600; }
+
+    /* ─── SYNTHÈSE FINANCIÈRE ─── */
+    .finance-box {
+      background: var(--navy);
+      padding: 12pt 14pt;
+      margin: 14pt 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .finance-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10pt;
+      padding-bottom: 6pt;
+      border-bottom: 0.5pt solid rgba(184,148,90,0.3);
+    }
+    .finance-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 11pt;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+    }
+    .finance-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8pt;
+    }
+    .finance-card {
+      background: rgba(255,255,255,0.06);
+      padding: 8pt 9pt;
+      border-left: 2pt solid var(--gold);
+    }
+    .finance-card-label {
+      font-size: 6.5pt;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 4pt;
+    }
+    .finance-card-value {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 14pt;
+      font-weight: 600;
+      color: white;
+      line-height: 1;
+    }
+    .finance-card-unit {
+      font-size: 7pt;
+      color: rgba(255,255,255,0.45);
+      margin-top: 2pt;
+    }
+
+    /* ─── SECTION HEADERS (P2-P6) ─── */
+    .section-header {
+      background: var(--navy);
+      margin: -20mm -20mm 0 -20mm;
+      padding: 11mm 20mm 9mm;
+      display: flex;
+      align-items: flex-end;
+      gap: 12pt;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .section-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 52pt;
+      font-weight: 700;
+      color: rgba(255,255,255,0.10);
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .section-titles { flex: 1; }
+    .section-chapter {
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold-light);
+      margin-bottom: 3pt;
+    }
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 21pt;
+      font-weight: 600;
+      color: white;
+      line-height: 1.15;
+    }
+
+    /* ─── ARTICLES ─── */
+    article.clause {
+      margin-bottom: 14pt;
+    }
+    article.clause > h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13pt;
+      font-weight: 600;
+      color: var(--navy);
+      margin-top: 14pt;
+      margin-bottom: 7pt;
+      padding-bottom: 3pt;
+      border-bottom: 1pt solid var(--navy-pale);
+      letter-spacing: 0.01em;
+    }
+    article.clause > h3:first-child { margin-top: 4pt; }
+    article.clause > h3 .article-num {
+      color: var(--gold);
+      font-weight: 700;
+      margin-right: 6pt;
+    }
+
+    p {
+      font-size: 9.5pt;
+      color: var(--text-dark);
+      margin-bottom: 5pt;
+      text-align: justify;
+      line-height: 1.65;
+    }
+
+    ul.items {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 10pt 0;
+    }
+    ul.items li {
+      font-size: 9.5pt;
+      padding: 4pt 0 4pt 16pt;
+      border-bottom: 0.5pt solid var(--border);
+      position: relative;
+      color: var(--text-dark);
+      line-height: 1.5;
+    }
+    ul.items li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--gold);
+      font-weight: 700;
+    }
+    ul.items li:last-child { border-bottom: none; }
+
+    /* ─── TABLES & STRIPS ─── */
+    .specs-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1pt solid var(--border);
+      margin-bottom: 14pt;
+    }
+    .spec-row { display: contents; }
+    .sk, .sv {
+      padding: 5.5pt 10pt;
+      border-bottom: 0.5pt solid var(--border);
+      font-size: 8.5pt;
+    }
+    .sk {
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 7.5pt;
+      color: var(--text-mid);
+      background: var(--bg-soft);
+      border-right: 1pt solid var(--border);
+    }
+    .sv { color: var(--text-dark); }
+    .sv strong { color: var(--navy); font-weight: 600; }
+
+    .echeancier-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10pt 0 14pt;
+      font-size: 8.5pt;
+    }
+    .echeancier-table th {
+      background: var(--navy);
+      color: white;
+      padding: 6pt 8pt;
+      text-align: left;
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .echeancier-table td {
+      padding: 5pt 8pt;
+      border-bottom: 0.5pt solid var(--border);
+      color: var(--text-dark);
+    }
+    .echeancier-table tr:last-child td {
+      border-bottom: 1pt solid var(--navy);
+      background: var(--bg-soft);
+      font-weight: 600;
+      color: var(--navy);
+    }
+    .echeancier-table .pct {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+      color: var(--gold);
+      font-size: 10pt;
+    }
+
+    /* ─── BOXES ─── */
+    .info-box {
+      background: var(--navy-pale);
+      border-left: 3pt solid var(--navy);
+      padding: 7pt 11pt;
+      margin: 10pt 0;
+    }
+    .info-box p { margin: 0; font-size: 8.5pt; color: var(--navy); text-align: left; }
+    .info-box strong { font-weight: 600; }
+
+    .warning-box {
+      background: #FFF8E7;
+      border-left: 3pt solid var(--gold);
+      padding: 7pt 11pt;
+      margin: 10pt 0;
+    }
+    .warning-box p { margin: 0; font-size: 8.5pt; color: #6B4C0E; text-align: left; }
+
+    .alert-box {
+      background: var(--red-soft);
+      border-left: 3pt solid var(--red-alert);
+      padding: 8pt 12pt;
+      margin: 10pt 0;
+    }
+    .alert-box p { margin: 0; font-size: 8.5pt; color: var(--red-alert); text-align: left; }
+    .alert-box strong { font-weight: 700; }
+
+    .article-box {
+      background: var(--bg-soft);
+      border: 0.5pt solid var(--border);
+      padding: 9pt 12pt;
+      margin: 10pt 0;
+    }
+    .article-ref {
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--navy);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 5pt;
+    }
+    .article-text {
+      font-size: 7.5pt;
+      color: var(--text-mid);
+      line-height: 1.65;
+      text-align: justify;
+      font-style: italic;
+    }
+
+    /* ─── SIGNATURES ─── */
+    .signature-zone {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24pt;
+      margin-top: 18pt;
+    }
+    .sig-label {
+      font-size: 7.5pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-mid);
+      margin-bottom: 4pt;
+    }
+    .sig-name {
+      font-size: 9pt;
+      color: var(--text-dark);
+      margin-bottom: 2pt;
+    }
+    .sig-area {
+      height: 50pt;
+      border: 0.5pt dashed var(--border);
+      background: var(--bg-soft);
+      margin-top: 6pt;
+      position: relative;
+    }
+    .sig-area::before {
+      content: "Bon pour accord — Signature manuscrite";
+      position: absolute;
+      bottom: 3pt;
+      left: 6pt;
+      font-size: 6.5pt;
+      color: var(--text-light);
+      font-style: italic;
+      letter-spacing: 0.05em;
+    }
+    .sig-mention {
+      font-size: 7pt;
+      color: var(--text-light);
+      margin-top: 6pt;
+      font-style: italic;
+      line-height: 1.5;
+    }
+
+    .lieu-date {
+      display: flex;
+      gap: 24pt;
+      margin: 18pt 0 10pt;
+      font-size: 9pt;
+    }
+    .lieu-date span { color: var(--text-mid); }
+    .lieu-date strong { color: var(--text-dark); font-weight: 600; }
+
+    /* ─── UTILS ─── */
+    .mt-sm { margin-top: 8pt; }
+    .mt-md { margin-top: 14pt; }
+    .text-gold { color: var(--gold); }
+    .text-navy { color: var(--navy); font-weight: 600; }
+    .sep { height: 0.5pt; background: var(--border); margin: 12pt 0; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 1 — COUVERTURE & SYNTHÈSE
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="cover-header">
+    <div>
+      <div class="cover-agency-tag">Contrat Préliminaire de Réservation</div>
+      <div class="cover-doc-type">Réservation VEFA</div>
+      <div class="cover-program-line">Programme [[PROGRAMME]]</div>
+      <div class="cover-subtitle">[[DEPARTEMENT]] — [[REGION]] &nbsp;·&nbsp; Vente en l'État Futur d'Achèvement</div>
+      <div class="cover-badge-row">
+        <span class="badge">Lot [[LOT_NUMERO]]</span>
+        <span class="badge outline">[[TYPE_LOT]] — [[SURFACE_CARREZ]] m²</span>
+        <span class="badge outline">Art. L.261-15 CCH</span>
+      </div>
+    </div>
+    <div class="cover-meta">
+      <strong>Réf. contrat</strong><br>
+      [[REF_DOCUMENT]]<br><br>
+      <strong>Date d'édition</strong><br>
+      [[DATE_EDITION]]<br><br>
+      <strong>Version</strong><br>
+      [[VERSION_DOC]]
+    </div>
+  </div>
+
+  <div class="gold-bar" style="margin-top:0; margin-bottom:14pt;"></div>
+
+  <div class="parties-grid">
+    <div class="party-card">
+      <div class="party-label">Réservant (Vendeur)</div>
+      <div class="party-name">[[VENDEUR_NOM]]</div>
+      <div class="party-meta">
+        SIREN <strong>[[VENDEUR_SIREN]]</strong> · RCS [[VENDEUR_RCS]]<br>
+        Capital social : [[VENDEUR_CAPITAL]]<br>
+        Siège : [[VENDEUR_SIEGE]]<br>
+        Représenté par : <strong>[[VENDEUR_REPRESENTANT]]</strong>
+      </div>
+    </div>
+    <div class="party-card">
+      <div class="party-label">Réservataire (Acquéreur)</div>
+      <div class="party-name">[[ACQUEREUR_NOM]]</div>
+      <div class="party-meta">
+        [[ACQUEREUR_CIVILITE]] · Né(e) le [[ACQUEREUR_NAISSANCE]]<br>
+        À : [[ACQUEREUR_LIEU_NAISSANCE]]<br>
+        Adresse : [[ACQUEREUR_ADRESSE]]<br>
+        Régime matrimonial : <strong>[[ACQUEREUR_REGIME]]</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-box">
+    <div class="finance-head">
+      <div class="finance-title">Synthèse Financière</div>
+      <div style="font-size:7.5pt;color:rgba(255,255,255,0.45);letter-spacing:0.08em;text-transform:uppercase;">TVA [[TVA_TAUX]]</div>
+    </div>
+    <div class="finance-grid">
+      <div class="finance-card">
+        <div class="finance-card-label">Prix de vente TTC</div>
+        <div class="finance-card-value">[[PRIX_TTC]]</div>
+        <div class="finance-card-unit">euros — toutes taxes comprises</div>
+      </div>
+      <div class="finance-card">
+        <div class="finance-card-label">Dépôt de garantie</div>
+        <div class="finance-card-value">[[DEPOT_MONTANT]]</div>
+        <div class="finance-card-unit">[[DEPOT_POURCENTAGE]] % du prix TTC</div>
+      </div>
+      <div class="finance-card">
+        <div class="finance-card-label">Livraison prévisionnelle</div>
+        <div class="finance-card-value" style="font-size:13pt;">[[LIVRAISON]]</div>
+        <div class="finance-card-unit">Acte authentique : [[DATE_ACTE_AUTHENTIQUE]]</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs-2col">
+    <div class="spec-row">
+      <div class="sk">Désignation du lot</div>
+      <div class="sv"><strong>Lot n° [[LOT_NUMERO]]</strong> — [[TYPE_LOT]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Surface Loi Carrez</div>
+      <div class="sv"><strong>[[SURFACE_CARREZ]] m²</strong> (surface habitable [[SURFACE]] m²)</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Situation</div>
+      <div class="sv">[[ETAGE]] — Orientation [[ORIENTATION]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Quote-parts indivises</div>
+      <div class="sv">[[QUOTE_PARTS]] / 10 000<sup>èmes</sup></div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Annexes incluses</div>
+      <div class="sv">[[ANNEXES]]</div>
+    </div>
+    <div class="spec-row">
+      <div class="sk">Notaire instrumentaire</div>
+      <div class="sv">[[NOTAIRE]]</div>
+    </div>
+  </div>
+
+  [[CLAUSE_CONTRAT_AVERTISSEMENT]]
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 1 / 6</div>
+</div><!-- /page 1 -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 2 — DÉSIGNATION DU BIEN
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">02</div>
+    <div class="section-titles">
+      <div class="section-chapter">Article I — Article 2 sur 6</div>
+      <div class="section-title">Désignation du Bien Réservé</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 1</span> Objet du contrat</h3>
+    [[CLAUSE_CONTRAT_OBJET]]
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 2</span> Désignation du lot</h3>
+    [[CLAUSE_CONTRAT_DESIGNATION_LOT]]
+    <ul class="items">
+      <li><strong>Programme :</strong> [[PROGRAMME]] — [[ADRESSE_PROGRAMME]]</li>
+      <li><strong>Lot privatif n°</strong> [[LOT_NUMERO]] — [[TYPE_LOT]]</li>
+      <li><strong>Surface habitable :</strong> [[SURFACE]] m² &nbsp;·&nbsp; <strong>Surface Loi Carrez :</strong> [[SURFACE_CARREZ]] m²</li>
+      <li><strong>Situation :</strong> [[ETAGE]], orientation [[ORIENTATION]]</li>
+      <li><strong>Annexes attachées :</strong> [[ANNEXES]]</li>
+      <li><strong>Référence cadastrale :</strong> [[CADASTRE]]</li>
+      <li><strong>Quote-parts indivises de la copropriété :</strong> [[QUOTE_PARTS]] / 10 000<sup>èmes</sup></li>
+    </ul>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 3</span> État descriptif de division &amp; règlement de copropriété</h3>
+    [[CLAUSE_CONTRAT_ETAT_DESCRIPTIF]]
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 4</span> Notice descriptive contractuelle</h3>
+    [[CLAUSE_CONTRAT_NOTICE_REFERENCE]]
+  </article>
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 2 / 6</div>
+</div><!-- /page 2 -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 3 — PRIX & MODALITÉS DE PAIEMENT
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">03</div>
+    <div class="section-titles">
+      <div class="section-chapter">Article II — Article 3 sur 6</div>
+      <div class="section-title">Prix &amp; Modalités de Paiement</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 5</span> Prix de vente</h3>
+    [[CLAUSE_CONTRAT_PRIX]]
+    <div class="specs-2col">
+      <div class="spec-row">
+        <div class="sk">Prix HT</div>
+        <div class="sv">[[PRIX_HT]] €</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">TVA ([[TVA_TAUX]])</div>
+        <div class="sv">[[TVA_MONTANT]] €</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Prix TTC</div>
+        <div class="sv"><strong>[[PRIX_TTC]] €</strong></div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Répartition foncier / bâti</div>
+        <div class="sv">[[REPARTITION_FONCIER_BATI]]</div>
+      </div>
+    </div>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 6</span> Échéancier de paiement (Art. R.261-14 CCH)</h3>
+    [[CLAUSE_CONTRAT_ECHEANCIER]]
+    <table class="echeancier-table">
+      <thead>
+        <tr>
+          <th style="width:55%;">Stade d'avancement</th>
+          <th style="width:20%;text-align:center;">Cumul</th>
+          <th style="width:25%;text-align:right;">Montant TTC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Signature acte authentique (achèvement fondations)</td>
+          <td style="text-align:center;"><span class="pct">35 %</span></td>
+          <td style="text-align:right;">[[ECH_FONDATIONS]] €</td>
+        </tr>
+        <tr>
+          <td>Mise hors d'eau</td>
+          <td style="text-align:center;"><span class="pct">70 %</span></td>
+          <td style="text-align:right;">[[ECH_HORS_EAU]] €</td>
+        </tr>
+        <tr>
+          <td>Achèvement des travaux</td>
+          <td style="text-align:center;"><span class="pct">95 %</span></td>
+          <td style="text-align:right;">[[ECH_ACHEVEMENT]] €</td>
+        </tr>
+        <tr>
+          <td>Livraison (remise des clés)</td>
+          <td style="text-align:center;"><span class="pct">100 %</span></td>
+          <td style="text-align:right;"><strong>[[PRIX_TTC]] €</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="info-box">
+      <p>Les pourcentages ci-dessus correspondent aux <strong>plafonds légaux fixés par l'article R.261-14 du Code de la Construction et de l'Habitation</strong>. Le promoteur ne peut exiger aucun versement supérieur à ces seuils selon le stade d'avancement constaté.</p>
+    </div>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 7</span> Frais d'acte &amp; émoluments</h3>
+    [[CLAUSE_CONTRAT_FRAIS_ACTE]]
+  </article>
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 3 / 6</div>
+</div><!-- /page 3 -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 4 — DÉPÔT DE GARANTIE
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">04</div>
+    <div class="section-titles">
+      <div class="section-chapter">Article III — Article 4 sur 6</div>
+      <div class="section-title">Dépôt de Garantie &amp; Séquestre</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 8</span> Montant du dépôt de garantie</h3>
+    [[CLAUSE_CONTRAT_DEPOT_GARANTIE]]
+    <div class="specs-2col">
+      <div class="spec-row">
+        <div class="sk">Montant TTC</div>
+        <div class="sv"><strong>[[DEPOT_MONTANT]] €</strong> ([[DEPOT_MONTANT_LETTRES]])</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Pourcentage du prix</div>
+        <div class="sv">[[DEPOT_POURCENTAGE]] % du prix TTC</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Plafond légal applicable</div>
+        <div class="sv">[[DEPOT_PLAFOND_LEGAL]]</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Mode de versement</div>
+        <div class="sv">[[DEPOT_MODE_VERSEMENT]]</div>
+      </div>
+    </div>
+    <div class="warning-box">
+      <p><strong>Plafonds légaux du dépôt de garantie</strong> — Art. R.261-28 CCH : 5 % maximum si la livraison intervient dans l'année, 2 % maximum si elle intervient dans les deux ans, aucun versement au-delà de deux ans.</p>
+    </div>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 9</span> Compte séquestre</h3>
+    [[CLAUSE_CONTRAT_SEQUESTRE]]
+    <ul class="items">
+      <li><strong>Établissement séquestre :</strong> [[SEQUESTRE_ETABLISSEMENT]]</li>
+      <li><strong>Référence du compte :</strong> [[SEQUESTRE_COMPTE]]</li>
+      <li>Les fonds versés sont indisponibles, inaliénables et insaisissables jusqu'à la signature de l'acte authentique ou la résolution du contrat.</li>
+    </ul>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 10</span> Restitution du dépôt</h3>
+    [[CLAUSE_CONTRAT_RESTITUTION_DEPOT]]
+  </article>
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 4 / 6</div>
+</div><!-- /page 4 -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 5 — CONDITIONS SUSPENSIVES & DÉLAIS
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">05</div>
+    <div class="section-titles">
+      <div class="section-chapter">Article IV — Article 5 sur 6</div>
+      <div class="section-title">Conditions Suspensives &amp; Délais</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 11</span> Délai de rétractation (loi SRU)</h3>
+    [[CLAUSE_CONTRAT_RETRACTATION]]
+    <div class="alert-box">
+      <p><strong>Délai de rétractation de 10 jours</strong> — Le réservataire dispose d'un délai de dix (10) jours calendaires à compter du lendemain de la première présentation de la lettre recommandée avec accusé de réception lui notifiant le présent contrat, pour se rétracter sans motif ni indemnité (Art. L.271-1 du CCH).</p>
+    </div>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 12</span> Condition suspensive d'obtention de prêt</h3>
+    [[CLAUSE_CONTRAT_COND_SUSP_PRET]]
+    <div class="specs-2col">
+      <div class="spec-row">
+        <div class="sk">Montant du prêt sollicité</div>
+        <div class="sv"><strong>[[PRET_MONTANT]] €</strong></div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Taux maximum (hors assurance)</div>
+        <div class="sv">[[PRET_TAUX_MAX]] %</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Durée maximale</div>
+        <div class="sv">[[PRET_DUREE_MAX]] ans</div>
+      </div>
+      <div class="spec-row">
+        <div class="sk">Délai d'obtention</div>
+        <div class="sv">[[PRET_DELAI]] jours à compter de la signature</div>
+      </div>
+    </div>
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 13</span> Conditions suspensives complémentaires</h3>
+    [[CLAUSE_CONTRAT_COND_SUSP_AUTRES]]
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 14</span> Livraison &amp; pénalités de retard</h3>
+    [[CLAUSE_CONTRAT_LIVRAISON]]
+    <ul class="items">
+      <li><strong>Date de livraison prévisionnelle :</strong> [[LIVRAISON]]</li>
+      <li><strong>Date de signature de l'acte authentique :</strong> [[DATE_ACTE_AUTHENTIQUE]]</li>
+      <li><strong>Pénalités de retard :</strong> [[PENALITES_RETARD]]</li>
+    </ul>
+  </article>
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 5 / 6</div>
+</div><!-- /page 5 -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PAGE 6 — CLAUSES PARTICULIÈRES, MENTIONS LÉGALES & SIGNATURES
+════════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">06</div>
+    <div class="section-titles">
+      <div class="section-chapter">Article V — Article 6 sur 6</div>
+      <div class="section-title">Mentions Légales &amp; Signatures</div>
+    </div>
+  </div>
+  <div class="gold-bar" style="margin-bottom:16pt;"></div>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 15</span> Garanties légales du vendeur</h3>
+    [[CLAUSE_CONTRAT_GARANTIES_LEGALES]]
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 16</span> Clauses particulières</h3>
+    [[CLAUSES_PARTICULIERES_BLOC]]
+  </article>
+
+  <article class="clause">
+    <h3><span class="article-num">Art. 17</span> Mentions légales obligatoires</h3>
+    <div class="article-box">
+      <div class="article-ref">Art. L.261-15 du Code de la Construction et de l'Habitation</div>
+      <div class="article-text">La vente en l'état futur d'achèvement peut être précédée d'un contrat préliminaire par lequel, en contrepartie d'un dépôt de garantie effectué à un compte spécial, le vendeur s'engage à réserver à un acheteur un immeuble ou une partie d'immeuble.</div>
+    </div>
+    <div class="article-box">
+      <div class="article-ref">Art. R.261-25-1 CCH — Mentions obligatoires du contrat préliminaire</div>
+      <div class="article-text">Le contrat préliminaire de vente doit comporter notamment : la consistance de l'immeuble, la qualité de la construction (notice descriptive), le prix prévisionnel, les modalités de paiement, le délai d'exécution des travaux, la date de signature de l'acte authentique, et les conditions dans lesquelles le dépôt de garantie peut être restitué.</div>
+    </div>
+    [[CLAUSE_CONTRAT_LITIGES_DROIT]]
+  </article>
+
+  <div class="lieu-date">
+    <div><span>Fait à</span> <strong>[[LIEU_SIGNATURE]]</strong></div>
+    <div><span>Le</span> <strong>[[DATE_SIGNATURE]]</strong></div>
+    <div><span>En</span> <strong>[[NB_EXEMPLAIRES]] exemplaires originaux</strong></div>
+  </div>
+
+  <div class="signature-zone">
+    <div>
+      <div class="sig-label">Le Réservant (Vendeur)</div>
+      <div class="sig-name">[[VENDEUR_NOM]]</div>
+      <div class="sig-name" style="color:var(--text-mid);font-size:8pt;">Représenté par [[VENDEUR_REPRESENTANT]]</div>
+      <div class="sig-area"></div>
+      <div class="sig-mention">Précédée de la mention manuscrite : « Lu et approuvé, bon pour réservation »</div>
+    </div>
+    <div>
+      <div class="sig-label">Le Réservataire (Acquéreur)</div>
+      <div class="sig-name">[[ACQUEREUR_NOM]]</div>
+      <div class="sig-name" style="color:var(--text-mid);font-size:8pt;">[[ACQUEREUR_CIVILITE]]</div>
+      <div class="sig-area"></div>
+      <div class="sig-mention">Précédée de la mention manuscrite : « Lu et approuvé, bon pour réservation »</div>
+    </div>
+  </div>
+
+  [[CLAUSE_CONTRAT_AVERTISSEMENT_VALIDATION]]
+
+  <div class="screen-footer">Contrat Préliminaire de Réservation &mdash; [[PROGRAMME]] &mdash; Lot [[LOT_NUMERO]] &mdash; Page 6 / 6</div>
+</div><!-- /page 6 -->
+
+</body>
+</html>

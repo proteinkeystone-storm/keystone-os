@@ -346,6 +346,178 @@ Brief pour :
 
 Le brief inclut : 1) Direction artistique (palette, ambiance, références) 2) Liste des prises de vues / angles (numérotés) 3) Consignes lumière 4) Livrables (formats, résolutions, délais) 5) 3 références visuelles décrites 6) Planning de production suggéré.`,
     },
+
+    // ── Sprint 4 — Contrat de Réservation VEFA (Art. L.261-15 CCH) ──
+    // Modèle indicatif à valider par notaire. Bouton "Contrat PDF" via
+    // doc_export → template vefa-contrat-v1.html. Pas d'appel LLM par défaut
+    // hors AI Assist sur le champ clauses_particulieres.
+    A9: {
+        id: 'O-IMM-009', padKey: 'A9',
+        title: 'Contrat de Réservation VEFA',
+        subtitle: 'Contrat préliminaire — Art. L.261-15 CCH',
+        ai_optimized: 'Claude', icon: 'vefa',
+        notice: `1. Remplissez les sections Vendeur, Acquéreur, Bien et Prix — chaque champ est obligatoire pour un document juridiquement complet.\n2. Le dépôt de garantie est plafonné par la loi : 5 % si livraison < 1 an, 2 % < 2 ans, 0 % au-delà (Art. R.261-28).\n3. Le champ "Clauses particulières" accepte un appel IA (✦) pour rédiger un paragraphe sur mesure depuis vos notes.\n4. Document indicatif : validation notariale impérative avant toute signature.`,
+        fields: [
+            // ── Identification du bien ──────────────────────────
+            { id: 'nom_programme',     label: 'Nom du programme',        type: 'text',   placeholder: 'ex: Les Jardins du Midi', required: true, span: 'full' },
+            { id: 'adresse_programme', label: 'Adresse du programme',    type: 'text',   placeholder: 'ex: 12 avenue des Lauriers, 83110 Sanary', span: 'full' },
+            { id: 'lot_numero',        label: 'Numéro de lot',           type: 'text',   placeholder: 'ex: A-203', required: true },
+            { id: 'type_logement',     label: 'Type de logement',        type: 'select', options: ['T2','T3','T4','T5','Villa','Penthouse'], required: true },
+            { id: 'surface',           label: 'Surface habitable (m²)',  type: 'number', placeholder: 'ex: 75', required: true },
+            { id: 'surface_carrez',    label: 'Surface Loi Carrez (m²)', type: 'number', placeholder: 'ex: 72.4', required: true },
+            { id: 'etage',             label: 'Étage / Situation',       type: 'text',   placeholder: 'ex: 3ème étage' },
+            { id: 'orientation',       label: 'Orientation',             type: 'select', options: ['Sud','Sud-Est','Sud-Ouest','Est','Ouest','Nord-Est','Nord-Ouest','Nord'] },
+            { id: 'annexes',           label: 'Annexes',                 type: 'text',   placeholder: 'ex: Cave n°14 + Parking IRVE n°22' },
+            { id: 'cadastre',          label: 'Référence cadastrale',    type: 'text',   placeholder: 'ex: Section AB n°123' },
+            { id: 'quote_parts',       label: 'Quote-parts copropriété', type: 'text',   placeholder: 'ex: 285 / 10 000' },
+            { id: 'ville',             label: 'Ville',                   type: 'text',   placeholder: 'ex: Sanary' },
+            { id: 'departement',       label: 'Département',             type: 'text',   placeholder: 'ex: Var (83)' },
+            { id: 'region',            label: 'Région',                  type: 'select', options: ['Provence-Alpes-Côte d\'Azur','Occitanie','Nouvelle-Aquitaine','Île-de-France','Auvergne-Rhône-Alpes','Bretagne','Pays de la Loire','Hauts-de-France','Grand Est','Bourgogne-Franche-Comté','Normandie','Centre-Val de Loire','Corse','DOM-TOM'] },
+
+            // ── Vendeur (Réservant) ─────────────────────────────
+            { id: 'vendeur_nom',          label: 'Vendeur — Raison sociale', type: 'text', placeholder: 'ex: SCCV Les Jardins du Midi', required: true, span: 'full' },
+            { id: 'vendeur_siren',        label: 'SIREN',                    type: 'text', placeholder: 'ex: 123 456 789' },
+            { id: 'vendeur_rcs',          label: 'RCS',                      type: 'text', placeholder: 'ex: Toulon B 123 456 789' },
+            { id: 'vendeur_capital',      label: 'Capital social',           type: 'text', placeholder: 'ex: 1 000 €' },
+            { id: 'vendeur_siege',        label: 'Siège social',             type: 'text', placeholder: 'ex: 5 rue Hoche, 83000 Toulon', span: 'full' },
+            { id: 'vendeur_representant', label: 'Représenté par',           type: 'text', placeholder: 'ex: M. Jean DUPONT, gérant' },
+
+            // ── Acquéreur (Réservataire) ────────────────────────
+            { id: 'acquereur_nom',            label: 'Acquéreur — Nom & prénom', type: 'text', placeholder: 'ex: Mme Sophie MARTIN', required: true, span: 'full' },
+            { id: 'acquereur_civilite',       label: 'Civilité / Profession',    type: 'text', placeholder: 'ex: Mme, cadre' },
+            { id: 'acquereur_naissance',      label: 'Date de naissance',        type: 'text', placeholder: 'ex: 14/03/1985' },
+            { id: 'acquereur_lieu_naissance', label: 'Lieu de naissance',        type: 'text', placeholder: 'ex: Marseille (13)' },
+            { id: 'acquereur_adresse',        label: 'Adresse',                  type: 'text', placeholder: 'ex: 22 rue de la République, 13001 Marseille', span: 'full' },
+            { id: 'acquereur_regime',         label: 'Régime matrimonial',       type: 'select', options: ['Célibataire','Marié(e) — communauté légale','Marié(e) — séparation de biens','Marié(e) — participation aux acquêts','Pacsé(e) — indivision','Pacsé(e) — séparation','Divorcé(e)','Veuf / Veuve'] },
+
+            // ── Prix & TVA ──────────────────────────────────────
+            { id: 'prix_ht',             label: 'Prix HT (€)',         type: 'number', placeholder: 'ex: 233333', required: true },
+            { id: 'prix_ttc',            label: 'Prix TTC (€)',        type: 'number', placeholder: 'ex: 280000', required: true },
+            { id: 'tva_taux',            label: 'Taux de TVA',         type: 'select', options: ['20 %','5,5 % (zone ANRU / PSLA)','10 %'] },
+            { id: 'tva_montant',         label: 'Montant TVA (€)',     type: 'number', placeholder: 'ex: 46667' },
+            { id: 'repartition_foncier_bati', label: 'Répartition foncier / bâti', type: 'text', placeholder: 'ex: 25 % foncier — 75 % bâti', span: 'full' },
+            // Échéancier (montants TTC à chaque palier R.261-14)
+            { id: 'ech_fondations',  label: 'Échéance — Fondations (35 %)', type: 'number', placeholder: 'ex: 98000' },
+            { id: 'ech_hors_eau',    label: 'Échéance — Hors d\'eau (70 %)', type: 'number', placeholder: 'ex: 196000' },
+            { id: 'ech_achevement',  label: 'Échéance — Achèvement (95 %)', type: 'number', placeholder: 'ex: 266000' },
+
+            // ── Dépôt de garantie ───────────────────────────────
+            { id: 'depot_montant',         label: 'Dépôt — Montant (€)',         type: 'number', placeholder: 'ex: 14000', required: true },
+            { id: 'depot_montant_lettres', label: 'Dépôt — Montant en lettres',  type: 'text',   placeholder: 'ex: quatorze mille euros' },
+            { id: 'depot_pourcentage',     label: 'Dépôt — Pourcentage',         type: 'select', options: ['5 % (livraison < 1 an)','2 % (livraison < 2 ans)','0 % (livraison > 2 ans)'], required: true },
+            { id: 'depot_plafond_legal',   label: 'Plafond légal applicable',    type: 'text',   placeholder: 'ex: Art. R.261-28 CCH — 5 % max si livraison < 1 an' },
+            { id: 'depot_mode_versement',  label: 'Mode de versement',           type: 'select', options: ['Virement bancaire','Chèque de banque'] },
+            { id: 'sequestre_etablissement', label: 'Séquestre — Établissement', type: 'text', placeholder: 'ex: Étude Maître Dupont, Toulon' },
+            { id: 'sequestre_compte',      label: 'Séquestre — Référence compte', type: 'text', placeholder: 'ex: Compte CARPA n°...' },
+
+            // ── Conditions suspensives ──────────────────────────
+            { id: 'pret_montant',   label: 'Prêt — Montant sollicité (€)',  type: 'number', placeholder: 'ex: 224000' },
+            { id: 'pret_taux_max',  label: 'Prêt — Taux maximum (%)',       type: 'number', placeholder: 'ex: 4.5' },
+            { id: 'pret_duree_max', label: 'Prêt — Durée maximum (ans)',    type: 'number', placeholder: 'ex: 25' },
+            { id: 'pret_delai',     label: 'Prêt — Délai d\'obtention (jours)', type: 'number', placeholder: 'ex: 45' },
+
+            // ── Livraison + signature ──────────────────────────
+            { id: 'livraison',              label: 'Date de livraison prévisionnelle', type: 'text', placeholder: 'ex: T4 2027' },
+            { id: 'date_acte_authentique',  label: 'Date prévue acte authentique',     type: 'text', placeholder: 'ex: 30/09/2026' },
+            { id: 'penalites_retard',       label: 'Pénalités de retard',              type: 'text', placeholder: 'ex: 1/3000ème du prix par jour de retard', span: 'full' },
+            { id: 'notaire',                label: 'Notaire instrumentaire',           type: 'text', placeholder: 'ex: Étude Maître Dupont, Toulon', span: 'full' },
+            { id: 'lieu_signature',         label: 'Lieu de signature',                type: 'text', placeholder: 'ex: Toulon' },
+            { id: 'date_signature',         label: 'Date de signature',                type: 'text', placeholder: 'ex: 11/05/2026' },
+            { id: 'nb_exemplaires',         label: 'Nombre d\'exemplaires',            type: 'number', placeholder: 'ex: 3' },
+
+            // ── Clauses particulières (AI Assist) ───────────────
+            { id: 'clauses_particulieres', label: 'Clauses particulières & adaptations', type: 'textarea',
+              placeholder: 'Modifications spécifiques au cas d\'espèce, options retenues, prestations sur mesure, conditions négociées...', span: 'full',
+              ai_assist: {
+                task: 'redact-section',
+                label: 'Rédiger avec IA',
+                topic: 'Les clauses particulières d\'un contrat de réservation VEFA pour le lot {lot_numero} ({type_logement}) du programme "{nom_programme}" entre {vendeur_nom} et {acquereur_nom}',
+                include_fields: ['nom_programme','lot_numero','type_logement','surface_carrez',
+                                 'vendeur_nom','acquereur_nom','prix_ttc','depot_montant',
+                                 'livraison','date_acte_authentique','annexes'],
+              }
+            },
+        ],
+        // Pad piloté par DocEngine — pas d'appel LLM principal,
+        // seulement AI Assist optionnel sur clauses_particulieres.
+        system_prompt: `Tu es un juriste expert en VEFA. À partir des données ci-dessous, rédige une note de synthèse à destination du notaire pour préparer l'acte authentique.
+
+DONNÉES :
+- Programme : {{nom_programme}} — Lot {{lot_numero}} ({{type_logement}}, {{surface_carrez}} m² Carrez)
+- Vendeur : {{vendeur_nom}}
+- Acquéreur : {{acquereur_nom}} ({{acquereur_regime}})
+- Prix TTC : {{prix_ttc}} € — Dépôt : {{depot_montant}} € ({{depot_pourcentage}})
+- Livraison : {{livraison}} — Acte : {{date_acte_authentique}}
+- Clauses particulières : {{clauses_particulieres}}
+
+Produire 5 sections : 1) Identification du dossier 2) Points financiers à vérifier 3) Conditions suspensives 4) Clauses particulières à valider 5) Documents à demander avant signature.`,
+        doc_export: {
+            templateId: 'vefa-contrat-v1',
+            label: 'Contrat PDF',
+            variable_map: {
+                // Identification bien
+                PROGRAMME              : 'nom_programme',
+                ADRESSE_PROGRAMME      : 'adresse_programme',
+                LOT_NUMERO             : 'lot_numero',
+                TYPE_LOT               : 'type_logement',
+                SURFACE                : 'surface',
+                SURFACE_CARREZ         : 'surface_carrez',
+                ETAGE                  : 'etage',
+                ORIENTATION            : 'orientation',
+                ANNEXES                : 'annexes',
+                CADASTRE               : 'cadastre',
+                QUOTE_PARTS            : 'quote_parts',
+                DEPARTEMENT            : 'departement',
+                REGION                 : 'region',
+                NOTAIRE                : 'notaire',
+                LIVRAISON              : 'livraison',
+                DATE_ACTE_AUTHENTIQUE  : 'date_acte_authentique',
+                // Vendeur
+                VENDEUR_NOM            : 'vendeur_nom',
+                VENDEUR_SIREN          : 'vendeur_siren',
+                VENDEUR_RCS            : 'vendeur_rcs',
+                VENDEUR_CAPITAL        : 'vendeur_capital',
+                VENDEUR_SIEGE          : 'vendeur_siege',
+                VENDEUR_REPRESENTANT   : 'vendeur_representant',
+                // Acquéreur
+                ACQUEREUR_NOM          : 'acquereur_nom',
+                ACQUEREUR_CIVILITE     : 'acquereur_civilite',
+                ACQUEREUR_NAISSANCE    : 'acquereur_naissance',
+                ACQUEREUR_LIEU_NAISSANCE: 'acquereur_lieu_naissance',
+                ACQUEREUR_ADRESSE      : 'acquereur_adresse',
+                ACQUEREUR_REGIME       : 'acquereur_regime',
+                // Prix
+                PRIX_HT                : 'prix_ht',
+                PRIX_TTC               : 'prix_ttc',
+                TVA_TAUX               : 'tva_taux',
+                TVA_MONTANT            : 'tva_montant',
+                REPARTITION_FONCIER_BATI: 'repartition_foncier_bati',
+                ECH_FONDATIONS         : 'ech_fondations',
+                ECH_HORS_EAU           : 'ech_hors_eau',
+                ECH_ACHEVEMENT         : 'ech_achevement',
+                // Dépôt + séquestre
+                DEPOT_MONTANT          : 'depot_montant',
+                DEPOT_MONTANT_LETTRES  : 'depot_montant_lettres',
+                DEPOT_POURCENTAGE      : 'depot_pourcentage',
+                DEPOT_PLAFOND_LEGAL    : 'depot_plafond_legal',
+                DEPOT_MODE_VERSEMENT   : 'depot_mode_versement',
+                SEQUESTRE_ETABLISSEMENT: 'sequestre_etablissement',
+                SEQUESTRE_COMPTE       : 'sequestre_compte',
+                // Prêt
+                PRET_MONTANT           : 'pret_montant',
+                PRET_TAUX_MAX          : 'pret_taux_max',
+                PRET_DUREE_MAX         : 'pret_duree_max',
+                PRET_DELAI             : 'pret_delai',
+                // Livraison + signature
+                PENALITES_RETARD       : 'penalites_retard',
+                LIEU_SIGNATURE         : 'lieu_signature',
+                DATE_SIGNATURE         : 'date_signature',
+                NB_EXEMPLAIRES         : 'nb_exemplaires',
+                // Bloc libre
+                CLAUSES_PARTICULIERES_BLOC: 'clauses_particulieres',
+            },
+        },
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -372,6 +544,8 @@ export const CATALOG_DATA = {
           longDesc:"Analyse de terrain : faisabilité réglementaire, potentiel constructible, bilan prévisionnel et risques. Présentable en comité d'engagement." },
         { id:'O-ADM-001', padKey:'A7', title:'Objections Acquéreurs', subtitle:'3 réponses graduées par objection',              category:'IMM', plan:'PRO',     price:39, lifetimePrice:149, icon:'chat',    ai_optimized:'Claude',  isNew:false, published:true, tags:['admin','commercial','objection','vente','argumentation'],
           longDesc:"Réponses calibrées aux objections fréquentes : prix, délais, charges, emplacement. 3 niveaux : douce, affirmée, closing." },
+        { id:'O-IMM-009', padKey:'A9', title:'Contrat Réservation VEFA', subtitle:'Contrat préliminaire Art. L.261-15 — PDF prêt notaire', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa', ai_optimized:'Claude', isNew:true, published:true, tags:['immobilier','vefa','contrat','réservation','juridique','notaire'],
+          longDesc:"Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Réutilise les données du programme déjà saisies." },
 
         // ── 6 ARTEFACTS (en proposition K-Store) ───────────────────
         { id:'A-IMM-001', padKey:null, title:'Sentinelle',              subtitle:'Monitoring ranking SEO & présence digitale',  category:'IMM', plan:'PRO', price:79, icon:'zap',   ai_optimized:'Claude', isNew:true,  published:true, tags:['artefact','seo','monitoring','présence digitale','ranking'],

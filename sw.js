@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v2.2.0-api-handler-via-proxy';
+const VERSION       = 'ks-os-v2.3.0-contrat-vefa';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

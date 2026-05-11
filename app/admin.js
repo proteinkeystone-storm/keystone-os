@@ -8,6 +8,7 @@ import { renderArtifactResult } from './artifact-renderer.js';
 import { KSTORE_CATEGORIES }    from './kstore-mock-catalog.js';
 import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
+import { VEFA_CONTRAT_CLAUSES_V1 } from './lib/doc-templates/vefa-contrat-clauses-seed.js';
 
 // ── Moteurs IA disponibles (fiches Key-Store) ──────────────────
 // Sert au select "Optimisé pour" + checkboxes "Moteurs compatibles".
@@ -3032,6 +3033,7 @@ async function renderClauses(panel) {
           <button class="btn" id="btn-clauses-view-all"    ${_clausesView === 'all'    ? 'disabled' : ''}>Vue globale (+ locales)</button>
           <button class="btn" id="btn-clauses-reseed">↻ Re-seed VEFA v1</button>
           <button class="btn" id="btn-clauses-reseed-v2" title="Pousse les 10 clauses techniques en version agnostique (corrige les contradictions PAC/électrique, biosourcé/PSE, etc.)">↻ Re-seed VEFA v2 (correctif)</button>
+          <button class="btn" id="btn-clauses-reseed-contrat" title="Charge les 17 clauses juridiques du Contrat de Réservation VEFA (Art. L.261-15 CCH). Préfixées CONTRAT_ pour ne pas collisionner avec la notice.">↻ Seed Contrat VEFA v1</button>
           <button class="btn btn-primary" id="btn-clauses-new">+ Nouvelle clause</button>
         </div>
       </div>
@@ -3094,6 +3096,7 @@ async function renderClauses(panel) {
     panel.querySelector('#btn-clauses-new')?.addEventListener('click', () => _openClauseEditor(panel));
     panel.querySelector('#btn-clauses-reseed')?.addEventListener('click', () => _reseedVefaClauses(panel, VEFA_CLAUSES_V1, 'v1'));
     panel.querySelector('#btn-clauses-reseed-v2')?.addEventListener('click', () => _reseedVefaClauses(panel, VEFA_CLAUSES_V2, 'v2'));
+    panel.querySelector('#btn-clauses-reseed-contrat')?.addEventListener('click', () => _reseedVefaClauses(panel, VEFA_CONTRAT_CLAUSES_V1, 'Contrat v1'));
 
     panel.querySelectorAll('[data-act]').forEach(btn => {
       const act = btn.dataset.act;
