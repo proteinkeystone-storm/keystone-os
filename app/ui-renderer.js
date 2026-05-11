@@ -2699,6 +2699,7 @@ function _buildDocExportVariables(pad, formData) {
         if (v) variables[tplVar] = v;
     }
 
+    // ── Variables dérivées du formulaire ───────────────────────
     variables.DATE_EDITION = new Date().toLocaleDateString('fr-FR', {
         day: 'numeric', month: 'long', year: 'numeric',
     });
@@ -2710,9 +2711,38 @@ function _buildDocExportVariables(pad, formData) {
         const ts = Date.now().toString(36).toUpperCase().slice(-5);
         variables.REF_DOCUMENT = `${slug}-${ts}`;
     }
+
+    // ── Parsing du select RE2020 ───────────────────────────────
+    // Le label complet est ex: "Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)"
+    // → RE2020_SEUIL     = "Seuil 2025"
+    // → RE2020_OBJECTIF  = "IC construction ≤ 490 kgCO₂eq/m²" (contenu parenthèse)
+    // → IC_CONSTRUCTION_MAX = "490" (regex sur le chiffre avant kg)
     const re2020 = formData['re2020'] || '';
-    const icMatch = re2020.match(/(\d{2,4})\s*kg/i);
-    if (icMatch) variables.IC_CONSTRUCTION_MAX = icMatch[1];
+    if (re2020) {
+        const parenMatch = re2020.match(/^([^(]+?)\s*\(([^)]+)\)/);
+        if (parenMatch) {
+            variables.RE2020_SEUIL    = parenMatch[1].trim();
+            variables.RE2020_OBJECTIF = parenMatch[2].trim();
+        } else {
+            variables.RE2020_SEUIL    = re2020.trim();
+            variables.RE2020_OBJECTIF = 'Objectif bas carbone';
+        }
+        const icMatch = re2020.match(/(\d{2,4})\s*kg/i);
+        if (icMatch) variables.IC_CONSTRUCTION_MAX = icMatch[1];
+    }
+
+    // ── Defaults pour variables sans champ formulaire ──────────
+    // ASSUREUR_DO et GFA_ETABLISSEMENT ne sont pas dans le pad actuel
+    // (Sprint futur : champs admin). On met des placeholders contractuels.
+    if (!variables.ASSUREUR_DO)        variables.ASSUREUR_DO        = 'Voir contrat de réservation';
+    if (!variables.GFA_ETABLISSEMENT) variables.GFA_ETABLISSEMENT = 'Voir contrat de réservation';
+
+    // SPECIFICITES_BLOC : si vide, on met un placeholder italique pour
+    // éviter d'afficher le marqueur [[SPECIFICITES_BLOC]] brut dans le PDF.
+    if (!variables.SPECIFICITES_BLOC) {
+        variables.SPECIFICITES_BLOC = '<p style="font-style:italic;color:#8896A8;">Spécificités du lot à compléter via le formulaire Keystone (champ « Spécificités &amp; équipements »).</p>';
+    }
+
     return variables;
 }
 
