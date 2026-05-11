@@ -1660,27 +1660,39 @@ function _buildModal(pad, tool) {
                 </div>
             </div>
 
-            <!-- ZONE DROITE : Prompt live + Actions + Notice + IA -->
-            <div class="modal-result-zone">
+            <!-- ZONE DROITE : Prompt live (mode classique) ou Notice Portable (mode doc_export) -->
+            <!-- data-mode="portable" sur les pads avec doc_export : le panneau affiche
+                 un résumé + offre Copier/Télécharger une version HTML auto-suffisante,
+                 reproductible dans n'importe quelle IA. Mode "prompt" sinon (legacy). -->
+            <div class="modal-result-zone${hasDocExport ? ' result-zone-portable' : ''}" data-mode="${hasDocExport ? 'portable' : 'prompt'}">
 
-                <div class="result-lbl" id="result-lbl">Prompt généré</div>
+                <div class="result-lbl" id="result-lbl">${hasDocExport ? 'Notice Portable' : 'Prompt généré'}</div>
 
                 <!-- État vide — visible tant que les champs requis ne sont pas remplis -->
                 <div class="prompt-empty-state" id="prompt-empty-state">
                     <div class="prompt-empty-cursor"></div>
                     <div class="prompt-empty-hint" id="prompt-empty-hint">
-                        Remplissez les champs requis<br>pour générer votre prompt
+                        Remplissez les champs requis<br>pour ${hasDocExport ? 'générer la version portable' : 'générer votre prompt'}
                     </div>
                     <div class="prompt-missing-fields" id="prompt-missing-fields"></div>
                 </div>
 
+                <!-- Mode classique : prompt brut -->
                 <pre class="prompt-text" id="prompt-text" style="display:none"></pre>
 
+                <!-- Mode portable : carte résumé compacte (rendue dynamiquement par _updatePromptPreview) -->
+                <div class="portable-card" id="portable-card" style="display:none"></div>
+
                 <div class="result-actions">
-                    <button class="action-btn" id="btn-copy-prompt" title="Copier le prompt">
+                    <button class="action-btn" id="btn-copy-prompt" title="${hasDocExport ? 'Copier la notice portable (instructions + HTML auto-suffisant)' : 'Copier le prompt'}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        Copier le prompt
+                        ${hasDocExport ? 'Copier (portable)' : 'Copier le prompt'}
                     </button>
+                    ${hasDocExport ? `
+                    <button class="action-btn" id="btn-download-html" title="Télécharger la notice en .html (ouvrable hors-ligne dans tout navigateur)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Télécharger .html
+                    </button>` : ''}
                     <button class="action-btn" id="btn-library" title="Sauvegarder dans la bibliothèque">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                         Bibliothèque
@@ -1756,17 +1768,76 @@ function _buildModal(pad, tool) {
         _updatePromptPreview(pad);
     });
 
-    // 📋 Copier le prompt
-    document.getElementById('btn-copy-prompt')?.addEventListener('click', () => {
-        const prompt = document.getElementById('prompt-text')?.textContent || '';
-        navigator.clipboard.writeText(prompt).then(() => {
-            const btn = document.getElementById('btn-copy-prompt');
-            if (!btn) return;
-            const orig = btn.textContent;
-            btn.textContent = '✓ Copié !';
+    // 📋 Copier le prompt (mode prompt) OU la notice portable (mode doc_export)
+    document.getElementById('btn-copy-prompt')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-copy-prompt');
+        if (!btn) return;
+        const origHTML = btn.innerHTML;
+
+        let payload = '';
+        if (pad.doc_export) {
+            // Mode portable : si le cache n'est pas prêt, on le construit à la volée
+            const form = document.getElementById('tool-form');
+            const formData = {};
+            form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
             btn.classList.add('active');
-            setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2000);
-        });
+            btn.innerHTML = '⏳ Génération…';
+            const cached = await _prebuildPortableBloc(pad, formData);
+            payload = cached?.content || '';
+        } else {
+            payload = document.getElementById('prompt-text')?.textContent || '';
+        }
+
+        if (!payload) {
+            btn.innerHTML = '✗ Erreur';
+            setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
+            return;
+        }
+
+        await navigator.clipboard.writeText(payload);
+        btn.innerHTML = '✓ Copié !';
+        btn.classList.add('active');
+        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2000);
+        return;
+    });
+
+    // ⬇ Télécharger .html (doc_export uniquement) — fichier auto-suffisant
+    // ouvrable hors-ligne dans n'importe quel navigateur, prêt à imprimer.
+    document.getElementById('btn-download-html')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-download-html');
+        if (!btn) return;
+        const origHTML = btn.innerHTML;
+        btn.innerHTML = '⏳ Préparation…';
+        btn.classList.add('active');
+
+        const form = document.getElementById('tool-form');
+        const formData = {};
+        form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+        const cached = await _prebuildPortableBloc(pad, formData);
+        if (!cached?.html) {
+            btn.innerHTML = '✗ Erreur';
+            setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
+            return;
+        }
+
+        // Nom de fichier : notice-vefa-PROGRAMME-DATE.html
+        const slug = (formData.nom_programme || 'notice')
+            .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+        const date = new Date().toISOString().slice(0, 10);
+        const filename = `notice-vefa-${slug}-${date}.html`;
+
+        // Blob → URL temporaire → download via <a>
+        const blob = new Blob([cached.html], { type: 'text/html;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        btn.innerHTML = '✓ Téléchargé !';
+        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2000);
     });
 
     // 📚 Bibliothèque
@@ -2348,36 +2419,8 @@ async function _handleDocExport(btn, pad) {
     const formData = {};
     form.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
 
-    // ── Mapping variable_map : template_var → form_field ───────
-    const variables = {};
-    for (const [tplVar, fieldId] of Object.entries(cfg.variable_map || {})) {
-        const value = formData[fieldId];
-        if (value) variables[tplVar] = value;
-    }
-
-    // ── Variables dérivées (non mappées, calculées au runtime) ─
-    // DATE_EDITION : aujourd'hui en FR (ex: "11 mai 2026")
-    variables.DATE_EDITION = new Date().toLocaleDateString('fr-FR', {
-        day: 'numeric', month: 'long', year: 'numeric',
-    });
-
-    // VERSION_DOC : v1 par défaut
-    if (!variables.VERSION_DOC) variables.VERSION_DOC = 'v1';
-
-    // REF_DOCUMENT : NOM_PROGRAMME + timestamp court
-    if (!variables.REF_DOCUMENT) {
-        const slug = (variables.PROGRAMME || 'NOTICE')
-            .toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-            .replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
-        const ts = Date.now().toString(36).toUpperCase().slice(-5);
-        variables.REF_DOCUMENT = `${slug}-${ts}`;
-    }
-
-    // IC_CONSTRUCTION_MAX : extrait depuis le label RE2020
-    //   "Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)" → "490"
-    const re2020 = formData['re2020'] || '';
-    const icMatch = re2020.match(/(\d{2,4})\s*kg/i);
-    if (icMatch) variables.IC_CONSTRUCTION_MAX = icMatch[1];
+    // ── Variables (mapping + dérivées, factorisé) ──────────────
+    const variables = _buildDocExportVariables(pad, formData);
 
     // ── UI : passage en mode loading ───────────────────────────
     btn.disabled = true;
@@ -2433,6 +2476,204 @@ let _promptWasReady  = false;
 let _promptTWTimer   = null;   // typewriter character timer
 let _promptDebounce  = null;   // debounce pour les updates post-ready
 
+// ══════════════════════════════════════════════════════════════════
+// NOTICE PORTABLE (Sprint B2) — bloc HTML auto-suffisant
+// ══════════════════════════════════════════════════════════════════
+// Pour les pads avec doc_export, on remplace le prompt LLM (obsolète)
+// par un bloc portable : instructions + HTML résolu (template + variables
+// + clauses). Ce bloc peut être collé dans n'importe quelle IA ou
+// sauvegardé en .html — la qualité du PDF reste identique partout.
+//
+// Cache du bloc portable : généré async via DocEngine, mis en cache
+// pour éviter les re-renders à chaque keystroke (debounce 500ms).
+
+let _portableCache = { padId: null, signature: null, content: null, html: null };
+let _portableTimer = null;
+
+function _updatePortableNoticePreview(pad, formData, requiredFilled, missingFields, requiredFields) {
+    const preview    = document.getElementById('portable-card');
+    const promptText = document.getElementById('prompt-text');
+    const emptyState = document.getElementById('prompt-empty-state');
+    const missingEl  = document.getElementById('prompt-missing-fields');
+    const resultLbl  = document.getElementById('result-lbl');
+    const form       = document.getElementById('tool-form');
+    if (!preview) return;
+
+    // Cache toujours le prompt-text (legacy) en mode portable
+    if (promptText) promptText.style.display = 'none';
+
+    // ── État vide : champs requis manquants ────────────────────
+    if (!requiredFilled) {
+        form?.querySelectorAll('.field-missing').forEach(el => el.classList.remove('field-missing'));
+        missingFields.forEach(f => {
+            const el = form?.querySelector(`[name="${f.id}"]`);
+            if (el && el.dataset.dirty) el.classList.add('field-missing');
+        });
+        if (missingEl) {
+            missingEl.innerHTML = missingFields.length === requiredFields.length
+                ? ''
+                : missingFields.map(f => `<span class="missing-chip">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:9px;height:9px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        ${f.label}
+                    </span>`).join('');
+        }
+        preview.style.display = 'none';
+        emptyState && (emptyState.style.display = '');
+        if (resultLbl) resultLbl.classList.remove('result-lbl-ready');
+        return;
+    }
+
+    // ── Tous les champs requis remplis : on affiche la carte ───
+    if (missingEl) missingEl.innerHTML = '';
+    form?.querySelectorAll('.field-missing').forEach(el => el.classList.remove('field-missing'));
+    emptyState && (emptyState.style.display = 'none');
+    preview.style.display = '';
+    if (resultLbl) resultLbl.classList.add('result-lbl-ready');
+
+    // ── Carte résumé (rapide, synchrone) ───────────────────────
+    const cfg     = pad.doc_export;
+    const mapVars = cfg.variable_map || {};
+    const filled  = Object.values(mapVars).filter(fid => formData[fid]).length;
+    const total   = Object.keys(mapVars).length;
+    const program = formData.nom_programme || '—';
+    const lot     = formData.type_logement || '—';
+    const surface = formData.surface ? `${formData.surface} m²` : '—';
+    const ville   = formData.ville || '';
+
+    preview.innerHTML = `
+        <div class="portable-summary">
+            <div class="portable-summary-row">
+                <span class="portable-summary-key">Programme</span>
+                <span class="portable-summary-val">${esc(program)}</span>
+            </div>
+            <div class="portable-summary-row">
+                <span class="portable-summary-key">Lot</span>
+                <span class="portable-summary-val">${esc(lot)} · ${esc(surface)}${ville ? ` · ${esc(ville)}` : ''}</span>
+            </div>
+            <div class="portable-summary-row">
+                <span class="portable-summary-key">Variables</span>
+                <span class="portable-summary-val">${filled}/${total} renseignées</span>
+            </div>
+            <div class="portable-summary-row">
+                <span class="portable-summary-key">Template</span>
+                <span class="portable-summary-val">${esc(cfg.templateId)}</span>
+            </div>
+            <div class="portable-summary-foot">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:11px;height:11px;flex-shrink:0;opacity:.6"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg>
+                Compatible Claude.ai, ChatGPT, Gemini, ou navigateur seul.
+            </div>
+        </div>
+    `;
+
+    // ── Pré-génération async du bloc portable (cache pour Copier/Télécharger) ─
+    // Debounce 500ms : évite de re-render le HTML à chaque keystroke.
+    clearTimeout(_portableTimer);
+    _portableTimer = setTimeout(() => _prebuildPortableBloc(pad, formData), 500);
+}
+
+// Helper : signature des form data (pour invalidation du cache portable)
+function _formSignature(formData) {
+    return Object.entries(formData).map(([k, v]) => `${k}=${v}`).sort().join('|');
+}
+
+// Pré-construit le bloc portable et le met en cache.
+// Appelé async par _updatePortableNoticePreview (debounce 500ms),
+// et au moment du clic Copier/Télécharger si pas encore prêt.
+async function _prebuildPortableBloc(pad, formData) {
+    const sig = _formSignature(formData);
+    if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
+        return _portableCache;  // cache hit
+    }
+    if (!window.docEngine) return null;
+
+    const cfg = pad.doc_export;
+    const variables = _buildDocExportVariables(pad, formData);
+
+    try {
+        // mode: 'html' → renvoie juste { html, missing }, n'ouvre pas de fenêtre
+        const { html, missing } = await window.docEngine.render({
+            templateId: cfg.templateId,
+            variables,
+            mode      : 'html',
+        });
+
+        const content = _composePortableBloc({ pad, variables, html, missing });
+        _portableCache = { padId: pad.id, signature: sig, content, html };
+        return _portableCache;
+    } catch (e) {
+        console.warn('[portable] erreur de pré-génération', e);
+        return null;
+    }
+}
+
+// Construit les variables à partir du formData + dérivées (DATE_EDITION etc.).
+// Factorisé du handler _handleDocExport pour réutilisation.
+function _buildDocExportVariables(pad, formData) {
+    const cfg = pad.doc_export;
+    const variables = {};
+
+    for (const [tplVar, fieldId] of Object.entries(cfg.variable_map || {})) {
+        const v = formData[fieldId];
+        if (v) variables[tplVar] = v;
+    }
+
+    variables.DATE_EDITION = new Date().toLocaleDateString('fr-FR', {
+        day: 'numeric', month: 'long', year: 'numeric',
+    });
+    if (!variables.VERSION_DOC) variables.VERSION_DOC = 'v1';
+    if (!variables.REF_DOCUMENT) {
+        const slug = (variables.PROGRAMME || 'NOTICE')
+            .toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
+        const ts = Date.now().toString(36).toUpperCase().slice(-5);
+        variables.REF_DOCUMENT = `${slug}-${ts}`;
+    }
+    const re2020 = formData['re2020'] || '';
+    const icMatch = re2020.match(/(\d{2,4})\s*kg/i);
+    if (icMatch) variables.IC_CONSTRUCTION_MAX = icMatch[1];
+    return variables;
+}
+
+// Compose le bloc portable final (instructions + HTML).
+// Format auto-suffisant : un humain qui le lit comprend quoi faire,
+// une IA qui le reçoit a tout pour le rendre.
+function _composePortableBloc({ pad, variables, html, missing }) {
+    const date = new Date().toLocaleString('fr-FR');
+    const prog = variables.PROGRAMME || '—';
+    const lot  = variables.TYPE_LOT || '—';
+    const ref  = variables.REF_DOCUMENT || '—';
+
+    const warn = missing?.length
+        ? `\n⚠ ${missing.length} marqueur(s) non rempli(s) : ${missing.join(', ')}\n   (Ces champs apparaîtront vides dans le PDF — complétez le formulaire si besoin.)\n`
+        : '';
+
+    return `=== NOTICE VEFA PORTABLE — Générée par Keystone OS le ${date} ===
+Programme : ${prog} · Lot : ${lot} · Référence : ${ref}
+${warn}
+Ce message est auto-suffisant : il contient tout le HTML nécessaire pour
+reproduire à l'identique le PDF généré par Keystone OS. Vous pouvez :
+
+▸ OPTION A — Le coller dans une IA (Claude.ai, ChatGPT, Gemini)
+  L'IA affichera le HTML ; demandez-lui ensuite d'ouvrir Cmd+P pour imprimer.
+
+▸ OPTION B — Le sauvegarder en fichier .html
+  Copiez tout le bloc HTML entre les balises ci-dessous, sauvegardez dans
+  un fichier "notice.html", ouvrez-le dans un navigateur, puis Cmd+P
+  (activez "Graphiques d'arrière-plan", désactivez "En-têtes du navigateur").
+
+INSTRUCTIONS POUR L'IA :
+Affiche le code HTML ci-dessous EXACTEMENT TEL QUEL, sans le résumer ni le
+modifier. Une fois affiché, indique à l'utilisateur comment l'imprimer en
+PDF via Cmd+P (Mac) ou Ctrl+P (Windows).
+
+=== DÉBUT CODE HTML ===
+${html}
+=== FIN CODE HTML ===
+
+(Notice générée par Keystone OS · keystone-os.com · DocEngine v1)
+`;
+}
+
 function _updatePromptPreview(pad) {
     const form         = document.getElementById('tool-form');
     const preview      = document.getElementById('prompt-text');
@@ -2450,6 +2691,14 @@ function _updatePromptPreview(pad) {
     const requiredFields = pad.fields.filter(f => f.required);
     const missingFields  = requiredFields.filter(f => !formData[f.id]);
     const requiredFilled = missingFields.length === 0;
+
+    // ── Sprint B2 — Mode "Notice Portable" pour pads avec doc_export ──
+    // Au lieu d'afficher le prompt LLM (devenu inutile depuis DocEngine),
+    // on affiche une carte résumé + on prépare un bloc HTML auto-suffisant
+    // que l'utilisateur peut copier ou télécharger pour imprimer ailleurs.
+    if (pad.doc_export) {
+        return _updatePortableNoticePreview(pad, formData, requiredFilled, missingFields, requiredFields);
+    }
 
     // ── Mise à jour visuelle des champs manquants ──────────────
     // Retirer les anciens highlights
