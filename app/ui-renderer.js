@@ -1582,6 +1582,15 @@ function _prefillForm(formData) {
                 if (o.dataset.val === value) o.dataset.selected = '';
                 else delete o.dataset.selected;
             });
+        } else if (el.type === 'hidden' && el.closest('.ks-multiselect')) {
+            // Multi-select : value est une string CSV ("SeLoger, LeBonCoin")
+            // → check les boxes correspondantes + sync hidden.
+            const wrap     = el.closest('.ks-multiselect');
+            const selected = String(value).split(',').map(s => s.trim()).filter(Boolean);
+            el.value = selected.join(', ');
+            wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = selected.includes(cb.value);
+            });
         } else {
             el.value = value;
         }
@@ -1815,6 +1824,9 @@ function _buildModal(pad, tool) {
     // Custom selects — init après injection du HTML
     const toolForm = document.getElementById('tool-form');
     if (toolForm) _initCustomSelects(toolForm);
+
+    // Sprint 5 — Multi-select (checkboxes synchronisés vers un hidden CSV)
+    if (toolForm) _initMultiSelects(toolForm);
 
     // Sprint P3 — Boutons AI Assist (PromptEngine) sur les champs déclarés
     if (toolForm) _initAIAssistButtons(toolForm, pad);
@@ -2181,6 +2193,25 @@ function _buildField(f) {
                 <div class="ks-select-list" role="listbox" hidden id="ks-list-${f.id}">${opts}</div>
                 <input type="hidden" id="f-${f.id}" name="${f.id}" value="${defaultVal}">
             </div>`;
+    } else if (f.type === 'multiselect') {
+        // Sprint 5 — Champ multi-cases pour portails / canaux / tons.
+        // Stocke la valeur sous forme de string CSV ("SeLoger,LeBonCoin")
+        // dans un input hidden — compatible avec form serialization +
+        // _interpolate (substitué tel quel dans {{portails}}).
+        const defaultArr = Array.isArray(f.default) ? f.default : [];
+        const defaultVal = defaultArr.join(', ');
+        const opts = (f.options || []).map(o => {
+            const checked = defaultArr.includes(o) ? 'checked' : '';
+            return `<label class="ks-multi-opt">
+                <input type="checkbox" value="${o}" ${checked}>
+                <span class="ks-multi-opt-lbl">${o}</span>
+            </label>`;
+        }).join('');
+        input = `
+            <div class="ks-multiselect" data-field="${f.id}">
+                <div class="ks-multi-grid">${opts}</div>
+                <input type="hidden" id="f-${f.id}" name="${f.id}" value="${defaultVal}">
+            </div>`;
     } else if (f.type === 'textarea') {
         input = `<textarea class="form-textarea" id="f-${f.id}" name="${f.id}" placeholder="${f.placeholder || ''}"></textarea>`;
     } else {
@@ -2274,6 +2305,29 @@ function _initCustomSelects(container) {
 
     // Global click closes all selects
     document.addEventListener('click', _closeAll, { capture: true, once: false });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MULTI-SELECT (Sprint 5) — Grille de checkboxes liée à un hidden CSV
+// ══════════════════════════════════════════════════════════════════
+// Synchronise les cases cochées vers un input[type=hidden] dont la valeur
+// est une string CSV ("SeLoger, LeBonCoin"). Le hidden porte le name du
+// champ → ce CSV apparaît tel quel dans le prompt via {{portails}}.
+function _initMultiSelects(container) {
+    container.querySelectorAll('.ks-multiselect').forEach(wrap => {
+        const hidden = wrap.querySelector('input[type="hidden"]');
+        if (!hidden) return;
+        wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const selected = [...wrap.querySelectorAll('input[type="checkbox"]:checked')]
+                    .map(c => c.value);
+                hidden.value = selected.join(', ');
+                hidden.dataset.dirty = '1';
+                hidden.dispatchEvent(new Event('input',  { bubbles: true }));
+                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+    });
 }
 
 // ══════════════════════════════════════════════════════════════════

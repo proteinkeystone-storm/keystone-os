@@ -21,18 +21,18 @@
     {
       "id": "O-IMM-002",
       "padKey": "A2",
-      "title": "Annonces Commerciales",
-      "subtitle": "Textes de vente percutants en 30 sec",
+      "title": "Annonces Multi-Portails",
+      "subtitle": "SeLoger · LeBonCoin · Bien'ici · Logic-Immo · Figaro Immo",
       "category": "IMM",
       "plan": "STARTER",
       "price": 29,
-      "longDesc": "Rédigez des annonces immobilières percutantes calibrées pour les portails (SeLoger, Bien'ici, Logic-Immo) et votre site. L'IA adapte le ton selon le type de bien, la cible acquéreur et le canal de diffusion. Chaque annonce est optimisée pour le taux de clic.",
+      "longDesc": "Générez vos annonces immobilières pour 6 portails majeurs (SeLoger, LeBonCoin, Bien'ici, Logic-Immo, Figaro Immo, Avendrealouer) en une seule saisie. L'IA produit une variante par portail respectant titre, description et ton spécifiques. Diffusion multi-canal en 2 minutes au lieu de 30.",
       "icon": "ad",
       "ai_optimized": "ChatGPT",
-      "isNew": false,
+      "isNew": true,
       "published": true,
       "lifetimePrice": 149,
-      "tags": ["immobilier", "annonce", "vente", "portail", "copywriting"]
+      "tags": ["immobilier", "annonce", "seloger", "leboncoin", "bienici", "diffusion", "portails", "copywriting"]
     },
     {
       "id": "O-IMM-003",

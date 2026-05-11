@@ -122,10 +122,10 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
 
     A2: {
         id: 'O-IMM-002', padKey: 'A2',
-        title: 'Annonces Commerciales',
-        subtitle: '3 versions de textes percutants',
+        title: 'Annonces Multi-Portails',
+        subtitle: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
         ai_optimized: 'ChatGPT', icon: 'ad',
-        notice: `1. Renseignez le programme, la ville et les atouts — c'est l'essentiel.\n2. Le prompt génère 3 versions d'annonces (Luxe, Investissement, Lifestyle).\n3. Dans votre IA, demandez : "Raccourcis la version 2 à 40 mots" ou "Adapte pour SeLoger".\n4. Tip : copiez la version retenue directement dans votre logiciel de diffusion.`,
+        notice: `1. Renseignez le programme, la ville, le prix et les atouts.\n2. Cochez les portails cibles — l'IA génère une variante par portail respectant titre / description / ton spécifiques.\n3. Le champ "Atouts" accepte un appel IA (✦) pour pré-rédiger un paragraphe.\n4. Le résultat affiche un bloc par portail, prêt à copier-coller dans l'admin du site.`,
         fields: [
             { id: 'nom_programme', label: 'Nom du programme',   type: 'text',   placeholder: 'ex: Résidence Azur', required: true },
             { id: 'ville',         label: 'Ville / Quartier',   type: 'text',   placeholder: 'ex: Marseille 8ème', required: true },
@@ -133,6 +133,13 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
             { id: 'surface',       label: 'Surface (m²)',       type: 'number', placeholder: 'ex: 68' },
             { id: 'prix',          label: 'Prix (€)',           type: 'number', placeholder: 'ex: 245000' },
             { id: 'dispositif',    label: 'Dispositif fiscal',  type: 'select', options: ['Aucun','Pinel','Pinel+','LMNP','Déficit foncier','Malraux'] },
+            { id: 'ton_global',    label: 'Ton dominant souhaité', type: 'select', options: ['Équilibré (auto-adapté par portail)','Premium / Prestige','Investisseur / ROI','Lifestyle / Émotion','Familial / Primo-accédant'] },
+            // Sprint 5 — Multi-select portails cibles. Le LLM reçoit la liste
+            // CSV dans {{portails}} et applique les contraintes ci-dessous.
+            { id: 'portails',      label: 'Portails cibles',    type: 'multiselect',
+              options: ['SeLoger','LeBonCoin','Bien\'ici','Logic-Immo','Figaro Immo','Avendrealouer'],
+              default: ['SeLoger','LeBonCoin','Bien\'ici'],
+              required: true, span: 'full' },
             { id: 'atouts',        label: 'Atouts & points forts', type: 'textarea', placeholder: 'Vue mer, terrasse, parking, livraison T4 2026...', span: 'full',
               ai_assist: {
                 task: 'redact-section',
@@ -142,18 +149,41 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
               }
             },
         ],
-        system_prompt: `Tu es un copywriter expert en immobilier neuf. Rédige 3 versions d'annonces commerciales percutantes.
+        system_prompt: `Tu es un copywriter expert en immobilier neuf, spécialisé en diffusion multi-portails. Rédige une annonce optimisée pour CHAQUE portail coché dans la liste, en respectant STRICTEMENT ses contraintes propres.
 
-Bien :
+BIEN À DIFFUSER :
 - Programme : {{nom_programme}} — {{ville}}
-- Type : {{type_bien}} de {{surface}}m² — {{prix}} €
+- Type : {{type_bien}} de {{surface}} m² — {{prix}} €
 - Dispositif fiscal : {{dispositif}}
 - Atouts : {{atouts}}
+- Ton dominant souhaité : {{ton_global}}
 
-Pour chaque version : 1 accroche (max 10 mots), 1 description (50 mots max), 1 call-to-action.
-1. LUXE & PRESTIGE — ton premium, vocabulaire élégant
-2. INVESTISSEMENT — ROI, rentabilité, avantages fiscaux
-3. LIFESTYLE — émotion, mode de vie, bien-être`,
+PORTAILS CIBLES : {{portails}}
+
+CONTRAINTES PAR PORTAIL — à respecter à la lettre :
+| Portail        | Titre max | Description max | Ton                | Format       |
+|----------------|-----------|------------------|---------------------|--------------|
+| SeLoger        | 60 car.   | 4000 car.        | Pro/qualifié        | HTML allégé  |
+| LeBonCoin      | 100 car.  | 5000 car.        | Populaire/direct    | Plain text   |
+| Bien'ici       | 80 car.   | 3000 car.        | Vert/RE2020 mis en avant | Plain text |
+| Logic-Immo     | 70 car.   | 4000 car.        | SEO (mots-clés répétés) | Plain text |
+| Figaro Immo    | 60 car.   | 3500 car.        | Premium/luxe        | HTML allégé  |
+| Avendrealouer  | 80 car.   | 4000 car.        | Neutre/factuel      | Plain text   |
+
+INSTRUCTIONS :
+- Ne génère QUE les blocs des portails effectivement cochés (ignore les autres).
+- Si "Ton dominant" est "Équilibré", adapte naturellement le ton à chaque portail.
+- Si un autre ton est précisé (Premium, Investisseur, Lifestyle, Familial), garde la cohérence ce ton tout en respectant le format/contrainte du portail.
+- Chaque description doit être autonome (lisible sans contexte externe) et inclure 1 call-to-action en fin.
+- HTML allégé autorisé = balises <strong>, <em>, <br>, <ul><li> uniquement (jamais <div>, <span>, <style>).
+
+FORMAT DE SORTIE — strictement ce gabarit en markdown :
+## [Nom du portail]
+**Titre** (X car.) : ...
+**Description** (Y car.) :
+...
+
+Répète ce bloc pour chaque portail coché. Comptes les caractères réels dans les parenthèses.`,
     },
 
     A3: {
@@ -542,8 +572,8 @@ export const CATALOG_DATA = {
         // ── 8 OUTILS PRINCIPAUX ────────────────────────────────────
         { id:'O-IMM-001', padKey:'A1', title:'Notices VEFA',          subtitle:'Générez vos notices descriptives en 15 sec',     category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa',    ai_optimized:'Claude',  isNew:false, published:true, tags:['immobilier','vefa','notice','juridique','contrat'],
           longDesc:"Générez des notices descriptives VEFA conformes RE 2020 en quelques secondes. L'IA produit un document structuré, prêt à intégrer dans vos contrats. Gagne 45 à 90 minutes par dossier." },
-        { id:'O-IMM-002', padKey:'A2', title:'Annonces Commerciales', subtitle:'Textes de vente percutants en 30 sec',           category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'ad',      ai_optimized:'ChatGPT', isNew:false, published:true, tags:['immobilier','annonce','vente','portail','copywriting'],
-          longDesc:"Rédigez des annonces immobilières percutantes calibrées pour SeLoger, Bien'ici et Logic-Immo. L'IA adapte le ton selon le type de bien et la cible." },
+        { id:'O-IMM-002', padKey:'A2', title:'Annonces Multi-Portails', subtitle:'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'ad', ai_optimized:'ChatGPT', isNew:true, published:true, tags:['immobilier','annonce','seloger','leboncoin','bienici','diffusion','portails','copywriting'],
+          longDesc:"Générez vos annonces immobilières pour 6 portails majeurs (SeLoger, LeBonCoin, Bien'ici, Logic-Immo, Figaro Immo, Avendrealouer) en une seule saisie. L'IA produit une variante par portail respectant titre, description et ton spécifiques. Diffusion multi-canal en 2 minutes au lieu de 30." },
         { id:'O-IMM-003', padKey:'A3', title:'Emails Acquéreurs',     subtitle:'Communication chantier personnalisée',           category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'mail',    ai_optimized:'Claude',  isNew:false, published:true, tags:['immobilier','email','chantier','acquéreur','suivi'],
           longDesc:"Générez des emails de suivi chantier professionnels et rassurants. L'IA adapte le contenu à l'avancement réel et au profil acquéreur. Réduit les appels entrants de 30 %." },
         { id:'O-MKT-001', padKey:'A4', title:'Posts Réseaux Sociaux', subtitle:'Facebook · Instagram · LinkedIn',                category:'COM', plan:'STARTER', price:29, lifetimePrice:149, icon:'social',  ai_optimized:'Gemini',  isNew:false, published:true, tags:['marketing','réseaux sociaux','facebook','instagram','linkedin'],

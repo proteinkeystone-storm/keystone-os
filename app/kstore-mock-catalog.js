@@ -61,6 +61,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'O-IMM-002',                      // ← Sprint 5 — réelle, pad A2 (Multi-Portails)
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'Annonces Multi-Portails',
+        punchline: '6 portails en une saisie',
+        shortDesc: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
+        price: 29,
+        icon: 'ad',
+        ai_optimized: 'ChatGPT',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {
