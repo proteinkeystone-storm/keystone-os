@@ -89,6 +89,35 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
    - Activez "Graphiques d'arrière-plan" (pour voir les couleurs et bandeaux).
    - Désactivez "En-têtes et pieds de page" du navigateur (pour ne pas voir l'URL du site en haut de page).
    - Vérifiez que l'échelle est bien à 100 %.`,
+        // Sprint C — VEFA Studio v3 : génération PDF directe via DocEngine.
+        // Pas d'appel LLM, juste substitution template + clauses partagées.
+        // Le bouton "Notice PDF" apparaît à côté de "Générer avec [Moteur]".
+        // Variables non mappées (DATE_EDITION, IC_CONSTRUCTION_MAX, REF_DOCUMENT,
+        // VERSION_DOC) sont calculées au runtime par _handleDocExport.
+        doc_export: {
+            templateId: 'vefa-notice-v1',
+            label: 'Notice PDF',
+            variable_map: {
+                PROGRAMME        : 'nom_programme',
+                TYPE_LOT         : 'type_logement',
+                SURFACE          : 'surface',
+                ETAGE            : 'etage',
+                ORIENTATION      : 'orientation',
+                SOLS             : 'sols',
+                CUISINE          : 'cuisine',
+                CHAUFFAGE        : 'chauffage',
+                CONFORT_ETE      : 'confort_ete',
+                ISOLATION        : 'isolation',
+                ANNEXES          : 'annexes',
+                DEPARTEMENT      : 'departement',
+                REGION           : 'region',
+                VENDEUR          : 'vendeur',
+                NOTAIRE          : 'notaire',
+                PERMIS           : 'permis',
+                LIVRAISON        : 'livraison',
+                SPECIFICITES_BLOC: 'specificites',
+            },
+        },
     },
 
     A2: {

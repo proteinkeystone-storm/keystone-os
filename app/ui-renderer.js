@@ -1589,6 +1589,24 @@ function _buildModal(pad, tool) {
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0;opacity:.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
            </button>`;
 
+    // ── Sprint C — VEFA Studio v3 : bouton "Notice PDF" via DocEngine ─
+    // S'affiche uniquement si le pad déclare `doc_export`. Pas d'appel LLM :
+    // substitution directe du template + clauses partagées (Paged.js).
+    const docExportBtn = pad.doc_export
+        ? `<button class="btn-doc-export" id="btn-doc-export" type="button" title="Générer la notice PDF print-ready (sans IA)">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px;flex-shrink:0">
+                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                   <polyline points="14 2 14 8 20 8"/>
+                   <line x1="9" y1="13" x2="15" y2="13"/>
+                   <line x1="9" y1="17" x2="13" y2="17"/>
+               </svg>
+               <span>${pad.doc_export.label || 'Notice PDF'}</span>
+               <span class="btn-doc-export-spinner" hidden>
+                   <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="14 28" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
+               </span>
+           </button>`
+        : '';
+
     // Résoudre le label de catégorie depuis le NOMEN-K id (ex: O-IMM-001 → IMMOBILIER)
     const _nomenId  = tool?.id  || pad.id;
     const _catCode  = _nomenId.split('-')[1] || '';
@@ -1628,7 +1646,10 @@ function _buildModal(pad, tool) {
                 <form id="tool-form" class="form-grid" onsubmit="return false">
                     ${fieldsHTML}
                 </form>
-                ${generateBtn}
+                <div class="modal-actions-row">
+                    ${generateBtn}
+                    ${docExportBtn}
+                </div>
             </div>
 
             <!-- ZONE DROITE : Prompt live + Actions + Notice + IA -->
@@ -1712,6 +1733,9 @@ function _buildModal(pad, tool) {
 
     // Sprint P3 — Boutons AI Assist (PromptEngine) sur les champs déclarés
     if (toolForm) _initAIAssistButtons(toolForm, pad);
+
+    // Sprint C — Bouton Doc Export (DocEngine, génération PDF directe)
+    _initDocExportButton(pad);
 
     // Prompt live — écoute tous les champs du formulaire
     // data-dirty : marque un champ comme "touché" pour activer le highlight si vide
@@ -2225,6 +2249,120 @@ function _setAIStatus(el, text, kind) {
     if (!el) return;
     el.textContent = text || '';
     el.className = 'ai-assist-status' + (kind ? ` ai-assist-status-${kind}` : '');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DOC EXPORT (Sprint C — VEFA Studio v3) — bouton "Notice PDF"
+// ══════════════════════════════════════════════════════════════════
+// Génération directe d'une notice PDF print-ready, sans appel LLM.
+// Le pad déclare `doc_export: { templateId, variable_map, label }` et
+// on délègue tout au DocEngine (lib/doc-engine.js) :
+//   1. Lecture du template HTML sanctuarisé
+//   2. Substitution [[VAR]] depuis les champs du formulaire
+//   3. Substitution [[CLAUSE_KEY]] depuis la bibliothèque D1 (fillClauses)
+//   4. Pagination A4 via Paged.js dans une fenêtre fille
+//   5. Toolbar Imprimer/PDF/Fermer injectée après pagination
+
+function _initDocExportButton(pad) {
+    const btn = document.getElementById('btn-doc-export');
+    if (!btn || !pad.doc_export) return;
+    btn.addEventListener('click', () => _handleDocExport(btn, pad));
+}
+
+async function _handleDocExport(btn, pad) {
+    if (btn.disabled) return;
+
+    if (!window.docEngine) {
+        _toast('DocEngine indisponible — rechargez la page.', 'error');
+        return;
+    }
+
+    const cfg = pad.doc_export;
+    const form = document.getElementById('tool-form');
+    if (!form) return;
+
+    // ── Collecte form data ─────────────────────────────────────
+    const formData = {};
+    form.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+    // ── Mapping variable_map : template_var → form_field ───────
+    const variables = {};
+    for (const [tplVar, fieldId] of Object.entries(cfg.variable_map || {})) {
+        const value = formData[fieldId];
+        if (value) variables[tplVar] = value;
+    }
+
+    // ── Variables dérivées (non mappées, calculées au runtime) ─
+    // DATE_EDITION : aujourd'hui en FR (ex: "11 mai 2026")
+    variables.DATE_EDITION = new Date().toLocaleDateString('fr-FR', {
+        day: 'numeric', month: 'long', year: 'numeric',
+    });
+
+    // VERSION_DOC : v1 par défaut
+    if (!variables.VERSION_DOC) variables.VERSION_DOC = 'v1';
+
+    // REF_DOCUMENT : NOM_PROGRAMME + timestamp court
+    if (!variables.REF_DOCUMENT) {
+        const slug = (variables.PROGRAMME || 'NOTICE')
+            .toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
+        const ts = Date.now().toString(36).toUpperCase().slice(-5);
+        variables.REF_DOCUMENT = `${slug}-${ts}`;
+    }
+
+    // IC_CONSTRUCTION_MAX : extrait depuis le label RE2020
+    //   "Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)" → "490"
+    const re2020 = formData['re2020'] || '';
+    const icMatch = re2020.match(/(\d{2,4})\s*kg/i);
+    if (icMatch) variables.IC_CONSTRUCTION_MAX = icMatch[1];
+
+    // ── UI : passage en mode loading ───────────────────────────
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.querySelector('.btn-doc-export-spinner')?.removeAttribute('hidden');
+
+    try {
+        const result = await window.docEngine.render({
+            templateId: cfg.templateId,
+            variables,
+            mode      : 'preview',
+        });
+
+        if (result.missing?.length) {
+            console.warn('[doc-export] marqueurs non remplis :', result.missing);
+            _toast(`Notice générée — ${result.missing.length} marqueur(s) non rempli(s) (voir console)`, 'warning');
+        } else {
+            _toast('Notice PDF prête — utilisez le bouton PDF dans la fenêtre', 'success');
+        }
+    } catch (err) {
+        console.error('[doc-export]', err);
+        const msg = err?.message || 'Erreur inconnue';
+        let friendly = msg;
+        if (/popup|fenêtre/i.test(msg)) friendly = 'Pop-up bloquée — autorisez les pop-ups pour ce site';
+        else if (/template/i.test(msg)) friendly = 'Template introuvable — contactez Protein Studio';
+        else if (/clauses/i.test(msg)) friendly = 'Clauses introuvables — rechargez la page';
+        _toast('✗ ' + friendly, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.querySelector('.btn-doc-export-spinner')?.setAttribute('hidden', '');
+    }
+}
+
+// Toast minimaliste (réutilisé par doc-export, peut servir ailleurs).
+// Crée un container global lazy au premier usage.
+function _toast(message, kind = 'info') {
+    let el = document.getElementById('ks-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'ks-toast';
+        el.className = 'ks-toast';
+        document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.className = `ks-toast ks-toast-${kind} ks-toast-show`;
+    clearTimeout(_toast._timer);
+    _toast._timer = setTimeout(() => { el.classList.remove('ks-toast-show'); }, 4500);
 }
 
 // ── État de suivi pour la transition empty → ready ────────────

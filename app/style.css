@@ -2780,6 +2780,75 @@ html.light-mode .ks-opt[data-selected] { color: #4f46e5; background: rgba(79,70,
 .btn-generate:active { background: #4338ca; transform: translateY(0); box-shadow: none; }
 .btn-generate:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
 
+/* ── Sprint C — Actions row + Doc Export button ────────────── */
+/* Quand le pad expose doc_export, on a deux CTA cote a cote :
+   - btn-generate : LLM (full HTML)
+   - btn-doc-export : DocEngine (PDF print-ready)
+   Le btn-generate prend la place principale, doc-export reste secondaire. */
+.modal-actions-row {
+  display: flex; gap: 10px; margin-top: 20px; align-items: stretch;
+}
+.modal-actions-row .btn-generate {
+  flex: 1; margin-top: 0;
+}
+.btn-doc-export {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--bd, rgba(255,255,255,.18));
+  border-radius: 6px;
+  color: var(--tx2, rgba(220,225,240,.85));
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background .18s, border-color .18s, transform .18s;
+  flex-shrink: 0; white-space: nowrap;
+}
+.btn-doc-export:hover:not(:disabled) {
+  background: rgba(99, 102, 241, .08);
+  border-color: rgba(99, 102, 241, .4);
+  color: rgba(220, 230, 255, 1);
+}
+.btn-doc-export:active:not(:disabled) { transform: translateY(0); }
+.btn-doc-export:disabled,
+.btn-doc-export.loading { opacity: .65; cursor: progress; }
+.btn-doc-export-spinner { display: inline-flex; }
+.btn-doc-export-spinner[hidden] { display: none; }
+
+html.light-mode .btn-doc-export {
+  border-color: rgba(15,23,42,.15);
+  color: rgba(15,23,42,.75);
+}
+html.light-mode .btn-doc-export:hover:not(:disabled) {
+  background: rgba(99, 102, 241, .06);
+  border-color: rgba(99, 102, 241, .35);
+  color: rgba(79, 70, 229, 1);
+}
+
+/* ── Toast minimaliste (Sprint C) ───────────────────────────── */
+/* Notification ephemere positionnee en bas. Couleur selon kind. */
+.ks-toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(20, 24, 35, .98);
+  color: rgba(230, 235, 245, 1);
+  border: 1px solid rgba(255,255,255,.08);
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px; font-weight: 500;
+  letter-spacing: -0.01em;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  z-index: 99999;
+  opacity: 0; pointer-events: none;
+  transition: opacity .22s, transform .22s;
+  max-width: 90vw; text-align: center;
+}
+.ks-toast-show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.ks-toast-success { border-color: rgba(120, 220, 160, .35); }
+.ks-toast-warning { border-color: rgba(255, 200, 100, .35); }
+.ks-toast-error   { border-color: rgba(255, 130, 130, .35); }
+
 /* Result zone */
 .result-lbl {
   font-size: 9px; font-weight: 800; color: var(--tx3);
