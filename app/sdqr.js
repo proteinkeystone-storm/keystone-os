@@ -508,6 +508,12 @@ async function _handleCreate(panel) {
     if (_creating.mode === 'dynamic' && _creating.type === 'url') {
       body.target_url = _creating.payload.url || '';
     }
+    // Mode dynamique non-URL : on pre-encode cote client et on envoie
+    // la string finale (le Worker stocke dans qr_redirects.encoded_payload
+    // pour servir le bon contenu au scan).
+    if (_creating.mode === 'dynamic' && _creating.type !== 'url') {
+      body.encoded_payload = encodePayload(_creating.type, _creating.payload);
+    }
     const qr = await _apiCreate(body);
     _selectedId = qr.id;
     await _refreshList(panel);
@@ -518,6 +524,48 @@ async function _handleCreate(panel) {
   } finally {
     _busy = false;
   }
+}
+
+// Variante de _renderField qui prend la valeur explicite (utilisée
+// dans le detail editable, indépendamment de l état _creating).
+function _renderEditPayloadField(f, currentValue) {
+  const span = f.span === 'full' ? ' sdqr-field--full' : '';
+  const req  = f.required ? ' <span class="sdqr-req">*</span>' : '';
+  const val  = _esc(currentValue ?? f.default ?? '');
+  const ph   = _esc(f.placeholder || '');
+
+  let input = '';
+  if (f.type === 'textarea') {
+    input = `<textarea data-payload-key="${f.id}" class="sdqr-input sdqr-input--textarea" placeholder="${ph}">${val}</textarea>`;
+  } else if (f.type === 'select') {
+    const opts = (f.options || []).map(o =>
+      `<option value="${_esc(o)}" ${o === (currentValue ?? f.default) ? 'selected' : ''}>${_esc(o)}</option>`
+    ).join('');
+    input = `<select data-payload-key="${f.id}" class="sdqr-input">${opts}</select>`;
+  } else if (f.type === 'checkbox') {
+    return `<div class="sdqr-field${span}">
+      <label class="sdqr-checkbox-lbl">
+        <input type="checkbox" data-payload-key="${f.id}" ${currentValue ? 'checked' : ''}>
+        <span>${_esc(f.label)}</span>
+      </label>
+    </div>`;
+  } else if (f.type === 'password') {
+    input = `<div class="sdqr-pw-wrap">
+      <input type="password" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">
+      <button type="button" class="sdqr-pw-toggle" aria-label="Afficher / masquer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>`;
+  } else {
+    input = `<input type="${f.type}" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">`;
+  }
+
+  return `
+    <label class="sdqr-field${span}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      ${input}
+    </label>
+  `;
 }
 
 function _showMsg(msgEl, text, kind = 'ok') {
@@ -582,6 +630,19 @@ async function _openQrDetail(panel, qr) {
         <div class="sdqr-detail-notice">
           <strong>Édition dynamique :</strong> tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.
         </div>
+        ` : isDynamic ? `
+        <!-- Sprint SDQR-2.5 — édition du payload pour dynamic non-URL -->
+        <div class="sdqr-edit-payload" id="sdqr-edit-payload-wrap">
+          <div class="sdqr-edit-payload-head">
+            <span class="sdqr-field-lbl">Contenu du QR (modifiable)</span>
+            <button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs" id="sdqr-save-payload">Mettre à jour le contenu</button>
+          </div>
+          <div class="sdqr-form-grid" id="sdqr-edit-payload-fields"></div>
+        </div>
+        <div class="sdqr-detail-notice">
+          <strong>Édition dynamique :</strong> modifie le contenu à tout moment.
+          Le QR imprimé reste valable — tous les scans serviront immédiatement la nouvelle version (${typeDef.label}).
+        </div>
         ` : `
         <div class="sdqr-detail-notice sdqr-detail-notice--stat">
           <strong>Mode statique :</strong> les données sont encodées directement dans les pixels du QR.
@@ -630,6 +691,55 @@ async function _openQrDetail(panel, qr) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });
+
+  // Sprint SDQR-2.5 — édition du payload pour QR dynamique non-URL.
+  // Render les fields contextuels avec valeurs courantes + bind sur un
+  // objet editingPayload local. Bouton "Mettre à jour" PATCH payload +
+  // encoded_payload (recomputé client-side via sdqr-types.js).
+  if (isDynamic && qr.qr_type !== 'url') {
+    const fieldsWrap = content.querySelector('#sdqr-edit-payload-fields');
+    if (fieldsWrap) {
+      const editingPayload = { ...(qr.payload || {}) };
+      fieldsWrap.innerHTML = typeDef.fields.map(f => _renderEditPayloadField(f, editingPayload[f.id])).join('');
+      fieldsWrap.querySelectorAll('[data-payload-key]').forEach(el => {
+        const handler = () => {
+          const k = el.dataset.payloadKey;
+          editingPayload[k] = el.type === 'checkbox' ? el.checked : el.value;
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+      });
+      fieldsWrap.querySelectorAll('.sdqr-pw-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const input = btn.closest('.sdqr-pw-wrap')?.querySelector('input');
+          if (input) input.type = input.type === 'password' ? 'text' : 'password';
+        });
+      });
+
+      content.querySelector('#sdqr-save-payload')?.addEventListener('click', async () => {
+        const msg = content.querySelector('#sdqr-detail-msg');
+        const newEncoded = encodePayload(qr.qr_type, editingPayload);
+        if (!newEncoded.trim()) {
+          if (msg) { msg.hidden = false; msg.textContent = 'Le contenu est vide.'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+          return;
+        }
+        try {
+          await _apiUpdate(qr.id, { payload: editingPayload, encoded_payload: newEncoded });
+          qr.payload = { ...editingPayload };
+          await _refreshList(panel);
+          // Re-render le detail pour refresh le summary + le contenu encodé affiché
+          _openQrDetail(panel, qr);
+          // Toast inline post-rerender
+          setTimeout(() => {
+            const m = document.getElementById('sdqr-detail-msg');
+            if (m) { m.hidden = false; m.textContent = '✓ Contenu mis à jour — tous les scans serviront la nouvelle version'; m.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+          }, 30);
+        } catch (e) {
+          if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+        }
+      });
+    }
+  }
 
   content.querySelector('#sdqr-archive')?.addEventListener('click', async () => {
     const next = qr.status === 'archived' ? 'active' : 'archived';

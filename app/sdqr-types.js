@@ -135,7 +135,7 @@ export const QR_TYPES = {
     label  : 'Texte',
     icon   : '📝',
     desc   : 'Note, message, clé',
-    supports : { static: true, dynamic: false },
+    supports : { static: true, dynamic: true },
     fields : [
       { id: 'text', type: 'textarea', label: 'Contenu texte', required: true, placeholder: 'Note, message ou clé chiffrée…' },
     ],
@@ -147,7 +147,7 @@ export const QR_TYPES = {
     label  : 'vCard',
     icon   : '👤',
     desc   : 'Carte de contact',
-    supports : { static: true, dynamic: false },
+    supports : { static: true, dynamic: true },
     fields : [
       { id: 'firstName', type: 'text',     label: 'Prénom',        required: true, placeholder: 'Sophie' },
       { id: 'lastName',  type: 'text',     label: 'Nom',           required: true, placeholder: 'Martin' },
@@ -187,7 +187,7 @@ export const QR_TYPES = {
     label  : 'Événement',
     icon   : '📅',
     desc   : 'Date + lieu + titre',
-    supports : { static: true, dynamic: false },
+    supports : { static: true, dynamic: true },
     fields : [
       { id: 'title',       type: 'text',           label: 'Titre',       required: true, placeholder: 'Visite chantier Programme Azur' },
       { id: 'location',    type: 'text',           label: 'Lieu',        placeholder: '12 avenue des Lauriers, Sanary' },

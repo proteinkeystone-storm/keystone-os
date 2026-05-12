@@ -6382,3 +6382,23 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   border: 1px solid rgba(46,179,124,.3);
   color: #6ee7a7;
 }
+
+/* SDQR-2.5 — Édition du payload pour QR dynamique non-URL */
+.sdqr-edit-payload {
+  background: rgba(99,102,241,.04);
+  border: 1px solid rgba(99,102,241,.18);
+  border-radius: 9px;
+  padding: 14px 16px;
+}
+.sdqr-edit-payload-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.sdqr-edit-payload .sdqr-form-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sdqr-edit-payload .sdqr-input { font-size: 12.5px; padding: 8px 11px; }

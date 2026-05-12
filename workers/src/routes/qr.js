@@ -64,7 +64,12 @@ function getTenantId(request) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// GET /r/:shortId — redirection publique + log scan (cœur SDQR)
+// GET /r/:shortId — redirect public + log scan (cœur SDQR)
+// Sprint SDQR-2.5 : dispatch selon qr_type :
+//   - url   → 302 redirect (legacy)
+//   - vcard → .vcf file (Content-Type text/x-vcard)
+//   - ical  → .ics file (Content-Type text/calendar)
+//   - text  → HTML page lisible avec bouton Copier
 // ══════════════════════════════════════════════════════════════════
 export async function handleQrRedirect(request, env, shortId) {
   if (!shortId || shortId.length < 4 || shortId.length > 32) {
@@ -72,25 +77,21 @@ export async function handleQrRedirect(request, env, shortId) {
   }
 
   // Lookup ultra-rapide via PRIMARY KEY (qr_redirects.short_id)
+  // qr_type + encoded_payload servent à dispatcher selon le type (SDQR-2.5)
   const row = await env.DB
-    .prepare('SELECT target_url, status FROM qr_redirects WHERE short_id = ?')
+    .prepare('SELECT target_url, qr_type, encoded_payload, status FROM qr_redirects WHERE short_id = ?')
     .bind(shortId)
     .first();
 
   if (!row || row.status !== 'active') {
-    // QR inconnu ou archivé → 404 (on log quand même pas, c'est public)
     return new Response('QR introuvable ou archivé', { status: 404 });
   }
 
-  // Log scan — non bloquant : on lance le INSERT sans attendre.
-  // Si l'INSERT échoue, le user est quand même redirigé.
+  // Log scan (async, non bloquant) — RGPD safe : pas d IP brute
   const ua      = request.headers.get('User-Agent') || '';
   const country = request.cf?.country || null;
   const { device, os } = parseUA(ua);
   const uaHash  = await sha256Hex(ua, 8);
-
-  // ctx.waitUntil n'est pas dispo si appelé hors handler — on tente la
-  // promesse, on ignore les erreurs côté redirection.
   try {
     await env.DB
       .prepare(`INSERT INTO qr_scans (short_id, country, device_kind, os_kind, ua_hash)
@@ -101,7 +102,97 @@ export async function handleQrRedirect(request, env, shortId) {
     console.warn('[qr-redirect] scan log failed:', e.message);
   }
 
-  return Response.redirect(row.target_url, 302);
+  const type = row.qr_type || 'url';
+
+  // ── URL : 302 standard ──────────────────────────────────────
+  if (type === 'url') {
+    return Response.redirect(row.target_url, 302);
+  }
+
+  // ── vCard : .vcf téléchargeable (iOS / Android proposent "Ajouter contact") ──
+  if (type === 'vcard') {
+    return new Response(row.encoded_payload || '', {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/x-vcard; charset=utf-8',
+        'Content-Disposition': `attachment; filename="contact-${shortId}.vcf"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // ── iCal : .ics téléchargeable (iOS / Android proposent "Ajouter événement") ──
+  if (type === 'ical') {
+    return new Response(row.encoded_payload || '', {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': `attachment; filename="event-${shortId}.ics"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // ── Texte : page HTML lisible avec bouton Copier ──
+  if (type === 'text') {
+    return new Response(_renderTextPage(row.encoded_payload || ''), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  return new Response('Type non supporté : ' + type, { status: 500 });
+}
+
+// Page HTML standalone servie pour les QR texte dynamiques.
+// Inline CSS pour aucune dépendance externe, look Keystone (navy / gold).
+function _renderTextPage(text) {
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+  }[c]));
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Keystone OS — Contenu</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:linear-gradient(180deg,#0a1024 0%,#060a18 100%);color:#e8edf8;min-height:100vh;padding:24px 20px;line-height:1.55}
+  .wrap{max-width:560px;margin:0 auto}
+  .pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#c9a84c;background:rgba(184,148,90,.10);border:1px solid rgba(184,148,90,.32);padding:5px 11px;border-radius:999px;margin-bottom:18px}
+  h1{font-family:Georgia,"Times New Roman",serif;font-weight:600;font-size:22px;color:#fff;letter-spacing:-.01em;margin-bottom:18px}
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:20px;margin-bottom:14px;white-space:pre-wrap;word-break:break-word;font-size:15px;color:#fff}
+  button{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;background:#c9a84c;color:#1a1a1a;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:transform .15s,background .15s}
+  button:hover{background:#d4b27a;transform:translateY(-1px)}
+  .foot{margin-top:30px;font-size:11px;color:rgba(220,225,240,.45);text-align:center;line-height:1.6}
+  .foot strong{color:rgba(220,225,240,.7)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="pill">Keystone OS · Contenu dynamique</span>
+  <h1>Contenu partagé</h1>
+  <div class="card" id="content">${esc(text)}</div>
+  <button id="copy">Copier le contenu</button>
+  <div class="foot">
+    Ce contenu est servi par un <strong>QR souverain Keystone</strong>.<br>
+    Aucune donnée tierce collectée. Conforme RGPD.
+  </div>
+</div>
+<script>
+document.getElementById('copy').addEventListener('click',function(){
+  navigator.clipboard.writeText(document.getElementById('content').textContent).then(function(){
+    var b=document.getElementById('copy');b.textContent='✓ Copié';
+    setTimeout(function(){b.textContent='Copier le contenu';},1500);
+  });
+});
+</script>
+</body>
+</html>`;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -128,19 +219,29 @@ export async function handleCreateQr(request, env) {
   if (!name)                  return err('Le nom est obligatoire', 400, origin);
   if (!ALLOWED_TYPES.has(type)) return err(`Type inconnu : ${type}`, 400, origin);
 
-  // Validation mode/type : seul URL supporte le mode dynamique
-  if (mode === 'dynamic' && type !== 'url') {
-    return err(`Le type "${type}" ne supporte que le mode statique.`, 400, origin);
+  // Validation mode/type : Wi-Fi reste static-only (cf. spec SDQR-2.5).
+  // URL/Text/vCard/iCal supportent les deux modes.
+  if (mode === 'dynamic' && type === 'wifi') {
+    return err('Wi-Fi ne supporte que le mode statique.', 400, origin);
   }
 
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
-  let target_url = '';
+  let target_url      = '';
+  let encoded_payload = (body.encoded_payload || '').toString();
   let short = null;
 
   if (mode === 'dynamic') {
-    target_url = (body.target_url || payload?.url || '').toString().trim();
-    if (!isValidUrl(target_url)) return err('target_url invalide (http/https requis)', 400, origin);
+    if (type === 'url') {
+      target_url = (body.target_url || payload?.url || '').toString().trim();
+      if (!isValidUrl(target_url)) return err('target_url invalide (http/https requis)', 400, origin);
+    } else {
+      // Pour text/vcard/ical dynamiques, le frontend pre-encode le payload
+      // et nous envoie la string a servir. Worker ne refait pas l encoding.
+      if (!encoded_payload.trim()) {
+        return err('encoded_payload manquant pour QR dynamique non-URL.', 400, origin);
+      }
+    }
 
     // Génère un short_id unique
     for (let i = 0; i < 3; i++) {
@@ -160,12 +261,11 @@ export async function handleCreateQr(request, env) {
   };
 
   try {
-    // Mode dynamique : crée d'abord l'entrée qr_redirects
     if (mode === 'dynamic') {
       await env.DB
-        .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, status)
-                  VALUES (?, ?, ?, ?, 'active')`)
-        .bind(short, id, tenantId, target_url)
+        .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, qr_type, encoded_payload, status)
+                  VALUES (?, ?, ?, ?, ?, ?, 'active')`)
+        .bind(short, id, tenantId, target_url, type, encoded_payload || null)
         .run();
     }
 
@@ -176,7 +276,6 @@ export async function handleCreateQr(request, env) {
 
     return json({ qr: { ...entityData, target_url } }, 201, origin);
   } catch (e) {
-    // Rollback best-effort de qr_redirects si entities échoue
     if (short) {
       await env.DB.prepare('DELETE FROM qr_redirects WHERE short_id = ?').bind(short).run().catch(() => {});
     }
@@ -252,7 +351,8 @@ export async function handleUpdateQr(request, env, qrId) {
   try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
 
   // Mise à jour des champs autorisés
-  let targetChanged = false;
+  let targetChanged          = false;
+  let encodedPayloadChanged  = false;
   if (body.name !== undefined)    entity.name   = String(body.name).trim() || entity.name;
   if (body.tags !== undefined)    entity.tags   = Array.isArray(body.tags) ? body.tags.slice(0, 12) : entity.tags;
   if (body.design !== undefined)  entity.design = body.design;
@@ -264,8 +364,25 @@ export async function handleUpdateQr(request, env, qrId) {
     if (entity.mode === 'static') {
       return err('Impossible de modifier la cible d\'un QR statique (regénérez un nouveau QR).', 400, origin);
     }
+    if (entity.qr_type !== 'url') {
+      return err('target_url ne s\'applique qu\'aux QR de type URL.', 400, origin);
+    }
     if (!isValidUrl(body.target_url)) return err('target_url invalide', 400, origin);
     targetChanged = true;
+  }
+  // Sprint SDQR-2.5 : encoded_payload editable pour dynamic non-URL.
+  // Le frontend recompute via sdqr-types.js et envoie la nouvelle string.
+  if (body.encoded_payload !== undefined) {
+    if (entity.mode === 'static') {
+      return err('Le contenu d\'un QR statique n\'est pas modifiable (regénérez).', 400, origin);
+    }
+    if (entity.qr_type === 'url') {
+      return err('Pour un QR URL, utilisez target_url plutôt qu\'encoded_payload.', 400, origin);
+    }
+    if (!String(body.encoded_payload).trim()) {
+      return err('encoded_payload ne peut pas être vide.', 400, origin);
+    }
+    encodedPayloadChanged = true;
   }
   entity.updated_at = new Date().toISOString();
 
@@ -280,6 +397,12 @@ export async function handleUpdateQr(request, env, qrId) {
         .prepare(`UPDATE qr_redirects SET target_url = ?, updated_at = datetime('now')
                   WHERE short_id = ?`)
         .bind(body.target_url, entity.short_id).run();
+    }
+    if (encodedPayloadChanged) {
+      await env.DB
+        .prepare(`UPDATE qr_redirects SET encoded_payload = ?, updated_at = datetime('now')
+                  WHERE short_id = ?`)
+        .bind(body.encoded_payload, entity.short_id).run();
     }
     if (body.status !== undefined) {
       await env.DB
