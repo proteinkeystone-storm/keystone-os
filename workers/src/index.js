@@ -113,7 +113,8 @@ export default {
         return handleQrRedirect(request, env, shortId);
       }
       // Page de transparence publique (RGPD natif, Sprint SDQR-5)
-      if (path === '/sdqr-privacy' && method === 'GET') {
+      // Tolerance HEAD pour les crawlers / health-checks (curl -I)
+      if (path === '/sdqr-privacy' && (method === 'GET' || method === 'HEAD')) {
         return handlePrivacyPage(request, env);
       }
       // CRUD QR — tenant authentifié via X-Tenant-Id (à durcir si besoin)
