@@ -15,6 +15,8 @@ const PREFS_KEYS = [
     'ks_active_engine','ks_user_name','ks_user_photo',
     'ks_lock_style','ks_lock_enabled','ks_lock_delay',
     'ks_pad_order',
+    // Sprint Kodex-3.3 : brouillons d'artefacts à workspace fullscreen
+    'ks_kodex_draft',
 ];
 
 let _saveTimer = null;

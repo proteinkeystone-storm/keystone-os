@@ -31,6 +31,7 @@ import {
   formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
   loadSectors, getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
+import { computeScale } from './lib/kodex-scale.js';
 
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
@@ -64,8 +65,21 @@ let _state = {
     standard: null,        // objet standard complet (cache)
   },
   content:     { sector: 'immobilier', fields: {} },
-  assets:      { logo_owned: false, charte_owned: false, pieces: [] },
-  output:      { codeMaitre: null, llmResponse: null, briefRef: null },
+  assets: {
+    // Sprint Kodex-3.2 : coffre-fort minimal
+    logo_owned:   false,    // ✓ logo déjà chez Protein Studio
+    charte_owned: false,    // ✓ charte graphique déjà transmise
+    fonts_owned:  false,    // ✓ polices fournies à Protein
+    charte: {
+      primary_hex:   '',    // couleur principale ex: #1B2A4A
+      secondary_hex: '',    // couleur secondaire
+      font_title:    '',    // ex: 'Cormorant Garamond'
+      font_body:     '',    // ex: 'Source Sans 3'
+    },
+    brand_book_url: '',     // lien externe vers le brand book (Drive, Dropbox)
+    extra_notes:    '',     // demandes spéciales pour le graphiste
+  },
+  output: { codeMaitre: null, llmResponse: null, briefRef: null },
 };
 
 let _root = null;   // élément racine du workspace, null = fermé
@@ -86,6 +100,7 @@ const ICONS = {
   'more-horizontal': '<circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/><circle cx="5" cy="12" r="1" fill="currentColor"/>',
   'plus'       : '<path d="M12 5v14M5 12h14"/>',
   'history'    : '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  'refresh'    : '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
 
   // Steps (rail)
   'target'     : '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
@@ -119,11 +134,71 @@ function icon(name, size = 20) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-3.3 — Persistance brouillon
+// ═══════════════════════════════════════════════════════════════
+const LS_DRAFT_KEY = 'ks_kodex_draft';
+
+function _saveDraft() {
+  try {
+    // On ne stocke pas l'objet standard complet (re-récupérable via id)
+    const lean = {
+      ..._state,
+      destination: {
+        ..._state.destination,
+        standard: null,   // on garde standardId, le standard sera re-fetch au load
+      },
+    };
+    localStorage.setItem(LS_DRAFT_KEY, JSON.stringify(lean));
+    // Sync cross-device via cloud-vault (debounce 1.5s)
+    import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
+  } catch (_) {}
+}
+
+async function _loadDraft() {
+  try {
+    const raw = localStorage.getItem(LS_DRAFT_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    // Merge non destructif (préserve les défauts si la structure a évolué)
+    _state = {
+      ..._state,
+      ...data,
+      destination: { ..._state.destination, ...(data.destination || {}) },
+      content:     { ..._state.content, ...(data.content || {}) },
+      assets:      { ..._state.assets, ...(data.assets || {}) },
+      output:      { ..._state.output, ...(data.output || {}) },
+    };
+    // Re-hydrate standard si on a un id
+    if (_state.destination.standardId) {
+      _state.destination.standard = await getStandard(_state.destination.standardId);
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function _resetDraft() {
+  try { localStorage.removeItem(LS_DRAFT_KEY); } catch (_) {}
+  _state = {
+    view: 'destination',
+    destination: { step: 'category', category: null, vendor: null, standardId: null, standard: null },
+    content:     { sector: 'immobilier', fields: {} },
+    assets: {
+      logo_owned: false, charte_owned: false, fonts_owned: false,
+      charte: { primary_hex: '', secondary_hex: '', font_title: '', font_body: '' },
+      brand_book_url: '', extra_notes: '',
+    },
+    output: { codeMaitre: null, llmResponse: null, briefRef: null },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // API publique
 // ═══════════════════════════════════════════════════════════════
-export function openKodex() {
+export async function openKodex() {
   if (_root) return;     // déjà ouvert
-  _state.view = 'destination';
+  await _loadDraft();    // restaure le brouillon si présent
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
@@ -131,6 +206,7 @@ export function openKodex() {
 
 export function closeKodex() {
   if (!_root) return;
+  _saveDraft();          // dernière sauvegarde avant fermeture
   _root.remove();
   _root = null;
   document.body.style.overflow = '';
@@ -158,8 +234,11 @@ function _buildShell() {
         <button class="ws-iconbtn" data-act="history" title="Historique des briefs">
           ${icon('history', 18)}
         </button>
-        <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon">
+        <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon (Cmd+S)">
           ${icon('save', 18)}
+        </button>
+        <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer">
+          ${icon('refresh', 18)}
         </button>
         <button class="ws-iconbtn" data-act="help" title="Aide">
           ${icon('help-circle', 18)}
@@ -194,8 +273,16 @@ function _onClick(e) {
   if (act === 'next')           return _advance();
   if (act === 'prev')           return _back();
   if (act === 'history')        return _toastSoon('Historique des briefs');
-  if (act === 'save')           return _toastSoon('Sauvegarde de brouillon');
+  if (act === 'save')           { _saveDraft(); _toastOk('Brouillon sauvegardé'); return; }
   if (act === 'help')           return _toastSoon('Guide pas-à-pas');
+  if (act === 'reset')          {
+    if (confirm('Effacer toutes vos saisies et recommencer le brief ?')) {
+      _resetDraft();
+      _renderMain();
+      _toastOk('Brouillon réinitialisé');
+    }
+    return;
+  }
   // Sprint Kodex-2 : navigation interne à la vue Destination
   if (act === 'dest-category')  return _pickCategory(t.dataset.cat);
   if (act === 'dest-vendor')    return _pickVendor(t.dataset.vendor);
@@ -203,6 +290,14 @@ function _onClick(e) {
   if (act === 'dest-back')      return _destBack();
   // Sprint Kodex-2 : changement de secteur (profil métier)
   if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
+  // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
+  if (act === 'assets-toggle')  return _toggleAsset(t.dataset.key);
+}
+
+function _toggleAsset(key) {
+  _state.assets[key] = !_state.assets[key];
+  _saveDraft();
+  _renderMain();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -211,6 +306,7 @@ function _onClick(e) {
 function _pickSector(sectorId) {
   _state.content.sector = sectorId;
   _state.content.fields = {};
+  _saveDraft();
   _renderMain();
 }
 
@@ -227,11 +323,13 @@ function _pickCategory(cat) {
   } else {
     _state.destination.step = 'vendor';
   }
+  _saveDraft();
   _renderMain();
 }
 function _pickVendor(vendor) {
   _state.destination.vendor = vendor;
   _state.destination.step = 'product';
+  _saveDraft();
   _renderMain();
 }
 async function _pickStandard(id) {
@@ -239,6 +337,7 @@ async function _pickStandard(id) {
   _state.destination.standardId = id;
   _state.destination.standard = std;
   _state.destination.step = 'done';
+  _saveDraft();
   _renderMain();
 }
 function _destBack() {
@@ -246,6 +345,7 @@ function _destBack() {
   if (d.step === 'done')       d.step = 'product';
   else if (d.step === 'product') { d.step = 'vendor'; d.vendor = null; }
   else if (d.step === 'vendor')  { d.step = 'category'; d.category = null; }
+  _saveDraft();
   _renderMain();
 }
 
@@ -532,6 +632,83 @@ function _destStepDone() {
         <strong style="color:var(--ws-accent);">À noter&nbsp;:</strong> ${_esc(s.notes)}
       </div>` : ''}
     </div>
+
+    ${_renderScaleCalculator(s)}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-3.1 — Killer feature : calculateur d'échelle
+// ═══════════════════════════════════════════════════════════════
+function _renderScaleCalculator(std) {
+  const calc = computeScale(std);
+  if (!calc) return '';
+
+  if (calc.digital) {
+    return `
+      <div class="ws-card" style="margin-top:14px;background:var(--ws-accent-soft);border-color:transparent;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${icon('sparkles', 18)}
+          <strong style="font-size:14px;letter-spacing:-.012em;color:var(--ws-text);">Format numérique</strong>
+        </div>
+        <p style="margin:8px 0 0 0;font-size:13px;color:var(--ws-text-soft);line-height:1.55;">
+          ${_esc(calc.message)}
+        </p>
+      </div>
+    `;
+  }
+
+  const rows = [
+    ['Distance de vue', `${calc.viewing_distance} (${calc.viewing_context.toLowerCase()})`],
+    ['Travail sur maquette', calc.work_format
+      ? `${calc.work_format.width_mm} × ${calc.work_format.height_mm} mm — ${calc.factor_label}`
+      : calc.factor_label],
+    ['Texte titre minimum', `${calc.min_text_mm} mm de hauteur capitale`],
+    ['Logo bitmap (PNG/JPG)', calc.min_logo_px ? `${calc.min_logo_px} px de large minimum` : '—'],
+  ];
+
+  const isLarge = calc.is_large_format;
+
+  return `
+    <div class="ws-card" style="margin-top:14px;border-color:var(--ws-accent);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        ${icon('ruler', 18)}
+        <strong style="font-size:14px;letter-spacing:-.012em;color:var(--ws-text);">
+          Calculateur d'échelle automatique
+        </strong>
+        ${isLarge ? `<span class="ws-badge ws-badge--accent" style="margin-left:auto;">Grand format</span>` : ''}
+      </div>
+      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-muted);line-height:1.55;">
+        Voici comment travailler ce format sans erreur de fabrication.
+        ${isLarge ? 'À cette taille, votre graphiste doit travailler à l\'échelle réduite.' : ''}
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tbody>
+          ${rows.map(([k, v]) => `
+            <tr>
+              <td style="padding:7px 0;color:var(--ws-text-muted);font-weight:500;width:42%;">${_esc(k)}</td>
+              <td style="padding:7px 0;color:var(--ws-text);font-weight:500;">${_esc(v)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      ${calc.warning ? `
+        <div style="margin-top:12px;padding:10px 12px;background:var(--danger-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text);border-left:3px solid var(--danger);">
+          <strong style="color:var(--danger);">Attention&nbsp;:</strong> ${_esc(calc.warning)}
+        </div>
+      ` : ''}
+
+      ${isLarge ? `
+        <div style="margin-top:12px;padding:10px 12px;background:var(--info-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text-soft);border-left:3px solid var(--info);line-height:1.55;">
+          <strong style="color:var(--info);">Pourquoi ${calc.factor_label.toLowerCase()}&nbsp;?</strong>
+          À l'échelle réelle, le fichier final ferait plusieurs gigaoctets — impossible à manipuler.
+          On travaille en réduit, et l'imprimeur agrandit pour la sortie.
+          La résolution effective reste équivalente à ${calc.target_dpi}&nbsp;DPI à l'impression finale.
+        </div>
+      ` : ''}
+    </div>
   `;
 }
 
@@ -672,6 +849,7 @@ function _onContentChange(e) {
     }
   }
   _state.content.fields = values;
+  _scheduleSave();
 
   // Recalcul des mentions légales si les labels ont changé
   if (e.target?.name === 'labels') {
@@ -681,6 +859,13 @@ function _onContentChange(e) {
       }
     });
   }
+}
+
+// Auto-save throttled (toutes les ~600 ms en frappe rapide)
+let _saveTimer = null;
+function _scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(_saveDraft, 600);
 }
 
 // ── Affiche les mentions légales applicables ──────────────────
@@ -705,47 +890,142 @@ function _renderLegalMentions(slot, sector) {
 // Vue 3 — ASSETS
 // ═══════════════════════════════════════════════════════════════
 function _viewAssets() {
-  return `
+  const a = _state.assets;
+  const root = `
     <span class="ws-eyebrow">${icon('package', 12)} 3 sur 4 · Les visuels</span>
     <h1 class="ws-h1">Quels éléments visuels avons-nous&nbsp;?</h1>
     <p class="ws-lead">
-      Cochez ce que Protein Studio a déjà reçu de votre part — votre logo, vos couleurs,
-      vos polices — et téléversez le reste si nécessaire. Tout reste chiffré et synchronisé
-      entre vos appareils, vous n'aurez plus jamais à le renvoyer.
+      Renseignez votre charte graphique en quelques secondes. Si Protein Studio
+      a déjà vos logos ou polices, cochez la case correspondante&nbsp;: vous n'aurez
+      plus jamais à les renvoyer.
     </p>
 
-    <h2 class="ws-h2">Ce que nous avons déjà</h2>
-    <div class="ws-card-grid">
-      <div class="ws-card">
-        <div class="ws-card-row">
-          <div class="ws-card-icon">${icon('image', 22)}</div>
-          <div class="ws-card-body">
-            <h3 class="ws-card-title">Votre logo</h3>
-            <p class="ws-card-desc">Cochez si vous nous l'avez déjà transmis (en vectoriel ou haute définition).</p>
-          </div>
-        </div>
-      </div>
-      <div class="ws-card">
-        <div class="ws-card-row">
-          <div class="ws-card-icon">${icon('palette', 22)}</div>
-          <div class="ws-card-body">
-            <h3 class="ws-card-title">Vos couleurs et polices</h3>
-            <p class="ws-card-desc">Votre charte graphique : couleurs de marque, polices titre et corps.</p>
-          </div>
-        </div>
-      </div>
+    <h2 class="ws-h2">Ce que Protein Studio possède déjà pour vous</h2>
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:24px;">
+      ${_renderOwnedToggle('logo_owned',   'Logo',          'image',    a.logo_owned)}
+      ${_renderOwnedToggle('charte_owned', 'Charte graphique', 'palette', a.charte_owned)}
+      ${_renderOwnedToggle('fonts_owned',  'Polices',       'type',     a.fonts_owned)}
     </div>
 
-    <h2 class="ws-h2">Ce qu'il manque</h2>
+    <h2 class="ws-h2">Votre charte graphique rapide</h2>
+    <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
+      Optionnel mais recommandé&nbsp;: ces informations seront reprises dans le brief final.
+    </p>
+    <form data-slot="assets-form" id="kodex-assets-form" autocomplete="off">
+      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
+        <div class="ws-field">
+          <label class="ws-label" for="ka-primary">Couleur principale</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="ws-input" id="ka-primary" name="primary_hex" type="text"
+                   value="${_esc(a.charte.primary_hex)}"
+                   placeholder="#1B2A4A" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
+                   style="font-family:'SF Mono','Menlo',monospace;">
+            <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.primary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-primary"></div>
+          </div>
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="ka-secondary">Couleur secondaire</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="ws-input" id="ka-secondary" name="secondary_hex" type="text"
+                   value="${_esc(a.charte.secondary_hex)}"
+                   placeholder="#c9a96e" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
+                   style="font-family:'SF Mono','Menlo',monospace;">
+            <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.secondary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-secondary"></div>
+          </div>
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="ka-font-title">Police des titres</label>
+          <input class="ws-input" id="ka-font-title" name="font_title" type="text"
+                 value="${_esc(a.charte.font_title)}"
+                 placeholder="ex : Cormorant Garamond, Inter Bold">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="ka-font-body">Police du corps de texte</label>
+          <input class="ws-input" id="ka-font-body" name="font_body" type="text"
+                 value="${_esc(a.charte.font_body)}"
+                 placeholder="ex : Source Sans 3, Inter Regular">
+        </div>
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label" for="ka-brand-book">Lien vers votre brand book complet (optionnel)</label>
+          <input class="ws-input" id="ka-brand-book" name="brand_book_url" type="url"
+                 value="${_esc(a.brand_book_url)}"
+                 placeholder="https://drive.google.com/...">
+          <div style="margin-top:4px;font-size:11.5px;color:var(--ws-text-muted);">
+            Si vous avez un PDF brand book, partagez-le ici&nbsp;— le graphiste pourra le consulter.
+          </div>
+        </div>
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label" for="ka-notes">Demandes spéciales pour le graphiste (optionnel)</label>
+          <textarea class="ws-textarea" id="ka-notes" name="extra_notes" rows="3"
+                    placeholder="ex : éviter le rose, garder un esprit minéral, respecter les espaces vides…">${_esc(a.extra_notes)}</textarea>
+        </div>
+      </div>
+    </form>
+
+    <h2 class="ws-h2">Téléverser des fichiers</h2>
     <div class="ws-empty">
       <div class="ws-empty-icon">${icon('upload-cloud', 24)}</div>
-      <h3 class="ws-empty-title">L'espace de dépôt arrive bientôt</h3>
+      <h3 class="ws-empty-title">L'espace de dépôt arrive au Sprint suivant</h3>
       <p class="ws-empty-desc">
-        Vous pourrez y glisser logos, illustrations, polices ou brand-book.
-        Stockage en Europe, chiffré.
+        Pour l'instant, partagez vos fichiers via le lien brand book ci-dessus.
+        L'upload direct (logos, photos, brand book PDF) sera disponible prochainement.
       </p>
     </div>
   `;
+
+  // Wiring asynchrone après injection DOM
+  setTimeout(() => _wireAssetsForm(), 0);
+
+  return root;
+}
+
+// ── Card cliquable pour toggle "déjà chez Protein" ────────────
+function _renderOwnedToggle(key, label, iconName, isOn) {
+  return `
+    <button class="ws-card is-clickable ${isOn ? 'is-selected' : ''}"
+            data-act="assets-toggle" data-key="${key}"
+            style="text-align:left;cursor:pointer;background:${isOn ? 'var(--ws-accent-soft)' : 'var(--ws-surface)'};border-color:${isOn ? 'var(--ws-accent)' : 'var(--ws-border)'};">
+      <div class="ws-card-row">
+        <div class="ws-card-icon" style="background:${isOn ? 'var(--ws-accent)' : 'var(--ws-accent-soft)'};color:${isOn ? '#fff' : 'var(--ws-accent)'};">
+          ${icon(isOn ? 'check' : iconName, 22)}
+        </div>
+        <div class="ws-card-body">
+          <h3 class="ws-card-title">${_esc(label)}</h3>
+          <p class="ws-card-desc">
+            ${isOn
+              ? '<strong style="color:var(--ws-accent);">Déjà chez Protein.</strong> Pas besoin de renvoyer.'
+              : 'Cliquez si vous l\'avez déjà transmis.'
+            }
+          </p>
+        </div>
+      </div>
+    </button>
+  `;
+}
+
+// ── Wiring du formulaire assets ───────────────────────────────
+function _wireAssetsForm() {
+  const form = _root?.querySelector('[data-slot="assets-form"]');
+  if (!form) return;
+  form.addEventListener('input', e => {
+    const el = e.target;
+    if (!el.name) return;
+    if (['primary_hex', 'secondary_hex', 'font_title', 'font_body'].includes(el.name)) {
+      _state.assets.charte[el.name] = el.value;
+      // Live preview des swatches
+      if (el.name === 'primary_hex') {
+        const sw = _root.querySelector('[data-slot="preview-primary"]');
+        if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+      }
+      if (el.name === 'secondary_hex') {
+        const sw = _root.querySelector('[data-slot="preview-secondary"]');
+        if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+      }
+    } else {
+      _state.assets[el.name] = el.value;
+    }
+    _scheduleSave();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -823,12 +1103,26 @@ function _currentStepIndex() { return STEPS.findIndex(s => s.id === _state.view)
 // Toast minimal pour les actions pas encore branchées
 // ═══════════════════════════════════════════════════════════════
 function _toastSoon(label) {
+  _toast(`${label} — arrivant dans un prochain sprint`);
+}
+function _toastOk(label) {
+  _toast(label, true);
+}
+function _toast(message, isSuccess = false) {
   const t = document.createElement('div');
-  t.textContent = `${label} — arrivant dans un prochain sprint`;
+  if (isSuccess) {
+    t.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      ${message}
+    </span>`;
+  } else {
+    t.textContent = message;
+  }
   Object.assign(t.style, {
     position: 'fixed', bottom: '24px', left: '50%',
     transform: 'translateX(-50%) translateY(20px)',
-    background: '#1a1a1a', color: '#fff',
+    background: isSuccess ? 'var(--green)' : '#1a1a1a',
+    color: '#fff',
     padding: '10px 18px', borderRadius: '999px',
     fontSize: '13px', fontWeight: '600', letterSpacing: '-0.005em',
     boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
@@ -845,5 +1139,5 @@ function _toastSoon(label) {
     t.style.opacity = '0';
     t.style.transform = 'translateX(-50%) translateY(20px)';
     setTimeout(() => t.remove(), 250);
-  }, 2400);
+  }, 1800);
 }

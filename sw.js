@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v3.4.1-kodex2-catalog';
+const VERSION       = 'ks-os-v3.4.2-kodex3-scale-assets';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
