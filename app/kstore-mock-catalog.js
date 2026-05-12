@@ -87,6 +87,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'A-COM-002',                      // ← Sprint Kodex-1 — squelette workspace
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Kodex',
+        punchline: 'Le brief print/digital infaillible',
+        shortDesc: 'Cahier des charges technique · calculateur d\'échelle pour grands formats',
+        price: 49,
+        icon: 'sparkles',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini', 'Grok', 'Perplexity', 'Llama'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {

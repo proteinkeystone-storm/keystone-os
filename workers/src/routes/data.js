@@ -27,6 +27,10 @@ import { requireJWT } from '../lib/jwt.js';
 const ALLOWED_ENTITIES = new Set([
   'programs',
   'clauses',   // Sprint 1.2 — bibliothèque de clauses pour DocEngine
+  // Sprint Kodex-1 — artefact A-COM-002
+  'standards',     // fiches techniques imprimeurs/réseaux/presse (tenant=shared)
+  'sectors',       // profils métier déclaratifs (tenant=shared)
+  'codex_briefs',  // historique des briefs générés par user
 ]);
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;   // 256 KB par entité (cap raisonnable)

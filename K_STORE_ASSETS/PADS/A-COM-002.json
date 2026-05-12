@@ -1,0 +1,23 @@
+{
+  "id": "A-COM-002",
+  "category": "BIZ",
+  "subcategory": "BIZ_COM",
+  "kind": "artefact",
+  "real": true,
+  "title": "Kodex",
+  "punchline": "Le brief print/digital infaillible",
+  "shortDesc": "Cahier des charges technique zéro défaut · Calculateur d'échelle automatique pour grands formats",
+  "longDesc": "Kodex transforme une intention en cahier des charges technique infaillible. Entonnoir guidé (imprimeur, réseaux sociaux, presse), saisie sectorisée, coffre-fort de vos assets, calculateur d'échelle automatique pour les grands formats. Sortie : un brief PDF prêt à envoyer à votre graphiste ou imprimeur.",
+  "icon": "kodex",
+  "price": 49,
+  "plan": "STARTER",
+  "plans_required": ["STARTER", "PRO", "MAX"],
+  "workspace": "fullscreen",
+  "workspace_route": "kodex",
+  "ai_optimized": "Claude",
+  "ai_compatible": ["Claude", "Gemini", "ChatGPT", "Mistral", "Grok", "Perplexity", "Llama"],
+  "copyright": "© 2026-2027 Protein Studio",
+  "version": "1.0.0-skeleton",
+  "killer_feature": "calculateur-echelle",
+  "tags": ["communication", "print", "digital", "brief", "production"]
+}
