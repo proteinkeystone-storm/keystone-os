@@ -1185,7 +1185,7 @@ function _renderLineChart(byDay) {
 
   // Hover dots
   const dots = points.map(p => `
-    <circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--gold, #c9a84c)">
+    <circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--gold, #6366f1)">
       <title>${p.day} : ${p.cnt} scan(s)</title>
     </circle>
   `).join('');
@@ -1193,8 +1193,8 @@ function _renderLineChart(byDay) {
   return `
     <svg viewBox="0 0 ${W} ${H}" class="sdqr-line-chart">
       ${yTickLines}
-      <path d="${area}" fill="rgba(184,148,90,.10)" stroke="none"/>
-      <path d="${path}" fill="none" stroke="var(--gold, #c9a84c)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${area}" fill="rgba(99,102,241,.10)" stroke="none"/>
+      <path d="${path}" fill="none" stroke="var(--gold, #6366f1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
       ${xLabels}
     </svg>

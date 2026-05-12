@@ -50,7 +50,7 @@ export const DEFAULT_DESIGN = {
   },
   fg     : '#000000',
   bg     : '#ffffff',
-  gradient: { enabled: false, from: '#1B2A4A', to: '#c9a84c', angle: 45 },
+  gradient: { enabled: false, from: '#1B2A4A', to: '#6366f1', angle: 45 },
   logo   : { dataUrl: '', size: 0.20 },
 };
 

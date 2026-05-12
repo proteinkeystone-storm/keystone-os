@@ -5694,7 +5694,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   position: fixed; inset: 0; z-index: 9000;
   display: none;
   flex-direction: column;
-  background: linear-gradient(180deg, #0a1024 0%, #060a18 100%);
+  background: var(--navy);
   color: var(--text, #e8edf8);
   font-family: 'Source Sans 3', 'Helvetica Neue', sans-serif;
 }
@@ -5707,7 +5707,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   padding: 0 24px;
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid rgba(255,255,255,.07);
-  background: rgba(10,16,36,.65);
+  background: var(--navy2);
   backdrop-filter: blur(10px);
 }
 .sdqr-topbar-left  { display: flex; align-items: center; gap: 18px; }
@@ -5768,7 +5768,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-sidebar {
   width: 280px; flex-shrink: 0;
   border-right: 1px solid rgba(255,255,255,.07);
-  background: rgba(10,16,36,.45);
+  background: var(--navy2);
   display: flex; flex-direction: column;
 }
 .sdqr-sidebar-head {
@@ -6047,7 +6047,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
    pendant qu'on bouge couleurs/dégradés/logo. */
 .sdqr-detail-card {
   padding: 20px;
-  background: rgba(10,16,36,.92);          /* opaque pour ne pas voir au travers */
+  background: var(--navy);          /* opaque pour ne pas voir au travers */
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 12px;
