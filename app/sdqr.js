@@ -992,7 +992,7 @@ function _renderStatsBody(data, qr) {
     <div class="sdqr-kpi-grid">
       ${_kpiCard('Scans totaux', t.total, 'Sur la période sélectionnée')}
       ${_kpiCard('Visiteurs uniques', t.unique, 'Empreintes UA distinctes')}
-      ${_kpiCard('Aujourd\\'hui', t.today, 'Depuis minuit')}
+      ${_kpiCard("Aujourd'hui", t.today, 'Depuis minuit')}
       ${_kpiCard('7 derniers jours', t.week, 'Glissants')}
     </div>
 
