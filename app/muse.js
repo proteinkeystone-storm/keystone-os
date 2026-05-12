@@ -11,9 +11,10 @@
    objections acquéreurs. Un mode "Mix tout" couvre les 4 en un.
 
    Concept UX : un plateau de jeu créatif (pas un formulaire).
-   - Étape 1 TOPIC      : 6 grandes cards plein écran pour choisir
-                          un mode (Naming · Punchline · Ambiance ·
-                          Marketing · Objections · Mix-tout)
+   - Étape 1 TOPIC      : 8 grandes cards plein écran pour choisir
+                          un mode (Naming · Positionnement · Punchline ·
+                          Ambiance · Marketing · Objections · Libre ·
+                          Mix-tout)
    - Étape 2 CALIBRATE  : sliders visuels + checkboxes imagées +
                           jauge "Qualité du brief" qui monte en
                           live + bouton "Surprends-moi" 🎲
@@ -422,7 +423,7 @@ function _viewTopic() {
       en une seule session.
     </p>
 
-    <div data-slot="mode-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;margin-top:24px;">
+    <div data-slot="mode-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(230px, 1fr));gap:14px;margin-top:24px;">
       <div class="ws-empty" style="grid-column:1/-1;">
         <div class="ws-empty-icon">${icon('sparkles', 24)}</div>
         <p class="ws-empty-desc">Chargement des modes…</p>

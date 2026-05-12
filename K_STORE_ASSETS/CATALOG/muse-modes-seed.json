@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "updatedAt": "2026-05-13",
-  "_comment": "Catalogue déclaratif des modes de brainstorming Muse. Chaque mode pilote l'étape 3 du workspace : prompt template envoyé au LLM, structure de l'output, clusters attendus, enrichissements optionnels (check domaine, lien INPI...). Modifiable sans toucher au code. Sprint Muse-Brainstorm-J1 : 6 modes initiaux validés terrain (chargée de com immobilière).",
+  "_comment": "Catalogue déclaratif des modes de brainstorming Muse. Chaque mode pilote l'étape 3 du workspace : prompt template envoyé au LLM, structure de l'output, clusters attendus, enrichissements optionnels (check domaine, lien INPI...). Modifiable sans toucher au code. Sprint Muse-Brainstorm-J1 : 8 modes validés terrain (chargée de com immobilière) + 6 frameworks pro activables sur chaque mode en étape 3 (Sprint J2-J3).",
 
   "modes": [
     {
@@ -19,6 +19,26 @@
       "enrichments": ["domain_check", "inpi_link"],
       "prompt_role": "Tu es naming strategist senior spécialisé en programmes immobiliers résidentiels haut de gamme. Tu maîtrises l'art de trouver des noms qui évoquent, mémorisent et différencient.",
       "prompt_instruction": "Génère 15 propositions de noms pour ce programme. Pour chaque proposition, donne : un titre principal (1 à 4 mots), un sous-titre évocateur (1 ligne), un cluster (parmi : nature-lieu, patrimoine, contemporain). Évite les clichés (Le Domaine de X, Les Jardins de X, Résidence Le X — sauf si vraiment justifié). Privilégie des noms qui pourraient se prononcer en 1 souffle et qui sonnent juste avec la cible.",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "positioning",
+      "label": "Positionnement & angle",
+      "tagline": "Définissez la promesse stratégique du programme",
+      "icon": "target",
+      "color_hex": "#14b8a6",
+      "ideas_count": 10,
+      "clusters": [
+        { "id": "promesse",        "label": "Promesse principale" },
+        { "id": "differenciation", "label": "Différenciation concurrentielle" },
+        { "id": "narration",       "label": "Angles narratifs" }
+      ],
+      "enrichments": [],
+      "prompt_role": "Tu es directeur stratégie senior chez un cabinet de conseil en marketing immobilier. Tu aides les promoteurs à formuler le positionnement unique d'un programme AVANT tout déploiement com (avant nom, avant accroches).",
+      "prompt_instruction": "Propose 10 angles de positionnement possibles pour ce programme. Pour chacun : un titre court (la promesse en 1 phrase), un développement de 2 lignes (qui démontre la différenciation et l'unicité), un cluster (promesse / differenciation / narration). Évite les positionnements génériques 'élégance & raffinement' ou 'votre nouveau chez vous'. Cherche les angles inattendus mais vrais (héritage local, geste architectural précis, rapport au paysage, mode de vie spécifique).",
       "output_schema": {
         "ideas": "array of { title, subtitle, cluster, rationale }"
       }
@@ -107,6 +127,26 @@
     },
 
     {
+      "id": "freeform",
+      "label": "Sujet libre",
+      "tagline": "Brainstormez tout autre sujet à votre façon",
+      "icon": "edit",
+      "color_hex": "#64748b",
+      "ideas_count": 12,
+      "clusters": [
+        { "id": "principales", "label": "Idées principales" },
+        { "id": "variations",  "label": "Variations & déclinaisons" },
+        { "id": "inattendues", "label": "Pistes inattendues" }
+      ],
+      "enrichments": [],
+      "prompt_role": "Tu es brainstormeur créatif senior, spécialisé en communication immobilière mais capable de t'adapter à tout sujet précis. Tu sais générer des idées variées et concrètes.",
+      "prompt_instruction": "Sujet libre fourni par l'utilisateur dans le champ 'extra' du brief. Produis 12 idées concrètes et activables liées à ce sujet, réparties en 3 clusters : 6 idées principales, 3 variations, 3 pistes inattendues. Pour chaque idée : titre court (verbe d'action), description en 2 lignes, cluster, courte justification (pourquoi ça marche).",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
       "id": "mix-all",
       "label": "Mix tout",
       "tagline": "Une session complète · 4 livrables d'un coup",
@@ -162,9 +202,11 @@
   ],
 
   "frameworks": [
-    { "id": "scamper",    "label": "SCAMPER",            "icon": "sliders",  "description": "Substituer, Combiner, Adapter, Modifier, Permuter, Éliminer, Réorganiser" },
-    { "id": "six-hats",   "label": "6 chapeaux",         "icon": "palette",  "description": "6 angles d'analyse (factuel, émotionnel, risques, optimiste, créatif, organisation)" },
-    { "id": "worst-idea", "label": "Worst Idea",         "icon": "x",        "description": "Génère la pire idée possible — libère la créativité par décalage" },
-    { "id": "reverse",    "label": "Reverse",            "icon": "refresh",  "description": "Comment empêcher que ça marche → inverser les solutions" }
+    { "id": "scamper",    "label": "SCAMPER",            "icon": "sliders",     "description": "Substituer, Combiner, Adapter, Modifier, Permuter, Éliminer, Réorganiser — 7 angles pour creuser une idée" },
+    { "id": "six-hats",   "label": "6 chapeaux",         "icon": "palette",     "description": "6 angles d'analyse à la De Bono (factuel, émotionnel, risques, optimiste, créatif, organisation)" },
+    { "id": "crazy8s",    "label": "Crazy 8s",           "icon": "history",     "description": "8 idées en 8 minutes — force la quantité avant la qualité (Design Sprint)", "timer_seconds": 480 },
+    { "id": "worst-idea", "label": "Worst Idea",         "icon": "x",           "description": "Génère la pire idée possible — libère la créativité par décalage" },
+    { "id": "reverse",    "label": "Reverse",            "icon": "refresh",     "description": "Comment garantir que ça échoue ? puis inverser les solutions trouvées" },
+    { "id": "five-whys",  "label": "5 Whys",             "icon": "help-circle", "description": "Creuse une question 5 fois 'Pourquoi ?' pour atteindre la racine du positionnement" }
   ]
 }
