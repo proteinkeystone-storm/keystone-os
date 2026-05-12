@@ -38,7 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -122,6 +122,17 @@ export default {
       if (path.startsWith('/api/qr/') && method === 'DELETE') {
         const qrId = path.split('/').pop();
         return handleDeleteQr(request, env, qrId);
+      }
+      // Sprint SDQR-4 — analytics
+      // /api/qr/:id/stats  → JSON agrégats
+      // /api/qr/:id/scans.csv → CSV brut RGPD-safe
+      const qrStatsMatch = path.match(/^\/api\/qr\/([^/]+)\/stats$/);
+      if (qrStatsMatch && method === 'GET') {
+        return handleStatsQr(request, env, qrStatsMatch[1]);
+      }
+      const qrCsvMatch = path.match(/^\/api\/qr\/([^/]+)\/scans\.csv$/);
+      if (qrCsvMatch && method === 'GET') {
+        return handleScansCsv(request, env, qrCsvMatch[1]);
       }
 
       // ── PADs ─────────────────────────────────────────────────

@@ -7,6 +7,8 @@
      GET  /api/qr           Tenant — liste les QRs du tenant
      PATCH /api/qr/:id      Tenant — modifie cible / status / nom / tags
      DELETE /api/qr/:id     Tenant — suppression definitive (cascade)
+     GET /api/qr/:id/stats  Tenant — agrégations scan (period=7d|30d|90d|all)
+     GET /api/qr/:id/scans.csv Tenant — export brut (RGPD-safe : 0 PII)
 
    RGPD : aucune IP brute stockée. country via cf.country, device_kind
    et os_kind dérivés du User-Agent, ua_hash = sha-256(UA) tronqué.
@@ -462,4 +464,163 @@ export async function handleDeleteQr(request, env, qrId) {
   } catch (e) {
     return err('Suppression échouée : ' + e.message, 500, origin);
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GET /api/qr/:id/stats — agrégations scans pour un QR (Sprint SDQR-4)
+// Query string : period=7d|30d|90d|all (défaut 30d)
+// Retour : { totals, byDay[], byCountry[], byDevice[], byOs[] }
+// Tout est RGPD-safe : pas d IP brute exposée, juste les agrégats.
+// ══════════════════════════════════════════════════════════════════
+
+const PERIOD_DAYS = { '7d': 7, '30d': 30, '90d': 90, 'all': null };
+
+export async function handleStatsQr(request, env, qrId) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = getTenantId(request);
+  const url      = new URL(request.url);
+  const period   = url.searchParams.get('period') || '30d';
+  const days     = PERIOD_DAYS[period];   // null = all
+
+  // Charge le QR pour récupérer son short_id (les scans sont indexés par short_id)
+  const row = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NULL`)
+    .bind(tenantId, qrId).first();
+  if (!row) return err('QR introuvable', 404, origin);
+
+  let entity;
+  try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
+
+  // QR statique : pas de scans trackés (par design, pas de /r/<id>)
+  if (entity.mode === 'static') {
+    return json({
+      mode: 'static',
+      info: 'Mode statique — aucun scan tracké (par design, RGPD natif).',
+      totals: { total: 0, unique: 0, today: 0, week: 0 },
+      byDay: [], byCountry: [], byDevice: [], byOs: [],
+    }, 200, origin);
+  }
+
+  const shortId = entity.short_id;
+  if (!shortId) {
+    return json({ totals: { total:0, unique:0, today:0, week:0 }, byDay:[], byCountry:[], byDevice:[], byOs:[] }, 200, origin);
+  }
+
+  // Filtre temporel optionnel pour les agrégats
+  const periodWhere = days ? `AND ts >= datetime('now', '-${days} days')` : '';
+
+  // ── Totaux ──────────────────────────────────────────────────
+  const totals = await env.DB.prepare(`
+    SELECT
+      COUNT(*)                                     AS total,
+      COUNT(DISTINCT ua_hash)                      AS unique,
+      SUM(CASE WHEN ts >= datetime('now', 'start of day') THEN 1 ELSE 0 END) AS today,
+      SUM(CASE WHEN ts >= datetime('now', '-7 days')      THEN 1 ELSE 0 END) AS week
+    FROM qr_scans
+    WHERE short_id = ? ${periodWhere}
+  `).bind(shortId).first() || { total: 0, unique: 0, today: 0, week: 0 };
+
+  // ── Scans par jour (pour line chart) ───────────────────────
+  const { results: byDay } = await env.DB.prepare(`
+    SELECT date(ts) AS day, COUNT(*) AS cnt
+    FROM qr_scans
+    WHERE short_id = ? ${periodWhere}
+    GROUP BY day
+    ORDER BY day ASC
+  `).bind(shortId).all();
+
+  // ── Top pays ──────────────────────────────────────────────
+  const { results: byCountry } = await env.DB.prepare(`
+    SELECT country, COUNT(*) AS cnt
+    FROM qr_scans
+    WHERE short_id = ? AND country IS NOT NULL ${periodWhere}
+    GROUP BY country
+    ORDER BY cnt DESC
+    LIMIT 10
+  `).bind(shortId).all();
+
+  // ── Device kind ────────────────────────────────────────────
+  const { results: byDevice } = await env.DB.prepare(`
+    SELECT device_kind, COUNT(*) AS cnt
+    FROM qr_scans
+    WHERE short_id = ? ${periodWhere}
+    GROUP BY device_kind
+    ORDER BY cnt DESC
+  `).bind(shortId).all();
+
+  // ── OS ─────────────────────────────────────────────────────
+  const { results: byOs } = await env.DB.prepare(`
+    SELECT os_kind, COUNT(*) AS cnt
+    FROM qr_scans
+    WHERE short_id = ? ${periodWhere}
+    GROUP BY os_kind
+    ORDER BY cnt DESC
+  `).bind(shortId).all();
+
+  return json({
+    mode: 'dynamic',
+    period,
+    totals: {
+      total : totals.total  || 0,
+      unique: totals.unique || 0,
+      today : totals.today  || 0,
+      week  : totals.week   || 0,
+    },
+    byDay     : (byDay     || []).map(r => ({ day: r.day, cnt: r.cnt })),
+    byCountry : (byCountry || []).map(r => ({ country: r.country, cnt: r.cnt })),
+    byDevice  : (byDevice  || []).map(r => ({ device: r.device_kind || 'other', cnt: r.cnt })),
+    byOs      : (byOs      || []).map(r => ({ os: r.os_kind || 'other', cnt: r.cnt })),
+  }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GET /api/qr/:id/scans.csv — export brut des scans (RGPD-safe)
+// Colonnes : ts, country, device_kind, os_kind, ua_hash (8 hex tronqué)
+// Aucune PII exposée. Pour audit / import dans tableur tiers.
+// ══════════════════════════════════════════════════════════════════
+export async function handleScansCsv(request, env, qrId) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = getTenantId(request);
+
+  const row = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NULL`)
+    .bind(tenantId, qrId).first();
+  if (!row) return err('QR introuvable', 404, origin);
+
+  let entity;
+  try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
+  if (entity.mode === 'static' || !entity.short_id) {
+    return new Response('ts,country,device_kind,os_kind,ua_hash\n', {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="scans-${qrId}.csv"`,
+        'Access-Control-Allow-Origin': origin,
+      },
+    });
+  }
+
+  const { results } = await env.DB.prepare(`
+    SELECT ts, country, device_kind, os_kind, ua_hash
+    FROM qr_scans
+    WHERE short_id = ?
+    ORDER BY ts DESC
+    LIMIT 10000
+  `).bind(entity.short_id).all();
+
+  const rows = (results || []).map(r =>
+    `${r.ts},${r.country || ''},${r.device_kind || ''},${r.os_kind || ''},${r.ua_hash || ''}`
+  ).join('\n');
+  const csv = `ts,country,device_kind,os_kind,ua_hash\n${rows}`;
+
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="scans-${entity.short_id}.csv"`,
+      'Access-Control-Allow-Origin': origin,
+    },
+  });
 }

@@ -102,6 +102,20 @@ async function _apiDelete(id) {
   return true;
 }
 
+// Sprint SDQR-4 — analytics
+async function _apiStats(id, period = '30d') {
+  const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}/stats?period=${period}`, {
+    headers: { 'X-Tenant-Id': _tenantId() },
+  });
+  if (!r.ok) throw new Error('API stats error ' + r.status);
+  return r.json();
+}
+
+function _apiScansCsvUrl(id) {
+  // Worker accepte X-Tenant-Id en query string aussi pour download direct
+  return `${CF_API}/api/qr/${encodeURIComponent(id)}/scans.csv`;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // QR SVG rendering (basic, sans design custom — Sprint SDQR-3)
 // ══════════════════════════════════════════════════════════════════
@@ -173,7 +187,7 @@ function _renderShell() {
       <main class="sdqr-main">
         <div class="sdqr-tabs">
           <button class="sdqr-tab active" data-view="studio">Studio</button>
-          <button class="sdqr-tab sdqr-tab--soon" data-view="stats" disabled title="Disponible Sprint SDQR-4">Statistiques · à venir</button>
+          <button class="sdqr-tab" data-view="stats">Statistiques</button>
         </div>
         <div class="sdqr-content" id="sdqr-content">
           ${_renderEmptyStudio()}
@@ -215,9 +229,43 @@ function _wireShell(panel) {
       panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       _currentView = t.dataset.view;
-      // Sprint SDQR-4 : router vers _renderStats
+      // Sprint SDQR-4 — dispatch selon la vue + QR sélectionné
+      _renderCurrentView(panel);
     });
   });
+}
+
+// Affiche la vue Studio ou Stats selon _currentView, scopé au QR
+// sélectionné dans la sidebar. Si aucun QR sélectionné, empty state.
+function _renderCurrentView(panel) {
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+  const qr = _selectedId ? _cachedQrs.find(q => q.id === _selectedId) : null;
+
+  if (_currentView === 'stats') {
+    if (!qr) {
+      content.innerHTML = `
+        <div class="sdqr-empty-state">
+          <div class="sdqr-empty-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:56px;height:56px;opacity:.45"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <h2 class="sdqr-empty-title">Statistiques souveraines</h2>
+          <p class="sdqr-empty-text">Sélectionne un QR dans la barre latérale pour voir ses scans, sa géographie, ses appareils.<br>Aucune donnée tierce — tout est aggrégé chez toi (RGPD natif).</p>
+        </div>
+      `;
+      return;
+    }
+    _openQrStats(panel, qr);
+    return;
+  }
+
+  // Vue Studio (par défaut)
+  if (!qr) {
+    content.innerHTML = _renderEmptyStudio();
+    panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
+    return;
+  }
+  _openQrDetail(panel, qr);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -261,7 +309,8 @@ async function _refreshList(panel) {
     btn.addEventListener('click', () => {
       _selectedId = btn.dataset.qrId;
       _refreshList(panel);
-      _openQrDetail(panel, _cachedQrs.find(q => q.id === _selectedId));
+      // Dispatch selon la vue courante (Studio ou Stats)
+      _renderCurrentView(panel);
     });
   });
 }
@@ -852,6 +901,233 @@ async function _openQrDetail(panel, qr) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SPRINT SDQR-4 — Dashboard Stats (analytics souveraines)
+// ══════════════════════════════════════════════════════════════════
+// Charts custom SVG (pas de Chart.js → cohérence Keystone, 0 dep).
+// Layout : KPI cards en haut, line chart période, bars geo/device/os.
+
+let _statsPeriod = '30d';   // 7d | 30d | 90d | all
+const PERIOD_LABELS = { '7d': '7 jours', '30d': '30 jours', '90d': '90 jours', 'all': 'Tout' };
+
+async function _openQrStats(panel, qr) {
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+
+  // Coquille initiale (loader)
+  content.innerHTML = `
+    <div class="sdqr-stats-wrap">
+      <div class="sdqr-stats-head">
+        <div class="sdqr-stats-head-left">
+          <h2 class="sdqr-stats-title">${_esc(qr.name || '(sans nom)')}</h2>
+          <div class="sdqr-stats-subtitle">Statistiques souveraines — aucune donnée tierce</div>
+        </div>
+        <div class="sdqr-stats-head-right">
+          <div class="sdqr-period-pills" id="sdqr-period-pills">
+            ${Object.entries(PERIOD_LABELS).map(([k, lbl]) => `
+              <button class="sdqr-period-pill ${_statsPeriod === k ? 'is-active' : ''}" data-period="${k}">${lbl}</button>
+            `).join('')}
+          </div>
+          <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-export-csv" title="Export brut des scans (RGPD-safe)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+        </div>
+      </div>
+      <div class="sdqr-stats-body" id="sdqr-stats-body">
+        <div class="sdqr-empty-mini">Chargement des statistiques…</div>
+      </div>
+    </div>
+  `;
+
+  // Wire period pills
+  content.querySelectorAll('.sdqr-period-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _statsPeriod = btn.dataset.period;
+      content.querySelectorAll('.sdqr-period-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+      _loadStats(content, qr);
+    });
+  });
+
+  // Wire CSV export
+  content.querySelector('#sdqr-export-csv')?.addEventListener('click', () => _exportScansCsv(qr));
+
+  await _loadStats(content, qr);
+}
+
+async function _loadStats(content, qr) {
+  const body = content.querySelector('#sdqr-stats-body');
+  if (!body) return;
+  body.innerHTML = `<div class="sdqr-empty-mini">Chargement…</div>`;
+  try {
+    const data = await _apiStats(qr.id, _statsPeriod);
+    body.innerHTML = _renderStatsBody(data, qr);
+  } catch (e) {
+    body.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur : ${_esc(e.message)}</div>`;
+  }
+}
+
+function _renderStatsBody(data, qr) {
+  // QR statique → empty state explicite
+  if (data.mode === 'static') {
+    return `
+      <div class="sdqr-stats-static">
+        <div class="sdqr-empty-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:48px;height:48px;opacity:.45"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h3 class="sdqr-stats-static-title">QR statique — aucun tracking</h3>
+        <p class="sdqr-stats-static-text">Par design, les QR statiques encodent les données directement dans les pixels.<br>Aucun scan n'est tracké, aucune donnée n'est collectée.</p>
+        <p class="sdqr-stats-static-text" style="margin-top:14px;font-size:11px;opacity:.5">${_esc(data.info || '')}</p>
+      </div>
+    `;
+  }
+
+  const t = data.totals || { total: 0, unique: 0, today: 0, week: 0 };
+  const hasData = t.total > 0;
+
+  return `
+    <!-- KPI cards -->
+    <div class="sdqr-kpi-grid">
+      ${_kpiCard('Scans totaux', t.total, 'Sur la période sélectionnée')}
+      ${_kpiCard('Visiteurs uniques', t.unique, 'Empreintes UA distinctes')}
+      ${_kpiCard('Aujourd\\'hui', t.today, 'Depuis minuit')}
+      ${_kpiCard('7 derniers jours', t.week, 'Glissants')}
+    </div>
+
+    ${hasData ? `
+      <!-- Line chart : scans par jour -->
+      <div class="sdqr-chart-card">
+        <div class="sdqr-chart-title">Évolution des scans</div>
+        ${_renderLineChart(data.byDay)}
+      </div>
+
+      <div class="sdqr-chart-grid">
+        <div class="sdqr-chart-card">
+          <div class="sdqr-chart-title">Pays (top 10)</div>
+          ${_renderBarChart(data.byCountry.map(r => ({ label: r.country || '—', value: r.cnt })))}
+        </div>
+        <div class="sdqr-chart-card">
+          <div class="sdqr-chart-title">Appareils</div>
+          ${_renderBarChart(data.byDevice.map(r => ({ label: _deviceLabel(r.device), value: r.cnt })))}
+        </div>
+        <div class="sdqr-chart-card">
+          <div class="sdqr-chart-title">Systèmes</div>
+          ${_renderBarChart(data.byOs.map(r => ({ label: _osLabel(r.os), value: r.cnt })))}
+        </div>
+      </div>
+    ` : `
+      <div class="sdqr-stats-empty">
+        <div class="sdqr-empty-mini">Aucun scan pour cette période. Le QR n'a peut-être pas encore été scanné, ou tu peux élargir la période en haut à droite.</div>
+      </div>
+    `}
+  `;
+}
+
+function _kpiCard(label, value, hint) {
+  return `
+    <div class="sdqr-kpi-card">
+      <div class="sdqr-kpi-label">${_esc(label)}</div>
+      <div class="sdqr-kpi-value">${value.toLocaleString('fr-FR')}</div>
+      <div class="sdqr-kpi-hint">${_esc(hint)}</div>
+    </div>
+  `;
+}
+
+// Line chart custom SVG. Points = byDay [{day:'2026-05-12', cnt:7}, ...]
+function _renderLineChart(byDay) {
+  if (!byDay?.length) {
+    return `<div class="sdqr-empty-mini">Pas de scans sur la période.</div>`;
+  }
+  const W = 720, H = 180;
+  const padL = 36, padR = 16, padT = 14, padB = 28;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const maxV = Math.max(...byDay.map(p => p.cnt), 1);
+  const stepX = byDay.length === 1 ? 0 : innerW / (byDay.length - 1);
+
+  const points = byDay.map((p, i) => {
+    const x = padL + i * stepX;
+    const y = padT + innerH - (p.cnt / maxV) * innerH;
+    return { x, y, day: p.day, cnt: p.cnt };
+  });
+
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area = `${path} L ${points[points.length-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L ${points[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+
+  // Y axis ticks (0, max/2, max)
+  const yTicks = [0, Math.ceil(maxV/2), maxV];
+  const yTickLines = yTicks.map(v => {
+    const y = padT + innerH - (v / maxV) * innerH;
+    return `<line x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+            <text x="${padL-6}" y="${y+3}" text-anchor="end" fill="rgba(220,225,240,.4)" font-size="9">${v}</text>`;
+  }).join('');
+
+  // X axis labels (first, middle, last)
+  const xIdx = byDay.length === 1 ? [0] : [0, Math.floor(byDay.length/2), byDay.length-1];
+  const xLabels = xIdx.map(i => {
+    const p = points[i];
+    const dateLabel = byDay[i].day.slice(5);   // MM-DD
+    return `<text x="${p.x}" y="${H-8}" text-anchor="middle" fill="rgba(220,225,240,.4)" font-size="9">${dateLabel}</text>`;
+  }).join('');
+
+  // Hover dots
+  const dots = points.map(p => `
+    <circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--gold, #c9a84c)">
+      <title>${p.day} : ${p.cnt} scan(s)</title>
+    </circle>
+  `).join('');
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" class="sdqr-line-chart">
+      ${yTickLines}
+      <path d="${area}" fill="rgba(184,148,90,.10)" stroke="none"/>
+      <path d="${path}" fill="none" stroke="var(--gold, #c9a84c)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${xLabels}
+    </svg>
+  `;
+}
+
+// Horizontal bar chart custom SVG. items = [{label, value}, ...]
+function _renderBarChart(items) {
+  if (!items?.length) {
+    return `<div class="sdqr-empty-mini">Aucune donnée.</div>`;
+  }
+  const maxV = Math.max(...items.map(i => i.value), 1);
+  return `
+    <ul class="sdqr-bar-list">
+      ${items.map(it => `
+        <li class="sdqr-bar-row">
+          <span class="sdqr-bar-label">${_esc(it.label)}</span>
+          <span class="sdqr-bar-track">
+            <span class="sdqr-bar-fill" style="width:${(it.value/maxV*100).toFixed(1)}%"></span>
+          </span>
+          <span class="sdqr-bar-value">${it.value.toLocaleString('fr-FR')}</span>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
+
+const _DEVICE_LABELS = { mobile: 'Mobile', desktop: 'Desktop', tablet: 'Tablette', other: 'Autre' };
+const _OS_LABELS = { ios: 'iOS', android: 'Android', windows: 'Windows', macos: 'macOS', linux: 'Linux', other: 'Autre' };
+function _deviceLabel(k) { return _DEVICE_LABELS[k] || k || 'Autre'; }
+function _osLabel(k)     { return _OS_LABELS[k]     || k || 'Autre'; }
+
+async function _exportScansCsv(qr) {
+  try {
+    const r = await fetch(_apiScansCsvUrl(qr.id), {
+      headers: { 'X-Tenant-Id': _tenantId() },
+    });
+    if (!r.ok) throw new Error('Export error ' + r.status);
+    const blob = await r.blob();
+    _triggerDownload(blob, `scans-${_slug(qr.name)}-${qr.short_id || qr.id.slice(0,8)}.csv`);
+  } catch (e) {
+    alert('Erreur export CSV : ' + e.message);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
