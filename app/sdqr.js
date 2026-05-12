@@ -19,10 +19,11 @@
 
 import { CF_API } from './pads-loader.js';
 import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
+import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
-let _qrLib       = null;       // lazy import
+let _qrLib       = null;       // lazy import (legacy createSvgTag fallback)
 let _cachedQrs   = [];         // dernière liste reçue
 let _currentView = 'studio';   // 'studio' | 'stats'
 let _selectedId  = null;       // QR sélectionné dans la sidebar
@@ -105,15 +106,10 @@ async function _apiDelete(id) {
 // QR SVG rendering (basic, sans design custom — Sprint SDQR-3)
 // ══════════════════════════════════════════════════════════════════
 
-async function _renderQrSvg(text, sizePx = 220) {
-  const qrcode = await _loadQrLib();
-  // typeNumber:0 = auto, errorCorrectionLevel:'M' = robuste sans pénalité
-  const qr = qrcode(0, 'M');
-  qr.addData(text);
-  qr.make();
-  const cellSize = Math.floor(sizePx / qr.getModuleCount());
-  const margin   = cellSize * 2;
-  return qr.createSvgTag({ cellSize, margin, scalable: true });
+async function _renderQrSvg(text, sizePx = 220, design = null) {
+  // Sprint SDQR-3 : on délègue au moteur custom (sdqr-render.js) qui
+  // gère les formes modules, ancres, couleurs, gradient, logo central.
+  return renderQrCustom(text, design, sizePx);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -604,6 +600,7 @@ async function _openQrDetail(panel, qr) {
             <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-payload">Copier</button>
           </div>
         </div>
+        ${_renderDesignPanel(qr)}
       </div>
       <div class="sdqr-detail-right">
         <label class="sdqr-field sdqr-field--inline">
@@ -661,15 +658,18 @@ async function _openQrDetail(panel, qr) {
     </div>
   `;
 
-  // Render le QR SVG depuis le contenu encodé (redirect URL ou payload statique)
+  // Render le QR SVG depuis le contenu encodé + le design custom (Sprint SDQR-3)
   try {
-    const svg = await _renderQrSvg(encodedForQr, 280);
+    const svg = await _renderQrSvg(encodedForQr, 280, qr.design);
     const wrap = content.querySelector('#sdqr-svg-wrap');
     if (wrap) wrap.innerHTML = svg;
   } catch (e) {
     const wrap = content.querySelector('#sdqr-svg-wrap');
     if (wrap) wrap.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur rendu QR : ${_esc(e.message)}</div>`;
   }
+
+  // Wire le panneau Design (Sprint SDQR-3 — collapsible, live preview)
+  _wireDesignPanel(content, qr, encodedForQr);
 
   // Copier (URL redirect OU payload encodé selon mode)
   content.querySelector('#sdqr-copy-payload')?.addEventListener('click', () => {
@@ -784,6 +784,277 @@ async function _openQrDetail(panel, qr) {
     } catch (e) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SPRINT SDQR-3 — Studio Design (panneau collapsible sous le QR)
+// ══════════════════════════════════════════════════════════════════
+// Contrôles : forme modules, forme ancres, couleur foreground + bg,
+// dégradé linéaire 2 stops + angle, logo central (upload + taille),
+// contrast checker temps réel. Live preview à chaque changement.
+//
+// Persistance : bouton "Sauvegarder le design" → PATCH /api/qr/:id
+// { design: {...} }. Le détail est ensuite re-rendu pour refresh
+// la liste sidebar (les vignettes pourraient utiliser le design plus tard).
+
+const SHAPE_OPTS = [
+  { id: 'square',  label: 'Carré' },
+  { id: 'dot',     label: 'Point' },
+  { id: 'rounded', label: 'Arrondi' },
+];
+
+function _renderDesignPanel(qr) {
+  const d = mergeDesign(qr.design);
+  return `
+    <details class="sdqr-design-panel" id="sdqr-design-panel">
+      <summary class="sdqr-design-summary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2a10 10 0 1 0 10 10c0-2.74-2.84-3.18-5-3.5"/></svg>
+        Personnaliser le design
+        <span class="sdqr-design-arrow">▾</span>
+      </summary>
+      <div class="sdqr-design-body">
+
+        <!-- Formes -->
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Modules</span>
+          <div class="sdqr-shape-pills" data-shape-target="module">
+            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.module.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Ancres</span>
+          <div class="sdqr-shape-pills" data-shape-target="anchor">
+            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+          </div>
+        </div>
+
+        <!-- Couleurs -->
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Mode couleur</span>
+          <div class="sdqr-shape-pills" data-color-mode>
+            <button class="sdqr-shape-pill ${!d.gradient.enabled ? 'is-active' : ''}" data-mode="solid">Unie</button>
+            <button class="sdqr-shape-pill ${d.gradient.enabled ? 'is-active' : ''}" data-mode="gradient">Dégradé</button>
+          </div>
+        </div>
+
+        <div class="sdqr-design-row sdqr-design-row--colors" data-when-solid hidden="${d.gradient.enabled ? 'hidden' : ''}">
+          <label class="sdqr-color-field">
+            <span class="sdqr-design-lbl-sm">Couleur</span>
+            <input type="color" id="sdqr-color-fg" value="${_esc(d.fg)}">
+          </label>
+          <label class="sdqr-color-field">
+            <span class="sdqr-design-lbl-sm">Fond</span>
+            <input type="color" id="sdqr-color-bg" value="${_esc(d.bg)}">
+          </label>
+        </div>
+
+        <div class="sdqr-design-row sdqr-design-row--colors" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
+          <label class="sdqr-color-field">
+            <span class="sdqr-design-lbl-sm">Départ</span>
+            <input type="color" id="sdqr-grad-from" value="${_esc(d.gradient.from)}">
+          </label>
+          <label class="sdqr-color-field">
+            <span class="sdqr-design-lbl-sm">Fin</span>
+            <input type="color" id="sdqr-grad-to" value="${_esc(d.gradient.to)}">
+          </label>
+          <label class="sdqr-color-field">
+            <span class="sdqr-design-lbl-sm">Fond</span>
+            <input type="color" id="sdqr-color-bg-grad" value="${_esc(d.bg)}">
+          </label>
+        </div>
+
+        <div class="sdqr-design-row" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
+          <span class="sdqr-design-lbl">Angle</span>
+          <div class="sdqr-slider-wrap">
+            <input type="range" id="sdqr-grad-angle" min="0" max="360" step="5" value="${d.gradient.angle}">
+            <span class="sdqr-slider-val" id="sdqr-grad-angle-val">${d.gradient.angle}°</span>
+          </div>
+        </div>
+
+        <!-- Logo -->
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Logo central</span>
+          <div class="sdqr-logo-controls">
+            ${d.logo.dataUrl ? `<div class="sdqr-logo-thumb"><img src="${_esc(d.logo.dataUrl)}" alt=""></div>` : ''}
+            <label class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" style="cursor:pointer">
+              ${d.logo.dataUrl ? 'Remplacer' : '+ Ajouter une image'}
+              <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
+            </label>
+            ${d.logo.dataUrl ? `<button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-logo-remove">Retirer</button>` : ''}
+          </div>
+        </div>
+
+        ${d.logo.dataUrl ? `
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Taille logo</span>
+          <div class="sdqr-slider-wrap">
+            <input type="range" id="sdqr-logo-size" min="10" max="30" step="1" value="${Math.round(d.logo.size * 100)}">
+            <span class="sdqr-slider-val" id="sdqr-logo-size-val">${Math.round(d.logo.size * 100)}%</span>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- Contrast checker + actions -->
+        <div class="sdqr-design-foot">
+          <div class="sdqr-contrast" id="sdqr-contrast"></div>
+          <button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs" id="sdqr-save-design">Sauvegarder le design</button>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+// État live du design pendant l'édition (avant save). Reset à chaque
+// ouverture de panel.
+let _editingDesign = null;
+
+function _wireDesignPanel(root, qr, encodedForQr) {
+  const panel = root.querySelector('#sdqr-design-panel');
+  if (!panel) return;
+  _editingDesign = mergeDesign(qr.design);
+
+  const _liveRerender = async () => {
+    try {
+      const svg = await renderQrCustom(encodedForQr, _editingDesign, 280);
+      const wrap = root.querySelector('#sdqr-svg-wrap');
+      if (wrap) wrap.innerHTML = svg;
+    } catch (e) { console.error('[sdqr-design] render', e); }
+    _updateContrastBadge(root);
+  };
+
+  // Pills formes (modules / ancres)
+  panel.querySelectorAll('[data-shape-target]').forEach(group => {
+    const target = group.dataset.shapeTarget;
+    group.querySelectorAll('.sdqr-shape-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _editingDesign[target].shape = btn.dataset.shape;
+        group.querySelectorAll('.sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+        _liveRerender();
+      });
+    });
+  });
+
+  // Mode couleur (solid / gradient)
+  panel.querySelectorAll('[data-color-mode] .sdqr-shape-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _editingDesign.gradient.enabled = btn.dataset.mode === 'gradient';
+      panel.querySelectorAll('[data-color-mode] .sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+      panel.querySelectorAll('[data-when-solid]').forEach(el => el.hidden = _editingDesign.gradient.enabled);
+      panel.querySelectorAll('[data-when-gradient]').forEach(el => el.hidden = !_editingDesign.gradient.enabled);
+      _liveRerender();
+    });
+  });
+
+  // Couleurs unies
+  panel.querySelector('#sdqr-color-fg')?.addEventListener('input', e => { _editingDesign.fg = e.target.value; _liveRerender(); });
+  panel.querySelector('#sdqr-color-bg')?.addEventListener('input', e => { _editingDesign.bg = e.target.value; _liveRerender(); });
+
+  // Couleurs gradient
+  panel.querySelector('#sdqr-grad-from')?.addEventListener('input', e => { _editingDesign.gradient.from = e.target.value; _liveRerender(); });
+  panel.querySelector('#sdqr-grad-to')?.addEventListener('input', e => { _editingDesign.gradient.to = e.target.value; _liveRerender(); });
+  panel.querySelector('#sdqr-color-bg-grad')?.addEventListener('input', e => { _editingDesign.bg = e.target.value; _liveRerender(); });
+
+  // Angle dégradé
+  panel.querySelector('#sdqr-grad-angle')?.addEventListener('input', e => {
+    _editingDesign.gradient.angle = parseInt(e.target.value, 10);
+    const valEl = panel.querySelector('#sdqr-grad-angle-val');
+    if (valEl) valEl.textContent = _editingDesign.gradient.angle + '°';
+    _liveRerender();
+  });
+
+  // Logo upload
+  panel.querySelector('#sdqr-logo-input')?.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      alert('Image trop lourde — max 500 Ko. Optimise via TinyPNG/Squoosh.');
+      return;
+    }
+    const dataUrl = await _fileToDataUrl(file);
+    _editingDesign.logo.dataUrl = dataUrl;
+    if (!_editingDesign.logo.size) _editingDesign.logo.size = 0.20;
+    _liveRerender();
+    // Re-render le panel pour afficher le thumb + le slider taille
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
+
+  // Retirer logo
+  panel.querySelector('#sdqr-logo-remove')?.addEventListener('click', () => {
+    _editingDesign.logo = { dataUrl: '', size: 0.20 };
+    _liveRerender();
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
+
+  // Taille logo
+  panel.querySelector('#sdqr-logo-size')?.addEventListener('input', e => {
+    _editingDesign.logo.size = parseInt(e.target.value, 10) / 100;
+    const valEl = panel.querySelector('#sdqr-logo-size-val');
+    if (valEl) valEl.textContent = e.target.value + '%';
+    _liveRerender();
+  });
+
+  // Sauvegarder le design
+  panel.querySelector('#sdqr-save-design')?.addEventListener('click', async () => {
+    const btn = panel.querySelector('#sdqr-save-design');
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '⏳ …';
+    try {
+      await _apiUpdate(qr.id, { design: _editingDesign });
+      qr.design = { ..._editingDesign };
+      btn.textContent = '✓ Design sauvegardé';
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
+    } catch (e) {
+      btn.textContent = '✗ ' + e.message;
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+    }
+  });
+
+  // Initial contrast badge
+  _updateContrastBadge(root);
+}
+
+// Re-render uniquement la zone .sdqr-design-body après upload/retrait logo
+// (préserve l'état ouvert <details> et le _editingDesign).
+function _refreshDesignPanelDom(root, qr, encodedForQr) {
+  const panel = root.querySelector('#sdqr-design-panel');
+  if (!panel) return;
+  const wasOpen = panel.open;
+  // On stocke le design en cours sur l'entité temporairement, puis re-render
+  const merged = { ..._editingDesign };
+  panel.outerHTML = _renderDesignPanel({ ...qr, design: merged });
+  _wireDesignPanel(root, qr, encodedForQr);
+  const newPanel = root.querySelector('#sdqr-design-panel');
+  if (newPanel && wasOpen) newPanel.open = true;
+}
+
+function _updateContrastBadge(root) {
+  const el = root.querySelector('#sdqr-contrast');
+  if (!el || !_editingDesign) return;
+  const fg = _editingDesign.gradient.enabled ? _editingDesign.gradient.from : _editingDesign.fg;
+  const bg = _editingDesign.bg;
+  if (!fg || !bg || bg === 'transparent') { el.innerHTML = ''; return; }
+  const ratio = contrastRatio(fg, bg);
+  const level = contrastLevel(fg, bg);
+  const labels = {
+    ok  : `Contraste excellent (${ratio.toFixed(1)}:1) — scannabilité optimale`,
+    warn: `Contraste limite (${ratio.toFixed(1)}:1) — certains scanners pourront peiner`,
+    bad : `Contraste insuffisant (${ratio.toFixed(1)}:1) — le QR risque d'être illisible`,
+  };
+  el.className = `sdqr-contrast sdqr-contrast--${level}`;
+  el.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><circle cx="12" cy="12" r="10"/>${level === 'ok' ? '<polyline points="9 12 11 14 15 9"/>' : '<line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12.01" y2="16"/>'}</svg>
+    ${labels[level]}
+  `;
+}
+
+function _fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
 
