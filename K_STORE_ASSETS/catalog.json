@@ -276,17 +276,17 @@
       "id": "A-COM-003",
       "padKey": null,
       "title": "Muse",
-      "subtitle": "Le moodboard de référence pour votre studio 3D · Prompt Maître + 4 CTA images",
+      "subtitle": "La planche d'ambiance pour votre studio 3D · 1 prompt → 1 moodboard complet",
       "category": "COM",
       "plan": "STARTER",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Muse prépare le moodboard que vous transmettrez à votre studio 3D spécialisé en illustration immobilière. Configurez le cadrage de l'illustration finale (drone, piéton, intérieur, terrasse, macro) et l'atmosphère (lumière, saison, palette végétale, figuration, matériaux, direction artistique). Muse assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT, Mistral, Grok). En retour, un fichier HTML autonome avec 4 boutons copy-to-clipboard qui génèrent des images de RÉFÉRENCE (Midjourney, Flux, DALL-E, Nano Banana) — Architecture, Lifestyle, Palette végétale, Textures. Ces images ne sont pas votre projet (modélisé par le studio sur plan) mais des inspirations d'ambiance, à glisser dans le brief du studio. Auto-injection du --ar pour cohérence ratio.",
+      "longDesc": "Muse prépare la planche d'ambiance que vous transmettrez à votre studio 3D spécialisé en illustration immobilière. Configurez le cadrage de l'illustration finale (drone, piéton, intérieur, terrasse, macro), l'atmosphère (lumière, saison, palette végétale, figuration, matériaux) et votre moteur d'image (Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion). Muse assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT). En retour, un fichier HTML avec un bouton 'Copier' unique qui produit, en une seule génération, une planche moodboard professionnelle de 6 vignettes cohérentes (architecture, lumière, palette végétale, matériaux, lifestyle, détail signature). Pratique standard des studios 3D : une planche cohérente vaut mieux que quatre images éparses à assembler à la main.",
       "icon": "palette",
       "ai_optimized": "Claude",
       "isNew": true,
       "published": true,
-      "tags": ["artefact", "moodboard", "studio-3d", "illustration-immobiliere", "midjourney", "flux", "muse"]
+      "tags": ["artefact", "moodboard", "planche-ambiance", "studio-3d", "illustration-immobiliere", "midjourney", "flux", "muse"]
     }
   ]
 }

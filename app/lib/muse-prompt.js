@@ -81,22 +81,24 @@ export async function buildPromptMaitre(state) {
   const coherence = checkRatioCoherence(ratio, viewpoint);
 
   // ── Consignes adaptées au moteur de génération d'images choisi ─
-  const engine = imageEngine || { id: 'midjourney', label: 'Midjourney v8.1', syntax: 'params', params_suffix: '--style raw --v 8.1', ratio_mode: 'param', style_hint: '' };
+  const engine = imageEngine || { id: 'midjourney', label: 'Midjourney v8.1', syntax: 'params', params_suffix: '--style raw --v 8.1', ratio_mode: 'param', moodboard_grid: 'as a single cohesive moodboard composition arranged in a 3x2 grid of 6 panels separated by thin pale dividers', moodboard_ratio: '3:2', style_hint: '' };
   const isParamsSyntax = engine.syntax === 'params';
+  // Pour une planche moodboard, on force le ratio à celui défini par le
+  // moteur (typiquement 3:2 — format planche éditoriale standard) plutôt
+  // que le ratio du support final (qui pilote l'illustration 3D livrée
+  // par le studio, pas la planche de référence).
+  const moodboardRatio = engine.moodboard_ratio || '3:2';
+  const moodboardArArg = ratioToMjArg(moodboardRatio);
   const suffix = [
-    engine.ratio_mode === 'param' ? (arArg || '--ar (à préciser)') : null,
+    engine.ratio_mode === 'param' ? (moodboardArArg || '--ar 3:2') : null,
     engine.params_suffix || null,
   ].filter(Boolean).join(' ').trim();
-  const ratioInWords = ratio
-    ? (ratio === '1:1' ? 'square 1:1 format'
-       : ratio.includes(':') && parseFloat(ratio.split(':')[0]) > parseFloat(ratio.split(':')[1])
-         ? `widescreen ${ratio} format`
-         : `vertical ${ratio} format`)
-    : 'standard format';
+  const ratioInWords = `widescreen ${moodboardRatio} moodboard layout`;
+  const gridInstruction = engine.moodboard_grid || 'as a single cohesive moodboard composition arranged in a 3x2 grid of 6 panels';
 
   const engineGuidance = isParamsSyntax
-    ? `**Syntaxe ${engine.label}** — utilise une suite dense de mots-clés séparés par des virgules, en anglais. Termine CHAQUE prompt par : \`${suffix}\` (paramètres techniques cliquables tels quels). Style : ${engine.style_hint || 'mots-clés évocateurs, qualité photo en fin de prompt'}.`
-    : `**Syntaxe ${engine.label}** — écris CHAQUE prompt en **prose narrative anglaise complète et fluide**, comme si tu briefais un photographe. **N'ajoute AUCUN paramètre technique** (pas de \`--ar\`, pas de \`--v\`, pas de \`--style\`). Mentionne le ratio en mots dans la phrase, par exemple "${ratioInWords}" intégré naturellement. Style : ${engine.style_hint || 'prose riche et précise, vocabulaire éditorial'}.`;
+    ? `**Syntaxe ${engine.label}** — utilise une suite dense de mots-clés séparés par des virgules, en anglais. Termine par : \`${suffix}\` (paramètres techniques cliquables tels quels). Style : ${engine.style_hint || 'mots-clés évocateurs, qualité photo en fin de prompt'}.`
+    : `**Syntaxe ${engine.label}** — écris le prompt en **prose narrative anglaise complète et fluide**, comme si tu briefais un photographe. **N'ajoute AUCUN paramètre technique** (pas de \`--ar\`, pas de \`--v\`, pas de \`--style\`). Mentionne le format en mots dans la phrase ("${ratioInWords}"). Style : ${engine.style_hint || 'prose riche et précise, vocabulaire éditorial'}.`;
 
   // ── Bloc 1 : Contraintes techniques (importées du support) ──
   const techLines = [
@@ -193,35 +195,50 @@ ${coherence ? `> ⚠️ **Note de cohérence** : ${coherence}\n` : ''}
 ## Section B — Master Concept (description narrative pour le studio)
 Un paragraphe descriptif riche (8 à 12 lignes) de l'illustration finale attendue : composition, qualité de lumière, ambiance générale, matériaux dominants, présence humaine, tonalité émotionnelle. Style : brief de DA à un studio 3D pro. **Tu décris ce que le studio doit produire**, pas une image que l'IA va générer.
 
-## Section C — Le Labo Moodboard de références (4 CTA copy-to-clipboard)
-Quatre boutons "**Copier**" stylisés, chacun donnant accès à un prompt optimisé pour générateur d'image IA (Midjourney, Flux, DALL-E, Nano Banana, Gemini). Implémente chaque bouton en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s.
+## Section C — La Planche d'ambiance (1 CTA copy-to-clipboard unique)
 
-Chaque prompt sert à générer une **image de référence** que le client glissera dans son partage avec le studio 3D. **Aucun de ces prompts ne doit décrire le projet réel — uniquement des références d'ambiance dans le même esprit.**
+**Approche moodboard professionnel** : au lieu de produire quatre prompts séparés à générer un par un, tu produis **UN SEUL prompt** qui génère **une planche d'ambiance complète, cohérente, en une seule image**. C'est la pratique standard des studios 3D et des directeurs artistiques : une planche unique (6 vignettes en grille) vaut mieux que quatre images éparses à assembler à la main. Garantit la cohérence palette/lumière/traitement entre toutes les références.
 
-Les 4 CTA — chacun doit produire un prompt anglais autonome adapté à **${engine.label}** :
+Un bouton "**Copier le prompt de la planche d'ambiance**" stylisé, implémenté en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s.
 
-1. **CTA Référence Architecture** — ambiance architecturale similaire (pas le projet)
-   Idée à exprimer : photographie/rendu d'une résidence contemporaine "dans le même esprit" que le programme, reprenant viewpoint + light + style + matériaux, en précisant "reference moodboard image only" et "NOT the actual project".
+### La planche à générer : 6 vignettes en grille 3×2
 
-2. **CTA Référence Lifestyle** — art de vivre suggéré (silhouettes abstraites uniquement)
-   Idée à exprimer : moodboard d'art de vivre dans un cadre résidentiel analogue, présence humaine éventuelle réduite à une suggestion atmosphérique (silhouette distante, pas de détails faciaux), atmosphère cohérente avec la lumière et la saison choisies.
+Le prompt unique doit décrire UNE image-planche composée des 6 vignettes thématiques suivantes, dans cet ordre (ligne du haut puis ligne du bas, de gauche à droite) :
 
-3. **CTA Référence Paysage & Végétation** — palette végétale pour le paysagiste 3D
-   Idée à exprimer : étude paysagère gros plan, plantations matures correspondant à la palette choisie, sans bâtiment visible, pour servir de référence au landscape architect du studio.
+1. **Vignette 1 (haut gauche) — Architecture extérieure de référence**
+   Photographie/rendu d'une résidence contemporaine "dans le même esprit" que le programme : viewpoint + style + matériaux dominants.
 
-4. **CTA Référence Textures & Matériaux** — gros plans pour le shader artist 3D
-   Idée à exprimer : sample board / planche de matériaux en macro photographie, matériaux issus du champ "Matériaux à mettre en avant" du brief, sans architecture visible, lumière naturelle révélant la micro-texture.
+2. **Vignette 2 (haut centre) — Lumière & atmosphère**
+   Étude de la qualité de lumière sur une façade analogue : light + season + style.
 
-**Contraintes techniques de chaque prompt secondaire — à respecter STRICTEMENT** :
+3. **Vignette 3 (haut droite) — Palette végétale**
+   Plantations matures, sans bâtiment visible. Issu de l'ancre vegetation.
 
-- **Moteur d'image cible** : l'utilisateur va coller ces prompts dans **${engine.label}**. ${engineGuidance}
-- **Langue : ANGLAIS uniquement.** Pas un mot de français dans les prompts copiables.
-- **Longueur** : entre 60 et 110 mots par prompt.
-- **Mots-clés qualité** à intégrer : photorealistic, 8k, ultra-detailed, editorial photography (intègre-les naturellement selon la syntaxe du moteur — mots-clés pour Midjourney/Flux/SD, prose intégrée pour DALL-E/Imagen).
-- Réutilise les ancres techniques de la section 4 du brief.
-- Inclut systématiquement "reference moodboard image" ou "inspiration reference" ou "ambient mood reference".
+4. **Vignette 4 (bas gauche) — Matériaux & textures**
+   Gros plan macro de 1 à 3 matériaux côte à côte, issus du champ "Matériaux à mettre en avant" du brief.
+
+5. **Vignette 5 (bas centre) — Lifestyle ambient**
+   Scène d'art de vivre cohérente (terrasse dressée, intérieur habité par la lumière). Présence humaine si demandée : silhouette abstraite à distance, jamais de détails faciaux.
+
+6. **Vignette 6 (bas droite) — Détail signature**
+   Détail architectural ou matière qui résume l'identité du projet : garde-corps, menuiserie, jonction matériaux, jeu d'ombre…
+
+### Contraintes du prompt unique — à respecter STRICTEMENT
+
+- **Moteur d'image cible** : l'utilisateur va coller ce prompt dans **${engine.label}**. ${engineGuidance}
+- **Format de la planche** : ${gridInstruction}. Précise explicitement la composition en grille 3×2 dans le prompt.
+- **Ratio de la planche** : ${moodboardRatio} (format éditorial moodboard, pas le ratio du support final qui pilote l'illustration finale du studio).
+- **Langue : ANGLAIS uniquement.** Pas un mot de français.
+- **Longueur** : 140 à 220 mots (plus dense qu'un prompt simple car 6 vignettes à décrire).
+- **Mots-clés qualité** à intégrer : photorealistic, 8k, ultra-detailed, editorial photography (intègre-les naturellement selon la syntaxe du moteur).
+- Réutilise les ancres techniques de la section 4 du brief pour chaque vignette pertinente.
+- Inclut systématiquement "reference moodboard composition" ou "inspiration moodboard sheet".
 - Utilise systématiquement "in the same spirit as", "analogous to", "similar contemporary…" — JAMAIS "this project", "this building", "the residence".
-- Pour la figuration humaine, **toujours rester abstrait et professionnel** : "ambient lifestyle suggestion", "blurred silhouette in distance", "no detailed facial features" — pas de description physique détaillée d'une personne réelle.
+- Pour la figuration humaine dans la vignette 5 : **toujours abstrait** ("ambient lifestyle suggestion", "blurred distant silhouette", "no detailed facial features").
+
+### Exemple de structure (à adapter au moteur cible)
+
+\`A cohesive Mediterranean residential moodboard reference sheet, ${gridInstruction}. [Vignette 1: architecture description...]. [Vignette 2: light & atmosphere description...]. [Vignette 3: vegetation description...]. [Vignette 4: materials description...]. [Vignette 5: lifestyle description...]. [Vignette 6: signature detail description...]. Inspiration moodboard composition only — NOT the actual project, only references in the same spirit. [keywords/prose adapted to ${engine.label}].\`
 
 ## Section D — Pièces techniques à transmettre au studio 3D
 Termine la page HTML par un bloc clair "Pièces à transmettre au studio 3D" qui liste tous les fichiers techniques (plan masse, élévations, coupes, fiche programme, charte, références validées) que le promoteur doit packager pour le studio. Ce bloc sert de checklist pour le client.

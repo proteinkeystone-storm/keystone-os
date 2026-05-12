@@ -104,8 +104,8 @@ export const KSTORE_MOCK_APPS = [
         id: 'A-COM-003',                      // ← Sprint Muse-1 — squelette workspace
         category: 'BIZ', subcategory: 'BIZ_COM',
         title: 'Muse',
-        punchline: 'Le moodboard de référence pour votre studio 3D',
-        shortDesc: 'Briefez votre studio 3D · Prompt Maître + 4 CTA images de référence (Archi, Lifestyle, Végétal, Textures)',
+        punchline: 'La planche d\'ambiance pour votre studio 3D',
+        shortDesc: 'Une planche moodboard professionnelle en une seule génération · 6 vignettes cohérentes',
         price: 49,
         icon: 'palette',
         ai_optimized: 'Claude',

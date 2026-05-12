@@ -129,7 +129,7 @@
     { "id": "Llama",       "label": "Llama (Meta · via Groq)", "recommended": false, "note": "Rapide, open-weights" }
   ],
 
-  "_comment_image_engines": "Chaque moteur de génération d'images a sa propre syntaxe optimale. Midjourney/Flux acceptent les paramètres --ar/--style/--v et préfèrent les mots-clés séparés par virgules ; DALL-E, Imagen et Nano Banana préfèrent une prose narrative complète sans paramètres techniques, avec le ratio mentionné en mots ('widescreen 16:9 photograph'). Le builder muse-prompt.js lit ce profil et adapte les consignes envoyées à l'IA cible.",
+  "_comment_image_engines": "Chaque moteur de génération d'images a sa propre syntaxe optimale. Midjourney/Flux acceptent les paramètres --ar/--style/--v et préfèrent les mots-clés séparés par virgules ; DALL-E, Imagen et Nano Banana préfèrent une prose narrative complète sans paramètres techniques. Le champ moodboard_grid décrit la formulation de grille à utiliser pour produire UNE planche d'ambiance complète en une seule génération (pratique standard des studios 3D : 1 moodboard cohérent vaut mieux que 4 images à assembler).",
 
   "image_engines": [
     {
@@ -139,8 +139,10 @@
       "syntax": "params",
       "params_suffix": "--style raw --v 8.1",
       "ratio_mode": "param",
+      "moodboard_grid": "as a single cohesive moodboard composition arranged in a 3x2 grid of 6 panels separated by thin pale dividers",
+      "moodboard_ratio": "3:2",
       "style_hint": "comma-separated keywords, dense and evocative, end with quality keywords (photorealistic, 8k, ultra-detailed, editorial photography), then the parameters block",
-      "note": "Le standard du marché 3D — accepte --ar / --style / --v"
+      "note": "Le standard du marché 3D — excellent rendu des grilles moodboard"
     },
     {
       "id": "flux",
@@ -149,6 +151,8 @@
       "syntax": "params",
       "params_suffix": "",
       "ratio_mode": "param",
+      "moodboard_grid": "as a single cohesive moodboard composition arranged in a 3x2 grid of 6 panels separated by thin pale dividers",
+      "moodboard_ratio": "3:2",
       "style_hint": "rich descriptive prose mixed with comma-separated keywords, accepts --ar W:H at the end, no --v needed",
       "note": "Excellente alternative open-weights, photorealisme remarquable"
     },
@@ -159,7 +163,9 @@
       "syntax": "prose",
       "params_suffix": "",
       "ratio_mode": "words",
-      "style_hint": "full narrative prose like briefing a photographer, no technical parameters, mention the framing in words ('widescreen 16:9 format', 'vertical 4:5 social media format'), end with quality words integrated into the sentence",
+      "moodboard_grid": "presented as a single cohesive moodboard layout with six clearly separated panels arranged in two rows of three, each panel framed by a thin pale divider",
+      "moodboard_ratio": "3:2",
+      "style_hint": "full narrative prose like briefing a photographer, no technical parameters, mention the framing in words ('widescreen 3:2 moodboard format'), end with quality words integrated into the sentence",
       "note": "Prompts en prose naturelle, refuse les paramètres techniques"
     },
     {
@@ -169,7 +175,9 @@
       "syntax": "prose",
       "params_suffix": "",
       "ratio_mode": "words",
-      "style_hint": "short, precise descriptive prose, mention the aspect ratio in words ('cinematic widescreen 16:9 photograph', 'tall vertical 9:16 mobile photograph'), prefer cautious neutral vocabulary to avoid safety filter triggers, integrate quality cues naturally ('professional editorial photograph, ultra-detailed')",
+      "moodboard_grid": "presented as a single cohesive moodboard layout composed of six panels arranged in two rows of three, with thin pale dividers between panels",
+      "moodboard_ratio": "3:2",
+      "style_hint": "short, precise descriptive prose, mention the aspect ratio in words ('cinematic widescreen 3:2 moodboard layout'), prefer cautious neutral vocabulary to avoid safety filter triggers, integrate quality cues naturally ('professional editorial photograph, ultra-detailed')",
       "note": "Filtres stricts — vocabulaire prudent, prose courte et claire"
     },
     {
@@ -179,6 +187,8 @@
       "syntax": "params",
       "params_suffix": "",
       "ratio_mode": "param",
+      "moodboard_grid": "as a single cohesive moodboard composition arranged in a 3x2 grid of 6 panels separated by thin pale dividers",
+      "moodboard_ratio": "3:2",
       "style_hint": "comma-separated dense keyword stack like Midjourney, can append (negative prompt: text, watermark, blur), accepts --ar W:H",
       "note": "Open-weights, fonctionne en local — ratio en paramètre"
     }

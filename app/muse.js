@@ -326,13 +326,15 @@ function _renderAside() {
     <div class="ws-aside-section">
       <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Muse prépare le <strong style="color:var(--gold);">moodboard de références</strong>
-        que vous transmettrez à votre studio 3D spécialisé en illustration immobilière.
-        Vous configurez l'univers visuel cible (cadrage, lumière, ambiance, palette
-        végétale, matériaux). Muse assemble un Prompt Maître que vous collez dans
-        votre IA habituelle ; elle vous renvoie un fichier HTML avec 4 boutons "Copier"
-        qui génèrent des <em>images d'inspiration</em> (Midjourney, Flux, DALL-E…).
-        Le studio modélise ensuite le projet sur plan en s'inspirant de ces références.
+        Muse prépare la <strong style="color:var(--gold);">planche d'ambiance</strong>
+        à transmettre à votre studio 3D spécialisé en illustration immobilière.
+        Vous configurez l'univers visuel cible (cadrage, lumière, palette végétale,
+        matériaux, figuration). Muse assemble un Prompt Maître que vous collez dans
+        votre IA habituelle ; elle vous renvoie un fichier HTML avec un bouton "Copier"
+        qui génère, en <strong>une seule image</strong>, une planche moodboard
+        professionnelle composée de 6 vignettes cohérentes (Midjourney, Flux,
+        DALL-E, Imagen…). Le studio modélise ensuite le projet sur plan en
+        s'inspirant de cette planche.
       </div>
     </div>
 
@@ -729,8 +731,8 @@ function _viewOutput() {
     <h1 class="ws-h1">${o.status === 'done' ? 'Votre Prompt Maître est prêt' : 'C\'est le moment de l\'assemblage&nbsp;!'}</h1>
     <p class="ws-lead">
       ${o.status === 'done'
-        ? 'Copiez ce texte dans votre IA. Elle vous demandera les plans techniques du programme, puis générera un dashboard HTML avec 4 boutons "Copier" pour produire vos références de moodboard.'
-        : 'Choisissez le moteur IA cible, puis Muse assemble le Prompt Maître. Vous n\'avez plus qu\'à le copier-coller — l\'IA va construire le moodboard de références à transmettre au studio 3D.'
+        ? 'Copiez ce texte dans votre IA. Elle vous demandera les plans techniques du programme, puis générera un fichier HTML contenant un bouton "Copier" unique qui produit votre planche d\'ambiance complète en une seule génération.'
+        : 'Choisissez le moteur IA cible, puis Muse assemble le Prompt Maître. Vous n\'avez plus qu\'à le copier-coller — l\'IA va construire la planche d\'ambiance à transmettre au studio 3D.'
       }
     </p>
     ${body}
@@ -750,9 +752,9 @@ function _renderEngineSelector() {
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
 
-    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur de génération d'images · pour les 4 CTA</h3>
+    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur de génération d'images · pour la planche</h3>
     <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 14px 0;">
-      Chaque moteur d'image a sa propre syntaxe. <strong style="color:var(--ws-text);">Midjourney / Flux / Stable Diffusion</strong> acceptent les paramètres <code style="font-size:11px;background:var(--gold3);color:var(--gold);padding:1px 5px;border-radius:4px;">--ar --style --v</code> ; <strong style="color:var(--ws-text);">DALL-E / Gemini Imagen / Nano Banana</strong> préfèrent de la prose narrative sans paramètres. Muse adapte les prompts en conséquence.
+      Chaque moteur d'image a sa propre syntaxe. <strong style="color:var(--ws-text);">Midjourney / Flux / Stable Diffusion</strong> acceptent les paramètres <code style="font-size:11px;background:var(--gold3);color:var(--gold);padding:1px 5px;border-radius:4px;">--ar --style --v</code> ; <strong style="color:var(--ws-text);">DALL-E / Gemini Imagen / Nano Banana</strong> préfèrent de la prose narrative sans paramètres. Muse adapte automatiquement le prompt de la planche en conséquence.
     </p>
     <div data-slot="image-engines" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
@@ -865,11 +867,14 @@ function _renderPromptResult() {
           <strong style="color:var(--gold);">Prochaine étape&nbsp;:</strong>
           Collez ce prompt dans <strong>${_esc(o.target_engine)}</strong>. L'IA va d'abord
           vous demander les pièces techniques du programme (plan de masse, élévations,
-          coupes, charte), puis elle vous renverra un fichier HTML interactif avec
-          4 boutons "Copier" qui génèrent des <strong>images de référence d'ambiance</strong>
-          (Midjourney, Flux, DALL-E, Nano Banana). Ces images ne sont <em>pas</em>
-          votre projet&nbsp;— elles servent de moodboard d'inspiration que vous
-          transmettrez au studio 3D avec les plans techniques.
+          coupes, charte), puis elle vous renverra un fichier HTML avec un
+          <strong>bouton "Copier" unique</strong> qui produit, en une seule génération,
+          une <strong>planche d'ambiance professionnelle</strong> de 6 vignettes
+          cohérentes (architecture · lumière · végétation · matériaux · lifestyle ·
+          détail signature). Ouvrez le HTML, cliquez sur le bouton, collez le prompt
+          dans votre moteur d'image (configuré&nbsp;: <strong>${_esc(o.image_engine || 'midjourney')}</strong>).
+          Cette planche n'est <em>pas</em> votre projet — c'est un moodboard
+          d'inspiration à transmettre au studio 3D avec les plans techniques.
         </div>
       </div>
     </div>
