@@ -575,6 +575,11 @@ async function _openQrDetail(panel, qr) {
   const content = panel.querySelector('#sdqr-content');
   if (!content || !qr) return;
 
+  // Reset l'etat d edition du design quand on switche de QR.
+  // _wireDesignPanel le ré-initialisera depuis qr.design lors du premier
+  // wire ; les refresh DOM ultérieurs (upload logo) le preserveront.
+  _editingDesign = null;
+
   const isDynamic   = (qr.mode || 'dynamic') === 'dynamic';
   const typeDef     = QR_TYPES[qr.qr_type] || QR_TYPES.url;
   const redirectUrl = qr.short_id ? `${CF_API}/r/${qr.short_id}` : '';
@@ -815,7 +820,7 @@ function _renderDesignPanel(qr) {
       </summary>
       <div class="sdqr-design-body">
 
-        <!-- Formes -->
+        <!-- Formes : modules + ancres (anneau + centre indépendants) -->
         <div class="sdqr-design-row">
           <span class="sdqr-design-lbl">Modules</span>
           <div class="sdqr-shape-pills" data-shape-target="module">
@@ -823,9 +828,15 @@ function _renderDesignPanel(qr) {
           </div>
         </div>
         <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Ancres</span>
-          <div class="sdqr-shape-pills" data-shape-target="anchor">
-            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+          <span class="sdqr-design-lbl">Ancres · anneau</span>
+          <div class="sdqr-shape-pills" data-shape-target="anchor-outer">
+            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.outer.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="sdqr-design-row">
+          <span class="sdqr-design-lbl">Ancres · centre</span>
+          <div class="sdqr-shape-pills" data-shape-target="anchor-inner">
+            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.inner.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
           </div>
         </div>
 
@@ -912,7 +923,12 @@ let _editingDesign = null;
 function _wireDesignPanel(root, qr, encodedForQr) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
-  _editingDesign = mergeDesign(qr.design);
+  // Si _editingDesign existe deja (cas refresh DOM apres upload/retrait
+  // logo), on le PRESERVE. Sinon (1ere ouverture du detail), on init.
+  // Le reset a null est fait par _openQrDetail au switch de QR.
+  if (!_editingDesign) {
+    _editingDesign = mergeDesign(qr.design);
+  }
 
   const _liveRerender = async () => {
     try {
@@ -923,12 +939,19 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     _updateContrastBadge(root);
   };
 
-  // Pills formes (modules / ancres)
+  // Pills formes (modules / anchor-outer / anchor-inner)
   panel.querySelectorAll('[data-shape-target]').forEach(group => {
     const target = group.dataset.shapeTarget;
     group.querySelectorAll('.sdqr-shape-pill').forEach(btn => {
       btn.addEventListener('click', () => {
-        _editingDesign[target].shape = btn.dataset.shape;
+        // Route vers la bonne propriete imbriquee
+        if (target === 'module') {
+          _editingDesign.module.shape = btn.dataset.shape;
+        } else if (target === 'anchor-outer') {
+          _editingDesign.anchor.outer.shape = btn.dataset.shape;
+        } else if (target === 'anchor-inner') {
+          _editingDesign.anchor.inner.shape = btn.dataset.shape;
+        }
         group.querySelectorAll('.sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
         _liveRerender();
       });

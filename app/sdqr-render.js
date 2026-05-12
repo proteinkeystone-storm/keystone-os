@@ -40,21 +40,33 @@ async function _loadQrLib() {
 }
 
 // ── Design par défaut (utilisé si l'entité n'a rien de spécifique) ──
+// SDQR-3.1 : anchor scindé en `outer` (anneau) + `inner` (centre) pour
+// permettre des combinaisons custom (ex: anneau arrondi + centre point).
 export const DEFAULT_DESIGN = {
   module : { shape: 'square' },
-  anchor : { shape: 'square' },
+  anchor : {
+    outer: { shape: 'square' },
+    inner: { shape: 'square' },
+  },
   fg     : '#000000',
   bg     : '#ffffff',
   gradient: { enabled: false, from: '#1B2A4A', to: '#c9a84c', angle: 45 },
   logo   : { dataUrl: '', size: 0.20 },
 };
 
-// Merge sûr : si design est partial (depuis D1), on complète avec DEFAULT
+// Merge sûr : si design est partial (depuis D1), on complète avec DEFAULT.
+// Compat retro : ancien format `anchor: { shape: '...' }` est splitté
+// automatiquement en outer + inner identiques.
 export function mergeDesign(design) {
   const d = design || {};
+  const a = d.anchor || {};
+  const legacyShape = a.shape;            // ancien format SDQR-3 initial
   return {
     module  : { ...DEFAULT_DESIGN.module,   ...(d.module   || {}) },
-    anchor  : { ...DEFAULT_DESIGN.anchor,   ...(d.anchor   || {}) },
+    anchor  : {
+      outer: { shape: a.outer?.shape || legacyShape || 'square' },
+      inner: { shape: a.inner?.shape || legacyShape || 'square' },
+    },
     fg      : d.fg || DEFAULT_DESIGN.fg,
     bg      : d.bg || DEFAULT_DESIGN.bg,
     gradient: { ...DEFAULT_DESIGN.gradient, ...(d.gradient || {}) },
@@ -101,69 +113,54 @@ function _moduleShape(shape, x, y, cell) {
   }
 }
 
-// Une ancre = 7x7 modules. On dessine :
-//   - cadre extérieur (anneau 7x7 - 5x5)
-//   - point central 3x3
-// Forme appliquée selon design.anchor.shape.
-function _anchorShape(shape, ox, oy, cell) {
-  const size = 7 * cell;
+// Une ancre = 7x7 modules. Composition :
+//   - anneau extérieur (7x7 moins le centre 5x5 vide)
+//   - centre 3x3 plein (offset 2 modules depuis l'origine)
+// outerShape contrôle l'anneau, innerShape contrôle le centre.
+// Ils sont indépendants → combinaisons créatives possibles
+// (ex: anneau arrondi + centre point = look "viseur").
+function _anchorShape(outerShape, innerShape, ox, oy, cell) {
+  const size        = 7 * cell;
   const innerOffset = 2 * cell;
   const innerSize   = 3 * cell;
+  const cx          = ox + size / 2;
+  const cy          = oy + size / 2;
+  const innerX      = ox + innerOffset;
+  const innerY      = oy + innerOffset;
 
-  if (shape === 'dot') {
-    // Anneau circulaire + cercle plein au centre
-    const cx = ox + size / 2;
-    const cy = oy + size / 2;
+  // ── Anneau extérieur ──────────────────────────────────────
+  let ring = '';
+  if (outerShape === 'dot') {
+    // Anneau circulaire = disque externe MOINS disque interne (fill-rule)
     const outerR = size / 2 - cell * 0.05;
     const ringR  = size / 2 - cell;
-    const innerR = innerSize / 2;
-    // Anneau = disque externe - disque interne via fill-rule
-    return `
-      <path d="M ${cx},${cy - outerR} a ${outerR},${outerR} 0 1,0 0.1,0 z
-               M ${cx},${cy - ringR} a ${ringR},${ringR} 0 1,1 -0.1,0 z" fill-rule="evenodd"/>
-      <circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${innerR.toFixed(2)}"/>
-    `;
-  }
-
-  if (shape === 'rounded') {
-    // Coin arrondi modéré (cell * 1.2)
-    const rr = (cell * 1.2).toFixed(2);
-    const innerR = (cell * 0.55).toFixed(2);
-    // Anneau via path : carré arrondi extérieur + carré arrondi intérieur (fill-rule)
-    const oRect = `M ${ox},${oy + cell * 1.2}
-                   a ${rr} ${rr} 0 0 1 ${rr} -${rr}
-                   h ${(size - 2 * cell * 1.2).toFixed(2)}
-                   a ${rr} ${rr} 0 0 1 ${rr} ${rr}
-                   v ${(size - 2 * cell * 1.2).toFixed(2)}
-                   a ${rr} ${rr} 0 0 1 -${rr} ${rr}
-                   h -${(size - 2 * cell * 1.2).toFixed(2)}
-                   a ${rr} ${rr} 0 0 1 -${rr} -${rr}
-                   z`;
+    ring = `<path d="M ${cx.toFixed(2)},${(cy - outerR).toFixed(2)} a ${outerR.toFixed(2)},${outerR.toFixed(2)} 0 1,0 0.1,0 z M ${cx.toFixed(2)},${(cy - ringR).toFixed(2)} a ${ringR.toFixed(2)},${ringR.toFixed(2)} 0 1,1 -0.1,0 z" fill-rule="evenodd"/>`;
+  } else if (outerShape === 'rounded') {
+    const rr = cell * 1.2;
+    const oSide = size - 2 * rr;
+    const iRr = cell * 0.7;
     const iSize = size - 2 * cell;
-    const iRr = (cell * 0.7).toFixed(2);
-    const iRect = `M ${ox + cell},${oy + cell + iRr}
-                   a ${iRr} ${iRr} 0 0 1 ${iRr} -${iRr}
-                   h ${(iSize - 2 * iRr).toFixed(2)}
-                   a ${iRr} ${iRr} 0 0 1 ${iRr} ${iRr}
-                   v ${(iSize - 2 * iRr).toFixed(2)}
-                   a ${iRr} ${iRr} 0 0 1 -${iRr} ${iRr}
-                   h -${(iSize - 2 * iRr).toFixed(2)}
-                   a ${iRr} ${iRr} 0 0 1 -${iRr} -${iRr}
-                   z`;
-    return `
-      <path d="${oRect} ${iRect}" fill-rule="evenodd"/>
-      <rect x="${(ox + innerOffset).toFixed(2)}" y="${(oy + innerOffset).toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}" rx="${innerR}" ry="${innerR}"/>
-    `;
+    const iSide = iSize - 2 * iRr;
+    const oRect = `M ${ox.toFixed(2)},${(oy + rr).toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} -${rr.toFixed(2)} h ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} ${rr.toFixed(2)} v ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} ${rr.toFixed(2)} h -${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} -${rr.toFixed(2)} z`;
+    const iRect = `M ${(ox + cell).toFixed(2)},${(oy + cell + iRr).toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} -${iRr.toFixed(2)} h ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} ${iRr.toFixed(2)} v ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} ${iRr.toFixed(2)} h -${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} -${iRr.toFixed(2)} z`;
+    ring = `<path d="${oRect} ${iRect}" fill-rule="evenodd"/>`;
+  } else {
+    // square (défaut)
+    ring = `<path d="M ${ox.toFixed(2)},${oy.toFixed(2)} h ${size.toFixed(2)} v ${size.toFixed(2)} h ${(-size).toFixed(2)} z M ${(ox + cell).toFixed(2)},${(oy + cell).toFixed(2)} v ${(5 * cell).toFixed(2)} h ${(5 * cell).toFixed(2)} v ${(-5 * cell).toFixed(2)} z" fill-rule="evenodd"/>`;
   }
 
-  // Square (défaut)
-  const innerX = ox + innerOffset;
-  const innerY = oy + innerOffset;
-  return `
-    <path d="M ${ox},${oy} h ${size} v ${size} h ${-size} z
-             M ${(ox + cell).toFixed(2)},${(oy + cell).toFixed(2)} v ${5 * cell} h ${5 * cell} v ${-5 * cell} z" fill-rule="evenodd"/>
-    <rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}"/>
-  `;
+  // ── Centre 3x3 ────────────────────────────────────────────
+  let inner = '';
+  if (innerShape === 'dot') {
+    inner = `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${(innerSize / 2).toFixed(2)}"/>`;
+  } else if (innerShape === 'rounded') {
+    const rr = (cell * 0.55).toFixed(2);
+    inner = `<rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}" rx="${rr}" ry="${rr}"/>`;
+  } else {
+    inner = `<rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}"/>`;
+  }
+
+  return ring + inner;
 }
 
 // ── Rendu principal ────────────────────────────────────────────
@@ -225,12 +222,12 @@ export async function renderQrCustom(text, design, sizePx = 280) {
     }
   }
 
-  // 4. Ancres (3 finder patterns)
+  // 4. Ancres (3 finder patterns) — outer + inner indépendants
   let anchors = '';
   for (const o of _anchorOrigins(count)) {
     const ox = offset + o.col * cell;
     const oy = offset + o.row * cell;
-    anchors += _anchorShape(d.anchor.shape, ox, oy, cell);
+    anchors += _anchorShape(d.anchor.outer.shape, d.anchor.inner.shape, ox, oy, cell);
   }
 
   // 5. Logo central (avec masque circulaire blanc autour pour contraste scan)
