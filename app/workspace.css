@@ -18,7 +18,28 @@
    toggle clair/sombre du dashboard — indépendance volontaire.
    Pour un futur toggle workspace : ajouter [data-theme="light"]
    sur .ws-app et override les variables.
+
+   Les variables sont aussi disponibles au :root pour permettre
+   l'usage de composants .ws-* hors workspace (ex: widget rating
+   dans la topbar SDQR qui a son propre layout).
    ────────────────────────────────────────────────────────────── */
+:root {
+  --ws-accent: #c9a96e;
+  --ws-accent-soft: rgba(201, 169, 110, 0.18);
+  --ws-accent-dark: #b59760;
+  --ws-text: #f0f6fc;
+  --ws-text-soft: #adbac7;
+  --ws-text-muted: #768390;
+  --ws-text-on-accent: #0d1117;
+  --ws-surface: #161b22;
+  --ws-border: #30363d;
+  --ws-border-strong: #444c56;
+  --ws-radius: 10px;
+  --ws-radius-sm: 6px;
+  --ws-radius-pill: 999px;
+  --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
 .ws-app {
   --ws-bg: #0d1117;
   --ws-surface: #161b22;
@@ -589,6 +610,85 @@
 .ws-badge--danger {
   background: var(--ws-danger-soft);
   color: var(--ws-danger);
+}
+
+/* ─── Rating widget (topbar) ───────────────────────────────────
+   Bouton étoile + popover avec 5 étoiles cliquables.
+   Utilisé dans les topbars SDQR + Kodex (et futurs workspaces).
+   ────────────────────────────────────────────────────────────── */
+.ws-rating-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.ws-rating-trigger {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+}
+.ws-rating-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ws-text-soft);
+}
+.ws-rating-trigger:hover .ws-rating-label { color: var(--ws-text); }
+
+.ws-rating-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-border-strong);
+  border-radius: var(--ws-radius);
+  padding: 14px 16px;
+  box-shadow: var(--ws-shadow-3);
+  z-index: 20;
+  min-width: 240px;
+  animation: ws-rating-pop-in 180ms ease;
+}
+@keyframes ws-rating-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ws-rating-pop-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--ws-text-muted);
+  margin-bottom: 10px;
+}
+.ws-rating-stars {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.ws-rating-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: var(--ws-radius-sm);
+  cursor: pointer;
+  color: var(--ws-text-muted);
+  transition: all 150ms ease;
+}
+.ws-rating-star:hover {
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent);
+  transform: scale(1.08);
+}
+.ws-rating-star.is-on {
+  color: var(--ws-accent);
+}
+.ws-rating-clear {
+  font-size: 12px;
+  padding: 4px 8px;
+  width: 100%;
+  justify-content: center;
 }
 
 /* ─── Scrollbar discret ─── */

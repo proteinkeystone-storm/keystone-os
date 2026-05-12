@@ -20,6 +20,7 @@
 import { CF_API } from './pads-loader.js';
 import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
+import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -150,6 +151,7 @@ export function openSDQR() {
   document.body.style.overflow = 'hidden';
 
   _wireShell(panel);
+  bindRatingButton(panel, 'A-COM-001');
   _refreshList(panel);
 }
 
@@ -172,6 +174,7 @@ function _renderShell() {
         </div>
       </div>
       <div class="sdqr-topbar-right">
+        ${ratingButtonHTML('A-COM-001')}
         <a class="sdqr-pill sdqr-pill--ok sdqr-pill--link" href="${CF_API}/sdqr-privacy" target="_blank" rel="noopener noreferrer"
            title="Voir la politique de transparence RGPD (s'ouvre dans un nouvel onglet)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:4px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>

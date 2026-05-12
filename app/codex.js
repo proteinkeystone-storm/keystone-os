@@ -25,6 +25,8 @@
      remplacer les 4 vues et l'objet WORKSPACE_META.
    ═══════════════════════════════════════════════════════════════ */
 
+import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
   id        : 'A-COM-002',
@@ -139,6 +141,7 @@ function _buildShell() {
         <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
       </div>
       <div class="ws-topbar-actions">
+        ${ratingButtonHTML(WORKSPACE_META.id)}
         <button class="ws-iconbtn" data-act="history" title="Historique des briefs">
           ${icon('history', 18)}
         </button>
@@ -163,6 +166,7 @@ function _buildShell() {
 
   document.body.appendChild(_root);
   _root.addEventListener('click', _onClick);
+  bindRatingButton(_root, WORKSPACE_META.id);
 
   _renderRail();
   _renderAside();
