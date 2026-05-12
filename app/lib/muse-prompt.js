@@ -196,7 +196,7 @@ Les 4 CTA :
 **Contraintes techniques de chaque prompt secondaire — à respecter STRICTEMENT** :
 - **Langue : ANGLAIS uniquement** (les moteurs comme Midjourney sont entraînés majoritairement en anglais et comprennent mieux les prompts dans cette langue). Pas un mot de français dans les prompts copiables.
 - Longueur : entre 60 et 110 mots
-- Termine TOUJOURS par : \`${arArg || '--ar (à préciser selon support)'} --style raw --v 6\`
+- Termine TOUJOURS par : \`${arArg || '--ar (à préciser selon support)'} --style raw --v 8.1\`
 - Mots-clés qualité : \`photorealistic, 8k, ultra-detailed, editorial photography\`
 - Réutilise les ancres techniques de la section 4 du brief
 - Inclut systématiquement "reference moodboard image" ou "inspiration reference" ou "ambient mood reference"
