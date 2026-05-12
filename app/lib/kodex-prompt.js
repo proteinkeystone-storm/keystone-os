@@ -97,11 +97,25 @@ function _renderAssetsBlock(assets) {
   }
 
   if (assets.brand_book_url) {
-    lines.push(`- Brand book complet : ${assets.brand_book_url}`);
+    lines.push(`- Brand book complet (lien externe) : ${assets.brand_book_url}`);
   }
   if (assets.extra_notes) {
     lines.push(`- Notes spéciales du client : "${assets.extra_notes}"`);
   }
+
+  // Sprint Kodex-3.1.5 + amélioration : fichiers uploadés dans le coffre-fort
+  const uploads = assets.uploads || [];
+  if (uploads.length) {
+    lines.push('');
+    lines.push('### Fichiers fournis par le client (téléversés dans Kodex) :');
+    for (const u of uploads) {
+      const sizeKo = u.size_bytes ? Math.round(u.size_bytes / 1024) : '?';
+      lines.push(`- **${u.kind || 'autre'}** — ${u.filename} (${u.mime}, ${sizeKo} Ko)`);
+    }
+    lines.push('');
+    lines.push('Ces fichiers sont accessibles via leur URL souveraine Keystone (à transmettre au graphiste avec le brief PDF). Mentionne-les explicitement dans la section "Fichiers à transmettre au graphiste".');
+  }
+
   if (lines.length === 1) return '';   // rien après le titre
   return lines.join('\n');
 }

@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "title": "Démo Prométhée Immobilier — Les Jardins du Mourillon",
+  "scenario": "Affiche 4×3 m pour panneau de chantier — programme VEFA neuf à Toulon",
+
+  "state": {
+    "view": "destination",
+    "destination": {
+      "step": "done",
+      "category": "print",
+      "vendor": "Exaprint",
+      "standardId": "exaprint-affiche-4x3"
+    },
+    "content": {
+      "sector": "immobilier",
+      "fields": {
+        "nom_programme": "Les Jardins du Mourillon",
+        "ville": "Toulon — quartier du Mourillon",
+        "prix_min": "295000",
+        "typologies": ["T2", "T3", "T4"],
+        "labels": ["Pinel", "DPE A", "RE2020"],
+        "livraison": "3e trimestre 2027",
+        "argumentaire": "Vivre face à la mer dans un cadre intimiste de 12 logements. Architecture provençale contemporaine, jardins partagés en pleine terre, terrasses orientées sud-est avec vue dégagée. À 200 m de la plage, à 5 min des écoles. La promesse d'un quotidien apaisé à Toulon.",
+        "cta": "Réservez votre visite virtuelle"
+      }
+    },
+    "assets": {
+      "logo_owned": true,
+      "charte_owned": true,
+      "fonts_owned": false,
+      "charte": {
+        "primary_hex": "#1B2A4A",
+        "secondary_hex": "#C9A96E",
+        "font_title": "Cormorant Garamond",
+        "font_body": "Inter"
+      },
+      "brand_book_url": "",
+      "extra_notes": "Garder une ambiance Méditerranée premium — ciel, mer, pierre, végétation provençale. Éviter les codes immobiliers générique (familles souriantes, slogans creux). Le programme s'adresse à des CSP+ qui investissent.",
+      "uploads": []
+    }
+  }
+}

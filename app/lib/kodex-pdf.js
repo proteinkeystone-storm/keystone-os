@@ -106,6 +106,30 @@ function _renderCharte(assets) {
   return `<h2 class="section">Identité visuelle</h2><ul class="charte">${items.join('')}</ul>`;
 }
 
+// Fichiers uploadés (Sprint Kodex-3.1.5)
+function _renderUploads(assets) {
+  const uploads = assets.uploads || [];
+  if (!uploads.length) return '';
+  const apiBase = (typeof window !== 'undefined' && window.location)
+    ? '' : '';   // les URLs sont déjà absolues via assetUrl()
+  const items = uploads.map(u => {
+    const sizeStr = u.size_bytes ? `${Math.round(u.size_bytes / 1024)} Ko` : '—';
+    const url = u.url || '';
+    return `<li>
+      <strong>${_esc(u.kind || 'autre')}</strong> — ${_esc(u.filename)}
+      <span style="color:#888;">(${_esc(u.mime)}, ${_esc(sizeStr)})</span>
+      ${url ? `<br><a href="${_esc(url)}" style="font-family:'SF Mono','Menlo',monospace;font-size:9pt;color:#6366f1;word-break:break-all;">${_esc(url)}</a>` : ''}
+    </li>`;
+  }).join('');
+  return `
+    <h2 class="section">Fichiers à transmettre au graphiste</h2>
+    <p style="font-size:10pt;color:#555;margin:0 0 10pt 0;">
+      Les fichiers ci-dessous ont été téléversés par le client dans Kodex. Communiquez les URLs au graphiste — accès direct, hébergement souverain.
+    </p>
+    <ul class="uploads" style="font-size:10pt;line-height:1.7;">${items}</ul>
+  `;
+}
+
 // Données projet
 function _renderProjectData(sector, fields) {
   if (!sector) return '';
@@ -258,6 +282,8 @@ ${_renderSpecsTable(std)}
 ${_renderProjectData(sector, state.content.fields)}
 
 ${_renderCharte(state.assets)}
+
+${_renderUploads(state.assets)}
 
 ${_renderLegalList(sector, state.content.fields)}
 

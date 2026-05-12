@@ -201,6 +201,12 @@ function _buildShell() {
       </div>
       <div class="ws-topbar-actions">
         ${ratingButtonHTML(WORKSPACE_META.id)}
+        ${localStorage.getItem('ks_admin_token') ? `
+          <button class="ws-iconbtn" data-act="load-demo" title="Charger l'exemple démo Prométhée"
+                  style="color:var(--gold);">
+            ${icon('sparkles', 18)}
+          </button>
+        ` : ''}
         <button class="ws-iconbtn" data-act="history" title="Historique des briefs">
           ${icon('history', 18)}
         </button>
@@ -273,6 +279,36 @@ function _onClick(e) {
   if (act === 'download-pdf')   return _downloadBriefPdf();
   // Sprint Kodex-3.1.5 : upload / delete fichiers binaires
   if (act === 'upload-delete')  return _handleDeleteUpload(t.dataset.id);
+  // Démo Prométhée : pré-remplit le brouillon
+  if (act === 'load-demo')      return _loadDemoScenario();
+}
+
+// ─── Démo Prométhée : pré-remplit le brouillon avec un scénario ─
+async function _loadDemoScenario() {
+  if (!confirm('Charger l\'exemple "Les Jardins du Mourillon" ? Votre brouillon actuel sera remplacé.')) return;
+  try {
+    const res = await fetch('/K_STORE_ASSETS/CATALOG/kodex-demo-promethee.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('Scénario démo introuvable');
+    const demo = await res.json();
+    // Restore le state à partir du scénario
+    _state = {
+      ..._state,
+      ...demo.state,
+      destination: { ..._state.destination, ...(demo.state.destination || {}) },
+      content:     { ..._state.content,     ...(demo.state.content     || {}) },
+      assets:      { ..._state.assets,      ...(demo.state.assets      || {}) },
+      output:      { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
+    };
+    // Re-hydrate l'objet standard à partir de l'id
+    if (_state.destination.standardId) {
+      _state.destination.standard = await getStandard(_state.destination.standardId);
+    }
+    _saveDraft();
+    _renderMain();
+    _toastOk('Scénario démo chargé');
+  } catch (e) {
+    _toastSoon('Chargement impossible : ' + e.message);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
