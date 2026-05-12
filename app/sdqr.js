@@ -1644,6 +1644,12 @@ function _wireDesignPanel(root, qr, encodedForQr) {
 
   // Initial contrast badge
   _updateContrastBadge(root);
+
+  // Sync initial du QR avec l'état _editingDesign courant. Crucial après
+  // un _refreshDesignPanelDom (theme / palette / surprise) : sinon les
+  // controles affichent le nouveau preset mais le QR reste sur l'ancien
+  // design tant que l'utilisateur ne touche pas un autre pill.
+  _liveRerender();
 }
 
 // Re-render uniquement la zone .sdqr-design-body après upload/retrait logo
