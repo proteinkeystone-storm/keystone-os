@@ -33,6 +33,10 @@ import {
 } from './lib/kodex-catalog.js';
 import { computeScale } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
+import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
+import { exportBriefAsPDF } from './lib/kodex-pdf.js';
+import { ApiHandler } from './api-handler.js';
+import { CF_API } from './pads-loader.js';
 
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
@@ -80,7 +84,14 @@ let _state = {
     brand_book_url: '',     // lien externe vers le brand book (Drive, Dropbox)
     extra_notes:    '',     // demandes spéciales pour le graphiste
   },
-  output: { codeMaitre: null, llmResponse: null, briefRef: null },
+  output: {
+    // Sprint Kodex-4.1 — état de la génération
+    status: 'idle',       // idle | building | calling | done | error
+    error: null,
+    codeMaitre: null,     // le prompt envoyé (debug)
+    brief: null,          // { text, model, generated_at, usage }
+    briefId: null,        // id de l'entity codex_briefs si sauvegardé
+  },
 };
 
 let _root = null;   // élément racine du workspace, null = fermé
@@ -228,7 +239,10 @@ function _onClick(e) {
   if (act === 'goto')           return _navigate(t.dataset.step);
   if (act === 'next')           return _advance();
   if (act === 'prev')           return _back();
-  if (act === 'history')        return _toastSoon('Historique des briefs');
+  if (act === 'history')        return _openLibrary();
+  if (act === 'lib-close')      return _closeLibrary();
+  if (act === 'lib-open')       return _loadBriefFromLibrary(t.dataset.id);
+  if (act === 'lib-delete')     return _deleteBriefFromLibrary(t.dataset.id);
   if (act === 'save')           { _saveDraft(); _toastOk('Brouillon sauvegardé'); return; }
   if (act === 'help')           return _toastSoon('Guide pas-à-pas');
   if (act === 'reset')          {
@@ -249,6 +263,197 @@ function _onClick(e) {
   if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
   if (act === 'assets-toggle')  return _toggleAsset(t.dataset.key);
+  // Sprint Kodex-4.1 : génération du brief
+  if (act === 'generate-brief') return _generateBrief();
+  if (act === 'regenerate')     return _generateBrief();
+  if (act === 'view-prompt')    return _toggleViewPrompt(t);
+  if (act === 'download-pdf')   return _downloadBriefPdf();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-4.3 — Bibliothèque des briefs sauvegardés
+// ═══════════════════════════════════════════════════════════════
+async function _openLibrary() {
+  // Construit l'overlay s'il n'existe pas
+  let overlay = _root?.querySelector('[data-slot="kodex-library"]');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.dataset.slot = 'kodex-library';
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: 10000,
+      background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      paddingTop: '8vh',
+    });
+    overlay.innerHTML = `
+      <div class="ws-card" style="width:90%;max-width:780px;max-height:80vh;display:flex;flex-direction:column;padding:24px 28px;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);">Bibliothèque</div>
+            <h2 style="margin:4px 0 0 0;font-size:22px;font-weight:800;letter-spacing:-.022em;">Mes briefs Kodex</h2>
+          </div>
+          <button class="ws-iconbtn" data-act="lib-close" title="Fermer">${icon('x', 18)}</button>
+        </div>
+        <div data-slot="lib-list" style="overflow-y:auto;flex:1;margin:-4px -4px;padding:4px;">
+          <div class="ws-empty">
+            <div class="ws-empty-icon">${icon('history', 24)}</div>
+            <p class="ws-empty-desc">Chargement…</p>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    // Click hors de la card → ferme
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) _closeLibrary();
+    });
+  }
+
+  // Hydratation asynchrone
+  const list = overlay.querySelector('[data-slot="lib-list"]');
+  try {
+    const briefs = await _fetchBriefs();
+    if (!briefs.length) {
+      list.innerHTML = `
+        <div class="ws-empty">
+          <div class="ws-empty-icon">${icon('history', 24)}</div>
+          <h3 class="ws-empty-title">Pas encore de brief sauvegardé</h3>
+          <p class="ws-empty-desc">Votre prochain brief généré apparaîtra ici, prêt à être ré-ouvert ou dupliqué.</p>
+        </div>
+      `;
+      return;
+    }
+    list.innerHTML = briefs.map(b => _renderBriefCard(b)).join('');
+  } catch (e) {
+    list.innerHTML = `
+      <div class="ws-empty">
+        <div class="ws-empty-icon" style="color:var(--danger);">${icon('x', 24)}</div>
+        <h3 class="ws-empty-title">Chargement impossible</h3>
+        <p class="ws-empty-desc">${_esc(e.message)}</p>
+      </div>
+    `;
+  }
+}
+
+function _closeLibrary() {
+  _root?.querySelector('[data-slot="kodex-library"]')?.remove();
+  // Si on l'a ajouté au body (cas overlay) :
+  document.querySelector('[data-slot="kodex-library"]')?.remove();
+}
+
+async function _fetchBriefs() {
+  const jwt = localStorage.getItem('ks_jwt');
+  if (!jwt) throw new Error('Connexion requise. Activez votre licence pour synchroniser les briefs.');
+  const res = await fetch(`${CF_API}/api/data/codex_briefs?limit=50`, {
+    headers: { 'Authorization': 'Bearer ' + jwt },
+  });
+  if (!res.ok) throw new Error('Erreur ' + res.status);
+  const data = await res.json();
+  return (data.items || []).sort((a, b) =>
+    (b._updatedAt || '').localeCompare(a._updatedAt || '')
+  );
+}
+
+function _renderBriefCard(b) {
+  const date = b._updatedAt
+    ? new Date(b._updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '—';
+  return `
+    <div class="ws-card" style="margin-bottom:10px;padding:14px 16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;">${_esc(b.title || 'Sans titre')}</h3>
+          <p style="margin:0;font-size:12px;color:var(--ws-text-muted);">
+            ${b.vendor ? _esc(b.vendor) + ' · ' : ''}${_esc(b.product_name || '')}
+            <span style="margin:0 6px;">·</span>
+            ${_esc(date)}
+            ${b.brief_model ? `<span style="margin:0 6px;">·</span><span>${_esc(b.brief_model)}</span>` : ''}
+          </p>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="ws-btn ws-btn--secondary" data-act="lib-open" data-id="${_esc(b.id)}" style="padding:6px 12px;font-size:12px;">
+            ${icon('arrow-right', 14)} Ouvrir
+          </button>
+          <button class="ws-iconbtn" data-act="lib-delete" data-id="${_esc(b.id)}" title="Supprimer" style="color:var(--danger);">
+            ${icon('x', 16)}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function _loadBriefFromLibrary(id) {
+  const jwt = localStorage.getItem('ks_jwt');
+  if (!jwt) return;
+  try {
+    const res = await fetch(`${CF_API}/api/data/codex_briefs/${id}`, {
+      headers: { 'Authorization': 'Bearer ' + jwt },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const b = await res.json();
+
+    // Restore le state Kodex à partir du brief sauvegardé
+    if (b.standard_id) {
+      _state.destination.standardId = b.standard_id;
+      _state.destination.standard = await getStandard(b.standard_id);
+      _state.destination.vendor   = b.vendor || null;
+      _state.destination.step     = 'done';
+    }
+    if (b.sector) _state.content.sector = b.sector;
+    if (b.fields) _state.content.fields = b.fields;
+    if (b.assets_snapshot) _state.assets = { ..._state.assets, ...b.assets_snapshot };
+
+    _state.output = {
+      status: 'done',
+      error: null,
+      codeMaitre: b.code_maitre || null,
+      brief: b.brief_text ? {
+        text: b.brief_text,
+        model: b.brief_model || '—',
+        generated_at: b.generated_at || b._updatedAt,
+      } : null,
+      briefId: id,
+    };
+    _state.view = 'output';
+
+    _saveDraft();
+    _closeLibrary();
+    _renderMain();
+    _hydrateBriefText();
+    _toastOk('Brief chargé');
+  } catch (e) {
+    _toastSoon('Ouverture impossible : ' + e.message);
+  }
+}
+
+async function _deleteBriefFromLibrary(id) {
+  if (!confirm('Supprimer définitivement ce brief de votre bibliothèque ?')) return;
+  const jwt = localStorage.getItem('ks_jwt');
+  if (!jwt) return;
+  try {
+    const res = await fetch(`${CF_API}/api/data/codex_briefs/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + jwt },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _toastOk('Brief supprimé');
+    _openLibrary();   // refresh
+  } catch (e) {
+    _toastSoon('Suppression impossible : ' + e.message);
+  }
+}
+
+// ─── Sprint Kodex-4.2 — Export du brief en PDF ────────────────
+async function _downloadBriefPdf() {
+  try {
+    const sector = await getSector(_state.content.sector);
+    exportBriefAsPDF(_state, sector);
+    _toastOk('Boîte d\'impression ouverte');
+  } catch (e) {
+    console.error('[Kodex] PDF export failed:', e);
+    _toastSoon('Export PDF échoué');
+  }
 }
 
 function _toggleAsset(key) {
@@ -1005,24 +1210,281 @@ function _wireAssetsForm() {
 // Vue 4 — OUTPUT
 // ═══════════════════════════════════════════════════════════════
 function _viewOutput() {
+  const o = _state.output;
+  const validationError = validateForGeneration(_state);
+  const activeEngine = localStorage.getItem('ks_active_engine') || 'Claude';
+
+  let body = '';
+
+  // ── État : déjà généré → afficher le résultat ─────────────
+  if (o.status === 'done' && o.brief) {
+    body = _renderBriefResult();
+  }
+  // ── État : en cours d'appel ─────────────────────────────
+  else if (o.status === 'calling' || o.status === 'building') {
+    body = `
+      <div class="ws-card" style="text-align:center;padding:48px 24px;">
+        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;animation:ws-pulse 1.4s ease-in-out infinite;">
+          ${icon('sparkles', 28)}
+        </div>
+        <h3 style="font-size:16px;font-weight:700;letter-spacing:-.018em;margin:0 0 6px 0;">Kodex assemble votre brief…</h3>
+        <p style="margin:0;font-size:13px;color:var(--ws-text-muted);max-width:380px;margin-inline:auto;line-height:1.55;">
+          Nous croisons les contraintes techniques avec vos données projet et la charte. L'IA produit la synthèse — généralement 10 à 20 secondes.
+        </p>
+      </div>
+      <style>
+        @keyframes ws-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%       { transform: scale(1.08); opacity: .7; }
+        }
+      </style>
+    `;
+  }
+  // ── État : erreur ────────────────────────────────────────
+  else if (o.status === 'error') {
+    body = `
+      <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          ${icon('x', 22)}
+          <div>
+            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--danger);">La génération a échoué</h3>
+            <p style="margin:0;font-size:13px;color:var(--ws-text);line-height:1.5;">${_esc(o.error || 'Erreur inconnue.')}</p>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;">
+        <button class="ws-btn ws-btn--accent" data-act="regenerate">
+          ${icon('refresh', 16)} Réessayer
+        </button>
+      </div>
+    `;
+  }
+  // ── État initial : invitation à générer ──────────────────
+  else {
+    const canGenerate = !validationError;
+    body = `
+      <div class="ws-card" style="text-align:center;padding:48px 24px;${canGenerate ? '' : 'opacity:.7;'}">
+        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;color:var(--gold);">
+          ${icon('sparkles', 28)}
+        </div>
+        <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Tout est prêt pour générer votre brief</h3>
+        <p style="margin:0 0 20px 0;font-size:13.5px;color:var(--ws-text-soft);max-width:440px;margin-inline:auto;line-height:1.6;">
+          Kodex va interroger le moteur <strong style="color:var(--ws-text);">${_esc(activeEngine)}</strong> avec
+          votre clé API personnelle (BYOK). Aucune donnée projet ne transite par nos serveurs au-delà du proxy technique.
+        </p>
+        <button class="ws-btn ws-btn--accent" data-act="generate-brief" ${canGenerate ? '' : 'disabled'} style="padding:12px 22px;font-size:14px;">
+          ${icon('sparkles', 16)} Générer le brief
+        </button>
+        ${validationError ? `
+          <div style="margin-top:14px;font-size:12.5px;color:var(--warn);display:inline-flex;align-items:center;gap:6px;">
+            ${icon('x', 14)} ${_esc(validationError)}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   return `
     <span class="ws-eyebrow">${icon('sparkles', 12)} 4 sur 4 · Le brief</span>
-    <h1 class="ws-h1">C'est le moment&nbsp;!</h1>
+    <h1 class="ws-h1">${o.status === 'done' ? 'Votre brief est prêt' : 'C\'est le moment&nbsp;!'}</h1>
     <p class="ws-lead">
-      Nous assemblons toutes vos informations en un brief technique infaillible,
-      prêt à être téléchargé en PDF et envoyé à votre graphiste. En bonus,
-      vous recevrez 5 punchlines marketing pour inspirer votre équipe.
+      ${o.status === 'done'
+        ? 'Voici le cahier des charges technique infaillible à envoyer à votre graphiste. Vous pouvez le réviser, le régénérer ou le télécharger.'
+        : 'Nous assemblons toutes vos informations en un brief technique infaillible, prêt à envoyer à votre graphiste. En bonus, 5 punchlines marketing pour inspirer votre équipe.'
+      }
     </p>
-
-    <div class="ws-empty">
-      <div class="ws-empty-icon">${icon('sparkles', 24)}</div>
-      <h3 class="ws-empty-title">Le générateur arrive bientôt</h3>
-      <p class="ws-empty-desc">
-        En un clic, votre brief PDF sera prêt&nbsp;: contraintes techniques pour
-        votre maquettiste, idées d'accroches pour votre communication.
-      </p>
-    </div>
+    ${body}
   `;
+}
+
+// ── Affichage du résultat IA + actions ────────────────────────
+function _renderBriefResult() {
+  const o = _state.output;
+  const brief = o.brief;
+  const generatedAt = brief?.generated_at ? new Date(brief.generated_at).toLocaleString('fr-FR') : '—';
+
+  return `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+      <span class="ws-badge ws-badge--success">${icon('check', 12)} Généré le ${_esc(generatedAt)}</span>
+      ${brief.model ? `<span class="ws-badge">Modèle : ${_esc(brief.model)}</span>` : ''}
+      ${o.briefId ? `<span class="ws-badge">Sauvegardé en bibliothèque</span>` : `<span class="ws-badge" style="color:var(--warn);">Brouillon non sauvegardé</span>`}
+    </div>
+
+    <div class="ws-card" style="padding:24px 28px;">
+      <div data-slot="brief-text" style="font-size:14px;line-height:1.7;color:var(--ws-text);"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
+      <button class="ws-btn ws-btn--accent" data-act="download-pdf">
+        ${icon('download', 16)} Télécharger en PDF
+      </button>
+      <button class="ws-btn ws-btn--secondary" data-act="regenerate">
+        ${icon('refresh', 16)} Régénérer
+      </button>
+      <button class="ws-btn ws-btn--ghost" data-act="view-prompt">
+        ${icon('file-text', 16)} Voir le Code Maître envoyé
+      </button>
+    </div>
+
+    <details data-slot="prompt-details" style="margin-top:14px;display:none;">
+      <summary style="font-size:12.5px;color:var(--ws-text-muted);cursor:pointer;">Détail du prompt</summary>
+      <pre style="margin-top:10px;padding:12px;background:var(--navy3);border-radius:var(--ws-radius);font-size:11px;line-height:1.5;color:var(--ws-text-soft);overflow:auto;max-height:300px;white-space:pre-wrap;">${_esc(o.codeMaitre || '')}</pre>
+    </details>
+  `;
+}
+
+// ── Affichage markdown très light dans la card brief ──────────
+function _hydrateBriefText() {
+  const slot = _root?.querySelector('[data-slot="brief-text"]');
+  if (!slot || !_state.output.brief?.text) return;
+  slot.innerHTML = _mdLite(_state.output.brief.text);
+}
+
+function _toggleViewPrompt(btn) {
+  const det = _root?.querySelector('[data-slot="prompt-details"]');
+  if (!det) return;
+  det.style.display = det.style.display === 'block' ? 'none' : 'block';
+}
+
+// Conversion markdown → HTML ultra-minimaliste (titres, gras, listes)
+function _mdLite(text) {
+  let html = _esc(text);
+  // Titres
+  html = html.replace(/^###\s+(.+)$/gm, '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ws-text-muted);margin:18px 0 8px 0;">$1</h3>');
+  html = html.replace(/^##\s+(.+)$/gm,  '<h2 style="font-size:16px;font-weight:700;letter-spacing:-.012em;margin:24px 0 10px 0;color:var(--ws-text);">$1</h2>');
+  html = html.replace(/^#\s+(.+)$/gm,   '<h1 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:24px 0 12px 0;color:var(--ws-text);">$1</h1>');
+  // Gras
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--ws-text);font-weight:700;">$1</strong>');
+  // Listes : on regroupe les lignes "- " consécutives
+  html = html.replace(/((?:^- .+(?:\n|$))+)/gm, m => {
+    const items = m.trim().split('\n').map(l => '<li style="margin:5px 0;">' + l.replace(/^- /, '') + '</li>').join('');
+    return `<ul style="margin:10px 0;padding-left:22px;">${items}</ul>`;
+  });
+  // Paragraphes (les blocs séparés par double newline qui ne sont pas déjà du HTML)
+  html = html.split(/\n\n+/).map(block => {
+    if (/^<(h\d|ul|li|strong)/.test(block.trim())) return block;
+    return `<p style="margin:8px 0;">${block.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-4.1 — Génération du brief via PromptEngine
+// ═══════════════════════════════════════════════════════════════
+async function _generateBrief() {
+  const err = validateForGeneration(_state);
+  if (err) { _toastSoon(err); return; }
+
+  // Récupère le moteur actif + la clé API du vault user (localStorage)
+  const engineLabel = localStorage.getItem('ks_active_engine') || 'Claude';
+  const engineKey   = _findApiKeyForEngine(engineLabel);
+  if (!engineKey) {
+    _state.output.status = 'error';
+    _state.output.error  = `Aucune clé API ${engineLabel} configurée. Allez dans Réglages → Vault pour la saisir.`;
+    _saveDraft();
+    _renderMain();
+    return;
+  }
+
+  _state.output.status = 'building';
+  _renderMain();
+
+  // Construit le prompt
+  let prompt;
+  try {
+    const sector = await getSector(_state.content.sector);
+    prompt = buildCodeMaitre(_state, sector);
+    _state.output.codeMaitre = prompt;
+  } catch (e) {
+    _state.output.status = 'error';
+    _state.output.error = `Construction du prompt échouée : ${e.message}`;
+    _renderMain();
+    return;
+  }
+
+  // Appelle le moteur via PromptEngine (BYOK proxy Worker)
+  _state.output.status = 'calling';
+  _renderMain();
+
+  try {
+    const text = await ApiHandler.callEngine(engineLabel, prompt, engineKey);
+    _state.output.brief = {
+      text,
+      model: engineLabel,
+      generated_at: new Date().toISOString(),
+    };
+    _state.output.status = 'done';
+    _state.output.error = null;
+
+    // Sauvegarde dans D1 entity codex_briefs (best-effort)
+    _saveBriefInLibrary().catch(e => console.warn('[Kodex] save brief failed:', e.message));
+
+    _saveDraft();
+    _renderMain();
+    _hydrateBriefText();
+    _toastOk('Brief généré');
+  } catch (e) {
+    _state.output.status = 'error';
+    _state.output.error = e.message || 'Erreur lors de l\'appel au moteur AI.';
+    _saveDraft();
+    _renderMain();
+  }
+}
+
+// ── Trouve la clé API du vault correspondant au moteur ────────
+function _findApiKeyForEngine(label) {
+  const map = {
+    'Claude'    : 'anthropic',
+    'ChatGPT'   : 'openai',
+    'GPT 5'     : 'openai',
+    'Gemini'    : 'gemini',
+    'Mistral'   : 'mistral',
+    'Grok'      : 'xai',
+    'Perplexity': 'perplexity',
+    'Llama'     : 'meta',
+  };
+  const id = map[label] || label.toLowerCase();
+  return localStorage.getItem('ks_api_' + id) || null;
+}
+
+// ── Sauvegarde du brief en bibliothèque (D1 entity codex_briefs) ──
+async function _saveBriefInLibrary() {
+  const jwt = localStorage.getItem('ks_jwt');
+  if (!jwt) return;       // pas de licence → pas de cloud (offline OK)
+
+  const payload = {
+    title: _briefTitle(),
+    standard_id: _state.destination.standardId,
+    vendor: _state.destination.standard?.vendor,
+    product_name: _state.destination.standard?.product_name,
+    sector: _state.content.sector,
+    fields: _state.content.fields,
+    assets_snapshot: _state.assets,
+    code_maitre: _state.output.codeMaitre,
+    brief_text: _state.output.brief.text,
+    brief_model: _state.output.brief.model,
+    generated_at: _state.output.brief.generated_at,
+  };
+
+  const res = await fetch(`${CF_API}/api/data/codex_briefs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+    body: JSON.stringify(payload),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    _state.output.briefId = data.id;
+  }
+}
+
+// ── Titre lisible pour un brief sauvegardé ────────────────────
+function _briefTitle() {
+  const std  = _state.destination.standard;
+  const prog = _state.content.fields?.nom_programme;
+  const parts = [];
+  if (prog) parts.push(prog);
+  if (std)  parts.push(`${std.product_name} ${std.vendor}`);
+  return parts.join(' — ') || 'Brief sans titre';
 }
 
 // ═══════════════════════════════════════════════════════════════
