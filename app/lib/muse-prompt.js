@@ -4,9 +4,11 @@
    ─────────────────────────────────────────────────────────────
    Le "Prompt Maître Artistique" est un texte structuré que
    l'utilisateur copie-colle dans son IA (Claude, Gemini, ChatGPT…).
-   Cette IA tierce génère en retour un dashboard HTML interactif
-   contenant 4 CTA copy-to-clipboard pour des prompts secondaires
-   destinés aux générateurs d'images (Midjourney, Flux, DALL-E…).
+   Cette IA tierce génère en retour un fichier HTML contenant UN SEUL
+   bouton copy-to-clipboard avec UN SEUL prompt unifié destiné à un
+   générateur d'images (Midjourney, Flux, DALL-E…). Ce prompt unique
+   produit en une seule génération une planche moodboard complète
+   (grille 3×2 de 6 vignettes thématiques cohérentes).
 
    Muse n'appelle PAS de LLM lui-même : il assemble du texte
    à partir des choix de l'utilisateur. La génération visuelle
@@ -128,9 +130,9 @@ export async function buildPromptMaitre(state) {
     _line('Matériaux à mettre en avant', mood.materials_focus),
   ].filter(Boolean).join('\n');
 
-  // ── Bloc 4 : Ancres techniques pour les prompts secondaires ─
-  // Ces "anchors" sont des fragments de prompt anglais prêts à être
-  // assemblés par l'IA cible dans les 4 CTA Moodboard.
+  // ── Bloc 4 : Ancres techniques pour le prompt de la planche ──
+  // Ces "anchors" sont des fragments de prompt anglais que l'IA cible
+  // assemblera dans le prompt UNIQUE de la planche d'ambiance.
   const anchorLines = [];
   if (viewpoint?.prompt_anchor)  anchorLines.push(`- viewpoint: ${viewpoint.prompt_anchor}`);
   if (light?.prompt_anchor)      anchorLines.push(`- light: ${light.prompt_anchor}`);
@@ -195,11 +197,12 @@ ${coherence ? `> ⚠️ **Note de cohérence** : ${coherence}\n` : ''}
 ## Section B — Master Concept (description narrative pour le studio)
 Un paragraphe descriptif riche (8 à 12 lignes) de l'illustration finale attendue : composition, qualité de lumière, ambiance générale, matériaux dominants, présence humaine, tonalité émotionnelle. Style : brief de DA à un studio 3D pro. **Tu décris ce que le studio doit produire**, pas une image que l'IA va générer.
 
-## Section C — La Planche d'ambiance (1 CTA copy-to-clipboard unique)
+## Section C — La Planche d'ambiance
 
-**Approche moodboard professionnel** : au lieu de produire quatre prompts séparés à générer un par un, tu produis **UN SEUL prompt** qui génère **une planche d'ambiance complète, cohérente, en une seule image**. C'est la pratique standard des studios 3D et des directeurs artistiques : une planche unique (6 vignettes en grille) vaut mieux que quatre images éparses à assembler à la main. Garantit la cohérence palette/lumière/traitement entre toutes les références.
+> 🔒 **RÈGLE STRUCTURELLE IMPÉRATIVE — à respecter absolument** :
+> Le HTML doit contenir **UN SEUL bouton "Copier"**, qui copie **UN SEUL prompt unifié**. Ce prompt unique génère, en une seule passe dans le moteur d'image, une **planche moodboard complète** composée de 6 vignettes thématiques disposées en grille 3×2. **Ne produis JAMAIS plusieurs boutons / plusieurs prompts thématiques séparés.** L'utilisateur veut UNE image-planche cohérente, pas une collection d'images séparées à assembler. C'est la pratique standard des studios 3D et des DA : une planche unique garantit la cohérence palette/lumière/traitement entre toutes les vignettes.
 
-Un bouton "**Copier le prompt de la planche d'ambiance**" stylisé, implémenté en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s.
+Implémentation : un bouton "**Copier le prompt de la planche d'ambiance**" stylisé, en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s. Le prompt copié est le prompt unifié décrit ci-dessous.
 
 ### La planche à générer : 6 vignettes en grille 3×2
 
@@ -272,7 +275,10 @@ Si malgré tout tu refuses, explique précisément quelle phrase pose problème 
 
 # Démarre maintenant
 Étape 1 : liste les pièces techniques à recevoir et attends ma réponse (réponse courte et structurée).
-Étape 2 : dès que l'utilisateur répond — pièces fournies OU "continue sans" — produis directement le HTML autonome demandé en respectant la règle d'or (références d'ambiance uniquement, jamais le projet lui-même, prompts secondaires intégralement en anglais).`;
+Étape 2 : dès que l'utilisateur répond — pièces fournies OU "continue sans" — produis directement le HTML autonome demandé en respectant :
+  1. La **règle d'or** (références d'ambiance uniquement, jamais le projet lui-même).
+  2. La **règle structurelle** : Section C contient **UN SEUL bouton "Copier"** avec **UN SEUL prompt unifié** qui génère **UNE seule image-planche** (grille 3×2, 6 vignettes thématiques). Pas plusieurs boutons. Pas plusieurs prompts. Une planche cohérente, un prompt, un clic.
+  3. Le prompt unique est intégralement en anglais et adapté à la syntaxe du moteur ${engine.label}.`;
 }
 
 /**

@@ -8,10 +8,13 @@
    structuré, à coller dans une IA tierce (Claude, Gemini,
    ChatGPT, Mistral, Grok, Perplexity, Llama).
 
-   L'IA tierce génère en retour un dashboard HTML autonome
-   interactif avec 4 CTA copy-to-clipboard (Architecture,
-   Lifestyle, Palette végétale, Textures & matériaux) pour les
-   générateurs d'images (Midjourney, Flux, DALL-E, Nano Banana…).
+   L'IA tierce génère en retour un fichier HTML autonome avec
+   UN SEUL bouton copy-to-clipboard contenant UN SEUL prompt
+   unifié, destiné à un générateur d'images (Midjourney, Flux,
+   DALL-E, Nano Banana…). Ce prompt unique produit en une seule
+   passe une planche moodboard complète (grille 3×2, 6 vignettes
+   thématiques : architecture, lumière, palette végétale,
+   matériaux, lifestyle, détail signature).
 
    Architecture des 4 étapes :
    ─────────────────────────────────────────────────────────────
