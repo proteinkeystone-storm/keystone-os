@@ -118,7 +118,13 @@ export async function handleLogin(request, env) {
     .run();
 
   // Récupère une licence active pour ce tenant (première trouvée par défaut)
-  // En production, associez le device à une licence spécifique
+  // Sprint Sécu-1 / C4 — décision Q1c :
+  // Discipline : le flow device (B2B terrain) ne doit PAS croiser les
+  // licences Stripe (B2C payeurs solo, tenant='default'). Quand on
+  // crée un device pour un client B2B (ex: Prométhée), on assigne
+  // explicitement device.tenant_id = leur tenant dédié, jamais 'default'.
+  // Sinon le device récupérerait la licence Stripe la plus récente
+  // d'un payeur quelconque. À durcir : foreign key device.licence_id.
   const licence = await env.DB
     .prepare('SELECT * FROM licences WHERE tenant_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1')
     .bind(device.tenant_id)

@@ -101,12 +101,18 @@ async function _handleCheckoutCompleted(env, event) {
   const lookupHmac = await blindIndex(key, env.KS_LOOKUP_PEPPER);
   const { hash, salt } = await hashKey(key);
 
+  // Sprint Sécu-1 / C4 — décision Q1c :
+  // Les licences Stripe (B2C, payeurs solo) atterrissent toutes dans
+  // tenant_id='default'. L'isolation entre payeurs passe par JWT.sub
+  // (= lookup_hmac), pas par tenant_id. Les clients B2B (type Prométhée)
+  // ont leur propre tenant_id, créé manuellement via /api/licence/activate.
+  // tenant_id est posé explicitement ici pour rendre l'intention lisible.
   await env.DB.prepare(`
     INSERT INTO licences (
-      key, owner, plan, is_active, owned_assets, customer_email,
+      key, tenant_id, owner, plan, is_active, owned_assets, customer_email,
       stripe_customer_id, stripe_subscription_id,
       lookup_hmac, key_hash, salt, created_at
-    ) VALUES (?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, 'default', ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).bind(
     key,
     customerEmail.split('@')[0],

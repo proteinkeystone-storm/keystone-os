@@ -15,7 +15,8 @@
    et os_kind dérivés du User-Agent, ua_hash = sha-256(UA) tronqué.
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { json, err, parseBody, getAllowedOrigin, requireDevice } from '../lib/auth.js';
+import { requireJWT } from '../lib/jwt.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -60,10 +61,17 @@ function isValidUrl(s) {
   catch { return false; }
 }
 
-// Pour l'instant l'auth tenant = header X-Tenant-Id (pas de JWT pour
-// l'artefact). À renforcer quand on aura un système de devices ou JWT.
-function getTenantId(request) {
-  return (request.headers.get('X-Tenant-Id') || 'default').trim();
+// Sprint Sécu-1 / C2 : auth obligatoire pour tous les CRUD QR.
+// Le tenant est dérivé du JWT licence (sub = lookup_hmac) OU du
+// device token. Le header X-Tenant-Id n'est plus pris en compte —
+// cela empêche le tenant spoofing par envoi d'un header arbitraire.
+// Retourne null si auth absente ou invalide → 401 côté handler.
+async function _authTenant(request, env) {
+  const claims = await requireJWT(request, env);
+  if (claims?.sub) return claims.sub;
+  const device = await requireDevice(request, env);
+  if (device?.tenant_id) return device.tenant_id;
+  return null;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -209,7 +217,8 @@ const ALLOWED_TYPES = new Set(['url', 'text', 'vcard', 'wifi', 'ical']);
 
 export async function handleCreateQr(request, env) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
   const body     = await parseBody(request);
 
   const name    = (body.name || '').toString().trim();
@@ -291,7 +300,8 @@ export async function handleCreateQr(request, env) {
 // ══════════════════════════════════════════════════════════════════
 export async function handleListQr(request, env) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
 
   // QRs = entités type='qr_codes' du tenant (non supprimées)
   const { results: qrRows } = await env.DB
@@ -340,7 +350,8 @@ export async function handleListQr(request, env) {
 // ══════════════════════════════════════════════════════════════════
 export async function handleUpdateQr(request, env, qrId) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
   const body     = await parseBody(request);
 
   // Charge l'entité existante
@@ -429,7 +440,8 @@ export async function handleUpdateQr(request, env, qrId) {
 // ══════════════════════════════════════════════════════════════════
 export async function handleDeleteQr(request, env, qrId) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
 
   const row = await env.DB
     .prepare(`SELECT data FROM entities
@@ -478,7 +490,8 @@ const PERIOD_DAYS = { '7d': 7, '30d': 30, '90d': 90, 'all': null };
 
 export async function handleStatsQr(request, env, qrId) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
   const url      = new URL(request.url);
   const period   = url.searchParams.get('period') || '30d';
   const days     = PERIOD_DAYS[period];   // null = all
@@ -590,7 +603,8 @@ export async function handleStatsQr(request, env, qrId) {
 // ══════════════════════════════════════════════════════════════════
 export async function handleScansCsv(request, env, qrId) {
   const origin   = getAllowedOrigin(env, request);
-  const tenantId = getTenantId(request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
 
   const row = await env.DB
     .prepare(`SELECT data FROM entities
