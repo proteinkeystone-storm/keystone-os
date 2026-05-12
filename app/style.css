@@ -6034,19 +6034,35 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 
 /* ── Detail (QR sélectionné) ──────────────────────────────── */
+/* align-items:start évite le stretch grid → permet le sticky de la card */
 .sdqr-detail {
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 32px;
+  align-items: start;
 }
 .sdqr-detail-left { display: flex; flex-direction: column; gap: 12px; }
+/* Sticky : la carte QR reste visible en haut quand on scroll dans le
+   panneau Design ouvert plus bas. UX clé pour voir l'aperçu live
+   pendant qu'on bouge couleurs/dégradés/logo. */
 .sdqr-detail-card {
   padding: 20px;
-  background: rgba(255,255,255,.02);
+  background: rgba(10,16,36,.92);          /* opaque pour ne pas voir au travers */
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 12px;
   display: flex; flex-direction: column; gap: 14px;
+  position: sticky;
+  top: 16px;
+  z-index: 5;
+  /* Si l'écran est trop petit, on autorise un scroll interne à la card
+     (rare en desktop, utile en notebook 13"). */
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
+/* Cache la scrollbar interne sauf au hover pour discrétion */
+.sdqr-detail-card::-webkit-scrollbar { width: 4px; }
+.sdqr-detail-card::-webkit-scrollbar-thumb { background: rgba(99,102,241,.18); border-radius: 2px; }
 .sdqr-detail-svg {
   background: #fff;
   border-radius: 8px;
