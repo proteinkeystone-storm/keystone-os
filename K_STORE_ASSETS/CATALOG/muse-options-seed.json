@@ -99,11 +99,11 @@
   ],
 
   "figurations": [
-    { "id": "family",          "label": "Famille avec enfants",     "prompt_anchor": "young family with two children, candid lifestyle moment, natural interaction" },
-    { "id": "young-actives",   "label": "Jeunes actifs urbains",    "prompt_anchor": "young urban professionals, late twenties to mid-thirties, casual-chic styling" },
-    { "id": "seniors-csp",     "label": "Seniors CSP+",             "prompt_anchor": "elegant senior couple, refined casual wear, calm confident demeanor" },
-    { "id": "investor-luxury", "label": "Investisseur luxe",        "prompt_anchor": "discreet luxury patron, tailored neutral wardrobe, low-key affluent presence" },
-    { "id": "none",            "label": "Aucune figuration · architecture pure", "prompt_anchor": "no human figure, pure architectural composition" }
+    { "id": "family",          "label": "Profil acheteur famille",     "prompt_anchor": "ambient family-oriented residential lifestyle suggestion, blurred silhouette in distance, no detailed facial features, editorial home-life mood" },
+    { "id": "young-actives",   "label": "Profil acheteur jeunes actifs urbains",    "prompt_anchor": "ambient urban-professional lifestyle suggestion, distant blurred silhouette, no detailed facial features, contemporary residential mood" },
+    { "id": "seniors-csp",     "label": "Profil acheteur seniors CSP+",             "prompt_anchor": "ambient refined-retiree lifestyle suggestion, distant blurred silhouette, no detailed facial features, calm upscale mood" },
+    { "id": "investor-luxury", "label": "Profil acheteur investisseur luxe",        "prompt_anchor": "ambient luxury-buyer lifestyle suggestion, distant blurred silhouette, no detailed facial features, discreet affluent mood" },
+    { "id": "none",            "label": "Aucune figuration · architecture pure", "prompt_anchor": "no human figure, pure architectural composition, empty staged interior or exterior" }
   ],
 
   "styles": [
