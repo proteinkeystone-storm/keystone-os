@@ -34,14 +34,14 @@ const WORKSPACE_META = {
 
 // ── Définition des étapes (ordre + icône + label) ──────────────
 const STEPS = [
-  { id: 'destination', label: 'Destination', icon: 'target',
-    sublabel: 'Acteur et produit' },
-  { id: 'content',     label: 'Contenu',     icon: 'edit',
-    sublabel: 'Saisies métier' },
-  { id: 'assets',      label: 'Assets',      icon: 'package',
-    sublabel: 'Coffre-fort + pièces' },
-  { id: 'output',      label: 'Génération',  icon: 'sparkles',
-    sublabel: 'Brief PDF final' },
+  { id: 'destination', label: 'Le support',   icon: 'target',
+    sublabel: 'Où ça va être publié' },
+  { id: 'content',     label: 'Le message',   icon: 'edit',
+    sublabel: 'Ce que vous voulez dire' },
+  { id: 'assets',      label: 'Les visuels',  icon: 'package',
+    sublabel: 'Logos, charte et photos' },
+  { id: 'output',      label: 'Le brief',     icon: 'sparkles',
+    sublabel: 'Le PDF prêt à envoyer' },
 ];
 
 // ── État global (in-memory, persistance en Sprint Kodex-2+) ───
@@ -216,30 +216,31 @@ function _renderAside() {
   const aside = _root.querySelector('[data-slot="aside"]');
   aside.innerHTML = `
     <div class="ws-aside-section">
-      <div class="ws-aside-title">Pourquoi cet outil</div>
+      <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Kodex vous évite l'erreur d'impression qui coûte cher : DPI insuffisant,
-        marges oubliées, format incompatible avec l'imprimeur. Le brief généré
-        est validé pour fabrication, prêt à envoyer à votre graphiste.
+        Kodex vous évite les erreurs d'impression qui coûtent cher&nbsp;:
+        résolution insuffisante, marges oubliées, format pas adapté à
+        votre imprimeur. Vous repartez avec un brief PDF prêt à envoyer,
+        que votre graphiste pourra suivre les yeux fermés.
       </div>
     </div>
 
     <div class="ws-aside-section">
-      <div class="ws-aside-title">Progression</div>
+      <div class="ws-aside-title">Votre progression</div>
       <div class="ws-aside-card" data-slot="progress">
-        <span class="ws-badge">Étape ${_currentStepIndex() + 1} / ${STEPS.length}</span>
+        <span class="ws-badge">Étape ${_currentStepIndex() + 1} sur ${STEPS.length}</span>
       </div>
     </div>
 
     <div class="ws-aside-section">
-      <div class="ws-aside-title">Killer feature</div>
+      <div class="ws-aside-title">Notre force</div>
       <div class="ws-aside-card">
         <strong style="color: var(--ws-text); display:block; margin-bottom:6px;">
-          ${icon('ruler', 14)} Calculateur d'échelle
+          ${icon('ruler', 14)} Calculateur d'échelle automatique
         </strong>
-        Pour les grands formats (bâche, 4×3), Kodex verrouille
-        automatiquement le DPI de travail selon la distance de vue —
-        finie l'affiche pixelisée à 800&nbsp;€.
+        Pour les grands formats (bâches, panneaux 4×3), nous calculons
+        automatiquement la bonne résolution selon la distance à laquelle
+        votre affiche sera vue. Plus de surprise désagréable à la livraison.
       </div>
     </div>
   `;
@@ -274,22 +275,23 @@ function _renderMain() {
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
   const categories = [
-    { id: 'print', label: 'Imprimeur', icon: 'printer',
-      desc: 'Exaprint, Pixartprinting, Vistaprint — flyers, affiches, bâches, brochures, cartes de visite.' },
-    { id: 'social', label: 'Réseaux sociaux', icon: 'globe',
-      desc: 'Meta, LinkedIn, X, Google Business — posts, stories, reels, bannières.' },
-    { id: 'press', label: 'Presse & magazines', icon: 'book-open',
-      desc: 'Propriétés Le Figaro, Logic-Immo, Côte Magazine, La Provence et autres parutions immo.' },
-    { id: 'custom', label: 'Format personnalisé', icon: 'custom',
-      desc: 'Dimensions libres + upload du PDF de spécifications du prestataire.' },
+    { id: 'print', label: 'Une impression', icon: 'printer',
+      desc: 'Flyer, affiche, bâche, carte de visite, brochure&nbsp;— chez Exaprint, Pixartprinting, Vistaprint ou votre imprimeur habituel.' },
+    { id: 'social', label: 'Les réseaux sociaux', icon: 'globe',
+      desc: 'Instagram, Facebook, LinkedIn, Google Business&nbsp;— post, story, reel ou bannière.' },
+    { id: 'press', label: 'Un magazine', icon: 'book-open',
+      desc: 'Propriétés Le Figaro, Logic-Immo, Côte Magazine, La Provence&nbsp;— et les autres parutions immo.' },
+    { id: 'custom', label: 'Un format à moi', icon: 'custom',
+      desc: 'Dimensions libres&nbsp;— vous pouvez aussi joindre le PDF de spécifications de votre prestataire.' },
   ];
 
   return `
-    <span class="ws-eyebrow">${icon('target', 12)} Étape 1 sur 4</span>
-    <h1 class="ws-h1">Où votre création sera-t-elle publiée&nbsp;?</h1>
+    <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
+    <h1 class="ws-h1">Où voulez-vous que votre création apparaisse&nbsp;?</h1>
     <p class="ws-lead">
-      Choisissez le canal de diffusion. Kodex verrouille immédiatement les contraintes
-      techniques (format, marges, colorimétrie, résolution) propres à cet acteur.
+      Choisissez le support. Nous nous occupons ensuite des contraintes techniques —
+      format exact, marges, résolution, colorimétrie. Plus besoin d'aller chercher
+      les spécifications du prestataire&nbsp;: on connaît déjà.
     </p>
 
     <div class="ws-card-grid">
@@ -309,10 +311,10 @@ function _viewDestination() {
 
     <div class="ws-empty" style="margin-top:32px;">
       <div class="ws-empty-icon" style="width:48px;height:48px;">${icon('printer', 22)}</div>
-      <h3 class="ws-empty-title">Catalogue des standards</h3>
+      <h3 class="ws-empty-title">Le catalogue arrive bientôt</h3>
       <p class="ws-empty-desc">
-        Une fois la catégorie sélectionnée, vous accéderez à la liste des produits avec
-        leurs spécifications techniques verrouillées. Sprint Kodex-2.
+        Une fois votre support choisi, vous verrez la liste des produits disponibles
+        avec leurs caractéristiques déjà préparées pour vous.
       </p>
     </div>
   `;
@@ -323,21 +325,21 @@ function _viewDestination() {
 // ═══════════════════════════════════════════════════════════════
 function _viewContent() {
   return `
-    <span class="ws-eyebrow">${icon('edit', 12)} Étape 2 sur 4</span>
-    <h1 class="ws-h1">Que voulez-vous communiquer&nbsp;?</h1>
+    <span class="ws-eyebrow">${icon('edit', 12)} 2 sur 4 · Le message</span>
+    <h1 class="ws-h1">Que voulez-vous dire&nbsp;?</h1>
     <p class="ws-lead">
-      Les champs s'adaptent à votre secteur. Pour la promotion immobilière, Kodex
-      récupère automatiquement les données déjà saisies dans vos autres outils
-      (nom de programme, mentions légales, typologies) — vous n'écrivez chaque
-      donnée qu'une seule fois.
+      Quelques champs simples pour décrire ce que vous voulez communiquer.
+      Si vous avez déjà rempli d'autres outils Keystone — par exemple votre
+      notice VEFA — les informations communes apparaîtront ici en pré-rempli.
+      Plus besoin de tout retaper.
     </p>
 
     <div class="ws-empty">
       <div class="ws-empty-icon">${icon('edit', 24)}</div>
-      <h3 class="ws-empty-title">Formulaire sectoriel arrivant</h3>
+      <h3 class="ws-empty-title">Le formulaire arrive bientôt</h3>
       <p class="ws-empty-desc">
-        Profil <strong>Immobilier</strong> en cours de chargement. Les profils
-        Retail et Restauration seront ajoutés ensuite. Sprint Kodex-2.
+        Pour l'instant, les champs adaptés à l'immobilier sont en préparation.
+        D'autres univers (commerce, restauration) suivront.
       </p>
     </div>
   `;
@@ -348,22 +350,22 @@ function _viewContent() {
 // ═══════════════════════════════════════════════════════════════
 function _viewAssets() {
   return `
-    <span class="ws-eyebrow">${icon('package', 12)} Étape 3 sur 4</span>
-    <h1 class="ws-h1">Quels visuels et chartes&nbsp;?</h1>
+    <span class="ws-eyebrow">${icon('package', 12)} 3 sur 4 · Les visuels</span>
+    <h1 class="ws-h1">Quels éléments visuels avons-nous&nbsp;?</h1>
     <p class="ws-lead">
-      Cochez ce que Protein Studio possède déjà pour vous (logos, charte graphique, polices)
-      et téléversez uniquement ce qui manque. Vos assets sont chiffrés au repos et synchronisés
-      entre vos appareils.
+      Cochez ce que Protein Studio a déjà reçu de votre part — votre logo, vos couleurs,
+      vos polices — et téléversez le reste si nécessaire. Tout reste chiffré et synchronisé
+      entre vos appareils, vous n'aurez plus jamais à le renvoyer.
     </p>
 
-    <h2 class="ws-h2">Déjà connus de Keystone</h2>
+    <h2 class="ws-h2">Ce que nous avons déjà</h2>
     <div class="ws-card-grid">
       <div class="ws-card">
         <div class="ws-card-row">
           <div class="ws-card-icon">${icon('image', 22)}</div>
           <div class="ws-card-body">
-            <h3 class="ws-card-title">Logo principal</h3>
-            <p class="ws-card-desc">À cocher si vous nous avez déjà transmis votre logo vectoriel.</p>
+            <h3 class="ws-card-title">Votre logo</h3>
+            <p class="ws-card-desc">Cochez si vous nous l'avez déjà transmis (en vectoriel ou haute définition).</p>
           </div>
         </div>
       </div>
@@ -371,20 +373,20 @@ function _viewAssets() {
         <div class="ws-card-row">
           <div class="ws-card-icon">${icon('palette', 22)}</div>
           <div class="ws-card-body">
-            <h3 class="ws-card-title">Charte graphique</h3>
-            <p class="ws-card-desc">Couleurs HEX/CMJN, polices titre &amp; corps.</p>
+            <h3 class="ws-card-title">Vos couleurs et polices</h3>
+            <p class="ws-card-desc">Votre charte graphique : couleurs de marque, polices titre et corps.</p>
           </div>
         </div>
       </div>
     </div>
 
-    <h2 class="ws-h2">À téléverser</h2>
+    <h2 class="ws-h2">Ce qu'il manque</h2>
     <div class="ws-empty">
       <div class="ws-empty-icon">${icon('upload-cloud', 24)}</div>
-      <h3 class="ws-empty-title">Zone de dépôt arrivant</h3>
+      <h3 class="ws-empty-title">L'espace de dépôt arrive bientôt</h3>
       <p class="ws-empty-desc">
-        Vous pourrez glisser-déposer logos, illustrations, polices et brand-book PDF.
-        Stockage chiffré (R2 EU). Sprint Kodex-3.
+        Vous pourrez y glisser logos, illustrations, polices ou brand-book.
+        Stockage en Europe, chiffré.
       </p>
     </div>
   `;
@@ -395,20 +397,20 @@ function _viewAssets() {
 // ═══════════════════════════════════════════════════════════════
 function _viewOutput() {
   return `
-    <span class="ws-eyebrow">${icon('sparkles', 12)} Étape 4 sur 4</span>
-    <h1 class="ws-h1">Le brief technique infaillible</h1>
+    <span class="ws-eyebrow">${icon('sparkles', 12)} 4 sur 4 · Le brief</span>
+    <h1 class="ws-h1">C'est le moment&nbsp;!</h1>
     <p class="ws-lead">
-      Kodex construit votre "Code Maître" puis interroge le moteur AI de votre choix.
-      Le brief PDF généré inclut le format technique pour votre maquettiste et
-      5 punchlines marketing pour votre directeur communication.
+      Nous assemblons toutes vos informations en un brief technique infaillible,
+      prêt à être téléchargé en PDF et envoyé à votre graphiste. En bonus,
+      vous recevrez 5 punchlines marketing pour inspirer votre équipe.
     </p>
 
     <div class="ws-empty">
       <div class="ws-empty-icon">${icon('sparkles', 24)}</div>
-      <h3 class="ws-empty-title">Générateur arrivant</h3>
+      <h3 class="ws-empty-title">Le générateur arrive bientôt</h3>
       <p class="ws-empty-desc">
-        Appel direct au PromptEngine Keystone (BYOK), template Paged.js dédié,
-        export PDF d'un clic. Sprint Kodex-4.
+        En un clic, votre brief PDF sera prêt&nbsp;: contraintes techniques pour
+        votre maquettiste, idées d'accroches pour votre communication.
       </p>
     </div>
   `;

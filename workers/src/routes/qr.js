@@ -15,7 +15,7 @@
    et os_kind dérivés du User-Agent, ua_hash = sha-256(UA) tronqué.
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, parseBody, getAllowedOrigin, requireDevice } from '../lib/auth.js';
+import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -66,7 +66,15 @@ function isValidUrl(s) {
 // device token. Le header X-Tenant-Id n'est plus pris en compte —
 // cela empêche le tenant spoofing par envoi d'un header arbitraire.
 // Retourne null si auth absente ou invalide → 401 côté handler.
+//
+// Hotfix Sprint Kodex-1 : autorise aussi l'admin (Stéphane via
+// KS_ADMIN_SECRET en Bearer) → accès au tenant 'default'. Cela
+// rétablit l'usage SDQR depuis le dashboard admin tant que la
+// flow JWT licence n'est pas configurée pour ces comptes.
+// TODO long terme : exposer ?tenantId= côté admin pour pouvoir
+// consulter les QR de tous les tenants (audit, support client).
 async function _authTenant(request, env) {
+  if (requireAdmin(request, env)) return 'default';
   const claims = await requireJWT(request, env);
   if (claims?.sub) return claims.sub;
   const device = await requireDevice(request, env);

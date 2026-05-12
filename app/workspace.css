@@ -12,34 +12,40 @@
    typographie native, pictogrammes outline 1.5px.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ─── Tokens design ─── */
+/* ─── Tokens design — Apple Premium NUIT ───────────────────────
+   Mode sombre par défaut (cohérent avec l'esthétique Keystone).
+   Le workspace définit ses propres tokens et n'hérite pas du
+   toggle clair/sombre du dashboard — indépendance volontaire.
+   Pour un futur toggle workspace : ajouter [data-theme="light"]
+   sur .ws-app et override les variables.
+   ────────────────────────────────────────────────────────────── */
 .ws-app {
-  --ws-bg: #f7f5f0;
-  --ws-surface: #ffffff;
-  --ws-surface-soft: rgba(255, 255, 255, 0.78);
-  --ws-surface-elevated: rgba(255, 255, 255, 0.95);
+  --ws-bg: #0d1117;
+  --ws-surface: #161b22;
+  --ws-surface-soft: rgba(255, 255, 255, 0.03);
+  --ws-surface-elevated: rgba(22, 27, 34, 0.82);
 
-  --ws-text: #1a1a1a;
-  --ws-text-soft: #5a5a5a;
-  --ws-text-muted: #9a9a9a;
-  --ws-text-on-accent: #1a1a1a;
+  --ws-text: #f0f6fc;
+  --ws-text-soft: #adbac7;
+  --ws-text-muted: #768390;
+  --ws-text-on-accent: #0d1117;
 
   --ws-accent: #c9a96e;
-  --ws-accent-soft: #f5ecd9;
-  --ws-accent-dark: #a8895a;
+  --ws-accent-soft: rgba(201, 169, 110, 0.18);
+  --ws-accent-dark: #b59760;
 
-  --ws-border: #e8e6e0;
-  --ws-border-strong: #d4d1c8;
-  --ws-border-soft: #f0eee8;
+  --ws-border: #30363d;
+  --ws-border-strong: #444c56;
+  --ws-border-soft: #21262d;
 
-  --ws-success: #2d8659;
-  --ws-success-soft: #e1f0e7;
-  --ws-danger: #c44535;
-  --ws-danger-soft: #fae5e2;
+  --ws-success: #3fb950;
+  --ws-success-soft: rgba(63, 185, 80, 0.15);
+  --ws-danger: #f85149;
+  --ws-danger-soft: rgba(248, 81, 73, 0.15);
 
-  --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --ws-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --ws-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ws-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.5);
 
   --ws-radius-sm: 6px;
   --ws-radius: 10px;
@@ -99,7 +105,7 @@
   transition: all 150ms ease;
 }
 .ws-topbar-back:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--ws-text);
 }
 
@@ -145,12 +151,12 @@
   transition: all 150ms ease;
 }
 .ws-iconbtn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--ws-text);
 }
 .ws-iconbtn.is-active {
   background: var(--ws-accent-soft);
-  color: var(--ws-accent-dark);
+  color: var(--ws-accent);
 }
 
 /* ─── Body : rail | main | aside ─── */
@@ -198,12 +204,12 @@
   font-size: 14px;
 }
 .ws-step:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--ws-text);
 }
 .ws-step.is-active {
   background: var(--ws-surface);
-  border-color: var(--ws-border);
+  border-color: var(--ws-border-strong);
   color: var(--ws-text);
   box-shadow: var(--ws-shadow-1);
 }
@@ -218,7 +224,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--ws-border-soft);
+  background: var(--ws-border);
   color: var(--ws-text-muted);
   font-size: 11px;
   font-weight: 700;
@@ -227,11 +233,11 @@
 }
 .ws-step.is-active .ws-step-num {
   background: var(--ws-accent);
-  color: #fff;
+  color: var(--ws-bg);
 }
 .ws-step.is-done .ws-step-num {
   background: var(--ws-success);
-  color: #fff;
+  color: var(--ws-bg);
 }
 
 .ws-step-label {
@@ -247,7 +253,7 @@
   color: var(--ws-text-muted);
   transition: color 180ms ease;
 }
-.ws-step.is-active .ws-step-icon { color: var(--ws-accent-dark); }
+.ws-step.is-active .ws-step-icon { color: var(--ws-accent); }
 .ws-step.is-done .ws-step-icon { color: var(--ws-success); }
 
 /* ─── Main panel central ─── */
@@ -269,7 +275,7 @@
   padding: 4px 10px;
   border-radius: var(--ws-radius-pill);
   background: var(--ws-accent-soft);
-  color: var(--ws-accent-dark);
+  color: var(--ws-accent);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -344,7 +350,7 @@
   height: 40px;
   border-radius: var(--ws-radius);
   background: var(--ws-accent-soft);
-  color: var(--ws-accent-dark);
+  color: var(--ws-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -392,7 +398,7 @@
 
 .ws-btn--primary {
   background: var(--ws-text);
-  color: #fff;
+  color: var(--ws-bg);
   box-shadow: var(--ws-shadow-1);
 }
 .ws-btn--primary:hover {
@@ -422,18 +428,18 @@
   color: var(--ws-text-soft);
 }
 .ws-btn--ghost:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ws-text);
 }
 
 .ws-btn--accent {
   background: var(--ws-accent);
-  color: #1a1a1a;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), var(--ws-shadow-1);
+  color: var(--ws-text-on-accent);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18), var(--ws-shadow-1);
 }
 .ws-btn--accent:hover {
-  background: var(--ws-accent-dark);
-  color: #fff;
+  background: #d8b87b;
+  color: var(--ws-text-on-accent);
 }
 
 /* ─── Step navigation footer ─── */
@@ -484,7 +490,7 @@
   border: 1.5px dashed var(--ws-border-strong);
   border-radius: var(--ws-radius-lg);
   color: var(--ws-text-muted);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.015);
 }
 .ws-empty-icon {
   width: 56px;
@@ -569,12 +575,12 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: -0.002em;
-  background: var(--ws-border-soft);
+  background: var(--ws-border);
   color: var(--ws-text-soft);
 }
 .ws-badge--accent {
   background: var(--ws-accent-soft);
-  color: var(--ws-accent-dark);
+  color: var(--ws-accent);
 }
 .ws-badge--success {
   background: var(--ws-success-soft);
