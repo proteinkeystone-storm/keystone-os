@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v3.2.0-sdqr-final-rgpd';
+const VERSION       = 'ks-os-v3.2.1-sdqr-rgpd-pill-link';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

@@ -7045,3 +7045,16 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   transition: background .15s;
 }
 .sdqr-empty-reset:hover { background: rgba(99,102,241,.18); color: #fff; }
+
+/* Pill RGPD cliquable (lien vers /sdqr-privacy) */
+.sdqr-pill--link {
+  text-decoration: none;
+  display: inline-flex; align-items: center;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.sdqr-pill--link:hover {
+  background: rgba(46,179,124,.16);
+  border-color: rgba(46,179,124,.55);
+  transform: translateY(-1px);
+}
