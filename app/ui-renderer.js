@@ -1709,11 +1709,11 @@ function _buildModal(pad, tool) {
             <div class="modal-rating">
                 <div class="modal-rating-lbl">Note</div>
                 <div class="modal-rating-stars" id="modal-rating-stars">
-                    <span class="rating-star" data-v="1">★</span>
-                    <span class="rating-star" data-v="2">★</span>
-                    <span class="rating-star" data-v="3">★</span>
-                    <span class="rating-star" data-v="4">★</span>
-                    <span class="rating-star" data-v="5">★</span>
+                    ${[1,2,3,4,5].map(v => `
+                        <button type="button" class="rating-star" data-v="${v}" aria-label="${v} étoile${v > 1 ? 's' : ''}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9 12 2"/></svg>
+                        </button>
+                    `).join('')}
                 </div>
             </div>
             <button class="modal-close" id="modal-close-btn" aria-label="Fermer">✕</button>
@@ -2065,11 +2065,11 @@ function _buildArtifactModal(inner, pad, tool) {
             <div class="modal-rating">
                 <div class="modal-rating-lbl">Note</div>
                 <div class="modal-rating-stars" id="modal-rating-stars">
-                    <span class="rating-star" data-v="1">★</span>
-                    <span class="rating-star" data-v="2">★</span>
-                    <span class="rating-star" data-v="3">★</span>
-                    <span class="rating-star" data-v="4">★</span>
-                    <span class="rating-star" data-v="5">★</span>
+                    ${[1,2,3,4,5].map(v => `
+                        <button type="button" class="rating-star" data-v="${v}" aria-label="${v} étoile${v > 1 ? 's' : ''}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9 12 2"/></svg>
+                        </button>
+                    `).join('')}
                 </div>
             </div>
             <button class="modal-close" id="modal-close-btn" aria-label="Fermer">✕</button>

@@ -2526,15 +2526,21 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:var(--gold); --to
 /* Notation discrète */
 .modal-rating { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; margin-right: 4px; }
 .modal-rating-lbl { font-size: 9px; font-weight: 700; color: var(--tx3); letter-spacing: .08em; text-transform: uppercase; }
-.modal-rating-stars { display: flex; gap: 1px; }
+.modal-rating-stars { display: flex; gap: 3px; }
 .rating-star {
-  font-size: 17px; cursor: pointer; line-height: 1;
-  color: rgba(255,255,255,.08);
-  transition: color .12s, transform .12s;
+  width: 22px; height: 22px;
+  cursor: pointer;
+  background: transparent; border: none; padding: 0;
+  color: var(--tx3);
+  transition: color .15s ease, transform .15s ease;
+  display: inline-flex; align-items: center; justify-content: center;
   user-select: none;
 }
+.rating-star svg { width: 100%; height: 100%; fill: none; stroke: currentColor; transition: fill .15s ease, stroke .15s ease; }
 .rating-star.on { color: var(--gold); }
-.rating-star:hover { transform: scale(1.2); color: var(--gold2); }
+.rating-star.on svg { fill: var(--gold); stroke: var(--gold); }
+.rating-star:hover { transform: scale(1.15); color: var(--gold2); }
+.rating-star:hover svg { stroke: var(--gold2); }
 
 /* Body split : form | result */
 .modal-body {
@@ -3479,8 +3485,8 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
     color: var(--tx3);
     flex-shrink: 0;
   }
-  .modal-rating-stars { gap: 3px; }
-  .rating-star        { font-size: 16px !important; }
+  .modal-rating-stars { gap: 4px; }
+  .rating-star        { width: 20px !important; height: 20px !important; }
 
   /* Body : pas de scroll propre, pas de flex split — juste empile */
   .modal-body {
