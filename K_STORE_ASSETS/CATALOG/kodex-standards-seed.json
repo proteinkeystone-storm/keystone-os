@@ -293,6 +293,21 @@
       "notes": "Délai de remise du fichier : J-15 avant parution. Mentions Pinel/DPE obligatoires."
     },
     {
+      "id": "presse-figaro-immobilier-demi",
+      "vendor": "Propriétés Le Figaro",
+      "category": "press",
+      "product_name": "Demi-page",
+      "format_fini": { "width_mm": 210, "height_mm": 272 },
+      "format_travail": { "width_mm": 216, "height_mm": 278 },
+      "bleed_mm": 3,
+      "safe_margin_mm": 8,
+      "dpi": 300,
+      "color_profile": "ISO Coated v2 · CMJN",
+      "export_format": "PDF/X-1a:2001",
+      "source_url": "https://immobilier.lefigaro.fr/proprietes",
+      "notes": "Format publicitaire conventionnel. Mentions Pinel/DPE obligatoires."
+    },
+    {
       "id": "presse-logic-immo-carre",
       "vendor": "Logic-Immo",
       "category": "press",
@@ -336,7 +351,7 @@
       "source_url": "https://www.residences-immobilier.com"
     },
     {
-      "id": "presse-la-provence",
+      "id": "presse-la-provence-quart",
       "vendor": "La Provence",
       "category": "press",
       "product_name": "Module quotidien (1/4 page)",
@@ -349,6 +364,50 @@
       "export_format": "PDF/X-1a:2001",
       "source_url": "https://www.laprovence.com",
       "notes": "Papier journal — saturations réduites, contraste atténué."
+    },
+    {
+      "id": "presse-la-provence-demi",
+      "vendor": "La Provence",
+      "category": "press",
+      "product_name": "Demi-page",
+      "format_fini": { "width_mm": 210, "height_mm": 272 },
+      "format_travail": { "width_mm": 216, "height_mm": 278 },
+      "bleed_mm": 3,
+      "safe_margin_mm": 8,
+      "dpi": 200,
+      "color_profile": "ISO Newspaper 26v5",
+      "export_format": "PDF/X-1a:2001",
+      "source_url": "https://www.laprovence.com",
+      "notes": "Format publicitaire spécifique demi-page. Papier journal, saturations réduites."
+    },
+    {
+      "id": "presse-surface-privee-pleine",
+      "vendor": "Surface Privée",
+      "category": "press",
+      "product_name": "Pleine page",
+      "format_fini": { "width_mm": 232, "height_mm": 300 },
+      "format_travail": { "width_mm": 238, "height_mm": 306 },
+      "bleed_mm": 3,
+      "safe_margin_mm": 8,
+      "dpi": 300,
+      "color_profile": "ISO Coated v2 · CMJN",
+      "export_format": "PDF/X-1a:2001",
+      "source_url": "https://www.surface-privee.com",
+      "notes": "Format magazine spécifique (un peu plus grand qu'A4). Lectorat haut de gamme immobilier."
+    },
+    {
+      "id": "maisons-appartements-pleine",
+      "vendor": "Maisons et Appartements",
+      "category": "press",
+      "product_name": "Pleine page A4",
+      "format_fini": { "width_mm": 210, "height_mm": 297 },
+      "format_travail": { "width_mm": 216, "height_mm": 303 },
+      "bleed_mm": 3,
+      "safe_margin_mm": 10,
+      "dpi": 300,
+      "color_profile": "ISO Coated v2 · CMJN",
+      "export_format": "PDF/X-1a:2001",
+      "source_url": "https://www.maisonsetappartements.fr"
     }
   ]
 }

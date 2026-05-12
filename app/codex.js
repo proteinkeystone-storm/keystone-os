@@ -288,6 +288,7 @@ function _onClick(e) {
   if (act === 'dest-vendor')    return _pickVendor(t.dataset.vendor);
   if (act === 'dest-standard')  return _pickStandard(t.dataset.id);
   if (act === 'dest-back')      return _destBack();
+  if (act === 'dest-reset')     return _destReset();
   // Sprint Kodex-2 : changement de secteur (profil métier)
   if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
@@ -342,11 +343,22 @@ async function _pickStandard(id) {
 }
 function _destBack() {
   const d = _state.destination;
-  if (d.step === 'done')       d.step = 'product';
-  else if (d.step === 'product') { d.step = 'vendor'; d.vendor = null; }
-  else if (d.step === 'vendor')  { d.step = 'category'; d.category = null; }
+  if (d.step === 'done')         { d.step = 'product'; }
+  else if (d.step === 'product') { d.step = 'vendor'; d.vendor = null; d.standardId = null; d.standard = null; }
+  else if (d.step === 'vendor')  { d.step = 'category'; d.category = null; d.vendor = null; d.standardId = null; d.standard = null; }
   _saveDraft();
   _renderMain();
+}
+
+// ── Réinitialise complètement la sélection Destination ────────
+function _destReset() {
+  _state.destination = {
+    step: 'category', category: null, vendor: null,
+    standardId: null, standard: null,
+  };
+  _saveDraft();
+  _renderMain();
+  _toastOk('Sélection annulée');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -609,12 +621,17 @@ function _destStepDone() {
   return `
     <span class="ws-eyebrow">${icon('check', 12)} Support sélectionné</span>
     <h1 class="ws-h1">${_esc(s.vendor)} · ${_esc(s.product_name)}</h1>
-    <p class="ws-lead">
-      Voilà les contraintes techniques verrouillées pour votre création.
-      Le brief final reprendra ces informations pour votre graphiste.
-      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
-        ${icon('chevron-left', 12)} Changer de format
-      </button>
+    <p class="ws-lead" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span>Voilà les contraintes techniques verrouillées pour votre création.
+        Le brief final reprendra ces informations pour votre graphiste.</span>
+      <span style="display:inline-flex;gap:8px;">
+        <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:4px 10px;font-size:12px;">
+          ${icon('chevron-left', 12)} Changer de format
+        </button>
+        <button class="ws-btn ws-btn--ghost" data-act="dest-reset" style="padding:4px 10px;font-size:12px;color:var(--danger);">
+          ${icon('x', 12)} Tout annuler
+        </button>
+      </span>
     </p>
 
     <div class="ws-card" style="margin-top:8px;">
@@ -1057,13 +1074,22 @@ function _viewOutput() {
 // ═══════════════════════════════════════════════════════════════
 function _stepNav() {
   const idx = _currentStepIndex();
-  const isFirst = idx === 0;
-  const isLast  = idx === STEPS.length - 1;
+  const isLast = idx === STEPS.length - 1;
+  const canBack = _canGoBack();
+
+  // Libellé "Précédent" adapté au contexte
+  let backLabel = 'Précédent';
+  if (_state.view === 'destination') {
+    const sub = _state.destination.step;
+    if (sub === 'vendor')  backLabel = 'Changer de support';
+    if (sub === 'product') backLabel = 'Changer de prestataire';
+    if (sub === 'done')    backLabel = 'Changer de format';
+  }
 
   return `
     <div class="ws-step-nav">
-      <button class="ws-btn ws-btn--ghost" data-act="prev" ${isFirst ? 'disabled style="visibility:hidden;"' : ''}>
-        ${icon('chevron-left', 16)} Précédent
+      <button class="ws-btn ws-btn--ghost" data-act="prev" ${canBack ? '' : 'disabled style="visibility:hidden;"'}>
+        ${icon('chevron-left', 16)} ${_esc(backLabel)}
       </button>
       ${isLast
         ? `<button class="ws-btn ws-btn--accent" data-act="next" disabled>
@@ -1091,9 +1117,31 @@ function _advance() {
   if (i < STEPS.length - 1) _navigate(STEPS[i + 1].id);
 }
 
+// ── Bouton "Précédent" en bas — navigation intelligente ───────
+// Sprint Kodex-3.4 : si on est dans Destination et qu'on a déjà
+// progressé dans son sub-step (vendor / product / done), reculer
+// d'un sub-step. Sinon, reculer à la grande étape précédente.
 function _back() {
+  if (_state.view === 'destination') {
+    const sub = _state.destination.step;
+    if (sub !== 'category') {
+      _destBack();
+      return;
+    }
+    // À 'category' on est tout au début → rien à faire (bouton masqué)
+    return;
+  }
+  // Vues Contenu / Assets / Output : recule à l'étape précédente
   const i = _currentStepIndex();
   if (i > 0) _navigate(STEPS[i - 1].id);
+}
+
+// ── Le bouton "Précédent" doit-il être visible/actif ? ────────
+function _canGoBack() {
+  if (_state.view === 'destination') {
+    return _state.destination.step !== 'category';
+  }
+  return _currentStepIndex() > 0;
 }
 
 function _currentStep() { return STEPS.find(s => s.id === _state.view) || STEPS[0]; }
