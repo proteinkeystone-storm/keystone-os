@@ -6751,3 +6751,187 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   padding: 30px 16px;
   text-align: center;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR-3 Studio v2 — version ludique : thèmes, mini-previews, swatches
+═══════════════════════════════════════════════════════════════ */
+
+/* Sections groupées dans le panneau */
+.sdqr-design-section {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.sdqr-design-section:last-of-type { border-bottom: none; }
+.sdqr-design-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sdqr-design-section-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px; font-weight: 600;
+  letter-spacing: .01em;
+  color: rgba(220,225,240,.85);
+  margin-bottom: 10px;
+  display: block;
+}
+
+/* Bouton "Surprends-moi" */
+.sdqr-surprise-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  background: linear-gradient(135deg, rgba(184,148,90,.15), rgba(99,102,241,.15));
+  border: 1px solid rgba(184,148,90,.35);
+  border-radius: 6px;
+  color: var(--gold, #c9a84c);
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, background .18s;
+}
+.sdqr-surprise-btn:hover {
+  background: linear-gradient(135deg, rgba(184,148,90,.25), rgba(99,102,241,.25));
+  transform: translateY(-1px) rotate(-1deg);
+  box-shadow: 0 4px 14px rgba(184,148,90,.18);
+}
+.sdqr-surprise-btn:active { transform: translateY(0) rotate(0); }
+
+/* THÈMES — cards visuelles cliquables */
+.sdqr-theme-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.sdqr-theme-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 8px 6px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .18s, border-color .18s, transform .15s;
+}
+.sdqr-theme-card:hover {
+  background: rgba(99,102,241,.08);
+  border-color: rgba(99,102,241,.35);
+  transform: translateY(-2px);
+}
+.sdqr-theme-preview {
+  width: 64px; height: 64px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  transition: transform .18s;
+}
+.sdqr-theme-card:hover .sdqr-theme-preview { transform: scale(1.06); }
+.sdqr-theme-svg { width: 100%; height: 100%; }
+.sdqr-theme-label {
+  font-size: 11px; font-weight: 600;
+  color: rgba(220,225,240,.85);
+  letter-spacing: .01em;
+}
+.sdqr-theme-card:hover .sdqr-theme-label { color: #fff; }
+
+/* PILLS de forme : version visuelle avec mini-aperçu SVG */
+.sdqr-shape-pill--visual {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 10px;
+  min-width: 56px;
+}
+.sdqr-shape-pill--visual .sdqr-shape-pill-svg {
+  width: 22px; height: 22px;
+  color: rgba(220,225,240,.65);
+  transition: color .15s;
+}
+.sdqr-shape-pill--visual:hover .sdqr-shape-pill-svg { color: #fff; }
+.sdqr-shape-pill--visual.is-active .sdqr-shape-pill-svg { color: var(--gold, #c9a84c); }
+.sdqr-shape-pill-lbl {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .03em;
+}
+
+/* PALETTE de couleurs : swatches en grille */
+.sdqr-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  flex: 1;
+}
+.sdqr-color-swatch {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.sdqr-color-swatch:hover {
+  background: rgba(99,102,241,.05);
+  border-color: rgba(99,102,241,.20);
+  transform: translateY(-1px);
+}
+.sdqr-color-swatch-preview {
+  display: block;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.sdqr-color-swatch-lbl {
+  font-size: 10px; font-weight: 600;
+  color: rgba(220,225,240,.7);
+}
+.sdqr-color-swatch:hover .sdqr-color-swatch-lbl { color: #fff; }
+
+/* LOGO ZONE : drag & drop visible */
+.sdqr-logo-zone {
+  min-height: 80px;
+  border: 1.5px dashed rgba(255,255,255,.15);
+  border-radius: 8px;
+  background: rgba(255,255,255,.01);
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px;
+  transition: border-color .18s, background .18s;
+}
+.sdqr-logo-zone.is-dragging {
+  border-color: var(--gold, #c9a84c);
+  background: rgba(184,148,90,.06);
+  border-style: solid;
+}
+.sdqr-logo-zone.has-logo {
+  border-style: solid;
+  border-color: rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+  padding: 10px 14px;
+  justify-content: flex-start;
+  gap: 12px;
+}
+.sdqr-logo-zone-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  cursor: pointer;
+  text-align: center;
+  color: rgba(220,225,240,.65);
+  font-size: 12px;
+  line-height: 1.5;
+  width: 100%;
+}
+.sdqr-logo-zone-empty:hover { color: #fff; }
+.sdqr-logo-zone-empty strong { color: #fff; font-weight: 600; }
+.sdqr-logo-zone-empty small {
+  font-size: 10px;
+  color: rgba(220,225,240,.4);
+}
+.sdqr-logo-zone-text { margin-top: 2px; }
+.sdqr-logo-zone-preview {
+  width: 44px; height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sdqr-logo-zone-preview img { width: 100%; height: 100%; object-fit: contain; }
+.sdqr-logo-zone-actions {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+
+/* Compacte la première section (themes) — pas de label texte */
+.sdqr-design-section:first-of-type .sdqr-design-section-title { display: none; }

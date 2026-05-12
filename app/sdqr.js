@@ -1215,10 +1215,54 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
 // { design: {...} }. Le détail est ensuite re-rendu pour refresh
 // la liste sidebar (les vignettes pourraient utiliser le design plus tard).
 
+// Mini-aperçus SVG des formes — bien plus ludique que des labels texte.
+// On affiche la forme à 22x22, currentColor, dans la pill.
 const SHAPE_OPTS = [
-  { id: 'square',  label: 'Carré' },
-  { id: 'dot',     label: 'Point' },
-  { id: 'rounded', label: 'Arrondi' },
+  { id: 'square',  label: 'Carré',   svg: `<rect x="4" y="4" width="14" height="14"/>` },
+  { id: 'dot',     label: 'Point',   svg: `<circle cx="11" cy="11" r="7"/>` },
+  { id: 'rounded', label: 'Arrondi', svg: `<rect x="4" y="4" width="14" height="14" rx="4" ry="4"/>` },
+];
+
+// Mini-aperçus dédiés pour les ancres (anneau + centre composés)
+const ANCHOR_OUTER_OPTS = [
+  { id: 'square',  label: 'Carré',
+    svg: `<rect x="3" y="3" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"/>` },
+  { id: 'dot',     label: 'Point',
+    svg: `<circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="2.4"/>` },
+  { id: 'rounded', label: 'Arrondi',
+    svg: `<rect x="3" y="3" width="16" height="16" rx="4" ry="4" fill="none" stroke="currentColor" stroke-width="2.4"/>` },
+];
+
+const ANCHOR_INNER_OPTS = [
+  { id: 'square',  label: 'Carré',   svg: `<rect x="7" y="7" width="8" height="8"/>` },
+  { id: 'dot',     label: 'Point',   svg: `<circle cx="11" cy="11" r="4"/>` },
+  { id: 'rounded', label: 'Arrondi', svg: `<rect x="7" y="7" width="8" height="8" rx="2.5" ry="2.5"/>` },
+];
+
+// Palette de couleurs prédéfinies (swatches cliquables en un coup)
+const COLOR_PRESETS = [
+  { id: 'mono',      label: 'Sobre',     fg: '#000000', bg: '#ffffff', gradient: null },
+  { id: 'keystone',  label: 'Keystone',  fg: '#1B2A4A', bg: '#ffffff', gradient: { from: '#1B2A4A', to: '#c9a84c', angle: 45 } },
+  { id: 'apple',     label: 'Apple',     fg: '#1d1d1f', bg: '#f5f5f7', gradient: null },
+  { id: 'indigo',    label: 'Indigo',    fg: '#4338ca', bg: '#ffffff', gradient: null },
+  { id: 'gold',      label: 'Or royal',  fg: '#c9a84c', bg: '#1a1a1a', gradient: null },
+  { id: 'emerald',   label: 'Émeraude',  fg: '#047857', bg: '#ffffff', gradient: null },
+  { id: 'rose',      label: 'Rose',      fg: '#be123c', bg: '#fff1f2', gradient: null },
+  { id: 'synthwave', label: 'Synthwave', fg: '#a855f7', bg: '#0f172a', gradient: { from: '#a855f7', to: '#06b6d4', angle: 135 } },
+];
+
+// Thèmes complets prêts à l'emploi (combo forme + couleur en 1 clic)
+const THEME_PRESETS = [
+  { id: 'sobre',     label: 'Sobre',
+    module: 'square',  outer: 'square',  inner: 'square',  color: 'mono' },
+  { id: 'keystone',  label: 'Keystone',
+    module: 'dot',     outer: 'rounded', inner: 'dot',     color: 'keystone' },
+  { id: 'apple',     label: 'Apple',
+    module: 'dot',     outer: 'rounded', inner: 'rounded', color: 'apple' },
+  { id: 'pop',       label: 'Pop',
+    module: 'rounded', outer: 'dot',     inner: 'dot',     color: 'indigo' },
+  { id: 'synthwave', label: 'Synthwave',
+    module: 'dot',     outer: 'dot',     inner: 'dot',     color: 'synthwave' },
 ];
 
 function _renderDesignPanel(qr) {
@@ -1232,91 +1276,135 @@ function _renderDesignPanel(qr) {
       </summary>
       <div class="sdqr-design-body">
 
-        <!-- Formes : modules + ancres (anneau + centre indépendants) -->
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Modules</span>
-          <div class="sdqr-shape-pills" data-shape-target="module">
-            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.module.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+        <!-- THÈMES prêts à l'emploi (1-clic) + Surprise -->
+        <div class="sdqr-design-section">
+          <div class="sdqr-design-section-head">
+            <span class="sdqr-design-section-title">Thèmes prêts à l'emploi</span>
+            <button class="sdqr-surprise-btn" data-action="surprise" title="Génère un design aléatoire">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M5 3v4"/><path d="M3 5h4"/><path d="M6 17v4"/><path d="M4 19h4"/><path d="M13 3l1.5 4.5L19 9l-4.5 1.5L13 15l-1.5-4.5L7 9l4.5-1.5L13 3z"/></svg>
+              Surprends-moi
+            </button>
           </div>
-        </div>
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Ancres · anneau</span>
-          <div class="sdqr-shape-pills" data-shape-target="anchor-outer">
-            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.outer.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
-          </div>
-        </div>
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Ancres · centre</span>
-          <div class="sdqr-shape-pills" data-shape-target="anchor-inner">
-            ${SHAPE_OPTS.map(s => `<button class="sdqr-shape-pill ${d.anchor.inner.shape === s.id ? 'is-active' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}
+          <div class="sdqr-theme-cards">
+            ${THEME_PRESETS.map(t => _renderThemeCard(t)).join('')}
           </div>
         </div>
 
-        <!-- Couleurs -->
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Mode couleur</span>
-          <div class="sdqr-shape-pills" data-color-mode>
-            <button class="sdqr-shape-pill ${!d.gradient.enabled ? 'is-active' : ''}" data-mode="solid">Unie</button>
-            <button class="sdqr-shape-pill ${d.gradient.enabled ? 'is-active' : ''}" data-mode="gradient">Dégradé</button>
+        <!-- FORMES (modules + ancres) avec mini-aperçus visuels -->
+        <div class="sdqr-design-section">
+          <div class="sdqr-design-section-title">Formes</div>
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Modules</span>
+            <div class="sdqr-shape-pills" data-shape-target="module">
+              ${SHAPE_OPTS.map(s => _renderShapePill(s, d.module.shape === s.id)).join('')}
+            </div>
+          </div>
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Ancres · anneau</span>
+            <div class="sdqr-shape-pills" data-shape-target="anchor-outer">
+              ${ANCHOR_OUTER_OPTS.map(s => _renderShapePill(s, d.anchor.outer.shape === s.id)).join('')}
+            </div>
+          </div>
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Ancres · centre</span>
+            <div class="sdqr-shape-pills" data-shape-target="anchor-inner">
+              ${ANCHOR_INNER_OPTS.map(s => _renderShapePill(s, d.anchor.inner.shape === s.id)).join('')}
+            </div>
           </div>
         </div>
 
-        <div class="sdqr-design-row sdqr-design-row--colors" data-when-solid hidden="${d.gradient.enabled ? 'hidden' : ''}">
-          <label class="sdqr-color-field">
-            <span class="sdqr-design-lbl-sm">Couleur</span>
-            <input type="color" id="sdqr-color-fg" value="${_esc(d.fg)}">
-          </label>
-          <label class="sdqr-color-field">
-            <span class="sdqr-design-lbl-sm">Fond</span>
-            <input type="color" id="sdqr-color-bg" value="${_esc(d.bg)}">
-          </label>
-        </div>
-
-        <div class="sdqr-design-row sdqr-design-row--colors" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
-          <label class="sdqr-color-field">
-            <span class="sdqr-design-lbl-sm">Départ</span>
-            <input type="color" id="sdqr-grad-from" value="${_esc(d.gradient.from)}">
-          </label>
-          <label class="sdqr-color-field">
-            <span class="sdqr-design-lbl-sm">Fin</span>
-            <input type="color" id="sdqr-grad-to" value="${_esc(d.gradient.to)}">
-          </label>
-          <label class="sdqr-color-field">
-            <span class="sdqr-design-lbl-sm">Fond</span>
-            <input type="color" id="sdqr-color-bg-grad" value="${_esc(d.bg)}">
-          </label>
-        </div>
-
-        <div class="sdqr-design-row" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
-          <span class="sdqr-design-lbl">Angle</span>
-          <div class="sdqr-slider-wrap">
-            <input type="range" id="sdqr-grad-angle" min="0" max="360" step="5" value="${d.gradient.angle}">
-            <span class="sdqr-slider-val" id="sdqr-grad-angle-val">${d.gradient.angle}°</span>
+        <!-- COULEURS : palettes + custom -->
+        <div class="sdqr-design-section">
+          <div class="sdqr-design-section-title">Couleurs</div>
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Palettes</span>
+            <div class="sdqr-color-swatches">
+              ${COLOR_PRESETS.map(p => `
+                <button class="sdqr-color-swatch" data-color-preset="${p.id}" title="${_esc(p.label)}">
+                  <span class="sdqr-color-swatch-preview" style="background:${p.gradient
+                    ? `linear-gradient(${p.gradient.angle}deg, ${p.gradient.from}, ${p.gradient.to})`
+                    : p.fg}; border: 2px solid ${p.bg};"></span>
+                  <span class="sdqr-color-swatch-lbl">${_esc(p.label)}</span>
+                </button>
+              `).join('')}
+            </div>
           </div>
-        </div>
 
-        <!-- Logo -->
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Logo central</span>
-          <div class="sdqr-logo-controls">
-            ${d.logo.dataUrl ? `<div class="sdqr-logo-thumb"><img src="${_esc(d.logo.dataUrl)}" alt=""></div>` : ''}
-            <label class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" style="cursor:pointer">
-              ${d.logo.dataUrl ? 'Remplacer' : '+ Ajouter une image'}
-              <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Mode</span>
+            <div class="sdqr-shape-pills" data-color-mode>
+              <button class="sdqr-shape-pill ${!d.gradient.enabled ? 'is-active' : ''}" data-mode="solid">Unie</button>
+              <button class="sdqr-shape-pill ${d.gradient.enabled ? 'is-active' : ''}" data-mode="gradient">Dégradé</button>
+            </div>
+          </div>
+
+          <div class="sdqr-design-row sdqr-design-row--colors" data-when-solid hidden="${d.gradient.enabled ? 'hidden' : ''}">
+            <label class="sdqr-color-field">
+              <span class="sdqr-design-lbl-sm">Couleur</span>
+              <input type="color" id="sdqr-color-fg" value="${_esc(d.fg)}">
             </label>
-            ${d.logo.dataUrl ? `<button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-logo-remove">Retirer</button>` : ''}
+            <label class="sdqr-color-field">
+              <span class="sdqr-design-lbl-sm">Fond</span>
+              <input type="color" id="sdqr-color-bg" value="${_esc(d.bg)}">
+            </label>
+          </div>
+
+          <div class="sdqr-design-row sdqr-design-row--colors" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
+            <label class="sdqr-color-field">
+              <span class="sdqr-design-lbl-sm">Départ</span>
+              <input type="color" id="sdqr-grad-from" value="${_esc(d.gradient.from)}">
+            </label>
+            <label class="sdqr-color-field">
+              <span class="sdqr-design-lbl-sm">Fin</span>
+              <input type="color" id="sdqr-grad-to" value="${_esc(d.gradient.to)}">
+            </label>
+            <label class="sdqr-color-field">
+              <span class="sdqr-design-lbl-sm">Fond</span>
+              <input type="color" id="sdqr-color-bg-grad" value="${_esc(d.bg)}">
+            </label>
+          </div>
+
+          <div class="sdqr-design-row" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
+            <span class="sdqr-design-lbl">Angle</span>
+            <div class="sdqr-slider-wrap">
+              <input type="range" id="sdqr-grad-angle" min="0" max="360" step="5" value="${d.gradient.angle}">
+              <span class="sdqr-slider-val" id="sdqr-grad-angle-val">${d.gradient.angle}°</span>
+            </div>
           </div>
         </div>
 
-        ${d.logo.dataUrl ? `
-        <div class="sdqr-design-row">
-          <span class="sdqr-design-lbl">Taille logo</span>
-          <div class="sdqr-slider-wrap">
-            <input type="range" id="sdqr-logo-size" min="10" max="30" step="1" value="${Math.round(d.logo.size * 100)}">
-            <span class="sdqr-slider-val" id="sdqr-logo-size-val">${Math.round(d.logo.size * 100)}%</span>
+        <!-- LOGO central avec zone drop visible -->
+        <div class="sdqr-design-section">
+          <div class="sdqr-design-section-title">Logo central</div>
+          <div class="sdqr-logo-zone ${d.logo.dataUrl ? 'has-logo' : ''}" id="sdqr-logo-zone">
+            ${d.logo.dataUrl ? `
+              <div class="sdqr-logo-zone-preview"><img src="${_esc(d.logo.dataUrl)}" alt=""></div>
+              <div class="sdqr-logo-zone-actions">
+                <label class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" style="cursor:pointer">
+                  Remplacer
+                  <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
+                </label>
+                <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-logo-remove">Retirer</button>
+              </div>
+            ` : `
+              <label class="sdqr-logo-zone-empty" for="sdqr-logo-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span class="sdqr-logo-zone-text"><strong>Glisse une image ici</strong> ou clique<br><small>PNG · JPEG · SVG · max 500 Ko</small></span>
+                <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
+              </label>
+            `}
           </div>
+
+          ${d.logo.dataUrl ? `
+            <div class="sdqr-design-row">
+              <span class="sdqr-design-lbl">Taille</span>
+              <div class="sdqr-slider-wrap">
+                <input type="range" id="sdqr-logo-size" min="10" max="30" step="1" value="${Math.round(d.logo.size * 100)}">
+                <span class="sdqr-slider-val" id="sdqr-logo-size-val">${Math.round(d.logo.size * 100)}%</span>
+              </div>
+            </div>
+          ` : ''}
         </div>
-        ` : ''}
 
         <!-- Contrast checker + actions -->
         <div class="sdqr-design-foot">
@@ -1325,6 +1413,58 @@ function _renderDesignPanel(qr) {
         </div>
       </div>
     </details>
+  `;
+}
+
+// Mini-preview SVG rendu directement pour les thèmes : un QR ultra-simplifié
+// 5x5 qui montre les formes module + ancres + couleurs.
+function _renderThemeCard(theme) {
+  const color = COLOR_PRESETS.find(c => c.id === theme.color);
+  const fill = color.gradient
+    ? `url(#g-${theme.id})`
+    : color.fg;
+  const grad = color.gradient
+    ? `<defs><linearGradient id="g-${theme.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${color.gradient.from}"/><stop offset="100%" stop-color="${color.gradient.to}"/></linearGradient></defs>`
+    : '';
+
+  // Modules : 3 points centraux selon la forme
+  const moduleShape = SHAPE_OPTS.find(s => s.id === theme.module).svg;
+  const outerShape  = ANCHOR_OUTER_OPTS.find(s => s.id === theme.outer).svg;
+  const innerShape  = ANCHOR_INNER_OPTS.find(s => s.id === theme.inner).svg;
+
+  return `
+    <button class="sdqr-theme-card" data-theme="${theme.id}">
+      <div class="sdqr-theme-preview" style="background:${color.bg}">
+        <svg viewBox="0 0 60 60" class="sdqr-theme-svg">
+          ${grad}
+          <g fill="${fill}" stroke="${fill}">
+            <!-- Ancre TL (top-left) miniaturisée -->
+            <g transform="translate(2,2) scale(0.55)">${outerShape}${innerShape}</g>
+            <!-- Ancre TR -->
+            <g transform="translate(38,2) scale(0.55)">${outerShape}${innerShape}</g>
+            <!-- Ancre BL -->
+            <g transform="translate(2,38) scale(0.55)">${outerShape}${innerShape}</g>
+            <!-- 3 modules au centre -->
+            <g transform="translate(26,26) scale(0.4)">${moduleShape}</g>
+            <g transform="translate(35,32) scale(0.4)">${moduleShape}</g>
+            <g transform="translate(28,40) scale(0.4)">${moduleShape}</g>
+            <g transform="translate(40,42) scale(0.4)">${moduleShape}</g>
+            <g transform="translate(22,34) scale(0.4)">${moduleShape}</g>
+          </g>
+        </svg>
+      </div>
+      <div class="sdqr-theme-label">${_esc(theme.label)}</div>
+    </button>
+  `;
+}
+
+// Pill avec mini-aperçu SVG de la forme (au lieu d'un label texte sec)
+function _renderShapePill(opt, isActive) {
+  return `
+    <button class="sdqr-shape-pill sdqr-shape-pill--visual ${isActive ? 'is-active' : ''}" data-shape="${opt.id}" title="${_esc(opt.label)}">
+      <svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg">${opt.svg}</svg>
+      <span class="sdqr-shape-pill-lbl">${_esc(opt.label)}</span>
+    </button>
   `;
 }
 
@@ -1366,7 +1506,6 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     const target = group.dataset.shapeTarget;
     group.querySelectorAll('.sdqr-shape-pill').forEach(btn => {
       btn.addEventListener('click', () => {
-        // Route vers la bonne propriete imbriquee
         if (target === 'module') {
           _editingDesign.module.shape = btn.dataset.shape;
         } else if (target === 'anchor-outer') {
@@ -1379,6 +1518,62 @@ function _wireDesignPanel(root, qr, encodedForQr) {
       });
     });
   });
+
+  // Thèmes prêts à l'emploi (1-clic applique formes + couleurs + gradient)
+  panel.querySelectorAll('[data-theme]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const theme = THEME_PRESETS.find(t => t.id === btn.dataset.theme);
+      if (!theme) return;
+      _applyTheme(theme);
+      _refreshDesignPanelDom(root, qr, encodedForQr);
+    });
+  });
+
+  // "Surprends-moi" : tirage aleatoire forme + couleur
+  panel.querySelector('[data-action="surprise"]')?.addEventListener('click', () => {
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    _applyTheme({
+      module: pick(SHAPE_OPTS).id,
+      outer : pick(ANCHOR_OUTER_OPTS).id,
+      inner : pick(ANCHOR_INNER_OPTS).id,
+      color : pick(COLOR_PRESETS).id,
+    });
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
+
+  // Palette de couleurs prédéfinies
+  panel.querySelectorAll('[data-color-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = COLOR_PRESETS.find(p => p.id === btn.dataset.colorPreset);
+      if (!preset) return;
+      _applyColorPreset(preset);
+      _refreshDesignPanelDom(root, qr, encodedForQr);
+    });
+  });
+
+  // Drag & drop logo sur la zone visible
+  const logoZone = panel.querySelector('#sdqr-logo-zone');
+  if (logoZone) {
+    ['dragenter', 'dragover'].forEach(ev => {
+      logoZone.addEventListener(ev, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        logoZone.classList.add('is-dragging');
+      });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      logoZone.addEventListener(ev, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        logoZone.classList.remove('is-dragging');
+      });
+    });
+    logoZone.addEventListener('drop', async e => {
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      await _handleLogoFile(file, root, qr, encodedForQr);
+    });
+  }
 
   // Mode couleur (solid / gradient)
   panel.querySelectorAll('[data-color-mode] .sdqr-shape-pill').forEach(btn => {
@@ -1408,20 +1603,11 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     _liveRerender();
   });
 
-  // Logo upload
+  // Logo upload (via input file click)
   panel.querySelector('#sdqr-logo-input')?.addEventListener('change', async e => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 500 * 1024) {
-      alert('Image trop lourde — max 500 Ko. Optimise via TinyPNG/Squoosh.');
-      return;
-    }
-    const dataUrl = await _fileToDataUrl(file);
-    _editingDesign.logo.dataUrl = dataUrl;
-    if (!_editingDesign.logo.size) _editingDesign.logo.size = 0.20;
-    _liveRerender();
-    // Re-render le panel pour afficher le thumb + le slider taille
-    _refreshDesignPanelDom(root, qr, encodedForQr);
+    await _handleLogoFile(file, root, qr, encodedForQr);
   });
 
   // Retirer logo
@@ -1492,6 +1678,43 @@ function _updateContrastBadge(root) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><circle cx="12" cy="12" r="10"/>${level === 'ok' ? '<polyline points="9 12 11 14 15 9"/>' : '<line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12.01" y2="16"/>'}</svg>
     ${labels[level]}
   `;
+}
+
+// Applique un thème complet à _editingDesign (formes + couleurs).
+function _applyTheme(theme) {
+  _editingDesign.module.shape       = theme.module;
+  _editingDesign.anchor.outer.shape = theme.outer;
+  _editingDesign.anchor.inner.shape = theme.inner;
+  const color = COLOR_PRESETS.find(c => c.id === theme.color);
+  if (color) _applyColorPreset(color);
+}
+
+// Applique un preset couleur (unie ou gradient) à _editingDesign.
+function _applyColorPreset(preset) {
+  _editingDesign.fg = preset.fg;
+  _editingDesign.bg = preset.bg;
+  if (preset.gradient) {
+    _editingDesign.gradient = { enabled: true, ...preset.gradient };
+  } else {
+    _editingDesign.gradient = { ..._editingDesign.gradient, enabled: false };
+  }
+}
+
+// Pipeline upload logo : validation + dataUrl + state + re-render
+async function _handleLogoFile(file, root, qr, encodedForQr) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|svg\+xml)$/.test(file.type)) {
+    alert('Format non supporté. Utilise PNG, JPEG ou SVG.');
+    return;
+  }
+  if (file.size > 500 * 1024) {
+    alert('Image trop lourde — max 500 Ko. Optimise via TinyPNG / Squoosh.');
+    return;
+  }
+  const dataUrl = await _fileToDataUrl(file);
+  _editingDesign.logo.dataUrl = dataUrl;
+  if (!_editingDesign.logo.size) _editingDesign.logo.size = 0.20;
+  _refreshDesignPanelDom(root, qr, encodedForQr);
 }
 
 function _fileToDataUrl(file) {
