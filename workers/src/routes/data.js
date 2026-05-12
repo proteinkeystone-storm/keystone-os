@@ -35,10 +35,10 @@ const SHARED_TENANT     = 'shared';     // Dette B — catalogue partagé en lec
 
 // ── Extraction tenant depuis JWT ───────────────────────────────
 async function _tenantOf(request, env) {
+  // Sprint Sécu-1 / C3 : plus de fallback 'default'. JWT obligatoire.
+  // Les handlers checkent null et renvoient 401.
   const payload = await requireJWT(request, env);
-  if (payload?.sub) return payload.sub;
-  // Fallback démo : pas de JWT → tenant 'default'.
-  return 'default';
+  return payload?.sub || null;
 }
 
 // Pour les écritures : permet d'override vers 'shared' si admin.
@@ -90,6 +90,7 @@ export async function handleDataList(request, env, entity) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
   const tenantId = await _tenantOf(request, env);
+  if (!tenantId) return err('JWT requis', 401, origin);
 
   const url   = new URL(request.url);
   const since = url.searchParams.get('since');
@@ -138,6 +139,7 @@ export async function handleDataRead(request, env, entity, id) {
   const origin = getAllowedOrigin(env, request);
   const bad = _checkEntity(entity, origin); if (bad) return bad;
   const tenantId = await _tenantOf(request, env);
+  if (!tenantId) return err('JWT requis', 401, origin);
 
   const row = await env.DB
     .prepare(`SELECT id, data, created_at, updated_at, deleted_at, tenant_id

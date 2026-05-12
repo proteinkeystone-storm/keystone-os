@@ -38,6 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
+import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
@@ -104,6 +105,13 @@ export default {
       // BYOK : la clé API est passée dans le body, jamais stockée Worker.
       if (path === '/api/proxy/llm' && method === 'POST') {
         return handleProxyLLM(request, env);
+      }
+
+      // ── CSP violation report endpoint (Sprint Sécu-2 / H5) ────
+      // Le navigateur POST ici les violations en mode Report-Only.
+      // Visible via `npx wrangler tail` (console.warn).
+      if (path === '/api/csp-report' && method === 'POST') {
+        return handleCspReport(request, env);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────

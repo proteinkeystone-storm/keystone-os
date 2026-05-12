@@ -29,7 +29,8 @@
      llama      → Groq Llama (api.groq.com)        (format OpenAI-compat)
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { json, err, parseBody, getAllowedOrigin, requireDevice } from '../lib/auth.js';
+import { requireJWT } from '../lib/jwt.js';
 
 // Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
 // L'utilisateur peut override via `body.model`.
@@ -62,6 +63,16 @@ const MAX_OUTPUT_TOKENS  = 8192;        // borne haute sortie
 
 export async function handleProxyLLM(request, env) {
   const origin = getAllowedOrigin(env, request);
+
+  // ── Sprint Sécu-1 / C1 ───────────────────────────────────────
+  // Auth obligatoire : JWT licence (app web) OU device token (tablette).
+  // BYOK ne suffit pas — on refuse les appels anonymes pour éviter que
+  // le proxy Worker serve de relais anonyme aux LLM vendors.
+  const claims = await requireJWT(request, env);
+  const device = claims ? null : await requireDevice(request, env);
+  if (!claims && !device) {
+    return err('Authentification requise', 401, origin);
+  }
 
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') {
