@@ -642,7 +642,7 @@ export async function handleScansCsv(request, env, qrId) {
 // ══════════════════════════════════════════════════════════════════
 export async function handlePrivacyPage(request, env) {
   const retentionDays = parseInt(env.SDQR_SCAN_RETENTION_DAYS || '90', 10);
-  const dpoEmail = env.SDQR_DPO_EMAIL || 'rgpd@protein-studio.fr';
+  const dpoEmail = env.SDQR_DPO_EMAIL || 'protein.keystone@gmail.com';
   return new Response(_renderPrivacyPage(retentionDays, dpoEmail), {
     status: 200,
     headers: {

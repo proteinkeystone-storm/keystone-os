@@ -43,7 +43,7 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
 SDQR_SCAN_RETENTION_DAYS = "90"
 # Email du DPO affiché sur la page /sdqr-privacy
-SDQR_DPO_EMAIL = "rgpd@protein-studio.fr"
+SDQR_DPO_EMAIL = "protein.keystone@gmail.com"
 
 # ── Triggers — Cron Workers (Sprint SDQR-5) ──────────────────
 # Auto-purge des logs qr_scans > SDQR_SCAN_RETENTION_DAYS chaque jour

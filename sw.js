@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v3.2.2-sdqr-rgpd-head';
+const VERSION       = 'ks-os-v3.2.3-sdqr-rgpd-dpo-email';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
