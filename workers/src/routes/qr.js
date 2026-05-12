@@ -507,19 +507,23 @@ export async function handleStatsQr(request, env, qrId) {
     return json({ totals: { total:0, unique:0, today:0, week:0 }, byDay:[], byCountry:[], byDevice:[], byOs:[] }, 200, origin);
   }
 
-  // Filtre temporel optionnel pour les agrégats
+  // Filtre temporel optionnel pour les agrégats. days numerique uniquement
+  // (pas d'injection — vient de la whitelist PERIOD_DAYS).
   const periodWhere = days ? `AND ts >= datetime('now', '-${days} days')` : '';
 
   // ── Totaux ──────────────────────────────────────────────────
-  const totals = await env.DB.prepare(`
-    SELECT
-      COUNT(*)                                     AS total,
-      COUNT(DISTINCT ua_hash)                      AS unique,
-      SUM(CASE WHEN ts >= datetime('now', 'start of day') THEN 1 ELSE 0 END) AS today,
-      SUM(CASE WHEN ts >= datetime('now', '-7 days')      THEN 1 ELSE 0 END) AS week
-    FROM qr_scans
-    WHERE short_id = ? ${periodWhere}
-  `).bind(shortId).first() || { total: 0, unique: 0, today: 0, week: 0 };
+  // `unique` est un keyword reserve SQL → on l alias en uniq_count.
+  // `today` compare via date(ts) pour simplicite (evite start-of-day).
+  try {
+    const totals = await env.DB.prepare(`
+      SELECT
+        COUNT(*)                AS total,
+        COUNT(DISTINCT ua_hash) AS uniq_count,
+        SUM(CASE WHEN date(ts) = date('now')                   THEN 1 ELSE 0 END) AS today,
+        SUM(CASE WHEN ts >= datetime('now', '-7 days')         THEN 1 ELSE 0 END) AS week
+      FROM qr_scans
+      WHERE short_id = ? ${periodWhere}
+    `).bind(shortId).first() || { total: 0, uniq_count: 0, today: 0, week: 0 };
 
   // ── Scans par jour (pour line chart) ───────────────────────
   const { results: byDay } = await env.DB.prepare(`
@@ -558,20 +562,24 @@ export async function handleStatsQr(request, env, qrId) {
     ORDER BY cnt DESC
   `).bind(shortId).all();
 
-  return json({
-    mode: 'dynamic',
-    period,
-    totals: {
-      total : totals.total  || 0,
-      unique: totals.unique || 0,
-      today : totals.today  || 0,
-      week  : totals.week   || 0,
-    },
-    byDay     : (byDay     || []).map(r => ({ day: r.day, cnt: r.cnt })),
-    byCountry : (byCountry || []).map(r => ({ country: r.country, cnt: r.cnt })),
-    byDevice  : (byDevice  || []).map(r => ({ device: r.device_kind || 'other', cnt: r.cnt })),
-    byOs      : (byOs      || []).map(r => ({ os: r.os_kind || 'other', cnt: r.cnt })),
-  }, 200, origin);
+    return json({
+      mode: 'dynamic',
+      period,
+      totals: {
+        total : totals.total      || 0,
+        unique: totals.uniq_count || 0,
+        today : totals.today      || 0,
+        week  : totals.week       || 0,
+      },
+      byDay     : (byDay     || []).map(r => ({ day: r.day, cnt: r.cnt })),
+      byCountry : (byCountry || []).map(r => ({ country: r.country, cnt: r.cnt })),
+      byDevice  : (byDevice  || []).map(r => ({ device: r.device_kind || 'other', cnt: r.cnt })),
+      byOs      : (byOs      || []).map(r => ({ os: r.os_kind || 'other', cnt: r.cnt })),
+    }, 200, origin);
+  } catch (e) {
+    console.error('[qr-stats]', e);
+    return err('Stats query failed : ' + e.message, 500, origin);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
