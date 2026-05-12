@@ -1,0 +1,170 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-05-13",
+  "_comment": "Catalogue déclaratif des modes de brainstorming Muse. Chaque mode pilote l'étape 3 du workspace : prompt template envoyé au LLM, structure de l'output, clusters attendus, enrichissements optionnels (check domaine, lien INPI...). Modifiable sans toucher au code. Sprint Muse-Brainstorm-J1 : 6 modes initiaux validés terrain (chargée de com immobilière).",
+
+  "modes": [
+    {
+      "id": "naming",
+      "label": "Naming de programme",
+      "tagline": "Trouvez le nom parfait pour votre résidence",
+      "icon": "edit",
+      "color_hex": "#6366f1",
+      "ideas_count": 15,
+      "clusters": [
+        { "id": "nature-lieu",      "label": "Nature & Lieu" },
+        { "id": "patrimoine",       "label": "Patrimoine & Littéraire" },
+        { "id": "contemporain",     "label": "Contemporain & Sobre" }
+      ],
+      "enrichments": ["domain_check", "inpi_link"],
+      "prompt_role": "Tu es naming strategist senior spécialisé en programmes immobiliers résidentiels haut de gamme. Tu maîtrises l'art de trouver des noms qui évoquent, mémorisent et différencient.",
+      "prompt_instruction": "Génère 15 propositions de noms pour ce programme. Pour chaque proposition, donne : un titre principal (1 à 4 mots), un sous-titre évocateur (1 ligne), un cluster (parmi : nature-lieu, patrimoine, contemporain). Évite les clichés (Le Domaine de X, Les Jardins de X, Résidence Le X — sauf si vraiment justifié). Privilégie des noms qui pourraient se prononcer en 1 souffle et qui sonnent juste avec la cible.",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "punchline",
+      "label": "Punchlines & accroches",
+      "tagline": "Slogans courts par canal de diffusion",
+      "icon": "sparkles",
+      "color_hex": "#f59e0b",
+      "ideas_count": 20,
+      "clusters": [
+        { "id": "bache",  "label": "Bâche grand format · 4 à 8 mots" },
+        { "id": "flyer",  "label": "Flyer / Brochure · 8 à 15 mots" },
+        { "id": "social", "label": "Réseaux sociaux · accroche + question" }
+      ],
+      "enrichments": [],
+      "prompt_role": "Tu es copywriter senior pour des agences de communication immobilière. Tu écris des accroches précises, élégantes, mémorables — jamais clichés (oublie 'votre nouveau chez-vous', 'vivre l'exception', 'élégance et raffinement').",
+      "prompt_instruction": "Génère 20 accroches au total, réparties entre 3 canaux. Pour chacune : texte exact à utiliser, cluster (bache / flyer / social), et le bénéfice émotionnel ou rationnel sur lequel elle joue. Varie les angles : promesse, question, paradoxe, image, voix du quartier...",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "ambiance",
+      "label": "Ambiance visuelle",
+      "tagline": "Direction artistique pour votre studio 3D",
+      "icon": "palette",
+      "color_hex": "#10b981",
+      "ideas_count": 7,
+      "clusters": [
+        { "id": "atmosphere",  "label": "Atmosphère générale" },
+        { "id": "cadrage",     "label": "Cadrages & narrations" },
+        { "id": "materiaux",   "label": "Matériaux & textures" }
+      ],
+      "enrichments": ["studio_brief_export"],
+      "prompt_role": "Tu es directeur artistique senior spécialisé en communication immobilière. Tu briefes des studios 3D (PixelEvolution, AVR...) pour des illustrations photoréalistes.",
+      "prompt_instruction": "Propose 7 directions artistiques cohérentes que le promoteur pourra présenter à son studio 3D. Pour chacune : titre court de la DA, description en 2 lignes (lumière + ambiance + matériaux + composition), cluster (atmosphere / cadrage / materiaux). Évite les références AI-générées ; pense référence éditoriale (Dezeen, AD, AMC).",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "marketing",
+      "label": "Idées marketing",
+      "tagline": "Canaux, événements, partenariats locaux",
+      "icon": "globe",
+      "color_hex": "#ec4899",
+      "ideas_count": 15,
+      "clusters": [
+        { "id": "events",       "label": "Événements & Lancement" },
+        { "id": "partnerships", "label": "Partenariats locaux" },
+        { "id": "digital",      "label": "Contenu digital & social" },
+        { "id": "terrain",      "label": "Print & terrain" }
+      ],
+      "enrichments": [],
+      "prompt_role": "Tu es directeur marketing senior, spécialiste de la promotion immobilière neuve. Tu connais les canaux qui convertissent vraiment (vs ceux qui font joli en présentation).",
+      "prompt_instruction": "Propose 15 actions marketing concrètes et activables pour ce programme, réparties en 4 clusters. Pour chacune : titre de l'action (verbe d'action en début), description avec budget indicatif et effort/impact, cluster (events / partnerships / digital / terrain). Mix court terme (lancement) et long terme (entretien commercialisation).",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "objections",
+      "label": "Objections & réponses",
+      "tagline": "Préparez vos commerciaux aux questions piège",
+      "icon": "help-circle",
+      "color_hex": "#ef4444",
+      "ideas_count": 12,
+      "clusters": [
+        { "id": "prix",        "label": "Prix & financement" },
+        { "id": "delais",      "label": "Délais & livraison" },
+        { "id": "emplacement", "label": "Emplacement & nuisances" },
+        { "id": "juridique",   "label": "Juridique & technique" }
+      ],
+      "enrichments": [],
+      "prompt_role": "Tu es directeur commercial senior promotion immobilière. Tu coaches les équipes terrain sur les objections récurrentes et les réponses qui font signer.",
+      "prompt_instruction": "Anticipe 12 objections probables que les acquéreurs pourraient soulever sur ce programme, réparties en 4 clusters. Pour chacune : formulation typique de l'objection (entre guillemets), réponse calibrée en 2-3 phrases (factuelle, calme, qui rassure sans esquiver), cluster (prix / delais / emplacement / juridique). Ne sur-vends pas — l'idée c'est désamorcer.",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    },
+
+    {
+      "id": "mix-all",
+      "label": "Mix tout",
+      "tagline": "Une session complète · 4 livrables d'un coup",
+      "icon": "sparkles",
+      "color_hex": "#8b5cf6",
+      "ideas_count": 20,
+      "clusters": [
+        { "id": "names",     "label": "Noms suggérés (5)" },
+        { "id": "punches",   "label": "Punchlines clés (5)" },
+        { "id": "ambiance",  "label": "Directions artistiques (4)" },
+        { "id": "marketing", "label": "Idées marketing (6)" }
+      ],
+      "enrichments": ["domain_check"],
+      "is_mix": true,
+      "mix_modes": ["naming", "punchline", "ambiance", "marketing"],
+      "prompt_role": "Tu es directeur de la communication senior chez un promoteur immobilier. Tu produis un brief complet : nom + accroches + direction artistique + actions marketing, le tout cohérent entre eux et aligné sur le programme.",
+      "prompt_instruction": "Produis 20 propositions au total, réparties en 4 clusters cohérents entre eux (même ton, même univers) : 5 propositions de noms, 5 punchlines, 4 directions artistiques, 6 idées marketing. Le cluster names contient des objets { title, subtitle, cluster:'names', rationale } ; idem pour les 3 autres clusters avec leurs id respectifs.",
+      "output_schema": {
+        "ideas": "array of { title, subtitle, cluster, rationale }"
+      }
+    }
+  ],
+
+  "_comment_calibrators": "Curseurs et cases à cocher de l'étape 2 (Calibrate). Le state.calibrate hydrate ces valeurs et les transmet au prompt LLM en étape 3.",
+
+  "sliders": [
+    { "id": "tonality", "label": "Tonalité",  "left": "Sobre",       "right": "Audacieux",  "default": 50 },
+    { "id": "tone",     "label": "Ton",       "left": "Chaleureux",  "right": "Minimaliste","default": 50 },
+    { "id": "format",   "label": "Format",    "left": "Slogan",      "right": "Manifeste",  "default": 50 },
+    { "id": "boldness", "label": "Niveau",    "left": "Réaliste",    "right": "Décalé",     "default": 30 }
+  ],
+
+  "time_budgets": [
+    { "id": "3min",      "label": "Express · 3 min",  "ideas_multiplier": 0.6 },
+    { "id": "10min",     "label": "Standard · 10 min", "ideas_multiplier": 1.0, "default": true },
+    { "id": "unlimited", "label": "Libre · sans limite","ideas_multiplier": 1.5 }
+  ],
+
+  "targets": [
+    { "id": "family",        "label": "Famille",         "emoji": "famille" },
+    { "id": "young-actives", "label": "Jeunes actifs",   "emoji": "jeunes" },
+    { "id": "seniors",       "label": "Seniors CSP+",    "emoji": "seniors" },
+    { "id": "investors",     "label": "Investisseurs",   "emoji": "investisseurs" }
+  ],
+
+  "inspirations": [
+    { "id": "sea",          "label": "Mer · littoral",          "emoji": "mer" },
+    { "id": "mountain",     "label": "Montagne · altitude",      "emoji": "montagne" },
+    { "id": "heritage",     "label": "Patrimoine · histoire",    "emoji": "patrimoine" },
+    { "id": "nature",       "label": "Nature · paysage",         "emoji": "nature" },
+    { "id": "contemporary", "label": "Contemporain · épuré",     "emoji": "contemporain" },
+    { "id": "urban",        "label": "Urbain · cosmopolite",     "emoji": "urbain" }
+  ],
+
+  "frameworks": [
+    { "id": "scamper",    "label": "SCAMPER",            "icon": "sliders",  "description": "Substituer, Combiner, Adapter, Modifier, Permuter, Éliminer, Réorganiser" },
+    { "id": "six-hats",   "label": "6 chapeaux",         "icon": "palette",  "description": "6 angles d'analyse (factuel, émotionnel, risques, optimiste, créatif, organisation)" },
+    { "id": "worst-idea", "label": "Worst Idea",         "icon": "x",        "description": "Génère la pire idée possible — libère la créativité par décalage" },
+    { "id": "reverse",    "label": "Reverse",            "icon": "refresh",  "description": "Comment empêcher que ça marche → inverser les solutions" }
+  ]
+}

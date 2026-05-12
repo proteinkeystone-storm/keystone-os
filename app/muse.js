@@ -1,114 +1,119 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Artefact MUSE (A-COM-003) v1.0
-   Sprint Muse-1 : workspace fullscreen + génération du Prompt
-   Maître Artistique.
+   KEYSTONE OS — Artefact MUSE (A-COM-003) v2.0
+   Sprint Muse-Brainstorm-J1 : pivot vers outil de brainstorming
+   ludique pour chargée de communication immobilière.
 
-   Mission : transformer une intention visuelle (cadrage,
-   atmosphère, cible lifestyle) en Prompt Maître Artistique
-   structuré, à coller dans une IA tierce (Claude, Gemini,
-   ChatGPT, Mistral, Grok, Perplexity, Llama).
+   Mission : remplacer la chaîne fragmentée (Muse → IA chat →
+   générateur d'image) par un assistant brainstorming intégré,
+   directement utilisable, gamifié. La chargée de com a 4 besoins
+   récurrents : trouver un nom de programme, des punchlines, une
+   direction artistique, des idées marketing — et anticiper les
+   objections acquéreurs. Un mode "Mix tout" couvre les 4 en un.
 
-   L'IA tierce génère en retour un fichier HTML autonome avec
-   UN SEUL bouton copy-to-clipboard contenant UN SEUL prompt
-   unifié, destiné à un générateur d'images (Midjourney, Flux,
-   DALL-E, Nano Banana…). Ce prompt unique produit en une seule
-   passe une planche moodboard complète (grille 3×2, 6 vignettes
-   thématiques : architecture, lumière, palette végétale,
-   matériaux, lifestyle, détail signature).
+   Concept UX : un plateau de jeu créatif (pas un formulaire).
+   - Étape 1 TOPIC      : 6 grandes cards plein écran pour choisir
+                          un mode (Naming · Punchline · Ambiance ·
+                          Marketing · Objections · Mix-tout)
+   - Étape 2 CALIBRATE  : sliders visuels + checkboxes imagées +
+                          jauge "Qualité du brief" qui monte en
+                          live + bouton "Surprends-moi" 🎲
+   - Étape 3 BRAINSTORM : l'IA tire les idées une par une comme
+                          des cartes (animation flip). L'utilisateur
+                          marque favoris ⭐, demande variations 🔄,
+                          rejette 🗑️. Frameworks pro (SCAMPER, 6
+                          chapeaux, Worst Idea, Reverse). Modes
+                          spéciaux : Crazy 8s timer, Mode chaos.
 
-   Architecture des 4 étapes :
-   ─────────────────────────────────────────────────────────────
-     1. CONTEXT  — Support, ratio, dimensions, secteur, projet
-     2. FRAMING  — Point de vue + sujet + intention focale
-     3. MOOD     — Lumière, saison, végétation, figuration, style
-     4. OUTPUT   — Génération du Prompt Maître + copy-to-clipboard
-
-   Connexion Kodex (future) : import du support/ratio/secteur
-   depuis un brief Kodex existant (entity codex_briefs). Pour
-   Muse-1, saisie manuelle uniquement.
-
-   Réutilisabilité :
-     Structure identique au pattern Kodex (.ws-* + openMuse).
-     Cloner ce fichier en `<nouvel-outil>.js`, garder la
-     mécanique, remplacer WORKSPACE_META, STEPS et les vues.
+   Réutilisation : shell workspace (.ws-*), persistance localStorage
+   + cloud-vault, sélecteur moteur IA, navigation, toasts. Le J1
+   livre les vues 1 et 2 complètes, vue 3 en placeholder pour J2.
    ═══════════════════════════════════════════════════════════════ */
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { icon } from './lib/ui-icons.js';
 import {
-  getSupports, getViewpoints, getLights, getSeasons,
-  getVegetations, getFigurations, getStyles, getTargetEngines, getImageEngines,
-  getSupport, getViewpoint, checkRatioCoherence,
-} from './lib/muse-catalog.js';
-import { buildPromptMaitre, validateForGeneration } from './lib/muse-prompt.js';
+  loadModes, getModes, getMode, getSliders, getTimeBudgets,
+  getTargets, getInspirations, computeBriefQualityScore,
+  getQualityTier, pickStimulusWord,
+} from './lib/muse-modes.js';
 
 // ── Métadonnées workspace ─────────────────────────────────────
 const WORKSPACE_META = {
   id        : 'A-COM-003',
   name      : 'Muse',
-  punchline : 'Le moodboard de référence pour votre studio 3D',
+  punchline : 'Le plateau de jeu créatif de votre com immobilière',
 };
 
-// ── Définition des étapes (ordre + icône + label) ─────────────
+// ── Définition des 3 étapes ───────────────────────────────────
 const STEPS = [
-  { id: 'context', label: 'Le contexte',  icon: 'sliders',
-    sublabel: 'Support, format et secteur' },
-  { id: 'framing', label: 'Le cadrage',   icon: 'eye',
-    sublabel: 'Point de vue et intention' },
-  { id: 'mood',    label: "L'atmosphère", icon: 'palette',
-    sublabel: 'Lumière, ambiance, cible' },
-  { id: 'output',  label: 'Le Prompt Maître', icon: 'sparkles',
-    sublabel: 'À copier dans votre IA' },
+  { id: 'topic',      label: 'Le sujet',     icon: 'sparkles',
+    sublabel: 'Que voulez-vous brainstormer ?' },
+  { id: 'calibrate',  label: 'Le calibrage', icon: 'sliders',
+    sublabel: 'Programme, ton, cible' },
+  { id: 'brainstorm', label: 'Le jeu',       icon: 'palette',
+    sublabel: 'Idées une par une, à trier' },
 ];
 
-// ── État global (in-memory + localStorage) ────────────────────
+// ── État global ───────────────────────────────────────────────
 let _state = _freshState();
 
 function _freshState() {
   return {
-    view: 'context',
-    context: {
-      support: '',
-      support_label: '',
-      ratio: '',
-      width_mm: null,
-      height_mm: null,
-      sector: 'immobilier',
-      project_name: '',
-      location: '',
-      kodex_brief_id: null,
+    view: 'topic',
+
+    topic: {
+      mode: null,            // 'naming' | 'punchline' | 'ambiance' | 'marketing' | 'objections' | 'mix-all'
     },
-    framing: {
-      viewpoint: null,
-      subject: '',
-      focal_intent: '',
+
+    calibrate: {
+      // Programme (importable depuis Kodex)
+      program_name: '',
+      program_location: '',
+      program_description: '',
+      program_kodex_id: null,
+
+      // Curseurs (0-100, défaut centre = 50)
+      tonality: 50,    // sobre ↔ audacieux
+      tone: 50,        // chaleureux ↔ minimaliste
+      format: 50,      // slogan ↔ manifeste
+      boldness: 30,    // réaliste ↔ décalé
+
+      // Cases à cocher imagées
+      time_budget: '10min',
+      targets: [],
+      inspirations: [],
+
+      // Champ libre
+      extra: '',
+
+      // Stimulus aléatoire (Surprends-moi)
+      stimulus_word: '',
     },
-    mood: {
-      light: '',
-      season: '',
-      vegetation: '',
-      figuration: '',
-      style: '',
-      materials_focus: '',
-    },
-    output: {
-      status: 'idle',          // idle | building | done | error
+
+    brainstorm: {
+      status: 'idle',        // idle | generating | done | error
       error: null,
-      prompt: null,
+      ideas: [],
+      rounds: 0,
+      framework: null,       // 'scamper' | 'six-hats' | 'worst-idea' | 'reverse' | null
+      timer_mode: null,      // 'crazy8s' | null
+    },
+
+    settings: {
       target_engine: 'Claude',
-      image_engine: 'midjourney',
-      generated_at: null,
+      sound_enabled: true,
     },
   };
 }
 
-let _root = null;            // élément racine du workspace
-let _saveTimer = null;       // debounce localStorage
+let _root = null;
+let _saveTimer = null;
 
 // ═══════════════════════════════════════════════════════════════
-// Persistance brouillon (localStorage + cloud-vault sync)
+// Persistance brouillon
 // ═══════════════════════════════════════════════════════════════
-const LS_DRAFT_KEY = 'ks_muse_draft';
+const LS_DRAFT_KEY = 'ks_muse_draft_v2';
+const LS_LEGACY_KEY = 'ks_muse_draft';     // ancien brouillon v1, purgé au load
 
 function _saveDraft() {
   try {
@@ -123,6 +128,9 @@ function _scheduleSave() {
 }
 
 function _loadDraft() {
+  // Purge l'ancien brouillon v1 (incompatible avec la nouvelle struct)
+  try { localStorage.removeItem(LS_LEGACY_KEY); } catch (_) {}
+
   try {
     const raw = localStorage.getItem(LS_DRAFT_KEY);
     if (!raw) return false;
@@ -131,10 +139,10 @@ function _loadDraft() {
     _state = {
       ...fresh,
       ...data,
-      context: { ...fresh.context, ...(data.context || {}) },
-      framing: { ...fresh.framing, ...(data.framing || {}) },
-      mood:    { ...fresh.mood,    ...(data.mood    || {}) },
-      output:  { ...fresh.output,  ...(data.output  || {}) },
+      topic:      { ...fresh.topic,      ...(data.topic      || {}) },
+      calibrate:  { ...fresh.calibrate,  ...(data.calibrate  || {}) },
+      brainstorm: { ...fresh.brainstorm, ...(data.brainstorm || {}) },
+      settings:   { ...fresh.settings,   ...(data.settings   || {}) },
     };
     return true;
   } catch (_) {
@@ -153,6 +161,8 @@ function _resetDraft() {
 export function openMuse() {
   if (_root) return;
   _loadDraft();
+  // Précharge le catalogue des modes pendant la construction du shell
+  loadModes().catch(() => {});
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
@@ -167,7 +177,7 @@ export function closeMuse() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Shell (top bar + rail + main + aside)
+// Shell
 // ═══════════════════════════════════════════════════════════════
 function _buildShell() {
   _root = document.createElement('div');
@@ -185,7 +195,7 @@ function _buildShell() {
       </div>
       <div class="ws-topbar-actions">
         ${ratingButtonHTML(WORKSPACE_META.id)}
-        <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon (Cmd+S)">
+        <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
         <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer">
@@ -225,22 +235,19 @@ function _onClick(e) {
   if (act === 'prev')            return _back();
   if (act === 'save')            { _saveDraft(); _toastOk('Brouillon sauvegardé'); return; }
   if (act === 'reset') {
-    if (confirm('Effacer toutes vos saisies et recommencer le brief Muse ?')) {
+    if (confirm('Effacer tout votre brouillon Muse et recommencer ?')) {
       _resetDraft();
       _renderMain();
       _toastOk('Brouillon réinitialisé');
     }
     return;
   }
-  if (act === 'pick-support')    return _pickSupport(t.dataset.id);
-  if (act === 'pick-viewpoint')  return _pickViewpoint(t.dataset.id);
-  if (act === 'pick-mood')       return _pickMood(t.dataset.group, t.dataset.id);
-  if (act === 'pick-engine')     return _pickEngine(t.dataset.id);
-  if (act === 'pick-image-engine') return _pickImageEngine(t.dataset.id);
-  if (act === 'generate-prompt') return _generatePrompt();
-  if (act === 'regenerate')      return _generatePrompt();
-  if (act === 'copy-prompt')     return _copyPrompt(t);
-  if (act === 'download-prompt') return _downloadPrompt();
+  if (act === 'pick-mode')         return _pickMode(t.dataset.id);
+  if (act === 'toggle-target')     return _toggleCheckbox('targets', t.dataset.id);
+  if (act === 'toggle-inspiration') return _toggleCheckbox('inspirations', t.dataset.id);
+  if (act === 'pick-time-budget')  return _pickTimeBudget(t.dataset.id);
+  if (act === 'surprise-me')       return _surpriseMe();
+  if (act === 'reset-stimulus')    return _resetStimulus();
 }
 
 function _onInput(e) {
@@ -249,57 +256,65 @@ function _onInput(e) {
   const group = el.dataset.group;
   if (!group) return;
   let value = el.value;
-  if (el.type === 'number') value = value === '' ? null : Number(value);
+  if (el.type === 'range' || el.type === 'number') {
+    value = value === '' ? null : Number(value);
+  }
   if (_state[group]) {
     _state[group][el.name] = value;
     _scheduleSave();
+    // Update live de la jauge si on est sur Calibrate
+    if (group === 'calibrate') _updateQualityGauge();
   }
 }
 
-// ── Sélecteurs cliquables (cards / chips) ─────────────────────
-// Tous ces handlers préservent la position de scroll pour ne pas
-// faire remonter la page au clic sur une option.
-async function _pickSupport(id) {
-  const s = await getSupport(id);
-  if (!s) return;
-  _state.context.support = id;
-  _state.context.support_label = s.label;
-  // Pré-renseigne le ratio par défaut si pas encore choisi
-  if (!_state.context.ratio && s.default_ratio) {
-    _state.context.ratio = s.default_ratio;
-  }
+// ── Pickers ───────────────────────────────────────────────────
+function _pickMode(id) {
+  _state.topic.mode = id;
+  _scheduleSave();
+  _renderMain({ preserveScroll: true });
+  // Animation : auto-advance après 600ms si l'utilisateur a cliqué sur un mode
+  setTimeout(() => {
+    if (_state.view === 'topic' && _state.topic.mode === id) {
+      _advance();
+    }
+  }, 650);
+}
+
+function _toggleCheckbox(group, id) {
+  const list = _state.calibrate[group] || [];
+  _state.calibrate[group] = list.includes(id)
+    ? list.filter(x => x !== id)
+    : [...list, id];
   _scheduleSave();
   _renderMain({ preserveScroll: true });
 }
 
-function _pickViewpoint(id) {
-  _state.framing.viewpoint = id;
+function _pickTimeBudget(id) {
+  _state.calibrate.time_budget = id;
   _scheduleSave();
   _renderMain({ preserveScroll: true });
 }
 
-function _pickMood(group, id) {
-  if (!['light','season','vegetation','figuration','style'].includes(group)) return;
-  // Click sur l'option déjà sélectionnée → on désélectionne
-  _state.mood[group] = _state.mood[group] === id ? '' : id;
+function _surpriseMe() {
+  // Randomise tous les curseurs + ajoute un mot stimulus
+  _state.calibrate.tonality = Math.floor(Math.random() * 100);
+  _state.calibrate.tone     = Math.floor(Math.random() * 100);
+  _state.calibrate.format   = Math.floor(Math.random() * 100);
+  _state.calibrate.boldness = Math.floor(Math.random() * 100);
+  _state.calibrate.stimulus_word = pickStimulusWord();
   _scheduleSave();
   _renderMain({ preserveScroll: true });
+  _toastOk(`Mot stimulus : "${_state.calibrate.stimulus_word}"`);
 }
 
-function _pickEngine(id) {
-  _state.output.target_engine = id;
-  _scheduleSave();
-  _renderMain({ preserveScroll: true });
-}
-
-function _pickImageEngine(id) {
-  _state.output.image_engine = id;
+function _resetStimulus() {
+  _state.calibrate.stimulus_word = '';
   _scheduleSave();
   _renderMain({ preserveScroll: true });
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Rail (navigation gauche)
+// Rail (3 étapes)
 // ═══════════════════════════════════════════════════════════════
 function _renderRail() {
   const rail = _root.querySelector('[data-slot="rail"]');
@@ -309,8 +324,10 @@ function _renderRail() {
     ${STEPS.map((s, i) => {
       const status = i < idx ? 'is-done' : (i === idx ? 'is-active' : '');
       const numContent = i < idx ? icon('check', 12) : (i + 1);
+      const enabled = i === 0 || _canAccessStep(i);
       return `
-        <button class="ws-step ${status}" data-act="goto" data-step="${s.id}">
+        <button class="ws-step ${status}" data-act="goto" data-step="${s.id}"
+                ${enabled ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>
           <span class="ws-step-num">${numContent}</span>
           <span class="ws-step-icon" style="width:18px;height:18px;">${icon(s.icon, 18)}</span>
           <span class="ws-step-label">${s.label}</span>
@@ -320,8 +337,15 @@ function _renderRail() {
   `;
 }
 
+// Empêche l'utilisateur d'aller à l'étape 3 sans mode choisi etc.
+function _canAccessStep(idx) {
+  if (idx === 0) return true;
+  if (idx >= 1 && !_state.topic.mode) return false;
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════
-// Aside (panel droit) — assistance contextuelle
+// Aside
 // ═══════════════════════════════════════════════════════════════
 function _renderAside() {
   const aside = _root.querySelector('[data-slot="aside"]');
@@ -329,28 +353,13 @@ function _renderAside() {
     <div class="ws-aside-section">
       <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Muse prépare la <strong style="color:var(--gold);">planche d'ambiance</strong>
-        à transmettre à votre studio 3D spécialisé en illustration immobilière.
-        Vous configurez l'univers visuel cible (cadrage, lumière, palette végétale,
-        matériaux, figuration). Muse assemble un Prompt Maître que vous collez dans
-        votre IA habituelle ; elle vous renvoie un fichier HTML avec un bouton "Copier"
-        qui génère, en <strong>une seule image</strong>, une planche moodboard
-        professionnelle composée de 6 vignettes cohérentes (Midjourney, Flux,
-        DALL-E, Imagen…). Le studio modélise ensuite le projet sur plan en
-        s'inspirant de cette planche.
-      </div>
-    </div>
-
-    <div class="ws-aside-section">
-      <div class="ws-aside-title">À retenir</div>
-      <div class="ws-aside-card" style="background:rgba(245,158,11,.06);border-color:var(--warn);">
-        <strong style="color:var(--warn);display:block;margin-bottom:4px;">
-          ${icon('shield-check', 14)} Pas une "génération du projet"
-        </strong>
-        Les images obtenues ne représentent <strong>pas</strong> votre programme :
-        ce sont des <em>références d'ambiance dans le même esprit</em>, à glisser
-        dans le brief du studio 3D pour qu'il sache exactement quelle direction
-        artistique viser lors de la modélisation sur plan.
+        Muse est votre <strong style="color:var(--gold);">plateau de jeu créatif</strong>
+        de communication immobilière. Vous lui dites sur quoi brainstormer
+        (nom de programme, punchlines, ambiance visuelle, idées marketing, objections
+        acquéreurs ou tout d'un coup), vous calibrez en quelques curseurs, et Muse
+        tire les idées une par une. Vous gardez vos favorites, exportez en PDF.
+        Pensé pour les <strong>chargé·es de communication</strong> qui ont besoin
+        d'aller vite sans sacrifier la qualité.
       </div>
     </div>
 
@@ -362,16 +371,15 @@ function _renderAside() {
     </div>
 
     <div class="ws-aside-section">
-      <div class="ws-aside-title">Notre force</div>
-      <div class="ws-aside-card">
-        <strong style="color: var(--ws-text); display:block; margin-bottom:6px;">
-          ${icon('shield-check', 14)} Cohérence ratio automatique
+      <div class="ws-aside-title">Astuce</div>
+      <div class="ws-aside-card" style="background:var(--gold3);border-color:var(--gold);">
+        <strong style="color:var(--gold);display:block;margin-bottom:4px;">
+          ${icon('sparkles', 14)} Mode "Mix tout"
         </strong>
-        Muse vérifie que votre cadrage est compatible avec le ratio du support
-        (issu de Kodex). Si vous choisissez une bâche horizontale avec une vue
-        intérieure verticale, on injecte automatiquement le paramètre
-        <code style="font-size:11px;background:var(--gold3);padding:1px 5px;border-radius:4px;color:var(--gold);">--ar</code>
-        dans les prompts pour éviter toute déformation.
+        Hésitez entre brainstormer un nom, des accroches ou des idées marketing ?
+        Choisissez <strong>Mix tout</strong> en étape 1. Muse produit
+        nom + punchlines + direction artistique + actions marketing
+        en une seule session, le tout cohérent entre eux.
       </div>
     </div>
   `;
@@ -380,19 +388,14 @@ function _renderAside() {
 // ═══════════════════════════════════════════════════════════════
 // Main panel — dispatch par vue
 // ═══════════════════════════════════════════════════════════════
-// preserveScroll: true → conserve la position de scroll actuelle
-// (utilisé pour les sélections de chips/cards qui ne changent pas
-// d'étape). Par défaut false → reset en haut (utilisé pour la
-// navigation entre étapes).
 function _renderMain(opts = {}) {
   const main = _root.querySelector('[data-slot="main"]');
   const prevScroll = main.scrollTop;
   const view = _state.view;
   let html = '';
-  if (view === 'context')      html = _viewContext();
-  else if (view === 'framing') html = _viewFraming();
-  else if (view === 'mood')    html = _viewMood();
-  else if (view === 'output')  html = _viewOutput();
+  if (view === 'topic')           html = _viewTopic();
+  else if (view === 'calibrate')  html = _viewCalibrate();
+  else if (view === 'brainstorm') html = _viewBrainstorm();
   main.innerHTML = `<div class="ws-main-inner">${html}${_stepNav()}</div>`;
   main.scrollTop = opts.preserveScroll ? prevScroll : 0;
 
@@ -406,556 +409,334 @@ function _renderMain(opts = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue 1 — CONTEXT
+// Vue 1 — TOPIC (mode picker, 6 cards plein écran)
 // ═══════════════════════════════════════════════════════════════
-function _viewContext() {
-  const ctx = _state.context;
-
+function _viewTopic() {
   const root = `
-    <span class="ws-eyebrow">${icon('sliders', 12)} 1 sur 4 · Le contexte</span>
-    <h1 class="ws-h1">Quel livrable allez-vous commander à votre studio 3D&nbsp;?</h1>
+    <span class="ws-eyebrow">${icon('sparkles', 12)} 1 sur 3 · Le sujet</span>
+    <h1 class="ws-h1">Sur quoi voulez-vous brainstormer&nbsp;?</h1>
     <p class="ws-lead">
-      Les trois premiers choix sont les commandes les plus fréquentes auprès des
-      studios spécialisés en illustration immobilière. Les suivants correspondent
-      aux <em>usages finaux</em> de l'illustration (bâche, magazine, réseaux
-      sociaux)&nbsp;— utiles pour caler le ratio et le niveau de détail attendu.
+      Choisissez un sujet pour démarrer. Si vous hésitez ou si vous voulez
+      tout couvrir d'un coup, prenez <strong style="color:var(--gold);">Mix tout</strong>
+      en bas à droite — Muse produira nom + punchlines + ambiance + idées marketing
+      en une seule session.
     </p>
 
-    <h3 class="ws-h3" style="margin-top:24px;">Livrable commandé au studio 3D · ou support de diffusion finale</h3>
-    <div class="ws-card-grid" data-slot="support-list">
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('package', 24)}</div>
-        <p class="ws-empty-desc">Chargement…</p>
+    <div data-slot="mode-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;margin-top:24px;">
+      <div class="ws-empty" style="grid-column:1/-1;">
+        <div class="ws-empty-icon">${icon('sparkles', 24)}</div>
+        <p class="ws-empty-desc">Chargement des modes…</p>
       </div>
     </div>
+  `;
 
-    <h3 class="ws-h3" style="margin-top:32px;">Détails du projet</h3>
+  getModes().then(modes => {
+    const slot = _root?.querySelector('[data-slot="mode-grid"]');
+    if (!slot) return;
+    slot.innerHTML = modes.map(m => {
+      const selected = _state.topic.mode === m.id;
+      const isMix = m.is_mix;
+      const accent = m.color_hex || 'var(--ws-accent)';
+      return `
+        <button class="ws-card is-clickable ${selected ? 'is-selected' : ''}"
+                data-act="pick-mode" data-id="${_esc(m.id)}"
+                style="all:unset;cursor:pointer;display:block;padding:28px 24px;border-radius:14px;background:var(--ws-surface);border:1px solid ${selected ? accent : 'var(--ws-border)'};${selected ? `box-shadow: 0 0 0 1px ${accent} inset, 0 8px 24px ${accent}33;` : ''}${isMix ? `background:linear-gradient(135deg, var(--ws-surface) 0%, ${accent}14 100%);` : ''}transition:all 220ms ease;text-align:left;min-height:170px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+            <div style="width:48px;height:48px;border-radius:12px;background:${accent}22;color:${accent};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              ${icon(m.icon || 'sparkles', 24)}
+            </div>
+            ${selected ? `<span style="color:${accent};font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:4px;">${icon('check', 14)} Choisi</span>` : ''}
+            ${isMix && !selected ? `<span class="ws-badge" style="background:${accent}22;color:${accent};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Tout-en-un</span>` : ''}
+          </div>
+          <h3 style="font-size:17px;font-weight:800;letter-spacing:-.018em;margin:0 0 6px 0;color:var(--ws-text);">
+            ${_esc(m.label)}
+          </h3>
+          <p style="margin:0;font-size:13.5px;color:var(--ws-text-soft);line-height:1.55;">
+            ${_esc(m.tagline)}
+          </p>
+          <div style="margin-top:14px;font-size:11.5px;color:var(--ws-text-muted);letter-spacing:0;">
+            ${m.ideas_count} idées · ${(m.clusters || []).length} cluster${(m.clusters || []).length > 1 ? 's' : ''}
+          </div>
+        </button>
+      `;
+    }).join('');
+  });
+
+  return root;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue 2 — CALIBRATE (sliders + checkboxes + jauge live + dé)
+// ═══════════════════════════════════════════════════════════════
+function _viewCalibrate() {
+  const c = _state.calibrate;
+  const score = computeBriefQualityScore(_state);
+  const tier = getQualityTier(score);
+  const stimulus = c.stimulus_word;
+
+  return `
+    <span class="ws-eyebrow">${icon('sliders', 12)} 2 sur 3 · Le calibrage</span>
+    <h1 class="ws-h1">Posez votre brief comme une partie d'échecs</h1>
+    <p class="ws-lead">
+      Plus vous précisez, plus Muse produit des idées justes.
+      <strong style="color:var(--gold);">Pas obligé de tout remplir</strong>&nbsp;—
+      vous pouvez aussi cliquer sur 🎲 <em>Surprends-moi</em> pour partir d'une
+      configuration aléatoire avec un mot stimulus.
+    </p>
+
+    <!-- ── PROGRAMME ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Le programme</h3>
     <div class="ws-card" style="padding:22px 26px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px 18px;">
         <div class="ws-field">
-          <label class="ws-label">Ratio cible</label>
-          <input class="ws-input" type="text" name="ratio" data-group="context"
-                 value="${_esc(ctx.ratio || '')}" placeholder="ex. 16:9, 4:5, 3:1">
-        </div>
-        <div class="ws-field">
-          <label class="ws-label">Secteur</label>
-          <select class="ws-select" name="sector" data-group="context">
-            <option value="immobilier" ${ctx.sector==='immobilier'?'selected':''}>Immobilier</option>
-            <option value="retail" ${ctx.sector==='retail'?'selected':''}>Retail / commerce</option>
-            <option value="restauration" ${ctx.sector==='restauration'?'selected':''}>Restauration</option>
-            <option value="autre" ${ctx.sector==='autre'?'selected':''}>Autre</option>
-          </select>
+          <label class="ws-label">Nom du programme (ou de travail)</label>
+          <input class="ws-input" type="text" name="program_name" data-group="calibrate"
+                 value="${_esc(c.program_name || '')}"
+                 placeholder="ex. Les Hauts de Bandol — résidence en projet">
         </div>
         <div class="ws-field">
-          <label class="ws-label">Largeur (mm) — optionnel</label>
-          <input class="ws-input" type="number" name="width_mm" data-group="context"
-                 value="${ctx.width_mm ?? ''}" placeholder="ex. 4000">
-        </div>
-        <div class="ws-field">
-          <label class="ws-label">Hauteur (mm) — optionnel</label>
-          <input class="ws-input" type="number" name="height_mm" data-group="context"
-                 value="${ctx.height_mm ?? ''}" placeholder="ex. 3000">
-        </div>
-        <div class="ws-field" style="grid-column:1/-1;">
-          <label class="ws-label">Nom du projet</label>
-          <input class="ws-input" type="text" name="project_name" data-group="context"
-                 value="${_esc(ctx.project_name || '')}" placeholder="ex. Les Jardins du Mourillon">
-        </div>
-        <div class="ws-field" style="grid-column:1/-1;">
           <label class="ws-label">Localisation</label>
-          <input class="ws-input" type="text" name="location" data-group="context"
-                 value="${_esc(ctx.location || '')}" placeholder="ex. Bandol (Var)">
+          <input class="ws-input" type="text" name="program_location" data-group="calibrate"
+                 value="${_esc(c.program_location || '')}"
+                 placeholder="ex. Bandol (Var)">
+        </div>
+        <div class="ws-field" style="grid-column:1/-1;">
+          <label class="ws-label">Description en 2-3 lignes</label>
+          <textarea class="ws-textarea" name="program_description" data-group="calibrate" rows="3"
+                    placeholder="ex. 24 lots T2-T4 duplex avec terrasses cascadées sur la mer, façades minérales claires et bois clair, parking souterrain, livraison T4 2027.">${_esc(c.program_description || '')}</textarea>
         </div>
       </div>
     </div>
-  `;
 
-  // Hydratation asynchrone des cartes support
-  getSupports().then(supports => {
-    const slot = _root?.querySelector('[data-slot="support-list"]');
-    if (!slot) return;
-    slot.innerHTML = supports.map(s => {
-      const selected = ctx.support === s.id;
-      const primary  = !!s.primary;
-      return `
-        <div class="ws-card is-clickable ${selected ? 'is-selected' : ''}"
-             data-act="pick-support" data-id="${_esc(s.id)}"
-             style="${selected ? 'background:var(--ws-accent-soft);border-color:var(--ws-accent);' : (primary ? 'border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset, 0 4px 14px rgba(99,102,241,.10);' : '')}">
-          <div class="ws-card-row">
-            <div class="ws-card-icon" style="${selected ? 'background:var(--ws-accent);color:#fff;' : (primary ? 'background:var(--gold3);color:var(--gold);' : '')}">
-              ${icon(s.icon || 'package', 22)}
-            </div>
-            <div class="ws-card-body">
-              <h3 class="ws-card-title">
-                ${_esc(s.label)}
-                ${primary ? `<span class="ws-badge" style="margin-left:8px;background:var(--gold3);color:var(--gold);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Studio 3D</span>` : ''}
-              </h3>
-              <p class="ws-card-desc">
-                Ratio par défaut <strong>${_esc(s.default_ratio || '—')}</strong> · ${_esc(s.context || '')}
-              </p>
-            </div>
+    <!-- ── JAUGE QUALITÉ DU BRIEF ── -->
+    <div class="ws-card" data-slot="quality-gauge" style="margin-top:16px;padding:18px 24px;background:linear-gradient(90deg, var(--ws-surface) 0%, ${tier.color}11 100%);border-color:${tier.color}44;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);margin-bottom:4px;">
+            Qualité du brief
+          </div>
+          <div style="font-size:18px;font-weight:800;letter-spacing:-.018em;color:${tier.color};">
+            ${tier.label} <span style="font-size:13px;font-weight:600;color:var(--ws-text-muted);margin-left:6px;">${score} / 100</span>
           </div>
         </div>
-      `;
-    }).join('');
-  });
-
-  return root;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Vue 2 — FRAMING
-// ═══════════════════════════════════════════════════════════════
-function _viewFraming() {
-  const frm = _state.framing;
-
-  const root = `
-    <span class="ws-eyebrow">${icon('eye', 12)} 2 sur 4 · Le cadrage</span>
-    <h1 class="ws-h1">Quel angle voulez-vous pour l'illustration finale&nbsp;?</h1>
-    <p class="ws-lead">
-      C'est <strong>l'angle de l'image que le studio 3D va modéliser</strong> à partir
-      des plans techniques. Choisissez la prise de vue qui sert le mieux votre récit
-      commercial&nbsp;— envergure (drone), immersion (piéton), volumes intérieurs,
-      atout extérieur, ou détail matières.
-    </p>
-
-    <div class="ws-card-grid" data-slot="viewpoint-list" style="margin-top:18px;">
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('eye', 24)}</div>
-        <p class="ws-empty-desc">Chargement…</p>
-      </div>
-    </div>
-
-    <h3 class="ws-h3" style="margin-top:32px;">Précisions sur le cadrage</h3>
-    <div class="ws-card" style="padding:22px 26px;">
-      <div class="ws-field">
-        <label class="ws-label">Sujet principal de l'image</label>
-        <input class="ws-input" type="text" name="subject" data-group="framing"
-               value="${_esc(frm.subject || '')}"
-               placeholder="ex. Façade principale avec terrasses cascadées sur la mer">
-      </div>
-      <div class="ws-field" style="margin-top:14px;">
-        <label class="ws-label">Intention focale — ce que vous voulez vraiment montrer</label>
-        <textarea class="ws-textarea" name="focal_intent" data-group="framing"
-                  rows="3"
-                  placeholder="ex. L'envergure du projet et son intégration discrète dans le paysage méditerranéen. La qualité des matériaux et l'élégance contemporaine sans ostentation.">${_esc(frm.focal_intent || '')}</textarea>
-      </div>
-    </div>
-  `;
-
-  // Hydratation asynchrone
-  getViewpoints().then(viewpoints => {
-    const slot = _root?.querySelector('[data-slot="viewpoint-list"]');
-    if (!slot) return;
-    slot.innerHTML = viewpoints.map(v => {
-      const selected = frm.viewpoint === v.id;
-      return `
-        <div class="ws-card is-clickable ${selected ? 'is-selected' : ''}"
-             data-act="pick-viewpoint" data-id="${_esc(v.id)}"
-             style="${selected ? 'background:var(--ws-accent-soft);border-color:var(--ws-accent);' : ''}">
-          <div class="ws-card-row">
-            <div class="ws-card-icon" style="${selected ? 'background:var(--ws-accent);color:#fff;' : ''}">
-              ${icon(v.icon || 'eye', 22)}
-            </div>
-            <div class="ws-card-body">
-              <h3 class="ws-card-title">${_esc(v.label)}</h3>
-              <p class="ws-card-desc">${_esc(v.narrative)}</p>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  });
-
-  return root;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Vue 3 — MOOD
-// ═══════════════════════════════════════════════════════════════
-function _viewMood() {
-  const mood = _state.mood;
-
-  const root = `
-    <span class="ws-eyebrow">${icon('palette', 12)} 3 sur 4 · L'atmosphère</span>
-    <h1 class="ws-h1">Quelle atmosphère voulez-vous transmettre&nbsp;?</h1>
-    <p class="ws-lead">
-      Sélectionnez au moins une option par groupe&nbsp;— ou laissez libre pour
-      ouvrir le champ créatif. Vous pouvez cliquer une seconde fois sur une
-      option sélectionnée pour la désélectionner.
-    </p>
-
-    ${_moodGroupBlock('Lumière',           'light',      'lights')}
-    ${_moodGroupBlock('Saison',            'season',     'seasons')}
-    ${_moodGroupBlock('Végétation',        'vegetation', 'vegetations')}
-    ${_moodGroupBlock('Figuration humaine','figuration', 'figurations')}
-    ${_moodGroupBlock('Direction artistique','style',    'styles')}
-
-    <h3 class="ws-h3" style="margin-top:32px;">Précisions libres</h3>
-    <div class="ws-card" style="padding:22px 26px;">
-      <div class="ws-field">
-        <label class="ws-label">Matériaux et textures à mettre en avant</label>
-        <input class="ws-input" type="text" name="materials_focus" data-group="mood"
-               value="${_esc(mood.materials_focus || '')}"
-               placeholder="ex. pierre de Cassis, bois brûlé, alu anodisé champagne">
-      </div>
-    </div>
-  `;
-
-  // Hydrate chaque groupe
-  ['light','season','vegetation','figuration','style'].forEach(group => {
-    const loader = group === 'light' ? getLights
-                : group === 'season' ? getSeasons
-                : group === 'vegetation' ? getVegetations
-                : group === 'figuration' ? getFigurations
-                : getStyles;
-    loader().then(options => {
-      const slot = _root?.querySelector(`[data-slot="mood-${group}"]`);
-      if (!slot) return;
-      slot.innerHTML = options.map(o => {
-        const selected = mood[group] === o.id;
-        return `
-          <button class="ws-chip ${selected ? 'is-selected' : ''}"
-                  data-act="pick-mood" data-group="${group}" data-id="${_esc(o.id)}"
-                  style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;margin:4px 6px 4px 0;">
-            ${selected ? icon('check', 13) : ''}
-            ${_esc(o.label)}
-          </button>
-        `;
-      }).join('');
-    });
-  });
-
-  return root;
-}
-
-function _moodGroupBlock(title, group, _seedName) {
-  return `
-    <h3 class="ws-h3" style="margin-top:24px;">${_esc(title)}</h3>
-    <div data-slot="mood-${group}" style="display:flex;flex-wrap:wrap;gap:4px;">
-      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
-    </div>
-  `;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Vue 4 — OUTPUT (Prompt Maître Artistique)
-// ═══════════════════════════════════════════════════════════════
-function _viewOutput() {
-  const o = _state.output;
-  const validationError = validateForGeneration(_state);
-
-  let body = '';
-
-  // ── État : généré → afficher le prompt + actions ─────────
-  if (o.status === 'done' && o.prompt) {
-    body = _renderPromptResult();
-  }
-  // ── État : en cours d'assemblage ──────────────────────────
-  else if (o.status === 'building') {
-    body = `
-      <div class="ws-card" style="text-align:center;padding:48px 24px;">
-        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;animation:muse-pulse 1.4s ease-in-out infinite;">
-          ${icon('palette', 28)}
-        </div>
-        <h3 style="font-size:16px;font-weight:700;letter-spacing:-.018em;margin:0 0 6px 0;">Muse assemble votre Prompt Maître…</h3>
-        <p style="margin:0;font-size:13px;color:var(--ws-text-muted);max-width:380px;margin-inline:auto;line-height:1.55;">
-          Nous croisons votre cadrage, votre atmosphère et les contraintes techniques du support.
-        </p>
-      </div>
-      <style>
-        @keyframes muse-pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50%       { transform: scale(1.08); opacity: .7; }
-        }
-      </style>
-    `;
-  }
-  // ── État : erreur ──────────────────────────────────────────
-  else if (o.status === 'error') {
-    body = `
-      <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
-        <div style="display:flex;gap:12px;align-items:flex-start;">
-          ${icon('x', 22)}
-          <div>
-            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--danger);">L'assemblage a échoué</h3>
-            <p style="margin:0;font-size:13px;color:var(--ws-text);line-height:1.5;">${_esc(o.error || 'Erreur inconnue.')}</p>
-          </div>
+        <div style="flex:1;min-width:200px;max-width:380px;height:10px;background:var(--ws-border);border-radius:999px;overflow:hidden;position:relative;">
+          <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 260ms cubic-bezier(.4,0,.2,1);"></div>
         </div>
       </div>
-      <div style="margin-top:16px;">
-        <button class="ws-btn ws-btn--accent" data-act="regenerate">
-          ${icon('refresh', 16)} Réessayer
+    </div>
+
+    <!-- ── CURSEURS ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Les cadrans créatifs</h3>
+    <div class="ws-card" style="padding:24px 28px;">
+      ${_renderSlider('tonality', 'Tonalité',  'Sobre',      'Audacieux',   c.tonality)}
+      ${_renderSlider('tone',     'Ton',       'Chaleureux', 'Minimaliste', c.tone)}
+      ${_renderSlider('format',   'Format',    'Slogan',     'Manifeste',   c.format)}
+      ${_renderSlider('boldness', 'Niveau',    'Réaliste',   'Décalé',      c.boldness)}
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:18px;border-top:1px solid var(--ws-border);flex-wrap:wrap;">
+        <button class="ws-btn ws-btn--secondary" data-act="surprise-me"
+                style="padding:9px 16px;font-size:13px;">
+          ${icon('sparkles', 14)} Surprends-moi
         </button>
+        ${stimulus ? `
+          <span style="font-size:12.5px;color:var(--ws-text-soft);display:inline-flex;align-items:center;gap:8px;">
+            Mot stimulus injecté : <strong style="color:var(--gold);font-style:italic;">"${_esc(stimulus)}"</strong>
+            <button class="ws-iconbtn" data-act="reset-stimulus" title="Retirer le stimulus" style="padding:4px;">
+              ${icon('x', 14)}
+            </button>
+          </span>
+        ` : `
+          <span style="font-size:12.5px;color:var(--ws-text-muted);">
+            Tire un mot aléatoire (style Oblique Strategies) pour débloquer la créativité.
+          </span>
+        `}
       </div>
-    `;
-  }
-  // ── État initial : invitation à générer ────────────────────
-  else {
-    const canGenerate = !validationError;
-    const coherence = _checkCurrentCoherence();
-    body = `
-      ${_renderEngineSelector()}
+    </div>
 
-      ${coherence ? `
-        <div class="ws-card" style="border-color:var(--warn);background:rgba(245,158,11,.06);padding:14px 18px;margin-bottom:16px;">
-          <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ws-text);">
-            <span style="color:var(--warn);flex-shrink:0;">${icon('shield-check', 16)}</span>
-            <div><strong style="color:var(--warn);">Cohérence ratio détectée&nbsp;:</strong> ${_esc(coherence)}</div>
-          </div>
-        </div>
-      ` : ''}
-
-      <div class="ws-card" style="text-align:center;padding:48px 24px;${canGenerate ? '' : 'opacity:.7;'}">
-        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;color:var(--gold);">
-          ${icon('sparkles', 28)}
-        </div>
-        <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Tout est prêt pour assembler votre Prompt Maître</h3>
-        <p style="margin:0 0 20px 0;font-size:13.5px;color:var(--ws-text-soft);max-width:480px;margin-inline:auto;line-height:1.6;">
-          Muse n'appelle <strong style="color:var(--ws-text);">aucune IA</strong> à cette étape. Il assemble un prompt structuré
-          que vous copierez ensuite dans <strong style="color:var(--ws-text);">${_esc(_state.output.target_engine)}</strong>.
-          La génération du dashboard HTML interactif est faite par l'IA cible.
-        </p>
-        <button class="ws-btn ws-btn--accent" data-act="generate-prompt" ${canGenerate ? '' : 'disabled'}
-                style="padding:12px 22px;font-size:14px;">
-          ${icon('sparkles', 16)} Assembler le Prompt Maître
-        </button>
-        ${validationError ? `
-          <div style="margin-top:14px;font-size:12.5px;color:var(--warn);display:inline-flex;align-items:center;gap:6px;">
-            ${icon('x', 14)} ${_esc(validationError)}
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  return `
-    <span class="ws-eyebrow">${icon('sparkles', 12)} 4 sur 4 · Le Prompt Maître</span>
-    <h1 class="ws-h1">${o.status === 'done' ? 'Votre Prompt Maître est prêt' : 'C\'est le moment de l\'assemblage&nbsp;!'}</h1>
-    <p class="ws-lead">
-      ${o.status === 'done'
-        ? 'Copiez ce texte dans votre IA. Elle vous demandera les plans techniques du programme, puis générera un fichier HTML contenant un bouton "Copier" unique qui produit votre planche d\'ambiance complète en une seule génération.'
-        : 'Choisissez le moteur IA cible, puis Muse assemble le Prompt Maître. Vous n\'avez plus qu\'à le copier-coller — l\'IA va construire la planche d\'ambiance à transmettre au studio 3D.'
-      }
+    <!-- ── CIBLES ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Cibles acheteurs</h3>
+    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 10px 0;">
+      Sélectionnez celles que vise ce programme (multi-choix possible).
     </p>
-    ${body}
+    <div data-slot="targets" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ── INSPIRATIONS ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Univers d'inspiration</h3>
+    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 10px 0;">
+      Choisissez les univers qui collent au programme — Muse en tiendra compte
+      pour ne pas vous proposer des idées hors sujet.
+    </p>
+    <div data-slot="inspirations" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ── TIME BUDGET ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Combien de temps avez-vous&nbsp;?</h3>
+    <div data-slot="time-budget" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ── CHAMP LIBRE ── -->
+    <h3 class="ws-h3" style="margin-top:28px;">Quelque chose de plus à dire&nbsp;?</h3>
+    <div class="ws-card" style="padding:22px 26px;">
+      <textarea class="ws-textarea" name="extra" data-group="calibrate" rows="3"
+                placeholder="ex. Le promoteur préfère un nom court et facile à prononcer au téléphone. La cible est plutôt locale (Var, Bouches-du-Rhône). Éviter le mot 'résidence'.">${_esc(c.extra || '')}</textarea>
+    </div>
   `;
 }
 
-// ── Sélecteurs : moteur IA cible + moteur de génération d'images ──
-function _renderEngineSelector() {
-  const currentAi  = _state.output.target_engine;
-  const currentImg = _state.output.image_engine;
-  const block = `
-    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur IA cible · pour le HTML</h3>
-    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 14px 0;">
-      Choisissez celui dans lequel vous comptez coller le Prompt Maître. Il sera mentionné dans le prompt pour adapter l'instruction système.
-    </p>
-    <div data-slot="engines" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">
-      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
-    </div>
-
-    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur de génération d'images · pour la planche</h3>
-    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 14px 0;">
-      Chaque moteur d'image a sa propre syntaxe. <strong style="color:var(--ws-text);">Midjourney / Flux / Stable Diffusion</strong> acceptent les paramètres <code style="font-size:11px;background:var(--gold3);color:var(--gold);padding:1px 5px;border-radius:4px;">--ar --style --v</code> ; <strong style="color:var(--ws-text);">DALL-E / Gemini Imagen / Nano Banana</strong> préfèrent de la prose narrative sans paramètres. Muse adapte automatiquement le prompt de la planche en conséquence.
-    </p>
-    <div data-slot="image-engines" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">
-      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+// ── Slider visuel custom ──────────────────────────────────────
+function _renderSlider(name, label, leftLabel, rightLabel, value) {
+  const v = value ?? 50;
+  return `
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ws-text-muted);">${_esc(label)}</span>
+        <span style="font-size:11px;color:var(--ws-text-muted);">${v} / 100</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:12.5px;color:var(--ws-text-soft);min-width:80px;text-align:right;">${_esc(leftLabel)}</span>
+        <input type="range" min="0" max="100" step="1" value="${v}"
+               name="${name}" data-group="calibrate"
+               style="flex:1;accent-color:var(--ws-accent);height:6px;cursor:pointer;">
+        <span style="font-size:12.5px;color:var(--ws-text-soft);min-width:80px;">${_esc(rightLabel)}</span>
+      </div>
     </div>
   `;
+}
 
-  // Hydratation moteurs IA
-  getTargetEngines().then(engines => {
-    const slot = _root?.querySelector('[data-slot="engines"]');
+// ── Hydrate targets/inspirations/time-budget (chips) ──────────
+function _hydrateCalibrateAsides() {
+  const c = _state.calibrate;
+
+  // Targets
+  getTargets().then(items => {
+    const slot = _root?.querySelector('[data-slot="targets"]');
     if (!slot) return;
-    slot.innerHTML = engines.map(e => {
-      const selected = currentAi === e.id;
+    slot.innerHTML = items.map(o => _chipHTML(o, c.targets.includes(o.id), 'toggle-target')).join('');
+  });
+
+  // Inspirations
+  getInspirations().then(items => {
+    const slot = _root?.querySelector('[data-slot="inspirations"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => _chipHTML(o, c.inspirations.includes(o.id), 'toggle-inspiration')).join('');
+  });
+
+  // Time budget (single select)
+  getTimeBudgets().then(items => {
+    const slot = _root?.querySelector('[data-slot="time-budget"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => {
+      const selected = (c.time_budget || '10min') === o.id;
       return `
         <button class="ws-chip ${selected ? 'is-selected' : ''}"
-                data-act="pick-engine" data-id="${_esc(e.id)}"
-                title="${_esc(e.note || '')}"
-                style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;margin:4px 6px 4px 0;">
+                data-act="pick-time-budget" data-id="${_esc(o.id)}"
+                style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;">
           ${selected ? icon('check', 13) : ''}
-          ${_esc(e.label)}
-          ${e.recommended ? `<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:4px;">★</span>` : ''}
+          ${_esc(o.label)}
         </button>
       `;
     }).join('');
   });
-
-  // Hydratation moteurs image
-  getImageEngines().then(engines => {
-    const slot = _root?.querySelector('[data-slot="image-engines"]');
-    if (!slot) return;
-    slot.innerHTML = engines.map(e => {
-      const selected = currentImg === e.id;
-      return `
-        <button class="ws-chip ${selected ? 'is-selected' : ''}"
-                data-act="pick-image-engine" data-id="${_esc(e.id)}"
-                title="${_esc(e.note || '')}"
-                style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;margin:4px 6px 4px 0;">
-          ${selected ? icon('check', 13) : ''}
-          ${_esc(e.label)}
-          ${e.recommended ? `<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:4px;">★</span>` : ''}
-        </button>
-      `;
-    }).join('');
-  });
-
-  return block;
 }
 
-// ── Cohérence ratio synchrone (best-effort, depuis le cache) ──
-function _checkCurrentCoherence() {
-  if (!_state.context.ratio || !_state.framing.viewpoint) return null;
-  // Lecture synchrone depuis le cache si dispo (sinon best-effort = ratio support only)
-  // On lance un fetch sans bloquer, le résultat sera dispo aux prochains render.
-  let warning = null;
-  getViewpoint(_state.framing.viewpoint).then(vp => {
-    warning = checkRatioCoherence(_state.context.ratio, vp);
-  }).catch(() => {});
-  // Pour le premier render, on tente une lecture synchrone via le cache déjà chargé
-  // (les options ont normalement été hydratées dans les vues précédentes)
-  try {
-    // Hack léger : on lit le module en cache via une variable globale du loader
-    // Pas optimal, mais évite un await dans une fonction de render synchrone.
-    // L'utilisateur verra le warning au render suivant après le 1er fetch.
-  } catch (_) {}
-  return warning;
-}
-
-// ── Affichage du Prompt Maître généré ─────────────────────────
-function _renderPromptResult() {
-  const o = _state.output;
-  const generatedAt = o.generated_at ? new Date(o.generated_at).toLocaleString('fr-FR') : '—';
-  const promptText = o.prompt || '';
-
+function _chipHTML(o, selected, act) {
   return `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-      <span class="ws-badge ws-badge--success">${icon('check', 12)} Assemblé le ${_esc(generatedAt)}</span>
-      <span class="ws-badge">Cible : ${_esc(o.target_engine)}</span>
-      <span class="ws-badge">${promptText.length.toLocaleString('fr-FR')} caractères</span>
-    </div>
+    <button class="ws-chip ${selected ? 'is-selected' : ''}"
+            data-act="${act}" data-id="${_esc(o.id)}"
+            style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;">
+      ${selected ? icon('check', 13) : ''}
+      ${_esc(o.label)}
+    </button>
+  `;
+}
 
-    <div class="ws-card" style="padding:0;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--ws-border);background:var(--ws-surface);">
-        <div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ws-text-muted);">
-          Prompt Maître Artistique
+// ── Update live de la jauge "Qualité du brief" ────────────────
+function _updateQualityGauge() {
+  const slot = _root?.querySelector('[data-slot="quality-gauge"]');
+  if (!slot) return;
+  const score = computeBriefQualityScore(_state);
+  const tier = getQualityTier(score);
+  slot.style.background = `linear-gradient(90deg, var(--ws-surface) 0%, ${tier.color}11 100%)`;
+  slot.style.borderColor = `${tier.color}44`;
+  slot.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);margin-bottom:4px;">
+          Qualité du brief
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="ws-btn ws-btn--accent" data-act="copy-prompt" style="padding:8px 16px;font-size:13px;">
-            ${icon('copy', 14)} <span data-slot="copy-label">Copier le prompt</span>
-          </button>
+        <div style="font-size:18px;font-weight:800;letter-spacing:-.018em;color:${tier.color};">
+          ${tier.label} <span style="font-size:13px;font-weight:600;color:var(--ws-text-muted);margin-left:6px;">${score} / 100</span>
         </div>
       </div>
-      <pre data-slot="prompt-text" style="margin:0;padding:22px 24px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.65;color:var(--ws-text);white-space:pre-wrap;word-break:break-word;max-height:560px;overflow-y:auto;background:transparent;">${_esc(promptText)}</pre>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
-      <button class="ws-btn ws-btn--secondary" data-act="copy-prompt">
-        ${icon('copy', 16)} Copier
-      </button>
-      <button class="ws-btn ws-btn--secondary" data-act="download-prompt">
-        ${icon('file-text', 16)} Télécharger en .txt
-      </button>
-      <button class="ws-btn ws-btn--ghost" data-act="regenerate">
-        ${icon('refresh', 16)} Régénérer
-      </button>
-    </div>
-
-    <div class="ws-card" style="margin-top:24px;padding:18px 22px;background:var(--gold3);border-color:var(--gold);">
-      <div style="display:flex;gap:12px;align-items:flex-start;">
-        <span style="color:var(--gold);flex-shrink:0;margin-top:2px;">${icon('sparkles', 18)}</span>
-        <div style="font-size:13px;line-height:1.65;color:var(--ws-text);">
-          <strong style="color:var(--gold);">Prochaine étape&nbsp;:</strong>
-          Collez ce prompt dans <strong>${_esc(o.target_engine)}</strong>. L'IA va d'abord
-          vous demander les pièces techniques du programme (plan de masse, élévations,
-          coupes, charte), puis elle vous renverra un fichier HTML avec un
-          <strong>bouton "Copier" unique</strong> qui produit, en une seule génération,
-          une <strong>planche d'ambiance professionnelle</strong> de 6 vignettes
-          cohérentes (architecture · lumière · végétation · matériaux · lifestyle ·
-          détail signature). Ouvrez le HTML, cliquez sur le bouton, collez le prompt
-          dans votre moteur d'image (configuré&nbsp;: <strong>${_esc(o.image_engine || 'midjourney')}</strong>).
-          Cette planche n'est <em>pas</em> votre projet — c'est un moodboard
-          d'inspiration à transmettre au studio 3D avec les plans techniques.
-        </div>
+      <div style="flex:1;min-width:200px;max-width:380px;height:10px;background:var(--ws-border);border-radius:999px;overflow:hidden;position:relative;">
+        <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 260ms cubic-bezier(.4,0,.2,1);"></div>
       </div>
     </div>
   `;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Génération du Prompt Maître
+// Vue 3 — BRAINSTORM (placeholder pour J2)
 // ═══════════════════════════════════════════════════════════════
-async function _generatePrompt() {
-  const err = validateForGeneration(_state);
-  if (err) { _toastSoon(err); return; }
+function _viewBrainstorm() {
+  return `
+    <span class="ws-eyebrow">${icon('palette', 12)} 3 sur 3 · Le jeu</span>
+    <h1 class="ws-h1">Le brainstorm IA arrive bientôt</h1>
+    <p class="ws-lead">
+      L'étape 3 (le tirage de cartes IA, le tri par favoris, les frameworks pro
+      SCAMPER / 6 chapeaux / Worst Idea, le mode Crazy 8s avec timer, et l'export
+      PDF) est livrée au prochain sprint <strong>Muse-Brainstorm-J2</strong>.
+    </p>
 
-  _state.output.status = 'building';
-  _state.output.error  = null;
-  _renderMain();
+    <div class="ws-card" style="padding:32px 28px;text-align:center;border-color:var(--gold);background:var(--gold3);">
+      <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold);color:#fff;align-items:center;justify-content:center;margin-bottom:16px;">
+        ${icon('sparkles', 28)}
+      </div>
+      <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 10px 0;">Votre brief est prêt à être joué</h3>
+      <p style="margin:0 auto;font-size:13.5px;color:var(--ws-text-soft);max-width:480px;line-height:1.6;">
+        Pour l'instant, vous pouvez revenir aux étapes précédentes pour ajuster
+        votre brief. Au prochain sprint, ce bouton lancera l'IA, qui va tirer
+        les idées une par une comme des cartes.
+      </p>
+      <div style="margin-top:20px;font-size:12.5px;color:var(--ws-text-muted);">
+        Sujet&nbsp;: <strong style="color:var(--gold);">${_esc(_state.topic.mode || '—')}</strong>
+        · Qualité brief&nbsp;: <strong style="color:var(--gold);">${computeBriefQualityScore(_state)} / 100</strong>
+      </div>
+    </div>
 
-  try {
-    const prompt = await buildPromptMaitre(_state);
-    _state.output.prompt = prompt;
-    _state.output.status = 'done';
-    _state.output.generated_at = new Date().toISOString();
-    _saveDraft();
-    _renderMain();
-    _toastOk('Prompt Maître assemblé');
-  } catch (e) {
-    _state.output.status = 'error';
-    _state.output.error  = e.message || 'Erreur lors de l\'assemblage.';
-    _saveDraft();
-    _renderMain();
-  }
-}
-
-// ── Copy-to-clipboard du prompt ───────────────────────────────
-async function _copyPrompt(btn) {
-  const text = _state.output.prompt;
-  if (!text) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    const labelSlot = _root?.querySelector('[data-slot="copy-label"]');
-    if (labelSlot) {
-      const original = labelSlot.textContent;
-      labelSlot.textContent = 'Copié ✓';
-      setTimeout(() => { labelSlot.textContent = original; }, 1600);
-    }
-    _toastOk('Prompt copié dans le presse-papier');
-  } catch (e) {
-    _toastSoon('Copie impossible : ' + e.message);
-  }
-}
-
-// ── Téléchargement .txt ───────────────────────────────────────
-function _downloadPrompt() {
-  const text = _state.output.prompt;
-  if (!text) return;
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  const name = (_state.context.project_name || 'Muse')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
-  a.href = url;
-  a.download = `muse-prompt-${name || 'brief'}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  _toastOk('Téléchargement lancé');
+    <div class="ws-card" style="margin-top:18px;padding:18px 22px;">
+      <h3 class="ws-h3" style="margin-top:0;">Ce qui sera livré au prochain sprint</h3>
+      <ul style="margin:8px 0 0 0;padding-left:22px;color:var(--ws-text-soft);font-size:13.5px;line-height:1.7;">
+        <li>Appel direct au moteur IA (Claude / Gemini / GPT) en BYOK</li>
+        <li>Tirage de cartes une par une avec animation flip</li>
+        <li>⭐ Favoris / 🔄 Variation / 🗑️ Rejet par carte</li>
+        <li>Frameworks pro 1-clic : SCAMPER · 6 chapeaux · Worst Idea · Reverse</li>
+        <li>Mode <strong>Crazy 8s</strong> avec timer 8 minutes</li>
+        <li>Mode <strong>Chaos</strong> avec mots stimulus aléatoires</li>
+        <li>Pour Naming : check domaine .fr disponible + lien INPI</li>
+        <li>Export PDF des favoris · sauvegarde bibliothèque D1</li>
+      </ul>
+    </div>
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Navigation footer
+// Step navigation footer
 // ═══════════════════════════════════════════════════════════════
 function _stepNav() {
   const idx = _currentStepIndex();
   const isLast = idx === STEPS.length - 1;
   const canBack = idx > 0;
+  const canNext = _canAccessStep(idx + 1) && idx < STEPS.length - 1;
+
+  let nextLabel = 'Étape suivante';
+  if (_state.view === 'topic' && !_state.topic.mode) {
+    nextLabel = 'Choisissez un sujet';
+  }
 
   return `
     <div class="ws-step-nav">
@@ -963,11 +744,9 @@ function _stepNav() {
         ${icon('chevron-left', 16)} Précédent
       </button>
       ${isLast
-        ? `<button class="ws-btn ws-btn--accent" data-act="generate-prompt">
-             ${icon('sparkles', 16)} Assembler le Prompt Maître
-           </button>`
-        : `<button class="ws-btn ws-btn--primary" data-act="next">
-             Étape suivante ${icon('chevron-right', 16)}
+        ? `<span style="font-size:13px;color:var(--ws-text-muted);font-style:italic;">Brainstorm IA arrive au prochain sprint</span>`
+        : `<button class="ws-btn ws-btn--primary" data-act="next" ${canNext ? '' : 'disabled'}>
+             ${_esc(nextLabel)} ${icon('chevron-right', 16)}
            </button>`
       }
     </div>
@@ -976,8 +755,17 @@ function _stepNav() {
 
 function _navigate(stepId) {
   if (!STEPS.find(s => s.id === stepId)) return;
+  const idx = STEPS.findIndex(s => s.id === stepId);
+  if (!_canAccessStep(idx)) {
+    _toastSoon('Choisissez d\'abord un sujet à l\'étape 1');
+    return;
+  }
   _state.view = stepId;
   _renderMain();
+  // Hydrate les chips quand on arrive sur Calibrate
+  if (stepId === 'calibrate') {
+    requestAnimationFrame(() => _hydrateCalibrateAsides());
+  }
 }
 
 function _advance() {
@@ -994,7 +782,7 @@ function _currentStep() { return STEPS.find(s => s.id === _state.view) || STEPS[
 function _currentStepIndex() { return STEPS.findIndex(s => s.id === _state.view); }
 
 // ═══════════════════════════════════════════════════════════════
-// Toasts (mêmes patterns que codex.js)
+// Toasts
 // ═══════════════════════════════════════════════════════════════
 function _toastSoon(label) { _toast(label, false); }
 function _toastOk(label)   { _toast(label, true); }
