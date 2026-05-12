@@ -605,5 +605,8 @@ export const CATALOG_DATA = {
         // ── Sprint SDQR-1 — Artefact à workspace fullscreen ──
         { id:'A-COM-001', padKey:null, title:'Sovereign Dynamic QR', subtitle:'QR codes dynamiques · stats souveraines · RGPD', category:'COM', plan:'PRO', price:49, lifetimePrice:199, icon:'zap', ai_optimized:'Claude', isNew:true, published:true, tags:['artefact','qr','marketing','tracking','vcard','wifi','sovereign','rgpd'],
           longDesc:"Générez des QR codes statiques (URL, VCard, Wi-Fi, iCal, texte) et dynamiques (URL modifiable après impression). Chaque scan est tracké de façon souveraine — aucune donnée tierce, RGPD natif. Studio de design pour brander vos QRs (Sprint SDQR-3). Dashboard stats (SDQR-4)." },
+        // ── Sprint Kodex-1 — Artefact à workspace fullscreen ──
+        { id:'A-COM-002', padKey:null, title:'Kodex', subtitle:'Le brief print/digital infaillible · calculateur d\'échelle', category:'COM', plan:'STARTER', price:49, lifetimePrice:199, icon:'sparkles', ai_optimized:'Claude', isNew:true, published:true, tags:['artefact','print','digital','brief','communication','production'],
+          longDesc:"Transforme une intention client en cahier des charges technique infaillible. Entonnoir guidé (imprimeur, réseaux sociaux, presse), saisie sectorisée, coffre-fort de vos assets, calculateur d'échelle automatique pour les grands formats (bâche, 4x3). Sortie : un brief PDF prêt à envoyer à votre graphiste ou imprimeur." },
     ],
 };
