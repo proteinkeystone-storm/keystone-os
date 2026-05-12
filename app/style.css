@@ -6246,7 +6246,23 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   background: rgba(184,148,90,.10);
   border-color: rgba(184,148,90,.45);
 }
-.sdqr-type-ico { font-size: 22px; line-height: 1; }
+.sdqr-type-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  color: rgba(220,225,240,.55);
+  transition: color .18s;
+}
+.sdqr-type-ico svg { width: 100%; height: 100%; }
+.sdqr-type-card.is-active .sdqr-type-ico { color: var(--gold, #c9a84c); }
+.sdqr-type-card:hover .sdqr-type-ico { color: rgba(220,230,255,1); }
+.sdqr-type-card.is-active:hover .sdqr-type-ico { color: var(--gold, #c9a84c); }
+/* SVG inline dans les pills (detail) et la sidebar : 11px en cohérence du texte */
+.sdqr-detail-pill svg,
+.sdqr-li-type svg {
+  width: 11px; height: 11px;
+  vertical-align: -1px;
+  margin-right: 2px;
+}
 .sdqr-type-label {
   font-family: 'Cormorant Garamond', serif;
   font-size: 16px; font-weight: 600;

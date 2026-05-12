@@ -116,12 +116,23 @@ function _encodeIcal(payload) {
   return lines.join('\n');
 }
 
+// ── Icônes SVG outline (style Lucide, monochrome currentColor) ────
+// 24x24 viewBox, fill:none, stroke:currentColor → s'adapte aux couleurs
+// de la carte (gris inactif / or actif).
+const _SVG = {
+  url: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+  text: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+  vcard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  wifi: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`,
+  ical: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+};
+
 // ── Registry public ────────────────────────────────────────────
 
 export const QR_TYPES = {
   url: {
     label  : 'URL',
-    icon   : '🔗',
+    icon   : _SVG.url,
     desc   : 'Lien web direct',
     supports : { static: true, dynamic: true },
     fields : [
@@ -133,7 +144,7 @@ export const QR_TYPES = {
 
   text: {
     label  : 'Texte',
-    icon   : '📝',
+    icon   : _SVG.text,
     desc   : 'Note, message, clé',
     supports : { static: true, dynamic: true },
     fields : [
@@ -145,7 +156,7 @@ export const QR_TYPES = {
 
   vcard: {
     label  : 'vCard',
-    icon   : '👤',
+    icon   : _SVG.vcard,
     desc   : 'Carte de contact',
     supports : { static: true, dynamic: true },
     fields : [
@@ -170,7 +181,7 @@ export const QR_TYPES = {
 
   wifi: {
     label  : 'Wi-Fi',
-    icon   : '📶',
+    icon   : _SVG.wifi,
     desc   : 'SSID + mot de passe',
     supports : { static: true, dynamic: false },
     fields : [
@@ -185,7 +196,7 @@ export const QR_TYPES = {
 
   ical: {
     label  : 'Événement',
-    icon   : '📅',
+    icon   : _SVG.ical,
     desc   : 'Date + lieu + titre',
     supports : { static: true, dynamic: true },
     fields : [
