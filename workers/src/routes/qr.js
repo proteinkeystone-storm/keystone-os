@@ -771,12 +771,39 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
 // ══════════════════════════════════════════════════════════════════
 export async function handleScheduledPurge(env) {
   const retentionDays = parseInt(env.SDQR_SCAN_RETENTION_DAYS || '90', 10);
+
+  // Sprint Sécu-2 / H9 — observabilité du cron :
+  // Auto-migration de la table system_meta (idempotent, ne casse rien).
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS system_meta (
+      key        TEXT PRIMARY KEY,
+      value      TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run().catch(() => {});
+
+  let purged = '?';
+  let status = 'ok';
+  let error  = null;
   try {
     const result = await env.DB
       .prepare(`DELETE FROM qr_scans WHERE ts < datetime('now', '-${retentionDays} days')`)
       .run();
-    console.log(`[sdqr-purge] OK — supprimé ${result?.meta?.changes ?? '?'} lignes anciennes (> ${retentionDays}j)`);
+    purged = result?.meta?.changes ?? '?';
+    console.log(`[sdqr-purge] OK — supprimé ${purged} lignes anciennes (> ${retentionDays}j)`);
   } catch (e) {
+    status = 'failed';
+    error  = e.message;
     console.error('[sdqr-purge] FAILED', e.message);
   }
+
+  // Enregistre toujours le timestamp, même en cas d'échec : permet à
+  // /api/admin/health de détecter un cron qui rate régulièrement.
+  await env.DB.prepare(`
+    INSERT INTO system_meta (key, value, updated_at)
+    VALUES ('last_purge_at', ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET
+      value      = excluded.value,
+      updated_at = excluded.updated_at
+  `).bind(JSON.stringify({ status, purged, error, retentionDays })).run().catch(() => {});
 }

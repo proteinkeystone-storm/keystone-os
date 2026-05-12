@@ -214,3 +214,28 @@ export async function handleMe(request, env) {
     expSec:  claims.exp - Math.floor(Date.now()/1000),
   }, 200, origin);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/auth/refresh
+// Sprint Sécu-2 / H4 / Q2b — rolling refresh du JWT.
+// Prend un JWT actuel valide, en émet un nouveau avec exp réinitialisé.
+// Le frontend peut appeler ce endpoint régulièrement (ex: toutes les
+// 24h) pour maintenir une session sans re-saisir la clé de licence.
+// Si le JWT actuel est invalide ou expiré → 401, l'user doit re-login.
+// ═══════════════════════════════════════════════════════════════
+export async function handleRefresh(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('JWT invalide ou expiré — re-login requis', 401, origin);
+
+  // On retire les claims de timing existants ; signJWT recalcule iat/exp.
+  const { iat: _iat, exp: _exp, nbf: _nbf, ...payload } = claims;
+  const jwt = await signJWT(payload, env);
+
+  return json({
+    jwt,
+    expiresIn: 60 * 60 * 24 * 7,
+    plan:      claims.plan,
+    owner:     claims.owner,
+  }, 200, origin);
+}

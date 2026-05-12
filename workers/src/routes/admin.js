@@ -28,8 +28,16 @@ export async function handleExport(request, env) {
 }
 
 // ── POST /api/admin/purge-tenant ──────────────────────────────
-// Supprime tous les appareils et révoque toutes les licences d'un tenant.
-// Action RGPD Art. 17 — droit à l'effacement.
+// Supprime toutes les données d'un tenant. Action RGPD Art. 17 —
+// droit à l'effacement.
+//
+// Sprint Sécu-2 / H1 — purge étendue à toutes les tables tenant-scoped :
+//   - devices, qr_redirects, qr_scans, screenshots, messages,
+//     pads, catalog, api_keys_vault, entities, user_vaults
+// Les licences sont anonymisées (UPDATE) plutôt que DELETE pour
+// conserver la traçabilité financière Stripe (chargebacks, audits).
+// stripe_events (idempotence globale) et activation_attempts
+// (par fingerprint, pas tenant) ne sont pas touchés.
 export async function handlePurgeTenant(request, env) {
   const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
@@ -39,31 +47,47 @@ export async function handlePurgeTenant(request, env) {
     return err('Champ "tenantId" requis', 400, origin);
   }
 
-  // Vérifier que le tenant existe
-  const tenant = await env.DB
-    .prepare('SELECT id FROM tenants WHERE id = ?')
-    .bind(tenantId)
-    .first();
+  // Ordre des DELETE : on supprime d'abord les tables qui pointent
+  // vers d'autres (qr_scans → qr_redirects, user_vaults → licences).
+  const counts = {};
 
-  // On tolère si le tenant n'est pas dans la table tenants (données orphelines à purger quand même)
+  // 1. qr_scans (via short_id link to qr_redirects)
+  const r1 = await env.DB.prepare(
+    'DELETE FROM qr_scans WHERE short_id IN (SELECT short_id FROM qr_redirects WHERE tenant_id = ?)'
+  ).bind(tenantId).run();
+  counts.qr_scans = r1.meta.changes || 0;
 
-  // Supprimer les devices du tenant
-  const delDevices = await env.DB
-    .prepare('DELETE FROM devices WHERE tenant_id = ?')
-    .bind(tenantId)
-    .run();
+  // 2. qr_redirects
+  const r2 = await env.DB.prepare('DELETE FROM qr_redirects WHERE tenant_id = ?').bind(tenantId).run();
+  counts.qr_redirects = r2.meta.changes || 0;
 
-  // Révoquer toutes les licences du tenant
-  const revokeRes = await env.DB
-    .prepare("UPDATE licences SET is_active = 0, updated_at = datetime('now') WHERE tenant_id = ?")
-    .bind(tenantId)
-    .run();
+  // 3. user_vaults (via sub link to licences.lookup_hmac)
+  const r3 = await env.DB.prepare(
+    'DELETE FROM user_vaults WHERE sub IN (SELECT lookup_hmac FROM licences WHERE tenant_id = ? AND lookup_hmac IS NOT NULL)'
+  ).bind(tenantId).run();
+  counts.user_vaults = r3.meta.changes || 0;
+
+  // 4-10. Tables tenant-scoped directes
+  for (const table of ['screenshots', 'messages', 'pads', 'catalog', 'api_keys_vault', 'entities', 'devices']) {
+    try {
+      const r = await env.DB.prepare(`DELETE FROM ${table} WHERE tenant_id = ?`).bind(tenantId).run();
+      counts[table] = r.meta.changes || 0;
+    } catch (e) {
+      // Table peut-être absente (auto-migration) — on tolère et on continue
+      counts[table] = `error: ${e.message}`;
+    }
+  }
+
+  // 11. Licences : anonymisation, pas DELETE (traçabilité financière)
+  const rLic = await env.DB.prepare(
+    "UPDATE licences SET is_active = 0, owner = 'REDACTED', customer_email = NULL, updated_at = datetime('now') WHERE tenant_id = ?"
+  ).bind(tenantId).run();
+  counts.licences_anonymized = rLic.meta.changes || 0;
 
   return json({
-    success:          true,
+    success:   true,
     tenantId,
-    devicesDeleted:   delDevices.meta.changes  || 0,
-    licencesRevoked:  revokeRes.meta.changes   || 0,
-    purgedAt:         new Date().toISOString(),
+    counts,
+    purgedAt:  new Date().toISOString(),
   }, 200, origin);
 }

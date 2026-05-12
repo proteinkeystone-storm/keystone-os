@@ -23,7 +23,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
-import { handleActivateV2, handleMe }                                  from './routes/licence-public.js';
+import { handleActivateV2, handleMe, handleRefresh }                   from './routes/licence-public.js';
 import { handleVaultLoad, handleVaultSave }                            from './routes/vault-user.js';
 import { handleStripeWebhook }                                         from './routes/stripe-webhook.js';
 import { handleRegister, handleApprove, handleLogin,
@@ -80,6 +80,10 @@ export default {
       // ── Licences v2 (Sprint 2 — public, hashed, JWT, fingerprint) ──
       if (path === '/api/licence/v2/activate' && method === 'POST') return handleActivateV2(request, env);
       if (path === '/api/licence/v2/me'       && method === 'GET')  return handleMe(request, env);
+
+      // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
+      // Rolling refresh du JWT : prend un JWT valide, en réémet un avec exp réinitialisé.
+      if (path === '/api/auth/refresh'        && method === 'POST') return handleRefresh(request, env);
 
       // ── Vault utilisateur (Sprint 4 — sync cross-device) ──
       if (path === '/api/vault/load'          && method === 'GET')  return handleVaultLoad(request, env);
@@ -195,11 +199,32 @@ export default {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
         // Vérifie la connexion D1
         const test = await env.DB.prepare('SELECT COUNT(*) as n FROM licences').first();
+
+        // Sprint Sécu-2 / H9 — observabilité du cron de purge SDQR.
+        // last_purge_at est posé par handleScheduledPurge (qr.js).
+        // stale = aucune purge dans les 25h (cron quotidien à 3h UTC).
+        let cron = { last_purge_at: null, stale: true, payload: null };
+        try {
+          const row = await env.DB
+            .prepare("SELECT value, updated_at FROM system_meta WHERE key = 'last_purge_at'")
+            .first();
+          if (row) {
+            const ageMs = Date.now() - new Date(row.updated_at + 'Z').getTime();
+            cron = {
+              last_purge_at: row.updated_at,
+              age_hours:     Math.round(ageMs / 36e5 * 10) / 10,
+              stale:         ageMs > 25 * 36e5,
+              payload:       (() => { try { return JSON.parse(row.value); } catch { return null; }})(),
+            };
+          }
+        } catch (_) { /* table absente — premier run, stale par défaut */ }
+
         return json({
-          status:    'ok',
+          status:    cron.stale ? 'degraded' : 'ok',
           worker:    'keystone-os-api',
           d1:        'connected',
           licences:  test?.n ?? 0,
+          cron,
           timestamp: new Date().toISOString(),
         }, 200, origin);
       }

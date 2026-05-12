@@ -51,9 +51,14 @@ async function _hmacKey(secret) {
  *
  * @param {object} payload    — claims utilisateur
  * @param {object} env        — env Worker (KS_JWT_SECRET requis)
- * @param {number} ttlSeconds — durée de vie (défaut 30 jours)
+ * @param {number} ttlSeconds — durée de vie (défaut 7 jours — Sprint Sécu-2 / H4 / Q2b)
+ *
+ * Sprint Sécu-2 / H4 — décision Q2b :
+ * TTL réduit de 30j à 7j. Si l'app web a besoin d'une session plus
+ * longue sans re-login, elle peut appeler POST /api/auth/refresh
+ * tant que le JWT actuel est encore valide (rolling refresh).
  */
-export async function signJWT(payload, env, ttlSeconds = 60 * 60 * 24 * 30) {
+export async function signJWT(payload, env, ttlSeconds = 60 * 60 * 24 * 7) {
   if (!env.KS_JWT_SECRET) throw new Error('KS_JWT_SECRET manquant');
 
   const now = Math.floor(Date.now() / 1000);
@@ -103,7 +108,10 @@ export async function verifyJWT(token, env) {
   // Décodage payload
   const payload = JSON.parse(_b64uDecode(payloadB64));
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now) throw new Error('JWT expiré');
+  // Sprint Sécu-2 / H4 : exp est désormais OBLIGATOIRE. Un JWT sans exp
+  // serait éternel ; on refuse explicitement même si la signature est OK.
+  if (!payload.exp || typeof payload.exp !== 'number') throw new Error('JWT sans exp');
+  if (payload.exp < now) throw new Error('JWT expiré');
   if (payload.nbf && payload.nbf > now) throw new Error('JWT pas encore valide');
 
   return payload;
