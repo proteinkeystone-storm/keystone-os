@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v3.4.0-harmonisation';
+const VERSION       = 'ks-os-v3.4.1-kodex2-catalog';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

@@ -26,6 +26,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import {
+  loadCatalog, getVendorsByCategory, getProductsByVendor, getStandard,
+  formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
+  loadSectors, getSector, getDefaultSector, computeLegalMentions,
+} from './lib/kodex-catalog.js';
 
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
@@ -46,10 +51,18 @@ const STEPS = [
     sublabel: 'Le PDF prêt à envoyer' },
 ];
 
-// ── État global (in-memory, persistance en Sprint Kodex-2+) ───
+// ── État global (in-memory, persistance en Sprint Kodex-3+) ───
+// Sprint Kodex-2 : `destination.step` ajoute une sous-navigation
+//   'category' → 'vendor' → 'product' → 'done'
 let _state = {
   view: 'destination',
-  destination: { vendor: null, category: null, product: null, custom: null },
+  destination: {
+    step: 'category',      // category | vendor | product | done
+    category: null,        // print | social | press | custom
+    vendor: null,          // 'Exaprint', 'Meta · Instagram', etc.
+    standardId: null,      // id de la fiche sélectionnée
+    standard: null,        // objet standard complet (cache)
+  },
   content:     { sector: 'immobilier', fields: {} },
   assets:      { logo_owned: false, charte_owned: false, pieces: [] },
   output:      { codeMaitre: null, llmResponse: null, briefRef: null },
@@ -176,13 +189,64 @@ function _onClick(e) {
   const t = e.target.closest('[data-act]');
   if (!t) return;
   const act = t.dataset.act;
-  if (act === 'close')     return closeKodex();
-  if (act === 'goto')      return _navigate(t.dataset.step);
-  if (act === 'next')      return _advance();
-  if (act === 'prev')      return _back();
-  if (act === 'history')   return _toastSoon('Historique des briefs');
-  if (act === 'save')      return _toastSoon('Sauvegarde de brouillon');
-  if (act === 'help')      return _toastSoon('Guide pas-à-pas');
+  if (act === 'close')          return closeKodex();
+  if (act === 'goto')           return _navigate(t.dataset.step);
+  if (act === 'next')           return _advance();
+  if (act === 'prev')           return _back();
+  if (act === 'history')        return _toastSoon('Historique des briefs');
+  if (act === 'save')           return _toastSoon('Sauvegarde de brouillon');
+  if (act === 'help')           return _toastSoon('Guide pas-à-pas');
+  // Sprint Kodex-2 : navigation interne à la vue Destination
+  if (act === 'dest-category')  return _pickCategory(t.dataset.cat);
+  if (act === 'dest-vendor')    return _pickVendor(t.dataset.vendor);
+  if (act === 'dest-standard')  return _pickStandard(t.dataset.id);
+  if (act === 'dest-back')      return _destBack();
+  // Sprint Kodex-2 : changement de secteur (profil métier)
+  if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-2 : changement de profil métier
+// ═══════════════════════════════════════════════════════════════
+function _pickSector(sectorId) {
+  _state.content.sector = sectorId;
+  _state.content.fields = {};
+  _renderMain();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sprint Kodex-2 : navigation interne Destination
+// ═══════════════════════════════════════════════════════════════
+function _pickCategory(cat) {
+  _state.destination.category = cat;
+  _state.destination.vendor = null;
+  _state.destination.standardId = null;
+  _state.destination.standard = null;
+  if (cat === 'custom') {
+    _state.destination.step = 'product';   // saisie libre (à implémenter)
+  } else {
+    _state.destination.step = 'vendor';
+  }
+  _renderMain();
+}
+function _pickVendor(vendor) {
+  _state.destination.vendor = vendor;
+  _state.destination.step = 'product';
+  _renderMain();
+}
+async function _pickStandard(id) {
+  const std = await getStandard(id);
+  _state.destination.standardId = id;
+  _state.destination.standard = std;
+  _state.destination.step = 'done';
+  _renderMain();
+}
+function _destBack() {
+  const d = _state.destination;
+  if (d.step === 'done')       d.step = 'product';
+  else if (d.step === 'product') { d.step = 'vendor'; d.vendor = null; }
+  else if (d.step === 'vendor')  { d.step = 'category'; d.category = null; }
+  _renderMain();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -278,6 +342,16 @@ function _renderMain() {
 // Vue 1 — DESTINATION
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
+  const step = _state.destination.step;
+  if (step === 'category') return _destStepCategory();
+  if (step === 'vendor')   return _destStepVendor();
+  if (step === 'product')  return _destStepProduct();
+  if (step === 'done')     return _destStepDone();
+  return _destStepCategory();
+}
+
+// ── Étape 1/3 : Choix de la catégorie ─────────────────────────
+function _destStepCategory() {
   const categories = [
     { id: 'print', label: 'Une impression', icon: 'printer',
       desc: 'Flyer, affiche, bâche, carte de visite, brochure&nbsp;— chez Exaprint, Pixartprinting, Vistaprint ou votre imprimeur habituel.' },
@@ -300,8 +374,8 @@ function _viewDestination() {
 
     <div class="ws-card-grid">
       ${categories.map(c => `
-        <div class="ws-card is-clickable ${_state.destination.category === c.id ? 'is-selected' : ''}"
-             data-act="goto" data-step="destination" data-cat="${c.id}">
+        <div class="ws-card is-clickable"
+             data-act="dest-category" data-cat="${c.id}">
           <div class="ws-card-row">
             <div class="ws-card-icon">${icon(c.icon, 22)}</div>
             <div class="ws-card-body">
@@ -312,39 +386,317 @@ function _viewDestination() {
         </div>
       `).join('')}
     </div>
+  `;
+}
 
-    <div class="ws-empty" style="margin-top:32px;">
-      <div class="ws-empty-icon" style="width:48px;height:48px;">${icon('printer', 22)}</div>
-      <h3 class="ws-empty-title">Le catalogue arrive bientôt</h3>
-      <p class="ws-empty-desc">
-        Une fois votre support choisi, vous verrez la liste des produits disponibles
-        avec leurs caractéristiques déjà préparées pour vous.
+// ── Étape 2/3 : Choix du vendor dans la catégorie ─────────────
+function _destStepVendor() {
+  const cat = _state.destination.category;
+  const catLabel = CATEGORY_LABELS[cat]?.label || cat;
+  const root = `<span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
+    <h1 class="ws-h1">${_esc(catLabel)}&nbsp;— quel prestataire&nbsp;?</h1>
+    <p class="ws-lead">
+      Sélectionnez votre prestataire pour accéder à ses formats officiels.
+      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
+        ${icon('chevron-left', 12)} Changer de catégorie
+      </button>
+    </p>
+    <div class="ws-card-grid" data-slot="vendor-list">
+      <div class="ws-empty">
+        <div class="ws-empty-icon">${icon('package', 24)}</div>
+        <p class="ws-empty-desc">Chargement du catalogue…</p>
+      </div>
+    </div>`;
+
+  // Hydratation asynchrone
+  getVendorsByCategory(cat).then(vendors => {
+    const slot = _root?.querySelector('[data-slot="vendor-list"]');
+    if (!slot) return;
+    if (!vendors.length) {
+      slot.innerHTML = `<div class="ws-empty">
+        <div class="ws-empty-icon">${icon('package', 24)}</div>
+        <h3 class="ws-empty-title">Aucun prestataire pour cette catégorie</h3>
+        <p class="ws-empty-desc">Le catalogue n'est pas encore peuplé pour ce support.</p>
+      </div>`;
+      return;
+    }
+    slot.innerHTML = vendors.map(v => `
+      <div class="ws-card is-clickable" data-act="dest-vendor" data-vendor="${_esc(v.vendor)}">
+        <div class="ws-card-row">
+          <div class="ws-card-icon">${icon(CATEGORY_LABELS[cat]?.icon || 'package', 22)}</div>
+          <div class="ws-card-body">
+            <h3 class="ws-card-title">${_esc(v.vendor)}</h3>
+            <p class="ws-card-desc">${v.count} format${v.count > 1 ? 's' : ''} disponible${v.count > 1 ? 's' : ''}</p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  });
+
+  return root;
+}
+
+// ── Étape 3/3 : Choix du produit chez le vendor ───────────────
+function _destStepProduct() {
+  const { category, vendor } = _state.destination;
+
+  if (category === 'custom') {
+    return `
+      <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
+      <h1 class="ws-h1">Format personnalisé</h1>
+      <p class="ws-lead">
+        <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
+          ${icon('chevron-left', 12)} Retour
+        </button>
       </p>
+      <div class="ws-empty">
+        <div class="ws-empty-icon">${icon('custom', 24)}</div>
+        <h3 class="ws-empty-title">Format libre arrivant</h3>
+        <p class="ws-empty-desc">Saisie libre des dimensions + upload du PDF de spécifications du prestataire. Sprint Kodex-3.</p>
+      </div>
+    `;
+  }
+
+  const root = `<span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
+    <h1 class="ws-h1">${_esc(vendor)}&nbsp;— quel format&nbsp;?</h1>
+    <p class="ws-lead">
+      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
+        ${icon('chevron-left', 12)} Changer de prestataire
+      </button>
+    </p>
+    <div class="ws-card-grid" data-slot="product-list">
+      <div class="ws-empty">
+        <div class="ws-empty-icon">${icon('package', 24)}</div>
+        <p class="ws-empty-desc">Chargement…</p>
+      </div>
+    </div>`;
+
+  getProductsByVendor(category, vendor).then(products => {
+    const slot = _root?.querySelector('[data-slot="product-list"]');
+    if (!slot) return;
+    slot.innerHTML = products.map(p => `
+      <div class="ws-card is-clickable" data-act="dest-standard" data-id="${_esc(p.id)}">
+        <div class="ws-card-row">
+          <div class="ws-card-icon">${icon(CATEGORY_LABELS[category]?.icon || 'package', 22)}</div>
+          <div class="ws-card-body">
+            <h3 class="ws-card-title">${_esc(p.product_name)}</h3>
+            <p class="ws-card-desc">${_esc(formatDimensions(p))} · ${_esc(formatDpi(p) || '')} ${p.color_profile ? '· ' + _esc(p.color_profile) : ''}</p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  });
+
+  return root;
+}
+
+// ── Récap : standard sélectionné, prêt à passer à l'étape 2 ──
+function _destStepDone() {
+  const s = _state.destination.standard;
+  if (!s) return _destStepCategory();
+
+  const rows = [
+    ['Format fini',      formatDimensions(s)],
+    ['Format de travail', s.format_travail ? formatDimensions({ format_fini: s.format_travail }) : null],
+    ['Fond perdu',       formatBleed(s)],
+    ['Marge sécurité',   s.safe_margin_mm ? `${s.safe_margin_mm} mm` : null],
+    ['Résolution',       formatDpi(s)],
+    ['Échelle de travail', s.scale],
+    ['Colorimétrie',     s.color_profile],
+    ['Export attendu',   s.export_format],
+  ].filter(r => r[1]);
+
+  return `
+    <span class="ws-eyebrow">${icon('check', 12)} Support sélectionné</span>
+    <h1 class="ws-h1">${_esc(s.vendor)} · ${_esc(s.product_name)}</h1>
+    <p class="ws-lead">
+      Voilà les contraintes techniques verrouillées pour votre création.
+      Le brief final reprendra ces informations pour votre graphiste.
+      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
+        ${icon('chevron-left', 12)} Changer de format
+      </button>
+    </p>
+
+    <div class="ws-card" style="margin-top:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+        <tbody>
+          ${rows.map(([k, v]) => `
+            <tr>
+              <td style="padding:9px 0;color:var(--ws-text-muted);font-weight:600;width:42%;border-bottom:1px solid var(--ws-border);">${_esc(k)}</td>
+              <td style="padding:9px 0;color:var(--ws-text);border-bottom:1px solid var(--ws-border);">${_esc(v)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${s.notes ? `<div style="margin-top:14px;padding:10px 12px;background:var(--ws-accent-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text-soft);">
+        <strong style="color:var(--ws-accent);">À noter&nbsp;:</strong> ${_esc(s.notes)}
+      </div>` : ''}
     </div>
   `;
+}
+
+// ── Helper d'échappement HTML ─────────────────────────────────
+function _esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Vue 2 — CONTENU
 // ═══════════════════════════════════════════════════════════════
 function _viewContent() {
-  return `
+  const root = `
     <span class="ws-eyebrow">${icon('edit', 12)} 2 sur 4 · Le message</span>
     <h1 class="ws-h1">Que voulez-vous dire&nbsp;?</h1>
     <p class="ws-lead">
-      Quelques champs simples pour décrire ce que vous voulez communiquer.
-      Si vous avez déjà rempli d'autres outils Keystone — par exemple votre
-      notice VEFA — les informations communes apparaîtront ici en pré-rempli.
-      Plus besoin de tout retaper.
+      Quelques informations sur votre projet. Les mentions légales obligatoires
+      seront ajoutées automatiquement selon les dispositifs que vous cochez.
     </p>
 
-    <div class="ws-empty">
-      <div class="ws-empty-icon">${icon('edit', 24)}</div>
-      <h3 class="ws-empty-title">Le formulaire arrive bientôt</h3>
-      <p class="ws-empty-desc">
-        Pour l'instant, les champs adaptés à l'immobilier sont en préparation.
-        D'autres univers (commerce, restauration) suivront.
-      </p>
+    <div data-slot="sector-picker"></div>
+    <form data-slot="sector-form" id="kodex-content-form" autocomplete="off"></form>
+    <div data-slot="legal-mentions"></div>
+  `;
+
+  // Hydratation asynchrone : charger le sector courant + générer le form
+  (async () => {
+    const all = await loadSectors();
+    const currentId = _state.content.sector || (await getDefaultSector())?.id;
+    const sector = await getSector(currentId);
+    if (!sector || !_root) return;
+
+    _renderSectorPicker(_root.querySelector('[data-slot="sector-picker"]'), all.sectors, currentId);
+    _renderSectorForm(_root.querySelector('[data-slot="sector-form"]'), sector);
+    _renderLegalMentions(_root.querySelector('[data-slot="legal-mentions"]'), sector);
+  })();
+
+  return root;
+}
+
+// ── Sélecteur de profil métier (pills) ────────────────────────
+function _renderSectorPicker(slot, sectors, currentId) {
+  if (!slot) return;
+  if (sectors.length <= 1) { slot.innerHTML = ''; return; }
+  slot.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;align-items:center;">
+      <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-right:6px;">
+        Votre univers
+      </span>
+      ${sectors.map(s => `
+        <button class="ws-btn ${currentId === s.id ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+                data-act="sector-pick" data-sector="${_esc(s.id)}"
+                style="padding:6px 12px;font-size:12.5px;">
+          ${_esc(s.label)}${s._status === 'placeholder' ? ' <span style="font-size:10px;opacity:.6;">(bientôt)</span>' : ''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ── Génère le formulaire à partir du sector ───────────────────
+function _renderSectorForm(form, sector) {
+  if (!form) return;
+  const values = _state.content.fields || {};
+
+  // Avis si placeholder
+  if (sector._status === 'placeholder') {
+    form.innerHTML = `
+      <div class="ws-empty">
+        <div class="ws-empty-icon">${icon('edit', 24)}</div>
+        <h3 class="ws-empty-title">Profil « ${_esc(sector.label)} » bientôt disponible</h3>
+        <p class="ws-empty-desc">Ce secteur est en préparation. Pour l'instant, utilisez le profil Immobilier.</p>
+      </div>
+    `;
+    return;
+  }
+
+  form.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;margin-bottom:20px;">
+      ${sector.fields.map(f => _renderField(f, values[f.name])).join('')}
+    </div>
+  `;
+
+  // Écouter les changements pour sauvegarder en state + recalculer mentions
+  form.addEventListener('input', _onContentChange);
+  form.addEventListener('change', _onContentChange);
+}
+
+function _renderField(f, value) {
+  const id = `kf-${f.name}`;
+  const span = f.span === 'full' ? 'grid-column:1 / -1;' : '';
+  const req = f.required ? '<span style="color:var(--danger);">*</span>' : '';
+  let input = '';
+
+  if (f.type === 'text' || f.type === 'number') {
+    input = `<input class="ws-input" id="${id}" name="${f.name}" type="${f.type}"
+             value="${value ? _esc(value) : ''}"
+             placeholder="${_esc(f.placeholder || '')}"
+             ${f.required ? 'required' : ''}>`;
+  } else if (f.type === 'textarea') {
+    input = `<textarea class="ws-textarea" id="${id}" name="${f.name}"
+             rows="${f.rows || 3}"
+             placeholder="${_esc(f.placeholder || '')}">${value ? _esc(value) : ''}</textarea>`;
+  } else if (f.type === 'select') {
+    input = `<select class="ws-select" id="${id}" name="${f.name}">
+      <option value="">— Choisir —</option>
+      ${(f.options || []).map(o => `<option value="${_esc(o)}" ${value === o ? 'selected' : ''}>${_esc(o)}</option>`).join('')}
+    </select>`;
+  } else if (f.type === 'multiselect') {
+    const selected = Array.isArray(value) ? value : [];
+    input = `<select class="ws-select" id="${id}" name="${f.name}" multiple style="min-height:96px;">
+      ${(f.options || []).map(o => `<option value="${_esc(o)}" ${selected.includes(o) ? 'selected' : ''}>${_esc(o)}</option>`).join('')}
+    </select>`;
+  }
+
+  return `
+    <div class="ws-field" style="${span}">
+      <label class="ws-label" for="${id}">${_esc(f.label)} ${req}</label>
+      ${input}
+      ${f.hint ? `<div style="margin-top:4px;font-size:11.5px;color:var(--ws-text-muted);">${_esc(f.hint)}</div>` : ''}
+    </div>
+  `;
+}
+
+// ── On input/change : récupère toutes les valeurs et persiste ─
+function _onContentChange(e) {
+  const form = e.currentTarget;
+  const values = {};
+  for (const el of form.querySelectorAll('input, select, textarea')) {
+    if (el.name) {
+      if (el.tagName === 'SELECT' && el.multiple) {
+        values[el.name] = Array.from(el.selectedOptions).map(o => o.value);
+      } else {
+        values[el.name] = el.value;
+      }
+    }
+  }
+  _state.content.fields = values;
+
+  // Recalcul des mentions légales si les labels ont changé
+  if (e.target?.name === 'labels') {
+    getSector(_state.content.sector).then(sector => {
+      if (sector && _root) {
+        _renderLegalMentions(_root.querySelector('[data-slot="legal-mentions"]'), sector);
+      }
+    });
+  }
+}
+
+// ── Affiche les mentions légales applicables ──────────────────
+function _renderLegalMentions(slot, sector) {
+  if (!slot) return;
+  const mentions = computeLegalMentions(sector, _state.content.fields);
+  if (!mentions.length) { slot.innerHTML = ''; return; }
+  slot.innerHTML = `
+    <div class="ws-card" style="margin-top:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        ${icon('shield-check', 18)}
+        <strong style="font-size:13px;letter-spacing:-.012em;">Mentions légales qui seront ajoutées au brief</strong>
+      </div>
+      <ul style="margin:0;padding-left:20px;color:var(--ws-text-soft);font-size:13px;line-height:1.6;">
+        ${mentions.map(m => `<li style="margin-bottom:5px;">${_esc(m)}</li>`).join('')}
+      </ul>
     </div>
   `;
 }

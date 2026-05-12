@@ -1,0 +1,127 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-05-12",
+  "_notice": "Profils métier déclaratifs pour Kodex. Chaque secteur définit ses champs spécifiques et ses mentions légales obligatoires. Évolutivité : ajouter un secteur = ajouter un objet ici, zéro code.",
+
+  "sectors": [
+    {
+      "id": "immobilier",
+      "label": "Promotion immobilière",
+      "icon": "building",
+      "is_default": true,
+      "description": "Programme neuf, VEFA, lotissement, résidence principale ou investissement.",
+      "fields": [
+        {
+          "name": "nom_programme",
+          "label": "Nom du programme",
+          "type": "text",
+          "placeholder": "ex : Les Jardins du Midi",
+          "required": true,
+          "span": "full"
+        },
+        {
+          "name": "ville",
+          "label": "Ville / localisation",
+          "type": "text",
+          "placeholder": "ex : Toulon Mourillon",
+          "required": true
+        },
+        {
+          "name": "prix_min",
+          "label": "Prix d'appel (€)",
+          "type": "number",
+          "placeholder": "ex : 285 000",
+          "suffix": "€"
+        },
+        {
+          "name": "typologies",
+          "label": "Typologies disponibles",
+          "type": "multiselect",
+          "options": ["Studio", "T2", "T3", "T4", "T5", "Villa", "Penthouse", "Duplex"],
+          "hint": "Maintenez Cmd / Ctrl pour sélection multiple"
+        },
+        {
+          "name": "labels",
+          "label": "Labels et dispositifs",
+          "type": "multiselect",
+          "options": ["Pinel", "BRS", "BBC", "HQE", "RE2020", "DPE A", "DPE B", "Habitat & Environnement", "NF Habitat"],
+          "hint": "Sélectionnez tous les dispositifs applicables — ils déclenchent les mentions légales obligatoires."
+        },
+        {
+          "name": "livraison",
+          "label": "Livraison prévue",
+          "type": "text",
+          "placeholder": "ex : 2e trimestre 2027"
+        },
+        {
+          "name": "argumentaire",
+          "label": "Argument central / promesse",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "ex : Vivre face à la mer dans un cadre intimiste. Architecture provençale contemporaine, jardins partagés, terrasses privées.",
+          "span": "full"
+        },
+        {
+          "name": "cta",
+          "label": "Appel à l'action principal",
+          "type": "text",
+          "placeholder": "ex : Réservez votre visite virtuelle"
+        }
+      ],
+      "legal_mentions": {
+        "always": [
+          "Document non contractuel — Illustrations libres de l'artiste, susceptibles de modifications.",
+          "Toute reproduction interdite sans autorisation."
+        ],
+        "by_label": {
+          "Pinel": "Loi Pinel — réduction d'impôt sous conditions (durée d'engagement, plafonds de loyer et ressources locataires, zonage). Plus d'informations sur economie.gouv.fr.",
+          "BRS": "Bail Réel Solidaire — dispositif d'accession à la propriété sous conditions de ressources. Le foncier reste détenu par un Organisme Foncier Solidaire (OFS).",
+          "DPE A": "Diagnostic de Performance Énergétique classe A — meilleure efficacité énergétique. Valable 10 ans selon réglementation en vigueur.",
+          "DPE B": "Diagnostic de Performance Énergétique classe B. Valable 10 ans selon réglementation en vigueur.",
+          "RE2020": "Réglementation Environnementale 2020 — applicable aux constructions neuves depuis le 1er janvier 2022."
+        }
+      },
+      "default_assets": ["logo", "charte_graphique"],
+      "default_pieces": [
+        "Image du programme (perspective architecte ou photo)",
+        "Plan masse ou carte de localisation"
+      ]
+    },
+
+    {
+      "id": "retail",
+      "label": "Commerce de détail",
+      "icon": "shopping-bag",
+      "description": "Boutique, magasin, point de vente, e-commerce omnicanal.",
+      "fields": [
+        { "name": "nom_enseigne", "label": "Nom de l'enseigne", "type": "text", "required": true, "span": "full" },
+        { "name": "univers", "label": "Univers / Catégorie", "type": "text", "placeholder": "ex : mode féminine, déco" },
+        { "name": "operation", "label": "Type d'opération", "type": "select", "options": ["Soldes", "Nouvelle collection", "Ouverture", "Évènement", "Promotion", "Black Friday"] },
+        { "name": "promesse", "label": "Promesse / offre", "type": "textarea", "rows": 3, "span": "full" }
+      ],
+      "legal_mentions": {
+        "always": ["Offre soumise à conditions, voir en magasin ou sur notre site."]
+      },
+      "default_assets": ["logo", "charte_graphique"],
+      "_status": "placeholder"
+    },
+
+    {
+      "id": "restauration",
+      "label": "Restauration",
+      "icon": "utensils",
+      "description": "Restaurant, brasserie, food truck, bar, traiteur.",
+      "fields": [
+        { "name": "nom_etablissement", "label": "Nom de l'établissement", "type": "text", "required": true, "span": "full" },
+        { "name": "cuisine", "label": "Type de cuisine", "type": "text", "placeholder": "ex : provençale moderne" },
+        { "name": "evenement", "label": "Évènement ou offre", "type": "text", "placeholder": "ex : Menu de fête, brunch dominical" },
+        { "name": "pitch", "label": "Atmosphère et pitch", "type": "textarea", "rows": 3, "span": "full" }
+      ],
+      "legal_mentions": {
+        "always": ["L'abus d'alcool est dangereux pour la santé, à consommer avec modération."]
+      },
+      "default_assets": ["logo", "charte_graphique"],
+      "_status": "placeholder"
+    }
+  ]
+}
