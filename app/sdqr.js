@@ -59,13 +59,26 @@ function _tenantId() {
   return localStorage.getItem('ks_tenant_id') || 'default';
 }
 
+// ── Headers d'auth pour les appels Worker ──────────────────────
+// Sprint Sécu-1 C2 a imposé auth obligatoire sur /api/qr/*. On
+// envoie le token disponible (admin secret en priorité, puis JWT
+// licence). Le Worker accepte les deux : requireAdmin OU requireJWT.
+function _headers(extra = {}) {
+  const h = { 'X-Tenant-Id': _tenantId(), ...extra };
+  const adminToken = localStorage.getItem('ks_admin_token');
+  const jwt        = localStorage.getItem('ks_jwt');
+  if (adminToken)  h['Authorization'] = 'Bearer ' + adminToken;
+  else if (jwt)    h['Authorization'] = 'Bearer ' + jwt;
+  return h;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // API client
 // ══════════════════════════════════════════════════════════════════
 
 async function _apiList() {
   const r = await fetch(`${CF_API}/api/qr`, {
-    headers: { 'X-Tenant-Id': _tenantId() },
+    headers: _headers(),
   });
   if (!r.ok) throw new Error('API list error ' + r.status);
   const body = await r.json();
@@ -75,7 +88,7 @@ async function _apiList() {
 async function _apiCreate(payload) {
   const r = await fetch(`${CF_API}/api/qr`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': _tenantId() },
+    headers: _headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
   });
   if (!r.ok) {
@@ -88,7 +101,7 @@ async function _apiCreate(payload) {
 async function _apiUpdate(id, patch) {
   const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': _tenantId() },
+    headers: _headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(patch),
   });
   if (!r.ok) {
@@ -101,7 +114,7 @@ async function _apiUpdate(id, patch) {
 async function _apiDelete(id) {
   const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: { 'X-Tenant-Id': _tenantId() },
+    headers: _headers(),
   });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
@@ -113,7 +126,7 @@ async function _apiDelete(id) {
 // Sprint SDQR-4 — analytics
 async function _apiStats(id, period = '30d') {
   const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}/stats?period=${period}`, {
-    headers: { 'X-Tenant-Id': _tenantId() },
+    headers: _headers(),
   });
   if (!r.ok) throw new Error('API stats error ' + r.status);
   return r.json();
@@ -1217,7 +1230,7 @@ function _osLabel(k)     { return _OS_LABELS[k]     || k || 'Autre'; }
 async function _exportScansCsv(qr) {
   try {
     const r = await fetch(_apiScansCsvUrl(qr.id), {
-      headers: { 'X-Tenant-Id': _tenantId() },
+      headers: _headers(),
     });
     if (!r.ok) throw new Error('Export error ' + r.status);
     const blob = await r.blob();

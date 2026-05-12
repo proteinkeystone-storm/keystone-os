@@ -12,70 +12,82 @@
    typographie native, pictogrammes outline 1.5px.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ─── Tokens design — Apple Premium NUIT ───────────────────────
-   Mode sombre par défaut (cohérent avec l'esthétique Keystone).
-   Le workspace définit ses propres tokens et n'hérite pas du
-   toggle clair/sombre du dashboard — indépendance volontaire.
-   Pour un futur toggle workspace : ajouter [data-theme="light"]
-   sur .ws-app et override les variables.
+/* ─── Tokens design — alignés Keystone OS ─────────────────────
+   Les variables --ws-* sont des ALIAS des variables Keystone
+   natives (--navy, --gold, --text, --bd, etc. définies dans
+   style.css). Conséquence : le toggle html.light-mode du
+   dashboard se propage automatiquement à tous les workspaces.
 
-   Les variables sont aussi disponibles au :root pour permettre
-   l'usage de composants .ws-* hors workspace (ex: widget rating
-   dans la topbar SDQR qui a son propre layout).
+   Pour un futur theme local au workspace : surcharger les
+   variables dans .ws-app (par exemple [data-theme="light"]).
    ────────────────────────────────────────────────────────────── */
 :root {
-  --ws-accent: #c9a96e;
-  --ws-accent-soft: rgba(201, 169, 110, 0.18);
-  --ws-accent-dark: #b59760;
-  --ws-text: #f0f6fc;
-  --ws-text-soft: #adbac7;
-  --ws-text-muted: #768390;
-  --ws-text-on-accent: #0d1117;
-  --ws-surface: #161b22;
-  --ws-border: #30363d;
-  --ws-border-strong: #444c56;
-  --ws-radius: 10px;
+  /* Accent indigo (Tailwind indigo-500) — variable Keystone --gold (mal nommée historiquement) */
+  --ws-accent: var(--gold, #6366f1);
+  --ws-accent-soft: var(--gold3, rgba(99,102,241,.12));
+  --ws-accent-dark: var(--gold2, #818cf8);
+  --ws-text: var(--text, #f8fafc);
+  --ws-text-soft: var(--tx2, rgba(248,250,252,.55));
+  --ws-text-muted: var(--tx3, rgba(248,250,252,.3));
+  --ws-text-on-accent: #ffffff;
+  --ws-surface: var(--navy2, #1c2234);
+  --ws-surface-soft: var(--navy3, #242d42);
+  --ws-border: var(--bd, rgba(255,255,255,.07));
+  --ws-border-strong: var(--bd, rgba(255,255,255,.12));
+  --ws-radius: var(--r, 10px);
   --ws-radius-sm: 6px;
   --ws-radius-pill: 999px;
   --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
+
+/* Mode clair : on hérite automatiquement via html.light-mode qui
+   redéfinit --gold, --text, --bd, etc. Aucun override nécessaire ici. */
+
 .ws-app {
-  --ws-bg: #0d1117;
-  --ws-surface: #161b22;
-  --ws-surface-soft: rgba(255, 255, 255, 0.03);
-  --ws-surface-elevated: rgba(22, 27, 34, 0.82);
+  --ws-bg: var(--navy, #131826);
+  --ws-surface: var(--navy2, #1c2234);
+  --ws-surface-soft: rgba(255, 255, 255, 0.02);
+  --ws-surface-elevated: var(--navy2, #1c2234);
 
-  --ws-text: #f0f6fc;
-  --ws-text-soft: #adbac7;
-  --ws-text-muted: #768390;
-  --ws-text-on-accent: #0d1117;
+  --ws-text: var(--text, #f8fafc);
+  --ws-text-soft: var(--tx2, rgba(248,250,252,.55));
+  --ws-text-muted: var(--tx3, rgba(248,250,252,.3));
+  --ws-text-on-accent: #ffffff;
 
-  --ws-accent: #c9a96e;
-  --ws-accent-soft: rgba(201, 169, 110, 0.18);
-  --ws-accent-dark: #b59760;
+  --ws-accent: var(--gold, #6366f1);
+  --ws-accent-soft: var(--gold3, rgba(99,102,241,.12));
+  --ws-accent-dark: var(--gold2, #818cf8);
 
-  --ws-border: #30363d;
-  --ws-border-strong: #444c56;
-  --ws-border-soft: #21262d;
+  --ws-border: var(--bd, rgba(255,255,255,.07));
+  --ws-border-strong: var(--bd, rgba(255,255,255,.14));
+  --ws-border-soft: var(--bd, rgba(255,255,255,.04));
 
-  --ws-success: #3fb950;
-  --ws-success-soft: rgba(63, 185, 80, 0.15);
+  --ws-success: var(--green, #22c55e);
+  --ws-success-soft: rgba(34, 197, 94, 0.15);
   --ws-danger: #f85149;
   --ws-danger-soft: rgba(248, 81, 73, 0.15);
 
-  --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ws-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ws-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.4);
 
   --ws-radius-sm: 6px;
-  --ws-radius: 10px;
-  --ws-radius-lg: 14px;
+  --ws-radius: var(--r, 10px);
+  --ws-radius-lg: var(--r2, 16px);
   --ws-radius-pill: 999px;
 
   --ws-rail-w: 220px;
   --ws-aside-w: 320px;
   --ws-topbar-h: 56px;
+}
+
+/* Mode clair — ombres plus douces, surfaces ajustées pour fond clair */
+html.light-mode .ws-app {
+  --ws-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ws-shadow-2: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --ws-shadow-3: 0 12px 32px rgba(15, 23, 42, 0.10);
+  --ws-surface-soft: rgba(15, 23, 42, 0.03);
 }
 
 /* ─── Container racine ─── */
