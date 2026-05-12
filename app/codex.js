@@ -201,12 +201,10 @@ function _buildShell() {
       </div>
       <div class="ws-topbar-actions">
         ${ratingButtonHTML(WORKSPACE_META.id)}
-        ${localStorage.getItem('ks_admin_token') ? `
-          <button class="ws-iconbtn" data-act="load-demo" title="Charger l'exemple démo Prométhée"
-                  style="color:var(--gold);">
-            ${icon('sparkles', 18)}
-          </button>
-        ` : ''}
+        <button class="ws-iconbtn" data-act="load-demo" title="Charger un exemple : Les Jardins du Mourillon (Affiche 4×3)"
+                style="color:var(--gold);">
+          ${icon('sparkles', 18)}
+        </button>
         <button class="ws-iconbtn" data-act="history" title="Historique des briefs">
           ${icon('history', 18)}
         </button>
