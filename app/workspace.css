@@ -715,6 +715,141 @@ html.light-mode .ws-app {
   background: var(--ws-text-muted);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Phase E1 — Alignement des composants legacy sur le système .ws-*
+   Sans toucher aux règles existantes (.form-input, .btn-generate, etc.),
+   on superpose des règles "polish" qui :
+     - homogénéisent border-radius / padding / transitions
+     - garantissent la palette Keystone partout
+     - donnent un focus ring uniforme (--gold3)
+   Les pads modaux héritent immédiatement du look Kodex.
+   ────────────────────────────────────────────────────────────── */
+
+/* — Inputs (form-* utilisé partout dans les pads modaux) — */
+.form-input,
+.form-select,
+.form-textarea {
+  border-radius: var(--ws-radius) !important;
+  letter-spacing: -0.005em;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+}
+
+/* — Focus ring uniforme indigo — */
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+.ws-input:focus,
+.ws-select:focus,
+.ws-textarea:focus {
+  outline: none;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px var(--gold3) !important;
+}
+
+/* — Labels uniformes — */
+.form-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+/* — Boutons principaux des pads modaux — alignement grammaire ws-btn — */
+.btn-generate,
+.btn-doc-export {
+  border-radius: var(--ws-radius);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: all 180ms ease;
+}
+
+.action-btn-compact {
+  border-radius: var(--ws-radius-sm);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: all 150ms ease;
+}
+
+/* — Cards modales (modal-form, pad-card, etc.) — radius cohérent — */
+.tool-modal,
+.modal-form,
+.pad-card,
+.ks-card,
+.cc-engine-card {
+  border-radius: var(--ws-radius-lg);
+}
+
+/* ─── Phase E2 — Alignement Pad VEFA Notice (et tous les pads modaux) ──
+   Renforce l'identité visuelle Kodex sur les éléments d'en-tête de
+   modale : eyebrow type pill indigo, titre plus impactant, subtitle
+   adoucie, bouton fermer en style iconbtn.
+   ────────────────────────────────────────────────────────────── */
+
+/* Eyebrow indigo (ex: "O-IMM-001 — Immobilier") */
+.modal-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  background: var(--gold3);
+  color: var(--gold) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase;
+  border-radius: var(--ws-radius-pill);
+  margin-bottom: 8px !important;
+}
+
+/* Titre plus impactant, cohérent avec ws-h1 (28-32px) mais adapté
+   à la taille de modal (~22px confortable). */
+.modal-title {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.022em !important;
+  line-height: 1.15 !important;
+  color: var(--text) !important;
+  margin-bottom: 5px !important;
+}
+
+.modal-subtitle {
+  font-size: 13px !important;
+  color: var(--tx2) !important;
+  letter-spacing: -0.005em;
+  line-height: 1.5;
+}
+
+/* Bouton fermer : style ws-iconbtn pour cohérence */
+.modal-close {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: var(--ws-radius-sm) !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--tx2) !important;
+  font-size: 18px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text) !important;
+}
+html.light-mode .modal-close:hover {
+  background: rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Chip "moteur AI recommandé" : alignement gold */
+.modal-engine-chip {
+  font-weight: 600 !important;
+  letter-spacing: -0.005em !important;
+}
+
 /* ─── Responsive (tablette) ─── */
 @media (max-width: 1100px) {
   .ws-aside { display: none; }
