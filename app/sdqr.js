@@ -725,7 +725,15 @@ async function _openQrDetail(panel, qr) {
     const msg = content.querySelector('#sdqr-detail-msg');
     if (!newUrl) return;
     try {
-      await _apiUpdate(qr.id, { target_url: newUrl });
+      // Sprint SDQR-3 fix : preserve le design en cours d'édition s'il
+      // a ete modifie mais non sauvegarde. Sinon un update de target_url
+      // re-render le detail et reset _editingDesign vers qr.design (stale).
+      const patch = { target_url: newUrl };
+      if (_designHasUnsavedChanges(_editingDesign, qr.design)) {
+        patch.design = _editingDesign;
+        qr.design = { ..._editingDesign };
+      }
+      await _apiUpdate(qr.id, patch);
       if (msg) { msg.hidden = false; msg.textContent = '✓ Cible mise à jour'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
       qr.target_url = newUrl;
     } catch (e) {
@@ -765,7 +773,15 @@ async function _openQrDetail(panel, qr) {
           return;
         }
         try {
-          await _apiUpdate(qr.id, { payload: editingPayload, encoded_payload: newEncoded });
+          // Sprint SDQR-3 fix : preserve le design en cours d'edition
+          // (sinon le re-render qui suit reset _editingDesign et l'user
+          // perd ses choix forme/couleur/logo en cours).
+          const patch = { payload: editingPayload, encoded_payload: newEncoded };
+          if (_designHasUnsavedChanges(_editingDesign, qr.design)) {
+            patch.design = _editingDesign;
+            qr.design = { ..._editingDesign };
+          }
+          await _apiUpdate(qr.id, patch);
           qr.payload = { ...editingPayload };
           await _refreshList(panel);
           // Re-render le detail pour refresh le summary + le contenu encodé affiché
@@ -785,7 +801,12 @@ async function _openQrDetail(panel, qr) {
   content.querySelector('#sdqr-archive')?.addEventListener('click', async () => {
     const next = qr.status === 'archived' ? 'active' : 'archived';
     try {
-      await _apiUpdate(qr.id, { status: next });
+      const patch = { status: next };
+      if (_designHasUnsavedChanges(_editingDesign, qr.design)) {
+        patch.design = _editingDesign;
+        qr.design = { ..._editingDesign };
+      }
+      await _apiUpdate(qr.id, patch);
       await _refreshList(panel);
       _openQrDetail(panel, { ...qr, status: next });
     } catch (e) {
@@ -803,7 +824,12 @@ async function _openQrDetail(panel, qr) {
       return;
     }
     try {
-      await _apiUpdate(qr.id, { name: newName });
+      const patch = { name: newName };
+      if (_designHasUnsavedChanges(_editingDesign, qr.design)) {
+        patch.design = _editingDesign;
+        qr.design = { ..._editingDesign };
+      }
+      await _apiUpdate(qr.id, patch);
       qr.name = newName;
       if (msg) { msg.hidden = false; msg.textContent = '✓ Nom mis à jour'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
       await _refreshList(panel);   // reflète le nouveau nom dans la sidebar
@@ -1029,6 +1055,16 @@ function _renderDesignPanel(qr) {
 // État live du design pendant l'édition (avant save). Reset à chaque
 // ouverture de panel.
 let _editingDesign = null;
+
+// Détecte si _editingDesign contient des modifs non sauvegardées par
+// rapport au design persisté. Utilisé par les save handlers (rename,
+// archive, target_url, payload) pour PRESERVER le design en cours
+// quand on update autre chose — sinon le re-render qui suit reset
+// _editingDesign et l'utilisateur perd ses choix forme/couleur/logo.
+function _designHasUnsavedChanges(editing, saved) {
+  if (!editing) return false;
+  return JSON.stringify(editing) !== JSON.stringify(mergeDesign(saved));
+}
 
 function _wireDesignPanel(root, qr, encodedForQr) {
   const panel = root.querySelector('#sdqr-design-panel');
