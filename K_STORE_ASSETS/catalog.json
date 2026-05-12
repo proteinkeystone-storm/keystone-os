@@ -255,6 +255,22 @@
       "isNew": true,
       "published": true,
       "tags": ["artefact", "qr", "marketing", "tracking", "vcard", "wifi", "sovereign", "rgpd"]
+    },
+    {
+      "id": "A-COM-002",
+      "padKey": null,
+      "title": "Kodex",
+      "subtitle": "Le brief print/digital infaillible · calculateur d'échelle",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Transforme une intention client en cahier des charges technique infaillible. Entonnoir guidé (imprimeur, réseaux sociaux, presse), saisie sectorisée, coffre-fort de vos assets, calculateur d'échelle automatique pour les grands formats (bâche, 4×3, panneau). Sortie : un brief PDF prêt à envoyer à votre graphiste ou imprimeur, avec 5 punchlines marketing en bonus. Catalogue de 28 standards (Exaprint, Pixartprinting, Vistaprint, Meta, LinkedIn, Propriétés Le Figaro, Logic-Immo, Côte Magazine, Surface Privée, etc.). Évite l'erreur d'impression à 800 €.",
+      "icon": "sparkles",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "tags": ["artefact", "print", "digital", "brief", "communication", "production", "calculateur-echelle", "kodex"]
     }
   ]
 }
