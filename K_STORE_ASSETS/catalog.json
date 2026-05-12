@@ -276,17 +276,17 @@
       "id": "A-COM-003",
       "padKey": null,
       "title": "Muse",
-      "subtitle": "Le directeur artistique de vos visuels · Prompt Maître Artistique",
+      "subtitle": "Le moodboard de référence pour votre studio 3D · Prompt Maître + 4 CTA images",
       "category": "COM",
       "plan": "STARTER",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Muse transforme une intention visuelle en Prompt Maître Artistique structuré. Configurez le cadrage (drone, piéton, intérieur, détail), l'atmosphère (lumière, saison, végétation, figuration humaine) et la cible lifestyle ; Muse assemble le brief créatif à coller dans votre IA habituelle (Claude, Gemini, ChatGPT). L'IA génère en retour un dashboard HTML interactif autonome avec 4 CTA copy-to-clipboard pour vos générateurs d'images (Midjourney, Flux, DALL-E, Nano Banana) : Architecture, Lifestyle, Palette végétale, Textures & matériaux. Auto-injection du paramètre --ar selon le ratio du support importé depuis Kodex.",
+      "longDesc": "Muse prépare le moodboard que vous transmettrez à votre studio 3D spécialisé en illustration immobilière. Configurez le cadrage de l'illustration finale (drone, piéton, intérieur, terrasse, macro) et l'atmosphère (lumière, saison, palette végétale, figuration, matériaux, direction artistique). Muse assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT, Mistral, Grok). En retour, un fichier HTML autonome avec 4 boutons copy-to-clipboard qui génèrent des images de RÉFÉRENCE (Midjourney, Flux, DALL-E, Nano Banana) — Architecture, Lifestyle, Palette végétale, Textures. Ces images ne sont pas votre projet (modélisé par le studio sur plan) mais des inspirations d'ambiance, à glisser dans le brief du studio. Auto-injection du --ar pour cohérence ratio.",
       "icon": "palette",
       "ai_optimized": "Claude",
       "isNew": true,
       "published": true,
-      "tags": ["artefact", "directeur-artistique", "moodboard", "prompt", "ai-image", "midjourney", "flux", "muse"]
+      "tags": ["artefact", "moodboard", "studio-3d", "illustration-immobiliere", "midjourney", "flux", "muse"]
     }
   ]
 }

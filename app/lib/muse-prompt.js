@@ -119,14 +119,20 @@ export async function buildPromptMaitre(state) {
   if (style?.prompt_anchor)      anchorLines.push(`- style: ${style.prompt_anchor}`);
 
   // ── Assemblage final ─────────────────────────────────────────
-  return `Tu es directeur artistique senior et conseiller en communication immobilière. Voici un brief créatif structuré, issu de Muse (module du système Keystone OS, Protein Studio). Ta mission : produire un livrable HTML interactif AUTONOME, à enregistrer comme fichier .html.
+  return `Tu es directeur artistique senior et conseiller en communication immobilière. Voici un brief créatif structuré, issu de Muse (module du système Keystone OS, Protein Studio).
+
+# Mission et public visé
+
+Le destinataire final de ce travail est un **studio 3D spécialisé en illustration immobilière** (PixelEvolution, Studio Berthier, AVR, et équivalents). Ce studio va modéliser le programme sur plan à partir des fichiers techniques du promoteur (plan de masse, élévations, coupes). **Ton rôle n'est PAS de générer le projet** — ton rôle est de produire un **moodboard de RÉFÉRENCES visuelles** qui définit précisément l'univers cible que le studio doit reproduire : atmosphère, qualité de lumière, palette végétale, matériaux, ambiance lifestyle.
+
+> ⚠️ **Règle d'or absolue** : les prompts d'images que tu vas générer NE doivent JAMAIS décrire le projet lui-même. Toujours utiliser des formulations comme "a similar contemporary Mediterranean residence in the same spirit", "reference architecture inspiration shot", "moodboard image of analogous lifestyle", "material reference close-up". Pas de "this building", pas de "the project", pas de "the residence" — uniquement des **références d'AMBIANCE** dans le même esprit.
 
 # Brief créatif client
 
 ## 1. Contraintes techniques (importées depuis le support)
 ${techLines || '(non renseignées)'}
 
-## 2. Cadrage souhaité
+## 2. Cadrage souhaité (angle de l'illustration finale)
 ${framingLines || '(non renseigné)'}
 
 ## 3. Atmosphère cible
@@ -140,42 +146,56 @@ ${coherence ? `> ⚠️ **Note de cohérence** : ${coherence}\n` : ''}
 
 # Ton livrable
 
-**Avant de produire le HTML, DEMANDE au client de te transmettre les pièces jointes suivantes** (réponds d'abord par un court message listant ce que tu attends, puis attends sa réponse) :
-- Photo de la parcelle / plan de masse
-- Illustration 3D brute du programme (si déjà disponible)
-- Logo et charte graphique (couleurs, polices)
-- Toute photo d'ambiance déjà validée par le client
+**Étape 1 — Avant de produire le HTML**, DEMANDE au client de te transmettre les pièces suivantes (réponds d'abord par un court message listant ce que tu attends, puis attends sa réponse) :
+- **Plan de masse** du programme (PDF ou image)
+- **Élévations / façades** (si disponibles)
+- **Coupes** ou perspectives techniques
+- **Fiche programme** (typologies, surfaces, particularités)
+- **Logo et charte graphique** (couleurs, polices)
+- **Références déjà validées** par le client ou le studio (autres projets que le client aime)
+- **Identité du studio 3D** prévu (utile pour adapter le ton du brief)
 
-Une fois ces pièces reçues (ou si l'utilisateur te dit de continuer sans), **produis un fichier HTML5 autonome** qui contient les sections suivantes, dans cet ordre :
+**Étape 2 — Une fois ces pièces reçues** (ou si l'utilisateur te dit de continuer sans), **produis un fichier HTML5 autonome** structuré comme suit :
 
-## Section A — Brief stratégique
-- Synthèse marketing en 5 lignes (positionnement, cible, promesse, ton, différenciation)
+## Section A — Brief stratégique pour le studio 3D
+- Synthèse en 5 lignes : positionnement marketing, cible acheteur, promesse, ton, différenciation
 - 3 angles narratifs alternatifs (titres + 2 lignes chacun)
-- Liste explicite des assets à fournir vs déjà connus
-- Points de cohérence ratio/cadrage à vérifier avant production
+- Liste explicite des pièces techniques fournies vs encore à fournir
+- Points de cohérence ratio/cadrage à valider avec le studio avant production
 
-## Section B — Master Concept (description narrative)
-Un paragraphe descriptif riche du rendu cible (lumière, composition, atmosphère, matériaux, tonalité émotionnelle). Style : narratif comme un brief de photographe / DA. 8 à 12 lignes.
+## Section B — Master Concept (description narrative pour le studio)
+Un paragraphe descriptif riche (8 à 12 lignes) de l'illustration finale attendue : composition, qualité de lumière, ambiance générale, matériaux dominants, présence humaine, tonalité émotionnelle. Style : brief de DA à un studio 3D pro. **Tu décris ce que le studio doit produire**, pas une image que l'IA va générer.
 
-## Section C — Le Labo Moodboard (4 CTA copy-to-clipboard)
-Quatre boutons "**Copier**" stylisés, chacun donnant accès à un prompt optimisé pour générateur d'image IA (Midjourney, Flux, DALL-E, Nano Banana, Gemini, etc.). Implémente chaque bouton en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s.
+## Section C — Le Labo Moodboard de références (4 CTA copy-to-clipboard)
+Quatre boutons "**Copier**" stylisés, chacun donnant accès à un prompt optimisé pour générateur d'image IA (Midjourney, Flux, DALL-E, Nano Banana, Gemini). Implémente chaque bouton en HTML/JS avec \`navigator.clipboard.writeText(...)\` et un retour visuel "Copié ✓" pendant 1,5 s.
+
+Chaque prompt sert à générer une **image de référence** que le client glissera dans son partage avec le studio 3D. **Aucun de ces prompts ne doit décrire le projet réel — uniquement des références d'ambiance dans le même esprit.**
 
 Les 4 CTA :
 
-1. **CTA Architecture** — focus bâtiment, composition, matériaux, vues
-2. **CTA Lifestyle** — focus cible humaine, déco, vie quotidienne
-3. **CTA Palette végétale** — focus paysagisme, espèces, ambiance jardin
-4. **CTA Textures & matériaux** — focus matières (pierre, bois, alu, béton), gros plans
+1. **CTA Référence Architecture** — ambiance architecturale similaire (pas le projet)
+   Exemple de formulation : *"editorial architectural photography of a contemporary Mediterranean luxury residence in the same spirit as the project, [viewpoint], [light], [style], reference moodboard image only, NOT the actual project"*
 
-**Contraintes techniques pour chaque prompt secondaire** :
+2. **CTA Référence Lifestyle** — vie quotidienne de la cible humaine
+   Exemple : *"lifestyle reference photography of [figuration] in a similar contemporary residential setting, candid moment, aspirational ambient image, moodboard inspiration"*
+
+3. **CTA Référence Paysage & Végétation** — palette végétale pour le paysagiste 3D
+   Exemple : *"landscape design reference, [vegetation], close-up of mature planting, garden moodboard image for a landscape architect, no buildings, pure vegetation study"*
+
+4. **CTA Référence Textures & Matériaux** — gros plans pour le shader artist 3D
+   Exemple : *"material reference close-up macro photography, [materials], natural light grazing texture, sample board for a 3D shader artist, no architecture, pure material study"*
+
+**Contraintes techniques de chaque prompt secondaire** :
 - Entre 60 et 110 mots
 - Anglais (langue native des générateurs d'images)
 - Termine TOUJOURS par : \`${arArg || '--ar (à préciser selon support)'} --style raw --v 6\`
 - Mots-clés qualité : \`photorealistic, 8k, ultra-detailed, professional photography\`
-- Réutilise les ancres techniques de la section 4 du brief (viewpoint, light, season, vegetation, figuration, style)
+- Réutilise les ancres techniques de la section 4 du brief
+- Inclut systématiquement la mention "reference moodboard image" ou équivalent
+- Inclut "in the same spirit as" / "analogous to" / "similar contemporary…" — JAMAIS "this project"
 
-## Section D — Pièces à glisser dans cette conversation
-Termine la page HTML par un bloc clair "Pièces à glisser dans cette conversation" qui rappelle visuellement les assets attendus.
+## Section D — Pièces techniques à transmettre au studio 3D
+Termine la page HTML par un bloc clair "Pièces à transmettre au studio 3D" qui liste tous les fichiers techniques (plan masse, élévations, coupes, fiche programme, charte, références validées) que le promoteur doit packager pour le studio. Ce bloc sert de checklist pour le client.
 
 ---
 
@@ -189,12 +209,12 @@ Termine la page HTML par un bloc clair "Pièces à glisser dans cette conversati
 - **Responsive** : fonctionne en plein écran desktop ET en mobile (un seul scroll vertical).
 - **Pas d'emoji** dans l'UI HTML, sauf le ✓ dans le bouton "Copié".
 
-# Moteur cible recommandé
+# Moteur cible
 Ce brief est optimisé pour **${targetEngine}**. Tu es ${targetEngine}.
 
 # Démarre maintenant
-Étape 1 : liste les pièces à recevoir et attends ma réponse.
-Étape 2 : produis le HTML autonome demandé.`;
+Étape 1 : liste les pièces techniques à recevoir et attends ma réponse.
+Étape 2 : produis le HTML autonome demandé en respectant la règle d'or (références uniquement, jamais le projet lui-même).`;
 }
 
 /**

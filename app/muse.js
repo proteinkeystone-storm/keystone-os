@@ -43,7 +43,7 @@ import { buildPromptMaitre, validateForGeneration } from './lib/muse-prompt.js';
 const WORKSPACE_META = {
   id        : 'A-COM-003',
   name      : 'Muse',
-  punchline : 'Le directeur artistique de vos visuels',
+  punchline : 'Le moodboard de référence pour votre studio 3D',
 };
 
 // ── Définition des étapes (ordre + icône + label) ─────────────
@@ -316,12 +316,26 @@ function _renderAside() {
     <div class="ws-aside-section">
       <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Muse est votre directeur artistique IA. Vous configurez ici votre intention
-        visuelle (cadrage, lumière, ambiance, cible). Muse assemble un
-        <strong style="color:var(--gold);">Prompt Maître Artistique</strong>
-        que vous copiez dans votre IA habituelle. Cette IA produit en retour un
-        dashboard HTML interactif avec 4 boutons "Copier" pour vos générateurs
-        d'images (Midjourney, Flux, DALL-E, Nano Banana…).
+        Muse prépare le <strong style="color:var(--gold);">moodboard de références</strong>
+        que vous transmettrez à votre studio 3D spécialisé en illustration immobilière.
+        Vous configurez l'univers visuel cible (cadrage, lumière, ambiance, palette
+        végétale, matériaux). Muse assemble un Prompt Maître que vous collez dans
+        votre IA habituelle ; elle vous renvoie un fichier HTML avec 4 boutons "Copier"
+        qui génèrent des <em>images d'inspiration</em> (Midjourney, Flux, DALL-E…).
+        Le studio modélise ensuite le projet sur plan en s'inspirant de ces références.
+      </div>
+    </div>
+
+    <div class="ws-aside-section">
+      <div class="ws-aside-title">À retenir</div>
+      <div class="ws-aside-card" style="background:rgba(245,158,11,.06);border-color:var(--warn);">
+        <strong style="color:var(--warn);display:block;margin-bottom:4px;">
+          ${icon('shield-check', 14)} Pas une "génération du projet"
+        </strong>
+        Les images obtenues ne représentent <strong>pas</strong> votre programme :
+        ce sont des <em>références d'ambiance dans le même esprit</em>, à glisser
+        dans le brief du studio 3D pour qu'il sache exactement quelle direction
+        artistique viser lors de la modélisation sur plan.
       </div>
     </div>
 
@@ -379,14 +393,15 @@ function _viewContext() {
 
   const root = `
     <span class="ws-eyebrow">${icon('sliders', 12)} 1 sur 4 · Le contexte</span>
-    <h1 class="ws-h1">Pour quel support cherchez-vous une direction artistique&nbsp;?</h1>
+    <h1 class="ws-h1">Quel livrable allez-vous commander à votre studio 3D&nbsp;?</h1>
     <p class="ws-lead">
-      Choisissez le support, puis renseignez les détails du projet. Si vous avez
-      déjà préparé un brief technique dans Kodex, ces informations sont normalement
-      identiques&nbsp;— Muse les enrichit côté créatif.
+      Les trois premiers choix sont les commandes les plus fréquentes auprès des
+      studios spécialisés en illustration immobilière. Les suivants correspondent
+      aux <em>usages finaux</em> de l'illustration (bâche, magazine, réseaux
+      sociaux)&nbsp;— utiles pour caler le ratio et le niveau de détail attendu.
     </p>
 
-    <h3 class="ws-h3" style="margin-top:24px;">Support visé</h3>
+    <h3 class="ws-h3" style="margin-top:24px;">Livrable commandé au studio 3D · ou support de diffusion finale</h3>
     <div class="ws-card-grid" data-slot="support-list">
       <div class="ws-empty">
         <div class="ws-empty-icon">${icon('package', 24)}</div>
@@ -441,16 +456,20 @@ function _viewContext() {
     if (!slot) return;
     slot.innerHTML = supports.map(s => {
       const selected = ctx.support === s.id;
+      const primary  = !!s.primary;
       return `
         <div class="ws-card is-clickable ${selected ? 'is-selected' : ''}"
              data-act="pick-support" data-id="${_esc(s.id)}"
-             style="${selected ? 'background:var(--ws-accent-soft);border-color:var(--ws-accent);' : ''}">
+             style="${selected ? 'background:var(--ws-accent-soft);border-color:var(--ws-accent);' : (primary ? 'border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset, 0 4px 14px rgba(99,102,241,.10);' : '')}">
           <div class="ws-card-row">
-            <div class="ws-card-icon" style="${selected ? 'background:var(--ws-accent);color:#fff;' : ''}">
+            <div class="ws-card-icon" style="${selected ? 'background:var(--ws-accent);color:#fff;' : (primary ? 'background:var(--gold3);color:var(--gold);' : '')}">
               ${icon(s.icon || 'package', 22)}
             </div>
             <div class="ws-card-body">
-              <h3 class="ws-card-title">${_esc(s.label)}</h3>
+              <h3 class="ws-card-title">
+                ${_esc(s.label)}
+                ${primary ? `<span class="ws-badge" style="margin-left:8px;background:var(--gold3);color:var(--gold);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Studio 3D</span>` : ''}
+              </h3>
               <p class="ws-card-desc">
                 Ratio par défaut <strong>${_esc(s.default_ratio || '—')}</strong> · ${_esc(s.context || '')}
               </p>
@@ -472,10 +491,12 @@ function _viewFraming() {
 
   const root = `
     <span class="ws-eyebrow">${icon('eye', 12)} 2 sur 4 · Le cadrage</span>
-    <h1 class="ws-h1">Quel point de vue raconte votre projet&nbsp;?</h1>
+    <h1 class="ws-h1">Quel angle voulez-vous pour l'illustration finale&nbsp;?</h1>
     <p class="ws-lead">
-      Le cadrage oriente toute la narration visuelle. Choisissez l'angle d'attaque
-      qui sert le mieux votre intention&nbsp;— envergure, immersion, intimité, détail.
+      C'est <strong>l'angle de l'image que le studio 3D va modéliser</strong> à partir
+      des plans techniques. Choisissez la prise de vue qui sert le mieux votre récit
+      commercial&nbsp;— envergure (drone), immersion (piéton), volumes intérieurs,
+      atout extérieur, ou détail matières.
     </p>
 
     <div class="ws-card-grid" data-slot="viewpoint-list" style="margin-top:18px;">
@@ -693,8 +714,8 @@ function _viewOutput() {
     <h1 class="ws-h1">${o.status === 'done' ? 'Votre Prompt Maître est prêt' : 'C\'est le moment de l\'assemblage&nbsp;!'}</h1>
     <p class="ws-lead">
       ${o.status === 'done'
-        ? 'Copiez ce texte dans votre IA. Elle vous demandera quelques pièces jointes, puis générera un dashboard HTML interactif avec 4 boutons "Copier" pour vos générateurs d\'images.'
-        : 'Choisissez le moteur cible que vous utiliserez, puis Muse assemble le Prompt Maître. Vous n\'avez plus qu\'à le copier-coller dans votre IA.'
+        ? 'Copiez ce texte dans votre IA. Elle vous demandera les plans techniques du programme, puis générera un dashboard HTML avec 4 boutons "Copier" pour produire vos références de moodboard.'
+        : 'Choisissez le moteur IA cible, puis Muse assemble le Prompt Maître. Vous n\'avez plus qu\'à le copier-coller — l\'IA va construire le moodboard de références à transmettre au studio 3D.'
       }
     </p>
     ${body}
@@ -796,12 +817,13 @@ function _renderPromptResult() {
         <span style="color:var(--gold);flex-shrink:0;margin-top:2px;">${icon('sparkles', 18)}</span>
         <div style="font-size:13px;line-height:1.65;color:var(--ws-text);">
           <strong style="color:var(--gold);">Prochaine étape&nbsp;:</strong>
-          Collez ce prompt dans <strong>${_esc(o.target_engine)}</strong>. L'IA va d'abord vous demander
-          quelques pièces jointes (plan masse, illustration 3D, charte, photos),
-          puis elle vous renverra un fichier HTML interactif avec 4 boutons
-          "Copier" pour vos générateurs d'images. Enregistrez ce HTML, ouvrez-le
-          dans un navigateur, et cliquez pour copier les prompts dans Midjourney,
-          Flux, DALL-E ou Nano Banana.
+          Collez ce prompt dans <strong>${_esc(o.target_engine)}</strong>. L'IA va d'abord
+          vous demander les pièces techniques du programme (plan de masse, élévations,
+          coupes, charte), puis elle vous renverra un fichier HTML interactif avec
+          4 boutons "Copier" qui génèrent des <strong>images de référence d'ambiance</strong>
+          (Midjourney, Flux, DALL-E, Nano Banana). Ces images ne sont <em>pas</em>
+          votre projet&nbsp;— elles servent de moodboard d'inspiration que vous
+          transmettrez au studio 3D avec les plans techniques.
         </div>
       </div>
     </div>
