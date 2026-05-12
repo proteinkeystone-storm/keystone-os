@@ -34,7 +34,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { icon } from './lib/ui-icons.js';
 import {
   getSupports, getViewpoints, getLights, getSeasons,
-  getVegetations, getFigurations, getStyles, getTargetEngines,
+  getVegetations, getFigurations, getStyles, getTargetEngines, getImageEngines,
   getSupport, getViewpoint, checkRatioCoherence,
 } from './lib/muse-catalog.js';
 import { buildPromptMaitre, validateForGeneration } from './lib/muse-prompt.js';
@@ -93,6 +93,7 @@ function _freshState() {
       error: null,
       prompt: null,
       target_engine: 'Claude',
+      image_engine: 'midjourney',
       generated_at: null,
     },
   };
@@ -232,6 +233,7 @@ function _onClick(e) {
   if (act === 'pick-viewpoint')  return _pickViewpoint(t.dataset.id);
   if (act === 'pick-mood')       return _pickMood(t.dataset.group, t.dataset.id);
   if (act === 'pick-engine')     return _pickEngine(t.dataset.id);
+  if (act === 'pick-image-engine') return _pickImageEngine(t.dataset.id);
   if (act === 'generate-prompt') return _generatePrompt();
   if (act === 'regenerate')      return _generatePrompt();
   if (act === 'copy-prompt')     return _copyPrompt(t);
@@ -281,6 +283,12 @@ function _pickMood(group, id) {
 
 function _pickEngine(id) {
   _state.output.target_engine = id;
+  _scheduleSave();
+  _renderMain();
+}
+
+function _pickImageEngine(id) {
+  _state.output.image_engine = id;
   _scheduleSave();
   _renderMain();
 }
@@ -722,23 +730,34 @@ function _viewOutput() {
   `;
 }
 
-// ── Sélecteur du moteur IA cible ──────────────────────────────
+// ── Sélecteurs : moteur IA cible + moteur de génération d'images ──
 function _renderEngineSelector() {
-  const current = _state.output.target_engine;
+  const currentAi  = _state.output.target_engine;
+  const currentImg = _state.output.image_engine;
   const block = `
-    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur IA cible</h3>
+    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur IA cible · pour le HTML</h3>
     <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 14px 0;">
       Choisissez celui dans lequel vous comptez coller le Prompt Maître. Il sera mentionné dans le prompt pour adapter l'instruction système.
     </p>
     <div data-slot="engines" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
+
+    <h3 class="ws-h3" style="margin-top:0;margin-bottom:10px;">Moteur de génération d'images · pour les 4 CTA</h3>
+    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 14px 0;">
+      Chaque moteur d'image a sa propre syntaxe. <strong style="color:var(--ws-text);">Midjourney / Flux / Stable Diffusion</strong> acceptent les paramètres <code style="font-size:11px;background:var(--gold3);color:var(--gold);padding:1px 5px;border-radius:4px;">--ar --style --v</code> ; <strong style="color:var(--ws-text);">DALL-E / Gemini Imagen / Nano Banana</strong> préfèrent de la prose narrative sans paramètres. Muse adapte les prompts en conséquence.
+    </p>
+    <div data-slot="image-engines" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:24px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
   `;
+
+  // Hydratation moteurs IA
   getTargetEngines().then(engines => {
     const slot = _root?.querySelector('[data-slot="engines"]');
     if (!slot) return;
     slot.innerHTML = engines.map(e => {
-      const selected = current === e.id;
+      const selected = currentAi === e.id;
       return `
         <button class="ws-chip ${selected ? 'is-selected' : ''}"
                 data-act="pick-engine" data-id="${_esc(e.id)}"
@@ -751,6 +770,26 @@ function _renderEngineSelector() {
       `;
     }).join('');
   });
+
+  // Hydratation moteurs image
+  getImageEngines().then(engines => {
+    const slot = _root?.querySelector('[data-slot="image-engines"]');
+    if (!slot) return;
+    slot.innerHTML = engines.map(e => {
+      const selected = currentImg === e.id;
+      return `
+        <button class="ws-chip ${selected ? 'is-selected' : ''}"
+                data-act="pick-image-engine" data-id="${_esc(e.id)}"
+                title="${_esc(e.note || '')}"
+                style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;margin:4px 6px 4px 0;">
+          ${selected ? icon('check', 13) : ''}
+          ${_esc(e.label)}
+          ${e.recommended ? `<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:4px;">★</span>` : ''}
+        </button>
+      `;
+    }).join('');
+  });
+
   return block;
 }
 

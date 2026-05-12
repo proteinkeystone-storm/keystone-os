@@ -30,6 +30,7 @@ export async function loadOptions() {
       _cache = {
         supports: [], viewpoints: [], lights: [], seasons: [],
         vegetations: [], figurations: [], styles: [], target_engines: [],
+        image_engines: [],
       };
       return _cache;
     } finally {
@@ -48,6 +49,8 @@ export async function getVegetations()    { return (await loadOptions()).vegetat
 export async function getFigurations()    { return (await loadOptions()).figurations || []; }
 export async function getStyles()         { return (await loadOptions()).styles || []; }
 export async function getTargetEngines()  { return (await loadOptions()).target_engines || []; }
+export async function getImageEngines()   { return (await loadOptions()).image_engines || []; }
+export async function getImageEngine(id)  { return (await getImageEngines()).find(e => e.id === id) || null; }
 
 export async function getSupport(id)      { return (await getSupports()).find(s => s.id === id) || null; }
 export async function getViewpoint(id)    { return (await getViewpoints()).find(v => v.id === id) || null; }

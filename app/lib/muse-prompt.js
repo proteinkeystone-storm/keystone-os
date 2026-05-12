@@ -21,7 +21,7 @@
 
 import {
   getSupport, getViewpoint, getLight, getSeason,
-  getVegetation, getFiguration, getStyle,
+  getVegetation, getFiguration, getStyle, getImageEngine,
   checkRatioCoherence, ratioToMjArg,
 } from './muse-catalog.js';
 
@@ -63,7 +63,7 @@ export async function buildPromptMaitre(state) {
   const out  = state.output   || {};
 
   // Hydrate tous les ids en parallèle vers leurs définitions complètes
-  const [support, viewpoint, light, season, vegetation, figuration, style] =
+  const [support, viewpoint, light, season, vegetation, figuration, style, imageEngine] =
     await Promise.all([
       getSupport(ctx.support),
       getViewpoint(frm.viewpoint),
@@ -72,12 +72,31 @@ export async function buildPromptMaitre(state) {
       getVegetation(mood.vegetation),
       getFiguration(mood.figuration),
       getStyle(mood.style),
+      getImageEngine(out.image_engine || 'midjourney'),
     ]);
 
   const ratio = _ratioLabel(state, support);
   const arArg = ratioToMjArg(ratio);
   const targetEngine = out.target_engine || 'Claude';
   const coherence = checkRatioCoherence(ratio, viewpoint);
+
+  // ── Consignes adaptées au moteur de génération d'images choisi ─
+  const engine = imageEngine || { id: 'midjourney', label: 'Midjourney v8.1', syntax: 'params', params_suffix: '--style raw --v 8.1', ratio_mode: 'param', style_hint: '' };
+  const isParamsSyntax = engine.syntax === 'params';
+  const suffix = [
+    engine.ratio_mode === 'param' ? (arArg || '--ar (à préciser)') : null,
+    engine.params_suffix || null,
+  ].filter(Boolean).join(' ').trim();
+  const ratioInWords = ratio
+    ? (ratio === '1:1' ? 'square 1:1 format'
+       : ratio.includes(':') && parseFloat(ratio.split(':')[0]) > parseFloat(ratio.split(':')[1])
+         ? `widescreen ${ratio} format`
+         : `vertical ${ratio} format`)
+    : 'standard format';
+
+  const engineGuidance = isParamsSyntax
+    ? `**Syntaxe ${engine.label}** — utilise une suite dense de mots-clés séparés par des virgules, en anglais. Termine CHAQUE prompt par : \`${suffix}\` (paramètres techniques cliquables tels quels). Style : ${engine.style_hint || 'mots-clés évocateurs, qualité photo en fin de prompt'}.`
+    : `**Syntaxe ${engine.label}** — écris CHAQUE prompt en **prose narrative anglaise complète et fluide**, comme si tu briefais un photographe. **N'ajoute AUCUN paramètre technique** (pas de \`--ar\`, pas de \`--v\`, pas de \`--style\`). Mentionne le ratio en mots dans la phrase, par exemple "${ratioInWords}" intégré naturellement. Style : ${engine.style_hint || 'prose riche et précise, vocabulaire éditorial'}.`;
 
   // ── Bloc 1 : Contraintes techniques (importées du support) ──
   const techLines = [
@@ -179,29 +198,30 @@ Quatre boutons "**Copier**" stylisés, chacun donnant accès à un prompt optimi
 
 Chaque prompt sert à générer une **image de référence** que le client glissera dans son partage avec le studio 3D. **Aucun de ces prompts ne doit décrire le projet réel — uniquement des références d'ambiance dans le même esprit.**
 
-Les 4 CTA :
+Les 4 CTA — chacun doit produire un prompt anglais autonome adapté à **${engine.label}** :
 
 1. **CTA Référence Architecture** — ambiance architecturale similaire (pas le projet)
-   Exemple de formulation : *"editorial architectural photography of a contemporary Mediterranean luxury residence in the same spirit as the project, [viewpoint], [light], [style], reference moodboard image only, NOT the actual project"*
+   Idée à exprimer : photographie/rendu d'une résidence contemporaine "dans le même esprit" que le programme, reprenant viewpoint + light + style + matériaux, en précisant "reference moodboard image only" et "NOT the actual project".
 
-2. **CTA Référence Lifestyle** — vie quotidienne de la cible humaine
-   Exemple : *"lifestyle reference photography of [figuration] in a similar contemporary residential setting, candid moment, aspirational ambient image, moodboard inspiration"*
+2. **CTA Référence Lifestyle** — art de vivre suggéré (silhouettes abstraites uniquement)
+   Idée à exprimer : moodboard d'art de vivre dans un cadre résidentiel analogue, présence humaine éventuelle réduite à une suggestion atmosphérique (silhouette distante, pas de détails faciaux), atmosphère cohérente avec la lumière et la saison choisies.
 
 3. **CTA Référence Paysage & Végétation** — palette végétale pour le paysagiste 3D
-   Exemple : *"landscape design reference, [vegetation], close-up of mature planting, garden moodboard image for a landscape architect, no buildings, pure vegetation study"*
+   Idée à exprimer : étude paysagère gros plan, plantations matures correspondant à la palette choisie, sans bâtiment visible, pour servir de référence au landscape architect du studio.
 
 4. **CTA Référence Textures & Matériaux** — gros plans pour le shader artist 3D
-   Exemple : *"material reference close-up macro photography, [materials], natural light grazing texture, sample board for a 3D shader artist, no architecture, pure material study"*
+   Idée à exprimer : sample board / planche de matériaux en macro photographie, matériaux issus du champ "Matériaux à mettre en avant" du brief, sans architecture visible, lumière naturelle révélant la micro-texture.
 
 **Contraintes techniques de chaque prompt secondaire — à respecter STRICTEMENT** :
-- **Langue : ANGLAIS uniquement** (les moteurs comme Midjourney sont entraînés majoritairement en anglais et comprennent mieux les prompts dans cette langue). Pas un mot de français dans les prompts copiables.
-- Longueur : entre 60 et 110 mots
-- Termine TOUJOURS par : \`${arArg || '--ar (à préciser selon support)'} --style raw --v 8.1\`
-- Mots-clés qualité : \`photorealistic, 8k, ultra-detailed, editorial photography\`
-- Réutilise les ancres techniques de la section 4 du brief
-- Inclut systématiquement "reference moodboard image" ou "inspiration reference" ou "ambient mood reference"
-- Utilise systématiquement "in the same spirit as", "analogous to", "similar contemporary…" — JAMAIS "this project", "this building", "the residence"
-- Pour la figuration humaine, **toujours rester abstrait et professionnel** : "lifestyle silhouette", "ambient figure suggestion", "buyer-profile lifestyle moment" — pas de description physique détaillée d'une personne réelle
+
+- **Moteur d'image cible** : l'utilisateur va coller ces prompts dans **${engine.label}**. ${engineGuidance}
+- **Langue : ANGLAIS uniquement.** Pas un mot de français dans les prompts copiables.
+- **Longueur** : entre 60 et 110 mots par prompt.
+- **Mots-clés qualité** à intégrer : photorealistic, 8k, ultra-detailed, editorial photography (intègre-les naturellement selon la syntaxe du moteur — mots-clés pour Midjourney/Flux/SD, prose intégrée pour DALL-E/Imagen).
+- Réutilise les ancres techniques de la section 4 du brief.
+- Inclut systématiquement "reference moodboard image" ou "inspiration reference" ou "ambient mood reference".
+- Utilise systématiquement "in the same spirit as", "analogous to", "similar contemporary…" — JAMAIS "this project", "this building", "the residence".
+- Pour la figuration humaine, **toujours rester abstrait et professionnel** : "ambient lifestyle suggestion", "blurred silhouette in distance", "no detailed facial features" — pas de description physique détaillée d'une personne réelle.
 
 ## Section D — Pièces techniques à transmettre au studio 3D
 Termine la page HTML par un bloc clair "Pièces à transmettre au studio 3D" qui liste tous les fichiers techniques (plan masse, élévations, coupes, fiche programme, charte, références validées) que le promoteur doit packager pour le studio. Ce bloc sert de checklist pour le client.
