@@ -6951,3 +6951,97 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 
 /* Compacte la première section (themes) — pas de label texte */
 .sdqr-design-section:first-of-type .sdqr-design-section-title { display: none; }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR sidebar : recherche + filtres
+═══════════════════════════════════════════════════════════════ */
+
+.sdqr-sidebar-filters {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* Champ recherche avec icône loupe + kbd ⌘K */
+.sdqr-search-wrap {
+  position: relative;
+  display: flex; align-items: center;
+}
+.sdqr-search-ico {
+  position: absolute;
+  left: 9px;
+  width: 13px; height: 13px;
+  color: rgba(220,225,240,.4);
+  pointer-events: none;
+}
+.sdqr-search-input {
+  width: 100%;
+  padding: 7px 36px 7px 30px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 6px;
+  color: #fff;
+  font-family: inherit; font-size: 12.5px;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.sdqr-search-input::placeholder { color: rgba(220,225,240,.4); }
+.sdqr-search-input:focus {
+  border-color: rgba(184,148,90,.45);
+  background: rgba(255,255,255,.05);
+}
+.sdqr-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.sdqr-search-kbd {
+  position: absolute;
+  right: 7px;
+  padding: 1px 5px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 3px;
+  color: rgba(220,225,240,.5);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  pointer-events: none;
+}
+.sdqr-search-input:focus + .sdqr-search-kbd { opacity: 0; }
+
+/* Pills filter status */
+.sdqr-filter-pills {
+  display: flex; gap: 3px;
+  padding: 3px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 6px;
+}
+.sdqr-filter-pill {
+  flex: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(220,225,240,.55);
+  font-family: inherit; font-size: 10.5px; font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.sdqr-filter-pill:hover { color: #fff; }
+.sdqr-filter-pill.is-active {
+  background: rgba(184,148,90,.14);
+  color: var(--gold, #c9a84c);
+}
+
+/* Empty state filter avec bouton reset */
+.sdqr-empty-reset {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: rgba(99,102,241,.10);
+  border: 1px solid rgba(99,102,241,.32);
+  border-radius: 5px;
+  color: #a5b4fc;
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.sdqr-empty-reset:hover { background: rgba(99,102,241,.18); color: #fff; }

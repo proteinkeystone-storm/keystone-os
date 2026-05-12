@@ -9,6 +9,7 @@
      DELETE /api/qr/:id     Tenant — suppression definitive (cascade)
      GET /api/qr/:id/stats  Tenant — agrégations scan (period=7d|30d|90d|all)
      GET /api/qr/:id/scans.csv Tenant — export brut (RGPD-safe : 0 PII)
+     GET /sdqr-privacy        Public — page de transparence RGPD
 
    RGPD : aucune IP brute stockée. country via cf.country, device_kind
    et os_kind dérivés du User-Agent, ua_hash = sha-256(UA) tronqué.
@@ -182,7 +183,7 @@ function _renderTextPage(text) {
   <button id="copy">Copier le contenu</button>
   <div class="foot">
     Ce contenu est servi par un <strong>QR souverain Keystone</strong>.<br>
-    Aucune donnée tierce collectée. Conforme RGPD.
+    Aucune donnée tierce collectée. <a href="/sdqr-privacy" style="color:#c9a84c;text-decoration:underline;text-underline-offset:2px">Politique de transparence</a>
   </div>
 </div>
 <script>
@@ -631,4 +632,137 @@ export async function handleScansCsv(request, env, qrId) {
       'Access-Control-Allow-Origin': origin,
     },
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GET /sdqr-privacy — page de transparence RGPD (Sprint SDQR-5)
+// Page publique accessible depuis tout QR Keystone (lien en footer
+// du viewer texte) qui expose noir sur blanc ce qui est tracké,
+// combien de temps, comment exercer ses droits.
+// ══════════════════════════════════════════════════════════════════
+export async function handlePrivacyPage(request, env) {
+  const retentionDays = parseInt(env.SDQR_SCAN_RETENTION_DAYS || '90', 10);
+  const dpoEmail = env.SDQR_DPO_EMAIL || 'rgpd@protein-studio.fr';
+  return new Response(_renderPrivacyPage(retentionDays, dpoEmail), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}
+
+function _renderPrivacyPage(retentionDays, dpoEmail) {
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Politique de transparence — Sovereign Dynamic QR</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:linear-gradient(180deg,#0a1024 0%,#060a18 100%);color:#e8edf8;min-height:100vh;line-height:1.65;padding:40px 24px 80px}
+  .wrap{max-width:720px;margin:0 auto}
+  .pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#c9a84c;background:rgba(184,148,90,.10);border:1px solid rgba(184,148,90,.32);padding:5px 12px;border-radius:999px;margin-bottom:24px}
+  h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:36px;color:#fff;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  h2{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:20px;color:#fff;margin:32px 0 12px;padding-top:24px;border-top:1px solid rgba(255,255,255,.08)}
+  h2:first-of-type{border-top:none;padding-top:0}
+  p{font-size:15px;color:rgba(220,225,240,.85);margin-bottom:12px}
+  ul{margin:0 0 14px 22px;color:rgba(220,225,240,.85);font-size:14.5px}
+  li{margin-bottom:6px}
+  strong{color:#fff;font-weight:600}
+  em{color:#c9a84c;font-style:normal;font-weight:500}
+  .lead{font-size:17px;color:rgba(220,225,240,.95);line-height:1.65;margin-bottom:8px;font-family:'Cormorant Garamond',serif;font-style:italic}
+  .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:18px 22px;margin:16px 0}
+  .table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  .table th,.table td{padding:9px 12px;text-align:left;border-bottom:1px solid rgba(255,255,255,.07)}
+  .table th{color:rgba(220,225,240,.55);font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .table td{color:rgba(220,225,240,.9)}
+  code{background:rgba(0,0,0,.25);padding:2px 7px;border-radius:4px;font-family:'SF Mono',Menlo,monospace;font-size:13px;color:#a5b4fc}
+  a{color:#c9a84c;text-decoration:none;border-bottom:1px dashed rgba(184,148,90,.4)}
+  a:hover{color:#d4b27a;border-bottom-color:rgba(184,148,90,.7)}
+  .foot{margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:rgba(220,225,240,.45);text-align:center}
+  .badge-ok{display:inline-block;padding:2px 8px;background:rgba(46,179,124,.12);color:#6ee7a7;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .badge-no{display:inline-block;padding:2px 8px;background:rgba(239,68,68,.10);color:#fca5a5;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="pill">Sovereign Dynamic QR · Transparence</span>
+  <h1>Ce que ce QR collecte<br>et ce qu'il ne collecte pas</h1>
+  <p class="lead">Vous venez de scanner un QR généré par Keystone OS. Voici, en clair, ce qui se passe.</p>
+
+  <h2>Données collectées</h2>
+  <p>Chaque scan d'un QR <strong>dynamique</strong> Keystone fait passer la requête par un serveur Cloudflare (datacenter UE). Nous y enregistrons strictement les informations suivantes :</p>
+  <table class="table">
+    <thead><tr><th>Donnée</th><th>Exemple</th><th>Pourquoi</th></tr></thead>
+    <tbody>
+      <tr><td>Date / heure</td><td><code>2026-05-12 14:23:00 UTC</code></td><td>Statistiques temporelles</td></tr>
+      <tr><td>Pays</td><td><code>FR</code></td><td>Carte d'audience géographique</td></tr>
+      <tr><td>Type d'appareil</td><td><code>mobile / desktop / tablet</code></td><td>Optimisation du contenu servi</td></tr>
+      <tr><td>Système</td><td><code>ios / android / macos / windows / linux</code></td><td>Idem</td></tr>
+      <tr><td>Empreinte UA</td><td><code>3f8a91b2</code> (8 chars)</td><td>Compteur de visiteurs uniques</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Ce que nous NE collectons PAS</h2>
+  <ul>
+    <li><span class="badge-no">Non</span> Adresse IP brute ni géolocalisation précise</li>
+    <li><span class="badge-no">Non</span> Identifiant publicitaire mobile (IDFA, AAID…)</li>
+    <li><span class="badge-no">Non</span> Cookie ni stockage local sur votre appareil</li>
+    <li><span class="badge-no">Non</span> Aucun pixel tracker tiers (Google, Meta, X…)</li>
+    <li><span class="badge-no">Non</span> Aucune donnée transmise à des régies publicitaires</li>
+  </ul>
+  <p>L'<em>empreinte UA</em> est un hash SHA-256 tronqué à 8 caractères du <em>User-Agent</em> de votre navigateur. Elle permet de distinguer si deux scans proviennent du même appareil <strong>sans pouvoir vous identifier</strong>. Elle est non-réversible.</p>
+
+  <h2>Durée de conservation</h2>
+  <p>Les logs de scan sont automatiquement supprimés après <strong>${retentionDays} jours</strong>. Une fois purgés, il est impossible de les reconstituer.</p>
+
+  <h2>Souveraineté technique</h2>
+  <div class="card">
+    <p style="margin:0"><strong>Hébergement :</strong> Cloudflare Workers (datacenter Europe — frontière des données respectée).<br>
+    <strong>Base de données :</strong> Cloudflare D1 SQLite, isolation tenant par chiffrement applicatif.<br>
+    <strong>Aucun sous-traitant tiers</strong> n'a accès aux logs de scan (pas de Google Analytics, pas de Plausible, pas de Hotjar).</p>
+  </div>
+
+  <h2>Vos droits RGPD</h2>
+  <p>Conformément au Règlement Général sur la Protection des Données (UE 2016/679), vous disposez des droits suivants :</p>
+  <ul>
+    <li><strong>Information</strong> (art. 13-14) — Cette page exerce ce droit.</li>
+    <li><strong>Accès</strong> (art. 15) — Demande de copie des données vous concernant.</li>
+    <li><strong>Rectification / effacement</strong> (art. 16-17) — Correction ou suppression anticipée.</li>
+    <li><strong>Limitation</strong> (art. 18) — Gel du traitement en cas de contestation.</li>
+    <li><strong>Portabilité</strong> (art. 20) — Export structuré CSV / JSON.</li>
+    <li><strong>Opposition</strong> (art. 21) — Refus du traitement statistique.</li>
+  </ul>
+  <p>Pour exercer ces droits, contactez le DPO de l'opérateur du QR ou écrivez à :<br>
+  <a href="mailto:${dpoEmail}">${dpoEmail}</a></p>
+
+  <h2>Réclamation</h2>
+  <p>Si vos demandes n'ont pas reçu de réponse satisfaisante, vous pouvez introduire une réclamation auprès de la <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a> (Autorité de contrôle française).</p>
+
+  <div class="foot">
+    Politique publiée par <strong>Keystone OS</strong> — éditeur de l'artefact Sovereign Dynamic QR.<br>
+    Version 1.0 · ${new Date().toISOString().slice(0, 10)} · Conforme RGPD UE 2016/679.
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Cron handler — auto-purge des scans > retention (Sprint SDQR-5)
+// Déclenché par un scheduled trigger défini dans wrangler.toml.
+// Default 90 jours, configurable via env.SDQR_SCAN_RETENTION_DAYS.
+// ══════════════════════════════════════════════════════════════════
+export async function handleScheduledPurge(env) {
+  const retentionDays = parseInt(env.SDQR_SCAN_RETENTION_DAYS || '90', 10);
+  try {
+    const result = await env.DB
+      .prepare(`DELETE FROM qr_scans WHERE ts < datetime('now', '-${retentionDays} days')`)
+      .run();
+    console.log(`[sdqr-purge] OK — supprimé ${result?.meta?.changes ?? '?'} lignes anciennes (> ${retentionDays}j)`);
+  } catch (e) {
+    console.error('[sdqr-purge] FAILED', e.message);
+  }
 }

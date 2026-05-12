@@ -38,7 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -111,6 +111,10 @@ export default {
       if (path.startsWith('/r/') && method === 'GET') {
         const shortId = path.slice(3);
         return handleQrRedirect(request, env, shortId);
+      }
+      // Page de transparence publique (RGPD natif, Sprint SDQR-5)
+      if (path === '/sdqr-privacy' && method === 'GET') {
+        return handlePrivacyPage(request, env);
       }
       // CRUD QR — tenant authentifié via X-Tenant-Id (à durcir si besoin)
       if (path === '/api/qr' && method === 'POST') return handleCreateQr(request, env);
@@ -197,5 +201,14 @@ export default {
       console.error('[Worker]', e);
       return err(`Erreur interne : ${e.message}`, 500, origin);
     }
+  },
+
+  // ── Scheduled handler (Cron) — Sprint SDQR-5 ──────────────
+  // Auto-purge des qr_scans > rétention (90 jours par défaut).
+  // Configure dans wrangler.toml :
+  //   [triggers]
+  //   crons = ["0 3 * * *"]   # tous les jours à 3h UTC
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(handleScheduledPurge(env));
   },
 };

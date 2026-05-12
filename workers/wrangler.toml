@@ -39,6 +39,18 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Pour les preview deployments Vercel (URL avec -git-XXX-storms-projects),
 # utilisez plutôt un domaine custom ou ajoutez explicitement chaque URL.
 
+# ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
+# Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
+SDQR_SCAN_RETENTION_DAYS = "90"
+# Email du DPO affiché sur la page /sdqr-privacy
+SDQR_DPO_EMAIL = "rgpd@protein-studio.fr"
+
+# ── Triggers — Cron Workers (Sprint SDQR-5) ──────────────────
+# Auto-purge des logs qr_scans > SDQR_SCAN_RETENTION_DAYS chaque jour
+# à 3h UTC (heure creuse). Cloudflare gère le retry si le run rate.
+[triggers]
+crons = ["0 3 * * *"]
+
 # ── Secrets à définir via `wrangler secret put` ───────────────
 # KS_ADMIN_SECRET   — même valeur que dans Vercel
 # KS_ENCRYPTION_KEY — clé 32+ chars pour chiffrer les clés API

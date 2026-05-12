@@ -29,6 +29,13 @@ let _currentView = 'studio';   // 'studio' | 'stats'
 let _selectedId  = null;       // QR sélectionné dans la sidebar
 let _busy        = false;      // anti-double-click
 
+// Filtres sidebar (Sprint final)
+let _filter = {
+  search: '',                  // matcher nom + tags
+  status: 'all',               // all | active | archived
+  type  : 'all',               // all | url | text | vcard | wifi | ical
+};
+
 // État de la fenêtre de création (Sprint SDQR-2)
 let _creating = {
   mode    : 'dynamic',         // 'static' | 'dynamic'
@@ -179,6 +186,18 @@ function _renderShell() {
             Nouveau
           </button>
         </div>
+        <div class="sdqr-sidebar-filters">
+          <div class="sdqr-search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="sdqr-search-ico"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="sdqr-search" class="sdqr-search-input" placeholder="Rechercher… (⌘K)" autocomplete="off">
+            <kbd class="sdqr-search-kbd">⌘K</kbd>
+          </div>
+          <div class="sdqr-filter-pills" id="sdqr-filter-status">
+            <button class="sdqr-filter-pill is-active" data-status="all">Tous</button>
+            <button class="sdqr-filter-pill" data-status="active">Actifs</button>
+            <button class="sdqr-filter-pill" data-status="archived">Archivés</button>
+          </div>
+        </div>
         <div class="sdqr-sidebar-list" id="sdqr-list">
           <div class="sdqr-empty-mini">Chargement…</div>
         </div>
@@ -229,10 +248,39 @@ function _wireShell(panel) {
       panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       _currentView = t.dataset.view;
-      // Sprint SDQR-4 — dispatch selon la vue + QR sélectionné
       _renderCurrentView(panel);
     });
   });
+
+  // Recherche : filtre live au keystroke (pas de debounce, la liste
+  // est petite et le filter est O(n) trivial)
+  const searchInput = panel.querySelector('#sdqr-search');
+  searchInput?.addEventListener('input', e => {
+    _filter.search = e.target.value.trim().toLowerCase();
+    _renderList(panel);
+  });
+
+  // Pills filter status (Tous / Actifs / Archivés)
+  panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _filter.status = btn.dataset.status;
+      panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+      _renderList(panel);
+    });
+  });
+
+  // Cmd+K (ou Ctrl+K) → focus recherche, raccourci Apple-like
+  if (!window._sdqrKeyboardBound) {
+    window._sdqrKeyboardBound = true;
+    window.addEventListener('keydown', e => {
+      const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+      if (!isCmdK) return;
+      const fullscreen = document.getElementById('sdqr-fullscreen');
+      if (!fullscreen?.classList.contains('open')) return;
+      e.preventDefault();
+      fullscreen.querySelector('#sdqr-search')?.focus();
+    });
+  }
 }
 
 // Affiche la vue Studio ou Stats selon _currentView, scopé au QR
@@ -272,6 +320,25 @@ function _renderCurrentView(panel) {
 // Sidebar — liste des QRs
 // ══════════════════════════════════════════════════════════════════
 
+// Filtre la liste en mémoire selon _filter (recherche + status + type).
+// Recherche : insensible casse, matche nom + tags.
+function _applyFilters(qrs) {
+  return qrs.filter(q => {
+    if (_filter.status !== 'all' && q.status !== _filter.status) return false;
+    if (_filter.type   !== 'all' && q.qr_type !== _filter.type)  return false;
+    if (_filter.search) {
+      const haystack = [
+        q.name || '',
+        ...(q.tags || []),
+        q.qr_type || '',
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(_filter.search)) return false;
+    }
+    return true;
+  });
+}
+
+// Fetch + render (appelé après les mutations create/update/delete)
 async function _refreshList(panel) {
   const listEl = panel.querySelector('#sdqr-list');
   if (!listEl) return;
@@ -281,11 +348,35 @@ async function _refreshList(panel) {
     listEl.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur : ${_esc(e.message)}</div>`;
     return;
   }
+  _renderList(panel);
+}
+
+// Render seul depuis _cachedQrs (appelé par les filter handlers — no fetch)
+function _renderList(panel) {
+  const listEl = panel.querySelector('#sdqr-list');
+  if (!listEl) return;
+
+  // Filtrage local (recherche + status)
+  const filtered = _applyFilters(_cachedQrs);
+
   if (_cachedQrs.length === 0) {
     listEl.innerHTML = `<div class="sdqr-empty-mini">Aucun QR pour l'instant.</div>`;
     return;
   }
-  listEl.innerHTML = _cachedQrs.map(q => {
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div class="sdqr-empty-mini">Aucun résultat pour ce filtre.<br><button class="sdqr-empty-reset" id="sdqr-filter-reset">Réinitialiser</button></div>`;
+    listEl.querySelector('#sdqr-filter-reset')?.addEventListener('click', () => {
+      _filter = { search: '', status: 'all', type: 'all' };
+      const searchInput = panel.querySelector('#sdqr-search');
+      if (searchInput) searchInput.value = '';
+      panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(b => {
+        b.classList.toggle('is-active', b.dataset.status === 'all');
+      });
+      _renderList(panel);
+    });
+    return;
+  }
+  listEl.innerHTML = filtered.map(q => {
     const tags = (q.tags || []).slice(0, 3).map(t => `<span class="sdqr-li-tag">${_esc(t)}</span>`).join('');
     const isSel = q.id === _selectedId;
     const isDyn = (q.mode || 'dynamic') === 'dynamic';
@@ -308,7 +399,7 @@ async function _refreshList(panel) {
   listEl.querySelectorAll('[data-qr-id]').forEach(btn => {
     btn.addEventListener('click', () => {
       _selectedId = btn.dataset.qrId;
-      _refreshList(panel);
+      _renderList(panel);   // re-render seul, no refetch
       // Dispatch selon la vue courante (Studio ou Stats)
       _renderCurrentView(panel);
     });
