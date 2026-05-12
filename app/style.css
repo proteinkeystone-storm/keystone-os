@@ -6579,3 +6579,21 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-contrast--ok   { color: #6ee7a7; }
 .sdqr-contrast--warn { color: #ffc36a; }
 .sdqr-contrast--bad  { color: #ff8b8b; }
+
+/* Export row dans la carte QR (PNG 1024 / PNG 2048 / SVG) */
+.sdqr-export-row {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.sdqr-export-btns {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.sdqr-export-btns .sdqr-btn {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

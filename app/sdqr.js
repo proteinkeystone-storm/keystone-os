@@ -604,6 +604,15 @@ async function _openQrDetail(panel, qr) {
             <code class="sdqr-detail-shortid-val">${_esc(isDynamic ? redirectUrl : (encodedForQr.length > 200 ? encodedForQr.slice(0, 200) + '…' : encodedForQr))}</code>
             <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-payload">Copier</button>
           </div>
+          <!-- SDQR-3 : Export PNG / SVG haute résolution pour impression -->
+          <div class="sdqr-export-row">
+            <span class="sdqr-detail-shortid-lbl">Télécharger</span>
+            <div class="sdqr-export-btns">
+              <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="png-1024" title="Web, document A4">PNG 1024px</button>
+              <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="png-2048" title="Impression standard, bâche moyenne">PNG 2048px</button>
+              <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="svg" title="Vectoriel illimité — impression haut de gamme, bâche grand format">SVG</button>
+            </div>
+          </div>
         </div>
         ${_renderDesignPanel(qr)}
       </div>
@@ -675,6 +684,33 @@ async function _openQrDetail(panel, qr) {
 
   // Wire le panneau Design (Sprint SDQR-3 — collapsible, live preview)
   _wireDesignPanel(content, qr, encodedForQr);
+
+  // Wire les boutons d'export (PNG 1024 / PNG 2048 / SVG vectoriel)
+  content.querySelectorAll('[data-export]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const kind = btn.dataset.export;
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = '⏳';
+      try {
+        // Utilise le design en cours d'édition s'il existe (preview live),
+        // sinon le design sauvegardé. Permet d'exporter avant de Sauvegarder.
+        const design = _editingDesign || qr.design;
+        if (kind === 'svg') {
+          await _exportQrSvg(qr, encodedForQr, design);
+        } else if (kind === 'png-1024') {
+          await _exportQrPng(qr, encodedForQr, design, 1024);
+        } else if (kind === 'png-2048') {
+          await _exportQrPng(qr, encodedForQr, design, 2048);
+        }
+        btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
+      } catch (e) {
+        console.error('[sdqr-export]', e);
+        btn.textContent = '✗';
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+      }
+    });
+  });
 
   // Copier (URL redirect OU payload encodé selon mode)
   content.querySelector('#sdqr-copy-payload')?.addEventListener('click', () => {
@@ -790,6 +826,80 @@ async function _openQrDetail(panel, qr) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SPRINT SDQR-3 — Export PNG / SVG haute résolution
+// ══════════════════════════════════════════════════════════════════
+// Tout est généré côté client (pas d'aller-retour Worker) :
+//   - SVG : on télécharge directement la string générée par renderQrCustom
+//   - PNG : on rasterize le SVG via <img> → <canvas> → toBlob('image/png')
+// Le filename est slugifié depuis le nom du QR ("Bâche Azur" → bache-azur).
+
+function _slug(s) {
+  return String(s || 'qr-keystone')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'qr-keystone';
+}
+
+function _triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function _exportQrSvg(qr, encodedForQr, design) {
+  // Rendu à 1024px pour avoir un viewBox propre — le SVG est vectoriel
+  // donc la taille est juste indicative, c'est scalable à l'infini.
+  let svg = await renderQrCustom(encodedForQr, design, 1024);
+  // Ajoute la déclaration XML standard pour conformité fichier .svg
+  if (!svg.trim().startsWith('<?xml')) {
+    svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n` + svg;
+  }
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  _triggerDownload(blob, `${_slug(qr.name)}-${qr.short_id || qr.id.slice(0, 8)}.svg`);
+}
+
+async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
+  const svg = await renderQrCustom(encodedForQr, design, sizePx);
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl  = URL.createObjectURL(svgBlob);
+
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload  = () => res(i);
+      i.onerror = (e) => rej(new Error('Image load failed'));
+      i.src = svgUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = sizePx;
+    canvas.height = sizePx;
+    const ctx = canvas.getContext('2d');
+    // Fond blanc explicite si le design demande transparent — beaucoup
+    // d'imprimeurs n'acceptent pas le transparent en PNG.
+    if (!design?.bg || design.bg === 'transparent') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sizePx, sizePx);
+    }
+    ctx.drawImage(img, 0, 0, sizePx, sizePx);
+
+    const pngBlob = await new Promise((res, rej) => {
+      canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+    });
+    _triggerDownload(pngBlob, `${_slug(qr.name)}-${qr.short_id || qr.id.slice(0, 8)}-${sizePx}.png`);
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
