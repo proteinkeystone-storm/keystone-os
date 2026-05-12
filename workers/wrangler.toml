@@ -35,7 +35,10 @@ database_id  = "f5d21b1a-74a5-436f-849a-e971ab9d44ac"
 # NB : keystone-os.vercel.app a été squatté — l'URL réelle est -inky.
 # protein-keystone.com = domaine officiel (depuis mai 2025)
 [vars]
-KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.com,https://keystone-os-inky.vercel.app,https://keystone-8qzoeqa34-storms-projects-01b49fbc.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:8787"
+# Sprint Sécu-3 / M3 — localhost retiré de la liste prod.
+# Pour le dev local, override via `wrangler dev --var KS_ALLOWED_ORIGIN:"*"`
+# ou créer un wrangler.dev.toml dédié avec localhost autorisé.
+KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.com,https://keystone-os-inky.vercel.app,https://keystone-8qzoeqa34-storms-projects-01b49fbc.vercel.app"
 # Pour les preview deployments Vercel (URL avec -git-XXX-storms-projects),
 # utilisez plutôt un domaine custom ou ajoutez explicitement chaque URL.
 

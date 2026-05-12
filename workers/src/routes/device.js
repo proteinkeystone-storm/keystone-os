@@ -17,6 +17,7 @@ import {
   json, err, requireAdmin, requireDevice,
   parseBody, generateToken, generateId, getAllowedOrigin,
 } from '../lib/auth.js';
+import { audit } from '../lib/audit.js';
 
 // ── POST /api/device/register ─────────────────────────────────
 // Appelé depuis la tablette du collaborateur.
@@ -84,6 +85,16 @@ export async function handleApprove(request, env) {
     SET is_approved = 1, approved_by = ?
     WHERE id = ?
   `).bind(approvedBy, deviceId).run();
+
+  // Sprint Sécu-4 / I3 — trace de l'approbation
+  await audit(env, {
+    action:    'device_approve',
+    target:    deviceId,
+    tenantId:  device.tenant_id,
+    actor:     approvedBy,
+    details:   { email: device.email, label: device.label },
+    request,
+  });
 
   return json({
     success:     true,
@@ -155,6 +166,13 @@ export async function handleRevoke(request, env) {
     .run();
 
   if (!result.meta.changes) return err('Device introuvable', 404, origin);
+
+  // Sprint Sécu-4 / I3 — trace de la révocation
+  await audit(env, {
+    action: 'device_revoke',
+    target: deviceId,
+    request,
+  });
 
   return json({ success: true, deviceId }, 200, origin);
 }

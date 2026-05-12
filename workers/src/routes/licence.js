@@ -9,6 +9,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { blindIndex, hashKey } from '../lib/kdf.js';
+import { audit } from '../lib/audit.js';
 
 // ── GET /api/licence/list ─────────────────────────────────────
 export async function handleList(request, env) {
@@ -49,18 +51,32 @@ export async function handleActivate(request, env) {
 
   const assetsJson = ownedAssets ? JSON.stringify(ownedAssets) : null;
 
+  // Sprint Sécu-3 / H7 / Q3b — hash + blind index obligatoires.
+  // Cohérence avec le webhook Stripe et activate-v2 : toute licence
+  // qui entre en DB a son lookup_hmac (HMAC-SHA256) et son key_hash
+  // (PBKDF2-100k+salt). La col `key` en clair reste pour rétrocompat
+  // jusqu'à migration one-shot (script à venir : UPDATE licences
+  // SET key='*****' WHERE lookup_hmac IS NOT NULL).
+  if (!env.KS_LOOKUP_PEPPER) return err('Server: KS_LOOKUP_PEPPER manquant', 500, origin);
+  const upperKey   = key.toUpperCase();
+  const lookupHmac = await blindIndex(upperKey, env.KS_LOOKUP_PEPPER);
+  const { hash, salt } = await hashKey(upperKey);
+
   // INSERT OR REPLACE = créer ou mettre à jour
   await env.DB.prepare(`
-    INSERT INTO licences (key, tenant_id, owner, plan, is_active, owned_assets, expires_at, updated_at)
-    VALUES (?, ?, ?, ?, 1, ?, ?, datetime('now'))
+    INSERT INTO licences (key, tenant_id, owner, plan, is_active, owned_assets, expires_at, lookup_hmac, key_hash, salt, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET
       owner        = excluded.owner,
       plan         = excluded.plan,
       is_active    = 1,
       owned_assets = excluded.owned_assets,
       expires_at   = excluded.expires_at,
+      lookup_hmac  = excluded.lookup_hmac,
+      key_hash     = excluded.key_hash,
+      salt         = excluded.salt,
       updated_at   = datetime('now')
-  `).bind(key.toUpperCase(), tenantId, owner, plan, assetsJson, expiresAt || null).run();
+  `).bind(upperKey, tenantId, owner, plan, assetsJson, expiresAt || null, lookupHmac, hash, salt).run();
 
   const licence = await env.DB
     .prepare('SELECT * FROM licences WHERE key = ?')
@@ -89,6 +105,13 @@ export async function handleRevoke(request, env) {
     .prepare("UPDATE licences SET is_active = 0, updated_at = datetime('now') WHERE key = ?")
     .bind(key.toUpperCase())
     .run();
+
+  // Sprint Sécu-4 / I3 — trace de la révocation pour audit RGPD
+  await audit(env, {
+    action:  'licence_revoke',
+    target:  key.toUpperCase(),
+    request,
+  });
 
   return json({ success: true, key: key.toUpperCase() }, 200, origin);
 }

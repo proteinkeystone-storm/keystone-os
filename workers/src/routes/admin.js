@@ -7,6 +7,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { audit } from '../lib/audit.js';
 
 // ── GET /api/admin/export ─────────────────────────────────────
 // Retourne toutes les licences + devices (RGPD portabilité Art.20)
@@ -83,6 +84,15 @@ export async function handlePurgeTenant(request, env) {
     "UPDATE licences SET is_active = 0, owner = 'REDACTED', customer_email = NULL, updated_at = datetime('now') WHERE tenant_id = ?"
   ).bind(tenantId).run();
   counts.licences_anonymized = rLic.meta.changes || 0;
+
+  // Sprint Sécu-4 / I3 — log audit de l'action critique RGPD Art.17.
+  await audit(env, {
+    action:   'purge_tenant',
+    target:   tenantId,
+    tenantId,
+    details:  counts,
+    request,
+  });
 
   return json({
     success:   true,
