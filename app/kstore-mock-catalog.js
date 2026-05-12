@@ -100,6 +100,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'A-COM-003',                      // ← Sprint Muse-1 — squelette workspace
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Muse',
+        punchline: 'Le directeur artistique de vos visuels',
+        shortDesc: 'Prompt Maître Artistique pour vos IA · 4 CTA moodboard (Archi, Lifestyle, Végétal, Textures)',
+        price: 49,
+        icon: 'palette',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini', 'Grok', 'Perplexity', 'Llama'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {

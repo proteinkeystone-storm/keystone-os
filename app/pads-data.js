@@ -608,5 +608,8 @@ export const CATALOG_DATA = {
         // ── Sprint Kodex-1 — Artefact à workspace fullscreen ──
         { id:'A-COM-002', padKey:null, title:'Kodex', subtitle:'Le brief print/digital infaillible · calculateur d\'échelle', category:'COM', plan:'STARTER', price:49, lifetimePrice:199, icon:'sparkles', ai_optimized:'Claude', isNew:true, published:true, tags:['artefact','print','digital','brief','communication','production'],
           longDesc:"Transforme une intention client en cahier des charges technique infaillible. Entonnoir guidé (imprimeur, réseaux sociaux, presse), saisie sectorisée, coffre-fort de vos assets, calculateur d'échelle automatique pour les grands formats (bâche, 4x3). Sortie : un brief PDF prêt à envoyer à votre graphiste ou imprimeur." },
+        // ── Sprint Muse-1 — Artefact à workspace fullscreen ──
+        { id:'A-COM-003', padKey:null, title:'Muse', subtitle:'Le directeur artistique de vos visuels · Prompt Maître Artistique', category:'COM', plan:'STARTER', price:49, lifetimePrice:199, icon:'palette', ai_optimized:'Claude', isNew:true, published:true, tags:['artefact','directeur-artistique','moodboard','prompt','ai-image','muse'],
+          longDesc:"Muse transforme une intention visuelle (cadrage, atmosphère, cible) en Prompt Maître Artistique structuré, à coller dans votre IA habituelle. En retour, vous obtenez un dashboard HTML interactif autonome avec 4 CTA copy-to-clipboard (Architecture, Lifestyle, Palette végétale, Textures) pour vos générateurs d'images (Midjourney, Flux, DALL-E, Nano Banana). Connecté à Kodex : reprend automatiquement le ratio et les contraintes techniques du support." },
     ],
 };

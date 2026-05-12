@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "updatedAt": "2026-04-26",
+  "version": "1.2",
+  "updatedAt": "2026-05-12",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -271,6 +271,22 @@
       "isNew": true,
       "published": true,
       "tags": ["artefact", "print", "digital", "brief", "communication", "production", "calculateur-echelle", "kodex"]
+    },
+    {
+      "id": "A-COM-003",
+      "padKey": null,
+      "title": "Muse",
+      "subtitle": "Le directeur artistique de vos visuels · Prompt Maître Artistique",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Muse transforme une intention visuelle en Prompt Maître Artistique structuré. Configurez le cadrage (drone, piéton, intérieur, détail), l'atmosphère (lumière, saison, végétation, figuration humaine) et la cible lifestyle ; Muse assemble le brief créatif à coller dans votre IA habituelle (Claude, Gemini, ChatGPT). L'IA génère en retour un dashboard HTML interactif autonome avec 4 CTA copy-to-clipboard pour vos générateurs d'images (Midjourney, Flux, DALL-E, Nano Banana) : Architecture, Lifestyle, Palette végétale, Textures & matériaux. Auto-injection du paramètre --ar selon le ratio du support importé depuis Kodex.",
+      "icon": "palette",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "tags": ["artefact", "directeur-artistique", "moodboard", "prompt", "ai-image", "midjourney", "flux", "muse"]
     }
   ]
 }

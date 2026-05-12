@@ -15,6 +15,7 @@ import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
 import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
+import { openMuse }                              from './muse.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -1535,6 +1536,7 @@ export function openTool(padId, opts = {}) {
     // Routing par id : on intercepte AVANT la résolution PADS_DATA.
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
+    if (padId === 'A-COM-003') { openMuse();  return; }
 
     // Résoudre NOMEN-K (O-IMM-001) ou padKey (A1) → pad via pads-loader
     const tool = TOOLS.find(t => t.id === padId);

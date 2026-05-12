@@ -1,0 +1,23 @@
+{
+  "id": "A-COM-003",
+  "category": "BIZ",
+  "subcategory": "BIZ_COM",
+  "kind": "artefact",
+  "real": true,
+  "title": "Muse",
+  "punchline": "Le directeur artistique de vos visuels",
+  "shortDesc": "Configurez un cadrage et une atmosphère · Muse génère le Prompt Maître Artistique à coller dans votre IA",
+  "longDesc": "Muse est le directeur artistique de Keystone : il transforme une intention visuelle (cadrage, lumière, atmosphère, cible) en Prompt Maître Artistique structuré. Vous le copiez dans votre IA habituelle (Claude, Gemini, ChatGPT, Mistral, Grok), qui génère en retour un dashboard HTML interactif avec 4 CTA copy-to-clipboard pour vos générateurs d'images (Midjourney, Flux, DALL-E, Nano Banana). Connecté à Kodex pour reprendre automatiquement le ratio, le support et les contraintes techniques.",
+  "icon": "palette",
+  "price": 49,
+  "plan": "STARTER",
+  "plans_required": ["STARTER", "PRO", "MAX"],
+  "workspace": "fullscreen",
+  "workspace_route": "muse",
+  "ai_optimized": "Claude",
+  "ai_compatible": ["Claude", "Gemini", "ChatGPT", "Mistral", "Grok", "Perplexity", "Llama"],
+  "copyright": "© 2026-2027 Protein Studio",
+  "version": "1.0.0-skeleton",
+  "killer_feature": "prompt-maitre-artistique",
+  "tags": ["communication", "directeur-artistique", "moodboard", "prompt", "ai-image", "midjourney", "flux"]
+}

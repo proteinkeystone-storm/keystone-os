@@ -1,0 +1,128 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-05-12",
+  "_comment": "Catalogue déclaratif des options Muse. Modifiable sans toucher au code. L'UI lit ce fichier via app/lib/muse-catalog.js et l'utilise pour construire les choix proposés à l'utilisateur dans les vues framing/mood/style. Les ids sont utilisés tels quels dans la construction du Prompt Maître Artistique (muse-prompt.js) — éviter de les renommer après mise en prod.",
+
+  "supports": [
+    { "id": "bache",           "label": "Bâche grand format",       "default_ratio": "3:1",  "scale": "macro",  "context": "extérieur, vue de loin", "icon": "package" },
+    { "id": "4x3",             "label": "Affiche 4×3",              "default_ratio": "4:3",  "scale": "macro",  "context": "extérieur, vue de loin", "icon": "package" },
+    { "id": "affiche-A2",      "label": "Affiche A2 / A1",          "default_ratio": "1:1.41","scale": "medium","context": "intérieur, distance moyenne", "icon": "printer" },
+    { "id": "flyer-A5",        "label": "Flyer / Carte commerciale", "default_ratio": "1:1.41","scale": "near",  "context": "main, lecture rapprochée", "icon": "printer" },
+    { "id": "brochure",        "label": "Brochure programme",        "default_ratio": "1:1.41","scale": "near",  "context": "main, lecture détaillée", "icon": "book-open" },
+    { "id": "magazine-pleine", "label": "Pleine page magazine",      "default_ratio": "1:1.41","scale": "near",  "context": "magazine, lecture posée", "icon": "book-open" },
+    { "id": "instagram-feed",  "label": "Instagram feed",            "default_ratio": "4:5",  "scale": "screen","context": "mobile vertical", "icon": "globe" },
+    { "id": "instagram-story", "label": "Instagram story / Reel",    "default_ratio": "9:16", "scale": "screen","context": "mobile vertical plein écran", "icon": "globe" },
+    { "id": "facebook-post",   "label": "Facebook / LinkedIn post",  "default_ratio": "1:1",  "scale": "screen","context": "feed desktop + mobile", "icon": "globe" },
+    { "id": "linkedin-banner", "label": "Bannière LinkedIn / web",   "default_ratio": "16:9", "scale": "screen","context": "header desktop", "icon": "globe" },
+    { "id": "custom",          "label": "Format personnalisé",       "default_ratio": "",     "scale": "custom","context": "à préciser", "icon": "custom" }
+  ],
+
+  "viewpoints": [
+    {
+      "id": "aerial",
+      "label": "Vue aérienne · drone",
+      "short": "Drone",
+      "narrative": "Focus sur l'insertion urbaine, l'envergure du projet et la qualité d'intégration au paysage",
+      "natural_orientation": "horizontal",
+      "icon": "globe",
+      "prompt_anchor": "aerial drone shot, slight tilt down, wide establishing view, architectural insertion into the surroundings"
+    },
+    {
+      "id": "pedestrian",
+      "label": "Vue piétonne · immersion",
+      "short": "Piéton",
+      "narrative": "Ressenti de l'acheteur devant la façade, échelle humaine, qualité de la voie publique",
+      "natural_orientation": "horizontal",
+      "icon": "eye",
+      "prompt_anchor": "eye-level street view, pedestrian perspective, building seen from the sidewalk, natural human scale"
+    },
+    {
+      "id": "interior",
+      "label": "Vue intérieure · pièce de vie",
+      "short": "Intérieur",
+      "narrative": "Volumes, lumière naturelle, qualité des prestations, ambiance pièce à vivre",
+      "natural_orientation": "horizontal",
+      "icon": "image",
+      "prompt_anchor": "interior architectural photography, living room with natural light pouring in, generous volumes, high-end finishes"
+    },
+    {
+      "id": "detail-terrace",
+      "label": "Vue détail · terrasse / extérieur",
+      "short": "Terrasse",
+      "narrative": "Atout extérieur : balcon, terrasse, jardin privatif, vue dégagée",
+      "natural_orientation": "horizontal",
+      "icon": "ruler",
+      "prompt_anchor": "close-up terrace and outdoor lifestyle, balcony with open view, plants, outdoor furniture, evening atmosphere"
+    },
+    {
+      "id": "macro",
+      "label": "Vue macro · matériaux",
+      "short": "Macro",
+      "narrative": "Gros plan textures, matériaux, finitions, prestations haut de gamme",
+      "natural_orientation": "horizontal",
+      "icon": "sliders",
+      "prompt_anchor": "macro shot of architectural materials, shallow depth of field, natural light grazing texture, premium finishes"
+    }
+  ],
+
+  "lights": [
+    { "id": "golden-hour", "label": "Golden hour", "short": "Fin de journée prestige",
+      "prompt_anchor": "warm golden hour light, long soft shadows, amber and gold tones, cinematic late afternoon sun" },
+    { "id": "azure-summer", "label": "Bleu azur · été", "short": "Ciel d'été méditerranéen",
+      "prompt_anchor": "deep azure blue sky, hard noon Mediterranean light, vivid saturated colors" },
+    { "id": "soft-veiled", "label": "Voilé doux", "short": "Lumière diffuse moderne",
+      "prompt_anchor": "soft overcast light, diffused shadows, calm muted palette, contemporary editorial mood" },
+    { "id": "blue-hour", "label": "Heure bleue · crépuscule", "short": "Bleu/violet artificiel",
+      "prompt_anchor": "blue hour twilight, warm interior lights glowing against a deep blue exterior, urban serenity" },
+    { "id": "night", "label": "Nuit · ambiance signature", "short": "Éclairage architectural",
+      "prompt_anchor": "night architectural photography, designed lighting accenting the façade, glowing interior windows" }
+  ],
+
+  "seasons": [
+    { "id": "summer",     "label": "Été méditerranéen", "prompt_anchor": "Mediterranean summer atmosphere, dry warm air" },
+    { "id": "spring",     "label": "Printemps lumineux", "prompt_anchor": "spring atmosphere, fresh foliage, clear bright air" },
+    { "id": "autumn",     "label": "Automne doré",       "prompt_anchor": "autumn light, golden palette, soft warm humidity" },
+    { "id": "winter",     "label": "Hiver lumineux",     "prompt_anchor": "crisp winter light, low sun, long shadows" },
+    { "id": "seasonless", "label": "Sans saison marquée","prompt_anchor": "season-agnostic atmosphere" }
+  ],
+
+  "vegetations": [
+    { "id": "dense",          "label": "Dense · camouflage", "prompt_anchor": "lush dense vegetation, mature trees softening the architecture" },
+    { "id": "realistic",      "label": "Réaliste · plan masse",  "prompt_anchor": "realistic landscaping faithful to the master plan, accurate species" },
+    { "id": "minimal",        "label": "Épurée · contemporaine", "prompt_anchor": "minimal contemporary landscaping, restrained greenery, designed planters" },
+    { "id": "mediterranean",  "label": "Méditerranéenne",        "prompt_anchor": "Mediterranean landscaping, olive trees, pines, lavender, cypress, dry rocky ground cover" },
+    { "id": "tropical",       "label": "Exotique · jardin du sud","prompt_anchor": "subtropical south-of-France vegetation, palms, agaves, bougainvillea" },
+    { "id": "none",           "label": "Aucune végétation",       "prompt_anchor": "no vegetation, pure architectural focus" }
+  ],
+
+  "figurations": [
+    { "id": "family",          "label": "Famille avec enfants",     "prompt_anchor": "young family with two children, candid lifestyle moment, natural interaction" },
+    { "id": "young-actives",   "label": "Jeunes actifs urbains",    "prompt_anchor": "young urban professionals, late twenties to mid-thirties, casual-chic styling" },
+    { "id": "seniors-csp",     "label": "Seniors CSP+",             "prompt_anchor": "elegant senior couple, refined casual wear, calm confident demeanor" },
+    { "id": "investor-luxury", "label": "Investisseur luxe",        "prompt_anchor": "discreet luxury patron, tailored neutral wardrobe, low-key affluent presence" },
+    { "id": "none",            "label": "Aucune figuration · architecture pure", "prompt_anchor": "no human figure, pure architectural composition" }
+  ],
+
+  "styles": [
+    { "id": "cinematic-realism", "label": "Réalisme cinématique",
+      "prompt_anchor": "cinematic realism, anamorphic lens look, shallow depth of field, color-graded like a feature film" },
+    { "id": "editorial-archi",   "label": "Editorial architectural",
+      "prompt_anchor": "editorial architectural photography in the style of Dezeen / Architectural Digest, clean composition, balanced symmetry" },
+    { "id": "painterly",         "label": "Pictural · ambiance peinture",
+      "prompt_anchor": "painterly rendering, soft brushstroke quality, atmospheric and emotive, illustrative finish" },
+    { "id": "documentary",       "label": "Documentaire authentique",
+      "prompt_anchor": "documentary photography, authentic candid feel, available light, slight imperfection, no staging" },
+    { "id": "aspirational-glossy", "label": "Aspirational glossy",
+      "prompt_anchor": "aspirational glossy advertising style, high contrast, vibrant saturation, premium real-estate campaign aesthetic" }
+  ],
+
+  "target_engines": [
+    { "id": "Claude",      "label": "Claude (Anthropic)",   "recommended": true,  "note": "Recommandé pour la qualité de structuration HTML" },
+    { "id": "Gemini",      "label": "Gemini (Google)",      "recommended": true,  "note": "Excellent pour la créativité visuelle" },
+    { "id": "ChatGPT",     "label": "ChatGPT (OpenAI)",     "recommended": false, "note": "Solide alternative" },
+    { "id": "Mistral",     "label": "Mistral / Le Chat",    "recommended": false, "note": "Souveraineté européenne" },
+    { "id": "Grok",        "label": "Grok (xAI)",           "recommended": false, "note": "Ton plus libre" },
+    { "id": "Perplexity",  "label": "Perplexity",           "recommended": false, "note": "Bonus : recherche sourcée" },
+    { "id": "Llama",       "label": "Llama (Meta · via Groq)", "recommended": false, "note": "Rapide, open-weights" }
+  ]
+}
