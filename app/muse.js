@@ -254,6 +254,8 @@ function _onInput(e) {
 }
 
 // ── Sélecteurs cliquables (cards / chips) ─────────────────────
+// Tous ces handlers préservent la position de scroll pour ne pas
+// faire remonter la page au clic sur une option.
 async function _pickSupport(id) {
   const s = await getSupport(id);
   if (!s) return;
@@ -264,13 +266,13 @@ async function _pickSupport(id) {
     _state.context.ratio = s.default_ratio;
   }
   _scheduleSave();
-  _renderMain();
+  _renderMain({ preserveScroll: true });
 }
 
 function _pickViewpoint(id) {
   _state.framing.viewpoint = id;
   _scheduleSave();
-  _renderMain();
+  _renderMain({ preserveScroll: true });
 }
 
 function _pickMood(group, id) {
@@ -278,19 +280,19 @@ function _pickMood(group, id) {
   // Click sur l'option déjà sélectionnée → on désélectionne
   _state.mood[group] = _state.mood[group] === id ? '' : id;
   _scheduleSave();
-  _renderMain();
+  _renderMain({ preserveScroll: true });
 }
 
 function _pickEngine(id) {
   _state.output.target_engine = id;
   _scheduleSave();
-  _renderMain();
+  _renderMain({ preserveScroll: true });
 }
 
 function _pickImageEngine(id) {
   _state.output.image_engine = id;
   _scheduleSave();
-  _renderMain();
+  _renderMain({ preserveScroll: true });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -373,8 +375,13 @@ function _renderAside() {
 // ═══════════════════════════════════════════════════════════════
 // Main panel — dispatch par vue
 // ═══════════════════════════════════════════════════════════════
-function _renderMain() {
+// preserveScroll: true → conserve la position de scroll actuelle
+// (utilisé pour les sélections de chips/cards qui ne changent pas
+// d'étape). Par défaut false → reset en haut (utilisé pour la
+// navigation entre étapes).
+function _renderMain(opts = {}) {
   const main = _root.querySelector('[data-slot="main"]');
+  const prevScroll = main.scrollTop;
   const view = _state.view;
   let html = '';
   if (view === 'context')      html = _viewContext();
@@ -382,7 +389,7 @@ function _renderMain() {
   else if (view === 'mood')    html = _viewMood();
   else if (view === 'output')  html = _viewOutput();
   main.innerHTML = `<div class="ws-main-inner">${html}${_stepNav()}</div>`;
-  main.scrollTop = 0;
+  main.scrollTop = opts.preserveScroll ? prevScroll : 0;
 
   const crumb = _root.querySelector('[data-slot="crumb"]');
   if (crumb) crumb.textContent = _currentStep().label;
