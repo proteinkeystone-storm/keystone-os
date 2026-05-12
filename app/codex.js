@@ -35,6 +35,7 @@ import { computeScale } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
 import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
 import { exportBriefAsPDF } from './lib/kodex-pdf.js';
+import { uploadFile, deleteAsset, assetUrl, formatSize, ALLOWED_MIMES as KODEX_ASSET_MIMES } from './lib/kodex-uploader.js';
 import { ApiHandler } from './api-handler.js';
 import { CF_API } from './pads-loader.js';
 
@@ -83,6 +84,8 @@ let _state = {
     },
     brand_book_url: '',     // lien externe vers le brand book (Drive, Dropbox)
     extra_notes:    '',     // demandes spéciales pour le graphiste
+    // Sprint Kodex-3.1.5 : fichiers uploadés en backend (D1 base64)
+    uploads: [],            // [{id, filename, mime, kind, size_bytes, url}]
   },
   output: {
     // Sprint Kodex-4.1 — état de la génération
@@ -268,6 +271,8 @@ function _onClick(e) {
   if (act === 'regenerate')     return _generateBrief();
   if (act === 'view-prompt')    return _toggleViewPrompt(t);
   if (act === 'download-pdf')   return _downloadBriefPdf();
+  // Sprint Kodex-3.1.5 : upload / delete fichiers binaires
+  if (act === 'upload-delete')  return _handleDeleteUpload(t.dataset.id);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1141,20 +1146,175 @@ function _viewAssets() {
     </form>
 
     <h2 class="ws-h2">Téléverser des fichiers</h2>
-    <div class="ws-empty">
-      <div class="ws-empty-icon">${icon('upload-cloud', 24)}</div>
-      <h3 class="ws-empty-title">L'espace de dépôt arrive au Sprint suivant</h3>
-      <p class="ws-empty-desc">
-        Pour l'instant, partagez vos fichiers via le lien brand book ci-dessus.
-        L'upload direct (logos, photos, brand book PDF) sera disponible prochainement.
+    <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
+      Glissez vos logos, illustrations, brand book ou gabarits ici. Stockage en
+      Europe, 2 Mo max par fichier. Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS.
+    </p>
+
+    <div class="kodex-dropzone" data-slot="dropzone"
+         style="border:1.5px dashed var(--ws-border-strong);border-radius:var(--ws-radius-lg);
+                padding:32px 24px;text-align:center;transition:all 180ms ease;
+                background:rgba(255,255,255,.015);cursor:pointer;">
+      <div style="display:inline-flex;width:48px;height:48px;border-radius:var(--ws-radius);
+                  background:var(--ws-surface);color:var(--ws-text-muted);
+                  align-items:center;justify-content:center;margin-bottom:10px;
+                  border:1px solid var(--ws-border);">
+        ${icon('upload-cloud', 24)}
+      </div>
+      <p style="margin:0 0 4px 0;font-size:14px;font-weight:600;color:var(--ws-text);">
+        Glissez vos fichiers ici
       </p>
+      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-muted);">
+        ou
+      </p>
+      <button class="ws-btn ws-btn--secondary" type="button" data-act="upload-pick" style="padding:7px 16px;font-size:13px;">
+        Sélectionner depuis votre ordinateur
+      </button>
+      <input type="file" data-slot="file-input" hidden
+             accept="${KODEX_ASSET_MIMES.join(',')}" multiple>
     </div>
+
+    <div data-slot="upload-list" style="margin-top:16px;"></div>
   `;
 
   // Wiring asynchrone après injection DOM
-  setTimeout(() => _wireAssetsForm(), 0);
+  setTimeout(() => { _wireAssetsForm(); _wireUploader(); _renderUploadList(); }, 0);
 
   return root;
+}
+
+// ── Wiring de la dropzone d'upload ────────────────────────────
+function _wireUploader() {
+  const drop = _root?.querySelector('[data-slot="dropzone"]');
+  const inp  = _root?.querySelector('[data-slot="file-input"]');
+  if (!drop || !inp) return;
+
+  // Click sur la zone OU sur le bouton "Sélectionner"
+  drop.addEventListener('click', e => {
+    if (e.target.closest('button[data-act]') == null && e.target.tagName !== 'INPUT') {
+      inp.click();
+    }
+  });
+  const pickBtn = drop.querySelector('[data-act="upload-pick"]');
+  if (pickBtn) pickBtn.addEventListener('click', e => { e.stopPropagation(); inp.click(); });
+
+  inp.addEventListener('change', e => {
+    [...e.target.files].forEach(_handleUploadFile);
+    inp.value = '';
+  });
+
+  // Drag-drop
+  ['dragenter', 'dragover'].forEach(ev => {
+    drop.addEventListener(ev, e => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--ws-accent)';
+      drop.style.background = 'var(--ws-accent-soft)';
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    drop.addEventListener(ev, e => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--ws-border-strong)';
+      drop.style.background = 'rgba(255,255,255,.015)';
+    });
+  });
+  drop.addEventListener('drop', e => {
+    [...(e.dataTransfer?.files || [])].forEach(_handleUploadFile);
+  });
+}
+
+// ── Détecte le kind selon le filename + lance l'upload ────────
+async function _handleUploadFile(file) {
+  // Heuristique simple sur le nom
+  let kind = 'autre';
+  const n = (file.name || '').toLowerCase();
+  if (/logo/.test(n))                                       kind = 'logo';
+  else if (/charte|brand[ _-]?book|guideline/.test(n))      kind = 'brand_book';
+  else if (/gabarit|template|spec/.test(n))                 kind = 'gabarit';
+  else if (file.type.startsWith('image/'))                  kind = 'illustration';
+
+  _addPendingUploadCard(file);
+  try {
+    const asset = await uploadFile(file, kind);
+    _state.assets.uploads.push({
+      id: asset.id, filename: asset.filename, mime: asset.mime,
+      kind: asset.kind, size_bytes: asset.size_bytes, url: asset.url,
+    });
+    _saveDraft();
+    _renderUploadList();
+    _toastOk(`${file.name} envoyé`);
+  } catch (e) {
+    _renderUploadList();
+    _toastSoon('Échec : ' + e.message);
+  }
+}
+
+// Card temporaire "en cours d'upload"
+function _addPendingUploadCard(file) {
+  const list = _root?.querySelector('[data-slot="upload-list"]');
+  if (!list) return;
+  const card = document.createElement('div');
+  card.className = 'ws-card';
+  card.style.cssText = 'margin-bottom:8px;padding:12px 14px;opacity:.6;';
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:36px;height:36px;border-radius:var(--ws-radius-sm);background:var(--ws-accent-soft);display:flex;align-items:center;justify-content:center;color:var(--ws-accent);">
+        ${icon('upload-cloud', 18)}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--ws-text);">${_esc(file.name)}</div>
+        <div style="font-size:11px;color:var(--ws-text-muted);">Envoi en cours…</div>
+      </div>
+    </div>
+  `;
+  list.appendChild(card);
+}
+
+// ── Liste des assets uploadés ─────────────────────────────────
+function _renderUploadList() {
+  const list = _root?.querySelector('[data-slot="upload-list"]');
+  if (!list) return;
+  const uploads = _state.assets.uploads || [];
+  if (!uploads.length) { list.innerHTML = ''; return; }
+  list.innerHTML = uploads.map(u => {
+    const isImg = (u.mime || '').startsWith('image/');
+    const thumb = isImg
+      ? `<img src="${_esc(assetUrl(u.id))}" alt="" style="width:44px;height:44px;border-radius:var(--ws-radius-sm);object-fit:cover;flex-shrink:0;background:var(--ws-surface);" loading="lazy">`
+      : `<div style="width:44px;height:44px;border-radius:var(--ws-radius-sm);background:var(--ws-accent-soft);display:flex;align-items:center;justify-content:center;color:var(--ws-accent);flex-shrink:0;">${icon('file-text', 22)}</div>`;
+    return `
+      <div class="ws-card" style="margin-bottom:8px;padding:12px 14px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          ${thumb}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--ws-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(u.filename)}</div>
+            <div style="font-size:11px;color:var(--ws-text-muted);">
+              <span class="ws-badge" style="text-transform:uppercase;font-size:9px;letter-spacing:.04em;">${_esc(u.kind)}</span>
+              <span style="margin:0 6px;">·</span>
+              ${_esc(formatSize(u.size_bytes))}
+            </div>
+          </div>
+          <button class="ws-iconbtn" data-act="upload-delete" data-id="${_esc(u.id)}"
+                  title="Supprimer ce fichier" style="color:var(--danger);">
+            ${icon('x', 16)}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Handler suppression ───────────────────────────────────────
+async function _handleDeleteUpload(id) {
+  if (!confirm('Supprimer ce fichier de votre coffre-fort ?')) return;
+  try {
+    await deleteAsset(id);
+    _state.assets.uploads = (_state.assets.uploads || []).filter(u => u.id !== id);
+    _saveDraft();
+    _renderUploadList();
+    _toastOk('Fichier supprimé');
+  } catch (e) {
+    _toastSoon('Suppression impossible : ' + e.message);
+  }
 }
 
 // ── Card cliquable pour toggle "déjà chez Protein" ────────────

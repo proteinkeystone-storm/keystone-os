@@ -39,6 +39,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
+import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
@@ -116,6 +117,18 @@ export default {
       // Visible via `npx wrangler tail` (console.warn).
       if (path === '/api/csp-report' && method === 'POST') {
         return handleCspReport(request, env);
+      }
+
+      // ── Kodex Assets (Sprint Kodex-3.1.5) — upload binaire ─────
+      if (path === '/api/kodex/asset'   && method === 'POST')   return handleUploadAsset(request, env);
+      if (path === '/api/kodex/assets'  && method === 'GET')    return handleListAssets(request, env);
+      if (path.startsWith('/api/kodex/asset/') && method === 'GET') {
+        const aid = path.split('/').pop();
+        return handleGetAsset(request, env, aid);
+      }
+      if (path.startsWith('/api/kodex/asset/') && method === 'DELETE') {
+        const aid = path.split('/').pop();
+        return handleDeleteAsset(request, env, aid);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
