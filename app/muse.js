@@ -74,33 +74,42 @@ function _freshState() {
       program_description: '',
       program_kodex_id: null,
 
-      // ADN du programme
+      // ADN du programme (utilisé par les modes génériques)
       brand_tones: [],         // multi-select chips (ton de marque)
       core_value: '',          // single-select chip (valeur centrale)
       keywords_in: [],         // tags input (mots associés à explorer)
       keywords_out: [],        // tags input (mots à éviter)
 
-      // Curseurs (0-100, défaut centre = 50)
+      // Curseurs génériques (0-100, défaut centre = 50)
       tonality: 50,    // sobre ↔ audacieux
       tone: 50,        // chaleureux ↔ minimaliste
       format: 50,      // slogan ↔ manifeste
       boldness: 30,    // réaliste ↔ décalé
 
-      // Cibles et univers
+      // Cibles et univers (utilisés par plusieurs modes)
       time_budget: '10min',
       targets: [],
       inspirations: [],
 
-      // Contraintes & raffinements
-      main_channel: '',        // chip single-select (print / digital / mix)
-      stage: '',               // chip single-select (launch / midway / endgame)
-      competitors: '',         // champ texte court (programmes voisins)
-
-      // Champ libre extra
+      // Contraintes génériques
+      main_channel: '',
+      stage: '',
+      competitors: '',
       extra: '',
-
-      // Stimulus aléatoire (Surprends-moi)
       stimulus_word: '',
+
+      // ── Champs spécifiques MODE NAMING ──
+      loved_names: [],         // tags : noms aimés par la chargée de com
+      hated_names: [],         // tags : noms détestés (apprentissage négatif)
+      sound_palette: '',       // 'soft' | 'firm' | 'airy' | 'any'
+      syllables_pref: '',      // '1' | '2' | '3' | '4' | 'any'
+      phone_test: '',          // 'crucial' | 'preferred' | 'whatever'
+
+      // ── Champs spécifiques MODE AMBIANCE VISUELLE ──
+      daytime_hour: 60,        // 0-100, slider visuel lever → nuit
+      season: '',              // 'spring' | 'summer' | 'autumn' | 'winter'
+      cinema_ref: '',          // 'editorial' | 'cinematic' | 'documentary' | 'aspirational'
+      calm_energy: 50,         // 0-100, slider calme ↔ énergie
     },
 
     brainstorm: {
@@ -264,6 +273,13 @@ function _onClick(e) {
   if (act === 'pick-channel')      return _pickSingle('main_channel', t.dataset.id);
   if (act === 'pick-stage')        return _pickSingle('stage', t.dataset.id);
   if (act === 'pick-time-budget')  return _pickTimeBudget(t.dataset.id);
+  // Spécifiques NAMING
+  if (act === 'pick-sound')        return _pickSingle('sound_palette', t.dataset.id);
+  if (act === 'pick-syllables')    return _pickSingle('syllables_pref', t.dataset.id);
+  if (act === 'pick-phone-test')   return _pickSingle('phone_test', t.dataset.id);
+  // Spécifiques AMBIANCE
+  if (act === 'pick-season')       return _pickSingle('season', t.dataset.id);
+  if (act === 'pick-cinema-ref')   return _pickSingle('cinema_ref', t.dataset.id);
   if (act === 'remove-tag')        return _removeTag(t.dataset.group, t.dataset.value);
   if (act === 'surprise-me')       return _surpriseMe();
   if (act === 'reset-stimulus')    return _resetStimulus();
@@ -527,16 +543,364 @@ function _viewTopic() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue 2 — CALIBRATE (sticky gauge + sections riches + tags inputs)
+// Vue 2 — CALIBRATE · DISPATCHER PAR MODE
 // ═══════════════════════════════════════════════════════════════
+// Chaque mode a sa propre série de questions ludiques adaptées.
+// Sortir du "même formulaire pour tout" = différencier l'UX :
+//   · Naming   → préférences sonores, syllabes, test du téléphone
+//   · Ambiance → heure du jour, saison, référence cinéma
+//   · ... (autres modes : version générique pour l'instant, à
+//          refondre selon validation utilisateur)
+// La jauge sticky reste commune à tous les modes.
 function _viewCalibrate() {
+  const sticky = _renderStickyGauge();
+  const mode = _state.topic.mode;
+  let body = '';
+  if (mode === 'naming')        body = _viewCalibrateNaming();
+  else if (mode === 'ambiance') body = _viewCalibrateAmbiance();
+  else                          body = _viewCalibrateGeneric();
+  return sticky + body;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Calibrate · MODE NAMING (pilote ludique)
+// ═══════════════════════════════════════════════════════════════
+function _viewCalibrateNaming() {
+  const c = _state.calibrate;
+
+  const SOUNDS = [
+    { id: 'soft',  label: 'Doux & mouillé',  hint: 'Lila · Mélilo · Velléa',  emoji: '🍃' },
+    { id: 'firm',  label: 'Affirmé & dur',   hint: 'Carrare · Sokar · Hertz', emoji: '🪨' },
+    { id: 'airy',  label: 'Aspiré & aérien', hint: 'Halia · Helia · Aerhom',  emoji: '🌬️' },
+    { id: 'any',   label: 'Peu importe',     hint: 'Laissez Muse explorer',   emoji: '🎲' },
+  ];
+  const SYLLABLES = [
+    { id: '1',   label: '1',  hint: 'Coupé' },
+    { id: '2',   label: '2',  hint: 'Coupole' },
+    { id: '3',   label: '3',  hint: 'Cinq Mers' },
+    { id: '4',   label: '4+', hint: 'Les Hauts de…' },
+    { id: 'any', label: '?',  hint: 'Peu importe' },
+  ];
+  const PHONE = [
+    { id: 'crucial',   label: 'Crucial',       hint: 'commerciaux sur le terrain',  emoji: '🎯' },
+    { id: 'preferred', label: 'Souhaitable',   hint: 'utile mais pas bloquant',     emoji: '🤝' },
+    { id: 'whatever',  label: 'Pas important', hint: 'le nom restera surtout écrit',emoji: '🤷' },
+  ];
+
+  return `
+    <span class="ws-eyebrow" style="color:#6366f1;">${icon('edit', 12)} 2 sur 3 · Calibrage Naming</span>
+    <h1 class="ws-h1">Trouvons le bon nom à votre programme</h1>
+    <p class="ws-lead">
+      Quelques préférences pour orienter Muse vers le nom juste.
+      <strong style="color:var(--gold);">Vos goûts personnels comptent</strong> —
+      donnez-lui des noms que vous aimez et que vous n'aimez pas, il apprendra
+      votre sensibilité.
+    </p>
+
+    <!-- ── PROGRAMME (compact) ── -->
+    <div class="ws-card" style="padding:18px 22px;margin-top:18px;">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px 18px;">
+        <div class="ws-field">
+          <label class="ws-label">Nom du programme (de travail)</label>
+          <input class="ws-input" type="text" name="program_name" data-group="calibrate"
+                 value="${_esc(c.program_name || '')}" placeholder="ex. Les Hauts de Bandol — en projet">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label">Localisation</label>
+          <input class="ws-input" type="text" name="program_location" data-group="calibrate"
+                 value="${_esc(c.program_location || '')}" placeholder="ex. Bandol (Var)">
+        </div>
+        <div class="ws-field" style="grid-column:1/-1;">
+          <label class="ws-label">Description en 2 lignes (le coeur du programme)</label>
+          <textarea class="ws-textarea" name="program_description" data-group="calibrate" rows="2"
+                    placeholder="ex. 24 lots T2-T4 duplex avec terrasses cascadées sur la mer, façades pierre claire & bois, cible CSP+ méditerranéens.">${_esc(c.program_description || '')}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ JEU 1 — VOS GOÛTS NAMING ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('sparkles', 14)} Vos goûts naming
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">Muse apprend votre sensibilité</span>
+    </h3>
+    <p style="font-size:13px;color:var(--ws-text-muted);margin:6px 0 12px 0;">
+      Donnez 2-3 noms (de programmes réels ou imaginaires) que vous trouvez beaux,
+      et 2-3 que vous trouvez ratés. Muse les utilisera comme références positives/négatives.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div>
+        <div style="font-size:12.5px;font-weight:700;color:#10b981;margin-bottom:6px;letter-spacing:-.005em;">
+          ${icon('check', 13)} J'aime
+        </div>
+        ${_renderTagsInput('loved_names', c.loved_names, 'ex. Le Cinq, Coupole, Villa Marius', '#10b981')}
+      </div>
+      <div>
+        <div style="font-size:12.5px;font-weight:700;color:#ef4444;margin-bottom:6px;letter-spacing:-.005em;">
+          ${icon('x', 13)} Je n'aime pas
+        </div>
+        ${_renderTagsInput('hated_names', c.hated_names, 'ex. Le Domaine du, Les Jardins de', '#ef4444')}
+      </div>
+    </div>
+
+    <!-- ═══ JEU 2 — SONS À PRIVILÉGIER ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('palette', 14)} Sons à privilégier
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">la musicalité du nom</span>
+    </h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px;">
+      ${SOUNDS.map(s => _bigChip(s, c.sound_palette === s.id, 'pick-sound', '#6366f1')).join('')}
+    </div>
+
+    <!-- ═══ JEU 3 — LONGUEUR IDÉALE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('ruler', 14)} Longueur idéale
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">nombre de syllabes du nom principal</span>
+    </h3>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${SYLLABLES.map(s => `
+        <button data-act="pick-syllables" data-id="${_esc(s.id)}"
+                style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:72px;padding:14px 18px;border-radius:14px;border:1px solid ${c.syllables_pref === s.id ? '#6366f1' : 'var(--ws-border)'};background:${c.syllables_pref === s.id ? 'var(--ws-accent-soft)' : 'transparent'};transition:all 140ms ease;">
+          <span style="font-size:24px;font-weight:900;letter-spacing:-.022em;color:${c.syllables_pref === s.id ? '#6366f1' : 'var(--ws-text)'};font-variant-numeric:tabular-nums;">${_esc(s.label)}</span>
+          <span style="font-size:11px;color:var(--ws-text-muted);margin-top:4px;">${_esc(s.hint)}</span>
+        </button>
+      `).join('')}
+    </div>
+
+    <!-- ═══ JEU 4 — TEST DU TÉLÉPHONE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('help-circle', 14)} Test du téléphone
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">se dire en un souffle, sans répéter ?</span>
+    </h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;">
+      ${PHONE.map(p => _bigChip(p, c.phone_test === p.id, 'pick-phone-test', '#6366f1')).join('')}
+    </div>
+
+    <!-- ═══ UNIVERS D'INSPIRATION (commun) ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('globe', 14)} Univers d'inspiration
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">l'ambiance qui colle au programme</span>
+    </h3>
+    <div data-slot="inspirations" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ═══ MOTS À ÉVITER ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('shield-check', 14)} Mots interdits
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">cassez les clichés</span>
+    </h3>
+    ${_renderTagsInput('keywords_out', c.keywords_out, 'ex. résidence, domaine, élégance, prestige', '#ef4444')}
+
+    <!-- ═══ ALLER PLUS LOIN (dépliable) ═══ -->
+    <details style="margin-top:28px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--ws-text);letter-spacing:-.005em;list-style:none;padding:10px 0;border-top:1px solid var(--ws-border);outline:none;">
+        ${icon('chevron-down', 14)} Aller plus loin (optionnel)
+      </summary>
+      <div class="ws-card" style="padding:22px 26px;margin-top:8px;">
+        <div class="ws-field">
+          <label class="ws-label">Programmes voisins ou concurrents</label>
+          <input class="ws-input" type="text" name="competitors" data-group="calibrate"
+                 value="${_esc(c.competitors || '')}" placeholder="ex. Les Terrasses du Soleil (Sanary)">
+        </div>
+        <div class="ws-field" style="margin-top:14px;">
+          <label class="ws-label">Consignes spéciales libres</label>
+          <textarea class="ws-textarea" name="extra" data-group="calibrate" rows="3"
+                    placeholder="ex. Le promoteur préfère un nom court. Cible locale (Var). Éviter le ton cosmopolite.">${_esc(c.extra || '')}</textarea>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Calibrate · MODE AMBIANCE VISUELLE (pilote ludique)
+// ═══════════════════════════════════════════════════════════════
+function _viewCalibrateAmbiance() {
+  const c = _state.calibrate;
+
+  const SEASONS = [
+    { id: 'spring', label: 'Printemps',   hint: 'verdure tendre, lumière claire', emoji: '🌸',
+      bg: 'linear-gradient(135deg, #86efac 0%, #fde68a 100%)' },
+    { id: 'summer', label: 'Été',         hint: 'soleil franc, ciel azur',        emoji: '☀️',
+      bg: 'linear-gradient(135deg, #fcd34d 0%, #f97316 100%)' },
+    { id: 'autumn', label: 'Automne',     hint: 'lumière dorée, palette chaude',  emoji: '🍂',
+      bg: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)' },
+    { id: 'winter', label: 'Hiver',       hint: 'lumière froide, atmosphère épurée', emoji: '❄️',
+      bg: 'linear-gradient(135deg, #93c5fd 0%, #e0e7ff 100%)' },
+  ];
+  const CINEMA = [
+    { id: 'editorial',     label: 'Éditorial sobre',       hint: 'Dezeen, AD · sans pose, composition rigoureuse', emoji: '📐' },
+    { id: 'cinematic',     label: 'Cinématique chaud',     hint: 'anamorphique, golden hour, profondeur de champ',  emoji: '🎥' },
+    { id: 'documentary',   label: 'Documentaire',          hint: 'lumière naturelle, instants saisis, sans artifice', emoji: '📸' },
+    { id: 'aspirational',  label: 'Aspirational glossy',   hint: 'haute saturation, mode magazine luxe',            emoji: '✨' },
+  ];
+
+  const dayHourLabel = c.daytime_hour < 20 ? 'Lever du soleil'
+                    : c.daytime_hour < 40 ? 'Matinée claire'
+                    : c.daytime_hour < 60 ? 'Plein midi'
+                    : c.daytime_hour < 80 ? 'Golden hour'
+                    : c.daytime_hour < 95 ? 'Crépuscule'
+                    :                       'Nuit signature';
+
+  return `
+    <span class="ws-eyebrow" style="color:#10b981;">${icon('palette', 12)} 2 sur 3 · Calibrage Ambiance</span>
+    <h1 class="ws-h1">Dessinons l'univers visuel cible</h1>
+    <p class="ws-lead">
+      Quelques choix pour cadrer la direction artistique. Ces réponses seront
+      transmises à Muse pour générer des propositions cohérentes que vous
+      passerez à votre studio 3D — <strong style="color:var(--gold);">vraies
+      références, pas le projet lui-même</strong>.
+    </p>
+
+    <!-- ── PROGRAMME (compact) ── -->
+    <div class="ws-card" style="padding:18px 22px;margin-top:18px;">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px 18px;">
+        <div class="ws-field">
+          <label class="ws-label">Nom du programme</label>
+          <input class="ws-input" type="text" name="program_name" data-group="calibrate"
+                 value="${_esc(c.program_name || '')}" placeholder="ex. Les Hauts de Bandol">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label">Localisation</label>
+          <input class="ws-input" type="text" name="program_location" data-group="calibrate"
+                 value="${_esc(c.program_location || '')}" placeholder="ex. Bandol (Var)">
+        </div>
+        <div class="ws-field" style="grid-column:1/-1;">
+          <label class="ws-label">Description visuelle en 2 lignes (volumes, matériaux, paysage)</label>
+          <textarea class="ws-textarea" name="program_description" data-group="calibrate" rows="2"
+                    placeholder="ex. Terrasses cascadées avec vue sur la baie, façades pierre claire & bois, jardin paysagé méditerranéen.">${_esc(c.program_description || '')}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ JEU 1 — HEURE DE LA JOURNÉE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('eye', 14)} Heure de la journée idéale
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">la lumière qui sert le mieux le programme</span>
+    </h3>
+    <div class="ws-card" style="padding:22px 26px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+        <span style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ws-text-muted);">Position</span>
+        <span style="font-size:15px;font-weight:800;letter-spacing:-.018em;color:#10b981;">${_esc(dayHourLabel)}</span>
+      </div>
+      <div style="position:relative;height:46px;border-radius:14px;overflow:hidden;background:linear-gradient(90deg, #fde68a 0%, #fbbf24 18%, #ffffff 38%, #fcd34d 60%, #f97316 78%, #312e81 92%, #0f172a 100%);">
+        <input type="range" min="0" max="100" step="1" value="${c.daytime_hour ?? 60}"
+               name="daytime_hour" data-group="calibrate"
+               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        <div style="position:absolute;top:0;bottom:0;left:${c.daytime_hour ?? 60}%;transform:translateX(-50%);width:4px;background:#fff;border-radius:2px;box-shadow:0 0 0 2px rgba(0,0,0,.2), 0 2px 6px rgba(0,0,0,.3);pointer-events:none;"></div>
+        <div style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;opacity:.85;">🌅</div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:14px;pointer-events:none;opacity:.85;">☀️</div>
+        <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;opacity:.85;">🌙</div>
+      </div>
+    </div>
+
+    <!-- ═══ JEU 2 — SAISON PRINCIPALE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('package', 14)} Saison principale
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">l'atmosphère climatique cible</span>
+    </h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;">
+      ${SEASONS.map(s => {
+        const selected = c.season === s.id;
+        return `
+          <button data-act="pick-season" data-id="${_esc(s.id)}"
+                  style="all:unset;cursor:pointer;display:block;padding:0;border-radius:14px;overflow:hidden;border:2px solid ${selected ? '#10b981' : 'transparent'};box-shadow:${selected ? '0 8px 24px rgba(16,185,129,.25)' : '0 2px 6px rgba(0,0,0,.08)'};transition:all 180ms ease;">
+            <div style="background:${s.bg};padding:24px 18px;text-align:center;">
+              <div style="font-size:32px;line-height:1;margin-bottom:6px;">${s.emoji}</div>
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.012em;color:#0f172a;">${_esc(s.label)}</div>
+            </div>
+            <div style="background:var(--ws-surface);padding:10px 14px;font-size:11.5px;color:var(--ws-text-muted);text-align:center;border-top:1px solid var(--ws-border);">
+              ${_esc(s.hint)}
+            </div>
+          </button>
+        `;
+      }).join('')}
+    </div>
+
+    <!-- ═══ JEU 3 — RÉFÉRENCE CINÉMATOGRAPHIQUE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('image', 14)} Référence visuelle
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">le style à imiter</span>
+    </h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;">
+      ${CINEMA.map(r => _bigChip(r, c.cinema_ref === r.id, 'pick-cinema-ref', '#10b981')).join('')}
+    </div>
+
+    <!-- ═══ JEU 4 — ÉMOTION DOMINANTE ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('sparkles', 14)} Émotion dominante
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">ce que doit ressentir l'acheteur en voyant l'image</span>
+    </h3>
+    <div class="ws-card" style="padding:22px 26px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:22px;">🧘</span>
+        <input type="range" min="0" max="100" step="1" value="${c.calm_energy ?? 50}"
+               name="calm_energy" data-group="calibrate"
+               style="flex:1;accent-color:#10b981;height:6px;cursor:pointer;">
+        <span style="font-size:22px;">⚡</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ws-text-muted);margin-top:6px;">
+        <span>Calme · contemplatif</span>
+        <span>${c.calm_energy ?? 50} / 100</span>
+        <span>Énergie · vibrant</span>
+      </div>
+    </div>
+
+    <!-- ═══ CIBLES (commun) ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('check-square', 14)} Cible humaine présente dans la scène
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">silhouette abstraite, jamais le projet réel</span>
+    </h3>
+    <div data-slot="targets" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ═══ MOTS À ÉVITER ═══ -->
+    <h3 class="ws-h3" style="margin-top:32px;">
+      ${icon('shield-check', 14)} Codes visuels à éviter
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">vocabulaire visuel banni</span>
+    </h3>
+    ${_renderTagsInput('keywords_out', c.keywords_out, 'ex. piscine flashy, mobilier rococo, palmiers tropicaux', '#ef4444')}
+
+    <!-- ═══ ALLER PLUS LOIN ═══ -->
+    <details style="margin-top:28px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--ws-text);letter-spacing:-.005em;list-style:none;padding:10px 0;border-top:1px solid var(--ws-border);outline:none;">
+        ${icon('chevron-down', 14)} Aller plus loin (optionnel)
+      </summary>
+      <div class="ws-card" style="padding:22px 26px;margin-top:8px;">
+        <div class="ws-field">
+          <label class="ws-label">Consignes spéciales libres</label>
+          <textarea class="ws-textarea" name="extra" data-group="calibrate" rows="3"
+                    placeholder="ex. Vue mer obligatoire dans toutes les références. Le studio aime les palettes minérales. Éviter tout cliché 'côte d'azur années 80'.">${_esc(c.extra || '')}</textarea>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+// ── Mini-composant : big chip (avec emoji + hint) ─────────────
+function _bigChip(opt, selected, act, accent) {
+  return `
+    <button data-act="${act}" data-id="${_esc(opt.id)}"
+            style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px 16px;border-radius:12px;background:${selected ? accent + '14' : 'var(--ws-surface)'};border:1px solid ${selected ? accent : 'var(--ws-border)'};transition:all 160ms ease;${selected ? `box-shadow: 0 0 0 1px ${accent} inset;` : ''}">
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${opt.emoji ? `<span style="font-size:18px;">${opt.emoji}</span>` : ''}
+        <span style="font-size:13.5px;font-weight:700;letter-spacing:-.005em;color:${selected ? accent : 'var(--ws-text)'};">${_esc(opt.label)}</span>
+        ${selected ? `<span style="margin-left:auto;color:${accent};">${icon('check', 13)}</span>` : ''}
+      </div>
+      ${opt.hint ? `<span style="font-size:11.5px;color:var(--ws-text-muted);line-height:1.4;">${_esc(opt.hint)}</span>` : ''}
+    </button>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Calibrate · GÉNÉRIQUE (fallback pour les 6 autres modes)
+// ═══════════════════════════════════════════════════════════════
+function _viewCalibrateGeneric() {
   const c = _state.calibrate;
   const stimulus = c.stimulus_word;
 
   return `
-    <!-- ── JAUGE STICKY TOP (toujours visible) ── -->
-    ${_renderStickyGauge()}
-
     <span class="ws-eyebrow">${icon('sliders', 12)} 2 sur 3 · Le calibrage</span>
     <h1 class="ws-h1">Posez votre brief, débloquez vos idées</h1>
     <p class="ws-lead">
@@ -545,6 +909,17 @@ function _viewCalibrate() {
       <strong style="color:var(--gold);">Vous n'êtes pas obligé·e de tout remplir</strong>&nbsp;—
       cliquez aussi sur 🎲 <em>Surprends-moi</em> pour débloquer la créativité.
     </p>
+
+    <div class="ws-card" style="margin-top:18px;padding:14px 18px;background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.3);">
+      <p style="margin:0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+        ${icon('sparkles', 13)}
+        <strong style="color:var(--ws-text);">Mode pilote</strong> · Les modes
+        <strong>Naming</strong> et <strong>Ambiance visuelle</strong> ont déjà
+        leur calibrage ludique dédié (mini-jeux, questions spécifiques). Les autres
+        modes (Positionnement, Punchlines, Marketing, Objections, Libre, Mix-tout)
+        utilisent encore ce formulaire générique — refonte ludique au prochain sprint.
+      </p>
+    </div>
 
     <!-- ═══ SECTION 1 — LE PROGRAMME ══════════════════════════ -->
     <h3 class="ws-h3" style="margin-top:28px;">

@@ -54,46 +54,54 @@ export async function getChannels()     { return (await loadModes()).channels ||
 export async function getStages()       { return (await loadModes()).stages || []; }
 
 // ── Calcul du score "Qualité du brief" (0-100) ────────────────
-// Utilisé par la jauge live (sticky en haut) de la vue Calibrate pour
-// donner un feedback visuel constant. Plus le score est élevé, plus le
-// brainstorm IA produira des idées affûtées. Distribution :
-//   · Programme    35 pts (nom 15 / lieu 5 / description 15)
-//   · ADN          25 pts (ton 10 / valeur 10 / mots-clés in 5)
-//   · Calibrage    25 pts (cibles 10 / inspirations 5 / sliders 5 / temps 5)
-//   · Raffinements 15 pts (mots-clés out 5 / canal 5 / stade 5)
+// Score mode-aware : chaque mode a sa propre liste de champs qui
+// comptent. Distribution générale (chaque mode peut atteindre 100) :
+//   · Programme (commun)    30 pts
+//   · Champs spécifiques    60 pts (variables par mode)
+//   · Inspirations + mots à éviter (commun)  10 pts
 export function computeBriefQualityScore(state) {
   const c = state.calibrate || {};
+  const mode = state.topic?.mode || 'generic';
   let score = 0;
 
-  // ── Programme · 35 pts ─────────────────────────────────────
-  if (c.program_name      && c.program_name.trim().length      > 1)  score += 15;
-  if (c.program_location  && c.program_location.trim().length  > 1)  score += 5;
-  if (c.program_description && c.program_description.trim().length > 10) score += 15;
+  // ── Programme · 30 pts (commun à tous les modes) ──────────
+  if (c.program_name        && c.program_name.trim().length > 1)         score += 15;
+  if (c.program_location    && c.program_location.trim().length > 1)     score += 5;
+  if (c.program_description && c.program_description.trim().length > 10) score += 10;
 
-  // ── ADN · 25 pts ───────────────────────────────────────────
-  const brandTones  = Array.isArray(c.brand_tones)  ? c.brand_tones  : [];
-  const keywordsIn  = Array.isArray(c.keywords_in)  ? c.keywords_in  : [];
-  if (brandTones.length >= 1)  score += 10;
-  if (c.core_value)            score += 10;
-  if (keywordsIn.length >= 2)  score += 5;
-
-  // ── Calibrage · 25 pts ─────────────────────────────────────
-  const targets      = Array.isArray(c.targets)      ? c.targets      : [];
-  const inspirations = Array.isArray(c.inspirations) ? c.inspirations : [];
-  if (targets.length      >= 1) score += 10;
-  if (inspirations.length >= 1) score += 5;
-  const sliderDefault = 50;
-  const sliders = ['tonality', 'tone', 'format', 'boldness'];
-  if (sliders.some(s => Math.abs((c[s] ?? sliderDefault) - sliderDefault) > 10)) {
-    score += 5;
+  // ── Champs spécifiques par mode · 60 pts ──────────────────
+  if (mode === 'naming') {
+    if ((c.loved_names || []).length >= 1) score += 12;
+    if ((c.hated_names || []).length >= 1) score += 10;
+    if (c.sound_palette)                   score += 12;
+    if (c.syllables_pref)                  score += 13;
+    if (c.phone_test)                      score += 13;
+  } else if (mode === 'ambiance') {
+    if (c.daytime_hour && c.daytime_hour !== 60)  score += 12;
+    if (c.season)                                 score += 15;
+    if (c.cinema_ref)                             score += 15;
+    if (c.calm_energy && c.calm_energy !== 50)    score += 8;
+    if ((c.targets || []).length >= 1)            score += 10;
+  } else {
+    // Mode générique : ADN + cibles + raffinements (ancien score)
+    const brandTones = Array.isArray(c.brand_tones) ? c.brand_tones : [];
+    if (brandTones.length >= 1)            score += 12;
+    if (c.core_value)                      score += 12;
+    if ((c.targets || []).length >= 1)     score += 10;
+    if ((c.keywords_in || []).length >= 2) score += 6;
+    if (c.main_channel)                    score += 5;
+    if (c.stage)                           score += 5;
+    const sliderDefault = 50;
+    const sliders = ['tonality', 'tone', 'format', 'boldness'];
+    if (sliders.some(s => Math.abs((c[s] ?? sliderDefault) - sliderDefault) > 10)) {
+      score += 5;
+    }
+    if (c.time_budget && c.time_budget !== '10min') score += 5;
   }
-  if (c.time_budget && c.time_budget !== '10min') score += 5;
 
-  // ── Raffinements · 15 pts ──────────────────────────────────
-  const keywordsOut = Array.isArray(c.keywords_out) ? c.keywords_out : [];
-  if (keywordsOut.length >= 1) score += 5;
-  if (c.main_channel)          score += 5;
-  if (c.stage)                 score += 5;
+  // ── Communs (inspirations + mots à éviter) · 10 pts ────────
+  if ((c.inspirations || []).length >= 1) score += 5;
+  if ((c.keywords_out || []).length >= 1) score += 5;
 
   return Math.min(100, score);
 }
@@ -107,16 +115,30 @@ export function getQualityTier(score) {
 }
 
 // ── Message d'encouragement contextuel selon l'état du brief ──
-// Pousse l'utilisateur·trice à compléter ce qui manque le plus,
-// sans culpabiliser. Affiché à droite de la jauge sticky.
+// Pousse à compléter ce qui manque le plus, adapté au mode actif.
+// Affiché sous la barre de progression sticky.
 export function getEncouragementMessage(state) {
   const c = state.calibrate || {};
+  const mode = state.topic?.mode || 'generic';
   const missing = [];
+
+  // Champs communs prioritaires
   if (!c.program_name || c.program_name.trim().length < 2)            missing.push("le nom du programme");
   if (!c.program_description || c.program_description.trim().length < 10) missing.push("une description en 2-3 lignes");
-  if (!c.core_value)                                                   missing.push("la valeur centrale");
-  if (!(Array.isArray(c.brand_tones) && c.brand_tones.length))         missing.push("le ton de marque");
-  if (!(Array.isArray(c.targets) && c.targets.length))                 missing.push("au moins une cible acheteur");
+
+  // Champs spécifiques par mode
+  if (mode === 'naming') {
+    if (!(c.loved_names || []).length && !(c.hated_names || []).length) missing.push("3 noms que vous aimez ou détestez");
+    if (!c.sound_palette)   missing.push("la palette de sons");
+    if (!c.syllables_pref)  missing.push("le nombre de syllabes");
+  } else if (mode === 'ambiance') {
+    if (!c.season)          missing.push("la saison principale");
+    if (!c.cinema_ref)      missing.push("une référence cinématographique");
+  } else {
+    if (!c.core_value)                                           missing.push("la valeur centrale");
+    if (!(Array.isArray(c.brand_tones) && c.brand_tones.length)) missing.push("le ton de marque");
+    if (!(Array.isArray(c.targets) && c.targets.length))         missing.push("au moins une cible acheteur");
+  }
 
   if (missing.length === 0) {
     return { type: 'ready', text: "Brief excellent — le brainstorm va être affûté." };
