@@ -17,10 +17,11 @@
     html { scroll-behavior: smooth; }
 
     :root {
-      --pf-brand:   #0a2741;
-      --pf-brand-2: #0d3254;
-      --pf-accent:  #c9b48a;
-      --pf-accent-2:#a8895a;
+      --pf-brand:    #0a2741;
+      --pf-brand-2:  #0d3254;
+      --pf-brand-bg: #0a2741;
+      --pf-accent:   #c9b48a;
+      --pf-accent-2: #a8895a;
       --pf-body:    #1a2a3a;
       --pf-muted:   #6b7a8d;
       --pf-light:   #f4f6f9;
@@ -75,7 +76,7 @@
     /* ── Header sticky ──────────────────────────────────── */
     .pf-header {
       position: sticky; top: 0; z-index: 50;
-      background: var(--pf-brand);
+      background: var(--pf-brand-bg);
       padding: 0 20px;
       box-shadow: 0 2px 16px rgba(0, 0, 0, .15);
     }
@@ -161,7 +162,7 @@
       box-shadow: 0 1px 8px rgba(0, 0, 0, .06);
     }
     .pf-section-head {
-      background: var(--pf-brand);
+      background: var(--pf-brand-bg);
       padding: 14px 20px;
       display: flex; align-items: center; gap: 12px;
     }
@@ -633,7 +634,7 @@
 
     /* ── Submit ─────────────────────────────────────────── */
     .pf-submit-section {
-      background: var(--pf-brand);
+      background: var(--pf-brand-bg);
       border-radius: 16px;
       padding: 24px 22px;
       margin-top: 8px;
@@ -979,7 +980,15 @@
       const root = document.documentElement;
       if (meta.brand_color)  root.style.setProperty('--pf-brand', meta.brand_color);
       if (meta.brand_accent) root.style.setProperty('--pf-accent', meta.brand_accent);
-      // theme-color iOS
+      // Si un gradient est défini, on l'utilise pour fond/header/CTA.
+      // Sinon on retombe sur la couleur unie (brand_color).
+      if (meta.brand_gradient) {
+        root.style.setProperty('--pf-brand-bg', meta.brand_gradient);
+      } else {
+        root.style.setProperty('--pf-brand-bg', meta.brand_color || '#0a2741');
+      }
+      // theme-color iOS : toujours une couleur unie (le gradient n'est
+      // pas supporté par la barre d'adresse iOS)
       const themeMeta = document.querySelector('[data-slot="theme"]');
       if (themeMeta && meta.brand_color) themeMeta.setAttribute('content', meta.brand_color);
     }

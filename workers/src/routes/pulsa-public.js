@@ -60,6 +60,7 @@ function _toPublicConfig(row) {
       logo_data_url: meta.logo_data_url || null,
       logo_url: meta.logo_url || null,
       brand_color: meta.brand_color || '#0a2741',
+      brand_gradient: meta.brand_gradient || null,
       brand_accent: meta.brand_accent || '#c9b48a',
       anonymous: meta.anonymous !== false,
     },

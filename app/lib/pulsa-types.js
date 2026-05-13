@@ -308,7 +308,11 @@ export function newForm() {
       // Si les deux sont remplis, logo_data_url prend la priorité au rendu.
       logo_data_url: null,
       logo_url: null,
+      // brand_color reste utilisé comme fallback (color picker manuel) ;
+      // si brand_gradient est défini, il prend la priorité au rendu pour
+      // le fond/header/CTA. brand_accent contraste avec les deux modes.
       brand_color: '#0a2741',
+      brand_gradient: null,
       brand_accent: '#c9b48a',
       anonymous: true,
       intro: '',

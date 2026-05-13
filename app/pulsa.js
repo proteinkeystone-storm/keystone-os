@@ -269,7 +269,8 @@ function _onClick(e) {
   if (act === 'copy-field-id')       return _copyFieldId(t.dataset.field);
 
   // Étapes Apparence / Livraison
-  if (act === 'set-brand-preset') return _setBrandPreset(t.dataset.color, t.dataset.accent);
+  if (act === 'set-brand-preset') return _setBrandPreset(t.dataset.gradient, t.dataset.color, t.dataset.accent);
+  if (act === 'clear-gradient')   return _clearGradient();
   if (act === 'set-ttl')          return _setTTL(parseInt(t.dataset.value, 10));
   if (act === 'add-recipient')    return _addRecipient();
   if (act === 'delete-recipient') return _deleteRecipient(t.dataset.email);
@@ -872,9 +873,16 @@ function _findFieldById(fieldId) {
 // ═══════════════════════════════════════════════════════════════
 // Actions Apparence / Livraison
 // ═══════════════════════════════════════════════════════════════
-function _setBrandPreset(color, accent) {
+function _setBrandPreset(gradient, color, accent) {
+  _state.form.meta.brand_gradient = gradient || null;
   _state.form.meta.brand_color = color;
   _state.form.meta.brand_accent = accent;
+  _renderMain();
+  _saveDraft();
+}
+
+function _clearGradient() {
+  _state.form.meta.brand_gradient = null;
   _renderMain();
   _saveDraft();
 }
@@ -1397,13 +1405,17 @@ function _renderPlaceholder(main, label, subline) {
 // ═══════════════════════════════════════════════════════════════
 function _renderAppearance(main) {
   const m = _state.form.meta;
+  // Palettes prédéfinies (dégradés webgradients.com retravaillés).
+  // Chaque palette définit son gradient CSS + une couleur d'accent
+  // bien contrastée + une couleur unie de fallback (theme-color iOS,
+  // mode mail sans support gradient).
   const presets = [
-    { name: 'Navy & Or',     color: '#0a2741', accent: '#c9b48a' },
-    { name: 'Indigo Pulsa',  color: '#131826', accent: '#6366f1' },
-    { name: 'Forêt',         color: '#0f3a2d', accent: '#86c6a4' },
-    { name: 'Bordeaux',      color: '#3a0f1f', accent: '#e0a8b6' },
-    { name: 'Graphite & Or', color: '#1a1a1a', accent: '#d4a574' },
-    { name: 'Blanc & Noir',  color: '#1a1a1a', accent: '#ffffff' },
+    { name: 'Navy & Or',     gradient: 'linear-gradient(135deg, #0a2741 0%, #1c4870 100%)', color: '#0a2741', accent: '#c9b48a' },
+    { name: 'Indigo Pulsa',  gradient: 'linear-gradient(135deg, #131826 0%, #2b3252 100%)', color: '#131826', accent: '#a5b4fc' },
+    { name: 'Aurore',        gradient: 'linear-gradient(135deg, #141e30 0%, #5b347a 100%)', color: '#1f1c3d', accent: '#fbbf24' },
+    { name: 'Émeraude',      gradient: 'linear-gradient(135deg, #0f3d3e 0%, #1a7a5e 100%)', color: '#0f3d3e', accent: '#fcd34d' },
+    { name: 'Bordeaux',      gradient: 'linear-gradient(135deg, #2d0a14 0%, #6b1431 100%)', color: '#2d0a14', accent: '#f4a261' },
+    { name: 'Graphite & Or', gradient: 'linear-gradient(135deg, #1a1a1a 0%, #383838 100%)', color: '#1a1a1a', accent: '#d4a574' },
   ];
 
   main.innerHTML = `
@@ -1481,27 +1493,42 @@ function _renderAppearance(main) {
 
     <section class="pulsa-block">
       <h3 class="pulsa-block-title">Palette</h3>
-      <p class="pulsa-block-hint">Sélectionnez une palette prédéfinie ou affinez à la main.</p>
+      <p class="pulsa-block-hint">Sélectionnez une palette prédéfinie (dégradé + accent) ou affinez à la main.</p>
       <div class="pulsa-palette-grid">
         ${presets.map(p => {
-          const active = m.brand_color === p.color && m.brand_accent === p.accent;
+          const active = (m.brand_gradient === p.gradient) || (!m.brand_gradient && m.brand_color === p.color && m.brand_accent === p.accent);
           return `
             <button class="pulsa-palette-card ${active ? 'is-on' : ''}"
                     data-act="set-brand-preset"
+                    data-gradient="${_escape(p.gradient)}"
                     data-color="${p.color}" data-accent="${p.accent}"
                     title="${p.name}">
-              <span class="pulsa-palette-swatches">
-                <span style="background:${p.color}"></span>
-                <span style="background:${p.accent}"></span>
+              <span class="pulsa-palette-swatches pulsa-palette-swatches-gradient">
+                <span class="pulsa-palette-gradient" style="background:${p.gradient}"></span>
+                <span class="pulsa-palette-accent" style="background:${p.accent}"></span>
               </span>
               <span class="pulsa-palette-name">${p.name}</span>
             </button>
           `;
         }).join('')}
       </div>
+
+      ${m.brand_gradient ? `
+        <div class="pulsa-gradient-active">
+          <span class="pulsa-gradient-preview" style="background:${_escape(m.brand_gradient)}"></span>
+          <div class="pulsa-gradient-info">
+            <span class="pulsa-fld-label">Dégradé actif</span>
+            <code class="pulsa-gradient-code">${_escape(m.brand_gradient)}</code>
+          </div>
+          <button class="pulsa-icon-btn pulsa-icon-btn-danger" data-act="clear-gradient" title="Retirer le dégradé (revenir à une couleur unie)">
+            ${icon('x', 14)}
+          </button>
+        </div>
+      ` : ''}
+
       <div class="pulsa-color-grid">
         <label class="pulsa-fld">
-          <span class="pulsa-fld-label">Couleur principale (fond / header)</span>
+          <span class="pulsa-fld-label">${m.brand_gradient ? 'Couleur de secours (mail, theme iOS)' : 'Couleur principale (fond / header)'}</span>
           <span class="pulsa-color-row">
             <input type="color"
                    data-bind="form.meta.brand_color"

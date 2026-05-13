@@ -24,6 +24,7 @@ export const DEMO_VEFA_FORM = {
     logo_data_url: null,
     logo_url: null,
     brand_color: "#0a2741",
+    brand_gradient: "linear-gradient(135deg, #0a2741 0%, #1c4870 100%)",
     brand_accent: "#c9b48a",
     anonymous: false,
     ttl_days: 30,
