@@ -165,14 +165,26 @@ textarea.pulsa-input {
   justify-content: center;
 }
 
-/* ── Champs ────────────────────────────────────────────── */
+/* ── Champs ──────────────────────────────────────────────
+   Grille 12 colonnes pour permettre les champs côte à côte.
+   Les widths du builder mappent sur des "span N" :
+     full → 12   3/4 → 9   1/2 → 6   1/4 → 3
+   Deux champs en 1/2 s'alignent (6+6=12). Trois 1/4 tiennent
+   à 3 (3×3=9, 3 cols vides à droite). Le wrap est naturel.
+   Sur petit écran (< 720px) la grille collapse en 1 colonne. */
 .pulsa-fields {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
   padding: 10px 0;
 }
+@media (min-width: 720px) {
+  .pulsa-fields {
+    grid-template-columns: repeat(12, 1fr);
+  }
+}
 .pulsa-fields-empty {
+  grid-column: 1 / -1;
   margin: 0;
   padding: 16px;
   text-align: center;
@@ -186,6 +198,7 @@ textarea.pulsa-input {
 }
 
 .pulsa-field {
+  grid-column: 1 / -1; /* défaut mobile : pleine largeur */
   background: rgba(255, 255, 255, .025);
   border: 1px solid var(--ws-border, var(--bd));
   border-radius: 8px;
@@ -193,12 +206,14 @@ textarea.pulsa-input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0; /* permet aux enfants de rétrécir */
 }
 .pulsa-field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap; /* en 1/4 ou 1/2, les chips passent à la ligne */
 }
 .pulsa-field-type {
   display: inline-flex;
@@ -340,15 +355,17 @@ textarea.pulsa-input {
   100% { transform: scale(1); }
 }
 
-/* ── Largeur des champs ─────────────────────────────────
-   Le builder applique max-width au wrapper pour matérialiser
-   visuellement la largeur que le champ aura dans le rendu
-   public. Le layout reste en colonne en V1 ; les champs
-   côte à côte arrivent en P2A.4. */
-.pulsa-field[data-width="full"] { max-width: 100%; }
-.pulsa-field[data-width="3/4"]  { max-width: 75%; }
-.pulsa-field[data-width="1/2"]  { max-width: 50%; }
-.pulsa-field[data-width="1/4"]  { max-width: 30%; }
+/* ── Largeur des champs (grille 12 colonnes) ────────────
+   Au-dessus de 720px, chaque champ occupe N colonnes selon
+   son `data-width`. La grille flex-wrap automatique aligne
+   les champs côte à côte quand leurs widths additionnés
+   tiennent sur 12 colonnes. */
+@media (min-width: 720px) {
+  .pulsa-field[data-width="full"] { grid-column: span 12; }
+  .pulsa-field[data-width="3/4"]  { grid-column: span 9; }
+  .pulsa-field[data-width="1/2"]  { grid-column: span 6; }
+  .pulsa-field[data-width="1/4"]  { grid-column: span 3; }
+}
 
 /* ── Boutons icône ─────────────────────────────────────── */
 .pulsa-icon-btn {
