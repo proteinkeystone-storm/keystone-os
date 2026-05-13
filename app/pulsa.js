@@ -257,6 +257,11 @@ function _onClick(e) {
   if (act === 'set-currency')     return _setCurrency(t.dataset.field, t.dataset.value);
   if (act === 'toggle-network')   return _toggleNetwork(t.dataset.field, t.dataset.network);
 
+  // Logique conditionnelle (P2B.1 — visible_if)
+  if (act === 'enable-visible-if')  return _enableVisibleIf(t.dataset.field);
+  if (act === 'disable-visible-if') return _disableVisibleIf(t.dataset.field);
+  if (act === 'copy-field-id')      return _copyFieldId(t.dataset.field);
+
   // Étapes Apparence / Livraison
   if (act === 'set-brand-preset') return _setBrandPreset(t.dataset.color, t.dataset.accent);
   if (act === 'set-ttl')          return _setTTL(parseInt(t.dataset.value, 10));
@@ -720,6 +725,49 @@ function _toggleNetwork(fieldId, networkId) {
   if (net) net.enabled = !net.enabled;
   _renderAside();
   _saveDraft();
+}
+
+// ── Logique conditionnelle ───────────────────────────────────
+function _enableVisibleIf(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  // Source par défaut : 1er autre champ disponible
+  const others = _otherFields(fieldId);
+  found.field.visible_if = {
+    field: others[0]?.id || '',
+    op: 'eq',
+    value: '',
+  };
+  _renderAside();
+  _saveDraft();
+}
+
+function _disableVisibleIf(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  found.field.visible_if = null;
+  _renderAside();
+  _saveDraft();
+}
+
+function _copyFieldId(fieldId) {
+  try {
+    navigator.clipboard.writeText(fieldId);
+  } catch {}
+}
+
+/**
+ * Retourne tous les champs du formulaire sauf le champ courant.
+ * Utilisé comme liste de sources possibles pour visible_if.
+ */
+function _otherFields(fieldId) {
+  const out = [];
+  for (const sec of _state.form.sections) {
+    for (const f of sec.fields) {
+      if (f.id !== fieldId) out.push(f);
+    }
+  }
+  return out;
 }
 
 function _findFieldById(fieldId) {
@@ -1736,7 +1784,7 @@ function _renderFieldEditor(section, field) {
 
 /**
  * Bloc commun à tous les types : label (visible aussi dans le main),
- * texte d'aide, requis, largeur.
+ * texte d'aide, requis, largeur, ID technique pour URL params.
  */
 function _editorCommonBlock(sid, field) {
   return `
@@ -1755,6 +1803,124 @@ function _editorCommonBlock(sid, field) {
                data-bind="field.${sid}.${field.id}.help"
                value="${_escape(field.help || '')}">
       </label>
+      <div class="pulsa-fld pulsa-fld-id">
+        <span class="pulsa-fld-label">ID technique (pré-remplissage URL)</span>
+        <div class="pulsa-fld-id-row">
+          <code class="pulsa-fld-id-code">${_escape(field.id)}</code>
+          <button class="pulsa-icon-btn" data-act="copy-field-id" data-field="${field.id}" title="Copier l'ID">
+            ${icon('copy', 12)}
+          </button>
+        </div>
+        <span class="pulsa-fld-help-inline">Permet de pré-remplir ce champ via l'URL :
+          <code>?${_escape(field.id)}=valeur</code></span>
+      </div>
+    </section>
+
+    ${_editorVisibleIfBlock(sid, field)}
+  `;
+}
+
+/**
+ * Bloc "Visibilité conditionnelle" : si la condition est définie,
+ * affiche les 3 selects (champ source / opérateur / valeur) ;
+ * sinon, propose un bouton pour ajouter la condition.
+ */
+function _editorVisibleIfBlock(sid, field) {
+  const vif = field.visible_if;
+  const others = _otherFields(field.id);
+
+  if (others.length === 0) {
+    return `
+      <section class="pulsa-editor-section">
+        <h4 class="pulsa-editor-section-title">Visibilité conditionnelle</h4>
+        <p class="pulsa-editor-hint">Ajoutez d'abord d'autres champs au formulaire pour pouvoir y conditionner l'affichage de celui-ci.</p>
+      </section>
+    `;
+  }
+
+  if (!vif) {
+    return `
+      <section class="pulsa-editor-section">
+        <h4 class="pulsa-editor-section-title">Visibilité conditionnelle</h4>
+        <p class="pulsa-editor-hint">Afficher ce champ uniquement si la réponse à un autre champ correspond à un critère.</p>
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="enable-visible-if" data-field="${field.id}">
+          ${icon('plus', 14)}<span>Ajouter une condition</span>
+        </button>
+      </section>
+    `;
+  }
+
+  const sourceField = others.find(f => f.id === vif.field) || others[0];
+  const sourceDef = FIELD_TYPES[sourceField?.type];
+  const showValue = !['truthy', 'falsy'].includes(vif.op);
+
+  // Si la source est un chips avec des choix, on offre un select pour la valeur
+  // (sinon on garde un input texte libre).
+  let valueControl = '';
+  if (showValue) {
+    if (sourceField?.type === 'chips' || sourceField?.type === 'yes-no') {
+      const choices = sourceField.type === 'yes-no'
+        ? [{ id: 'yes', label: sourceField.options?.yes_label || 'Oui' },
+           { id: 'no',  label: sourceField.options?.no_label  || 'Non' }]
+        : (sourceField.options?.choices || []);
+      valueControl = `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Valeur attendue</span>
+          <select class="pulsa-input" data-bind="field.${sid}.${field.id}.visible_if.value">
+            <option value="">— Choisir —</option>
+            ${choices.map(c => `
+              <option value="${_escape(c.id)}" ${String(vif.value) === String(c.id) ? 'selected' : ''}>
+                ${_escape(c.label || c.id)}
+              </option>
+            `).join('')}
+          </select>
+        </label>
+      `;
+    } else {
+      valueControl = `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Valeur attendue</span>
+          <input class="pulsa-input" type="text"
+                 placeholder="La valeur exacte à comparer"
+                 data-bind="field.${sid}.${field.id}.visible_if.value"
+                 value="${_escape(vif.value ?? '')}">
+        </label>
+      `;
+    }
+  }
+
+  return `
+    <section class="pulsa-editor-section pulsa-visif">
+      <h4 class="pulsa-editor-section-title">Visibilité conditionnelle</h4>
+      <p class="pulsa-editor-hint">Ce champ apparaît au répondant uniquement si :</p>
+
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Champ source</span>
+        <select class="pulsa-input" data-bind="field.${sid}.${field.id}.visible_if.field">
+          ${others.map(f => `
+            <option value="${_escape(f.id)}" ${vif.field === f.id ? 'selected' : ''}>
+              ${_escape(f.label || f.id)} (${_escape(FIELD_TYPES[f.type]?.label || f.type)})
+            </option>
+          `).join('')}
+        </select>
+      </label>
+
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Opérateur</span>
+        <select class="pulsa-input" data-bind="field.${sid}.${field.id}.visible_if.op">
+          <option value="eq"     ${vif.op === 'eq'     ? 'selected' : ''}>est égal à</option>
+          <option value="neq"    ${vif.op === 'neq'    ? 'selected' : ''}>n'est pas égal à</option>
+          <option value="truthy" ${vif.op === 'truthy' ? 'selected' : ''}>est rempli</option>
+          <option value="falsy"  ${vif.op === 'falsy'  ? 'selected' : ''}>est vide</option>
+        </select>
+      </label>
+
+      ${valueControl}
+
+      <button class="pulsa-btn pulsa-btn-ghost pulsa-btn-danger-ghost"
+              data-act="disable-visible-if" data-field="${field.id}">
+        ${icon('x', 14)}<span>Retirer la condition</span>
+      </button>
     </section>
   `;
 }

@@ -492,6 +492,7 @@
     let _form = null;
     const _values = {};   // fieldId → value
     let _submitting = false;
+    let _visibleFieldIds = new Set();  // ids des champs actuellement visibles
 
     // ── Utilitaires ────────────────────────────────────────
     function escape(s) {
@@ -528,6 +529,152 @@
       t.textContent = msg;
       t.classList.add('is-on');
       setTimeout(() => t.classList.remove('is-on'), ms);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Logique conditionnelle (visible_if) + pré-remplissage URL
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Évalue une condition `visible_if` contre les valeurs courantes.
+     * Renvoie true si le champ doit être affiché.
+     */
+    function evalCondition(cond, values) {
+      if (!cond || !cond.field) return true;
+      const v = values[cond.field];
+      switch (cond.op) {
+        case 'truthy':
+          if (v == null) return false;
+          if (Array.isArray(v)) return v.length > 0;
+          if (typeof v === 'object') return Object.values(v).some(x => x != null && String(x).trim());
+          return String(v).trim() !== '';
+        case 'falsy':
+          if (v == null) return true;
+          if (Array.isArray(v)) return v.length === 0;
+          if (typeof v === 'object') return !Object.values(v).some(x => x != null && String(x).trim());
+          return String(v).trim() === '';
+        case 'eq':
+          if (Array.isArray(v)) return v.map(String).includes(String(cond.value));
+          return String(v ?? '') === String(cond.value ?? '');
+        case 'neq':
+          if (Array.isArray(v)) return !v.map(String).includes(String(cond.value));
+          return String(v ?? '') !== String(cond.value ?? '');
+      }
+      return true;
+    }
+
+    /**
+     * Recalcule la visibilité de chaque champ et applique display:none
+     * aux champs cachés. Met aussi à jour la set _visibleFieldIds.
+     */
+    function refreshVisibility() {
+      if (!_form) return;
+      _visibleFieldIds = new Set();
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          const visible = !f.visible_if || evalCondition(f.visible_if, _values);
+          if (visible) _visibleFieldIds.add(f.id);
+          const el = document.querySelector(`.pf-field[data-fid="${f.id}"]`);
+          if (el) el.style.display = visible ? '' : 'none';
+        }
+      }
+    }
+
+    /**
+     * Pré-remplit les valeurs à partir des query params de l'URL.
+     * Les paramètres réservés (s, slug) sont ignorés.
+     * Format : ?fld_xxx=valeur ; pour les champs avec choices,
+     * on accepte aussi le label du choix (matchera l'id correspondant).
+     */
+    function prefillFromUrl() {
+      const params = new URLSearchParams(location.search);
+      const reserved = new Set(['s', 'slug']);
+      const allFields = [];
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) allFields.push(f);
+      }
+      for (const [key, value] of params) {
+        if (reserved.has(key)) continue;
+        const field = allFields.find(f => f.id === key);
+        if (!field) continue;
+        // Cas spécial chips/cards : si la valeur match un choice.id ou choice.label
+        if (field.type === 'chips') {
+          const choices = field.options?.choices || [];
+          const match = choices.find(c => c.id === value || c.label === value);
+          _values[field.id] = match?.id || value;
+        } else if (field.type === 'yes-no') {
+          const v = value.toLowerCase();
+          if (['oui', 'yes', 'y', '1', 'true'].includes(v)) _values[field.id] = 'yes';
+          else if (['non', 'no', 'n', '0', 'false'].includes(v)) _values[field.id] = 'no';
+          else _values[field.id] = value;
+        } else if (field.type === 'cards') {
+          // multi-valeurs séparées par virgule
+          const ids = value.split(',').map(s => s.trim()).filter(Boolean);
+          _values[field.id] = ids;
+        } else {
+          _values[field.id] = value;
+        }
+      }
+    }
+
+    /**
+     * Applique les _values pré-remplis aux inputs déjà rendus dans le DOM
+     * (texte, email, url, date, amount, rank, social-links, et marquage
+     * visuel des chips/cards/yes-no).
+     */
+    function applyPrefilledToDom() {
+      for (const fid of Object.keys(_values)) {
+        const v = _values[fid];
+        if (v == null) continue;
+        // chips
+        const chipsGroup = document.querySelector(`.pf-chips[data-fid="${fid}"]`);
+        if (chipsGroup) {
+          chipsGroup.querySelectorAll('.pf-chip').forEach(c => {
+            const on = c.dataset.cid === String(v);
+            c.classList.toggle('is-selected', on);
+            c.setAttribute('aria-checked', on ? 'true' : 'false');
+          });
+          continue;
+        }
+        // cards multi
+        const cardsGroup = document.querySelector(`.pf-cards[data-fid="${fid}"]`);
+        if (cardsGroup) {
+          const set = new Set(Array.isArray(v) ? v.map(String) : [String(v)]);
+          cardsGroup.querySelectorAll('.pf-card').forEach(c => {
+            c.classList.toggle('is-selected', set.has(c.dataset.cid));
+          });
+          continue;
+        }
+        // yes/no
+        const ynGroup = document.querySelector(`.pf-yesno[data-fid="${fid}"]`);
+        if (ynGroup) {
+          ynGroup.querySelectorAll('.pf-yesno-btn').forEach(b => {
+            b.classList.toggle('is-selected', b.dataset.val === String(v));
+          });
+          continue;
+        }
+        // social-links (objet)
+        if (typeof v === 'object' && !Array.isArray(v)) {
+          for (const [netId, netVal] of Object.entries(v)) {
+            const inp = document.querySelector(`[data-fid="${fid}"][data-net="${netId}"]`);
+            if (inp) inp.value = netVal;
+          }
+          continue;
+        }
+        // rank (array)
+        if (Array.isArray(v)) {
+          v.forEach((val, i) => {
+            const inp = document.querySelector(`[data-fid="${fid}"][data-rank="${i + 1}"]`);
+            if (inp) inp.value = val ?? '';
+          });
+          continue;
+        }
+        // input simple par id
+        const input = document.getElementById('pf-' + fid);
+        if (input) input.value = v;
+        // compteur de caractères pour text-long
+        if (input?.dataset?.kind === 'textlong') updateCharCount(input);
+      }
     }
 
     // ── Application charte (couleurs de marque) ────────────
@@ -752,6 +899,7 @@
           chip.classList.add('is-selected');
           chip.setAttribute('aria-checked', 'true');
           _values[fid] = cid;
+          refreshVisibility();
           refreshProgress();
           clearFieldError(fid);
           return;
@@ -777,6 +925,7 @@
           yn.closest('.pf-yesno').querySelectorAll('.pf-yesno-btn').forEach(b => b.classList.remove('is-selected'));
           yn.classList.add('is-selected');
           _values[fid] = yn.dataset.val;
+          refreshVisibility();
           refreshProgress();
           clearFieldError(fid);
           return;
@@ -810,6 +959,7 @@
         } else {
           _values[fid] = t.value;
         }
+        refreshVisibility();
         refreshProgress();
         clearFieldError(fid);
       });
@@ -847,7 +997,8 @@
       const required = [];
       for (const sec of _form.sections || []) {
         for (const f of (sec.fields || [])) {
-          if (f.required) required.push(f);
+          // Ne compte que les champs visibles (visible_if peut masquer)
+          if (f.required && _visibleFieldIds.has(f.id)) required.push(f);
         }
       }
       if (required.length === 0) {
@@ -878,6 +1029,10 @@
       for (const sec of _form.sections || []) {
         for (const f of (sec.fields || [])) {
           clearFieldError(f.id);
+          // Skip les champs cachés (visible_if non satisfait) :
+          // leur valeur ne doit pas bloquer la soumission ni être
+          // considérée comme "requise non remplie".
+          if (!_visibleFieldIds.has(f.id)) continue;
           if (f.required && !hasValue(f.id)) {
             setFieldError(f.id, 'Ce champ est obligatoire');
             firstErrId = firstErrId || f.id;
@@ -1060,6 +1215,9 @@
       `;
 
       bindEvents(document.getElementById('pf-app'));
+      prefillFromUrl();
+      applyPrefilledToDom();
+      refreshVisibility();
       refreshProgress();
     }
 
