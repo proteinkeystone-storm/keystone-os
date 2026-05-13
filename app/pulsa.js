@@ -36,6 +36,7 @@ import {
   getCurrentFormId,
   setCurrentFormId,
 } from './lib/pulsa-library.js';
+import { DEMO_VEFA_FORM } from './lib/pulsa-demo.js';
 
 // ── Métadonnées de l'artefact ─────────────────────────────────
 const WORKSPACE_META = {
@@ -227,6 +228,7 @@ function _onClick(e) {
 
   // Vue Bibliothèque
   if (act === 'new-form')          return _newForm();
+  if (act === 'load-demo-vefa')    return _loadDemoVefa();
   if (act === 'open-form')         return _openForm(t.dataset.id);
   if (act === 'duplicate-form')    return _duplicateForm(t.dataset.id);
   if (act === 'delete-form')       return _deleteForm(t.dataset.id);
@@ -395,6 +397,30 @@ function _refreshTopbar() {
 // ═══════════════════════════════════════════════════════════════
 function _newForm() {
   const form = saveForm({ ...newForm(), id: newFormId() });
+  setCurrentFormId(form.id);
+  _state.view = 'builder';
+  _state.form = form;
+  _state.ui.selected_field = null;
+  _currentStepId = 'structure';
+  _refreshTopbar();
+  _renderMain();
+  _renderRail();
+}
+
+/**
+ * Charge le formulaire de démonstration VEFA Les Jardins du Mourillon.
+ * Utilise les 16 types de champs + toutes les features (visible_if,
+ * required_if, compute_from, code d'accès, etc.). Sert de test
+ * end-to-end et de modèle réutilisable.
+ */
+function _loadDemoVefa() {
+  // Clone profond pour ne pas muter la constante exportée
+  const cloned = JSON.parse(JSON.stringify(DEMO_VEFA_FORM));
+  // Ajoute un suffixe de date au slug pour éviter les collisions
+  // (si l'utilisateur recharge l'exemple plusieurs fois)
+  const stamp = new Date().toISOString().slice(0, 10);
+  cloned.meta.slug = `${cloned.meta.slug}-${stamp}`;
+  const form = saveForm({ ...cloned, id: newFormId() });
   setCurrentFormId(form.id);
   _state.view = 'builder';
   _state.form = form;
@@ -1037,9 +1063,14 @@ function _renderLibrary(main) {
         ${icon('sparkles', 48)}
         <h1>Bienvenue dans Pulsa</h1>
         <p>Créez vos formulaires intelligents : diagnostics, questionnaires, onboarding, candidatures. Partage par URL, notification mail, RGPD natif.</p>
-        <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish" data-act="new-form">
-          ${icon('plus', 16)}<span>Créer mon premier formulaire</span>
-        </button>
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin:8px auto 0;">
+          <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish" data-act="new-form">
+            ${icon('plus', 16)}<span>Créer mon premier formulaire</span>
+          </button>
+          <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
+            ${icon('building', 14)}<span>Charger l'exemple immobilier VEFA</span>
+          </button>
+        </div>
       </div>
     `;
     return;
@@ -1051,9 +1082,14 @@ function _renderLibrary(main) {
         <h1 class="ws-step-title">Vos formulaires</h1>
         <p class="ws-step-sub">${forms.length} ${forms.length > 1 ? 'formulaires sauvegardés' : 'formulaire sauvegardé'} — auto-sauvegarde continue.</p>
       </div>
-      <button class="pulsa-btn pulsa-btn-primary" data-act="new-form">
-        ${icon('plus', 16)}<span>Nouveau formulaire</span>
-      </button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
+          ${icon('building', 14)}<span>Exemple VEFA</span>
+        </button>
+        <button class="pulsa-btn pulsa-btn-primary" data-act="new-form">
+          ${icon('plus', 16)}<span>Nouveau formulaire</span>
+        </button>
+      </div>
     </div>
     <div class="pulsa-lib-grid">
       ${forms.map(f => _renderLibraryCard(f)).join('')}
