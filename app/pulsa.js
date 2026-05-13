@@ -16,6 +16,7 @@
 import { icon } from './lib/ui-icons.js';
 import { scheduleAutoSave } from './vault.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { CF_API } from './pads-loader.js';
 import {
   FIELD_TYPES,
@@ -184,6 +185,7 @@ function _buildShell() {
         <span class="pulsa-save-indicator" data-slot="save-indicator" aria-live="polite">
           ${icon('check', 12)}<span data-slot="save-label">Enregistré</span>
         </span>
+        ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
         <button class="ws-iconbtn" data-slot="save-btn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
@@ -209,6 +211,7 @@ function _buildShell() {
   _root.addEventListener('change', _onInput);
   _root.addEventListener('keydown', _onKeydown);
   bindRatingButton(_root, WORKSPACE_META.id);
+  bindHelpButton(_root, WORKSPACE_META.id);
 }
 
 // ═══════════════════════════════════════════════════════════════

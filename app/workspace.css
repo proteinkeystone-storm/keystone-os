@@ -862,3 +862,240 @@ html.light-mode .modal-close:hover {
   .ws-step-icon { width: 22px; height: 22px; }
   .ws-main { padding: 32px 24px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   HELP OVERLAY — Composant partagé (slide-in à droite)
+   Bouton "?" en topbar (.ws-help-trigger) qui ouvre un panneau
+   d'aide sans interrompre le travail. Pattern Notion / Linear.
+   Contenu chargé depuis /K_STORE_ASSETS/HELP/{appId}.json
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Le bouton trigger réutilise .ws-iconbtn existant. Ce qui est
+   spécifique : on hover discret + couleur indigo */
+.ws-help-trigger:hover {
+  color: var(--ws-accent);
+}
+
+/* ── Overlay racine (positionné par-dessus tout) ────────── */
+.ws-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+.ws-help-overlay.is-on { pointer-events: auto; }
+
+.ws-help-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity .25s ease;
+  cursor: pointer;
+}
+.ws-help-overlay.is-on .ws-help-backdrop { opacity: 1; }
+
+/* ── Panel slide-in à droite ────────────────────────────── */
+.ws-help-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 420px;
+  max-width: 100vw;
+  background: var(--ws-surface, var(--navy2));
+  border-left: 1px solid var(--ws-border, var(--bd));
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+  overflow: hidden;
+}
+.ws-help-overlay.is-on .ws-help-panel { transform: translateX(0); }
+@media (max-width: 540px) {
+  .ws-help-panel { width: 100vw; }
+}
+
+/* ── Header du panneau ───────────────────────────────────── */
+.ws-help-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.ws-help-head-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ws-help-tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ws-accent, var(--gold));
+  opacity: .85;
+}
+.ws-help-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+  color: var(--ws-text, var(--text));
+}
+
+/* ── Body scrollable ─────────────────────────────────────── */
+.ws-help-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px 28px;
+}
+.ws-help-body::-webkit-scrollbar { width: 6px; }
+.ws-help-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .08);
+  border-radius: 3px;
+}
+
+.ws-help-empty {
+  margin: 24px 0;
+  color: var(--ws-text, var(--text));
+  opacity: .6;
+  font-size: 14px;
+  line-height: 1.6;
+  font-style: italic;
+}
+
+/* ── Bloc TLDR (encart accent en haut) ───────────────────── */
+.ws-help-tldr {
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  background: rgba(99, 102, 241, .08);
+  border-left: 3px solid var(--ws-accent, var(--gold));
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ws-text, var(--text));
+}
+
+/* ── Sections génériques ─────────────────────────────────── */
+.ws-help-section {
+  margin-bottom: 22px;
+}
+.ws-help-section:last-child { margin-bottom: 0; }
+.ws-help-section h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+
+/* ── Étapes "Comment ça marche" ──────────────────────────── */
+.ws-help-steps {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-help-steps li {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ws-text, var(--text));
+}
+
+/* ── FAQ (details/summary) ───────────────────────────────── */
+.ws-help-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-help-faq-item {
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+  overflow: hidden;
+  transition: background .15s;
+}
+.ws-help-faq-item[open] {
+  background: rgba(99, 102, 241, .05);
+}
+.ws-help-faq-item summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ws-text, var(--text));
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  user-select: none;
+}
+.ws-help-faq-item summary::-webkit-details-marker { display: none; }
+.ws-help-faq-item summary::before {
+  content: '▸';
+  display: inline-block;
+  color: var(--ws-accent, var(--gold));
+  flex-shrink: 0;
+  transition: transform .15s;
+  margin-top: 1px;
+}
+.ws-help-faq-item[open] summary::before { transform: rotate(90deg); }
+.ws-help-faq-answer {
+  padding: 0 14px 14px 30px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ws-text, var(--text));
+  opacity: .8;
+}
+
+/* ── Raccourcis clavier ──────────────────────────────────── */
+.ws-help-shortcuts {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ws-help-shortcuts td {
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--ws-text, var(--text));
+}
+.ws-help-shortcuts td:first-child {
+  width: 80px;
+}
+.ws-help-shortcuts kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ws-accent, var(--gold));
+}
+
+/* ── Footer (date de mise à jour) ────────────────────────── */
+.ws-help-foot {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ws-border, var(--bd));
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ws-text, var(--text));
+  opacity: .45;
+  text-align: center;
+}

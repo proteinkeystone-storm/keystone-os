@@ -31,6 +31,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { icon } from './lib/ui-icons.js';
 import {
   loadModes, getModes, getMode, getSliders, getTimeBudgets,
@@ -216,6 +217,7 @@ function _buildShell() {
         <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
       </div>
       <div class="ws-topbar-actions">
+        ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
         <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
@@ -241,6 +243,7 @@ function _buildShell() {
   _root.addEventListener('change', _onInput);
   _root.addEventListener('keydown', _onKeydown);
   bindRatingButton(_root, WORKSPACE_META.id);
+  bindHelpButton(_root, WORKSPACE_META.id);
   _renderRail();
   _renderAside();
 }

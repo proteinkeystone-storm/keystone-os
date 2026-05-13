@@ -1,0 +1,32 @@
+{
+  "title": "Kodex",
+  "tldr": "Kodex transforme votre intention créative en cahier des charges technique infaillible pour votre graphiste ou votre imprimeur. Évite l'erreur d'impression à 800 €.",
+  "key_points": [
+    "1. Destination : choisissez votre support cible (imprimeur, réseau social, presse). 28 standards inclus.",
+    "2. Message : renseignez votre texte, votre ton, votre cible. Kodex génère 5 punchlines bonus.",
+    "3. Visuels : déposez logo, charte graphique, photos dans le coffre-fort assets.",
+    "4. Brief : récupérez un PDF prêt à envoyer à votre graphiste ou imprimeur, avec calculateur d'échelle pour grands formats."
+  ],
+  "faq": [
+    {
+      "q": "Qu'est-ce que le calculateur d'échelle ?",
+      "a": "Pour les grands formats (bâche, 4×3, panneau), Kodex convertit automatiquement vos visuels en dimensions imprimables : DPI, marges, fonds perdus, taille minimale des textes. Vous évitez l'erreur classique de logo pixellisé à 4 mètres."
+    },
+    {
+      "q": "Quels imprimeurs et plateformes sont supportés ?",
+      "a": "28 standards : Exaprint, Pixartprinting, Vistaprint pour l'impression ; Meta, LinkedIn, Google pour le digital ; Le Figaro, Logic-Immo, Côte Magazine, Surface Privée, La Provence pour la presse."
+    },
+    {
+      "q": "Mes visuels sont-ils stockés en sécurité ?",
+      "a": "Oui : ils sont chiffrés AES-256-GCM côté serveur D1, accessibles uniquement par vous. Limite 2 MB par fichier."
+    },
+    {
+      "q": "Le PDF généré est-il prêt à imprimer directement ?",
+      "a": "Pas l'impression elle-même : c'est un BRIEF technique. Vous le donnez à votre graphiste qui produit le visuel final selon les spécifications, ou à l'imprimeur pour validation des contraintes."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+  ],
+  "updated_at": "2026-05-14"
+}

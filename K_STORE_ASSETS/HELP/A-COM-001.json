@@ -1,0 +1,33 @@
+{
+  "title": "Sovereign Dynamic QR",
+  "tldr": "SDQR crée des QR codes souverains avec tracking RGPD natif. Statiques ou dynamiques (modifiables après impression), brandés à votre charte, sans dépendance Google.",
+  "key_points": [
+    "1. Choisissez le type de QR (URL, VCard, Wi-Fi, iCal, texte libre)",
+    "2. Statique ou dynamique : dynamique = modifiable après impression (parfait pour bâche chantier ou flyer en réimpression)",
+    "3. Studio design : ajustez la forme, la couleur, ajoutez votre logo central",
+    "4. Chaque scan est tracké côté Keystone, jamais Google ou GAFAM",
+    "5. Dashboard statistiques avec export CSV brut RGPD-safe"
+  ],
+  "faq": [
+    {
+      "q": "Quelle est la différence entre QR statique et dynamique ?",
+      "a": "Un QR statique encode directement l'URL — impossible à modifier après impression. Un QR dynamique pointe vers une redirection Keystone que vous pouvez changer à tout moment (idéal pour les bâches chantier ou flyers réutilisés)."
+    },
+    {
+      "q": "Combien de temps les scans sont-ils stockés ?",
+      "a": "90 jours en détail (date, heure, pays). Au-delà, agrégation anonymisée. Conformité RGPD Art. 5 par design."
+    },
+    {
+      "q": "Le tracking respecte-t-il le RGPD ?",
+      "a": "Oui, natif. Aucune donnée envoyée à Google. Pas de cookie. Pas de fingerprint. Une page de transparence publique est disponible à /sdqr-privacy."
+    },
+    {
+      "q": "Puis-je personnaliser le design du QR ?",
+      "a": "Oui : couleur, forme des modules, logo central, pattern personnalisé. Tous les QR conservent le niveau de correction d'erreurs ECC nécessaire pour rester scannables."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+  ],
+  "updated_at": "2026-05-14"
+}

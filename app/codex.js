@@ -26,6 +26,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import {
   loadCatalog, getVendorsByCategory, getProductsByVendor, getStandard,
   formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
@@ -200,6 +201,7 @@ function _buildShell() {
         <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
       </div>
       <div class="ws-topbar-actions">
+        ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
         <button class="ws-iconbtn" data-act="load-demo" title="Charger un exemple : Les Jardins du Mourillon (Affiche 4×3)"
                 style="color:var(--gold);">
@@ -233,6 +235,7 @@ function _buildShell() {
   document.body.appendChild(_root);
   _root.addEventListener('click', _onClick);
   bindRatingButton(_root, WORKSPACE_META.id);
+  bindHelpButton(_root, WORKSPACE_META.id);
 
   _renderRail();
   _renderAside();

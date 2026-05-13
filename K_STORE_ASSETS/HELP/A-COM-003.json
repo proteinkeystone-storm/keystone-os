@@ -1,0 +1,33 @@
+{
+  "title": "Muse",
+  "tldr": "Muse prépare une planche d'ambiance pour votre studio 3D : en une seule génération IA, vous obtenez 6 vignettes cohérentes (architecture, lumière, palette, matériaux, lifestyle, détail signature).",
+  "key_points": [
+    "1. Cadrage : choisissez la perspective de l'illustration finale (drone, piéton, intérieur, terrasse, macro)",
+    "2. Atmosphère : configurez lumière, saison, palette végétale, matériaux, figuration",
+    "3. Moteur d'image : Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion",
+    "4. Prompt Maître : copiez le prompt structuré généré, collez-le dans votre IA",
+    "5. Résultat : un fichier HTML avec bouton 'Copier' unique, qui produit la planche moodboard en une génération"
+  ],
+  "faq": [
+    {
+      "q": "Muse génère-t-il les images directement ?",
+      "a": "Non, et c'est volontaire. Muse produit le PROMPT optimisé. La génération reste chez votre IA (Midjourney, Flux, etc.) pour vous laisser le contrôle qualité et le coût maîtrisé."
+    },
+    {
+      "q": "Est-ce compatible avec le travail de mon studio 3D ?",
+      "a": "Oui, c'est même fait pour. Muse produit un MOODBOARD de référence (\"in the same spirit, analogous to\") — jamais une illustration du projet lui-même. Le studio 3D garde la responsabilité de modéliser votre programme sur plan."
+    },
+    {
+      "q": "Combien de temps pour avoir la planche finale ?",
+      "a": "5 à 8 minutes : 2 min pour configurer dans Muse, 1 min pour copier dans votre IA, 2-3 min pour la génération, 1 min pour télécharger la planche HTML."
+    },
+    {
+      "q": "Puis-je modifier le prompt avant de l'envoyer à l'IA ?",
+      "a": "Oui, le prompt généré est affiché en clair dans Muse. Copiez-le, modifiez-le si besoin, puis collez dans votre IA. Aucun verrouillage."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+  ],
+  "updated_at": "2026-05-14"
+}

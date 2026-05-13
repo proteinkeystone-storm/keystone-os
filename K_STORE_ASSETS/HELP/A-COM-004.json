@@ -1,0 +1,45 @@
+{
+  "title": "Pulsa",
+  "tldr": "Pulsa construit des formulaires intelligents partageables par URL. 16 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.",
+  "key_points": [
+    "1. Structure : ajoutez vos sections et vos champs (16 types, du texte simple à la signature manuscrite)",
+    "2. Apparence : choisissez vos couleurs (10 palettes dégradés webgradients) et votre logo",
+    "3. Livraison : définissez l'URL courte, vos destinataires mail et la durée de conservation (30 à 365 jours)",
+    "4. Publication : vérifiez le récap et publiez à keystone.app/f/{votre-slug}",
+    "5. Réponses : consultez les réponses reçues depuis la bibliothèque (bouton œil), exportez en CSV"
+  ],
+  "faq": [
+    {
+      "q": "Combien de temps les réponses sont-elles conservées ?",
+      "a": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment."
+    },
+    {
+      "q": "Mes répondants doivent-ils créer un compte ?",
+      "a": "Non, le formulaire est ouvert et anonyme par défaut. Vous pouvez activer un code d'accès optionnel dans l'étape Apparence pour les questionnaires confidentiels."
+    },
+    {
+      "q": "Comment partager le formulaire avec mes répondants ?",
+      "a": "Une fois publié, copiez l'URL keystone.app/f/{votre-slug} et envoyez-la par mail, SMS, Slack ou QR code. Aucune installation nécessaire pour le répondant."
+    },
+    {
+      "q": "Puis-je dupliquer un formulaire existant ?",
+      "a": "Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs."
+    },
+    {
+      "q": "Comment fonctionne la logique conditionnelle ?",
+      "a": "Sélectionnez un champ dans le builder, puis dans l'éditeur de droite ouvrez 'Visibilité conditionnelle' ou 'Obligatoire conditionnel'. Vous pouvez aussi configurer une somme automatique entre champs Montant."
+    },
+    {
+      "q": "Puis-je pré-remplir des champs via l'URL ?",
+      "a": "Oui : chaque champ a un ID technique (visible dans son éditeur) qui peut être utilisé en query param. Exemple : keystone.app/f/biennale?fld_nom=Marie+Durand."
+    },
+    {
+      "q": "Quels types de fichiers les répondants peuvent-ils joindre ?",
+      "a": "Pas d'upload direct (pour limiter les coûts et la complexité RGPD). À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer le workspace, un modal ou ce panneau d'aide" }
+  ],
+  "updated_at": "2026-05-14"
+}
