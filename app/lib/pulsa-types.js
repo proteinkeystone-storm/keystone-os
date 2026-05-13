@@ -161,6 +161,57 @@ export const FIELD_TYPES = {
       providers_hint: 'WeTransfer · Google Drive · Dropbox · Vimeo · YouTube',
     },
   },
+  'signature': {
+    label: 'Signature manuscrite',
+    sub: 'Canvas tactile, sauvegardée en SVG inline',
+    ico: 'edit',
+    group: 'media',
+    defaults: {
+      hint: 'Signez dans le cadre ci-dessous avec votre doigt ou souris',
+    },
+  },
+  'nps': {
+    label: 'NPS (recommandation)',
+    sub: 'Échelle 0–10 "Recommanderiez-vous ?"',
+    ico: 'sliders',
+    group: 'scale',
+    defaults: {
+      low_label: 'Pas du tout probable',
+      high_label: 'Extrêmement probable',
+    },
+  },
+  'slider': {
+    label: 'Slider numérique',
+    sub: 'Curseur sur une échelle min → max',
+    ico: 'sliders',
+    group: 'scale',
+    defaults: {
+      min: 0,
+      max: 100,
+      step: 1,
+      unit: '',
+      low_label: '',
+      high_label: '',
+    },
+  },
+  'likert': {
+    label: 'Échelle Likert (5 niveaux)',
+    sub: 'Pas du tout d\'accord → Tout à fait d\'accord',
+    ico: 'sliders',
+    group: 'scale',
+    defaults: {
+      // Réutilise la même clé `choices` que chips/cards : permet
+      // de réutiliser le binding `choice.<sid>.<fid>.<id>.label`
+      // existant pour l'édition côté builder.
+      choices: [
+        { id: 'lk1', label: 'Pas du tout d\'accord' },
+        { id: 'lk2', label: 'Plutôt pas d\'accord' },
+        { id: 'lk3', label: 'Neutre' },
+        { id: 'lk4', label: 'Plutôt d\'accord' },
+        { id: 'lk5', label: 'Tout à fait d\'accord' },
+      ],
+    },
+  },
 };
 
 /**
@@ -169,9 +220,10 @@ export const FIELD_TYPES = {
 export const FIELD_GROUPS = [
   { id: 'text',    label: 'Texte' },
   { id: 'choice',  label: 'Choix' },
+  { id: 'scale',   label: 'Échelles & notation' },
   { id: 'contact', label: 'Contact' },
   { id: 'data',    label: 'Données structurées' },
-  { id: 'media',   label: 'Médias (lien externe)' },
+  { id: 'media',   label: 'Médias & signature' },
 ];
 
 /**

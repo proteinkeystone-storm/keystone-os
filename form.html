@@ -387,6 +387,144 @@
       outline: none;
     }
 
+    /* ── Signature manuscrite (canvas) ──────────────────── */
+    .pf-sig {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pf-sig-canvas {
+      width: 100%;
+      max-width: 100%;
+      aspect-ratio: 10 / 3;
+      background: #fff;
+      border: 1.5px dashed var(--pf-border);
+      border-radius: 10px;
+      cursor: crosshair;
+      touch-action: none;
+      display: block;
+    }
+    .pf-sig-actions {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .pf-sig-hint {
+      font-size: 11.5px; color: var(--pf-muted); font-style: italic;
+    }
+    .pf-sig-clear {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid var(--pf-border);
+      border-radius: 999px;
+      color: var(--pf-muted);
+      font: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-sig-clear:hover { color: var(--pf-body); border-color: var(--pf-muted); }
+
+    /* ── NPS (0 à 10 avec dégradé rouge/orange/vert) ────── */
+    .pf-nps {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pf-nps-scale {
+      display: grid;
+      grid-template-columns: repeat(11, 1fr);
+      gap: 4px;
+    }
+    @media (max-width: 480px) {
+      .pf-nps-scale { gap: 2px; }
+    }
+    .pf-nps-btn {
+      padding: 12px 0;
+      border-radius: 8px;
+      border: 1.5px solid transparent;
+      background: var(--pf-light);
+      font: inherit; font-size: 14px; font-weight: 700;
+      color: var(--pf-body);
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-nps-btn.pf-nps-detractor { background: rgba(224, 92, 92, .12); color: #b9302e; }
+    .pf-nps-btn.pf-nps-passive   { background: rgba(245, 158, 11, .14); color: #c47600; }
+    .pf-nps-btn.pf-nps-promoter  { background: rgba(34, 197, 94, .14); color: #15803d; }
+    .pf-nps-btn.is-selected {
+      background: var(--pf-brand) !important;
+      color: #fff !important;
+      border-color: var(--pf-brand);
+      transform: scale(1.05);
+    }
+    .pf-nps-labels {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--pf-muted);
+      padding: 0 4px;
+    }
+
+    /* ── Slider numérique ──────────────────────────────── */
+    .pf-slider {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pf-slider-input {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: var(--pf-border);
+      border-radius: 999px;
+      outline: none;
+    }
+    .pf-slider-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--pf-accent);
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(201, 180, 138, .35);
+      cursor: pointer;
+    }
+    .pf-slider-input::-moz-range-thumb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--pf-accent);
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(201, 180, 138, .35);
+      cursor: pointer;
+    }
+    .pf-slider-value {
+      text-align: center;
+      font-size: 18px; font-weight: 900;
+      letter-spacing: -.02em;
+      color: var(--pf-brand);
+    }
+    .pf-slider-labels {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--pf-muted);
+    }
+
+    /* ── Likert (échelle horizontale) ───────────────────── */
+    .pf-likert {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+    }
+    .pf-likert-btn {
+      padding: 12px 10px;
+      border-radius: 10px;
+      border: 1.5px solid var(--pf-border);
+      background: #fff;
+      font: inherit; font-size: 12.5px; font-weight: 600;
+      color: var(--pf-body);
+      cursor: pointer;
+      transition: all .15s;
+      line-height: 1.3;
+      text-align: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-likert-btn:hover { border-color: var(--pf-muted); }
+    .pf-likert-btn.is-selected {
+      background: var(--pf-brand);
+      border-color: var(--pf-brand);
+      color: #fff;
+    }
+
     /* ── Social links ──────────────────────────────────── */
     .pf-socials {
       display: flex; flex-direction: column; gap: 10px;
@@ -770,6 +908,10 @@
       'date':         renderDate,
       'amount':       renderAmount,
       'social-links': renderSocialLinks,
+      'signature':    renderSignature,
+      'nps':          renderNps,
+      'slider':       renderSlider,
+      'likert':       renderLikert,
     };
 
     function renderField(field) {
@@ -937,6 +1079,84 @@
       `;
     }
 
+    function renderSignature(field) {
+      const opts = field.options || {};
+      const hint = opts.hint || 'Signez dans le cadre ci-dessous';
+      return `
+        <div class="pf-sig" data-fid="${field.id}" data-kind="signature">
+          <canvas class="pf-sig-canvas" data-fid="${field.id}" width="600" height="180"></canvas>
+          <div class="pf-sig-actions">
+            <span class="pf-sig-hint">${escape(hint)}</span>
+            <button type="button" class="pf-sig-clear" data-act="sig-clear" data-fid="${field.id}">
+              Effacer
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderNps(field) {
+      const opts = field.options || {};
+      const buttons = [];
+      for (let n = 0; n <= 10; n++) {
+        const cls = n <= 6 ? 'pf-nps-detractor' : (n <= 8 ? 'pf-nps-passive' : 'pf-nps-promoter');
+        buttons.push(`
+          <button type="button" class="pf-nps-btn ${cls}"
+                  data-fid="${field.id}" data-nps="${n}">
+            ${n}
+          </button>
+        `);
+      }
+      return `
+        <div class="pf-nps" data-fid="${field.id}" data-kind="nps">
+          <div class="pf-nps-scale">${buttons.join('')}</div>
+          <div class="pf-nps-labels">
+            <span>${escape(opts.low_label || 'Pas du tout probable')}</span>
+            <span>${escape(opts.high_label || 'Extrêmement probable')}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSlider(field) {
+      const opts = field.options || {};
+      const min = Number(opts.min ?? 0);
+      const max = Number(opts.max ?? 100);
+      const step = Number(opts.step ?? 1);
+      const initial = Math.round((min + max) / 2);
+      return `
+        <div class="pf-slider" data-fid="${field.id}" data-kind="slider">
+          <input class="pf-slider-input" type="range"
+                 min="${min}" max="${max}" step="${step}" value="${initial}"
+                 id="pf-${field.id}"
+                 data-fid="${field.id}" data-kind="slider">
+          <div class="pf-slider-value" data-slot="sv-${field.id}">
+            ${initial}${opts.unit ? ' ' + escape(opts.unit) : ''}
+          </div>
+          ${(opts.low_label || opts.high_label) ? `
+            <div class="pf-slider-labels">
+              <span>${escape(opts.low_label || '')}</span>
+              <span>${escape(opts.high_label || '')}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderLikert(field) {
+      const levels = field.options?.choices || [];
+      return `
+        <div class="pf-likert" data-fid="${field.id}" data-kind="likert" role="radiogroup">
+          ${levels.map(l => `
+            <button type="button" class="pf-likert-btn" role="radio" aria-checked="false"
+                    data-fid="${field.id}" data-lid="${escape(l.id)}">
+              ${escape(l.label)}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
     function renderSocialLinks(field) {
       const networks = (field.options?.networks || []).filter(n => n.enabled);
       if (networks.length === 0) {
@@ -961,6 +1181,53 @@
     // ═══════════════════════════════════════════════════════════════
     function bindEvents(root) {
       root.addEventListener('click', e => {
+        // NPS button
+        const npsBtn = e.target.closest('.pf-nps-btn');
+        if (npsBtn) {
+          const fid = npsBtn.dataset.fid;
+          npsBtn.closest('.pf-nps-scale').querySelectorAll('.pf-nps-btn').forEach(b => b.classList.remove('is-selected'));
+          npsBtn.classList.add('is-selected');
+          _values[fid] = Number(npsBtn.dataset.nps);
+          refreshVisibility();
+          recomputeAll();
+          refreshRequiredIndicators();
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Likert button
+        const likBtn = e.target.closest('.pf-likert-btn');
+        if (likBtn) {
+          const fid = likBtn.dataset.fid;
+          likBtn.closest('.pf-likert').querySelectorAll('.pf-likert-btn').forEach(b => {
+            b.classList.remove('is-selected');
+            b.setAttribute('aria-checked', 'false');
+          });
+          likBtn.classList.add('is-selected');
+          likBtn.setAttribute('aria-checked', 'true');
+          _values[fid] = likBtn.dataset.lid;
+          refreshVisibility();
+          recomputeAll();
+          refreshRequiredIndicators();
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Signature clear
+        const sigClear = e.target.closest('[data-act="sig-clear"]');
+        if (sigClear) {
+          const fid = sigClear.dataset.fid;
+          const cnv = document.querySelector(`.pf-sig-canvas[data-fid="${fid}"]`);
+          if (cnv) {
+            const ctx = cnv.getContext('2d');
+            ctx.clearRect(0, 0, cnv.width, cnv.height);
+            _values[fid] = '';
+            refreshRequiredIndicators();
+            refreshProgress();
+          }
+          return;
+        }
+
         // Chips single-select
         const chip = e.target.closest('.pf-chip');
         if (chip) {
@@ -1035,12 +1302,96 @@
           updateCharCount(t);
         } else if (kind === 'amount') {
           _values[fid] = t.value === '' ? null : Number(t.value);
+        } else if (kind === 'slider') {
+          _values[fid] = Number(t.value);
+          const sv = document.querySelector(`[data-slot="sv-${fid}"]`);
+          if (sv) {
+            const field = _findField(fid);
+            const unit = field?.options?.unit ? ' ' + field.options.unit : '';
+            sv.textContent = t.value + unit;
+          }
         } else {
           _values[fid] = t.value;
         }
         refreshVisibility();
         refreshProgress();
         clearFieldError(fid);
+      });
+    }
+
+    /**
+     * Trouve un champ par id dans la config courante.
+     */
+    function _findField(fid) {
+      for (const sec of _form?.sections || []) {
+        const f = (sec.fields || []).find(x => x.id === fid);
+        if (f) return f;
+      }
+      return null;
+    }
+
+    /**
+     * Initialise les canvas de signature après le rendu.
+     * Capture mouse + touch et stocke en SVG inline dans _values[fid].
+     */
+    function initSignatureCanvases() {
+      document.querySelectorAll('.pf-sig-canvas').forEach(cnv => {
+        const fid = cnv.dataset.fid;
+        const ctx = cnv.getContext('2d');
+        ctx.strokeStyle = '#1a2a3a';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        let drawing = false;
+        let lastX = 0, lastY = 0;
+        const points = []; // pour reconstruire un path SVG
+
+        function getPos(e) {
+          const rect = cnv.getBoundingClientRect();
+          const scaleX = cnv.width / rect.width;
+          const scaleY = cnv.height / rect.height;
+          const cx = e.touches ? e.touches[0].clientX : e.clientX;
+          const cy = e.touches ? e.touches[0].clientY : e.clientY;
+          return { x: (cx - rect.left) * scaleX, y: (cy - rect.top) * scaleY };
+        }
+
+        function start(e) {
+          e.preventDefault();
+          drawing = true;
+          const { x, y } = getPos(e);
+          lastX = x; lastY = y;
+          points.push('M' + x.toFixed(1) + ',' + y.toFixed(1));
+        }
+        function move(e) {
+          if (!drawing) return;
+          e.preventDefault();
+          const { x, y } = getPos(e);
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          points.push('L' + x.toFixed(1) + ',' + y.toFixed(1));
+          lastX = x; lastY = y;
+        }
+        function end() {
+          if (!drawing) return;
+          drawing = false;
+          // Sérialise en SVG inline
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cnv.width} ${cnv.height}" width="${cnv.width}" height="${cnv.height}"><path d="${points.join(' ')}" fill="none" stroke="#1a2a3a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+          _values[fid] = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+          refreshRequiredIndicators();
+          refreshProgress();
+          clearFieldError(fid);
+        }
+
+        cnv.addEventListener('mousedown', start);
+        cnv.addEventListener('mousemove', move);
+        cnv.addEventListener('mouseup', end);
+        cnv.addEventListener('mouseleave', end);
+        cnv.addEventListener('touchstart', start, { passive: false });
+        cnv.addEventListener('touchmove', move, { passive: false });
+        cnv.addEventListener('touchend', end);
       });
     }
 
@@ -1294,6 +1645,7 @@
       `;
 
       bindEvents(document.getElementById('pf-app'));
+      initSignatureCanvases();
       prefillFromUrl();
       applyPrefilledToDom();
       refreshVisibility();

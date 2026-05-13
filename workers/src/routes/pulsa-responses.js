@@ -345,6 +345,23 @@ function _csvFormatValue(field, raw) {
       const cur = opts.currency || 'EUR';
       return `${raw} ${cur}`;
     }
+    case 'signature':
+      // Signature en data URI : valeur trop volumineuse pour le CSV
+      return raw ? '[signature]' : '';
+    case 'nps': {
+      const n = Number(raw);
+      if (isNaN(n)) return String(raw);
+      const tier = n <= 6 ? 'Détracteur' : (n <= 8 ? 'Passif' : 'Promoteur');
+      return `${n}/10 (${tier})`;
+    }
+    case 'slider': {
+      const unit = opts.unit ? ' ' + opts.unit : '';
+      return `${raw}${unit}`;
+    }
+    case 'likert': {
+      const level = (opts.choices || []).find(c => c.id === raw);
+      return level?.label || String(raw);
+    }
     default:
       return typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
   }
@@ -416,6 +433,25 @@ function _formatValue(field, raw) {
         })
         .filter(Boolean);
       return lines.length ? lines.join('') : '<em style="color:#64748b">(aucun)</em>';
+    }
+    case 'signature': {
+      // raw = data URI base64 SVG. On l'affiche inline dans le mail.
+      return `<img src="${_escapeHtml(raw)}" alt="Signature" style="max-width:280px;background:#fff;border:1px solid #1f2a37;border-radius:6px;padding:6px"/>`;
+    }
+    case 'nps': {
+      const n = Number(raw);
+      if (isNaN(n)) return _escapeHtml(raw);
+      const tier = n <= 6 ? 'Détracteur' : (n <= 8 ? 'Passif' : 'Promoteur');
+      const color = n <= 6 ? '#e05c5c' : (n <= 8 ? '#f59e0b' : '#22c55e');
+      return `<strong style="color:${color};font-size:18px">${n}/10</strong> <span style="color:#94a3b8;font-size:12px">· ${tier}</span>`;
+    }
+    case 'slider': {
+      const unit = opts.unit ? ' ' + opts.unit : '';
+      return `<strong>${_escapeHtml(raw)}${_escapeHtml(unit)}</strong>`;
+    }
+    case 'likert': {
+      const level = (opts.choices || []).find(c => c.id === raw);
+      return _escapeHtml(level?.label || raw);
     }
     default:
       return _escapeHtml(typeof raw === 'object' ? JSON.stringify(raw) : raw);

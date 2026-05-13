@@ -1292,6 +1292,22 @@ function _formatValueForUI(field, raw) {
         .filter(Boolean);
       return lines.join(' · ');
     }
+    case 'signature':
+      return `<img src="${_escape(raw)}" alt="Signature" style="max-width:200px;background:#fff;border-radius:4px;padding:4px;border:1px solid rgba(255,255,255,.1)">`;
+    case 'nps': {
+      const n = Number(raw);
+      if (isNaN(n)) return _escape(raw);
+      const tier = n <= 6 ? 'Détracteur' : (n <= 8 ? 'Passif' : 'Promoteur');
+      return `<strong>${n}/10</strong> <em style="opacity:.7">${_escape(tier)}</em>`;
+    }
+    case 'slider': {
+      const unit = opts.unit ? ' ' + opts.unit : '';
+      return `<strong>${_escape(raw)}${_escape(unit)}</strong>`;
+    }
+    case 'likert': {
+      const level = (opts.choices || []).find(c => c.id === raw);
+      return _escape(level?.label || raw);
+    }
     default:
       return _escape(typeof raw === 'object' ? JSON.stringify(raw) : raw);
   }
@@ -2094,8 +2110,111 @@ function _editorOptionsBlock(sid, field) {
     case 'date':         return _editorDate(sid, field);
     case 'amount':       return _editorAmount(sid, field);
     case 'social-links': return _editorSocialLinks(sid, field);
+    case 'signature':    return _editorSignature(sid, field);
+    case 'nps':          return _editorNps(sid, field);
+    case 'slider':       return _editorSlider(sid, field);
+    case 'likert':       return _editorLikert(sid, field);
     default:             return '';
   }
+}
+
+function _editorSignature(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Consigne affichée au répondant</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.hint"
+               value="${_escape(field.options?.hint || '')}">
+      </label>
+      <p class="pulsa-editor-hint">La signature est capturée au doigt (mobile/tablette) ou à la souris (desktop) et stockée en SVG inline — pas de fichier serveur.</p>
+    </section>
+  `;
+}
+
+function _editorNps(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Libellés des extrémités</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte sous le « 0 »</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.low_label"
+               value="${_escape(field.options?.low_label || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte sous le « 10 »</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.high_label"
+               value="${_escape(field.options?.high_label || '')}">
+      </label>
+      <p class="pulsa-editor-hint">11 boutons (0 à 10) gradués rouge → orange → vert. Standard Net Promoter Score.</p>
+    </section>
+  `;
+}
+
+function _editorSlider(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Bornes du slider</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Valeur minimale</span>
+        <input class="pulsa-input" type="number"
+               data-bind="field.${sid}.${field.id}.options.min"
+               value="${field.options?.min ?? 0}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Valeur maximale</span>
+        <input class="pulsa-input" type="number"
+               data-bind="field.${sid}.${field.id}.options.max"
+               value="${field.options?.max ?? 100}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Pas (incrément)</span>
+        <input class="pulsa-input" type="number" min="0.001" step="any"
+               data-bind="field.${sid}.${field.id}.options.step"
+               value="${field.options?.step ?? 1}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Unité (optionnel : %, m², kg…)</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.unit"
+               value="${_escape(field.options?.unit || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Étiquette extrémité gauche</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.low_label"
+               value="${_escape(field.options?.low_label || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Étiquette extrémité droite</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.high_label"
+               value="${_escape(field.options?.high_label || '')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorLikert(sid, field) {
+  const levels = field.options?.choices || [];
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Niveaux de l'échelle</h4>
+      <p class="pulsa-editor-hint">Modifiez le libellé de chaque niveau (l'ordre est respecté de gauche à droite).</p>
+      <div class="pulsa-choices">
+        ${levels.map(l => `
+          <div class="pulsa-choice">
+            <input class="pulsa-input" type="text"
+                   data-bind="choice.${sid}.${field.id}.${l.id}.label"
+                   value="${_escape(l.label)}">
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `;
 }
 
 function _editorTextShort(sid, field) {
