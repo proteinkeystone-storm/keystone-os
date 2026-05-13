@@ -7,12 +7,188 @@
    Pas de hex hardcodé : toutes les couleurs viennent du DS.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Aside (colonne droite : aperçu/stats) ─────────────── */
+/* ── Aside (colonne droite : aperçu/stats ou éditeur) ───── */
 .pulsa-aside {
   background: var(--ws-surface, var(--navy2));
   border-left: 1px solid var(--ws-border, var(--bd));
   padding: 24px 20px;
   overflow-y: auto;
+}
+
+/* ── Éditeur contextuel d'un champ sélectionné ─────────── */
+.pulsa-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.pulsa-editor-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-editor-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pulsa-editor-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ws-accent, var(--gold));
+}
+.pulsa-editor-title h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--ws-text, var(--text));
+}
+
+.pulsa-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.pulsa-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pulsa-editor-section-title {
+  margin: 0 0 2px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .5;
+}
+.pulsa-editor-hint {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+
+/* ── Ligne de presets (max_chars, currency) ────────────── */
+.pulsa-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pulsa-preset-custom {
+  flex: 1;
+  min-width: 80px;
+  max-width: 110px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* ── Liste de choix (chips, cards) ──────────────────────── */
+.pulsa-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pulsa-choice {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+}
+.pulsa-choice .pulsa-input {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.pulsa-choice-desc {
+  grid-column: 1 / -1;
+}
+.pulsa-choice-add {
+  align-self: flex-start;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-style: dashed;
+}
+
+/* ── Liste des réseaux sociaux ──────────────────────────── */
+.pulsa-networks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pulsa-network {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+  transition: border-color .15s;
+}
+.pulsa-network.is-on {
+  border-color: rgba(99, 102, 241, .35);
+}
+.pulsa-network-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 999px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  align-self: flex-start;
+}
+.pulsa-network-toggle:hover {
+  opacity: 1;
+}
+.pulsa-network.is-on .pulsa-network-toggle {
+  background: var(--ws-accent, var(--gold));
+  color: var(--navy);
+  border-color: var(--ws-accent, var(--gold));
+  opacity: 1;
+}
+.pulsa-network-placeholder {
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+/* ── Champ sélectionné dans le main ─────────────────────── */
+.pulsa-field {
+  cursor: pointer;
+}
+.pulsa-field.is-selected {
+  border-color: var(--ws-accent, var(--gold));
+  background: rgba(99, 102, 241, .06);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, .25);
+}
+.pulsa-field-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ws-accent, var(--gold));
+  opacity: .8;
 }
 
 .pulsa-stats {

@@ -51,8 +51,21 @@ let _saveIndicatorTimer = null;
 function _initState() {
   return {
     form: newForm(),
-    ui: { selected_section_id: null },
+    ui: {
+      selected_section_id: null,
+      // { sectionId, fieldId } quand un champ est en cours d'édition → aside contextuel
+      selected_field: null,
+    },
   };
+}
+
+function _selectedField() {
+  const sel = _state.ui.selected_field;
+  if (!sel) return null;
+  const sec = _state.form.sections.find(s => s.id === sel.sectionId);
+  const fld = sec?.fields.find(f => f.id === sel.fieldId);
+  if (!sec || !fld) return null;
+  return { section: sec, field: fld };
 }
 
 function _currentStep() {
@@ -173,9 +186,18 @@ function _onClick(e) {
   if (act === 'open-field-menu')  return _openFieldTypeMenu(t.dataset.section);
   if (act === 'close-modal')      return _closeModal();
   if (act === 'pick-field-type')  return _addField(_fieldTypeMenu?.sectionId, t.dataset.type);
+  if (act === 'select-field')     return _selectField(t.dataset.section, t.dataset.field);
+  if (act === 'deselect-field')   return _deselectField();
   if (act === 'delete-field')     return _deleteField(t.dataset.section, t.dataset.field);
   if (act === 'toggle-required')  return _toggleRequired(t.dataset.section, t.dataset.field);
   if (act === 'cycle-field-width') return _cycleFieldWidth(t.dataset.section, t.dataset.field);
+
+  // Édition des options spécifiques d'un champ sélectionné
+  if (act === 'add-choice')       return _addChoice(t.dataset.field);
+  if (act === 'delete-choice')    return _deleteChoice(t.dataset.field, t.dataset.choice);
+  if (act === 'preset-max-chars') return _setMaxChars(t.dataset.field, parseInt(t.dataset.value, 10));
+  if (act === 'set-currency')     return _setCurrency(t.dataset.field, t.dataset.value);
+  if (act === 'toggle-network')   return _toggleNetwork(t.dataset.field, t.dataset.network);
 }
 
 function _onInput(e) {
@@ -195,30 +217,57 @@ function _onKeydown(e) {
 
 /**
  * Met à jour le state à partir d'un input avec data-bind.
- * Format : "form.meta.title" | "section.<id>.title" | "field.<sectionId>.<fieldId>.label"
+ * Format générique avec chemins profonds :
+ *   form.meta.title
+ *   form.delivery.notification_subject
+ *   section.<id>.title
+ *   field.<sectionId>.<fieldId>.label
+ *   field.<sectionId>.<fieldId>.options.placeholder
+ *   field.<sectionId>.<fieldId>.options.max_chars
+ *   choice.<sectionId>.<fieldId>.<choiceId>.label
+ *   network.<sectionId>.<fieldId>.<networkId>.placeholder
  */
 function _applyBinding(input) {
   const path = input.dataset.bind;
-  const value = input.type === 'checkbox' ? input.checked : input.value;
+  const raw = input.type === 'checkbox' ? input.checked : input.value;
+  const value = input.type === 'number' ? (raw === '' ? null : Number(raw)) : raw;
   const parts = path.split('.');
 
   if (parts[0] === 'form') {
-    let ref = _state.form;
-    for (let i = 1; i < parts.length - 1; i++) ref = ref[parts[i]];
-    ref[parts[parts.length - 1]] = value;
-    return;
+    return _setDeep(_state.form, parts.slice(1), value);
   }
   if (parts[0] === 'section') {
     const sec = _state.form.sections.find(s => s.id === parts[1]);
-    if (sec) sec[parts[2]] = value;
+    if (sec) _setDeep(sec, parts.slice(2), value);
     return;
   }
   if (parts[0] === 'field') {
     const sec = _state.form.sections.find(s => s.id === parts[1]);
-    if (!sec) return;
-    const fld = sec.fields.find(f => f.id === parts[2]);
-    if (fld) fld[parts[3]] = value;
+    const fld = sec?.fields.find(f => f.id === parts[2]);
+    if (fld) _setDeep(fld, parts.slice(3), value);
+    return;
   }
+  if (parts[0] === 'choice') {
+    const sec = _state.form.sections.find(s => s.id === parts[1]);
+    const fld = sec?.fields.find(f => f.id === parts[2]);
+    const ch  = fld?.options?.choices?.find(c => c.id === parts[3]);
+    if (ch) _setDeep(ch, parts.slice(4), value);
+    return;
+  }
+  if (parts[0] === 'network') {
+    const sec = _state.form.sections.find(s => s.id === parts[1]);
+    const fld = sec?.fields.find(f => f.id === parts[2]);
+    const net = fld?.options?.networks?.find(n => n.id === parts[3]);
+    if (net) _setDeep(net, parts.slice(4), value);
+  }
+}
+
+function _setDeep(obj, parts, value) {
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (obj[parts[i]] == null || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {};
+    obj = obj[parts[i]];
+  }
+  obj[parts[parts.length - 1]] = value;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -307,6 +356,85 @@ function _cycleFieldWidth(sectionId, fieldId) {
   fld.width = FIELD_WIDTHS[(current + 1) % FIELD_WIDTHS.length];
   _renderMain();
   _saveDraft();
+}
+
+// ── Sélection d'un champ pour édition contextuelle dans l'aside ─
+function _selectField(sectionId, fieldId) {
+  // Idempotence : si déjà sélectionné, ne pas re-render (préserve focus input)
+  const cur = _state.ui.selected_field;
+  if (cur?.sectionId === sectionId && cur?.fieldId === fieldId) return;
+  _state.ui.selected_field = { sectionId, fieldId };
+  _renderMain();
+  _renderAside();
+}
+
+function _deselectField() {
+  _state.ui.selected_field = null;
+  _renderMain();
+  _renderAside();
+}
+
+// ── Édition options : choices (chips, cards) ─────────────────
+function _addChoice(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const { field } = found;
+  if (!field.options.choices) field.options.choices = [];
+  const idx = field.options.choices.length + 1;
+  const baseChoice = field.type === 'cards'
+    ? { id: 'c' + idx, label: 'Choix ' + idx, ico: 'sparkles', desc: '' }
+    : { id: 'c' + idx, label: 'Option ' + idx };
+  // Garantir un id unique simple
+  while (field.options.choices.some(c => c.id === baseChoice.id)) {
+    baseChoice.id += '_' + Math.random().toString(36).slice(2, 4);
+  }
+  field.options.choices.push(baseChoice);
+  _renderAside();
+  _saveDraft();
+}
+
+function _deleteChoice(fieldId, choiceId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  found.field.options.choices = (found.field.options.choices || []).filter(c => c.id !== choiceId);
+  _renderAside();
+  _saveDraft();
+}
+
+// ── Édition options : presets max_chars (text-long) ──────────
+function _setMaxChars(fieldId, value) {
+  const found = _findFieldById(fieldId);
+  if (!found || isNaN(value)) return;
+  found.field.options.max_chars = value;
+  _renderAside();
+  _saveDraft();
+}
+
+// ── Édition options : currency (amount) ──────────────────────
+function _setCurrency(fieldId, currency) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  found.field.options.currency = currency;
+  _renderAside();
+  _saveDraft();
+}
+
+// ── Édition options : toggle réseau actif (social-links) ─────
+function _toggleNetwork(fieldId, networkId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const net = (found.field.options.networks || []).find(n => n.id === networkId);
+  if (net) net.enabled = !net.enabled;
+  _renderAside();
+  _saveDraft();
+}
+
+function _findFieldById(fieldId) {
+  for (const sec of _state.form.sections) {
+    const fld = sec.fields.find(f => f.id === fieldId);
+    if (fld) return { section: sec, field: fld };
+  }
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -473,8 +601,12 @@ function _renderField(sectionId, field) {
   const def = FIELD_TYPES[field.type] || { label: field.type, ico: 'help-circle' };
   const width = field.width || 'full';
   const widthLabel = width === 'full' ? 'Pleine' : width;
+  const isSelected = _state.ui.selected_field?.fieldId === field.id;
   return `
-    <div class="pulsa-field" data-field-id="${field.id}" data-width="${width}">
+    <div class="pulsa-field ${isSelected ? 'is-selected' : ''}"
+         data-field-id="${field.id}" data-width="${width}"
+         data-act="select-field"
+         data-section="${sectionId}" data-field="${field.id}">
       <div class="pulsa-field-head">
         <span class="pulsa-field-type">
           ${icon(def.ico, 14)}
@@ -507,6 +639,7 @@ function _renderField(sectionId, field) {
              type="text" placeholder="Question posée au répondant"
              data-bind="field.${sectionId}.${field.id}.label"
              value="${_escape(field.label)}">
+      ${isSelected ? '<div class="pulsa-field-hint">Édition des options dans le panneau de droite →</div>' : ''}
     </div>
   `;
 }
@@ -555,6 +688,12 @@ function _renderFieldTypeMenu() {
 function _renderAside() {
   const aside = _root?.querySelector('[data-slot="aside"]');
   if (!aside) return;
+  const selected = _selectedField();
+  if (selected) {
+    aside.innerHTML = _renderFieldEditor(selected.section, selected.field);
+    return;
+  }
+  // Sinon : stats globales du formulaire
   const sections = _state.form.sections;
   const fieldCount = sections.reduce((acc, s) => acc + s.fields.length, 0);
   aside.innerHTML = `
@@ -568,8 +707,340 @@ function _renderAside() {
         <span class="pulsa-stat-num">${fieldCount}</span>
         <span class="pulsa-stat-label">${fieldCount > 1 ? 'champs' : 'champ'}</span>
       </div>
-      <p class="pulsa-stats-hint">La preview live mobile sera disponible dans la prochaine étape (P2A.5).</p>
+      <p class="pulsa-stats-hint">Cliquez sur un champ pour éditer ses options spécifiques.</p>
     </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Éditeur contextuel d'un champ sélectionné (aside)
+// ═══════════════════════════════════════════════════════════════
+function _renderFieldEditor(section, field) {
+  const def = FIELD_TYPES[field.type] || { label: field.type, ico: 'help-circle' };
+  const fid = field.id;
+  const sid = section.id;
+
+  return `
+    <div class="pulsa-editor">
+      <header class="pulsa-editor-head">
+        <button class="pulsa-icon-btn" data-act="deselect-field" title="Retour aux stats">
+          ${icon('arrow-left', 14)}
+        </button>
+        <div class="pulsa-editor-title">
+          <span class="pulsa-editor-type">${icon(def.ico, 14)} ${def.label}</span>
+          <h3>Options du champ</h3>
+        </div>
+      </header>
+
+      <div class="pulsa-editor-body">
+        ${_editorCommonBlock(sid, field)}
+        ${_editorOptionsBlock(sid, field)}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Bloc commun à tous les types : label (visible aussi dans le main),
+ * texte d'aide, requis, largeur.
+ */
+function _editorCommonBlock(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Général</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Libellé de la question</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.label"
+               value="${_escape(field.label)}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte d'aide (optionnel)</span>
+        <input class="pulsa-input" type="text"
+               placeholder="Information complémentaire affichée sous la question"
+               data-bind="field.${sid}.${field.id}.help"
+               value="${_escape(field.help || '')}">
+      </label>
+    </section>
+  `;
+}
+
+/**
+ * Dispatcher : retourne le bloc d'options spécifiques au type.
+ */
+function _editorOptionsBlock(sid, field) {
+  switch (field.type) {
+    case 'text-short':   return _editorTextShort(sid, field);
+    case 'text-long':    return _editorTextLong(sid, field);
+    case 'email':        return _editorPlaceholder(sid, field, 'prenom.nom@exemple.fr');
+    case 'website':      return _editorPlaceholder(sid, field, 'https://votre-site.com');
+    case 'url-external': return _editorUrlExternal(sid, field);
+    case 'chips':        return _editorChoices(sid, field, 'chips');
+    case 'cards':        return _editorChoices(sid, field, 'cards');
+    case 'yes-no':       return _editorYesNo(sid, field);
+    case 'rank-top3':    return _editorRank(sid, field);
+    case 'date':         return _editorDate(sid, field);
+    case 'amount':       return _editorAmount(sid, field);
+    case 'social-links': return _editorSocialLinks(sid, field);
+    default:             return '';
+  }
+}
+
+function _editorTextShort(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte de remplacement (placeholder)</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.placeholder"
+               value="${_escape(field.options?.placeholder || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Nombre max de caractères</span>
+        <input class="pulsa-input" type="number" min="1" max="2000"
+               data-bind="field.${sid}.${field.id}.options.max_chars"
+               value="${field.options?.max_chars ?? ''}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorTextLong(sid, field) {
+  const presets = [300, 500, 1500];
+  const max = field.options?.max_chars ?? 500;
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte de remplacement</span>
+        <textarea class="pulsa-input" rows="2"
+                  data-bind="field.${sid}.${field.id}.options.placeholder">${_escape(field.options?.placeholder || '')}</textarea>
+      </label>
+      <div class="pulsa-fld">
+        <span class="pulsa-fld-label">Limite stricte de signes</span>
+        <div class="pulsa-preset-row">
+          ${presets.map(p => `
+            <button class="pulsa-chip ${max === p ? 'is-on' : ''}"
+                    data-act="preset-max-chars"
+                    data-field="${field.id}" data-value="${p}">
+              ${p}
+            </button>
+          `).join('')}
+          <input class="pulsa-input pulsa-preset-custom" type="number" min="50" max="5000"
+                 placeholder="Autre…"
+                 data-bind="field.${sid}.${field.id}.options.max_chars"
+                 value="${presets.includes(max) ? '' : max}">
+        </div>
+      </div>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Lignes affichées</span>
+        <input class="pulsa-input" type="number" min="1" max="20"
+               data-bind="field.${sid}.${field.id}.options.rows"
+               value="${field.options?.rows ?? 4}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorPlaceholder(sid, field, defaultHint) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte de remplacement</span>
+        <input class="pulsa-input" type="text"
+               placeholder="${_escape(defaultHint)}"
+               data-bind="field.${sid}.${field.id}.options.placeholder"
+               value="${_escape(field.options?.placeholder || '')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorUrlExternal(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte de remplacement</span>
+        <input class="pulsa-input" type="text"
+               placeholder="https://wetransfer.com/…"
+               data-bind="field.${sid}.${field.id}.options.placeholder"
+               value="${_escape(field.options?.placeholder || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Astuce fournisseurs (affichée sous le champ)</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.providers_hint"
+               value="${_escape(field.options?.providers_hint || '')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorChoices(sid, field, kind) {
+  const choices = field.options?.choices || [];
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Choix proposés</h4>
+      <div class="pulsa-choices">
+        ${choices.map(c => `
+          <div class="pulsa-choice">
+            <input class="pulsa-input" type="text"
+                   placeholder="Libellé du choix"
+                   data-bind="choice.${sid}.${field.id}.${c.id}.label"
+                   value="${_escape(c.label)}">
+            ${kind === 'cards' ? `
+              <input class="pulsa-input pulsa-choice-desc" type="text"
+                     placeholder="Description courte (optionnelle)"
+                     data-bind="choice.${sid}.${field.id}.${c.id}.desc"
+                     value="${_escape(c.desc || '')}">
+            ` : ''}
+            <button class="pulsa-icon-btn pulsa-icon-btn-danger"
+                    data-act="delete-choice"
+                    data-field="${field.id}" data-choice="${c.id}"
+                    title="Supprimer">
+              ${icon('x', 12)}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="pulsa-btn pulsa-btn-ghost pulsa-choice-add"
+              data-act="add-choice" data-field="${field.id}">
+        ${icon('plus', 14)}<span>Ajouter un choix</span>
+      </button>
+    </section>
+  `;
+}
+
+function _editorYesNo(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Libellés</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Bouton « Oui »</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.yes_label"
+               value="${_escape(field.options?.yes_label || 'Oui')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Bouton « Non »</span>
+        <input class="pulsa-input" type="text"
+               data-bind="field.${sid}.${field.id}.options.no_label"
+               value="${_escape(field.options?.no_label || 'Non')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorRank(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Nombre de places à classer</span>
+        <input class="pulsa-input" type="number" min="2" max="10"
+               data-bind="field.${sid}.${field.id}.options.slots"
+               value="${field.options?.slots ?? 3}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Étiquette de chaque place</span>
+        <input class="pulsa-input" type="text"
+               placeholder="Priorité"
+               data-bind="field.${sid}.${field.id}.options.placeholder"
+               value="${_escape(field.options?.placeholder || '')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorDate(sid, field) {
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Bornes (optionnelles)</h4>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Date minimale</span>
+        <input class="pulsa-input" type="date"
+               data-bind="field.${sid}.${field.id}.options.min"
+               value="${_escape(field.options?.min || '')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Date maximale</span>
+        <input class="pulsa-input" type="date"
+               data-bind="field.${sid}.${field.id}.options.max"
+               value="${_escape(field.options?.max || '')}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorAmount(sid, field) {
+  const currencies = ['EUR', 'USD', 'CHF', 'GBP'];
+  const cur = field.options?.currency || 'EUR';
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Options</h4>
+      <div class="pulsa-fld">
+        <span class="pulsa-fld-label">Devise</span>
+        <div class="pulsa-preset-row">
+          ${currencies.map(c => `
+            <button class="pulsa-chip ${cur === c ? 'is-on' : ''}"
+                    data-act="set-currency"
+                    data-field="${field.id}" data-value="${c}">
+              ${c}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Décimales (0 à 4)</span>
+        <input class="pulsa-input" type="number" min="0" max="4"
+               data-bind="field.${sid}.${field.id}.options.decimals"
+               value="${field.options?.decimals ?? 2}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Minimum</span>
+        <input class="pulsa-input" type="number"
+               data-bind="field.${sid}.${field.id}.options.min"
+               value="${field.options?.min ?? ''}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Maximum (optionnel)</span>
+        <input class="pulsa-input" type="number"
+               data-bind="field.${sid}.${field.id}.options.max"
+               value="${field.options?.max ?? ''}">
+      </label>
+    </section>
+  `;
+}
+
+function _editorSocialLinks(sid, field) {
+  const networks = field.options?.networks || [];
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Réseaux proposés au répondant</h4>
+      <p class="pulsa-editor-hint">Activez les réseaux pertinents pour votre formulaire. Le répondant ne verra que ceux que vous activez.</p>
+      <div class="pulsa-networks">
+        ${networks.map(n => `
+          <div class="pulsa-network ${n.enabled ? 'is-on' : ''}">
+            <button class="pulsa-network-toggle"
+                    data-act="toggle-network"
+                    data-field="${field.id}" data-network="${n.id}"
+                    title="${n.enabled ? 'Désactiver' : 'Activer'}">
+              ${n.enabled ? icon('check', 12) : icon('plus', 12)}
+              <span>${n.label}</span>
+            </button>
+            ${n.enabled ? `
+              <input class="pulsa-input pulsa-network-placeholder" type="text"
+                     placeholder="Placeholder affiché au répondant"
+                     data-bind="network.${sid}.${field.id}.${n.id}.placeholder"
+                     value="${_escape(n.placeholder)}">
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </section>
   `;
 }
 
