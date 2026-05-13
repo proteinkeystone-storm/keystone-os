@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#0a2741">
+  <title>Pulsa — Formulaire</title>
+  <style>
+    /* ── Reset minimal ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background: #eef1f5;
+      color: #1a2a3a;
+      min-height: 100vh;
+    }
+
+    /* ── Loading skeleton ──────────────────────────── */
+    .pf-loading, .pf-error {
+      max-width: 480px;
+      margin: 80px auto 40px;
+      padding: 40px 24px;
+      text-align: center;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 2px 16px rgba(10, 39, 65, .08);
+    }
+    .pf-loading-spinner {
+      width: 32px;
+      height: 32px;
+      margin: 0 auto 18px;
+      border: 3px solid #dde3ec;
+      border-top-color: #c9b48a;
+      border-radius: 50%;
+      animation: pf-spin .9s linear infinite;
+    }
+    @keyframes pf-spin { to { transform: rotate(360deg); } }
+    .pf-loading p, .pf-error p { color: #6b7a8d; font-size: 14px; line-height: 1.6; }
+    .pf-error h1 {
+      font-size: 22px; font-weight: 900; letter-spacing: -.03em;
+      color: #0a2741; margin-bottom: 8px;
+    }
+    .pf-error-code {
+      display: inline-block; margin-top: 16px;
+      padding: 4px 12px; border-radius: 999px;
+      background: #f4f6f9; color: #6b7a8d;
+      font-size: 11px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <!-- Le renderer mobile-first sera injecté par form.js (P3.2). -->
+  <!-- En attendant, on affiche un état de chargement + fetch de la config. -->
+  <div id="pf-app">
+    <div class="pf-loading">
+      <div class="pf-loading-spinner" aria-hidden="true"></div>
+      <p>Chargement du formulaire…</p>
+    </div>
+  </div>
+
+  <script type="module">
+    /* ═══════════════════════════════════════════════════════════════
+       Pulsa Public · Shell minimal (P3.1)
+       Récupère le slug depuis l'URL `/f/{slug}` et fetch la config
+       depuis l'API Worker. Le vrai renderer mobile-first (12 types
+       de champs + soumission + écran de confirmation) arrive en P3.2.
+       ═══════════════════════════════════════════════════════════════ */
+
+    const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
+
+    function getSlugFromPath() {
+      const m = location.pathname.match(/^\/f\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/?$/);
+      return m ? m[1] : null;
+    }
+
+    function renderError(title, msg, code) {
+      document.getElementById('pf-app').innerHTML = `
+        <div class="pf-error">
+          <h1>${title}</h1>
+          <p>${msg}</p>
+          ${code ? `<span class="pf-error-code">${code}</span>` : ''}
+        </div>
+      `;
+    }
+
+    async function load() {
+      const slug = getSlugFromPath();
+      if (!slug) {
+        renderError(
+          'Adresse incorrecte',
+          'L\'URL ne contient pas d\'identifiant de formulaire valide.',
+          '/f/{slug}'
+        );
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/pulsa/public/${slug}`);
+        if (res.status === 404) {
+          renderError(
+            'Formulaire introuvable',
+            'Ce lien ne pointe vers aucun formulaire publié. Vérifiez l\'URL auprès de l\'expéditeur.',
+            '404'
+          );
+          return;
+        }
+        if (!res.ok) {
+          renderError(
+            'Erreur temporaire',
+            'Le formulaire n\'a pas pu être chargé. Réessayez dans un instant.',
+            'HTTP ' + res.status
+          );
+          return;
+        }
+        const data = await res.json();
+        const form = data?.form;
+        if (!form) {
+          renderError('Formulaire introuvable', 'La réponse du serveur est invalide.', 'NO_FORM');
+          return;
+        }
+
+        // P3.1 : on affiche juste un récap brut. Le rendu mobile-first
+        // avec saisie et soumission est livré dans la P3.2.
+        document.title = form.title || 'Pulsa';
+        document.getElementById('pf-app').innerHTML = `
+          <div class="pf-loading" style="text-align:left;padding:32px 28px;">
+            <h1 style="font-size:22px;font-weight:900;letter-spacing:-.03em;color:#0a2741;margin-bottom:6px;">
+              ${form.title || 'Formulaire'}
+            </h1>
+            <p style="margin-bottom:18px;color:#6b7a8d;font-size:13px;">
+              ${form.meta?.intro || '<em>Pas d\'introduction.</em>'}
+            </p>
+            <p style="font-size:12px;color:#6b7a8d;font-style:italic;line-height:1.6;">
+              ${form.sections?.length || 0} section(s),
+              ${(form.sections || []).reduce((a, s) => a + (s.fields?.length || 0), 0)} champ(s).
+            </p>
+            <p style="margin-top:24px;padding:12px;background:#f4f6f9;border-radius:8px;font-size:12px;color:#6b7a8d;line-height:1.6;">
+              <strong>Phase 3.1 — Shell publié.</strong><br>
+              Le rendu mobile-first complet (saisie + envoi + accusé de réception) arrive en Phase 3.2.
+            </p>
+          </div>
+        `;
+      } catch (e) {
+        renderError(
+          'Erreur réseau',
+          'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.',
+          e?.message || 'NETWORK'
+        );
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

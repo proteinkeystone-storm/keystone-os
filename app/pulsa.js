@@ -16,6 +16,7 @@
 import { icon } from './lib/ui-icons.js';
 import { scheduleAutoSave } from './vault.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import { CF_API } from './pads-loader.js';
 import {
   FIELD_TYPES,
   FIELD_GROUPS,
@@ -438,8 +439,20 @@ function _navigateRelative(delta) {
   if (next) _navigate(next.id);
 }
 
-function _publishForm() {
+// ── Headers d'authentification pour l'API Worker (admin ou JWT) ─
+function _authHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  const adminToken = localStorage.getItem('ks_admin_token');
+  const jwt        = localStorage.getItem('ks_jwt');
+  if (adminToken)  h['Authorization'] = 'Bearer ' + adminToken;
+  else if (jwt)    h['Authorization'] = 'Bearer ' + jwt;
+  return h;
+}
+
+// ── Publication réelle via Worker (POST /api/pulsa/forms) ───────
+async function _publishForm() {
   const f = _state.form;
+  if (!f) return;
   const fieldCount = f.sections.reduce((acc, s) => acc + s.fields.length, 0);
   const missing = [];
   if (!f.meta.title?.trim())            missing.push('titre');
@@ -450,7 +463,54 @@ function _publishForm() {
     alert(`Avant de publier, complétez : ${missing.join(', ')}.`);
     return;
   }
-  alert(`Formulaire prêt à être publié à keystone.app/f/${f.meta.slug}.\n\nLa publication réelle (route Worker + collecte D1 + mail Resend) sera activée en Phase 3.`);
+
+  // Marque le formulaire comme à publier (status='published') côté payload
+  const payload = {
+    form: {
+      ...f,
+      output: { ...(f.output || {}), status: 'published' },
+    },
+  };
+
+  try {
+    const res = await fetch(CF_API + '/api/pulsa/forms', {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      // 409 = slug pris ; 400 = validation ; 401 = pas d'auth ; 403 = pas owner
+      const msg = data?.error || data?.message || `Erreur HTTP ${res.status}`;
+      alert(`Publication impossible :\n\n${msg}`);
+      return;
+    }
+
+    // Succès : on récupère la version serveur (output.status, published_at, etc.)
+    if (data?.form) {
+      _state.form = {
+        ..._state.form,
+        ...data.form,
+        output: {
+          ...(_state.form.output || {}),
+          ...(data.form.output || {}),
+          status: 'published',
+          published_url: `${location.origin}/f/${data.form.slug || _state.form.meta.slug}`,
+          last_response_at: null,
+        },
+      };
+      _saveDraft({ explicit: true });
+    }
+
+    const url = `${location.origin}/f/${f.meta.slug}`;
+    alert(`Formulaire publié avec succès !\n\nURL à partager :\n${url}\n\nLes répondants pourront le remplir en ligne. Les réponses arriveront aux destinataires configurés.`);
+    _renderMain();
+    _renderRail();
+  } catch (e) {
+    console.error('[pulsa] publish error', e);
+    alert(`Erreur réseau lors de la publication : ${e.message || e}`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

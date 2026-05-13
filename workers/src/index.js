@@ -40,6 +40,8 @@ import { handleDataDispatch }                                           from './
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
+import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
+import { handlePulsaPublic } from './routes/pulsa-public.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
@@ -129,6 +131,25 @@ export default {
       if (path.startsWith('/api/kodex/asset/') && method === 'DELETE') {
         const aid = path.split('/').pop();
         return handleDeleteAsset(request, env, aid);
+      }
+
+      // ── Pulsa — Builder de formulaires (Sprint Pulsa-3.1) ─────
+      // CRUD config formulaires (auth requise) + lecture publique par slug.
+      if (path === '/api/pulsa/forms' && method === 'POST')  return handlePulsaUpsert(request, env);
+      if (path === '/api/pulsa/forms' && method === 'GET')   return handlePulsaList(request, env);
+      if (path.startsWith('/api/pulsa/forms/') && method === 'GET') {
+        const fid = path.split('/').pop();
+        return handlePulsaGet(request, env, fid);
+      }
+      if (path.startsWith('/api/pulsa/forms/') && method === 'DELETE') {
+        const fid = path.split('/').pop();
+        return handlePulsaDelete(request, env, fid);
+      }
+      // Lecture publique : pas d'auth, retourne uniquement les formulaires
+      // status='published' et strip les champs sensibles (recipients, owner).
+      if (path.startsWith('/api/pulsa/public/') && method === 'GET') {
+        const slug = path.split('/').pop();
+        return handlePulsaPublic(request, env, slug);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
