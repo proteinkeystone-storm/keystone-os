@@ -198,6 +198,13 @@ function _onClick(e) {
   if (act === 'preset-max-chars') return _setMaxChars(t.dataset.field, parseInt(t.dataset.value, 10));
   if (act === 'set-currency')     return _setCurrency(t.dataset.field, t.dataset.value);
   if (act === 'toggle-network')   return _toggleNetwork(t.dataset.field, t.dataset.network);
+
+  // Étapes Apparence / Livraison
+  if (act === 'set-brand-preset') return _setBrandPreset(t.dataset.color, t.dataset.accent);
+  if (act === 'set-ttl')          return _setTTL(parseInt(t.dataset.value, 10));
+  if (act === 'add-recipient')    return _addRecipient();
+  if (act === 'delete-recipient') return _deleteRecipient(t.dataset.email);
+  if (act === 'auto-slug')        return _autoSlug();
 }
 
 function _onInput(e) {
@@ -289,7 +296,18 @@ function _navigateRelative(delta) {
 }
 
 function _publishForm() {
-  alert('Publication du formulaire : disponible à partir de la Phase 3 (route publique /f/{slug} + Worker collecte + mail Resend).');
+  const f = _state.form;
+  const fieldCount = f.sections.reduce((acc, s) => acc + s.fields.length, 0);
+  const missing = [];
+  if (!f.meta.title?.trim())            missing.push('titre');
+  if (!f.meta.slug?.trim())             missing.push('slug');
+  if ((f.delivery.recipients || []).length === 0) missing.push('destinataire mail');
+  if (fieldCount === 0)                 missing.push('au moins un champ');
+  if (missing.length > 0) {
+    alert(`Avant de publier, complétez : ${missing.join(', ')}.`);
+    return;
+  }
+  alert(`Formulaire prêt à être publié à keystone.app/f/${f.meta.slug}.\n\nLa publication réelle (route Worker + collecte D1 + mail Resend) sera activée en Phase 3.`);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -438,6 +456,70 @@ function _findFieldById(fieldId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Actions Apparence / Livraison
+// ═══════════════════════════════════════════════════════════════
+function _setBrandPreset(color, accent) {
+  _state.form.meta.brand_color = color;
+  _state.form.meta.brand_accent = accent;
+  _renderMain();
+  _saveDraft();
+}
+
+function _setTTL(days) {
+  if (!days || isNaN(days)) return;
+  _state.form.meta.ttl_days = days;
+  _renderMain();
+  _saveDraft();
+}
+
+function _autoSlug() {
+  const title = _state.form.meta.title?.trim();
+  if (!title) return;
+  _state.form.meta.slug = _slugify(title);
+  _renderMain();
+  _saveDraft();
+}
+
+function _slugify(s) {
+  return String(s)
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // retirer accents
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function _addRecipient() {
+  const input = _root?.querySelector('[data-slot="new-recipient"]');
+  if (!input) return;
+  const email = input.value.trim();
+  if (!email) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    alert('Adresse email invalide.');
+    return;
+  }
+  const list = _state.form.delivery.recipients ||= [];
+  if (list.includes(email)) {
+    alert('Ce destinataire est déjà dans la liste.');
+    return;
+  }
+  if (list.length >= 3) {
+    alert('Maximum 3 destinataires direction par formulaire (Phase 1). La V2 permettra des listes plus longues.');
+    return;
+  }
+  list.push(email);
+  input.value = '';
+  _renderMain();
+  _saveDraft();
+}
+
+function _deleteRecipient(email) {
+  _state.form.delivery.recipients = (_state.form.delivery.recipients || []).filter(e => e !== email);
+  _renderMain();
+  _saveDraft();
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Rendu
 // ═══════════════════════════════════════════════════════════════
 function _renderRail() {
@@ -466,9 +548,9 @@ function _renderMain() {
   if (!main) return;
   switch (_currentStepId) {
     case 'structure':  _renderStructure(main); break;
-    case 'appearance': _renderPlaceholder(main, 'Apparence', 'Couleurs, logo, intro (P2A.6)'); break;
-    case 'delivery':   _renderPlaceholder(main, 'Livraison', 'URL, destinataires direction, TTL (P2A.7)'); break;
-    case 'publish':    _renderPlaceholder(main, 'Publication', 'Preview final & publier (P2A.8)'); break;
+    case 'appearance': _renderAppearance(main); break;
+    case 'delivery':   _renderDelivery(main); break;
+    case 'publish':    _renderPublish(main); break;
   }
   main.insertAdjacentHTML('beforeend', _renderStepFooter());
 }
@@ -512,6 +594,268 @@ function _renderPlaceholder(main, label, subline) {
       ${icon('sparkles', 32)}
       <h2>Étape en cours de construction</h2>
       <p>Disponible dans la prochaine itération du builder.</p>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Étape Apparence
+// ═══════════════════════════════════════════════════════════════
+function _renderAppearance(main) {
+  const m = _state.form.meta;
+  const presets = [
+    { name: 'Navy & Or',     color: '#0a2741', accent: '#c9b48a' },
+    { name: 'Indigo Pulsa',  color: '#131826', accent: '#6366f1' },
+    { name: 'Forêt',         color: '#0f3a2d', accent: '#86c6a4' },
+    { name: 'Bordeaux',      color: '#3a0f1f', accent: '#e0a8b6' },
+    { name: 'Graphite & Or', color: '#1a1a1a', accent: '#d4a574' },
+    { name: 'Blanc & Noir',  color: '#1a1a1a', accent: '#ffffff' },
+  ];
+
+  main.innerHTML = `
+    <div class="ws-step-header">
+      <h1 class="ws-step-title">Apparence du formulaire</h1>
+      <p class="ws-step-sub">Personnalisez l'identité visuelle perçue par les répondants.</p>
+    </div>
+
+    <section class="pulsa-block">
+      <h3 class="pulsa-block-title">Identité</h3>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Titre du formulaire</span>
+        <input class="pulsa-input" type="text"
+               placeholder="Ex : Diagnostic opérationnel Prométhée"
+               data-bind="form.meta.title"
+               value="${_escape(m.title)}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte d'introduction (affiché en tête)</span>
+        <textarea class="pulsa-input" rows="3"
+                  placeholder="Quelques mots pour expliquer le contexte aux répondants"
+                  data-bind="form.meta.intro">${_escape(m.intro)}</textarea>
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Logo du formulaire (URL d'image)</span>
+        <input class="pulsa-input" type="url"
+               placeholder="https://votre-site.com/logo.png"
+               data-bind="form.meta.logo_url"
+               value="${_escape(m.logo_url || '')}">
+      </label>
+      <label class="pulsa-toggle">
+        <input type="checkbox"
+               data-bind="form.meta.anonymous"
+               ${m.anonymous ? 'checked' : ''}>
+        <span class="pulsa-toggle-track"></span>
+        <span class="pulsa-toggle-body">
+          <span class="pulsa-toggle-label">Réponses anonymes</span>
+          <span class="pulsa-toggle-sub">Si désactivé, les répondants devront indiquer leur identité au début</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="pulsa-block">
+      <h3 class="pulsa-block-title">Palette</h3>
+      <p class="pulsa-block-hint">Sélectionnez une palette prédéfinie ou affinez à la main.</p>
+      <div class="pulsa-palette-grid">
+        ${presets.map(p => {
+          const active = m.brand_color === p.color && m.brand_accent === p.accent;
+          return `
+            <button class="pulsa-palette-card ${active ? 'is-on' : ''}"
+                    data-act="set-brand-preset"
+                    data-color="${p.color}" data-accent="${p.accent}"
+                    title="${p.name}">
+              <span class="pulsa-palette-swatches">
+                <span style="background:${p.color}"></span>
+                <span style="background:${p.accent}"></span>
+              </span>
+              <span class="pulsa-palette-name">${p.name}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div class="pulsa-color-grid">
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Couleur principale (fond / header)</span>
+          <span class="pulsa-color-row">
+            <input type="color"
+                   data-bind="form.meta.brand_color"
+                   value="${_escape(m.brand_color)}">
+            <input class="pulsa-input" type="text"
+                   data-bind="form.meta.brand_color"
+                   value="${_escape(m.brand_color)}">
+          </span>
+        </label>
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Couleur d'accent (boutons / liens)</span>
+          <span class="pulsa-color-row">
+            <input type="color"
+                   data-bind="form.meta.brand_accent"
+                   value="${_escape(m.brand_accent)}">
+            <input class="pulsa-input" type="text"
+                   data-bind="form.meta.brand_accent"
+                   value="${_escape(m.brand_accent)}">
+          </span>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Étape Livraison
+// ═══════════════════════════════════════════════════════════════
+function _renderDelivery(main) {
+  const m = _state.form.meta;
+  const d = _state.form.delivery;
+  const ttlPresets = [30, 90, 180, 365];
+  const currentTtl = m.ttl_days ?? 90;
+
+  main.innerHTML = `
+    <div class="ws-step-header">
+      <h1 class="ws-step-title">Livraison du formulaire</h1>
+      <p class="ws-step-sub">URL publique, destinataires direction et durée de conservation des réponses.</p>
+    </div>
+
+    <section class="pulsa-block">
+      <h3 class="pulsa-block-title">URL publique</h3>
+      <p class="pulsa-block-hint">L'URL que vous partagerez avec vos répondants.</p>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Identifiant court (slug)</span>
+        <div class="pulsa-slug-row">
+          <span class="pulsa-slug-prefix">keystone.app/f/</span>
+          <input class="pulsa-input pulsa-slug-input" type="text"
+                 placeholder="biennale-art-2026"
+                 data-bind="form.meta.slug"
+                 value="${_escape(m.slug || '')}">
+          <button class="pulsa-btn pulsa-btn-ghost pulsa-slug-auto"
+                  data-act="auto-slug"
+                  title="Générer depuis le titre du formulaire">
+            ${icon('sparkles', 14)}<span>Auto</span>
+          </button>
+        </div>
+      </label>
+    </section>
+
+    <section class="pulsa-block">
+      <h3 class="pulsa-block-title">Notification mail</h3>
+      <p class="pulsa-block-hint">Chaque nouvelle réponse est envoyée à ces adresses. Le mail = votre backup permanent même si la TTL purge la donnée serveur.</p>
+      <div class="pulsa-recipients">
+        ${(d.recipients || []).length === 0 ? `
+          <p class="pulsa-recipients-empty">Aucun destinataire pour l'instant.</p>
+        ` : d.recipients.map(email => `
+          <div class="pulsa-recipient">
+            <span class="pulsa-recipient-email">${icon('edit', 12)} ${_escape(email)}</span>
+            <button class="pulsa-icon-btn pulsa-icon-btn-danger"
+                    data-act="delete-recipient" data-email="${_escape(email)}"
+                    title="Retirer">
+              ${icon('x', 12)}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+      <div class="pulsa-recipient-add">
+        <input class="pulsa-input" type="email"
+               placeholder="prenom.nom@entreprise.fr"
+               data-slot="new-recipient">
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="add-recipient">
+          ${icon('plus', 14)}<span>Ajouter ce destinataire</span>
+        </button>
+      </div>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Objet du mail de notification</span>
+        <input class="pulsa-input" type="text"
+               placeholder="Nouvelle réponse — ${_escape(m.title || 'Pulsa')}"
+               data-bind="form.delivery.notification_subject"
+               value="${_escape(d.notification_subject || '')}">
+      </label>
+    </section>
+
+    <section class="pulsa-block">
+      <h3 class="pulsa-block-title">Durée de conservation (TTL)</h3>
+      <p class="pulsa-block-hint">Les réponses stockées sont automatiquement supprimées au bout de ce délai. Conformité RGPD Art. 5 (minimisation) par design. Le mail de notification reste, lui, indéfiniment dans la boîte du destinataire.</p>
+      <div class="pulsa-ttl-row">
+        ${ttlPresets.map(d => `
+          <button class="pulsa-chip ${currentTtl === d ? 'is-on' : ''}"
+                  data-act="set-ttl" data-value="${d}">
+            ${d} jours
+          </button>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Étape Publication
+// ═══════════════════════════════════════════════════════════════
+function _renderPublish(main) {
+  const f = _state.form;
+  const sections = f.sections;
+  const fieldCount = sections.reduce((acc, s) => acc + s.fields.length, 0);
+  const warnings = [];
+  if (!f.meta.title?.trim())               warnings.push('Le formulaire n\'a pas de titre (étape Apparence).');
+  if (!f.meta.slug?.trim())                warnings.push('Aucun slug défini pour l\'URL publique (étape Livraison).');
+  if ((f.delivery.recipients || []).length === 0) warnings.push('Aucun destinataire de notification mail (étape Livraison).');
+  if (sections.length === 0)               warnings.push('Aucune section dans le formulaire (étape Structure).');
+  if (fieldCount === 0)                    warnings.push('Aucun champ dans le formulaire (étape Structure).');
+  const ready = warnings.length === 0;
+
+  main.innerHTML = `
+    <div class="ws-step-header">
+      <h1 class="ws-step-title">Prêt à publier ?</h1>
+      <p class="ws-step-sub">Vérifiez le récapitulatif et publiez votre formulaire.</p>
+    </div>
+
+    <section class="pulsa-recap">
+      <h3 class="pulsa-block-title">Récapitulatif</h3>
+      <div class="pulsa-recap-grid">
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">Titre</span>
+          <span class="pulsa-recap-value">${_escape(f.meta.title) || '<em>non défini</em>'}</span>
+        </div>
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">URL publique</span>
+          <span class="pulsa-recap-value">${f.meta.slug ? `keystone.app/f/${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
+        </div>
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">Sections</span>
+          <span class="pulsa-recap-value">${sections.length}</span>
+        </div>
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">Champs</span>
+          <span class="pulsa-recap-value">${fieldCount}</span>
+        </div>
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">Destinataires</span>
+          <span class="pulsa-recap-value">${(f.delivery.recipients || []).length}</span>
+        </div>
+        <div class="pulsa-recap-cell">
+          <span class="pulsa-recap-label">TTL</span>
+          <span class="pulsa-recap-value">${f.meta.ttl_days ?? 90} jours</span>
+        </div>
+      </div>
+    </section>
+
+    ${warnings.length > 0 ? `
+      <section class="pulsa-block pulsa-warnings">
+        <h3 class="pulsa-block-title">${warnings.length} ${warnings.length > 1 ? 'éléments manquants' : 'élément manquant'} avant publication</h3>
+        <ul class="pulsa-warning-list">
+          ${warnings.map(w => `<li>${_escape(w)}</li>`).join('')}
+        </ul>
+      </section>
+    ` : `
+      <section class="pulsa-block pulsa-ready">
+        <h3 class="pulsa-block-title">${icon('check', 16)} Tout est en place</h3>
+        <p>Votre formulaire est prêt à être publié à l'URL <strong>keystone.app/f/${_escape(f.meta.slug)}</strong>. Une fois publié, vous pourrez le partager avec vos répondants et recevoir les réponses par mail.</p>
+      </section>
+    `}
+
+    <div class="pulsa-publish-cta">
+      <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish ${ready ? '' : 'is-disabled'}"
+              data-act="publish-form"
+              ${ready ? '' : 'aria-disabled="true"'}>
+        ${icon('sparkles', 16)}<span>Publier le formulaire</span>
+      </button>
+      <p class="pulsa-publish-note">La publication réelle (route Worker + collecte D1 + mail Resend) sera activée en Phase 3.</p>
     </div>
   `;
 }
