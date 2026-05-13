@@ -6,7 +6,7 @@
   "rewrites": [
     { "source": "/app",         "destination": "/app.html"   },
     { "source": "/admin",       "destination": "/admin.html" },
-    { "source": "/f/:slug",     "destination": "/form.html"  }
+    { "source": "/f/(.*)",      "destination": "/form.html"  }
   ],
 
   "headers": [
@@ -54,6 +54,12 @@
     },
     {
       "source": "/admin.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/form.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
