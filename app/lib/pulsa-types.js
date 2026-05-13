@@ -238,6 +238,11 @@ export function newForm() {
     meta: {
       title: '',
       slug: '',
+      // Deux modes de logo, exclusifs :
+      // - logo_data_url : data URI base64 (uploadé localement, max ~500 ko)
+      // - logo_url      : URL externe (CDN du client)
+      // Si les deux sont remplis, logo_data_url prend la priorité au rendu.
+      logo_data_url: null,
       logo_url: null,
       brand_color: '#0a2741',
       brand_accent: '#c9b48a',

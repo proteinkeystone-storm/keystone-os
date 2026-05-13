@@ -205,9 +205,16 @@ function _onClick(e) {
   if (act === 'add-recipient')    return _addRecipient();
   if (act === 'delete-recipient') return _deleteRecipient(t.dataset.email);
   if (act === 'auto-slug')        return _autoSlug();
+  if (act === 'remove-logo')      return _removeLogo();
 }
 
 function _onInput(e) {
+  // Cas spécial : upload de fichier pour le logo
+  if (e.target.type === 'file' && e.target.dataset?.slot === 'logo-upload') {
+    const file = e.target.files?.[0];
+    if (file) _uploadLogo(file);
+    return;
+  }
   const t = e.target.closest('[data-bind]');
   if (t) {
     _applyBinding(t);
@@ -519,6 +526,36 @@ function _deleteRecipient(email) {
   _saveDraft();
 }
 
+// ── Upload de logo (base64 inline) ──────────────────────────
+const LOGO_MAX_BYTES = 500 * 1024; // 500 ko
+const LOGO_MIME_WHITELIST = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp', 'image/gif'];
+
+function _uploadLogo(file) {
+  if (!LOGO_MIME_WHITELIST.includes(file.type)) {
+    alert('Format non supporté. Utilisez PNG, JPG, SVG, WebP ou GIF.');
+    return;
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    const kb = Math.round(file.size / 1024);
+    alert(`Logo trop volumineux (${kb} ko). Maximum 500 ko. Redimensionnez votre image avant de la téléverser.`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    _state.form.meta.logo_data_url = reader.result; // data URI complète
+    _renderMain();
+    _saveDraft({ explicit: true });
+  };
+  reader.onerror = () => alert('Échec de la lecture du fichier. Réessayez.');
+  reader.readAsDataURL(file);
+}
+
+function _removeLogo() {
+  _state.form.meta.logo_data_url = null;
+  _renderMain();
+  _saveDraft();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Rendu
 // ═══════════════════════════════════════════════════════════════
@@ -633,13 +670,38 @@ function _renderAppearance(main) {
                   placeholder="Quelques mots pour expliquer le contexte aux répondants"
                   data-bind="form.meta.intro">${_escape(m.intro)}</textarea>
       </label>
-      <label class="pulsa-fld">
-        <span class="pulsa-fld-label">Logo du formulaire (URL d'image)</span>
-        <input class="pulsa-input" type="url"
-               placeholder="https://votre-site.com/logo.png"
-               data-bind="form.meta.logo_url"
-               value="${_escape(m.logo_url || '')}">
-      </label>
+      <div class="pulsa-logo-block">
+        <span class="pulsa-fld-label">Logo du formulaire</span>
+        ${m.logo_data_url ? `
+          <div class="pulsa-logo-preview">
+            <img src="${_escape(m.logo_data_url)}" alt="Logo téléversé">
+            <button class="pulsa-icon-btn pulsa-icon-btn-danger pulsa-logo-remove"
+                    data-act="remove-logo" title="Retirer ce logo">
+              ${icon('x', 14)}
+            </button>
+          </div>
+        ` : (m.logo_url ? `
+          <div class="pulsa-logo-preview pulsa-logo-preview-url">
+            <img src="${_escape(m.logo_url)}" alt="Logo (URL externe)"
+                 onerror="this.style.display='none'">
+            <span class="pulsa-logo-url-hint">URL externe — ${_escape(m.logo_url)}</span>
+          </div>
+        ` : '')}
+        <div class="pulsa-logo-actions">
+          <label class="pulsa-btn pulsa-btn-ghost pulsa-logo-upload">
+            ${icon('upload-cloud', 14)}<span>${m.logo_data_url ? 'Remplacer le logo' : 'Téléverser un logo'}</span>
+            <input type="file" data-slot="logo-upload"
+                   accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
+                   hidden>
+          </label>
+          <span class="pulsa-logo-or">ou</span>
+          <input class="pulsa-input pulsa-logo-url-input" type="url"
+                 placeholder="https://votre-site.com/logo.png"
+                 data-bind="form.meta.logo_url"
+                 value="${_escape(m.logo_url || '')}">
+        </div>
+        <p class="pulsa-logo-meta">PNG · JPG · SVG · WebP · GIF — max 500 ko. Le logo apparaît en tête du formulaire public.</p>
+      </div>
       <label class="pulsa-toggle">
         <input type="checkbox"
                data-bind="form.meta.anonymous"
