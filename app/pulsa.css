@@ -1195,6 +1195,20 @@ textarea.pulsa-input {
 }
 
 /* ── Palettes prédéfinies (Apparence) ──────────────────── */
+.pulsa-palette-family {
+  margin-bottom: 14px;
+}
+.pulsa-palette-family:last-child { margin-bottom: 0; }
+.pulsa-palette-family-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .45;
+  margin-bottom: 6px;
+}
 .pulsa-palette-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

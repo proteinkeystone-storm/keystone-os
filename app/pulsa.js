@@ -1405,17 +1405,31 @@ function _renderPlaceholder(main, label, subline) {
 // ═══════════════════════════════════════════════════════════════
 function _renderAppearance(main) {
   const m = _state.form.meta;
-  // Palettes prédéfinies (dégradés webgradients.com retravaillés).
-  // Chaque palette définit son gradient CSS + une couleur d'accent
-  // bien contrastée + une couleur unie de fallback (theme-color iOS,
-  // mode mail sans support gradient).
+  // 10 palettes prédéfinies inspirées webgradients.com, réparties en
+  // 5 familles (Sobres / Chaleureux / Frais / Bold / Néon). Chaque
+  // accent a été choisi pour TRANCHER avec son dégradé, pas pour
+  // l'accompagner — on évite ainsi les variations de or sur tous
+  // les fonds sombres.
   const presets = [
-    { name: 'Navy & Or',     gradient: 'linear-gradient(135deg, #0a2741 0%, #1c4870 100%)', color: '#0a2741', accent: '#c9b48a' },
-    { name: 'Indigo Pulsa',  gradient: 'linear-gradient(135deg, #131826 0%, #2b3252 100%)', color: '#131826', accent: '#a5b4fc' },
-    { name: 'Aurore',        gradient: 'linear-gradient(135deg, #141e30 0%, #5b347a 100%)', color: '#1f1c3d', accent: '#fbbf24' },
-    { name: 'Émeraude',      gradient: 'linear-gradient(135deg, #0f3d3e 0%, #1a7a5e 100%)', color: '#0f3d3e', accent: '#fcd34d' },
-    { name: 'Bordeaux',      gradient: 'linear-gradient(135deg, #2d0a14 0%, #6b1431 100%)', color: '#2d0a14', accent: '#f4a261' },
-    { name: 'Graphite & Or', gradient: 'linear-gradient(135deg, #1a1a1a 0%, #383838 100%)', color: '#1a1a1a', accent: '#d4a574' },
+    // ── Sobres premium (texte blanc lisible) ──────────────
+    { family: 'Sobres', name: 'Navy & Or',          gradient: 'linear-gradient(135deg, #0a2741 0%, #1c4870 100%)', color: '#0a2741', accent: '#c9b48a' },
+    { family: 'Sobres', name: 'Indigo Pulsa',       gradient: 'linear-gradient(135deg, #131826 0%, #2b3252 100%)', color: '#131826', accent: '#a5b4fc' },
+    { family: 'Sobres', name: 'Aurore',             gradient: 'linear-gradient(135deg, #141e30 0%, #5b347a 100%)', color: '#1f1c3d', accent: '#fbbf24' },
+
+    // ── Chaleureux (pour atmosphères estivales / lifestyle) ─
+    { family: 'Chaleureux', name: 'Coucher de soleil', gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', color: '#fa709a', accent: '#7c2d12' },
+    { family: 'Chaleureux', name: "Jus d'orange",      gradient: 'linear-gradient(135deg, #fc6076 0%, #ff9a44 100%)', color: '#fc6076', accent: '#1e1b4b' },
+
+    // ── Frais (turquoise, cyan, vert eau) ─────────────────
+    { family: 'Frais', name: 'Malibu',                 gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: '#4facfe', accent: '#9d174d' },
+    { family: 'Frais', name: 'Jeune pousse',           gradient: 'linear-gradient(135deg, #9be15d 0%, #00e3ae 100%)', color: '#10b981', accent: '#831843' },
+
+    // ── Bold (saturé, énergie) ───────────────────────────
+    { family: 'Bold', name: 'Profondeur',              gradient: 'linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)', color: '#4f46e5', accent: '#fde047' },
+    { family: 'Bold', name: 'Violet pop',              gradient: 'linear-gradient(135deg, #b224ef 0%, #7579ff 100%)', color: '#7c3aed', accent: '#22d3ee' },
+
+    // ── Néon (vibrant, événementiel) ─────────────────────
+    { family: 'Néon', name: 'Miracle',                 gradient: 'linear-gradient(135deg, #00dbde 0%, #fc00ff 100%)', color: '#a855f7', accent: '#fde047' },
   ];
 
   main.innerHTML = `
@@ -1493,25 +1507,43 @@ function _renderAppearance(main) {
 
     <section class="pulsa-block">
       <h3 class="pulsa-block-title">Palette</h3>
-      <p class="pulsa-block-hint">Sélectionnez une palette prédéfinie (dégradé + accent) ou affinez à la main.</p>
-      <div class="pulsa-palette-grid">
-        ${presets.map(p => {
-          const active = (m.brand_gradient === p.gradient) || (!m.brand_gradient && m.brand_color === p.color && m.brand_accent === p.accent);
-          return `
-            <button class="pulsa-palette-card ${active ? 'is-on' : ''}"
-                    data-act="set-brand-preset"
-                    data-gradient="${_escape(p.gradient)}"
-                    data-color="${p.color}" data-accent="${p.accent}"
-                    title="${p.name}">
-              <span class="pulsa-palette-swatches pulsa-palette-swatches-gradient">
-                <span class="pulsa-palette-gradient" style="background:${p.gradient}"></span>
-                <span class="pulsa-palette-accent" style="background:${p.accent}"></span>
-              </span>
-              <span class="pulsa-palette-name">${p.name}</span>
-            </button>
-          `;
-        }).join('')}
-      </div>
+      <p class="pulsa-block-hint">10 dégradés prêts à l'emploi, regroupés par ambiance. Chaque couleur d'accent a été choisie pour trancher avec son dégradé.</p>
+      ${(() => {
+        // Regroupement par famille pour une lecture plus claire
+        const families = [];
+        const byFamily = {};
+        for (const p of presets) {
+          if (!byFamily[p.family]) {
+            byFamily[p.family] = [];
+            families.push(p.family);
+          }
+          byFamily[p.family].push(p);
+        }
+        return families.map(fam => `
+          <div class="pulsa-palette-family">
+            <span class="pulsa-palette-family-label">${_escape(fam)}</span>
+            <div class="pulsa-palette-grid">
+              ${byFamily[fam].map(p => {
+                const active = (m.brand_gradient === p.gradient) ||
+                  (!m.brand_gradient && m.brand_color === p.color && m.brand_accent === p.accent);
+                return `
+                  <button class="pulsa-palette-card ${active ? 'is-on' : ''}"
+                          data-act="set-brand-preset"
+                          data-gradient="${_escape(p.gradient)}"
+                          data-color="${p.color}" data-accent="${p.accent}"
+                          title="${_escape(p.name)} — accent ${p.accent}">
+                    <span class="pulsa-palette-swatches pulsa-palette-swatches-gradient">
+                      <span class="pulsa-palette-gradient" style="background:${p.gradient}"></span>
+                      <span class="pulsa-palette-accent" style="background:${p.accent}"></span>
+                    </span>
+                    <span class="pulsa-palette-name">${_escape(p.name)}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `).join('');
+      })()}
 
       ${m.brand_gradient ? `
         <div class="pulsa-gradient-active">
