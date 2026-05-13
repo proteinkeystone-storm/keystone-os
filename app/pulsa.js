@@ -1068,7 +1068,7 @@ function _renderLibrary(main) {
             ${icon('plus', 16)}<span>Créer mon premier formulaire</span>
           </button>
           <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
-            ${icon('building', 14)}<span>Charger l'exemple immobilier VEFA</span>
+            ${icon('building', 14)}<span>Charger l'exemple immobilier</span>
           </button>
         </div>
       </div>
@@ -1084,7 +1084,7 @@ function _renderLibrary(main) {
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
-          ${icon('building', 14)}<span>Exemple VEFA</span>
+          ${icon('building', 14)}<span>Exemple immobilier</span>
         </button>
         <button class="pulsa-btn pulsa-btn-primary" data-act="new-form">
           ${icon('plus', 16)}<span>Nouveau formulaire</span>
