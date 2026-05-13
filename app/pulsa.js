@@ -18,6 +18,7 @@ import { scheduleAutoSave } from './vault.js';
 import {
   FIELD_TYPES,
   FIELD_GROUPS,
+  FIELD_WIDTHS,
   newField,
   newSection,
   newForm,
@@ -44,6 +45,8 @@ let _state = _initState();
 let _root  = null;
 let _currentStepId = 'structure';
 let _fieldTypeMenu = null; // { sectionId } quand ouvert
+let _lastSavedAt = null;
+let _saveIndicatorTimer = null;
 
 function _initState() {
   return {
@@ -54,6 +57,33 @@ function _initState() {
 
 function _currentStep() {
   return STEPS.find(s => s.id === _currentStepId) || STEPS[0];
+}
+
+function _stepIndex(stepId) {
+  return STEPS.findIndex(s => s.id === stepId);
+}
+
+/**
+ * Une étape est "is-done" quand ses conditions minimales sont remplies.
+ * Pulsa n'est pas un wizard linéaire — toutes les étapes sont navigables
+ * à tout moment, mais le rail signale visuellement la complétion.
+ */
+function _isStepDone(stepId) {
+  const f = _state.form;
+  switch (stepId) {
+    case 'structure':
+      return f.sections.length > 0 &&
+             f.sections.some(s => s.fields.length > 0);
+    case 'appearance':
+      return Boolean(f.meta.title?.trim());
+    case 'delivery':
+      return Boolean(f.meta.slug?.trim()) &&
+             f.delivery.recipients.length > 0;
+    case 'publish':
+      return f.output.status === 'published';
+    default:
+      return false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -93,6 +123,9 @@ function _buildShell() {
         <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
       </div>
       <div class="ws-topbar-actions">
+        <span class="pulsa-save-indicator" data-slot="save-indicator" aria-live="polite">
+          ${icon('check', 12)}<span data-slot="save-label">Enregistré</span>
+        </span>
         <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
@@ -127,18 +160,22 @@ function _onClick(e) {
 
   if (act === 'close')           return closePulsa();
   if (act === 'goto')            return _navigate(t.dataset.step);
-  if (act === 'save')            { _saveDraft(); return; }
+  if (act === 'next-step')       return _navigateRelative(+1);
+  if (act === 'prev-step')       return _navigateRelative(-1);
+  if (act === 'publish-form')    return _publishForm();
+  if (act === 'save')            { _saveDraft({ explicit: true }); return; }
 
   // Structure — sections
   if (act === 'add-section')     return _addSection();
   if (act === 'delete-section')  return _deleteSection(t.dataset.id);
 
   // Structure — champs
-  if (act === 'open-field-menu') return _openFieldTypeMenu(t.dataset.section);
-  if (act === 'close-modal')     return _closeModal();
-  if (act === 'pick-field-type') return _addField(_fieldTypeMenu?.sectionId, t.dataset.type);
-  if (act === 'delete-field')    return _deleteField(t.dataset.section, t.dataset.field);
-  if (act === 'toggle-required') return _toggleRequired(t.dataset.section, t.dataset.field);
+  if (act === 'open-field-menu')  return _openFieldTypeMenu(t.dataset.section);
+  if (act === 'close-modal')      return _closeModal();
+  if (act === 'pick-field-type')  return _addField(_fieldTypeMenu?.sectionId, t.dataset.type);
+  if (act === 'delete-field')     return _deleteField(t.dataset.section, t.dataset.field);
+  if (act === 'toggle-required')  return _toggleRequired(t.dataset.section, t.dataset.field);
+  if (act === 'cycle-field-width') return _cycleFieldWidth(t.dataset.section, t.dataset.field);
 }
 
 function _onInput(e) {
@@ -194,6 +231,16 @@ function _navigate(stepId) {
   if (crumb) crumb.textContent = _currentStep().label;
   _renderRail();
   _renderMain();
+}
+
+function _navigateRelative(delta) {
+  const i = _stepIndex(_currentStepId);
+  const next = STEPS[i + delta];
+  if (next) _navigate(next.id);
+}
+
+function _publishForm() {
+  alert('Publication du formulaire : disponible à partir de la Phase 3 (route publique /f/{slug} + Worker collecte + mail Resend).');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -252,34 +299,79 @@ function _toggleRequired(sectionId, fieldId) {
   _saveDraft();
 }
 
+function _cycleFieldWidth(sectionId, fieldId) {
+  const sec = _state.form.sections.find(s => s.id === sectionId);
+  const fld = sec?.fields.find(f => f.id === fieldId);
+  if (!fld) return;
+  const current = FIELD_WIDTHS.indexOf(fld.width || 'full');
+  fld.width = FIELD_WIDTHS[(current + 1) % FIELD_WIDTHS.length];
+  _renderMain();
+  _saveDraft();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Rendu
 // ═══════════════════════════════════════════════════════════════
 function _renderRail() {
   const rail = _root?.querySelector('[data-slot="rail"]');
   if (!rail) return;
-  rail.innerHTML = STEPS.map((s, i) => `
-    <button class="ws-rail-item ${s.id === _currentStepId ? 'is-active' : ''}"
-            data-act="goto" data-step="${s.id}">
-      <span class="ws-rail-num">${i + 1}</span>
-      <span class="ws-rail-icon">${icon(s.ico, 18)}</span>
-      <span class="ws-rail-label">
-        <span class="ws-rail-title">${s.label}</span>
-        <span class="ws-rail-sub">${s.sub}</span>
-      </span>
-    </button>
-  `).join('');
+  rail.innerHTML = `
+    <div class="ws-rail-section">Étapes</div>
+    ${STEPS.map((s, i) => {
+      const isActive = s.id === _currentStepId;
+      const isDone   = !isActive && _isStepDone(s.id);
+      const status   = isActive ? 'is-active' : (isDone ? 'is-done' : '');
+      const numContent = isDone ? icon('check', 12) : (i + 1);
+      return `
+        <button class="ws-step ${status}" data-act="goto" data-step="${s.id}">
+          <span class="ws-step-num">${numContent}</span>
+          <span class="ws-step-icon" style="width:18px;height:18px;">${icon(s.ico, 18)}</span>
+          <span class="ws-step-label">${s.label}</span>
+        </button>
+      `;
+    }).join('')}
+  `;
 }
 
 function _renderMain() {
   const main = _root?.querySelector('[data-slot="main"]');
   if (!main) return;
   switch (_currentStepId) {
-    case 'structure':  return _renderStructure(main);
-    case 'appearance': return _renderPlaceholder(main, 'Apparence', 'Couleurs, logo, intro (P2A.6)');
-    case 'delivery':   return _renderPlaceholder(main, 'Livraison', 'URL, destinataires direction, TTL (P2A.7)');
-    case 'publish':    return _renderPlaceholder(main, 'Publication', 'Preview final & publier (P2A.8)');
+    case 'structure':  _renderStructure(main); break;
+    case 'appearance': _renderPlaceholder(main, 'Apparence', 'Couleurs, logo, intro (P2A.6)'); break;
+    case 'delivery':   _renderPlaceholder(main, 'Livraison', 'URL, destinataires direction, TTL (P2A.7)'); break;
+    case 'publish':    _renderPlaceholder(main, 'Publication', 'Preview final & publier (P2A.8)'); break;
   }
+  main.insertAdjacentHTML('beforeend', _renderStepFooter());
+}
+
+function _renderStepFooter() {
+  const i = _stepIndex(_currentStepId);
+  const prev = STEPS[i - 1];
+  const next = STEPS[i + 1];
+  const isLast = i === STEPS.length - 1;
+  return `
+    <footer class="pulsa-step-footer">
+      <div class="pulsa-step-footer-left">
+        ${prev ? `
+          <button class="pulsa-btn pulsa-btn-ghost" data-act="prev-step">
+            ${icon('arrow-left', 14)}<span>Étape précédente : ${prev.label}</span>
+          </button>
+        ` : ''}
+      </div>
+      <div class="pulsa-step-footer-right">
+        ${isLast ? `
+          <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish" data-act="publish-form">
+            ${icon('sparkles', 16)}<span>Publier le formulaire</span>
+          </button>
+        ` : `
+          <button class="pulsa-btn pulsa-btn-primary" data-act="next-step">
+            <span>Continuer : ${next.label}</span>${icon('arrow-right', 14)}
+          </button>
+        `}
+      </div>
+    </footer>
+  `;
 }
 
 function _renderPlaceholder(main, label, subline) {
@@ -379,14 +471,23 @@ function _renderSection(section, index) {
 
 function _renderField(sectionId, field) {
   const def = FIELD_TYPES[field.type] || { label: field.type, ico: 'help-circle' };
+  const width = field.width || 'full';
+  const widthLabel = width === 'full' ? 'Pleine' : width;
   return `
-    <div class="pulsa-field" data-field-id="${field.id}">
+    <div class="pulsa-field" data-field-id="${field.id}" data-width="${width}">
       <div class="pulsa-field-head">
         <span class="pulsa-field-type">
           ${icon(def.ico, 14)}
           <span>${def.label}</span>
         </span>
         <div class="pulsa-field-actions">
+          <button class="pulsa-chip"
+                  data-act="cycle-field-width"
+                  data-section="${sectionId}" data-field="${field.id}"
+                  title="Largeur du champ — cliquer pour cycler">
+            ${icon('sliders', 12)}
+            <span>${widthLabel}</span>
+          </button>
           <button class="pulsa-chip ${field.required ? 'is-on' : ''}"
                   data-act="toggle-required"
                   data-section="${sectionId}" data-field="${field.id}"
@@ -487,11 +588,37 @@ function _escape(s) {
 // ═══════════════════════════════════════════════════════════════
 // Persistance brouillon (localStorage + vault sync)
 // ═══════════════════════════════════════════════════════════════
-function _saveDraft() {
+function _saveDraft({ explicit = false } = {}) {
   try {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(_state));
     if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    _lastSavedAt = Date.now();
+    _refreshSaveIndicator(explicit);
+    // Le rail peut changer (is-done sur étape Structure/Apparence...) à chaque save
+    _renderRail();
   } catch {}
+}
+
+function _refreshSaveIndicator(pulse = false) {
+  const ind = _root?.querySelector('[data-slot="save-indicator"]');
+  const lbl = _root?.querySelector('[data-slot="save-label"]');
+  if (!ind || !lbl || !_lastSavedAt) return;
+  lbl.textContent = pulse ? 'Enregistré' : _saveAgo(_lastSavedAt);
+  ind.classList.add('is-visible');
+  if (pulse) {
+    ind.classList.add('is-pulse');
+    setTimeout(() => ind.classList.remove('is-pulse'), 600);
+  }
+  clearTimeout(_saveIndicatorTimer);
+  _saveIndicatorTimer = setTimeout(() => _refreshSaveIndicator(false), 5000);
+}
+
+function _saveAgo(ts) {
+  const sec = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 60) return `Enregistré il y a ${sec} s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `Enregistré il y a ${min} min`;
+  return 'Enregistré';
 }
 
 function _loadDraft() {

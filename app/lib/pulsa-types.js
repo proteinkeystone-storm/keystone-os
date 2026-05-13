@@ -164,6 +164,12 @@ function _uid(prefix) {
  * (visible_if, required_if, compute_from) qui resteront `null`
  * jusqu'à la V2 du builder.
  */
+/**
+ * Largeurs disponibles pour un champ (cycle au clic dans le builder).
+ * Ordre = ordre du cycle. "full" = pleine largeur, autres = fractions.
+ */
+export const FIELD_WIDTHS = ['full', '3/4', '1/2', '1/4'];
+
 export function newField(type) {
   const def = FIELD_TYPES[type];
   if (!def) throw new Error(`[pulsa-types] Type inconnu : ${type}`);
@@ -173,6 +179,7 @@ export function newField(type) {
     label: def.label,
     help: '',
     required: false,
+    width: 'full',
     options: structuredClone(def.defaults),
     // Hooks pour la logique conditionnelle V2 (P2B)
     visible_if:   null,

@@ -284,6 +284,71 @@ textarea.pulsa-input {
   justify-content: center;
   border-style: dashed;
 }
+.pulsa-btn-publish {
+  padding: 12px 22px;
+  font-size: 14px;
+}
+
+/* ── Footer de navigation entre étapes ─────────────────── */
+.pulsa-step-footer {
+  margin-top: 40px;
+  padding: 20px 0 8px;
+  border-top: 1px solid var(--ws-border, var(--bd));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pulsa-step-footer-left,
+.pulsa-step-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pulsa-step-footer-right {
+  margin-left: auto;
+}
+
+/* ── Indicateur "Enregistré" dans la topbar ────────────── */
+.pulsa-save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, .12);
+  color: var(--ws-success, var(--green, #22c55e));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  opacity: 0;
+  transition: opacity .25s, transform .25s;
+  transform: translateY(-2px);
+  pointer-events: none;
+}
+.pulsa-save-indicator.is-visible {
+  opacity: .85;
+  transform: translateY(0);
+}
+.pulsa-save-indicator.is-pulse {
+  opacity: 1;
+  animation: pulsa-save-pulse .6s ease-out;
+}
+@keyframes pulsa-save-pulse {
+  0%   { transform: scale(.92); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* ── Largeur des champs ─────────────────────────────────
+   Le builder applique max-width au wrapper pour matérialiser
+   visuellement la largeur que le champ aura dans le rendu
+   public. Le layout reste en colonne en V1 ; les champs
+   côte à côte arrivent en P2A.4. */
+.pulsa-field[data-width="full"] { max-width: 100%; }
+.pulsa-field[data-width="3/4"]  { max-width: 75%; }
+.pulsa-field[data-width="1/2"]  { max-width: 50%; }
+.pulsa-field[data-width="1/4"]  { max-width: 30%; }
 
 /* ── Boutons icône ─────────────────────────────────────── */
 .pulsa-icon-btn {
