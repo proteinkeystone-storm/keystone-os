@@ -34,8 +34,9 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { icon } from './lib/ui-icons.js';
 import {
   loadModes, getModes, getMode, getSliders, getTimeBudgets,
-  getTargets, getInspirations, computeBriefQualityScore,
-  getQualityTier, pickStimulusWord,
+  getTargets, getInspirations, getBrandTones, getCoreValues,
+  getChannels, getStages, computeBriefQualityScore, getQualityTier,
+  getEncouragementMessage, pickStimulusWord,
 } from './lib/muse-modes.js';
 
 // ── Métadonnées workspace ─────────────────────────────────────
@@ -73,18 +74,29 @@ function _freshState() {
       program_description: '',
       program_kodex_id: null,
 
+      // ADN du programme
+      brand_tones: [],         // multi-select chips (ton de marque)
+      core_value: '',          // single-select chip (valeur centrale)
+      keywords_in: [],         // tags input (mots associés à explorer)
+      keywords_out: [],        // tags input (mots à éviter)
+
       // Curseurs (0-100, défaut centre = 50)
       tonality: 50,    // sobre ↔ audacieux
       tone: 50,        // chaleureux ↔ minimaliste
       format: 50,      // slogan ↔ manifeste
       boldness: 30,    // réaliste ↔ décalé
 
-      // Cases à cocher imagées
+      // Cibles et univers
       time_budget: '10min',
       targets: [],
       inspirations: [],
 
-      // Champ libre
+      // Contraintes & raffinements
+      main_channel: '',        // chip single-select (print / digital / mix)
+      stage: '',               // chip single-select (launch / midway / endgame)
+      competitors: '',         // champ texte court (programmes voisins)
+
+      // Champ libre extra
       extra: '',
 
       // Stimulus aléatoire (Surprends-moi)
@@ -218,6 +230,7 @@ function _buildShell() {
   _root.addEventListener('click', _onClick);
   _root.addEventListener('input', _onInput);
   _root.addEventListener('change', _onInput);
+  _root.addEventListener('keydown', _onKeydown);
   bindRatingButton(_root, WORKSPACE_META.id);
   _renderRail();
   _renderAside();
@@ -246,7 +259,12 @@ function _onClick(e) {
   if (act === 'pick-mode')         return _pickMode(t.dataset.id);
   if (act === 'toggle-target')     return _toggleCheckbox('targets', t.dataset.id);
   if (act === 'toggle-inspiration') return _toggleCheckbox('inspirations', t.dataset.id);
+  if (act === 'toggle-brand-tone') return _toggleCheckbox('brand_tones', t.dataset.id);
+  if (act === 'pick-core-value')   return _pickSingle('core_value', t.dataset.id);
+  if (act === 'pick-channel')      return _pickSingle('main_channel', t.dataset.id);
+  if (act === 'pick-stage')        return _pickSingle('stage', t.dataset.id);
   if (act === 'pick-time-budget')  return _pickTimeBudget(t.dataset.id);
+  if (act === 'remove-tag')        return _removeTag(t.dataset.group, t.dataset.value);
   if (act === 'surprise-me')       return _surpriseMe();
   if (act === 'reset-stimulus')    return _resetStimulus();
 }
@@ -256,6 +274,8 @@ function _onInput(e) {
   if (!el.name) return;
   const group = el.dataset.group;
   if (!group) return;
+  // Les tags inputs ne synchronisent leur valeur qu'au keydown Enter/virgule
+  if (el.dataset.tagsInput) return;
   let value = el.value;
   if (el.type === 'range' || el.type === 'number') {
     value = value === '' ? null : Number(value);
@@ -263,8 +283,21 @@ function _onInput(e) {
   if (_state[group]) {
     _state[group][el.name] = value;
     _scheduleSave();
-    // Update live de la jauge si on est sur Calibrate
     if (group === 'calibrate') _updateQualityGauge();
+  }
+}
+
+// Capture Enter et virgule sur les tags inputs (keywords_in / keywords_out)
+// pour valider un tag à la volée sans bouton Ajouter.
+function _onKeydown(e) {
+  const el = e.target;
+  if (!el.dataset || !el.dataset.tagsInput) return;
+  if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
+    const value = el.value;
+    if (!value || !value.trim()) return;
+    e.preventDefault();
+    _addTag(el.dataset.tagsInput, value);
+    el.value = '';
   }
 }
 
@@ -290,10 +323,37 @@ function _toggleCheckbox(group, id) {
   _renderMain({ preserveScroll: true });
 }
 
+// Single-select : clic sur le chip déjà choisi → désélectionne
+function _pickSingle(field, id) {
+  _state.calibrate[field] = _state.calibrate[field] === id ? '' : id;
+  _scheduleSave();
+  _renderMain({ preserveScroll: true });
+}
+
 function _pickTimeBudget(id) {
   _state.calibrate.time_budget = id;
   _scheduleSave();
   _renderMain({ preserveScroll: true });
+}
+
+// Retire un tag (keywords_in / keywords_out) cliqué via sa croix
+function _removeTag(group, value) {
+  const list = _state.calibrate[group] || [];
+  _state.calibrate[group] = list.filter(x => x !== value);
+  _scheduleSave();
+  _renderMain({ preserveScroll: true });
+}
+
+// Ajoute un tag suite à validation Enter / virgule dans un tags input
+function _addTag(group, value) {
+  const v = (value || '').trim().replace(/^,+|,+$/g, '');
+  if (!v) return;
+  const list = _state.calibrate[group] || [];
+  if (!list.includes(v)) {
+    _state.calibrate[group] = [...list, v];
+    _scheduleSave();
+    _renderMain({ preserveScroll: true });
+  }
 }
 
 function _surpriseMe() {
@@ -467,26 +527,30 @@ function _viewTopic() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue 2 — CALIBRATE (sliders + checkboxes + jauge live + dé)
+// Vue 2 — CALIBRATE (sticky gauge + sections riches + tags inputs)
 // ═══════════════════════════════════════════════════════════════
 function _viewCalibrate() {
   const c = _state.calibrate;
-  const score = computeBriefQualityScore(_state);
-  const tier = getQualityTier(score);
   const stimulus = c.stimulus_word;
 
   return `
+    <!-- ── JAUGE STICKY TOP (toujours visible) ── -->
+    ${_renderStickyGauge()}
+
     <span class="ws-eyebrow">${icon('sliders', 12)} 2 sur 3 · Le calibrage</span>
-    <h1 class="ws-h1">Posez votre brief comme une partie d'échecs</h1>
+    <h1 class="ws-h1">Posez votre brief, débloquez vos idées</h1>
     <p class="ws-lead">
-      Plus vous précisez, plus Muse produit des idées justes.
-      <strong style="color:var(--gold);">Pas obligé de tout remplir</strong>&nbsp;—
-      vous pouvez aussi cliquer sur 🎲 <em>Surprends-moi</em> pour partir d'une
-      configuration aléatoire avec un mot stimulus.
+      Chaque champ rempli aide Muse à produire des idées plus précises.
+      La jauge en haut vous indique en temps réel la qualité du brief.
+      <strong style="color:var(--gold);">Vous n'êtes pas obligé·e de tout remplir</strong>&nbsp;—
+      cliquez aussi sur 🎲 <em>Surprends-moi</em> pour débloquer la créativité.
     </p>
 
-    <!-- ── PROGRAMME ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Le programme</h3>
+    <!-- ═══ SECTION 1 — LE PROGRAMME ══════════════════════════ -->
+    <h3 class="ws-h3" style="margin-top:28px;">
+      ${icon('building', 14)} Le programme
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">35 pts</span>
+    </h3>
     <div class="ws-card" style="padding:22px 26px;">
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px 18px;">
         <div class="ws-field">
@@ -509,25 +573,39 @@ function _viewCalibrate() {
       </div>
     </div>
 
-    <!-- ── JAUGE QUALITÉ DU BRIEF ── -->
-    <div class="ws-card" data-slot="quality-gauge" style="margin-top:16px;padding:18px 24px;background:linear-gradient(90deg, var(--ws-surface) 0%, ${tier.color}11 100%);border-color:${tier.color}44;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
-        <div>
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);margin-bottom:4px;">
-            Qualité du brief
-          </div>
-          <div style="font-size:18px;font-weight:800;letter-spacing:-.018em;color:${tier.color};">
-            ${tier.label} <span style="font-size:13px;font-weight:600;color:var(--ws-text-muted);margin-left:6px;">${score} / 100</span>
-          </div>
-        </div>
-        <div style="flex:1;min-width:200px;max-width:380px;height:10px;background:var(--ws-border);border-radius:999px;overflow:hidden;position:relative;">
-          <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 260ms cubic-bezier(.4,0,.2,1);"></div>
-        </div>
-      </div>
+    <!-- ═══ SECTION 2 — L'ADN DU PROGRAMME ═══════════════════ -->
+    <h3 class="ws-h3" style="margin-top:28px;">
+      ${icon('sparkles', 14)} L'ADN du programme
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">25 pts · le cœur du brief</span>
+    </h3>
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:14px 0 8px 0;letter-spacing:-.005em;">
+      Ton de marque · que doit-on ressentir&nbsp;?
+      <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">multi-choix</span>
+    </div>
+    <div data-slot="brand-tones" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
 
-    <!-- ── CURSEURS ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Les cadrans créatifs</h3>
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Valeur centrale · qu'est-ce qui rend ce programme désirable AVANT TOUT&nbsp;?
+      <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">un seul choix</span>
+    </div>
+    <div data-slot="core-values" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Mots associés à explorer · que vous vient-il en pensant à ce programme&nbsp;?
+      <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">tapez puis Entrée — ou virgule</span>
+    </div>
+    ${_renderTagsInput('keywords_in', c.keywords_in, 'ex. silence, horizon, pierre, calme, dehors', '#10b981')}
+
+    <!-- ═══ SECTION 3 — LES CADRANS CRÉATIFS ════════════════ -->
+    <h3 class="ws-h3" style="margin-top:28px;">
+      ${icon('sliders', 14)} Les cadrans créatifs
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">5 pts si déplacés</span>
+    </h3>
     <div class="ws-card" style="padding:24px 28px;">
       ${_renderSlider('tonality', 'Tonalité',  'Sobre',      'Audacieux',   c.tonality)}
       ${_renderSlider('tone',     'Ton',       'Chaleureux', 'Minimaliste', c.tone)}
@@ -554,36 +632,147 @@ function _viewCalibrate() {
       </div>
     </div>
 
-    <!-- ── CIBLES ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Cibles acheteurs</h3>
-    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 10px 0;">
-      Sélectionnez celles que vise ce programme (multi-choix possible).
-    </p>
-    <div data-slot="targets" style="display:flex;flex-wrap:wrap;gap:8px;">
+    <!-- ═══ SECTION 4 — CIBLES ET UNIVERS ═══════════════════ -->
+    <h3 class="ws-h3" style="margin-top:28px;">
+      ${icon('check-square', 14)} Cibles & univers
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">15 pts</span>
+    </h3>
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:14px 0 8px 0;letter-spacing:-.005em;">
+      Cibles acheteurs · qui sont les acquéreurs visés&nbsp;? <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">multi-choix</span>
+    </div>
+    <div data-slot="targets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
 
-    <!-- ── INSPIRATIONS ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Univers d'inspiration</h3>
-    <p style="font-size:13px;color:var(--ws-text-muted);margin:0 0 10px 0;">
-      Choisissez les univers qui collent au programme — Muse en tiendra compte
-      pour ne pas vous proposer des idées hors sujet.
-    </p>
-    <div data-slot="inspirations" style="display:flex;flex-wrap:wrap;gap:8px;">
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Univers d'inspiration · l'ambiance qui colle au programme <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">multi-choix</span>
+    </div>
+    <div data-slot="inspirations" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
 
-    <!-- ── TIME BUDGET ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Combien de temps avez-vous&nbsp;?</h3>
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Temps disponible · pour cette session de brainstorm
+    </div>
     <div data-slot="time-budget" style="display:flex;flex-wrap:wrap;gap:8px;">
       <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
     </div>
 
-    <!-- ── CHAMP LIBRE ── -->
-    <h3 class="ws-h3" style="margin-top:28px;">Quelque chose de plus à dire&nbsp;?</h3>
-    <div class="ws-card" style="padding:22px 26px;">
-      <textarea class="ws-textarea" name="extra" data-group="calibrate" rows="3"
-                placeholder="ex. Le promoteur préfère un nom court et facile à prononcer au téléphone. La cible est plutôt locale (Var, Bouches-du-Rhône). Éviter le mot 'résidence'.">${_esc(c.extra || '')}</textarea>
+    <!-- ═══ SECTION 5 — CONTRAINTES & RAFFINEMENTS ══════════ -->
+    <h3 class="ws-h3" style="margin-top:28px;">
+      ${icon('shield-check', 14)} Contraintes & raffinements
+      <span style="font-size:11px;color:var(--ws-text-muted);font-weight:500;margin-left:6px;">15 pts</span>
+    </h3>
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:14px 0 8px 0;letter-spacing:-.005em;">
+      Mots à éviter · vocabulaire interdit dans les propositions
+      <span style="font-weight:500;color:var(--ws-text-muted);font-size:12px;">tapez puis Entrée — utile pour casser les clichés</span>
+    </div>
+    ${_renderTagsInput('keywords_out', c.keywords_out, 'ex. résidence, domaine, élégance, prestige', '#ef4444')}
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Canal principal · où seront diffusées les idées en priorité&nbsp;?
+    </div>
+    <div data-slot="channels" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <div style="font-size:13px;font-weight:700;color:var(--ws-text);margin:18px 0 8px 0;letter-spacing:-.005em;">
+      Stade de commercialisation · à quel moment de la vie du programme&nbsp;?
+    </div>
+    <div data-slot="stages" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;color:var(--ws-text-muted);">Chargement…</span>
+    </div>
+
+    <!-- ═══ SECTION 6 — ALLER PLUS LOIN (optionnel) ═════════ -->
+    <details style="margin-top:28px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--ws-text);letter-spacing:-.005em;list-style:none;padding:10px 0;border-top:1px solid var(--ws-border);outline:none;">
+        ${icon('chevron-down', 14)} Aller plus loin (optionnel)
+      </summary>
+      <div class="ws-card" style="padding:22px 26px;margin-top:8px;">
+        <div class="ws-field">
+          <label class="ws-label">Programmes voisins ou concurrents</label>
+          <input class="ws-input" type="text" name="competitors" data-group="calibrate"
+                 value="${_esc(c.competitors || '')}"
+                 placeholder="ex. Les Terrasses du Soleil (Sanary), Villa Marius (Cassis)">
+        </div>
+        <div class="ws-field" style="margin-top:14px;">
+          <label class="ws-label">Quelque chose de plus à dire&nbsp;? (consignes spéciales, contraintes diverses)</label>
+          <textarea class="ws-textarea" name="extra" data-group="calibrate" rows="3"
+                    placeholder="ex. Le promoteur préfère un nom court et facile à prononcer au téléphone. La cible est plutôt locale (Var, Bouches-du-Rhône). Éviter le ton 'cosmopolite'.">${_esc(c.extra || '')}</textarea>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Jauge sticky en haut + message d'encouragement
+// ═══════════════════════════════════════════════════════════════
+function _renderStickyGauge() {
+  const score = computeBriefQualityScore(_state);
+  const tier = getQualityTier(score);
+  const msg = getEncouragementMessage(_state);
+  const msgColor = msg.type === 'ready'  ? 'var(--green)'
+                 : msg.type === 'almost' ? 'var(--gold)'
+                 :                          'var(--ws-text-soft)';
+  return `
+    <div data-slot="quality-gauge"
+         style="position:sticky;top:0;z-index:5;margin:-24px -24px 18px -24px;padding:14px 28px;background:linear-gradient(180deg, var(--ws-bg-elev, var(--ws-surface)) 0%, var(--ws-bg-elev, var(--ws-surface)) 90%, transparent 100%);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid ${tier.color}33;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span style="font-size:24px;font-weight:900;letter-spacing:-.022em;color:${tier.color};font-variant-numeric:tabular-nums;">${score}</span>
+            <span style="font-size:13px;color:var(--ws-text-muted);font-variant-numeric:tabular-nums;">/ 100</span>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);">
+              Qualité du brief
+            </div>
+            <div style="font-size:14px;font-weight:700;color:${tier.color};">
+              ${tier.label}
+            </div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;max-width:380px;height:10px;background:var(--ws-border);border-radius:999px;overflow:hidden;position:relative;">
+          <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 280ms cubic-bezier(.4,0,.2,1);"></div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:12.5px;line-height:1.5;color:${msgColor};">
+        ${msg.type === 'ready' ? icon('check', 13) : icon('sparkles', 13)}
+        <span style="margin-left:4px;">${_esc(msg.text)}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tags input mini-composant (keywords_in / keywords_out)
+// ═══════════════════════════════════════════════════════════════
+function _renderTagsInput(field, values, placeholder, accent) {
+  const tags = Array.isArray(values) ? values : [];
+  return `
+    <div class="ws-card" style="padding:14px 18px;margin-bottom:10px;">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        ${tags.map(v => `
+          <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px 5px 12px;border-radius:999px;background:${accent}1a;color:${accent};font-size:12.5px;font-weight:600;border:1px solid ${accent}33;">
+            ${_esc(v)}
+            <button data-act="remove-tag" data-group="${field}" data-value="${_esc(v)}"
+                    style="all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;color:${accent};opacity:.7;transition:opacity 140ms ease;"
+                    onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'"
+                    title="Retirer">
+              ${icon('x', 12)}
+            </button>
+          </span>
+        `).join('')}
+        <input type="text"
+               data-tags-input="${field}"
+               data-group="calibrate"
+               name="_tag_${field}"
+               placeholder="${_esc(placeholder)}"
+               style="flex:1;min-width:180px;all:unset;padding:6px 8px;font-size:13px;color:var(--ws-text);background:transparent;font-family:inherit;">
+      </div>
     </div>
   `;
 }
@@ -608,39 +797,47 @@ function _renderSlider(name, label, leftLabel, rightLabel, value) {
   `;
 }
 
-// ── Hydrate targets/inspirations/time-budget (chips) ──────────
+// ── Hydrate tous les slots de chips (multi + single select) ──
 function _hydrateCalibrateAsides() {
   const c = _state.calibrate;
 
-  // Targets
+  // Multi-select : Brand tones / Targets / Inspirations
+  getBrandTones().then(items => {
+    const slot = _root?.querySelector('[data-slot="brand-tones"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => _chipHTML(o, (c.brand_tones || []).includes(o.id), 'toggle-brand-tone')).join('');
+  });
   getTargets().then(items => {
     const slot = _root?.querySelector('[data-slot="targets"]');
     if (!slot) return;
-    slot.innerHTML = items.map(o => _chipHTML(o, c.targets.includes(o.id), 'toggle-target')).join('');
+    slot.innerHTML = items.map(o => _chipHTML(o, (c.targets || []).includes(o.id), 'toggle-target')).join('');
   });
-
-  // Inspirations
   getInspirations().then(items => {
     const slot = _root?.querySelector('[data-slot="inspirations"]');
     if (!slot) return;
-    slot.innerHTML = items.map(o => _chipHTML(o, c.inspirations.includes(o.id), 'toggle-inspiration')).join('');
+    slot.innerHTML = items.map(o => _chipHTML(o, (c.inspirations || []).includes(o.id), 'toggle-inspiration')).join('');
   });
 
-  // Time budget (single select)
+  // Single-select : Core values / Channels / Stages / Time budget
+  getCoreValues().then(items => {
+    const slot = _root?.querySelector('[data-slot="core-values"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => _chipHTML(o, c.core_value === o.id, 'pick-core-value')).join('');
+  });
+  getChannels().then(items => {
+    const slot = _root?.querySelector('[data-slot="channels"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => _chipHTML(o, c.main_channel === o.id, 'pick-channel')).join('');
+  });
+  getStages().then(items => {
+    const slot = _root?.querySelector('[data-slot="stages"]');
+    if (!slot) return;
+    slot.innerHTML = items.map(o => _chipHTML(o, c.stage === o.id, 'pick-stage')).join('');
+  });
   getTimeBudgets().then(items => {
     const slot = _root?.querySelector('[data-slot="time-budget"]');
     if (!slot) return;
-    slot.innerHTML = items.map(o => {
-      const selected = (c.time_budget || '10min') === o.id;
-      return `
-        <button class="ws-chip ${selected ? 'is-selected' : ''}"
-                data-act="pick-time-budget" data-id="${_esc(o.id)}"
-                style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:-.005em;border:1px solid ${selected ? 'var(--ws-accent)' : 'var(--ws-border)'};background:${selected ? 'var(--ws-accent-soft)' : 'transparent'};color:${selected ? 'var(--ws-accent)' : 'var(--ws-text)'};transition:all 140ms ease;">
-          ${selected ? icon('check', 13) : ''}
-          ${_esc(o.label)}
-        </button>
-      `;
-    }).join('');
+    slot.innerHTML = items.map(o => _chipHTML(o, (c.time_budget || '10min') === o.id, 'pick-time-budget')).join('');
   });
 }
 
@@ -655,27 +852,40 @@ function _chipHTML(o, selected, act) {
   `;
 }
 
-// ── Update live de la jauge "Qualité du brief" ────────────────
+// ── Update live de la jauge sticky "Qualité du brief" ─────────
 function _updateQualityGauge() {
   const slot = _root?.querySelector('[data-slot="quality-gauge"]');
   if (!slot) return;
   const score = computeBriefQualityScore(_state);
   const tier = getQualityTier(score);
-  slot.style.background = `linear-gradient(90deg, var(--ws-surface) 0%, ${tier.color}11 100%)`;
-  slot.style.borderColor = `${tier.color}44`;
+  const msg = getEncouragementMessage(_state);
+  const msgColor = msg.type === 'ready'  ? 'var(--green)'
+                 : msg.type === 'almost' ? 'var(--gold)'
+                 :                          'var(--ws-text-soft)';
+  slot.style.borderBottomColor = `${tier.color}33`;
   slot.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
-      <div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);margin-bottom:4px;">
-          Qualité du brief
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span style="font-size:24px;font-weight:900;letter-spacing:-.022em;color:${tier.color};font-variant-numeric:tabular-nums;">${score}</span>
+          <span style="font-size:13px;color:var(--ws-text-muted);font-variant-numeric:tabular-nums;">/ 100</span>
         </div>
-        <div style="font-size:18px;font-weight:800;letter-spacing:-.018em;color:${tier.color};">
-          ${tier.label} <span style="font-size:13px;font-weight:600;color:var(--ws-text-muted);margin-left:6px;">${score} / 100</span>
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);">
+            Qualité du brief
+          </div>
+          <div style="font-size:14px;font-weight:700;color:${tier.color};">
+            ${tier.label}
+          </div>
         </div>
       </div>
       <div style="flex:1;min-width:200px;max-width:380px;height:10px;background:var(--ws-border);border-radius:999px;overflow:hidden;position:relative;">
-        <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 260ms cubic-bezier(.4,0,.2,1);"></div>
+        <div style="position:absolute;inset:0 auto 0 0;width:${score}%;background:linear-gradient(90deg, ${tier.color}99 0%, ${tier.color} 100%);border-radius:999px;transition:width 280ms cubic-bezier(.4,0,.2,1);"></div>
       </div>
+    </div>
+    <div style="margin-top:8px;font-size:12.5px;line-height:1.5;color:${msgColor};">
+      ${msg.type === 'ready' ? icon('check', 13) : icon('sparkles', 13)}
+      <span style="margin-left:4px;">${_esc(msg.text)}</span>
     </div>
   `;
 }

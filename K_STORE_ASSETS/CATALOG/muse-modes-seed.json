@@ -201,6 +201,46 @@
     { "id": "urban",        "label": "Urbain · cosmopolite",     "emoji": "urbain" }
   ],
 
+  "_comment_brand_tones": "Ton de marque · multi-select. Vient enrichir les sliders (qui sont abstraits) par des qualificatifs tangibles. Aide la chargée de com à exprimer l'ADN de la marque promoteur ou du programme spécifique.",
+
+  "brand_tones": [
+    { "id": "elegant",      "label": "Élégant · luxueux" },
+    { "id": "warm",         "label": "Chaleureux · proche" },
+    { "id": "modern",       "label": "Moderne · dynamique" },
+    { "id": "authentic",    "label": "Authentique · sincère" },
+    { "id": "precise",      "label": "Précis · technique" },
+    { "id": "creative",     "label": "Créatif · audacieux" },
+    { "id": "confidential", "label": "Confidentiel · rare" },
+    { "id": "engaged",      "label": "Engagé · responsable" }
+  ],
+
+  "_comment_core_values": "Valeur centrale · single-select. Qu'est-ce qui rend ce programme désirable AVANT TOUT. Cadre les idées de l'IA sur l'argument numéro 1.",
+
+  "core_values": [
+    { "id": "location",     "label": "L'emplacement" },
+    { "id": "architecture", "label": "L'architecture · le geste" },
+    { "id": "view",         "label": "La vue · le paysage" },
+    { "id": "lifestyle",    "label": "Le mode de vie offert" },
+    { "id": "value",        "label": "Le rapport qualité-prix" },
+    { "id": "signature",    "label": "La signature du promoteur" },
+    { "id": "innovation",   "label": "L'innovation · le geste tech" },
+    { "id": "heritage",     "label": "Le patrimoine local" }
+  ],
+
+  "_comment_channels_stages": "Canal principal et stade de commercialisation : influencent fortement le ton des idées (lancement = aspirational, fin = urgent ; print = court élégant, digital = engageant).",
+
+  "channels": [
+    { "id": "print",   "label": "Print uniquement" },
+    { "id": "digital", "label": "Digital uniquement" },
+    { "id": "mix",     "label": "Print + Digital" }
+  ],
+
+  "stages": [
+    { "id": "launch",   "label": "Lancement · pré-commercialisation" },
+    { "id": "midway",   "label": "Mi-parcours · entretien" },
+    { "id": "endgame",  "label": "Fin de commercialisation · urgence" }
+  ],
+
   "frameworks": [
     { "id": "scamper",    "label": "SCAMPER",            "icon": "sliders",     "description": "Substituer, Combiner, Adapter, Modifier, Permuter, Éliminer, Réorganiser — 7 angles pour creuser une idée" },
     { "id": "six-hats",   "label": "6 chapeaux",         "icon": "palette",     "description": "6 angles d'analyse à la De Bono (factuel, émotionnel, risques, optimiste, créatif, organisation)" },
