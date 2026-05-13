@@ -23,6 +23,17 @@ import {
   newSection,
   newForm,
 } from './lib/pulsa-types.js';
+import {
+  newFormId,
+  listForms,
+  getForm,
+  saveForm,
+  deleteForm,
+  duplicateForm,
+  migrateLegacyDraft,
+  getCurrentFormId,
+  setCurrentFormId,
+} from './lib/pulsa-library.js';
 
 // ── Métadonnées de l'artefact ─────────────────────────────────
 const WORKSPACE_META = {
@@ -38,8 +49,6 @@ const STEPS = [
   { id: 'publish',    label: 'Publication', ico: 'sparkles', sub: 'Preview & publier' },
 ];
 
-const DRAFT_KEY = 'ks_pulsa_draft';
-
 // ── État global ───────────────────────────────────────────────
 let _state = _initState();
 let _root  = null;
@@ -50,7 +59,10 @@ let _saveIndicatorTimer = null;
 
 function _initState() {
   return {
-    form: newForm(),
+    // Mode d'affichage : 'library' (liste des formulaires) ou 'builder'
+    view: 'library',
+    // Formulaire actuellement en édition (null en mode library)
+    form: null,
     ui: {
       selected_section_id: null,
       // { sectionId, fieldId } quand un champ est en cours d'édition → aside contextuel
@@ -104,18 +116,46 @@ function _isStepDone(stepId) {
 // ═══════════════════════════════════════════════════════════════
 export function openPulsa() {
   if (_root) return;
-  _loadDraft();
+  _initFromStorage();
   _buildShell();
-  _renderRail();
   _renderMain();
+  _renderRail();
 }
 
 export function closePulsa() {
   if (!_root) return;
-  _saveDraft();
+  if (_state.view === 'builder') _saveDraft();
   _root.remove();
   _root = null;
   _fieldTypeMenu = null;
+}
+
+/**
+ * Initialise l'état au démarrage :
+ *   1. Migre un éventuel ancien brouillon `ks_pulsa_draft` vers la library
+ *   2. Charge le dernier formulaire édité s'il existe → mode builder
+ *   3. Sinon → mode library (liste)
+ */
+function _initFromStorage() {
+  _state = _initState();
+
+  // 1. Migration ancien draft (format { form, ui } sans library)
+  const migratedId = migrateLegacyDraft();
+
+  // 2. Reprise du dernier formulaire édité
+  const lastId = migratedId || getCurrentFormId();
+  if (lastId) {
+    const form = getForm(lastId);
+    if (form) {
+      _state.view = 'builder';
+      _state.form = form;
+      return;
+    }
+  }
+
+  // 3. Par défaut : vue library
+  _state.view = 'library';
+  _state.form = null;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -125,24 +165,24 @@ function _buildShell() {
   _root = document.createElement('div');
   _root.className = 'ws-app pulsa-app';
   _root.innerHTML = `
-    <header class="ws-topbar">
-      <button class="ws-topbar-back" data-act="close">
+    <header class="ws-topbar" data-slot="topbar">
+      <button class="ws-topbar-back" data-slot="back-btn" data-act="close">
         ${icon('arrow-left', 16)}
-        <span>Retour</span>
+        <span data-slot="back-label">Retour</span>
       </button>
       <div class="ws-topbar-title">
         <span class="name">${WORKSPACE_META.name}</span>
-        <span class="sep">·</span>
-        <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
+        <span class="sep" data-slot="topbar-sep">·</span>
+        <span class="crumb" data-slot="crumb"></span>
       </div>
       <div class="ws-topbar-actions">
         <span class="pulsa-save-indicator" data-slot="save-indicator" aria-live="polite">
           ${icon('check', 12)}<span data-slot="save-label">Enregistré</span>
         </span>
-        <button class="ws-iconbtn" data-act="save" title="Sauvegarder le brouillon">
+        <button class="ws-iconbtn" data-slot="save-btn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
-        <button class="ws-iconbtn" data-act="close" title="Fermer">
+        <button class="ws-iconbtn" data-act="close" title="Fermer Pulsa">
           ${icon('x', 18)}
         </button>
       </div>
@@ -156,6 +196,7 @@ function _buildShell() {
 
     <div class="pulsa-modal" data-slot="modal" hidden></div>
   `;
+  _refreshTopbar();
   document.body.appendChild(_root);
   _root.addEventListener('click', _onClick);
   _root.addEventListener('input', _onInput);
@@ -171,12 +212,19 @@ function _onClick(e) {
   if (!t) return;
   const act = t.dataset.act;
 
-  if (act === 'close')           return closePulsa();
-  if (act === 'goto')            return _navigate(t.dataset.step);
-  if (act === 'next-step')       return _navigateRelative(+1);
-  if (act === 'prev-step')       return _navigateRelative(-1);
-  if (act === 'publish-form')    return _publishForm();
-  if (act === 'save')            { _saveDraft({ explicit: true }); return; }
+  if (act === 'close')             return closePulsa();
+  if (act === 'goto')              return _navigate(t.dataset.step);
+  if (act === 'next-step')         return _navigateRelative(+1);
+  if (act === 'prev-step')         return _navigateRelative(-1);
+  if (act === 'publish-form')      return _publishForm();
+  if (act === 'save')              { _saveDraft({ explicit: true }); return; }
+
+  // Vue Bibliothèque
+  if (act === 'new-form')          return _newForm();
+  if (act === 'open-form')         return _openForm(t.dataset.id);
+  if (act === 'duplicate-form')    return _duplicateForm(t.dataset.id);
+  if (act === 'delete-form')       return _deleteForm(t.dataset.id);
+  if (act === 'back-to-library')   return _backToLibrary();
 
   // Structure — sections
   if (act === 'add-section')     return _addSection();
@@ -282,6 +330,90 @@ function _setDeep(obj, parts, value) {
     obj = obj[parts[i]];
   }
   obj[parts[parts.length - 1]] = value;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Topbar contextuelle (library / builder)
+// ═══════════════════════════════════════════════════════════════
+function _refreshTopbar() {
+  if (!_root) return;
+  const back = _root.querySelector('[data-slot="back-btn"]');
+  const backLbl = _root.querySelector('[data-slot="back-label"]');
+  const sep = _root.querySelector('[data-slot="topbar-sep"]');
+  const crumb = _root.querySelector('[data-slot="crumb"]');
+  const saveBtn = _root.querySelector('[data-slot="save-btn"]');
+  const saveInd = _root.querySelector('[data-slot="save-indicator"]');
+
+  if (_state.view === 'library') {
+    if (back) back.dataset.act = 'close';
+    if (backLbl) backLbl.textContent = 'Retour';
+    if (sep) sep.style.display = 'none';
+    if (crumb) crumb.textContent = 'Mes formulaires';
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (saveInd) saveInd.style.display = 'none';
+  } else {
+    if (back) back.dataset.act = 'back-to-library';
+    if (backLbl) backLbl.textContent = 'Mes formulaires';
+    if (sep) sep.style.display = '';
+    if (crumb) crumb.textContent = _currentStep().label;
+    if (saveBtn) saveBtn.style.display = '';
+    if (saveInd) saveInd.style.display = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Bibliothèque — actions
+// ═══════════════════════════════════════════════════════════════
+function _newForm() {
+  const form = saveForm({ ...newForm(), id: newFormId() });
+  setCurrentFormId(form.id);
+  _state.view = 'builder';
+  _state.form = form;
+  _state.ui.selected_field = null;
+  _currentStepId = 'structure';
+  _refreshTopbar();
+  _renderMain();
+  _renderRail();
+}
+
+function _openForm(id) {
+  const form = getForm(id);
+  if (!form) return;
+  setCurrentFormId(id);
+  _state.view = 'builder';
+  _state.form = form;
+  _state.ui.selected_field = null;
+  _currentStepId = 'structure';
+  _refreshTopbar();
+  _renderMain();
+  _renderRail();
+}
+
+function _duplicateForm(id) {
+  const copy = duplicateForm(id);
+  if (!copy) return;
+  _openForm(copy.id);
+}
+
+function _deleteForm(id) {
+  const form = getForm(id);
+  if (!form) return;
+  const title = form.meta?.title?.trim() || 'ce formulaire';
+  if (!confirm(`Supprimer définitivement « ${title} » ? Cette action est irréversible.`)) return;
+  deleteForm(id);
+  if (getCurrentFormId() === id) setCurrentFormId(null);
+  _renderMain();
+}
+
+function _backToLibrary() {
+  if (_state.form) _saveDraft();
+  setCurrentFormId(null);
+  _state.view = 'library';
+  _state.form = null;
+  _state.ui.selected_field = null;
+  _refreshTopbar();
+  _renderMain();
+  _renderRail();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -562,6 +694,11 @@ function _removeLogo() {
 function _renderRail() {
   const rail = _root?.querySelector('[data-slot="rail"]');
   if (!rail) return;
+  // En mode library, le rail est masqué via CSS — on peut le vider
+  if (_state.view !== 'builder') {
+    rail.innerHTML = '';
+    return;
+  }
   rail.innerHTML = `
     <div class="ws-rail-section">Étapes</div>
     ${STEPS.map((s, i) => {
@@ -583,6 +720,16 @@ function _renderRail() {
 function _renderMain() {
   const main = _root?.querySelector('[data-slot="main"]');
   if (!main) return;
+
+  // Vue Bibliothèque : on rend la liste et on stop là (rail + aside masqués via CSS)
+  if (_state.view === 'library') {
+    _root.classList.add('is-library');
+    _renderLibrary(main);
+    _renderAside(); // aside vide
+    return;
+  }
+
+  _root.classList.remove('is-library');
   switch (_currentStepId) {
     case 'structure':  _renderStructure(main); break;
     case 'appearance': _renderAppearance(main); break;
@@ -619,6 +766,102 @@ function _renderStepFooter() {
       </div>
     </footer>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Bibliothèque — rendu
+// ═══════════════════════════════════════════════════════════════
+function _renderLibrary(main) {
+  const forms = listForms();
+
+  if (forms.length === 0) {
+    main.innerHTML = `
+      <div class="pulsa-lib-empty">
+        ${icon('sparkles', 48)}
+        <h1>Bienvenue dans Pulsa</h1>
+        <p>Créez vos formulaires intelligents : diagnostics, questionnaires, onboarding, candidatures. Partage par URL, notification mail, RGPD natif.</p>
+        <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish" data-act="new-form">
+          ${icon('plus', 16)}<span>Créer mon premier formulaire</span>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  main.innerHTML = `
+    <div class="pulsa-lib-head">
+      <div>
+        <h1 class="ws-step-title">Vos formulaires</h1>
+        <p class="ws-step-sub">${forms.length} ${forms.length > 1 ? 'formulaires sauvegardés' : 'formulaire sauvegardé'} — auto-sauvegarde continue.</p>
+      </div>
+      <button class="pulsa-btn pulsa-btn-primary" data-act="new-form">
+        ${icon('plus', 16)}<span>Nouveau formulaire</span>
+      </button>
+    </div>
+    <div class="pulsa-lib-grid">
+      ${forms.map(f => _renderLibraryCard(f)).join('')}
+    </div>
+  `;
+}
+
+function _renderLibraryCard(form) {
+  const meta = form.meta || {};
+  const sections = form.sections || [];
+  const delivery = form.delivery || {};
+  const fieldCount = sections.reduce((acc, s) => acc + (s.fields?.length || 0), 0);
+  const recipients = (delivery.recipients || []).length;
+  const status = form.output?.status === 'published' ? 'Publié' : 'Brouillon';
+  const isPublished = form.output?.status === 'published';
+  const updated = _formatUpdatedAt(form.updated_at);
+  const logo = meta.logo_data_url || meta.logo_url || null;
+  const title = meta.title?.trim() || 'Formulaire sans titre';
+
+  return `
+    <article class="pulsa-lib-card" data-act="open-form" data-id="${form.id}">
+      <header class="pulsa-lib-card-head">
+        <div class="pulsa-lib-card-logo">
+          ${logo
+            ? `<img src="${_escape(logo)}" alt="" onerror="this.parentElement.classList.add('is-fallback');this.style.display='none'">`
+            : ''}
+          <span class="pulsa-lib-card-logo-fallback">${icon('check-square', 22)}</span>
+        </div>
+        <span class="pulsa-lib-status ${isPublished ? 'is-published' : ''}">${status}</span>
+      </header>
+      <h3 class="pulsa-lib-card-title">${_escape(title)}</h3>
+      ${meta.slug ? `<p class="pulsa-lib-card-slug">keystone.app/f/${_escape(meta.slug)}</p>` : '<p class="pulsa-lib-card-slug pulsa-lib-card-slug-empty">URL non définie</p>'}
+      <div class="pulsa-lib-card-meta">
+        <span title="Sections">${icon('sliders', 12)} ${sections.length}</span>
+        <span title="Champs">${icon('edit', 12)} ${fieldCount}</span>
+        <span title="Destinataires">${icon('check', 12)} ${recipients}</span>
+        <span title="TTL">${icon('history', 12)} ${meta.ttl_days ?? 90}j</span>
+      </div>
+      <footer class="pulsa-lib-card-footer">
+        <span class="pulsa-lib-card-date">${updated}</span>
+        <div class="pulsa-lib-card-actions" data-stop-propagation>
+          <button class="pulsa-icon-btn" data-act="duplicate-form" data-id="${form.id}" title="Dupliquer">
+            ${icon('copy', 14)}
+          </button>
+          <button class="pulsa-icon-btn pulsa-icon-btn-danger" data-act="delete-form" data-id="${form.id}" title="Supprimer">
+            ${icon('x', 14)}
+          </button>
+        </div>
+      </footer>
+    </article>
+  `;
+}
+
+function _formatUpdatedAt(ts) {
+  if (!ts) return '—';
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return `il y a ${sec} s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `il y a ${d} j`;
+  return new Date(ts).toLocaleDateString('fr-FR');
 }
 
 function _renderPlaceholder(main, label, subline) {
@@ -1094,6 +1337,10 @@ function _renderFieldTypeMenu() {
 function _renderAside() {
   const aside = _root?.querySelector('[data-slot="aside"]');
   if (!aside) return;
+  if (_state.view !== 'builder' || !_state.form) {
+    aside.innerHTML = '';
+    return;
+  }
   const selected = _selectedField();
   if (selected) {
     aside.innerHTML = _renderFieldEditor(selected.section, selected.field);
@@ -1466,8 +1713,12 @@ function _escape(s) {
 // Persistance brouillon (localStorage + vault sync)
 // ═══════════════════════════════════════════════════════════════
 function _saveDraft({ explicit = false } = {}) {
+  // Si on n'est pas dans le builder ou pas de formulaire chargé, rien à sauver
+  if (_state.view !== 'builder' || !_state.form) return;
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(_state));
+    const stored = saveForm(_state.form);
+    _state.form = stored; // récupère updated_at + id si nouveau
+    setCurrentFormId(stored.id);
     if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
     _lastSavedAt = Date.now();
     _refreshSaveIndicator(explicit);
@@ -1498,12 +1749,4 @@ function _saveAgo(ts) {
   return 'Enregistré';
 }
 
-function _loadDraft() {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.form && parsed?.ui) _state = parsed;
-    }
-  } catch {}
-}
+// _loadDraft a été remplacé par _initFromStorage + la library

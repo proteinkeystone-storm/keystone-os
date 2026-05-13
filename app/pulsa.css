@@ -7,6 +7,215 @@
    Pas de hex hardcodé : toutes les couleurs viennent du DS.
    ═══════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════
+   VUE BIBLIOTHÈQUE (multi-formulaires)
+   ═══════════════════════════════════════════════════════ */
+
+/* En mode library, on masque rail et aside : la liste prend toute la largeur */
+.pulsa-app.is-library .ws-rail,
+.pulsa-app.is-library .ws-aside {
+  display: none;
+}
+.pulsa-app.is-library .ws-main {
+  padding: 32px 40px;
+}
+@media (max-width: 640px) {
+  .pulsa-app.is-library .ws-main {
+    padding: 20px;
+  }
+}
+
+/* ── Écran d'accueil (library vide) ────────────────────── */
+.pulsa-lib-empty {
+  max-width: 520px;
+  margin: 80px auto 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--ws-text, var(--text));
+}
+.pulsa-lib-empty h1 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+}
+.pulsa-lib-empty p {
+  margin: 0;
+  opacity: .65;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.pulsa-lib-empty .pulsa-btn {
+  margin-top: 12px;
+  padding: 14px 28px;
+  font-size: 14px;
+}
+
+/* ── Header de la library ──────────────────────────────── */
+.pulsa-lib-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-lib-head h1 {
+  margin: 0 0 4px;
+}
+.pulsa-lib-head .ws-step-sub {
+  margin: 0;
+}
+
+/* ── Grille de cards ───────────────────────────────────── */
+.pulsa-lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* ── Card formulaire ───────────────────────────────────── */
+.pulsa-lib-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all .18s;
+  position: relative;
+}
+.pulsa-lib-card:hover {
+  border-color: var(--ws-accent, var(--gold));
+  background: rgba(99, 102, 241, .04);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .25);
+}
+
+.pulsa-lib-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pulsa-lib-card-logo {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--ws-border, var(--bd));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.pulsa-lib-card-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+}
+.pulsa-lib-card-logo-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-accent, var(--gold));
+  opacity: .55;
+}
+.pulsa-lib-card-logo:not(:has(img)) .pulsa-lib-card-logo-fallback,
+.pulsa-lib-card-logo.is-fallback .pulsa-lib-card-logo-fallback {
+  display: flex;
+}
+
+.pulsa-lib-status {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.pulsa-lib-status.is-published {
+  background: rgba(34, 197, 94, .15);
+  color: var(--green, #22c55e);
+  opacity: 1;
+}
+
+.pulsa-lib-card-title {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--ws-text, var(--text));
+  line-height: 1.3;
+}
+.pulsa-lib-card-slug {
+  margin: 0;
+  font-size: 11.5px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--ws-accent, var(--gold));
+  opacity: .85;
+  word-break: break-all;
+}
+.pulsa-lib-card-slug-empty {
+  color: var(--ws-text, var(--text));
+  opacity: .35;
+  font-style: italic;
+}
+
+.pulsa-lib-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+  margin-top: 4px;
+}
+.pulsa-lib-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pulsa-lib-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-lib-card-date {
+  font-size: 11px;
+  color: var(--ws-text, var(--text));
+  opacity: .45;
+  font-style: italic;
+}
+.pulsa-lib-card-actions {
+  display: flex;
+  gap: 4px;
+}
+.pulsa-lib-card-actions .pulsa-icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
 /* ── Aside (colonne droite : aperçu/stats ou éditeur) ───── */
 .pulsa-aside {
   background: var(--ws-surface, var(--navy2));
