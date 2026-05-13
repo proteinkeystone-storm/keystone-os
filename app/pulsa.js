@@ -15,6 +15,7 @@
 
 import { icon } from './lib/ui-icons.js';
 import { scheduleAutoSave } from './vault.js';
+import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import {
   FIELD_TYPES,
   FIELD_GROUPS,
@@ -179,6 +180,7 @@ function _buildShell() {
         <span class="pulsa-save-indicator" data-slot="save-indicator" aria-live="polite">
           ${icon('check', 12)}<span data-slot="save-label">Enregistré</span>
         </span>
+        ${ratingButtonHTML(WORKSPACE_META.id)}
         <button class="ws-iconbtn" data-slot="save-btn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
@@ -202,6 +204,7 @@ function _buildShell() {
   _root.addEventListener('input', _onInput);
   _root.addEventListener('change', _onInput);
   _root.addEventListener('keydown', _onKeydown);
+  bindRatingButton(_root, WORKSPACE_META.id);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -351,6 +354,7 @@ function _refreshTopbar() {
     if (crumb) crumb.textContent = 'Mes formulaires';
     if (saveBtn) saveBtn.style.display = 'none';
     if (saveInd) saveInd.style.display = 'none';
+    // Le bouton de notation reste affiché en bibliothèque (note de l'artefact, pas du formulaire)
   } else {
     if (back) back.dataset.act = 'back-to-library';
     if (backLbl) backLbl.textContent = 'Mes formulaires';
