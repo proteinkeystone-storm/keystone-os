@@ -42,6 +42,7 @@ import { handleCspReport }                                              from './
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
 import { handlePulsaPublic } from './routes/pulsa-public.js';
+import { handlePulsaSubmit, handlePulsaPurge } from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
@@ -150,6 +151,12 @@ export default {
       if (path.startsWith('/api/pulsa/public/') && method === 'GET') {
         const slug = path.split('/').pop();
         return handlePulsaPublic(request, env, slug);
+      }
+      // Soumission d'une réponse (publique). Stocke en D1 + envoie un mail
+      // Resend aux destinataires direction. Purge automatique au TTL.
+      if (path.startsWith('/api/pulsa/responses/') && method === 'POST') {
+        const slug = path.split('/').pop();
+        return handlePulsaSubmit(request, env, slug);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
@@ -278,5 +285,12 @@ export default {
   //   crons = ["0 3 * * *"]   # tous les jours à 3h UTC
   async scheduled(event, env, ctx) {
     ctx.waitUntil(handleScheduledPurge(env));
+    // Purge des réponses Pulsa expirées (TTL configurable par formulaire,
+    // 90j par défaut). Indépendant de la purge SDQR.
+    ctx.waitUntil(
+      handlePulsaPurge(env)
+        .then(r => console.log('[pulsa-purge]', JSON.stringify(r)))
+        .catch(e => console.warn('[pulsa-purge] failed', e?.message || e))
+    );
   },
 };

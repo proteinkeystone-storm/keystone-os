@@ -916,26 +916,54 @@
       const btn = document.querySelector('[data-act="submit"]');
       if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
 
-      // P3.2 : on n'envoie pas encore au serveur. Aperçu console + écran de succès local.
-      console.log('[pulsa] réponse collectée', _values);
+      const slug = getSlug();
+      try {
+        const res = await fetch(`${API_BASE}/api/pulsa/responses/${slug}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ responses: _values }),
+        });
+        const data = await res.json().catch(() => ({}));
 
-      setTimeout(() => {
+        if (!res.ok) {
+          const msg = data?.error || data?.message || `Erreur HTTP ${res.status}`;
+          showToast('Envoi échoué : ' + msg);
+          if (btn) { btn.disabled = false; btn.textContent = 'Envoyer mes réponses'; }
+          _submitting = false;
+          return;
+        }
+
+        // Succès — écran de remerciement avec accusé de réception
+        const mailNote = data?.mail === 'sent'
+          ? 'Les destinataires ont été notifiés par mail.'
+          : (data?.mail === 'failed'
+              ? 'Votre réponse a été enregistrée. La notification mail n\'a pas pu partir, mais l\'équipe sera prévenue.'
+              : 'Votre réponse a été enregistrée.');
         document.getElementById('pf-app').innerHTML = `
-          <div class="pf-loading" style="margin-top:60px;">
-            <h1 style="font-size:24px;font-weight:900;letter-spacing:-.03em;color:var(--pf-brand);margin-bottom:10px;">
-              Merci !
+          <div class="pf-loading" style="margin-top:60px;max-width:520px;">
+            <div style="font-size:48px;line-height:1;margin-bottom:16px;color:var(--pf-green);">✓</div>
+            <h1 style="font-size:26px;font-weight:900;letter-spacing:-.03em;color:var(--pf-brand);margin-bottom:10px;">
+              Merci pour votre réponse !
             </h1>
-            <p style="font-size:14px;color:var(--pf-muted);line-height:1.6;margin-bottom:18px;">
-              Votre réponse a bien été collectée (côté navigateur).
+            <p style="font-size:14px;color:var(--pf-muted);line-height:1.6;margin-bottom:8px;">
+              ${escape(mailNote)}
             </p>
-            <p style="font-size:12px;color:var(--pf-muted);line-height:1.6;padding:14px;background:var(--pf-light);border-radius:10px;">
-              <strong>Phase 3.2 — Renderer livré.</strong><br>
-              L'envoi réel vers le serveur + notification mail aux destinataires arrive en Phase 3.3.
+            <p style="font-size:12px;color:var(--pf-muted);line-height:1.6;font-style:italic;">
+              Vous pouvez fermer cette page.
             </p>
+            ${data?.response_id ? `
+              <p style="margin-top:24px;padding:10px;background:var(--pf-light);border-radius:8px;font-size:11px;color:var(--pf-muted);font-family:'SF Mono',Menlo,monospace;">
+                Accusé : ${escape(data.response_id)}
+              </p>
+            ` : ''}
           </div>
         `;
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 350);
+      } catch (e) {
+        showToast('Erreur réseau — réessayez dans un instant');
+        if (btn) { btn.disabled = false; btn.textContent = 'Envoyer mes réponses'; }
+        _submitting = false;
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════
