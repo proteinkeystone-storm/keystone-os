@@ -3,21 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="theme-color" content="#0a2741">
+  <meta name="theme-color" content="#0a2741" data-slot="theme">
   <title>Pulsa — Formulaire</title>
   <style>
-    /* ── Reset minimal ─────────────────────────────── */
+    /* ═══════════════════════════════════════════════════════════════
+       PULSA · Page publique de formulaire (P3.2)
+       Renderer mobile-first inspiré Sentinelle iPad + Diagnostic
+       Prométhée. Charte adaptable via CSS vars définies par JS
+       depuis la config form.meta.brand_color / brand_accent.
+       ═══════════════════════════════════════════════════════════════ */
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+
+    :root {
+      --pf-brand:   #0a2741;
+      --pf-brand-2: #0d3254;
+      --pf-accent:  #c9b48a;
+      --pf-accent-2:#a8895a;
+      --pf-body:    #1a2a3a;
+      --pf-muted:   #6b7a8d;
+      --pf-light:   #f4f6f9;
+      --pf-border:  #dde3ec;
+      --pf-bg:      #eef1f5;
+      --pf-green:   #22c55e;
+      --pf-danger:  #e05c5c;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
-      background: #eef1f5;
-      color: #1a2a3a;
+      background: var(--pf-bg);
+      color: var(--pf-body);
       min-height: 100vh;
+      padding-bottom: 80px;
     }
 
-    /* ── Loading skeleton ──────────────────────────── */
+    /* ── Loading / Error states ─────────────────────────── */
     .pf-loading, .pf-error {
       max-width: 480px;
       margin: 80px auto 40px;
@@ -31,29 +53,422 @@
       width: 32px;
       height: 32px;
       margin: 0 auto 18px;
-      border: 3px solid #dde3ec;
-      border-top-color: #c9b48a;
+      border: 3px solid var(--pf-border);
+      border-top-color: var(--pf-accent);
       border-radius: 50%;
       animation: pf-spin .9s linear infinite;
     }
     @keyframes pf-spin { to { transform: rotate(360deg); } }
-    .pf-loading p, .pf-error p { color: #6b7a8d; font-size: 14px; line-height: 1.6; }
+    .pf-loading p, .pf-error p { color: var(--pf-muted); font-size: 14px; line-height: 1.6; }
     .pf-error h1 {
       font-size: 22px; font-weight: 900; letter-spacing: -.03em;
-      color: #0a2741; margin-bottom: 8px;
+      color: var(--pf-brand); margin-bottom: 8px;
     }
     .pf-error-code {
       display: inline-block; margin-top: 16px;
       padding: 4px 12px; border-radius: 999px;
-      background: #f4f6f9; color: #6b7a8d;
+      background: var(--pf-light); color: var(--pf-muted);
       font-size: 11px; font-weight: 700; letter-spacing: .08em;
       text-transform: uppercase;
+    }
+
+    /* ── Header sticky ──────────────────────────────────── */
+    .pf-header {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--pf-brand);
+      padding: 0 20px;
+      box-shadow: 0 2px 16px rgba(0, 0, 0, .15);
+    }
+    .pf-header-inner {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 0 10px;
+      max-width: 680px; margin: 0 auto;
+    }
+    .pf-logo {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .08);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .pf-logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+    .pf-logo-fallback {
+      font-size: 16px; font-weight: 900;
+      color: var(--pf-accent);
+    }
+    .pf-header-text { flex: 1; min-width: 0; }
+    .pf-header-tag {
+      font-size: 10px; font-weight: 800; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--pf-accent); opacity: .85;
+    }
+    .pf-header-title {
+      font-size: 15px; font-weight: 900; color: #fff;
+      letter-spacing: -.02em; line-height: 1.25;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pf-progress {
+      height: 3px; background: rgba(255, 255, 255, .12);
+      max-width: 680px; margin: 0 auto;
+    }
+    .pf-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--pf-accent-2), var(--pf-accent));
+      width: 0%;
+      transition: width .35s ease;
+    }
+    .pf-progress-label {
+      font-size: 10px; color: rgba(255, 255, 255, .55);
+      letter-spacing: .04em; text-align: center;
+      padding: 5px 0 8px;
+    }
+
+    /* ── Bandeau anonymat ───────────────────────────────── */
+    .pf-anon-banner {
+      background: rgba(34, 197, 94, .12);
+      border-bottom: 1px solid rgba(34, 197, 94, .25);
+      padding: 10px 20px;
+      text-align: center;
+      font-size: 12.5px; font-weight: 600;
+      color: #15803d;
+    }
+    .pf-anon-banner strong { color: #14532d; }
+
+    /* ── Container ──────────────────────────────────────── */
+    .pf-container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 20px 16px 0;
+    }
+
+    .pf-intro {
+      background: #fff;
+      border-left: 4px solid var(--pf-accent);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      font-size: 14px; line-height: 1.6;
+      color: var(--pf-body);
+      white-space: pre-line;
+    }
+
+    /* ── Sections ───────────────────────────────────────── */
+    .pf-section {
+      background: #fff;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 8px rgba(0, 0, 0, .06);
+    }
+    .pf-section-head {
+      background: var(--pf-brand);
+      padding: 14px 20px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .pf-section-num {
+      background: var(--pf-accent);
+      color: var(--pf-brand);
+      font-size: 10px; font-weight: 900; letter-spacing: .12em;
+      text-transform: uppercase;
+      padding: 3px 10px; border-radius: 20px;
+      flex-shrink: 0;
+    }
+    .pf-section-title {
+      font-size: 15px; font-weight: 800; color: #fff;
+      letter-spacing: -.02em; flex: 1;
+    }
+    .pf-section-sub {
+      font-size: 12.5px; color: var(--pf-muted);
+      padding: 12px 20px 0;
+      font-style: italic;
+    }
+    .pf-section-body {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      padding: 18px 20px;
+    }
+    @media (min-width: 640px) {
+      .pf-section-body { grid-template-columns: repeat(12, 1fr); }
+    }
+
+    /* ── Field wrapper ──────────────────────────────────── */
+    .pf-field {
+      grid-column: 1 / -1; /* mobile = pleine largeur */
+    }
+    @media (min-width: 640px) {
+      .pf-field[data-width="full"] { grid-column: span 12; }
+      .pf-field[data-width="3/4"]  { grid-column: span 9; }
+      .pf-field[data-width="1/2"]  { grid-column: span 6; }
+      .pf-field[data-width="1/4"]  { grid-column: span 4; }
+    }
+
+    .pf-field-label {
+      display: block;
+      font-size: 13.5px; font-weight: 700; color: var(--pf-brand);
+      margin-bottom: 8px; line-height: 1.4;
+    }
+    .pf-field-label .pf-req { color: var(--pf-danger); margin-left: 3px; }
+    .pf-field-help {
+      display: block;
+      font-size: 12px; color: var(--pf-muted);
+      margin-top: -4px; margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .pf-field-error {
+      display: block;
+      font-size: 12px; font-weight: 600;
+      color: var(--pf-danger);
+      margin-top: 6px;
+      min-height: 16px;
+    }
+
+    /* ── Inputs ─────────────────────────────────────────── */
+    .pf-input, .pf-textarea {
+      width: 100%;
+      border: 1.5px solid var(--pf-border);
+      background: #fff;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font: inherit;
+      font-size: 15px;
+      color: var(--pf-body);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .pf-input:focus, .pf-textarea:focus {
+      border-color: var(--pf-accent);
+      box-shadow: 0 0 0 3px rgba(201, 180, 138, .18);
+    }
+    .pf-textarea {
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.55;
+      font-family: inherit;
+    }
+    .pf-input::placeholder, .pf-textarea::placeholder { color: #b0bec5; }
+    .pf-input.is-invalid, .pf-textarea.is-invalid {
+      border-color: var(--pf-danger);
+    }
+
+    /* ── Compteur de caractères (text-long) ─────────────── */
+    .pf-charcount {
+      display: block;
+      text-align: right;
+      font-size: 11px; color: var(--pf-muted);
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .pf-charcount.is-warning { color: #f59e0b; }
+    .pf-charcount.is-over    { color: var(--pf-danger); font-weight: 700; }
+
+    /* ── Chips (single select) ──────────────────────────── */
+    .pf-chips {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .pf-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 16px;
+      border-radius: 50px;
+      border: 1.5px solid var(--pf-border);
+      background: #fff;
+      font: inherit; font-size: 13px; font-weight: 600;
+      color: var(--pf-muted);
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    .pf-chip:hover { border-color: var(--pf-muted); color: var(--pf-body); }
+    .pf-chip.is-selected {
+      background: var(--pf-brand);
+      border-color: var(--pf-brand);
+      color: #fff;
+    }
+
+    /* ── Tool cards (multi) ─────────────────────────────── */
+    .pf-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 420px) {
+      .pf-cards { grid-template-columns: 1fr; }
+    }
+    .pf-card {
+      background: var(--pf-light);
+      border: 2px solid var(--pf-border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+      text-align: left;
+      font: inherit;
+      color: var(--pf-body);
+    }
+    .pf-card:hover { border-color: var(--pf-muted); }
+    .pf-card.is-selected {
+      background: rgba(10, 39, 65, .04);
+      border-color: var(--pf-brand);
+      box-shadow: 0 0 0 1px var(--pf-brand);
+    }
+    .pf-card-title {
+      font-size: 13.5px; font-weight: 800;
+      letter-spacing: -.01em;
+      color: var(--pf-brand);
+      margin-bottom: 3px;
+      line-height: 1.3;
+    }
+    .pf-card-desc {
+      font-size: 11.5px; color: var(--pf-muted); line-height: 1.45;
+    }
+
+    /* ── Yes / No binaire ───────────────────────────────── */
+    .pf-yesno {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .pf-yesno-btn {
+      padding: 14px;
+      border-radius: 12px;
+      border: 2px solid var(--pf-border);
+      background: #fff;
+      font: inherit; font-size: 14px; font-weight: 700;
+      color: var(--pf-body);
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-yesno-btn.is-selected {
+      background: var(--pf-brand);
+      border-color: var(--pf-brand);
+      color: #fff;
+    }
+
+    /* ── Rank top N ─────────────────────────────────────── */
+    .pf-rank {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pf-rank-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--pf-light);
+      border: 1.5px solid var(--pf-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+    }
+    .pf-rank-num {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--pf-brand);
+      color: var(--pf-accent);
+      font-size: 13px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pf-rank-input {
+      flex: 1;
+      border: none; background: transparent;
+      font: inherit; font-size: 15px; color: var(--pf-body);
+      outline: none;
+    }
+
+    /* ── Social links ──────────────────────────────────── */
+    .pf-socials {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .pf-social {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .pf-social-label {
+      font-size: 11.5px; font-weight: 700;
+      letter-spacing: .04em;
+      color: var(--pf-muted);
+      text-transform: uppercase;
+    }
+
+    /* ── Submit ─────────────────────────────────────────── */
+    .pf-submit-section {
+      background: var(--pf-brand);
+      border-radius: 16px;
+      padding: 24px 22px;
+      margin-top: 8px;
+      text-align: center;
+    }
+    .pf-submit-title {
+      font-size: 18px; font-weight: 900;
+      letter-spacing: -.03em; color: #fff;
+      margin-bottom: 6px;
+    }
+    .pf-submit-sub {
+      font-size: 13px;
+      color: rgba(255, 255, 255, .65);
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .pf-submit-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--pf-accent-2), var(--pf-accent));
+      color: var(--pf-brand);
+      font: inherit;
+      font-size: 15px; font-weight: 900;
+      letter-spacing: -.02em;
+      padding: 16px 24px;
+      border-radius: 50px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 18px rgba(201, 180, 138, .35);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pf-submit-btn:active { transform: scale(.97); }
+    .pf-submit-btn:disabled {
+      opacity: .55; cursor: not-allowed; box-shadow: none;
+    }
+
+    .pf-footer {
+      text-align: center;
+      padding: 20px 16px;
+      font-size: 11px;
+      color: var(--pf-muted);
+      opacity: .7;
+    }
+    .pf-footer a { color: inherit; text-decoration: underline; }
+
+    /* ── Toast d'erreur global ─────────────────────────── */
+    .pf-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--pf-brand);
+      color: #fff;
+      border-left: 4px solid var(--pf-danger);
+      padding: 14px 22px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      font-weight: 600;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
+      z-index: 9999;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      max-width: 340px;
+      text-align: center;
+    }
+    .pf-toast.is-on {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
   </style>
 </head>
 <body>
-  <!-- Le renderer mobile-first sera injecté par form.js (P3.2). -->
-  <!-- En attendant, on affiche un état de chargement + fetch de la config. -->
   <div id="pf-app">
     <div class="pf-loading">
       <div class="pf-loading-spinner" aria-hidden="true"></div>
@@ -61,24 +476,38 @@
     </div>
   </div>
 
+  <div class="pf-toast" id="pf-toast" role="alert" aria-live="assertive"></div>
+
   <script type="module">
     /* ═══════════════════════════════════════════════════════════════
-       Pulsa Public · Shell minimal (P3.1)
-       Récupère le slug depuis l'URL `/f/{slug}` et fetch la config
-       depuis l'API Worker. Le vrai renderer mobile-first (12 types
-       de champs + soumission + écran de confirmation) arrive en P3.2.
+       Pulsa Public · Renderer P3.2
+       12 types de champs rendus côté répondant, validation client,
+       progress bar, application des couleurs de marque.
+       Soumission = placeholder pour P3.3 (route Worker collecte).
        ═══════════════════════════════════════════════════════════════ */
 
     const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
+    // ── État local ─────────────────────────────────────────
+    let _form = null;
+    const _values = {};   // fieldId → value
+    let _submitting = false;
+
+    // ── Utilitaires ────────────────────────────────────────
+    function escape(s) {
+      if (s == null) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('\'', '&#039;');
+    }
+
     function getSlug() {
-      // 1. Query param ?s= (URL primaire utilisée par Pulsa actuellement)
       const params = new URLSearchParams(location.search);
       const fromQuery = params.get('s') || params.get('slug');
-      if (fromQuery && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(fromQuery)) {
-        return fromQuery;
-      }
-      // 2. Fallback : URL canonique /f/{slug} (au cas où le rewrite serait actif)
+      if (fromQuery && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(fromQuery)) return fromQuery;
       const m = location.pathname.match(/^\/f\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/?$/);
       return m ? m[1] : null;
     }
@@ -86,76 +515,524 @@
     function renderError(title, msg, code) {
       document.getElementById('pf-app').innerHTML = `
         <div class="pf-error">
-          <h1>${title}</h1>
-          <p>${msg}</p>
-          ${code ? `<span class="pf-error-code">${code}</span>` : ''}
+          <h1>${escape(title)}</h1>
+          <p>${escape(msg)}</p>
+          ${code ? `<span class="pf-error-code">${escape(code)}</span>` : ''}
         </div>
       `;
     }
 
+    function showToast(msg, ms = 3500) {
+      const t = document.getElementById('pf-toast');
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.add('is-on');
+      setTimeout(() => t.classList.remove('is-on'), ms);
+    }
+
+    // ── Application charte (couleurs de marque) ────────────
+    function applyBrand(meta) {
+      const root = document.documentElement;
+      if (meta.brand_color)  root.style.setProperty('--pf-brand', meta.brand_color);
+      if (meta.brand_accent) root.style.setProperty('--pf-accent', meta.brand_accent);
+      // theme-color iOS
+      const themeMeta = document.querySelector('[data-slot="theme"]');
+      if (themeMeta && meta.brand_color) themeMeta.setAttribute('content', meta.brand_color);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Renderers par type (12 dispatchers)
+    // ═══════════════════════════════════════════════════════════════
+    const RENDERERS = {
+      'text-short':   renderTextShort,
+      'text-long':    renderTextLong,
+      'email':        renderEmail,
+      'website':      renderWebsite,
+      'url-external': renderUrlExternal,
+      'chips':        renderChips,
+      'cards':        renderCards,
+      'yes-no':       renderYesNo,
+      'rank-top3':    renderRank,
+      'date':         renderDate,
+      'amount':       renderAmount,
+      'social-links': renderSocialLinks,
+    };
+
+    function renderField(field) {
+      const renderer = RENDERERS[field.type];
+      if (!renderer) return `<div class="pf-field-error">Type de champ non supporté : ${escape(field.type)}</div>`;
+      const labelHtml = `
+        <label class="pf-field-label" for="pf-${field.id}">
+          ${escape(field.label)}${field.required ? '<span class="pf-req" aria-hidden="true">*</span>' : ''}
+        </label>
+        ${field.help ? `<span class="pf-field-help">${escape(field.help)}</span>` : ''}
+      `;
+      return `
+        <div class="pf-field" data-width="${field.width || 'full'}" data-fid="${field.id}">
+          ${labelHtml}
+          ${renderer(field)}
+          <span class="pf-field-error" data-slot="err-${field.id}"></span>
+        </div>
+      `;
+    }
+
+    function renderTextShort(field) {
+      const opts = field.options || {};
+      return `<input class="pf-input" type="text" id="pf-${field.id}"
+                     placeholder="${escape(opts.placeholder || '')}"
+                     ${opts.max_chars ? `maxlength="${opts.max_chars}"` : ''}
+                     data-fid="${field.id}" data-kind="text">`;
+    }
+
+    function renderTextLong(field) {
+      const opts = field.options || {};
+      const max = opts.max_chars || 500;
+      return `
+        <textarea class="pf-textarea" id="pf-${field.id}"
+                  placeholder="${escape(opts.placeholder || '')}"
+                  rows="${opts.rows || 4}"
+                  ${opts.strict !== false ? `maxlength="${max}"` : ''}
+                  data-fid="${field.id}" data-kind="textlong"
+                  data-max="${max}"></textarea>
+        <span class="pf-charcount" data-slot="cc-${field.id}">0 / ${max}</span>
+      `;
+    }
+
+    function renderEmail(field) {
+      const opts = field.options || {};
+      return `<input class="pf-input" type="email" id="pf-${field.id}"
+                     placeholder="${escape(opts.placeholder || 'prenom.nom@exemple.fr')}"
+                     autocomplete="email" inputmode="email"
+                     data-fid="${field.id}" data-kind="email">`;
+    }
+
+    function renderWebsite(field) {
+      const opts = field.options || {};
+      return `<input class="pf-input" type="url" id="pf-${field.id}"
+                     placeholder="${escape(opts.placeholder || 'https://votre-site.com')}"
+                     inputmode="url" autocomplete="url"
+                     data-fid="${field.id}" data-kind="url">`;
+    }
+
+    function renderUrlExternal(field) {
+      const opts = field.options || {};
+      const hint = opts.providers_hint || 'WeTransfer · Google Drive · Dropbox · Vimeo · YouTube';
+      return `
+        <input class="pf-input" type="url" id="pf-${field.id}"
+               placeholder="${escape(opts.placeholder || 'https://wetransfer.com/…')}"
+               inputmode="url" autocomplete="off"
+               data-fid="${field.id}" data-kind="url">
+        <span class="pf-field-help" style="margin-top:6px;margin-bottom:0;">
+          Fournisseurs acceptés : ${escape(hint)}
+        </span>
+      `;
+    }
+
+    function renderChips(field) {
+      const choices = field.options?.choices || [];
+      return `
+        <div class="pf-chips" role="radiogroup" data-fid="${field.id}" data-kind="chips">
+          ${choices.map(c => `
+            <button type="button" class="pf-chip" role="radio" aria-checked="false"
+                    data-fid="${field.id}" data-cid="${escape(c.id)}">
+              ${escape(c.label)}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderCards(field) {
+      const choices = field.options?.choices || [];
+      return `
+        <div class="pf-cards" data-fid="${field.id}" data-kind="cards">
+          ${choices.map(c => `
+            <button type="button" class="pf-card"
+                    data-fid="${field.id}" data-cid="${escape(c.id)}">
+              <span class="pf-card-title">${escape(c.label)}</span>
+              ${c.desc ? `<span class="pf-card-desc">${escape(c.desc)}</span>` : ''}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderYesNo(field) {
+      const opts = field.options || {};
+      return `
+        <div class="pf-yesno" data-fid="${field.id}" data-kind="yesno">
+          <button type="button" class="pf-yesno-btn" data-fid="${field.id}" data-val="yes">${escape(opts.yes_label || 'Oui')}</button>
+          <button type="button" class="pf-yesno-btn" data-fid="${field.id}" data-val="no">${escape(opts.no_label || 'Non')}</button>
+        </div>
+      `;
+    }
+
+    function renderRank(field) {
+      const opts = field.options || {};
+      const slots = Math.max(1, Math.min(10, opts.slots || 3));
+      const phLabel = opts.placeholder || 'Priorité';
+      const rows = [];
+      for (let i = 1; i <= slots; i++) {
+        rows.push(`
+          <div class="pf-rank-item">
+            <span class="pf-rank-num">${i}</span>
+            <input class="pf-rank-input" type="text"
+                   placeholder="${escape(phLabel)} n°${i}"
+                   data-fid="${field.id}" data-rank="${i}" data-kind="rank">
+          </div>
+        `);
+      }
+      return `<div class="pf-rank">${rows.join('')}</div>`;
+    }
+
+    function renderDate(field) {
+      const opts = field.options || {};
+      const minAttr = opts.min ? `min="${escape(opts.min)}"` : '';
+      const maxAttr = opts.max ? `max="${escape(opts.max)}"` : '';
+      return `<input class="pf-input" type="date" id="pf-${field.id}"
+                     ${minAttr} ${maxAttr}
+                     data-fid="${field.id}" data-kind="date">`;
+    }
+
+    function renderAmount(field) {
+      const opts = field.options || {};
+      const cur = opts.currency || 'EUR';
+      const symbol = { EUR: '€', USD: '$', GBP: '£', CHF: 'CHF' }[cur] || cur;
+      const dec = Number.isInteger(opts.decimals) ? opts.decimals : 2;
+      const step = dec > 0 ? '0.' + '0'.repeat(dec - 1) + '1' : '1';
+      const minAttr = opts.min != null ? `min="${escape(opts.min)}"` : '';
+      const maxAttr = opts.max != null ? `max="${escape(opts.max)}"` : '';
+      return `
+        <div style="display:flex;align-items:stretch;gap:8px;">
+          <input class="pf-input" type="number" id="pf-${field.id}"
+                 inputmode="decimal" step="${step}" ${minAttr} ${maxAttr}
+                 placeholder="0${dec > 0 ? ',' + '0'.repeat(dec) : ''}"
+                 data-fid="${field.id}" data-kind="amount"
+                 data-decimals="${dec}"
+                 style="flex:1;">
+          <span style="display:inline-flex;align-items:center;padding:0 14px;background:var(--pf-light);border:1.5px solid var(--pf-border);border-radius:10px;font-size:14px;font-weight:700;color:var(--pf-muted);">${escape(symbol)}</span>
+        </div>
+      `;
+    }
+
+    function renderSocialLinks(field) {
+      const networks = (field.options?.networks || []).filter(n => n.enabled);
+      if (networks.length === 0) {
+        return `<span class="pf-field-help" style="margin:0;">Aucun réseau configuré.</span>`;
+      }
+      return `
+        <div class="pf-socials" data-fid="${field.id}" data-kind="socials">
+          ${networks.map(n => `
+            <div class="pf-social">
+              <span class="pf-social-label">${escape(n.label)}</span>
+              <input class="pf-input" type="text"
+                     placeholder="${escape(n.placeholder || '')}"
+                     data-fid="${field.id}" data-net="${escape(n.id)}">
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Délégation événements (clics + saisies)
+    // ═══════════════════════════════════════════════════════════════
+    function bindEvents(root) {
+      root.addEventListener('click', e => {
+        // Chips single-select
+        const chip = e.target.closest('.pf-chip');
+        if (chip) {
+          const fid = chip.dataset.fid;
+          const cid = chip.dataset.cid;
+          const group = chip.closest('.pf-chips');
+          group.querySelectorAll('.pf-chip').forEach(c => {
+            c.classList.remove('is-selected');
+            c.setAttribute('aria-checked', 'false');
+          });
+          chip.classList.add('is-selected');
+          chip.setAttribute('aria-checked', 'true');
+          _values[fid] = cid;
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Cards multi-select
+        const card = e.target.closest('.pf-card');
+        if (card) {
+          const fid = card.dataset.fid;
+          const cid = card.dataset.cid;
+          card.classList.toggle('is-selected');
+          const set = new Set(_values[fid] || []);
+          if (card.classList.contains('is-selected')) set.add(cid);
+          else set.delete(cid);
+          _values[fid] = Array.from(set);
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Yes/No
+        const yn = e.target.closest('.pf-yesno-btn');
+        if (yn) {
+          const fid = yn.dataset.fid;
+          yn.closest('.pf-yesno').querySelectorAll('.pf-yesno-btn').forEach(b => b.classList.remove('is-selected'));
+          yn.classList.add('is-selected');
+          _values[fid] = yn.dataset.val;
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Submit
+        if (e.target.closest('[data-act="submit"]')) {
+          submitForm();
+        }
+      });
+
+      root.addEventListener('input', e => {
+        const t = e.target;
+        const fid = t.dataset?.fid;
+        if (!fid) return;
+        const kind = t.dataset.kind;
+        if (kind === 'rank') {
+          const rank = t.dataset.rank;
+          const arr = _values[fid] || [];
+          arr[rank - 1] = t.value;
+          _values[fid] = arr;
+        } else if (kind === 'socials') {
+          const net = t.dataset.net;
+          const obj = _values[fid] || {};
+          obj[net] = t.value;
+          _values[fid] = obj;
+        } else if (kind === 'textlong') {
+          _values[fid] = t.value;
+          updateCharCount(t);
+        } else if (kind === 'amount') {
+          _values[fid] = t.value === '' ? null : Number(t.value);
+        } else {
+          _values[fid] = t.value;
+        }
+        refreshProgress();
+        clearFieldError(fid);
+      });
+    }
+
+    function updateCharCount(textarea) {
+      const fid = textarea.dataset.fid;
+      const max = Number(textarea.dataset.max) || 0;
+      const len = textarea.value.length;
+      const cc = document.querySelector(`[data-slot="cc-${fid}"]`);
+      if (!cc) return;
+      cc.textContent = `${len} / ${max}`;
+      cc.classList.remove('is-warning', 'is-over');
+      if (max && len >= max)              cc.classList.add('is-over');
+      else if (max && len > max * 0.85)   cc.classList.add('is-warning');
+    }
+
+    function clearFieldError(fid) {
+      const err = document.querySelector(`[data-slot="err-${fid}"]`);
+      if (err) err.textContent = '';
+      document.querySelectorAll(`[data-fid="${fid}"]`).forEach(el => el.classList?.remove?.('is-invalid'));
+    }
+
+    function setFieldError(fid, msg) {
+      const err = document.querySelector(`[data-slot="err-${fid}"]`);
+      if (err) err.textContent = msg;
+      document.querySelectorAll(`[data-fid="${fid}"]`).forEach(el => el.classList?.add?.('is-invalid'));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Progress (pourcentage des champs requis remplis)
+    // ═══════════════════════════════════════════════════════════════
+    function refreshProgress() {
+      if (!_form) return;
+      const required = [];
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          if (f.required) required.push(f);
+        }
+      }
+      if (required.length === 0) {
+        document.getElementById('pf-progress-fill').style.width = '100%';
+        document.getElementById('pf-progress-label').textContent = 'Aucun champ obligatoire';
+        return;
+      }
+      const filled = required.filter(f => hasValue(f.id)).length;
+      const pct = Math.round((filled / required.length) * 100);
+      document.getElementById('pf-progress-fill').style.width = pct + '%';
+      document.getElementById('pf-progress-label').textContent = `${filled} / ${required.length} champs obligatoires`;
+    }
+
+    function hasValue(fid) {
+      const v = _values[fid];
+      if (v == null) return false;
+      if (typeof v === 'string') return v.trim().length > 0;
+      if (Array.isArray(v)) return v.filter(x => x != null && String(x).trim()).length > 0;
+      if (typeof v === 'object') return Object.values(v).some(x => x != null && String(x).trim());
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Validation
+    // ═══════════════════════════════════════════════════════════════
+    function validate() {
+      let firstErrId = null;
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          clearFieldError(f.id);
+          if (f.required && !hasValue(f.id)) {
+            setFieldError(f.id, 'Ce champ est obligatoire');
+            firstErrId = firstErrId || f.id;
+            continue;
+          }
+          const v = _values[f.id];
+          if (v == null || v === '') continue;
+          if (f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+            setFieldError(f.id, 'Adresse email invalide');
+            firstErrId = firstErrId || f.id;
+          } else if ((f.type === 'website' || f.type === 'url-external') && !/^https?:\/\//.test(v)) {
+            setFieldError(f.id, 'L\'URL doit commencer par http:// ou https://');
+            firstErrId = firstErrId || f.id;
+          } else if (f.type === 'text-long' && f.options?.max_chars && f.options?.strict !== false && v.length > f.options.max_chars) {
+            setFieldError(f.id, `Trop long (${v.length} / ${f.options.max_chars} caractères max)`);
+            firstErrId = firstErrId || f.id;
+          }
+        }
+      }
+      if (firstErrId) {
+        const el = document.querySelector(`.pf-field[data-fid="${firstErrId}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast('Quelques champs nécessitent votre attention');
+        return false;
+      }
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Soumission (placeholder P3.2 — vraie soumission = P3.3)
+    // ═══════════════════════════════════════════════════════════════
+    async function submitForm() {
+      if (_submitting) return;
+      if (!validate()) return;
+      _submitting = true;
+      const btn = document.querySelector('[data-act="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
+
+      // P3.2 : on n'envoie pas encore au serveur. Aperçu console + écran de succès local.
+      console.log('[pulsa] réponse collectée', _values);
+
+      setTimeout(() => {
+        document.getElementById('pf-app').innerHTML = `
+          <div class="pf-loading" style="margin-top:60px;">
+            <h1 style="font-size:24px;font-weight:900;letter-spacing:-.03em;color:var(--pf-brand);margin-bottom:10px;">
+              Merci !
+            </h1>
+            <p style="font-size:14px;color:var(--pf-muted);line-height:1.6;margin-bottom:18px;">
+              Votre réponse a bien été collectée (côté navigateur).
+            </p>
+            <p style="font-size:12px;color:var(--pf-muted);line-height:1.6;padding:14px;background:var(--pf-light);border-radius:10px;">
+              <strong>Phase 3.2 — Renderer livré.</strong><br>
+              L'envoi réel vers le serveur + notification mail aux destinataires arrive en Phase 3.3.
+            </p>
+          </div>
+        `;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 350);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Bootstrap
+    // ═══════════════════════════════════════════════════════════════
     async function load() {
       const slug = getSlug();
       if (!slug) {
-        renderError(
-          'Adresse incorrecte',
-          'L\'URL ne contient pas d\'identifiant de formulaire valide. Format attendu : /form?s=mon-slug',
-          'NO_SLUG'
-        );
+        renderError('Adresse incorrecte', 'L\'URL ne contient pas d\'identifiant de formulaire valide. Format attendu : /form?s=mon-slug', 'NO_SLUG');
         return;
       }
       try {
         const res = await fetch(`${API_BASE}/api/pulsa/public/${slug}`);
         if (res.status === 404) {
-          renderError(
-            'Formulaire introuvable',
-            'Ce lien ne pointe vers aucun formulaire publié. Vérifiez l\'URL auprès de l\'expéditeur.',
-            '404'
-          );
+          renderError('Formulaire introuvable', 'Ce lien ne pointe vers aucun formulaire publié. Vérifiez l\'URL auprès de l\'expéditeur.', '404');
           return;
         }
         if (!res.ok) {
-          renderError(
-            'Erreur temporaire',
-            'Le formulaire n\'a pas pu être chargé. Réessayez dans un instant.',
-            'HTTP ' + res.status
-          );
+          renderError('Erreur temporaire', 'Le formulaire n\'a pas pu être chargé. Réessayez dans un instant.', 'HTTP ' + res.status);
           return;
         }
         const data = await res.json();
-        const form = data?.form;
-        if (!form) {
+        _form = data?.form;
+        if (!_form || !Array.isArray(_form.sections)) {
           renderError('Formulaire introuvable', 'La réponse du serveur est invalide.', 'NO_FORM');
           return;
         }
-
-        // P3.1 : on affiche juste un récap brut. Le rendu mobile-first
-        // avec saisie et soumission est livré dans la P3.2.
-        document.title = form.title || 'Pulsa';
-        document.getElementById('pf-app').innerHTML = `
-          <div class="pf-loading" style="text-align:left;padding:32px 28px;">
-            <h1 style="font-size:22px;font-weight:900;letter-spacing:-.03em;color:#0a2741;margin-bottom:6px;">
-              ${form.title || 'Formulaire'}
-            </h1>
-            <p style="margin-bottom:18px;color:#6b7a8d;font-size:13px;">
-              ${form.meta?.intro || '<em>Pas d\'introduction.</em>'}
-            </p>
-            <p style="font-size:12px;color:#6b7a8d;font-style:italic;line-height:1.6;">
-              ${form.sections?.length || 0} section(s),
-              ${(form.sections || []).reduce((a, s) => a + (s.fields?.length || 0), 0)} champ(s).
-            </p>
-            <p style="margin-top:24px;padding:12px;background:#f4f6f9;border-radius:8px;font-size:12px;color:#6b7a8d;line-height:1.6;">
-              <strong>Phase 3.1 — Shell publié.</strong><br>
-              Le rendu mobile-first complet (saisie + envoi + accusé de réception) arrive en Phase 3.2.
-            </p>
-          </div>
-        `;
+        applyBrand(_form.meta || {});
+        renderForm();
       } catch (e) {
-        renderError(
-          'Erreur réseau',
-          'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.',
-          e?.message || 'NETWORK'
-        );
+        renderError('Erreur réseau', 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.', e?.message || 'NETWORK');
       }
+    }
+
+    function renderForm() {
+      const meta = _form.meta || {};
+      const sections = _form.sections || [];
+      const totalFields = sections.reduce((a, s) => a + (s.fields?.length || 0), 0);
+      document.title = (meta.title || 'Pulsa') + ' — Formulaire';
+
+      const logoHtml = (meta.logo_data_url || meta.logo_url)
+        ? `<img src="${escape(meta.logo_data_url || meta.logo_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pf-logo-fallback',textContent:'P'}))">`
+        : `<span class="pf-logo-fallback">P</span>`;
+
+      document.getElementById('pf-app').innerHTML = `
+        <header class="pf-header">
+          <div class="pf-header-inner">
+            <div class="pf-logo">${logoHtml}</div>
+            <div class="pf-header-text">
+              <div class="pf-header-tag">Formulaire</div>
+              <div class="pf-header-title">${escape(meta.title || 'Sans titre')}</div>
+            </div>
+          </div>
+          <div class="pf-progress"><div class="pf-progress-fill" id="pf-progress-fill"></div></div>
+          <div class="pf-progress-label" id="pf-progress-label">0 / 0</div>
+        </header>
+
+        ${meta.anonymous !== false ? `
+          <div class="pf-anon-banner">
+            <strong>Réponses anonymes</strong> — vos réponses ne servent qu'à préparer le suivi.
+          </div>
+        ` : ''}
+
+        <div class="pf-container">
+          ${meta.intro ? `<div class="pf-intro">${escape(meta.intro)}</div>` : ''}
+
+          ${sections.map((s, idx) => `
+            <section class="pf-section">
+              <header class="pf-section-head">
+                <span class="pf-section-num">Bloc ${String(idx + 1).padStart(2, '0')}</span>
+                <span class="pf-section-title">${escape(s.title || 'Section ' + (idx + 1))}</span>
+              </header>
+              ${s.subtitle ? `<div class="pf-section-sub">${escape(s.subtitle)}</div>` : ''}
+              <div class="pf-section-body">
+                ${(s.fields || []).map(renderField).join('')}
+              </div>
+            </section>
+          `).join('')}
+
+          <div class="pf-submit-section">
+            <div class="pf-submit-title">Tout est prêt ?</div>
+            <div class="pf-submit-sub">
+              ${totalFields} champ${totalFields > 1 ? 's' : ''} dans ce formulaire. Vérifiez vos réponses, puis envoyez.
+            </div>
+            <button class="pf-submit-btn" type="button" data-act="submit">
+              Envoyer mes réponses
+            </button>
+          </div>
+
+          <p class="pf-footer">
+            Formulaire propulsé par <a href="https://protein-keystone.com" target="_blank" rel="noopener">Keystone OS</a> · Pulsa
+          </p>
+        </div>
+      `;
+
+      bindEvents(document.getElementById('pf-app'));
+      refreshProgress();
     }
 
     load();
