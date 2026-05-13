@@ -20,8 +20,40 @@
      POST /api/pulsa/responses/:slug
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, parseBody, getAllowedOrigin, generateId } from '../lib/auth.js';
+import {
+  json, err, parseBody, getAllowedOrigin, generateId,
+  requireDevice, requireAdmin,
+} from '../lib/auth.js';
+import { requireJWT } from '../lib/jwt.js';
 import { sendEmail } from '../lib/email-resend.js';
+
+// ── Auth resolver (mêmes 3 tiers que pulsa-forms) ─────────────
+async function _resolveOwner(request, env) {
+  if (requireAdmin(request, env)) {
+    return { sub: 'admin', tenant: 'default', isAdmin: true };
+  }
+  const claims = await requireJWT(request, env);
+  if (claims?.sub) {
+    return { sub: claims.sub, tenant: claims.sub, isAdmin: false };
+  }
+  const device = await requireDevice(request, env);
+  if (device?.tenant_id) {
+    return { sub: 'device:' + device.id, tenant: device.tenant_id, isAdmin: false };
+  }
+  return null;
+}
+
+// ── Vérifie que l'owner a le droit d'accéder à un formulaire ──
+async function _assertOwnsForm(env, formId, owner) {
+  const form = await env.DB.prepare(
+    'SELECT id, owner_sub FROM pulsa_forms WHERE id = ?'
+  ).bind(formId).first();
+  if (!form) return { ok: false, status: 404, msg: 'Formulaire introuvable' };
+  if (!owner.isAdmin && form.owner_sub !== owner.sub) {
+    return { ok: false, status: 403, msg: 'Accès refusé' };
+  }
+  return { ok: true, form };
+}
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
@@ -114,6 +146,138 @@ export async function handlePulsaSubmit(request, env, slug) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// GET /api/pulsa/responses?form_id=X   — liste owner
+// ═══════════════════════════════════════════════════════════════
+export async function handlePulsaResponsesList(request, env, url) {
+  const origin = getAllowedOrigin(env, request);
+  const owner = await _resolveOwner(request, env);
+  if (!owner) return err('Authentification requise', 401, origin);
+
+  await _ensureSchema(env);
+
+  const formId = url.searchParams.get('form_id');
+  if (!formId) return err('Paramètre form_id requis', 400, origin);
+
+  const ownership = await _assertOwnsForm(env, formId, owner);
+  if (!ownership.ok) return err(ownership.msg, ownership.status, origin);
+
+  const { results = [] } = await env.DB.prepare(`
+    SELECT id, form_id, slug, response_json, created_at, expires_at
+    FROM pulsa_responses
+    WHERE form_id = ?
+    ORDER BY created_at DESC
+    LIMIT 500
+  `).bind(formId).all();
+
+  const responses = results.map(r => ({
+    id: r.id,
+    form_id: r.form_id,
+    slug: r.slug,
+    responses: _safeJson(r.response_json),
+    created_at: r.created_at,
+    expires_at: r.expires_at,
+  }));
+
+  return json({ ok: true, responses, count: responses.length }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GET /api/pulsa/responses/:id   — détail (auth + owner)
+// ═══════════════════════════════════════════════════════════════
+export async function handlePulsaResponseGet(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const owner = await _resolveOwner(request, env);
+  if (!owner) return err('Authentification requise', 401, origin);
+
+  await _ensureSchema(env);
+
+  const row = await env.DB.prepare(
+    'SELECT * FROM pulsa_responses WHERE id = ?'
+  ).bind(id).first();
+  if (!row) return err('Réponse introuvable', 404, origin);
+
+  const ownership = await _assertOwnsForm(env, row.form_id, owner);
+  if (!ownership.ok) return err(ownership.msg, ownership.status, origin);
+
+  return json({
+    ok: true,
+    response: {
+      id: row.id,
+      form_id: row.form_id,
+      slug: row.slug,
+      responses: _safeJson(row.response_json),
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+    },
+  }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GET /api/pulsa/responses.csv?form_id=X   — export CSV
+// ═══════════════════════════════════════════════════════════════
+export async function handlePulsaResponsesCsv(request, env, url) {
+  const origin = getAllowedOrigin(env, request);
+  const owner = await _resolveOwner(request, env);
+  if (!owner) return err('Authentification requise', 401, origin);
+
+  await _ensureSchema(env);
+
+  const formId = url.searchParams.get('form_id');
+  if (!formId) return err('Paramètre form_id requis', 400, origin);
+
+  const ownership = await _assertOwnsForm(env, formId, owner);
+  if (!ownership.ok) return err(ownership.msg, ownership.status, origin);
+
+  const formConfig = _safeJson(ownership.form?.config_json) || {};
+  // On récupère la config complète pour formater les valeurs (chips → label, etc.)
+  const fullForm = await env.DB.prepare(
+    'SELECT config_json FROM pulsa_forms WHERE id = ?'
+  ).bind(formId).first();
+  const cfg = _safeJson(fullForm?.config_json) || {};
+
+  const { results = [] } = await env.DB.prepare(`
+    SELECT id, response_json, created_at
+    FROM pulsa_responses
+    WHERE form_id = ?
+    ORDER BY created_at ASC
+  `).bind(formId).all();
+
+  // Calcule l'ordre des colonnes depuis la config (parcours sections → fields)
+  const fields = [];
+  for (const sec of (cfg.sections || [])) {
+    for (const f of (sec.fields || [])) {
+      fields.push({ id: f.id, label: f.label || f.id, type: f.type, options: f.options || {} });
+    }
+  }
+
+  const headers = ['Date', 'ID réponse', ...fields.map(f => f.label)];
+  const rows = [headers.map(_csvEscape).join(',')];
+
+  for (const r of results) {
+    const values = _safeJson(r.response_json) || {};
+    const line = [
+      r.created_at,
+      r.id,
+      ...fields.map(f => _csvFormatValue(f, values[f.id])),
+    ];
+    rows.push(line.map(_csvEscape).join(','));
+  }
+
+  const csv = '﻿' + rows.join('\n'); // BOM pour Excel UTF-8
+  const filename = `pulsa-${formId}-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Access-Control-Allow-Origin': origin,
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Purge TTL (appelée par le cron quotidien)
 // ═══════════════════════════════════════════════════════════════
 export async function handlePulsaPurge(env) {
@@ -130,6 +294,60 @@ export async function handlePulsaPurge(env) {
 function _isoDaysFromNow(days) {
   const d = new Date(Date.now() + days * 86400000);
   return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function _safeJson(s) {
+  try { return JSON.parse(s || 'null'); } catch { return null; }
+}
+
+// ── CSV helpers ─────────────────────────────────────────────
+function _csvEscape(v) {
+  if (v == null) return '';
+  const s = String(v);
+  if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replaceAll('"', '""') + '"';
+  }
+  return s;
+}
+
+function _csvFormatValue(field, raw) {
+  if (raw == null || raw === '') return '';
+  const opts = field.options || {};
+  switch (field.type) {
+    case 'chips': {
+      const c = (opts.choices || []).find(c => c.id === raw);
+      return c?.label || raw;
+    }
+    case 'cards': {
+      const ids = Array.isArray(raw) ? raw : [];
+      return ids.map(id => {
+        const c = (opts.choices || []).find(c => c.id === id);
+        return c?.label || id;
+      }).join(' | ');
+    }
+    case 'yes-no':
+      if (raw === 'yes') return opts.yes_label || 'Oui';
+      if (raw === 'no')  return opts.no_label || 'Non';
+      return raw;
+    case 'rank-top3': {
+      const arr = Array.isArray(raw) ? raw : [];
+      return arr.filter(Boolean).map((v, i) => `${i + 1}. ${v}`).join(' | ');
+    }
+    case 'social-links': {
+      const networks = (opts.networks || []).filter(n => n.enabled);
+      const obj = (raw && typeof raw === 'object') ? raw : {};
+      return networks
+        .map(n => obj[n.id] ? `${n.label}: ${obj[n.id]}` : null)
+        .filter(Boolean)
+        .join(' | ');
+    }
+    case 'amount': {
+      const cur = opts.currency || 'EUR';
+      return `${raw} ${cur}`;
+    }
+    default:
+      return typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+  }
 }
 
 function _escapeHtml(s) {

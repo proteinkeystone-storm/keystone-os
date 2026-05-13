@@ -11,16 +11,21 @@
    VUE BIBLIOTHÈQUE (multi-formulaires)
    ═══════════════════════════════════════════════════════ */
 
-/* En mode library, on masque rail et aside : la liste prend toute la largeur */
+/* En mode library OU responses, on masque rail et aside :
+   la liste prend toute la largeur de la fenêtre. */
 .pulsa-app.is-library .ws-rail,
-.pulsa-app.is-library .ws-aside {
+.pulsa-app.is-library .ws-aside,
+.pulsa-app.is-responses .ws-rail,
+.pulsa-app.is-responses .ws-aside {
   display: none;
 }
-.pulsa-app.is-library .ws-main {
+.pulsa-app.is-library .ws-main,
+.pulsa-app.is-responses .ws-main {
   padding: 32px 40px;
 }
 @media (max-width: 640px) {
-  .pulsa-app.is-library .ws-main {
+  .pulsa-app.is-library .ws-main,
+  .pulsa-app.is-responses .ws-main {
     padding: 20px;
   }
 }
@@ -214,6 +219,181 @@
 .pulsa-lib-card-actions .pulsa-icon-btn {
   width: 28px;
   height: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   VUE RÉPONSES (dashboard par formulaire)
+   ═══════════════════════════════════════════════════════ */
+
+.pulsa-resp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-resp-head h1 { margin: 0 0 4px; }
+.pulsa-resp-head .ws-step-sub { margin: 0; }
+.pulsa-resp-head .pulsa-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* ── Stats globales en haut ─────────────────────────────── */
+.pulsa-resp-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 480px) {
+  .pulsa-resp-stats { grid-template-columns: 1fr; }
+}
+.pulsa-resp-stat {
+  padding: 18px;
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pulsa-resp-stat-num {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--ws-accent, var(--gold));
+  line-height: 1;
+}
+.pulsa-resp-stat-label {
+  font-size: 12px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+  letter-spacing: -.01em;
+}
+
+/* ── Liste de cards "1 par réponse" ─────────────────────── */
+.pulsa-resp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pulsa-resp-card {
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pulsa-resp-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.pulsa-resp-card-num {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  color: var(--ws-accent, var(--gold));
+  background: rgba(99, 102, 241, .12);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.pulsa-resp-card-date {
+  font-size: 12px;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+
+.pulsa-resp-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pulsa-resp-card-empty {
+  margin: 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ws-text, var(--text));
+  opacity: .45;
+}
+
+.pulsa-resp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+.pulsa-resp-row-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+.pulsa-resp-row-value {
+  font-size: 13.5px;
+  color: var(--ws-text, var(--text));
+  line-height: 1.5;
+  word-break: break-word;
+}
+.pulsa-resp-row-value a {
+  color: var(--ws-accent, var(--gold));
+  text-decoration: none;
+}
+.pulsa-resp-row-value a:hover { text-decoration: underline; }
+
+/* ── Détails complets (expand) ──────────────────────────── */
+.pulsa-resp-card-expand {
+  margin-top: 4px;
+  border-top: 1px solid var(--ws-border, var(--bd));
+  padding-top: 8px;
+}
+.pulsa-resp-card-expand summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ws-accent, var(--gold));
+  padding: 4px 0;
+  list-style: none;
+  user-select: none;
+}
+.pulsa-resp-card-expand summary::-webkit-details-marker { display: none; }
+.pulsa-resp-card-expand summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform .15s;
+}
+.pulsa-resp-card-expand[open] summary::before { transform: rotate(90deg); }
+
+.pulsa-resp-full {
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pulsa-resp-section {
+  background: rgba(255, 255, 255, .02);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.pulsa-resp-section-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ws-accent, var(--gold));
+  opacity: .85;
 }
 
 /* ── Aside (colonne droite : aperçu/stats ou éditeur) ───── */

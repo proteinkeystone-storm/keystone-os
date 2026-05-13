@@ -42,7 +42,10 @@ import { handleCspReport }                                              from './
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
 import { handlePulsaPublic } from './routes/pulsa-public.js';
-import { handlePulsaSubmit, handlePulsaPurge } from './routes/pulsa-responses.js';
+import {
+  handlePulsaSubmit, handlePulsaPurge,
+  handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
+} from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
@@ -157,6 +160,17 @@ export default {
       if (path.startsWith('/api/pulsa/responses/') && method === 'POST') {
         const slug = path.split('/').pop();
         return handlePulsaSubmit(request, env, slug);
+      }
+      // Dashboard réponses (auth requise, owner du formulaire)
+      if (path === '/api/pulsa/responses.csv' && method === 'GET') {
+        return handlePulsaResponsesCsv(request, env, url);
+      }
+      if (path === '/api/pulsa/responses' && method === 'GET') {
+        return handlePulsaResponsesList(request, env, url);
+      }
+      if (path.startsWith('/api/pulsa/responses/') && method === 'GET') {
+        const rid = path.split('/').pop();
+        return handlePulsaResponseGet(request, env, rid);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────

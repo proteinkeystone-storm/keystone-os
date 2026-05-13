@@ -61,10 +61,12 @@ let _saveIndicatorTimer = null;
 
 function _initState() {
   return {
-    // Mode d'affichage : 'library' (liste des formulaires) ou 'builder'
+    // Mode d'affichage : 'library' | 'builder' | 'responses'
     view: 'library',
-    // Formulaire actuellement en édition (null en mode library)
+    // Formulaire actuellement en édition (null en mode library ou responses)
     form: null,
+    // Vue Responses : { form_id, list, loading, error }
+    responses: { form_id: null, list: [], loading: false, error: null },
     ui: {
       selected_section_id: null,
       // { sectionId, fieldId } quand un champ est en cours d'édition → aside contextuel
@@ -230,6 +232,10 @@ function _onClick(e) {
   if (act === 'delete-form')       return _deleteForm(t.dataset.id);
   if (act === 'back-to-library')   return _backToLibrary();
 
+  // Vue Responses
+  if (act === 'view-responses')    return _viewResponses(t.dataset.id);
+  if (act === 'export-csv')        return _exportCsv(t.dataset.id);
+
   // Structure — sections
   if (act === 'add-section')     return _addSection();
   if (act === 'delete-section')  return _deleteSection(t.dataset.id);
@@ -355,7 +361,16 @@ function _refreshTopbar() {
     if (crumb) crumb.textContent = 'Mes formulaires';
     if (saveBtn) saveBtn.style.display = 'none';
     if (saveInd) saveInd.style.display = 'none';
-    // Le bouton de notation reste affiché en bibliothèque (note de l'artefact, pas du formulaire)
+  } else if (_state.view === 'responses') {
+    if (back) back.dataset.act = 'back-to-library';
+    if (backLbl) backLbl.textContent = 'Mes formulaires';
+    if (sep) sep.style.display = '';
+    if (crumb) {
+      const form = getForm(_state.responses.form_id);
+      crumb.textContent = (form?.meta?.title?.trim() || 'Formulaire') + ' · Réponses';
+    }
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (saveInd) saveInd.style.display = 'none';
   } else {
     if (back) back.dataset.act = 'back-to-library';
     if (backLbl) backLbl.textContent = 'Mes formulaires';
@@ -415,10 +430,65 @@ function _backToLibrary() {
   setCurrentFormId(null);
   _state.view = 'library';
   _state.form = null;
+  _state.responses = { form_id: null, list: [], loading: false, error: null };
   _state.ui.selected_field = null;
   _refreshTopbar();
   _renderMain();
   _renderRail();
+}
+
+// ── Vue Responses : chargement et navigation ──────────────────
+async function _viewResponses(formId) {
+  if (!formId) return;
+  _state.view = 'responses';
+  _state.responses = { form_id: formId, list: [], loading: true, error: null };
+  _refreshTopbar();
+  _renderMain();
+  _renderRail();
+
+  try {
+    const res = await fetch(CF_API + '/api/pulsa/responses?form_id=' + encodeURIComponent(formId), {
+      headers: _authHeaders(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      _state.responses.error = data?.error || data?.message || `Erreur HTTP ${res.status}`;
+    } else {
+      _state.responses.list = data?.responses || [];
+    }
+  } catch (e) {
+    _state.responses.error = 'Erreur réseau : ' + (e.message || e);
+  }
+  _state.responses.loading = false;
+  _renderMain();
+}
+
+async function _exportCsv(formId) {
+  if (!formId) return;
+  try {
+    const res = await fetch(CF_API + '/api/pulsa/responses.csv?form_id=' + encodeURIComponent(formId), {
+      headers: _authHeaders(),
+    });
+    if (!res.ok) {
+      alert('Export impossible : HTTP ' + res.status);
+      return;
+    }
+    const blob = await res.blob();
+    const form = getForm(formId);
+    const slug = form?.meta?.slug || 'pulsa';
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pulsa-${slug}-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 100);
+  } catch (e) {
+    alert('Erreur réseau : ' + (e.message || e));
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -790,12 +860,20 @@ function _renderMain() {
   // Vue Bibliothèque : on rend la liste et on stop là (rail + aside masqués via CSS)
   if (_state.view === 'library') {
     _root.classList.add('is-library');
+    _root.classList.remove('is-responses');
     _renderLibrary(main);
-    _renderAside(); // aside vide
+    _renderAside();
+    return;
+  }
+  if (_state.view === 'responses') {
+    _root.classList.add('is-responses');
+    _root.classList.remove('is-library');
+    _renderResponses(main);
+    _renderAside();
     return;
   }
 
-  _root.classList.remove('is-library');
+  _root.classList.remove('is-library', 'is-responses');
   switch (_currentStepId) {
     case 'structure':  _renderStructure(main); break;
     case 'appearance': _renderAppearance(main); break;
@@ -904,6 +982,11 @@ function _renderLibraryCard(form) {
       <footer class="pulsa-lib-card-footer">
         <span class="pulsa-lib-card-date">${updated}</span>
         <div class="pulsa-lib-card-actions" data-stop-propagation>
+          ${isPublished ? `
+            <button class="pulsa-icon-btn" data-act="view-responses" data-id="${form.id}" title="Voir les réponses">
+              ${icon('eye', 14)}
+            </button>
+          ` : ''}
           <button class="pulsa-icon-btn" data-act="duplicate-form" data-id="${form.id}" title="Dupliquer">
             ${icon('copy', 14)}
           </button>
@@ -914,6 +997,198 @@ function _renderLibraryCard(form) {
       </footer>
     </article>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Vue Responses — rendu
+// ═══════════════════════════════════════════════════════════════
+function _renderResponses(main) {
+  const formId = _state.responses.form_id;
+  const form = getForm(formId);
+  if (!form) {
+    main.innerHTML = `
+      <div class="pulsa-lib-empty">
+        <h1>Formulaire introuvable</h1>
+        <p>Ce formulaire n'existe plus dans votre bibliothèque.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const { list, loading, error } = _state.responses;
+  const total = list.length;
+  const last7d = list.filter(r => {
+    const t = r.created_at ? new Date(r.created_at + 'Z').getTime() : 0;
+    return Date.now() - t < 7 * 86400000;
+  }).length;
+
+  main.innerHTML = `
+    <div class="pulsa-resp-head">
+      <div>
+        <h1 class="ws-step-title">Réponses reçues</h1>
+        <p class="ws-step-sub">${_escape(form.meta?.title || 'Formulaire')} · TTL ${form.meta?.ttl_days ?? 90} jours</p>
+      </div>
+      <button class="pulsa-btn pulsa-btn-primary" data-act="export-csv" data-id="${form.id}" ${total === 0 ? 'disabled' : ''}>
+        ${icon('download', 14)}<span>Exporter CSV</span>
+      </button>
+    </div>
+
+    <div class="pulsa-resp-stats">
+      <div class="pulsa-resp-stat">
+        <span class="pulsa-resp-stat-num">${total}</span>
+        <span class="pulsa-resp-stat-label">${total > 1 ? 'réponses au total' : 'réponse au total'}</span>
+      </div>
+      <div class="pulsa-resp-stat">
+        <span class="pulsa-resp-stat-num">${last7d}</span>
+        <span class="pulsa-resp-stat-label">${last7d > 1 ? 'sur 7 derniers jours' : 'sur 7 derniers jours'}</span>
+      </div>
+    </div>
+
+    ${loading ? `
+      <div class="pulsa-lib-empty"><p>Chargement des réponses…</p></div>
+    ` : error ? `
+      <div class="pulsa-lib-empty">
+        <h1>Erreur de chargement</h1>
+        <p>${_escape(error)}</p>
+      </div>
+    ` : total === 0 ? `
+      <div class="pulsa-lib-empty">
+        <p>Aucune réponse reçue pour l'instant.</p>
+        ${form.meta?.slug ? `<p style="font-size:12px;opacity:.6;margin-top:8px;">URL : ${location.host}/form?s=${_escape(form.meta.slug)}</p>` : ''}
+      </div>
+    ` : `
+      <div class="pulsa-resp-list">
+        ${list.map((r, i) => _renderResponseCard(form, r, list.length - i)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function _renderResponseCard(form, response, ordinal) {
+  const sections = form.sections || [];
+  const values = response.responses || {};
+  const created = _formatResponseDate(response.created_at);
+
+  const previews = [];
+  for (const sec of sections) {
+    for (const f of (sec.fields || [])) {
+      if (previews.length >= 3) break;
+      const v = values[f.id];
+      const formatted = _formatValueForUI(f, v);
+      if (formatted) previews.push({ label: f.label, value: formatted });
+    }
+    if (previews.length >= 3) break;
+  }
+
+  return `
+    <article class="pulsa-resp-card">
+      <header class="pulsa-resp-card-head">
+        <span class="pulsa-resp-card-num">#${ordinal}</span>
+        <span class="pulsa-resp-card-date">${_escape(created)}</span>
+      </header>
+      <div class="pulsa-resp-card-body">
+        ${previews.length === 0 ? `
+          <p class="pulsa-resp-card-empty">Réponse vide.</p>
+        ` : previews.map(p => `
+          <div class="pulsa-resp-row">
+            <span class="pulsa-resp-row-label">${_escape(p.label || '')}</span>
+            <span class="pulsa-resp-row-value">${p.value}</span>
+          </div>
+        `).join('')}
+      </div>
+      <details class="pulsa-resp-card-expand">
+        <summary>Voir toutes les réponses</summary>
+        <div class="pulsa-resp-full">
+          ${sections.map(sec => _renderResponseSection(sec, values)).join('')}
+        </div>
+      </details>
+    </article>
+  `;
+}
+
+function _renderResponseSection(section, values) {
+  const fields = section.fields || [];
+  if (fields.length === 0) return '';
+  return `
+    <div class="pulsa-resp-section">
+      <h4 class="pulsa-resp-section-title">${_escape(section.title || 'Section')}</h4>
+      ${fields.map(f => {
+        const formatted = _formatValueForUI(f, values[f.id]);
+        return `
+          <div class="pulsa-resp-row">
+            <span class="pulsa-resp-row-label">${_escape(f.label || '')}</span>
+            <span class="pulsa-resp-row-value">${formatted || '<em style="opacity:.4">(vide)</em>'}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function _formatResponseDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts + 'Z');
+  if (isNaN(d.getTime())) return ts;
+  return d.toLocaleString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function _formatValueForUI(field, raw) {
+  if (raw == null || raw === '') return '';
+  const opts = field.options || {};
+  switch (field.type) {
+    case 'text-short':
+    case 'text-long':
+      return _escape(raw).replace(/\n/g, '<br>');
+    case 'email':
+      return `<a href="mailto:${_escape(raw)}">${_escape(raw)}</a>`;
+    case 'website':
+    case 'url-external':
+      return `<a href="${_escape(raw)}" target="_blank" rel="noopener">${_escape(raw)}</a>`;
+    case 'chips': {
+      const c = (opts.choices || []).find(c => c.id === raw);
+      return _escape(c?.label || raw);
+    }
+    case 'cards': {
+      const ids = Array.isArray(raw) ? raw : [];
+      return ids.map(id => {
+        const c = (opts.choices || []).find(c => c.id === id);
+        return _escape(c?.label || id);
+      }).join(' · ');
+    }
+    case 'yes-no':
+      if (raw === 'yes') return _escape(opts.yes_label || 'Oui');
+      if (raw === 'no')  return _escape(opts.no_label || 'Non');
+      return _escape(raw);
+    case 'rank-top3': {
+      const arr = Array.isArray(raw) ? raw : [];
+      const items = arr.filter(Boolean);
+      if (items.length === 0) return '';
+      return items.map((v, i) => `${i + 1}. ${_escape(v)}`).join(' · ');
+    }
+    case 'date':
+      try {
+        return new Date(raw).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+      } catch { return _escape(raw); }
+    case 'amount': {
+      const cur = opts.currency || 'EUR';
+      try {
+        return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(Number(raw));
+      } catch { return _escape(raw) + ' ' + _escape(cur); }
+    }
+    case 'social-links': {
+      const networks = (opts.networks || []).filter(n => n.enabled);
+      const obj = (raw && typeof raw === 'object') ? raw : {};
+      const lines = networks
+        .map(n => obj[n.id] ? `<strong>${_escape(n.label)}</strong> ${_escape(obj[n.id])}` : null)
+        .filter(Boolean);
+      return lines.join(' · ');
+    }
+    default:
+      return _escape(typeof raw === 'object' ? JSON.stringify(raw) : raw);
+  }
 }
 
 function _formatUpdatedAt(ts) {
