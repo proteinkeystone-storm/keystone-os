@@ -55,6 +55,34 @@ export const FIELD_TYPES = {
       placeholder: 'prenom.nom@exemple.fr',
     },
   },
+  'website': {
+    label: 'Site web',
+    sub: 'URL d\'un site personnel ou professionnel (auto-format https://)',
+    ico: 'globe',
+    group: 'contact',
+    defaults: {
+      placeholder: 'https://votre-site.com',
+    },
+  },
+  'social-links': {
+    label: 'Réseaux sociaux',
+    sub: 'Sélection de comptes (Instagram, LinkedIn, X, TikTok…)',
+    ico: 'globe',
+    group: 'contact',
+    defaults: {
+      networks: [
+        { id: 'instagram', label: 'Instagram', placeholder: '@compte ou URL',     enabled: true },
+        { id: 'facebook',  label: 'Facebook',  placeholder: 'URL du profil',      enabled: true },
+        { id: 'linkedin',  label: 'LinkedIn',  placeholder: 'URL du profil',      enabled: true },
+        { id: 'x',         label: 'X (Twitter)', placeholder: '@compte ou URL',   enabled: true },
+        { id: 'tiktok',    label: 'TikTok',    placeholder: '@compte ou URL',     enabled: false },
+        { id: 'youtube',   label: 'YouTube',   placeholder: 'URL de la chaîne',   enabled: false },
+        { id: 'behance',   label: 'Behance',   placeholder: 'URL du portfolio',   enabled: false },
+        { id: 'pinterest', label: 'Pinterest', placeholder: 'URL du compte',      enabled: false },
+        { id: 'vimeo',     label: 'Vimeo',     placeholder: 'URL de la chaîne',   enabled: false },
+      ],
+    },
+  },
   'chips': {
     label: 'Chips (choix unique)',
     sub: 'Boutons compacts, un seul choix',
