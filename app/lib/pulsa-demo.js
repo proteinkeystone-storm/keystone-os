@@ -17,17 +17,19 @@
 
 export const DEMO_VEFA_FORM = {
   meta: {
-    title: "Dossier d'intérêt VEFA — Les Jardins du Mourillon",
-    slug: "jardins-mourillon-vefa",
+    title: "Dossier d'intérêt — Les Jardins du Mourillon",
+    slug: "jardins-mourillon",
     intro:
-      "Merci de prendre quelques minutes pour formaliser votre projet. Vos réponses nous permettront de préparer une proposition sur-mesure pour votre prochain rendez-vous.\n\nDurée estimée : 6 minutes. Vos réponses sont confidentielles et conservées 180 jours maximum.",
+      "Merci de prendre quelques minutes pour formaliser votre projet. Vos réponses nous permettront de préparer une proposition sur-mesure pour votre prochain rendez-vous.\n\nDurée estimée : 6 minutes. Vos réponses sont confidentielles et conservées 30 jours maximum.",
     logo_data_url: null,
     logo_url: null,
     brand_color: "#0a2741",
     brand_accent: "#c9b48a",
     anonymous: false,
-    ttl_days: 180,
-    access_code: "JARDINS2026",
+    ttl_days: 30,
+    // Pas de code d'accès : la démo doit être accessible immédiatement
+    // en ligne pour qu'on puisse partager le lien et tester sans friction.
+    access_code: null,
   },
   sections: [
     // ───────────────────────────────────────────────────────────
@@ -467,10 +469,10 @@ export const DEMO_VEFA_FORM = {
     },
   ],
   delivery: {
-    recipients: [
-      "commercial@promethee-immo.fr",
-      "direction@promethee-immo.fr",
-    ],
+    // Liste vide volontaire : chaque testeur ajoute SA propre adresse mail
+    // dans l'étape Livraison avant de publier. Plus parlant pour la démo
+    // que des adresses Prométhée pré-câblées.
+    recipients: [],
     notification_subject: "Nouveau dossier d'intérêt — Les Jardins du Mourillon",
   },
   output: {
