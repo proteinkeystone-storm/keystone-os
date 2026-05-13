@@ -71,7 +71,14 @@
 
     const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
-    function getSlugFromPath() {
+    function getSlug() {
+      // 1. Query param ?s= (URL primaire utilisée par Pulsa actuellement)
+      const params = new URLSearchParams(location.search);
+      const fromQuery = params.get('s') || params.get('slug');
+      if (fromQuery && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(fromQuery)) {
+        return fromQuery;
+      }
+      // 2. Fallback : URL canonique /f/{slug} (au cas où le rewrite serait actif)
       const m = location.pathname.match(/^\/f\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/?$/);
       return m ? m[1] : null;
     }
@@ -87,12 +94,12 @@
     }
 
     async function load() {
-      const slug = getSlugFromPath();
+      const slug = getSlug();
       if (!slug) {
         renderError(
           'Adresse incorrecte',
-          'L\'URL ne contient pas d\'identifiant de formulaire valide.',
-          '/f/{slug}'
+          'L\'URL ne contient pas d\'identifiant de formulaire valide. Format attendu : /form?s=mon-slug',
+          'NO_SLUG'
         );
         return;
       }

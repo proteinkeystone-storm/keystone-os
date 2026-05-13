@@ -488,6 +488,8 @@ async function _publishForm() {
     }
 
     // Succès : on récupère la version serveur (output.status, published_at, etc.)
+    const slug = data?.form?.slug || _state.form.meta.slug;
+    const publicUrl = `${location.origin}/form?s=${encodeURIComponent(slug)}`;
     if (data?.form) {
       _state.form = {
         ..._state.form,
@@ -496,14 +498,14 @@ async function _publishForm() {
           ...(_state.form.output || {}),
           ...(data.form.output || {}),
           status: 'published',
-          published_url: `${location.origin}/f/${data.form.slug || _state.form.meta.slug}`,
+          published_url: publicUrl,
           last_response_at: null,
         },
       };
       _saveDraft({ explicit: true });
     }
 
-    const url = `${location.origin}/f/${f.meta.slug}`;
+    const url = publicUrl;
     alert(`Formulaire publié avec succès !\n\nURL à partager :\n${url}\n\nLes répondants pourront le remplir en ligne. Les réponses arriveront aux destinataires configurés.`);
     _renderMain();
     _renderRail();
@@ -1090,7 +1092,7 @@ function _renderDelivery(main) {
       <label class="pulsa-fld">
         <span class="pulsa-fld-label">Identifiant court (slug)</span>
         <div class="pulsa-slug-row">
-          <span class="pulsa-slug-prefix">keystone.app/f/</span>
+          <span class="pulsa-slug-prefix">/form?s=</span>
           <input class="pulsa-input pulsa-slug-input" type="text"
                  placeholder="biennale-art-2026"
                  data-bind="form.meta.slug"
@@ -1183,7 +1185,7 @@ function _renderPublish(main) {
         </div>
         <div class="pulsa-recap-cell">
           <span class="pulsa-recap-label">URL publique</span>
-          <span class="pulsa-recap-value">${f.meta.slug ? `keystone.app/f/${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
+          <span class="pulsa-recap-value">${f.meta.slug ? `${location.host}/form?s=${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
         </div>
         <div class="pulsa-recap-cell">
           <span class="pulsa-recap-label">Sections</span>
@@ -1214,7 +1216,7 @@ function _renderPublish(main) {
     ` : `
       <section class="pulsa-block pulsa-ready">
         <h3 class="pulsa-block-title">${icon('check', 16)} Tout est en place</h3>
-        <p>Votre formulaire est prêt à être publié à l'URL <strong>keystone.app/f/${_escape(f.meta.slug)}</strong>. Une fois publié, vous pourrez le partager avec vos répondants et recevoir les réponses par mail.</p>
+        <p>Votre formulaire est prêt à être publié à l'URL <strong>${location.host}/form?s=${_escape(f.meta.slug)}</strong>. Une fois publié, vous pourrez le partager avec vos répondants et recevoir les réponses par mail.</p>
       </section>
     `}
 
