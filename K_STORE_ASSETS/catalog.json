@@ -273,6 +273,22 @@
       "tags": ["artefact", "print", "digital", "brief", "communication", "production", "calculateur-echelle", "kodex"]
     },
     {
+      "id": "A-COM-004",
+      "padKey": null,
+      "title": "Pulsa",
+      "subtitle": "Le formulaire intelligent · URL partageable · notif direction",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Pulsa transforme votre besoin de collecte d'informations en un formulaire intelligent, prêt à partager. Builder en 4 étapes : structurez vos sections et champs (texte court/long avec compteur strict, chips, tool cards, upload, rank, signature, date, montant, téléphone), personnalisez l'apparence aux couleurs de votre marque, configurez les destinataires direction qui recevront les réponses, puis publiez à une URL partageable type keystone.app/f/votre-slug. Mobile-first, signature anonyme garantie. Cas d'usage : diagnostic opérationnel, audit interne, onboarding fournisseur, candidature artistique, qualification prospect, pré-brief client.",
+      "icon": "check-square",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "tags": ["artefact", "formulaire", "questionnaire", "diagnostic", "onboarding", "collecte", "communication", "pulsa"]
+    },
+    {
       "id": "A-COM-003",
       "padKey": null,
       "title": "Muse",

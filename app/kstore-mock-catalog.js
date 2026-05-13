@@ -113,6 +113,19 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'A-COM-004',                      // ← Sprint Pulsa-1 — squelette workspace
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Pulsa',
+        punchline: 'Le formulaire intelligent qui collecte sans friction',
+        shortDesc: 'Builder de questionnaires · URL partageable · notification mail direction',
+        price: 49,
+        icon: 'check-square',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini', 'Grok', 'Perplexity', 'Llama'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 
     // Coquilles vides — une par catégorie principale + sous-tags BIZ
     {

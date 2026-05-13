@@ -16,6 +16,7 @@ import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
 import { openMuse }                              from './muse.js';
+import { openPulsa }                             from './pulsa.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -1537,6 +1538,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
     if (padId === 'A-COM-003') { openMuse();  return; }
+    if (padId === 'A-COM-004') { openPulsa(); return; }
 
     // Résoudre NOMEN-K (O-IMM-001) ou padKey (A1) → pad via pads-loader
     const tool = TOOLS.find(t => t.id === padId);
