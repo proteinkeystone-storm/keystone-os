@@ -1,0 +1,469 @@
+/* ═══════════════════════════════════════════════════════════════
+   KEYSTONE OS — PULSA Builder · Styles spécifiques
+   Sprint Pulsa-2A
+
+   Préfixe `.pulsa-*` pour les classes builder.
+   Le shell workspace utilise `.ws-*` (workspace.css) sans override.
+   Pas de hex hardcodé : toutes les couleurs viennent du DS.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Aside (colonne droite : aperçu/stats) ─────────────── */
+.pulsa-aside {
+  background: var(--ws-surface, var(--navy2));
+  border-left: 1px solid var(--ws-border, var(--bd));
+  padding: 24px 20px;
+  overflow-y: auto;
+}
+
+.pulsa-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pulsa-stats h3 {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+  margin: 0 0 4px;
+}
+.pulsa-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pulsa-stat-num {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--ws-accent, var(--gold));
+}
+.pulsa-stat-label {
+  font-size: 13px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+}
+.pulsa-stats-hint {
+  margin-top: 16px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ws-text, var(--text));
+  opacity: .45;
+  line-height: 1.5;
+}
+
+/* ── Méta-formulaire (titre + intro) ───────────────────── */
+.pulsa-form-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: var(--r, 10px);
+}
+
+.pulsa-fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pulsa-fld-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+
+/* ── Inputs unifiés ────────────────────────────────────── */
+.pulsa-input {
+  width: 100%;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ws-text, var(--text));
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.pulsa-input:focus {
+  border-color: var(--ws-accent, var(--gold));
+  background: rgba(255, 255, 255, .05);
+}
+.pulsa-input::placeholder {
+  color: var(--ws-text, var(--text));
+  opacity: .35;
+}
+textarea.pulsa-input {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.5;
+}
+
+/* ── Sections (cartes containers) ──────────────────────── */
+.pulsa-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pulsa-section {
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: var(--r, 10px);
+  padding: 18px;
+  transition: border-color .15s;
+}
+.pulsa-section:hover {
+  border-color: rgba(99, 102, 241, .25);
+}
+
+.pulsa-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.pulsa-section-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ws-accent, var(--gold));
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pulsa-section-inputs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pulsa-section-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.pulsa-section-sub {
+  font-size: 13px;
+  opacity: .85;
+}
+
+.pulsa-section-add {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Champs ────────────────────────────────────────────── */
+.pulsa-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+}
+.pulsa-fields-empty {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ws-text, var(--text));
+  opacity: .4;
+  background: rgba(255, 255, 255, .02);
+  border-radius: 8px;
+  border: 1px dashed var(--ws-border, var(--bd));
+}
+
+.pulsa-field {
+  background: rgba(255, 255, 255, .025);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pulsa-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pulsa-field-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ws-accent, var(--gold));
+  opacity: .85;
+}
+.pulsa-field-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pulsa-field-label {
+  font-size: 14px;
+}
+
+/* ── Chips (toggle Requis) ─────────────────────────────── */
+.pulsa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ws-border, var(--bd));
+  background: transparent;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pulsa-chip:hover {
+  opacity: .85;
+}
+.pulsa-chip.is-on {
+  background: var(--ws-accent, var(--gold));
+  color: var(--navy);
+  border-color: var(--ws-accent, var(--gold));
+  opacity: 1;
+}
+
+/* ── Boutons ───────────────────────────────────────────── */
+.pulsa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pulsa-btn-primary {
+  background: var(--ws-accent, var(--gold));
+  color: var(--navy);
+}
+.pulsa-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.pulsa-btn-ghost {
+  background: transparent;
+  border-color: var(--ws-border, var(--bd));
+  color: var(--ws-text, var(--text));
+  opacity: .75;
+}
+.pulsa-btn-ghost:hover {
+  opacity: 1;
+  border-color: var(--ws-accent, var(--gold));
+  color: var(--ws-accent, var(--gold));
+}
+.pulsa-btn-add-field {
+  margin-top: 4px;
+  width: 100%;
+  justify-content: center;
+  border-style: dashed;
+}
+
+/* ── Boutons icône ─────────────────────────────────────── */
+.pulsa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pulsa-icon-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, .05);
+}
+.pulsa-icon-btn-danger:hover {
+  color: var(--danger, #e05c5c);
+  background: rgba(224, 92, 92, .1);
+  opacity: 1;
+}
+
+/* ── État vide ─────────────────────────────────────────── */
+.pulsa-empty {
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--ws-surface, var(--navy2));
+  border: 1px dashed var(--ws-border, var(--bd));
+  border-radius: var(--r, 10px);
+}
+.pulsa-empty p {
+  margin: 0 0 16px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+  font-size: 14px;
+}
+
+.pulsa-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ws-text, var(--text));
+  opacity: .65;
+}
+.pulsa-placeholder h2 {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  margin: 16px 0 8px;
+  color: var(--ws-text, var(--text));
+}
+.pulsa-placeholder p {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Modal (sélection de type de champ) ────────────────── */
+.pulsa-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.pulsa-modal[hidden] {
+  display: none;
+}
+
+.pulsa-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.pulsa-modal-card {
+  position: relative;
+  max-width: 720px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--navy2);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+}
+.pulsa-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-modal-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--ws-text, var(--text));
+}
+.pulsa-modal-body {
+  padding: 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pulsa-type-group-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ws-text, var(--text));
+  opacity: .5;
+}
+.pulsa-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (max-width: 540px) {
+  .pulsa-type-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pulsa-type-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, .025);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ws-text, var(--text));
+  transition: all .15s;
+}
+.pulsa-type-card:hover {
+  background: rgba(99, 102, 241, .08);
+  border-color: var(--ws-accent, var(--gold));
+}
+.pulsa-type-card-ico {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, .12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-accent, var(--gold));
+}
+.pulsa-type-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pulsa-type-card-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.pulsa-type-card-sub {
+  font-size: 12px;
+  opacity: .6;
+  line-height: 1.4;
+}
