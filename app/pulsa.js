@@ -257,10 +257,14 @@ function _onClick(e) {
   if (act === 'set-currency')     return _setCurrency(t.dataset.field, t.dataset.value);
   if (act === 'toggle-network')   return _toggleNetwork(t.dataset.field, t.dataset.network);
 
-  // Logique conditionnelle (P2B.1 — visible_if)
-  if (act === 'enable-visible-if')  return _enableVisibleIf(t.dataset.field);
-  if (act === 'disable-visible-if') return _disableVisibleIf(t.dataset.field);
-  if (act === 'copy-field-id')      return _copyFieldId(t.dataset.field);
+  // Logique conditionnelle (P2B.1/.2)
+  if (act === 'enable-visible-if')   return _enableVisibleIf(t.dataset.field);
+  if (act === 'disable-visible-if')  return _disableVisibleIf(t.dataset.field);
+  if (act === 'enable-required-if')  return _enableRequiredIf(t.dataset.field);
+  if (act === 'disable-required-if') return _disableRequiredIf(t.dataset.field);
+  if (act === 'toggle-compute-source') return _toggleComputeSource(t.dataset.field, t.dataset.source);
+  if (act === 'toggle-compute')      return _toggleCompute(t.dataset.field);
+  if (act === 'copy-field-id')       return _copyFieldId(t.dataset.field);
 
   // Étapes Apparence / Livraison
   if (act === 'set-brand-preset') return _setBrandPreset(t.dataset.color, t.dataset.accent);
@@ -768,6 +772,60 @@ function _otherFields(fieldId) {
     }
   }
   return out;
+}
+
+/**
+ * Tous les autres champs amount (sources possibles d'un compute_from).
+ */
+function _otherAmountFields(fieldId) {
+  return _otherFields(fieldId).filter(f => f.type === 'amount' && !f.compute_from);
+}
+
+// ── required_if (P2B.2) ──────────────────────────────────────
+function _enableRequiredIf(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const others = _otherFields(fieldId);
+  found.field.required_if = {
+    field: others[0]?.id || '',
+    op: 'eq',
+    value: '',
+  };
+  _renderAside();
+  _saveDraft();
+}
+
+function _disableRequiredIf(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  found.field.required_if = null;
+  _renderAside();
+  _saveDraft();
+}
+
+// ── compute_from (P2B.2) — uniquement pour amount ────────────
+function _toggleCompute(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found || found.field.type !== 'amount') return;
+  if (found.field.compute_from) {
+    found.field.compute_from = null;
+  } else {
+    found.field.compute_from = { fields: [], op: 'sum' };
+  }
+  _renderAside();
+  _saveDraft();
+}
+
+function _toggleComputeSource(fieldId, sourceId) {
+  const found = _findFieldById(fieldId);
+  if (!found || !found.field.compute_from) return;
+  const list = found.field.compute_from.fields || [];
+  const idx = list.indexOf(sourceId);
+  if (idx === -1) list.push(sourceId);
+  else list.splice(idx, 1);
+  found.field.compute_from.fields = list;
+  _renderAside();
+  _saveDraft();
 }
 
 function _findFieldById(fieldId) {
@@ -1817,6 +1875,100 @@ function _editorCommonBlock(sid, field) {
     </section>
 
     ${_editorVisibleIfBlock(sid, field)}
+    ${_editorRequiredIfBlock(sid, field)}
+  `;
+}
+
+/**
+ * Bloc "Obligatoire conditionnel" : pattern miroir de visible_if.
+ * Le champ devient requis si la condition est satisfaite.
+ */
+function _editorRequiredIfBlock(sid, field) {
+  const rif = field.required_if;
+  const others = _otherFields(field.id);
+
+  if (others.length === 0) return '';
+
+  if (!rif) {
+    return `
+      <section class="pulsa-editor-section">
+        <h4 class="pulsa-editor-section-title">Obligatoire conditionnel</h4>
+        <p class="pulsa-editor-hint">Rendre ce champ obligatoire uniquement si la réponse à un autre champ correspond à un critère.</p>
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="enable-required-if" data-field="${field.id}">
+          ${icon('plus', 14)}<span>Ajouter une exigence conditionnelle</span>
+        </button>
+      </section>
+    `;
+  }
+
+  const sourceField = others.find(f => f.id === rif.field) || others[0];
+  const showValue = !['truthy', 'falsy'].includes(rif.op);
+  let valueControl = '';
+  if (showValue) {
+    if (sourceField?.type === 'chips' || sourceField?.type === 'yes-no') {
+      const choices = sourceField.type === 'yes-no'
+        ? [{ id: 'yes', label: sourceField.options?.yes_label || 'Oui' },
+           { id: 'no',  label: sourceField.options?.no_label  || 'Non' }]
+        : (sourceField.options?.choices || []);
+      valueControl = `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Valeur attendue</span>
+          <select class="pulsa-input" data-bind="field.${sid}.${field.id}.required_if.value">
+            <option value="">— Choisir —</option>
+            ${choices.map(c => `
+              <option value="${_escape(c.id)}" ${String(rif.value) === String(c.id) ? 'selected' : ''}>
+                ${_escape(c.label || c.id)}
+              </option>
+            `).join('')}
+          </select>
+        </label>
+      `;
+    } else {
+      valueControl = `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Valeur attendue</span>
+          <input class="pulsa-input" type="text"
+                 placeholder="La valeur exacte à comparer"
+                 data-bind="field.${sid}.${field.id}.required_if.value"
+                 value="${_escape(rif.value ?? '')}">
+        </label>
+      `;
+    }
+  }
+
+  return `
+    <section class="pulsa-editor-section pulsa-reqif">
+      <h4 class="pulsa-editor-section-title">Obligatoire conditionnel</h4>
+      <p class="pulsa-editor-hint">Devient obligatoire si :</p>
+
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Champ source</span>
+        <select class="pulsa-input" data-bind="field.${sid}.${field.id}.required_if.field">
+          ${others.map(f => `
+            <option value="${_escape(f.id)}" ${rif.field === f.id ? 'selected' : ''}>
+              ${_escape(f.label || f.id)} (${_escape(FIELD_TYPES[f.type]?.label || f.type)})
+            </option>
+          `).join('')}
+        </select>
+      </label>
+
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Opérateur</span>
+        <select class="pulsa-input" data-bind="field.${sid}.${field.id}.required_if.op">
+          <option value="eq"     ${rif.op === 'eq'     ? 'selected' : ''}>est égal à</option>
+          <option value="neq"    ${rif.op === 'neq'    ? 'selected' : ''}>n'est pas égal à</option>
+          <option value="truthy" ${rif.op === 'truthy' ? 'selected' : ''}>est rempli</option>
+          <option value="falsy"  ${rif.op === 'falsy'  ? 'selected' : ''}>est vide</option>
+        </select>
+      </label>
+
+      ${valueControl}
+
+      <button class="pulsa-btn pulsa-btn-ghost pulsa-btn-danger-ghost"
+              data-act="disable-required-if" data-field="${field.id}">
+        ${icon('x', 14)}<span>Retirer l'exigence conditionnelle</span>
+      </button>
+    </section>
   `;
 }
 
@@ -2171,6 +2323,56 @@ function _editorAmount(sid, field) {
                data-bind="field.${sid}.${field.id}.options.max"
                value="${field.options?.max ?? ''}">
       </label>
+    </section>
+    ${_editorComputeFromBlock(field)}
+  `;
+}
+
+/**
+ * Bloc "Calcul automatique" — uniquement pour les champs amount.
+ * Liste les autres champs amount du formulaire et permet de cocher
+ * lesquels sont à sommer pour calculer ce champ.
+ */
+function _editorComputeFromBlock(field) {
+  const sources = _otherAmountFields(field.id);
+  const isActive = !!field.compute_from;
+  const selectedIds = (field.compute_from?.fields || []);
+
+  if (sources.length === 0) {
+    return `
+      <section class="pulsa-editor-section">
+        <h4 class="pulsa-editor-section-title">Calcul automatique</h4>
+        <p class="pulsa-editor-hint">Pour activer la somme automatique, créez d'abord d'autres champs Montant dans le formulaire.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="pulsa-editor-section ${isActive ? 'pulsa-compute-active' : ''}">
+      <h4 class="pulsa-editor-section-title">Calcul automatique</h4>
+      <p class="pulsa-editor-hint">Quand activé, ce champ devient en lecture seule et sa valeur est la somme des montants cochés. Idéal pour un "Total" automatique.</p>
+      <button class="pulsa-chip ${isActive ? 'is-on' : ''}"
+              data-act="toggle-compute" data-field="${field.id}">
+        ${isActive ? icon('check', 12) : icon('plus', 12)}
+        <span>${isActive ? 'Désactiver le calcul' : 'Activer la somme automatique'}</span>
+      </button>
+      ${isActive ? `
+        <div class="pulsa-compute-sources">
+          <p class="pulsa-editor-hint" style="margin-top:8px">Cochez les champs à inclure dans la somme :</p>
+          ${sources.map(s => {
+            const on = selectedIds.includes(s.id);
+            const currency = s.options?.currency || 'EUR';
+            return `
+              <button class="pulsa-network-toggle ${on ? 'is-on-toggle' : ''}"
+                      data-act="toggle-compute-source"
+                      data-field="${field.id}" data-source="${s.id}">
+                ${on ? icon('check', 12) : icon('plus', 12)}
+                <span>${_escape(s.label || s.id)} <em style="opacity:.6;font-style:normal">(${_escape(currency)})</em></span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
     </section>
   `;
 }

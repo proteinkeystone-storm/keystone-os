@@ -208,7 +208,15 @@
       font-size: 13.5px; font-weight: 700; color: var(--pf-brand);
       margin-bottom: 8px; line-height: 1.4;
     }
-    .pf-field-label .pf-req { color: var(--pf-danger); margin-left: 3px; }
+    .pf-field-label .pf-req { color: var(--pf-danger); margin-left: 3px; display: none; }
+    .pf-field.is-required .pf-field-label .pf-req { display: inline; }
+    .pf-input-computed {
+      background: var(--pf-light);
+      color: var(--pf-body);
+      font-weight: 700;
+      cursor: not-allowed;
+    }
+    .pf-input-computed:focus { box-shadow: none; border-color: var(--pf-border); }
     .pf-field-help {
       display: block;
       font-size: 12px; color: var(--pf-muted);
@@ -581,6 +589,65 @@
     }
 
     /**
+     * Évalue si un champ est requis maintenant : soit field.required est
+     * vrai, soit required_if est défini ET satisfait. Les champs cachés
+     * (visible_if non satisfait) ne sont JAMAIS requis.
+     */
+    function isFieldRequired(field) {
+      if (!_visibleFieldIds.has(field.id)) return false;
+      if (field.required) return true;
+      if (field.required_if) return evalCondition(field.required_if, _values);
+      return false;
+    }
+
+    /**
+     * Met à jour l'asterisque rouge des champs requis dynamiques.
+     * Le span .pf-req est toujours présent dans le DOM ; on bascule
+     * la classe is-required sur le wrapper pour l'afficher/le masquer.
+     */
+    function refreshRequiredIndicators() {
+      if (!_form) return;
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          const el = document.querySelector(`.pf-field[data-fid="${f.id}"]`);
+          if (el) el.classList.toggle('is-required', isFieldRequired(f));
+        }
+      }
+    }
+
+    /**
+     * Recalcule les valeurs des champs avec compute_from. Pour V1,
+     * seul l'op='sum' est supporté : somme des valeurs numériques
+     * des champs sources.
+     */
+    function recomputeAll() {
+      if (!_form) return;
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          if (!f.compute_from) continue;
+          const srcIds = f.compute_from.fields || [];
+          const op = f.compute_from.op || 'sum';
+          const nums = srcIds
+            .map(id => _values[id])
+            .map(v => Number(v))
+            .filter(n => !isNaN(n));
+          let result = 0;
+          if (op === 'sum') {
+            result = nums.reduce((a, n) => a + n, 0);
+          } else if (op === 'avg' && nums.length > 0) {
+            result = nums.reduce((a, n) => a + n, 0) / nums.length;
+          }
+          // Arrondi selon les décimales configurées du champ amount
+          const dec = Number.isInteger(f.options?.decimals) ? f.options.decimals : 2;
+          const rounded = Number(result.toFixed(dec));
+          _values[f.id] = rounded;
+          const inp = document.getElementById('pf-' + f.id);
+          if (inp) inp.value = rounded;
+        }
+      }
+    }
+
+    /**
      * Pré-remplit les valeurs à partir des query params de l'URL.
      * Les paramètres réservés (s, slug) sont ignorés.
      * Format : ?fld_xxx=valeur ; pour les champs avec choices,
@@ -708,9 +775,11 @@
     function renderField(field) {
       const renderer = RENDERERS[field.type];
       if (!renderer) return `<div class="pf-field-error">Type de champ non supporté : ${escape(field.type)}</div>`;
+      // L'asterisque est toujours rendu ; sa visibilité est gérée
+      // par .is-required appliquée dynamiquement selon evalRequired().
       const labelHtml = `
         <label class="pf-field-label" for="pf-${field.id}">
-          ${escape(field.label)}${field.required ? '<span class="pf-req" aria-hidden="true">*</span>' : ''}
+          ${escape(field.label)}<span class="pf-req" aria-hidden="true" data-slot="req-${field.id}">*</span>
         </label>
         ${field.help ? `<span class="pf-field-help">${escape(field.help)}</span>` : ''}
       `;
@@ -849,16 +918,22 @@
       const step = dec > 0 ? '0.' + '0'.repeat(dec - 1) + '1' : '1';
       const minAttr = opts.min != null ? `min="${escape(opts.min)}"` : '';
       const maxAttr = opts.max != null ? `max="${escape(opts.max)}"` : '';
+      // compute_from rend le champ readonly : la valeur est calculée
+      // automatiquement par recomputeAll() à chaque changement de source.
+      const isComputed = !!field.compute_from;
+      const computedAttr = isComputed ? 'readonly' : '';
+      const placeholder = isComputed ? 'Calculé automatiquement' : `0${dec > 0 ? ',' + '0'.repeat(dec) : ''}`;
       return `
         <div style="display:flex;align-items:stretch;gap:8px;">
-          <input class="pf-input" type="number" id="pf-${field.id}"
-                 inputmode="decimal" step="${step}" ${minAttr} ${maxAttr}
-                 placeholder="0${dec > 0 ? ',' + '0'.repeat(dec) : ''}"
+          <input class="pf-input ${isComputed ? 'pf-input-computed' : ''}" type="number" id="pf-${field.id}"
+                 inputmode="decimal" step="${step}" ${minAttr} ${maxAttr} ${computedAttr}
+                 placeholder="${escape(placeholder)}"
                  data-fid="${field.id}" data-kind="amount"
                  data-decimals="${dec}"
                  style="flex:1;">
           <span style="display:inline-flex;align-items:center;padding:0 14px;background:var(--pf-light);border:1.5px solid var(--pf-border);border-radius:10px;font-size:14px;font-weight:700;color:var(--pf-muted);">${escape(symbol)}</span>
         </div>
+        ${isComputed ? `<span class="pf-field-help" style="margin-top:6px;margin-bottom:0;">Calculé à partir des autres montants</span>` : ''}
       `;
     }
 
@@ -900,6 +975,8 @@
           chip.setAttribute('aria-checked', 'true');
           _values[fid] = cid;
           refreshVisibility();
+          recomputeAll();
+          refreshRequiredIndicators();
           refreshProgress();
           clearFieldError(fid);
           return;
@@ -926,6 +1003,8 @@
           yn.classList.add('is-selected');
           _values[fid] = yn.dataset.val;
           refreshVisibility();
+          recomputeAll();
+          refreshRequiredIndicators();
           refreshProgress();
           clearFieldError(fid);
           return;
@@ -997,8 +1076,8 @@
       const required = [];
       for (const sec of _form.sections || []) {
         for (const f of (sec.fields || [])) {
-          // Ne compte que les champs visibles (visible_if peut masquer)
-          if (f.required && _visibleFieldIds.has(f.id)) required.push(f);
+          // Ne compte que les champs requis ET visibles à l'instant T
+          if (isFieldRequired(f)) required.push(f);
         }
       }
       if (required.length === 0) {
@@ -1033,7 +1112,7 @@
           // leur valeur ne doit pas bloquer la soumission ni être
           // considérée comme "requise non remplie".
           if (!_visibleFieldIds.has(f.id)) continue;
-          if (f.required && !hasValue(f.id)) {
+          if (isFieldRequired(f) && !hasValue(f.id)) {
             setFieldError(f.id, 'Ce champ est obligatoire');
             firstErrId = firstErrId || f.id;
             continue;
@@ -1218,6 +1297,8 @@
       prefillFromUrl();
       applyPrefilledToDom();
       refreshVisibility();
+      recomputeAll();
+      refreshRequiredIndicators();
       refreshProgress();
     }
 
