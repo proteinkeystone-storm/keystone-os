@@ -194,6 +194,18 @@ export const FIELD_TYPES = {
       high_label: '',
     },
   },
+  'image-picker': {
+    label: 'Image picker (choix visuel)',
+    sub: 'Choix unique parmi plusieurs images (ambiance, mood, style…)',
+    ico: 'image',
+    group: 'choice',
+    defaults: {
+      choices: [
+        { id: 'img1', label: 'Option 1', image_url: '' },
+        { id: 'img2', label: 'Option 2', image_url: '' },
+      ],
+    },
+  },
   'likert': {
     label: 'Échelle Likert (5 niveaux)',
     sub: 'Pas du tout d\'accord → Tout à fait d\'accord',
@@ -301,6 +313,9 @@ export function newForm() {
       anonymous: true,
       intro: '',
       ttl_days: 90,
+      // Code d'accès optionnel (mot de passe court protégeant
+      // l'accès au formulaire public). null = formulaire ouvert.
+      access_code: null,
     },
     sections: [],
     delivery: {

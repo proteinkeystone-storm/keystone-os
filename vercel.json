@@ -4,8 +4,9 @@
   "version": 2,
 
   "rewrites": [
-    { "source": "/app",    "destination": "/app.html"   },
-    { "source": "/admin",  "destination": "/admin.html" }
+    { "source": "/app",       "destination": "/app.html"   },
+    { "source": "/admin",     "destination": "/admin.html" },
+    { "source": "/f/(.*)",    "destination": "/form?s=$1"  }
   ],
 
   "headers": [

@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.12.0-pulsa-types-v2-p5-1';
+const VERSION       = 'ks-os-v4.13.0-pulsa-imgpicker-gate-url-p5-2-3';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

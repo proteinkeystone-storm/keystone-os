@@ -568,7 +568,9 @@ async function _publishForm() {
 
     // Succès : on récupère la version serveur (output.status, published_at, etc.)
     const slug = data?.form?.slug || _state.form.meta.slug;
-    const publicUrl = `${location.origin}/form?s=${encodeURIComponent(slug)}`;
+    // URL propre /f/{slug} si le rewrite Vercel fonctionne, sinon
+    // form.html lit aussi /form?s={slug} en fallback.
+    const publicUrl = `${location.origin}/f/${encodeURIComponent(slug)}`;
     if (data?.form) {
       _state.form = {
         ..._state.form,
@@ -683,9 +685,14 @@ function _addChoice(fieldId) {
   const { field } = found;
   if (!field.options.choices) field.options.choices = [];
   const idx = field.options.choices.length + 1;
-  const baseChoice = field.type === 'cards'
-    ? { id: 'c' + idx, label: 'Choix ' + idx, ico: 'sparkles', desc: '' }
-    : { id: 'c' + idx, label: 'Option ' + idx };
+  let baseChoice;
+  if (field.type === 'cards') {
+    baseChoice = { id: 'c' + idx, label: 'Choix ' + idx, ico: 'sparkles', desc: '' };
+  } else if (field.type === 'image-picker') {
+    baseChoice = { id: 'img' + idx, label: 'Option ' + idx, image_url: '' };
+  } else {
+    baseChoice = { id: 'c' + idx, label: 'Option ' + idx };
+  }
   // Garantir un id unique simple
   while (field.options.choices.some(c => c.id === baseChoice.id)) {
     baseChoice.id += '_' + Math.random().toString(36).slice(2, 4);
@@ -1308,6 +1315,14 @@ function _formatValueForUI(field, raw) {
       const level = (opts.choices || []).find(c => c.id === raw);
       return _escape(level?.label || raw);
     }
+    case 'image-picker': {
+      const c = (opts.choices || []).find(c => c.id === raw);
+      if (!c) return _escape(raw);
+      if (c.image_url) {
+        return `<span style="display:inline-flex;align-items:center;gap:6px"><img src="${_escape(c.image_url)}" alt="" style="width:36px;height:27px;object-fit:cover;border-radius:3px;border:1px solid rgba(255,255,255,.1)"><span>${_escape(c.label || raw)}</span></span>`;
+      }
+      return _escape(c.label || raw);
+    }
     default:
       return _escape(typeof raw === 'object' ? JSON.stringify(raw) : raw);
   }
@@ -1418,6 +1433,14 @@ function _renderAppearance(main) {
           <span class="pulsa-toggle-sub">Si désactivé, les répondants devront indiquer leur identité au début</span>
         </span>
       </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Code d'accès (optionnel)</span>
+        <input class="pulsa-input" type="text"
+               placeholder="Laissez vide pour un formulaire ouvert"
+               data-bind="form.meta.access_code"
+               value="${_escape(m.access_code || '')}">
+        <span class="pulsa-fld-help-inline">Si défini, les répondants devront saisir ce code avant d'accéder au formulaire. Idéal pour les diagnostics internes ou les questionnaires confidentiels.</span>
+      </label>
     </section>
 
     <section class="pulsa-block">
@@ -1489,7 +1512,7 @@ function _renderDelivery(main) {
       <label class="pulsa-fld">
         <span class="pulsa-fld-label">Identifiant court (slug)</span>
         <div class="pulsa-slug-row">
-          <span class="pulsa-slug-prefix">/form?s=</span>
+          <span class="pulsa-slug-prefix">/f/</span>
           <input class="pulsa-input pulsa-slug-input" type="text"
                  placeholder="biennale-art-2026"
                  data-bind="form.meta.slug"
@@ -1582,7 +1605,7 @@ function _renderPublish(main) {
         </div>
         <div class="pulsa-recap-cell">
           <span class="pulsa-recap-label">URL publique</span>
-          <span class="pulsa-recap-value">${f.meta.slug ? `${location.host}/form?s=${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
+          <span class="pulsa-recap-value">${f.meta.slug ? `${location.host}/f/${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
         </div>
         <div class="pulsa-recap-cell">
           <span class="pulsa-recap-label">Sections</span>
@@ -1613,7 +1636,7 @@ function _renderPublish(main) {
     ` : `
       <section class="pulsa-block pulsa-ready">
         <h3 class="pulsa-block-title">${icon('check', 16)} Tout est en place</h3>
-        <p>Votre formulaire est prêt à être publié à l'URL <strong>${location.host}/form?s=${_escape(f.meta.slug)}</strong>. Une fois publié, vous pourrez le partager avec vos répondants et recevoir les réponses par mail.</p>
+        <p>Votre formulaire est prêt à être publié à l'URL <strong>${location.host}/f/${_escape(f.meta.slug)}</strong>. Une fois publié, vous pourrez le partager avec vos répondants et recevoir les réponses par mail.</p>
       </section>
     `}
 
@@ -2105,6 +2128,7 @@ function _editorOptionsBlock(sid, field) {
     case 'url-external': return _editorUrlExternal(sid, field);
     case 'chips':        return _editorChoices(sid, field, 'chips');
     case 'cards':        return _editorChoices(sid, field, 'cards');
+    case 'image-picker': return _editorImagePicker(sid, field);
     case 'yes-no':       return _editorYesNo(sid, field);
     case 'rank-top3':    return _editorRank(sid, field);
     case 'date':         return _editorDate(sid, field);
@@ -2340,6 +2364,46 @@ function _editorChoices(sid, field, kind) {
       <button class="pulsa-btn pulsa-btn-ghost pulsa-choice-add"
               data-act="add-choice" data-field="${field.id}">
         ${icon('plus', 14)}<span>Ajouter un choix</span>
+      </button>
+    </section>
+  `;
+}
+
+function _editorImagePicker(sid, field) {
+  const choices = field.options?.choices || [];
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Images proposées</h4>
+      <p class="pulsa-editor-hint">Le répondant choisit une image. Collez l'URL d'une image hébergée publiquement (Unsplash, votre CDN, etc.) — pas d'upload serveur.</p>
+      <div class="pulsa-choices">
+        ${choices.map(c => `
+          <div class="pulsa-choice pulsa-choice-img">
+            ${c.image_url ? `
+              <div class="pulsa-choice-img-preview">
+                <img src="${_escape(c.image_url)}" alt=""
+                     onerror="this.style.display='none'">
+              </div>
+            ` : ''}
+            <input class="pulsa-input" type="text"
+                   placeholder="Libellé sous l'image"
+                   data-bind="choice.${sid}.${field.id}.${c.id}.label"
+                   value="${_escape(c.label)}">
+            <input class="pulsa-input" type="url"
+                   placeholder="https://… (URL publique de l'image)"
+                   data-bind="choice.${sid}.${field.id}.${c.id}.image_url"
+                   value="${_escape(c.image_url || '')}">
+            <button class="pulsa-icon-btn pulsa-icon-btn-danger"
+                    data-act="delete-choice"
+                    data-field="${field.id}" data-choice="${c.id}"
+                    title="Supprimer">
+              ${icon('x', 12)}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="pulsa-btn pulsa-btn-ghost pulsa-choice-add"
+              data-act="add-choice" data-field="${field.id}">
+        ${icon('plus', 14)}<span>Ajouter une image</span>
       </button>
     </section>
   `;

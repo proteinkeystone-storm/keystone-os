@@ -499,6 +499,98 @@
       font-size: 11px; color: var(--pf-muted);
     }
 
+    /* ── Image picker ───────────────────────────────────── */
+    .pf-imgpick {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .pf-imgpick-card {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 8px;
+      background: #fff;
+      border: 2px solid var(--pf-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+      font: inherit;
+      color: var(--pf-body);
+    }
+    .pf-imgpick-card:hover { border-color: var(--pf-muted); }
+    .pf-imgpick-card.is-selected {
+      border-color: var(--pf-brand);
+      box-shadow: 0 0 0 1px var(--pf-brand);
+    }
+    .pf-imgpick-card img {
+      width: 100%; aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+    }
+    .pf-imgpick-placeholder {
+      width: 100%; aspect-ratio: 4 / 3;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--pf-light);
+      color: var(--pf-muted);
+      font-size: 11px;
+      font-style: italic;
+      border-radius: 8px;
+    }
+    .pf-imgpick-label {
+      font-size: 12.5px; font-weight: 700;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    /* ── Code d'accès (modal d'entrée) ──────────────────── */
+    .pf-gate {
+      max-width: 420px;
+      margin: 80px auto 40px;
+      padding: 32px 28px;
+      text-align: center;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(10, 39, 65, .12);
+    }
+    .pf-gate h1 {
+      font-size: 20px; font-weight: 900; letter-spacing: -.02em;
+      color: var(--pf-brand); margin-bottom: 8px;
+    }
+    .pf-gate p {
+      font-size: 13.5px; color: var(--pf-muted);
+      line-height: 1.6; margin-bottom: 22px;
+    }
+    .pf-gate-input {
+      width: 100%;
+      padding: 14px 16px;
+      font: inherit; font-size: 18px;
+      font-family: 'SF Mono', Menlo, monospace;
+      letter-spacing: .1em;
+      text-align: center;
+      border: 1.5px solid var(--pf-border);
+      border-radius: 10px;
+      outline: none;
+      margin-bottom: 14px;
+    }
+    .pf-gate-input:focus { border-color: var(--pf-accent); }
+    .pf-gate-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: var(--pf-brand);
+      color: #fff;
+      font: inherit; font-size: 14px; font-weight: 800;
+      border: none; border-radius: 50px;
+      cursor: pointer;
+      letter-spacing: -.01em;
+    }
+    .pf-gate-error {
+      margin-top: 12px;
+      font-size: 12px; font-weight: 600;
+      color: var(--pf-danger);
+      min-height: 16px;
+    }
+
     /* ── Likert (échelle horizontale) ───────────────────── */
     .pf-likert {
       display: grid;
@@ -912,6 +1004,7 @@
       'nps':          renderNps,
       'slider':       renderSlider,
       'likert':       renderLikert,
+      'image-picker': renderImagePicker,
     };
 
     function renderField(field) {
@@ -1143,6 +1236,24 @@
       `;
     }
 
+    function renderImagePicker(field) {
+      const choices = field.options?.choices || [];
+      return `
+        <div class="pf-imgpick" data-fid="${field.id}" data-kind="imgpick" role="radiogroup">
+          ${choices.map(c => `
+            <button type="button" class="pf-imgpick-card" role="radio" aria-checked="false"
+                    data-fid="${field.id}" data-cid="${escape(c.id)}">
+              ${c.image_url ? `
+                <img src="${escape(c.image_url)}" alt="${escape(c.label)}"
+                     onerror="this.style.display='none'">
+              ` : '<div class="pf-imgpick-placeholder">(pas d\'image)</div>'}
+              <span class="pf-imgpick-label">${escape(c.label)}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
     function renderLikert(field) {
       const levels = field.options?.choices || [];
       return `
@@ -1188,6 +1299,24 @@
           npsBtn.closest('.pf-nps-scale').querySelectorAll('.pf-nps-btn').forEach(b => b.classList.remove('is-selected'));
           npsBtn.classList.add('is-selected');
           _values[fid] = Number(npsBtn.dataset.nps);
+          refreshVisibility();
+          recomputeAll();
+          refreshRequiredIndicators();
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Image picker (single select)
+        const imgCard = e.target.closest('.pf-imgpick-card');
+        if (imgCard) {
+          const fid = imgCard.dataset.fid;
+          imgCard.closest('.pf-imgpick').querySelectorAll('.pf-imgpick-card').forEach(c => {
+            c.classList.remove('is-selected');
+            c.setAttribute('aria-checked', 'false');
+          });
+          imgCard.classList.add('is-selected');
+          imgCard.setAttribute('aria-checked', 'true');
+          _values[fid] = imgCard.dataset.cid;
           refreshVisibility();
           recomputeAll();
           refreshRequiredIndicators();
@@ -1501,9 +1630,10 @@
       const btn = document.querySelector('[data-act="submit"]');
       if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
 
-      const slug = getSlug();
+      const slug = _slug || getSlug();
+      const submitUrl = `${API_BASE}/api/pulsa/responses/${slug}${_accessCode ? '?code=' + encodeURIComponent(_accessCode) : ''}`;
       try {
-        const res = await fetch(`${API_BASE}/api/pulsa/responses/${slug}`, {
+        const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ responses: _values }),
@@ -1554,14 +1684,28 @@
     // ═══════════════════════════════════════════════════════════════
     // Bootstrap
     // ═══════════════════════════════════════════════════════════════
+    let _slug = null;
+    let _accessCode = ''; // Mémorisé entre les tentatives, pour la soumission
+
     async function load() {
-      const slug = getSlug();
-      if (!slug) {
-        renderError('Adresse incorrecte', 'L\'URL ne contient pas d\'identifiant de formulaire valide. Format attendu : /form?s=mon-slug', 'NO_SLUG');
+      _slug = getSlug();
+      if (!_slug) {
+        renderError('Adresse incorrecte', 'L\'URL ne contient pas d\'identifiant de formulaire valide.', 'NO_SLUG');
         return;
       }
+      await tryFetchForm('');
+    }
+
+    async function tryFetchForm(code) {
+      const url = `${API_BASE}/api/pulsa/public/${_slug}${code ? '?code=' + encodeURIComponent(code) : ''}`;
       try {
-        const res = await fetch(`${API_BASE}/api/pulsa/public/${slug}`);
+        const res = await fetch(url);
+        if (res.status === 401) {
+          const data = await res.json().catch(() => ({}));
+          // Formulaire protégé : on demande le code
+          renderGate(data?.title || '', data?.message || 'Code requis', !!code);
+          return;
+        }
         if (res.status === 404) {
           renderError('Formulaire introuvable', 'Ce lien ne pointe vers aucun formulaire publié. Vérifiez l\'URL auprès de l\'expéditeur.', '404');
           return;
@@ -1576,11 +1720,37 @@
           renderError('Formulaire introuvable', 'La réponse du serveur est invalide.', 'NO_FORM');
           return;
         }
+        _accessCode = code; // mémorisé pour la soumission ultérieure
         applyBrand(_form.meta || {});
         renderForm();
       } catch (e) {
         renderError('Erreur réseau', 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.', e?.message || 'NETWORK');
       }
+    }
+
+    function renderGate(title, message, isRetry) {
+      document.getElementById('pf-app').innerHTML = `
+        <div class="pf-gate">
+          <h1>${escape(title || 'Formulaire protégé')}</h1>
+          <p>Ce formulaire nécessite un code d'accès pour être consulté. Si vous n'en avez pas, contactez l'expéditeur du lien.</p>
+          <input class="pf-gate-input" type="text" id="pf-gate-input"
+                 placeholder="Code d'accès" autofocus autocomplete="off"
+                 spellcheck="false">
+          <button class="pf-gate-btn" type="button" data-act="gate-submit">Accéder au formulaire</button>
+          <div class="pf-gate-error">${isRetry ? escape(message) : ''}</div>
+        </div>
+      `;
+      const input = document.getElementById('pf-gate-input');
+      const btn = document.querySelector('[data-act="gate-submit"]');
+      const submit = () => {
+        const code = input.value.trim();
+        if (!code) return;
+        btn.disabled = true;
+        btn.textContent = 'Vérification…';
+        tryFetchForm(code);
+      };
+      btn.addEventListener('click', submit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
     }
 
     function renderForm() {

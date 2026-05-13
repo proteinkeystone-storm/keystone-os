@@ -567,6 +567,32 @@
 .pulsa-choice-desc {
   grid-column: 1 / -1;
 }
+
+/* Image picker dans l'éditeur : layout vertical avec preview en haut */
+.pulsa-choice-img {
+  grid-template-columns: 1fr auto;
+}
+.pulsa-choice-img-preview {
+  grid-column: 1 / -1;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: rgba(255, 255, 255, .04);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pulsa-choice-img-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pulsa-choice-img > input[type="url"] {
+  grid-column: 1 / -1;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
 .pulsa-choice-add {
   align-self: flex-start;
   padding: 6px 12px;

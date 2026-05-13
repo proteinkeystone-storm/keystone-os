@@ -102,6 +102,17 @@ export async function handlePulsaSubmit(request, env, slug) {
   try { recipients = JSON.parse(formRow.recipients_json || '[]'); } catch {}
   const ttlDays = formRow.ttl_days || 90;
 
+  // Vérification du code d'accès si le formulaire est protégé.
+  // Le code arrive en query param (?code=XXXX) — même flow que GET public.
+  const expectedCode = config.meta?.access_code?.trim();
+  if (expectedCode) {
+    const url = new URL(request.url);
+    const providedCode = url.searchParams.get('code')?.trim() || '';
+    if (providedCode !== expectedCode) {
+      return err('Code d\'accès incorrect', 401, origin);
+    }
+  }
+
   // 2. Validation du payload
   const body = await parseBody(request);
   const responses = body?.responses;
@@ -362,6 +373,10 @@ function _csvFormatValue(field, raw) {
       const level = (opts.choices || []).find(c => c.id === raw);
       return level?.label || String(raw);
     }
+    case 'image-picker': {
+      const c = (opts.choices || []).find(c => c.id === raw);
+      return c?.label || String(raw);
+    }
     default:
       return typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
   }
@@ -452,6 +467,15 @@ function _formatValue(field, raw) {
     case 'likert': {
       const level = (opts.choices || []).find(c => c.id === raw);
       return _escapeHtml(level?.label || raw);
+    }
+    case 'image-picker': {
+      const c = (opts.choices || []).find(c => c.id === raw);
+      if (!c) return _escapeHtml(raw);
+      const label = _escapeHtml(c.label || raw);
+      if (c.image_url) {
+        return `<div style="display:flex;gap:10px;align-items:center"><img src="${_escapeHtml(c.image_url)}" alt="" style="width:60px;height:45px;object-fit:cover;border-radius:4px;border:1px solid #1f2a37"/><span>${label}</span></div>`;
+      }
+      return label;
     }
     default:
       return _escapeHtml(typeof raw === 'object' ? JSON.stringify(raw) : raw);

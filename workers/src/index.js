@@ -151,9 +151,10 @@ export default {
       }
       // Lecture publique : pas d'auth, retourne uniquement les formulaires
       // status='published' et strip les champs sensibles (recipients, owner).
+      // Supporte un access_code optionnel via ?code=XXXX (401 si requis et absent).
       if (path.startsWith('/api/pulsa/public/') && method === 'GET') {
         const slug = path.split('/').pop();
-        return handlePulsaPublic(request, env, slug);
+        return handlePulsaPublic(request, env, slug, url);
       }
       // Soumission d'une réponse (publique). Stocke en D1 + envoie un mail
       // Resend aux destinataires direction. Purge automatique au TTL.

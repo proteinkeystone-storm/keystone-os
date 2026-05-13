@@ -67,10 +67,23 @@ function _toPublicConfig(row) {
   };
 }
 
+/**
+ * Lit le code d'accès configuré pour ce slug, sans rien révéler
+ * d'autre. Utilisé par le handler pour décider 401 vs 200.
+ */
+function _getAccessCode(row) {
+  let cfg = {};
+  try { cfg = JSON.parse(row.config_json || '{}'); } catch {}
+  return cfg.meta?.access_code?.trim() || null;
+}
+
 // ═══════════════════════════════════════════════════════════════
-// GET /api/pulsa/public/:slug
+// GET /api/pulsa/public/:slug?code=XXXX
+// Si access_code est défini, le code doit matcher exactement.
+// Retourne 401 + { protected: true } si manquant ou incorrect,
+// 200 + form complet si OK ou si aucun code n'est requis.
 // ═══════════════════════════════════════════════════════════════
-export async function handlePulsaPublic(request, env, slug) {
+export async function handlePulsaPublic(request, env, slug, url) {
   const origin = getAllowedOrigin(env, request);
   if (!slug || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {
     return err('Slug invalide', 400, origin);
@@ -81,6 +94,19 @@ export async function handlePulsaPublic(request, env, slug) {
     'SELECT * FROM pulsa_forms WHERE slug = ? AND status = ? LIMIT 1'
   ).bind(slug, 'published').first();
   if (!row) return err('Formulaire introuvable ou non publié', 404, origin);
+
+  const expectedCode = _getAccessCode(row);
+  if (expectedCode) {
+    const providedCode = url?.searchParams?.get('code')?.trim() || '';
+    if (!providedCode || providedCode !== expectedCode) {
+      return json({
+        ok: false,
+        protected: true,
+        message: providedCode ? 'Code incorrect' : 'Code requis',
+        title: row.title || _toPublicConfig(row).meta?.title || '',
+      }, 401, origin);
+    }
+  }
 
   return json({ ok: true, form: _toPublicConfig(row) }, 200, origin);
 }
