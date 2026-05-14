@@ -1023,12 +1023,24 @@ function _renderAppCardSmall(app) {
         : '00,00 €';
     const action   = app.real && !isOwned ? 'obtenir' : 'soon';
 
+    // Trois sources possibles pour l'icône, dans cet ordre :
+    // 1. Screenshot uploadé via admin (iconId) — background image
+    // 2. Pictogramme SVG du registre ICONS (icon = 'kodex', 'pulsa'…)
+    // 3. Fallback ICONS['package'] (apps mockées sans icône définie)
     const iconStyle = app.iconId
         ? `background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.iconId)}');background-size:cover;background-position:center`
         : '';
+    const iconInline = !app.iconId
+        ? (ICONS[app.icon] || ICONS['package'] || '')
+        : '';
+
+    // Palette du plan (indigo pour PRO, blue pour STARTER, violet pour MAX,
+    // amber pour les artefacts A-*, slate pour les mocks)
+    const palette = getToolPalette(app.id);
+
     return `
-        <article class="ksfs-app-card" data-app-id="${app.id}">
-            <div class="ksfs-app-icon" style="${iconStyle}"></div>
+        <article class="ksfs-app-card" data-app-id="${app.id}" data-palette="${palette}">
+            <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
             <div class="ksfs-app-body">
                 <div class="ksfs-app-name">${app.title}</div>
                 <div class="ksfs-app-desc">${app.shortDesc || ''}</div>
