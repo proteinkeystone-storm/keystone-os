@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.18.1-kstore-icons-dashboard-match';
+const VERSION       = 'ks-os-v4.19.0-sprints-kodex-dashboard-config';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

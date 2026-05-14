@@ -56,8 +56,10 @@ function _renderSpecsTable(std) {
   if (scale && !scale.digital) {
     scaleRows = `
       <tr><td class="cat">Calculateur d'échelle</td><td></td></tr>
+      <tr><td class="sub">— Résolution de sortie</td><td>${scale.output_dpi} DPI (fixe)</td></tr>
       <tr><td class="sub">— Échelle de travail</td><td>${_esc(scale.factor_label)}</td></tr>
       ${scale.work_format ? `<tr><td class="sub">— Travail sur maquette</td><td>${scale.work_format.width_mm} × ${scale.work_format.height_mm} mm</td></tr>` : ''}
+      ${scale.work_format ? `<tr><td class="sub">— Fichier à produire</td><td>${scale.work_format.width_px} × ${scale.work_format.height_px} px à ${scale.output_dpi} DPI</td></tr>` : ''}
       <tr><td class="sub">— Distance de vue</td><td>${_esc(scale.viewing_distance)} (${_esc(scale.viewing_context.toLowerCase())})</td></tr>
       <tr><td class="sub">— Texte titre minimum</td><td>${scale.min_text_mm} mm de hauteur capitale</td></tr>
       ${scale.min_logo_px ? `<tr><td class="sub">— Logo bitmap minimum</td><td>${scale.min_logo_px} px de large</td></tr>` : ''}

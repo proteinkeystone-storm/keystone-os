@@ -66,7 +66,7 @@ async function _refreshCatalogFromD1() {
     // pricing) pour ne pas se faire écraser par une version D1
     // obsolète qui n'aurait pas été resynchronisée après une mise
     // à jour des pictogrammes ou du pricing côté Vercel.
-    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price'];
+    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {

@@ -581,6 +581,45 @@ html.light-mode .ws-app {
 }
 .ws-textarea { resize: vertical; min-height: 84px; }
 
+/* ─── Chips multi-sélection (remplace <select multiple>) ─── */
+.ws-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.ws-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-border-strong);
+  border-radius: var(--ws-radius-pill);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ws-text-soft);
+  cursor: pointer;
+  user-select: none;
+  transition: all 150ms ease;
+}
+.ws-chip:hover {
+  border-color: var(--ws-accent);
+  color: var(--ws-text);
+}
+.ws-chip.selected {
+  background: var(--ws-accent-soft);
+  border-color: var(--ws-accent);
+  color: var(--ws-text);
+}
+.ws-chip .ws-chip-check {
+  width: 13px;
+  height: 13px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+.ws-chip.selected .ws-chip-check { opacity: 1; }
+
 /* ─── Pictogrammes ─── */
 .ws-icon {
   display: inline-flex;

@@ -1734,24 +1734,49 @@ async function activateLicence() {
    ONBOARDING
 ═══════════════════════════════════════════ */
 const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': 7 };
-// Source de vérité : IDs NOMEN-K immuables + USER_LABEL canonique
-// Doit refléter K_STORE_ASSETS/PADS/manifest.json
-const ALL_TOOLS = [
-  { id: 'O-IMM-001', name: 'Notices VEFA' },
-  { id: 'O-IMM-002', name: 'Annonces Commerciales' },
-  { id: 'O-IMM-003', name: 'Emails Acquéreurs' },
-  { id: 'O-MKT-001', name: 'Posts Réseaux Sociaux' },
-  { id: 'O-MKT-002', name: 'Brief Photo / 3D' },
-  { id: 'O-ANL-001', name: 'CR Chantier' },
-  { id: 'O-ANL-002', name: 'Analyste Foncier' },
-  { id: 'O-ADM-001', name: 'Objections Acquéreurs' },
+
+// Hiérarchie cumulative des plans : un plan voit son tag + ceux du dessous.
+// Demo a accès à tout le catalogue (l'utilisateur n'en choisira qu'un).
+const PLAN_TIERS = {
+  'Demo':  ['STARTER', 'PRO', 'MAX'],
+  'Start': ['STARTER'],
+  'Pro':   ['STARTER', 'PRO'],
+  'Max':   ['STARTER', 'PRO', 'MAX'],
+};
+
+// Source de vérité : app/pads-data.js (CATALOG_DATA). On importe dynamiquement
+// pour éviter toute désynchronisation outils/artefacts/plans. Fallback minimal
+// si l'import échoue (file:// ou réseau coupé).
+let ALL_TOOLS = [
+  { id: 'O-IMM-001', name: 'Notices VEFA',          plan: 'STARTER' },
+  { id: 'O-IMM-002', name: 'Annonces Multi-Portails', plan: 'STARTER' },
+  { id: 'O-IMM-003', name: 'Emails Acquéreurs',     plan: 'STARTER' },
+  { id: 'O-MKT-001', name: 'Posts Réseaux Sociaux', plan: 'STARTER' },
+  { id: 'O-MKT-002', name: 'Brief Photo / 3D',      plan: 'STARTER' },
+  { id: 'O-ANL-001', name: 'CR Chantier',           plan: 'PRO' },
+  { id: 'O-ANL-002', name: 'Analyste Foncier',      plan: 'PRO' },
+  { id: 'O-ADM-001', name: 'Objections Acquéreurs', plan: 'PRO' },
 ];
+
+const _toolsReady = import('./app/pads-data.js')
+  .then(m => {
+    const cat = m.CATALOG_DATA?.tools || [];
+    const published = cat.filter(t => t.published !== false);
+    if (published.length) {
+      ALL_TOOLS = published.map(t => ({
+        id: t.id, name: t.title, plan: (t.plan || 'STARTER').toUpperCase(),
+      }));
+    }
+  })
+  .catch(e => console.warn('[Onboarding] pads-data indisponible, fallback local :', e.message));
+
 let _selectedTools = new Set(); // IDs NOMEN-K
 
 function openOnboarding() {
   document.getElementById('onboarding-overlay').classList.add('open');
   obNext(1);
-  buildToolsGrid();
+  // Attend le catalogue (pads-data) avant de peupler la grille filtrée par plan
+  _toolsReady.then(buildToolsGrid);
   // Pré-remplir le nom si déjà connu (re-onboarding après bump de version)
   const nameInput = document.getElementById('ob-name-input');
   if (nameInput) {
@@ -1785,15 +1810,23 @@ function obNext(step) {
   document.getElementById('ob-bar').style.width = (step / 4 * 100) + '%';
 }
 
+// Outils visibles dans l'onboarding = ceux inclus dans le plan de la licence
+// (hiérarchie cumulative : Pro voit STARTER + PRO, etc.)
+function _toolsForPlan() {
+  const tiers = PLAN_TIERS[_activePlan] || ['STARTER'];
+  return ALL_TOOLS.filter(t => tiers.includes((t.plan || 'STARTER').toUpperCase()));
+}
+
 function buildToolsGrid() {
   const quota = TOOL_QUOTA[_activePlan] || 3;
   const grid  = document.getElementById('ob-tools-grid');
   const label = document.getElementById('ob-quota-label');
+  const tools = _toolsForPlan();
   label.style.color = '';
   label.textContent = _activePlan === 'Demo'
     ? `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`
-    : `Sélectionnez vos ${quota} Assistants Certifiés selon votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
-  grid.innerHTML = ALL_TOOLS.map(tool => `
+    : `Sélectionnez vos ${quota} Assistants Certifiés inclus dans votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
+  grid.innerHTML = tools.map(tool => `
     <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota})">
       <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
       <span class="ob-tool-label">${tool.name}</span>

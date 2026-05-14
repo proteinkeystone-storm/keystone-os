@@ -213,6 +213,58 @@ function renderHeroDate() {
     });
 }
 
+// ── Jauge "temps gagné potentiel" ─────────────────────────────
+// Estimation indicative : somme des minutes/jour économisées par les
+// outils & artefacts actifs du Dashboard (champ `timeSaved` du catalogue).
+// Clic = bascule jour / mois. Le masquage d'un pad ne change rien (il
+// reste "actif") ; seule la désactivation/retrait fait varier la jauge.
+const TS_WORKDAYS_PER_MONTH = 21;
+
+function _formatDuration(min) {
+    const m = Math.round(min);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r ? `${h} h ${r}` : `${h} h`;
+}
+
+function _renderTimeSaveGauge(ownedTools, ownedArts) {
+    const chip = document.getElementById('timesave-chip');
+    if (!chip) return;
+
+    const items = [...ownedTools, ...ownedArts];
+    const perDay = items.reduce((sum, it) => {
+        const t = Number(getCatalogEntry(it.id)?.timeSaved) || 0;
+        return sum + t;
+    }, 0);
+
+    if (perDay <= 0) { chip.hidden = true; return; }
+    chip.hidden = false;
+
+    let period = localStorage.getItem('ks_timesave_period') || 'day';
+    const valEl    = document.getElementById('timesave-val');
+    const periodEl = document.getElementById('timesave-period');
+
+    const paint = () => {
+        const isMonth = period === 'month';
+        const total = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
+        valEl.textContent    = _formatDuration(total);
+        periodEl.textContent = isMonth ? '/ mois' : '/ jour';
+        chip.title = `Temps gagné estimé avec vos ${items.length} outil${items.length > 1 ? 's' : ''} actif${items.length > 1 ? 's' : ''} `
+            + `— estimation indicative sur une journée de bureau de 7 h. Cliquer pour basculer jour / mois.`;
+    };
+    paint();
+
+    if (!chip.dataset.bound) {
+        chip.dataset.bound = '1';
+        chip.addEventListener('click', () => {
+            period = period === 'month' ? 'day' : 'month';
+            localStorage.setItem('ks_timesave_period', period);
+            paint();
+        });
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
@@ -357,17 +409,16 @@ export function renderDashboard() {
         );
     }
 
-    // ── BARRE KEY-STORE — Outils suggérés / verrouillés ────────
+    // ── BARRE KEY-STORE — Outils disponibles : nouveautés (NEW) ────────
     if (artsEl) {
-        // Tri : nouveaux outils en premier, puis ordre déclaratif
-        const sortedLocked = [...lockedTools, ...lockedArts].sort((a, b) => {
-            const aNew = !!getCatalogEntry(a.id)?.isNew;
-            const bNew = !!getCatalogEntry(b.id)?.isNew;
-            return (bNew ? 1 : 0) - (aNew ? 1 : 0);
-        });
+        // Sprint 4 : la section "Outils disponibles" ne liste QUE les
+        // outils/artefacts portant la pastille NEW (tag `isNew`).
+        const newOnly = [...lockedTools, ...lockedArts].filter(
+            item => !!getCatalogEntry(item.id)?.isNew
+        );
 
         // Cartes compactes — pictogramme + nom (sans CTA)
-        const suggestCards = sortedLocked.map(item => {
+        const suggestCards = newOnly.map(item => {
             const cat    = getCatalogEntry(item.id);
             const isNew  = !!cat?.isNew;
             const icon   = ICONS[item.icon] || ICONS['zap'];
@@ -384,21 +435,24 @@ export function renderDashboard() {
 
         artsEl.innerHTML = suggestCards;
 
-        // Délégation de clic — ouvre le panneau K-Store.
-        // En plan Démo (1 outil), un clic sur un autre outil renvoie
-        // directement vers l'onglet Abonnements/Plans.
-        artsEl.addEventListener('click', e => {
-            const card = e.target.closest('.suggest-card');
-            if (!card) return;
-            _openKStorePanel(isDemoPlan ? 'plans' : 'catalogue');
-        });
+        // Délégation de clic — Sprint 4 : un clic mène directement à la
+        // fiche individuelle de l'outil dans le Key-Store (pour l'acheter).
+        if (!artsEl.dataset.bound) {
+            artsEl.dataset.bound = '1';
+            artsEl.addEventListener('click', e => {
+                const card = e.target.closest('.suggest-card');
+                if (!card) return;
+                _openKStorePanel('catalogue');
+                _openKStoreAppDetail(card.dataset.id);
+            });
+        }
 
         // Mise à jour du compteur Key-Store
         const ksCountEl = document.querySelector('.suggest-section .sec-kstore-badge');
         if (ksCountEl) {
-            const total = lockedTools.length + lockedArts.length;
+            const total = newOnly.length;
             ksCountEl.textContent = total > 0
-                ? `Key-Store · ${total} disponibles`
+                ? `Key-Store · ${total} nouveauté${total > 1 ? 's' : ''}`
                 : 'Key-Store';
         }
     }
@@ -415,6 +469,7 @@ export function renderDashboard() {
         _renderKStoreItems();
     }
 
+    _renderTimeSaveGauge(ownedTools, ownedArts);
     renderHeroDate();
 }
 

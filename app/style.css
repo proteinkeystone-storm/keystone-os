@@ -709,6 +709,19 @@ html.light-mode #ks-logo-light { display: block; }
   animation: pulse-g 2s ease-in-out infinite;
 }
 
+/* ── Jauge temps gagné potentiel (discrète) ── */
+.timesave-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; border: 1px solid var(--bd);
+  border-radius: 999px; padding: 3px 9px;
+  font-size: 11px; font-weight: 600; color: var(--tx3);
+  cursor: pointer; transition: all 150ms ease; font-family: inherit;
+}
+.timesave-chip:hover { color: var(--text); border-color: var(--bd-strong, rgba(255,255,255,.16)); }
+.timesave-ico { width: 11px; height: 11px; flex-shrink: 0; opacity: .7; }
+.timesave-val { color: var(--gold); font-weight: 800; letter-spacing: -.01em; }
+.timesave-period { opacity: .7; }
+
 /* ══ SECTION HEADERS ════════════════════════════════════════════ */
 .sec-hd {
   display: flex; align-items: center; gap: 12px;

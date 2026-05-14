@@ -44,9 +44,11 @@ function _renderTechBlock(std) {
   if (scale && !scale.digital) {
     lines.push('');
     lines.push(`### Contraintes d'échelle :`);
+    lines.push(`- Résolution de sortie : ${scale.output_dpi} DPI (fixe — ne jamais dégrader)`);
     lines.push(`- Échelle de travail : ${scale.factor_label}`);
     if (scale.work_format) {
       lines.push(`- Travail sur maquette : ${scale.work_format.width_mm} × ${scale.work_format.height_mm} mm`);
+      lines.push(`- Fichier à produire : ${scale.work_format.width_px} × ${scale.work_format.height_px} px à ${scale.output_dpi} DPI`);
     }
     lines.push(`- Distance de vue : ${scale.viewing_distance} (${scale.viewing_context.toLowerCase()})`);
     lines.push(`- Hauteur minimum titre lisible : ${scale.min_text_mm} mm`);

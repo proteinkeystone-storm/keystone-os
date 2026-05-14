@@ -32,7 +32,7 @@ import {
   formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
   loadSectors, getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
-import { computeScale } from './lib/kodex-scale.js';
+import { computeScale, formatFileSize } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
 import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
 import { exportBriefAsPDF } from './lib/kodex-pdf.js';
@@ -878,11 +878,16 @@ function _renderScaleCalculator(std) {
     `;
   }
 
+  const wf = calc.work_format;
   const rows = [
+    ['Résolution de sortie', `${calc.output_dpi} DPI — fixe, jamais dégradée`],
     ['Distance de vue', `${calc.viewing_distance} (${calc.viewing_context.toLowerCase()})`],
-    ['Travail sur maquette', calc.work_format
-      ? `${calc.work_format.width_mm} × ${calc.work_format.height_mm} mm — ${calc.factor_label}`
+    ['Travail sur maquette', wf
+      ? `${wf.width_mm} × ${wf.height_mm} mm — ${calc.factor_label}`
       : calc.factor_label],
+    ['Fichier à produire', wf
+      ? `${wf.width_px} × ${wf.height_px} px (~${formatFileSize(wf.file_bytes_work)})`
+      : '—'],
     ['Texte titre minimum', `${calc.min_text_mm} mm de hauteur capitale`],
     ['Logo bitmap (PNG/JPG)', calc.min_logo_px ? `${calc.min_logo_px} px de large minimum` : '—'],
   ];
@@ -920,12 +925,13 @@ function _renderScaleCalculator(std) {
         </div>
       ` : ''}
 
-      ${isLarge ? `
+      ${isLarge && wf ? `
         <div style="margin-top:12px;padding:10px 12px;background:var(--info-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text-soft);border-left:3px solid var(--info);line-height:1.55;">
           <strong style="color:var(--info);">Pourquoi ${calc.factor_label.toLowerCase()}&nbsp;?</strong>
-          À l'échelle réelle, le fichier final ferait plusieurs gigaoctets — impossible à manipuler.
-          On travaille en réduit, et l'imprimeur agrandit pour la sortie.
-          La résolution effective reste équivalente à ${calc.target_dpi}&nbsp;DPI à l'impression finale.
+          On garde les ${calc.output_dpi}&nbsp;DPI — c'est la <em>taille du fichier</em> qu'on réduit, pas la résolution.
+          À l'échelle réelle, le fichier pèserait ~${formatFileSize(wf.file_bytes_full)} : impossible à manipuler.
+          À ${calc.factor_label.toLowerCase()}, il tombe à ~${formatFileSize(wf.file_bytes_work)} tout en restant à ${calc.output_dpi}&nbsp;DPI.
+          L'imprimeur agrandit ensuite pour la sortie.
         </div>
       ` : ''}
     </div>
@@ -1040,10 +1046,17 @@ function _renderField(f, value) {
       ${(f.options || []).map(o => `<option value="${_esc(o)}" ${value === o ? 'selected' : ''}>${_esc(o)}</option>`).join('')}
     </select>`;
   } else if (f.type === 'multiselect') {
-    const selected = Array.isArray(value) ? value : [];
-    input = `<select class="ws-select" id="${id}" name="${f.name}" multiple style="min-height:96px;">
-      ${(f.options || []).map(o => `<option value="${_esc(o)}" ${selected.includes(o) ? 'selected' : ''}>${_esc(o)}</option>`).join('')}
-    </select>`;
+    const selected = Array.isArray(value) ? value : (value ? [value] : []);
+    const check = '<svg class="ws-chip-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>';
+    input = `<div class="ws-chips" id="${id}" data-multiselect="${f.name}">
+      ${(f.options || []).map(o => {
+        const on = selected.includes(o);
+        return `<label class="ws-chip${on ? ' selected' : ''}">
+          <input type="checkbox" name="${f.name}" value="${_esc(o)}" ${on ? 'checked' : ''} hidden>
+          ${check}<span>${_esc(o)}</span>
+        </label>`;
+      }).join('')}
+    </div>`;
   }
 
   return `
@@ -1060,13 +1073,20 @@ function _onContentChange(e) {
   const form = e.currentTarget;
   const values = {};
   for (const el of form.querySelectorAll('input, select, textarea')) {
-    if (el.name) {
-      if (el.tagName === 'SELECT' && el.multiple) {
-        values[el.name] = Array.from(el.selectedOptions).map(o => o.value);
-      } else {
-        values[el.name] = el.value;
-      }
+    if (!el.name) continue;
+    if (el.tagName === 'SELECT' && el.multiple) {
+      values[el.name] = Array.from(el.selectedOptions).map(o => o.value);
+    } else if (el.type === 'checkbox') {
+      // Chips multi-sélection : on agrège toutes les cases cochées d'un même name
+      if (!Array.isArray(values[el.name])) values[el.name] = [];
+      if (el.checked) values[el.name].push(el.value);
+    } else {
+      values[el.name] = el.value;
     }
+  }
+  // Reflète l'état visuel des chips (classe .selected sur le <label>)
+  if (e.target?.type === 'checkbox') {
+    e.target.closest('.ws-chip')?.classList.toggle('selected', e.target.checked);
   }
   _state.content.fields = values;
   _scheduleSave();
