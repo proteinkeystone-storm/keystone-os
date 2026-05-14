@@ -810,8 +810,13 @@
       if (!_form) return;
       _visibleFieldIds = new Set();
       for (const sec of _form.sections || []) {
+        // Visibilité de section (visible_if au niveau section). Une section
+        // masquée masque tous ses champs et les exclut du requis/validation.
+        const secVisible = !sec.visible_if || evalCondition(sec.visible_if, _values);
+        const secEl = document.querySelector(`.pf-section[data-sid="${sec.id}"]`);
+        if (secEl) secEl.style.display = secVisible ? '' : 'none';
         for (const f of (sec.fields || [])) {
-          const visible = !f.visible_if || evalCondition(f.visible_if, _values);
+          const visible = secVisible && (!f.visible_if || evalCondition(f.visible_if, _values));
           if (visible) _visibleFieldIds.add(f.id);
           const el = document.querySelector(`.pf-field[data-fid="${f.id}"]`);
           if (el) el.style.display = visible ? '' : 'none';
@@ -1795,7 +1800,7 @@
           ${meta.intro ? `<div class="pf-intro">${escape(meta.intro)}</div>` : ''}
 
           ${sections.map((s, idx) => `
-            <section class="pf-section">
+            <section class="pf-section" data-sid="${escape(s.id || ('sec' + idx))}">
               <header class="pf-section-head">
                 <span class="pf-section-num">Bloc ${String(idx + 1).padStart(2, '0')}</span>
                 <span class="pf-section-title">${escape(s.title || 'Section ' + (idx + 1))}</span>
