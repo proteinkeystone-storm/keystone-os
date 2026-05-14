@@ -62,11 +62,22 @@ async function _refreshCatalogFromD1() {
     if (!remote || !Array.isArray(remote.tools)) return;
 
     // Merge tool-par-tool : D1 prioritaire mais embarqué = fallback.
+    // EXCEPTION : on préserve les champs d'UI embarqués (icon, plan,
+    // pricing) pour ne pas se faire écraser par une version D1
+    // obsolète qui n'aurait pas été resynchronisée après une mise
+    // à jour des pictogrammes ou du pricing côté Vercel.
+    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {
         if (!t?.id) return;
-        byId.set(t.id, { ...(byId.get(t.id) || {}), ...t });
+        const existing = byId.get(t.id);
+        const merged = { ...(existing || {}), ...t };
+        // Restaure les champs UI depuis la version embarquée
+        for (const f of UI_FIELDS_LOCAL_FIRST) {
+            if (existing && existing[f] != null) merged[f] = existing[f];
+        }
+        byId.set(t.id, merged);
     });
 
     _catalogCache = {
