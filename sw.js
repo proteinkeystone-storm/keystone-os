@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.17.4-kodex-mire-fallback-tool-icons';
+const VERSION       = 'ks-os-v4.17.5-preserve-local-ui-fields';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
