@@ -6,7 +6,7 @@
   "title": "Sovereign Dynamic QR",
   "subtitle": "QR codes dynamiques · stats souveraines · RGPD",
   "category": "COM",
-  "icon": "zap",
+  "icon": "sdqr",
   "ai_optimized": "Claude",
   "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nLa logique métier (parsers, studio design, redirect, stats) vit dans app/sdqr.js et workers/src/routes/qr.js.\nPour modifier le comportement utilisateur : éditer le code de l'artefact directement.",
   "fields": [],

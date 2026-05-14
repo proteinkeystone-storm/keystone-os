@@ -8,7 +8,7 @@
   "punchline": "La planche d'ambiance pour votre studio 3D",
   "shortDesc": "Une planche moodboard professionnelle en une seule génération · 6 vignettes cohérentes pour briefer votre studio 3D",
   "longDesc": "Muse prépare la planche d'ambiance que vous transmettrez à votre studio 3D spécialisé en illustration immobilière (PixelEvolution, Studio Berthier, AVR, etc.). Vous configurez l'univers cible (cadrage de l'illustration finale, lumière, palette végétale, figuration, matériaux) ; Muse assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT, Mistral, Grok). En retour, vous obtenez un fichier HTML autonome avec un bouton copy-to-clipboard unique qui produit, en une seule génération, une planche moodboard professionnelle composée de 6 vignettes cohérentes (architecture · lumière · palette végétale · matériaux · lifestyle · détail signature). Le prompt s'adapte à votre moteur d'image (Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion). Cette planche n'est pas votre projet — c'est une inspiration d'ambiance \"dans le même esprit\" à transmettre au studio 3D avec les plans techniques.",
-  "icon": "palette",
+  "icon": "muse",
   "price": 49,
   "plan": "STARTER",
   "plans_required": ["STARTER", "PRO", "MAX"],
