@@ -3979,16 +3979,13 @@ export function initSettings() {
         if (document.getElementById('pl-panel')?.classList.contains('open')) {
             _closePromptLibrary(); return;
         }
-        // P5 : dropdown moteur ouvert ?
-        if (document.getElementById('engine-dropdown')?.classList.contains('open')) {
-            _closeEngineDropdown(); return;
-        }
-        // P6 : DST messages (priorité 1 ou 2) — dismiss vers message de bienvenue
+        // P5 : DST messages (priorité 1 ou 2) — dismiss vers message de bienvenue
         dismissDSTMessage();
     });
 
     // ── Control Center wiring ──────────────────────────────────
-    _initEngineDropdown();
+    // Le sélecteur de moteur IA vit désormais dans le panneau Paramètres
+    // (section « Moteur actif ») — plus de dropdown dans la topbar.
     _initPromptLibrary();
     _initModeToggle();
 
@@ -3999,75 +3996,6 @@ export function initSettings() {
 
     // Synchroniser le hero avec les données utilisateur sauvegardées
     _updateIdentityZone();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CONTROL CENTER — ENGINE DROPDOWN
-// ═══════════════════════════════════════════════════════════════
-function _initEngineDropdown() {
-    const triggerBtn = document.getElementById('tb-engine-btn');
-    const dropdown   = document.getElementById('engine-dropdown');
-    if (!triggerBtn || !dropdown) return;
-
-    triggerBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        const isOpen = dropdown.classList.contains('open');
-        if (isOpen) { _closeEngineDropdown(); return; }
-        _openEngineDropdown(triggerBtn, dropdown);
-    });
-
-    document.addEventListener('click', () => _closeEngineDropdown());
-}
-
-function _openEngineDropdown(triggerBtn, dropdown) {
-    const activeEngine = getActiveEngine();
-
-    dropdown.innerHTML = `
-        <div class="cc-dropdown-hd">Moteur IA actif</div>
-        ${API_PROVIDERS.map(p => {
-            const hasKey   = !!loadKey(p.id);
-            const isActive = activeEngine === p.label;
-            const logoHTML = p.logo
-                ? `<img src="${p.logo}" alt="${p.label}" class="cc-engine-logo engine-logo-dark">${p.logoLight ? `<img src="${p.logoLight}" alt="${p.label}" class="cc-engine-logo engine-logo-light">` : ''}`
-                : `<span class="cc-engine-initials">${p.label.charAt(0)}</span>`;
-            return `
-            <div class="cc-engine-item ${isActive ? 'active' : ''}" data-engine="${p.label}" data-provider="${p.id}">
-                <div class="cc-engine-item-icon">${logoHTML}</div>
-                <div class="cc-engine-item-info">
-                    <div class="cc-engine-item-name">${p.label}</div>
-                    <div class="cc-engine-item-sub">${p.name}</div>
-                </div>
-                <div class="cc-engine-item-status ${hasKey ? 'ok' : 'empty'}">${hasKey ? '✓ Clé' : 'Pas de clé'}</div>
-                <div class="cc-engine-item-chk">✦</div>
-            </div>`;
-        }).join('')}
-    `;
-
-    // Positionner sous le bouton
-    const rect = triggerBtn.getBoundingClientRect();
-    dropdown.style.top  = (rect.bottom + 8) + 'px';
-    dropdown.style.left = rect.left + 'px';
-    dropdown.classList.add('open');
-    triggerBtn.classList.add('active');
-
-    dropdown.querySelectorAll('.cc-engine-item').forEach(item => {
-        item.addEventListener('click', e => {
-            e.stopPropagation();
-            setActiveEngine(item.dataset.engine);
-            _closeEngineDropdown();
-            // Re-render settings si ouvert
-            if (document.getElementById('settings-panel')?.classList.contains('open')) {
-                _renderSettingsBody();
-            }
-            // Re-render modale outil si ouverte (prompt + label bouton)
-            _refreshOpenToolForEngine();
-        });
-    });
-}
-
-function _closeEngineDropdown() {
-    document.getElementById('engine-dropdown')?.classList.remove('open');
-    document.getElementById('tb-engine-btn')?.classList.remove('active');
 }
 
 // ═══════════════════════════════════════════════════════════════

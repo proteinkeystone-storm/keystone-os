@@ -236,12 +236,8 @@
   <div class="tb-spacer"></div>
   <div class="cc-bar">
 
-    <!-- Moteur actif -->
-    <button class="cc-btn cc-engine" id="tb-engine-btn" title="Changer de moteur IA">
-      <div class="ai-engine-dot" id="cc-engine-dot"></div>
-      <span id="ai-engine-label">Claude</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;opacity:.45;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
+    <!-- Le sélecteur de moteur IA vit dans le panneau Paramètres
+         (section « Moteur actif »). -->
 
     <!-- Bibliothèque de prompts — icône seule -->
     <button class="cc-btn cc-icon" id="tb-prompts-btn" title="Bibliothèque de prompts">
@@ -280,9 +276,6 @@
 
   </div>
 </nav>
-
-<!-- ══ ENGINE DROPDOWN ══════════════════════════════════════════ -->
-<div class="cc-dropdown" id="engine-dropdown" role="menu" aria-label="Sélection du moteur"></div>
 
 <!-- ══ PROMPT LIBRARY PANEL ════════════════════════════════════ -->
 <div class="pl-backdrop" id="pl-backdrop"></div>
