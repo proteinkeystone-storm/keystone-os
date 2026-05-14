@@ -236,14 +236,9 @@
   <div class="tb-spacer"></div>
   <div class="cc-bar">
 
-    <!-- Le sélecteur de moteur IA vit dans le panneau Paramètres
-         (section « Moteur actif »). -->
-
-    <!-- Bibliothèque de prompts — icône seule -->
-    <button class="cc-btn cc-icon" id="tb-prompts-btn" title="Bibliothèque de prompts">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:15px;height:15px;flex-shrink:0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      <span class="cc-badge" id="prompts-badge" style="display:none"></span>
-    </button>
+    <!-- Le sélecteur de moteur IA vit dans le panneau Paramètres.
+         La bibliothèque de prompts vit dans chaque fenêtre d'outil
+         (bouton « Bibliothèque ») — plus de panneau global ici. -->
 
     <!-- Mode clair/sombre -->
     <button class="cc-btn cc-icon" id="tb-mode-btn" title="Basculer le thème">
@@ -276,23 +271,6 @@
 
   </div>
 </nav>
-
-<!-- ══ PROMPT LIBRARY PANEL ════════════════════════════════════ -->
-<div class="pl-backdrop" id="pl-backdrop"></div>
-<div class="pl-panel" id="pl-panel" role="dialog" aria-modal="true" aria-label="Bibliothèque de prompts">
-  <div class="pl-head">
-    <div class="pl-head-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;flex-shrink:0;opacity:.7"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      Bibliothèque de prompts
-    </div>
-    <button class="sp-close" id="pl-close-btn" aria-label="Fermer">✕</button>
-  </div>
-  <div class="pl-body" id="pl-body"></div>
-  <div class="sp-footer">
-    <div class="sp-footer-brand">Key-Store · Prompts sauvegardés</div>
-    <button class="pl-clear-btn" id="pl-clear-btn">Tout effacer</button>
-  </div>
-</div>
 
 <!-- ══ MAIN ════════════════════════════════════════════════════ -->
 <main class="main">

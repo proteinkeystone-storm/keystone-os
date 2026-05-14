@@ -1810,6 +1810,9 @@ function _prefillForm(formData) {
 }
 
 export function closeTool() {
+    // Ferme aussi la bibliothèque interne si elle était ouverte
+    const _lib = document.getElementById('modal-library');
+    if (_lib) { _lib.classList.remove('open'); _lib.hidden = true; }
     document.getElementById('tool-modal')?.classList.remove('open');
     document.getElementById('tool-backdrop')?.classList.remove('open');
     document.body.style.overflow = '';
@@ -1983,6 +1986,24 @@ function _buildModal(pad, tool) {
             </div>
             ` : ''}
         </div>
+
+        <!-- Bibliothèque de l'outil — panneau interne (slide-over) -->
+        <div class="modal-library" id="modal-library" hidden>
+            <div class="modal-library-head">
+                <div class="modal-library-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;flex-shrink:0;opacity:.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Bibliothèque · ${pad.title}
+                </div>
+                <button class="modal-library-close" id="modal-library-close" aria-label="Fermer la bibliothèque">✕</button>
+            </div>
+            <div class="modal-library-actions">
+                <button class="btn-generate btn-library-save" id="modal-library-save" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    Sauvegarder le dossier actuel
+                </button>
+            </div>
+            <div class="modal-library-list" id="modal-library-list"></div>
+        </div>
     `;
 
     // Notation + aide — widgets partagés avec les artefacts (clé stable
@@ -2125,45 +2146,11 @@ function _buildModal(pad, tool) {
         setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 2000);
     });
 
-    // 📚 Bibliothèque — sauvegarde dans localStorage ks_library
-    // v2 : stocke aussi formData pour permettre Recharger (pas seulement Copier).
-    document.getElementById('btn-library')?.addEventListener('click', async () => {
-        const btn = document.getElementById('btn-library');
-        if (!btn) return;
-        const orig = btn.textContent;
-
-        // Collecte systématique du formData — utile pour Recharger même en mode LLM
-        const form = document.getElementById('tool-form');
-        const formData = {};
-        form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
-
-        let payload = '';
-        if (pad.doc_export) {
-            // Mode portable : on tente le cache, sinon génération à la volée
-            const sig = _formSignature(formData);
-            if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
-                payload = _portableCache.content;
-            } else {
-                btn.textContent = '⏳ …';
-                const cached = await _prebuildPortableBloc(pad, formData);
-                payload = cached?.content || '';
-            }
-        } else {
-            payload = document.getElementById('prompt-text')?.textContent || '';
-        }
-
-        if (!payload || payload.startsWith('Remplissez')) {
-            btn.textContent = '✗ Remplis d\'abord les champs requis';
-            btn.classList.add('active');
-            setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2500);
-            return;
-        }
-
-        const ok = _saveToLibrary(pad, payload, formData);
-        btn.textContent = ok ? '✓ Sauvegardé !' : '✗ Erreur';
-        btn.classList.add('active');
-        setTimeout(() => { btn.textContent = orig; btn.classList.remove('active'); }, 2000);
-    });
+    // 📚 Bibliothèque — désormais un panneau interne à la fenêtre de
+    // l'outil (plus de panneau global dans la topbar du Dashboard).
+    document.getElementById('btn-library')?.addEventListener('click', () => _openModalLibrary(pad));
+    document.getElementById('modal-library-close')?.addEventListener('click', _closeModalLibrary);
+    document.getElementById('modal-library-save')?.addEventListener('click', () => _saveCurrentToolToLibrary(pad));
 
     // 🔑 No-API hint → ouvre directement l'accordéon Clés API dans Settings
     document.getElementById('no-api-link')?.addEventListener('click', () => {
@@ -3348,6 +3335,7 @@ function _saveToLibrary(pad, prompt, formData = null) {
     }
 
     lib.unshift({
+        uid     : 'lib_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         id      : pad.id,
         padKey  : pad.padKey || null,
         icon    : pad.icon   || null,
@@ -3359,7 +3347,6 @@ function _saveToLibrary(pad, prompt, formData = null) {
     });
     if (lib.length > 50) lib.splice(50);
     localStorage.setItem('ks_library', JSON.stringify(lib));
-    _refreshPromptsBadge();
     return true;
 }
 
@@ -3963,67 +3950,226 @@ export function initSettings() {
         // P0 : lock screen actif → déverrouiller (priorité absolue)
         if (isLocked()) { unlock(); return; }
 
-        // P1 : modal outil ouverte ?
+        // P1 : bibliothèque interne de l'outil ouverte ?
+        // (avant la modale outil — on ferme d'abord la sur-couche)
+        const _lib = document.getElementById('modal-library');
+        if (_lib && !_lib.hidden) {
+            _closeModalLibrary(); return;
+        }
+        // P2 : modal outil ouverte ?
         if (document.getElementById('tool-modal')?.classList.contains('open')) {
             closeTool(); return;
         }
-        // P2 : mode édition grille actif (floating bar) ?
+        // P3 : mode édition grille actif (floating bar) ?
         if (document.querySelector('.pad-card.editing')) {
             dismissEditMode(); return;
         }
-        // P3 : panneau Paramètres ouvert ?
+        // P4 : panneau Paramètres ouvert ?
         if (document.getElementById('settings-panel')?.classList.contains('open')) {
             _closeSettings(); return;
-        }
-        // P4 : bibliothèque de prompts ouverte ?
-        if (document.getElementById('pl-panel')?.classList.contains('open')) {
-            _closePromptLibrary(); return;
         }
         // P5 : DST messages (priorité 1 ou 2) — dismiss vers message de bienvenue
         dismissDSTMessage();
     });
 
     // ── Control Center wiring ──────────────────────────────────
-    // Le sélecteur de moteur IA vit désormais dans le panneau Paramètres
-    // (section « Moteur actif ») — plus de dropdown dans la topbar.
-    _initPromptLibrary();
+    // Le sélecteur de moteur IA vit dans le panneau Paramètres.
+    // La bibliothèque de prompts vit dans chaque fenêtre d'outil.
     _initModeToggle();
 
     // Key-Store — câblage déplacé dans la zone Suggest (section dashboard)
-
-    // Mettre à jour le badge prompts au démarrage
-    _refreshPromptsBadge();
 
     // Synchroniser le hero avec les données utilisateur sauvegardées
     _updateIdentityZone();
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CONTROL CENTER — PROMPT LIBRARY
+// BIBLIOTHÈQUE DE L'OUTIL — panneau interne à la fenêtre du pad
+// ─────────────────────────────────────────────────────────────
+// La bibliothèque n'est plus un panneau global dans la topbar : chaque
+// fenêtre d'outil expose SA bibliothèque (filtrée sur l'id du pad), via
+// le bouton « Bibliothèque ». Stockage inchangé : localStorage.ks_library
+// (array partagé) — on filtre simplement par entry.id.
 // ═══════════════════════════════════════════════════════════════
-function _initPromptLibrary() {
-    document.getElementById('tb-prompts-btn')?.addEventListener('click', _openPromptLibrary);
-    document.getElementById('pl-close-btn')?.addEventListener('click', _closePromptLibrary);
-    document.getElementById('pl-backdrop')?.addEventListener('click', _closePromptLibrary);
-    document.getElementById('pl-clear-btn')?.addEventListener('click', () => {
-        if (!confirm('Effacer toute la bibliothèque ?')) return;
-        localStorage.removeItem('ks_library');
-        _renderPromptLibraryBody();
-        _refreshPromptsBadge();
+
+// Migration douce : garantit un uid stable sur chaque entrée (les
+// entrées legacy n'en avaient pas — on les complète et on persiste).
+function _libEnsureUids(lib) {
+    let changed = false;
+    for (const e of lib) {
+        if (!e.uid) {
+            e.uid = 'lib_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+            changed = true;
+        }
+    }
+    if (changed) localStorage.setItem('ks_library', JSON.stringify(lib));
+    return lib;
+}
+
+function _openModalLibrary(pad) {
+    const panel = document.getElementById('modal-library');
+    if (!panel) return;
+    _renderModalLibraryList(pad);
+    panel.hidden = false;
+    requestAnimationFrame(() => panel.classList.add('open'));
+}
+
+function _closeModalLibrary() {
+    const panel = document.getElementById('modal-library');
+    if (!panel) return;
+    panel.classList.remove('open');
+    setTimeout(() => { panel.hidden = true; }, 220);
+}
+
+// Sauvegarde le dossier actuel de l'outil ouvert dans sa bibliothèque.
+async function _saveCurrentToolToLibrary(pad) {
+    const btn = document.getElementById('modal-library-save');
+    if (!btn) return;
+    const orig = btn.innerHTML;
+
+    const form = document.getElementById('tool-form');
+    const formData = {};
+    form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+    let payload = '';
+    if (pad.doc_export) {
+        const sig = _formSignature(formData);
+        if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
+            payload = _portableCache.content;
+        } else {
+            btn.textContent = '⏳ Génération…';
+            const cached = await _prebuildPortableBloc(pad, formData);
+            payload = cached?.content || '';
+        }
+    } else {
+        payload = document.getElementById('prompt-text')?.textContent || '';
+    }
+
+    if (!payload || payload.startsWith('Remplissez')) {
+        btn.textContent = '✗ Remplissez d\'abord les champs requis';
+        setTimeout(() => { btn.innerHTML = orig; }, 2500);
+        return;
+    }
+
+    const ok = _saveToLibrary(pad, payload, formData);
+    btn.textContent = ok ? '✓ Dossier sauvegardé' : '✗ Erreur';
+    setTimeout(() => { btn.innerHTML = orig; }, 1800);
+    if (ok) _renderModalLibraryList(pad);
+}
+
+// Rend la liste filtrée sur l'outil courant dans le panneau interne.
+function _renderModalLibraryList(pad) {
+    const list = document.getElementById('modal-library-list');
+    if (!list) return;
+
+    const lib = _libEnsureUids(JSON.parse(localStorage.getItem('ks_library') || '[]'));
+    const entries = lib.filter(e => e.id === pad.id);
+
+    if (entries.length === 0) {
+        list.innerHTML = `
+            <div class="pl-empty">
+                <div class="pl-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="width:38px;height:38px;opacity:.35"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+                <div class="pl-empty-txt">Aucun dossier sauvegardé pour cet outil.<br>Remplissez les champs puis « Sauvegarder le dossier actuel ».</div>
+            </div>`;
+        return;
+    }
+
+    const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+
+    list.innerHTML = entries.map(entry => {
+        const dateRel   = _libRelativeDate(entry.date);
+        const dateAbs   = new Date(entry.date).toLocaleString('fr-FR', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        const label     = entry.label || entry.autoLabel || `Dossier · ${dateRel}`;
+        const summary   = _libSummaryLine(entry);
+        const canReload = !!entry.formData;
+        return `
+        <div class="pl-entry" data-uid="${_esc(entry.uid)}">
+            <div class="pl-entry-hd">
+                <span class="pl-entry-tag pl-entry-rename" data-uid="${_esc(entry.uid)}" title="Cliquer pour renommer" contenteditable="false">${_esc(label)}</span>
+                <span class="pl-entry-edit-ico" data-uid="${_esc(entry.uid)}" title="Renommer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;pointer-events:none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </span>
+                <span class="pl-entry-date" title="${_esc(dateAbs)}">${_esc(dateRel)}</span>
+            </div>
+            <div class="pl-entry-summary">${_esc(summary)}</div>
+            <div class="pl-entry-actions">
+                ${canReload ? `<button class="pl-entry-btn pl-entry-btn-primary" data-action="reload" data-uid="${_esc(entry.uid)}" title="Recharger ce dossier dans le formulaire">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    Recharger
+                </button>` : ''}
+                <button class="pl-entry-btn" data-action="copy" data-uid="${_esc(entry.uid)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button>
+                <button class="pl-entry-btn danger" data-action="delete" data-uid="${_esc(entry.uid)}">Supprimer</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    // ── Renommer ───────────────────────────────────────────────
+    list.querySelectorAll('.pl-entry-rename, .pl-entry-edit-ico').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            const uid = el.dataset.uid;
+            const tag = list.querySelector(`.pl-entry-rename[data-uid="${uid}"]`);
+            if (!tag || tag.contentEditable === 'true') return;
+            tag.contentEditable = 'true';
+            tag.classList.add('editing');
+            tag.focus();
+            const range = document.createRange();
+            range.selectNodeContents(tag);
+            window.getSelection()?.removeAllRanges();
+            window.getSelection()?.addRange(range);
+
+            const _save = () => {
+                tag.contentEditable = 'false';
+                tag.classList.remove('editing');
+                const newLabel = tag.textContent.trim();
+                if (!newLabel) { _renderModalLibraryList(pad); return; }
+                const cur = JSON.parse(localStorage.getItem('ks_library') || '[]');
+                const it  = cur.find(x => x.uid === uid);
+                if (it) { it.label = newLabel; localStorage.setItem('ks_library', JSON.stringify(cur)); }
+            };
+            tag.addEventListener('blur', _save, { once: true });
+            tag.addEventListener('keydown', ev => {
+                if (ev.key === 'Enter')  { ev.preventDefault(); tag.blur(); }
+                if (ev.key === 'Escape') { tag.contentEditable = 'false'; tag.classList.remove('editing'); _renderModalLibraryList(pad); }
+            });
+        });
     });
-}
 
-function _openPromptLibrary() {
-    _renderPromptLibraryBody();
-    document.getElementById('pl-panel')?.classList.add('open');
-    document.getElementById('pl-backdrop')?.classList.add('open');
-    document.body.style.overflow = 'hidden';
-}
+    // ── Recharger / Copier / Supprimer ─────────────────────────
+    list.querySelectorAll('.pl-entry-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const uid    = btn.dataset.uid;
+            const cur    = JSON.parse(localStorage.getItem('ks_library') || '[]');
+            const entry  = cur.find(x => x.uid === uid);
+            if (!entry) return;
+            const action = btn.dataset.action;
 
-function _closePromptLibrary() {
-    document.getElementById('pl-panel')?.classList.remove('open');
-    document.getElementById('pl-backdrop')?.classList.remove('open');
-    document.body.style.overflow = '';
+            if (action === 'reload') {
+                // Recharge le dossier directement dans la fenêtre ouverte :
+                // openTool reconstruit la modale avec le formulaire pré-rempli.
+                _closeModalLibrary();
+                openTool(pad.id, { prefillData: entry.formData });
+                return;
+            }
+
+            if (action === 'copy') {
+                navigator.clipboard.writeText(entry.prompt || '').then(() => {
+                    btn.textContent = '✓ Copié !';
+                    setTimeout(() => { btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000);
+                });
+                return;
+            }
+
+            if (action === 'delete') {
+                if (!confirm('Supprimer ce dossier de la bibliothèque ?')) return;
+                const next = cur.filter(x => x.uid !== uid);
+                localStorage.setItem('ks_library', JSON.stringify(next));
+                _renderModalLibraryList(pad);
+            }
+        });
+    });
 }
 
 // ── Helpers bibliothèque v2 ────────────────────────────────────
@@ -4053,137 +4199,6 @@ function _libSummaryLine(entry) {
     // Fallback : tronque le prompt brut (en strippant HTML basique)
     const stripped = String(entry.prompt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     return stripped.slice(0, 140) + (stripped.length > 140 ? '…' : '');
-}
-
-function _renderPromptLibraryBody() {
-    const body = document.getElementById('pl-body');
-    if (!body) return;
-
-    const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
-
-    if (lib.length === 0) {
-        body.innerHTML = `
-            <div class="pl-empty">
-                <div class="pl-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px;opacity:.35"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-                <div class="pl-empty-txt">Aucun dossier sauvegardé.<br>Utilisez le bouton "Bibliothèque"<br>dans une boîte à outils.</div>
-            </div>`;
-        return;
-    }
-
-    const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-
-    body.innerHTML = lib.map((entry, idx) => {
-        const dateRel  = _libRelativeDate(entry.date);
-        const dateAbs  = new Date(entry.date).toLocaleString('fr-FR', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-        const label    = entry.label || entry.autoLabel || `${entry.id} · ${entry.title}`;
-        const padTag   = entry.title ? entry.title : entry.id;
-        const summary  = _libSummaryLine(entry);
-        const canReload = !!entry.formData;     // Recharger uniquement si v2
-
-        return `
-        <div class="pl-entry" data-idx="${idx}">
-            <div class="pl-entry-hd">
-                <span class="pl-entry-padtag" title="${_esc(entry.id || '')}">${_esc(padTag)}</span>
-                <span class="pl-entry-tag pl-entry-rename" data-idx="${idx}" title="Cliquer pour renommer" contenteditable="false">${_esc(label)}</span>
-                <span class="pl-entry-edit-ico" data-idx="${idx}" title="Renommer">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;pointer-events:none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </span>
-                <span class="pl-entry-date" title="${_esc(dateAbs)}">${_esc(dateRel)}</span>
-            </div>
-            <div class="pl-entry-summary">${_esc(summary)}</div>
-            <div class="pl-entry-actions">
-                ${canReload ? `<button class="pl-entry-btn pl-entry-btn-primary" data-action="reload" data-idx="${idx}" title="Rouvrir le dossier avec les champs pré-remplis">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                    Recharger
-                </button>` : ''}
-                <button class="pl-entry-btn" data-action="copy" data-idx="${idx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button>
-                <button class="pl-entry-btn danger" data-action="delete" data-idx="${idx}">Supprimer</button>
-            </div>
-        </div>`;
-    }).join('');
-
-    // ── Rename : clic sur le titre ou l'icône crayon ────────────
-    body.querySelectorAll('.pl-entry-rename, .pl-entry-edit-ico').forEach(el => {
-        el.addEventListener('click', e => {
-            e.stopPropagation();
-            const idx = parseInt(el.dataset.idx, 10);
-            const tag = body.querySelector(`.pl-entry-rename[data-idx="${idx}"]`);
-            if (!tag || tag.contentEditable === 'true') return;
-            tag.contentEditable = 'true';
-            tag.classList.add('editing');
-            tag.focus();
-            const range = document.createRange();
-            range.selectNodeContents(tag);
-            window.getSelection()?.removeAllRanges();
-            window.getSelection()?.addRange(range);
-
-            const _save = () => {
-                tag.contentEditable = 'false';
-                tag.classList.remove('editing');
-                const newLabel = tag.textContent.trim();
-                if (!newLabel) { _renderPromptLibraryBody(); return; }
-                const lib = JSON.parse(localStorage.getItem('ks_library') || '[]');
-                if (lib[idx]) { lib[idx].label = newLabel; localStorage.setItem('ks_library', JSON.stringify(lib)); }
-            };
-            tag.addEventListener('blur', _save, { once: true });
-            tag.addEventListener('keydown', e => {
-                if (e.key === 'Enter') { e.preventDefault(); tag.blur(); }
-                if (e.key === 'Escape') { tag.contentEditable = 'false'; tag.classList.remove('editing'); _renderPromptLibraryBody(); }
-            });
-        });
-    });
-
-    // ── Recharger / Copier / Supprimer ──────────────────────────
-    body.querySelectorAll('.pl-entry-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx    = parseInt(btn.dataset.idx, 10);
-            const lib    = JSON.parse(localStorage.getItem('ks_library') || '[]');
-            const entry  = lib[idx];
-            if (!entry) return;
-            const action = btn.dataset.action;
-
-            if (action === 'reload') {
-                // Ferme la bibliothèque, rouvre le pad avec prefill.
-                // L'id stocké est le NOMEN-K (ex: O-IMM-009) — openTool sait
-                // résoudre via TOOLS pour retrouver le padKey.
-                _closePromptLibrary();
-                setTimeout(() => {
-                    openTool(entry.id, { prefillData: entry.formData });
-                }, 150);
-                return;
-            }
-
-            if (action === 'copy') {
-                navigator.clipboard.writeText(entry.prompt || '').then(() => {
-                    btn.textContent = '✓ Copié !';
-                    setTimeout(() => { btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000);
-                });
-                return;
-            }
-
-            if (action === 'delete') {
-                if (!confirm('Supprimer ce dossier de la bibliothèque ?')) return;
-                lib.splice(idx, 1);
-                localStorage.setItem('ks_library', JSON.stringify(lib));
-                _renderPromptLibraryBody();
-                _refreshPromptsBadge();
-            }
-        });
-    });
-}
-
-export function _refreshPromptsBadge() {
-    const lib    = JSON.parse(localStorage.getItem('ks_library') || '[]');
-    const badge  = document.getElementById('prompts-badge');
-    if (!badge) return;
-    if (lib.length > 0) {
-        badge.textContent = lib.length > 99 ? '99+' : lib.length;
-        badge.style.display = 'inline-flex';
-    } else {
-        badge.style.display = 'none';
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════
