@@ -236,6 +236,32 @@
     }
     .pf-rep-add:hover { background: var(--pf-brand-bg); border-color: var(--pf-brand); }
 
+    /* ── Barre « brouillon restauré » ───────────────────── */
+    .pf-draft-bar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 8px 16px;
+      padding: 11px 18px;
+      background: var(--pf-brand-bg);
+      color: #fff;
+      font-size: 13px; line-height: 1.4;
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, .18);
+      animation: pf-draft-in .35s ease both;
+    }
+    @keyframes pf-draft-in {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    .pf-draft-bar-txt { font-weight: 600; }
+    .pf-draft-bar-reset {
+      border: 1px solid rgba(255,255,255,.45);
+      background: rgba(255,255,255,.12); color: #fff;
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      padding: 5px 13px; border-radius: 20px; cursor: pointer;
+      transition: background .15s;
+    }
+    .pf-draft-bar-reset:hover { background: rgba(255,255,255,.25); }
+
     /* ── Field wrapper ──────────────────────────────────── */
     .pf-field {
       grid-column: 1 / -1; /* mobile = pleine largeur */
@@ -811,6 +837,109 @@
       t.textContent = msg;
       t.classList.add('is-on');
       setTimeout(() => t.classList.remove('is-on'), ms);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Brouillon local — reprise après fermeture accidentale de la page
+    // ─────────────────────────────────────────────────────────────
+    // 100 % côté navigateur du répondant (localStorage), clé = slug.
+    // N'altère ni la définition du formulaire ni le serveur : c'est
+    // une simple résilience de saisie. Effacé à l'envoi réussi.
+    // ═══════════════════════════════════════════════════════════════
+    const DRAFT_TTL_DAYS = 45;
+    let _draftTimer = null;
+    let _draftDone = false;   // passe à true après un envoi réussi
+
+    function _draftKey() {
+      return 'pulsa_draft_v1_' + (_slug || getSlug() || 'form');
+    }
+
+    function _hasDraftContent() {
+      return Object.values(_values).some(v => {
+        if (v == null) return false;
+        if (typeof v === 'string') return v.trim() !== '';
+        if (Array.isArray(v)) return v.length > 0;
+        if (typeof v === 'object') return Object.values(v).some(x => x != null && String(x).trim());
+        return true;
+      });
+    }
+
+    function saveDraft() {
+      if (_draftDone) return;
+      try {
+        if (!_hasDraftContent()) { localStorage.removeItem(_draftKey()); return; }
+        localStorage.setItem(_draftKey(), JSON.stringify({ v: _values, t: Date.now() }));
+      } catch (_) { /* quota plein ou stockage indisponible → on ignore */ }
+    }
+
+    function clearDraft() {
+      try { localStorage.removeItem(_draftKey()); } catch (_) {}
+    }
+
+    // Restaure un brouillon : reconstruit les blocs répétables aux bons
+    // index puis fusionne les valeurs dans _values. applyPrefilledToDom()
+    // (appelé juste après dans load) se charge de remplir le DOM.
+    function restoreDraft() {
+      let draft = null;
+      try { draft = JSON.parse(localStorage.getItem(_draftKey()) || 'null'); } catch (_) {}
+      if (!draft || !draft.v || typeof draft.v !== 'object') return;
+      // Expiration
+      if (draft.t && (Date.now() - draft.t) > DRAFT_TTL_DAYS * 86400000) {
+        clearDraft(); return;
+      }
+      const dv = draft.v;
+      // Reconstruit chaque repeater avec les index présents dans le brouillon
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          if (f.type !== 'repeater') continue;
+          const wrap = document.querySelector(`.pf-repeater[data-fid="${f.id}"]`);
+          if (!wrap) continue;
+          const idxSet = new Set();
+          for (const k of Object.keys(dv)) {
+            if (k.startsWith(f.id + '::')) {
+              const n = k.slice(f.id.length + 2).split('::')[0];
+              if (n !== '' && !isNaN(Number(n))) idxSet.add(Number(n));
+            }
+          }
+          if (idxSet.size === 0) continue;   // rien de sauvegardé → on garde le rendu par défaut
+          const indices = [...idxSet].sort((a, b) => a - b);
+          const itemsEl = wrap.querySelector('.pf-rep-items');
+          if (itemsEl) {
+            itemsEl.innerHTML = indices.map(n => renderRepeaterItem(f, n)).join('');
+            renumberRepeater(wrap);
+          }
+        }
+      }
+      Object.assign(_values, dv);
+      _showDraftBar(draft.t);
+    }
+
+    function _showDraftBar(savedAt) {
+      if (document.getElementById('pf-draft-bar')) return;
+      const when = savedAt ? _draftRelative(savedAt) : '';
+      const bar = document.createElement('div');
+      bar.id = 'pf-draft-bar';
+      bar.className = 'pf-draft-bar';
+      bar.innerHTML = `
+        <span class="pf-draft-bar-txt">✓ Brouillon restauré — vous reprenez où vous vous étiez arrêté${when ? ' (' + escape(when) + ')' : ''}.</span>
+        <button type="button" class="pf-draft-bar-reset" data-act="draft-reset">Recommencer à zéro</button>
+      `;
+      document.body.appendChild(bar);
+      bar.querySelector('[data-act="draft-reset"]').addEventListener('click', () => {
+        clearDraft();
+        location.reload();
+      });
+    }
+
+    function _draftRelative(ts) {
+      const diff = Date.now() - ts;
+      const min = Math.floor(diff / 60000);
+      if (min < 1) return 'à l\'instant';
+      if (min < 60) return `il y a ${min} min`;
+      const h = Math.floor(min / 60);
+      if (h < 24) return `il y a ${h} h`;
+      const d = Math.floor(h / 24);
+      return `il y a ${d} j`;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1891,6 +2020,11 @@
           return;
         }
 
+        // Succès — le brouillon local n'a plus de raison d'être
+        _draftDone = true;
+        if (_draftTimer) clearInterval(_draftTimer);
+        clearDraft();
+
         // Succès — écran de remerciement avec accusé de réception
         const mailNote = data?.mail === 'sent'
           ? 'Les destinataires ont été notifiés par mail.'
@@ -2061,11 +2195,20 @@
       initSignatureCanvases();
       renumberAllRepeaters();
       prefillFromUrl();
+      restoreDraft();          // reprise éventuelle d'un brouillon local
       applyPrefilledToDom();
       refreshVisibility();
       recomputeAll();
       refreshRequiredIndicators();
       refreshProgress();
+
+      // Sauvegarde du brouillon : à intervalle, quand l'onglet passe en
+      // arrière-plan, et avant fermeture/rechargement de la page.
+      _draftTimer = setInterval(saveDraft, 5000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') saveDraft();
+      });
+      window.addEventListener('beforeunload', saveDraft);
     }
 
     load();

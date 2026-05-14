@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.25.1-pulsa-repeater-builder-editor';
+const VERSION       = 'ks-os-v4.26.0-pulsa-form-draft-autosave';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
