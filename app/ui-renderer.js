@@ -1996,12 +1996,6 @@ function _buildModal(pad, tool) {
                 </div>
                 <button class="modal-library-close" id="modal-library-close" aria-label="Fermer la bibliothèque">✕</button>
             </div>
-            <div class="modal-library-actions">
-                <button class="btn-generate btn-library-save" id="modal-library-save" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                    Sauvegarder le dossier actuel
-                </button>
-            </div>
             <div class="modal-library-list" id="modal-library-list"></div>
         </div>
     `;
@@ -2150,7 +2144,6 @@ function _buildModal(pad, tool) {
     // l'outil (plus de panneau global dans la topbar du Dashboard).
     document.getElementById('btn-library')?.addEventListener('click', () => _openModalLibrary(pad));
     document.getElementById('modal-library-close')?.addEventListener('click', _closeModalLibrary);
-    document.getElementById('modal-library-save')?.addEventListener('click', () => _saveCurrentToolToLibrary(pad));
 
     // 🔑 No-API hint → ouvre directement l'accordéon Clés API dans Settings
     document.getElementById('no-api-link')?.addEventListener('click', () => {
@@ -4006,11 +3999,22 @@ function _libEnsureUids(lib) {
     return lib;
 }
 
-function _openModalLibrary(pad) {
+// Ouvre la bibliothèque interne : sauvegarde d'abord le dossier courant
+// (si le formulaire est suffisamment rempli), puis affiche le panneau.
+async function _openModalLibrary(pad) {
     const panel = document.getElementById('modal-library');
     if (!panel) return;
+
+    // Sauvegarde automatique silencieuse du dossier en cours.
+    await _autoSaveCurrentTool(pad);
+
     _renderModalLibraryList(pad);
     panel.hidden = false;
+    // Toujours afficher le haut de la liste à l'ouverture
+    const list = document.getElementById('modal-library-list');
+    if (list) list.scrollTop = 0;
+    const toolModal = document.getElementById('tool-modal');
+    if (toolModal) toolModal.scrollTop = 0;
     requestAnimationFrame(() => panel.classList.add('open'));
 }
 
@@ -4021,23 +4025,28 @@ function _closeModalLibrary() {
     setTimeout(() => { panel.hidden = true; }, 220);
 }
 
-// Sauvegarde le dossier actuel de l'outil ouvert dans sa bibliothèque.
-async function _saveCurrentToolToLibrary(pad) {
-    const btn = document.getElementById('modal-library-save');
-    if (!btn) return;
-    const orig = btn.innerHTML;
-
+// Sauvegarde silencieuse du dossier de l'outil ouvert. Ne fait rien (sans
+// erreur) si le formulaire n'est pas assez rempli pour produire un contenu,
+// ni si le dernier dossier sauvegardé pour cet outil est identique
+// (évite les doublons quand on rouvre la bibliothèque sans rien changer).
+async function _autoSaveCurrentTool(pad) {
     const form = document.getElementById('tool-form');
+    if (!form) return false;
     const formData = {};
-    form?.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+    form.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+    // Dédoublonnage : si le dernier dossier de cet outil a exactement le
+    // même contenu de formulaire, on ne resauvegarde pas.
+    const sig = _formSignature(formData);
+    const existing = JSON.parse(localStorage.getItem('ks_library') || '[]');
+    const lastForPad = existing.find(e => e.id === pad.id);
+    if (lastForPad && _formSignature(lastForPad.formData || {}) === sig) return false;
 
     let payload = '';
     if (pad.doc_export) {
-        const sig = _formSignature(formData);
         if (_portableCache.padId === pad.id && _portableCache.signature === sig && _portableCache.content) {
             payload = _portableCache.content;
         } else {
-            btn.textContent = '⏳ Génération…';
             const cached = await _prebuildPortableBloc(pad, formData);
             payload = cached?.content || '';
         }
@@ -4045,16 +4054,8 @@ async function _saveCurrentToolToLibrary(pad) {
         payload = document.getElementById('prompt-text')?.textContent || '';
     }
 
-    if (!payload || payload.startsWith('Remplissez')) {
-        btn.textContent = '✗ Remplissez d\'abord les champs requis';
-        setTimeout(() => { btn.innerHTML = orig; }, 2500);
-        return;
-    }
-
-    const ok = _saveToLibrary(pad, payload, formData);
-    btn.textContent = ok ? '✓ Dossier sauvegardé' : '✗ Erreur';
-    setTimeout(() => { btn.innerHTML = orig; }, 1800);
-    if (ok) _renderModalLibraryList(pad);
+    if (!payload || payload.startsWith('Remplissez')) return false;
+    return _saveToLibrary(pad, payload, formData);
 }
 
 // Rend la liste filtrée sur l'outil courant dans le panneau interne.
@@ -4069,7 +4070,7 @@ function _renderModalLibraryList(pad) {
         list.innerHTML = `
             <div class="pl-empty">
                 <div class="pl-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="width:38px;height:38px;opacity:.35"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-                <div class="pl-empty-txt">Aucun dossier sauvegardé pour cet outil.<br>Remplissez les champs puis « Sauvegarder le dossier actuel ».</div>
+                <div class="pl-empty-txt">Aucun dossier sauvegardé pour cet outil.<br>Remplissez les champs : le dossier est enregistré ici dès que vous rouvrez la bibliothèque.</div>
             </div>`;
         return;
     }
