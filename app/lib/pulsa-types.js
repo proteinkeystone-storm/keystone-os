@@ -224,6 +224,23 @@ export const FIELD_TYPES = {
       ],
     },
   },
+  // Bloc répétable : le répondant duplique un mini-formulaire autant de
+  // fois que nécessaire (ex : « une œuvre » × N). options.fields contient
+  // le gabarit des sous-champs ; la valeur soumise est un tableau d'objets.
+  // Édité via configuration JSON pour l'instant (pas d'UI builder en V1).
+  'repeater': {
+    label: 'Bloc répétable',
+    sub: 'Le répondant ajoute autant d\'éléments qu\'il veut',
+    ico: 'copy',
+    group: 'repeat',          // groupe non listé dans FIELD_GROUPS → absent du menu builder
+    defaults: {
+      item_label: 'Élément',
+      add_label: 'Ajouter un élément',
+      min: 1,
+      max: 0,                 // 0 = pas de limite
+      fields: [],             // gabarit des sous-champs (mêmes objets que des champs normaux)
+    },
+  },
 };
 
 /**

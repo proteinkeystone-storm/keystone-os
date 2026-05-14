@@ -2,7 +2,7 @@
   "meta": {
     "title": "Formulaire d'information — Biennale d'Art contemporain du Revest, édition 2026",
     "slug": "biennale-revest-2026",
-    "intro": "Merci de renseigner cette fiche : elle alimente directement le livret de l'exposition, le mini-site de l'édition 2026 et l'organisation logistique du montage.\n\nVous présentez plusieurs œuvres ? Renseignez la première, puis répondez « oui » à la question « une autre œuvre ? » : un nouveau bloc apparaîtra (jusqu'à 3 œuvres).\n\nLes limites de signes sont strictes — elles garantissent une mise en page homogène. Les visuels se transmettent par lien externe (WeTransfer, Drive…) en haute définition.",
+    "intro": "Merci de renseigner cette fiche : elle alimente directement le livret de l'exposition, le mini-site de l'édition 2026 et l'organisation logistique du montage.\n\nVous présentez plusieurs œuvres ? Le bloc « Vos œuvres » s'adapte : ajoutez-en autant que nécessaire avec le bouton « + Ajouter une œuvre ».\n\nVos fichiers haute définition (portrait + visuels de toutes vos œuvres) se transmettent en UN SEUL envoi WeTransfer / SwissTransfer / Drive — voir la section dédiée.\n\nLes limites de signes sont strictes : elles garantissent une mise en page homogène.",
     "logo_data_url": null,
     "logo_url": null,
     "brand_color": "#141417",
@@ -105,435 +105,139 @@
           "width": "full",
           "options": { "placeholder": "Parcours, expositions marquantes, axes de recherche…", "max_chars": 1500, "rows": 6, "strict": true },
           "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_portrait",
-          "type": "url-external",
-          "label": "Portrait de l'artiste (HD)",
-          "help": "300 DPI minimum. Lien WeTransfer / Drive / Dropbox vers le fichier original, non compressé.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "https://wetransfer.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_credits_portrait",
-          "type": "text-short",
-          "label": "Crédits du portrait",
-          "help": "À qui appartient la photo de portrait ? Obligation légale.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "© Nom du photographe — ou — © l'artiste", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
         }
       ]
     },
     {
-      "id": "sec_oeuvre_1",
-      "title": "Œuvre 1",
-      "subtitle": "Première œuvre présentée — données livret, visuels et logistique",
+      "id": "sec_fichiers",
+      "title": "Vos fichiers haute définition",
+      "subtitle": "Un seul envoi pour tout — portrait + visuels de toutes vos œuvres",
       "visible_if": null,
       "fields": [
         {
-          "id": "fld_o1_titre",
-          "type": "text-short",
-          "label": "Titre de l'œuvre",
-          "help": "",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Sans titre, ou le titre exact de l'œuvre", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_annee",
-          "type": "text-short",
-          "label": "Année de création",
-          "help": "",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "2025", "max_chars": 20 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_dimensions",
-          "type": "text-short",
-          "label": "Dimensions (H × L × P, en cm)",
-          "help": "Indiquez « variable » si l'œuvre est une installation modulable",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "120 × 80 × 5 cm", "max_chars": 80 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_materiaux",
-          "type": "text-short",
-          "label": "Matériaux et techniques",
-          "help": "",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Huile sur toile — installation sonore — céramique émaillée…", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_intention",
-          "type": "text-long",
-          "label": "Note d'intention",
-          "help": "Pourquoi cette œuvre ? Indispensable pour le livret. Limite stricte.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Le propos, le contexte, ce que vous cherchez à provoquer chez le spectateur…", "max_chars": 500, "rows": 4, "strict": true },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_visuel",
+          "id": "fld_transfert",
           "type": "url-external",
-          "label": "Visuel principal de l'œuvre (HD)",
-          "help": "300 DPI minimum, détouré ou sur fond neutre. C'est l'image qui représentera l'œuvre dans le livret.",
+          "label": "Lien unique vers tous vos fichiers HD",
+          "help": "Regroupez TOUT dans UN SEUL envoi : votre portrait + le visuel principal de chaque œuvre + les vues de détail. 300 DPI minimum, fichiers originaux non compressés. Nommez clairement (ex. « Portrait.jpg », « Oeuvre1-visuel.jpg », « Oeuvre1-detail.jpg »…).",
           "required": true,
           "width": "full",
-          "options": { "placeholder": "https://wetransfer.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
+          "options": { "placeholder": "https://wetransfer.com/…  ou  https://www.swisstransfer.com/…", "providers_hint": "WeTransfer · SwissTransfer · Google Drive · Dropbox · iCloud" },
           "visible_if": null, "required_if": null, "compute_from": null
         },
         {
-          "id": "fld_o1_visuel_details",
-          "type": "url-external",
-          "label": "Vues de détail ou secondaires (optionnel)",
-          "help": "Pour la galerie du mini-site. Regroupez-les dans un seul lien (dossier ou archive).",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "https://drive.google.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_credits",
+          "id": "fld_credits_visuels",
           "type": "text-short",
-          "label": "Crédits photographiques de l'œuvre",
-          "help": "Obligation légale — sans crédit, le visuel ne pourra pas être publié.",
+          "label": "Crédits photographiques",
+          "help": "À qui appartiennent les images (portrait et œuvres) ? Obligation légale — sans crédit, les visuels ne pourront pas être publiés. Précisez si plusieurs photographes.",
           "required": true,
           "width": "full",
-          "options": { "placeholder": "© Nom du photographe — ou — © l'artiste", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_elec",
-          "type": "text-short",
-          "label": "Besoins en alimentation électrique",
-          "help": "Indiquez « aucun » si l'œuvre n'a pas besoin de courant",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "2 prises 230 V — ou — alimentation triphasée — ou — aucun", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_maintenance",
-          "type": "yes-no",
-          "label": "Cette œuvre nécessite-t-elle une intervention quotidienne ?",
-          "help": "Allumage, extinction, remplissage, recalibrage…",
-          "required": true,
-          "width": "full",
-          "options": { "yes_label": "Oui", "no_label": "Non" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_maintenance_detail",
-          "type": "text-long",
-          "label": "Précisez l'intervention nécessaire",
-          "help": "Qui s'en charge, à quel moment, quelle durée ?",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "Ex : allumage chaque matin à l'ouverture, ~5 min…", "max_chars": 400, "rows": 3, "strict": true },
-          "visible_if": { "field": "fld_o1_maintenance", "op": "eq", "value": "yes" },
-          "required_if": { "field": "fld_o1_maintenance", "op": "eq", "value": "yes" },
-          "compute_from": null
-        },
-        {
-          "id": "fld_o1_assurance",
-          "type": "amount",
-          "label": "Valeur d'assurance de l'œuvre (HT)",
-          "help": "Montant servant de base à la couverture pendant l'exposition",
-          "required": true,
-          "width": "1/2",
-          "options": { "currency": "EUR", "min": 0, "max": null, "decimals": 0 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o1_autre",
-          "type": "yes-no",
-          "label": "Présentez-vous une autre œuvre ?",
-          "help": "Si oui, un bloc « Œuvre 2 » apparaîtra ci-dessous",
-          "required": true,
-          "width": "full",
-          "options": { "yes_label": "Oui, j'ai une autre œuvre", "no_label": "Non, c'est tout" },
+          "options": { "placeholder": "© Nom du photographe — ou — © l'artiste", "max_chars": 220 },
           "visible_if": null, "required_if": null, "compute_from": null
         }
       ]
     },
     {
-      "id": "sec_oeuvre_2",
-      "title": "Œuvre 2",
-      "subtitle": "Deuxième œuvre présentée",
-      "visible_if": { "field": "fld_o1_autre", "op": "eq", "value": "yes" },
+      "id": "sec_oeuvres",
+      "title": "Vos œuvres",
+      "subtitle": "Ajoutez autant d'œuvres que nécessaire — le bloc se duplique",
+      "visible_if": null,
       "fields": [
         {
-          "id": "fld_o2_titre",
-          "type": "text-short",
-          "label": "Titre de l'œuvre",
-          "help": "",
+          "id": "fld_oeuvres",
+          "type": "repeater",
+          "label": "Œuvres présentées",
+          "help": "Une fiche par œuvre. Cliquez « + Ajouter une œuvre » pour en saisir une nouvelle ; « Retirer » pour en enlever une.",
           "required": true,
           "width": "full",
-          "options": { "placeholder": "Sans titre, ou le titre exact de l'œuvre", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_annee",
-          "type": "text-short",
-          "label": "Année de création",
-          "help": "",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "2025", "max_chars": 20 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_dimensions",
-          "type": "text-short",
-          "label": "Dimensions (H × L × P, en cm)",
-          "help": "Indiquez « variable » si l'œuvre est une installation modulable",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "120 × 80 × 5 cm", "max_chars": 80 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_materiaux",
-          "type": "text-short",
-          "label": "Matériaux et techniques",
-          "help": "",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Huile sur toile — installation sonore — céramique émaillée…", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_intention",
-          "type": "text-long",
-          "label": "Note d'intention",
-          "help": "Pourquoi cette œuvre ? Indispensable pour le livret. Limite stricte.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Le propos, le contexte, ce que vous cherchez à provoquer chez le spectateur…", "max_chars": 500, "rows": 4, "strict": true },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_visuel",
-          "type": "url-external",
-          "label": "Visuel principal de l'œuvre (HD)",
-          "help": "300 DPI minimum, détouré ou sur fond neutre.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "https://wetransfer.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_visuel_details",
-          "type": "url-external",
-          "label": "Vues de détail ou secondaires (optionnel)",
-          "help": "Pour la galerie du mini-site. Regroupez-les dans un seul lien.",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "https://drive.google.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_credits",
-          "type": "text-short",
-          "label": "Crédits photographiques de l'œuvre",
-          "help": "Obligation légale — sans crédit, le visuel ne pourra pas être publié.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "© Nom du photographe — ou — © l'artiste", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_elec",
-          "type": "text-short",
-          "label": "Besoins en alimentation électrique",
-          "help": "Indiquez « aucun » si l'œuvre n'a pas besoin de courant",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "2 prises 230 V — ou — alimentation triphasée — ou — aucun", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_maintenance",
-          "type": "yes-no",
-          "label": "Cette œuvre nécessite-t-elle une intervention quotidienne ?",
-          "help": "Allumage, extinction, remplissage, recalibrage…",
-          "required": true,
-          "width": "full",
-          "options": { "yes_label": "Oui", "no_label": "Non" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_maintenance_detail",
-          "type": "text-long",
-          "label": "Précisez l'intervention nécessaire",
-          "help": "Qui s'en charge, à quel moment, quelle durée ?",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "Ex : allumage chaque matin à l'ouverture, ~5 min…", "max_chars": 400, "rows": 3, "strict": true },
-          "visible_if": { "field": "fld_o2_maintenance", "op": "eq", "value": "yes" },
-          "required_if": { "field": "fld_o2_maintenance", "op": "eq", "value": "yes" },
-          "compute_from": null
-        },
-        {
-          "id": "fld_o2_assurance",
-          "type": "amount",
-          "label": "Valeur d'assurance de l'œuvre (HT)",
-          "help": "Montant servant de base à la couverture pendant l'exposition",
-          "required": true,
-          "width": "1/2",
-          "options": { "currency": "EUR", "min": 0, "max": null, "decimals": 0 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o2_autre",
-          "type": "yes-no",
-          "label": "Présentez-vous une autre œuvre ?",
-          "help": "Si oui, un bloc « Œuvre 3 » apparaîtra ci-dessous",
-          "required": true,
-          "width": "full",
-          "options": { "yes_label": "Oui, j'ai une autre œuvre", "no_label": "Non, c'est tout" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        }
-      ]
-    },
-    {
-      "id": "sec_oeuvre_3",
-      "title": "Œuvre 3",
-      "subtitle": "Troisième œuvre présentée — au-delà, contactez l'organisation",
-      "visible_if": { "field": "fld_o2_autre", "op": "eq", "value": "yes" },
-      "fields": [
-        {
-          "id": "fld_o3_titre",
-          "type": "text-short",
-          "label": "Titre de l'œuvre",
-          "help": "",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Sans titre, ou le titre exact de l'œuvre", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_annee",
-          "type": "text-short",
-          "label": "Année de création",
-          "help": "",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "2025", "max_chars": 20 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_dimensions",
-          "type": "text-short",
-          "label": "Dimensions (H × L × P, en cm)",
-          "help": "Indiquez « variable » si l'œuvre est une installation modulable",
-          "required": true,
-          "width": "1/2",
-          "options": { "placeholder": "120 × 80 × 5 cm", "max_chars": 80 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_materiaux",
-          "type": "text-short",
-          "label": "Matériaux et techniques",
-          "help": "",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Huile sur toile — installation sonore — céramique émaillée…", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_intention",
-          "type": "text-long",
-          "label": "Note d'intention",
-          "help": "Pourquoi cette œuvre ? Indispensable pour le livret. Limite stricte.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "Le propos, le contexte, ce que vous cherchez à provoquer chez le spectateur…", "max_chars": 500, "rows": 4, "strict": true },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_visuel",
-          "type": "url-external",
-          "label": "Visuel principal de l'œuvre (HD)",
-          "help": "300 DPI minimum, détouré ou sur fond neutre.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "https://wetransfer.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_visuel_details",
-          "type": "url-external",
-          "label": "Vues de détail ou secondaires (optionnel)",
-          "help": "Pour la galerie du mini-site. Regroupez-les dans un seul lien.",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "https://drive.google.com/…", "providers_hint": "WeTransfer · Google Drive · Dropbox · iCloud" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_credits",
-          "type": "text-short",
-          "label": "Crédits photographiques de l'œuvre",
-          "help": "Obligation légale — sans crédit, le visuel ne pourra pas être publié.",
-          "required": true,
-          "width": "full",
-          "options": { "placeholder": "© Nom du photographe — ou — © l'artiste", "max_chars": 160 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_elec",
-          "type": "text-short",
-          "label": "Besoins en alimentation électrique",
-          "help": "Indiquez « aucun » si l'œuvre n'a pas besoin de courant",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "2 prises 230 V — ou — alimentation triphasée — ou — aucun", "max_chars": 200 },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_maintenance",
-          "type": "yes-no",
-          "label": "Cette œuvre nécessite-t-elle une intervention quotidienne ?",
-          "help": "Allumage, extinction, remplissage, recalibrage…",
-          "required": true,
-          "width": "full",
-          "options": { "yes_label": "Oui", "no_label": "Non" },
-          "visible_if": null, "required_if": null, "compute_from": null
-        },
-        {
-          "id": "fld_o3_maintenance_detail",
-          "type": "text-long",
-          "label": "Précisez l'intervention nécessaire",
-          "help": "Qui s'en charge, à quel moment, quelle durée ?",
-          "required": false,
-          "width": "full",
-          "options": { "placeholder": "Ex : allumage chaque matin à l'ouverture, ~5 min…", "max_chars": 400, "rows": 3, "strict": true },
-          "visible_if": { "field": "fld_o3_maintenance", "op": "eq", "value": "yes" },
-          "required_if": { "field": "fld_o3_maintenance", "op": "eq", "value": "yes" },
-          "compute_from": null
-        },
-        {
-          "id": "fld_o3_assurance",
-          "type": "amount",
-          "label": "Valeur d'assurance de l'œuvre (HT)",
-          "help": "Montant servant de base à la couverture pendant l'exposition",
-          "required": true,
-          "width": "1/2",
-          "options": { "currency": "EUR", "min": 0, "max": null, "decimals": 0 },
+          "options": {
+            "item_label": "Œuvre",
+            "add_label": "Ajouter une œuvre",
+            "min": 1,
+            "max": 0,
+            "fields": [
+              {
+                "id": "titre",
+                "type": "text-short",
+                "label": "Titre de l'œuvre",
+                "help": "",
+                "required": true,
+                "width": "full",
+                "options": { "placeholder": "Sans titre, ou le titre exact", "max_chars": 160 }
+              },
+              {
+                "id": "annee",
+                "type": "text-short",
+                "label": "Année de création",
+                "help": "",
+                "required": true,
+                "width": "1/2",
+                "options": { "placeholder": "2025", "max_chars": 20 }
+              },
+              {
+                "id": "dimensions",
+                "type": "text-short",
+                "label": "Dimensions (H × L × P, cm)",
+                "help": "« variable » si l'installation est modulable",
+                "required": true,
+                "width": "1/2",
+                "options": { "placeholder": "120 × 80 × 5 cm", "max_chars": 80 }
+              },
+              {
+                "id": "materiaux",
+                "type": "text-short",
+                "label": "Matériaux et techniques",
+                "help": "",
+                "required": true,
+                "width": "full",
+                "options": { "placeholder": "Huile sur toile — installation sonore — céramique émaillée…", "max_chars": 200 }
+              },
+              {
+                "id": "intention",
+                "type": "text-long",
+                "label": "Note d'intention",
+                "help": "Pourquoi cette œuvre ? Indispensable pour le livret. Limite stricte.",
+                "required": true,
+                "width": "full",
+                "options": { "placeholder": "Le propos, le contexte, ce que vous cherchez à provoquer…", "max_chars": 500, "rows": 4, "strict": true }
+              },
+              {
+                "id": "elec",
+                "type": "text-short",
+                "label": "Besoins en alimentation électrique",
+                "help": "« aucun » si l'œuvre n'a pas besoin de courant",
+                "required": false,
+                "width": "full",
+                "options": { "placeholder": "2 prises 230 V — triphasé — aucun…", "max_chars": 200 }
+              },
+              {
+                "id": "maintenance",
+                "type": "yes-no",
+                "label": "Intervention quotidienne nécessaire ?",
+                "help": "Allumage, extinction, remplissage, recalibrage…",
+                "required": true,
+                "width": "full",
+                "options": { "yes_label": "Oui", "no_label": "Non" }
+              },
+              {
+                "id": "maintenance_detail",
+                "type": "text-long",
+                "label": "Si oui, précisez l'intervention",
+                "help": "Qui s'en charge, à quel moment, quelle durée ? (laisser vide si non concerné)",
+                "required": false,
+                "width": "full",
+                "options": { "placeholder": "Ex : allumage chaque matin à l'ouverture, ~5 min…", "max_chars": 400, "rows": 3, "strict": true }
+              },
+              {
+                "id": "assurance",
+                "type": "amount",
+                "label": "Valeur d'assurance (HT)",
+                "help": "Base de couverture pendant l'exposition",
+                "required": true,
+                "width": "1/2",
+                "options": { "currency": "EUR", "min": 0, "max": null, "decimals": 0 }
+              }
+            ]
+          },
           "visible_if": null, "required_if": null, "compute_from": null
         }
       ]

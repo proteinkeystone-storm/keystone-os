@@ -1370,6 +1370,25 @@ function _formatValueForUI(field, raw) {
       }
       return _escape(c.label || raw);
     }
+    case 'repeater': {
+      // raw = tableau d'objets { subId: valeur }. On rend chaque item
+      // comme un mini-bloc avec ses sous-champs formatés.
+      const items = Array.isArray(raw) ? raw : [];
+      if (items.length === 0) return '<em style="opacity:.5">aucun élément</em>';
+      const subFields = opts.fields || [];
+      const itemLabel = opts.item_label || 'Élément';
+      return items.map((item, i) => {
+        const rows = subFields.map(sf => {
+          const v = item?.[sf.id];
+          if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) return '';
+          return `<div style="margin:2px 0"><span style="color:var(--tx3)">${_escape(sf.label || sf.id)} :</span> ${_formatValueForUI(sf, v)}</div>`;
+        }).filter(Boolean).join('');
+        return `<div style="margin:6px 0;padding:8px 10px;background:rgba(255,255,255,.03);border-left:2px solid var(--gold,#6366f1);border-radius:4px">
+          <div style="font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold,#6366f1);margin-bottom:4px">${_escape(itemLabel)} ${i + 1}</div>
+          ${rows || '<em style="opacity:.5">vide</em>'}
+        </div>`;
+      }).join('');
+    }
     default:
       return _escape(typeof raw === 'object' ? JSON.stringify(raw) : raw);
   }

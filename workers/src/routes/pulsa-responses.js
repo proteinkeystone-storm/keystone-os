@@ -377,6 +377,22 @@ function _csvFormatValue(field, raw) {
       const c = (opts.choices || []).find(c => c.id === raw);
       return c?.label || String(raw);
     }
+    case 'repeater': {
+      // Tableau d'objets : aplati en une cellule lisible.
+      // « Élément 1 — Titre: X · Année: Y ‖ Élément 2 — … »
+      const items = Array.isArray(raw) ? raw : [];
+      if (items.length === 0) return '';
+      const subFields = opts.fields || [];
+      const itemLabel = opts.item_label || 'Élément';
+      return items.map((item, i) => {
+        const parts = subFields.map(sf => {
+          const v = item?.[sf.id];
+          if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) return null;
+          return `${sf.label || sf.id}: ${_csvFormatValue(sf, v)}`;
+        }).filter(Boolean).join(' · ');
+        return `${itemLabel} ${i + 1} — ${parts}`;
+      }).join('  ‖  ');
+    }
     default:
       return typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
   }

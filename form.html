@@ -193,6 +193,49 @@
       .pf-section-body { grid-template-columns: repeat(12, 1fr); }
     }
 
+    /* ── Bloc répétable ─────────────────────────────────── */
+    .pf-repeater { display: flex; flex-direction: column; gap: 14px; }
+    .pf-rep-items { display: flex; flex-direction: column; gap: 14px; }
+    .pf-rep-item {
+      border: 1px solid var(--pf-border, #e6e6ea);
+      border-radius: 12px;
+      background: var(--pf-light, #f7f7f9);
+      overflow: hidden;
+    }
+    .pf-rep-item-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 10px 14px;
+      background: var(--pf-brand-bg);
+    }
+    .pf-rep-item-title {
+      font-size: 13px; font-weight: 800; color: #fff;
+      letter-spacing: -.01em;
+    }
+    .pf-rep-remove {
+      border: 1px solid rgba(255,255,255,.3);
+      background: rgba(255,255,255,.1); color: #fff;
+      font-family: inherit; font-size: 11px; font-weight: 700;
+      padding: 4px 11px; border-radius: 20px; cursor: pointer;
+      transition: background .15s;
+    }
+    .pf-rep-remove:hover { background: rgba(255,255,255,.22); }
+    .pf-rep-item-body {
+      display: grid; grid-template-columns: 1fr; gap: 16px;
+      padding: 16px 14px;
+    }
+    @media (min-width: 640px) {
+      .pf-rep-item-body { grid-template-columns: repeat(12, 1fr); }
+    }
+    .pf-rep-add {
+      align-self: flex-start;
+      border: 1.5px dashed var(--pf-accent, #c9b48a);
+      background: transparent; color: var(--pf-brand);
+      font-family: inherit; font-size: 13px; font-weight: 700;
+      padding: 10px 18px; border-radius: 10px; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .pf-rep-add:hover { background: var(--pf-brand-bg); border-color: var(--pf-brand); }
+
     /* ── Field wrapper ──────────────────────────────────── */
     .pf-field {
       grid-column: 1 / -1; /* mobile = pleine largeur */
@@ -1019,6 +1062,7 @@
       'slider':       renderSlider,
       'likert':       renderLikert,
       'image-picker': renderImagePicker,
+      'repeater':     renderRepeater,
     };
 
     function renderField(field) {
@@ -1039,6 +1083,61 @@
           <span class="pf-field-error" data-slot="err-${field.id}"></span>
         </div>
       `;
+    }
+
+    // ── Bloc répétable (repeater) ────────────────────────────────
+    // La valeur soumise est un tableau d'objets. Chaque item rend ses
+    // sous-champs via renderField() avec un id composé `repId::idx::subId`,
+    // ce qui réutilise tels quels les handlers input/click existants.
+    function renderRepeater(field) {
+      const opts = field.options || {};
+      const min = Math.max(1, Number(opts.min) || 1);
+      const max = Number(opts.max) || 0;          // 0 = illimité
+      const addLabel = opts.add_label || 'Ajouter';
+      let items = '';
+      for (let i = 0; i < min; i++) items += renderRepeaterItem(field, i);
+      return `
+        <div class="pf-repeater" data-fid="${field.id}" data-kind="repeater"
+             data-min="${min}" data-max="${max}">
+          <div class="pf-rep-items">${items}</div>
+          <button type="button" class="pf-rep-add" data-act="rep-add" data-fid="${field.id}">
+            + ${escape(addLabel)}
+          </button>
+        </div>
+      `;
+    }
+
+    function renderRepeaterItem(field, idx) {
+      const opts = field.options || {};
+      const subFields = opts.fields || [];
+      const itemLabel = opts.item_label || 'Élément';
+      const body = subFields.map(sf => renderField({
+        ...sf,
+        id: `${field.id}::${idx}::${sf.id}`,
+        // les sous-champs ne portent pas de logique conditionnelle en V1
+        visible_if: null, required_if: null, compute_from: null,
+      })).join('');
+      return `
+        <div class="pf-rep-item" data-rep="${field.id}" data-idx="${idx}">
+          <div class="pf-rep-item-head">
+            <span class="pf-rep-item-title">${escape(itemLabel)} <span class="pf-rep-num"></span></span>
+            <button type="button" class="pf-rep-remove" data-act="rep-remove"
+                    data-fid="${field.id}" data-idx="${idx}">Retirer</button>
+          </div>
+          <div class="pf-rep-item-body">${body}</div>
+        </div>
+      `;
+    }
+
+    // Renumérote les items (« Œuvre 1, 2, 3… ») d'après leur position DOM.
+    function renumberRepeater(wrap) {
+      wrap.querySelectorAll('.pf-rep-item').forEach((it, i) => {
+        const num = it.querySelector('.pf-rep-num');
+        if (num) num.textContent = String(i + 1);
+      });
+    }
+    function renumberAllRepeaters() {
+      document.querySelectorAll('.pf-repeater').forEach(renumberRepeater);
     }
 
     function renderTextShort(field) {
@@ -1419,6 +1518,48 @@
           clearFieldError(fid);
           return;
         }
+        // Repeater — ajouter un item
+        const repAdd = e.target.closest('[data-act="rep-add"]');
+        if (repAdd) {
+          const fid = repAdd.dataset.fid;
+          const field = _findField(fid);
+          const wrap = repAdd.closest('.pf-repeater');
+          const itemsEl = wrap.querySelector('.pf-rep-items');
+          const max = Number(wrap.dataset.max) || 0;
+          const items = itemsEl.querySelectorAll('.pf-rep-item');
+          if (max && items.length >= max) { showToast(`Maximum ${max} éléments`); return; }
+          // idx monotone : on ne réutilise jamais un index libéré
+          let nextIdx = 0;
+          items.forEach(it => { nextIdx = Math.max(nextIdx, Number(it.dataset.idx) + 1); });
+          itemsEl.insertAdjacentHTML('beforeend', renderRepeaterItem(field, nextIdx));
+          renumberRepeater(wrap);
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
+        // Repeater — retirer un item
+        const repRem = e.target.closest('[data-act="rep-remove"]');
+        if (repRem) {
+          const fid = repRem.dataset.fid;
+          const wrap = repRem.closest('.pf-repeater');
+          const itemsEl = wrap.querySelector('.pf-rep-items');
+          const min = Math.max(1, Number(wrap.dataset.min) || 1);
+          if (itemsEl.querySelectorAll('.pf-rep-item').length <= min) {
+            showToast(`Au moins ${min} élément${min > 1 ? 's' : ''} requis`);
+            return;
+          }
+          const item = repRem.closest('.pf-rep-item');
+          const idx = item.dataset.idx;
+          // Purge des valeurs scratch de cet item
+          Object.keys(_values).forEach(k => {
+            if (k.startsWith(`${fid}::${idx}::`)) delete _values[k];
+          });
+          item.remove();
+          renumberRepeater(wrap);
+          refreshProgress();
+          clearFieldError(fid);
+          return;
+        }
         // Submit
         if (e.target.closest('[data-act="submit"]')) {
           submitForm();
@@ -1579,7 +1720,12 @@
         document.getElementById('pf-progress-label').textContent = 'Aucun champ obligatoire';
         return;
       }
-      const filled = required.filter(f => hasValue(f.id)).length;
+      const filled = required.filter(f =>
+        f.type === 'repeater'
+          ? [...document.querySelectorAll(`.pf-repeater[data-fid="${f.id}"] .pf-rep-item`)]
+              .some(it => _repeaterItemFilled(f, it.dataset.idx))
+          : hasValue(f.id)
+      ).length;
       const pct = Math.round((filled / required.length) * 100);
       document.getElementById('pf-progress-fill').style.width = pct + '%';
       document.getElementById('pf-progress-label').textContent = `${filled} / ${required.length} champs obligatoires`;
@@ -1595,6 +1741,83 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Bloc répétable — validation + assemblage de la valeur
+    // ═══════════════════════════════════════════════════════════════
+
+    // Un item est "rempli" si au moins un de ses sous-champs a une valeur.
+    function _repeaterItemFilled(field, idx) {
+      return (field.options?.fields || []).some(sf => {
+        const v = _values[`${field.id}::${idx}::${sf.id}`];
+        if (v == null) return false;
+        if (typeof v === 'string') return v.trim() !== '';
+        if (Array.isArray(v)) return v.length > 0;
+        return true;
+      });
+    }
+
+    // Valide chaque item visible du repeater. Retourne l'id (composé) du
+    // premier sous-champ en erreur, ou null si tout est bon.
+    function _validateRepeater(field) {
+      const wrap = document.querySelector(`.pf-repeater[data-fid="${field.id}"]`);
+      if (!wrap) return null;
+      const items = [...wrap.querySelectorAll('.pf-rep-item')];
+      const subFields = field.options?.fields || [];
+      let firstErr = null;
+
+      for (const item of items) {
+        const idx = item.dataset.idx;
+        for (const sf of subFields) {
+          const key = `${field.id}::${idx}::${sf.id}`;
+          clearFieldError(key);
+          const v = _values[key];
+          const filled = v != null && (typeof v === 'string' ? v.trim() !== ''
+            : (Array.isArray(v) ? v.length > 0 : true));
+          if (sf.required && !filled) {
+            setFieldError(key, 'Ce champ est obligatoire');
+            firstErr = firstErr || key;
+          } else if (filled && sf.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+            setFieldError(key, 'Adresse email invalide');
+            firstErr = firstErr || key;
+          } else if (filled && (sf.type === 'website' || sf.type === 'url-external') && !/^https?:\/\//.test(v)) {
+            setFieldError(key, 'L\'URL doit commencer par http:// ou https://');
+            firstErr = firstErr || key;
+          }
+        }
+      }
+      return firstErr;
+    }
+
+    // Assemble l'objet de réponses final : valeurs simples + chaque
+    // repeater reconstruit en tableau d'objets, dans l'ordre du DOM.
+    function _buildResponses() {
+      const out = {};
+      for (const [k, v] of Object.entries(_values)) {
+        if (k.includes('::')) continue;       // clé scratch de repeater
+        out[k] = v;
+      }
+      for (const sec of _form.sections || []) {
+        for (const f of (sec.fields || [])) {
+          if (f.type !== 'repeater') continue;
+          const wrap = document.querySelector(`.pf-repeater[data-fid="${f.id}"]`);
+          const arr = [];
+          if (wrap) {
+            wrap.querySelectorAll('.pf-rep-item').forEach(item => {
+              const idx = item.dataset.idx;
+              const obj = {};
+              for (const sf of (f.options?.fields || [])) {
+                const val = _values[`${f.id}::${idx}::${sf.id}`];
+                if (val !== undefined && val !== '' && val != null) obj[sf.id] = val;
+              }
+              arr.push(obj);
+            });
+          }
+          out[f.id] = arr;
+        }
+      }
+      return out;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Validation
     // ═══════════════════════════════════════════════════════════════
     function validate() {
@@ -1606,6 +1829,12 @@
           // leur valeur ne doit pas bloquer la soumission ni être
           // considérée comme "requise non remplie".
           if (!_visibleFieldIds.has(f.id)) continue;
+          // Bloc répétable : validation déléguée (chaque item, chaque sous-champ).
+          if (f.type === 'repeater') {
+            const repErr = _validateRepeater(f);
+            if (repErr) firstErrId = firstErrId || repErr;
+            continue;
+          }
           if (isFieldRequired(f) && !hasValue(f.id)) {
             setFieldError(f.id, 'Ce champ est obligatoire');
             firstErrId = firstErrId || f.id;
@@ -1650,7 +1879,7 @@
         const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ responses: _values }),
+          body: JSON.stringify({ responses: _buildResponses() }),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -1830,6 +2059,7 @@
 
       bindEvents(document.getElementById('pf-app'));
       initSignatureCanvases();
+      renumberAllRepeaters();
       prefillFromUrl();
       applyPrefilledToDom();
       refreshVisibility();
