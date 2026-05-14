@@ -361,6 +361,30 @@
   <div id="modal-inner"></div>
 </div>
 
+<!-- ══ TIME-SAVE MODAL — détail du temps gagné par outil ══════════ -->
+<div class="ts-backdrop" id="ts-backdrop"></div>
+<div class="ts-modal" id="ts-modal" role="dialog" aria-modal="true" aria-label="Temps gagné potentiel">
+  <div class="ts-head">
+    <div class="ts-head-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+           style="width:16px;height:16px;flex-shrink:0;opacity:.8">
+        <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>
+      </svg>
+      Temps gagné potentiel
+    </div>
+    <div class="ts-period-toggle" id="ts-period-toggle">
+      <button type="button" data-period="day" class="active">Jour</button>
+      <button type="button" data-period="month">Mois</button>
+    </div>
+    <button class="ts-close" id="ts-close" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           style="width:14px;height:14px"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="ts-body" id="ts-body"></div>
+  <div class="ts-foot" id="ts-foot"></div>
+</div>
+
 <!-- ══ SETTINGS PANEL ══════════════════════════════════════════ -->
 <div class="settings-backdrop" id="settings-backdrop"></div>
 <div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-label="Paramètres">

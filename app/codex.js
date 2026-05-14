@@ -810,15 +810,18 @@ function _destStepDone() {
   const s = _state.destination.standard;
   if (!s) return _destStepCategory();
 
+  // Résolution : toujours 300 DPI dans le modèle Kodex (cf. kodex-scale.js).
+  // L'échelle de travail et le format de travail réel sont gérés par le
+  // calculateur d'échelle juste en dessous — on ne les duplique pas ici
+  // pour éviter toute contradiction (échelle réelle vs échelle réduite).
+  const _scale = computeScale(s);
   const rows = [
-    ['Format fini',      formatDimensions(s)],
-    ['Format de travail', s.format_travail ? formatDimensions({ format_fini: s.format_travail }) : null],
-    ['Fond perdu',       formatBleed(s)],
-    ['Marge sécurité',   s.safe_margin_mm ? `${s.safe_margin_mm} mm` : null],
-    ['Résolution',       formatDpi(s)],
-    ['Échelle de travail', s.scale],
-    ['Colorimétrie',     s.color_profile],
-    ['Export attendu',   s.export_format],
+    ['Format fini',    formatDimensions(s)],
+    ['Fond perdu',     formatBleed(s)],
+    ['Marge sécurité', s.safe_margin_mm ? `${s.safe_margin_mm} mm` : null],
+    ['Résolution',     _scale ? `${_scale.output_dpi} DPI` : formatDpi(s)],
+    ['Colorimétrie',   s.color_profile],
+    ['Export attendu', s.export_format],
   ].filter(r => r[1]);
 
   return `

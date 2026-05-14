@@ -216,9 +216,11 @@ function renderHeroDate() {
 // ── Jauge "temps gagné potentiel" ─────────────────────────────
 // Estimation indicative : somme des minutes/jour économisées par les
 // outils & artefacts actifs du Dashboard (champ `timeSaved` du catalogue).
-// Clic = bascule jour / mois. Le masquage d'un pad ne change rien (il
-// reste "actif") ; seule la désactivation/retrait fait varier la jauge.
+// Le chip affiche le total ; un clic ouvre la modale de détail par outil.
+// Le masquage d'un pad ne change rien (il reste "actif") ; seule la
+// désactivation/retrait fait varier la jauge.
 const TS_WORKDAYS_PER_MONTH = 21;
+let _timeSaveItems = [];   // [{ id, name, min }] — recalculé à chaque render
 
 function _formatDuration(min) {
     const m = Math.round(min);
@@ -228,41 +230,123 @@ function _formatDuration(min) {
     return r ? `${h} h ${r}` : `${h} h`;
 }
 
+function _tsPeriod() {
+    return localStorage.getItem('ks_timesave_period') === 'month' ? 'month' : 'day';
+}
+
 function _renderTimeSaveGauge(ownedTools, ownedArts) {
     const chip = document.getElementById('timesave-chip');
     if (!chip) return;
 
-    const items = [...ownedTools, ...ownedArts];
-    const perDay = items.reduce((sum, it) => {
-        const t = Number(getCatalogEntry(it.id)?.timeSaved) || 0;
-        return sum + t;
-    }, 0);
+    _timeSaveItems = [...ownedTools, ...ownedArts]
+        .map(it => ({
+            id:   it.id,
+            name: getUserLabel(it.id) || it.name,
+            min:  Number(getCatalogEntry(it.id)?.timeSaved) || 0,
+        }))
+        .filter(it => it.min > 0)
+        .sort((a, b) => b.min - a.min);
 
-    if (perDay <= 0) { chip.hidden = true; return; }
-    chip.hidden = false;
-
-    let period = localStorage.getItem('ks_timesave_period') || 'day';
-    const valEl    = document.getElementById('timesave-val');
-    const periodEl = document.getElementById('timesave-period');
-
-    const paint = () => {
-        const isMonth = period === 'month';
-        const total = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
-        valEl.textContent    = _formatDuration(total);
-        periodEl.textContent = isMonth ? '/ mois' : '/ jour';
-        chip.title = `Temps gagné estimé avec vos ${items.length} outil${items.length > 1 ? 's' : ''} actif${items.length > 1 ? 's' : ''} `
-            + `— estimation indicative sur une journée de bureau de 7 h. Cliquer pour basculer jour / mois.`;
-    };
-    paint();
+    _paintTimeSaveChip();
 
     if (!chip.dataset.bound) {
         chip.dataset.bound = '1';
-        chip.addEventListener('click', () => {
-            period = period === 'month' ? 'day' : 'month';
-            localStorage.setItem('ks_timesave_period', period);
-            paint();
+        chip.addEventListener('click', _openTimeSaveModal);
+    }
+}
+
+function _paintTimeSaveChip() {
+    const chip = document.getElementById('timesave-chip');
+    if (!chip) return;
+    const perDay = _timeSaveItems.reduce((s, it) => s + it.min, 0);
+    if (perDay <= 0) { chip.hidden = true; return; }
+    chip.hidden = false;
+
+    const isMonth = _tsPeriod() === 'month';
+    const total   = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
+    document.getElementById('timesave-val').textContent    = _formatDuration(total);
+    document.getElementById('timesave-period').textContent = isMonth ? '/ mois' : '/ jour';
+    chip.title = `Temps gagné estimé avec vos ${_timeSaveItems.length} outil${_timeSaveItems.length > 1 ? 's' : ''} actif${_timeSaveItems.length > 1 ? 's' : ''} — cliquer pour le détail`;
+}
+
+function _renderTimeSaveModalBody() {
+    const body = document.getElementById('ts-body');
+    const foot = document.getElementById('ts-foot');
+    if (!body || !foot) return;
+
+    const isMonth = _tsPeriod() === 'month';
+    const factor  = isMonth ? TS_WORKDAYS_PER_MONTH : 1;
+    const periodLbl = isMonth ? 'par mois' : 'par jour';
+
+    // Sync de l'état actif du toggle
+    document.querySelectorAll('#ts-period-toggle button').forEach(b => {
+        b.classList.toggle('active', b.dataset.period === (isMonth ? 'month' : 'day'));
+    });
+
+    if (!_timeSaveItems.length) {
+        body.innerHTML = `<div class="ts-empty">Aucun outil actif sur votre Dashboard pour le moment.</div>`;
+        foot.innerHTML = '';
+        return;
+    }
+
+    const maxMin = Math.max(..._timeSaveItems.map(it => it.min));
+    body.innerHTML = _timeSaveItems.map(it => {
+        const val = it.min * factor;
+        const pct = Math.max(6, Math.round(it.min / maxMin * 100));
+        return `
+        <div class="ts-row">
+          <div class="ts-row-top">
+            <span class="ts-row-name">${it.name}</span>
+            <span class="ts-row-val">${_formatDuration(val)}</span>
+          </div>
+          <div class="ts-bar"><div class="ts-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
+
+    const totalMin = _timeSaveItems.reduce((s, it) => s + it.min, 0) * factor;
+    foot.innerHTML = `
+      <div class="ts-total-row">
+        <span>Total potentiel (${_timeSaveItems.length} outil${_timeSaveItems.length > 1 ? 's' : ''})</span>
+        <span class="ts-total-val">${_formatDuration(totalMin)} ${periodLbl}</span>
+      </div>
+      <div class="ts-disclaimer">
+        Estimation indicative basée sur une journée de bureau standard de 7 h
+        ${isMonth ? `(${TS_WORKDAYS_PER_MONTH} jours ouvrés / mois)` : ''}.
+        Le total s'additionne à chaque outil ajouté à votre Dashboard.
+      </div>`;
+}
+
+function _openTimeSaveModal() {
+    const backdrop = document.getElementById('ts-backdrop');
+    const modal    = document.getElementById('ts-modal');
+    if (!backdrop || !modal) return;
+
+    _renderTimeSaveModalBody();
+    backdrop.classList.add('open');
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    if (!modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        document.getElementById('ts-close')?.addEventListener('click', _closeTimeSaveModal);
+        backdrop.addEventListener('click', _closeTimeSaveModal);
+        document.getElementById('ts-period-toggle')?.addEventListener('click', e => {
+            const btn = e.target.closest('button[data-period]');
+            if (!btn) return;
+            localStorage.setItem('ks_timesave_period', btn.dataset.period);
+            _renderTimeSaveModalBody();
+            _paintTimeSaveChip();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && modal.classList.contains('open')) _closeTimeSaveModal();
         });
     }
+}
+
+function _closeTimeSaveModal() {
+    document.getElementById('ts-backdrop')?.classList.remove('open');
+    document.getElementById('ts-modal')?.classList.remove('open');
+    document.body.style.overflow = '';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1073,10 +1157,12 @@ function _renderFeaturedCard(app) {
 function _renderAppCardSmall(app) {
     const ownedIds = getOwnedIds();
     const isOwned  = (ownedIds === null) || ownedIds.includes(app.id);
+    // Outil possédé mais retiré du Dashboard → réinstallable
+    const isDeactivated = isOwned && app.real && isPadDeactivated(app.id);
     const priceLbl = app.real
-        ? (isOwned ? '✓ Actif' : `${(app.price ?? 0).toFixed(2).replace('.', ',')} €`)
+        ? (isDeactivated ? 'Réinstaller' : (isOwned ? '✓ Actif' : `${(app.price ?? 0).toFixed(2).replace('.', ',')} €`))
         : '00,00 €';
-    const action   = app.real && !isOwned ? 'obtenir' : 'soon';
+    const action   = app.real && (!isOwned || isDeactivated) ? 'obtenir' : 'soon';
 
     // Trois sources possibles pour l'icône, dans cet ordre :
     // 1. Screenshot uploadé via admin (iconId) — background image
@@ -1099,7 +1185,7 @@ function _renderAppCardSmall(app) {
             <div class="ksfs-app-body">
                 <div class="ksfs-app-name">${app.title}</div>
                 <div class="ksfs-app-desc">${app.shortDesc || ''}</div>
-                <button class="ksfs-buy-btn${isOwned && app.real ? ' ksfs-buy-btn--owned' : ''}"
+                <button class="ksfs-buy-btn${isOwned && app.real && !isDeactivated ? ' ksfs-buy-btn--owned' : ''}"
                         data-action="${action}" data-id="${app.id}"
                         ${!app.real ? 'aria-disabled="true"' : ''}>
                     ${priceLbl}
@@ -1165,6 +1251,10 @@ function _renderKStoreAppDetail(appId) {
     const btnAction = (() => {
         if (!app.real) {
             return `<button class="ksfs-detail-buy ksfs-detail-buy--soon" disabled>Bientôt</button>`;
+        }
+        // Outil possédé mais retiré du Dashboard → bouton de réinstallation
+        if (isOwned && isPadDeactivated(appId)) {
+            return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">Réinstaller</button>`;
         }
         if (isOwned) {
             return `<span class="ksfs-detail-buy ksfs-detail-buy--owned">✓ Actif</span>`;

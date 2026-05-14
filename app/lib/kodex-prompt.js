@@ -28,14 +28,15 @@ function _fieldValue(v) {
 function _renderTechBlock(std) {
   if (!std) return '';
   const scale = computeScale(std);
+  // Résolution toujours 300 DPI (modèle Kodex) ; échelle et format de
+  // travail sont détaillés dans le bloc « Contraintes d'échelle » ci-dessous.
   const lines = [
     `- **Prestataire** : ${std.vendor}`,
     `- **Produit** : ${std.product_name}`,
     `- **Format fini** : ${formatDimensions(std)}`,
-    std.format_travail ? `- **Format de travail** : ${formatDimensions({ format_fini: std.format_travail })}` : null,
     formatBleed(std) ? `- **Fond perdu** : ${formatBleed(std)}` : null,
     std.safe_margin_mm ? `- **Marge de sécurité** : ${std.safe_margin_mm} mm` : null,
-    formatDpi(std) ? `- **Résolution** : ${formatDpi(std)}` : null,
+    `- **Résolution** : ${scale && scale.output_dpi ? scale.output_dpi : 300} DPI`,
     std.color_profile ? `- **Colorimétrie** : ${std.color_profile}` : null,
     std.export_format ? `- **Export attendu** : ${std.export_format}` : null,
   ].filter(Boolean);

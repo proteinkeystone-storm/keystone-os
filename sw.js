@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.19.0-sprints-kodex-dashboard-config';
+const VERSION       = 'ks-os-v4.19.1-fix-reinstall-kodex-dpi-timesave-modal';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
