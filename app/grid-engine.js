@@ -25,64 +25,89 @@ export const reactivatePad     = id        => localStorage.removeItem(LS_DEACTIV
 let _editTriggered = false;
 
 export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
-    _setupDragDrop(container);
-    _setupEditMode(container, onPadChanged, onDeactivate);
+    _setupPointerInteractions(container, onPadChanged, onDeactivate);
+    _setupContextMenu(container, onPadChanged, onDeactivate);
     _setupClickDelegate(container, onOpen);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP — carte entière saisissable, leap-frog distance-based
+// INTERACTIONS POINTEUR — arbitrage unifié tap / drag / long-press
 // ─────────────────────────────────────────────────────────────
-//  · on peut saisir N'IMPORTE OÙ sur la carte (plus seulement la
-//    poignée) → déplacement beaucoup plus fluide et naturel
-//  · ghost (clone) suit le curseur en position:fixed
-//  · src reste en DOM avec class .dragging (visuel : effacé)
-//  · à chaque pointermove : on cherche la carte LA PLUS PROCHE du
-//    curseur (distance euclidienne au centre) → leap-frog multi-cran,
-//    fonctionne dans les deux axes (gauche/droite ET haut/bas)
-//  · pointerup → ghost retiré, ordre persisté
-//  · _dragJustHappened : empêche le clic d'ouverture juste après un drag
+// UN SEUL handler pointerdown décide, de façon déterministe, entre :
+//   · tap          → ouverture de l'outil (géré par le click delegate)
+//   · drag         → réorganisation (mouvement franc avant le délai)
+//   · long-press   → mode édition (immobile pendant LP_DURATION)
+// L'ancienne version avait deux handlers concurrents (drag + edit) qui
+// se volaient mutuellement l'événement → long-press peu fiable. Ici un
+// état `mode` ('pending' | 'drag' | 'edit') tranche une fois pour toutes.
+//
+// Drag : carte entière saisissable, ghost qui suit le curseur,
+// réorganisation leap-frog distance-based (X et Y).
 // ═══════════════════════════════════════════════════════════════
-const DRAG_THRESHOLD = 5; // px avant d'activer le drag réel
+const DRAG_THRESHOLD = 8;    // px de mouvement franc → c'est un drag
+const LP_DURATION    = 550;  // ms immobile → c'est un long-press
 let _dragJustHappened = false;
 
-function _setupDragDrop(container) {
+function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
     container.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;                          // clic gauche uniquement
-        const src = e.target.closest('.pad-card');
-        if (!src) return;
-        // Pas de drag : pendant un rename, sur l'overlay de confirmation,
-        // ni depuis un champ éditable.
-        if (src.classList.contains('pad-renaming')) return;
+        if (e.button !== 0) return;                       // clic gauche / tap uniquement
+        const card = e.target.closest('.pad-card');
+        if (!card) return;
+        // Jamais d'interaction pendant un rename, sur l'overlay de
+        // confirmation, ni depuis un champ éditable.
+        if (card.classList.contains('pad-renaming')) return;
         if (e.target.closest('.pad-confirm-overlay')) return;
         if (e.target.closest('[contenteditable]')) return;
 
         const startX  = e.clientX;
         const startY  = e.clientY;
-        const sRect   = src.getBoundingClientRect();
+        const sRect   = card.getBoundingClientRect();
         const offsetX = startX - sRect.left;
         const offsetY = startY - sRect.top;
         const W       = sRect.width;
         const H       = sRect.height;
 
-        let active = false;
-        let ghost  = null;
+        // La poignée (grip) est dédiée au drag : pas de long-press depuis elle.
+        const fromHandle = !!e.target.closest('.pad-drag-handle');
+
+        let mode  = 'pending';   // 'pending' | 'drag' | 'edit'
+        let ghost = null;
+        let lpTimer = null;
+
+        const clearPressing = () => card.classList.remove('pad-pressing');
+        const cancelLP      = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+
+        // Feedback visuel immédiat de l'appui
+        card.classList.add('pad-pressing');
+
+        // Long-press → mode édition (uniquement si on n'a pas bougé, et
+        // pas depuis la poignée de déplacement)
+        if (!fromHandle) {
+            lpTimer = setTimeout(() => {
+                lpTimer = null;
+                if (mode !== 'pending') return;     // un drag a déjà pris la main
+                mode = 'edit';
+                clearPressing();
+                navigator.vibrate?.(110);
+                _editTriggered = true;
+                _triggerEditMode(card, onPadChanged, onDeactivate);
+            }, LP_DURATION);
+        }
 
         const onMove = ev => {
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
+            if (mode === 'edit') return;        // édition en cours → on ignore les moves
 
-            if (!active) {
-                if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-                active = true;
-                // Le drag prend le pas sur le long-press d'édition
-                _cancelLongPress();
-                src.classList.remove('pad-pressing');
+            const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+
+            if (mode === 'pending') {
+                if (dist < DRAG_THRESHOLD) return;
+                // Mouvement franc avant le long-press → c'est un drag
+                mode = 'drag';
+                cancelLP();
+                clearPressing();
                 document.body.classList.add('ks-dragging');
-                src.classList.add('dragging');
-
-                // Ghost = clone visuel qui suit le curseur 1:1
-                ghost = src.cloneNode(true);
+                card.classList.add('dragging');
+                ghost = card.cloneNode(true);
                 ghost.classList.remove('dragging', 'pad-pressing', 'editing');
                 ghost.classList.add('pad-card-ghost');
                 ghost.style.cssText =
@@ -91,85 +116,36 @@ function _setupDragDrop(container) {
                 document.body.appendChild(ghost);
             }
 
+            if (mode !== 'drag') return;
             ev.preventDefault();
-
-            // Position du ghost : suit le curseur sans aucune latence
             ghost.style.transform =
                 `translate3d(${ev.clientX - offsetX}px, ${ev.clientY - offsetY}px, 0) scale(1.03)`;
-
-            // Cible = carte LA PLUS PROCHE du curseur (autorise le leap-frog)
-            const cards = [...container.querySelectorAll('.pad-card')].filter(c => c !== src);
-            if (!cards.length) return;
-
-            let best = null, bestDist = Infinity;
-            for (const c of cards) {
-                const r  = c.getBoundingClientRect();
-                const cx = r.left + r.width / 2;
-                const cy = r.top  + r.height / 2;
-                const d  = Math.hypot(ev.clientX - cx, ev.clientY - cy);
-                if (d < bestDist) { bestDist = d; best = c; }
-            }
-            if (!best) return;
-
-            // Insertion before/after — prend en compte X ET Y pour gérer
-            // les déplacements verticaux (haut/bas) et horizontaux (gauche/droite).
-            const r  = best.getBoundingClientRect();
-            const cx = r.left + r.width  / 2;
-            const cy = r.top  + r.height / 2;
-            // Si la cible est sur une autre rangée que le curseur (différence Y > height/2),
-            // on décide before/after sur Y. Sinon, on décide sur X.
-            const verticalMove = Math.abs(ev.clientY - cy) > r.height / 2;
-            const before = verticalMove
-                ? (ev.clientY < cy)
-                : (ev.clientX < cx);
-
-            const willMove = before
-                ? (best.previousElementSibling !== src)
-                : (best.nextElementSibling     !== src);
-
-            if (!willMove) return;
-
-            // FLIP : capture les positions, fait le move, anime les deltas
-            const movables = cards; // toutes les cartes sauf src
-            const before_  = new Map();
-            for (const c of movables) before_.set(c, c.getBoundingClientRect());
-
-            if (before) best.before(src); else best.after(src);
-
-            for (const c of movables) {
-                const o = before_.get(c);
-                const n = c.getBoundingClientRect();
-                const ddx = o.left - n.left;
-                const ddy = o.top  - n.top;
-                if (ddx === 0 && ddy === 0) continue;
-                c.style.transition = 'none';
-                c.style.transform  = `translate(${ddx}px, ${ddy}px)`;
-                // Force reflow puis enclenche la transition retour à 0
-                void c.offsetWidth;
-                c.style.transition = 'transform .26s cubic-bezier(.25,.8,.25,1)';
-                c.style.transform  = '';
-            }
+            _dragReorder(container, card, ev);
         };
 
         const onUp = () => {
             window.removeEventListener('pointermove',   onMove);
             window.removeEventListener('pointerup',     onUp);
             window.removeEventListener('pointercancel', onUp);
-            if (!active) return;
+            cancelLP();
+            clearPressing();
 
-            document.body.classList.remove('ks-dragging');
-            src.classList.remove('dragging');
-            ghost?.remove();
-            ghost = null;
-            // Nettoie les inline styles du FLIP sur les cartes
-            container.querySelectorAll('.pad-card').forEach(c => {
-                c.style.transition = '';
-                c.style.transform  = '';
-            });
-            _persistOrder(container);
-            // Empêche le clic d'ouverture qui suit immédiatement le drop
-            _dragJustHappened = true;
-            setTimeout(() => { _dragJustHappened = false; }, 60);
+            if (mode === 'drag') {
+                document.body.classList.remove('ks-dragging');
+                card.classList.remove('dragging');
+                ghost?.remove();
+                ghost = null;
+                container.querySelectorAll('.pad-card').forEach(c => {
+                    c.style.transition = '';
+                    c.style.transform  = '';
+                });
+                _persistOrder(container);
+                // Empêche le clic d'ouverture qui suit immédiatement le drop
+                _dragJustHappened = true;
+                setTimeout(() => { _dragJustHappened = false; }, 80);
+            }
+            // mode 'pending' → c'était un tap → le click delegate ouvre l'outil
+            // mode 'edit'    → la barre d'édition est déjà ouverte
         };
 
         window.addEventListener('pointermove',   onMove);
@@ -181,89 +157,81 @@ function _setupDragDrop(container) {
     container.addEventListener('dragstart', e => e.preventDefault());
 }
 
+// Réorganisation pendant un drag : insère `src` à côté de la carte la
+// plus proche du curseur (leap-frog), avec animation FLIP des voisines.
+function _dragReorder(container, src, ev) {
+    const cards = [...container.querySelectorAll('.pad-card')].filter(c => c !== src);
+    if (!cards.length) return;
+
+    let best = null, bestDist = Infinity;
+    for (const c of cards) {
+        const r  = c.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top  + r.height / 2;
+        const d  = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+        if (d < bestDist) { bestDist = d; best = c; }
+    }
+    if (!best) return;
+
+    // Insertion before/after — gère les déplacements verticaux ET horizontaux.
+    const r  = best.getBoundingClientRect();
+    const cx = r.left + r.width  / 2;
+    const cy = r.top  + r.height / 2;
+    const verticalMove = Math.abs(ev.clientY - cy) > r.height / 2;
+    const before = verticalMove ? (ev.clientY < cy) : (ev.clientX < cx);
+
+    const willMove = before
+        ? (best.previousElementSibling !== src)
+        : (best.nextElementSibling     !== src);
+    if (!willMove) return;
+
+    // FLIP : capture les positions, fait le move, anime les deltas
+    const before_ = new Map();
+    for (const c of cards) before_.set(c, c.getBoundingClientRect());
+
+    if (before) best.before(src); else best.after(src);
+
+    for (const c of cards) {
+        const o = before_.get(c);
+        const n = c.getBoundingClientRect();
+        const ddx = o.left - n.left;
+        const ddy = o.top  - n.top;
+        if (ddx === 0 && ddy === 0) continue;
+        c.style.transition = 'none';
+        c.style.transform  = `translate(${ddx}px, ${ddy}px)`;
+        void c.offsetWidth;
+        c.style.transition = 'transform .26s cubic-bezier(.25,.8,.25,1)';
+        c.style.transform  = '';
+    }
+}
+
 function _persistOrder(container) {
     const ids = [...container.querySelectorAll('.pad-card')].map(c => c.dataset.id);
     saveOrder(ids);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// EDIT MODE (Long Press 3s + Clic Droit)
+// MODE ÉDITION — déclenché par clic droit ou long-press
+// (le long-press est géré dans _setupPointerInteractions ci-dessus ;
+//  ici on ne câble que le clic droit et le dismiss au clic extérieur)
 // ═══════════════════════════════════════════════════════════════
-let _longPressTimer = null;
-let _lpStartX = 0;
-let _lpStartY = 0;
-const LP_DURATION  = 1500; // ms — long press déclenché après 1.5s
-const LP_THRESHOLD = 14;   // px — déplacement max toléré avant d'annuler le long press
-
-function _setupEditMode(container, onPadChanged, onDeactivate) {
-    // Clic droit
+function _setupContextMenu(container, onPadChanged, onDeactivate) {
+    // Clic droit → mode édition immédiat
     container.addEventListener('contextmenu', e => {
         const card = e.target.closest('.pad-card');
         if (!card) return;
+        if (card.classList.contains('pad-renaming')) return;
         e.preventDefault();
+        _editTriggered = true;
         _triggerEditMode(card, onPadChanged, onDeactivate);
     });
 
-    // Long press — pointer events (mobile + desktop)
-    container.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return; // clic gauche uniquement
-        const card = e.target.closest('.pad-card');
-        if (!card || card.classList.contains('pad-renaming')) return; // pas pendant un rename
-
-        // Ne pas démarrer le long-press depuis la poignée (réservée au drag)
-        if (e.target.closest('.pad-drag-handle')) return;
-
-        // Reset complet — évite les timers stackés et les états pad-pressing rémanents
-        _cancelLongPress();
-        container.querySelectorAll('.pad-card.pad-pressing').forEach(c => c.classList.remove('pad-pressing'));
-
-        _editTriggered = false;
-        _lpStartX = e.clientX;
-        _lpStartY = e.clientY;
-        // Feedback visuel dès le début de l'appui
-        card.classList.add('pad-pressing');
-        _longPressTimer = setTimeout(() => {
-            navigator.vibrate?.(120);
-            card.classList.remove('pad-pressing');
-            _editTriggered = true;
-            _triggerEditMode(card, onPadChanged, onDeactivate);
-        }, LP_DURATION);
-    });
-
-    // Annuler si relâché avant 3s
-    container.addEventListener('pointerup', e => {
-        const card = e.target.closest('.pad-card');
-        card?.classList.remove('pad-pressing');
-        _cancelLongPress();
-    });
-    container.addEventListener('pointercancel', e => {
-        const card = e.target.closest('.pad-card');
-        card?.classList.remove('pad-pressing');
-        _cancelLongPress();
-    });
-
-    // Annuler uniquement si déplacement significatif (évite les micro-tremblements)
-    container.addEventListener('pointermove', e => {
-        if (!_longPressTimer) return;
-        const dx = Math.abs(e.clientX - _lpStartX);
-        const dy = Math.abs(e.clientY - _lpStartY);
-        if (dx > LP_THRESHOLD || dy > LP_THRESHOLD) {
-            const card = e.target.closest('.pad-card');
-            card?.classList.remove('pad-pressing');
-            _cancelLongPress();
-        }
-    });
-
-    // Dismiss edit bar au clic extérieur (capture phase)
+    // Dismiss de la barre d'édition au clic extérieur (capture phase)
     document.addEventListener('click', e => {
         if (!e.target.closest('.pad-card.editing') && !e.target.closest('.pad-edit-bar')) {
             _dismissEditBar();
         }
     }, true);
-}
-
-function _cancelLongPress() {
-    if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
 }
 
 // ── Barre d'édition FLOTTANTE (position: fixed · body) ───────
@@ -272,7 +240,6 @@ let _floatBar            = null;
 let _floatScrollHandler  = null;
 
 function _triggerEditMode(card, onPadChanged, onDeactivate) {
-    _cancelLongPress();
     if (_activeEditCard === card) { _dismissEditBar(); return; } // toggle
     _dismissEditBar();
 
