@@ -42,19 +42,22 @@ const ICONS = {
     'calc':    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg>`,
     'table':   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
     // ── Pictogrammes brand (Stéphane mai 2026) ──────────────
-    // Réinterprétations en outline 1.5px (style Lucide cohérent
-    // avec tout le reste du registre) des SVG filled initialement
-    // fournis. Chaque picto garde le concept visuel original :
-    // - kodex         : cible avec croix de visée et point central (brief précis)
-    // - pulsa         : document avec ligne pulsée + cercle d'envoi (collecte)
-    // - sdqr          : 3 "yeux" QR + modules (pattern QR clair)
-    // - muse          : cadre avec étincelle créative (planche d'ambiance)
-    // - multiportails : 3 lignes courtes + 3 lignes longues (diffusion multi-canal)
-    'kodex':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
-    'pulsa':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><line x1="6.5" y1="7.5" x2="12.5" y2="7.5"/><line x1="6.5" y1="11.5" x2="10" y2="11.5"/><circle cx="17" cy="17" r="4"/><line x1="17" y1="15" x2="17" y2="19"/><line x1="15" y1="17" x2="19" y2="17"/></svg>`,
-    'sdqr':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="5.5" y="5.5" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="3" width="7" height="7"/><rect x="16.5" y="5.5" width="2" height="2" fill="currentColor" stroke="none"/><rect x="3" y="14" width="7" height="7"/><rect x="5.5" y="16.5" width="2" height="2" fill="currentColor" stroke="none"/><line x1="14" y1="14" x2="14" y2="16"/><line x1="16" y1="14" x2="18" y2="14"/><line x1="20" y1="14" x2="21" y2="14"/><line x1="14" y1="18" x2="14" y2="21"/><line x1="17" y1="17" x2="17" y2="19"/><line x1="20" y1="17" x2="20" y2="19"/><line x1="17" y1="21" x2="19" y2="21"/></svg>`,
-    'muse':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M12 7.5l1 2.5 2.5 1-2.5 1L12 14.5l-1-2.5L8.5 11l2.5-1z"/><line x1="7" y1="22" x2="17" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>`,
-    'multiportails':  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="5" y2="6"/><line x1="8" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="5" y2="12"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="5" y2="18"/><line x1="8" y1="18" x2="21" y2="18"/></svg>`,
+    // Pictos identitaires des 5 artefacts/outils principaux.
+    // Style outline cohérent avec le reste du registre mais
+    // stroke-width 1.8 (légèrement plus marqué que le 1.5 par
+    // défaut) pour donner du poids visuel sur les cards du
+    // dashboard. Concepts préservés des SVG fournis par Stéphane.
+    // - kodex         : cible avec croix de visée (brief précis)
+    // - pulsa         : document + cercle "+" (formulaire+collecte)
+    // - sdqr          : 3 carrés à coins arrondis + modules
+    //                   (réutilise le picto QR de sdqr.js l.245-253)
+    // - muse          : cadre avec étincelle (planche d'ambiance)
+    // - multiportails : 3 lignes courtes + 3 longues (diffusion)
+    'kodex':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`,
+    'pulsa':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="14" height="14" rx="2"/><line x1="5" y1="6.5" x2="13" y2="6.5"/><line x1="5" y1="10.5" x2="11" y2="10.5"/><circle cx="17" cy="17" r="5"/><line x1="17" y1="14.5" x2="17" y2="19.5"/><line x1="14.5" y1="17" x2="19.5" y2="17"/></svg>`,
+    'sdqr':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg>`,
+    'muse':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="15" rx="2"/><path d="M12 6.5l1.4 3.6 3.6 1.4-3.6 1.4L12 16.5l-1.4-3.6L7 11.5l3.6-1.4z" fill="currentColor" stroke="none"/><line x1="6" y1="22" x2="18" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>`,
+    'multiportails':  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="5" x2="5" y2="5"/><line x1="8" y1="5" x2="22" y2="5"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="8" y1="12" x2="22" y2="12"/><line x1="2" y1="19" x2="5" y2="19"/><line x1="8" y1="19" x2="22" y2="19"/></svg>`,
 };
 
 // ── Palette par PLAN (et par type) ────────────────────────────
