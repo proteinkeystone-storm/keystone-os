@@ -877,10 +877,12 @@ html.light-mode .modal-close:hover {
 }
 
 /* ── Overlay racine (positionné par-dessus tout) ────────── */
+/* z-index 10000 = au-dessus de .ws-app (9999) pour que le panel
+   apparaisse bien quand un artefact fullscreen est ouvert. */
 .ws-help-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 10000;
   pointer-events: none;
 }
 .ws-help-overlay.is-on { pointer-events: auto; }
