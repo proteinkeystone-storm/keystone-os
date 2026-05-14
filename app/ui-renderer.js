@@ -3999,14 +3999,16 @@ function _libEnsureUids(lib) {
     return lib;
 }
 
-// Ouvre la bibliothèque interne : sauvegarde d'abord le dossier courant
-// (si le formulaire est suffisamment rempli), puis affiche le panneau.
+// Ouvre la bibliothèque interne. Si le formulaire est rempli, on
+// sauvegarde d'abord le dossier courant ; sinon (fiche vide) on ouvre
+// simplement le panneau pour consulter ce qui est déjà enregistré.
+// L'auto-save ne doit JAMAIS empêcher l'ouverture du panneau.
 async function _openModalLibrary(pad) {
     const panel = document.getElementById('modal-library');
     if (!panel) return;
 
-    // Sauvegarde automatique silencieuse du dossier en cours.
-    await _autoSaveCurrentTool(pad);
+    try { await _autoSaveCurrentTool(pad); }
+    catch (e) { console.warn('[library] auto-save ignoré :', e?.message || e); }
 
     _renderModalLibraryList(pad);
     panel.hidden = false;
@@ -4034,6 +4036,12 @@ async function _autoSaveCurrentTool(pad) {
     if (!form) return false;
     const formData = {};
     form.querySelectorAll('[name]').forEach(el => { formData[el.name] = (el.value || '').trim(); });
+
+    // Fiche vide → rien à sauvegarder. On sort tout de suite (aucune
+    // génération, aucun appel async) : appuyer sur « Bibliothèque » ne
+    // fait alors qu'ouvrir le panneau pour consulter les dossiers.
+    const hasContent = Object.values(formData).some(v => v && v.length > 0);
+    if (!hasContent) return false;
 
     // Dédoublonnage : si le dernier dossier de cet outil a exactement le
     // même contenu de formulaire, on ne resauvegarde pas.
