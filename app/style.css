@@ -5357,34 +5357,37 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 .ksfs-app-card:hover { background: rgba(255,255,255,.04); }
 .ksfs-app-icon {
-    width: 56px; height: 56px;
-    border-radius: 14px;
-    /* Fond teinté selon la palette du plan (data-palette du parent),
-       fallback sur un gris neutre si pas de palette. Si une image
-       (screenshot uploadé via admin) est définie dans le style inline,
-       elle override le background ; sinon on affiche le picto SVG
-       centré avec la couleur de la palette. */
-    background: var(--tool-bg, rgba(255,255,255,.06));
-    color: var(--tool-c, rgba(255,255,255,.6));
-    flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    display: flex;
+    /* Specs IDENTIQUES à .pad-icon du dashboard (style.css l.1032)
+       pour cohérence visuelle parfaite entre Dashboard et K-Store.
+       44×44, border 1px, radius 11px, SVG 22×22, fond/couleur via
+       les vars --tool-bg / --tool-c / --tool-bd définies par
+       [data-palette] sur l'article parent. */
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 44px; height: 44px;
+    background: var(--tool-bg, rgba(99,102,241,.1));
+    border: 1px solid var(--tool-bd, var(--bd));
+    border-radius: 11px;
+    color: var(--tool-c, var(--gold));
+    flex-shrink: 0;
     background-size: cover;
     background-position: center;
+    transition: transform .2s ease;
 }
 .ksfs-app-icon > svg {
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 22px;
+    display: block;
 }
 
-/* Palettes K-Store (réplique de .pad-card[data-palette] pour scope K-Store) */
-.ksfs-app-card[data-palette="slate"]   { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12); }
-.ksfs-app-card[data-palette="blue"]    { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  }
-.ksfs-app-card[data-palette="indigo"]  { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); }
-.ksfs-app-card[data-palette="violet"]  { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); }
-.ksfs-app-card[data-palette="amber"]   { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12); }
+/* Palettes K-Store (réplique de .pad-card[data-palette] pour scope K-Store)
+   Inclut --tool-bd pour la bordure 1px, identique au dashboard. */
+.ksfs-app-card[data-palette="slate"]   { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12); --tool-bd:rgba(148,163,184,.25); }
+.ksfs-app-card[data-palette="blue"]    { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  --tool-bd:rgba(56,189,248,.25); }
+.ksfs-app-card[data-palette="indigo"]  { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
+.ksfs-app-card[data-palette="violet"]  { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
+.ksfs-app-card[data-palette="amber"]   { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
 .ksfs-app-body { flex: 1; min-width: 0; padding-top: 2px; }
 .ksfs-app-name {
     font-size: 13px; font-weight: 700;
