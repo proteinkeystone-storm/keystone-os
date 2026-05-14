@@ -600,6 +600,62 @@
   border-style: dashed;
 }
 
+/* ── Éditeur de bloc répétable (repeater) ───────────────── */
+.pulsa-rep-minmax {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pulsa-rep-subs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.pulsa-rep-sub {
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 10px;
+  overflow: hidden;
+}
+.pulsa-rep-sub-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, .03);
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+}
+.pulsa-rep-sub-head .pulsa-input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.pulsa-rep-sub-num {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gold3, rgba(99,102,241,.15));
+  color: var(--gold, #6366f1);
+  border-radius: 6px;
+  font-size: 11px; font-weight: 800;
+}
+.pulsa-rep-sub-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+.pulsa-rep-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ws-text, var(--text));
+  cursor: pointer;
+}
+.pulsa-rep-check input { width: 15px; height: 15px; cursor: pointer; }
+
 /* ── Liste des réseaux sociaux ──────────────────────────── */
 .pulsa-networks {
   display: flex;

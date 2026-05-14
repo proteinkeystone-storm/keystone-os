@@ -262,6 +262,11 @@ function _onClick(e) {
   if (act === 'set-currency')     return _setCurrency(t.dataset.field, t.dataset.value);
   if (act === 'toggle-network')   return _toggleNetwork(t.dataset.field, t.dataset.network);
 
+  // Bloc répétable — édition des sous-champs
+  if (act === 'rep-add-sub')      return _repeaterAddSub(t.dataset.field);
+  if (act === 'rep-del-sub')      return _repeaterDelSub(t.dataset.field, t.dataset.idx);
+  if (act === 'rep-move-sub')     return _repeaterMoveSub(t.dataset.field, t.dataset.idx, t.dataset.dir);
+
   // Logique conditionnelle (P2B.1/.2)
   if (act === 'enable-visible-if')   return _enableVisibleIf(t.dataset.field);
   if (act === 'disable-visible-if')  return _disableVisibleIf(t.dataset.field);
@@ -736,6 +741,47 @@ function _deleteChoice(fieldId, choiceId) {
   const found = _findFieldById(fieldId);
   if (!found) return;
   found.field.options.choices = (found.field.options.choices || []).filter(c => c.id !== choiceId);
+  _renderAside();
+  _saveDraft();
+}
+
+// ── Édition des sous-champs d'un bloc répétable (repeater) ───
+function _repeaterAddSub(fieldId) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const f = found.field;
+  if (!f.options) f.options = {};
+  if (!Array.isArray(f.options.fields)) f.options.fields = [];
+  let n = f.options.fields.length + 1;
+  let id = 'sub' + n;
+  while (f.options.fields.some(x => x.id === id)) { n++; id = 'sub' + n; }
+  f.options.fields.push({
+    id, type: 'text-short', label: 'Nouveau champ', help: '',
+    required: false, width: 'full',
+    options: { placeholder: '', max_chars: 160 },
+  });
+  _renderAside();
+  _saveDraft();
+}
+
+function _repeaterDelSub(fieldId, idx) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const arr = found.field.options?.fields;
+  if (Array.isArray(arr)) arr.splice(Number(idx), 1);
+  _renderAside();
+  _saveDraft();
+}
+
+function _repeaterMoveSub(fieldId, idx, dir) {
+  const found = _findFieldById(fieldId);
+  if (!found) return;
+  const arr = found.field.options?.fields;
+  if (!Array.isArray(arr)) return;
+  const i = Number(idx);
+  const j = i + (dir === 'up' ? -1 : 1);
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
   _renderAside();
   _saveDraft();
 }
@@ -2255,8 +2301,142 @@ function _editorOptionsBlock(sid, field) {
     case 'nps':          return _editorNps(sid, field);
     case 'slider':       return _editorSlider(sid, field);
     case 'likert':       return _editorLikert(sid, field);
+    case 'repeater':     return _editorRepeater(sid, field);
     default:             return '';
   }
+}
+
+// ── Éditeur : bloc répétable (repeater) ──────────────────────
+function _editorRepeater(sid, field) {
+  const o = field.options || {};
+  const subs = Array.isArray(o.fields) ? o.fields : [];
+  const fid = field.id;
+  // Types autorisés comme sous-champs : ceux éditables sans sous-éditeur
+  // dédié (les choix/échelles nécessiteraient une UI imbriquée — V2).
+  const SUB_TYPES = ['text-short', 'text-long', 'email', 'website', 'url-external', 'amount', 'yes-no', 'date'];
+  const typeOpts = SUB_TYPES
+    .filter(k => FIELD_TYPES[k])
+    .map(k => ({ k, label: FIELD_TYPES[k].label }));
+
+  const subRow = (sf, i) => {
+    const base = `field.${sid}.${fid}.options.fields.${i}`;
+    const t = sf.type || 'text-short';
+    const so = sf.options || {};
+    let extra = '';
+    if (['text-short', 'text-long', 'email', 'website', 'url-external'].includes(t)) {
+      extra += `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Texte d'exemple</span>
+          <input class="pulsa-input" type="text" data-bind="${base}.options.placeholder"
+                 value="${_escape(so.placeholder || '')}">
+        </label>`;
+    }
+    if (t === 'text-short' || t === 'text-long') {
+      extra += `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Signes max</span>
+          <input class="pulsa-input" type="number" min="1"
+                 data-bind="${base}.options.max_chars"
+                 value="${so.max_chars ?? (t === 'text-long' ? 500 : 160)}">
+        </label>`;
+    }
+    if (t === 'amount') {
+      extra += `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Devise</span>
+          <input class="pulsa-input" type="text" data-bind="${base}.options.currency"
+                 value="${_escape(so.currency || 'EUR')}">
+        </label>`;
+    }
+    if (t === 'yes-no') {
+      extra += `
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Bouton « Oui »</span>
+          <input class="pulsa-input" type="text" data-bind="${base}.options.yes_label"
+                 value="${_escape(so.yes_label || 'Oui')}">
+        </label>
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Bouton « Non »</span>
+          <input class="pulsa-input" type="text" data-bind="${base}.options.no_label"
+                 value="${_escape(so.no_label || 'Non')}">
+        </label>`;
+    }
+    return `
+      <div class="pulsa-rep-sub">
+        <div class="pulsa-rep-sub-head">
+          <span class="pulsa-rep-sub-num">${i + 1}</span>
+          <input class="pulsa-input" type="text" placeholder="Libellé du sous-champ"
+                 data-bind="${base}.label" value="${_escape(sf.label || '')}">
+          <button class="pulsa-icon-btn" data-act="rep-move-sub" data-field="${fid}" data-idx="${i}" data-dir="up" title="Monter">↑</button>
+          <button class="pulsa-icon-btn" data-act="rep-move-sub" data-field="${fid}" data-idx="${i}" data-dir="down" title="Descendre">↓</button>
+          <button class="pulsa-icon-btn pulsa-icon-btn-danger" data-act="rep-del-sub" data-field="${fid}" data-idx="${i}" title="Supprimer">${icon('x', 12)}</button>
+        </div>
+        <div class="pulsa-rep-sub-body">
+          <label class="pulsa-fld">
+            <span class="pulsa-fld-label">Type</span>
+            <select class="pulsa-input" data-bind="${base}.type">
+              ${typeOpts.map(to => `<option value="${to.k}" ${to.k === t ? 'selected' : ''}>${_escape(to.label)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="pulsa-fld">
+            <span class="pulsa-fld-label">Largeur</span>
+            <select class="pulsa-input" data-bind="${base}.width">
+              <option value="full" ${(sf.width || 'full') === 'full' ? 'selected' : ''}>Pleine largeur</option>
+              <option value="1/2" ${sf.width === '1/2' ? 'selected' : ''}>Moitié</option>
+            </select>
+          </label>
+          <label class="pulsa-rep-check">
+            <input type="checkbox" data-bind="${base}.required" ${sf.required ? 'checked' : ''}>
+            <span>Champ obligatoire</span>
+          </label>
+          <label class="pulsa-fld">
+            <span class="pulsa-fld-label">Aide</span>
+            <input class="pulsa-input" type="text" data-bind="${base}.help"
+                   value="${_escape(sf.help || '')}">
+          </label>
+          ${extra}
+        </div>
+      </div>`;
+  };
+
+  return `
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Bloc répétable</h4>
+      <p class="pulsa-editor-hint">Le répondant duplique ce bloc autant de fois qu'il le souhaite.</p>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Nom d'un élément</span>
+        <input class="pulsa-input" type="text" data-bind="field.${sid}.${fid}.options.item_label"
+               value="${_escape(o.item_label || 'Élément')}">
+      </label>
+      <label class="pulsa-fld">
+        <span class="pulsa-fld-label">Texte du bouton d'ajout</span>
+        <input class="pulsa-input" type="text" data-bind="field.${sid}.${fid}.options.add_label"
+               value="${_escape(o.add_label || 'Ajouter')}">
+      </label>
+      <div class="pulsa-rep-minmax">
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Minimum</span>
+          <input class="pulsa-input" type="number" min="1"
+                 data-bind="field.${sid}.${fid}.options.min" value="${o.min ?? 1}">
+        </label>
+        <label class="pulsa-fld">
+          <span class="pulsa-fld-label">Maximum (0 = illimité)</span>
+          <input class="pulsa-input" type="number" min="0"
+                 data-bind="field.${sid}.${fid}.options.max" value="${o.max ?? 0}">
+        </label>
+      </div>
+    </section>
+    <section class="pulsa-editor-section">
+      <h4 class="pulsa-editor-section-title">Sous-champs (${subs.length})</h4>
+      <div class="pulsa-rep-subs">
+        ${subs.map(subRow).join('') || '<p class="pulsa-editor-hint">Aucun sous-champ défini.</p>'}
+      </div>
+      <button class="pulsa-btn pulsa-btn-ghost pulsa-choice-add"
+              data-act="rep-add-sub" data-field="${fid}">
+        ${icon('plus', 14)}<span>Ajouter un sous-champ</span>
+      </button>
+    </section>
+  `;
 }
 
 function _editorSignature(sid, field) {
