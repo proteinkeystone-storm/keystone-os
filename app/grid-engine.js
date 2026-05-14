@@ -31,29 +31,31 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DRAG & DROP — Ghost pattern, leap-frog distance-based
+// DRAG & DROP — carte entière saisissable, leap-frog distance-based
 // ─────────────────────────────────────────────────────────────
+//  · on peut saisir N'IMPORTE OÙ sur la carte (plus seulement la
+//    poignée) → déplacement beaucoup plus fluide et naturel
 //  · ghost (clone) suit le curseur en position:fixed
 //  · src reste en DOM avec class .dragging (visuel : effacé)
-//  · à chaque pointermove : on cherche la carte LA PLUS PROCHE du curseur
-//    (distance euclidienne au centre) → permet le leap-frog multi-cran
-//  · src est inséré before/after selon position X relative au centre
+//  · à chaque pointermove : on cherche la carte LA PLUS PROCHE du
+//    curseur (distance euclidienne au centre) → leap-frog multi-cran,
+//    fonctionne dans les deux axes (gauche/droite ET haut/bas)
 //  · pointerup → ghost retiré, ordre persisté
+//  · _dragJustHappened : empêche le clic d'ouverture juste après un drag
 // ═══════════════════════════════════════════════════════════════
 const DRAG_THRESHOLD = 5; // px avant d'activer le drag réel
+let _dragJustHappened = false;
 
 function _setupDragDrop(container) {
     container.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;                          // clic gauche uniquement
-        const handle = e.target.closest('.pad-drag-handle');
-        if (!handle) return;
-        const src = handle.closest('.pad-card');
+        const src = e.target.closest('.pad-card');
         if (!src) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        _cancelLongPress();
-        src.classList.remove('pad-pressing');
+        // Pas de drag : pendant un rename, sur l'overlay de confirmation,
+        // ni depuis un champ éditable.
+        if (src.classList.contains('pad-renaming')) return;
+        if (e.target.closest('.pad-confirm-overlay')) return;
+        if (e.target.closest('[contenteditable]')) return;
 
         const startX  = e.clientX;
         const startY  = e.clientY;
@@ -66,8 +68,6 @@ function _setupDragDrop(container) {
         let active = false;
         let ghost  = null;
 
-        try { handle.setPointerCapture(e.pointerId); } catch (_) {}
-
         const onMove = ev => {
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
@@ -75,6 +75,9 @@ function _setupDragDrop(container) {
             if (!active) {
                 if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
                 active = true;
+                // Le drag prend le pas sur le long-press d'édition
+                _cancelLongPress();
+                src.classList.remove('pad-pressing');
                 document.body.classList.add('ks-dragging');
                 src.classList.add('dragging');
 
@@ -87,6 +90,8 @@ function _setupDragDrop(container) {
                     `pointer-events:none;z-index:10000;margin:0;will-change:transform;`;
                 document.body.appendChild(ghost);
             }
+
+            ev.preventDefault();
 
             // Position du ghost : suit le curseur sans aucune latence
             ghost.style.transform =
@@ -134,11 +139,11 @@ function _setupDragDrop(container) {
             for (const c of movables) {
                 const o = before_.get(c);
                 const n = c.getBoundingClientRect();
-                const dx = o.left - n.left;
-                const dy = o.top  - n.top;
-                if (dx === 0 && dy === 0) continue;
+                const ddx = o.left - n.left;
+                const ddy = o.top  - n.top;
+                if (ddx === 0 && ddy === 0) continue;
                 c.style.transition = 'none';
-                c.style.transform  = `translate(${dx}px, ${dy}px)`;
+                c.style.transform  = `translate(${ddx}px, ${ddy}px)`;
                 // Force reflow puis enclenche la transition retour à 0
                 void c.offsetWidth;
                 c.style.transition = 'transform .26s cubic-bezier(.25,.8,.25,1)';
@@ -146,13 +151,11 @@ function _setupDragDrop(container) {
             }
         };
 
-        const cleanup = () => {
-            try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
-            handle.removeEventListener('pointermove',   onMove);
-            handle.removeEventListener('pointerup',     onUp);
-            handle.removeEventListener('pointercancel', onUp);
+        const onUp = () => {
+            window.removeEventListener('pointermove',   onMove);
             window.removeEventListener('pointerup',     onUp);
             window.removeEventListener('pointercancel', onUp);
+            if (!active) return;
 
             document.body.classList.remove('ks-dragging');
             src.classList.remove('dragging');
@@ -163,15 +166,15 @@ function _setupDragDrop(container) {
                 c.style.transition = '';
                 c.style.transform  = '';
             });
-            if (active) _persistOrder(container);
+            _persistOrder(container);
+            // Empêche le clic d'ouverture qui suit immédiatement le drop
+            _dragJustHappened = true;
+            setTimeout(() => { _dragJustHappened = false; }, 60);
         };
-        const onUp = () => cleanup();
 
-        handle.addEventListener('pointermove',   onMove);
-        handle.addEventListener('pointerup',     onUp);
-        handle.addEventListener('pointercancel', onUp);
-        window.addEventListener('pointerup',     onUp,     { once: true });
-        window.addEventListener('pointercancel', onUp,     { once: true });
+        window.addEventListener('pointermove',   onMove);
+        window.addEventListener('pointerup',     onUp);
+        window.addEventListener('pointercancel', onUp);
     });
 
     // Sécurité : aucune drag native HTML5
@@ -472,6 +475,7 @@ function _refreshSectionCount() {
 function _setupClickDelegate(container, onOpen) {
     container.addEventListener('click', e => {
         if (_editTriggered) { _editTriggered = false; return; }
+        if (_dragJustHappened) return;   // un drag vient de se terminer → pas d'ouverture
         const card = e.target.closest('.pad-card');
         if (!card) return;
         // Bloquer si : barre edit ouverte, overlay confirm, ou rename en cours

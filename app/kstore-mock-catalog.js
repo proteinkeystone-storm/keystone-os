@@ -1,42 +1,39 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Key-Store Mock Catalog
-   Catalogue de coquilles vides pour valider la nouvelle UI plein écran.
-   À supprimer / remplacer quand les vraies apps seront produites.
-   La seule entrée RÉELLE est Notice VEFA (id: O-IMM-001) — toutes les
-   autres sont des placeholders avec bouton "Bientôt disponible".
+   KEYSTONE OS — Key-Store Catalog
+   Catalogue des applications réelles du Key-Store.
+   ─────────────────────────────────────────────────────────────
+   Historique : ce fichier contenait des « coquilles vides »
+   (MOCK-*) placées pour valider la nouvelle UI plein écran. Elles
+   ont été retirées une fois la production des vraies apps lancée —
+   le Key-Store n'expose plus que des applications réelles.
+
+   Chaque entrée fournit la taxonomie K-Store (category/subcategory)
+   et les métadonnées d'affichage. Le contenu rédactionnel détaillé
+   (longDesc, screenshots…) provient du catalogue D1 via _ksMergeApp.
    ═══════════════════════════════════════════════════════════════ */
 
-// ── Catégories de la nouvelle taxonomie (inspirées Mac App Store) ──
+// ── Catégories du Key-Store ───────────────────────────────────
+// Seules les catégories réellement peuplées sont exposées dans la
+// sidebar. On rouvrira NEWS / FUN / FIN / etc. quand des apps de
+// ces univers seront produites.
 export const KSTORE_CATEGORIES = [
-    { id: 'NEWS',     label: 'Actualités' },
-    { id: 'FUN',      label: 'Divertissement' },
     {
         id: 'BIZ',
         label: 'Économie & entreprise',
         sub: [
             { id: 'BIZ_IMM', label: 'Immobilier' },
-            { id: 'BIZ_RST', label: 'Restauration' },
-            { id: 'BIZ_LSR', label: 'Loisirs' },
             { id: 'BIZ_COM', label: 'Communication' },
         ],
     },
-    { id: 'FIN',      label: 'Finance' },
-    { id: 'GFX',      label: 'Graphisme & Design' },
-    { id: 'MED',      label: 'Médecine' },
-    { id: 'MUS',      label: 'Musique' },
-    { id: 'PRD',      label: 'Productivité' },
-    { id: 'SOC',      label: 'Réseaux sociaux' },
-    { id: 'LIF',      label: 'Style de vie' },
-    { id: 'UTL',      label: 'Utilitaires' },
 ];
 
-// ── Apps mockées : une coquille vide par catégorie/sous-catégorie ──
-// Notice VEFA reste la seule réelle (référencée par son id O-IMM-001
-// pour pouvoir être achetée via le flow Stripe existant).
+// ── Apps du Key-Store ─────────────────────────────────────────
+// Toutes réelles : bouton d'achat actif, référencées par leur id
+// NOMEN-K (lien avec pads-data.js / flow Stripe).
 export const KSTORE_MOCK_APPS = [
-    // Économie & entreprise > Immobilier
+    // ── Économie & entreprise > Immobilier ────────────────────
     {
-        id: 'O-IMM-001',                      // ← réelle, référence pads-data.js
+        id: 'O-IMM-001',
         category: 'BIZ', subcategory: 'BIZ_IMM',
         title: 'Notices VEFA',
         punchline: 'Notice descriptive conforme RE 2020',
@@ -46,10 +43,10 @@ export const KSTORE_MOCK_APPS = [
         ai_optimized: 'Claude',
         ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
         copyright: '© 2026-2027 Protein Studio',
-        real: true,                           // ← bouton acheter actif
+        real: true,
     },
     {
-        id: 'O-IMM-009',                      // ← Sprint 4 — réelle, pad A9
+        id: 'O-IMM-009',
         category: 'BIZ', subcategory: 'BIZ_IMM',
         title: 'Contrat de Réservation VEFA',
         punchline: 'Contrat préliminaire Art. L.261-15 CCH',
@@ -62,7 +59,7 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
     {
-        id: 'O-IMM-002',                      // ← Sprint 5 — réelle, pad A2 (Multi-Portails)
+        id: 'O-IMM-002',
         category: 'BIZ', subcategory: 'BIZ_IMM',
         title: 'Annonces Multi-Portails',
         punchline: '6 portails en une saisie',
@@ -75,7 +72,87 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
     {
-        id: 'A-COM-001',                      // ← Sprint SDQR-1 — réel, artefact fullscreen
+        id: 'O-IMM-003',
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'Emails Acquéreurs',
+        punchline: 'Communication chantier personnalisée',
+        shortDesc: 'Suivi chantier rassurant en quelques secondes',
+        price: 29,
+        icon: 'mail',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-ANL-001',
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'CR Chantier',
+        punchline: 'Notes terrain → CR professionnel',
+        shortDesc: 'Vos notes brutes structurées en compte-rendu',
+        price: 49,
+        icon: 'site',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-ANL-002',
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'Analyste Foncier',
+        punchline: 'Dossier foncier complet en 5 minutes',
+        shortDesc: 'Faisabilité, potentiel constructible et risques',
+        price: 49,
+        icon: 'foncier',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-ADM-001',
+        category: 'BIZ', subcategory: 'BIZ_IMM',
+        title: 'Objections Acquéreurs',
+        punchline: '3 réponses graduées par objection',
+        shortDesc: 'Réponses calibrées : prix, délais, charges, emplacement',
+        price: 39,
+        icon: 'chat',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+
+    // ── Économie & entreprise > Communication ─────────────────
+    {
+        id: 'O-MKT-001',
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Posts Réseaux Sociaux',
+        punchline: 'Facebook · Instagram · LinkedIn',
+        shortDesc: 'Posts engageants adaptés à chaque plateforme',
+        price: 29,
+        icon: 'social',
+        ai_optimized: 'Gemini',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-MKT-002',
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Brief Photo / 3D',
+        punchline: 'Brief créatif professionnel en 2 minutes',
+        shortDesc: 'Briefs détaillés pour vos prestataires photo et 3D',
+        price: 29,
+        icon: 'brief',
+        ai_optimized: 'ChatGPT',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'A-COM-001',
         category: 'BIZ', subcategory: 'BIZ_COM',
         title: 'Sovereign Dynamic QR',
         punchline: 'QR codes souverains · sans GAFAM',
@@ -88,7 +165,7 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
     {
-        id: 'A-COM-002',                      // ← Sprint Kodex-1 — squelette workspace
+        id: 'A-COM-002',
         category: 'BIZ', subcategory: 'BIZ_COM',
         title: 'Kodex',
         punchline: 'Le brief print/digital infaillible',
@@ -101,7 +178,7 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
     {
-        id: 'A-COM-003',                      // ← Sprint Muse-1 — squelette workspace
+        id: 'A-COM-003',
         category: 'BIZ', subcategory: 'BIZ_COM',
         title: 'Muse',
         punchline: 'La planche d\'ambiance pour votre studio 3D',
@@ -114,7 +191,7 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
     {
-        id: 'A-COM-004',                      // ← Sprint Pulsa-1 — squelette workspace
+        id: 'A-COM-004',
         category: 'BIZ', subcategory: 'BIZ_COM',
         title: 'Pulsa',
         punchline: 'Le formulaire intelligent qui collecte sans friction',
@@ -126,53 +203,15 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
-
-    // Coquilles vides — une par catégorie principale + sous-tags BIZ
-    {
-        id: 'MOCK-BIZ-RST', category: 'BIZ', subcategory: 'BIZ_RST',
-        title: 'Nom d\'une App Restauration', punchline: 'Punchline App',
-        shortDesc: 'Brève description de l\'App', price: 0,
-    },
-    {
-        id: 'MOCK-BIZ-LSR', category: 'BIZ', subcategory: 'BIZ_LSR',
-        title: 'Nom d\'une App Loisirs', punchline: 'Punchline App',
-        shortDesc: 'Brève description de l\'App', price: 0,
-    },
-    {
-        id: 'MOCK-BIZ-COM', category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Nom d\'une App Communication', punchline: 'Punchline App',
-        shortDesc: 'Brève description de l\'App', price: 0,
-    },
-
-    { id: 'MOCK-NEWS-001', category: 'NEWS', title: 'Nom d\'une App Actu',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-FUN-001',  category: 'FUN',  title: 'Nom d\'une App Divertissement',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-FIN-001',  category: 'FIN',  title: 'Nom d\'une App Finance',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-GFX-001',  category: 'GFX',  title: 'Nom d\'une App Design',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-MED-001',  category: 'MED',  title: 'Nom d\'une App Médecine',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-MUS-001',  category: 'MUS',  title: 'Nom d\'une App Musique',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-PRD-001',  category: 'PRD',  title: 'Nom d\'une App Productivité',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-SOC-001',  category: 'SOC',  title: 'Nom d\'une App Réseaux sociaux',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-LIF-001',  category: 'LIF',  title: 'Nom d\'une App Style de vie',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
-    { id: 'MOCK-UTL-001',  category: 'UTL',  title: 'Nom d\'une App Utilitaire',
-      punchline: 'Punchline App', shortDesc: 'Brève description de l\'App', price: 0 },
 ];
 
-// ── "À la une pour vous" — 5 apps mises en avant (rail du haut) ──
+// ── "À la une pour vous" — apps mises en avant (rail du haut) ──
 export const KSTORE_FEATURED_IDS = [
     'O-IMM-001',
-    'MOCK-BIZ-COM',
-    'MOCK-PRD-001',
-    'MOCK-GFX-001',
-    'MOCK-FIN-001',
+    'A-COM-002',
+    'A-COM-004',
+    'A-COM-001',
+    'O-IMM-002',
 ];
 
 // ── Helpers ──

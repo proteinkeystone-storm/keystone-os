@@ -1,0 +1,18 @@
+{
+  "title": "Notices VEFA",
+  "tldr": "Notice descriptive conforme RE 2020 — 2026",
+  "key_points": [
+    "Remplissez chaque champ avec précision — les données saisies sont substituées dans le template print-ready.",
+    "Le champ \"Spécificités & équipements\" accepte un appel IA (✦) pour rédiger un paragraphe sur mesure.",
+    "Cliquez sur \"Notice PDF\" : le document s'ouvre dans une nouvelle fenêtre, prêt à imprimer ou exporter en PDF.",
+    "Génération 100 % déterministe — clauses techniques canoniques en bibliothèque (admin), aucun LLM dans le rendu juridique."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}

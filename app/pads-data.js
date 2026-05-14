@@ -589,20 +589,8 @@ export const CATALOG_DATA = {
         { id:'O-IMM-009', padKey:'A9', title:'Contrat Réservation VEFA', subtitle:'Contrat préliminaire Art. L.261-15 — PDF prêt notaire', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa', ai_optimized:'Claude', isNew:true, published:true, timeSaved:30, tags:['immobilier','vefa','contrat','réservation','juridique','notaire'],
           longDesc:"Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Réutilise les données du programme déjà saisies." },
 
-        // ── 6 ARTEFACTS (en proposition K-Store) ───────────────────
-        { id:'A-IMM-001', padKey:null, title:'Sentinelle',              subtitle:'Monitoring ranking SEO & présence digitale',  category:'IMM', plan:'PRO', price:79, icon:'zap',   ai_optimized:'Claude', isNew:true,  published:true, timeSaved:20, tags:['artefact','seo','monitoring','présence digitale','ranking'],
-          longDesc:"Surveillez la présence digitale de vos programmes : SEO, mentions, comparatif concurrentiel. Alertes auto + rapport hebdo." },
-        { id:'A-IMM-002', padKey:null, title:'Tableau des Lots',        subtitle:'Grille de vente interactive et exportable',   category:'IMM', plan:'PRO', price:59, icon:'table', ai_optimized:'Claude', isNew:false, published:true, timeSaved:25, tags:['artefact','lots','grille de vente','disponibilités','export'],
-          longDesc:"Tableau des lots en temps réel : disponibilités, options, réservations. Codes couleurs, filtres, export PDF/Excel." },
-        { id:'A-IMM-003', padKey:null, title:'Qualification Acquéreur', subtitle:'Scoring et profil acheteur automatisé',       category:'IMM', plan:'PRO', price:59, icon:'chat',  ai_optimized:'Claude', isNew:false, published:true, timeSaved:20, tags:['artefact','qualification','scoring','acquéreur','CRM'],
-          longDesc:"Qualifiez vos prospects en 2 minutes : scoring auto basé sur profil, capacité financière et projet. Recommandation de lot." },
-        { id:'A-ANL-001', padKey:null, title:'Simulateur Pinel',        subtitle:'Calcul fiscal interactif Pinel / Pinel+',     category:'ANL', plan:'MAX', price:99, lifetimePrice:299, icon:'calc', ai_optimized:'Claude', isNew:false, is_custom:true, published:true, timeSaved:15, tags:['artefact','pinel','fiscal','investissement','simulation'],
-          longDesc:"Simulez l'économie d'impôt Pinel/Pinel+ pour vos investisseurs. Fiche récap PDF personnalisée." },
-        { id:'A-ANL-002', padKey:null, title:'Calculatrice Promoteur',  subtitle:'Bilan opérateur simplifié en temps réel',     category:'ANL', plan:'STARTER', price:19, lifetimePrice:49, icon:'calc', ai_optimized:'Claude', isNew:false, is_custom:true, published:true, timeSaved:20, tags:['artefact','bilan','promoteur','calcul','marge'],
-          longDesc:"Bilan promoteur en temps réel : prix de revient, marge, charges financières, TVA. Export PDF." },
-        { id:'A-ADM-001', padKey:null, title:'FAQ Client',              subtitle:'Base de réponses dynamique par programme',    category:'ADM', plan:'PRO', price:59, icon:'brief', ai_optimized:'Claude', isNew:false, published:true, timeSaved:15, tags:['artefact','faq','client','communication','admin'],
-          longDesc:"Base de FAQ par programme. L'IA suggère les questions fréquentes et les actualise selon les échanges acquéreurs." },
-        // ── Sprint SDQR-1 — Artefact à workspace fullscreen ──
+        // ── ARTEFACTS livrés (workspace fullscreen) ────────────────
+        // Sprint SDQR-1 — Artefact à workspace fullscreen ──
         { id:'A-COM-001', padKey:null, title:'Sovereign Dynamic QR', subtitle:'QR codes dynamiques · stats souveraines · RGPD', category:'COM', plan:'PRO', price:49, lifetimePrice:199, icon:'sdqr', ai_optimized:'Claude', isNew:true, published:true, timeSaved:10, tags:['artefact','qr','marketing','tracking','vcard','wifi','sovereign','rgpd'],
           longDesc:"Générez des QR codes statiques (URL, VCard, Wi-Fi, iCal, texte) et dynamiques (URL modifiable après impression). Chaque scan est tracké de façon souveraine — aucune donnée tierce, RGPD natif. Studio de design pour brander vos QRs (Sprint SDQR-3). Dashboard stats (SDQR-4)." },
         // ── Sprint Kodex-1 — Artefact à workspace fullscreen ──

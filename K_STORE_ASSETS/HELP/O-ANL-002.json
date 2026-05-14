@@ -1,0 +1,18 @@
+{
+  "title": "Analyste Foncier",
+  "tldr": "Dossier foncier complet en 5 minutes",
+  "key_points": [
+    "Vérifiez le zonage PLU avant toute analyse — c'est le point bloquant n°1.",
+    "Renseignez le prix même approximatif : l'analyse de charge foncière est la plus-value principale.",
+    "L'IA produit une recommandation GO/NO-GO — à compléter avec votre expertise terrain.",
+    "Utilisez le résultat comme base de note interne ou de présentation aux associés."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}

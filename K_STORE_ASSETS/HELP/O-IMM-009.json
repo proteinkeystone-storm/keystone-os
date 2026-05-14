@@ -1,0 +1,18 @@
+{
+  "title": "Contrat de Réservation VEFA",
+  "tldr": "Contrat préliminaire — Art. L.261-15 CCH",
+  "key_points": [
+    "Remplissez les sections Vendeur, Acquéreur, Bien et Prix — chaque champ est obligatoire pour un document juridiquement complet.",
+    "Le dépôt de garantie est plafonné par la loi : 5 % si livraison < 1 an, 2 % < 2 ans, 0 % au-delà (Art. R.261-28).",
+    "Le champ \"Clauses particulières\" accepte un appel IA (✦) pour rédiger un paragraphe sur mesure depuis vos notes.",
+    "Document indicatif : validation notariale impérative avant toute signature."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}

@@ -1,0 +1,18 @@
+{
+  "title": "Annonces Multi-Portails",
+  "tldr": "SeLoger · LeBonCoin · Bien'ici · Logic-Immo · Figaro Immo",
+  "key_points": [
+    "Renseignez le programme, la ville, le prix et les atouts.",
+    "Cochez les portails cibles — l'IA génère une variante par portail respectant titre / description / ton spécifiques.",
+    "Le champ \"Atouts\" accepte un appel IA (✦) pour pré-rédiger un paragraphe.",
+    "Le résultat affiche un bloc par portail, prêt à copier-coller dans l'admin du site."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}

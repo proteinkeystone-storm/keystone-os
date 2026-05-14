@@ -22,6 +22,8 @@ import { lock, unlock, isLocked }              from './lockscreen.js';
 import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
+import { ratingButtonHTML, bindRatingButton }                          from './lib/rating-widget.js';
+import { helpButtonHTML, bindHelpButton }                              from './lib/help-overlay.js';
 import {
     KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
@@ -212,6 +214,15 @@ function renderHeroDate() {
         weekday:'long', day:'numeric', month:'long', year:'numeric'
     });
 }
+
+// Descriptions courtes des artefacts pour les pads du Dashboard
+// (remplace le libellé générique « Artefact »).
+const ART_PAD_DESC = {
+    'A-COM-001': 'QR codes dynamiques & stats souveraines',
+    'A-COM-002': 'Brief print/digital infaillible',
+    'A-COM-003': "Planche d'ambiance pour studio 3D",
+    'A-COM-004': 'Formulaire intelligent partageable',
+};
 
 // ── Jauge "temps gagné potentiel" ─────────────────────────────
 // Estimation indicative : somme des minutes/jour économisées par les
@@ -462,6 +473,12 @@ export function renderDashboard() {
         // Artefacts possédés (dans la grille principale, si achetés)
         const ownedArtCards = ownedArts.map(a => {
             const pal = getToolPalette(a.id);
+            // Description courte de la fonction de l'artefact (au lieu du
+            // libellé générique « Artefact »). On dérive du sous-titre
+            // catalogue, ou on retombe sur des libellés concis dédiés.
+            const desc = ART_PAD_DESC[a.id]
+                || getCatalogEntry(a.id)?.subtitle?.split(' · ')[0]
+                || a.desc || 'Artefact';
             return `
             <div class="pad-card pad-card--artefact" data-id="${a.id}" data-palette="${pal}">
                 <div class="pad-drag-handle" title="Déplacer pour réorganiser">
@@ -474,7 +491,7 @@ export function renderDashboard() {
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
                 <div class="pad-arrow">↗</div>
                 <div class="pad-name">${a.name}</div>
-                <div class="pad-desc">Artefact</div>
+                <div class="pad-desc">${desc}</div>
             </div>`;
         }).join('');
 
@@ -531,8 +548,9 @@ export function renderDashboard() {
             });
         }
 
-        // Mise à jour du compteur Key-Store
-        const ksCountEl = document.querySelector('.suggest-section .sec-kstore-badge');
+        // Mise à jour du libellé de la pill Key-Store (le span dédié,
+        // pour ne pas écraser l'icône et la flèche du bouton)
+        const ksCountEl = document.getElementById('kstore-badge-label');
         if (ksCountEl) {
             const total = newOnly.length;
             ksCountEl.textContent = total > 0
@@ -686,8 +704,7 @@ window.addEventListener('ks-catalog-loaded', () => {
 // a sa propre taxonomie (BIZ/NEWS/FUN/…) avec sous-cats (BIZ_IMM…).
 // Mélanger les deux fait disparaître les pads du K-Store sidebar.
 const _KSTORE_CAT_CODES = new Set([
-    'BIZ', 'NEWS', 'FUN', 'FIN', 'GFX', 'MED', 'MUS', 'PRD', 'SOC', 'LIF', 'UTL',
-    'BIZ_IMM', 'BIZ_RST', 'BIZ_LSR', 'BIZ_COM',
+    'BIZ', 'BIZ_IMM', 'BIZ_COM',
 ]);
 
 // Normalise une entrée D1 catalog vers le shape attendu côté front
@@ -873,27 +890,30 @@ function _buildKStorePanel() {
     wrap.innerHTML = `
         <aside class="ksfs-sidebar">${sidebarHTML}</aside>
         <main class="ksfs-main">
-            <button id="ksfs-close-btn" class="ksfs-close" aria-label="Fermer le Key-Store">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     style="width:16px;height:16px">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-            </button>
             <div id="ksfs-content" class="ksfs-content"></div>
         </main>
     `;
     document.body.appendChild(wrap);
 
     // ── Listeners ──────────────────────────────────────────────
-    wrap.querySelector('#ksfs-close-btn').addEventListener('click', _closeKStorePanel);
+    // Retour unifié : la flèche en haut à gauche est le SEUL point de
+    // sortie. Sur une vue secondaire (catégorie, fiche détail, plans),
+    // elle ramène à l'accueil du Key-Store ; sur l'accueil, elle ferme
+    // le Key-Store et revient au Dashboard.
+    const _ksGoBack = () => {
+        if (_ksFilter.kind !== 'all') {
+            _ksFilter = { kind: 'all', id: null };
+            _ksSearch = '';
+            const searchEl = document.getElementById('ksfs-search');
+            if (searchEl) searchEl.value = '';
+            _renderKStoreItems();
+        } else {
+            _closeKStorePanel();
+        }
+    };
+    wrap.querySelector('#ksfs-back-btn').addEventListener('click', _ksGoBack);
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && wrap.classList.contains('open')) _closeKStorePanel();
-    });
-
-    wrap.querySelector('#ksfs-back-btn').addEventListener('click', () => {
-        _ksFilter = { kind: 'all', id: null };
-        _renderKStoreItems();
+        if (e.key === 'Escape' && wrap.classList.contains('open')) _ksGoBack();
     });
 
     wrap.querySelector('#ksfs-search').addEventListener('input', e => {
@@ -1885,15 +1905,11 @@ function _buildModal(pad, tool) {
                     Recommandé : <strong>${pad.ai_optimized}</strong>
                 </div>
             </div>
-            <div class="modal-rating">
-                <div class="modal-rating-lbl">Note</div>
-                <div class="modal-rating-stars" id="modal-rating-stars">
-                    ${[1,2,3,4,5].map(v => `
-                        <button type="button" class="rating-star" data-v="${v}" aria-label="${v} étoile${v > 1 ? 's' : ''}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9 12 2"/></svg>
-                        </button>
-                    `).join('')}
+            <div class="modal-head-tools">
+                <div class="modal-head-tools-top">
+                    ${helpButtonHTML(_nomenId)}
                 </div>
+                ${ratingButtonHTML(_nomenId)}
             </div>
             <button class="modal-close" id="modal-close-btn" aria-label="Fermer">✕</button>
         </div>
@@ -1921,16 +1937,8 @@ function _buildModal(pad, tool) {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                         Bibliothèque
                     </button>
-                    <button class="action-btn action-btn-compact" id="btn-notice" type="button" title="Notice d'utilisation">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg>
-                        Notice
-                    </button>
                     ` : ''}
                 </div>
-
-                ${hasDocExport ? `
-                <div class="tool-notice" id="tool-notice">${_renderNotice(pad.notice)}</div>
-                ` : ''}
             </div>
 
             ${!hasDocExport ? `
@@ -1958,13 +1966,7 @@ function _buildModal(pad, tool) {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                         Bibliothèque
                     </button>
-                    <button class="action-btn" id="btn-notice" title="Notice d'utilisation">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg>
-                        Notice
-                    </button>
                 </div>
-
-                <div class="tool-notice" id="tool-notice">${_renderNotice(pad.notice)}</div>
 
                 ${hasKey ? `
                 <div class="ai-divider">
@@ -1983,24 +1985,10 @@ function _buildModal(pad, tool) {
         </div>
     `;
 
-    // Notation — clé stable = NOMEN-K id (invariant quel que soit padKey ou tool)
-    const _ratingKey  = 'ks_rating_' + (pad.id || pad.padKey);
-    const savedRating = parseInt(localStorage.getItem(_ratingKey) || '0', 10);
-    const starsEl     = document.getElementById('modal-rating-stars');
-    if (starsEl) {
-        const stars = starsEl.querySelectorAll('.rating-star');
-        stars.forEach(s => s.classList.toggle('on', parseInt(s.dataset.v, 10) <= savedRating));
-        starsEl.addEventListener('click', e => {
-            const star = e.target.closest('.rating-star');
-            if (!star) return;
-            e.stopPropagation();
-            const val = parseInt(star.dataset.v, 10);
-            localStorage.setItem(_ratingKey, val);
-            stars.forEach(s => s.classList.toggle('on', parseInt(s.dataset.v, 10) <= val));
-            // Sync cloud (cross-device)
-            import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
-        });
-    }
+    // Notation + aide — widgets partagés avec les artefacts (clé stable
+    // = NOMEN-K id, invariant quel que soit padKey ou tool).
+    bindRatingButton(inner, _nomenId);
+    bindHelpButton(inner, _nomenId);
 
     // Wire-up fermeture + génération IA
     document.getElementById('modal-close-btn')?.addEventListener('click', closeTool);
@@ -2181,14 +2169,6 @@ function _buildModal(pad, tool) {
     document.getElementById('no-api-link')?.addEventListener('click', () => {
         closeTool();
         setTimeout(() => openSettingsTo('acc-api'), 120);
-    });
-
-    // ℹ️ Notice toggle
-    document.getElementById('btn-notice')?.addEventListener('click', () => {
-        const noticeEl = document.getElementById('tool-notice');
-        const noticeBtn = document.getElementById('btn-notice');
-        noticeEl?.classList.toggle('open');
-        noticeBtn?.classList.toggle('active');
     });
 
     // Premier rendu du prompt

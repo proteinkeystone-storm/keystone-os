@@ -1,0 +1,18 @@
+{
+  "title": "CR Chantier",
+  "tldr": "Notes terrain → CR professionnel",
+  "key_points": [
+    "Collez vos notes brutes telles quelles — abréviations, fautes, raccourcis acceptés.",
+    "Plus vos notes sont détaillées, plus le CR sera précis et exploitable.",
+    "Le CR généré inclut un tableau d'actions avec responsables et délais.",
+    "Après génération, complétez le tableau des actions et envoyez directement depuis votre messagerie."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}

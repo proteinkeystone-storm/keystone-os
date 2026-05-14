@@ -1,0 +1,18 @@
+{
+  "title": "Emails Acquéreurs",
+  "tldr": "Communication chantier personnalisée",
+  "key_points": [
+    "Le prénom du client est important — l'IA l'utilisera pour personnaliser le ton.",
+    "Soyez précis dans \"Informations à transmettre\" : montants, dates, pièces demandées.",
+    "Vous obtiendrez 2 variantes : formelle et chaleureuse. Choisissez selon le profil client.",
+    "Après génération, relisez et ajoutez les éléments contractuels spécifiques à votre dossier."
+  ],
+  "faq": [],
+  "shortcuts": [
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'outil"
+    }
+  ],
+  "updated_at": "2026-05-14"
+}
