@@ -9,7 +9,7 @@
    un PDF généré côté serveur + téléchargement direct.
    ═══════════════════════════════════════════════════════════════ */
 
-import { formatDimensions, formatBleed, formatDpi, computeLegalMentions } from './kodex-catalog.js';
+import { formatDimensions, formatBleed, computeLegalMentions } from './kodex-catalog.js';
 import { computeScale } from './kodex-scale.js';
 
 function _esc(s) {

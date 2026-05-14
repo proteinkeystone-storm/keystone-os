@@ -15,7 +15,7 @@
      - Des alertes en cas d'incohérence détectée
    ═══════════════════════════════════════════════════════════════ */
 
-import { formatDimensions, formatBleed, formatDpi, computeLegalMentions } from './kodex-catalog.js';
+import { formatDimensions, formatBleed, computeLegalMentions } from './kodex-catalog.js';
 import { computeScale } from './kodex-scale.js';
 
 // ── Helpers de formatage pour le prompt ───────────────────────

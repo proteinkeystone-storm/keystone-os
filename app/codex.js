@@ -789,17 +789,24 @@ function _destStepProduct() {
   getProductsByVendor(category, vendor).then(products => {
     const slot = _root?.querySelector('[data-slot="product-list"]');
     if (!slot) return;
-    slot.innerHTML = products.map(p => `
+    slot.innerHTML = products.map(p => {
+      // Description : on assemble les parties disponibles (dimensions,
+      // résolution, colorimétrie) en ignorant les valeurs absentes —
+      // les formats numériques n'ont pas de DPI.
+      const desc = [formatDimensions(p), formatDpi(p), p.color_profile]
+        .filter(Boolean).map(_esc).join(' · ');
+      return `
       <div class="ws-card is-clickable" data-act="dest-standard" data-id="${_esc(p.id)}">
         <div class="ws-card-row">
           <div class="ws-card-icon">${icon(CATEGORY_LABELS[category]?.icon || 'package', 22)}</div>
           <div class="ws-card-body">
             <h3 class="ws-card-title">${_esc(p.product_name)}</h3>
-            <p class="ws-card-desc">${_esc(formatDimensions(p))} · ${_esc(formatDpi(p) || '')} ${p.color_profile ? '· ' + _esc(p.color_profile) : ''}</p>
+            <p class="ws-card-desc">${desc}</p>
           </div>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   });
 
   return root;
