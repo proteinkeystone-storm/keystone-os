@@ -987,6 +987,48 @@ html.light-mode .modal-close:hover {
 @media (max-width: 1100px) {
   .ws-aside { display: none; }
 }
+
+/* ─── Hero responsive : 2 rangées sur narrow (pattern Smart Page) ───
+   Au-dessus de 1024px : layout 1 rangée comme avant.
+   En dessous : brand + title sur la 1re rangée, actions wrap sur la 2e
+   centrées. La crumb disparait (pas de place pour « Mes formulaires »). */
+@media (max-width: 1024px) {
+  .ws-topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 16px;
+    gap: 10px;
+    justify-content: center;
+  }
+  .ws-topbar-brand {
+    width: auto;
+    padding: 0;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+  .ws-topbar-title {
+    padding-left: 0;
+    gap: 10px;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  .ws-topbar-title .name {
+    font-size: 18px;        /* legerement reduit pour eviter le saut */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40vw;
+  }
+  .ws-topbar-title .crumb { display: none; }   /* pas la place sur narrow */
+  .ws-topbar-actions {
+    flex-basis: 100%;        /* prend toute la largeur => devient 2e rangee */
+    justify-content: center;
+    padding-right: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
 @media (max-width: 768px) {
   .ws-rail { width: 60px; padding: 16px 8px; }
   .ws-rail-section { display: none; }

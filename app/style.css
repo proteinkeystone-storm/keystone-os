@@ -5888,6 +5888,42 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   display: flex; align-items: center; gap: 14px;
   padding-left: 56px;   /* aligne le picto sur l'ancre main des autres artefacts (cf. .ws-topbar-title) */
 }
+
+/* ─── Responsive SDQR : 2 rangees sur narrow (meme pattern que les
+   autres artefacts) ─────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .sdqr-topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 16px;
+    gap: 10px;
+    justify-content: center;
+  }
+  .sdqr-topbar-left {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .sdqr-title-zone {
+    padding-left: 0;
+    gap: 10px;
+  }
+  .sdqr-title {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40vw;
+  }
+  .sdqr-topbar-right {
+    flex-basis: 100%;
+    justify-content: center;
+    padding-right: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
 .sdqr-eyebrow {
   font-size: 9.5px; font-weight: 700;
   letter-spacing: .14em; text-transform: uppercase;
