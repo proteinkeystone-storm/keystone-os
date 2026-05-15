@@ -22,9 +22,21 @@ export const deactivatePad     = id        => localStorage.setItem(LS_DEACTIVATE
 export const reactivatePad     = id        => localStorage.removeItem(LS_DEACTIVATED + id);
 
 // ── Init ─────────────────────────────────────────────────────
+// `renderDashboard()` est rejoué à chaque changement (login, licence,
+// pad masqué/restauré…) mais réutilise le MÊME nœud `#pads-container`.
+// On ne branche donc les listeners qu'UNE seule fois pour éviter de les
+// empiler — sinon un clic « ⋯ » déclenche le délégué N fois et la modale
+// d'édition se rouvre/referme en boucle. Les callbacks, eux, sont
+// rafraîchis à chaque appel via `_callbacks` (onPadChanged capture
+// `ownedTools`, qui change d'un render à l'autre).
+let _callbacks = { onOpen: null, onPadChanged: null, onDeactivate: null };
+
 export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
+    _callbacks = { onOpen, onPadChanged, onDeactivate };
+    if (container.dataset.gridEngineBound === '1') return;
+    container.dataset.gridEngineBound = '1';
     _setupDragDrop(container);
-    _setupClicks(container, onOpen, onPadChanged, onDeactivate);
+    _setupClicks(container);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -401,7 +413,7 @@ function _refreshSectionCount() {
 // ── Clics sur la grille ───────────────────────────────────────
 // Un seul délégué : le bouton « ⋯ » ouvre la modale d'édition ; un clic
 // ailleurs sur la carte ouvre l'outil. Le drag est géré séparément.
-function _setupClicks(container, onOpen, onPadChanged, onDeactivate) {
+function _setupClicks(container) {
     container.addEventListener('click', e => {
         // 1) Bouton d'édition « ⋯ » → modale d'édition du Pad
         const trigger = e.target.closest('.pad-edit-trigger');
@@ -409,7 +421,7 @@ function _setupClicks(container, onOpen, onPadChanged, onDeactivate) {
             e.stopPropagation();
             const card = trigger.closest('.pad-card');
             if (card && !card.classList.contains('pad-renaming')) {
-                _openPadEditModal(card, onPadChanged, onDeactivate);
+                _openPadEditModal(card, _callbacks.onPadChanged, _callbacks.onDeactivate);
             }
             return;
         }
@@ -421,6 +433,6 @@ function _setupClicks(container, onOpen, onPadChanged, onDeactivate) {
         if (!card) return;
         if (card.classList.contains('editing'))      return;
         if (card.classList.contains('pad-renaming')) return;
-        onOpen(card.dataset.id);
+        _callbacks.onOpen(card.dataset.id);
     });
 }

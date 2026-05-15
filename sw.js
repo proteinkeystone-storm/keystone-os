@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.28.0-pad-edit-trigger-button';
+const VERSION       = 'ks-os-v4.28.1-fix-pad-edit-modal-instant-close';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
