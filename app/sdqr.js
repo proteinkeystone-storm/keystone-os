@@ -22,6 +22,7 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
+import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -167,6 +168,7 @@ export function openSDQR() {
   _wireShell(panel);
   bindRatingButton(panel, 'A-COM-001');
   bindHelpButton(panel, 'A-COM-001');
+  bindBurger(panel);
   _refreshList(panel);
 }
 
@@ -194,6 +196,7 @@ function _renderShell() {
           <div class="sdqr-title">Sovereign Dynamic QR</div>
         </div>
       </div>
+      ${burgerHTML()}
       <div class="sdqr-topbar-right">
         ${helpButtonHTML('A-COM-001')}
         ${ratingButtonHTML('A-COM-001')}

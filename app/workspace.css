@@ -988,44 +988,74 @@ html.light-mode .modal-close:hover {
   .ws-aside { display: none; }
 }
 
-/* ─── Hero responsive : 2 rangées sur narrow (pattern Smart Page) ───
+/* ─── Hero responsive : burger menu sur narrow ─────────────────
    Au-dessus de 1024px : layout 1 rangée comme avant.
-   En dessous : brand + title sur la 1re rangée, actions wrap sur la 2e
-   centrées. La crumb disparait (pas de place pour « Mes formulaires »). */
+   En dessous : 1 rangée toujours, mais les actions disparaissent
+   derrière un bouton burger ☰ qui ouvre un dropdown vertical.
+   Le brand (logo + chevron) reste à gauche, le title (picto + name)
+   reste centré-gauche, le burger atterrit à droite. */
+
+/* Burger : caché par défaut sur grand écran, visible sur narrow */
+.ws-topbar-burger {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  padding: 0;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  color: var(--ws-text-soft);
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s;
+  flex-shrink: 0;
+}
+.ws-topbar-burger:hover {
+  background: rgba(255,255,255,.07);
+  border-color: var(--ws-border-strong);
+  color: var(--ws-text);
+}
+
 @media (max-width: 1024px) {
-  .ws-topbar {
-    flex-wrap: wrap;
-    height: auto;
-    padding: 10px 16px;
-    gap: 10px;
-    justify-content: center;
-  }
-  .ws-topbar-brand {
-    width: auto;
-    padding: 0;
-    gap: 10px;
-    flex: 0 0 auto;
-  }
-  .ws-topbar-title {
-    padding-left: 0;
-    gap: 10px;
-    flex: 0 0 auto;
-    min-width: 0;
-  }
+  .ws-topbar-burger { display: inline-flex; margin-right: 16px; }
+
+  /* Crumb masquée sur narrow (pas la place) */
+  .ws-topbar-title .crumb { display: none; }
+
+  /* Nom légèrement réduit + ellipsis pour éviter le wrap */
   .ws-topbar-title .name {
-    font-size: 18px;        /* legerement reduit pour eviter le saut */
+    font-size: 18px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 40vw;
   }
-  .ws-topbar-title .crumb { display: none; }   /* pas la place sur narrow */
+  .ws-topbar-title { padding-left: 16px; min-width: 0; }
+
+  /* Actions : cachées par défaut, deviennent un dropdown vertical au clic du burger */
   .ws-topbar-actions {
-    flex-basis: 100%;        /* prend toute la largeur => devient 2e rangee */
-    justify-content: center;
-    padding-right: 0;
-    flex-wrap: wrap;
-    gap: 6px;
+    display: none;
+    position: absolute;
+    top: calc(var(--ws-topbar-h) + 6px);
+    right: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--ws-surface-elevated, var(--navy2));
+    border: 1px solid var(--ws-border);
+    border-radius: 12px;
+    padding: 8px;
+    gap: 4px;
+    z-index: 50;
+    box-shadow: 0 12px 32px rgba(0,0,0,.45);
+    min-width: 200px;
+  }
+  .ws-topbar-actions.is-open { display: flex; }
+  /* Dans le dropdown, les boutons s'étirent et le rating reprend sa
+     largeur naturelle pour être lisible */
+  .ws-topbar-actions.is-open .ws-iconbtn,
+  .ws-topbar-actions.is-open .ws-rating-trigger {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 10px;
   }
 }
 

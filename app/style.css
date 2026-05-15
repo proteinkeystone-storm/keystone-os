@@ -5889,26 +5889,10 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   padding-left: 56px;   /* aligne le picto sur l'ancre main des autres artefacts (cf. .ws-topbar-title) */
 }
 
-/* ─── Responsive SDQR : 2 rangees sur narrow (meme pattern que les
-   autres artefacts) ─────────────────────────────────────────────── */
+/* ─── Responsive SDQR : burger dropdown sur narrow (meme pattern que
+   les autres artefacts via .ws-topbar-burger + .ws-topbar-actions/dropdown) */
 @media (max-width: 1024px) {
-  .sdqr-topbar {
-    flex-wrap: wrap;
-    height: auto;
-    padding: 10px 16px;
-    gap: 10px;
-    justify-content: center;
-  }
-  .sdqr-topbar-left {
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-  }
-  .sdqr-title-zone {
-    padding-left: 0;
-    gap: 10px;
-  }
+  .sdqr-title-zone { padding-left: 16px; }
   .sdqr-title {
     font-size: 18px;
     white-space: nowrap;
@@ -5916,12 +5900,32 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     text-overflow: ellipsis;
     max-width: 40vw;
   }
+  /* sdqr-topbar-right devient le dropdown (meme strategie que .ws-topbar-actions) */
   .sdqr-topbar-right {
-    flex-basis: 100%;
-    justify-content: center;
-    padding-right: 0;
-    flex-wrap: wrap;
-    gap: 6px;
+    display: none;
+    position: absolute;
+    top: 62px;
+    right: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--navy2);
+    border: 1px solid var(--bd);
+    border-radius: 12px;
+    padding: 8px;
+    gap: 4px;
+    z-index: 50;
+    box-shadow: 0 12px 32px rgba(0,0,0,.45);
+    min-width: 200px;
+    padding-right: 8px;
+  }
+  .sdqr-topbar-right.is-open { display: flex; }
+  .sdqr-topbar-right.is-open .ws-iconbtn,
+  .sdqr-topbar-right.is-open .ws-rating-trigger,
+  .sdqr-topbar-right.is-open .sdqr-pill {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 10px;
   }
 }
 .sdqr-eyebrow {

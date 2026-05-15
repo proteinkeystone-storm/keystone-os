@@ -17,6 +17,7 @@ import { icon } from './lib/ui-icons.js';
 import { scheduleAutoSave } from './vault.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
+import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { CF_API } from './pads-loader.js';
 import {
   FIELD_TYPES,
@@ -187,6 +188,7 @@ function _buildShell() {
         <span class="name">${WORKSPACE_META.name}</span>
         <span class="crumb" data-slot="crumb"></span>
       </div>
+      ${burgerHTML()}
       <div class="ws-topbar-actions">
         <span class="pulsa-save-indicator" data-slot="save-indicator" aria-live="polite">
           ${icon('check', 12)}<span data-slot="save-label">Enregistré</span>
@@ -215,6 +217,7 @@ function _buildShell() {
   _root.addEventListener('keydown', _onKeydown);
   bindRatingButton(_root, WORKSPACE_META.id);
   bindHelpButton(_root, WORKSPACE_META.id);
+  bindBurger(_root);
 }
 
 // ═══════════════════════════════════════════════════════════════

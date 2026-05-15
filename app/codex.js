@@ -27,6 +27,7 @@
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
+import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import {
   loadCatalog, getVendorsByCategory, getProductsByVendor, getStandard,
   formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
@@ -203,6 +204,7 @@ function _buildShell() {
         <span class="ws-topbar-app-picto">${icon('kodex', 24)}</span>
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
+      ${burgerHTML()}
       <div class="ws-topbar-actions">
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
@@ -233,6 +235,7 @@ function _buildShell() {
   _root.addEventListener('click', _onClick);
   bindRatingButton(_root, WORKSPACE_META.id);
   bindHelpButton(_root, WORKSPACE_META.id);
+  bindBurger(_root);
 
   _renderRail();
   _renderAside();

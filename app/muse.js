@@ -32,6 +32,7 @@
 
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
+import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { icon } from './lib/ui-icons.js';
 import {
   loadModes, getModes, getMode, getSliders, getTimeBudgets,
@@ -219,6 +220,7 @@ function _buildShell() {
         <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
+      ${burgerHTML()}
       <div class="ws-topbar-actions">
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
@@ -244,6 +246,7 @@ function _buildShell() {
   _root.addEventListener('keydown', _onKeydown);
   bindRatingButton(_root, WORKSPACE_META.id);
   bindHelpButton(_root, WORKSPACE_META.id);
+  bindBurger(_root);
   _renderRail();
   _renderAside();
 }
