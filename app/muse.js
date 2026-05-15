@@ -216,7 +216,6 @@ function _buildShell() {
       <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
       <div class="ws-topbar-title">
         <span class="name">${WORKSPACE_META.name}</span>
-        <span class="crumb" data-slot="crumb">${_currentStep().label}</span>
       </div>
       <div class="ws-topbar-actions">
         ${helpButtonHTML(WORKSPACE_META.id)}
@@ -226,9 +225,6 @@ function _buildShell() {
         </button>
         <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer">
           ${icon('refresh', 18)}
-        </button>
-        <button class="ws-iconbtn" data-act="close" title="Fermer">
-          ${icon('x', 18)}
         </button>
       </div>
     </header>
@@ -481,8 +477,8 @@ function _renderMain(opts = {}) {
   main.innerHTML = `<div class="ws-main-inner">${html}${_stepNav()}</div>`;
   main.scrollTop = opts.preserveScroll ? prevScroll : 0;
 
-  const crumb = _root.querySelector('[data-slot="crumb"]');
-  if (crumb) crumb.textContent = _currentStep().label;
+  // Le crumb d'étape a été retiré du hero — le rail gauche reste la
+  // source de vérité de l'étape courante.
   _renderRail();
   const progress = _root.querySelector('[data-slot="progress"]');
   if (progress) {

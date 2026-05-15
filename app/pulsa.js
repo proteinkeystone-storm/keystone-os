@@ -194,9 +194,6 @@ function _buildShell() {
         <button class="ws-iconbtn" data-slot="save-btn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
-        <button class="ws-iconbtn" data-act="close" title="Fermer Pulsa">
-          ${icon('x', 18)}
-        </button>
       </div>
     </header>
 

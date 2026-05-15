@@ -139,8 +139,9 @@ html.light-mode .ws-app {
 .ws-topbar-logo:hover { opacity: .85; transform: scale(1.02); }
 .ws-topbar-logo img   { height: 22px; width: auto; display: block; }
 
-/* Flèche retour : icône seule (plus de label « Retour »), animation
-   subtile de glissement vers la gauche au survol pour signifier le sens. */
+/* Flèche retour : chevron indigo en permanence (couleur identitaire du
+   sens de navigation). Animation subtile de glissement vers la gauche au
+   survol pour signifier le sens — pas besoin d'écrire « Retour ». */
 .ws-topbar-back {
   display: inline-flex;
   align-items: center;
@@ -149,17 +150,15 @@ html.light-mode .ws-app {
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--ws-text-soft);
+  color: var(--ws-accent, var(--gold));
   border-radius: 50%;
   cursor: pointer;
   transition: transform .25s cubic-bezier(.16,1,.3,1),
-              background .2s ease,
-              color .2s ease;
+              background .2s ease;
   flex-shrink: 0;
 }
 .ws-topbar-back:hover {
   background: var(--ws-accent-soft, rgba(99,102,241,.12));
-  color: var(--ws-accent, var(--gold));
   transform: translateX(-3px);
 }
 .ws-topbar-back:active { transform: translateX(-3px) scale(.94); }
