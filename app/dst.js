@@ -111,6 +111,36 @@ export function setDefaultStatus(content) {
     }
 }
 
+// ── Pool de messages P3 en rotation ──────────────────────────
+// Le niveau « défaut » n'est plus un texte figé : on fait tourner
+// plusieurs messages contextuels pour garder le hero vivant. Quand
+// un message Coach (P2) ou Admin (P1) est au-dessus, la rotation
+// continue en silence et reprend visuellement dès le retour en P3.
+let _defaultPool  = [];
+let _defaultIdx   = 0;
+let _defaultTimer = null;
+const DEFAULT_ROTATE_MS = 8500;
+
+export function setDefaultStatusPool(messages) {
+    const pool = (messages || []).filter(Boolean);
+    if (!pool.length) return;
+    // Pool identique → on ne réarme pas (évite de couper l'animation
+    // en cours à chaque renderDashboard).
+    if (pool.length === _defaultPool.length && pool.every((m, i) => m === _defaultPool[i])) return;
+
+    _defaultPool = pool;
+    _defaultIdx  = 0;
+    setDefaultStatus(_defaultPool[0]);
+
+    clearInterval(_defaultTimer);
+    if (_defaultPool.length > 1) {
+        _defaultTimer = setInterval(() => {
+            _defaultIdx = (_defaultIdx + 1) % _defaultPool.length;
+            setDefaultStatus(_defaultPool[_defaultIdx]);
+        }, DEFAULT_ROTATE_MS);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // RENDU & ANIMATION — texte « motion graphic »
 // ─────────────────────────────────────────────────────────────
@@ -178,69 +208,90 @@ function _applyMsg(msg, slideIn) {
     _typeMessage(_parseMarkup(msg.content));
 }
 
-/** Machine à écrire : remplit #dst-text caractère par caractère. */
+const _emphasized = s => s === 'accent' || s === 'action' || s === 'bold';
+
+/**
+ * Rendu « motion graphic » : chaque caractère jaillit dans sa position
+ * (ressort + rotation + flou qui se résorbe). Structure DOM :
+ *   segment → mot (insécable) → caractère animé.
+ * Les mots assurent un retour à la ligne propre ; les caractères
+ * portent l'animation. Vitesse de révélation variable (respiration
+ * sur la ponctuation, ralenti sur les mots forts).
+ */
 function _typeMessage(segments) {
     const token = ++_typeToken;
     _textEl.innerHTML = '';
     _textEl.classList.add('dst-typing');
 
-    // Un span (vide) par segment + un curseur clignotant
-    const spans = segments.map(seg => {
-        const tag = seg.style === 'bold' ? 'b' : seg.style === 'italic' ? 'i' : 'span';
-        const el  = document.createElement(tag);
-        el.className = 'dst-seg dst-seg--' + seg.style;
-        if (seg.style === 'action') {
-            el.dataset.dstAction = seg.action;
-            el.setAttribute('role', 'button');
-            el.tabIndex = 0;
-        }
-        _textEl.appendChild(el);
-        return el;
-    });
-    const caret = document.createElement('span');
-    caret.className = 'dst-caret';
-    _textEl.appendChild(caret);
+    const charSpans = [];   // ordre de révélation : { el, strong, seg }
 
-    const emphasized = s => s === 'accent' || s === 'action' || s === 'bold';
+    segments.forEach(seg => {
+        const tag = seg.style === 'bold' ? 'b' : seg.style === 'italic' ? 'i' : 'span';
+        const segEl = document.createElement(tag);
+        segEl.className = 'dst-seg dst-seg--' + seg.style;
+        if (seg.style === 'action') {
+            segEl.dataset.dstAction = seg.action;
+            segEl.setAttribute('role', 'button');
+            segEl.tabIndex = 0;
+        }
+        const strong = _emphasized(seg.style);
+
+        // Découpe en mots + espaces (séparateurs conservés)
+        seg.text.split(/(\s+)/).forEach(part => {
+            if (part === '') return;
+            if (/^\s+$/.test(part)) {           // espace → noeud texte (point de césure)
+                segEl.appendChild(document.createTextNode(part));
+                return;
+            }
+            const wordEl = document.createElement('span');
+            wordEl.className = 'dst-word';      // insécable (white-space:nowrap en CSS)
+            for (const ch of part) {
+                const chEl = document.createElement('span');
+                chEl.className = 'dst-ch' + (strong ? ' dst-ch--strong' : '');
+                chEl.textContent = ch;
+                chEl.style.visibility = 'hidden';   // réserve la place, pas de reflow
+                wordEl.appendChild(chEl);
+                charSpans.push({ el: chEl, strong, seg: segEl });
+            }
+            segEl.appendChild(wordEl);
+        });
+        _textEl.appendChild(segEl);
+    });
 
     // Préférence d'accessibilité : pas d'animation → tout afficher d'un coup
     if (_prefersReducedMotion()) {
-        segments.forEach((seg, i) => {
-            spans[i].textContent = seg.text;
-            if (emphasized(seg.style)) spans[i].classList.add('dst-seg--done');
-        });
-        caret.remove();
+        charSpans.forEach(c => { c.el.style.visibility = ''; });
+        _textEl.querySelectorAll('.dst-seg--accent,.dst-seg--action,.dst-seg--bold')
+               .forEach(s => s.classList.add('dst-seg--done'));
         _textEl.classList.remove('dst-typing');
         return;
     }
 
-    let si = 0, ci = 0;
+    let i = 0;
     const step = () => {
         if (token !== _typeToken) return;          // un nouveau message a pris la main
-        if (si >= segments.length) {               // terminé
+        if (i >= charSpans.length) {               // terminé
             _textEl.classList.remove('dst-typing');
-            setTimeout(() => { if (token === _typeToken) caret.remove(); }, 1600);
             return;
         }
-        const seg = segments[si];
-        const ch  = seg.text[ci];
-        spans[si].textContent += ch;
-        ci++;
+        const { el, strong, seg } = charSpans[i];
+        const ch = el.textContent;
+        el.style.visibility = '';
+        el.classList.add('dst-ch--in');
 
-        // Segment stylé entièrement écrit → flash « pop » lumineux
-        if (ci >= seg.text.length) {
-            if (emphasized(seg.style)) spans[si].classList.add('dst-seg--done');
-            si++; ci = 0;
-        }
+        // Dernier caractère d'un segment stylé → flash « pop » lumineux
+        const next = charSpans[i + 1];
+        if (strong && (!next || next.seg !== seg)) seg.classList.add('dst-seg--done');
+
+        i++;
 
         // Vitesse variable — c'est ce qui donne du « caractère » au texte
-        let delay = emphasized(seg.style) ? 36 : 19;   // ralenti sur les mots forts
-        if (ch === ' ')           delay = 24;
-        if (',;:'.includes(ch))   delay = 210;          // courte respiration
-        if ('.!?—…'.includes(ch)) delay = 440;          // ponctuation forte
-        delay += Math.random() * 16 - 8;                // micro-variation organique
+        let delay = strong ? 44 : 24;                   // ralenti sur les mots forts
+        if (',;:'.includes(ch))   delay = 230;          // courte respiration
+        if ('.!?—…'.includes(ch)) delay = 470;          // ponctuation forte
+        delay += Math.random() * 18 - 9;                // micro-variation organique
 
-        setTimeout(step, Math.max(8, delay));
+        setTimeout(step, Math.max(12, delay));
     };
     step();
 }

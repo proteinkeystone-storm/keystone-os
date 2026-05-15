@@ -253,7 +253,9 @@ body::after {
 /* Conteneur — mêmes règles que .hero-sub */
 .hero-dst {
   /* hérite de .hero-sub : font-size 13.5px, color var(--tx2) */
-  overflow: hidden;
+  /* overflow visible : laisse respirer le glow des accents et le
+     « pop » des caractères (sinon text-shadow/scale rognés). */
+  overflow: visible;
   min-height: 1.4em; /* évite le saut de layout quand vide */
 }
 
@@ -275,44 +277,65 @@ body::after {
 /* Light mode */
 html.light-mode .hero-dst .hero-dst-text { color: var(--text) !important; opacity: 1 !important; }
 
-/* ── DST « motion graphic » — segments stylés + curseur ─────────
-   Le moteur (dst.js) tape le texte caractère par caractère et
-   enrobe les segments markup dans ces classes. */
+/* ── DST « motion graphic » ─────────────────────────────────────
+   dst.js révèle le texte caractère par caractère ; chaque lettre
+   jaillit dans sa position finale (ressort + rotation + flou qui se
+   résorbe). Structure DOM : segment > mot (insécable) > caractère.
+   La teinte des accents et du glow suit l'« humeur » du message
+   (--dst-mood, piloté par data-type). */
+
+/* Humeur du message → teinte (RGB brut pour composer rgb()/rgba()) */
+.hero-dst                     { --dst-mood: 99,102,241; }   /* défaut — indigo */
+.hero-dst[data-type="info"]   { --dst-mood: 56,189,248; }   /* info   — bleu ciel */
+.hero-dst[data-type="promo"]  { --dst-mood: 76,201,168; }   /* promo  — vert */
+.hero-dst[data-type="urgent"] { --dst-mood: 224,90,80;  }   /* urgent — rouge */
+.hero-dst[data-type="alert"]  { --dst-mood: 224,120,90; }   /* alerte — ambre */
+
+/* Mot insécable — pas de césure au milieu d'un mot animé */
+.dst-word { white-space: nowrap; }
+
+/* Caractère animé — l'entrée « ressort » donne le côté motion graphic */
+.dst-ch { display: inline-block; will-change: transform, filter, opacity; }
+.dst-ch--in                { animation: dst-ch-in .42s cubic-bezier(.22,1.35,.32,1) both; }
+.dst-ch--strong.dst-ch--in { animation: dst-ch-in-strong .5s cubic-bezier(.18,1.6,.28,1) both; }
+@keyframes dst-ch-in {
+  0%   { opacity: 0; transform: translateY(.42em) scale(.45) rotate(-10deg); filter: blur(3px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dst-ch-in-strong {
+  0%   { opacity: 0; transform: translateY(.55em) scale(.3) rotate(-14deg); filter: blur(4px); }
+  55%  { opacity: 1; transform: translateY(-.06em) scale(1.16) rotate(2deg); filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* Segments stylés (markup **gras** *italique* ==accent== [[…|action]]) */
 .dst-seg--bold   { font-weight: 800; }
-.dst-seg--italic { font-style: italic; opacity: .9; }
+.dst-seg--italic { font-style: italic; opacity: .92; }
 .dst-seg--accent,
 .dst-seg--action {
   font-weight: 800;
-  color: var(--gold) !important;
+  color: rgb(var(--dst-mood)) !important;
   letter-spacing: -.01em;
 }
 .dst-seg--action { cursor: pointer; transition: filter .15s; }
-.dst-seg--action:hover  { filter: brightness(1.25); text-decoration: underline; text-underline-offset: 2px; }
-.dst-seg--action:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 3px; }
+.dst-seg--action:hover         { filter: brightness(1.25); text-decoration: underline; text-underline-offset: 2px; }
+.dst-seg--action:focus-visible { outline: 2px solid rgb(var(--dst-mood)); outline-offset: 2px; border-radius: 3px; }
 
-/* Flash lumineux une fois le segment fort entièrement écrit */
+/* Flash lumineux quand un segment fort vient d'être entièrement écrit */
 .dst-seg--accent.dst-seg--done,
 .dst-seg--action.dst-seg--done,
-.dst-seg--bold.dst-seg--done { animation: dst-pop .55s cubic-bezier(.16,1,.3,1); }
+.dst-seg--bold.dst-seg--done { animation: dst-pop .6s cubic-bezier(.16,1,.3,1); }
 @keyframes dst-pop {
-  0%   { text-shadow: 0 0 0   rgba(99,102,241,0);   }
-  40%  { text-shadow: 0 0 14px rgba(99,102,241,.75); }
-  100% { text-shadow: 0 0 0   rgba(99,102,241,0);   }
+  0%   { text-shadow: 0 0 0    rgba(var(--dst-mood), 0);   }
+  40%  { text-shadow: 0 0 16px rgba(var(--dst-mood), .85); }
+  100% { text-shadow: 0 0 0    rgba(var(--dst-mood), 0);   }
 }
-
-/* Curseur clignotant pendant la frappe */
-.dst-caret {
-  display: inline-block;
-  width: 2px; height: 1.05em;
-  margin-left: 2px; vertical-align: -2px;
-  background: var(--gold); border-radius: 1px;
-  animation: dst-caret-blink .85s steps(1, end) infinite;
-}
-@keyframes dst-caret-blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dst-caret,
+  .dst-ch--in, .dst-ch--strong.dst-ch--in,
   .dst-seg--done { animation: none !important; }
+  .dst-ch { transform: none !important; filter: none !important; opacity: 1 !important; }
 }
 
 /* ── INBOX — CTA + Dismiss à droite du DST ──────────────────── */

@@ -11,7 +11,7 @@ import {
     getUserLabel, isPadHidden, restorePad,
     dismissEditMode, isPadDeactivated, deactivatePad, reactivatePad,
 } from './grid-engine.js';
-import { setKeystoneStatus, dismissDSTMessage, setDefaultStatus } from './dst.js';
+import { setKeystoneStatus, dismissDSTMessage, setDefaultStatusPool } from './dst.js';
 import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
@@ -268,20 +268,25 @@ function _renderTimeSaveGauge(ownedTools, ownedArts) {
     }
 }
 
-// Compose le message d'accueil du DST avec le temps gagné intégré.
-// Markup DST : **gras** · ==accent== · [[texte|action cliquable]].
+// Compose le POOL de messages d'accueil du DST (rotation ~8,5 s) avec
+// le temps gagné intégré. Markup DST : **gras** · ==accent== ·
+// [[texte|action cliquable]].
 function _pushTimeSaveStatus() {
     const perDay = _timeSaveItems.reduce((s, it) => s + it.min, 0);
     const n      = _timeSaveItems.length;
-    if (perDay <= 0 || n === 0) {
-        setDefaultStatus('Votre pôle de promotion immobilière est prêt.');
-        return;
+    const pool   = [];
+
+    if (perDay > 0 && n > 0) {
+        const isMonth = _tsPeriod() === 'month';
+        const total   = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
+        const period  = isMonth ? 'par mois' : 'par jour';
+        const outils  = `${n} outil${n > 1 ? 's' : ''}`;
+        pool.push(`Vos **${outils}** vous font gagner [[${_formatDuration(total)}|timesave]] ${period}.`);
+        pool.push(`**${n} assistant${n > 1 ? 's' : ''} IA** prêt${n > 1 ? 's' : ''} à travailler sur vos projets.`);
     }
-    const isMonth = _tsPeriod() === 'month';
-    const total   = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
-    const period  = isMonth ? 'par mois' : 'par jour';
-    const outils  = `${n} outil${n > 1 ? 's' : ''}`;
-    setDefaultStatus(`Vos **${outils}** vous font gagner [[${_formatDuration(total)}|timesave]] ${period}.`);
+    pool.push('Votre pôle de promotion immobilière est **prêt**.');
+
+    setDefaultStatusPool(pool);
 }
 
 function _renderTimeSaveModalBody() {
