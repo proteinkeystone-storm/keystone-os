@@ -359,22 +359,23 @@ html.light-mode .ks-inbox-cta-close {
 }
 .cc-btn.cc-icon:hover { color: var(--text); }
 
-/* Séparateur vertical */
-.cc-sep {
-  width: 1px; height: 18px;
-  background: rgba(255,255,255,.1);
-  margin: 0 4px; flex-shrink: 0;
+/* Bouton mode clair / sombre — soleil + lune visibles, l'actif est « plein »
+   (rempli + couleur accent), l'autre en outline atténué. */
+.cc-mode-btn { gap: 5px; padding: 5px 7px; }
+.mode-ico {
+  width: 13px; height: 13px; flex-shrink: 0;
+  transition: opacity .2s, fill .2s, color .2s;
 }
+/* Dark mode (défaut) : lune active, soleil atténué */
+.mode-sun  { fill: none;         opacity: .32; }
+.mode-moon { fill: currentColor; opacity: 1;   color: var(--gold); }
+/* Light mode : soleil actif, lune atténuée */
+html.light-mode .mode-sun  { fill: currentColor; opacity: 1;   color: var(--gold); }
+html.light-mode .mode-moon { fill: none;         opacity: .32; }
 
-/* Cadenas sécurité — discret, non cliquable */
-.cc-lock-chip {
-  display: flex; align-items: center;
-  padding: 4px 7px;
-  color: rgba(255,255,255,.22);
-  cursor: default;
-  flex-shrink: 0;
-}
-html.light-mode .cc-lock-chip { color: rgba(17,24,39,.2); }
+/* Cadenas — déclencheur de l'économiseur d'écran. C'est désormais un
+   vrai bouton carré : tout l'habillage vient de .cc-btn.cc-icon. */
+.cc-lock-chip { flex-shrink: 0; }
 
 /* Dual AI logos — dark variant / light variant (sélecteur moteur des
    Paramètres) ────────────────────────────────────────────────── */
@@ -473,25 +474,17 @@ html.light-mode .engine-logo-light { display: block !important; }
 .pl-empty-ico { font-size: 40px; }
 .pl-empty-txt { font-size: 12.5px; color: var(--tx3); text-align: center; line-height: 1.6; }
 
-/* Licence chip */
-.lic-chip {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 11px;
-  background: rgba(34,197,94,.08);
-  border: 1px solid rgba(34,197,94,.25);
-  border-radius: 20px;
-  cursor: default;
-  transition: background .2s;
-}
+/* Licence active — point vert minimal dans la topbar (remplace la pill) */
 .lic-dot {
-  width: 6px; height: 6px; background: var(--green); border-radius: 50%;
+  width: 7px; height: 7px; flex-shrink: 0;
+  background: var(--green); border-radius: 50%;
+  margin: 0 4px 0 2px;
   animation: pulse-g 2.5s ease-in-out infinite;
 }
 @keyframes pulse-g {
   0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
   60%      { box-shadow: 0 0 0 4px rgba(34,197,94,.08); }
 }
-.lic-text { font-size: 10px; font-weight: 700; color: var(--green); white-space: nowrap; letter-spacing: .02em; }
 
 /* Bouton Paramètres */
 .settings-btn {
@@ -3623,9 +3616,9 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
   .tb-spacer        { display: none; }
 
   .cc-bar           { gap: 6px; flex: 1; justify-content: flex-end; }
-  .cc-lock-chip,
-  .lic-chip,
-  .cc-sep           { display: none !important; }
+  /* Narrow = minimalisme : on masque le point vert licence, mais le
+     cadenas (économiseur) reste accessible comme les autres CTA. */
+  .lic-dot          { display: none !important; }
 
   /* Boutons icône : 36×36 (zone tactile Apple HIG) */
   .cc-btn.cc-icon {
