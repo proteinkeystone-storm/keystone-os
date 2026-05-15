@@ -37,6 +37,7 @@
   --ws-radius: var(--r, 10px);
   --ws-radius-sm: 6px;
   --ws-radius-lg: var(--r2, 20px);   /* DOIT vivre à :root : la règle d'alignement Phase E1 (l.815) cible aussi .pad-card, qui n'est PAS dans .ws-app. Sans ça, var() fallback 0 → coins carrés. */
+  --ws-rail-w: 220px;                /* DOIT vivre à :root : .ws-topbar-brand est aussi utilisé en SDQR (qui n'est PAS dans .ws-app). Sans ça, width:var(--ws-rail-w) tombe sur auto → le chevron colle au logo. */
   --ws-radius-pill: 999px;
   --ws-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --ws-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.5);

@@ -5856,15 +5856,15 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 /* ── Topbar ──────────────────────────────────────────────────── */
 .sdqr-topbar {
   flex-shrink: 0;
-  height: 68px;
-  padding: 0 24px;
+  height: 56px;                  /* aligne sur --ws-topbar-h des autres artefacts */
+  padding: 0;                    /* le brand gere son propre padding-left, comme les autres heros */
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid rgba(255,255,255,.07);
   background: var(--navy2);
   backdrop-filter: blur(10px);
 }
-.sdqr-topbar-left  { display: flex; align-items: center; gap: 18px; }
-.sdqr-topbar-right { display: flex; align-items: center; gap: 10px; }
+.sdqr-topbar-left  { display: flex; align-items: center; gap: 0; flex: 1; }
+.sdqr-topbar-right { display: flex; align-items: center; gap: 8px; padding-right: 16px; }
 
 .sdqr-back-btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -5883,7 +5883,11 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   color: #fff;
 }
 
-.sdqr-title-zone { line-height: 1.1; display: flex; align-items: center; gap: 14px; }
+.sdqr-title-zone {
+  line-height: 1.1;
+  display: flex; align-items: center; gap: 14px;
+  padding-left: 56px;   /* aligne le picto sur l'ancre main des autres artefacts (cf. .ws-topbar-title) */
+}
 .sdqr-eyebrow {
   font-size: 9.5px; font-weight: 700;
   letter-spacing: .14em; text-transform: uppercase;

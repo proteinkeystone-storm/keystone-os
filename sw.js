@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.49.0-sdqr-pill-rectangle';
+const VERSION       = 'ks-os-v4.50.0-chevron-position-coherente';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
