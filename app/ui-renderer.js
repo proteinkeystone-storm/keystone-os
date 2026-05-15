@@ -470,7 +470,6 @@ export function renderDashboard() {
                     </svg>
                 </button>
                 <div class="pad-icon">${ICONS[t.icon] || ICONS['package']}</div>
-                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${label}</div>
                 <div class="pad-desc">${t.desc}</div>
                 ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
@@ -494,7 +493,6 @@ export function renderDashboard() {
                     </svg>
                 </button>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
-                <div class="pad-arrow">↗</div>
                 <div class="pad-name">${a.name}</div>
                 <div class="pad-desc">${desc}</div>
             </div>`;

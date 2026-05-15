@@ -109,7 +109,7 @@ html.light-mode .pad-card:hover {
   box-shadow: 0 6px 20px rgba(15,23,42,.08);
   background: #ffffff;
 }
-html.light-mode .pad-arrow { color: rgba(15,23,42,.35); }
+/* (.pad-arrow supprimée — voir .pad-card::before pour le spotlight) */
 html.light-mode .pad-name  { color: #0f172a; }
 html.light-mode .pad-desc  { color: rgba(15,23,42,.55); }
 
@@ -758,13 +758,37 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
 }
 
 .pad-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--tool-bd, rgba(99,102,241,.28));
-  box-shadow: 0 4px 16px rgba(0,0,0,.16);
+  transform: translateY(-3px) scale(1.006);
+  border-color: var(--tool-bd, rgba(99,102,241,.32));
+  box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 0 0 1px var(--tool-bd, rgba(99,102,241,.18));
   background: var(--navy3);
 }
-.pad-card:hover .pad-icon { transform: scale(1.04); }
+.pad-card:hover .pad-icon { transform: scale(1.06); }
 .pad-card:active { transform: translateY(0) scale(.985); transition-duration: .08s; }
+
+/* ── Reflet de lumière qui suit le curseur ─────────────────────
+   Spotlight indigo radial centré sur la position du pointeur,
+   mise à jour via les variables --mx / --my écrites en JS par
+   grid-engine.js (listener mousemove sur le container). Le glow
+   s'ouvre en fondu au :hover, et suit le curseur en temps réel. */
+.pad-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    520px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(99,102,241,.16),
+    transparent 45%
+  );
+  opacity: 0;
+  transition: opacity .35s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.pad-card:hover::before { opacity: 1; }
+/* Le contenu doit passer au-dessus du spotlight */
+.pad-card > * { position: relative; z-index: 1; }
 
 /* Animation d'entrée en cascade */
 @keyframes rise {
@@ -1141,15 +1165,7 @@ html.light-mode .ks-frigo-text  { color: rgba(140,100,30,.9); }
 }
 .pad-lock-icon svg { display: block; }
 
-/* Enlève la flèche ↗ sur les cartes verrouillées */
-.pad-card--locked .pad-arrow {
-  position: absolute; bottom: 18px; right: 20px;
-  font-size: 16px; color: var(--tx3);
-  font-weight: 300; line-height: 1;
-  transition: color .2s ease, transform .2s ease;
-  pointer-events: none;
-}
-.pad-card:hover .pad-arrow { color: var(--tool-c, var(--gold)); transform: translate(2px,-2px); }
+/* (Flèche ↗ supprimée — remplacée par un spotlight curseur, cf. .pad-card::before plus bas) */
 
 /* Artefacts achetés dans la grille — sans draggable */
 .pad-card--artefact { cursor: pointer; }
@@ -1377,23 +1393,16 @@ html.light-mode .pad-card--locked::after {
   background: linear-gradient(135deg, rgba(99,102,241,.06) 0%, transparent 60%);
 }
 
-.pad-arrow {
-  position: absolute; bottom: 18px; right: 20px;
-  font-size: 16px; color: var(--tx3);
-  font-weight: 300; line-height: 1;
-  transition: color .2s ease, transform .2s ease;
-  pointer-events: none;
-}
-.pad-card:hover .pad-arrow { color: var(--tool-c, var(--gold)); transform: translate(2px,-2px); }
-
 /* ══ SUGGEST SECTION (ex Artefacts — Key-Store suggestions) ═══════ */
 .suggest-section { margin-bottom: 48px; }
 
-/* Section suggest — grille auto-fill, s'adapte au nombre d'outils */
+/* Section suggest — alignée pixel-perfect sur .pads-grid : mêmes
+   colonnes, même gap → les cartes « Outils disponibles » tombent
+   exactement sous les Pads, mêmes largeurs, titres lisibles en entier. */
 #arts-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 13px;
   overflow-x: visible;
   padding-bottom: 0;
   scroll-snap-type: none;

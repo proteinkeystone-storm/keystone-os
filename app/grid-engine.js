@@ -37,6 +37,26 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
     container.dataset.gridEngineBound = '1';
     _setupDragDrop(container);
     _setupClicks(container);
+    _setupSpotlight(container);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPOTLIGHT — reflet de lumière qui suit le curseur sur les Pads
+// ─────────────────────────────────────────────────────────────
+// Met à jour les variables --mx / --my sur la carte survolée,
+// que le pseudo-élément ::before consomme via radial-gradient
+// (cf. style.css `.pad-card::before`). Mousemove en délégation
+// container — pas de listener par carte → coût constant quel que
+// soit le nombre de Pads.
+// ═══════════════════════════════════════════════════════════════
+function _setupSpotlight(container) {
+    container.addEventListener('mousemove', e => {
+        const card = e.target.closest('.pad-card');
+        if (!card) return;
+        const r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', ((e.clientX - r.left) / r.width  * 100) + '%');
+        card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100) + '%');
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
