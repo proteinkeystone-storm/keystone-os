@@ -197,7 +197,7 @@ function _buildShell() {
         </a>
         <div class="ws-topbar-brand-right">
           <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
-            ${icon('chevron-left', 26)}
+            ${icon('chevron-left', 34)}
           </button>
           <span class="ws-topbar-app-picto">${icon('kodex', 24)}</span>
         </div>

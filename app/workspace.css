@@ -137,7 +137,7 @@ html.light-mode .ws-app {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px 0 14px;     /* gauche aligné sur le rail ; on garde 14 à droite pour ne pas coller au séparateur — la ligne rouge du design tombe juste avant la bordure */
+  padding: 0 0 0 14px;        /* gauche aligné sur le rail ; à droite : 0 → le picto colle au séparateur (border-right du brand) comme dans la maquette */
   border-right: 1px solid var(--ws-border);
   gap: 6px;
 }
@@ -166,7 +166,7 @@ html.light-mode .ws-app {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px; height: 36px;
+  width: 40px; height: 40px;
   padding: 0;
   background: transparent;
   border: none;
@@ -182,10 +182,10 @@ html.light-mode .ws-app {
   transform: translateX(-3px);
 }
 .ws-topbar-back:active { transform: translateX(-3px) scale(.94); }
-/* Chevron épais — surcharge le stroke-width 1.5 de ui-icons pour le
-   look chunky de la référence design. */
+/* Chevron 34 px chunky — surcharge le stroke-width 1.5 de ui-icons. */
 .ws-topbar-back svg,
-.ws-topbar-back .ws-icon svg { stroke-width: 2.4; width: 26px; height: 26px; }
+.ws-topbar-back .ws-icon svg { stroke-width: 2.4; width: 34px; height: 34px; }
+.ws-topbar-back .ws-icon { width: 34px !important; height: 34px !important; }
 
 /* Pictogramme de l'artefact — bloc carré tinté indigo (style mini
    pad-icon du dashboard) à gauche du nom. Identification visuelle
@@ -212,7 +212,7 @@ html.light-mode .ws-app {
   padding-left: 24px;   /* breathing space après le séparateur du brand */
 }
 .ws-topbar-title .name {
-  font-size: 17px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.025em;
   color: var(--ws-text);
@@ -223,12 +223,12 @@ html.light-mode .ws-app {
 }
 .ws-topbar-title .crumb {
   display: inline-flex; align-items: center;
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.04);
+  padding: 6px 12px;
+  border-radius: 10px;            /* rectangle à coins arrondis, pas pill */
+  background: rgba(255,255,255,.03);
   border: 1px solid var(--ws-border);
-  color: var(--ws-text-soft);
-  font-size: 12px; font-weight: 600;
+  color: var(--ws-text);
+  font-size: 13px; font-weight: 600;
   letter-spacing: -.005em;
   transition: background .2s, color .2s, border-color .2s;
 }
