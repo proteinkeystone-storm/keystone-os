@@ -225,24 +225,33 @@ html.light-mode .ws-app {
   gap: 8px;
 }
 
+/* Boutons d'action de la topbar : carrés à coins arrondis avec bordure
+   subtile (cohérence avec le pad-icon). Le rating ("Noter") devient une
+   pill plus large car il contient un label texte. */
 .ws-iconbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  background: transparent;
-  border: none;
-  border-radius: var(--ws-radius-sm);
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
   color: var(--ws-text-soft);
-  transition: all 150ms ease;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .12s ease;
+  flex-shrink: 0;
 }
 .ws-iconbtn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--ws-border-strong);
   color: var(--ws-text);
 }
+.ws-iconbtn:active { transform: scale(.94); }
 .ws-iconbtn.is-active {
   background: var(--ws-accent-soft);
+  border-color: rgba(99,102,241,.32);
   color: var(--ws-accent);
 }
 
@@ -727,8 +736,10 @@ html.light-mode .ws-app {
 }
 .ws-rating-trigger {
   width: auto;
-  padding: 0 10px;
-  gap: 6px;
+  padding: 0 14px 0 11px;
+  gap: 7px;
+  height: 38px;
+  border-radius: 999px;   /* pill : « Noter » est un mot, pas une icône seule */
 }
 .ws-rating-label {
   font-size: 12px;
