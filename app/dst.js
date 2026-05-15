@@ -43,7 +43,7 @@ export function initDST() {
         if (a) { e.preventDefault(); _fireAction(a); }
     });
 
-    _render(false); // premier affichage — la machine à écrire se lance
+    _ensureRotation({ jumpTo: 0 });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -56,6 +56,10 @@ export function initDST() {
  * @param {'default'|'info'|'alert'} type — Style visuel
  * @param {number} duration — ms avant retour au message inférieur (0 = permanent)
  * @param {1|2|3} priority  — Niveau de priorité (1=admin, 2=IA, 3=défaut)
+ *
+ * NB : depuis la rotation unifiée, la priorité contrôle l'ORDRE
+ * dans le cycle (les P1 passent en premier), pas l'exclusion :
+ * les P2/P3 conservent leur tour même si un P1 est épinglé.
  */
 export function setKeystoneStatus(content, type = 'default', duration = 0, priority = 2) {
     // Retirer l'éventuel ancien message de même priorité (sauf P3 qui est le socle)
@@ -67,13 +71,13 @@ export function setKeystoneStatus(content, type = 'default', duration = 0, prior
     _queue.sort((a, b) => a.priority - b.priority); // P1 en tête
 
     clearTimeout(_timer);
-    _render(true);
+    // Nouveau message haute priorité → on saute dessus dans la rotation
+    _ensureRotation({ jumpTo: 0 });
 
     if (duration > 0) {
         _timer = setTimeout(() => {
             _queue = _queue.filter(m => m.priority >= 3 || m.content !== content);
-            _current = null;
-            _render(true);
+            _ensureRotation();
         }, duration);
     }
 }
@@ -89,8 +93,7 @@ export function dismissDSTMessage(maxPriority = 2) {
     _queue = _queue.filter(m => m.priority > maxPriority);
     if (_queue.length === 0) _queue = [{ ...DEFAULT_MSG }];
     clearTimeout(_timer);
-    _current = null;
-    _render(true);
+    _ensureRotation({ jumpTo: 0 });
     return true;
 }
 
@@ -101,43 +104,81 @@ export function dismissDSTMessage(maxPriority = 2) {
 export function setDefaultStatus(content) {
     if (DEFAULT_MSG.content === content) return; // inchangé → pas de ré-animation
     DEFAULT_MSG.content = content;
-    // Mettre à jour le message P3 existant dans la queue
     const p3 = _queue.find(m => m.priority === 3);
     if (p3) p3.content = content;
-    // Si P3 est actuellement affiché, le mettre à jour directement
-    if (_current?.priority === 3) {
-        _current = null;
-        _render(true);
-    }
+    // Si pas de pool, le défaut entre dans la rotation : on rebuild.
+    if (_defaultPool.length === 0) _ensureRotation();
 }
 
-// ── Pool de messages P3 en rotation ──────────────────────────
-// Le niveau « défaut » n'est plus un texte figé : on fait tourner
-// plusieurs messages contextuels pour garder le hero vivant. Quand
-// un message Coach (P2) ou Admin (P1) est au-dessus, la rotation
-// continue en silence et reprend visuellement dès le retour en P3.
-let _defaultPool  = [];
-let _defaultIdx   = 0;
-let _defaultTimer = null;
-const DEFAULT_ROTATE_MS = 8500;
+/**
+ * Définit le pool de messages d'accueil (rotation P3). Toutes les
+ * entrées du pool prennent leur tour dans la rotation unifiée.
+ */
+let _defaultPool = [];
 
 export function setDefaultStatusPool(messages) {
     const pool = (messages || []).filter(Boolean);
     if (!pool.length) return;
-    // Pool identique → on ne réarme pas (évite de couper l'animation
-    // en cours à chaque renderDashboard).
     if (pool.length === _defaultPool.length && pool.every((m, i) => m === _defaultPool[i])) return;
-
     _defaultPool = pool;
-    _defaultIdx  = 0;
-    setDefaultStatus(_defaultPool[0]);
+    _ensureRotation();
+}
 
-    clearInterval(_defaultTimer);
-    if (_defaultPool.length > 1) {
-        _defaultTimer = setInterval(() => {
-            _defaultIdx = (_defaultIdx + 1) % _defaultPool.length;
-            setDefaultStatus(_defaultPool[_defaultIdx]);
-        }, DEFAULT_ROTATE_MS);
+// ═══════════════════════════════════════════════════════════════
+// ROTATION UNIFIÉE — TOUS les niveaux de priorité tournent ensemble
+// ─────────────────────────────────────────────────────────────
+// Modèle précédent (priorité stricte) : un message Admin (P1)
+// permanent supprimait totalement le Coach (P2) et le défaut (P3).
+// Conséquence : le « temps gagné » ne s'affichait jamais si l'admin
+// avait épinglé un message.
+//
+// Nouveau modèle : la liste d'affichage = [P1*, P2*, ...P3 pool],
+// la rotation cycle dessus toutes les DISPLAY_MS. Priorité = ORDRE
+// (les P1 passent en premier de chaque cycle), pas EXCLUSION — tout
+// le monde a son tour.
+// ═══════════════════════════════════════════════════════════════
+const DISPLAY_MS = 9000;
+let _displayList   = [];
+let _displayIdx    = 0;
+let _rotationTimer = null;
+
+function _buildDisplayList() {
+    const high = _queue.filter(m => m.priority < 3);
+    const pool = _defaultPool.length
+        ? _defaultPool.map(content => ({
+              priority: 3,
+              content,
+              type:     DEFAULT_MSG.type,
+              duration: 0,
+          }))
+        : [{ ...DEFAULT_MSG }];
+    return [...high, ...pool];
+}
+
+function _ensureRotation({ jumpTo = null } = {}) {
+    _displayList = _buildDisplayList();
+    if (jumpTo !== null) _displayIdx = jumpTo;
+    if (_displayIdx >= _displayList.length) _displayIdx = 0;
+
+    clearInterval(_rotationTimer);
+    if (_displayList.length > 1) {
+        _rotationTimer = setInterval(() => {
+            _displayIdx = (_displayIdx + 1) % _displayList.length;
+            _renderCursor(true);
+        }, DISPLAY_MS);
+    }
+    _renderCursor(jumpTo !== null);
+}
+
+function _renderCursor(animate) {
+    if (!_dstEl || !_textEl) return;
+    const msg = _displayList[_displayIdx];
+    if (!msg) return;
+    if (_current?.content === msg.content && _current?.type === msg.type) return;
+    if (animate && _current && _current.content !== msg.content) {
+        _animateChange(msg);
+    } else {
+        _applyMsg(msg, animate);
     }
 }
 
@@ -171,20 +212,6 @@ function _parseMarkup(raw) {
     }
     if (last < raw.length) out.push({ text: raw.slice(last), style: 'normal' });
     return out.length ? out : [{ text: raw, style: 'normal' }];
-}
-
-function _render(animate) {
-    if (!_dstEl || !_textEl) return;
-
-    const top = _queue[0];
-    if (!top) return;
-    if (!animate && _current?.content === top.content) return;
-
-    if (animate && _current && _current.content !== top.content) {
-        _animateChange(top);
-    } else {
-        _applyMsg(top, false);
-    }
 }
 
 function _animateChange(msg) {
