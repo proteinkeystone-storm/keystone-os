@@ -137,9 +137,10 @@ html.light-mode .ws-app {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 0 14px;        /* gauche aligné sur le rail ; à droite : 0 → le picto colle au séparateur (border-right du brand) comme dans la maquette */
-  border-right: 1px solid var(--ws-border);
+  padding: 0 0 0 14px;        /* gauche aligné sur le rail ; pas de padding droit */
   gap: 6px;
+  /* Séparateur retiré — le rail dessous garde son propre border-right,
+     le hero respire sans cette ligne verticale parasite. */
 }
 .ws-topbar-brand-right {
   display: flex;
@@ -151,13 +152,13 @@ html.light-mode .ws-app {
 .ws-topbar-logo {
   display: inline-flex;
   align-items: center;
-  height: 24px;
+  height: 28px;
   text-decoration: none;
   transition: opacity .2s ease, transform .2s ease;
   flex-shrink: 0;
 }
 .ws-topbar-logo:hover { opacity: .85; transform: scale(1.02); }
-.ws-topbar-logo img   { height: 18px; width: auto; display: block; }
+.ws-topbar-logo img   { height: 22px; width: auto; display: block; }
 
 /* Flèche retour : chevron indigo en permanence (couleur identitaire du
    sens de navigation). Animation subtile de glissement vers la gauche au

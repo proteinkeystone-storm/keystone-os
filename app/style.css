@@ -5890,11 +5890,13 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   color: rgba(99,102,241,.85);
 }
 .sdqr-title {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 22px; font-weight: 600;
-  letter-spacing: -.01em;
+  /* Aligné sur les autres artefacts (.ws-topbar-title .name) :
+     font system Apple Premium, weight 800, tracking -0.025em. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 22px; font-weight: 800;
+  letter-spacing: -.025em;
   color: #fff;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .sdqr-pill {

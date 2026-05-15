@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.46.0-hero-chevron-name-crumb';
+const VERSION       = 'ks-os-v4.47.0-logo-up-no-sep-sdqr-font';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
