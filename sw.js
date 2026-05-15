@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.28.1-fix-pad-edit-modal-instant-close';
+const VERSION       = 'ks-os-v4.29.0-dashboard-pleine-largeur';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

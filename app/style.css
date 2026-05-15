@@ -217,7 +217,7 @@ body::after {
   background: var(--navy2);
   border-bottom: 1px solid var(--bd);
   display: flex; align-items: center;
-  padding: 0 22px; gap: 14px;
+  padding: 0 32px; gap: 14px;   /* aligné sur .wrap (pleine largeur) */
   z-index: 100;
   box-shadow: 0 1px 0 rgba(0,0,0,.1);
 }
@@ -508,7 +508,10 @@ html.light-mode .engine-logo-light { display: block !important; }
 
 /* ══ MAIN LAYOUT ════════════════════════════════════════════════ */
 .main { padding-top: 54px; min-height: 100vh; background: var(--navy); }
-.wrap { max-width: 1100px; margin: 0 auto; padding: 0 28px; }
+/* Pleine largeur edge-to-edge — le contenu occupe tout le viewport avec
+   des marges latérales fixes. La topbar utilise le même padding (32px)
+   pour que logo + CTA s'alignent sur le contenu du hero / de la grille. */
+.wrap { max-width: 100%; margin: 0 auto; padding: 0 32px; }
 
 /* ══ HERO ════════════════════════════════════════════════════════ */
 .hero {
@@ -661,7 +664,9 @@ html.light-mode #ks-logo-light { display: block; }
 .pads-section { margin-bottom: 32px; }
 .pads-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Responsive : autant de Pads par ligne que la largeur le permet.
+     ~220px mini par carte → 4 colonnes sur écran moyen, 7-8+ sur large. */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 13px;
 }
 
@@ -3356,9 +3361,9 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 }
 
 /* ══ RESPONSIVE ══════════════════════════════════════════════════ */
-@media (max-width: 960px) {
-  .pads-grid { grid-template-columns: repeat(2, 1fr); }
-}
+/* La grille des Pads est désormais auto-responsive (auto-fill minmax) :
+   plus besoin de forcer le nombre de colonnes en tablette — elle s'adapte
+   seule. Seul le passage mobile (1 colonne ≤ 768px) reste explicite. */
 
 /* ═══════════════════════════════════════════════════════════════
    SPRINT 1 — RÉFONTE MOBILE (smartphone)
