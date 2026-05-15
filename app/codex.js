@@ -191,13 +191,17 @@ function _buildShell() {
   _root.className = 'ws-app';
   _root.innerHTML = `
     <header class="ws-topbar">
-      <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
-        <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
-      </a>
-      <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
-        ${icon('chevron-left', 26)}
-      </button>
-      <span class="ws-topbar-app-picto">${icon('kodex', 24)}</span>
+      <div class="ws-topbar-brand">
+        <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
+          <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+        </a>
+        <div class="ws-topbar-brand-right">
+          <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
+            ${icon('chevron-left', 26)}
+          </button>
+          <span class="ws-topbar-app-picto">${icon('kodex', 24)}</span>
+        </div>
+      </div>
       <div class="ws-topbar-title">
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
@@ -216,9 +220,6 @@ function _buildShell() {
         </button>
         <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer">
           ${icon('refresh', 18)}
-        </button>
-        <button class="ws-iconbtn" data-act="help" title="Aide">
-          ${icon('help-circle', 18)}
         </button>
       </div>
     </header>

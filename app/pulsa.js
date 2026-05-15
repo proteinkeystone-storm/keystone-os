@@ -172,15 +172,19 @@ function _buildShell() {
   _root.className = 'ws-app pulsa-app';
   _root.innerHTML = `
     <header class="ws-topbar" data-slot="topbar">
-      <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
-        <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
-      </a>
-      <button class="ws-topbar-back" data-slot="back-btn" data-act="close"
-              title="Retour" aria-label="Retour">
-        ${icon('chevron-left', 26)}
-        <span data-slot="back-label" hidden></span>
-      </button>
-      <span class="ws-topbar-app-picto">${icon('pulsa', 24)}</span>
+      <div class="ws-topbar-brand">
+        <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
+          <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+        </a>
+        <div class="ws-topbar-brand-right">
+          <button class="ws-topbar-back" data-slot="back-btn" data-act="close"
+                  title="Retour" aria-label="Retour">
+            ${icon('chevron-left', 26)}
+            <span data-slot="back-label" hidden></span>
+          </button>
+          <span class="ws-topbar-app-picto">${icon('pulsa', 24)}</span>
+        </div>
+      </div>
       <div class="ws-topbar-title">
         <span class="name">${WORKSPACE_META.name}</span>
         <span class="crumb" data-slot="crumb"></span>
@@ -396,7 +400,9 @@ function _refreshTopbar() {
     if (back) back.dataset.act = 'back-to-library';
     if (backLbl) backLbl.textContent = 'Mes formulaires';
     if (sep) sep.style.display = '';
-    if (crumb) crumb.textContent = _currentStep().label;
+    // Pas de label d'étape dans le hero : le rail gauche est déjà la
+    // source de vérité de l'étape courante (« 1 · Structure »).
+    if (crumb) crumb.textContent = '';
     if (saveBtn) saveBtn.style.display = '';
     if (saveInd) saveInd.style.display = '';
   }
@@ -542,8 +548,7 @@ async function _exportCsv(formId) {
 function _navigate(stepId) {
   if (!STEPS.find(s => s.id === stepId)) return;
   _currentStepId = stepId;
-  const crumb = _root?.querySelector('[data-slot="crumb"]');
-  if (crumb) crumb.textContent = _currentStep().label;
+  // Pas de label d'étape dans le hero — le rail gauche fait foi.
   _renderRail();
   _renderMain();
 }

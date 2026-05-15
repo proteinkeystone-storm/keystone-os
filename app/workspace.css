@@ -117,8 +117,8 @@ html.light-mode .ws-app {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 0;
+  padding: 0;
   background: var(--ws-surface-elevated);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -126,18 +126,38 @@ html.light-mode .ws-app {
   z-index: 10;
 }
 
-/* Logo Keystone — cliquable, ramène au Dashboard. Premier élément du hero
-   pour ancrer l'identité OS et offrir une sortie rapide. */
+/* Cluster « brand » à gauche : occupe EXACTEMENT la largeur du rail
+   (var(--ws-rail-w) = 220px) et reproduit la séparation par border-right.
+   Visuellement, ce cluster colle au rail en dessous → continuité parfaite
+   logo/chevron/picto avec ÉTAPES/numéros/labels. */
+.ws-topbar-brand {
+  width: var(--ws-rail-w);
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px 0 14px;     /* gauche aligné sur le rail ; on garde 14 à droite pour ne pas coller au séparateur — la ligne rouge du design tombe juste avant la bordure */
+  border-right: 1px solid var(--ws-border);
+  gap: 6px;
+}
+.ws-topbar-brand-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;                   /* chevron + picto serrés ensemble */
+}
+
+/* Logo Keystone — cliquable, ramène au Dashboard. */
 .ws-topbar-logo {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  height: 24px;
   text-decoration: none;
   transition: opacity .2s ease, transform .2s ease;
   flex-shrink: 0;
 }
 .ws-topbar-logo:hover { opacity: .85; transform: scale(1.02); }
-.ws-topbar-logo img   { height: 22px; width: auto; display: block; }
+.ws-topbar-logo img   { height: 18px; width: auto; display: block; }
 
 /* Flèche retour : chevron indigo en permanence (couleur identitaire du
    sens de navigation). Animation subtile de glissement vers la gauche au
@@ -189,6 +209,7 @@ html.light-mode .ws-app {
   gap: 12px;
   flex: 1;
   min-width: 0;
+  padding-left: 24px;   /* breathing space après le séparateur du brand */
 }
 .ws-topbar-title .name {
   font-size: 17px;
@@ -222,6 +243,7 @@ html.light-mode .ws-app {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-right: 16px;   /* le topbar n'a plus de padding global, c'est ici qu'on respire à droite */
 }
 
 /* Boutons d'action de la topbar : carrés à coins arrondis avec bordure
@@ -738,7 +760,8 @@ html.light-mode .ws-app {
   padding: 0 14px 0 11px;
   gap: 7px;
   height: 38px;
-  border-radius: 999px;   /* pill : « Noter » est un mot, pas une icône seule */
+  /* Hérite border-radius: 10px de .ws-iconbtn — même langage visuel que
+     les autres boutons (rectangle à bords arrondis, pas pill). */
 }
 .ws-rating-label {
   font-size: 12px;
