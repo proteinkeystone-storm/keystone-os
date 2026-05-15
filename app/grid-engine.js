@@ -77,8 +77,11 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
         const clearPressing = () => card.classList.remove('pad-pressing');
         const cancelLP      = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
 
-        // Feedback visuel immédiat de l'appui
+        // Feedback visuel immédiat de l'appui + blocage de la sélection
+        // de texte native pendant tout le geste (sinon l'appui long
+        // surligne la zone sous la carte).
         card.classList.add('pad-pressing');
+        document.body.classList.add('ks-no-select');
 
         // Long-press → mode édition (uniquement si on n'a pas bougé, et
         // pas depuis la poignée de déplacement)
@@ -91,6 +94,7 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
                 navigator.vibrate?.(110);
                 _editTriggered = true;
                 setTimeout(() => { _editTriggered = false; }, 400);
+                _armClickSwallow();   // avale le clic de relâchement qui suit
                 _openPadEditModal(card, onPadChanged, onDeactivate);
             }, LP_DURATION);
         }
@@ -130,6 +134,7 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
             window.removeEventListener('pointercancel', onUp);
             cancelLP();
             clearPressing();
+            document.body.classList.remove('ks-no-select');
 
             if (mode === 'drag') {
                 document.body.classList.remove('ks-dragging');
@@ -229,8 +234,35 @@ function _setupContextMenu(container, onPadChanged, onDeactivate) {
         e.stopPropagation();
         _editTriggered = true;
         setTimeout(() => { _editTriggered = false; }, 400);
+        // Sur Mac, un ctrl+clic émet aussi un `click` synthétique :
+        // on l'avale pour qu'il ne referme pas la modale aussitôt.
+        _armClickSwallow();
         _openPadEditModal(card, onPadChanged, onDeactivate);
     });
+}
+
+// Avale le PROCHAIN clic situé HORS de la modale — c'est le « clic de
+// relâchement » qui suit un appui long, ou le clic synthétique d'un
+// ctrl+clic Mac. Sans ça, ce clic referme la modale à peine ouverte
+// (et peut ouvrir l'outil derrière). Un clic DANS la modale passe
+// normalement (action légitime). Désarmement auto après 600 ms.
+let _clickSwallow = null;
+function _armClickSwallow() {
+    if (_clickSwallow) document.removeEventListener('click', _clickSwallow, true);
+    _clickSwallow = e => {
+        document.removeEventListener('click', _clickSwallow, true);
+        _clickSwallow = null;
+        if (e.target.closest('.pad-edit-modal')) return;   // clic légitime sur la modale
+        e.stopPropagation();
+        e.preventDefault();
+    };
+    document.addEventListener('click', _clickSwallow, true);
+    setTimeout(() => {
+        if (_clickSwallow) {
+            document.removeEventListener('click', _clickSwallow, true);
+            _clickSwallow = null;
+        }
+    }, 600);
 }
 
 // ── Modale d'édition de pad ──────────────────────────────────
@@ -251,6 +283,8 @@ function _openPadEditModal(card, onPadChanged, onDeactivate) {
 
     _activeEditCard = card;
     card.classList.add('editing');
+    // Efface toute sélection de texte amorcée pendant l'appui
+    try { window.getSelection()?.removeAllRanges(); } catch (_) {}
 
     const id       = card.dataset.id;
     const name     = card.querySelector('.pad-name')?.textContent?.trim() || id;
@@ -453,13 +487,13 @@ function _setupClickDelegate(container, onOpen) {
     container.addEventListener('click', e => {
         if (_editTriggered) { _editTriggered = false; return; }
         if (_dragJustHappened) return;   // un drag vient de se terminer → pas d'ouverture
+        // Une modale d'édition est ouverte → ne JAMAIS ouvrir l'outil
+        // derrière (garde ultime, indépendante du CSS/timing).
+        if (_editModalEls) return;
         const card = e.target.closest('.pad-card');
         if (!card) return;
-        // Bloquer si : modale d'édition ouverte sur la carte, ou rename en cours
         if (card.classList.contains('editing'))      return;
         if (card.classList.contains('pad-renaming')) return;
-        // Sécurité : referme toute modale d'édition résiduelle avant d'ouvrir l'outil
-        _closePadEditModal();
         onOpen(card.dataset.id);
     });
 }

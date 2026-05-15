@@ -759,6 +759,15 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
 body.ks-dragging,
 body.ks-dragging * { cursor: grabbing !important; user-select: none !important; }
 
+/* Pendant l'appui sur un Pad (avant drag/long-press tranché) : on
+   bloque toute sélection de texte native — sinon l'appui long
+   surligne la zone autour de la carte. */
+body.ks-no-select,
+body.ks-no-select * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 /* Carte source pendant le drag : effacée, garde sa place */
 .pad-card.dragging {
   opacity: .18 !important;
