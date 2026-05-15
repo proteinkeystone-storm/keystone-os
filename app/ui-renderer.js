@@ -11,7 +11,7 @@ import {
     getUserLabel, isPadHidden, restorePad,
     dismissEditMode, isPadDeactivated, deactivatePad, reactivatePad,
 } from './grid-engine.js';
-import { setKeystoneStatus, dismissDSTMessage } from './dst.js';
+import { setKeystoneStatus, dismissDSTMessage, setDefaultStatus } from './dst.js';
 import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
@@ -232,6 +232,7 @@ const ART_PAD_DESC = {
 // désactivation/retrait fait varier la jauge.
 const TS_WORKDAYS_PER_MONTH = 21;
 let _timeSaveItems = [];   // [{ id, name, min }] — recalculé à chaque render
+let _tsActionBound = false;
 
 function _formatDuration(min) {
     const m = Math.round(min);
@@ -246,9 +247,6 @@ function _tsPeriod() {
 }
 
 function _renderTimeSaveGauge(ownedTools, ownedArts) {
-    const chip = document.getElementById('timesave-chip');
-    if (!chip) return;
-
     _timeSaveItems = [...ownedTools, ...ownedArts]
         .map(it => ({
             id:   it.id,
@@ -258,26 +256,32 @@ function _renderTimeSaveGauge(ownedTools, ownedArts) {
         .filter(it => it.min > 0)
         .sort((a, b) => b.min - a.min);
 
-    _paintTimeSaveChip();
+    _pushTimeSaveStatus();
 
-    if (!chip.dataset.bound) {
-        chip.dataset.bound = '1';
-        chip.addEventListener('click', _openTimeSaveModal);
+    // Le détail par outil s'ouvre via le segment cliquable [[…|timesave]]
+    // injecté dans le message d'accueil du DST.
+    if (!_tsActionBound) {
+        _tsActionBound = true;
+        document.addEventListener('ks-dst-action', e => {
+            if (e.detail === 'timesave') _openTimeSaveModal();
+        });
     }
 }
 
-function _paintTimeSaveChip() {
-    const chip = document.getElementById('timesave-chip');
-    if (!chip) return;
+// Compose le message d'accueil du DST avec le temps gagné intégré.
+// Markup DST : **gras** · ==accent== · [[texte|action cliquable]].
+function _pushTimeSaveStatus() {
     const perDay = _timeSaveItems.reduce((s, it) => s + it.min, 0);
-    if (perDay <= 0) { chip.hidden = true; return; }
-    chip.hidden = false;
-
+    const n      = _timeSaveItems.length;
+    if (perDay <= 0 || n === 0) {
+        setDefaultStatus('Votre pôle de promotion immobilière est prêt.');
+        return;
+    }
     const isMonth = _tsPeriod() === 'month';
     const total   = isMonth ? perDay * TS_WORKDAYS_PER_MONTH : perDay;
-    document.getElementById('timesave-val').textContent    = _formatDuration(total);
-    document.getElementById('timesave-period').textContent = isMonth ? '/ mois' : '/ jour';
-    chip.title = `Temps gagné estimé avec vos ${_timeSaveItems.length} outil${_timeSaveItems.length > 1 ? 's' : ''} actif${_timeSaveItems.length > 1 ? 's' : ''} — cliquer pour le détail`;
+    const period  = isMonth ? 'par mois' : 'par jour';
+    const outils  = `${n} outil${n > 1 ? 's' : ''}`;
+    setDefaultStatus(`Vos **${outils}** vous font gagner [[${_formatDuration(total)}|timesave]] ${period}.`);
 }
 
 function _renderTimeSaveModalBody() {
@@ -346,7 +350,7 @@ function _openTimeSaveModal() {
             if (!btn) return;
             localStorage.setItem('ks_timesave_period', btn.dataset.period);
             _renderTimeSaveModalBody();
-            _paintTimeSaveChip();
+            _pushTimeSaveStatus();
         });
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape' && modal.classList.contains('open')) _closeTimeSaveModal();

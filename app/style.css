@@ -275,6 +275,46 @@ body::after {
 /* Light mode */
 html.light-mode .hero-dst .hero-dst-text { color: var(--text) !important; opacity: 1 !important; }
 
+/* ── DST « motion graphic » — segments stylés + curseur ─────────
+   Le moteur (dst.js) tape le texte caractère par caractère et
+   enrobe les segments markup dans ces classes. */
+.dst-seg--bold   { font-weight: 800; }
+.dst-seg--italic { font-style: italic; opacity: .9; }
+.dst-seg--accent,
+.dst-seg--action {
+  font-weight: 800;
+  color: var(--gold) !important;
+  letter-spacing: -.01em;
+}
+.dst-seg--action { cursor: pointer; transition: filter .15s; }
+.dst-seg--action:hover  { filter: brightness(1.25); text-decoration: underline; text-underline-offset: 2px; }
+.dst-seg--action:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 3px; }
+
+/* Flash lumineux une fois le segment fort entièrement écrit */
+.dst-seg--accent.dst-seg--done,
+.dst-seg--action.dst-seg--done,
+.dst-seg--bold.dst-seg--done { animation: dst-pop .55s cubic-bezier(.16,1,.3,1); }
+@keyframes dst-pop {
+  0%   { text-shadow: 0 0 0   rgba(99,102,241,0);   }
+  40%  { text-shadow: 0 0 14px rgba(99,102,241,.75); }
+  100% { text-shadow: 0 0 0   rgba(99,102,241,0);   }
+}
+
+/* Curseur clignotant pendant la frappe */
+.dst-caret {
+  display: inline-block;
+  width: 2px; height: 1.05em;
+  margin-left: 2px; vertical-align: -2px;
+  background: var(--gold); border-radius: 1px;
+  animation: dst-caret-blink .85s steps(1, end) infinite;
+}
+@keyframes dst-caret-blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dst-caret,
+  .dst-seg--done { animation: none !important; }
+}
+
 /* ── INBOX — CTA + Dismiss à droite du DST ──────────────────── */
 .hero-dst { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ks-inbox-cta {
@@ -552,24 +592,9 @@ html.light-mode #ks-logo-light { display: block; }
 
 .hero-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .hero-date { font-size: 11px; font-weight: 600; color: var(--tx3); letter-spacing: .06em; text-transform: capitalize; }
-.online-chip { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--tx3); }
-.online-chip-dot {
-  width: 6px; height: 6px; background: var(--green); border-radius: 50%;
-  animation: pulse-g 2s ease-in-out infinite;
-}
-
-/* ── Jauge temps gagné potentiel (discrète) ── */
-.timesave-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: transparent; border: 1px solid var(--bd);
-  border-radius: 999px; padding: 3px 9px;
-  font-size: 11px; font-weight: 600; color: var(--tx3);
-  cursor: pointer; transition: all 150ms ease; font-family: inherit;
-}
-.timesave-chip:hover { color: var(--text); border-color: var(--bd-strong, rgba(255,255,255,.16)); }
-.timesave-ico { width: 11px; height: 11px; flex-shrink: 0; opacity: .7; }
-.timesave-val { color: var(--gold); font-weight: 800; letter-spacing: -.01em; }
-.timesave-period { opacity: .7; }
+/* Le « temps gagné » a migré dans le message d'accueil du DST (segment
+   cliquable [[…|timesave]]) ; le chip « En ligne » a été supprimé car
+   redondant avec le point vert « Licence active » de la topbar. */
 
 /* ── Modale détail temps gagné ── */
 .ts-backdrop {
