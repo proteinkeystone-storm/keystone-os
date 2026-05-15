@@ -44,8 +44,10 @@ export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
 // Drag : carte entière saisissable, ghost qui suit le curseur,
 // réorganisation leap-frog distance-based (X et Y).
 // ═══════════════════════════════════════════════════════════════
-const DRAG_THRESHOLD = 8;    // px de mouvement franc → c'est un drag
-const LP_DURATION    = 550;  // ms immobile → c'est un long-press
+const DRAG_THRESHOLD = 12;   // px de mouvement franc → c'est un drag
+                             // (seuil large : tolère le jitter du trackpad
+                             //  pendant l'appui long, fiabilise le long-press)
+const LP_DURATION    = 650;  // ms immobile → c'est un long-press
 let _dragJustHappened = false;
 
 function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
@@ -53,10 +55,8 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
         if (e.button !== 0) return;                       // clic gauche / tap uniquement
         const card = e.target.closest('.pad-card');
         if (!card) return;
-        // Jamais d'interaction pendant un rename, sur l'overlay de
-        // confirmation, ni depuis un champ éditable.
+        // Jamais d'interaction pendant un rename ni depuis un champ éditable.
         if (card.classList.contains('pad-renaming')) return;
-        if (e.target.closest('.pad-confirm-overlay')) return;
         if (e.target.closest('[contenteditable]')) return;
 
         const startX  = e.clientX;
@@ -90,7 +90,8 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
                 clearPressing();
                 navigator.vibrate?.(110);
                 _editTriggered = true;
-                _triggerEditMode(card, onPadChanged, onDeactivate);
+                setTimeout(() => { _editTriggered = false; }, 400);
+                _openPadEditModal(card, onPadChanged, onDeactivate);
             }, LP_DURATION);
         }
 
@@ -211,9 +212,12 @@ function _persistOrder(container) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MODE ÉDITION — déclenché par clic droit ou long-press
-// (le long-press est géré dans _setupPointerInteractions ci-dessus ;
-//  ici on ne câble que le clic droit et le dismiss au clic extérieur)
+// MODE ÉDITION — modale centrée (Renommer / Masquer / Désactiver)
+// ─────────────────────────────────────────────────────────────
+// Déclenchée par appui long OU clic droit. Une modale centrée +
+// backdrop est BEAUCOUP plus robuste qu'une barre flottante calée sur
+// la carte : plus de bug de position, plus de tracking de scroll, plus
+// de dismiss accidentel. Le backdrop intercepte tout — le geste est net.
 // ═══════════════════════════════════════════════════════════════
 function _setupContextMenu(container, onPadChanged, onDeactivate) {
     // Clic droit → mode édition immédiat
@@ -222,115 +226,165 @@ function _setupContextMenu(container, onPadChanged, onDeactivate) {
         if (!card) return;
         if (card.classList.contains('pad-renaming')) return;
         e.preventDefault();
+        e.stopPropagation();
         _editTriggered = true;
-        _triggerEditMode(card, onPadChanged, onDeactivate);
+        setTimeout(() => { _editTriggered = false; }, 400);
+        _openPadEditModal(card, onPadChanged, onDeactivate);
     });
-
-    // Dismiss de la barre d'édition au clic extérieur (capture phase)
-    document.addEventListener('click', e => {
-        if (!e.target.closest('.pad-card.editing') && !e.target.closest('.pad-edit-bar')) {
-            _dismissEditBar();
-        }
-    }, true);
 }
 
-// ── Barre d'édition FLOTTANTE (position: fixed · body) ───────
-let _activeEditCard      = null;
-let _floatBar            = null;
-let _floatScrollHandler  = null;
+// ── Modale d'édition de pad ──────────────────────────────────
+let _activeEditCard   = null;
+let _editModalEls     = null;   // { backdrop, modal }
+let _editModalOpenedAt = 0;     // garde anti « clic de relâchement »
 
-function _triggerEditMode(card, onPadChanged, onDeactivate) {
-    if (_activeEditCard === card) { _dismissEditBar(); return; } // toggle
-    _dismissEditBar();
+const _EDIT_ICONS = {
+    rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    hide:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>',
+};
 
-    card.classList.add('editing');
+function _openPadEditModal(card, onPadChanged, onDeactivate) {
+    // Toggle : re-déclencher sur la même carte referme la modale
+    if (_activeEditCard === card) { _closePadEditModal(); return; }
+    _closePadEditModal();
+
     _activeEditCard = card;
-    _editTriggered  = true;
+    card.classList.add('editing');
 
-    // Barre flottante — attachée au body, jamais au card
-    const bar = document.createElement('div');
-    bar.className = 'pad-edit-bar';
-    bar.innerHTML = `
-        <button class="pad-edit-bar-btn" data-action="rename">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Renommer
-        </button>
-        <div class="pad-edit-bar-sep"></div>
-        <button class="pad-edit-bar-btn" data-action="hide">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            Masquer
-        </button>
-        <div class="pad-edit-bar-sep"></div>
-        <button class="pad-edit-bar-btn danger" data-action="delete">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;flex-shrink:0"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
-            Désactiver
-        </button>
+    const id       = card.dataset.id;
+    const name     = card.querySelector('.pad-name')?.textContent?.trim() || id;
+    const iconHtml = card.querySelector('.pad-icon')?.innerHTML || '';
+    const _esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pad-edit-backdrop';
+
+    const modal = document.createElement('div');
+    modal.className = 'pad-edit-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Modifier ' + name);
+    modal.innerHTML = `
+        <div class="pad-edit-modal-head">
+            <div class="pad-edit-modal-ico">${iconHtml}</div>
+            <div class="pad-edit-modal-name">${_esc(name)}</div>
+        </div>
+        <div class="pad-edit-modal-body" data-slot="body">
+            <button class="pad-edit-action" data-action="rename">
+                <span class="pad-edit-action-ico">${_EDIT_ICONS.rename}</span>
+                <span class="pad-edit-action-txt"><strong>Renommer</strong><em>Changer le nom affiché</em></span>
+            </button>
+            <button class="pad-edit-action" data-action="hide">
+                <span class="pad-edit-action-ico">${_EDIT_ICONS.hide}</span>
+                <span class="pad-edit-action-txt"><strong>Masquer</strong><em>Le retirer de la vue (reste actif)</em></span>
+            </button>
+            <button class="pad-edit-action danger" data-action="delete">
+                <span class="pad-edit-action-ico">${_EDIT_ICONS.delete}</span>
+                <span class="pad-edit-action-txt"><strong>Désactiver</strong><em>Le renvoyer dans le Key-Store</em></span>
+            </button>
+        </div>
+        <button class="pad-edit-modal-close" data-action="cancel">Fermer</button>
     `;
 
-    document.body.appendChild(bar);
-    _floatBar = bar;
-    _positionFloatingBar(card, bar);
-
-    // Repositionner lors du scroll/resize
-    _floatScrollHandler = () => { if (_activeEditCard === card) _positionFloatingBar(card, bar); };
-    window.addEventListener('scroll', _floatScrollHandler, { passive: true });
-    window.addEventListener('resize', _floatScrollHandler, { passive: true });
-
-    bar.querySelector('[data-action="rename"]').addEventListener('click', e => {
-        e.stopPropagation();
-        _dismissEditBar();
-        _startRename(card);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+    _editModalEls = { backdrop, modal };
+    _editModalOpenedAt = Date.now();
+    requestAnimationFrame(() => {
+        backdrop.classList.add('open');
+        modal.classList.add('open');
     });
 
-    // Masquer : l'outil reste actif (quota occupé) mais disparaît de la vue
-    bar.querySelector('[data-action="hide"]').addEventListener('click', e => {
-        e.stopPropagation();
-        _dismissEditBar();
-        hidePad(card.dataset.id);
-        card.classList.add('pad-removing');
-        setTimeout(() => {
-            const grid = card.closest('.pads-grid');
-            card.remove();
-            if (grid) _persistOrder(grid);
-            _refreshSectionCount();
-            onPadChanged?.();
-        }, 380);
+    // Le « clic de relâchement » qui suit un appui long retombe sur le
+    // backdrop (qui couvre tout) : on l'ignore pendant 400 ms pour ne
+    // pas refermer la modale aussitôt ouverte.
+    backdrop.addEventListener('click', () => {
+        if (Date.now() - _editModalOpenedAt < 400) return;
+        _closePadEditModal();
     });
 
-    bar.querySelector('[data-action="delete"]').addEventListener('click', e => {
+    modal.addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
         e.stopPropagation();
-        _dismissEditBar();
-        _confirmDeactivate(card, onPadChanged, onDeactivate);
-    });
+        const action = btn.dataset.action;
 
-    // Reset flag après un court délai pour ne pas bloquer les clicks suivants
-    setTimeout(() => { _editTriggered = false; }, 400);
+        if (action === 'cancel') { _closePadEditModal(); return; }
+        if (action === 'rename') { _closePadEditModal(); _startRename(card); return; }
+        if (action === 'hide')   { _closePadEditModal(); _doHide(card, onPadChanged); return; }
+        if (action === 'delete') {
+            // Bascule la modale en confirmation (tout reste dans la modale)
+            modal.querySelector('[data-slot="body"]').innerHTML = `
+                <div class="pad-edit-confirm">
+                    <p class="pad-edit-confirm-msg">Désactiver <strong>${_esc(name)}</strong> ?</p>
+                    <p class="pad-edit-confirm-sub">L'outil retourne dans le catalogue Key-Store. Vous pourrez le réinstaller à tout moment.</p>
+                    <div class="pad-edit-confirm-btns">
+                        <button class="pad-edit-action pad-edit-action--ghost" data-action="cancel">Annuler</button>
+                        <button class="pad-edit-action danger" data-action="confirm-delete">Désactiver</button>
+                    </div>
+                </div>`;
+            return;
+        }
+        if (action === 'confirm-delete') {
+            _closePadEditModal();
+            _doDeactivate(card, onPadChanged, onDeactivate);
+            return;
+        }
+    });
 }
 
-function _positionFloatingBar(card, bar) {
-    const rect = card.getBoundingClientRect();
-    const barH = 38;
-    let top = rect.bottom + 6;
-    // Retourner au-dessus si trop près du bas de l'écran
-    if (top + barH > window.innerHeight - 8) top = rect.top - barH - 6;
-    bar.style.top   = top + 'px';
-    bar.style.left  = rect.left + 'px';
-    bar.style.width = rect.width + 'px';
-}
-
-function _dismissEditBar() {
-    if (_floatBar) { _floatBar.remove(); _floatBar = null; }
-    if (_floatScrollHandler) {
-        window.removeEventListener('scroll', _floatScrollHandler);
-        window.removeEventListener('resize', _floatScrollHandler);
-        _floatScrollHandler = null;
+function _closePadEditModal() {
+    if (_editModalEls) {
+        const { backdrop, modal } = _editModalEls;
+        backdrop.classList.remove('open');
+        modal.classList.remove('open');
+        setTimeout(() => { backdrop.remove(); modal.remove(); }, 200);
+        _editModalEls = null;
     }
     _activeEditCard?.classList.remove('editing');
     _activeEditCard = null;
 }
 
-/** Expose publique — utilisée par le listener Esc global */
-export function dismissEditMode() { _dismissEditBar(); }
+/** Expose publique — utilisée par le listener Esc global de ui-renderer */
+export function dismissEditMode() { _closePadEditModal(); }
+
+// ── Actions d'édition ────────────────────────────────────────
+// Masquer : l'outil reste actif (quota occupé) mais disparaît de la vue.
+function _doHide(card, onPadChanged) {
+    hidePad(card.dataset.id);
+    card.classList.add('pad-removing');
+    setTimeout(() => {
+        const grid = card.closest('.pads-grid');
+        card.remove();
+        if (grid) _persistOrder(grid);
+        _refreshSectionCount();
+        onPadChanged?.();
+    }, 380);
+}
+
+// Désactiver : retire l'outil du Dashboard et le renvoie au Key-Store.
+function _doDeactivate(card, onPadChanged, onDeactivate) {
+    const id = card.dataset.id;
+    deactivatePad(id);
+    // Synchroniser ks_user_selection : libérer la place de quota
+    try {
+        const raw = localStorage.getItem('ks_user_selection');
+        if (raw) {
+            const sel = JSON.parse(raw).filter(x => x !== id);
+            localStorage.setItem('ks_user_selection', JSON.stringify(sel));
+        }
+    } catch (_) {}
+    card.classList.add('pad-removing');
+    setTimeout(() => {
+        const grid = card.closest('.pads-grid');
+        card.remove();
+        if (grid) _persistOrder(grid);
+        _refreshSectionCount();
+        onPadChanged?.();
+        onDeactivate?.(id);
+    }, 380);
+}
 
 // ── Rename ────────────────────────────────────────────────────
 function _startRename(card) {
@@ -387,50 +441,6 @@ function _startRename(card) {
     }, { once: true });
 }
 
-// ── Désactiver (retire du dashboard + retourne dans KEY-STORE) ─
-function _confirmDeactivate(card, onPadChanged, onDeactivate) {
-    const id   = card.dataset.id;
-    const name = card.querySelector('.pad-name')?.textContent || id;
-
-    const overlay = document.createElement('div');
-    overlay.className = 'pad-confirm-overlay';
-    overlay.innerHTML = `
-        <div class="pad-confirm-msg" style="font-size:11px;line-height:1.5;">Désactiver<br><strong>${name}</strong> ?<br><span style="font-size:9.5px;opacity:.6;font-weight:400">L'outil retourne dans le catalogue KEY-STORE.</span></div>
-        <div class="pad-confirm-btns">
-            <button class="pad-confirm-btn cancel">Annuler</button>
-            <button class="pad-confirm-btn confirm">Désactiver</button>
-        </div>
-    `;
-
-    card.appendChild(overlay);
-
-    overlay.querySelector('.cancel').addEventListener('click', e => {
-        e.stopPropagation();
-        overlay.remove();
-    });
-    overlay.querySelector('.confirm').addEventListener('click', e => {
-        e.stopPropagation();
-        deactivatePad(id);
-        // Synchroniser ks_user_selection : libérer la place de quota
-        try {
-            const raw = localStorage.getItem('ks_user_selection');
-            if (raw) {
-                const sel = JSON.parse(raw).filter(x => x !== id);
-                localStorage.setItem('ks_user_selection', JSON.stringify(sel));
-            }
-        } catch (_) {}
-        card.classList.add('pad-removing');
-        setTimeout(() => {
-            const grid = card.closest('.pads-grid');
-            card.remove();
-            if (grid) _persistOrder(grid);
-            _refreshSectionCount();
-            onPadChanged?.();
-            onDeactivate?.(id);
-        }, 380);
-    });
-}
-
 // ── Helpers ───────────────────────────────────────────────────
 function _refreshSectionCount() {
     const count = document.querySelectorAll('#pads-container .pad-card').length;
@@ -445,13 +455,11 @@ function _setupClickDelegate(container, onOpen) {
         if (_dragJustHappened) return;   // un drag vient de se terminer → pas d'ouverture
         const card = e.target.closest('.pad-card');
         if (!card) return;
-        // Bloquer si : barre edit ouverte, overlay confirm, ou rename en cours
+        // Bloquer si : modale d'édition ouverte sur la carte, ou rename en cours
         if (card.classList.contains('editing'))      return;
         if (card.classList.contains('pad-renaming')) return;
-        if (card.querySelector('.pad-confirm-overlay')) return;
-        // Sécurité : dismiss toute barre d'édition résiduelle avant d'ouvrir un modal
-        // (évite que la barre flotte par-dessus le modal d'outil avec son z-index 9500)
-        _dismissEditBar();
+        // Sécurité : referme toute modale d'édition résiduelle avant d'ouvrir l'outil
+        _closePadEditModal();
         onOpen(card.dataset.id);
     });
 }
