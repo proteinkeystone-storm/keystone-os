@@ -5900,13 +5900,18 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 
 .sdqr-pill {
-  font-size: 10.5px; font-weight: 600;
-  letter-spacing: .06em;
-  padding: 4px 10px;
+  /* Rectangle a bords arrondis — meme langage visuel que les autres CTA
+     du hero (.ws-iconbtn / .ws-rating-trigger : height 38, radius 10). */
+  display: inline-flex; align-items: center;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .02em;
   border: 1px solid rgba(255,255,255,.12);
-  border-radius: 999px;
+  border-radius: 10px;
   color: rgba(220,225,240,.75);
   background: rgba(255,255,255,.03);
+  white-space: nowrap;
 }
 .sdqr-pill--ok {
   border-color: rgba(46,179,124,.35);
