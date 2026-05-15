@@ -58,8 +58,8 @@
   --tx2:   rgba(248,250,252,.55);
   --tx3:   rgba(248,250,252,.3);
   --bd:    rgba(255,255,255,.07);
-  --r:     10px;
-  --r2:    16px;
+  --r:     10px;   /* petites cartes / chips (suggest-card, modales secondaires) */
+  --r2:    20px;   /* grandes cartes (pad-card, restore-panel, art-card) — bump de 16 à 20px pour harmoniser le ressenti d'arrondi sur les grands Pads de la grille pleine largeur */
 }
 
 /* ══ LIGHT MODE — surcharge variables ══════════════════════════ */
