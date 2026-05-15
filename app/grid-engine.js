@@ -22,40 +22,31 @@ export const deactivatePad     = id        => localStorage.setItem(LS_DEACTIVATE
 export const reactivatePad     = id        => localStorage.removeItem(LS_DEACTIVATED + id);
 
 // ── Init ─────────────────────────────────────────────────────
-let _editTriggered = false;
-
 export function initGridEngine(container, onOpen, onPadChanged, onDeactivate) {
-    _setupPointerInteractions(container, onPadChanged, onDeactivate);
-    _setupContextMenu(container, onPadChanged, onDeactivate);
-    _setupClickDelegate(container, onOpen);
+    _setupDragDrop(container);
+    _setupClicks(container, onOpen, onPadChanged, onDeactivate);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// INTERACTIONS POINTEUR — arbitrage unifié tap / drag / long-press
+// DRAG & DROP — carte entière saisissable
 // ─────────────────────────────────────────────────────────────
-// UN SEUL handler pointerdown décide, de façon déterministe, entre :
-//   · tap          → ouverture de l'outil (géré par le click delegate)
-//   · drag         → réorganisation (mouvement franc avant le délai)
-//   · long-press   → mode édition (immobile pendant LP_DURATION)
-// L'ancienne version avait deux handlers concurrents (drag + edit) qui
-// se volaient mutuellement l'événement → long-press peu fiable. Ici un
-// état `mode` ('pending' | 'drag' | 'edit') tranche une fois pour toutes.
-//
-// Drag : carte entière saisissable, ghost qui suit le curseur,
-// réorganisation leap-frog distance-based (X et Y).
+// pointerdown → on suit le pointeur ; au-delà de DRAG_THRESHOLD on
+// bascule en drag (ghost qui suit le curseur, réorganisation leap-frog).
+// Sous le seuil, c'est un simple tap → géré par le click delegate.
+// Le bouton « ⋯ » (.pad-edit-trigger, coin haut-droit) est exclu : il
+// ouvre la modale d'édition, il ne déclenche jamais de drag.
 // ═══════════════════════════════════════════════════════════════
-const DRAG_THRESHOLD = 12;   // px de mouvement franc → c'est un drag
-                             // (seuil large : tolère le jitter du trackpad
-                             //  pendant l'appui long, fiabilise le long-press)
-const LP_DURATION    = 650;  // ms immobile → c'est un long-press
+const DRAG_THRESHOLD = 10;   // px de mouvement franc → c'est un drag
 let _dragJustHappened = false;
 
-function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
+function _setupDragDrop(container) {
     container.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;                       // clic gauche / tap uniquement
         const card = e.target.closest('.pad-card');
         if (!card) return;
-        // Jamais d'interaction pendant un rename ni depuis un champ éditable.
+        // Jamais de drag : depuis le bouton d'édition, pendant un rename,
+        // ni depuis un champ éditable.
+        if (e.target.closest('.pad-edit-trigger')) return;
         if (card.classList.contains('pad-renaming')) return;
         if (e.target.closest('[contenteditable]')) return;
 
@@ -67,53 +58,22 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
         const W       = sRect.width;
         const H       = sRect.height;
 
-        // La poignée (grip) est dédiée au drag : pas de long-press depuis elle.
-        const fromHandle = !!e.target.closest('.pad-drag-handle');
-
-        let mode  = 'pending';   // 'pending' | 'drag' | 'edit'
+        let mode  = 'pending';   // 'pending' | 'drag'
         let ghost = null;
-        let lpTimer = null;
 
-        const clearPressing = () => card.classList.remove('pad-pressing');
-        const cancelLP      = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
-
-        // Feedback visuel immédiat de l'appui + blocage de la sélection
-        // de texte native pendant tout le geste (sinon l'appui long
-        // surligne la zone sous la carte).
-        card.classList.add('pad-pressing');
+        // Bloque la sélection de texte native pendant le geste
         document.body.classList.add('ks-no-select');
 
-        // Long-press → mode édition (uniquement si on n'a pas bougé, et
-        // pas depuis la poignée de déplacement)
-        if (!fromHandle) {
-            lpTimer = setTimeout(() => {
-                lpTimer = null;
-                if (mode !== 'pending') return;     // un drag a déjà pris la main
-                mode = 'edit';
-                clearPressing();
-                navigator.vibrate?.(110);
-                _editTriggered = true;
-                setTimeout(() => { _editTriggered = false; }, 400);
-                _armClickSwallow();   // avale le clic de relâchement qui suit
-                _openPadEditModal(card, onPadChanged, onDeactivate);
-            }, LP_DURATION);
-        }
-
         const onMove = ev => {
-            if (mode === 'edit') return;        // édition en cours → on ignore les moves
-
             const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
 
             if (mode === 'pending') {
                 if (dist < DRAG_THRESHOLD) return;
-                // Mouvement franc avant le long-press → c'est un drag
                 mode = 'drag';
-                cancelLP();
-                clearPressing();
                 document.body.classList.add('ks-dragging');
                 card.classList.add('dragging');
                 ghost = card.cloneNode(true);
-                ghost.classList.remove('dragging', 'pad-pressing', 'editing');
+                ghost.classList.remove('dragging', 'editing');
                 ghost.classList.add('pad-card-ghost');
                 ghost.style.cssText =
                     `position:fixed;top:0;left:0;width:${W}px;height:${H}px;` +
@@ -132,8 +92,6 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
             window.removeEventListener('pointermove',   onMove);
             window.removeEventListener('pointerup',     onUp);
             window.removeEventListener('pointercancel', onUp);
-            cancelLP();
-            clearPressing();
             document.body.classList.remove('ks-no-select');
 
             if (mode === 'drag') {
@@ -150,8 +108,7 @@ function _setupPointerInteractions(container, onPadChanged, onDeactivate) {
                 _dragJustHappened = true;
                 setTimeout(() => { _dragJustHappened = false; }, 80);
             }
-            // mode 'pending' → c'était un tap → le click delegate ouvre l'outil
-            // mode 'edit'    → la barre d'édition est déjà ouverte
+            // mode 'pending' → simple tap → le click delegate ouvre l'outil
         };
 
         window.addEventListener('pointermove',   onMove);
@@ -219,56 +176,15 @@ function _persistOrder(container) {
 // ═══════════════════════════════════════════════════════════════
 // MODE ÉDITION — modale centrée (Renommer / Masquer / Désactiver)
 // ─────────────────────────────────────────────────────────────
-// Déclenchée par appui long OU clic droit. Une modale centrée +
-// backdrop est BEAUCOUP plus robuste qu'une barre flottante calée sur
-// la carte : plus de bug de position, plus de tracking de scroll, plus
-// de dismiss accidentel. Le backdrop intercepte tout — le geste est net.
+// Déclenchée par un clic sur le bouton « ⋯ » (.pad-edit-trigger) en
+// haut-droite de chaque Pad. Modale centrée + backdrop : on ferme via
+// la croix « Fermer » ou en cliquant à côté (le backdrop). Net et fiable.
 // ═══════════════════════════════════════════════════════════════
-function _setupContextMenu(container, onPadChanged, onDeactivate) {
-    // Clic droit → mode édition immédiat
-    container.addEventListener('contextmenu', e => {
-        const card = e.target.closest('.pad-card');
-        if (!card) return;
-        if (card.classList.contains('pad-renaming')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        _editTriggered = true;
-        setTimeout(() => { _editTriggered = false; }, 400);
-        // Sur Mac, un ctrl+clic émet aussi un `click` synthétique :
-        // on l'avale pour qu'il ne referme pas la modale aussitôt.
-        _armClickSwallow();
-        _openPadEditModal(card, onPadChanged, onDeactivate);
-    });
-}
-
-// Avale le PROCHAIN clic situé HORS de la modale — c'est le « clic de
-// relâchement » qui suit un appui long, ou le clic synthétique d'un
-// ctrl+clic Mac. Sans ça, ce clic referme la modale à peine ouverte
-// (et peut ouvrir l'outil derrière). Un clic DANS la modale passe
-// normalement (action légitime). Désarmement auto après 600 ms.
-let _clickSwallow = null;
-function _armClickSwallow() {
-    if (_clickSwallow) document.removeEventListener('click', _clickSwallow, true);
-    _clickSwallow = e => {
-        document.removeEventListener('click', _clickSwallow, true);
-        _clickSwallow = null;
-        if (e.target.closest('.pad-edit-modal')) return;   // clic légitime sur la modale
-        e.stopPropagation();
-        e.preventDefault();
-    };
-    document.addEventListener('click', _clickSwallow, true);
-    setTimeout(() => {
-        if (_clickSwallow) {
-            document.removeEventListener('click', _clickSwallow, true);
-            _clickSwallow = null;
-        }
-    }, 600);
-}
 
 // ── Modale d'édition de pad ──────────────────────────────────
 let _activeEditCard   = null;
 let _editModalEls     = null;   // { backdrop, modal }
-let _editModalOpenedAt = 0;     // garde anti « clic de relâchement »
+let _editModalOpenedAt = 0;     // garde anti double-événement à l'ouverture
 
 const _EDIT_ICONS = {
     rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
@@ -482,14 +398,25 @@ function _refreshSectionCount() {
     if (countEl) countEl.textContent = count;
 }
 
-// ── Click delegate (évite conflit drag/longpress/click/rename) ─
-function _setupClickDelegate(container, onOpen) {
+// ── Clics sur la grille ───────────────────────────────────────
+// Un seul délégué : le bouton « ⋯ » ouvre la modale d'édition ; un clic
+// ailleurs sur la carte ouvre l'outil. Le drag est géré séparément.
+function _setupClicks(container, onOpen, onPadChanged, onDeactivate) {
     container.addEventListener('click', e => {
-        if (_editTriggered) { _editTriggered = false; return; }
-        if (_dragJustHappened) return;   // un drag vient de se terminer → pas d'ouverture
-        // Une modale d'édition est ouverte → ne JAMAIS ouvrir l'outil
-        // derrière (garde ultime, indépendante du CSS/timing).
-        if (_editModalEls) return;
+        // 1) Bouton d'édition « ⋯ » → modale d'édition du Pad
+        const trigger = e.target.closest('.pad-edit-trigger');
+        if (trigger) {
+            e.stopPropagation();
+            const card = trigger.closest('.pad-card');
+            if (card && !card.classList.contains('pad-renaming')) {
+                _openPadEditModal(card, onPadChanged, onDeactivate);
+            }
+            return;
+        }
+
+        // 2) Clic ailleurs sur la carte → ouverture de l'outil
+        if (_dragJustHappened) return;   // un drag vient de se terminer
+        if (_editModalEls) return;       // une modale d'édition est ouverte
         const card = e.target.closest('.pad-card');
         if (!card) return;
         if (card.classList.contains('editing'))      return;

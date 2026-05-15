@@ -455,13 +455,11 @@ export function renderDashboard() {
             const pal   = getToolPalette(t.id);
             return `
             <div class="pad-card${lt ? ' pad-card--lifetime' : ''}" data-id="${t.id}" data-engine="${t.engine}" data-palette="${pal}">
-                <div class="pad-drag-handle" title="Déplacer pour réorganiser">
-                    <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
-                        <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
-                        <circle cx="3" cy="8"   r="1.3"/><circle cx="7" cy="8"   r="1.3"/>
-                        <circle cx="3" cy="13.5" r="1.3"/><circle cx="7" cy="13.5" r="1.3"/>
+                <button class="pad-edit-trigger" type="button" title="Modifier ce Pad" aria-label="Modifier ce Pad">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
                     </svg>
-                </div>
+                </button>
                 <div class="pad-icon">${ICONS[t.icon] || ICONS['package']}</div>
                 <div class="pad-arrow">↗</div>
                 <div class="pad-name">${label}</div>
@@ -481,13 +479,11 @@ export function renderDashboard() {
                 || a.desc || 'Artefact';
             return `
             <div class="pad-card pad-card--artefact" data-id="${a.id}" data-palette="${pal}">
-                <div class="pad-drag-handle" title="Déplacer pour réorganiser">
-                    <svg viewBox="0 0 10 16" fill="currentColor" style="width:10px;height:14px">
-                        <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
-                        <circle cx="3" cy="8"   r="1.3"/><circle cx="7" cy="8"   r="1.3"/>
-                        <circle cx="3" cy="13.5" r="1.3"/><circle cx="7" cy="13.5" r="1.3"/>
+                <button class="pad-edit-trigger" type="button" title="Modifier ce Pad" aria-label="Modifier ce Pad">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
                     </svg>
-                </div>
+                </button>
                 <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
                 <div class="pad-arrow">↗</div>
                 <div class="pad-name">${a.name}</div>
