@@ -172,13 +172,17 @@ function _buildShell() {
   _root.className = 'ws-app pulsa-app';
   _root.innerHTML = `
     <header class="ws-topbar" data-slot="topbar">
-      <button class="ws-topbar-back" data-slot="back-btn" data-act="close">
-        ${icon('arrow-left', 16)}
-        <span data-slot="back-label">Retour</span>
+      <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
+        <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+      </a>
+      <button class="ws-topbar-back" data-slot="back-btn" data-act="close"
+              title="Retour" aria-label="Retour">
+        ${icon('arrow-left', 18)}
+        <span data-slot="back-label" hidden></span>
       </button>
+      <span class="ws-topbar-app-picto">${icon('pulsa', 24)}</span>
       <div class="ws-topbar-title">
         <span class="name">${WORKSPACE_META.name}</span>
-        <span class="sep" data-slot="topbar-sep">·</span>
         <span class="crumb" data-slot="crumb"></span>
       </div>
       <div class="ws-topbar-actions">

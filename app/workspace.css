@@ -117,8 +117,8 @@ html.light-mode .ws-app {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 20px;
+  gap: 12px;
+  padding: 0 16px;
   background: var(--ws-surface-elevated);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -126,44 +126,87 @@ html.light-mode .ws-app {
   z-index: 10;
 }
 
+/* Logo Keystone — cliquable, ramène au Dashboard. Premier élément du hero
+   pour ancrer l'identité OS et offrir une sortie rapide. */
+.ws-topbar-logo {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  text-decoration: none;
+  transition: opacity .2s ease, transform .2s ease;
+  flex-shrink: 0;
+}
+.ws-topbar-logo:hover { opacity: .85; transform: scale(1.02); }
+.ws-topbar-logo img   { height: 22px; width: auto; display: block; }
+
+/* Flèche retour : icône seule (plus de label « Retour »), animation
+   subtile de glissement vers la gauche au survol pour signifier le sens. */
 .ws-topbar-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 36px; height: 36px;
+  padding: 0;
   background: transparent;
   border: none;
   color: var(--ws-text-soft);
-  padding: 6px 10px;
-  border-radius: var(--ws-radius-sm);
-  font-size: 13px;
-  transition: all 150ms ease;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .25s cubic-bezier(.16,1,.3,1),
+              background .2s ease,
+              color .2s ease;
+  flex-shrink: 0;
 }
 .ws-topbar-back:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--ws-text);
+  background: var(--ws-accent-soft, rgba(99,102,241,.12));
+  color: var(--ws-accent, var(--gold));
+  transform: translateX(-3px);
+}
+.ws-topbar-back:active { transform: translateX(-3px) scale(.94); }
+
+/* Pictogramme de l'artefact — petit bloc à gauche du nom, accent indigo
+   pour l'identification visuelle immédiate. */
+.ws-topbar-app-picto {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  color: var(--ws-accent, var(--gold));
+  flex-shrink: 0;
 }
 
 .ws-topbar-title {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   flex: 1;
   min-width: 0;
 }
 .ws-topbar-title .name {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
   color: var(--ws-text);
 }
 .ws-topbar-title .sep {
-  color: var(--ws-border-strong);
-  font-weight: 300;
+  /* Conservé pour rétrocompat — masqué quand on a un pictogramme dédié */
+  display: none;
 }
 .ws-topbar-title .crumb {
-  font-size: 13px;
+  display: inline-flex; align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--ws-border);
   color: var(--ws-text-soft);
-  letter-spacing: -0.005em;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: -.005em;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.ws-topbar-title .crumb:empty { display: none; }
+.ws-topbar-title .crumb:hover {
+  background: rgba(255,255,255,.07);
+  color: var(--ws-text);
+  border-color: var(--ws-border-strong);
 }
 
 .ws-topbar-actions {
