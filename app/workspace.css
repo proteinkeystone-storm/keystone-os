@@ -131,21 +131,23 @@ html.light-mode .ws-app {
    Visuellement, ce cluster colle au rail en dessous → continuité parfaite
    logo/chevron/picto avec ÉTAPES/numéros/labels. */
 .ws-topbar-brand {
-  width: var(--ws-rail-w);
+  width: var(--ws-rail-w);     /* 220 px = largeur du rail */
   flex-shrink: 0;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 0 14px;        /* gauche aligné sur le rail ; pas de padding droit */
-  gap: 6px;
-  /* Séparateur retiré — le rail dessous garde son propre border-right,
-     le hero respire sans cette ligne verticale parasite. */
+  /* Alignement strict sur la maquette (3 traits rouges) :
+     - logo @ x=22 (= bord gauche de « ÉTAPES » dans le rail)
+     - chevron right edge @ x=205 (= bord droit de la step row active)
+     Brand width 220 - padding-right 15 = 205 → chevron à droite y atterrit. */
+  padding: 0 15px 0 22px;
 }
 .ws-topbar-brand-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;                   /* chevron + picto serrés ensemble */
+  /* (Plus utilisé : le picto est sorti du brand pour aller dans le
+     title — voir .ws-topbar-title plus bas.) Conservé sans style
+     visuel pour éviter de casser d'éventuels usages legacy. */
+  display: contents;
 }
 
 /* Logo Keystone — cliquable, ramène au Dashboard. */
@@ -207,10 +209,13 @@ html.light-mode .ws-app {
 .ws-topbar-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   min-width: 0;
-  padding-left: 24px;   /* breathing space après le séparateur du brand */
+  /* Alignement strict (3e trait rouge) : le picto démarre à x=276,
+     c'est-à-dire le bord gauche du h1 « Structure du formulaire »
+     dans le main (.ws-main padding-left: 56px → 220 + 56 = 276). */
+  padding-left: 56px;
 }
 .ws-topbar-title .name {
   font-size: 22px;

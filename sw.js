@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.47.0-logo-up-no-sep-sdqr-font';
+const VERSION       = 'ks-os-v4.48.0-hero-3-traits-rouges';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

@@ -211,14 +211,12 @@ function _buildShell() {
         <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
           <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
         </a>
-        <div class="ws-topbar-brand-right">
-          <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
-            ${icon('chevron-left', 34)}
-          </button>
-          <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
-        </div>
+        <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
+          ${icon('chevron-left', 34)}
+        </button>
       </div>
       <div class="ws-topbar-title">
+        <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
       <div class="ws-topbar-actions">
