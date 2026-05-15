@@ -206,13 +206,26 @@ export function updateEngineChip(label) {
     if (el) el.textContent = label;
 }
 
-// ── Hero date ─────────────────────────────────────────────────
+// ── Hero date + heure ─────────────────────────────────────────
+// Mode horloge type macOS menubar : heure HH:MM en gros au-dessus,
+// date complète en petit dessous. Tick toutes les 30 s pour rester
+// à jour sans surcharge (la précision seconde n'est pas affichée).
+let _heroClockTimer = null;
 function renderHeroDate() {
-    const el = document.getElementById('hero-date');
-    if (!el) return;
-    el.textContent = new Date().toLocaleDateString('fr-FR', {
-        weekday:'long', day:'numeric', month:'long', year:'numeric'
-    });
+    const dateEl = document.getElementById('hero-date');
+    const timeEl = document.getElementById('hero-time');
+    const now = new Date();
+    if (dateEl) {
+        dateEl.textContent = now.toLocaleDateString('fr-FR', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        });
+    }
+    if (timeEl) {
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeEl.textContent = `${hh}:${mm}`;
+    }
+    if (!_heroClockTimer) _heroClockTimer = setInterval(renderHeroDate, 30_000);
 }
 
 // Descriptions courtes des artefacts pour les pads du Dashboard
