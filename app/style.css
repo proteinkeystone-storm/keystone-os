@@ -1518,6 +1518,38 @@ html.light-mode .suggest-card-arrow { color: rgba(15,23,42,.35); }
 }
 .sec-kstore-badge:hover .sec-kstore-badge-arrow { transform: translateX(3px); opacity: 1; }
 .sec-kstore-badge:active { transform: translateY(0); }
+
+/* ── Call-to-action : survol de la zone basse (.suggest-section) ──
+   Le libellé « Débloquez de nouvelles performances » passe en blanc
+   avec un léger surplus de tracking pour l'emphase, et la pill
+   Key-Store entre dans une boucle d'invitation (hop + breathe + glow)
+   pour appeler clairement au clic. La flèche glisse aussi. */
+.sec-lbl { transition: color .25s ease, letter-spacing .25s ease; }
+.suggest-section:hover .sec-lbl {
+  color: var(--text);
+  letter-spacing: .22em;
+}
+.suggest-section:hover .sec-kstore-badge {
+  background: linear-gradient(135deg, rgba(99,102,241,.32), rgba(99,102,241,.14));
+  border-color: rgba(99,102,241,.7);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.06) inset,
+    0 8px 22px rgba(99,102,241,.35);
+  animation: kstore-attract 1.4s ease-in-out infinite;
+}
+.suggest-section:hover .sec-kstore-badge-arrow {
+  transform: translateX(3px);
+  opacity: 1;
+}
+@keyframes kstore-attract {
+  0%   { transform: translateY(-1px) scale(1);    }
+  40%  { transform: translateY(-3px) scale(1.04); }
+  70%  { transform: translateY(-2px) scale(1.02); }
+  100% { transform: translateY(-1px) scale(1);    }
+}
+@media (prefers-reduced-motion: reduce) {
+  .suggest-section:hover .sec-kstore-badge { animation: none; }
+}
 html.light-mode .sec-kstore-badge {
   background: linear-gradient(135deg, rgba(79,70,229,.14), rgba(79,70,229,.05));
   border-color: rgba(79,70,229,.32);
