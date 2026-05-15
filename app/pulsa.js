@@ -177,7 +177,7 @@ function _buildShell() {
       </a>
       <button class="ws-topbar-back" data-slot="back-btn" data-act="close"
               title="Retour" aria-label="Retour">
-        ${icon('arrow-left', 18)}
+        ${icon('chevron-left', 26)}
         <span data-slot="back-label" hidden></span>
       </button>
       <span class="ws-topbar-app-picto">${icon('pulsa', 24)}</span>

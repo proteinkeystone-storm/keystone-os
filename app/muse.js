@@ -211,7 +211,7 @@ function _buildShell() {
         <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
       </a>
       <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
-        ${icon('arrow-left', 18)}
+        ${icon('chevron-left', 26)}
       </button>
       <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
       <div class="ws-topbar-title">

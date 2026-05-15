@@ -163,16 +163,26 @@ html.light-mode .ws-app {
   transform: translateX(-3px);
 }
 .ws-topbar-back:active { transform: translateX(-3px) scale(.94); }
+/* Chevron épais — surcharge le stroke-width 1.5 de ui-icons pour le
+   look chunky de la référence design. */
+.ws-topbar-back svg,
+.ws-topbar-back .ws-icon svg { stroke-width: 2.4; width: 26px; height: 26px; }
 
-/* Pictogramme de l'artefact — petit bloc à gauche du nom, accent indigo
-   pour l'identification visuelle immédiate. */
+/* Pictogramme de l'artefact — bloc carré tinté indigo (style mini
+   pad-icon du dashboard) à gauche du nom. Identification visuelle
+   immédiate de quel artefact on est en train d'utiliser. */
 .ws-topbar-app-picto {
   display: inline-flex;
   align-items: center; justify-content: center;
-  width: 30px; height: 30px;
+  width: 38px; height: 38px;
+  background: var(--ws-accent-soft, rgba(99,102,241,.12));
+  border: 1px solid rgba(99,102,241,.22);
+  border-radius: 11px;
   color: var(--ws-accent, var(--gold));
   flex-shrink: 0;
 }
+.ws-topbar-app-picto svg,
+.ws-topbar-app-picto .ws-icon { width: 22px; height: 22px; }
 
 .ws-topbar-title {
   display: flex;
