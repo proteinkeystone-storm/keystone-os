@@ -391,6 +391,16 @@
 ───────────────────────────────────────────────────────────────── -->
 <script>
   if ('serviceWorker' in navigator) {
+    // Reload one-shot quand un nouveau SW prend le contrôle : sinon la
+    // page déjà chargée garde ses anciens modules JS en mémoire et il
+    // faut un rafraîchissement manuel pour voir la nouvelle version.
+    // On ignore le tout premier controllerchange (1re installation :
+    // aucun SW ne contrôlait encore la page, rien à rafraîchir).
+    let _hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!_hadController) { _hadController = true; return; }
+      window.location.reload();
+    });
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js', { scope: '/' })
         .catch(err => console.warn('[sw] registration failed', err));
