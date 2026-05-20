@@ -42,10 +42,16 @@ import { computeScale, formatFileSize } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
 import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
 import { exportBriefAsPDF } from './lib/kodex-pdf.js';
-import { openSettingsTo } from './ui-renderer.js';
+import { openSettingsTo, openKStoreAppDetail } from './ui-renderer.js';
 import { uploadFile, deleteAsset, assetUrl, formatSize, ALLOWED_MIMES as KODEX_ASSET_MIMES } from './lib/kodex-uploader.js';
 import { ApiHandler } from './api-handler.js';
-import { CF_API } from './pads-loader.js';
+import { CF_API, getOwnedIds, getLifetimeIds } from './pads-loader.js';
+// Intégration hybride Pulsa : si l'utilisateur a la licence A-COM-004, le
+// bouton « Partager le brief » crée un draft Pulsa pré-rempli ; sinon il
+// affiche une card teaser qui renvoie vers la fiche K-Store de Pulsa.
+import { newForm } from './lib/pulsa-types.js';
+import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
+import { openPulsa } from './pulsa.js';
 
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
@@ -375,6 +381,11 @@ function _onClick(e) {
   if (act === 'copy-prompt')    return _copyPromptToClipboard();
   // Plan B humain : toggle de la section "Mode manuel" dans le hero
   if (act === 'toggle-manual')  return _toggleManualMode();
+  // Sprint Kodex-Pulsa-share : intégration hybride (cf. _renderShareSection)
+  if (act === 'share-mail')          return _shareByMail();
+  if (act === 'share-copy-text')     return _shareCopyText();
+  if (act === 'share-unlock-pulsa')  return _shareUnlockPulsa();
+  if (act === 'share-create-pulsa')  return _shareCreatePulsa();
 }
 
 // ── Construit puis copie le Code Maître dans le presse-papier ──
@@ -2205,7 +2216,9 @@ function _viewOutput() {
         </button>
       </div>
 
-      <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
+      ${_renderShareSection()}
+
+      <div class="ws-card" style="margin-top:18px;border-color:var(--danger);background:var(--danger-soft);">
         <div style="display:flex;gap:12px;align-items:flex-start;">
           ${icon('x', 22)}
           <div style="flex:1;min-width:0;">
@@ -2368,7 +2381,9 @@ function _renderBriefIdleState({ validationError, activeEngine, hasApiKey, showM
     </div>
   `;
 
-  return primaryCard + aiBonusCard + planBHTML;
+  // Ordre logique : obtenir (primary) → envoyer + premium Pulsa (share)
+  //                → enrichir (IA bonus) → dépannage (plan B).
+  return primaryCard + _renderShareSection() + aiBonusCard + planBHTML;
 }
 
 // ── Affichage du résultat IA + actions ────────────────────────
@@ -2391,7 +2406,9 @@ function _renderBriefResult() {
       </button>
     </div>
 
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    ${_renderShareSection()}
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 14px 0;align-items:center;">
       <span class="ws-badge ws-badge--success">${icon('check', 12)} Enrichi le ${_esc(generatedAt)}</span>
       ${brief.model ? `<span class="ws-badge">${_esc(brief.model)}${brief.used_fallback ? ' (fallback)' : ''}</span>` : ''}
       ${brief.used_fallback && Array.isArray(brief.tried_engines) && brief.tried_engines.length > 1 ? `
@@ -2761,6 +2778,259 @@ function _renderManualModeCard(opts = {}) {
       </div>
     </div>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Partage du brief — pattern hybride Kodex × Pulsa
+// ═══════════════════════════════════════════════════════════════
+// Deux cards rendues dans l'étape 4, juste après le téléchargement PDF :
+//   1. Card universelle « Envoyer à votre graphiste » → mailto: pré-rempli
+//      ou copie du brief texte (fonctionne sans licence Pulsa).
+//   2. Card contextuelle :
+//      - sans licence Pulsa → teaser cadenas + bouton K-Store fiche A-COM-004
+//      - avec licence Pulsa → carte premium + bouton « Créer une page Pulsa »
+// ═══════════════════════════════════════════════════════════════
+
+// Détecte si l'utilisateur possède la licence Pulsa (A-COM-004).
+// Mode démo (`getOwnedIds() === null`) = tout est dispo, on retourne true.
+function _hasPulsaLicence() {
+  const owned    = getOwnedIds();
+  const lifetime = getLifetimeIds();
+  if (owned === null) return true;
+  const all = [...(owned || []), ...(lifetime || [])];
+  return all.includes('A-COM-004');
+}
+
+// Extrait un titre lisible du brief depuis le state (nom_projet, sinon
+// support + vendor). Sert à pré-remplir le sujet du mailto, le titre du
+// draft Pulsa et le titre de la card.
+function _briefProjectTitle() {
+  const name = _state.content?.fields?.nom_projet?.trim();
+  if (name) return name;
+  const std    = _state.destination?.standard || {};
+  const vendor = std.vendor || _state.destination?.vendor_id || '';
+  const supp   = std.type_support || std.product_name || '';
+  const parts  = [supp, vendor].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Brief créatif';
+}
+
+// Texte court pour mailto / copie / intro Pulsa.
+// On reste lisible (pas le code maître complet), juste un résumé du
+// projet + une mention que le PDF complet est joint séparément.
+function _buildBriefSummaryText() {
+  const title      = _briefProjectTitle();
+  const std        = _state.destination?.standard || {};
+  const sup        = std.type_support || std.product_name || '—';
+  const fmt        = (std.format_fini?.width_mm && std.format_fini?.height_mm)
+    ? `${std.format_fini.width_mm} × ${std.format_fini.height_mm} mm`
+    : (std.format_fini?.width_px && std.format_fini?.height_px)
+      ? `${std.format_fini.width_px} × ${std.format_fini.height_px} px`
+      : '—';
+  const argu       = _state.content?.fields?.argumentaire?.trim() || '';
+  const lieu       = _state.content?.fields?.lieu?.trim();
+  const echeance   = _state.content?.fields?.echeance?.trim();
+  const cta        = _state.content?.fields?.cta?.trim();
+  const vendor     = std.vendor || '';
+
+  const lines = [];
+  lines.push(`Bonjour,`);
+  lines.push('');
+  lines.push(`Voici un brief créatif généré avec Kodex pour le projet « ${title} ».`);
+  lines.push('');
+  lines.push(`Support : ${sup}`);
+  lines.push(`Format fini : ${fmt}`);
+  if (vendor) lines.push(`Prestataire visé : ${vendor}`);
+  if (lieu)     lines.push(`Lieu : ${lieu}`);
+  if (echeance) lines.push(`Échéance : ${echeance}`);
+  if (cta)      lines.push(`Appel à l'action : ${cta}`);
+  lines.push('');
+  if (argu) {
+    lines.push(`Argumentaire :`);
+    lines.push(argu);
+    lines.push('');
+  }
+  lines.push(`Le brief technique complet (contraintes d'impression, charte, mentions légales, recommandations) est joint en PDF.`);
+  lines.push('');
+  lines.push(`Merci d'avance,`);
+  return lines.join('\n');
+}
+
+// Sujet du mailto. On garde court et explicite.
+function _buildBriefMailSubject() {
+  return `Brief créatif — ${_briefProjectTitle()}`;
+}
+
+// Card universelle « Envoyer à votre graphiste » : mailto + copie.
+// Toujours rendue après la primary card de téléchargement.
+function _renderShareMailCard() {
+  return `
+    <div class="ws-card" style="margin-top:14px;padding:18px 20px;">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent-soft);color:var(--ws-accent);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('send', 18)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            Envoyer le brief à votre graphiste
+          </h3>
+          <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+            Ouvre votre client mail avec un message pré-rempli (sujet + résumé du projet). Pensez à joindre le PDF téléchargé en pièce jointe.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="ws-btn ws-btn--primary" data-act="share-mail" style="padding:8px 14px;font-size:12.5px;">
+              ${icon('mail', 14)} Envoyer par mail
+            </button>
+            <button class="ws-btn ws-btn--ghost" data-act="share-copy-text" style="padding:8px 14px;font-size:12.5px;">
+              ${icon('copy', 14)} Copier le résumé
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Card teaser Pulsa (sans licence) : cadenas + valeur concrète + upsell.
+function _renderSharePulsaTeaserCard() {
+  return `
+    <div class="ws-card" style="margin-top:14px;padding:18px 20px;background:linear-gradient(135deg, var(--ws-surface) 0%, var(--ws-accent-soft) 100%);border-color:var(--ws-accent);">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;">
+          ${icon('pulsa', 18)}
+          <span style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:50%;background:var(--ws-surface);color:var(--ws-text);display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--ws-accent);">
+            ${icon('lock', 9)}
+          </span>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
+            Premium · avec Pulsa
+          </div>
+          <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            Transformez ce brief en page partageable
+          </h3>
+          <p style="margin:0 0 10px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+            Avec Pulsa, le brief devient une URL hébergée que vous envoyez à votre graphiste : suivi des consultations, relances automatiques si pas d'ouverture, dashboard centralisé.
+          </p>
+          <ul style="margin:0 0 12px 0;padding:0;list-style:none;font-size:12px;color:var(--ws-text);">
+            <li style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              ${icon('eye', 12)} Voyez qui a ouvert le brief, quand, depuis quel appareil
+            </li>
+            <li style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              ${icon('bar-chart', 12)} Dashboard centralisé de tous vos briefs partagés
+            </li>
+            <li style="display:flex;align-items:center;gap:6px;">
+              ${icon('refresh', 12)} Relances automatiques si pas d'ouverture sous N jours
+            </li>
+          </ul>
+          <button class="ws-btn ws-btn--accent" data-act="share-unlock-pulsa" style="padding:8px 14px;font-size:12.5px;">
+            ${icon('unlock', 14)} Débloquer avec Pulsa
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Card premium Pulsa (avec licence) : création directe d'un draft Pulsa.
+function _renderSharePulsaPremiumCard() {
+  return `
+    <div class="ws-card" style="margin-top:14px;padding:18px 20px;border-color:var(--ws-accent);">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('pulsa', 18)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
+            Votre licence Pulsa est active
+          </div>
+          <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            Créer une page Pulsa à partir de ce brief
+          </h3>
+          <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+            Kodex crée un brouillon Pulsa pré-rempli avec ce projet — il ne vous reste qu'à le compléter (champ « Email destinataire », confirmation de lecture…) et à publier l'URL.
+          </p>
+          <button class="ws-btn ws-btn--accent" data-act="share-create-pulsa" style="padding:8px 14px;font-size:12.5px;">
+            ${icon('share-2', 14)} Créer dans Pulsa
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Section partage complète, à appeler depuis _renderBriefIdleState et
+// _renderBriefResult. Toujours rendre la card mail + une des 2 cards
+// contextuelles selon la licence Pulsa.
+function _renderShareSection() {
+  const pulsaCard = _hasPulsaLicence()
+    ? _renderSharePulsaPremiumCard()
+    : _renderSharePulsaTeaserCard();
+  return _renderShareMailCard() + pulsaCard;
+}
+
+// Handler : ouvre le client mail avec sujet + corps pré-remplis.
+function _shareByMail() {
+  const subject = encodeURIComponent(_buildBriefMailSubject());
+  const body    = encodeURIComponent(_buildBriefSummaryText());
+  const url     = `mailto:?subject=${subject}&body=${body}`;
+  // location.href = url ouvre le client mail par défaut. window.open avec
+  // _self est équivalent et évite l'ouverture d'un onglet vide.
+  window.location.href = url;
+}
+
+// Handler : copie le résumé brief dans le presse-papier.
+async function _shareCopyText() {
+  const text = _buildBriefSummaryText();
+  try {
+    await navigator.clipboard.writeText(text);
+    _toastOk('Résumé du brief copié dans le presse-papier');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); _toastOk('Résumé copié'); }
+    catch (_e) { _toastSoon('Copie impossible — copie manuelle requise'); }
+    ta.remove();
+  }
+}
+
+// Handler : ouvre le K-Store sur la fiche Pulsa (A-COM-004) pour upsell.
+function _shareUnlockPulsa() {
+  // Ferme Kodex avant d'ouvrir le K-Store : sinon la fiche s'affiche
+  // sous le workspace fullscreen et reste invisible.
+  closeKodex();
+  setTimeout(() => openKStoreAppDetail('A-COM-004'), 120);
+}
+
+// Handler : crée un draft Pulsa pré-rempli puis bascule sur Pulsa.
+function _shareCreatePulsa() {
+  try {
+    const title = _briefProjectTitle();
+    const intro = _buildBriefSummaryText();
+    const form = newForm();
+    form.meta.title  = `Brief — ${title}`;
+    form.meta.intro  = intro;
+    // Slug propre auto-généré (sera unique sur publication côté Worker).
+    // NFD + suppression des marques diacritiques (catégorie Unicode Mn,
+    // plage U+0300–U+036F) pour retirer proprement les accents.
+    form.meta.slug   = `brief-${title.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      .slice(0, 60)}`;
+    // On ne crée pas de section/champs : l'utilisateur les ajoute dans
+    // Pulsa s'il veut collecter des réponses (email lecteur, confirmation
+    // de lecture, etc.). L'intro porte le brief complet.
+    const stored = saveForm(form);
+    setCurrentFormId(stored.id);
+    _toastOk('Brouillon Pulsa créé — ouverture du builder');
+    // Ferme Kodex puis ouvre Pulsa avec le draft chargé.
+    closeKodex();
+    setTimeout(() => openPulsa(), 120);
+  } catch (e) {
+    console.error('[kodex] share-create-pulsa', e);
+    _toastSoon('Création Pulsa impossible : ' + e.message);
+  }
 }
 
 // ── Devine un vendor_id à partir du label texte (fallback briefs legacy)

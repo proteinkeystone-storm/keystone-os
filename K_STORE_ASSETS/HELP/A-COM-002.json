@@ -23,10 +23,14 @@
     {
       "q": "Le PDF généré est-il prêt à imprimer directement ?",
       "a": "Pas l'impression elle-même : c'est un BRIEF technique. Vous le donnez à votre graphiste qui produit le visuel final selon les spécifications, ou à l'imprimeur pour validation des contraintes."
+    },
+    {
+      "q": "Comment envoyer le brief à mon graphiste ?",
+      "a": "Étape 4, en dessous du téléchargement du PDF, deux options : « Envoyer par mail » ouvre votre client mail avec un sujet et un résumé pré-remplis (pensez à joindre le PDF), ou « Copier le résumé » place le texte dans le presse-papier. Si vous avez la licence Pulsa, un bouton supplémentaire crée une page partageable avec suivi des consultations et relances automatiques."
     }
   ],
   "shortcuts": [
     { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
   ],
-  "updated_at": "2026-05-14"
+  "updated_at": "2026-05-21"
 }

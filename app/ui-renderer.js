@@ -1241,6 +1241,14 @@ function _openKStoreAppDetail(appId) {
     document.querySelector('.ksfs-main')?.scrollTo({ top: 0, behavior: 'instant' });
 }
 
+// Ouverture du K-Store directement sur une fiche d'app — utilisée par les
+// workspaces qui renvoient vers un upsell (ex : Kodex → fiche Pulsa pour
+// débloquer le partage de brief).
+export function openKStoreAppDetail(appId) {
+    _openKStorePanel('catalogue');
+    setTimeout(() => _openKStoreAppDetail(appId), 80);
+}
+
 function _backFromKStoreDetail() {
     _ksFilter = _ksPrevFilter || { kind: 'all', id: null };
     _ksPrevFilter = null;
