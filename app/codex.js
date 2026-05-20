@@ -371,6 +371,51 @@ function _onClick(e) {
   if (act === 'open-vault')     return _openVault();
   // Bascule sur un autre moteur AI (ks_active_engine) + re-render
   if (act === 'switch-engine')  return _switchEngine(t.dataset.engine);
+  // Plan B humain : copier le Code Maître dans le presse-papier
+  if (act === 'copy-prompt')    return _copyPromptToClipboard();
+  // Plan B humain : toggle de la section "Mode manuel" dans le hero
+  if (act === 'toggle-manual')  return _toggleManualMode();
+}
+
+// ── Construit puis copie le Code Maître dans le presse-papier ──
+// Si le prompt n'existe pas encore (l'utilisateur n'a pas cliqué Générer),
+// on le construit à la volée à partir de l'état courant. Ainsi le bouton
+// "Copier" fonctionne aussi en amont de toute tentative de génération.
+async function _copyPromptToClipboard() {
+  let prompt = _state.output.codeMaitre;
+  if (!prompt) {
+    try {
+      const sector = await getSector(_state.content.sector);
+      prompt = await buildCodeMaitre(_state, sector);
+      _state.output.codeMaitre = prompt;
+    } catch (e) {
+      _toastSoon('Impossible de construire le prompt : ' + e.message);
+      return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(prompt);
+    _toastOk('Code Maître copié dans le presse-papier');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = prompt;
+    ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); _toastOk('Code Maître copié'); }
+    catch (_e) { _toastSoon('Copie impossible — copie manuelle requise'); }
+    ta.remove();
+  }
+}
+
+// ── Toggle de la section "Mode manuel (copier-coller)" ────────
+function _toggleManualMode() {
+  _state.output.show_manual = !_state.output.show_manual;
+  _saveDraft();
+  _renderMain();
+  setTimeout(() => {
+    _root?.querySelector('[data-slot="manual-mode"]')
+         ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
 }
 
 // ── Bascule sur un autre moteur AI (depuis card erreur ou bandeau) ─
@@ -2141,6 +2186,8 @@ function _viewOutput() {
           ${icon('refresh', 16)} Réessayer
         </button>
       </div>
+
+      ${_renderManualModeCard({ context: 'error' })}
     `;
   }
   // ── État initial : invitation à générer ──────────────────
@@ -2197,7 +2244,15 @@ function _viewOutput() {
             ${icon('x', 14)} ${_esc(validationError)}
           </div>
         ` : ''}
+        <div style="margin-top:18px;border-top:1px solid var(--ws-border);padding-top:14px;">
+          <button class="ws-btn ws-btn--ghost" data-act="toggle-manual"
+                  style="padding:6px 14px;font-size:12px;color:var(--ws-text-muted);">
+            ${icon(o.show_manual ? 'chevron-up' : 'file-text', 13)}
+            ${o.show_manual ? 'Masquer le mode manuel' : 'Ou copier-coller sur une AI gratuite (plan B)'}
+          </button>
+        </div>
       </div>
+      ${o.show_manual ? _renderManualModeCard({ context: 'default' }) : ''}
     `;
   }
 
@@ -2496,10 +2551,103 @@ const ENGINE_DOC_URL = {
   'Llama'     : 'https://api.together.xyz/settings/api-keys',
 };
 
+// ── Mapping moteur → URL de l'interface web GRATUITE (plan B humain)
+// L'utilisateur copie le Code Maître, ouvre un de ces liens, colle.
+// Toutes les interfaces ont une version gratuite (souvent avec compte).
+const ENGINE_WEB_URL = {
+  'Claude'    : { url: 'https://claude.ai/new',          host: 'claude.ai' },
+  'ChatGPT'   : { url: 'https://chatgpt.com/',           host: 'chatgpt.com' },
+  'GPT 5'     : { url: 'https://chatgpt.com/',           host: 'chatgpt.com' },
+  'Gemini'    : { url: 'https://gemini.google.com/app',  host: 'gemini.google.com' },
+  'Mistral'   : { url: 'https://chat.mistral.ai/chat',   host: 'chat.mistral.ai' },
+  'Grok'      : { url: 'https://grok.com/',              host: 'grok.com' },
+  'Perplexity': { url: 'https://www.perplexity.ai/',     host: 'perplexity.ai' },
+  'Llama'     : { url: 'https://www.meta.ai/',           host: 'meta.ai' },
+};
+
 // Liste tous les moteurs avec une clé API configurée dans le Vault
 function _listAvailableEngines() {
   const labels = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity', 'Llama'];
   return labels.filter(l => _findApiKeyForEngine(l));
+}
+
+// ── Card "Plan B humain" : copier le Code Maître + liens AI web ──
+// Utilisé à 2 endroits :
+//   - dans la card erreur "tous engines KO" (toujours visible)
+//   - dans le hero "Le brief" via un toggle discret (pour user qui
+//     préfère générer manuellement depuis le départ)
+function _renderManualModeCard(opts = {}) {
+  const { context = 'default' } = opts;
+  // Labels affichés en pills "Ouvrir [AI]" — uniquement ceux qu'on a
+  // dans ENGINE_WEB_URL (= les plus connus, version web gratuite)
+  const aiPills = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity']
+    .map(label => {
+      const web = ENGINE_WEB_URL[label];
+      if (!web) return '';
+      return `
+        <a href="${_esc(web.url)}" target="_blank" rel="noopener"
+           class="ws-btn ws-btn--secondary"
+           style="padding:8px 14px;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+          ${_esc(label)}
+          <span style="font-size:10px;color:var(--ws-text-muted);">${_esc(web.host)} ↗</span>
+        </a>
+      `;
+    }).join('');
+
+  const introBg = context === 'error'
+    ? 'var(--ws-accent-soft)'
+    : 'var(--ws-surface)';
+  const introHeader = context === 'error'
+    ? `Plan B : utilisez n'importe quelle AI gratuite`
+    : `Générer manuellement (plan B sans clé API)`;
+  const introBlurb = context === 'error'
+    ? `Vos clés API sont toutes en panne ? Pas de souci. Copiez le Code Maître ci-dessous et collez-le dans n'importe quelle interface web gratuite — vous obtiendrez le même brief en quelques secondes.`
+    : `Vous n'avez pas envie de saisir une clé API ? Copiez le Code Maître et collez-le dans une AI web gratuite. Pratique pour tester ou en mode dépannage.`;
+
+  return `
+    <div class="ws-card" data-slot="manual-mode"
+         style="padding:18px 20px;background:${introBg};border-color:var(--ws-accent);margin-top:14px;">
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('file-text', 18)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            ${_esc(introHeader)}
+          </h3>
+          <p style="margin:0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+            ${introBlurb}
+          </p>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center;margin-bottom:14px;">
+        <div style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--ws-accent);color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="ws-btn ws-btn--accent" data-act="copy-prompt"
+                  style="padding:8px 14px;font-size:13px;">
+            ${icon('save', 14)} Copier le Code Maître
+          </button>
+          <span style="font-size:12px;color:var(--ws-text-muted);">prompt complet prêt à être collé</span>
+        </div>
+
+        <div style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--ws-accent);color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
+        <div>
+          <div style="font-size:12.5px;color:var(--ws-text);margin-bottom:8px;font-weight:600;">
+            Ouvrez l'interface web de votre choix (compte gratuit suffit)
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${aiPills}
+          </div>
+        </div>
+
+        <div style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--ws-accent);color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:700;">3</div>
+        <div style="font-size:12.5px;color:var(--ws-text);">
+          Collez le Code Maître (<kbd style="font-family:'SF Mono',monospace;font-size:11px;padding:1px 5px;background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:4px;">Cmd</kbd>+<kbd style="font-family:'SF Mono',monospace;font-size:11px;padding:1px 5px;background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:4px;">V</kbd>), envoyez, puis copiez la réponse — c'est votre brief prêt à transmettre à votre graphiste.
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── Devine un vendor_id à partir du label texte (fallback briefs legacy)
