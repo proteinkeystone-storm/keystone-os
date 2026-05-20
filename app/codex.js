@@ -2244,11 +2244,14 @@ function _viewOutput() {
             ${icon('x', 14)} ${_esc(validationError)}
           </div>
         ` : ''}
-        <div style="margin-top:18px;border-top:1px solid var(--ws-border);padding-top:14px;">
-          <button class="ws-btn ws-btn--ghost" data-act="toggle-manual"
-                  style="padding:6px 14px;font-size:12px;color:var(--ws-text-muted);">
-            ${icon(o.show_manual ? 'chevron-up' : 'file-text', 13)}
-            ${o.show_manual ? 'Masquer le mode manuel' : 'Ou copier-coller sur une AI gratuite (plan B)'}
+        <div style="margin-top:24px;border-top:1px solid var(--ws-border);padding-top:18px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-bottom:10px;">
+            Plan B — sans clé API
+          </div>
+          <button class="ws-btn ws-btn--secondary" data-act="toggle-manual"
+                  style="padding:9px 16px;font-size:13px;">
+            ${icon(o.show_manual ? 'chevron-up' : 'file-text', 14)}
+            ${o.show_manual ? 'Masquer le mode manuel' : 'Copier-coller le brief sur une AI gratuite'}
           </button>
         </div>
       </div>
