@@ -2309,8 +2309,40 @@ function _editorOptionsBlock(sid, field) {
     case 'slider':       return _editorSlider(sid, field);
     case 'likert':       return _editorLikert(sid, field);
     case 'repeater':     return _editorRepeater(sid, field);
+    case 'brief-readonly': return _editorBriefReadonly(sid, field);
     default:             return '';
   }
+}
+
+// ── Éditeur : bloc « brief » lecture seule (auto-injecté par Kodex) ──
+// Le champ apparaît dans des forms créés depuis Kodex. Le user peut
+// ajuster le titre et le texte avant de publier. Bouton d'aide qui
+// rappelle l'origine du champ pour ne pas perdre le user qui ne se
+// souviendrait pas de l'avoir créé.
+function _editorBriefReadonly(sid, field) {
+  const o = field.options || {};
+  const fid = field.id;
+  return `
+    <section class="pulsa-editor-section">
+      <div class="pulsa-editor-hint" style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--ws-accent-soft, rgba(99,102,241,.08));border-radius:8px;font-size:12px;color:var(--ws-text-soft, #64748b);line-height:1.5;margin-bottom:14px;">
+        ${icon('sparkles', 13)}
+        <span>Ce bloc a été injecté par Kodex à la création du formulaire. Vous pouvez ajuster le titre et le texte avant publication — ou supprimer le bloc.</span>
+      </div>
+
+      <label class="pulsa-editor-label">Titre du bloc</label>
+      <input class="pulsa-input"
+             type="text"
+             data-bind="field.${sid}.${fid}.options.heading"
+             value="${_escape(o.heading || '')}"
+             placeholder="Brief créatif">
+
+      <label class="pulsa-editor-label" style="margin-top:14px;">Contenu du brief</label>
+      <textarea class="pulsa-textarea"
+                rows="10"
+                data-bind="field.${sid}.${fid}.options.brief_text"
+                placeholder="Présentation du projet, contraintes techniques, échéance…">${_escape(o.brief_text || '')}</textarea>
+    </section>
+  `;
 }
 
 // ── Éditeur : bloc répétable (repeater) ──────────────────────

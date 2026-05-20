@@ -301,6 +301,41 @@
       min-height: 16px;
     }
 
+    /* ── Bloc « Brief Kodex » lecture seule (auto-injecté) ──
+       Style distinct des champs de saisie : panneau d'information
+       en aplat clair avec liseré accent à gauche pour le distinguer
+       visuellement du flux de questions. */
+    .pf-field--info { margin-top: 8px; }
+    .pf-brief-block {
+      background: var(--pf-light);
+      border: 1px solid var(--pf-border);
+      border-left: 3px solid var(--pf-accent);
+      border-radius: 10px;
+      padding: 18px 20px;
+      line-height: 1.6;
+    }
+    .pf-brief-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--pf-accent);
+      margin-bottom: 4px;
+    }
+    .pf-brief-heading {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+      color: var(--pf-brand);
+    }
+    .pf-brief-text {
+      font-size: 14px;
+      color: var(--pf-body);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     /* ── Inputs ─────────────────────────────────────────── */
     .pf-input, .pf-textarea {
       width: 100%;
@@ -1192,11 +1227,22 @@
       'likert':       renderLikert,
       'image-picker': renderImagePicker,
       'repeater':     renderRepeater,
+      'brief-readonly': renderBriefReadonly,
     };
+
+    // Types qui ne sont pas de la saisie utilisateur : ils sortent du flux
+    // standard (pas de label, pas d'astérisque, pas de validation, pas de
+    // collecte de payload). Aujourd'hui seul brief-readonly est concerné.
+    const INFO_ONLY_TYPES = new Set(['brief-readonly']);
 
     function renderField(field) {
       const renderer = RENDERERS[field.type];
       if (!renderer) return `<div class="pf-field-error">Type de champ non supporté : ${escape(field.type)}</div>`;
+      // Bloc info-only : pas de label, pas d'astérisque, pas de slot erreur.
+      // Le renderer produit son propre wrapper visuel.
+      if (INFO_ONLY_TYPES.has(field.type)) {
+        return `<div class="pf-field pf-field--info" data-width="${field.width || 'full'}" data-fid="${field.id}">${renderer(field)}</div>`;
+      }
       // L'asterisque est toujours rendu ; sa visibilité est gérée
       // par .is-required appliquée dynamiquement selon evalRequired().
       const labelHtml = `
@@ -1210,6 +1256,25 @@
           ${labelHtml}
           ${renderer(field)}
           <span class="pf-field-error" data-slot="err-${field.id}"></span>
+        </div>
+      `;
+    }
+
+    // ── Bloc « brief » lecture seule (auto-injecté par Kodex) ─────
+    // Affiche un panneau d'information stylisé avec le brief en clair.
+    // Aucun input → aucun payload → aucun impact validation/submission.
+    function renderBriefReadonly(field) {
+      const opts = field.options || {};
+      const heading = opts.heading || 'Brief créatif';
+      const text    = opts.brief_text || '';
+      // Préserve les sauts de ligne en HTML sans interpréter le markdown
+      // (le contenu vient du state Kodex, pas d'une saisie utilisateur).
+      const safeText = escape(text).replace(/\n/g, '<br>');
+      return `
+        <div class="pf-brief-block" data-source="${escape(opts.source || 'kodex')}">
+          <div class="pf-brief-eyebrow">Pour le graphiste</div>
+          <h3 class="pf-brief-heading">${escape(heading)}</h3>
+          <div class="pf-brief-text">${safeText}</div>
         </div>
       `;
     }

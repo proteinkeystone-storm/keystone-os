@@ -49,7 +49,7 @@ import { CF_API, getOwnedIds, getLifetimeIds } from './pads-loader.js';
 // Intégration hybride Pulsa : si l'utilisateur a la licence A-COM-004, le
 // bouton « Partager le brief » crée un draft Pulsa pré-rempli ; sinon il
 // affiche une card teaser qui renvoie vers la fiche K-Store de Pulsa.
-import { newForm } from './lib/pulsa-types.js';
+import { newForm, newField, newSection } from './lib/pulsa-types.js';
 import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
 import { openPulsa } from './pulsa.js';
 
@@ -3004,23 +3004,50 @@ function _shareUnlockPulsa() {
 }
 
 // Handler : crée un draft Pulsa pré-rempli puis bascule sur Pulsa.
+// V2 (mai 2026) : le form contient désormais 2 sections — la première
+// avec le brief en bloc lecture seule (type brief-readonly), la seconde
+// avec 2 champs de collecte (email + confirmation de lecture). Le user
+// n'a qu'à cliquer « Publier » dans Pulsa pour obtenir une URL hébergée,
+// puis envoyer ce lien à son graphiste qui lira le brief et confirmera.
 function _shareCreatePulsa() {
   try {
     const title = _briefProjectTitle();
-    const intro = _buildBriefSummaryText();
+    const brief = _buildBriefSummaryText();
+
     const form = newForm();
     form.meta.title  = `Brief — ${title}`;
-    form.meta.intro  = intro;
-    // Slug propre auto-généré (sera unique sur publication côté Worker).
-    // NFD + suppression des marques diacritiques (catégorie Unicode Mn,
-    // plage U+0300–U+036F) pour retirer proprement les accents.
+    form.meta.intro  = `Ce formulaire contient le brief créatif du projet « ${title} ». Lisez-le attentivement, indiquez votre email pour recevoir le PDF complet, puis confirmez votre lecture.`;
+    // Slug auto : NFD + suppression des marques diacritiques (catégorie
+    // Unicode Mn, plage U+0300–U+036F) pour retirer proprement les accents.
     form.meta.slug   = `brief-${title.toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       .slice(0, 60)}`;
-    // On ne crée pas de section/champs : l'utilisateur les ajoute dans
-    // Pulsa s'il veut collecter des réponses (email lecteur, confirmation
-    // de lecture, etc.). L'intro porte le brief complet.
+
+    // Section 1 — Bloc brief en lecture seule (auto-injecté Kodex).
+    const briefSection = newSection('Le brief');
+    briefSection.subtitle = 'Présentation du projet et contraintes techniques.';
+    const briefField = newField('brief-readonly');
+    briefField.label = 'Brief créatif';
+    briefField.options.heading    = `Brief — ${title}`;
+    briefField.options.brief_text = brief;
+    briefSection.fields.push(briefField);
+    form.sections.push(briefSection);
+
+    // Section 2 — Collecte minimale auprès du graphiste.
+    const collectSection = newSection('Votre confirmation');
+    collectSection.subtitle = 'Deux questions rapides pour valider la transmission du brief.';
+    const emailField = newField('email');
+    emailField.label    = 'Votre email pour recevoir le PDF du brief';
+    emailField.required = true;
+    emailField.options.placeholder = 'graphiste@studio.fr';
+    collectSection.fields.push(emailField);
+    const confirmField = newField('yes-no');
+    confirmField.label    = 'Confirmez-vous avoir lu et compris le brief ?';
+    confirmField.required = true;
+    collectSection.fields.push(confirmField);
+    form.sections.push(collectSection);
+
     const stored = saveForm(form);
     setCurrentFormId(stored.id);
     _toastOk('Brouillon Pulsa créé — ouverture du builder');

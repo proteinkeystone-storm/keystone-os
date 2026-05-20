@@ -241,6 +241,28 @@ export const FIELD_TYPES = {
       fields: [],             // gabarit des sous-champs (mêmes objets que des champs normaux)
     },
   },
+  // Bloc « brief » lecture seule : auto-injecté quand Kodex génère un form
+  // Pulsa partageable. Le répondant ne saisit rien — c'est un panneau
+  // d'information stylisé qui présente le brief au graphiste/imprimeur
+  // avant les champs de collecte (email, confirmation lecture).
+  // Le group 'kodex-readonly' n'est pas dans FIELD_GROUPS → absent du
+  // menu builder Pulsa (auto-injection seulement, pas de saisie utilisateur).
+  // Le payload n'est jamais soumis (aucun input), donc aucun impact sur
+  // la collecte de réponses ni sur les forms Pulsa V1 existants (Biennale).
+  'brief-readonly': {
+    label: 'Brief Kodex',
+    sub: 'Bloc d\'information lecture seule (auto-injecté par Kodex)',
+    ico: 'file-text',
+    group: 'kodex-readonly',
+    defaults: {
+      // Texte du brief en plain text (avec retours à la ligne préservés)
+      brief_text: '',
+      // Titre affiché au-dessus du bloc, sert d'amorce à la lecture
+      heading: 'Brief créatif',
+      // Identifie l'origine pour traçage analytics futur
+      source: 'kodex',
+    },
+  },
 };
 
 /**
