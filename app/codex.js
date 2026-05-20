@@ -755,11 +755,21 @@ async function _pickSupport(supportId) {
   d.support_id = supportId;
   // preset_id miroir pour rétro-compat briefs D1
   d.preset_id = supportId;
-  // Si pas de vendor encore choisi, on pré-sélectionne "other" (le pill
-  // "Je ne sais pas encore"). L'utilisateur peut switcher après.
-  if (!d.vendor_id) d.vendor_id = 'other';
-  const vendor = await getVendor(d.vendor_id);
-  const spec = await getSpec(d.vendor_id, supportId);
+
+  // Logique vendor selon la catégorie :
+  //   - print_paper / large_format : auto-sélection "other" si vide, pour
+  //     que l'utilisateur voie le récap (il pourra switcher de vendor après)
+  //   - digital / press : PAS de vendor (les vendors d'imprimerie n'ont
+  //     aucun sens). On utilise les catDefaults purs (sRGB + JPG/PNG pour
+  //     digital, CMJN ISO Coated pour presse).
+  const isPrintCategory = (support.category === 'print_paper' || support.category === 'large_format');
+  if (isPrintCategory) {
+    if (!d.vendor_id) d.vendor_id = 'other';
+  } else {
+    d.vendor_id = null;
+  }
+  const vendor = d.vendor_id ? await getVendor(d.vendor_id) : null;
+  const spec = d.vendor_id ? await getSpec(d.vendor_id, supportId) : null;
   d.standard = specToStandard(spec, vendor, support, catDefaults);
   _saveDraft();
   _renderMain();
@@ -931,14 +941,27 @@ function _renderMain() {
 //   7. Calculateur d'échelle (si grandes dimensions)
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
+  // Le lead s'adapte à la catégorie : on évite de parler d'imprimerie
+  // si l'utilisateur est sur Digital (réseaux sociaux) ou Press.
+  const cat = _state.destination.category;
+  let lead;
+  if (cat === 'digital') {
+    lead = `Choisissez le format de votre visuel. Kodex pré-remplit les
+      dimensions exactes et le profil colorimétrique adaptés au réseau social ciblé —
+      votre graphiste pourra travailler directement à la bonne taille.`;
+  } else if (cat === 'press') {
+    lead = `Choisissez le format de votre encart. Les dimensions exactes
+      seront fournies par la régie publicitaire — Kodex pré-remplit les standards
+      presse pour préparer le brief.`;
+  } else {
+    lead = `Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
+      Kodex adaptera fond perdu, marges et préparation aux exigences exactes
+      de votre imprimeur.`;
+  }
   const shell = `
     <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
     <h1 class="ws-h1">Quel format pour votre création&nbsp;?</h1>
-    <p class="ws-lead">
-      Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
-      Kodex adaptera fond perdu, marges et préparation aux exigences exactes
-      de votre imprimeur.
-    </p>
+    <p class="ws-lead">${lead}</p>
 
     <div data-slot="dest-tabs"     style="margin-bottom:14px;"></div>
     <div data-slot="dest-supports" style="margin-bottom:28px;"></div>
@@ -1050,11 +1073,24 @@ function _renderSupportCard(s, isActive) {
 // Header explicatif court, pills horizontales colorées par niveau de
 // précision. Le pill "Je ne sais pas" est toujours en dernier et reste
 // sélectionnable même si l'utilisateur n'a pas d'imprimeur en tête.
+//
+// MASQUÉ pour les catégories digital (réseaux sociaux) et press (régies) :
+// les fournisseurs d'imprimerie n'ont aucun sens pour un post Instagram
+// ou un encart magazine. Les pills disparaissent complètement.
 async function _renderDestVendors() {
   const slot = _root?.querySelector('[data-slot="dest-vendors"]');
   if (!slot) return;
   const supportId = _state.destination.support_id;
   if (!supportId) { slot.innerHTML = ''; return; }
+
+  const cat = _state.destination.category;
+  if (cat === 'digital' || cat === 'press') {
+    // Pas de pills vendor pour digital/presse. Le vendor_id est mis à
+    // null dans _pickSupport pour que les catDefaults purs s'appliquent
+    // (sRGB + JPG/PNG pour digital, CMJN ISO Coated pour presse).
+    slot.innerHTML = '';
+    return;
+  }
 
   const vendors = await getVendorsForSupport(supportId);
   const currentId = _state.destination.vendor_id;
@@ -1113,17 +1149,21 @@ async function _renderDestRecap() {
   const support = await getSupport(d.support_id);
   const dims = formatDimensions(std);
   const hasDims = dims && dims !== '—';
+  const isDigital = d.category === 'digital';
 
-  // Rendu en lignes "label → valeur" avec icônes parlantes
+  // Rendu en lignes "label → valeur" avec icônes parlantes.
+  // Digital (réseaux sociaux) : on masque Fond perdu / Zone de sécurité
+  // qui n'existent pas en numérique. On enlève aussi "DPI" qui n'a pas
+  // de sens pour un fichier 1080×1080 px.
   const rows = [
     { ic: 'ruler',  label: 'Format',          val: hasDims ? dims : 'À saisir ci-dessous' },
-    std.bleed_mm != null ? { ic: 'square',    label: 'Fond perdu',
+    (!isDigital && std.bleed_mm != null) ? { ic: 'square',    label: 'Fond perdu',
         val: std.bleed_mm === 0 ? 'Aucun (format fini = fichier)' : `${std.bleed_mm} mm sur chaque bord` } : null,
-    std.safe_margin_mm   ? { ic: 'shield',    label: 'Zone de sécurité',
+    (!isDigital && std.safe_margin_mm)   ? { ic: 'shield',    label: 'Zone de sécurité',
         val: `${std.safe_margin_mm} mm autour du visuel` } : null,
     std.color_profile    ? { ic: 'palette',   label: 'Couleurs', val: std.color_profile } : null,
-    std.export_format    ? { ic: 'file-text', label: 'Fichier final', val: std.export_format } : null,
-    std.dpi              ? { ic: 'image',     label: 'Résolution', val: `${std.dpi} DPI` } : null,
+    std.export_format    ? { ic: 'file-text', label: isDigital ? 'Format d\'export' : 'Fichier final', val: std.export_format } : null,
+    (!isDigital && std.dpi) ? { ic: 'image',  label: 'Résolution', val: `${std.dpi} DPI` } : null,
   ].filter(Boolean);
 
   // Préparation spécifique vendor (si niveau 1-2)
@@ -1197,6 +1237,12 @@ function _renderDestOther() {
   const d = _state.destination;
   if (d.vendor_id !== 'other') { slot.innerHTML = ''; return; }
   if (!d.support_id) { slot.innerHTML = ''; return; }
+  // Digital et presse : pas de prestataire à saisir (réseaux sociaux,
+  // régie publicitaire — la zone "Votre imprimeur" n'a aucun sens).
+  if (d.category === 'digital' || d.category === 'press') {
+    slot.innerHTML = '';
+    return;
+  }
 
   const specsPdf = d.specs_pdf;
   slot.innerHTML = `
