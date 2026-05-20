@@ -196,8 +196,12 @@ function _renderProjectData(sector, fields) {
 export async function exportBriefAsPDF(state, sector) {
   const std    = state.destination?.standard;
   const brief  = state.output?.brief;
-  if (!std || !brief) {
-    alert('Génère d\'abord un brief avant d\'exporter.');
+  // Le brief MÉCANIQUE est toujours générable tant qu'on a un support choisi.
+  // Le brief IA (state.output.brief) est OPTIONNEL — il enrichit le PDF
+  // avec une partie "Synthèse stratégique" s'il est présent, sinon le PDF
+  // ne contient que le brief technique mécanique.
+  if (!std) {
+    alert('Choisissez d\'abord un format à l\'étape 1.');
     return;
   }
 
@@ -216,9 +220,9 @@ export async function exportBriefAsPDF(state, sector) {
     || 'Brief Kodex';
   const supportLabel = std.type_support || std.product_name || 'Support à produire';
   const title = projectLabel + ' — ' + supportLabel;
-  const dateStr = new Date(brief.generated_at).toLocaleDateString('fr-FR', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  });
+  const dateStr = brief?.generated_at
+    ? new Date(brief.generated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const productLine = std.vendor ? `${supportLabel} · ${std.vendor}` : supportLabel;
 
   const html = `<!DOCTYPE html>
@@ -319,7 +323,7 @@ export async function exportBriefAsPDF(state, sector) {
       ${(f.lieu || f.ville) ? `<div><strong>Lieu</strong> : ${_esc(f.lieu || f.ville)}</div>` : ''}
       ${(f.echeance || f.livraison) ? `<div><strong>Échéance</strong> : ${_esc(f.echeance || f.livraison)}</div>` : ''}
       <div><strong>Généré le</strong> : ${_esc(dateStr)}</div>
-      <div><strong>Moteur AI</strong> : ${_esc(brief.model || '—')}</div>
+      ${brief?.model ? `<div><strong>Enrichi par</strong> : ${_esc(brief.model)}</div>` : ''}
     </div>
   </div>
   <div class="footer">
@@ -344,12 +348,14 @@ ${_renderVendorPrep(vendor)}
 
 ${_renderLegalList(sector, state.content.fields)}
 
-<!-- ─── PARTIE 2 — SYNTHÈSE IA ─── -->
+<!-- ─── PARTIE 2 — SYNTHÈSE IA (optionnelle) ─── -->
+${brief?.text ? `
 <div class="page-break"></div>
 <div class="ai-section">
   <h1 class="md-h1">Synthèse stratégique et pistes créatives</h1>
   ${_mdToHtml(brief.text)}
 </div>
+` : ''}
 
 <script>
   // Lancement automatique de la fenêtre d'impression à l'ouverture

@@ -2179,8 +2179,10 @@ function _viewOutput() {
     `;
   }
   // ── État : erreur ────────────────────────────────────────
+  // L'erreur ne concerne QUE l'enrichissement IA optionnel. Le brief
+  // mécanique reste téléchargeable normalement — on l'affiche en haut
+  // pour que l'utilisateur ne soit jamais bloqué.
   else if (o.status === 'error') {
-    // Détection des cas spécifiques d'erreur API pour adapter les boutons
     const errLow = (o.error || '').toLowerCase();
     const isExpired = /expired|expire|invalid.+key|unauthor|401|403/.test(errLow);
     const isMissing = /aucune clé|non configurée|missing.*key|api.?key.+missing/.test(errLow);
@@ -2188,15 +2190,28 @@ function _viewOutput() {
     const docUrl = ENGINE_DOC_URL[activeEngine];
     const otherEngines = _listAvailableEngines().filter(e => e !== activeEngine);
     body = `
+      <div class="ws-card" style="text-align:center;padding:32px 24px;border-color:var(--ws-accent);margin-bottom:18px;">
+        <div style="display:inline-flex;width:48px;height:48px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;margin-bottom:12px;color:var(--ws-accent);">
+          ${icon('file-text', 24)}
+        </div>
+        <h3 style="font-size:16px;font-weight:700;letter-spacing:-.012em;margin:0 0 8px 0;">Votre brief technique reste téléchargeable</h3>
+        <p style="margin:0 0 14px 0;font-size:12.5px;color:var(--ws-text-soft);max-width:440px;margin-inline:auto;line-height:1.55;">
+          L'enrichissement IA a échoué mais cela ne bloque pas votre brief. Téléchargez la version mécanique maintenant — vous pourrez réessayer l'IA plus tard.
+        </p>
+        <button class="ws-btn ws-btn--accent" data-act="download-pdf" style="padding:10px 18px;font-size:13px;">
+          ${icon('download', 14)} Télécharger le brief PDF
+        </button>
+      </div>
+
       <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
         <div style="display:flex;gap:12px;align-items:flex-start;">
           ${icon('x', 22)}
           <div style="flex:1;min-width:0;">
-            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--danger);">La génération a échoué</h3>
+            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--danger);">L'enrichissement IA a échoué</h3>
             <p style="margin:0;font-size:13px;color:var(--ws-text);line-height:1.5;">${_esc(o.error || 'Erreur inconnue.')}</p>
             ${isExpired && docUrl ? `
               <p style="margin:8px 0 0 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.5;">
-                Renouvelez votre clé <strong>${_esc(activeEngine)}</strong> chez votre fournisseur :
+                Renouvelez votre clé <strong>${_esc(activeEngine)}</strong> :
                 <a href="${_esc(docUrl)}" target="_blank" rel="noopener" style="color:var(--ws-accent);text-decoration:underline;">${_esc(docUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, ''))} ↗</a>
               </p>
             ` : ''}
@@ -2208,8 +2223,7 @@ function _viewOutput() {
         <div class="ws-card" style="margin-top:14px;padding:14px 16px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
             ${icon('sparkles', 14)}
-            <strong style="font-size:13px;letter-spacing:-.008em;">Essayer un autre moteur AI</strong>
-            <span style="font-size:11.5px;color:var(--ws-text-muted);">votre clé existante sera utilisée</span>
+            <strong style="font-size:13px;letter-spacing:-.008em;">Essayer l'enrichissement avec un autre moteur AI</strong>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${otherEngines.map(e => `
@@ -2224,98 +2238,135 @@ function _viewOutput() {
 
       <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
         ${isApiKeyError ? `
-          <button class="ws-btn ws-btn--accent" data-act="open-vault">
+          <button class="ws-btn ws-btn--secondary" data-act="open-vault">
             ${icon('lock', 16)} ${isExpired ? 'Mettre à jour' : 'Configurer'} ma clé ${_esc(activeEngine)}
           </button>
         ` : ''}
-        <button class="ws-btn ${isApiKeyError ? 'ws-btn--secondary' : 'ws-btn--accent'}" data-act="regenerate">
-          ${icon('refresh', 16)} Réessayer
+        <button class="ws-btn ws-btn--secondary" data-act="regenerate">
+          ${icon('refresh', 16)} Réessayer l'enrichissement
         </button>
       </div>
 
       ${_renderManualModeCard({ context: 'error' })}
     `;
   }
-  // ── État initial : invitation à générer ──────────────────
+  // ── État initial : brief mécanique dispo + bonus IA optionnel ──
+  // Refonte : on ne demande plus d'AI pour OBTENIR le brief. Toutes les
+  // données du state sont assemblables instantanément par template. L'AI
+  // n'apporte qu'un BONUS créatif (5 punchlines + 3 angles + alertes)
+  // qui devient une option, pas un prérequis.
   else {
-    const canGenerate = !validationError && hasApiKey;
-    // Bandeau d'avertissement spécifique si clé API manquante
-    const otherEnginesAvailable = _listAvailableEngines();
-    const apiKeyMissingHTML = !hasApiKey ? `
-      <div class="ws-card" style="margin-bottom:16px;border-color:var(--warn);background:var(--warn-soft, rgba(245, 158, 11, 0.08));padding:14px 16px;">
-        <div style="display:flex;gap:12px;align-items:flex-start;">
-          ${icon('lock', 18)}
-          <div style="flex:1;">
-            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--ws-text);">
-              Clé API ${_esc(activeEngine)} manquante
-            </h3>
-            <p style="margin:0 0 10px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.5;">
-              Kodex interroge le moteur AI avec votre propre clé (BYOK), stockée chiffrée dans votre Vault.
-              Configurez-la une fois, elle restera disponible pour tous les outils Keystone.
-            </p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <button class="ws-btn ws-btn--accent" data-act="open-vault" style="padding:7px 14px;font-size:12.5px;">
-                ${icon('lock', 14)} Configurer ma clé ${_esc(activeEngine)}
-              </button>
-              ${otherEnginesAvailable.length ? `
-                <span style="font-size:11.5px;color:var(--ws-text-muted);">ou utilisez un moteur déjà configuré :</span>
-                ${otherEnginesAvailable.map(e => `
-                  <button class="ws-btn ws-btn--secondary" data-act="switch-engine" data-engine="${_esc(e)}"
-                          style="padding:6px 12px;font-size:12px;">
-                    ${_esc(e)}
-                  </button>
-                `).join('')}
-              ` : ''}
-            </div>
-          </div>
-        </div>
-      </div>
-    ` : '';
-    body = `
-      ${apiKeyMissingHTML}
-      <div class="ws-card" style="text-align:center;padding:48px 24px;${canGenerate ? '' : 'opacity:.7;'}">
-        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;color:var(--gold);">
-          ${icon('sparkles', 28)}
-        </div>
-        <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Tout est prêt pour générer votre brief</h3>
-        <p style="margin:0 0 20px 0;font-size:13.5px;color:var(--ws-text-soft);max-width:440px;margin-inline:auto;line-height:1.6;">
-          Kodex va interroger le moteur <strong style="color:var(--ws-text);">${_esc(activeEngine)}</strong> avec
-          votre clé API personnelle (BYOK). Aucune donnée projet ne transite par nos serveurs au-delà du proxy technique.
-        </p>
-        <button class="ws-btn ws-btn--accent" data-act="generate-brief" ${canGenerate ? '' : 'disabled'} style="padding:12px 22px;font-size:14px;">
-          ${icon('sparkles', 16)} Générer le brief
-        </button>
-        ${validationError ? `
-          <div style="margin-top:14px;font-size:12.5px;color:var(--warn);display:inline-flex;align-items:center;gap:6px;">
-            ${icon('x', 14)} ${_esc(validationError)}
-          </div>
-        ` : ''}
-        <div style="margin-top:24px;border-top:1px solid var(--ws-border);padding-top:18px;">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-bottom:10px;">
-            Plan B — sans clé API
-          </div>
-          <button class="ws-btn ws-btn--secondary" data-act="toggle-manual"
-                  style="padding:9px 16px;font-size:13px;">
-            ${icon(o.show_manual ? 'chevron-up' : 'file-text', 14)}
-            ${o.show_manual ? 'Masquer le mode manuel' : 'Copier-coller le brief sur une AI gratuite'}
-          </button>
-        </div>
-      </div>
-      ${o.show_manual ? _renderManualModeCard({ context: 'default' }) : ''}
-    `;
+    body = _renderBriefIdleState({ validationError, activeEngine, hasApiKey, showManual: o.show_manual });
   }
 
   return `
     <span class="ws-eyebrow">${icon('sparkles', 12)} 4 sur 4 · Le brief</span>
-    <h1 class="ws-h1">${o.status === 'done' ? 'Votre brief est prêt' : 'C\'est le moment&nbsp;!'}</h1>
+    <h1 class="ws-h1">Votre brief est prêt</h1>
     <p class="ws-lead">
       ${o.status === 'done'
-        ? 'Voici le cahier des charges technique infaillible à envoyer à votre graphiste. Vous pouvez le réviser, le régénérer ou le télécharger.'
-        : 'Nous assemblons toutes vos informations en un brief technique infaillible, prêt à envoyer à votre graphiste. En bonus, 5 punchlines marketing pour inspirer votre équipe.'
+        ? 'Le PDF contient déjà toutes vos données. L\'enrichissement IA a aussi été ajouté en bonus.'
+        : 'Toutes vos données sont rassemblées en un brief technique infaillible. Téléchargez-le directement, ou enrichissez-le d\'un bonus créatif IA si vous le souhaitez.'
       }
     </p>
     ${body}
   `;
+}
+
+// ── État initial de la vue brief : téléchargement PDF primary + IA bonus
+function _renderBriefIdleState({ validationError, activeEngine, hasApiKey, showManual }) {
+  // Si validation error (pas assez de données) : on bloque tout proprement
+  if (validationError) {
+    return `
+      <div class="ws-card" style="text-align:center;padding:48px 24px;opacity:.7;">
+        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--ws-surface);border:1px solid var(--ws-border);align-items:center;justify-content:center;margin-bottom:16px;color:var(--ws-text-muted);">
+          ${icon('file-text', 28)}
+        </div>
+        <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Encore un détail à compléter</h3>
+        <p style="margin:0;font-size:13.5px;color:var(--warn);max-width:440px;margin-inline:auto;line-height:1.6;display:inline-flex;align-items:center;gap:6px;">
+          ${icon('x', 14)} ${_esc(validationError)}
+        </p>
+      </div>
+    `;
+  }
+
+  // Card primary : téléchargement PDF instantané, sans clé API requise
+  const primaryCard = `
+    <div class="ws-card" style="text-align:center;padding:48px 24px;border-color:var(--ws-accent);">
+      <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;margin-bottom:16px;color:var(--ws-accent);">
+        ${icon('file-text', 28)}
+      </div>
+      <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Brief technique prêt à imprimer</h3>
+      <p style="margin:0 0 20px 0;font-size:13.5px;color:var(--ws-text-soft);max-width:480px;margin-inline:auto;line-height:1.6;">
+        Toutes vos saisies sont assemblées en un PDF structuré : contraintes du support, données projet, charte graphique, fichiers à transmettre et mentions légales.
+      </p>
+      <button class="ws-btn ws-btn--accent" data-act="download-pdf" style="padding:12px 22px;font-size:14px;">
+        ${icon('download', 16)} Télécharger le brief PDF
+      </button>
+      <p style="margin:14px 0 0 0;font-size:11.5px;color:var(--ws-text-muted);">
+        Instantané — aucune clé API requise.
+      </p>
+    </div>
+  `;
+
+  // Card secondary : enrichissement IA optionnel (bonus créatif)
+  const otherEnginesAvailable = _listAvailableEngines();
+  const aiBonusCard = `
+    <div class="ws-card" style="margin-top:14px;padding:18px 20px;background:var(--ws-surface);">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--gold3);color:var(--gold);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('sparkles', 18)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-bottom:2px;">
+            Bonus créatif — optionnel
+          </div>
+          <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            Enrichir le brief avec des suggestions IA
+          </h3>
+          <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+            ${hasApiKey
+              ? `Kodex interroge ${_esc(activeEngine)} avec votre clé personnelle pour produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence. Le brief PDF inclura alors cette synthèse créative en page 2.`
+              : `Avec une clé API configurée, Kodex peut produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en bonus du brief technique.`
+            }
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="ws-btn ${hasApiKey ? 'ws-btn--primary' : 'ws-btn--secondary'}" data-act="generate-brief"
+                    ${hasApiKey ? '' : 'disabled'} style="padding:8px 14px;font-size:12.5px;">
+              ${icon('sparkles', 14)} ${hasApiKey ? `Enrichir avec ${_esc(activeEngine)}` : 'Clé API requise'}
+            </button>
+            ${!hasApiKey ? `
+              <button class="ws-btn ws-btn--ghost" data-act="open-vault" style="padding:8px 14px;font-size:12.5px;">
+                ${icon('lock', 14)} Configurer ma clé ${_esc(activeEngine)}
+              </button>
+            ` : ''}
+            ${!hasApiKey && otherEnginesAvailable.length ? `
+              <span style="font-size:11.5px;color:var(--ws-text-muted);">ou utilisez :</span>
+              ${otherEnginesAvailable.slice(0, 3).map(e => `
+                <button class="ws-btn ws-btn--ghost" data-act="switch-engine" data-engine="${_esc(e)}"
+                        style="padding:6px 12px;font-size:12px;">
+                  ${_esc(e)}
+                </button>
+              `).join('')}
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Card tertiary : plan B copier-coller (caché par défaut, dépliable)
+  const planBHTML = `
+    <div style="margin-top:18px;">
+      <button class="ws-btn ws-btn--ghost" data-act="toggle-manual"
+              style="padding:8px 14px;font-size:12.5px;color:var(--ws-text-muted);">
+        ${icon(showManual ? 'chevron-up' : 'file-text', 13)}
+        ${showManual ? 'Masquer le mode manuel' : 'Plan B — copier le prompt sur une AI gratuite'}
+      </button>
+      ${showManual ? _renderManualModeCard({ context: 'default' }) : ''}
+    </div>
+  `;
+
+  return primaryCard + aiBonusCard + planBHTML;
 }
 
 // ── Affichage du résultat IA + actions ────────────────────────
@@ -2325,27 +2376,38 @@ function _renderBriefResult() {
   const generatedAt = brief?.generated_at ? new Date(brief.generated_at).toLocaleString('fr-FR') : '—';
 
   return `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-      <span class="ws-badge ws-badge--success">${icon('check', 12)} Généré le ${_esc(generatedAt)}</span>
-      ${brief.model ? `<span class="ws-badge">Modèle : ${_esc(brief.model)}${brief.used_fallback ? ' (fallback)' : ''}</span>` : ''}
+    <div class="ws-card" style="text-align:center;padding:36px 24px;border-color:var(--ws-accent);margin-bottom:18px;">
+      <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;margin-bottom:14px;color:var(--ws-accent);">
+        ${icon('check', 28)}
+      </div>
+      <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 6px 0;">Brief enrichi — prêt à télécharger</h3>
+      <p style="margin:0 0 18px 0;font-size:13px;color:var(--ws-text-soft);max-width:480px;margin-inline:auto;line-height:1.55;">
+        Le PDF contient les contraintes techniques verrouillées + les ${_esc(brief.model || 'IA')} suggestions créatives en page 2.
+      </p>
+      <button class="ws-btn ws-btn--accent" data-act="download-pdf" style="padding:12px 22px;font-size:14px;">
+        ${icon('download', 16)} Télécharger le brief PDF
+      </button>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+      <span class="ws-badge ws-badge--success">${icon('check', 12)} Enrichi le ${_esc(generatedAt)}</span>
+      ${brief.model ? `<span class="ws-badge">${_esc(brief.model)}${brief.used_fallback ? ' (fallback)' : ''}</span>` : ''}
       ${brief.used_fallback && Array.isArray(brief.tried_engines) && brief.tried_engines.length > 1 ? `
-        <span class="ws-badge" style="color:var(--ws-text-muted);" title="Engines essayés dans l'ordre : ${_esc(brief.tried_engines.join(' → '))}">
+        <span class="ws-badge" style="color:var(--ws-text-muted);" title="Engines essayés : ${_esc(brief.tried_engines.join(' → '))}">
           ${icon('refresh', 11)} ${_esc(brief.tried_engines.length)} moteurs essayés
         </span>
       ` : ''}
       ${o.briefId ? `<span class="ws-badge">Sauvegardé en bibliothèque</span>` : `<span class="ws-badge" style="color:var(--warn);">Brouillon non sauvegardé</span>`}
     </div>
 
+    <h2 class="ws-h2" style="margin:18px 0 10px 0;">Suggestions créatives IA</h2>
     <div class="ws-card" style="padding:24px 28px;">
       <div data-slot="brief-text" style="font-size:14px;line-height:1.7;color:var(--ws-text);"></div>
     </div>
 
     <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
-      <button class="ws-btn ws-btn--accent" data-act="download-pdf">
-        ${icon('download', 16)} Télécharger en PDF
-      </button>
       <button class="ws-btn ws-btn--secondary" data-act="regenerate">
-        ${icon('refresh', 16)} Régénérer
+        ${icon('refresh', 16)} Régénérer la partie IA
       </button>
       <button class="ws-btn ws-btn--ghost" data-act="view-prompt">
         ${icon('file-text', 16)} Voir le Code Maître envoyé
@@ -2796,8 +2858,8 @@ function _stepNav() {
         ${icon('chevron-left', 16)} ${_esc(backLabel)}
       </button>
       ${isLast
-        ? `<button class="ws-btn ws-btn--accent" data-act="next" disabled>
-             ${icon('sparkles', 16)} Générer le brief
+        ? `<button class="ws-btn ws-btn--accent" data-act="download-pdf">
+             ${icon('download', 16)} Télécharger le brief PDF
            </button>`
         : `<button class="ws-btn ws-btn--primary" data-act="next">
              Étape suivante ${icon('chevron-right', 16)}
