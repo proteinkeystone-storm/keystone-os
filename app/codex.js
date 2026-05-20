@@ -2035,14 +2035,29 @@ function _viewOutput() {
   }
   // ── État : en cours d'appel ─────────────────────────────
   else if (o.status === 'calling' || o.status === 'building') {
+    // Pattern fallback Kodex : on indique l'engine essayé + bascule + retry
+    let liveTitle = 'Kodex assemble votre brief…';
+    let liveSub   = 'Nous croisons les contraintes techniques avec vos données projet et la charte. L\'IA produit la synthèse — généralement 10 à 20 secondes.';
+    if (o.status === 'calling' && o.attempt_engine) {
+      if (o.attempt_is_fallback) {
+        liveTitle = `${_esc(o.attempt_previous)} indisponible — bascule sur ${_esc(o.attempt_engine)}…`;
+        liveSub = 'Vos quotas étaient épuisés sur le premier moteur. Kodex tente automatiquement le suivant.';
+      } else if (o.attempt_retry) {
+        liveTitle = `${_esc(o.attempt_engine)} sature — nouvelle tentative (${o.attempt_retry}/3)…`;
+        liveSub = 'Le moteur a renvoyé une erreur transitoire. On réessaie avec un court délai.';
+      } else {
+        liveTitle = `${_esc(o.attempt_engine)} rédige votre brief…`;
+        liveSub = 'L\'IA croise vos données. Si elle est indisponible, Kodex bascule automatiquement sur un autre moteur configuré.';
+      }
+    }
     body = `
       <div class="ws-card" style="text-align:center;padding:48px 24px;">
         <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;animation:ws-pulse 1.4s ease-in-out infinite;">
           ${icon('sparkles', 28)}
         </div>
-        <h3 style="font-size:16px;font-weight:700;letter-spacing:-.018em;margin:0 0 6px 0;">Kodex assemble votre brief…</h3>
-        <p style="margin:0;font-size:13px;color:var(--ws-text-muted);max-width:380px;margin-inline:auto;line-height:1.55;">
-          Nous croisons les contraintes techniques avec vos données projet et la charte. L'IA produit la synthèse — généralement 10 à 20 secondes.
+        <h3 style="font-size:16px;font-weight:700;letter-spacing:-.018em;margin:0 0 6px 0;">${liveTitle}</h3>
+        <p style="margin:0;font-size:13px;color:var(--ws-text-muted);max-width:440px;margin-inline:auto;line-height:1.55;">
+          ${liveSub}
         </p>
       </div>
       <style>
@@ -2189,7 +2204,12 @@ function _renderBriefResult() {
   return `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
       <span class="ws-badge ws-badge--success">${icon('check', 12)} Généré le ${_esc(generatedAt)}</span>
-      ${brief.model ? `<span class="ws-badge">Modèle : ${_esc(brief.model)}</span>` : ''}
+      ${brief.model ? `<span class="ws-badge">Modèle : ${_esc(brief.model)}${brief.used_fallback ? ' (fallback)' : ''}</span>` : ''}
+      ${brief.used_fallback && Array.isArray(brief.tried_engines) && brief.tried_engines.length > 1 ? `
+        <span class="ws-badge" style="color:var(--ws-text-muted);" title="Engines essayés dans l'ordre : ${_esc(brief.tried_engines.join(' → '))}">
+          ${icon('refresh', 11)} ${_esc(brief.tried_engines.length)} moteurs essayés
+        </span>
+      ` : ''}
       ${o.briefId ? `<span class="ws-badge">Sauvegardé en bibliothèque</span>` : `<span class="ws-badge" style="color:var(--warn);">Brouillon non sauvegardé</span>`}
     </div>
 
@@ -2258,12 +2278,14 @@ async function _generateBrief() {
   const err = validateForGeneration(_state);
   if (err) { _toastSoon(err); return; }
 
-  // Récupère le moteur actif + la clé API du vault user (localStorage)
-  const engineLabel = localStorage.getItem('ks_active_engine') || 'Claude';
-  const engineKey   = _findApiKeyForEngine(engineLabel);
-  if (!engineKey) {
+  // ── 1. Résolution de la liste d'engines à essayer (fallback) ──
+  // L'engine actif est en tête, puis les autres engines avec clé API
+  // configurée dans le Vault. Pattern repris de l'AI-assist Pulsa.
+  const activeLabel = localStorage.getItem('ks_active_engine') || 'Claude';
+  const enginesToTry = _resolveAIEnginesOrdered(activeLabel);
+  if (enginesToTry.length === 0) {
     _state.output.status = 'error';
-    _state.output.error  = `Aucune clé API ${engineLabel} configurée. Allez dans Réglages → Vault pour la saisir.`;
+    _state.output.error  = `Aucune clé API ${activeLabel} configurée. Allez dans Réglages → Vault pour la saisir.`;
     _saveDraft();
     _renderMain();
     return;
@@ -2272,7 +2294,7 @@ async function _generateBrief() {
   _state.output.status = 'building';
   _renderMain();
 
-  // Construit le prompt
+  // ── 2. Construction du prompt ──────────────────────────────
   let prompt;
   try {
     const sector = await getSector(_state.content.sector);
@@ -2285,16 +2307,91 @@ async function _generateBrief() {
     return;
   }
 
-  // Appelle le moteur via PromptEngine (BYOK proxy Worker)
+  // ── 3. Boucle de fallback sur les engines ──────────────────
+  // Pattern : engine N essaie 3× sur 503 (transient), bascule sur N+1
+  // si quota/credit/429/billing. Out direct si clé invalide / network.
   _state.output.status = 'calling';
+  _state.output.attempt_engine = enginesToTry[0];
+  _state.output.attempt_is_fallback = false;
   _renderMain();
 
-  try {
-    const text = await ApiHandler.callEngine(engineLabel, prompt, engineKey);
+  const isQuotaError = (msg) =>
+    /credit|quota|insufficient|429|balance|billing|payment|exceed|too low/i.test(msg);
+  const isTransient = (msg) =>
+    /503|high demand|overload|unavailable|temporar/i.test(msg);
+  const isAuthError = (msg) =>
+    /401|403|expired|invalid.+key|unauthor|forbidden/i.test(msg);
+  const RETRY_DELAYS = [0, 1500, 3500];
+
+  let resultText = null;
+  let usedEngine = null;
+  let lastErr = null;
+  let triedEngines = [];
+
+  outer: for (let i = 0; i < enginesToTry.length; i++) {
+    const engineLabel = enginesToTry[i];
+    triedEngines.push(engineLabel);
+    const engineKey = _findApiKeyForEngine(engineLabel);
+    if (!engineKey) continue;
+
+    // Status visuel : bascule entre engines
+    const isFallback = i > 0;
+    _state.output.attempt_engine = engineLabel;
+    _state.output.attempt_is_fallback = isFallback;
+    _state.output.attempt_previous = isFallback ? enginesToTry[i - 1] : null;
+    _renderMain();
+    if (isFallback) await new Promise(r => setTimeout(r, 500));
+
+    // Retry interne sur 503
+    let attemptErr = null;
+    for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+      if (attempt > 0) {
+        _state.output.attempt_retry = attempt + 1;
+        _renderMain();
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+      }
+      try {
+        const text = await ApiHandler.callEngine(engineLabel, prompt, engineKey);
+        if (text && text.trim()) {
+          resultText = text;
+          usedEngine = engineLabel;
+          break outer;  // succès → on sort des 2 boucles
+        }
+        attemptErr = new Error('Réponse vide du moteur');
+      } catch (e) {
+        attemptErr = e;
+        const msg = e?.message || '';
+        if (!isTransient(msg)) break;   // erreur non-transitoire → on sort du retry
+      }
+    }
+
+    // Échec sur cet engine. On bascule UNIQUEMENT si quota épuisé.
+    lastErr = attemptErr;
+    const msg = attemptErr?.message || '';
+    if (isAuthError(msg)) {
+      // Clé invalide/expirée → on tente quand même les autres engines
+      // (le user peut avoir d'autres clés valides). On continue donc la
+      // boucle, mais sans message "bascule" trompeur.
+      continue;
+    }
+    if (!isQuotaError(msg)) {
+      // Erreur non-récupérable (network, format, etc.) → out
+      break;
+    }
+    // Quota épuisé → on continue vers le moteur suivant (boucle outer)
+  }
+  delete _state.output.attempt_engine;
+  delete _state.output.attempt_is_fallback;
+  delete _state.output.attempt_previous;
+  delete _state.output.attempt_retry;
+
+  if (resultText) {
     _state.output.brief = {
-      text,
-      model: engineLabel,
+      text: resultText,
+      model: usedEngine,
       generated_at: new Date().toISOString(),
+      used_fallback: usedEngine !== enginesToTry[0],
+      tried_engines: triedEngines,
     };
     _state.output.status = 'done';
     _state.output.error = null;
@@ -2305,13 +2402,50 @@ async function _generateBrief() {
     _saveDraft();
     _renderMain();
     _hydrateBriefText();
-    _toastOk('Brief généré');
-  } catch (e) {
+    const fallbackMark = (usedEngine !== enginesToTry[0]) ? ` (fallback)` : '';
+    _toastOk(`Brief généré par ${usedEngine}${fallbackMark}`);
+  } else {
     _state.output.status = 'error';
-    _state.output.error = e.message || 'Erreur lors de l\'appel au moteur AI.';
+    _state.output.tried_engines = triedEngines;
+    _state.output.error = _humanizeEngineError(lastErr, triedEngines);
     _saveDraft();
     _renderMain();
   }
+}
+
+// Liste ordonnée des engines à essayer : actif en tête, puis les autres
+// engines avec clé API configurée dans le Vault.
+function _resolveAIEnginesOrdered(activeLabel) {
+  const preferred = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity', 'Llama'];
+  const withKey = new Set(preferred.filter(l => _findApiKeyForEngine(l)));
+  const ordered = [];
+  if (withKey.has(activeLabel)) ordered.push(activeLabel);
+  for (const l of preferred) {
+    if (l === activeLabel) continue;
+    if (withKey.has(l)) ordered.push(l);
+  }
+  return ordered;
+}
+
+// Traduit une erreur AI brute en message clair (FR), en mentionnant
+// les engines qui ont été essayés si le fallback a eu lieu.
+function _humanizeEngineError(err, triedEngines) {
+  const msg = err?.message || 'Erreur inconnue';
+  const tried = (triedEngines || []).join(', ');
+  if (/credit|quota|429|insufficient|balance|billing/i.test(msg)) {
+    return tried
+      ? `Quotas/crédits épuisés sur tous les moteurs essayés (${tried}). Rechargez un compte ou réessayez plus tard.`
+      : msg;
+  }
+  if (/401|403|expired|invalid.+key|unauthor/i.test(msg)) {
+    return tried.includes(',')
+      ? `Aucune clé valide parmi (${tried}). Mettez à jour vos clés API dans le Vault.`
+      : msg;
+  }
+  if (/network|timeout|fetch/i.test(msg)) {
+    return 'Problème réseau — vérifiez votre connexion puis réessayez.';
+  }
+  return msg;
 }
 
 // ── Mapping moteur → URL de gestion de la clé API (renouvellement)
