@@ -263,6 +263,7 @@ export async function openKodex() {
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
+  _maybeShowWelcome();
 }
 
 export function closeKodex() {
@@ -271,6 +272,117 @@ export function closeKodex() {
   _root.remove();
   _root = null;
   document.body.style.overflow = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Modale welcome — affichée à la première ouverture de Kodex
+// ═══════════════════════════════════════════════════════════════
+// Présente brièvement les 4 étapes + 1 killer feature au premier visiteur.
+// Skippée si l'utilisateur arrive avec un brouillon déjà existant (il
+// connaît déjà l'outil) ou s'il l'a déjà vue (localStorage flag).
+//
+// Reset possible via Settings > Réinitialiser les guides (todo backlog)
+// ou en supprimant la clé `ks_kodex_welcomed` du localStorage.
+const LS_WELCOMED = 'ks_kodex_welcomed';
+
+function _maybeShowWelcome() {
+  if (!_root) return;
+  // Skip si l'utilisateur a déjà vu la modale ou a déjà un brouillon en cours
+  // (cas du user qui reprend une session — il connaît déjà l'outil).
+  try {
+    if (localStorage.getItem(LS_WELCOMED) === '1') return;
+  } catch (_) { /* localStorage indispo : on affiche quand même */ }
+  if (_state?.destination?.category || _state?.content?.fields?.nom_projet) {
+    // Brouillon déjà avancé → on marque welcomed sans afficher
+    try { localStorage.setItem(LS_WELCOMED, '1'); } catch (_) {}
+    return;
+  }
+  _renderWelcomeModal();
+}
+
+function _renderWelcomeModal() {
+  if (!_root) return;
+  // Supprime une instance précédente le cas échéant (idempotent)
+  _root.querySelector('[data-slot="welcome-modal"]')?.remove();
+
+  const card = (icoName, num, title, sub) => `
+    <div class="ws-welcome-card">
+      <div class="ws-welcome-card-head">
+        <span class="ws-welcome-card-num">${num}</span>
+        <span class="ws-welcome-card-ico">${icon(icoName, 18)}</span>
+      </div>
+      <h3 class="ws-welcome-card-title">${title}</h3>
+      <p class="ws-welcome-card-sub">${sub}</p>
+    </div>
+  `;
+
+  const overlay = document.createElement('div');
+  overlay.dataset.slot = 'welcome-modal';
+  overlay.className = 'ws-welcome-overlay';
+  overlay.innerHTML = `
+    <div class="ws-welcome-modal" role="dialog" aria-labelledby="ws-welcome-title">
+      <button class="ws-welcome-close" data-act="welcome-close" aria-label="Fermer">
+        ${icon('x', 18)}
+      </button>
+
+      <div class="ws-welcome-hero">
+        <div class="ws-welcome-hero-ico">${icon('kodex', 36)}</div>
+        <span class="ws-welcome-eyebrow">${icon('sparkles', 12)} Bienvenue dans Kodex</span>
+        <h1 id="ws-welcome-title" class="ws-welcome-h1">Le brief créatif infaillible pour votre graphiste</h1>
+        <p class="ws-welcome-lead">
+          En 4 étapes guidées, Kodex transforme votre intention en cahier des charges technique
+          prêt à transmettre — format exact, charte, fichiers, mentions légales.
+        </p>
+      </div>
+
+      <div class="ws-welcome-steps">
+        ${card('target',   '1', 'Le support',  'Imprimeur, réseau social, presse — 31 standards inclus')}
+        ${card('edit',     '2', 'Le message',  'Argumentaire, lieu, échéance, appel à l\'action')}
+        ${card('package',  '3', 'Les visuels', 'Charte graphique, logos, photos dans le coffre-fort')}
+        ${card('sparkles', '4', 'Le brief',    'PDF technique + bonus créatif IA optionnel')}
+      </div>
+
+      <div class="ws-welcome-killer">
+        <div class="ws-welcome-killer-ico">${icon('ruler', 22)}</div>
+        <div class="ws-welcome-killer-body">
+          <div class="ws-welcome-killer-eyebrow">Killer feature</div>
+          <div class="ws-welcome-killer-title">Calculateur d'échelle automatique</div>
+          <div class="ws-welcome-killer-sub">Pour les grands formats (bâches, 4×3, panneaux), Kodex verrouille le DPI et alerte si un visuel est sous-résolu — fini l'erreur d'impression à 800 €.</div>
+        </div>
+      </div>
+
+      <div class="ws-welcome-actions">
+        <button class="ws-btn ws-btn--accent ws-welcome-btn-primary" data-act="welcome-start">
+          ${icon('arrow-right', 14)} Commencer
+        </button>
+        <button class="ws-btn ws-btn--secondary" data-act="welcome-demo">
+          ${icon('sparkles', 14)} Voir une démo
+        </button>
+      </div>
+    </div>
+  `;
+  _root.appendChild(overlay);
+
+  // Échap → ferme (mémorise welcomed pour ne pas réafficher)
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      _closeWelcome({ remember: true });
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  overlay._onKey = onKey;
+}
+
+function _closeWelcome({ remember = true } = {}) {
+  const overlay = _root?.querySelector('[data-slot="welcome-modal"]');
+  if (!overlay) return;
+  if (overlay._onKey) document.removeEventListener('keydown', overlay._onKey);
+  if (remember) {
+    try { localStorage.setItem(LS_WELCOMED, '1'); } catch (_) {}
+  }
+  overlay.remove();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -384,6 +496,14 @@ function _onClick(e) {
   if (act === 'share-copy-text')     return _shareCopyText();
   if (act === 'share-unlock-pulsa')  return _shareUnlockPulsa();
   if (act === 'share-create-pulsa')  return _shareCreatePulsa();
+  // Sprint welcome : modale d'onboarding 1ère ouverture
+  if (act === 'welcome-start')       return _closeWelcome({ remember: true });
+  if (act === 'welcome-close')       return _closeWelcome({ remember: true });
+  if (act === 'welcome-demo')        {
+    _closeWelcome({ remember: true });
+    _loadDemoScenario();
+    return;
+  }
 }
 
 // ── Construit puis copie le Code Maître dans le presse-papier ──

@@ -1306,3 +1306,214 @@ html.light-mode .modal-close:hover {
   opacity: .45;
   text-align: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Welcome modal — onboarding 1ère ouverture d'artefact
+   ═══════════════════════════════════════════════════════════════
+   z-index 10001 pour passer au-dessus du Help-Overlay (10000)
+   et de la topbar (qui colle au workspace via sticky). */
+.ws-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 24px;
+  animation: ws-welcome-fadein 240ms ease;
+}
+@keyframes ws-welcome-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.ws-welcome-modal {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border-strong, var(--bd));
+  border-radius: 16px;
+  padding: 32px 36px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, .6);
+  animation: ws-welcome-slidein 280ms cubic-bezier(.18, .89, .32, 1.18);
+}
+@keyframes ws-welcome-slidein {
+  from { transform: translateY(16px) scale(.96); opacity: 0; }
+  to   { transform: translateY(0)    scale(1);   opacity: 1; }
+}
+
+.ws-welcome-close {
+  position: absolute;
+  top: 16px; right: 16px;
+  width: 32px; height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ws-text-muted);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.ws-welcome-close:hover {
+  background: var(--ws-surface, rgba(255,255,255,.04));
+  color: var(--ws-text);
+  border-color: var(--ws-border);
+}
+
+.ws-welcome-hero {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.ws-welcome-hero-ico {
+  display: inline-flex;
+  width: 64px; height: 64px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--ws-accent-soft, rgba(99,102,241,.12));
+  color: var(--ws-accent);
+  margin-bottom: 14px;
+}
+.ws-welcome-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+  color: var(--ws-accent);
+  padding: 4px 10px;
+  background: var(--ws-accent-soft, rgba(99,102,241,.10));
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+.ws-welcome-h1 {
+  margin: 0 0 10px 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--ws-text);
+}
+.ws-welcome-lead {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ws-text-soft);
+  line-height: 1.55;
+  max-width: 480px;
+  margin-inline: auto;
+}
+
+.ws-welcome-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+@media (max-width: 640px) {
+  .ws-welcome-steps { grid-template-columns: repeat(2, 1fr); }
+}
+.ws-welcome-card {
+  background: var(--ws-bg, var(--navy));
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 12px;
+  padding: 14px 12px;
+  text-align: left;
+}
+.ws-welcome-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--ws-accent);
+}
+.ws-welcome-card-num {
+  display: inline-flex;
+  width: 22px; height: 22px;
+  align-items: center;
+  justify-content: center;
+  background: var(--ws-accent);
+  color: var(--ws-bg, #fff);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+.ws-welcome-card-ico {
+  display: inline-flex;
+  color: var(--ws-text-muted);
+}
+.ws-welcome-card-title {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ws-text);
+}
+.ws-welcome-card-sub {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ws-text-soft);
+  line-height: 1.45;
+}
+
+.ws-welcome-killer {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--ws-accent-soft, rgba(99,102,241,.08));
+  border: 1px solid var(--ws-accent);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+.ws-welcome-killer-ico {
+  display: inline-flex;
+  width: 40px; height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: var(--ws-accent);
+  color: var(--ws-bg, #fff);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.ws-welcome-killer-body { flex: 1; min-width: 0; }
+.ws-welcome-killer-eyebrow {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+  color: var(--ws-accent);
+  margin-bottom: 3px;
+}
+.ws-welcome-killer-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ws-text);
+  margin-bottom: 4px;
+}
+.ws-welcome-killer-sub {
+  font-size: 12.5px;
+  color: var(--ws-text-soft);
+  line-height: 1.55;
+}
+
+.ws-welcome-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.ws-welcome-btn-primary {
+  padding: 11px 22px;
+  font-size: 14px;
+}
