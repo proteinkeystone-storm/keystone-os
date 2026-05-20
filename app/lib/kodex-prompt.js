@@ -99,7 +99,9 @@ function _renderTechBlock(std, destState, vendor) {
 
 function _renderContentBlock(sector, fields) {
   if (!sector) return '';
-  const lines = [`### Profil métier : ${sector.label}`];
+  // Pas de label sectoriel — Kodex est universel. On affiche juste les
+  // données projet brutes pour ne pas typer artificiellement la sortie IA.
+  const lines = [`### Données projet`];
   for (const field of sector.fields) {
     const val = _fieldValue(fields?.[field.name]);
     if (val) {
@@ -216,22 +218,22 @@ ${legal || '(aucune mention spécifique requise)'}
 
 Produis un document structuré en deux sections claires (Markdown) :
 
-## SECTION 1 — Brief technique (pour le maquettiste / imprimeur)
+## SECTION 1 — Brief technique (pour votre graphiste / maquettiste)
 
 Récapitule les éléments techniques de manière professionnelle et synthétique :
 - Format, marges, fond perdu, colorimétrie, export
-- Particularités d'échelle si grand format
+- Particularités d'échelle si grand format, ou contraintes du réseau social ciblé si digital
 - Mentions légales obligatoires à intégrer
 - Liste des assets fournis vs à demander au client
-- Recommandations spécifiques liées à la distance de vue
+- Recommandations spécifiques liées à la distance de vue ou au support
 
 ## SECTION 2 — Pistes créatives (pour le directeur communication)
 
-- **5 punchlines marketing courtes** (max 10 mots chacune) inspirées par l'argumentaire client et le format ciblé. Évite les clichés immobiliers. Tonalité : confiante, élégante, en lien avec la promesse.
+- **5 punchlines marketing courtes** (max 10 mots chacune) inspirées par l'argumentaire client et le format ciblé. Adapte la tonalité au secteur du projet (immobilier, retail, restauration, événementiel, B2B, association, indépendant…) en évitant les clichés génériques. Tonalité : confiante, élégante, en lien avec la promesse.
 - **3 angles de direction artistique** différents (ton/atmosphère/structure visuelle).
 - **Alertes critiques** que tu détectes (incohérence, manque d'asset, risque technique).
 
-Termine par une checklist en bullet de "Points de validation avant impression". Sois concret et exigeant — ce brief doit faire gagner du temps au graphiste et éviter les erreurs coûteuses.`;
+Termine par une checklist en bullet de "Points de validation avant transmission au graphiste". Sois concret et exigeant — ce brief doit faire gagner du temps au graphiste et éviter les allers-retours coûteux.`;
 }
 
 /**

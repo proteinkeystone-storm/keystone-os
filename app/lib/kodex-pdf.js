@@ -333,7 +333,7 @@ export async function exportBriefAsPDF(state, sector) {
 </section>
 
 <!-- ─── PARTIE 1 — DONNÉES STRUCTURÉES ─── -->
-<h1 class="md-h1">Brief technique pour la fabrication</h1>
+<h1 class="md-h1">Brief technique pour votre graphiste</h1>
 
 <h2 class="section">Contraintes techniques verrouillées</h2>
 ${_renderSpecsTable(std, state.destination)}

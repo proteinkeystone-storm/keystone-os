@@ -876,10 +876,11 @@ function _renderAside() {
     <div class="ws-aside-section">
       <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Kodex vous évite les erreurs d'impression qui coûtent cher&nbsp;:
-        résolution insuffisante, marges oubliées, format pas adapté à
-        votre imprimeur. Vous repartez avec un brief PDF prêt à envoyer,
-        que votre graphiste pourra suivre les yeux fermés.
+        Kodex transforme votre intention en cahier des charges précis pour
+        votre graphiste&nbsp;: format exact, charte, fichiers, mentions à respecter.
+        Vous repartez avec un brief PDF prêt à transmettre, que votre graphiste
+        pourra suivre les yeux fermés — quel que soit le support (print, digital
+        ou presse).
       </div>
     </div>
 
@@ -896,9 +897,10 @@ function _renderAside() {
         <strong style="color: var(--ws-text); display:block; margin-bottom:6px;">
           ${icon('ruler', 14)} Calculateur d'échelle automatique
         </strong>
-        Pour les grands formats (bâches, panneaux 4×3), nous calculons
-        automatiquement la bonne résolution selon la distance à laquelle
-        votre affiche sera vue. Plus de surprise désagréable à la livraison.
+        Pour les grands formats (bâches, panneaux 4×3), Kodex calcule la
+        bonne résolution selon la distance de vue. Pour les visuels digitaux,
+        il pré-remplit les dimensions exactes du réseau social. Plus de
+        spec incertaine à transmettre à votre graphiste.
       </div>
     </div>
   `;
@@ -2295,9 +2297,9 @@ function _renderBriefIdleState({ validationError, activeEngine, hasApiKey, showM
       <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;margin-bottom:16px;color:var(--ws-accent);">
         ${icon('file-text', 28)}
       </div>
-      <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Brief technique prêt à imprimer</h3>
+      <h3 style="font-size:18px;font-weight:800;letter-spacing:-.018em;margin:0 0 8px 0;">Brief technique prêt à transmettre à votre graphiste</h3>
       <p style="margin:0 0 20px 0;font-size:13.5px;color:var(--ws-text-soft);max-width:480px;margin-inline:auto;line-height:1.6;">
-        Toutes vos saisies sont assemblées en un PDF structuré : contraintes du support, données projet, charte graphique, fichiers à transmettre et mentions légales.
+        Toutes vos saisies sont assemblées en un PDF structuré que votre graphiste pourra suivre les yeux fermés : format exact, charte, fichiers à utiliser, mentions à respecter.
       </p>
       <button class="ws-btn ws-btn--accent" data-act="download-pdf" style="padding:12px 22px;font-size:14px;">
         ${icon('download', 16)} Télécharger le brief PDF
