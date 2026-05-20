@@ -2037,7 +2037,7 @@ function _viewOutput() {
   else if (o.status === 'calling' || o.status === 'building') {
     // Pattern fallback Kodex : on indique l'engine essayé + bascule + retry
     let liveTitle = 'Kodex assemble votre brief…';
-    let liveSub   = 'Nous croisons les contraintes techniques avec vos données projet et la charte. L\'IA produit la synthèse — généralement 10 à 20 secondes.';
+    let liveSub   = 'Construction du prompt à partir de vos saisies.';
     if (o.status === 'calling' && o.attempt_engine) {
       if (o.attempt_is_fallback) {
         liveTitle = `${_esc(o.attempt_previous)} indisponible — bascule sur ${_esc(o.attempt_engine)}…`;
@@ -2047,23 +2047,42 @@ function _viewOutput() {
         liveSub = 'Le moteur a renvoyé une erreur transitoire. On réessaie avec un court délai.';
       } else {
         liveTitle = `${_esc(o.attempt_engine)} rédige votre brief…`;
-        liveSub = 'L\'IA croise vos données. Si elle est indisponible, Kodex bascule automatiquement sur un autre moteur configuré.';
+        liveSub = 'L\'IA croise vos données. Délai habituel 10 à 30 secondes selon la longueur du brief.';
       }
     }
     body = `
       <div class="ws-card" style="text-align:center;padding:48px 24px;">
-        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;animation:ws-pulse 1.4s ease-in-out infinite;">
+        <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;animation:ws-pulse 1.4s ease-in-out infinite;color:var(--gold);">
           ${icon('sparkles', 28)}
         </div>
         <h3 style="font-size:16px;font-weight:700;letter-spacing:-.018em;margin:0 0 6px 0;">${liveTitle}</h3>
-        <p style="margin:0;font-size:13px;color:var(--ws-text-muted);max-width:440px;margin-inline:auto;line-height:1.55;">
+        <p style="margin:0 0 14px 0;font-size:13px;color:var(--ws-text-muted);max-width:440px;margin-inline:auto;line-height:1.55;">
           ${liveSub}
         </p>
+        <div data-slot="gen-progress" style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:18px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ws-text-soft);font-variant-numeric:tabular-nums;">
+            ${icon('refresh', 13)}
+            <span data-slot="gen-timer">0 s</span>
+            <span style="color:var(--ws-text-muted);">·</span>
+            <span data-slot="gen-stage">${_esc(o.attempt_engine || 'préparation')}</span>
+          </div>
+          <div style="width:240px;height:3px;border-radius:999px;background:var(--ws-surface);overflow:hidden;">
+            <div data-slot="gen-bar"
+                 style="height:100%;background:var(--ws-accent);width:8%;border-radius:999px;
+                        animation:gen-progress 18s ease-out forwards;"></div>
+          </div>
+        </div>
       </div>
       <style>
         @keyframes ws-pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50%       { transform: scale(1.08); opacity: .7; }
+        }
+        @keyframes gen-progress {
+          0%   { width: 8%;  }
+          30%  { width: 35%; }
+          60%  { width: 70%; }
+          100% { width: 92%; }
         }
       </style>
     `;
@@ -2320,8 +2339,19 @@ async function _generateBrief() {
   const isTransient = (msg) =>
     /503|high demand|overload|unavailable|temporar/i.test(msg);
   const isAuthError = (msg) =>
-    /401|403|expired|invalid.+key|unauthor|forbidden/i.test(msg);
+    /401|403|expired|invalid.+key|unauthor|forbidden|failed to fetch|authentication/i.test(msg);
   const RETRY_DELAYS = [0, 1500, 3500];
+
+  // Timer live : démarre dès le premier appel, mis à jour côté DOM toutes
+  // les secondes pour rassurer l'utilisateur que ça travaille en arrière-plan.
+  const startedAt = Date.now();
+  const timerInterval = setInterval(() => {
+    const timerEl = _root?.querySelector('[data-slot="gen-timer"]');
+    if (timerEl) {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      timerEl.textContent = s + ' s';
+    }
+  }, 500);
 
   let resultText = null;
   let usedEngine = null;
@@ -2380,6 +2410,7 @@ async function _generateBrief() {
     }
     // Quota épuisé → on continue vers le moteur suivant (boucle outer)
   }
+  clearInterval(timerInterval);
   delete _state.output.attempt_engine;
   delete _state.output.attempt_is_fallback;
   delete _state.output.attempt_previous;
@@ -2432,18 +2463,23 @@ function _resolveAIEnginesOrdered(activeLabel) {
 function _humanizeEngineError(err, triedEngines) {
   const msg = err?.message || 'Erreur inconnue';
   const tried = (triedEngines || []).join(', ');
+  const triedMulti = (triedEngines || []).length > 1;
   if (/credit|quota|429|insufficient|balance|billing/i.test(msg)) {
     return tried
       ? `Quotas/crédits épuisés sur tous les moteurs essayés (${tried}). Rechargez un compte ou réessayez plus tard.`
       : msg;
   }
   if (/401|403|expired|invalid.+key|unauthor/i.test(msg)) {
-    return tried.includes(',')
+    return triedMulti
       ? `Aucune clé valide parmi (${tried}). Mettez à jour vos clés API dans le Vault.`
-      : msg;
+      : `Clé API ${tried} invalide ou expirée. Mettez-la à jour dans le Vault.`;
   }
-  if (/network|timeout|fetch/i.test(msg)) {
-    return 'Problème réseau — vérifiez votre connexion puis réessayez.';
+  if (/failed to fetch|network|timeout/i.test(msg)) {
+    // Avec le proxy Worker Keystone, "Failed to fetch" peut aussi être
+    // une clé qui n'a pas pu joindre le fournisseur. On reste ambigu.
+    return triedMulti
+      ? `Aucune réponse des moteurs essayés (${tried}). Vérifiez votre connexion ET la validité de vos clés API.`
+      : `Pas de réponse de ${tried}. Vérifiez votre connexion ET la validité de votre clé API.`;
   }
   return msg;
 }
