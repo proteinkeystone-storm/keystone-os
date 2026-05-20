@@ -29,8 +29,9 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import {
-  loadCatalog, getVendorsByCategory, getProductsByVendor, getStandard,
-  formatDimensions, formatBleed, formatDpi, CATEGORY_LABELS,
+  loadCategories, getCategory, getCategoryDefaults,
+  getPresetsByCategory, getPreset, presetToStandard,
+  formatDimensions, formatBleed,
   loadSectors, getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
 import { computeScale, formatFileSize } from './lib/kodex-scale.js';
@@ -61,16 +62,22 @@ const STEPS = [
 ];
 
 // ── État global (in-memory, persistance en Sprint Kodex-3+) ───
-// Sprint Kodex-2 : `destination.step` ajoute une sous-navigation
-//   'category' → 'vendor' → 'product' → 'done'
+// Refonte universelle (mai 2026) : `destination` aplati.
+//   - category : 'print_paper' | 'large_format' | 'digital' | 'press' | null
+//   - preset_id : id du preset qui a seedé le standard (null si vide)
+//   - standard : objet technique modifiable (forme historique conservée
+//                pour kodex-prompt / kodex-pdf / kodex-scale)
+//   - vendor_url, specs_pdf : zone 3 « prestataire » optionnelle
+//   - _hint_shown : flag one-shot pour l'animation didactique zone 3
 let _state = {
   view: 'destination',
   destination: {
-    step: 'category',      // category | vendor | product | done
-    category: null,        // print | social | press | custom
-    vendor: null,          // 'Exaprint', 'Meta · Instagram', etc.
-    standardId: null,      // id de la fiche sélectionnée
-    standard: null,        // objet standard complet (cache)
+    category: null,
+    preset_id: null,
+    standard: null,
+    vendor_url: '',
+    specs_pdf: null,
+    _hint_shown: false,
   },
   content:     { sector: 'immobilier', fields: {} },
   assets: {
@@ -131,6 +138,23 @@ async function _loadDraft() {
     const raw = localStorage.getItem(LS_DRAFT_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
+
+    // Migration : ancien format (step/vendor/standardId/category=print|social|press|custom)
+    // → reset propre, on ne tente pas de mapping fragile.
+    const d = data.destination || {};
+    const isOldFormat = (
+      d.step != null ||
+      typeof d.vendor === 'string' ||
+      d.standardId != null ||
+      ['print', 'social', 'press', 'custom'].includes(d.category)
+    );
+    if (isOldFormat) {
+      _resetDraft();
+      // Toast info différée — _root n'existe pas encore au moment du load
+      setTimeout(() => _toastOk('Brouillon ancien format réinitialisé'), 600);
+      return false;
+    }
+
     // Merge non destructif (préserve les défauts si la structure a évolué)
     _state = {
       ..._state,
@@ -140,10 +164,8 @@ async function _loadDraft() {
       assets:      { ..._state.assets, ...(data.assets || {}) },
       output:      { ..._state.output, ...(data.output || {}) },
     };
-    // Re-hydrate standard si on a un id
-    if (_state.destination.standardId) {
-      _state.destination.standard = await getStandard(_state.destination.standardId);
-    }
+    // Reset du flag d'animation didactique à chaque session
+    _state.destination._hint_shown = false;
     return true;
   } catch (_) {
     return false;
@@ -154,14 +176,17 @@ function _resetDraft() {
   try { localStorage.removeItem(LS_DRAFT_KEY); } catch (_) {}
   _state = {
     view: 'destination',
-    destination: { step: 'category', category: null, vendor: null, standardId: null, standard: null },
+    destination: {
+      category: null, preset_id: null, standard: null,
+      vendor_url: '', specs_pdf: null, _hint_shown: false,
+    },
     content:     { sector: 'immobilier', fields: {} },
     assets: {
       logo_owned: false, charte_owned: false, fonts_owned: false,
       charte: { primary_hex: '', secondary_hex: '', font_title: '', font_body: '' },
-      brand_book_url: '', extra_notes: '',
+      brand_book_url: '', extra_notes: '', uploads: [],
     },
-    output: { codeMaitre: null, llmResponse: null, briefRef: null },
+    output: { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
   };
 }
 
@@ -229,6 +254,19 @@ function _buildShell() {
       <main class="ws-main" data-slot="main"></main>
       <aside class="ws-aside" data-slot="aside"></aside>
     </div>
+
+    <style>
+      .kodex-vendor-body {
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 260ms ease, opacity 220ms ease;
+      }
+      .kodex-vendor-zone.is-open .kodex-vendor-body  { max-height: 480px; opacity: 1; }
+      .kodex-vendor-zone.is-open .kodex-vendor-chev  { transform: rotate(90deg); }
+      .kodex-vendor-zone.is-open .kodex-vendor-header { border-color: var(--ws-accent); border-style: solid; }
+      .kodex-vendor-zone .kodex-vendor-header:hover  { border-color: var(--ws-border-strong); }
+    </style>
   `;
 
   document.body.appendChild(_root);
@@ -263,12 +301,12 @@ function _onClick(e) {
     }
     return;
   }
-  // Sprint Kodex-2 : navigation interne à la vue Destination
+  // Étape Destination (refonte universelle mai 2026)
   if (act === 'dest-category')  return _pickCategory(t.dataset.cat);
-  if (act === 'dest-vendor')    return _pickVendor(t.dataset.vendor);
-  if (act === 'dest-standard')  return _pickStandard(t.dataset.id);
-  if (act === 'dest-back')      return _destBack();
+  if (act === 'dest-preset')    return _pickPreset(t.dataset.id);
   if (act === 'dest-reset')     return _destReset();
+  if (act === 'dest-vendor-toggle') return _toggleVendorZone();
+  if (act === 'dest-specs-delete')  return _deleteSpecsPdf();
   // Sprint Kodex-2 : changement de secteur (profil métier)
   if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
@@ -300,9 +338,14 @@ async function _loadDemoScenario() {
       assets:      { ..._state.assets,      ...(demo.state.assets      || {}) },
       output:      { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
     };
-    // Re-hydrate l'objet standard à partir de l'id
-    if (_state.destination.standardId) {
-      _state.destination.standard = await getStandard(_state.destination.standardId);
+    // Re-hydrate le standard depuis le preset_id si présent et que le
+    // scénario n'a pas embarqué l'objet standard complet.
+    if (_state.destination.preset_id && !_state.destination.standard) {
+      const preset = await getPreset(_state.destination.preset_id);
+      if (preset) {
+        const defaults = await getCategoryDefaults(preset.category);
+        _state.destination.standard = presetToStandard(preset, defaults);
+      }
     }
     _saveDraft();
     _renderMain();
@@ -436,11 +479,36 @@ async function _loadBriefFromLibrary(id) {
     const b = await res.json();
 
     // Restore le state Kodex à partir du brief sauvegardé
-    if (b.standard_id) {
-      _state.destination.standardId = b.standard_id;
-      _state.destination.standard = await getStandard(b.standard_id);
-      _state.destination.vendor   = b.vendor || null;
-      _state.destination.step     = 'done';
+    // Le brief peut être au format universel (preset_id + standard embed)
+    // OU à l'ancien format (standard_id pointant vers les anciens vendors).
+    if (b.preset_id) {
+      const preset = await getPreset(b.preset_id);
+      if (preset) {
+        const defaults = await getCategoryDefaults(preset.category);
+        _state.destination.category  = preset.category;
+        _state.destination.preset_id = b.preset_id;
+        _state.destination.standard  = b.standard_snapshot
+          ? { ...presetToStandard(preset, defaults), ...b.standard_snapshot }
+          : presetToStandard(preset, defaults);
+      }
+    } else if (b.standard_snapshot) {
+      _state.destination.category  = b.category || null;
+      _state.destination.preset_id = null;
+      _state.destination.standard  = b.standard_snapshot;
+    } else if (b.standard_id) {
+      // Ancien format : on tente seulement d'afficher les noms (vendor /
+      // product) sans pouvoir hydrater le standard complet.
+      _state.destination.category  = null;
+      _state.destination.preset_id = null;
+      _state.destination.standard  = {
+        id: b.standard_id,
+        type_support: b.product_name || '',
+        product_name: b.product_name || '',
+        vendor: b.vendor || '',
+        format_fini: {},
+        bleed_mm: null, safe_margin_mm: null, dpi: null,
+        color_profile: '', export_format: '', material: '', notes: '',
+      };
     }
     if (b.sector) _state.content.sector = b.sector;
     if (b.fields) _state.content.fields = b.fields;
@@ -515,53 +583,74 @@ function _pickSector(sectorId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Sprint Kodex-2 : navigation interne Destination
+// Étape Destination — handlers (refonte universelle mai 2026)
 // ═══════════════════════════════════════════════════════════════
+
+// ── Changement de catégorie (tab) ─────────────────────────────
+// Préserve les saisies si possible : on ne reset le standard que
+// si l'utilisateur n'avait pas encore choisi de format.
 function _pickCategory(cat) {
-  _state.destination.category = cat;
-  _state.destination.vendor = null;
-  _state.destination.standardId = null;
-  _state.destination.standard = null;
-  if (cat === 'custom') {
-    _state.destination.step = 'product';   // saisie libre (à implémenter)
-  } else {
-    _state.destination.step = 'vendor';
-  }
-  _saveDraft();
-  _renderMain();
-}
-function _pickVendor(vendor) {
-  _state.destination.vendor = vendor;
-  _state.destination.step = 'product';
-  _saveDraft();
-  _renderMain();
-}
-async function _pickStandard(id) {
-  const std = await getStandard(id);
-  _state.destination.standardId = id;
-  _state.destination.standard = std;
-  _state.destination.step = 'done';
-  _saveDraft();
-  _renderMain();
-}
-function _destBack() {
   const d = _state.destination;
-  if (d.step === 'done')         { d.step = 'product'; }
-  else if (d.step === 'product') { d.step = 'vendor'; d.vendor = null; d.standardId = null; d.standard = null; }
-  else if (d.step === 'vendor')  { d.step = 'category'; d.category = null; d.vendor = null; d.standardId = null; d.standard = null; }
+  d.category = cat;
+  d.preset_id = null;
+  d.standard = null;     // chaque catégorie a ses propres defaults
   _saveDraft();
   _renderMain();
+}
+
+// ── Clic sur un preset → seed du standard ─────────────────────
+async function _pickPreset(presetId) {
+  const preset = await getPreset(presetId);
+  if (!preset) return;
+  const catDefaults = await getCategoryDefaults(preset.category);
+  _state.destination.category = preset.category;
+  _state.destination.preset_id = presetId;
+  _state.destination.standard = presetToStandard(preset, catDefaults);
+  _saveDraft();
+  _renderMain();
+  // Scroll vers le formulaire universel pour montrer le pré-remplissage
+  setTimeout(() => {
+    const form = _root?.querySelector('[data-slot="dest-form"]');
+    if (form) {
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Focus sur largeur si Sur-mesure (dimensions vides) ou is_dim_free
+      if (preset.is_custom || preset.is_dim_free) {
+        form.querySelector('input[name="width"]')?.focus();
+      }
+    }
+  }, 60);
 }
 
 // ── Réinitialise complètement la sélection Destination ────────
 function _destReset() {
   _state.destination = {
-    step: 'category', category: null, vendor: null,
-    standardId: null, standard: null,
+    category: null, preset_id: null, standard: null,
+    vendor_url: '', specs_pdf: null, _hint_shown: true,
   };
   _saveDraft();
   _renderMain();
   _toastOk('Sélection annulée');
+}
+
+// ── Toggle zone 3 « Prestataire » (dépliable manuelle) ────────
+function _toggleVendorZone() {
+  const zone = _root?.querySelector('[data-slot="dest-vendor-zone"]');
+  if (!zone) return;
+  zone.classList.toggle('is-open');
+}
+
+// ── Suppression du PDF de specs ───────────────────────────────
+async function _deleteSpecsPdf() {
+  const pdf = _state.destination.specs_pdf;
+  if (!pdf) return;
+  if (!confirm('Supprimer le PDF de spécifications joint ?')) return;
+  try {
+    await deleteAsset(pdf.id);
+  } catch (_) {}
+  _state.destination.specs_pdf = null;
+  _saveDraft();
+  _renderMain();
+  _toastOk('PDF retiré');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -653,217 +742,404 @@ function _renderMain() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue 1 — DESTINATION
+// Vue 1 — DESTINATION (refonte universelle mai 2026)
+// ─────────────────────────────────────────────────────────────
+// Layout en 4 zones empilées dans une seule vue :
+//   Zone 1 : tabs catégories + grid presets
+//   Zone 2 : formulaire universel (toujours visible)
+//   Zone 3 : zone prestataire repliable (animation didactique 1×)
+//   Zone 4 : calculateur d'échelle (apparaît dès dimensions saisies)
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
-  const step = _state.destination.step;
-  if (step === 'category') return _destStepCategory();
-  if (step === 'vendor')   return _destStepVendor();
-  if (step === 'product')  return _destStepProduct();
-  if (step === 'done')     return _destStepDone();
-  return _destStepCategory();
-}
-
-// ── Étape 1/3 : Choix de la catégorie ─────────────────────────
-function _destStepCategory() {
-  const categories = [
-    { id: 'print', label: 'Une impression', icon: 'printer',
-      desc: 'Flyer, affiche, bâche, carte de visite, brochure&nbsp;— chez Exaprint, Pixartprinting, Vistaprint ou votre imprimeur habituel.' },
-    { id: 'social', label: 'Les réseaux sociaux', icon: 'globe',
-      desc: 'Instagram, Facebook, LinkedIn, Google Business&nbsp;— post, story, reel ou bannière.' },
-    { id: 'press', label: 'Un magazine', icon: 'book-open',
-      desc: 'Propriétés Le Figaro, Logic-Immo, Côte Magazine, La Provence&nbsp;— et les autres parutions immo.' },
-    { id: 'custom', label: 'Un format à moi', icon: 'custom',
-      desc: 'Dimensions libres&nbsp;— vous pouvez aussi joindre le PDF de spécifications de votre prestataire.' },
-  ];
-
-  return `
+  const shell = `
     <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
-    <h1 class="ws-h1">Où voulez-vous que votre création apparaisse&nbsp;?</h1>
+    <h1 class="ws-h1">Quel format pour votre création&nbsp;?</h1>
     <p class="ws-lead">
-      Choisissez le support. Nous nous occupons ensuite des contraintes techniques —
-      format exact, marges, résolution, colorimétrie. Plus besoin d'aller chercher
-      les spécifications du prestataire&nbsp;: on connaît déjà.
+      Choisissez un preset ou décrivez précisément votre support&nbsp;:
+      Kodex calcule automatiquement les contraintes techniques, peu importe
+      l'imprimeur final.
     </p>
 
-    <div class="ws-card-grid">
-      ${categories.map(c => `
-        <div class="ws-card is-clickable"
-             data-act="dest-category" data-cat="${c.id}">
-          <div class="ws-card-row">
-            <div class="ws-card-icon">${icon(c.icon, 22)}</div>
-            <div class="ws-card-body">
-              <h3 class="ws-card-title">${c.label}</h3>
-              <p class="ws-card-desc">${c.desc}</p>
-            </div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
+    <div data-slot="dest-tabs"      style="margin-bottom:14px;"></div>
+    <div data-slot="dest-presets"   style="margin-bottom:28px;"></div>
+    <div data-slot="dest-form"      style="margin-bottom:14px;"></div>
+    <div data-slot="dest-vendor-zone" class="kodex-vendor-zone" style="margin-bottom:14px;"></div>
+    <div data-slot="dest-scale"></div>
   `;
+
+  // Hydratation asynchrone (catégories + presets + formulaire)
+  (async () => {
+    if (!_root) return;
+    const categories = await loadCategories();
+    _renderDestTabs(categories);
+    await _renderDestPresets();
+    await _renderDestForm();
+    _renderDestVendorZone();
+    _renderDestScale();
+    _maybePlayVendorHint();
+  })();
+
+  return shell;
 }
 
-// ── Étape 2/3 : Choix du vendor dans la catégorie ─────────────
-function _destStepVendor() {
-  const cat = _state.destination.category;
-  const catLabel = CATEGORY_LABELS[cat]?.label || cat;
-  const root = `<span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
-    <h1 class="ws-h1">${_esc(catLabel)}&nbsp;— quel prestataire&nbsp;?</h1>
-    <p class="ws-lead">
-      Sélectionnez votre prestataire pour accéder à ses formats officiels.
-      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
-        ${icon('chevron-left', 12)} Changer de catégorie
-      </button>
-    </p>
-    <div class="ws-card-grid" data-slot="vendor-list">
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('package', 24)}</div>
-        <p class="ws-empty-desc">Chargement du catalogue…</p>
-      </div>
-    </div>`;
-
-  // Hydratation asynchrone
-  getVendorsByCategory(cat).then(vendors => {
-    const slot = _root?.querySelector('[data-slot="vendor-list"]');
-    if (!slot) return;
-    if (!vendors.length) {
-      slot.innerHTML = `<div class="ws-empty">
-        <div class="ws-empty-icon">${icon('package', 24)}</div>
-        <h3 class="ws-empty-title">Aucun prestataire pour cette catégorie</h3>
-        <p class="ws-empty-desc">Le catalogue n'est pas encore peuplé pour ce support.</p>
-      </div>`;
-      return;
-    }
-    slot.innerHTML = vendors.map(v => `
-      <div class="ws-card is-clickable" data-act="dest-vendor" data-vendor="${_esc(v.vendor)}">
-        <div class="ws-card-row">
-          <div class="ws-card-icon">${icon(CATEGORY_LABELS[cat]?.icon || 'package', 22)}</div>
-          <div class="ws-card-body">
-            <h3 class="ws-card-title">${_esc(v.vendor)}</h3>
-            <p class="ws-card-desc">${v.count} format${v.count > 1 ? 's' : ''} disponible${v.count > 1 ? 's' : ''}</p>
-          </div>
-        </div>
-      </div>
-    `).join('');
-  });
-
-  return root;
-}
-
-// ── Étape 3/3 : Choix du produit chez le vendor ───────────────
-function _destStepProduct() {
-  const { category, vendor } = _state.destination;
-
-  if (category === 'custom') {
-    return `
-      <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
-      <h1 class="ws-h1">Format personnalisé</h1>
-      <p class="ws-lead">
-        <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
-          ${icon('chevron-left', 12)} Retour
+// ── Zone 1a : tabs catégories ─────────────────────────────────
+function _renderDestTabs(categories) {
+  const slot = _root?.querySelector('[data-slot="dest-tabs"]');
+  if (!slot) return;
+  const active = _state.destination.category;
+  slot.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-right:6px;">
+        Catégorie
+      </span>
+      ${categories.map(c => `
+        <button class="ws-btn ${active === c.id ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+                data-act="dest-category" data-cat="${_esc(c.id)}"
+                style="padding:6px 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+          ${icon(c.icon, 14)} ${_esc(c.label)}
         </button>
-      </p>
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('custom', 24)}</div>
-        <h3 class="ws-empty-title">Format libre arrivant</h3>
-        <p class="ws-empty-desc">Saisie libre des dimensions + upload du PDF de spécifications du prestataire. Sprint Kodex-3.</p>
-      </div>
-    `;
-  }
-
-  const root = `<span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
-    <h1 class="ws-h1">${_esc(vendor)}&nbsp;— quel format&nbsp;?</h1>
-    <p class="ws-lead">
-      <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:2px 8px;font-size:12px;">
-        ${icon('chevron-left', 12)} Changer de prestataire
-      </button>
-    </p>
-    <div class="ws-card-grid" data-slot="product-list">
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('package', 24)}</div>
-        <p class="ws-empty-desc">Chargement…</p>
-      </div>
-    </div>`;
-
-  getProductsByVendor(category, vendor).then(products => {
-    const slot = _root?.querySelector('[data-slot="product-list"]');
-    if (!slot) return;
-    slot.innerHTML = products.map(p => {
-      // Description : on assemble les parties disponibles (dimensions,
-      // résolution, colorimétrie) en ignorant les valeurs absentes —
-      // les formats numériques n'ont pas de DPI.
-      const desc = [formatDimensions(p), formatDpi(p), p.color_profile]
-        .filter(Boolean).map(_esc).join(' · ');
-      return `
-      <div class="ws-card is-clickable" data-act="dest-standard" data-id="${_esc(p.id)}">
-        <div class="ws-card-row">
-          <div class="ws-card-icon">${icon(CATEGORY_LABELS[category]?.icon || 'package', 22)}</div>
-          <div class="ws-card-body">
-            <h3 class="ws-card-title">${_esc(p.product_name)}</h3>
-            <p class="ws-card-desc">${desc}</p>
-          </div>
-        </div>
-      </div>
-    `;
-    }).join('');
-  });
-
-  return root;
-}
-
-// ── Récap : standard sélectionné, prêt à passer à l'étape 2 ──
-function _destStepDone() {
-  const s = _state.destination.standard;
-  if (!s) return _destStepCategory();
-
-  // Résolution : toujours 300 DPI dans le modèle Kodex (cf. kodex-scale.js).
-  // L'échelle de travail et le format de travail réel sont gérés par le
-  // calculateur d'échelle juste en dessous — on ne les duplique pas ici
-  // pour éviter toute contradiction (échelle réelle vs échelle réduite).
-  const _scale = computeScale(s);
-  const rows = [
-    ['Format fini',    formatDimensions(s)],
-    ['Fond perdu',     formatBleed(s)],
-    ['Marge sécurité', s.safe_margin_mm ? `${s.safe_margin_mm} mm` : null],
-    ['Résolution',     _scale ? `${_scale.output_dpi} DPI` : formatDpi(s)],
-    ['Colorimétrie',   s.color_profile],
-    ['Export attendu', s.export_format],
-  ].filter(r => r[1]);
-
-  return `
-    <span class="ws-eyebrow">${icon('check', 12)} Support sélectionné</span>
-    <h1 class="ws-h1">${_esc(s.vendor)} · ${_esc(s.product_name)}</h1>
-    <p class="ws-lead" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span>Voilà les contraintes techniques verrouillées pour votre création.
-        Le brief final reprendra ces informations pour votre graphiste.</span>
-      <span style="display:inline-flex;gap:8px;">
-        <button class="ws-btn ws-btn--ghost" data-act="dest-back" style="padding:4px 10px;font-size:12px;">
-          ${icon('chevron-left', 12)} Changer de format
-        </button>
-        <button class="ws-btn ws-btn--ghost" data-act="dest-reset" style="padding:4px 10px;font-size:12px;color:var(--danger);">
+      `).join('')}
+      ${(_state.destination.standard || _state.destination.preset_id) ? `
+        <button class="ws-btn ws-btn--ghost" data-act="dest-reset"
+                style="padding:6px 10px;font-size:12px;color:var(--danger);margin-left:auto;">
           ${icon('x', 12)} Tout annuler
         </button>
-      </span>
-    </p>
-
-    <div class="ws-card" style="margin-top:8px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
-        <tbody>
-          ${rows.map(([k, v]) => `
-            <tr>
-              <td style="padding:9px 0;color:var(--ws-text-muted);font-weight:600;width:42%;border-bottom:1px solid var(--ws-border);">${_esc(k)}</td>
-              <td style="padding:9px 0;color:var(--ws-text);border-bottom:1px solid var(--ws-border);">${_esc(v)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ${s.notes ? `<div style="margin-top:14px;padding:10px 12px;background:var(--ws-accent-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text-soft);">
-        <strong style="color:var(--ws-accent);">À noter&nbsp;:</strong> ${_esc(s.notes)}
-      </div>` : ''}
+      ` : ''}
     </div>
-
-    ${_renderScaleCalculator(s)}
   `;
+}
+
+// ── Zone 1b : grid presets de la catégorie active ─────────────
+async function _renderDestPresets() {
+  const slot = _root?.querySelector('[data-slot="dest-presets"]');
+  if (!slot) return;
+  const cat = _state.destination.category;
+  if (!cat) {
+    slot.innerHTML = `
+      <div class="ws-empty" style="margin-top:8px;">
+        <div class="ws-empty-icon">${icon('target', 24)}</div>
+        <p class="ws-empty-desc">Choisissez une catégorie ci-dessus pour voir les presets associés.</p>
+      </div>
+    `;
+    return;
+  }
+  const presets = await getPresetsByCategory(cat);
+  const currentId = _state.destination.preset_id;
+
+  slot.innerHTML = `
+    <div class="ws-card-grid">
+      ${presets.map(p => _renderPresetCard(p, currentId === p.id)).join('')}
+    </div>
+  `;
+}
+
+function _renderPresetCard(p, isActive) {
+  // Description : dimensions si présentes, sinon libellé d'intention
+  // (libres / à saisir / sur-mesure).
+  let desc;
+  if (p.format_fini) {
+    desc = formatDimensions(p);
+    if (p.type_support) desc += ` · ${p.type_support}`;
+  } else if (p.is_press_intro) {
+    desc = 'Toutes dimensions — à fournir par la régie';
+  } else if (p.is_custom) {
+    desc = p.type_support || 'Dimensions à saisir librement';
+  } else if (p.is_dim_free) {
+    desc = `Dimensions libres${p.type_support ? ` · ${p.type_support}` : ''}`;
+  } else {
+    desc = p.type_support || '—';
+  }
+  return `
+    <div class="ws-card is-clickable ${isActive ? 'is-selected' : ''}"
+         data-act="dest-preset" data-id="${_esc(p.id)}"
+         ${p.is_custom ? 'style="border-style:dashed;"' : ''}>
+      <div class="ws-card-row">
+        <div class="ws-card-icon">${icon(p.icon || 'printer', 22)}</div>
+        <div class="ws-card-body">
+          <h3 class="ws-card-title">${_esc(p.label)}</h3>
+          <p class="ws-card-desc">${_esc(desc)}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Zone 2 : formulaire universel (toujours visible) ──────────
+async function _renderDestForm() {
+  const slot = _root?.querySelector('[data-slot="dest-form"]');
+  if (!slot) return;
+  const std = _state.destination.standard;
+  const cat = _state.destination.category;
+  const catObj = cat ? await getCategory(cat) : null;
+  const isDigital = catObj?.defaults?.unit === 'px';
+
+  // État vide : pas encore de standard → invitation à choisir un preset
+  if (!std) {
+    slot.innerHTML = `
+      <div class="ws-card" style="background:var(--ws-surface);border-style:dashed;text-align:center;padding:28px 20px;">
+        <div style="display:inline-flex;width:44px;height:44px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;color:var(--ws-accent);margin-bottom:10px;">
+          ${icon('sliders', 22)}
+        </div>
+        <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">Formulaire universel</h3>
+        <p style="margin:0;font-size:12.5px;color:var(--ws-text-muted);line-height:1.55;max-width:380px;margin-inline:auto;">
+          Choisissez un preset ci-dessus pour le pré-remplir, ou une catégorie pour démarrer en Sur-mesure.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  const f = std.format_fini || {};
+  const width  = isDigital ? (f.width_px  ?? '') : (f.width_mm  ?? '');
+  const height = isDigital ? (f.height_px ?? '') : (f.height_mm ?? '');
+  const unitLabel = isDigital ? 'px' : 'mm';
+
+  slot.innerHTML = `
+    <h2 class="ws-h2" style="margin-bottom:6px;">Spécifications techniques</h2>
+    <p style="font-size:12.5px;color:var(--ws-text-muted);margin:0 0 14px 0;">
+      Modifiables à tout moment. Le brief final reprendra exactement ces valeurs.
+    </p>
+    <form data-slot="dest-form-inner" id="kodex-dest-form" autocomplete="off">
+      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label" for="kd-type">Type de support</label>
+          <input class="ws-input" id="kd-type" name="type_support" type="text"
+                 value="${_esc(std.type_support || '')}"
+                 placeholder="ex : carte de visite, bâche PVC, post Instagram…">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-width">Largeur (${unitLabel})</label>
+          <input class="ws-input" id="kd-width" name="width" type="number" min="1" step="1"
+                 value="${_esc(width)}"
+                 placeholder="ex : ${isDigital ? '1080' : '2000'}">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-height">Hauteur (${unitLabel})</label>
+          <input class="ws-input" id="kd-height" name="height" type="number" min="1" step="1"
+                 value="${_esc(height)}"
+                 placeholder="ex : ${isDigital ? '1080' : '800'}">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-color">Colorimétrie</label>
+          <input class="ws-input" id="kd-color" name="color_profile" type="text"
+                 value="${_esc(std.color_profile || '')}"
+                 placeholder="ex : CMJN FOGRA39, sRGB…">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-export">Format d'export attendu</label>
+          <input class="ws-input" id="kd-export" name="export_format" type="text"
+                 value="${_esc(std.export_format || '')}"
+                 placeholder="ex : PDF/X-1a, PNG haute qualité…">
+        </div>
+        ${isDigital ? '' : `
+        <div class="ws-field">
+          <label class="ws-label" for="kd-bleed">Fond perdu (mm)</label>
+          <input class="ws-input" id="kd-bleed" name="bleed_mm" type="number" min="0" step="1"
+                 value="${_esc(std.bleed_mm ?? '')}" placeholder="3">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-margin">Marges de sécurité (mm)</label>
+          <input class="ws-input" id="kd-margin" name="safe_margin_mm" type="number" min="0" step="1"
+                 value="${_esc(std.safe_margin_mm ?? '')}" placeholder="5">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-dpi">Résolution (DPI)</label>
+          <input class="ws-input" id="kd-dpi" name="dpi" type="number" min="72" step="1"
+                 value="${_esc(std.dpi ?? '')}" placeholder="300">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-material">Matière / finition (optionnel)</label>
+          <input class="ws-input" id="kd-material" name="material" type="text"
+                 value="${_esc(std.material || '')}"
+                 placeholder="ex : PVC 510 g/m², papier couché 350 g…">
+        </div>
+        `}
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label" for="kd-notes">Notes techniques (optionnel)</label>
+          <textarea class="ws-textarea" id="kd-notes" name="notes" rows="2"
+                    placeholder="Précisions à transmettre au graphiste / imprimeur">${_esc(std.notes || '')}</textarea>
+        </div>
+      </div>
+    </form>
+  `;
+
+  // Wiring : chaque change met à jour _state.destination.standard
+  const form = slot.querySelector('#kodex-dest-form');
+  form.addEventListener('input', _onDestFormChange);
+  form.addEventListener('change', _onDestFormChange);
+}
+
+// ── Zone 3 : prestataire (repliable, animation didactique) ────
+function _renderDestVendorZone() {
+  const slot = _root?.querySelector('[data-slot="dest-vendor-zone"]');
+  if (!slot) return;
+  const d = _state.destination;
+  const specsPdf = d.specs_pdf;
+  slot.innerHTML = `
+    <button class="kodex-vendor-header" data-act="dest-vendor-toggle"
+            style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;
+                   padding:14px 16px;background:var(--ws-surface);border:1.5px dashed var(--ws-border-strong);
+                   border-radius:var(--ws-radius);cursor:pointer;color:var(--ws-text);
+                   font-family:inherit;transition:border-color 180ms ease;">
+      <span class="kodex-vendor-chev" style="display:inline-flex;transition:transform 220ms ease;">
+        ${icon('chevron-right', 16)}
+      </span>
+      <span style="flex:1;font-size:13.5px;font-weight:600;letter-spacing:-.008em;">
+        Vous savez où ça va être imprimé&nbsp;? (optionnel)
+      </span>
+      <span style="font-size:11.5px;color:var(--ws-text-muted);font-weight:500;">
+        Cliquez pour ajouter le prestataire
+      </span>
+    </button>
+    <div class="kodex-vendor-body">
+      <div style="padding:16px 4px 4px 4px;display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
+        <div class="ws-field">
+          <label class="ws-label" for="kd-vendor-name">Nom du prestataire</label>
+          <input class="ws-input" id="kd-vendor-name" name="vendor" type="text"
+                 value="${_esc(_state.destination.standard?.vendor || '')}"
+                 placeholder="ex : Exaprint, Vistaprint, imprimeur local…">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-vendor-url">Lien fiche technique officielle</label>
+          <input class="ws-input" id="kd-vendor-url" name="vendor_url" type="url"
+                 value="${_esc(d.vendor_url || '')}"
+                 placeholder="https://…">
+        </div>
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label">PDF de spécifications (optionnel)</label>
+          ${specsPdf ? `
+            <div class="ws-card" style="padding:10px 12px;display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:var(--ws-radius-sm);background:var(--ws-accent-soft);display:flex;align-items:center;justify-content:center;color:var(--ws-accent);">
+                ${icon('file-text', 18)}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:var(--ws-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(specsPdf.filename)}</div>
+                <a href="${_esc(specsPdf.url)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ws-accent);text-decoration:none;">Ouvrir le PDF</a>
+              </div>
+              <button class="ws-iconbtn" data-act="dest-specs-delete" title="Retirer" style="color:var(--danger);">
+                ${icon('x', 14)}
+              </button>
+            </div>
+          ` : `
+            <button class="ws-btn ws-btn--secondary" type="button" data-slot="dest-specs-pick"
+                    style="padding:8px 14px;font-size:12.5px;width:100%;">
+              ${icon('upload-cloud', 14)} Joindre le PDF de specs du prestataire (max 2 Mo)
+            </button>
+            <input type="file" data-slot="dest-specs-input" hidden accept="application/pdf">
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Wiring inputs vendor
+  slot.querySelector('#kd-vendor-name')?.addEventListener('input', e => {
+    if (!_state.destination.standard) {
+      // Pas encore de standard : on stocke à part pour ne pas perdre la saisie
+      _state.destination._pending_vendor = e.target.value;
+    } else {
+      _state.destination.standard.vendor = e.target.value;
+    }
+    _scheduleSave();
+  });
+  slot.querySelector('#kd-vendor-url')?.addEventListener('input', e => {
+    _state.destination.vendor_url = e.target.value;
+    _scheduleSave();
+  });
+  // Upload PDF specs
+  const pick = slot.querySelector('[data-slot="dest-specs-pick"]');
+  const inp  = slot.querySelector('[data-slot="dest-specs-input"]');
+  if (pick && inp) {
+    pick.addEventListener('click', () => inp.click());
+    inp.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const asset = await uploadFile(file, 'specs');
+        _state.destination.specs_pdf = {
+          id: asset.id, filename: asset.filename, mime: asset.mime,
+          size_bytes: asset.size_bytes, url: asset.url,
+        };
+        _saveDraft();
+        _renderDestVendorZone();
+        // Reouvre la zone (sinon elle se referme après re-render)
+        const z = _root?.querySelector('[data-slot="dest-vendor-zone"]');
+        z?.classList.add('is-open');
+        _toastOk('PDF joint');
+      } catch (err) {
+        _toastSoon('Upload échoué : ' + err.message);
+      }
+    });
+  }
+}
+
+// ── Zone 4 : calculateur d'échelle (si standard saisi) ────────
+function _renderDestScale() {
+  const slot = _root?.querySelector('[data-slot="dest-scale"]');
+  if (!slot) return;
+  const std = _state.destination.standard;
+  if (!std) { slot.innerHTML = ''; return; }
+  // computeScale traite digital (px) et print (mm) automatiquement.
+  // Pour le print sans dimensions, on n'affiche pas la card.
+  const f = std.format_fini || {};
+  const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
+  if (!hasDims) { slot.innerHTML = ''; return; }
+  slot.innerHTML = _renderScaleCalculator(std);
+}
+
+// ── Animation didactique one-shot zone 3 ──────────────────────
+function _maybePlayVendorHint() {
+  if (_state.destination._hint_shown) return;
+  const zone = _root?.querySelector('[data-slot="dest-vendor-zone"]');
+  if (!zone) return;
+  // Ouvre 600 ms après le mount, ferme après 1 s d'exposition
+  setTimeout(() => {
+    if (!_root || !_root.contains(zone)) return;
+    zone.classList.add('is-open');
+    setTimeout(() => {
+      if (!_root || !_root.contains(zone)) return;
+      zone.classList.remove('is-open');
+      _state.destination._hint_shown = true;
+      _saveDraft();
+    }, 1000);
+  }, 600);
+}
+
+// ── Form universel : update _state.destination.standard ──────
+function _onDestFormChange(e) {
+  const el = e.target;
+  if (!el.name) return;
+  const std = _state.destination.standard;
+  if (!std) return;
+  const v = el.value;
+
+  if (el.name === 'width' || el.name === 'height') {
+    std.format_fini = std.format_fini || {};
+    const cat = _state.destination.category;
+    // Détection unité : présence width_px sur le preset OU absence dpi
+    const isDigital = std.format_fini.width_px != null
+      || (cat === 'digital');
+    const numeric = v === '' ? null : Number(v);
+    if (isDigital) {
+      if (el.name === 'width')  std.format_fini.width_px  = numeric;
+      if (el.name === 'height') std.format_fini.height_px = numeric;
+    } else {
+      if (el.name === 'width')  std.format_fini.width_mm  = numeric;
+      if (el.name === 'height') std.format_fini.height_mm = numeric;
+    }
+  } else if (['bleed_mm', 'safe_margin_mm', 'dpi'].includes(el.name)) {
+    std[el.name] = v === '' ? null : Number(v);
+  } else {
+    std[el.name] = v;
+    // product_name suit type_support (utilisé par prompt/pdf)
+    if (el.name === 'type_support') std.product_name = v;
+  }
+  _scheduleSave();
+
+  // Re-render du calculateur d'échelle quand dimensions changent
+  if (el.name === 'width' || el.name === 'height') {
+    _renderDestScale();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1680,9 +1956,11 @@ async function _saveBriefInLibrary() {
 
   const payload = {
     title: _briefTitle(),
-    standard_id: _state.destination.standardId,
-    vendor: _state.destination.standard?.vendor,
-    product_name: _state.destination.standard?.product_name,
+    category: _state.destination.category,
+    preset_id: _state.destination.preset_id,
+    standard_snapshot: _state.destination.standard,
+    vendor: _state.destination.standard?.vendor || '',
+    product_name: _state.destination.standard?.product_name || '',
     sector: _state.content.sector,
     fields: _state.content.fields,
     assets_snapshot: _state.assets,
@@ -1706,10 +1984,15 @@ async function _saveBriefInLibrary() {
 // ── Titre lisible pour un brief sauvegardé ────────────────────
 function _briefTitle() {
   const std  = _state.destination.standard;
-  const prog = _state.content.fields?.nom_programme;
+  const prog = _state.content.fields?.nom_programme
+            || _state.content.fields?.nom_enseigne
+            || _state.content.fields?.nom_etablissement;
   const parts = [];
   if (prog) parts.push(prog);
-  if (std)  parts.push(`${std.product_name} ${std.vendor}`);
+  if (std)  {
+    const supportLabel = std.product_name || std.type_support || 'Support';
+    parts.push(std.vendor ? `${supportLabel} chez ${std.vendor}` : supportLabel);
+  }
   return parts.join(' — ') || 'Brief sans titre';
 }
 
@@ -1721,14 +2004,8 @@ function _stepNav() {
   const isLast = idx === STEPS.length - 1;
   const canBack = _canGoBack();
 
-  // Libellé "Précédent" adapté au contexte
-  let backLabel = 'Précédent';
-  if (_state.view === 'destination') {
-    const sub = _state.destination.step;
-    if (sub === 'vendor')  backLabel = 'Changer de support';
-    if (sub === 'product') backLabel = 'Changer de prestataire';
-    if (sub === 'done')    backLabel = 'Changer de format';
-  }
+  // Libellé "Précédent" simple (plus de sous-step interne Destination)
+  const backLabel = 'Précédent';
 
   return `
     <div class="ws-step-nav">
@@ -1761,30 +2038,16 @@ function _advance() {
   if (i < STEPS.length - 1) _navigate(STEPS[i + 1].id);
 }
 
-// ── Bouton "Précédent" en bas — navigation intelligente ───────
-// Sprint Kodex-3.4 : si on est dans Destination et qu'on a déjà
-// progressé dans son sub-step (vendor / product / done), reculer
-// d'un sub-step. Sinon, reculer à la grande étape précédente.
+// ── Bouton "Précédent" en bas ─────────────────────────────────
+// Refonte universelle : plus de sous-étapes dans Destination.
+// Le bouton remonte simplement à l'étape précédente du flux principal.
 function _back() {
-  if (_state.view === 'destination') {
-    const sub = _state.destination.step;
-    if (sub !== 'category') {
-      _destBack();
-      return;
-    }
-    // À 'category' on est tout au début → rien à faire (bouton masqué)
-    return;
-  }
-  // Vues Contenu / Assets / Output : recule à l'étape précédente
   const i = _currentStepIndex();
   if (i > 0) _navigate(STEPS[i - 1].id);
 }
 
 // ── Le bouton "Précédent" doit-il être visible/actif ? ────────
 function _canGoBack() {
-  if (_state.view === 'destination') {
-    return _state.destination.step !== 'category';
-  }
   return _currentStepIndex() > 0;
 }
 

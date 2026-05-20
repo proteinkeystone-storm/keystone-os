@@ -1,0 +1,246 @@
+{
+  "version": "2.0",
+  "last_updated": "2026-05-20",
+  "_notice": "Catalogue de presets universels Kodex (v2). Plus de hiérarchie vendor/produit — l'utilisateur clique sur un preset pour pré-remplir le formulaire universel, ou saisit ses propres valeurs. La résolution est toujours 300 DPI pour le print, sRGB en numérique. Le calculateur d'échelle se déclenche automatiquement si une dimension ≥ 1000 mm.",
+
+  "categories": [
+    {
+      "id": "print_paper",
+      "label": "Print papier",
+      "icon": "printer",
+      "description": "Cartes, flyers, affiches, brochures, menus — tout ce qui s'imprime à plat sur papier.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "bleed_mm": 3,
+        "safe_margin_mm": 5,
+        "dpi": 300,
+        "export_format": "PDF/X-1a:2001 ou PDF/X-4"
+      }
+    },
+    {
+      "id": "large_format",
+      "label": "Grand format",
+      "icon": "image",
+      "description": "Bâches, panneaux, roll-up, drapeaux, vitrophanie — tout ce qui dépasse l'A2.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "bleed_mm": 50,
+        "safe_margin_mm": 50,
+        "dpi": 300,
+        "export_format": "PDF/X-4 ou TIFF haute définition"
+      }
+    },
+    {
+      "id": "digital",
+      "label": "Digital",
+      "icon": "globe",
+      "description": "Réseaux sociaux, bannières web — visuels destinés aux écrans.",
+      "defaults": {
+        "unit": "px",
+        "color_profile": "sRGB",
+        "bleed_mm": 0,
+        "safe_margin_mm": 0,
+        "dpi": null,
+        "export_format": "JPG ou PNG haute qualité"
+      }
+    },
+    {
+      "id": "press",
+      "label": "Presse / Édition",
+      "icon": "book-open",
+      "description": "Encarts magazines, journaux, parutions presse — dimensions fournies par la régie.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (ISO Coated v2 ou Newspaper 26v5)",
+        "bleed_mm": 3,
+        "safe_margin_mm": 5,
+        "dpi": 300,
+        "export_format": "PDF/X-1a:2001"
+      }
+    }
+  ],
+
+  "presets": [
+    {
+      "id": "card-business-85x55",
+      "category": "print_paper",
+      "label": "Carte de visite",
+      "icon": "printer",
+      "type_support": "Carte commerciale",
+      "format_fini": { "width_mm": 85, "height_mm": 55 },
+      "notes": "Format européen standard. Polices vectorisées obligatoires. Texte minimum 7 pt pour rester lisible."
+    },
+    {
+      "id": "flyer-a5",
+      "category": "print_paper",
+      "label": "Flyer A5",
+      "icon": "printer",
+      "type_support": "Flyer recto-verso",
+      "format_fini": { "width_mm": 148, "height_mm": 210 }
+    },
+    {
+      "id": "poster-a3",
+      "category": "print_paper",
+      "label": "Affiche A3",
+      "icon": "printer",
+      "type_support": "Affiche papier",
+      "format_fini": { "width_mm": 297, "height_mm": 420 },
+      "safe_margin_mm_override": 8
+    },
+    {
+      "id": "brochure-a4",
+      "category": "print_paper",
+      "label": "Brochure A4",
+      "icon": "printer",
+      "type_support": "Brochure agrafée ou collée",
+      "format_fini": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Page de garde fournie en simple page. Pli prévu au centre, prévoir une marge interne supplémentaire."
+    },
+    {
+      "id": "menu-restaurant-a4",
+      "category": "print_paper",
+      "label": "Menu / Carte resto",
+      "icon": "printer",
+      "type_support": "Menu restaurant",
+      "format_fini": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Pelliculage mat ou vernis sélectif recommandé pour durabilité face aux manipulations en salle."
+    },
+    {
+      "id": "custom-print_paper",
+      "category": "print_paper",
+      "label": "Sur-mesure",
+      "icon": "plus",
+      "is_custom": true,
+      "type_support": "Format papier sur-mesure",
+      "notes": "Saisissez librement vos dimensions et finitions. Kodex pré-remplit les standards print (CMJN, bleed 3 mm, 300 DPI)."
+    },
+
+    {
+      "id": "tarp-custom",
+      "category": "large_format",
+      "label": "Bâche personnalisée",
+      "icon": "image",
+      "type_support": "Bâche PVC publicitaire",
+      "is_dim_free": true,
+      "notes": "Œillets aux angles standards. Saisissez les dimensions exactes — le calculateur d'échelle s'active automatiquement pour les grandes tailles."
+    },
+    {
+      "id": "poster-4x3",
+      "category": "large_format",
+      "label": "Affiche 4×3 m",
+      "icon": "image",
+      "type_support": "Panneau publicitaire grand format",
+      "format_fini": { "width_mm": 4000, "height_mm": 3000 },
+      "bleed_mm_override": 100,
+      "safe_margin_mm_override": 200,
+      "notes": "Distance de vue > 10 m. Texte titre minimum 100 mm de hauteur capitale."
+    },
+    {
+      "id": "rollup-85x200",
+      "category": "large_format",
+      "label": "Roll-up / Kakémono",
+      "icon": "image",
+      "type_support": "Roll-up déroulant",
+      "format_fini": { "width_mm": 850, "height_mm": 2000 },
+      "bleed_mm_override": 25,
+      "safe_margin_mm_override": 100,
+      "notes": "Zone basse (≈ 200 mm) masquée par le mécanisme déroulant — pas de texte sensible en bas."
+    },
+    {
+      "id": "plv-a1",
+      "category": "large_format",
+      "label": "PLV / Stop trottoir A1",
+      "icon": "image",
+      "type_support": "PLV recto-verso",
+      "format_fini": { "width_mm": 594, "height_mm": 841 },
+      "bleed_mm_override": 5,
+      "safe_margin_mm_override": 15
+    },
+    {
+      "id": "window-decal",
+      "category": "large_format",
+      "label": "Vitrophanie",
+      "icon": "image",
+      "type_support": "Vitrophanie adhésive",
+      "is_dim_free": true,
+      "notes": "Adhésif blanc ou transparent — préciser dans le brief. Lisible recto ou verso selon la pose."
+    },
+    {
+      "id": "custom-large_format",
+      "category": "large_format",
+      "label": "Sur-mesure",
+      "icon": "plus",
+      "is_custom": true,
+      "type_support": "Grand format sur-mesure",
+      "notes": "Saisissez librement vos dimensions. Le calculateur d'échelle s'active dès qu'une dimension dépasse 1 m."
+    },
+
+    {
+      "id": "instagram-post",
+      "category": "digital",
+      "label": "Post Instagram",
+      "icon": "instagram",
+      "type_support": "Post Instagram (fil principal)",
+      "format_fini": { "width_px": 1080, "height_px": 1080 },
+      "notes": "Ratio 1:1. Texte sur image idéalement limité à 20% de la surface pour favoriser la portée organique."
+    },
+    {
+      "id": "instagram-story",
+      "category": "digital",
+      "label": "Story / Reel",
+      "icon": "instagram",
+      "type_support": "Story Instagram / Reel vertical",
+      "format_fini": { "width_px": 1080, "height_px": 1920 },
+      "notes": "Ratio 9:16. Zone sûre : prévoir 250 px en haut et 250 px en bas réservés à l'UI Instagram (logo, CTA, profil)."
+    },
+    {
+      "id": "linkedin-banner",
+      "category": "digital",
+      "label": "Bannière LinkedIn",
+      "icon": "linkedin",
+      "type_support": "Bannière de profil LinkedIn",
+      "format_fini": { "width_px": 1584, "height_px": 396 },
+      "notes": "Centrer le logo et le message clé : les bords sont tronqués sur l'affichage mobile."
+    },
+    {
+      "id": "facebook-cover",
+      "category": "digital",
+      "label": "Couverture Facebook",
+      "icon": "facebook",
+      "type_support": "Photo de couverture Facebook",
+      "format_fini": { "width_px": 820, "height_px": 312 },
+      "notes": "Format desktop. Sur mobile, Facebook recadre — garder les éléments importants au centre."
+    },
+    {
+      "id": "pinterest-pin",
+      "category": "digital",
+      "label": "Pin Pinterest",
+      "icon": "pinterest",
+      "type_support": "Pin Pinterest",
+      "format_fini": { "width_px": 1000, "height_px": 1500 },
+      "notes": "Ratio 2:3 — format vertical optimal pour le feed Pinterest."
+    },
+    {
+      "id": "custom-digital",
+      "category": "digital",
+      "label": "Sur-mesure",
+      "icon": "plus",
+      "is_custom": true,
+      "type_support": "Visuel numérique sur-mesure",
+      "notes": "Bannière web, header newsletter, cover YouTube… Saisissez vos dimensions en pixels."
+    },
+
+    {
+      "id": "press-free",
+      "category": "press",
+      "label": "Saisir les dimensions de la parution",
+      "icon": "book-open",
+      "is_custom": true,
+      "is_press_intro": true,
+      "type_support": "Parution presse / magazine",
+      "notes": "Les dimensions, le fond perdu et la colorimétrie sont communiqués par la régie publicitaire ou la rédaction. Saisissez les valeurs ci-dessous — Kodex pré-remplit les standards presse (CMJN, fond perdu 3 mm, 300 DPI)."
+    }
+  ]
+}

@@ -1,15 +1,30 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "title": "Démo Prométhée Immobilier — Les Jardins du Mourillon",
   "scenario": "Affiche 4×3 m pour panneau de chantier — programme VEFA neuf à Toulon",
 
   "state": {
     "view": "destination",
     "destination": {
-      "step": "done",
-      "category": "print",
-      "vendor": "Exaprint",
-      "standardId": "exaprint-affiche-4x3"
+      "category": "large_format",
+      "preset_id": "poster-4x3",
+      "standard": {
+        "id": "poster-4x3",
+        "type_support": "Panneau publicitaire grand format",
+        "product_name": "Panneau publicitaire grand format",
+        "vendor": "Exaprint",
+        "format_fini": { "width_mm": 4000, "height_mm": 3000 },
+        "bleed_mm": 100,
+        "safe_margin_mm": 200,
+        "dpi": 300,
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "export_format": "PDF/X-4 ou TIFF haute définition",
+        "material": "Bâche PVC 510 g/m²",
+        "notes": "Distance de vue > 10 m. Texte titre minimum 100 mm de hauteur capitale. Œillets aux quatre angles pour fixation au panneau de chantier."
+      },
+      "vendor_url": "https://www.exaprint.fr/grands-formats",
+      "specs_pdf": null,
+      "_hint_shown": true
     },
     "content": {
       "sector": "immobilier",
@@ -35,7 +50,7 @@
         "font_body": "Inter"
       },
       "brand_book_url": "",
-      "extra_notes": "Garder une ambiance Méditerranée premium — ciel, mer, pierre, végétation provençale. Éviter les codes immobiliers générique (familles souriantes, slogans creux). Le programme s'adresse à des CSP+ qui investissent.",
+      "extra_notes": "Garder une ambiance Méditerranée premium — ciel, mer, pierre, végétation provençale. Éviter les codes immobiliers génériques (familles souriantes, slogans creux). Le programme s'adresse à des CSP+ qui investissent.",
       "uploads": []
     }
   }

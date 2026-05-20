@@ -37,20 +37,22 @@ function _mdToHtml(text) {
 }
 
 // Tableau des spécifications techniques
-function _renderSpecsTable(std) {
+function _renderSpecsTable(std, destState) {
   if (!std) return '';
   const scale = computeScale(std);
-  // Résolution toujours 300 DPI ; échelle/format de travail détaillés
-  // dans le bloc « Calculateur d'échelle » ci-dessous.
+  // Résolution toujours 300 DPI pour le print ; échelle/format de travail
+  // détaillés dans le bloc « Calculateur d'échelle » ci-dessous.
   const rows = [
-    ['Prestataire', std.vendor],
-    ['Produit', std.product_name],
+    std.vendor ? ['Prestataire visé', std.vendor] : null,
+    ['Type de support', std.type_support || std.product_name || '—'],
     ['Format fini', formatDimensions(std)],
     formatBleed(std) ? ['Fond perdu', formatBleed(std)] : null,
     std.safe_margin_mm ? ['Marge de sécurité', `${std.safe_margin_mm} mm`] : null,
-    ['Résolution', `${scale && scale.output_dpi ? scale.output_dpi : 300} DPI`],
+    ['Résolution', `${scale && scale.output_dpi ? scale.output_dpi : (std.dpi || 300)} DPI`],
     std.color_profile ? ['Colorimétrie', std.color_profile] : null,
     std.export_format ? ['Export attendu', std.export_format] : null,
+    std.material ? ['Matière / finition', std.material] : null,
+    destState?.vendor_url ? ['Fiche officielle', destState.vendor_url] : null,
   ].filter(Boolean);
 
   let scaleRows = '';
@@ -163,11 +165,16 @@ export function exportBriefAsPDF(state, sector) {
     return;
   }
 
-  const title = (state.content.fields?.nom_programme || 'Brief Kodex') + ' — ' + std.product_name;
+  const projectLabel = state.content.fields?.nom_programme
+    || state.content.fields?.nom_enseigne
+    || state.content.fields?.nom_etablissement
+    || 'Brief Kodex';
+  const supportLabel = std.type_support || std.product_name || 'Support à produire';
+  const title = projectLabel + ' — ' + supportLabel;
   const dateStr = new Date(brief.generated_at).toLocaleDateString('fr-FR', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
-  const productLine = `${std.vendor} · ${std.product_name}`;
+  const productLine = std.vendor ? `${supportLabel} · ${std.vendor}` : supportLabel;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -259,9 +266,9 @@ export function exportBriefAsPDF(state, sector) {
 
 <!-- ─── PAGE DE GARDE ─── -->
 <section class="cover">
-  <div class="top">Brief Kodex · ${_esc(state.destination.standard.id.toUpperCase())}</div>
+  <div class="top">Brief Kodex · ${_esc((state.destination.category || 'support').toUpperCase().replace('_', ' '))}</div>
   <div>
-    <h1>${_esc(state.content.fields?.nom_programme || 'Brief technique')}</h1>
+    <h1>${_esc(projectLabel)}</h1>
     <div class="subtitle">${_esc(productLine)}</div>
     <div class="meta">
       ${state.content.fields?.ville ? `<div><strong>Ville</strong> : ${_esc(state.content.fields.ville)}</div>` : ''}
@@ -280,7 +287,7 @@ export function exportBriefAsPDF(state, sector) {
 <h1 class="md-h1">Brief technique pour la fabrication</h1>
 
 <h2 class="section">Contraintes techniques verrouillées</h2>
-${_renderSpecsTable(std)}
+${_renderSpecsTable(std, state.destination)}
 
 ${_renderProjectData(sector, state.content.fields)}
 

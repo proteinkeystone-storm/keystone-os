@@ -25,20 +25,23 @@ function _fieldValue(v) {
   return String(v);
 }
 
-function _renderTechBlock(std) {
+function _renderTechBlock(std, destState) {
   if (!std) return '';
   const scale = computeScale(std);
-  // Résolution toujours 300 DPI (modèle Kodex) ; échelle et format de
-  // travail sont détaillés dans le bloc « Contraintes d'échelle » ci-dessous.
+  // Résolution toujours 300 DPI pour le print (modèle Kodex) ; échelle et
+  // format de travail détaillés dans le bloc « Contraintes d'échelle ».
   const lines = [
-    `- **Prestataire** : ${std.vendor}`,
-    `- **Produit** : ${std.product_name}`,
+    std.vendor ? `- **Prestataire visé** : ${std.vendor}` : null,
+    `- **Type de support** : ${std.type_support || std.product_name || '(non précisé)'}`,
     `- **Format fini** : ${formatDimensions(std)}`,
     formatBleed(std) ? `- **Fond perdu** : ${formatBleed(std)}` : null,
     std.safe_margin_mm ? `- **Marge de sécurité** : ${std.safe_margin_mm} mm` : null,
-    `- **Résolution** : ${scale && scale.output_dpi ? scale.output_dpi : 300} DPI`,
+    `- **Résolution** : ${scale && scale.output_dpi ? scale.output_dpi : (std.dpi || 300)} DPI`,
     std.color_profile ? `- **Colorimétrie** : ${std.color_profile}` : null,
     std.export_format ? `- **Export attendu** : ${std.export_format}` : null,
+    std.material ? `- **Matière / finition** : ${std.material}` : null,
+    destState?.vendor_url ? `- **Fiche technique officielle** : ${destState.vendor_url}` : null,
+    destState?.specs_pdf ? `- **PDF de specs du prestataire joint au brief** : ${destState.specs_pdf.url}` : null,
   ].filter(Boolean);
 
   // Bloc échelle (killer feature)
@@ -142,16 +145,21 @@ function _renderLegalBlock(sector, fields) {
  * @returns {string}       prompt complet en markdown
  */
 export function buildCodeMaitre(state, sector) {
-  const std = state.destination?.standard;
+  const destState = state.destination || {};
+  const std = destState.standard;
   const fields = state.content?.fields || {};
   const assets = state.assets || {};
 
-  const tech    = _renderTechBlock(std);
+  const tech    = _renderTechBlock(std, destState);
   const content = _renderContentBlock(sector, fields);
   const visuel  = _renderAssetsBlock(assets);
   const legal   = _renderLegalBlock(sector, fields);
 
-  return `Tu es un expert en production print et digital, garant du "zéro défaut" de fabrication pour le compte d'un promoteur immobilier. Voici un cahier des charges client complet. Ton rôle : produire un BRIEF TECHNIQUE INFAILLIBLE prêt à être envoyé à un graphiste ou un maquettiste.
+  const vendorHint = std?.vendor
+    ? ` Le client envisage de produire chez « ${std.vendor} » : la spec officielle de ce prestataire fait foi en cas d'écart — rappelle-le dans le brief.`
+    : '';
+
+  return `Tu es un expert en production print et digital, garant du "zéro défaut" de fabrication. Voici un cahier des charges client complet. Ton rôle : produire un BRIEF TECHNIQUE INFAILLIBLE prêt à être envoyé à un graphiste ou un maquettiste.${vendorHint}
 
 # Cahier des charges du client
 
@@ -196,8 +204,14 @@ Termine par une checklist en bullet de "Points de validation avant impression". 
  * lancer une génération. Retourne null si OK, sinon un message d'erreur.
  */
 export function validateForGeneration(state) {
-  if (!state.destination?.standard) {
-    return 'Sélectionnez d\'abord un support de diffusion (étape 1).';
+  const std = state.destination?.standard;
+  if (!std) {
+    return 'Choisissez un preset ou saisissez vos spécifications dans l\'étape 1.';
+  }
+  const f = std.format_fini || {};
+  const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
+  if (!hasDims) {
+    return 'Saisissez les dimensions de votre support (étape 1).';
   }
   const fields = state.content?.fields || {};
   const hasContent = Object.values(fields).some(v =>
