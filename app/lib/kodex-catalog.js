@@ -35,7 +35,10 @@
      Ces aliases reconstruisent l'ancien format à partir de SUPPORTS
      (presets ≡ supports avec champ category). Aucun changement DB requis.
 
-   Secteurs (profils métier) : inchangé.
+   Sector unique « universal » : Kodex est volontairement non-segmenté
+   (mai 2026). La structure `sector` reste utilisée pour décrire les
+   champs du formulaire étape 2 (nom_projet, lieu, échéance, argumentaire…)
+   sans préjuger du métier du user.
    ═══════════════════════════════════════════════════════════════ */
 
 const CATALOG_URL = '/K_STORE_ASSETS/CATALOG/kodex-vendors-seed.json';

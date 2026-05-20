@@ -9,7 +9,7 @@
    Architecture des 4 étapes :
    ─────────────────────────────────────────────────────────────
      1. DESTINATION   — Acteur (imprimeur/réseau/presse) + Produit
-     2. CONTENU       — Saisies métier sectorisées + données injectées
+     2. CONTENU       — Saisies projet universelles (nom, lieu, échéance, argu…)
      3. ASSETS        — Coffre-fort : pièces détenues vs à fournir
      4. GÉNÉRATION    — Code Maître → IA → brief PDF téléchargeable
 
@@ -36,7 +36,7 @@ import {
   // utils
   formatDimensions, formatBleed,
   // secteurs métier
-  loadSectors, getSector, getDefaultSector, computeLegalMentions,
+  getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
 import { computeScale, formatFileSize } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
@@ -360,8 +360,6 @@ function _onClick(e) {
   if (act === 'dest-reset')     return _destReset();
   if (act === 'dest-form-toggle') return _toggleDestForm();
   if (act === 'dest-specs-delete') return _deleteSpecsPdf();
-  // Sprint Kodex-2 : changement de secteur (profil métier)
-  if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
   if (act === 'assets-toggle')  return _toggleAsset(t.dataset.key);
   // Sprint Kodex-4.1 : génération du brief
@@ -727,15 +725,6 @@ function _toggleAsset(key) {
   _renderMain();
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Sprint Kodex-2 : changement de profil métier
-// ═══════════════════════════════════════════════════════════════
-function _pickSector(sectorId) {
-  _state.content.sector = sectorId;
-  _state.content.fields = {};
-  _saveDraft();
-  _renderMain();
-}
 
 // ═══════════════════════════════════════════════════════════════
 // Étape Destination — handlers (refonte universelle mai 2026)
@@ -1603,19 +1592,18 @@ function _viewContent() {
       seront ajoutées automatiquement selon les dispositifs que vous cochez.
     </p>
 
-    <div data-slot="sector-picker"></div>
     <form data-slot="sector-form" id="kodex-content-form" autocomplete="off"></form>
     <div data-slot="legal-mentions"></div>
   `;
 
-  // Hydratation asynchrone : charger le sector courant + générer le form
+  // Hydratation asynchrone : Kodex est universel — un seul sector ('universal'),
+  // pas de sélecteur. La structure `sector` reste utilisée en interne pour
+  // décrire les champs du formulaire (lib partagée).
   (async () => {
-    const all = await loadSectors();
     const currentId = _state.content.sector || (await getDefaultSector())?.id;
     const sector = await getSector(currentId);
     if (!sector || !_root) return;
 
-    _renderSectorPicker(_root.querySelector('[data-slot="sector-picker"]'), all.sectors, currentId);
     _renderSectorForm(_root.querySelector('[data-slot="sector-form"]'), sector);
     _renderLegalMentions(_root.querySelector('[data-slot="legal-mentions"]'), sector);
   })();
@@ -1623,42 +1611,10 @@ function _viewContent() {
   return root;
 }
 
-// ── Sélecteur de profil métier (pills) ────────────────────────
-function _renderSectorPicker(slot, sectors, currentId) {
-  if (!slot) return;
-  if (sectors.length <= 1) { slot.innerHTML = ''; return; }
-  slot.innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;align-items:center;">
-      <span style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-right:6px;">
-        Votre univers
-      </span>
-      ${sectors.map(s => `
-        <button class="ws-btn ${currentId === s.id ? 'ws-btn--accent' : 'ws-btn--secondary'}"
-                data-act="sector-pick" data-sector="${_esc(s.id)}"
-                style="padding:6px 12px;font-size:12.5px;">
-          ${_esc(s.label)}${s._status === 'placeholder' ? ' <span style="font-size:10px;opacity:.6;">(bientôt)</span>' : ''}
-        </button>
-      `).join('')}
-    </div>
-  `;
-}
-
 // ── Génère le formulaire à partir du sector ───────────────────
 function _renderSectorForm(form, sector) {
   if (!form) return;
   const values = _state.content.fields || {};
-
-  // Avis si placeholder
-  if (sector._status === 'placeholder') {
-    form.innerHTML = `
-      <div class="ws-empty">
-        <div class="ws-empty-icon">${icon('edit', 24)}</div>
-        <h3 class="ws-empty-title">Profil « ${_esc(sector.label)} » bientôt disponible</h3>
-        <p class="ws-empty-desc">Ce secteur est en préparation. Pour l'instant, utilisez le profil Immobilier.</p>
-      </div>
-    `;
-    return;
-  }
 
   form.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;margin-bottom:20px;">

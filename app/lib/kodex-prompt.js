@@ -168,7 +168,7 @@ function _renderLegalBlock(sector, fields) {
 /**
  * Construit le Code Maître à envoyer au moteur AI.
  * @param {object} state   l'état Kodex complet (_state)
- * @param {object} sector  le profil métier hydraté
+ * @param {object} sector  le sector universel hydraté (description des champs du formulaire)
  * @returns {string}       prompt complet en markdown
  */
 export async function buildCodeMaitre(state, sector) {
