@@ -25,7 +25,7 @@ import {
 } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const MAX_BASE64_LEN = 3 * 1024 * 1024;   // 3 MB de base64 (~2.25 MB binary)
+const MAX_BASE64_LEN = 14 * 1024 * 1024;   // 14 MB de base64 (~10 MB binary)
 const ALLOWED_MIMES  = [
   'image/png', 'image/jpeg', 'image/svg+xml', 'image/gif', 'image/webp',
   'application/pdf',

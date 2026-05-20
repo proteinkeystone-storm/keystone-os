@@ -30,16 +30,15 @@
       "_form_open": false
     },
     "content": {
-      "sector": "immobilier",
+      "sector": "universal",
       "fields": {
-        "nom_programme": "Les Jardins du Mourillon",
-        "ville": "Toulon — quartier du Mourillon",
-        "prix_min": "295000",
-        "typologies": ["T2", "T3", "T4"],
-        "labels": ["Pinel", "DPE A", "RE2020"],
-        "livraison": "3e trimestre 2027",
+        "nom_projet": "Les Jardins du Mourillon",
+        "lieu": "Toulon — quartier du Mourillon",
+        "echeance": "Livraison 3e trimestre 2027",
         "argumentaire": "Vivre face à la mer dans un cadre intimiste de 12 logements. Architecture provençale contemporaine, jardins partagés en pleine terre, terrasses orientées sud-est avec vue dégagée. À 200 m de la plage, à 5 min des écoles. La promesse d'un quotidien apaisé à Toulon.",
-        "cta": "Réservez votre visite virtuelle"
+        "cta": "Réservez votre visite virtuelle",
+        "infos_specifiques": "Prix d'appel : 295 000 €\nTypologies disponibles : T2, T3, T4\nLabels : Pinel, DPE A, RE2020\n12 logements seulement — intimité préservée",
+        "mentions_legales": "Loi Pinel — réduction d'impôt sous conditions (durée d'engagement, plafonds de loyer et ressources locataires, zonage). Plus d'informations sur economie.gouv.fr.\nRE2020 — applicable aux constructions neuves depuis le 1er janvier 2022."
       }
     },
     "assets": {

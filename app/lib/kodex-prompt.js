@@ -115,7 +115,7 @@ function _renderAssetsBlock(assets) {
   if (assets.logo_owned)   owned.push('Logo principal');
   if (assets.charte_owned) owned.push('Charte graphique');
   if (assets.fonts_owned)  owned.push('Polices');
-  if (owned.length) lines.push(`- Déjà transmis à Protein Studio : ${owned.join(', ')}`);
+  if (owned.length) lines.push(`- Déjà transmis au graphiste : ${owned.join(', ')}`);
 
   const c = assets.charte || {};
   const charteParts = [];

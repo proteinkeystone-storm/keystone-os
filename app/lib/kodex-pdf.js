@@ -140,7 +140,7 @@ function _renderCharte(assets) {
   if (assets.logo_owned)   owned.push('Logo');
   if (assets.charte_owned) owned.push('Charte');
   if (assets.fonts_owned)  owned.push('Polices');
-  if (owned.length) items.push(`<li><strong>Déjà chez Protein Studio</strong> : ${_esc(owned.join(', '))}</li>`);
+  if (owned.length) items.push(`<li><strong>Déjà chez votre graphiste</strong> : ${_esc(owned.join(', '))}</li>`);
   if (assets.brand_book_url) items.push(`<li><strong>Brand book</strong> : <a href="${_esc(assets.brand_book_url)}">${_esc(assets.brand_book_url)}</a></li>`);
   if (assets.extra_notes)    items.push(`<li><strong>Notes spéciales</strong> : « ${_esc(assets.extra_notes)} »</li>`);
   if (!items.length) return '';
@@ -208,9 +208,11 @@ export async function exportBriefAsPDF(state, sector) {
     catch (_) { vendor = null; }
   }
 
-  const projectLabel = state.content.fields?.nom_programme
-    || state.content.fields?.nom_enseigne
-    || state.content.fields?.nom_etablissement
+  const f = state.content.fields || {};
+  const projectLabel = f.nom_projet
+    || f.nom_programme
+    || f.nom_enseigne
+    || f.nom_etablissement
     || 'Brief Kodex';
   const supportLabel = std.type_support || std.product_name || 'Support à produire';
   const title = projectLabel + ' — ' + supportLabel;
@@ -314,8 +316,8 @@ export async function exportBriefAsPDF(state, sector) {
     <h1>${_esc(projectLabel)}</h1>
     <div class="subtitle">${_esc(productLine)}</div>
     <div class="meta">
-      ${state.content.fields?.ville ? `<div><strong>Ville</strong> : ${_esc(state.content.fields.ville)}</div>` : ''}
-      ${state.content.fields?.livraison ? `<div><strong>Livraison</strong> : ${_esc(state.content.fields.livraison)}</div>` : ''}
+      ${(f.lieu || f.ville) ? `<div><strong>Lieu</strong> : ${_esc(f.lieu || f.ville)}</div>` : ''}
+      ${(f.echeance || f.livraison) ? `<div><strong>Échéance</strong> : ${_esc(f.echeance || f.livraison)}</div>` : ''}
       <div><strong>Généré le</strong> : ${_esc(dateStr)}</div>
       <div><strong>Moteur AI</strong> : ${_esc(brief.model || '—')}</div>
     </div>

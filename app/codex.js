@@ -42,6 +42,7 @@ import { computeScale, formatFileSize } from './lib/kodex-scale.js';
 import { icon } from './lib/ui-icons.js';
 import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
 import { exportBriefAsPDF } from './lib/kodex-pdf.js';
+import { openSettingsTo } from './ui-renderer.js';
 import { uploadFile, deleteAsset, assetUrl, formatSize, ALLOWED_MIMES as KODEX_ASSET_MIMES } from './lib/kodex-uploader.js';
 import { ApiHandler } from './api-handler.js';
 import { CF_API } from './pads-loader.js';
@@ -89,12 +90,12 @@ let _state = {
     specs_pdf: null,
     _form_open: false,
   },
-  content:     { sector: 'immobilier', fields: {} },
+  content:     { sector: 'universal', fields: {} },
   assets: {
     // Sprint Kodex-3.2 : coffre-fort minimal
-    logo_owned:   false,    // ✓ logo déjà chez Protein Studio
-    charte_owned: false,    // ✓ charte graphique déjà transmise
-    fonts_owned:  false,    // ✓ polices fournies à Protein
+    logo_owned:   false,    // ✓ logo déjà transmis au graphiste
+    charte_owned: false,    // ✓ charte graphique déjà transmise au graphiste
+    fonts_owned:  false,    // ✓ polices fournies au graphiste
     charte: {
       primary_hex:   '',    // couleur principale ex: #1B2A4A
       secondary_hex: '',    // couleur secondaire
@@ -190,10 +191,43 @@ async function _loadDraft() {
     }
     dst._form_open = false;       // form replié à chaque session
     delete dst._hint_shown;       // ancien flag d'animation didactique
+
+    // Migration sector v2 → v3 universel : ancien sector immo/retail/resto
+    // → universal, avec mapping des champs métier vers leurs équivalents.
+    const cnt = _state.content;
+    if (['immobilier', 'retail', 'restauration'].includes(cnt.sector)) {
+      const f = cnt.fields || {};
+      cnt.fields = {
+        nom_projet:         f.nom_projet         || f.nom_programme || f.nom_enseigne || f.nom_etablissement || '',
+        lieu:               f.lieu               || f.ville          || '',
+        echeance:           f.echeance           || f.livraison      || '',
+        argumentaire:       f.argumentaire       || f.promesse       || f.pitch        || '',
+        cta:                f.cta                || '',
+        infos_specifiques:  f.infos_specifiques  || _composeOldInfos(f),
+        mentions_legales:   f.mentions_legales   || '',
+      };
+      cnt.sector = 'universal';
+    }
     return true;
   } catch (_) {
     return false;
   }
+}
+
+// Rétro-compat : compose les anciens champs immobiliers spécifiques en une
+// note infos_specifiques unique (prix, typologies, labels, opération…)
+function _composeOldInfos(f) {
+  const parts = [];
+  if (f.prix_min)     parts.push(`Prix d'appel : ${f.prix_min} €`);
+  if (Array.isArray(f.typologies) && f.typologies.length)
+    parts.push(`Typologies : ${f.typologies.join(', ')}`);
+  if (Array.isArray(f.labels) && f.labels.length)
+    parts.push(`Labels : ${f.labels.join(', ')}`);
+  if (f.operation)    parts.push(`Opération : ${f.operation}`);
+  if (f.univers)      parts.push(`Univers : ${f.univers}`);
+  if (f.cuisine)      parts.push(`Cuisine : ${f.cuisine}`);
+  if (f.evenement)    parts.push(`Événement : ${f.evenement}`);
+  return parts.join('\n');
 }
 
 function _resetDraft() {
@@ -204,7 +238,7 @@ function _resetDraft() {
       category: null, support_id: null, vendor_id: null, standard: null,
       vendor_url: '', specs_pdf: null, _form_open: false,
     },
-    content:     { sector: 'immobilier', fields: {} },
+    content:     { sector: 'universal', fields: {} },
     assets: {
       logo_owned: false, charte_owned: false, fonts_owned: false,
       charte: { primary_hex: '', secondary_hex: '', font_title: '', font_body: '' },
@@ -333,6 +367,17 @@ function _onClick(e) {
   if (act === 'upload-delete')  return _handleDeleteUpload(t.dataset.id);
   // Démo Prométhée : pré-remplit le brouillon
   if (act === 'load-demo')      return _loadDemoScenario();
+  // Ouvre le Vault directement sur l'onglet clés API
+  if (act === 'open-vault')     return _openVault();
+}
+
+// ── Ouvre le Vault (Réglages → Clés API) ──────────────────────
+// Ferme Kodex pour laisser l'utilisateur configurer sa clé, puis il
+// rouvrira Kodex et son brouillon sera intact.
+function _openVault() {
+  _saveDraft();           // sauvegarde explicite avant fermeture
+  closeKodex();
+  setTimeout(() => openSettingsTo('acc-api'), 120);
 }
 
 // ─── Démo Prométhée : pré-remplit le brouillon avec un scénario ─
@@ -1614,81 +1659,120 @@ function _renderLegalMentions(slot, sector) {
 // ═══════════════════════════════════════════════════════════════
 function _viewAssets() {
   const a = _state.assets;
+  // Masquage conditionnel : on n'affiche dans la charte rapide que les
+  // champs qui correspondent à ce que le graphiste N'A PAS déjà.
+  const needsLogo   = !a.logo_owned;
+  const needsCharte = !a.charte_owned;
+  const needsFonts  = !a.fonts_owned;
+  const showChartBlock = needsLogo || needsCharte || needsFonts;
+
+  // Le bloc charte rapide n'a de sens que si au moins UN élément manque
+  // côté graphiste. Si tout est coché → on saute direct aux demandes
+  // spéciales + dropzone.
+  const chartBlockHTML = showChartBlock ? `
+    <h2 class="ws-h2">Votre charte graphique rapide</h2>
+    <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
+      Saisissez ce qui manque côté graphiste — Kodex masque automatiquement les champs déjà fournis ci-dessus.
+    </p>
+    <form data-slot="assets-form" id="kodex-assets-form" autocomplete="off">
+      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
+        ${needsCharte ? `
+          <div class="ws-field">
+            <label class="ws-label" for="ka-primary">Couleur principale</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="ws-input" id="ka-primary" name="primary_hex" type="text"
+                     value="${_esc(a.charte.primary_hex)}"
+                     placeholder="#1B2A4A" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
+                     style="font-family:'SF Mono','Menlo',monospace;">
+              <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.primary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-primary"></div>
+            </div>
+          </div>
+          <div class="ws-field">
+            <label class="ws-label" for="ka-secondary">Couleur secondaire</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="ws-input" id="ka-secondary" name="secondary_hex" type="text"
+                     value="${_esc(a.charte.secondary_hex)}"
+                     placeholder="#c9a96e" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
+                     style="font-family:'SF Mono','Menlo',monospace;">
+              <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.secondary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-secondary"></div>
+            </div>
+          </div>
+        ` : ''}
+        ${needsFonts ? `
+          <div class="ws-field">
+            <label class="ws-label" for="ka-font-title">Police des titres</label>
+            <input class="ws-input" id="ka-font-title" name="font_title" type="text"
+                   value="${_esc(a.charte.font_title)}"
+                   placeholder="ex : Cormorant Garamond, Inter Bold">
+          </div>
+          <div class="ws-field">
+            <label class="ws-label" for="ka-font-body">Police du corps de texte</label>
+            <input class="ws-input" id="ka-font-body" name="font_body" type="text"
+                   value="${_esc(a.charte.font_body)}"
+                   placeholder="ex : Source Sans 3, Inter Regular">
+          </div>
+        ` : ''}
+        ${needsCharte ? `
+          <div class="ws-field" style="grid-column:1 / -1;">
+            <label class="ws-label" for="ka-brand-book">Lien vers votre brand book complet (optionnel)</label>
+            <input class="ws-input" id="ka-brand-book" name="brand_book_url" type="url"
+                   value="${_esc(a.brand_book_url)}"
+                   placeholder="https://drive.google.com/...">
+            <div style="margin-top:4px;font-size:11.5px;color:var(--ws-text-muted);">
+              Si vous avez un PDF brand book, partagez-le ici&nbsp;— votre graphiste pourra le consulter.
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    </form>
+  ` : `
+    <div class="ws-card" style="background:var(--ws-accent-soft);border-color:var(--ws-accent);padding:16px 18px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="display:inline-flex;width:32px;height:32px;border-radius:50%;background:var(--ws-accent);color:#fff;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('check', 18)}
+        </span>
+        <div>
+          <strong style="font-size:13.5px;color:var(--ws-text);">Votre graphiste a déjà toute votre identité visuelle.</strong>
+          <div style="font-size:12px;color:var(--ws-text-muted);margin-top:2px;">
+            Pas besoin de re-saisir votre charte. Passez directement aux demandes spéciales et fichiers supplémentaires.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
   const root = `
     <span class="ws-eyebrow">${icon('package', 12)} 3 sur 4 · Les visuels</span>
     <h1 class="ws-h1">Quels éléments visuels avons-nous&nbsp;?</h1>
     <p class="ws-lead">
-      Renseignez votre charte graphique en quelques secondes. Si Protein Studio
-      a déjà vos logos ou polices, cochez la case correspondante&nbsp;: vous n'aurez
-      plus jamais à les renvoyer.
+      Indiquez à Kodex ce que votre graphiste possède déjà&nbsp;: vous gagnerez du temps
+      en évitant de re-saisir ce qu'il a déjà reçu.
     </p>
 
-    <h2 class="ws-h2">Ce que Protein Studio possède déjà pour vous</h2>
+    <h2 class="ws-h2">Ce que votre graphiste possède déjà pour vous</h2>
     <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:24px;">
       ${_renderOwnedToggle('logo_owned',   'Logo',          'image',    a.logo_owned)}
       ${_renderOwnedToggle('charte_owned', 'Charte graphique', 'palette', a.charte_owned)}
       ${_renderOwnedToggle('fonts_owned',  'Polices',       'type',     a.fonts_owned)}
     </div>
 
-    <h2 class="ws-h2">Votre charte graphique rapide</h2>
+    ${chartBlockHTML}
+
+    <h2 class="ws-h2">Demandes spéciales pour le graphiste</h2>
     <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
-      Optionnel mais recommandé&nbsp;: ces informations seront reprises dans le brief final.
+      Tout ce que vous voulez qu'il sache avant de démarrer.
     </p>
-    <form data-slot="assets-form" id="kodex-assets-form" autocomplete="off">
-      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
-        <div class="ws-field">
-          <label class="ws-label" for="ka-primary">Couleur principale</label>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input class="ws-input" id="ka-primary" name="primary_hex" type="text"
-                   value="${_esc(a.charte.primary_hex)}"
-                   placeholder="#1B2A4A" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
-                   style="font-family:'SF Mono','Menlo',monospace;">
-            <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.primary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-primary"></div>
-          </div>
-        </div>
-        <div class="ws-field">
-          <label class="ws-label" for="ka-secondary">Couleur secondaire</label>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input class="ws-input" id="ka-secondary" name="secondary_hex" type="text"
-                   value="${_esc(a.charte.secondary_hex)}"
-                   placeholder="#c9a96e" maxlength="7" pattern="^#[0-9a-fA-F]{6}$"
-                   style="font-family:'SF Mono','Menlo',monospace;">
-            <div style="width:42px;height:38px;border-radius:var(--ws-radius-sm);border:1px solid var(--ws-border);background:${a.charte.secondary_hex || 'transparent'};flex-shrink:0;" data-slot="preview-secondary"></div>
-          </div>
-        </div>
-        <div class="ws-field">
-          <label class="ws-label" for="ka-font-title">Police des titres</label>
-          <input class="ws-input" id="ka-font-title" name="font_title" type="text"
-                 value="${_esc(a.charte.font_title)}"
-                 placeholder="ex : Cormorant Garamond, Inter Bold">
-        </div>
-        <div class="ws-field">
-          <label class="ws-label" for="ka-font-body">Police du corps de texte</label>
-          <input class="ws-input" id="ka-font-body" name="font_body" type="text"
-                 value="${_esc(a.charte.font_body)}"
-                 placeholder="ex : Source Sans 3, Inter Regular">
-        </div>
-        <div class="ws-field" style="grid-column:1 / -1;">
-          <label class="ws-label" for="ka-brand-book">Lien vers votre brand book complet (optionnel)</label>
-          <input class="ws-input" id="ka-brand-book" name="brand_book_url" type="url"
-                 value="${_esc(a.brand_book_url)}"
-                 placeholder="https://drive.google.com/...">
-          <div style="margin-top:4px;font-size:11.5px;color:var(--ws-text-muted);">
-            Si vous avez un PDF brand book, partagez-le ici&nbsp;— le graphiste pourra le consulter.
-          </div>
-        </div>
-        <div class="ws-field" style="grid-column:1 / -1;">
-          <label class="ws-label" for="ka-notes">Demandes spéciales pour le graphiste (optionnel)</label>
-          <textarea class="ws-textarea" id="ka-notes" name="extra_notes" rows="3"
-                    placeholder="ex : éviter le rose, garder un esprit minéral, respecter les espaces vides…">${_esc(a.extra_notes)}</textarea>
-        </div>
+    <form data-slot="assets-notes-form" id="kodex-assets-notes-form" autocomplete="off" style="margin-bottom:24px;">
+      <div class="ws-field">
+        <textarea class="ws-textarea" id="ka-notes" name="extra_notes" rows="3"
+                  placeholder="ex : éviter le rose, garder un esprit minéral, respecter les espaces vides, inspiration Notion/Linear, ne pas reproduire la concurrence…">${_esc(a.extra_notes)}</textarea>
       </div>
     </form>
 
     <h2 class="ws-h2">Téléverser des fichiers</h2>
     <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
       Glissez vos logos, illustrations, brand book ou gabarits ici. Stockage en
-      Europe, 2 Mo max par fichier. Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS.
+      Europe, 10 Mo max par fichier. Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS.
     </p>
 
     <div class="kodex-dropzone" data-slot="dropzone"
@@ -1871,8 +1955,8 @@ function _renderOwnedToggle(key, label, iconName, isOn) {
           <h3 class="ws-card-title">${_esc(label)}</h3>
           <p class="ws-card-desc">
             ${isOn
-              ? '<strong style="color:var(--ws-accent);">Déjà chez Protein.</strong> Pas besoin de renvoyer.'
-              : 'Cliquez si vous l\'avez déjà transmis.'
+              ? '<strong style="color:var(--ws-accent);">Déjà transmis.</strong> Pas besoin de renvoyer.'
+              : 'Cliquez si votre graphiste l\'a déjà.'
             }
           </p>
         </div>
@@ -1881,29 +1965,42 @@ function _renderOwnedToggle(key, label, iconName, isOn) {
   `;
 }
 
-// ── Wiring du formulaire assets ───────────────────────────────
+// ── Wiring des formulaires assets (charte + demandes spéciales) ─
 function _wireAssetsForm() {
+  // Form charte rapide (optionnel — n'existe que si needsLogo/Charte/Fonts)
   const form = _root?.querySelector('[data-slot="assets-form"]');
-  if (!form) return;
-  form.addEventListener('input', e => {
-    const el = e.target;
-    if (!el.name) return;
-    if (['primary_hex', 'secondary_hex', 'font_title', 'font_body'].includes(el.name)) {
-      _state.assets.charte[el.name] = el.value;
-      // Live preview des swatches
-      if (el.name === 'primary_hex') {
-        const sw = _root.querySelector('[data-slot="preview-primary"]');
-        if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+  if (form) {
+    form.addEventListener('input', e => {
+      const el = e.target;
+      if (!el.name) return;
+      if (['primary_hex', 'secondary_hex', 'font_title', 'font_body'].includes(el.name)) {
+        _state.assets.charte[el.name] = el.value;
+        if (el.name === 'primary_hex') {
+          const sw = _root.querySelector('[data-slot="preview-primary"]');
+          if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+        }
+        if (el.name === 'secondary_hex') {
+          const sw = _root.querySelector('[data-slot="preview-secondary"]');
+          if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+        }
+      } else {
+        _state.assets[el.name] = el.value;
       }
-      if (el.name === 'secondary_hex') {
-        const sw = _root.querySelector('[data-slot="preview-secondary"]');
-        if (sw && /^#[0-9a-fA-F]{6}$/.test(el.value)) sw.style.background = el.value;
+      _scheduleSave();
+    });
+  }
+
+  // Form notes spéciales (toujours présent)
+  const notesForm = _root?.querySelector('[data-slot="assets-notes-form"]');
+  if (notesForm) {
+    notesForm.addEventListener('input', e => {
+      const el = e.target;
+      if (el.name === 'extra_notes') {
+        _state.assets.extra_notes = el.value;
+        _scheduleSave();
       }
-    } else {
-      _state.assets[el.name] = el.value;
-    }
-    _scheduleSave();
-  });
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1913,6 +2010,8 @@ function _viewOutput() {
   const o = _state.output;
   const validationError = validateForGeneration(_state);
   const activeEngine = localStorage.getItem('ks_active_engine') || 'Claude';
+  // Détection en amont : clé API du moteur actif présente ?
+  const hasApiKey = !!_findApiKeyForEngine(activeEngine);
 
   let body = '';
 
@@ -1942,6 +2041,8 @@ function _viewOutput() {
   }
   // ── État : erreur ────────────────────────────────────────
   else if (o.status === 'error') {
+    // Détection : si l'erreur mentionne "clé API", on offre le bouton Vault
+    const isApiKeyError = /clé API|api.?key|configurée/i.test(o.error || '');
     body = `
       <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
         <div style="display:flex;gap:12px;align-items:flex-start;">
@@ -1952,8 +2053,13 @@ function _viewOutput() {
           </div>
         </div>
       </div>
-      <div style="margin-top:16px;display:flex;gap:10px;">
-        <button class="ws-btn ws-btn--accent" data-act="regenerate">
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+        ${isApiKeyError ? `
+          <button class="ws-btn ws-btn--accent" data-act="open-vault">
+            ${icon('lock', 16)} Configurer ma clé ${_esc(activeEngine)}
+          </button>
+        ` : ''}
+        <button class="ws-btn ${isApiKeyError ? 'ws-btn--secondary' : 'ws-btn--accent'}" data-act="regenerate">
           ${icon('refresh', 16)} Réessayer
         </button>
       </div>
@@ -1961,8 +2067,29 @@ function _viewOutput() {
   }
   // ── État initial : invitation à générer ──────────────────
   else {
-    const canGenerate = !validationError;
+    const canGenerate = !validationError && hasApiKey;
+    // Bandeau d'avertissement spécifique si clé API manquante
+    const apiKeyMissingHTML = !hasApiKey ? `
+      <div class="ws-card" style="margin-bottom:16px;border-color:var(--warn);background:var(--warn-soft, rgba(245, 158, 11, 0.08));padding:14px 16px;">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          ${icon('lock', 18)}
+          <div style="flex:1;">
+            <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--ws-text);">
+              Clé API ${_esc(activeEngine)} manquante
+            </h3>
+            <p style="margin:0 0 10px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.5;">
+              Kodex interroge le moteur AI avec votre propre clé (BYOK), stockée chiffrée dans votre Vault.
+              Configurez-la une fois, elle restera disponible pour tous les outils Keystone.
+            </p>
+            <button class="ws-btn ws-btn--accent" data-act="open-vault" style="padding:7px 14px;font-size:12.5px;">
+              ${icon('lock', 14)} Configurer ma clé ${_esc(activeEngine)}
+            </button>
+          </div>
+        </div>
+      </div>
+    ` : '';
     body = `
+      ${apiKeyMissingHTML}
       <div class="ws-card" style="text-align:center;padding:48px 24px;${canGenerate ? '' : 'opacity:.7;'}">
         <div style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--gold3);align-items:center;justify-content:center;margin-bottom:16px;color:var(--gold);">
           ${icon('sparkles', 28)}
@@ -2196,9 +2323,12 @@ async function _saveBriefInLibrary() {
 // ── Titre lisible pour un brief sauvegardé ────────────────────
 function _briefTitle() {
   const std  = _state.destination.standard;
-  const prog = _state.content.fields?.nom_programme
-            || _state.content.fields?.nom_enseigne
-            || _state.content.fields?.nom_etablissement;
+  const f    = _state.content.fields || {};
+  // v3 universel : nom_projet ; rétro-compat : anciens champs métier
+  const prog = f.nom_projet
+            || f.nom_programme
+            || f.nom_enseigne
+            || f.nom_etablissement;
   const parts = [];
   if (prog) parts.push(prog);
   if (std)  {

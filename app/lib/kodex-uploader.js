@@ -13,7 +13,7 @@
 
 import { CF_API } from '../pads-loader.js';
 
-const MAX_FILE_BYTES = 2 * 1024 * 1024;   // 2 MB binary (devient ~2.7 MB base64)
+const MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB binary (devient ~13.3 MB base64)
 
 export const ALLOWED_MIMES = [
   'image/png', 'image/jpeg', 'image/svg+xml', 'image/gif', 'image/webp',
