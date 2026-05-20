@@ -15,7 +15,7 @@
      - Des alertes en cas d'incohérence détectée
    ═══════════════════════════════════════════════════════════════ */
 
-import { formatDimensions, formatBleed, computeLegalMentions } from './kodex-catalog.js';
+import { formatDimensions, formatBleed, computeLegalMentions, getVendor } from './kodex-catalog.js';
 import { computeScale } from './kodex-scale.js';
 
 // ── Helpers de formatage pour le prompt ───────────────────────
@@ -25,7 +25,27 @@ function _fieldValue(v) {
   return String(v);
 }
 
-function _renderTechBlock(std, destState) {
+function _renderVendorBlock(vendor) {
+  if (!vendor || vendor.level === 3) return '';
+  const lines = [];
+  lines.push('');
+  lines.push(`### Préparation spécifique chez ${vendor.label} :`);
+  if (vendor.url)
+    lines.push(`- Fiche officielle : ${vendor.url}`);
+  if (Array.isArray(vendor.system_layers) && vendor.system_layers.length)
+    lines.push(`- Calques système attendus : ${vendor.system_layers.join(', ')}`);
+  if (vendor.rich_black)
+    lines.push(`- Noir riche recommandé : ${vendor.rich_black}`);
+  if (vendor.max_file_size_mb)
+    lines.push(`- Taille fichier finale : < ${vendor.max_file_size_mb} Mo`);
+  if (Array.isArray(vendor.preparation_steps) && vendor.preparation_steps.length) {
+    lines.push('- Étapes de préparation obligatoires :');
+    vendor.preparation_steps.forEach(p => lines.push(`  * ${p}`));
+  }
+  return lines.join('\n');
+}
+
+function _renderTechBlock(std, destState, vendor) {
   if (!std) return '';
   const scale = computeScale(std);
   // Résolution toujours 300 DPI pour le print (modèle Kodex) ; échelle et
@@ -69,6 +89,11 @@ function _renderTechBlock(std, destState) {
     lines.push(`### Note du prestataire :`);
     lines.push(std.notes);
   }
+
+  // Ajoute la section "Préparation spécifique chez X" si vendor connu (lvl 1-2)
+  const vendorBlock = _renderVendorBlock(vendor);
+  if (vendorBlock) lines.push(vendorBlock);
+
   return lines.join('\n');
 }
 
@@ -144,20 +169,30 @@ function _renderLegalBlock(sector, fields) {
  * @param {object} sector  le profil métier hydraté
  * @returns {string}       prompt complet en markdown
  */
-export function buildCodeMaitre(state, sector) {
+export async function buildCodeMaitre(state, sector) {
   const destState = state.destination || {};
   const std = destState.standard;
   const fields = state.content?.fields || {};
   const assets = state.assets || {};
 
-  const tech    = _renderTechBlock(std, destState);
+  // v3 vendor-aware : on hydrate l'objet vendor depuis vendor_id pour
+  // enrichir le bloc tech avec calques système, noir riche, étapes prep…
+  let vendor = null;
+  if (destState.vendor_id) {
+    try { vendor = await getVendor(destState.vendor_id); }
+    catch (_) { vendor = null; }
+  }
+
+  const tech    = _renderTechBlock(std, destState, vendor);
   const content = _renderContentBlock(sector, fields);
   const visuel  = _renderAssetsBlock(assets);
   const legal   = _renderLegalBlock(sector, fields);
 
-  const vendorHint = std?.vendor
-    ? ` Le client envisage de produire chez « ${std.vendor} » : la spec officielle de ce prestataire fait foi en cas d'écart — rappelle-le dans le brief.`
-    : '';
+  const vendorHint = (vendor && vendor.level !== 3)
+    ? ` Le client produira chez « ${vendor.label} » (specs commerciales connues — bleed ${std.bleed_mm} mm, ${vendor.color_profile}). Respecte scrupuleusement la préparation décrite section 1.`
+    : std?.vendor
+      ? ` Le client envisage de produire chez « ${std.vendor} » : la spec officielle de ce prestataire fait foi en cas d'écart — rappelle-le dans le brief.`
+      : '';
 
   return `Tu es un expert en production print et digital, garant du "zéro défaut" de fabrication. Voici un cahier des charges client complet. Ton rôle : produire un BRIEF TECHNIQUE INFAILLIBLE prêt à être envoyé à un graphiste ou un maquettiste.${vendorHint}
 

@@ -7,24 +7,27 @@
     "view": "destination",
     "destination": {
       "category": "large_format",
+      "support_id": "poster-4x3",
+      "vendor_id": "exaprint",
       "preset_id": "poster-4x3",
       "standard": {
         "id": "poster-4x3",
-        "type_support": "Panneau publicitaire grand format",
-        "product_name": "Panneau publicitaire grand format",
+        "type_support": "Panneau publicitaire 4×3 m",
+        "product_name": "Panneau publicitaire 4×3 m",
         "vendor": "Exaprint",
+        "vendor_id": "exaprint",
         "format_fini": { "width_mm": 4000, "height_mm": 3000 },
         "bleed_mm": 100,
         "safe_margin_mm": 200,
         "dpi": 300,
-        "color_profile": "CMJN (FOGRA39 ou équivalent)",
-        "export_format": "PDF/X-4 ou TIFF haute définition",
+        "color_profile": "CMJN (FOGRA39)",
+        "export_format": "PDF/X-1a:2001 ou PDF/X-4",
         "material": "Bâche PVC 510 g/m²",
-        "notes": "Distance de vue > 10 m. Texte titre minimum 100 mm de hauteur capitale. Œillets aux quatre angles pour fixation au panneau de chantier."
+        "notes": "Panneau 4×3 m Exaprint. Travail à l'échelle 1/10. Multi-lés assemblés avec croix d'assemblage obligatoires. Livré en 3 formats : PDF + IDML + EPS."
       },
-      "vendor_url": "https://www.exaprint.fr/grands-formats",
+      "vendor_url": "",
       "specs_pdf": null,
-      "_hint_shown": true
+      "_form_open": false
     },
     "content": {
       "sector": "immobilier",

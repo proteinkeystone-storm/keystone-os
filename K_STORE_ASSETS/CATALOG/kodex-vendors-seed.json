@@ -1,0 +1,720 @@
+{
+  "version": "3.0",
+  "last_updated": "2026-05-20",
+  "_notice": "Catalogue Kodex vendor-aware (v3). Trois entités liées : SUPPORTS universels × VENDORS (Exaprint/Vistaprint/Pixartprinting/Autre) × SPECS (jonction vendor × support). Quand l'utilisateur choisit un couple support×vendor, Kodex hydrate le standard avec les specs précises du couple. Sinon (vendor=other ou couple inconnu), fallback sur les defaults catégorie. Compatible briefs D1 existants via le snapshot standard_snapshot.",
+
+  "categories": [
+    {
+      "id": "print_paper",
+      "label": "Print papier",
+      "icon": "printer",
+      "description": "Cartes, flyers, dépliants, brochures, stickers, enveloppes — tout ce qui s'imprime sur papier ou support fin.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "bleed_mm": 3,
+        "safe_margin_mm": 5,
+        "dpi": 300,
+        "export_format": "PDF/X-1a:2001 ou PDF/X-4"
+      }
+    },
+    {
+      "id": "large_format",
+      "label": "Grand format",
+      "icon": "image",
+      "description": "Bâches, panneaux, roll-up, vitrophanie, PLV — tout ce qui dépasse l'A2.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "bleed_mm": 5,
+        "safe_margin_mm": 20,
+        "dpi": 300,
+        "export_format": "PDF/X-4 ou TIFF haute définition"
+      }
+    },
+    {
+      "id": "digital",
+      "label": "Digital",
+      "icon": "globe",
+      "description": "Réseaux sociaux, bannières web — visuels destinés aux écrans.",
+      "defaults": {
+        "unit": "px",
+        "color_profile": "sRGB",
+        "bleed_mm": 0,
+        "safe_margin_mm": 0,
+        "dpi": null,
+        "export_format": "JPG ou PNG haute qualité"
+      }
+    },
+    {
+      "id": "press",
+      "label": "Presse / Édition",
+      "icon": "book-open",
+      "description": "Encarts magazines, journaux, parutions presse — dimensions fournies par la régie.",
+      "defaults": {
+        "unit": "mm",
+        "color_profile": "CMJN (ISO Coated v2 ou Newspaper 26v5)",
+        "bleed_mm": 3,
+        "safe_margin_mm": 5,
+        "dpi": 300,
+        "export_format": "PDF/X-1a:2001"
+      }
+    }
+  ],
+
+  "vendors": [
+    {
+      "id": "exaprint",
+      "label": "Exaprint",
+      "level": 1,
+      "country": "FR",
+      "url": "https://www.exaprint.fr",
+      "tagline": "Imprimeur industriel français — gabarits sourcés en interne",
+      "color_profile": "CMJN (FOGRA39)",
+      "export_format": "PDF/X-1a:2001 ou PDF/X-4",
+      "rich_black": null,
+      "system_layers": [
+        "coupe / corte",
+        "fond perdu / sangrado",
+        "zone tranquille / zona tranquila"
+      ],
+      "highlights": [
+        "22 gabarits IDML sourcés en interne",
+        "Calques bilingues FR/ES",
+        "Échelle 1/10 standardisée dès les très grands formats"
+      ],
+      "preparation_steps": [
+        "Polices vectorisées avant export",
+        "Calques bilingues nommés exactement comme dans le gabarit",
+        "Échelle 1/10 + 1000 DPI obligatoire pour les formats > 5 m"
+      ],
+      "supports": [
+        "card-business-85x55",
+        "flyer-a4",
+        "flyer-a5",
+        "flyer-a6",
+        "brochure-a4",
+        "folded-leaflet-a5",
+        "folded-leaflet-a4",
+        "letterhead-a4",
+        "envelope-dl",
+        "menu-restaurant-a4",
+        "poster-a3",
+        "poster-50x70",
+        "poster-120x160",
+        "poster-4x3",
+        "rollup-84x204",
+        "rollup-200x300",
+        "tarp-vinyl",
+        "window-decal",
+        "plv-a1",
+        "sticker-sheet"
+      ]
+    },
+
+    {
+      "id": "vistaprint",
+      "label": "Vistaprint",
+      "level": 2,
+      "country": "EU",
+      "url": "https://www.vistaprint.fr",
+      "tagline": "Standards uniformes, commande en ligne simple",
+      "color_profile": "CMJN",
+      "export_format": "PDF Adobe preset \"High Quality Print\"",
+      "rich_black": "C40/M30/Y30/K100",
+      "max_file_size_mb": 30,
+      "system_layers": [
+        "Directions",
+        "Dieline",
+        "Mask",
+        "Bottom (impression R/V optionnelle)"
+      ],
+      "highlights": [
+        "Bleed/safe uniformes 1,5 mm sur tout le catalogue papier",
+        "Préset PDF unique « High Quality Print »",
+        "Texte minimum 10 pt obligatoire"
+      ],
+      "preparation_steps": [
+        "Vectorisation des polices obligatoire (Type > Create Outlines)",
+        "Désactiver les calques Directions, Dieline, Mask avant export",
+        "Embed all links",
+        "Use Document Bleed Settings dans la dialog d'export PDF",
+        "Fichier final < 30 Mo"
+      ],
+      "supports": [
+        "card-business-85x55",
+        "card-business-40x85",
+        "flyer-a5",
+        "flyer-a6",
+        "poster-a3",
+        "tarp-vinyl",
+        "tarp-mesh",
+        "rollup-85x200",
+        "sticker-roll"
+      ]
+    },
+
+    {
+      "id": "pixartprinting",
+      "label": "Pixartprinting",
+      "level": 2,
+      "country": "EU",
+      "url": "https://www.pixartprinting.fr",
+      "tagline": "Dépliants riches & bâches très complètes",
+      "color_profile": "CMJN Fogra 39",
+      "export_format": "PDF échelle 1:1 haute qualité, calques séparés",
+      "rich_black": "C63/M52/J51/N100",
+      "system_layers": [
+        "Artwork (obligatoire — visuel)",
+        "white (optionnel — blanc sélectif/soutien)",
+        "CutContour (optionnel — découpe forme perso, magenta C0/M100/Y0/K0)",
+        "Finishing (optionnel — vernis 3D, laminage or/argent)"
+      ],
+      "highlights": [
+        "Dépliants riches (3 modes de pliage, 130–300 g/m²)",
+        "Bâches très complètes (œillets, fourreaux, formes personnalisées)",
+        "Système CutContour standardisé pour découpes sur-mesure"
+      ],
+      "preparation_steps": [
+        "Visuel sur le calque \"Artwork\" obligatoire",
+        "Supprimer toutes les couleurs/lignes techniques du gabarit SAUF la ligne verte (zone de sécurité)",
+        "Conversion polices en courbes/tracés",
+        "PDF haute qualité sans downsampling, calques séparés",
+        "Échelle 1/10 + 1000 DPI au-delà de 5 m de côté"
+      ],
+      "supports": [
+        "card-business-85x55",
+        "flyer-a5",
+        "flyer-a6",
+        "folded-leaflet-a5",
+        "folded-leaflet-a4",
+        "poster-a3",
+        "poster-4x3",
+        "tarp-vinyl",
+        "tarp-mesh",
+        "rollup-85x200",
+        "sticker-roll",
+        "sticker-die-cut",
+        "sticker-sheet"
+      ]
+    },
+
+    {
+      "id": "other",
+      "label": "Je ne sais pas encore",
+      "short_label": "Autre / inconnu",
+      "level": 3,
+      "country": null,
+      "url": null,
+      "tagline": "Standards génériques — saisissez votre imprimeur plus tard",
+      "color_profile": "CMJN (FOGRA39 ou équivalent)",
+      "export_format": "PDF/X-1a ou PDF/X-4",
+      "rich_black": null,
+      "system_layers": null,
+      "highlights": [
+        "Defaults universels par catégorie",
+        "Saisie libre du nom d'imprimeur",
+        "PDF de specs joignable au brief si vous l'avez reçu"
+      ],
+      "preparation_steps": [
+        "Demandez à votre imprimeur sa fiche technique officielle",
+        "Vérifiez profil couleur, fond perdu et format d'export attendus",
+        "Joignez le PDF de specs si vous l'avez reçu"
+      ],
+      "supports": "*"
+    }
+  ],
+
+  "supports": [
+    {
+      "id": "card-business-85x55",
+      "category": "print_paper",
+      "label": "Carte de visite",
+      "icon": "printer",
+      "type_support": "Carte commerciale",
+      "default_format": { "width_mm": 85, "height_mm": 55 },
+      "notes": "Format européen standard. Polices vectorisées, texte minimum 7 pt."
+    },
+    {
+      "id": "card-business-40x85",
+      "category": "print_paper",
+      "label": "Carte de visite Slim",
+      "icon": "printer",
+      "type_support": "Carte commerciale étroite",
+      "default_format": { "width_mm": 40, "height_mm": 85 },
+      "notes": "Format Slim Vistaprint, vertical. Idéal portrait/identité visuelle premium."
+    },
+    {
+      "id": "flyer-a4",
+      "category": "print_paper",
+      "label": "Flyer A4",
+      "icon": "printer",
+      "type_support": "Flyer recto-verso A4",
+      "default_format": { "width_mm": 210, "height_mm": 297 }
+    },
+    {
+      "id": "flyer-a5",
+      "category": "print_paper",
+      "label": "Flyer A5",
+      "icon": "printer",
+      "type_support": "Flyer recto-verso A5",
+      "default_format": { "width_mm": 148, "height_mm": 210 }
+    },
+    {
+      "id": "flyer-a6",
+      "category": "print_paper",
+      "label": "Flyer A6",
+      "icon": "printer",
+      "type_support": "Flyer compact A6",
+      "default_format": { "width_mm": 105, "height_mm": 148 }
+    },
+    {
+      "id": "brochure-a4",
+      "category": "print_paper",
+      "label": "Brochure A4",
+      "icon": "printer",
+      "type_support": "Brochure agrafée ou collée",
+      "default_format": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Pli central prévu — marge interne supplémentaire recommandée."
+    },
+    {
+      "id": "folded-leaflet-a5",
+      "category": "print_paper",
+      "label": "Dépliant A5 (1 pli)",
+      "icon": "printer",
+      "type_support": "Dépliant A5 ouvert, 4 faces",
+      "default_format": { "width_mm": 210, "height_mm": 148 },
+      "notes": "Format ouvert A5 paysage. 1 pli central = 4 faces. Grammage ≥ 250 g/m² recommandé pour un rendu sans cassure au pli."
+    },
+    {
+      "id": "folded-leaflet-a4",
+      "category": "print_paper",
+      "label": "Dépliant A4 (2 plis)",
+      "icon": "printer",
+      "type_support": "Dépliant A4 ouvert, 6 faces",
+      "default_format": { "width_mm": 297, "height_mm": 210 },
+      "notes": "Format ouvert A4 paysage. 2 plis (portefeuille ou accordéon) = 6 faces. Précisez le sens de pliage dans le brief."
+    },
+    {
+      "id": "letterhead-a4",
+      "category": "print_paper",
+      "label": "Tête de lettre A4",
+      "icon": "printer",
+      "type_support": "Papier à en-tête A4",
+      "default_format": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Marges intérieures généreuses obligatoires pour l'impression bureau ultérieure."
+    },
+    {
+      "id": "envelope-dl",
+      "category": "print_paper",
+      "label": "Enveloppe DL",
+      "icon": "printer",
+      "type_support": "Enveloppe DL 110×220",
+      "default_format": { "width_mm": 220, "height_mm": 110 },
+      "notes": "Recto uniquement (verso = intérieur). Précisez avec/sans fenêtre (35 ou 45 mm du bord gauche)."
+    },
+    {
+      "id": "menu-restaurant-a4",
+      "category": "print_paper",
+      "label": "Menu / Carte resto",
+      "icon": "printer",
+      "type_support": "Menu restaurant A4",
+      "default_format": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Pelliculage mat ou vernis sélectif recommandé pour résistance aux manipulations."
+    },
+    {
+      "id": "sticker-sheet",
+      "category": "print_paper",
+      "label": "Planche d'autocollants",
+      "icon": "printer",
+      "type_support": "Stickers en planche",
+      "default_format": { "width_mm": 210, "height_mm": 297 },
+      "notes": "Format A4 ou A3. Plusieurs éléments adhésifs sur la même planche, découpe au format choisi."
+    },
+    {
+      "id": "sticker-roll",
+      "category": "print_paper",
+      "label": "Étiquettes en rouleau",
+      "icon": "printer",
+      "type_support": "Stickers/étiquettes en rouleau",
+      "is_dim_free": true,
+      "notes": "Format au choix. Buffer de découpe plus important que sur planche — fond perdu généreux recommandé."
+    },
+    {
+      "id": "sticker-die-cut",
+      "category": "print_paper",
+      "label": "Sticker découpe perso",
+      "icon": "printer",
+      "type_support": "Sticker forme personnalisée",
+      "is_dim_free": true,
+      "notes": "Découpe sur tracé CutContour (forme libre). Prévoyez un visuel avec 2 mm de débord au-delà du tracé."
+    },
+
+    {
+      "id": "poster-a3",
+      "category": "large_format",
+      "label": "Affiche A3",
+      "icon": "image",
+      "type_support": "Affiche papier A3",
+      "default_format": { "width_mm": 297, "height_mm": 420 }
+    },
+    {
+      "id": "poster-50x70",
+      "category": "large_format",
+      "label": "Affiche 50×70 cm",
+      "icon": "image",
+      "type_support": "Affiche papier 50×70",
+      "default_format": { "width_mm": 500, "height_mm": 700 }
+    },
+    {
+      "id": "poster-120x160",
+      "category": "large_format",
+      "label": "Affiche 120×160 cm",
+      "icon": "image",
+      "type_support": "Affiche grand format 120×160",
+      "default_format": { "width_mm": 1200, "height_mm": 1600 }
+    },
+    {
+      "id": "poster-4x3",
+      "category": "large_format",
+      "label": "Panneau 4×3 m",
+      "icon": "image",
+      "type_support": "Panneau publicitaire 4×3 m",
+      "default_format": { "width_mm": 4000, "height_mm": 3000 },
+      "notes": "Distance de vue > 10 m. Texte titre minimum 100 mm de hauteur capitale."
+    },
+    {
+      "id": "rollup-85x200",
+      "category": "large_format",
+      "label": "Roll-up 85×200 cm",
+      "icon": "image",
+      "type_support": "Roll-up déroulant 85×200",
+      "default_format": { "width_mm": 850, "height_mm": 2000 },
+      "notes": "Zone basse masquée par le mécanisme — pas de texte sensible en bas. Zone haute parfois cachée par la fermeture supérieure."
+    },
+    {
+      "id": "rollup-84x204",
+      "category": "large_format",
+      "label": "Roll-up 84×204 cm",
+      "icon": "image",
+      "type_support": "Roll-up Exaprint 84×204",
+      "default_format": { "width_mm": 840, "height_mm": 2040 },
+      "notes": "Format Exaprint. Échelle de travail 1/4 systématique. Zone basse mécanisme à respecter."
+    },
+    {
+      "id": "rollup-200x300",
+      "category": "large_format",
+      "label": "Roll-up 200×300 cm",
+      "icon": "image",
+      "type_support": "Roll-up double face 200×300",
+      "default_format": { "width_mm": 2000, "height_mm": 3000 },
+      "notes": "Très grand roll-up — échelle 1/4 systématique. Idéal salons professionnels."
+    },
+    {
+      "id": "tarp-vinyl",
+      "category": "large_format",
+      "label": "Bâche vinyle PVC",
+      "icon": "image",
+      "type_support": "Bâche PVC publicitaire",
+      "is_dim_free": true,
+      "notes": "Format au choix. Œillets standards aux 4 angles (en option). Calculateur d'échelle automatique au-delà d'1 m."
+    },
+    {
+      "id": "tarp-mesh",
+      "category": "large_format",
+      "label": "Bâche mesh ajourée",
+      "icon": "image",
+      "type_support": "Bâche tissu ajouré (passe-vent)",
+      "is_dim_free": true,
+      "notes": "Tissu maillé qui laisse passer le vent — idéal extérieur exposé. Œillets le long des bords (env. tous les 50 cm)."
+    },
+    {
+      "id": "window-decal",
+      "category": "large_format",
+      "label": "Vitrophanie",
+      "icon": "image",
+      "type_support": "Vitrophanie adhésive",
+      "is_dim_free": true,
+      "notes": "Adhésif blanc ou transparent. Précisez la pose (recto ou verso, intérieur ou extérieur) dans le brief."
+    },
+    {
+      "id": "plv-a1",
+      "category": "large_format",
+      "label": "PLV A1 / Stop trottoir",
+      "icon": "image",
+      "type_support": "PLV recto-verso A1",
+      "default_format": { "width_mm": 594, "height_mm": 841 }
+    },
+
+    {
+      "id": "instagram-post",
+      "category": "digital",
+      "label": "Post Instagram",
+      "icon": "instagram",
+      "type_support": "Post Instagram carré",
+      "default_format": { "width_px": 1080, "height_px": 1080 },
+      "notes": "Ratio 1:1. Texte sur image limité à 20% de la surface pour favoriser la portée organique."
+    },
+    {
+      "id": "instagram-story",
+      "category": "digital",
+      "label": "Story / Reel",
+      "icon": "instagram",
+      "type_support": "Story Instagram / Reel vertical",
+      "default_format": { "width_px": 1080, "height_px": 1920 },
+      "notes": "Ratio 9:16. Zone sûre : 250 px en haut et 250 px en bas réservés à l'UI Instagram."
+    },
+    {
+      "id": "linkedin-banner",
+      "category": "digital",
+      "label": "Bannière LinkedIn",
+      "icon": "linkedin",
+      "type_support": "Bannière de profil LinkedIn",
+      "default_format": { "width_px": 1584, "height_px": 396 },
+      "notes": "Centrer le logo et le message clé — les bords sont tronqués sur l'affichage mobile."
+    },
+    {
+      "id": "facebook-cover",
+      "category": "digital",
+      "label": "Couverture Facebook",
+      "icon": "facebook",
+      "type_support": "Photo de couverture Facebook",
+      "default_format": { "width_px": 820, "height_px": 312 },
+      "notes": "Format desktop. Sur mobile, Facebook recadre — garder les éléments importants au centre."
+    },
+    {
+      "id": "pinterest-pin",
+      "category": "digital",
+      "label": "Pin Pinterest",
+      "icon": "pinterest",
+      "type_support": "Pin Pinterest",
+      "default_format": { "width_px": 1000, "height_px": 1500 },
+      "notes": "Ratio 2:3 — format vertical optimal pour le feed Pinterest."
+    },
+
+    {
+      "id": "press-free",
+      "category": "press",
+      "label": "Parution presse / magazine",
+      "icon": "book-open",
+      "type_support": "Encart presse ou magazine",
+      "is_custom": true,
+      "is_press_intro": true,
+      "notes": "Les dimensions et le profil couleur sont communiqués par la régie publicitaire. Saisissez les valeurs ci-dessous."
+    }
+  ],
+
+  "specs": [
+    {
+      "vendor_id": "exaprint", "support_id": "card-business-85x55",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Format européen Exaprint 85×54 mm en réalité — Kodex arrondit à 85×55 pour cohérence catalogue. Polices vectorisées. Coins droits ou arrondis R3 selon option commande."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "flyer-a4",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Échelle 1:1. CMJN FOGRA39. Calques bilingues FR/ES dans le gabarit officiel."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "flyer-a5",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Échelle 1:1. CMJN FOGRA39. Disponible recto seul ou recto-verso."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "flyer-a6",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "brochure-a4",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Reliure agrafée 2 points ou dos carré collé. Page de garde fournie en simple page."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "folded-leaflet-a5",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Dépliant 210×148 mm Exaprint. 3 pliages disponibles : central, accordéons, roulés. Précisez le pliage dans le brief."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "folded-leaflet-a4",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Dépliant A4 ouvert Exaprint. Plusieurs configurations de pliage — préciser dans le brief."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "letterhead-a4",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Tête de lettre Exaprint. Marges intérieures généreuses recommandées pour l'impression bureautique."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "envelope-dl",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Enveloppe DL 110×220 Exaprint. Calques spécifiques PRISE DE PINCE (zone machine encartage) et FENÊTRE (si avec). Grammage 80g / 90g vélin / 100g vélin / 120g."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "menu-restaurant-a4",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Menu A4 Exaprint. Pelliculage recommandé."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "poster-a3",
+      "bleed_mm": 5, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Affiche A3 Exaprint. Échelle 1:1."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "poster-50x70",
+      "bleed_mm": 5, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Affiche 50×70 Exaprint disponible en portrait ou paysage. Calques bilingues FR/ES."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "poster-120x160",
+      "bleed_mm": 5, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Affiche 120×160 vertical Exaprint. Calques bilingues FR/ES — vérifier le pliage des bords si reliure."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "poster-4x3",
+      "bleed_mm": 100, "safe_margin_mm": 200, "dpi": 300,
+      "notes": "Panneau 4×3 m Exaprint. Travail à l'échelle 1/10. Multi-lés assemblés avec croix d'assemblage obligatoires. Livré en 3 formats : PDF + IDML + EPS."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "rollup-84x204",
+      "bleed_mm": 25, "safe_margin_mm": 100, "dpi": 300,
+      "notes": "Roll-up Exaprint 84×204. Échelle 1/4 systématique. Marges asymétriques — zone basse masquée par le mécanisme. Format à imprimer ≠ format produit commercial (rabattage)."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "rollup-200x300",
+      "bleed_mm": 25, "safe_margin_mm": 100, "dpi": 300,
+      "notes": "Roll-up Exaprint 200×300 cm. Échelle 1/4 systématique. Zone basse mécanisme à respecter."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "tarp-vinyl",
+      "bleed_mm": 0, "safe_margin_mm": 20, "dpi": 300,
+      "notes": "Bâche Exaprint sur-mesure. Min 50×50 cm. 10 matières au choix (135g polypropylène → 610g polyester PVC), chacune avec laize max + classement feu M1/B1. 3 finitions combinables : ourlet soudé 50 mm, fourreau Ø 30 mm max, œillets Ø 12 mm intérieur (centre à 30 mm du bord, zone tranquille 60 mm autour)."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "window-decal",
+      "bleed_mm": 5, "safe_margin_mm": 10, "dpi": 300,
+      "notes": "Vitrophanie Exaprint adhésive. Préciser blanc/transparent et sens de pose (recto/verso)."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "plv-a1",
+      "bleed_mm": 5, "safe_margin_mm": 15, "dpi": 300,
+      "notes": "PLV A1 Exaprint recto-verso."
+    },
+    {
+      "vendor_id": "exaprint", "support_id": "sticker-sheet",
+      "bleed_mm": 0, "safe_margin_mm": 6, "dpi": 300,
+      "notes": "Planche d'autocollants Exaprint. Format A4 ou A3. Zone non imprimable de 6 mm périphérique (prise machine de découpe)."
+    },
+
+    {
+      "vendor_id": "vistaprint", "support_id": "card-business-85x55",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 300,
+      "notes": "Vistaprint EU Standard 85×55 mm. Préset PDF « High Quality Print ». Désactiver les calques Directions, Dieline, Mask avant export. Use Document Bleed Settings dans la dialog."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "card-business-40x85",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 300,
+      "notes": "Vistaprint EU Slim 40×85 mm — format vertical premium. Même préparation que la carte Standard."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "flyer-a5",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 300,
+      "notes": "Vistaprint Flyer A5. Bleed et safe 1,5 mm uniformes sur tout le catalogue."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "flyer-a6",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 300,
+      "notes": "Vistaprint Flyer A6 — format compact. Bleed/safe 1,5 mm."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "poster-a3",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 300,
+      "notes": "Vistaprint Affiche A3. Bleed/safe 1,5 mm."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "tarp-vinyl",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 150,
+      "notes": "Vistaprint Bâche vinyle PVC. Résolution réduite acceptable (150 DPI suffisant pour grand format). PDF en CMJN."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "tarp-mesh",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 150,
+      "notes": "Vistaprint Bâche mesh ajourée. Œillets aux 4 coins + le long des bords (env. tous les 50 cm). Pour fixation extérieure exposée au vent."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "rollup-85x200",
+      "bleed_mm": 1.5, "safe_margin_mm": 1.5, "dpi": 150,
+      "notes": "Vistaprint Roll-up rétractable 85×206 cm. Zone basse mécanisme — pas de texte sensible en pied."
+    },
+    {
+      "vendor_id": "vistaprint", "support_id": "sticker-roll",
+      "bleed_mm": 5, "safe_margin_mm": 10, "dpi": 300,
+      "notes": "Vistaprint Stickers en rouleau. Bleed plus généreux que les autres produits Vistaprint (5 mm vs 1,5 mm) — la découpe au rouleau exige un buffer plus large."
+    },
+
+    {
+      "vendor_id": "pixartprinting", "support_id": "card-business-85x55",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Carte de visite classique. Téléchargez le gabarit officiel, insérez votre visuel sur le calque Artwork, supprimez toutes les couleurs techniques SAUF la ligne verte (zone de sécurité)."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "flyer-a5",
+      "bleed_mm": 1, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Flyer A5. Fond perdu seulement 1 mm — très serré, soyez précis sur le débord. Calque Artwork obligatoire."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "flyer-a6",
+      "bleed_mm": 1, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Flyer A6. Fond perdu 1 mm."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "folded-leaflet-a5",
+      "bleed_mm": 1, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Dépliant A5. Grammage ≥ 250 g/m² recommandé : un rainage est effectué avant pliage, ce qui évite la cassure des fibres du papier. Pour grammages 130/170 g/m², attendez-vous à des différences chromatiques au pli."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "folded-leaflet-a4",
+      "bleed_mm": 1, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Dépliant A4. 3 modes au choix : 1 pli central (4 faces), 2 plis portefeuille (6 faces), 2 plis accordéon (6 faces). Précisez le mode dans le brief."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "poster-a3",
+      "bleed_mm": 1, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Affiche A3."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "poster-4x3",
+      "bleed_mm": 30, "safe_margin_mm": 100, "dpi": 1000,
+      "notes": "Pixartprinting Affiche 4×3 m. Au-delà de 5 m de côté, fichier obligatoirement à l'échelle 1/10 avec résolution 1000 DPI. Si dimensions < 5 m, échelle 1:1 et 100-150 DPI suffisent."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "tarp-vinyl",
+      "bleed_mm": 1, "safe_margin_mm": 5, "dpi": 150,
+      "notes": "Pixartprinting Bâches PVC. Fond perdu 1 mm (3 mm pour tissus rétroéclairés). En présence d'œillets, marge sécurité = 5 cm. Renfort périmétral PVC = 4,3 cm ; fourreau PVC = 10 cm (barre Ø max 4 cm). Œillets aluminium 2,3 cm ou polycarbonate 2,5 cm @ 1,5 cm du bord (3,8 cm avec renfort)."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "tarp-mesh",
+      "bleed_mm": 1, "safe_margin_mm": 5, "dpi": 150,
+      "notes": "Pixartprinting Bâches tissu maillé. Œillets polycarbonate 2,3 cm @ 0,5 cm du bord. Renfort tissu = 2 cm ; fourreau tissu = 5 cm. Parcellisation impossible sur tissu (pas de découpe en plusieurs lés)."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "rollup-85x200",
+      "bleed_mm": 0, "safe_margin_mm": 50, "dpi": 150,
+      "notes": "Pixartprinting Roll-up Classic 85×200 cm. Pas d'éléments significatifs dans la zone basse (enroulée à l'intérieur de la structure) ni dans la zone supérieure (cachée par la fermeture)."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "sticker-roll",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Étiquettes en rouleau. Fond perdu 2 mm. Veillez à ne pas utiliser les tons directs présents dans le gabarit."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "sticker-die-cut",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Autocollants découpés à pleine chair : CutContour à 3 mm du trait de coupe. Découpés à mi-chair : CutContour à 5 mm du trait de coupe, visuel étendu de 2 mm au-delà du tracé. Création du calque CutContour : ton direct C0/M100/Y0/K0, tracés en surimpression, calques séparés."
+    },
+    {
+      "vendor_id": "pixartprinting", "support_id": "sticker-sheet",
+      "bleed_mm": 2, "safe_margin_mm": 3, "dpi": 300,
+      "notes": "Pixartprinting Planche d'autocollants. Chaque élément doit avoir son tracé CutContour (ligne fermée). Distance minimum 4 mm entre deux éléments. Étendez chaque visuel de 2 mm au-delà du CutContour."
+    }
+  ]
+}

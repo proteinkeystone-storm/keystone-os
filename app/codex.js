@@ -30,8 +30,12 @@ import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import {
   loadCategories, getCategory, getCategoryDefaults,
-  getPresetsByCategory, getPreset, presetToStandard,
+  // v3 vendor-aware
+  loadVendors, getVendor, getSupportsByCategory, getSupport,
+  getSpec, specToStandard, getVendorsForSupport,
+  // utils
   formatDimensions, formatBleed,
+  // secteurs métier
   loadSectors, getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
 import { computeScale, formatFileSize } from './lib/kodex-scale.js';
@@ -62,22 +66,28 @@ const STEPS = [
 ];
 
 // ── État global (in-memory, persistance en Sprint Kodex-3+) ───
-// Refonte universelle (mai 2026) : `destination` aplati.
+// Refonte vendor-aware (mai 2026 v3) : `destination` aplati.
 //   - category : 'print_paper' | 'large_format' | 'digital' | 'press' | null
-//   - preset_id : id du preset qui a seedé le standard (null si vide)
+//   - support_id : id du support choisi (null si vide)
+//   - vendor_id  : id du vendor choisi ('exaprint' | 'vistaprint' |
+//                  'pixartprinting' | 'other' | null)
 //   - standard : objet technique modifiable (forme historique conservée
-//                pour kodex-prompt / kodex-pdf / kodex-scale)
-//   - vendor_url, specs_pdf : zone 3 « prestataire » optionnelle
-//   - _hint_shown : flag one-shot pour l'animation didactique zone 3
+//                pour kodex-prompt / kodex-pdf / kodex-scale).
+//                On y trouve aussi `vendor_id` pour re-hydratation.
+//   - vendor_url, specs_pdf : visible si vendor_id === 'other'
+//   - _form_open : si true, le form détaillé est déplié (sinon récap visuel)
+//   - preset_id (legacy) : conservé en miroir de support_id pour rétro-compat
+//                          avec les briefs D1 existants.
 let _state = {
   view: 'destination',
   destination: {
     category: null,
-    preset_id: null,
+    support_id: null,
+    vendor_id: null,
     standard: null,
     vendor_url: '',
     specs_pdf: null,
-    _hint_shown: false,
+    _form_open: false,
   },
   content:     { sector: 'immobilier', fields: {} },
   assets: {
@@ -139,7 +149,7 @@ async function _loadDraft() {
     if (!raw) return false;
     const data = JSON.parse(raw);
 
-    // Migration : ancien format (step/vendor/standardId/category=print|social|press|custom)
+    // Migration : ancien format préhistorique (step/vendor/standardId/category=print|social|press|custom)
     // → reset propre, on ne tente pas de mapping fragile.
     const d = data.destination || {};
     const isOldFormat = (
@@ -150,7 +160,6 @@ async function _loadDraft() {
     );
     if (isOldFormat) {
       _resetDraft();
-      // Toast info différée — _root n'existe pas encore au moment du load
       setTimeout(() => _toastOk('Brouillon ancien format réinitialisé'), 600);
       return false;
     }
@@ -164,8 +173,23 @@ async function _loadDraft() {
       assets:      { ..._state.assets, ...(data.assets || {}) },
       output:      { ..._state.output, ...(data.output || {}) },
     };
-    // Reset du flag d'animation didactique à chaque session
-    _state.destination._hint_shown = false;
+
+    // Migration v2 → v3 vendor-aware : recopie preset_id → support_id et
+    // assigne vendor_id par défaut si le draft contenait déjà un vendor.
+    const dst = _state.destination;
+    if (dst.preset_id && !dst.support_id) {
+      dst.support_id = dst.preset_id;
+    }
+    if (!dst.vendor_id && dst.standard?.vendor) {
+      // Tentative best-effort : on tagge le vendor_id si on retrouve un match
+      const v = String(dst.standard.vendor).toLowerCase();
+      if (v.includes('exa'))       dst.vendor_id = 'exaprint';
+      else if (v.includes('vista')) dst.vendor_id = 'vistaprint';
+      else if (v.includes('pixart')) dst.vendor_id = 'pixartprinting';
+      else                            dst.vendor_id = 'other';
+    }
+    dst._form_open = false;       // form replié à chaque session
+    delete dst._hint_shown;       // ancien flag d'animation didactique
     return true;
   } catch (_) {
     return false;
@@ -177,8 +201,8 @@ function _resetDraft() {
   _state = {
     view: 'destination',
     destination: {
-      category: null, preset_id: null, standard: null,
-      vendor_url: '', specs_pdf: null, _hint_shown: false,
+      category: null, support_id: null, vendor_id: null, standard: null,
+      vendor_url: '', specs_pdf: null, _form_open: false,
     },
     content:     { sector: 'immobilier', fields: {} },
     assets: {
@@ -255,18 +279,6 @@ function _buildShell() {
       <aside class="ws-aside" data-slot="aside"></aside>
     </div>
 
-    <style>
-      .kodex-vendor-body {
-        overflow: hidden;
-        max-height: 0;
-        opacity: 0;
-        transition: max-height 260ms ease, opacity 220ms ease;
-      }
-      .kodex-vendor-zone.is-open .kodex-vendor-body  { max-height: 480px; opacity: 1; }
-      .kodex-vendor-zone.is-open .kodex-vendor-chev  { transform: rotate(90deg); }
-      .kodex-vendor-zone.is-open .kodex-vendor-header { border-color: var(--ws-accent); border-style: solid; }
-      .kodex-vendor-zone .kodex-vendor-header:hover  { border-color: var(--ws-border-strong); }
-    </style>
   `;
 
   document.body.appendChild(_root);
@@ -301,12 +313,13 @@ function _onClick(e) {
     }
     return;
   }
-  // Étape Destination (refonte universelle mai 2026)
+  // Étape Destination (refonte vendor-aware mai 2026 v3)
   if (act === 'dest-category')  return _pickCategory(t.dataset.cat);
-  if (act === 'dest-preset')    return _pickPreset(t.dataset.id);
+  if (act === 'dest-support')   return _pickSupport(t.dataset.id);
+  if (act === 'dest-vendor')    return _pickVendor(t.dataset.id);
   if (act === 'dest-reset')     return _destReset();
-  if (act === 'dest-vendor-toggle') return _toggleVendorZone();
-  if (act === 'dest-specs-delete')  return _deleteSpecsPdf();
+  if (act === 'dest-form-toggle') return _toggleDestForm();
+  if (act === 'dest-specs-delete') return _deleteSpecsPdf();
   // Sprint Kodex-2 : changement de secteur (profil métier)
   if (act === 'sector-pick')    return _pickSector(t.dataset.sector);
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
@@ -338,13 +351,25 @@ async function _loadDemoScenario() {
       assets:      { ..._state.assets,      ...(demo.state.assets      || {}) },
       output:      { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
     };
-    // Re-hydrate le standard depuis le preset_id si présent et que le
+    // Migration v2 → v3 si le scénario démo est encore en ancien format
+    const dst = _state.destination;
+    if (dst.preset_id && !dst.support_id) dst.support_id = dst.preset_id;
+    if (!dst.vendor_id && dst.standard?.vendor) {
+      const v = String(dst.standard.vendor).toLowerCase();
+      if (v.includes('exa'))       dst.vendor_id = 'exaprint';
+      else if (v.includes('vista')) dst.vendor_id = 'vistaprint';
+      else if (v.includes('pixart')) dst.vendor_id = 'pixartprinting';
+      else                            dst.vendor_id = 'other';
+    }
+    // Re-hydrate le standard depuis le couple (support × vendor) si le
     // scénario n'a pas embarqué l'objet standard complet.
-    if (_state.destination.preset_id && !_state.destination.standard) {
-      const preset = await getPreset(_state.destination.preset_id);
-      if (preset) {
-        const defaults = await getCategoryDefaults(preset.category);
-        _state.destination.standard = presetToStandard(preset, defaults);
+    if (dst.support_id && !dst.standard) {
+      const support = await getSupport(dst.support_id);
+      if (support) {
+        const defaults = await getCategoryDefaults(support.category);
+        const vendor = dst.vendor_id ? await getVendor(dst.vendor_id) : null;
+        const spec = await getSpec(dst.vendor_id, dst.support_id);
+        dst.standard = specToStandard(spec, vendor, support, defaults);
       }
     }
     _saveDraft();
@@ -478,29 +503,44 @@ async function _loadBriefFromLibrary(id) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const b = await res.json();
 
-    // Restore le state Kodex à partir du brief sauvegardé
-    // Le brief peut être au format universel (preset_id + standard embed)
-    // OU à l'ancien format (standard_id pointant vers les anciens vendors).
-    if (b.preset_id) {
-      const preset = await getPreset(b.preset_id);
-      if (preset) {
-        const defaults = await getCategoryDefaults(preset.category);
-        _state.destination.category  = preset.category;
-        _state.destination.preset_id = b.preset_id;
-        _state.destination.standard  = b.standard_snapshot
-          ? { ...presetToStandard(preset, defaults), ...b.standard_snapshot }
-          : presetToStandard(preset, defaults);
+    // Restore le state Kodex à partir du brief sauvegardé.
+    // 3 formats possibles selon la date du brief :
+    //   a) v3 vendor-aware : support_id + vendor_id + standard_snapshot
+    //   b) v2 universel : preset_id + standard_snapshot
+    //   c) v1 legacy : standard_id pointant vers les anciens vendors
+    const dst = _state.destination;
+    const supportId = b.support_id || b.preset_id || null;
+
+    if (supportId) {
+      const support = await getSupport(supportId);
+      if (support) {
+        const defaults = await getCategoryDefaults(support.category);
+        const vendorId = b.vendor_id
+          || (b.standard_snapshot?.vendor_id)
+          || (b.vendor ? _guessVendorIdFromLabel(b.vendor) : null);
+        const vendor = vendorId ? await getVendor(vendorId) : null;
+        const spec = await getSpec(vendorId, supportId);
+        dst.category = support.category;
+        dst.support_id = supportId;
+        dst.preset_id  = supportId;   // miroir rétro-compat
+        dst.vendor_id  = vendorId;
+        dst.standard = b.standard_snapshot
+          ? { ...specToStandard(spec, vendor, support, defaults), ...b.standard_snapshot }
+          : specToStandard(spec, vendor, support, defaults);
       }
     } else if (b.standard_snapshot) {
-      _state.destination.category  = b.category || null;
-      _state.destination.preset_id = null;
-      _state.destination.standard  = b.standard_snapshot;
+      dst.category   = b.category || null;
+      dst.support_id = null;
+      dst.preset_id  = null;
+      dst.vendor_id  = b.standard_snapshot.vendor_id || null;
+      dst.standard   = b.standard_snapshot;
     } else if (b.standard_id) {
-      // Ancien format : on tente seulement d'afficher les noms (vendor /
-      // product) sans pouvoir hydrater le standard complet.
-      _state.destination.category  = null;
-      _state.destination.preset_id = null;
-      _state.destination.standard  = {
+      // v1 legacy : on affiche juste les noms, pas de re-hydratation possible
+      dst.category   = null;
+      dst.support_id = null;
+      dst.preset_id  = null;
+      dst.vendor_id  = null;
+      dst.standard   = {
         id: b.standard_id,
         type_support: b.product_name || '',
         product_name: b.product_name || '',
@@ -558,7 +598,7 @@ async function _deleteBriefFromLibrary(id) {
 async function _downloadBriefPdf() {
   try {
     const sector = await getSector(_state.content.sector);
-    exportBriefAsPDF(_state, sector);
+    await exportBriefAsPDF(_state, sector);
     _toastOk('Boîte d\'impression ouverte');
   } catch (e) {
     console.error('[Kodex] PDF export failed:', e);
@@ -587,56 +627,88 @@ function _pickSector(sectorId) {
 // ═══════════════════════════════════════════════════════════════
 
 // ── Changement de catégorie (tab) ─────────────────────────────
-// Préserve les saisies si possible : on ne reset le standard que
-// si l'utilisateur n'avait pas encore choisi de format.
+// Reset support + vendor + standard car les contraintes changent
+// totalement entre catégories.
 function _pickCategory(cat) {
   const d = _state.destination;
   d.category = cat;
-  d.preset_id = null;
-  d.standard = null;     // chaque catégorie a ses propres defaults
+  d.support_id = null;
+  d.vendor_id = null;
+  d.standard = null;
+  d._form_open = false;
   _saveDraft();
   _renderMain();
 }
 
-// ── Clic sur un preset → seed du standard ─────────────────────
-async function _pickPreset(presetId) {
-  const preset = await getPreset(presetId);
-  if (!preset) return;
-  const catDefaults = await getCategoryDefaults(preset.category);
-  _state.destination.category = preset.category;
-  _state.destination.preset_id = presetId;
-  _state.destination.standard = presetToStandard(preset, catDefaults);
+// ── Clic sur un SUPPORT → pré-sélection vendor "Je ne sais pas"
+// et seed du standard avec les defaults catégorie.
+async function _pickSupport(supportId) {
+  const support = await getSupport(supportId);
+  if (!support) return;
+  const catDefaults = await getCategoryDefaults(support.category);
+  const d = _state.destination;
+  d.category = support.category;
+  d.support_id = supportId;
+  // preset_id miroir pour rétro-compat briefs D1
+  d.preset_id = supportId;
+  // Si pas de vendor encore choisi, on pré-sélectionne "other" (le pill
+  // "Je ne sais pas encore"). L'utilisateur peut switcher après.
+  if (!d.vendor_id) d.vendor_id = 'other';
+  const vendor = await getVendor(d.vendor_id);
+  const spec = await getSpec(d.vendor_id, supportId);
+  d.standard = specToStandard(spec, vendor, support, catDefaults);
   _saveDraft();
   _renderMain();
-  // Scroll vers le formulaire universel pour montrer le pré-remplissage
-  setTimeout(() => {
-    const form = _root?.querySelector('[data-slot="dest-form"]');
-    if (form) {
-      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Focus sur largeur si Sur-mesure (dimensions vides) ou is_dim_free
-      if (preset.is_custom || preset.is_dim_free) {
-        form.querySelector('input[name="width"]')?.focus();
-      }
-    }
-  }, 60);
+}
+
+// ── Clic sur un VENDOR → re-seed du standard ──────────────────
+async function _pickVendor(vendorId) {
+  const d = _state.destination;
+  const support = d.support_id ? await getSupport(d.support_id) : null;
+  if (!support) {
+    // Sélection vendor avant support : on stocke juste l'id, le standard
+    // sera seedé au prochain pick support.
+    d.vendor_id = vendorId;
+    _saveDraft();
+    _renderMain();
+    return;
+  }
+  const catDefaults = await getCategoryDefaults(support.category);
+  const vendor = await getVendor(vendorId);
+  const spec = await getSpec(vendorId, support.id);
+  d.vendor_id = vendorId;
+  d.standard = specToStandard(spec, vendor, support, catDefaults);
+  // Reset des champs "Autre imprimeur" si on passe sur un vendor connu
+  if (vendorId !== 'other') {
+    d.vendor_url = '';
+    d.specs_pdf = null;
+  }
+  _saveDraft();
+  _renderMain();
+  // Toast info — feedback immédiat sur le changement de specs
+  if (spec) {
+    _toastOk(`Adapté à ${vendor.label} · fond perdu ${spec.bleed_mm} mm`);
+  } else if (vendorId === 'other') {
+    _toastOk('Standards génériques appliqués');
+  }
 }
 
 // ── Réinitialise complètement la sélection Destination ────────
 function _destReset() {
   _state.destination = {
-    category: null, preset_id: null, standard: null,
-    vendor_url: '', specs_pdf: null, _hint_shown: true,
+    category: null, support_id: null, vendor_id: null, standard: null,
+    vendor_url: '', specs_pdf: null, _form_open: false,
   };
   _saveDraft();
   _renderMain();
   _toastOk('Sélection annulée');
 }
 
-// ── Toggle zone 3 « Prestataire » (dépliable manuelle) ────────
-function _toggleVendorZone() {
-  const zone = _root?.querySelector('[data-slot="dest-vendor-zone"]');
-  if (!zone) return;
-  zone.classList.toggle('is-open');
+// ── Toggle du form détaillé replié par défaut ─────────────────
+function _toggleDestForm() {
+  _state.destination._form_open = !_state.destination._form_open;
+  _saveDraft();
+  _renderMain();
 }
 
 // ── Suppression du PDF de specs ───────────────────────────────
@@ -742,41 +814,48 @@ function _renderMain() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue 1 — DESTINATION (refonte universelle mai 2026)
+// Vue 1 — DESTINATION (refonte vendor-aware mai 2026 v3)
 // ─────────────────────────────────────────────────────────────
-// Layout en 4 zones empilées dans une seule vue :
-//   Zone 1 : tabs catégories + grid presets
-//   Zone 2 : formulaire universel (toujours visible)
-//   Zone 3 : zone prestataire repliable (animation didactique 1×)
-//   Zone 4 : calculateur d'échelle (apparaît dès dimensions saisies)
+// Layout fluide, simple, ludique :
+//   1. Tabs catégories
+//   2. Grid SUPPORTS (clic = sélection)
+//   3. Pills VENDORS (apparaît dès qu'un support est choisi)
+//   4. Card RECAP visuel (apparaît quand support + vendor sont choisis,
+//      avec icônes et données prêtes en lecture seule)
+//   5. Form détaillé (replié par défaut, dépliable via bouton discret)
+//   6. Zone "Autre imprimeur" (visible si vendor_id === 'other')
+//   7. Calculateur d'échelle (si grandes dimensions)
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
   const shell = `
     <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
     <h1 class="ws-h1">Quel format pour votre création&nbsp;?</h1>
     <p class="ws-lead">
-      Choisissez un preset ou décrivez précisément votre support&nbsp;:
-      Kodex calcule automatiquement les contraintes techniques, peu importe
-      l'imprimeur final.
+      Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
+      Kodex adaptera fond perdu, marges et préparation aux exigences exactes
+      de votre imprimeur.
     </p>
 
-    <div data-slot="dest-tabs"      style="margin-bottom:14px;"></div>
-    <div data-slot="dest-presets"   style="margin-bottom:28px;"></div>
-    <div data-slot="dest-form"      style="margin-bottom:14px;"></div>
-    <div data-slot="dest-vendor-zone" class="kodex-vendor-zone" style="margin-bottom:14px;"></div>
+    <div data-slot="dest-tabs"     style="margin-bottom:14px;"></div>
+    <div data-slot="dest-supports" style="margin-bottom:28px;"></div>
+    <div data-slot="dest-vendors"  style="margin-bottom:20px;"></div>
+    <div data-slot="dest-recap"    style="margin-bottom:14px;"></div>
+    <div data-slot="dest-form"     style="margin-bottom:14px;"></div>
+    <div data-slot="dest-other"    style="margin-bottom:14px;"></div>
     <div data-slot="dest-scale"></div>
   `;
 
-  // Hydratation asynchrone (catégories + presets + formulaire)
+  // Hydratation asynchrone — toutes les sous-vues
   (async () => {
     if (!_root) return;
     const categories = await loadCategories();
     _renderDestTabs(categories);
-    await _renderDestPresets();
+    await _renderDestSupports();
+    await _renderDestVendors();
+    await _renderDestRecap();
     await _renderDestForm();
-    _renderDestVendorZone();
+    _renderDestOther();
     _renderDestScale();
-    _maybePlayVendorHint();
   })();
 
   return shell;
@@ -799,7 +878,7 @@ function _renderDestTabs(categories) {
           ${icon(c.icon, 14)} ${_esc(c.label)}
         </button>
       `).join('')}
-      ${(_state.destination.standard || _state.destination.preset_id) ? `
+      ${(_state.destination.standard || _state.destination.support_id) ? `
         <button class="ws-btn ws-btn--ghost" data-act="dest-reset"
                 style="padding:6px 10px;font-size:12px;color:var(--danger);margin-left:auto;">
           ${icon('x', 12)} Tout annuler
@@ -809,54 +888,53 @@ function _renderDestTabs(categories) {
   `;
 }
 
-// ── Zone 1b : grid presets de la catégorie active ─────────────
-async function _renderDestPresets() {
-  const slot = _root?.querySelector('[data-slot="dest-presets"]');
+// ── Zone 1b : grid SUPPORTS de la catégorie active ────────────
+async function _renderDestSupports() {
+  const slot = _root?.querySelector('[data-slot="dest-supports"]');
   if (!slot) return;
   const cat = _state.destination.category;
   if (!cat) {
     slot.innerHTML = `
       <div class="ws-empty" style="margin-top:8px;">
         <div class="ws-empty-icon">${icon('target', 24)}</div>
-        <p class="ws-empty-desc">Choisissez une catégorie ci-dessus pour voir les presets associés.</p>
+        <p class="ws-empty-desc">Choisissez une catégorie ci-dessus pour voir les formats associés.</p>
       </div>
     `;
     return;
   }
-  const presets = await getPresetsByCategory(cat);
-  const currentId = _state.destination.preset_id;
+  const supports = await getSupportsByCategory(cat);
+  const currentId = _state.destination.support_id;
 
   slot.innerHTML = `
     <div class="ws-card-grid">
-      ${presets.map(p => _renderPresetCard(p, currentId === p.id)).join('')}
+      ${supports.map(s => _renderSupportCard(s, currentId === s.id)).join('')}
     </div>
   `;
 }
 
-function _renderPresetCard(p, isActive) {
-  // Description : dimensions si présentes, sinon libellé d'intention
-  // (libres / à saisir / sur-mesure).
+function _renderSupportCard(s, isActive) {
+  // Description courte : dimensions si connues, sinon intention.
   let desc;
-  if (p.format_fini) {
-    desc = formatDimensions(p);
-    if (p.type_support) desc += ` · ${p.type_support}`;
-  } else if (p.is_press_intro) {
-    desc = 'Toutes dimensions — à fournir par la régie';
-  } else if (p.is_custom) {
-    desc = p.type_support || 'Dimensions à saisir librement';
-  } else if (p.is_dim_free) {
-    desc = `Dimensions libres${p.type_support ? ` · ${p.type_support}` : ''}`;
+  if (s.default_format) {
+    desc = formatDimensions({ format_fini: s.default_format });
+    if (s.type_support) desc += ` · ${s.type_support}`;
+  } else if (s.is_press_intro) {
+    desc = 'Dimensions fournies par la régie';
+  } else if (s.is_custom) {
+    desc = s.type_support || 'Dimensions au choix';
+  } else if (s.is_dim_free) {
+    desc = `Dimensions au choix${s.type_support ? ` · ${s.type_support}` : ''}`;
   } else {
-    desc = p.type_support || '—';
+    desc = s.type_support || '—';
   }
   return `
     <div class="ws-card is-clickable ${isActive ? 'is-selected' : ''}"
-         data-act="dest-preset" data-id="${_esc(p.id)}"
-         ${p.is_custom ? 'style="border-style:dashed;"' : ''}>
+         data-act="dest-support" data-id="${_esc(s.id)}"
+         ${s.is_custom ? 'style="border-style:dashed;"' : ''}>
       <div class="ws-card-row">
-        <div class="ws-card-icon">${icon(p.icon || 'printer', 22)}</div>
+        <div class="ws-card-icon">${icon(s.icon || 'printer', 22)}</div>
         <div class="ws-card-body">
-          <h3 class="ws-card-title">${_esc(p.label)}</h3>
+          <h3 class="ws-card-title">${_esc(s.label)}</h3>
           <p class="ws-card-desc">${_esc(desc)}</p>
         </div>
       </div>
@@ -864,41 +942,283 @@ function _renderPresetCard(p, isActive) {
   `;
 }
 
-// ── Zone 2 : formulaire universel (toujours visible) ──────────
+// ── Zone 2 : pills VENDORS (apparaît dès qu'un support est choisi) ─
+// Header explicatif court, pills horizontales colorées par niveau de
+// précision. Le pill "Je ne sais pas" est toujours en dernier et reste
+// sélectionnable même si l'utilisateur n'a pas d'imprimeur en tête.
+async function _renderDestVendors() {
+  const slot = _root?.querySelector('[data-slot="dest-vendors"]');
+  if (!slot) return;
+  const supportId = _state.destination.support_id;
+  if (!supportId) { slot.innerHTML = ''; return; }
+
+  const vendors = await getVendorsForSupport(supportId);
+  const currentId = _state.destination.vendor_id;
+
+  slot.innerHTML = `
+    <div class="ws-card" style="padding:18px 20px;background:var(--ws-surface);border-color:var(--ws-border);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        ${icon('printer', 16)}
+        <strong style="font-size:13.5px;letter-spacing:-.012em;color:var(--ws-text);">
+          Vous avez un imprimeur en tête&nbsp;?
+        </strong>
+        <span style="font-size:11.5px;color:var(--ws-text-muted);">
+          (optionnel — adapte les contraintes techniques)
+        </span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${vendors.map(v => _renderVendorPill(v, currentId === v.id)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function _renderVendorPill(v, isActive) {
+  const isOther = v.id === 'other';
+  const badgeText = isOther ? 'Saisie libre' : 'Specs précises';
+  const badgeBg   = isOther ? 'transparent' : 'var(--ws-accent-soft)';
+  const badgeFg   = isOther ? 'var(--ws-text-muted)' : 'var(--ws-accent)';
+  return `
+    <button class="ws-btn ${isActive ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+            data-act="dest-vendor" data-id="${_esc(v.id)}"
+            style="padding:10px 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:10px;
+                   ${isOther && !isActive ? 'border-style:dashed;' : ''}">
+      <span style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.2;">
+        <span style="font-weight:700;letter-spacing:-.008em;">${_esc(v.label)}</span>
+        <span style="font-size:10px;font-weight:500;letter-spacing:.02em;padding:1px 6px;border-radius:999px;background:${badgeBg};color:${badgeFg};">
+          ${badgeText}
+        </span>
+      </span>
+    </button>
+  `;
+}
+
+// ── Zone 3 : CARD RECAP visuel (lecture seule, ludique) ───────
+// Apparaît une fois support + vendor sélectionnés. C'est la pièce
+// maîtresse de la nouvelle ergonomie : l'utilisateur voit tout ce qu'il
+// faut savoir en un clin d'œil, sans formulaire en face. Le form
+// détaillé est masqué dans un <details> dépliable en bas.
+async function _renderDestRecap() {
+  const slot = _root?.querySelector('[data-slot="dest-recap"]');
+  if (!slot) return;
+  const d = _state.destination;
+  const std = d.standard;
+  if (!std || !d.support_id) { slot.innerHTML = ''; return; }
+
+  const vendor = d.vendor_id ? await getVendor(d.vendor_id) : null;
+  const support = await getSupport(d.support_id);
+  const dims = formatDimensions(std);
+  const hasDims = dims && dims !== '—';
+
+  // Rendu en lignes "label → valeur" avec icônes parlantes
+  const rows = [
+    { ic: 'ruler',  label: 'Format',          val: hasDims ? dims : 'À saisir ci-dessous' },
+    std.bleed_mm != null ? { ic: 'square',    label: 'Fond perdu',
+        val: std.bleed_mm === 0 ? 'Aucun (format fini = fichier)' : `${std.bleed_mm} mm sur chaque bord` } : null,
+    std.safe_margin_mm   ? { ic: 'shield',    label: 'Zone de sécurité',
+        val: `${std.safe_margin_mm} mm autour du visuel` } : null,
+    std.color_profile    ? { ic: 'palette',   label: 'Couleurs', val: std.color_profile } : null,
+    std.export_format    ? { ic: 'file-text', label: 'Fichier final', val: std.export_format } : null,
+    std.dpi              ? { ic: 'image',     label: 'Résolution', val: `${std.dpi} DPI` } : null,
+  ].filter(Boolean);
+
+  // Préparation spécifique vendor (si niveau 1-2)
+  const prepHTML = (vendor && vendor.level !== 3 && vendor.preparation_steps?.length) ? `
+    <div style="margin-top:14px;padding:12px 14px;background:var(--ws-accent-soft);border-radius:var(--ws-radius-sm);border-left:3px solid var(--ws-accent);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:-.008em;color:var(--ws-text);">
+        ${icon('check', 14)} À préparer chez ${_esc(vendor.label)}
+      </div>
+      <ul style="margin:0;padding-left:20px;font-size:12px;color:var(--ws-text-soft);line-height:1.6;">
+        ${vendor.preparation_steps.map(p => `<li style="margin:3px 0;">${_esc(p)}</li>`).join('')}
+      </ul>
+    </div>
+  ` : '';
+
+  const tagline = vendor?.tagline
+    ? `<div style="font-size:11.5px;color:var(--ws-text-muted);margin-top:2px;font-weight:500;">${_esc(vendor.tagline)}</div>`
+    : '';
+
+  const formOpen = d._form_open;
+
+  slot.innerHTML = `
+    <div class="ws-card" style="padding:22px 24px;border-color:var(--ws-accent);background:linear-gradient(180deg, var(--ws-surface) 0%, var(--ws-bg) 100%);">
+      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
+        <div style="width:48px;height:48px;border-radius:var(--ws-radius);background:var(--ws-accent-soft);display:inline-flex;align-items:center;justify-content:center;color:var(--ws-accent);flex-shrink:0;">
+          ${icon(support?.icon || 'printer', 26)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.014em;color:var(--ws-text);">
+            ${_esc(support?.label || '')}
+            ${vendor ? `<span style="font-weight:500;color:var(--ws-text-muted);"> · ${_esc(vendor.label)}</span>` : ''}
+          </h3>
+          ${tagline}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px 24px;">
+        ${rows.map(r => `
+          <div style="display:flex;align-items:flex-start;gap:10px;">
+            <span style="display:inline-flex;width:24px;height:24px;border-radius:6px;background:var(--ws-surface);color:var(--ws-text-muted);align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--ws-border);">
+              ${icon(r.ic, 13)}
+            </span>
+            <div style="min-width:0;line-height:1.4;">
+              <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--ws-text-muted);">${_esc(r.label)}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--ws-text);">${_esc(r.val)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      ${prepHTML}
+
+      <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+        <button class="ws-btn ws-btn--ghost" data-act="dest-form-toggle"
+                style="padding:6px 12px;font-size:12px;color:var(--ws-text-muted);">
+          ${icon(formOpen ? 'chevron-up' : 'sliders', 13)}
+          ${formOpen ? 'Masquer les détails' : 'Ajuster les paramètres techniques'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ── Zone "Autre imprimeur" : nom + URL + PDF specs joignable ───
+// Visible UNIQUEMENT si vendor_id === 'other'. C'est le mode "saisie libre"
+// où l'utilisateur peut renseigner son imprimeur perso et joindre les
+// specs reçues. Si vendor_id pointe sur un vendor connu (level 1-2),
+// la zone disparaît (les specs sont déjà précises).
+function _renderDestOther() {
+  const slot = _root?.querySelector('[data-slot="dest-other"]');
+  if (!slot) return;
+  const d = _state.destination;
+  if (d.vendor_id !== 'other') { slot.innerHTML = ''; return; }
+  if (!d.support_id) { slot.innerHTML = ''; return; }
+
+  const specsPdf = d.specs_pdf;
+  slot.innerHTML = `
+    <div class="ws-card" style="padding:16px 18px;background:var(--ws-surface);border-style:dashed;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        ${icon('printer', 14)}
+        <strong style="font-size:13px;letter-spacing:-.008em;color:var(--ws-text);">Votre imprimeur — optionnel</strong>
+        <span style="font-size:11px;color:var(--ws-text-muted);">enrichira le brief avec ses contraintes propres</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;">
+        <div class="ws-field">
+          <label class="ws-label" for="kd-vendor-name">Nom de votre imprimeur</label>
+          <input class="ws-input" id="kd-vendor-name" name="vendor" type="text"
+                 value="${_esc(d.standard?.vendor || '')}"
+                 placeholder="ex : imprimeur local, ville…">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-vendor-url">Lien fiche technique (si reçue)</label>
+          <input class="ws-input" id="kd-vendor-url" name="vendor_url" type="url"
+                 value="${_esc(d.vendor_url || '')}"
+                 placeholder="https://…">
+        </div>
+        <div class="ws-field" style="grid-column:1 / -1;">
+          <label class="ws-label">PDF de spécifications (optionnel)</label>
+          ${specsPdf ? `
+            <div class="ws-card" style="padding:10px 12px;display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:var(--ws-radius-sm);background:var(--ws-accent-soft);display:flex;align-items:center;justify-content:center;color:var(--ws-accent);">
+                ${icon('file-text', 18)}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:var(--ws-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(specsPdf.filename)}</div>
+                <a href="${_esc(specsPdf.url)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ws-accent);text-decoration:none;">Ouvrir le PDF</a>
+              </div>
+              <button class="ws-iconbtn" data-act="dest-specs-delete" title="Retirer" style="color:var(--danger);">
+                ${icon('x', 14)}
+              </button>
+            </div>
+          ` : `
+            <button class="ws-btn ws-btn--secondary" type="button" data-slot="dest-specs-pick"
+                    style="padding:8px 14px;font-size:12.5px;width:100%;">
+              ${icon('upload-cloud', 14)} Joindre le PDF de specs reçu (max 2 Mo)
+            </button>
+            <input type="file" data-slot="dest-specs-input" hidden accept="application/pdf">
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Wiring inputs vendor (texte libre dans le standard)
+  slot.querySelector('#kd-vendor-name')?.addEventListener('input', e => {
+    if (_state.destination.standard) {
+      _state.destination.standard.vendor = e.target.value;
+    }
+    _scheduleSave();
+  });
+  slot.querySelector('#kd-vendor-url')?.addEventListener('input', e => {
+    _state.destination.vendor_url = e.target.value;
+    _scheduleSave();
+  });
+  // Upload PDF specs
+  const pick = slot.querySelector('[data-slot="dest-specs-pick"]');
+  const inp  = slot.querySelector('[data-slot="dest-specs-input"]');
+  if (pick && inp) {
+    pick.addEventListener('click', () => inp.click());
+    inp.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const asset = await uploadFile(file, 'specs');
+        _state.destination.specs_pdf = {
+          id: asset.id, filename: asset.filename, mime: asset.mime,
+          size_bytes: asset.size_bytes, url: asset.url,
+        };
+        _saveDraft();
+        _renderDestOther();
+        _toastOk('PDF joint');
+      } catch (err) {
+        _toastSoon('Upload échoué : ' + err.message);
+      }
+    });
+  }
+}
+
+// ── Zone form universel : replié par défaut ───────────────────
+// Caché tant que support pas choisi. Une fois support sélectionné, le
+// récap visuel suffit pour 95% des cas. Le form n'apparaît que si
+// l'utilisateur clique "Ajuster les paramètres techniques" (state
+// _form_open = true) OU s'il a besoin de saisir les dimensions
+// (support sans default_format : bâche, sticker custom, presse…).
 async function _renderDestForm() {
   const slot = _root?.querySelector('[data-slot="dest-form"]');
   if (!slot) return;
-  const std = _state.destination.standard;
-  const cat = _state.destination.category;
+  const d = _state.destination;
+  const std = d.standard;
+  const cat = d.category;
   const catObj = cat ? await getCategory(cat) : null;
   const isDigital = catObj?.defaults?.unit === 'px';
 
-  // État vide : pas encore de standard → invitation à choisir un preset
-  if (!std) {
-    slot.innerHTML = `
-      <div class="ws-card" style="background:var(--ws-surface);border-style:dashed;text-align:center;padding:28px 20px;">
-        <div style="display:inline-flex;width:44px;height:44px;border-radius:50%;background:var(--ws-accent-soft);align-items:center;justify-content:center;color:var(--ws-accent);margin-bottom:10px;">
-          ${icon('sliders', 22)}
-        </div>
-        <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">Formulaire universel</h3>
-        <p style="margin:0;font-size:12.5px;color:var(--ws-text-muted);line-height:1.55;max-width:380px;margin-inline:auto;">
-          Choisissez un preset ci-dessus pour le pré-remplir, ou une catégorie pour démarrer en Sur-mesure.
-        </p>
-      </div>
-    `;
-    return;
-  }
+  // Pas encore de support : on n'affiche rien (la grid supports parle d'elle-même)
+  if (!std || !d.support_id) { slot.innerHTML = ''; return; }
+
+  // Détection : faut-il dérouler automatiquement le form ?
+  // → oui si le support n'a pas de dimensions par défaut (custom/dim_free/press_intro)
+  const support = await getSupport(d.support_id);
+  const needsDims = support && (support.is_custom || support.is_dim_free || support.is_press_intro);
+  const isOpen = d._form_open || needsDims;
+
+  if (!isOpen) { slot.innerHTML = ''; return; }
 
   const f = std.format_fini || {};
   const width  = isDigital ? (f.width_px  ?? '') : (f.width_mm  ?? '');
   const height = isDigital ? (f.height_px ?? '') : (f.height_mm ?? '');
   const unitLabel = isDigital ? 'px' : 'mm';
 
+  const headerHint = needsDims
+    ? `<p style="font-size:12.5px;color:var(--ws-text-muted);margin:0 0 14px 0;">
+         Ce format nécessite que vous saisissiez les dimensions. Tout le reste est déjà préparé selon votre choix d'imprimeur.
+       </p>`
+    : `<p style="font-size:12.5px;color:var(--ws-text-muted);margin:0 0 14px 0;">
+         Tout est modifiable. Le brief final reprendra exactement ces valeurs.
+       </p>`;
+
   slot.innerHTML = `
-    <h2 class="ws-h2" style="margin-bottom:6px;">Spécifications techniques</h2>
-    <p style="font-size:12.5px;color:var(--ws-text-muted);margin:0 0 14px 0;">
-      Modifiables à tout moment. Le brief final reprendra exactement ces valeurs.
-    </p>
+    <h2 class="ws-h2" style="margin-bottom:6px;">${needsDims ? 'Saisissez vos dimensions' : 'Ajustez les détails'}</h2>
+    ${headerHint}
     <form data-slot="dest-form-inner" id="kodex-dest-form" autocomplete="off">
       <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
         <div class="ws-field" style="grid-column:1 / -1;">
@@ -969,111 +1289,7 @@ async function _renderDestForm() {
   form.addEventListener('change', _onDestFormChange);
 }
 
-// ── Zone 3 : prestataire (repliable, animation didactique) ────
-function _renderDestVendorZone() {
-  const slot = _root?.querySelector('[data-slot="dest-vendor-zone"]');
-  if (!slot) return;
-  const d = _state.destination;
-  const specsPdf = d.specs_pdf;
-  slot.innerHTML = `
-    <button class="kodex-vendor-header" data-act="dest-vendor-toggle"
-            style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;
-                   padding:14px 16px;background:var(--ws-surface);border:1.5px dashed var(--ws-border-strong);
-                   border-radius:var(--ws-radius);cursor:pointer;color:var(--ws-text);
-                   font-family:inherit;transition:border-color 180ms ease;">
-      <span class="kodex-vendor-chev" style="display:inline-flex;transition:transform 220ms ease;">
-        ${icon('chevron-right', 16)}
-      </span>
-      <span style="flex:1;font-size:13.5px;font-weight:600;letter-spacing:-.008em;">
-        Vous savez où ça va être imprimé&nbsp;? (optionnel)
-      </span>
-      <span style="font-size:11.5px;color:var(--ws-text-muted);font-weight:500;">
-        Cliquez pour ajouter le prestataire
-      </span>
-    </button>
-    <div class="kodex-vendor-body">
-      <div style="padding:16px 4px 4px 4px;display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
-        <div class="ws-field">
-          <label class="ws-label" for="kd-vendor-name">Nom du prestataire</label>
-          <input class="ws-input" id="kd-vendor-name" name="vendor" type="text"
-                 value="${_esc(_state.destination.standard?.vendor || '')}"
-                 placeholder="ex : Exaprint, Vistaprint, imprimeur local…">
-        </div>
-        <div class="ws-field">
-          <label class="ws-label" for="kd-vendor-url">Lien fiche technique officielle</label>
-          <input class="ws-input" id="kd-vendor-url" name="vendor_url" type="url"
-                 value="${_esc(d.vendor_url || '')}"
-                 placeholder="https://…">
-        </div>
-        <div class="ws-field" style="grid-column:1 / -1;">
-          <label class="ws-label">PDF de spécifications (optionnel)</label>
-          ${specsPdf ? `
-            <div class="ws-card" style="padding:10px 12px;display:flex;align-items:center;gap:10px;">
-              <div style="width:32px;height:32px;border-radius:var(--ws-radius-sm);background:var(--ws-accent-soft);display:flex;align-items:center;justify-content:center;color:var(--ws-accent);">
-                ${icon('file-text', 18)}
-              </div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;color:var(--ws-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(specsPdf.filename)}</div>
-                <a href="${_esc(specsPdf.url)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ws-accent);text-decoration:none;">Ouvrir le PDF</a>
-              </div>
-              <button class="ws-iconbtn" data-act="dest-specs-delete" title="Retirer" style="color:var(--danger);">
-                ${icon('x', 14)}
-              </button>
-            </div>
-          ` : `
-            <button class="ws-btn ws-btn--secondary" type="button" data-slot="dest-specs-pick"
-                    style="padding:8px 14px;font-size:12.5px;width:100%;">
-              ${icon('upload-cloud', 14)} Joindre le PDF de specs du prestataire (max 2 Mo)
-            </button>
-            <input type="file" data-slot="dest-specs-input" hidden accept="application/pdf">
-          `}
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Wiring inputs vendor
-  slot.querySelector('#kd-vendor-name')?.addEventListener('input', e => {
-    if (!_state.destination.standard) {
-      // Pas encore de standard : on stocke à part pour ne pas perdre la saisie
-      _state.destination._pending_vendor = e.target.value;
-    } else {
-      _state.destination.standard.vendor = e.target.value;
-    }
-    _scheduleSave();
-  });
-  slot.querySelector('#kd-vendor-url')?.addEventListener('input', e => {
-    _state.destination.vendor_url = e.target.value;
-    _scheduleSave();
-  });
-  // Upload PDF specs
-  const pick = slot.querySelector('[data-slot="dest-specs-pick"]');
-  const inp  = slot.querySelector('[data-slot="dest-specs-input"]');
-  if (pick && inp) {
-    pick.addEventListener('click', () => inp.click());
-    inp.addEventListener('change', async e => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const asset = await uploadFile(file, 'specs');
-        _state.destination.specs_pdf = {
-          id: asset.id, filename: asset.filename, mime: asset.mime,
-          size_bytes: asset.size_bytes, url: asset.url,
-        };
-        _saveDraft();
-        _renderDestVendorZone();
-        // Reouvre la zone (sinon elle se referme après re-render)
-        const z = _root?.querySelector('[data-slot="dest-vendor-zone"]');
-        z?.classList.add('is-open');
-        _toastOk('PDF joint');
-      } catch (err) {
-        _toastSoon('Upload échoué : ' + err.message);
-      }
-    });
-  }
-}
-
-// ── Zone 4 : calculateur d'échelle (si standard saisi) ────────
+// ── Zone calculateur d'échelle (si standard saisi) ────────────
 function _renderDestScale() {
   const slot = _root?.querySelector('[data-slot="dest-scale"]');
   if (!slot) return;
@@ -1085,24 +1301,6 @@ function _renderDestScale() {
   const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
   if (!hasDims) { slot.innerHTML = ''; return; }
   slot.innerHTML = _renderScaleCalculator(std);
-}
-
-// ── Animation didactique one-shot zone 3 ──────────────────────
-function _maybePlayVendorHint() {
-  if (_state.destination._hint_shown) return;
-  const zone = _root?.querySelector('[data-slot="dest-vendor-zone"]');
-  if (!zone) return;
-  // Ouvre 600 ms après le mount, ferme après 1 s d'exposition
-  setTimeout(() => {
-    if (!_root || !_root.contains(zone)) return;
-    zone.classList.add('is-open');
-    setTimeout(() => {
-      if (!_root || !_root.contains(zone)) return;
-      zone.classList.remove('is-open');
-      _state.destination._hint_shown = true;
-      _saveDraft();
-    }, 1000);
-  }, 600);
 }
 
 // ── Form universel : update _state.destination.standard ──────
@@ -1895,7 +2093,7 @@ async function _generateBrief() {
   let prompt;
   try {
     const sector = await getSector(_state.content.sector);
-    prompt = buildCodeMaitre(_state, sector);
+    prompt = await buildCodeMaitre(_state, sector);
     _state.output.codeMaitre = prompt;
   } catch (e) {
     _state.output.status = 'error';
@@ -1933,6 +2131,16 @@ async function _generateBrief() {
   }
 }
 
+// ── Devine un vendor_id à partir du label texte (fallback briefs legacy)
+function _guessVendorIdFromLabel(label) {
+  if (!label) return null;
+  const v = String(label).toLowerCase();
+  if (v.includes('exa'))    return 'exaprint';
+  if (v.includes('vista'))  return 'vistaprint';
+  if (v.includes('pixart')) return 'pixartprinting';
+  return 'other';
+}
+
 // ── Trouve la clé API du vault correspondant au moteur ────────
 function _findApiKeyForEngine(label) {
   const map = {
@@ -1957,7 +2165,11 @@ async function _saveBriefInLibrary() {
   const payload = {
     title: _briefTitle(),
     category: _state.destination.category,
-    preset_id: _state.destination.preset_id,
+    // v3 vendor-aware (nouveaux champs)
+    support_id: _state.destination.support_id,
+    vendor_id:  _state.destination.vendor_id,
+    // miroir rétro-compat avec les briefs créés en v2
+    preset_id: _state.destination.support_id,
     standard_snapshot: _state.destination.standard,
     vendor: _state.destination.standard?.vendor || '',
     product_name: _state.destination.standard?.product_name || '',

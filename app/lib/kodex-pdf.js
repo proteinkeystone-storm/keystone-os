@@ -9,7 +9,7 @@
    un PDF généré côté serveur + téléchargement direct.
    ═══════════════════════════════════════════════════════════════ */
 
-import { formatDimensions, formatBleed, computeLegalMentions } from './kodex-catalog.js';
+import { formatDimensions, formatBleed, computeLegalMentions, getVendor } from './kodex-catalog.js';
 import { computeScale } from './kodex-scale.js';
 
 function _esc(s) {
@@ -77,6 +77,42 @@ function _renderSpecsTable(std, destState) {
       </tbody>
     </table>
     ${std.notes ? `<div class="note"><strong>Note du prestataire :</strong> ${_esc(std.notes)}</div>` : ''}
+  `;
+}
+
+// Préparation spécifique chez vendor (niveau 1-2)
+function _renderVendorPrep(vendor) {
+  if (!vendor || vendor.level === 3) return '';
+  const blocks = [];
+  if (Array.isArray(vendor.system_layers) && vendor.system_layers.length) {
+    blocks.push(`
+      <h3 style="margin:14pt 0 6pt 0;">Calques système attendus</h3>
+      <ul>${vendor.system_layers.map(l => `<li>${_esc(l)}</li>`).join('')}</ul>
+    `);
+  }
+  if (vendor.rich_black || vendor.max_file_size_mb) {
+    const rows = [
+      vendor.rich_black ? `<tr><td class="cat">Noir riche recommandé</td><td>${_esc(vendor.rich_black)}</td></tr>` : '',
+      vendor.max_file_size_mb ? `<tr><td class="cat">Taille fichier max</td><td>< ${vendor.max_file_size_mb} Mo</td></tr>` : '',
+      vendor.color_profile ? `<tr><td class="cat">Profil colorimétrique</td><td>${_esc(vendor.color_profile)}</td></tr>` : '',
+      vendor.export_format ? `<tr><td class="cat">Préset PDF requis</td><td>${_esc(vendor.export_format)}</td></tr>` : '',
+      vendor.url ? `<tr><td class="cat">Fiche officielle</td><td><a href="${_esc(vendor.url)}">${_esc(vendor.url)}</a></td></tr>` : '',
+    ].filter(Boolean).join('');
+    blocks.push(`<table class="specs"><tbody>${rows}</tbody></table>`);
+  }
+  if (Array.isArray(vendor.preparation_steps) && vendor.preparation_steps.length) {
+    blocks.push(`
+      <h3 style="margin:14pt 0 6pt 0;">Étapes de préparation obligatoires</h3>
+      <ul>${vendor.preparation_steps.map(p => `<li>${_esc(p)}</li>`).join('')}</ul>
+    `);
+  }
+  if (!blocks.length) return '';
+  return `
+    <h2 class="section">Préparation chez ${_esc(vendor.label)}</h2>
+    <p style="font-size:10pt;color:#555;margin:0 0 8pt 0;">
+      Spécifications commerciales connues — à respecter scrupuleusement pour éviter tout refus du fichier.
+    </p>
+    ${blocks.join('\n')}
   `;
 }
 
@@ -157,12 +193,19 @@ function _renderProjectData(sector, fields) {
  * Ouvre une fenêtre print-ready avec le brief Kodex stylé.
  * L'utilisateur fait Cmd+P → "Enregistrer en PDF".
  */
-export function exportBriefAsPDF(state, sector) {
+export async function exportBriefAsPDF(state, sector) {
   const std    = state.destination?.standard;
   const brief  = state.output?.brief;
   if (!std || !brief) {
     alert('Génère d\'abord un brief avant d\'exporter.');
     return;
+  }
+
+  // Hydrate vendor object pour enrichir le PDF avec sa section dédiée
+  let vendor = null;
+  if (state.destination?.vendor_id) {
+    try { vendor = await getVendor(state.destination.vendor_id); }
+    catch (_) { vendor = null; }
   }
 
   const projectLabel = state.content.fields?.nom_programme
@@ -294,6 +337,8 @@ ${_renderProjectData(sector, state.content.fields)}
 ${_renderCharte(state.assets)}
 
 ${_renderUploads(state.assets)}
+
+${_renderVendorPrep(vendor)}
 
 ${_renderLegalList(sector, state.content.fields)}
 
