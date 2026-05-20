@@ -1185,7 +1185,19 @@ function _renderLibraryCard(form) {
         <span class="pulsa-lib-status ${isPublished ? 'is-published' : ''}">${status}</span>
       </header>
       <h3 class="pulsa-lib-card-title">${_escape(title)}</h3>
-      ${meta.slug ? `<p class="pulsa-lib-card-slug">keystone.app/f/${_escape(meta.slug)}</p>` : '<p class="pulsa-lib-card-slug pulsa-lib-card-slug-empty">URL non définie</p>'}
+      ${(() => {
+        // Pour les brouillons, on ne montre PAS le slug nu : le user serait
+        // tenté de le copier-coller dans son navigateur et tomberait sur une
+        // 404 (le formulaire n'existe pas encore côté Worker). On annonce
+        // explicitement que l'URL sera activée à la publication.
+        if (!meta.slug) {
+          return '<p class="pulsa-lib-card-slug pulsa-lib-card-slug-empty">URL non définie</p>';
+        }
+        if (!isPublished) {
+          return `<p class="pulsa-lib-card-slug pulsa-lib-card-slug-empty">URL active après publication · /f/${_escape(meta.slug)}</p>`;
+        }
+        return `<p class="pulsa-lib-card-slug">keystone.app/f/${_escape(meta.slug)}</p>`;
+      })()}
       <div class="pulsa-lib-card-meta">
         <span title="Sections">${icon('sliders', 12)} ${sections.length}</span>
         <span title="Champs">${icon('edit', 12)} ${fieldCount}</span>
@@ -1774,8 +1786,10 @@ function _renderPublish(main) {
           <span class="pulsa-recap-value">${_escape(f.meta.title) || '<em>non défini</em>'}</span>
         </div>
         <div class="pulsa-recap-cell">
-          <span class="pulsa-recap-label">URL publique</span>
-          <span class="pulsa-recap-value">${f.meta.slug ? `${location.host}/f/${_escape(f.meta.slug)}` : '<em>slug manquant</em>'}</span>
+          <span class="pulsa-recap-label">${f.output?.status === 'published' ? 'URL publique' : 'URL future'}</span>
+          <span class="pulsa-recap-value">${f.meta.slug
+            ? `${location.host}/f/${_escape(f.meta.slug)}${f.output?.status !== 'published' ? ' <em style="color:var(--pulsa-text-muted, #94a3b8);font-style:normal;font-size:11.5px;">(active après publication)</em>' : ''}`
+            : '<em>slug manquant</em>'}</span>
         </div>
         <div class="pulsa-recap-cell">
           <span class="pulsa-recap-label">Sections</span>
@@ -1816,7 +1830,7 @@ function _renderPublish(main) {
               ${ready ? '' : 'aria-disabled="true"'}>
         ${icon('sparkles', 16)}<span>Publier le formulaire</span>
       </button>
-      <p class="pulsa-publish-note">La publication réelle (route Worker + collecte D1 + mail Resend) sera activée en Phase 3.</p>
+      <p class="pulsa-publish-note">Tant que vous n'avez pas publié, l'URL retourne 404 — c'est normal. Cliquez sur « Publier le formulaire » pour activer la page partageable.</p>
     </div>
   `;
 }

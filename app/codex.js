@@ -3131,8 +3131,11 @@ function _shareCreatePulsa() {
 
     const stored = saveForm(form);
     setCurrentFormId(stored.id);
-    _toastOk('Brouillon Pulsa créé — ouverture du builder');
-    // Ferme Kodex puis ouvre Pulsa avec le draft chargé.
+    // Le user va aboutir sur le builder Pulsa étape Structure. Il doit
+    // ensuite passer aux étapes Apparence → Livraison → Publication pour
+    // activer l'URL — sinon le lien /f/SLUG retourne 404. Le toast pointe
+    // explicitement vers cette dernière étape pour éviter la confusion.
+    _toastOk('Brouillon Pulsa créé — n\'oubliez pas l\'étape Publication pour activer l\'URL');
     closeKodex();
     setTimeout(() => openPulsa(), 120);
   } catch (e) {
