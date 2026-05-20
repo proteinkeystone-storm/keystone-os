@@ -6225,6 +6225,44 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 .sdqr-btn--xs { padding: 5px 10px; font-size: 11px; }
 
+/* État verrouillé — utilisé sur l'export SVG quand le logo est raster
+   (PNG/JPEG). Le SVG résultant aurait un trou central → on bloque. */
+.sdqr-btn.is-locked,
+.sdqr-btn[disabled].is-locked {
+  opacity: .35;
+  cursor: not-allowed;
+  background: rgba(255,255,255,.02);
+  border-color: rgba(255,255,255,.08);
+  color: rgba(220,225,240,.5);
+  position: relative;
+}
+.sdqr-btn.is-locked::after {
+  content: "🔒";
+  position: absolute;
+  top: -6px; right: -6px;
+  font-size: 9px;
+  background: var(--navy2, #1c2234);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sdqr-btn.is-locked:hover {
+  background: rgba(255,255,255,.02);
+  border-color: rgba(255,255,255,.08);
+  color: rgba(220,225,240,.5);
+}
+
+/* Hint inline à côté du bouton SVG verrouillé */
+.sdqr-svg-hint {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(224,120,90,.85);     /* ambre subtil — info, pas alerte */
+  letter-spacing: .01em;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
 .sdqr-form-msg {
   margin-top: 14px;
   padding: 10px 14px;

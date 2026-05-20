@@ -783,6 +783,7 @@ async function _openQrDetail(panel, qr) {
               <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="png-2048" title="Impression standard, bâche moyenne">PNG 2048px</button>
               <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="svg" title="Vectoriel illimité — impression haut de gamme, bâche grand format">SVG</button>
             </div>
+            <span class="sdqr-svg-hint" data-svg-hint hidden>SVG verrouillé — logo non vectoriel</span>
           </div>
         </div>
         ${_renderDesignPanel(qr)}
@@ -855,6 +856,10 @@ async function _openQrDetail(panel, qr) {
 
   // Wire le panneau Design (Sprint SDQR-3 — collapsible, live preview)
   _wireDesignPanel(content, qr, encodedForQr);
+
+  // État initial du bouton « Export SVG » selon la nature du logo
+  // (raster → désactivé). Sera ré-évalué à chaque _liveRerender.
+  _updateSvgExportState(content, _editingDesign || qr.design);
 
   // Wire les boutons d'export (PNG 1024 / PNG 2048 / SVG vectoriel)
   content.querySelectorAll('[data-export]').forEach(btn => {
@@ -1292,6 +1297,36 @@ async function _exportQrSvg(qr, encodedForQr, design) {
   _triggerDownload(blob, `${_slug(qr.name)}-${qr.short_id || qr.id.slice(0, 8)}.svg`);
 }
 
+// ── Détection logo raster + lockdown du bouton Export SVG ─────────
+// Un SVG qui contient un <image href="data:image/png;base64,..."> n'est
+// PLUS vraiment vectoriel : beaucoup de visualiseurs SVG (Illustrator,
+// Inkscape, certains services d'impression grand format) ignorent l'image
+// embarquée → trou vide au centre du QR. On bloque l'export SVG dans ce cas.
+function _logoIsRaster(design) {
+  const url = design?.logo?.dataUrl || '';
+  if (!url) return false;
+  return /^data:image\/(png|jpeg|jpg|webp|gif)/i.test(url);
+}
+
+function _updateSvgExportState(root, design) {
+  const btn  = root?.querySelector('[data-export="svg"]');
+  const hint = root?.querySelector('[data-svg-hint]');
+  if (!btn) return;
+  if (_logoIsRaster(design)) {
+    btn.disabled = true;
+    btn.classList.add('is-locked');
+    btn.title = 'Export SVG indisponible : ton logo n\'est pas vectoriel (PNG/JPEG). '
+              + 'Le SVG résultant aurait un trou au centre dans la plupart des visualiseurs et services d\'impression. '
+              + 'Utilise un logo .svg pour l\'export vectoriel, ou passe par PNG 1024/2048.';
+    if (hint) hint.hidden = false;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('is-locked');
+    btn.title = 'Vectoriel illimité — impression haut de gamme, bâche grand format';
+    if (hint) hint.hidden = true;
+  }
+}
+
 async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
   const svg = await renderQrCustom(encodedForQr, design, sizePx);
   const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
@@ -1511,7 +1546,7 @@ function _renderDesignPanel(qr) {
             ` : `
               <label class="sdqr-logo-zone-empty" for="sdqr-logo-input">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span class="sdqr-logo-zone-text"><strong>Glisse une image ici</strong> ou clique<br><small>PNG · JPEG · SVG · max 500 Ko</small></span>
+                <span class="sdqr-logo-zone-text"><strong>Glisse une image ici</strong> ou clique<br><small>PNG · JPEG · <strong>SVG</strong> recommandé pour export vectoriel · max 500 Ko</small></span>
                 <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
               </label>
             `}
@@ -1621,6 +1656,7 @@ function _wireDesignPanel(root, qr, encodedForQr) {
       if (wrap) wrap.innerHTML = svg;
     } catch (e) { console.error('[sdqr-design] render', e); }
     _updateContrastBadge(root);
+    _updateSvgExportState(root, _editingDesign);
   };
 
   // Pills formes (modules / anchor-outer / anchor-inner)
