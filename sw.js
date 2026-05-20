@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.67.0-kodex-universal-cleanup';
+const VERSION       = 'ks-os-v4.67.1-kodex-mesbriefs-centering';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

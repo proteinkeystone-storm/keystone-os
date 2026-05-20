@@ -861,7 +861,12 @@ function _renderRail() {
 
     <div class="ws-rail-section">Workspace</div>
     <button class="ws-step" data-act="history">
-      <span class="ws-step-icon" style="width:18px;height:18px;margin-left:32px;">${icon('history', 18)}</span>
+      <!-- Placeholder invisible aligné sur .ws-step-num (24px + gap 12px) pour
+           que l'icône s'aligne verticalement avec celles des étapes numérotées
+           en mode large. En mode étroit, .ws-step-num est display:none, donc
+           le placeholder disparaît aussi et l'icône se centre naturellement. -->
+      <span class="ws-step-num" aria-hidden="true" style="visibility:hidden;"></span>
+      <span class="ws-step-icon" style="width:18px;height:18px;">${icon('history', 18)}</span>
       <span class="ws-step-label">Mes briefs</span>
     </button>
   `;
