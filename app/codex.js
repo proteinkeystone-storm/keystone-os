@@ -369,6 +369,20 @@ function _onClick(e) {
   if (act === 'load-demo')      return _loadDemoScenario();
   // Ouvre le Vault directement sur l'onglet clés API
   if (act === 'open-vault')     return _openVault();
+  // Bascule sur un autre moteur AI (ks_active_engine) + re-render
+  if (act === 'switch-engine')  return _switchEngine(t.dataset.engine);
+}
+
+// ── Bascule sur un autre moteur AI (depuis card erreur ou bandeau) ─
+function _switchEngine(label) {
+  if (!label) return;
+  localStorage.setItem('ks_active_engine', label);
+  // Reset l'état d'erreur pour permettre une nouvelle tentative immédiate
+  _state.output.status = 'idle';
+  _state.output.error = null;
+  _saveDraft();
+  _renderMain();
+  _toastOk(`Moteur basculé sur ${label}`);
 }
 
 // ── Ouvre le Vault (Réglages → Clés API) ──────────────────────
@@ -2041,22 +2055,52 @@ function _viewOutput() {
   }
   // ── État : erreur ────────────────────────────────────────
   else if (o.status === 'error') {
-    // Détection : si l'erreur mentionne "clé API", on offre le bouton Vault
-    const isApiKeyError = /clé API|api.?key|configurée/i.test(o.error || '');
+    // Détection des cas spécifiques d'erreur API pour adapter les boutons
+    const errLow = (o.error || '').toLowerCase();
+    const isExpired = /expired|expire|invalid.+key|unauthor|401|403/.test(errLow);
+    const isMissing = /aucune clé|non configurée|missing.*key|api.?key.+missing/.test(errLow);
+    const isApiKeyError = isExpired || isMissing || /clé api|api.?key/.test(errLow);
+    const docUrl = ENGINE_DOC_URL[activeEngine];
+    const otherEngines = _listAvailableEngines().filter(e => e !== activeEngine);
     body = `
       <div class="ws-card" style="border-color:var(--danger);background:var(--danger-soft);">
         <div style="display:flex;gap:12px;align-items:flex-start;">
           ${icon('x', 22)}
-          <div>
+          <div style="flex:1;min-width:0;">
             <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;color:var(--danger);">La génération a échoué</h3>
             <p style="margin:0;font-size:13px;color:var(--ws-text);line-height:1.5;">${_esc(o.error || 'Erreur inconnue.')}</p>
+            ${isExpired && docUrl ? `
+              <p style="margin:8px 0 0 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.5;">
+                Renouvelez votre clé <strong>${_esc(activeEngine)}</strong> chez votre fournisseur :
+                <a href="${_esc(docUrl)}" target="_blank" rel="noopener" style="color:var(--ws-accent);text-decoration:underline;">${_esc(docUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, ''))} ↗</a>
+              </p>
+            ` : ''}
           </div>
         </div>
       </div>
+
+      ${otherEngines.length ? `
+        <div class="ws-card" style="margin-top:14px;padding:14px 16px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            ${icon('sparkles', 14)}
+            <strong style="font-size:13px;letter-spacing:-.008em;">Essayer un autre moteur AI</strong>
+            <span style="font-size:11.5px;color:var(--ws-text-muted);">votre clé existante sera utilisée</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${otherEngines.map(e => `
+              <button class="ws-btn ws-btn--secondary" data-act="switch-engine" data-engine="${_esc(e)}"
+                      style="padding:7px 14px;font-size:12.5px;">
+                ${_esc(e)}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
         ${isApiKeyError ? `
           <button class="ws-btn ws-btn--accent" data-act="open-vault">
-            ${icon('lock', 16)} Configurer ma clé ${_esc(activeEngine)}
+            ${icon('lock', 16)} ${isExpired ? 'Mettre à jour' : 'Configurer'} ma clé ${_esc(activeEngine)}
           </button>
         ` : ''}
         <button class="ws-btn ${isApiKeyError ? 'ws-btn--secondary' : 'ws-btn--accent'}" data-act="regenerate">
@@ -2069,6 +2113,7 @@ function _viewOutput() {
   else {
     const canGenerate = !validationError && hasApiKey;
     // Bandeau d'avertissement spécifique si clé API manquante
+    const otherEnginesAvailable = _listAvailableEngines();
     const apiKeyMissingHTML = !hasApiKey ? `
       <div class="ws-card" style="margin-bottom:16px;border-color:var(--warn);background:var(--warn-soft, rgba(245, 158, 11, 0.08));padding:14px 16px;">
         <div style="display:flex;gap:12px;align-items:flex-start;">
@@ -2081,9 +2126,20 @@ function _viewOutput() {
               Kodex interroge le moteur AI avec votre propre clé (BYOK), stockée chiffrée dans votre Vault.
               Configurez-la une fois, elle restera disponible pour tous les outils Keystone.
             </p>
-            <button class="ws-btn ws-btn--accent" data-act="open-vault" style="padding:7px 14px;font-size:12.5px;">
-              ${icon('lock', 14)} Configurer ma clé ${_esc(activeEngine)}
-            </button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button class="ws-btn ws-btn--accent" data-act="open-vault" style="padding:7px 14px;font-size:12.5px;">
+                ${icon('lock', 14)} Configurer ma clé ${_esc(activeEngine)}
+              </button>
+              ${otherEnginesAvailable.length ? `
+                <span style="font-size:11.5px;color:var(--ws-text-muted);">ou utilisez un moteur déjà configuré :</span>
+                ${otherEnginesAvailable.map(e => `
+                  <button class="ws-btn ws-btn--secondary" data-act="switch-engine" data-engine="${_esc(e)}"
+                          style="padding:6px 12px;font-size:12px;">
+                    ${_esc(e)}
+                  </button>
+                `).join('')}
+              ` : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -2256,6 +2312,24 @@ async function _generateBrief() {
     _saveDraft();
     _renderMain();
   }
+}
+
+// ── Mapping moteur → URL de gestion de la clé API (renouvellement)
+const ENGINE_DOC_URL = {
+  'Claude'    : 'https://console.anthropic.com/settings/keys',
+  'ChatGPT'   : 'https://platform.openai.com/api-keys',
+  'GPT 5'     : 'https://platform.openai.com/api-keys',
+  'Gemini'    : 'https://aistudio.google.com/app/apikey',
+  'Mistral'   : 'https://console.mistral.ai/api-keys/',
+  'Grok'      : 'https://console.x.ai/',
+  'Perplexity': 'https://www.perplexity.ai/settings/api',
+  'Llama'     : 'https://api.together.xyz/settings/api-keys',
+};
+
+// Liste tous les moteurs avec une clé API configurée dans le Vault
+function _listAvailableEngines() {
+  const labels = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity', 'Llama'];
+  return labels.filter(l => _findApiKeyForEngine(l));
 }
 
 // ── Devine un vendor_id à partir du label texte (fallback briefs legacy)

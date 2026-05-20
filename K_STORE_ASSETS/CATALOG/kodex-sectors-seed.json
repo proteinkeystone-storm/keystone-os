@@ -9,13 +9,13 @@
       "label": "Brief créatif",
       "icon": "edit",
       "is_default": true,
-      "description": "Quel que soit votre métier — promotion immobilière, commerce, restauration, événement, service B2B — les informations ci-dessous suffisent à composer un brief précis pour votre graphiste.",
+      "description": "Quel que soit votre activité, ces informations suffisent à composer un brief précis pour votre graphiste. Tous les champs sont génériques — adaptez-les à votre contexte.",
       "fields": [
         {
           "name": "nom_projet",
           "label": "Nom du projet ou de l'opération",
           "type": "text",
-          "placeholder": "ex : Les Jardins du Mourillon · Soldes Hiver 2026 · Brunch Saint-Valentin",
+          "placeholder": "ex : le nom de votre opération, événement ou produit",
           "required": true,
           "span": "full"
         },
@@ -23,20 +23,20 @@
           "name": "lieu",
           "label": "Lieu / localisation (optionnel)",
           "type": "text",
-          "placeholder": "ex : Toulon Mourillon · Tout le réseau · En ligne"
+          "placeholder": "ex : ville, adresse complète, ou en ligne"
         },
         {
           "name": "echeance",
           "label": "Date ou échéance (optionnel)",
           "type": "text",
-          "placeholder": "ex : Livraison T3 2027 · Du 8 au 31 janvier · Soirée du 14 février"
+          "placeholder": "ex : date précise, période, jour J"
         },
         {
           "name": "argumentaire",
           "label": "Argument central / promesse",
           "type": "textarea",
           "rows": 4,
-          "placeholder": "Décrivez en quelques phrases ce que vous voulez communiquer. Ce que vous vendez, à qui, et pourquoi votre offre est unique. Plus c'est précis, plus le brief sera juste.",
+          "placeholder": "Décrivez en quelques phrases ce que vous proposez, à qui vous vous adressez, et ce qui rend votre offre unique. Plus c'est précis, plus le brief sera juste.",
           "required": true,
           "span": "full"
         },
@@ -44,14 +44,14 @@
           "name": "cta",
           "label": "Appel à l'action principal (optionnel)",
           "type": "text",
-          "placeholder": "ex : Réservez votre visite · Profitez des soldes · Réservez votre table"
+          "placeholder": "ex : Réservez, Contactez-nous, Découvrir, Téléchargez"
         },
         {
           "name": "infos_specifiques",
           "label": "Informations chiffrées ou spécifiques à mentionner (optionnel)",
           "type": "textarea",
           "rows": 3,
-          "placeholder": "ex : Prix d'appel 295 000 €, livraison 2027, label RE2020 · Réduction -30% sur l'ensemble du magasin · Menu à 38 € avec un verre offert",
+          "placeholder": "ex : tarif, durée, capacité, dimensions, certifications, garanties — toute info concrète à inclure",
           "span": "full"
         },
         {
@@ -59,8 +59,8 @@
           "label": "Mentions légales à reprendre (optionnel)",
           "type": "textarea",
           "rows": 3,
-          "placeholder": "ex : Loi Pinel, conditions d'éligibilité sur economie.gouv.fr · L'abus d'alcool est dangereux pour la santé · Offre soumise à conditions, voir en magasin",
-          "hint": "Saisissez librement les mentions obligatoires à votre secteur — vous les connaissez mieux que personne.",
+          "placeholder": "ex : mentions obligatoires propres à votre secteur, conditions générales, références réglementaires",
+          "hint": "Saisissez librement les mentions obligatoires à votre activité — vous les connaissez mieux que personne.",
           "span": "full"
         }
       ],
