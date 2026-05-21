@@ -3707,6 +3707,15 @@ function _renderSettingsBody() {
                         <div class="sp-user-hint" id="lic-feedback" style="min-height:16px"></div>
                     </div>
                     ${lic.active ? `<button class="sp-danger-btn" id="licence-revoke" style="margin-top:4px">Révoquer la licence</button>` : ''}
+                    <!-- Reset local : vide localStorage + SW + caches + redirige sur la landing.
+                         Indispensable pour changer d'appareil ou reseter une session en erreur.
+                         Ne touche PAS à la licence côté serveur (pas de révocation). -->
+                    <button class="sp-danger-btn" id="licence-local-reset" style="margin-top:8px;background:transparent;border:1px solid var(--bd);color:var(--tx2)">
+                        Déconnexion complète (reset cet appareil)
+                    </button>
+                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
+                        Vide cet appareil (cache, SW, préférences locales) et renvoie sur l'écran d'activation. La licence reste valide côté serveur.
+                    </p>
                 </div>`;
             })(),
         },
@@ -3906,6 +3915,35 @@ function _renderSettingsBody() {
         revokeLicence();
         // Fermer les settings et laisser le hot reload gérer l'UI
         document.getElementById('settings-panel')?.classList.remove('open');
+    });
+
+    // Bouton « Déconnexion complète (reset cet appareil) » — équivalent
+    // à taper /app?ks_reset=1 manuellement, mais accessible depuis l'UI.
+    // Utile pour : changer d'appareil, debug d'un état corrompu, perdre
+    // accès à une licence collée sur un device. Ne touche QUE le local.
+    body.querySelector('#licence-local-reset')?.addEventListener('click', async () => {
+        if (!confirm('Déconnexion complète de cet appareil ?\n\n' +
+            'Va vider : préférences locales, cache PWA, brouillons Kodex et Pulsa, ' +
+            'photo, ordre des pads.\n\n' +
+            'La licence reste valide côté serveur — vous pourrez ré-activer immédiatement après.')) return;
+        try {
+            // 1. Vide toutes les clés ks_* du localStorage
+            Object.keys(localStorage)
+                .filter(k => k.startsWith('ks_'))
+                .forEach(k => localStorage.removeItem(k));
+            // 2. Unregister les Service Workers (PWA cache)
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister().catch(() => null)));
+            }
+            // 3. Vide les caches HTTP du SW
+            if ('caches' in window) {
+                const ks = await caches.keys();
+                await Promise.all(ks.map(k => caches.delete(k).catch(() => null)));
+            }
+        } catch (_) { /* best-effort, on continue même en cas d'erreur */ }
+        // 4. Redirection landing avec flag logout pour éviter la redirection auto
+        location.replace('/?logout=1');
     });
 
     // Auto-save global — déclenché par toute modification de préférence
