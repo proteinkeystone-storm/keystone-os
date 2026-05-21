@@ -367,7 +367,7 @@ function _pushTimeSaveStatus() {
         pool.push(`Vos **${outils}** vous font gagner [[${_formatDuration(total)}|timesave]] ${period}.`);
         pool.push(`**${n} assistant${n > 1 ? 's' : ''} IA** prêt${n > 1 ? 's' : ''} à travailler sur vos projets.`);
     }
-    pool.push('Votre pôle de promotion immobilière est **prêt**.');
+    pool.push('Votre suite d\'applications métiers est **prête**.');
 
     setDefaultStatusPool(pool);
 }

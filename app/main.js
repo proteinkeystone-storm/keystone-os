@@ -124,7 +124,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 : 'accès complet activé';
             dstText.textContent = `✓ Licence ${plan || ''} activée — ${count}.`;
             setTimeout(() => {
-                dstText.textContent = 'Votre pôle de promotion immobilière est prêt.';
+                dstText.textContent = 'Votre suite d\'applications métiers est prête.';
             }, 5000);
         }
     });
@@ -142,7 +142,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (dstText) {
             dstText.textContent = `✓ Outil acquis définitivement — accès permanent garanti.`;
             setTimeout(() => {
-                dstText.textContent = 'Votre pôle de promotion immobilière est prêt.';
+                dstText.textContent = 'Votre suite d\'applications métiers est prête.';
             }, 5000);
         }
     });
