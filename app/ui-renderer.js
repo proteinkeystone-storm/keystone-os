@@ -24,6 +24,16 @@ import { activateLicence, getLicenceStatus, revokeLicence }            from './l
 import { exportArtifactPDF }                                           from './pdf-export.js';
 import { ratingButtonHTML, bindRatingButton }                          from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }                              from './lib/help-overlay.js';
+// Sprint Démo Limited A+B — TTL 7j + 1 app simultanée
+import {
+  isDemoMode, isDemoExpired, ensureDemoStarted,
+  canAddAppInDemo, getBlockingDemoApp, switchDemoApp,
+} from './lib/demo-mode.js';
+import { renderDemoChrono, refreshDemoChrono, DEMO_CHRONO_CSS } from './lib/demo-chrono.js';
+import {
+  showDemoUpsellModal, showDemoExpiredModal, maybeShowDemoNudge,
+  DEMO_MODAL_CSS,
+} from './lib/demo-modals.js';
 import {
     KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
@@ -210,6 +220,9 @@ export function updateEngineChip(label) {
 // Mode horloge type macOS menubar : heure HH:MM en gros au-dessus,
 // date complète en petit dessous. Tick toutes les 30 s pour rester
 // à jour sans surcharge (la précision seconde n'est pas affichée).
+//
+// + Sprint Démo Limited A+B : chronomètre 7-jours injecté dans
+// .hero-meta (au-dessus de l'heure) si mode démo actif.
 let _heroClockTimer = null;
 function renderHeroDate() {
     const dateEl = document.getElementById('hero-date');
@@ -225,7 +238,64 @@ function renderHeroDate() {
         const mm = String(now.getMinutes()).padStart(2, '0');
         timeEl.textContent = `${hh}:${mm}`;
     }
+
+    // Chronomètre démo : insère/met à jour à chaque tick
+    _renderDemoChronoInHero();
+
     if (!_heroClockTimer) _heroClockTimer = setInterval(renderHeroDate, 30_000);
+}
+
+// ─── Injection CSS one-shot pour le sprint démo ──────────────
+let _demoCssInjected = false;
+function _injectDemoCssOnce() {
+    if (_demoCssInjected) return;
+    if (typeof document === 'undefined') return;
+    const style = document.createElement('style');
+    style.id = 'ks-demo-styles';
+    style.textContent = DEMO_CHRONO_CSS + '\n' + DEMO_MODAL_CSS;
+    document.head.appendChild(style);
+    _demoCssInjected = true;
+}
+
+// ─── Insère/refresh le chronomètre démo dans .hero-meta ───────
+// Idempotent : peut être appelé à chaque tick d'horloge sans surcoût.
+// - Pose ks_demo_started_at si pas encore posée (1re visite en démo)
+// - Inject le CSS au 1er appel
+// - Crée le DOM s'il manque, le rafraîchit sinon
+// - Affiche la modale expired si J0, ou nudge discret si J-3/2/1
+function _renderDemoChronoInHero() {
+    const heroMeta = document.querySelector('.hero-meta');
+    if (!heroMeta) return;
+
+    const existing = heroMeta.querySelector('.ks-demo-chrono');
+
+    if (!isDemoMode()) {
+        // Plus en démo → on retire le chrono s'il existait (passage à licence)
+        if (existing) existing.remove();
+        return;
+    }
+
+    // Pose la date de début si manquante (idempotent)
+    ensureDemoStarted();
+    // Injection CSS lazy
+    _injectDemoCssOnce();
+
+    if (existing) {
+        // Refresh in-place (préserve les transitions CSS)
+        refreshDemoChrono(existing);
+    } else {
+        // Insère le chrono AU-DESSUS de l'heure pour visibilité maximale
+        const html = renderDemoChrono();
+        if (html) heroMeta.insertAdjacentHTML('afterbegin', html);
+    }
+
+    // Si la démo a expiré, on affiche la modale plein écran (idempotent)
+    if (isDemoExpired()) {
+        showDemoExpiredModal();
+    } else {
+        // Sinon, nudge discret à J-3, J-2, J-1
+        maybeShowDemoNudge();
+    }
 }
 
 // Descriptions courtes des artefacts pour les pads du Dashboard
@@ -1028,6 +1098,31 @@ function _buildKStorePanel() {
 // ── Activation d'un outil depuis le KEY-STORE ─────────────────
 function _activateKStoreItem(id, btn) {
     if (!btn || btn.classList.contains('ks-item-btn--loading')) return;
+
+    // ─── Sprint Démo Limited A+B ──────────────────────────────
+    // En mode démo, blocage du quota 1 app + redirection vers modale upsell.
+    // L'utilisateur peut soit switcher (1x/24h) soit choisir un plan.
+    if (isDemoMode() && !canAddAppInDemo(id)) {
+        const blockingId = getBlockingDemoApp();
+        const blocking = blockingId ? getPad(blockingId) : null;
+        const target   = getPad(id);
+        const blockingLabel = blocking?.title || blocking?.name || blockingId || 'une app';
+        const targetLabel   = target?.title   || target?.name   || id;
+        showDemoUpsellModal({
+            blockingAppLabel: blockingLabel,
+            targetAppLabel:   targetLabel,
+            onSwitch: () => {
+                // Switch d'app : remplace la sélection démo + persiste
+                const ok = switchDemoApp(id);
+                if (ok) {
+                    // Reflète immédiatement dans ks_user_selection : poursuit le flow normal
+                    renderDashboard();
+                    _renderKStoreItems();
+                }
+            },
+        });
+        return;
+    }
 
     // 1. Loading visual
     btn.classList.add('ks-item-btn--loading');
