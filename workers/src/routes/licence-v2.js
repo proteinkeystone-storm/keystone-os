@@ -30,6 +30,9 @@
 
 import { json, err, parseBody, getAllowedOrigin, requireAdmin, generateId } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+// Sprint S3.3 — envoi d'un magic-link à l'invité (plan MAX)
+import { issueMagicLink } from './auth-magic-link.js';
+import { sendEmail, tplInviteMember } from '../lib/email-resend.js';
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
@@ -420,13 +423,47 @@ export async function handleLicenceInvite(request, env) {
     `).bind(id, auth.licenceKey, email, invitedBy).run();
   }
 
+  // ── S3.3 — Génère un magic-link + envoie l'email d'invitation ──
+  // Try/catch défensif : si l'envoi email échoue, on n'annule PAS
+  // l'invitation (l'entry licence_emails reste pending). L'owner peut
+  // redemander un magic-link via POST /api/auth/request-magic-link.
+  let invitationSent = false;
+  let invitationExpiresAt = null;
+  try {
+    const issued = await issueMagicLink(env, {
+      email,
+      licenceKey: auth.licenceKey,
+      purpose:    'invite',
+      // pas de fingerprint à l'invite : l'invité utilisera son propre device
+    });
+    invitationExpiresAt = issued.expiresAt;
+
+    const subject = `Vous êtes invité sur Keystone OS (${auth.licence.plan})`;
+    const html = tplInviteMember({
+      ownerEmail:    invitedBy,
+      ownerName:     null,    // on n'a pas le nom propre côté owner pour l'instant
+      magicUrl:      issued.magicUrl,
+      expiresHours:  Math.round(issued.ttlMinutes / 60),
+    });
+    await sendEmail(env, { to: email, subject, html });
+    invitationSent = true;
+  } catch (e) {
+    console.warn('[invite] email failed', e?.message || e);
+    // On NE rollback PAS l'entry licence_emails — l'invitation reste
+    // valide, l'owner peut redemander un mail via request-magic-link.
+  }
+
   return json({
-    ok:       true,
+    ok:                   true,
     email,
-    role:     'member',
-    status:   'pending',
-    invited_by: invitedBy,
-    note: 'Magic-link d\'invitation : sera implémenté en Sprint S3.',
+    role:                 'member',
+    status:               'pending',
+    invited_by:           invitedBy,
+    invitation_sent:      invitationSent,
+    invitation_expires:   invitationExpiresAt,
+    note: invitationSent
+      ? `Email d'invitation envoyé à ${email}. Lien valable 7 jours.`
+      : 'Invitation enregistrée mais email non envoyé (config Resend ?). L\'owner peut redemander un mail via /api/auth/request-magic-link.',
   }, 200, origin);
 }
 

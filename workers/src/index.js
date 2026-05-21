@@ -69,6 +69,11 @@ import {
   handleListDevices,
   handleRevokeDevice,
 } from './routes/devices-v2.js';
+// ── Sprint S3 (Email + magic-link — activation sans saisie de clé) ──
+import {
+  handleRequestMagicLink,
+  handleConsumeMagicLink,
+} from './routes/auth-magic-link.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -124,6 +129,15 @@ export default {
       if (path.startsWith('/api/licence/devices/') && method === 'DELETE') {
         const deviceId = path.split('/').pop();
         return handleRevokeDevice(request, env, deviceId);
+      }
+
+      // ── Magic-link auth (Sprint S3 — email + activation sans clé) ──
+      // Routes ADDITIVES — n'altèrent aucune route auth existante.
+      if (path === '/api/auth/request-magic-link' && method === 'POST') {
+        return handleRequestMagicLink(request, env);
+      }
+      if (path === '/api/auth/consume-magic-link' && method === 'POST') {
+        return handleConsumeMagicLink(request, env);
       }
 
       // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
