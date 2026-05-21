@@ -14,7 +14,7 @@ import { initLockScreen }                     from './lockscreen.js';
 import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
-import { loadFromCloud, saveToCloud, isCloudReady } from './cloud-vault.js';
+import { loadFromCloud, saveToCloud, isCloudReady, installAutoSync } from './cloud-vault.js';
 
 // ═══════════════════════════════════════════════════════════════
 // VERSION CHECK — auto-cleanup à chaque déploiement
@@ -63,6 +63,13 @@ function _boot() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+    // 0. Installe l'auto-sync localStorage → Cloud Vault dès maintenant.
+    //    Toute écriture sur une PREFS_KEY (ks_kodex_draft, ks_pulsa_library,
+    //    ks_active_engine, ks_user_name, ks_pad_order, ks_lock_*, etc.)
+    //    déclenchera un saveToCloud debouncé. Bug racine résolu : avant,
+    //    seule la modif de clé API uploadait quoi que ce soit.
+    installAutoSync();
+
     // 1. Vault local en premier — restore préférences depuis localStorage
     loadVault();
 
