@@ -50,7 +50,7 @@ import { CF_API, getOwnedIds, getLifetimeIds } from './pads-loader.js';
 // bouton « Partager le brief » crée un draft Pulsa pré-rempli ; sinon il
 // affiche une card teaser qui renvoie vers la fiche K-Store de Pulsa.
 import { newForm, newField, newSection } from './lib/pulsa-types.js';
-import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
+import { saveForm, setCurrentFormId, getForm } from './lib/pulsa-library.js';
 import { openPulsa } from './pulsa.js';
 
 // ── Métadonnées workspace (override par artefact) ──────────────
@@ -121,6 +121,10 @@ let _state = {
     brief: null,          // { text, model, generated_at, usage }
     briefId: null,        // id de l'entity codex_briefs si sauvegardé
   },
+  // Sprint 5-light Pulsa premium : lien vers un form Pulsa créé depuis
+  // ce brief (« Créer dans Pulsa » étape 4). Permet d'afficher les stats
+  // de consultation et de rouvrir le dashboard d'un clic.
+  linked_pulsa_form_id: null,
 };
 
 let _root = null;   // élément racine du workspace, null = fermé
@@ -214,6 +218,23 @@ async function _loadDraft() {
       };
       cnt.sector = 'universal';
     }
+
+    // Re-hydratation du standard depuis le couple (support × vendor) :
+    // _saveDraft store `standard: null` pour économiser l'espace localStorage,
+    // donc on reconstruit l'objet ici à chaque chargement. Même pattern que
+    // _loadDemoScenario, mutualisable mais maintenu localement pour rester
+    // au plus près de la logique de migration.
+    if (dst.support_id && !dst.standard) {
+      try {
+        const support = await getSupport(dst.support_id);
+        if (support) {
+          const defaults = await getCategoryDefaults(support.category);
+          const vendor = dst.vendor_id ? await getVendor(dst.vendor_id) : null;
+          const spec = await getSpec(dst.vendor_id, dst.support_id);
+          dst.standard = specToStandard(spec, vendor, support, defaults);
+        }
+      } catch (_) { /* re-hydratation silencieuse : le user revoit l'étape 1 vide si KO */ }
+    }
     return true;
   } catch (_) {
     return false;
@@ -251,6 +272,7 @@ function _resetDraft() {
       brand_book_url: '', extra_notes: '', uploads: [],
     },
     output: { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
+    linked_pulsa_form_id: null,
   };
 }
 
@@ -502,6 +524,10 @@ function _onClick(e) {
   if (act === 'share-copy-text')     return _shareCopyText();
   if (act === 'share-unlock-pulsa')  return _shareUnlockPulsa();
   if (act === 'share-create-pulsa')  return _shareCreatePulsa();
+  // Sprint 5-light : lien Kodex ↔ Pulsa form spécifique
+  if (act === 'share-open-pulsa-form')   return _shareOpenPulsaForm();
+  if (act === 'share-view-pulsa-stats')  return _shareViewPulsaStats();
+  if (act === 'share-recreate-pulsa')    return _shareRecreatePulsa();
   // Sprint welcome : modale d'onboarding 1ère ouverture
   if (act === 'welcome-start')       return _closeWelcome({ remember: true });
   if (act === 'welcome-close')       return _closeWelcome({ remember: true });
@@ -1152,6 +1178,13 @@ function _renderMain() {
   const progress = _root.querySelector('[data-slot="progress"]');
   if (progress) {
     progress.innerHTML = `<span class="ws-badge">Étape ${_currentStepIndex() + 1} / ${STEPS.length}</span>`;
+  }
+
+  // Sprint 5-light : hydrate les stats de consultation Pulsa quand on est
+  // sur l'étape 4 et qu'un lien actif existe. Async non-bloquant — la
+  // card affiche d'abord « Chargement… » puis se rafraîchit.
+  if (view === 'output' && _state.linked_pulsa_form_id) {
+    _hydrateLinkedPulsaStats();
   }
 }
 
@@ -3113,31 +3146,198 @@ function _renderSharePulsaTeaserCard() {
   `;
 }
 
-// Card premium Pulsa (avec licence) : création directe d'un draft Pulsa.
+// Card premium Pulsa (avec licence). Trois états selon le lien existant
+// entre ce brief Kodex et un form Pulsa créé précédemment :
+//   (a) pas de lien → bouton « Créer dans Pulsa » (V2)
+//   (b) lien existant + form brouillon → CTA Publier + Ouvrir le builder
+//   (c) lien existant + form publié → stats consultations + Voir dashboard
 function _renderSharePulsaPremiumCard() {
+  const linked = _getLinkedPulsaForm();
+
+  // État (a) — pas de lien : comportement V2 inchangé.
+  if (!linked) {
+    return `
+      <div class="ws-card" style="margin-top:14px;padding:18px 20px;border-color:var(--ws-accent);">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+            ${icon('pulsa', 18)}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
+              Votre licence Pulsa est active
+            </div>
+            <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+              Créer une page Pulsa à partir de ce brief
+            </h3>
+            <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+              Kodex crée un brouillon Pulsa pré-rempli avec ce projet — il ne vous reste qu'à le compléter (champ « Email destinataire », confirmation de lecture…) et à publier l'URL.
+            </p>
+            <button class="ws-btn ws-btn--accent" data-act="share-create-pulsa" style="padding:8px 14px;font-size:12.5px;">
+              ${icon('share-2', 14)} Créer dans Pulsa
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const isPublished = linked.output?.status === 'published';
+  const formTitle = linked.meta?.title || 'Page Pulsa';
+
+  // État (b) — form brouillon : on incite à publier pour activer l'URL.
+  if (!isPublished) {
+    return `
+      <div class="ws-card" style="margin-top:14px;padding:18px 20px;border-color:var(--warn);background:linear-gradient(135deg, var(--ws-surface) 0%, rgba(245, 158, 11, .06) 100%);">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="width:36px;height:36px;border-radius:8px;background:var(--warn);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+            ${icon('pulsa', 18)}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--warn);margin-bottom:3px;">
+              Page Pulsa créée · Brouillon
+            </div>
+            <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+              ${_esc(formTitle)}
+            </h3>
+            <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
+              Votre page Pulsa est créée mais pas encore publiée. Activez-la dans Pulsa (étape Publication) pour récupérer l'URL partageable et commencer à suivre les consultations.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="ws-btn ws-btn--accent" data-act="share-open-pulsa-form" style="padding:8px 14px;font-size:12.5px;">
+                ${icon('arrow-right', 14)} Ouvrir dans Pulsa
+              </button>
+              <button class="ws-btn ws-btn--ghost" data-act="share-recreate-pulsa" style="padding:8px 14px;font-size:12.5px;color:var(--ws-text-muted);">
+                ${icon('refresh', 13)} Recréer un nouveau form
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // État (c) — form publié : stats hydratées en async via data-slot.
+  // Le compteur est mis à jour par _hydrateLinkedPulsaStats après le render.
   return `
-    <div class="ws-card" style="margin-top:14px;padding:18px 20px;border-color:var(--ws-accent);">
+    <div class="ws-card" style="margin-top:14px;padding:18px 20px;border-color:var(--ws-success);background:linear-gradient(135deg, var(--ws-surface) 0%, rgba(34, 197, 94, .06) 100%);">
       <div style="display:flex;align-items:flex-start;gap:12px;">
-        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
-          ${icon('pulsa', 18)}
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--ws-success);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${icon('eye', 18)}
         </div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
-            Votre licence Pulsa est active
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-success);margin-bottom:3px;">
+            Page Pulsa active
           </div>
-          <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
-            Créer une page Pulsa à partir de ce brief
+          <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
+            ${_esc(formTitle)}
           </h3>
-          <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
-            Kodex crée un brouillon Pulsa pré-rempli avec ce projet — il ne vous reste qu'à le compléter (champ « Email destinataire », confirmation de lecture…) et à publier l'URL.
-          </p>
-          <button class="ws-btn ws-btn--accent" data-act="share-create-pulsa" style="padding:8px 14px;font-size:12.5px;">
-            ${icon('share-2', 14)} Créer dans Pulsa
-          </button>
+          ${linked.meta?.slug ? `
+            <div style="font-size:11.5px;color:var(--ws-text-muted);margin-bottom:10px;font-family:'SF Mono',monospace;">
+              /f/${_esc(linked.meta.slug)}
+            </div>
+          ` : ''}
+          <div data-slot="linked-pulsa-stats" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--ws-text-soft);">
+            <span style="display:inline-flex;align-items:center;gap:5px;">
+              ${icon('refresh', 12)} <em style="font-style:normal;">Chargement des consultations…</em>
+            </span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="ws-btn ws-btn--accent" data-act="share-view-pulsa-stats" style="padding:8px 14px;font-size:12.5px;">
+              ${icon('bar-chart', 14)} Voir le dashboard
+            </button>
+            <button class="ws-btn ws-btn--ghost" data-act="share-recreate-pulsa" style="padding:8px 14px;font-size:12.5px;color:var(--ws-text-muted);">
+              ${icon('plus', 13)} Créer une autre page
+            </button>
+          </div>
         </div>
       </div>
     </div>
   `;
+}
+
+// Helper : récupère le form Pulsa lié à ce brief depuis pulsa-library.
+// Retourne null si pas de lien ou si le form a été supprimé entre-temps.
+function _getLinkedPulsaForm() {
+  const id = _state.linked_pulsa_form_id;
+  if (!id) return null;
+  try {
+    return getForm(id);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Handler : ouvre Pulsa sur le form lié (mode builder, étape Publication).
+function _shareOpenPulsaForm() {
+  const linked = _getLinkedPulsaForm();
+  if (!linked) { _toastSoon('Page Pulsa introuvable — recréez-la depuis le brouillon'); return; }
+  setCurrentFormId(linked.id);
+  closeKodex();
+  setTimeout(() => openPulsa(), 120);
+}
+
+// Handler : ouvre Pulsa directement sur la vue Responses du form lié,
+// pour consulter les stats détaillées (qui a répondu, quand, export CSV).
+function _shareViewPulsaStats() {
+  const linked = _getLinkedPulsaForm();
+  if (!linked) { _toastSoon('Page Pulsa introuvable'); return; }
+  setCurrentFormId(linked.id);
+  closeKodex();
+  setTimeout(() => openPulsa({ viewResponses: true }), 120);
+}
+
+// Handler : reset le lien et relance la création d'une nouvelle page Pulsa.
+// Utile si le user veut un nouveau form (changement de destinataire, etc.)
+// ou si l'ancien a été supprimé manuellement dans Pulsa.
+function _shareRecreatePulsa() {
+  if (!confirm('Créer une nouvelle page Pulsa pour ce brief ? L\'ancien lien sera oublié (le form Pulsa précédent n\'est pas supprimé — il reste dans votre bibliothèque Pulsa).')) return;
+  _state.linked_pulsa_form_id = null;
+  _saveDraft();
+  _shareCreatePulsa();
+}
+
+// Hydratation async des stats de consultation pour un form Pulsa publié.
+// Appelée après _renderMain quand on est sur l'étape 4 et qu'un lien
+// actif existe. Fetch /api/pulsa/responses?form_id=X (déjà utilisé par
+// le builder Pulsa pour sa vue Responses, donc auth pattern connu).
+async function _hydrateLinkedPulsaStats() {
+  const slot = _root?.querySelector('[data-slot="linked-pulsa-stats"]');
+  if (!slot) return;
+  const linked = _getLinkedPulsaForm();
+  if (!linked?.id) return;
+
+  try {
+    const jwt = localStorage.getItem('ks_jwt');
+    if (!jwt) {
+      slot.innerHTML = `<span style="color:var(--ws-text-muted);">Connectez-vous pour voir les consultations</span>`;
+      return;
+    }
+    const url = `${CF_API}/api/pulsa/responses?form_id=${encodeURIComponent(linked.id)}`;
+    const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + jwt } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json().catch(() => ({}));
+    const list = Array.isArray(data?.responses) ? data.responses : [];
+    const count = list.length;
+    // Dernière consultation = max created_at (le Worker timestamp les responses)
+    const latest = list.reduce((acc, r) => {
+      const t = r?.created_at || r?.createdAt || null;
+      return t && (!acc || t > acc) ? t : acc;
+    }, null);
+    const latestLabel = latest
+      ? `Dernière le ${new Date(latest).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+      : 'Pas encore consulté';
+
+    slot.innerHTML = `
+      <span style="display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--ws-text);">
+        ${icon('eye', 12)} <strong>${count}</strong> ${count === 1 ? 'consultation' : 'consultations'}
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:5px;">
+        ${icon('history', 12)} ${_esc(latestLabel)}
+      </span>
+    `;
+  } catch (e) {
+    slot.innerHTML = `<span style="color:var(--ws-text-muted);">Stats indisponibles (${_esc(e.message || 'erreur réseau')})</span>`;
+  }
 }
 
 // Section partage complète, à appeler depuis _renderBriefIdleState et
@@ -3232,6 +3432,11 @@ function _shareCreatePulsa() {
 
     const stored = saveForm(form);
     setCurrentFormId(stored.id);
+    // Sprint 5-light : on retient le lien entre ce brief Kodex et le form
+    // Pulsa créé, pour afficher les stats de consultation dans la card
+    // premium au prochain affichage de l'étape 4.
+    _state.linked_pulsa_form_id = stored.id;
+    _saveDraft();
     // Le user va aboutir sur le builder Pulsa étape Structure. Il doit
     // ensuite passer aux étapes Apparence → Livraison → Publication pour
     // activer l'URL — sinon le lien /f/SLUG retourne 404. Le toast pointe

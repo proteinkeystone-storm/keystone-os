@@ -121,12 +121,26 @@ function _isStepDone(stepId) {
 // ═══════════════════════════════════════════════════════════════
 // API publique
 // ═══════════════════════════════════════════════════════════════
-export function openPulsa() {
+/**
+ * Ouvre le workspace Pulsa.
+ * @param {object} [opts]
+ * @param {boolean} [opts.viewResponses] Si vrai et qu'un formulaire est
+ *   chargé depuis setCurrentFormId, bascule directement sur la vue
+ *   « Responses » au lieu du builder. Utilisé par Kodex pour ouvrir le
+ *   dashboard des consultations d'un brief partagé en un seul clic.
+ */
+export function openPulsa(opts = {}) {
   if (_root) return;
   _initFromStorage();
   _buildShell();
   _renderMain();
   _renderRail();
+  // Si demandé, on déclenche le mode responses après le rendu initial.
+  // _viewResponses re-rend le main → pas de flash visuel parce que les
+  // 2 renders sont synchrones dans la même tâche.
+  if (opts.viewResponses && _state.form?.id) {
+    _viewResponses(_state.form.id);
+  }
 }
 
 export function closePulsa() {
