@@ -64,6 +64,11 @@ import {
   handleLicenceInvite,
   handleLicenceRevokeMember,
 } from './routes/licence-v2.js';
+// ── Sprint S2 (Devices v2 — liste + soft revoke licence/email) ──
+import {
+  handleListDevices,
+  handleRevokeDevice,
+} from './routes/devices-v2.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -107,6 +112,18 @@ export default {
       if (path.startsWith('/api/licence/members/') && method === 'DELETE') {
         const targetEmail = path.split('/').pop();
         return handleLicenceRevokeMember(request, env, targetEmail);
+      }
+
+      // ── Devices v2 (Sprint S2 — liste + soft revoke) ────────────
+      // Routes ADDITIVES centrées licence/email (différentes des
+      // routes B2B-terrain /api/device/{register,approve,login,revoke}
+      // qui restent inchangées).
+      if (path === '/api/licence/devices' && method === 'GET') {
+        return handleListDevices(request, env);
+      }
+      if (path.startsWith('/api/licence/devices/') && method === 'DELETE') {
+        const deviceId = path.split('/').pop();
+        return handleRevokeDevice(request, env, deviceId);
       }
 
       // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
