@@ -24,7 +24,7 @@
 
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
 import { handleActivateV2, handleMe, handleRefresh }                   from './routes/licence-public.js';
-import { handleVaultLoad, handleVaultSave }                            from './routes/vault-user.js';
+import { handleVaultLoad, handleVaultSave, handleVaultHealth }         from './routes/vault-user.js';
 import { handleStripeWebhook }                                         from './routes/stripe-webhook.js';
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
@@ -145,8 +145,11 @@ export default {
       if (path === '/api/auth/refresh'        && method === 'POST') return handleRefresh(request, env);
 
       // ── Vault utilisateur (Sprint 4 — sync cross-device) ──
+      // S4 hardening : health-check + scoping per-(licence_key, email)
+      // dormant par défaut, géré dans vault-user.js.
       if (path === '/api/vault/load'          && method === 'GET')  return handleVaultLoad(request, env);
       if (path === '/api/vault/save'          && method === 'POST') return handleVaultSave(request, env);
+      if (path === '/api/vault/health'        && method === 'GET')  return handleVaultHealth(request, env);
 
       // ── Stripe webhook (Sprint 5 — auto-delivery clés) ────
       if (path === '/api/stripe/webhook'      && method === 'POST') return handleStripeWebhook(request, env);
