@@ -253,6 +253,7 @@ function _onClick(e) {
   // Vue Bibliothèque
   if (act === 'new-form')          return _newForm();
   if (act === 'load-demo-vefa')    return _loadDemoVefa();
+  if (act === 'recover-published') return _recoverPublishedForm();
   if (act === 'open-form')         return _openForm(t.dataset.id);
   if (act === 'duplicate-form')    return _duplicateForm(t.dataset.id);
   if (act === 'delete-form')       return _deleteForm(t.dataset.id);
@@ -461,6 +462,69 @@ function _loadDemoVefa() {
   _refreshTopbar();
   _renderMain();
   _renderRail();
+}
+
+// ─── Récupération d'un formulaire publié depuis le Worker D1 ──
+// Cas d'usage : la library locale a été vidée (changement d'appareil,
+// reset, mode démo, etc.) mais le formulaire reste publié côté serveur.
+// On le re-télécharge via l'endpoint public et on le réinjecte dans
+// la library locale. Zéro accès admin requis (route publique).
+async function _recoverPublishedForm() {
+  // Prompt natif pour le slug — on accepte aussi une URL complète et on
+  // extrait le slug automatiquement pour réduire la friction.
+  let input = window.prompt(
+    'Slug ou URL du formulaire publié à récupérer\n\n' +
+    'Exemples acceptés :\n' +
+    '  biennale-revest-2026\n' +
+    '  https://protein-keystone.com/f/biennale-revest-2026'
+  );
+  if (!input) return;
+  input = input.trim();
+  // Extrait le slug si une URL est collée
+  const match = input.match(/\/f\/([^/?#]+)/);
+  const slug = (match ? match[1] : input).toLowerCase().trim();
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    alert('Slug invalide — utilisez uniquement lettres minuscules, chiffres et tirets.');
+    return;
+  }
+  try {
+    const res = await fetch(`${CF_API}/api/pulsa/public/${encodeURIComponent(slug)}`);
+    if (!res.ok) {
+      alert(res.status === 404
+        ? `Formulaire "${slug}" introuvable.\nVérifiez le slug ou contactez l'administrateur.`
+        : `Erreur ${res.status} lors de la récupération.`);
+      return;
+    }
+    const data = await res.json();
+    const form = data.form || data;
+    if (!form?.meta) {
+      alert('Réponse serveur invalide.');
+      return;
+    }
+    // On marque comme publié pour que la library affiche le badge correct
+    // (la card "URL active après publication" devient "URL publique").
+    form.output = {
+      ...(form.output || {}),
+      status: 'published',
+      published_url: `${location.origin}/f/${slug}`,
+    };
+    // Si un form portant déjà ce slug existe → on le remplace pour éviter
+    // les doublons. Sinon on ajoute proprement.
+    const existing = listForms().find(f => f?.meta?.slug === slug);
+    if (existing) form.id = existing.id;
+    const stored = saveForm(form);
+    setCurrentFormId(stored.id);
+    // Bascule directement sur le builder du form récupéré.
+    _state.view = 'builder';
+    _state.form = stored;
+    _state.ui.selected_field = null;
+    _currentStepId = 'structure';
+    _refreshTopbar();
+    _renderMain();
+    _renderRail();
+  } catch (e) {
+    alert('Erreur réseau : ' + (e.message || e));
+  }
 }
 
 function _openForm(id) {
@@ -1149,6 +1213,9 @@ function _renderLibrary(main) {
           <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
             ${icon('building', 14)}<span>Charger l'exemple immobilier</span>
           </button>
+          <button class="pulsa-btn pulsa-btn-ghost" data-act="recover-published" title="Re-télécharger un formulaire déjà publié depuis son URL">
+            ${icon('refresh', 14)}<span>Récupérer un formulaire publié</span>
+          </button>
         </div>
       </div>
     `;
@@ -1162,6 +1229,9 @@ function _renderLibrary(main) {
         <p class="ws-step-sub">${forms.length} ${forms.length > 1 ? 'formulaires sauvegardés' : 'formulaire sauvegardé'} — auto-sauvegarde continue.</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="recover-published" title="Re-télécharger un formulaire déjà publié depuis son URL">
+          ${icon('refresh', 14)}<span>Récupérer un publié</span>
+        </button>
         <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
           ${icon('building', 14)}<span>Exemple immobilier</span>
         </button>
