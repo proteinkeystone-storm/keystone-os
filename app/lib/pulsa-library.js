@@ -43,7 +43,7 @@ export function loadLibrary() {
 }
 
 /**
- * Écrit la library en localStorage.
+ * Écrit la library en localStorage + déclenche la sync cross-device.
  */
 function _saveLibrary(library) {
   try {
@@ -51,6 +51,13 @@ function _saveLibrary(library) {
   } catch (e) {
     console.warn('[pulsa-library] save failed', e);
   }
+  // Sync vers le Cloud Vault (debounce 1.5s) pour propager la library
+  // sur les autres appareils du même JWT (Mac ↔ iPad). Import dynamique
+  // pour éviter une dépendance circulaire au boot. Le form publié côté
+  // Worker D1 reste indépendant — seuls les brouillons sont sync ici.
+  import('../cloud-vault.js').then(({ scheduleCloudSave, isCloudReady }) => {
+    if (isCloudReady()) scheduleCloudSave();
+  }).catch(() => {});
 }
 
 /**
@@ -169,4 +176,8 @@ export function setCurrentFormId(id) {
     if (id) localStorage.setItem(CURRENT_KEY, id);
     else localStorage.removeItem(CURRENT_KEY);
   } catch {}
+  // Sync cross-device (debounce 1.5s) — voir _saveLibrary().
+  import('../cloud-vault.js').then(({ scheduleCloudSave, isCloudReady }) => {
+    if (isCloudReady()) scheduleCloudSave();
+  }).catch(() => {});
 }

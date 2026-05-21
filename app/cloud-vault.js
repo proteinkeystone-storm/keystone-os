@@ -17,6 +17,12 @@ const PREFS_KEYS = [
     'ks_pad_order',
     // Sprint Kodex-3.3 : brouillons d'artefacts à workspace fullscreen
     'ks_kodex_draft',
+    // Sync cross-device des brouillons Pulsa (mai 2026, demande user
+    // Mac↔iPad). Le form publié reste indépendant côté Worker D1 — ces
+    // 2 clés ne servent qu'à retrouver les brouillons en cours d'édition
+    // sur tous les appareils du même JWT.
+    'ks_pulsa_library',
+    'ks_pulsa_current_form',
 ];
 
 let _saveTimer = null;
