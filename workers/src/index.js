@@ -45,6 +45,7 @@ import { handlePulsaPublic } from './routes/pulsa-public.js';
 import {
   handlePulsaSubmit, handlePulsaPurge,
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
+  handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleListPublic as handleMsgListPublic,
@@ -55,6 +56,14 @@ import { handleListPublic as handleMsgListPublic,
          handleRevoke     as handleMsgRevoke,
          handleRepublish  as handleMsgRepublish }                       from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
+// ── Sprint S1 (Auth v2 — multi-email pour plan MAX) ─────────
+import {
+  handleLicenceMe       as handleLicenceMeV2Full,
+  handleLicenceMembers,
+  handleLicenceClaim,
+  handleLicenceInvite,
+  handleLicenceRevokeMember,
+} from './routes/licence-v2.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -87,6 +96,18 @@ export default {
       // ── Licences v2 (Sprint 2 — public, hashed, JWT, fingerprint) ──
       if (path === '/api/licence/v2/activate' && method === 'POST') return handleActivateV2(request, env);
       if (path === '/api/licence/v2/me'       && method === 'GET')  return handleMe(request, env);
+
+      // ── Licence multi-email (Sprint S1 — plan MAX) ──────────────
+      // Routes ADDITIVES — n'altèrent aucune route v2 existante.
+      // Auto-migration D1 au premier appel via ensureSchemaAuthV2().
+      if (path === '/api/licence/me'      && method === 'GET')  return handleLicenceMeV2Full(request, env);
+      if (path === '/api/licence/members' && method === 'GET')  return handleLicenceMembers(request, env);
+      if (path === '/api/licence/claim'   && method === 'POST') return handleLicenceClaim(request, env);
+      if (path === '/api/licence/invite'  && method === 'POST') return handleLicenceInvite(request, env);
+      if (path.startsWith('/api/licence/members/') && method === 'DELETE') {
+        const targetEmail = path.split('/').pop();
+        return handleLicenceRevokeMember(request, env, targetEmail);
+      }
 
       // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
       // Rolling refresh du JWT : prend un JWT valide, en réémet un avec exp réinitialisé.
@@ -169,9 +190,21 @@ export default {
       if (path === '/api/pulsa/responses' && method === 'GET') {
         return handlePulsaResponsesList(request, env, url);
       }
+      // Variante slug → form_id (alias lisible pour consommateurs externes)
+      if (path.startsWith('/api/pulsa/responses-by-slug/') && method === 'GET') {
+        const slug = path.split('/').pop();
+        return handlePulsaResponsesListBySlug(request, env, slug);
+      }
       if (path.startsWith('/api/pulsa/responses/') && method === 'GET') {
         const rid = path.split('/').pop();
         return handlePulsaResponseGet(request, env, rid);
+      }
+      // PATCH partiel admin (Sprint Trait d'union — Fiches artistes).
+      // Whitelist STRICTE côté handler : fld_bio_courte, fld_bio_longue,
+      // fld_oeuvres (uniquement op set_image). Tout autre champ → 400.
+      if (path.startsWith('/api/pulsa/responses/') && method === 'PATCH') {
+        const rid = path.split('/').pop();
+        return handlePulsaResponsePatch(request, env, rid);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────

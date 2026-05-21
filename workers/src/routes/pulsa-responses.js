@@ -193,6 +193,55 @@ export async function handlePulsaResponsesList(request, env, url) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// GET /api/pulsa/responses-by-slug/:slug   — liste owner par slug
+//
+// Variante de handlePulsaResponsesList : résout le form_id depuis le
+// slug (lookup pulsa_forms) puis renvoie le même payload. Permet aux
+// consommateurs externes (proxies Pages Functions) de référencer un
+// formulaire par son slug stable plutôt que par son UUID opaque.
+// Auth + ownership : identique à la route principale.
+// ═══════════════════════════════════════════════════════════════
+export async function handlePulsaResponsesListBySlug(request, env, slug) {
+  const origin = getAllowedOrigin(env, request);
+  const owner = await _resolveOwner(request, env);
+  if (!owner) return err('Authentification requise', 401, origin);
+
+  if (!slug || !SLUG_RE.test(slug)) {
+    return err('Slug invalide', 400, origin);
+  }
+
+  await _ensureSchema(env);
+
+  const formRow = await env.DB.prepare(
+    'SELECT id, owner_sub FROM pulsa_forms WHERE slug = ? LIMIT 1'
+  ).bind(slug).first();
+  if (!formRow) return err('Formulaire introuvable', 404, origin);
+
+  if (!owner.isAdmin && formRow.owner_sub !== owner.sub) {
+    return err('Accès refusé', 403, origin);
+  }
+
+  const { results = [] } = await env.DB.prepare(`
+    SELECT id, form_id, slug, response_json, created_at, expires_at
+    FROM pulsa_responses
+    WHERE form_id = ?
+    ORDER BY created_at DESC
+    LIMIT 500
+  `).bind(formRow.id).all();
+
+  const responses = results.map(r => ({
+    id: r.id,
+    form_id: r.form_id,
+    slug: r.slug,
+    responses: _safeJson(r.response_json),
+    created_at: r.created_at,
+    expires_at: r.expires_at,
+  }));
+
+  return json({ ok: true, responses, count: responses.length, form_id: formRow.id }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // GET /api/pulsa/responses/:id   — détail (auth + owner)
 // ═══════════════════════════════════════════════════════════════
 export async function handlePulsaResponseGet(request, env, id) {
@@ -286,6 +335,159 @@ export async function handlePulsaResponsesCsv(request, env, url) {
       'Cache-Control': 'no-store',
     },
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PATCH /api/pulsa/responses/:id   — édition partielle admin
+//
+// Mise à jour ciblée et fortement whitelistée d'une réponse Pulsa.
+// Cas d'usage : Trait d'union — l'admin biennale édite bio/démarche et
+// uploade des images d'œuvres depuis /admin?token=…&tab=artists.
+//
+// Body attendu : { fields: { ... } } où fields ne peut contenir QUE :
+//   - fld_bio_courte    : string                         → remplacement simple
+//   - fld_bio_longue    : string                         → remplacement simple
+//   - fld_oeuvres       : { __op: 'set_image',
+//                           index: number,
+//                           oeuvre_slug?: string,
+//                           image_url: string }          → patch ciblé sur 1 œuvre
+//
+// Sécurité — TOUS les autres champs sont rejetés (400). Aucun upsert
+// d'op libre, aucun remplacement complet de fld_oeuvres (qui contient
+// les autres métadonnées titre/année/etc. saisies via le form public).
+//
+// Auth : requireAdmin uniquement (pas de JWT/device — c'est une opération
+// hors flux owner classique). On audit côté console (suffisant pour la
+// biennale ; si besoin d'audit durable, ajouter table _admin_logs).
+// ═══════════════════════════════════════════════════════════════
+const ALLOWED_PATCH_FIELDS = new Set(['fld_bio_courte', 'fld_bio_longue', 'fld_oeuvres']);
+const MAX_TEXT_LEN = 8_000;
+
+export async function handlePulsaResponsePatch(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  if (!requireAdmin(request, env)) {
+    return err('Non autorisé', 401, origin);
+  }
+
+  await _ensureSchema(env);
+
+  const row = await env.DB.prepare(
+    'SELECT id, form_id, slug, response_json FROM pulsa_responses WHERE id = ?'
+  ).bind(id).first();
+  if (!row) return err('Réponse introuvable', 404, origin);
+
+  const body = await parseBody(request);
+  const fields = body?.fields;
+  if (!fields || typeof fields !== 'object') {
+    return err('Champ "fields" requis (objet partiel)', 400, origin);
+  }
+
+  // Whitelist stricte : on REJETTE toute clé non autorisée (vs ignorance
+  // silencieuse) pour faire remonter les bugs côté appelant.
+  for (const k of Object.keys(fields)) {
+    if (!ALLOWED_PATCH_FIELDS.has(k)) {
+      return err(`Champ non autorisé en PATCH : ${k}`, 400, origin);
+    }
+  }
+
+  let current;
+  try {
+    current = JSON.parse(row.response_json || '{}');
+  } catch {
+    current = {};
+  }
+  if (!current || typeof current !== 'object') current = {};
+
+  const updated = { ...current };
+
+  // ── Textes : remplacement simple, longueur bornée ────────────
+  if ('fld_bio_courte' in fields) {
+    if (typeof fields.fld_bio_courte !== 'string') {
+      return err('fld_bio_courte doit être une string', 400, origin);
+    }
+    updated.fld_bio_courte = fields.fld_bio_courte.slice(0, MAX_TEXT_LEN);
+  }
+  if ('fld_bio_longue' in fields) {
+    if (typeof fields.fld_bio_longue !== 'string') {
+      return err('fld_bio_longue doit être une string', 400, origin);
+    }
+    updated.fld_bio_longue = fields.fld_bio_longue.slice(0, MAX_TEXT_LEN);
+  }
+
+  // ── fld_oeuvres : op `set_image` uniquement ──────────────────
+  if ('fld_oeuvres' in fields) {
+    const op = fields.fld_oeuvres;
+    if (!op || typeof op !== 'object' || op.__op !== 'set_image') {
+      return err('fld_oeuvres : seule l\'op { __op: "set_image" } est autorisée', 400, origin);
+    }
+    const idx = Number(op.index);
+    const imageUrl = typeof op.image_url === 'string' ? op.image_url : '';
+    const oeuvreSlug = typeof op.oeuvre_slug === 'string' ? op.oeuvre_slug : '';
+    if (!Number.isFinite(idx) || idx < 0) {
+      return err('set_image : index doit être un entier ≥ 0', 400, origin);
+    }
+    if (!imageUrl || imageUrl.length > 2048) {
+      return err('set_image : image_url requise (max 2048 chars)', 400, origin);
+    }
+    // Validation URL minimale — on accepte uniquement HTTPS pour la fiche publique.
+    if (!/^https:\/\//i.test(imageUrl)) {
+      return err('set_image : image_url doit être en HTTPS', 400, origin);
+    }
+    const oeuvres = Array.isArray(updated.fld_oeuvres) ? updated.fld_oeuvres.slice() : [];
+    if (idx >= oeuvres.length) {
+      return err(`set_image : index ${idx} hors borne (${oeuvres.length} œuvres)`, 400, origin);
+    }
+    // Vérification de cohérence du slug si fourni — protège contre un upload
+    // mal référencé après réordonnancement côté Pulsa. Heuristique : on compare
+    // au titre slugifié.
+    if (oeuvreSlug) {
+      const expected = _slugifyTitle((oeuvres[idx] || {}).titre || '');
+      if (expected && expected !== oeuvreSlug && !oeuvreSlug.startsWith(expected)) {
+        // On log mais on ne bloque pas — la disambiguation slug-2/slug-3 fait
+        // que ça peut diverger légitimement (cf. /api/artists côté Pages).
+        console.warn('[pulsa-patch] slug mismatch', { id, idx, expected, got: oeuvreSlug });
+      }
+    }
+    const target = (oeuvres[idx] && typeof oeuvres[idx] === 'object') ? { ...oeuvres[idx] } : {};
+    target.image_url = imageUrl;
+    oeuvres[idx] = target;
+    updated.fld_oeuvres = oeuvres;
+  }
+
+  // ── Persistance D1 ────────────────────────────────────────────
+  await env.DB.prepare(
+    'UPDATE pulsa_responses SET response_json = ? WHERE id = ?'
+  ).bind(JSON.stringify(updated), id).run();
+
+  // Audit minimal — visible via `wrangler tail`. Pas de PII côté requête
+  // (on log le rowId et les clés touchées, pas le contenu).
+  console.log('[pulsa-patch]', JSON.stringify({
+    rowId: id,
+    fields: Object.keys(fields),
+    at: new Date().toISOString(),
+    ua: (request.headers.get('user-agent') || '').slice(0, 80),
+  }));
+
+  return json({
+    ok: true,
+    row: {
+      id: row.id,
+      form_id: row.form_id,
+      slug: row.slug,
+      responses: updated,
+    },
+  }, 200, origin);
+}
+
+function _slugifyTitle(input) {
+  return String(input || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
 }
 
 // ═══════════════════════════════════════════════════════════════
