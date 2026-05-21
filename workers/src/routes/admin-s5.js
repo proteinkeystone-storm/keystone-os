@@ -28,6 +28,26 @@ const TOGGLABLE_FLAGS = new Set([
   'enforce_vault_per_email_v2',   // S4
 ]);
 
+// ── Auto-migration locale (hotfix 22/05) ─────────────────────────
+// Garantit que les colonnes flag S2.5/S4 existent côté D1 avant le
+// SELECT enrichi. Les helpers d'origine (_ensureSchemaEnforce dans
+// devices-v2.js et ensureSchemaVaultV2 dans vault-user.js) ne sont
+// déclenchés qu'au 1er call de leur route respective ; si personne
+// n'a touché vault depuis S4 en prod, la colonne S4 manque encore
+// et le SELECT throw → banner "Mode legacy" intempestif.
+// Idempotent (try/catch silent), zéro risque même si déjà appliqué.
+let _adminS5SchemaReady = false;
+async function _ensureSchemaForAdminS5(env) {
+  if (_adminS5SchemaReady) return;
+  try {
+    await env.DB.prepare('ALTER TABLE licences ADD COLUMN enforce_devices_v2 INTEGER DEFAULT 0').run();
+  } catch (_) { /* colonne déjà ajoutée, ok */ }
+  try {
+    await env.DB.prepare('ALTER TABLE licences ADD COLUMN enforce_vault_per_email_v2 INTEGER DEFAULT 0').run();
+  } catch (_) { /* colonne déjà ajoutée, ok */ }
+  _adminS5SchemaReady = true;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // GET /api/admin/licences
 // ───────────────────────────────────────────────────────────────
@@ -43,6 +63,8 @@ const TOGGLABLE_FLAGS = new Set([
 export async function handleListLicencesEnriched(request, env) {
   const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+
+  await _ensureSchemaForAdminS5(env);
 
   const url    = new URL(request.url);
   const fActive = url.searchParams.get('active'); // 'true' | 'false' | null
@@ -139,6 +161,8 @@ function safeJSON(s) {
 export async function handleToggleLicenceFlag(request, env, licenceKey) {
   const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+
+  await _ensureSchemaForAdminS5(env);
 
   if (!licenceKey || typeof licenceKey !== 'string') {
     return err('Clé licence invalide', 400, origin);
