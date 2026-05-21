@@ -50,7 +50,8 @@ import {
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
-         handleAuditList, handleExpirationRemindersRunNow }            from './routes/admin-s5.js';
+         handleAuditList, handleExpirationRemindersRunNow,
+         handleAdminIssueJWT }                                         from './routes/admin-s5.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -282,6 +283,8 @@ export default {
       if (path === '/api/admin/licences'                 && method === 'GET')  return handleListLicencesEnriched(request, env);
       if (path === '/api/admin/audit'                    && method === 'GET')  return handleAuditList(request, env);
       if (path === '/api/admin/expiration-reminders/run-now' && method === 'POST') return handleExpirationRemindersRunNow(request, env);
+      // S5.6 — Admin login unifié : émet un JWT user pour activer Cloud Vault sync
+      if (path === '/api/admin/issue-jwt'                && method === 'POST') return handleAdminIssueJWT(request, env);
       const licenceFlagMatch = path.match(/^\/api\/admin\/licences\/([A-Z0-9-]+)\/flag$/i);
       if (licenceFlagMatch && method === 'POST') {
         return handleToggleLicenceFlag(request, env, licenceFlagMatch[1]);

@@ -23,6 +23,18 @@ const PREFS_KEYS = [
     // sur tous les appareils du même JWT.
     'ks_pulsa_library',
     'ks_pulsa_current_form',
+    // Sprint S5.6 — sélection d'outils Dashboard (ks_user_selection)
+    // et état de bibliothèque Kodex. Sans ces 2 clés sync'ées, l'admin
+    // qui se logue sur un nouveau device repartait avec un dashboard
+    // vide même si Cloud Vault était actif (bug récurrent 21/05 + 22/05).
+    'ks_user_selection',
+    'ks_kodex_library',
+    'ks_user_owner',
+    // Marqueurs démo : utiles pour ne pas redéclencher la pop-up démo
+    // sur un device déjà sorti du mode démo (cross-device coherence).
+    'ks_is_demo',
+    'ks_demo_started_at',
+    'ks_demo_last_switch',
 ];
 
 let _saveTimer = null;

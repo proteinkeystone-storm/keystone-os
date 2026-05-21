@@ -3802,6 +3802,18 @@ function _renderSettingsBody() {
                         <div class="sp-user-hint" id="lic-feedback" style="min-height:16px"></div>
                     </div>
                     ${lic.active ? `<button class="sp-danger-btn" id="licence-revoke" style="margin-top:4px">Révoquer la licence</button>` : ''}
+                    <!-- S5.6 — Bouton de push manuel vers le Cloud Vault.
+                         Utile au 1er login sur un nouvel appareil, ou si l'admin
+                         vient de poser son ks_jwt et veut push toute sa config
+                         existante d'un coup (sans attendre la sync auto sur le
+                         prochain setItem). Pousse PREFS_KEYS + clés API.
+                         Inverse logique : restaurer = via login normal. -->
+                    <button class="api-key-save-btn" id="licence-force-sync" style="margin-top:12px;width:100%">
+                        Forcer la synchronisation Cloud
+                    </button>
+                    <p class="sp-user-hint" id="lic-sync-feedback" style="margin-top:4px;font-size:11px;line-height:1.4;min-height:16px">
+                        Pousse vos préférences (sélection d'outils, clés API, brouillons) vers le serveur. À utiliser au 1er login sur un nouvel appareil ou après /admin.
+                    </p>
                     <!-- Reset local : vide localStorage + SW + caches + redirige sur la landing.
                          Indispensable pour changer d'appareil ou reseter une session en erreur.
                          Ne touche PAS à la licence côté serveur (pas de révocation). -->
@@ -4010,6 +4022,37 @@ function _renderSettingsBody() {
         revokeLicence();
         // Fermer les settings et laisser le hot reload gérer l'UI
         document.getElementById('settings-panel')?.classList.remove('open');
+    });
+
+    // S5.6 — Bouton « Forcer la synchronisation Cloud »
+    // Pousse immédiatement le snapshot localStorage vers /api/vault/save
+    // (au lieu d'attendre le prochain setItem debouncé 1.5s). Pré-requis :
+    // un ks_jwt actif en localStorage (sinon affiche message d'aide).
+    body.querySelector('#licence-force-sync')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const fb = body.querySelector('#lic-sync-feedback');
+        const originalLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Synchronisation…';
+        if (fb) { fb.textContent = ''; fb.style.color = ''; }
+        try {
+            const { saveToCloud, isCloudReady } = await import('./cloud-vault.js');
+            if (!isCloudReady()) {
+                throw new Error('Aucun JWT actif. Reconnectez-vous via /admin (ou via la pop-up d\'activation) pour activer Cloud Vault.');
+            }
+            const ok = await saveToCloud();
+            if (ok === false) throw new Error('Le serveur a refusé le push (JWT invalide ou expiré ?).');
+            btn.textContent = '✓ Synchronisé';
+            if (fb) { fb.textContent = 'Vos préférences sont sur le serveur. Vous pouvez maintenant les retrouver sur un autre appareil.'; fb.style.color = 'var(--gold)'; }
+        } catch (err) {
+            btn.textContent = '✗ Échec';
+            if (fb) { fb.textContent = err.message; fb.style.color = '#f26a4b'; }
+        } finally {
+            setTimeout(() => {
+                btn.textContent = originalLabel;
+                btn.disabled = false;
+            }, 3000);
+        }
     });
 
     // Bouton « Déconnexion complète (reset cet appareil) » — équivalent

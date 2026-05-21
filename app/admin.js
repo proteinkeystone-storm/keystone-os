@@ -207,6 +207,27 @@ async function tryLogin() {
   try {
     await api('/api/licence/list');
     localStorage.setItem('ks_admin_token', secret);
+
+    // S5.6 — Pose AUSSI un ks_jwt user lié à la licence ADMIN active,
+    // pour que le Cloud Vault sync puisse fonctionner cross-device.
+    // Sans ce JWT, le Mac restait silencieusement "muet" côté serveur
+    // et iPad/iPhone ne pouvaient rien restaurer (bug récurrent 21/05).
+    try {
+      const jwtResp = await api('/api/admin/issue-jwt', 'POST');
+      if (jwtResp?.jwt) {
+        localStorage.setItem('ks_jwt', jwtResp.jwt);
+        localStorage.setItem('ks_licence_plan', jwtResp.plan || 'ADMIN');
+        if (jwtResp.email) localStorage.setItem('ks_user_email', jwtResp.email);
+        if (jwtResp.owner) localStorage.setItem('ks_user_owner', jwtResp.owner);
+        if (jwtResp.licence_key) localStorage.setItem('ks_licence_key', jwtResp.licence_key);
+        console.log('[S5.6] JWT admin posé, Cloud Vault sync activé pour', jwtResp.email || jwtResp.owner || '(sans email)');
+      }
+    } catch (e) {
+      // Non bloquant : si le backend est ancien (pas encore S5.6 deployé)
+      // ou si pas de licence ADMIN en DB, on reste sur le flow legacy.
+      console.warn('[S5.6] JWT admin non émis — Cloud Vault sync indisponible cross-device', e.message);
+    }
+
     showAdmin();
   } catch {
     adminToken = prev;

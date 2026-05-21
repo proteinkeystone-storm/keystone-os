@@ -19,7 +19,11 @@
 
 import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { audit }                                                 from '../lib/audit.js';
+import { signJWT }                                                from '../lib/jwt.js';
+import { blindIndex }                                             from '../lib/kdf.js';
 import { handleExpirationReminders }                             from './expiration-reminders.js';
+
+const EMAIL_RE_ADMIN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 // Whitelist stricte des flags togglables. Si un autre flag apparaît
 // un jour, l'ajouter explicitement ici (= contrôle d'accès au schéma).
@@ -267,6 +271,88 @@ export async function handleAuditList(request, env) {
     total:   entries.length,
     filters: { action: fAction, target: fTarget, tenant: fTenant, since: fSince, limit },
     entries,
+  }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/admin/issue-jwt  (Sprint S5.6 — Admin login unifié)
+// ───────────────────────────────────────────────────────────────
+// Émet un JWT utilisateur lié à la 1ère licence ADMIN active, pour
+// que l'admin (déjà authentifié via ks_admin_token) puisse activer
+// le Cloud Vault sync cross-device.
+//
+// Sans cet endpoint, le login /admin posait UNIQUEMENT ks_admin_token,
+// jamais ks_jwt → cloud-vault.js retournait { hydrated: false, reason:
+// 'no-jwt' } → aucune sync entre Mac/iPad/iPhone pour les admins.
+//
+// Sécurité :
+//   - requireAdmin obligatoire (= il faut déjà avoir ks_admin_token)
+//   - JWT lié à la VRAIE licence ADMIN en DB, pas à un sub forgé
+//   - Backfill lookup_hmac sur les licences legacy (= migration douce)
+//   - Audit log de chaque émission pour traçabilité
+// ═══════════════════════════════════════════════════════════════
+export async function handleAdminIssueJWT(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+
+  if (!env.KS_JWT_SECRET)    return err('Server: KS_JWT_SECRET manquant',    500, origin);
+  if (!env.KS_LOOKUP_PEPPER) return err('Server: KS_LOOKUP_PEPPER manquant', 500, origin);
+
+  // Trouve la 1ère licence ADMIN active. On prend la plus ancienne pour
+  // garder un sub stable dans le temps (= le même JWT après chaque login).
+  const adminLicence = await env.DB
+    .prepare(`
+      SELECT * FROM licences
+       WHERE UPPER(COALESCE(plan, '')) = 'ADMIN'
+         AND is_active = 1
+       ORDER BY created_at ASC
+       LIMIT 1
+    `)
+    .first();
+  if (!adminLicence) return err('Aucune licence ADMIN active trouvée', 404, origin);
+
+  // Backfill lookup_hmac si manquant (licence legacy). Idempotent.
+  let sub = adminLicence.lookup_hmac;
+  if (!sub) {
+    sub = await blindIndex(adminLicence.key, env.KS_LOOKUP_PEPPER);
+    try {
+      await env.DB
+        .prepare('UPDATE licences SET lookup_hmac = ? WHERE key = ? AND lookup_hmac IS NULL')
+        .bind(sub, adminLicence.key)
+        .run();
+    } catch (_) { /* best-effort, le JWT marche même si UPDATE échoue */ }
+  }
+
+  // Email du JWT : on prend owner s'il matche un email valide, sinon null.
+  // Cohérent avec le claim S4 (cf. vault-user.js _claimEmailIfValid).
+  const ownerLower = (adminLicence.owner || '').toString().trim().toLowerCase();
+  const emailClaim = EMAIL_RE_ADMIN.test(ownerLower) ? ownerLower : null;
+
+  const jwt = await signJWT({
+    sub,
+    plan:    'ADMIN',
+    owner:   adminLicence.owner,
+    email:   emailClaim,
+    isAdmin: true,
+    via:     'admin_login',
+  }, env);
+
+  await audit(env, {
+    action:   'admin_jwt_issued',
+    actor:    'admin',
+    target:   adminLicence.key,
+    tenantId: adminLicence.tenant_id || null,
+    details:  { has_email: !!emailClaim, owner_was_legacy: !adminLicence.lookup_hmac },
+    request,
+  });
+
+  return json({
+    ok:    true,
+    jwt,
+    plan:  'ADMIN',
+    owner: adminLicence.owner,
+    email: emailClaim,
+    licence_key: adminLicence.key,  // utile pour debug côté frontend
   }, 200, origin);
 }
 
