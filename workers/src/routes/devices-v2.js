@@ -37,9 +37,31 @@
    audit complet de licence-public.js (route critique pour Stripe).
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
+import { json, err, getAllowedOrigin, requireAdmin, generateId, generateToken } from '../lib/auth.js';
 import { requireJWT }                                from '../lib/jwt.js';
 import { ensureSchemaAuthV2 }                        from './licence-v2.js';
+
+// ── Auto-migration Sprint S2.5 (enforcement devices_max) ────────
+// Ajoute les colonnes/index nécessaires à l'enforcement effectif
+// de licences.devices_max via enforceDeviceLimit(). Pattern try/catch
+// sur les ALTER (SQLite n'a pas IF NOT EXISTS pour ADD COLUMN).
+let _enforceSchemaReady = false;
+async function _ensureSchemaEnforce(env) {
+  if (_enforceSchemaReady) return;
+  const safeAlter = async (sql) => {
+    try { await env.DB.prepare(sql).run(); }
+    catch (e) { /* colonne déjà existante : OK */ }
+  };
+  // Flag par licence — par défaut 0 (off), à activer par licence test :
+  //   UPDATE licences SET enforce_devices_v2 = 1 WHERE key = '...'
+  await safeAlter('ALTER TABLE licences ADD COLUMN enforce_devices_v2 INTEGER DEFAULT 0');
+  // Fingerprint pour matcher un device existant lors de re-activations
+  await safeAlter('ALTER TABLE devices ADD COLUMN fingerprint TEXT');
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_devices_fingerprint_v2 ON devices(licence_key, email, fingerprint)'
+  ).run().catch(() => {});
+  _enforceSchemaReady = true;
+}
 
 // ── Helpers communs ─────────────────────────────────────────────
 function _normEmail(v) {
@@ -124,6 +146,149 @@ export async function countActiveDevices(env, { licenceKey, email, tenantId } = 
   }
 
   return 0;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// enforceDeviceLimit — helper appelé par handleActivateV2 (S2.5)
+// ───────────────────────────────────────────────────────────────
+// Vérifie + enregistre un device pour le couple (licence, email).
+//
+// Algo :
+//   1. Si licence.enforce_devices_v2 !== 1 → { mode: 'legacy_skip' } (caller
+//      doit continuer son flow legacy fingerprint binding).
+//   2. Plan ADMIN/DEMO → { mode: 'bypass' } (multi-device illimité).
+//   3. Cherche un device existant pour (licence_key, email, fingerprint).
+//      - Si trouvé → UPDATE last_seen + retourne { mode: 'reused', device }.
+//      - Sinon → compte les devices actifs distincts (par fingerprint) pour
+//        ce couple (licence, email) :
+//        - Si count >= devices_max → 409 enrichi { mode: 'denied',
+//          devicesMax, existingDevices, suggestion }.
+//        - Sinon → INSERT new device row, retourne { mode: 'created', device }.
+//
+// Effets de bord :
+//   - Crée/update une row dans devices (avec fingerprint, label auto,
+//     token random unique).
+//   - NE modifie PAS licences.device_fingerprint (laissé pour rétrocompat
+//     du flow legacy ; handleActivateV2 le maintient explicitement
+//     en parallèle si besoin).
+//
+// Retour :
+//   { mode: 'legacy_skip' | 'bypass' | 'reused' | 'created' | 'denied',
+//     device?: row,
+//     devicesMax?: number,
+//     existingDevices?: [...],
+//     suggestion?: string }
+//
+// Cohérence avec countActiveDevices : on compte les fingerprints
+// DISTINCTS pour ne pas compter 2 rows si le user a refait /activate
+// sans avoir fait DELETE avant (cas malheureux : double création).
+// ═══════════════════════════════════════════════════════════════
+export async function enforceDeviceLimit(env, { licence, email, fingerprint } = {}) {
+  if (!licence || !licence.key) {
+    return { mode: 'legacy_skip', reason: 'no_licence' };
+  }
+
+  // Flag par licence — par défaut off
+  if (licence.enforce_devices_v2 !== 1) {
+    return { mode: 'legacy_skip', reason: 'flag_off' };
+  }
+
+  // Plans bypass binding (cohérent avec licence-public.js bypassBind)
+  const planUp = (licence.plan || '').toUpperCase();
+  if (planUp === 'ADMIN' || planUp === 'DEMO') {
+    return { mode: 'bypass', reason: 'plan_bypass' };
+  }
+
+  const e = _normEmail(email);
+  const fp = (fingerprint || '').toString().trim();
+  if (!e) return { mode: 'legacy_skip', reason: 'no_email' };
+  if (!fp || fp.length < 16) return { mode: 'legacy_skip', reason: 'no_fingerprint' };
+
+  await _ensureSchemaEnforce(env);
+
+  // 1. Cherche un device existant pour ce fingerprint
+  const existing = await env.DB
+    .prepare('SELECT * FROM devices WHERE licence_key = ? AND email = ? AND fingerprint = ? LIMIT 1')
+    .bind(licence.key, e, fp)
+    .first();
+
+  if (existing) {
+    // Réactivation depuis le même device → on rafraîchit last_seen, ré-approuve
+    // (au cas où le device avait été soft-revoke entre temps).
+    await env.DB
+      .prepare("UPDATE devices SET is_approved = 1, last_seen = datetime('now') WHERE id = ?")
+      .bind(existing.id)
+      .run();
+    return {
+      mode:   'reused',
+      device: { ..._rowToDevice(existing), is_approved: true },
+    };
+  }
+
+  // 2. Nouveau device. Compte les fingerprints distincts actifs pour ce couple.
+  const countRow = await env.DB
+    .prepare(`
+      SELECT COUNT(DISTINCT fingerprint) AS n
+        FROM devices
+       WHERE licence_key = ? AND email = ?
+         AND is_approved = 1
+         AND fingerprint IS NOT NULL
+    `)
+    .bind(licence.key, e)
+    .first();
+  const activeCount = countRow?.n || 0;
+
+  const devicesMax = Number(licence.devices_max || 0) || null;
+
+  if (devicesMax && activeCount >= devicesMax) {
+    // Récupère la liste pour aider le user à choisir lequel révoquer
+    const { results: deviceRows = [] } = await env.DB
+      .prepare(`
+        SELECT id, label, type, last_seen, created_at
+          FROM devices
+         WHERE licence_key = ? AND email = ?
+           AND is_approved = 1
+         ORDER BY last_seen DESC NULLS LAST, created_at DESC
+         LIMIT 20
+      `)
+      .bind(licence.key, e)
+      .all();
+
+    return {
+      mode:            'denied',
+      devicesMax,
+      activeCount,
+      existingDevices: deviceRows.map(_rowToDevice),
+      suggestion:      `Limite atteinte pour ${e} (${devicesMax} device${devicesMax > 1 ? 's' : ''} max). Révoquez un device existant via DELETE /api/licence/devices/:id puis ré-activez.`,
+    };
+  }
+
+  // 3. INSERT nouveau device
+  const id = generateId();
+  const token = generateToken(32);
+  const label = `Web ${new Date().toISOString().slice(0, 10)}`;
+  await env.DB.prepare(`
+    INSERT INTO devices (id, tenant_id, label, type, email, token, is_approved, licence_key, fingerprint, last_seen)
+    VALUES (?, ?, ?, 'web', ?, ?, 1, ?, ?, datetime('now'))
+  `).bind(
+    id,
+    licence.tenant_id || 'default',
+    label,
+    e,
+    token,
+    licence.key,
+    fp,
+  ).run();
+
+  const inserted = await env.DB
+    .prepare('SELECT * FROM devices WHERE id = ?')
+    .bind(id)
+    .first();
+
+  return {
+    mode:   'created',
+    device: _rowToDevice(inserted),
+  };
 }
 
 // Mappe un row DB vers la forme exposée par l'API.

@@ -22,6 +22,8 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { blindIndex, hashKey, verifyKey }         from '../lib/kdf.js';
 import { signJWT }                                from '../lib/jwt.js';
+// Sprint S2.5 — enforcement effectif de licences.devices_max
+import { enforceDeviceLimit }                     from './devices-v2.js';
 
 const MAX_BACKOFF_MS = 60 * 60 * 1000; // 1 heure
 const HARD_LOCK_AFTER = 10;            // attentes avant lock 24h
@@ -144,7 +146,7 @@ export async function handleActivateV2(request, env) {
     return err('Licence expirée.', 403, origin);
   }
 
-  // ── Étape 5 : First-Use device binding (Sprint 2.2) ──────────
+  // ── Étape 5 : First-Use device binding (Sprint 2.2 + S2.5) ─────
   // Plan DEMO/ADMIN = bypass (multi-device pour démos, commerciaux,
   // et l'admin qui doit accéder depuis tous ses appareils).
   // Plan BETA = binding normal (1 testeur = 1 appareil).
@@ -153,24 +155,60 @@ export async function handleActivateV2(request, env) {
   const isAdmin   = planUp === 'ADMIN';
   const bypassBind = isDemo || isAdmin;
   let   deviceBound = false;
+  let   enforcementResult = null;  // S2.5 — résultat de enforceDeviceLimit (debug)
 
-  if (!bypassBind) {
-    if (!licence.device_fingerprint) {
-      // Première activation → on binde
-      await env.DB.prepare(`
-        UPDATE licences
-           SET device_fingerprint = ?, activated_at = datetime('now')
-         WHERE lookup_hmac = ?
-      `).bind(fp, lookupHmac).run();
-      licence.device_fingerprint = fp;
-      deviceBound = true;
-    } else if (licence.device_fingerprint !== fp) {
-      // Clé déjà liée à un autre appareil
-      return err(
-        'Cette clé est déjà activée sur un autre appareil. Contactez le support.',
-        409,
-        origin,
-      );
+  // ── S2.5 — Enforcement effectif via table devices ────────────
+  // Activé UNIQUEMENT pour les licences avec enforce_devices_v2=1.
+  // Pour toutes les autres (= toutes les licences existantes par
+  // défaut) → comportement legacy (binding fingerprint sur licences).
+  // Try/catch défensif : si l'enforcement échoue (bug Worker, DB
+  // hors-service…), on retombe sur le legacy plutôt que de bloquer
+  // l'utilisateur.
+  try {
+    enforcementResult = await enforceDeviceLimit(env, {
+      licence,
+      email,
+      fingerprint: fp,
+    });
+  } catch (e) {
+    console.warn('[activate v2] enforceDeviceLimit threw, falling back to legacy', e);
+    enforcementResult = { mode: 'legacy_skip', reason: 'exception' };
+  }
+
+  if (enforcementResult?.mode === 'denied') {
+    // Limite atteinte → 409 enrichi avec liste devices + suggestion
+    return json({
+      error:           enforcementResult.suggestion || 'Limite de devices atteinte pour cet email.',
+      devices_max:     enforcementResult.devicesMax,
+      active_count:    enforcementResult.activeCount,
+      active_devices:  enforcementResult.existingDevices || [],
+      action:          'DELETE /api/licence/devices/:id (revoke un device) puis ré-essayer /api/licence/v2/activate',
+    }, 409, origin);
+  }
+
+  if (enforcementResult?.mode === 'created' || enforcementResult?.mode === 'reused') {
+    deviceBound = (enforcementResult.mode === 'created');
+  } else {
+    // mode = 'legacy_skip' ou 'bypass' → on continue le code legacy
+    // (cas par défaut tant qu'enforce_devices_v2 n'est pas activé).
+    if (!bypassBind) {
+      if (!licence.device_fingerprint) {
+        // Première activation → on binde
+        await env.DB.prepare(`
+          UPDATE licences
+             SET device_fingerprint = ?, activated_at = datetime('now')
+           WHERE lookup_hmac = ?
+        `).bind(fp, lookupHmac).run();
+        licence.device_fingerprint = fp;
+        deviceBound = true;
+      } else if (licence.device_fingerprint !== fp) {
+        // Clé déjà liée à un autre appareil
+        return err(
+          'Cette clé est déjà activée sur un autre appareil. Contactez le support.',
+          409,
+          origin,
+        );
+      }
     }
   }
 
