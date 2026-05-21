@@ -156,19 +156,21 @@ export function refreshDemoChrono(rootEl) {
 // ═══════════════════════════════════════════════════════════════
 export const DEMO_CHRONO_CSS = `
 /* ── Chronomètre démo (Sprint Démo A+B) ─────────────────────── */
+/* Cible : largeur ≤ #hero-time (~81px en HH:MM, font 28px) pour ne
+   jamais déborder visuellement de l'heure dans .hero-meta. */
 .ks-demo-chrono {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 8px 16px;
-  margin-bottom: 14px;     /* respiration vs heure/date hero */
-  margin-left: auto;       /* pousse à droite dans .hero-meta */
-  min-width: 112px;        /* largeur cohérente quelle que soit la valeur (5j vs 12j) */
+  gap: 4px;                 /* très compact */
+  padding: 4px 8px;         /* serré horizontal pour rentrer sous 81px */
+  margin-bottom: 8px;       /* respiration vs heure */
+  margin-left: auto;
+  min-width: 0;
   border-radius: 999px;
   border: 1px solid currentColor;
   background: color-mix(in srgb, currentColor 8%, transparent);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -176,11 +178,24 @@ export const DEMO_CHRONO_CSS = `
   cursor: default;
   transition: color 220ms ease, background 220ms ease, border-color 220ms ease;
 }
-/* Quand inséré dans .hero-meta, s'assure que la pill est sur sa propre
-   ligne (sinon elle peut se mettre à côté de l'heure si parent inline). */
+/* Quand dans .hero-meta : pousse à droite + bornée à la largeur de l'heure */
 .hero-meta .ks-demo-chrono {
   flex: 0 0 auto;
   align-self: flex-end;
+  max-width: 81px;          /* exactement la largeur de l'heure HH:MM (font 28px) */
+}
+/* SVG compact pour tenir dans la pill ≤ 81px */
+.ks-demo-chrono-svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+.ks-demo-chrono-tag {
+  font-size: 9px;           /* "DÉMO" en petite caps */
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+.ks-demo-chrono-days {
+  font-size: 11px;
 }
 .ks-demo-chrono-svg {
   flex: 0 0 auto;
