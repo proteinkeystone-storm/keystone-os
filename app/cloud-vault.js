@@ -155,25 +155,46 @@ let _autoSyncInstalled = false;
 export function installAutoSync() {
     if (_autoSyncInstalled) return;
     _autoSyncInstalled = true;
+    // Tout le bloc est wrappé : si pour une raison absurde le navigateur
+    // refuse l'override (Safari/iPad strict mode, freeze sur Storage, etc.),
+    // on log un warning mais on NE PROPAGE PAS l'erreur — l'app continue
+    // sans auto-sync plutôt que de bloquer le boot.
+    try {
 
     const origSet = Storage.prototype.setItem;
     const origDel = Storage.prototype.removeItem;
 
+    // try/catch defensive : si _shouldSync, isCloudReady ou scheduleCloudSave
+    // lèvent une exception pour une raison imprévue, on NE DOIT JAMAIS casser
+    // le setItem natif — sinon toute l'app se bloque silencieusement
+    // (n'importe quel localStorage.setItem ailleurs leverait l'erreur).
     Storage.prototype.setItem = function(key, value) {
         origSet.call(this, key, value);
-        // Ne surveille QUE localStorage (pas sessionStorage), et seulement
-        // si l'utilisateur a un JWT (sinon pas de cloud accessible).
-        if (this === localStorage && _shouldSync(key) && isCloudReady()) {
-            scheduleCloudSave();
+        try {
+            if (this === localStorage && _shouldSync(key) && isCloudReady()) {
+                scheduleCloudSave();
+            }
+        } catch (e) {
+            console.warn('[CloudVault] auto-sync setItem hook error:', e.message);
         }
     };
 
     Storage.prototype.removeItem = function(key) {
         origDel.call(this, key);
-        if (this === localStorage && _shouldSync(key) && isCloudReady()) {
-            scheduleCloudSave();
+        try {
+            if (this === localStorage && _shouldSync(key) && isCloudReady()) {
+                scheduleCloudSave();
+            }
+        } catch (e) {
+            console.warn('[CloudVault] auto-sync removeItem hook error:', e.message);
         }
     };
+    } catch (e) {
+        // Install échoué : on désactive le flag pour qu'un futur appel
+        // puisse retenter. Le reste de l'app fonctionne normalement.
+        _autoSyncInstalled = false;
+        console.warn('[CloudVault] installAutoSync failed, continuing without auto-sync:', e.message);
+    }
 }
 
 /**
