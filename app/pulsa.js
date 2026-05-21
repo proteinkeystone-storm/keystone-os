@@ -496,22 +496,41 @@ async function _recoverPublishedForm() {
       return;
     }
     const data = await res.json();
-    const form = data.form || data;
-    if (!form?.meta) {
+    const publicForm = data.form || data;
+    if (!publicForm?.meta || !Array.isArray(publicForm.sections)) {
       alert('Réponse serveur invalide.');
       return;
     }
-    // On marque comme publié pour que la library affiche le badge correct
-    // (la card "URL active après publication" devient "URL publique").
-    form.output = {
-      ...(form.output || {}),
-      status: 'published',
-      published_url: `${location.origin}/f/${slug}`,
-    };
-    // Si un form portant déjà ce slug existe → on le remplace pour éviter
-    // les doublons. Sinon on ajoute proprement.
+    // L'endpoint public /api/pulsa/public/:slug retourne un format
+    // simplifié (id, slug, title, meta, sections) sans delivery ni
+    // output (stripping de sécurité côté Worker, cf. _toPublicConfig).
+    // Pour que le builder fonctionne, on merge avec un newForm() qui
+    // fournit toutes les clés requises (delivery, output, etc.).
+    const baseline = newForm();
     const existing = listForms().find(f => f?.meta?.slug === slug);
-    if (existing) form.id = existing.id;
+    const form = {
+      ...baseline,
+      ...publicForm,
+      // id local format pul_xxx (l'id du Worker row.id est différent)
+      id: existing?.id || baseline.id,
+      meta: {
+        ...baseline.meta,
+        ...(publicForm.meta || {}),
+        slug,
+      },
+      sections: publicForm.sections,
+      delivery: {
+        ...baseline.delivery,
+        ...(existing?.delivery || {}),
+      },
+      output: {
+        ...baseline.output,
+        ...(existing?.output || {}),
+        status: 'published',
+        published_url: `${location.origin}/f/${slug}`,
+        last_response_at: existing?.output?.last_response_at || null,
+      },
+    };
     const stored = saveForm(form);
     setCurrentFormId(stored.id);
     // Bascule directement sur le builder du form récupéré.
