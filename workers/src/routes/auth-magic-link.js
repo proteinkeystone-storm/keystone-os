@@ -253,6 +253,31 @@ export async function handleRequestMagicLink(request, env) {
       .first();
   }
 
+  // ── Fallback legacy : pas trouvé dans licence_emails (table S1) ─
+  // On regarde si une licence active a cet email dans son champ
+  // owner historique (text libre, posé avant migration S1). Si oui,
+  // on backfill licence_emails au passage pour les usages futurs
+  // (invite, /me, etc.) et on continue le flow d'envoi normal.
+  if (!memberRow) {
+    const legacyLicence = await env.DB
+      .prepare('SELECT * FROM licences WHERE LOWER(owner) = ? AND is_active = 1 LIMIT 1')
+      .bind(email)
+      .first();
+    if (legacyLicence) {
+      // Backfill silencieux. INSERT OR IGNORE pour rester idempotent
+      // si une entry partielle existerait déjà (status='revoked' etc.).
+      const id = generateId();
+      try {
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO licence_emails (id, licence_key, email, role, status, activated_at)
+          VALUES (?, ?, ?, 'owner', 'active', datetime('now'))
+        `).bind(id, legacyLicence.key, email).run();
+      } catch (_) { /* table peut ne pas exister si S1 pas encore activé sur l'env — silent */ }
+      licenceRow = legacyLicence;
+      memberRow  = { licence_key: legacyLicence.key, email, role: 'owner', status: 'active' };
+    }
+  }
+
   // Pas de match → silent OK (anti enum)
   if (!memberRow || !licenceRow) {
     return json({
