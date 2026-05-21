@@ -507,12 +507,26 @@ async function _recoverPublishedForm() {
     // Pour que le builder fonctionne, on merge avec un newForm() qui
     // fournit toutes les clés requises (delivery, output, etc.).
     const baseline = newForm();
+    // IMPÉRATIF : aligner l'id local sur l'id retourné par le Worker.
+    // Sans ça, les routes par form_id (/api/pulsa/responses, exports,
+    // PATCH publish…) renvoient 404 puisque le row DB est introuvable.
+    const dbId = publicForm.id;
+    if (!dbId) {
+      alert('Réponse serveur invalide (id manquant).');
+      return;
+    }
+    // Si un brouillon local existe pour ce slug avec un id différent
+    // (ancien clic du bouton qui avait généré un id local divergent),
+    // on supprime ce doublon pour réaligner sur l'id DB. On préserve
+    // d'abord delivery/output pour les ré-injecter ci-dessous.
     const existing = listForms().find(f => f?.meta?.slug === slug);
+    if (existing && existing.id !== dbId) {
+      deleteForm(existing.id);
+    }
     const form = {
       ...baseline,
       ...publicForm,
-      // id local format pul_xxx (l'id du Worker row.id est différent)
-      id: existing?.id || baseline.id,
+      id: dbId,
       meta: {
         ...baseline.meta,
         ...(publicForm.meta || {}),
