@@ -6,7 +6,7 @@
   "rewrites": [
     { "source": "/app",         "destination": "/app.html"         },
     { "source": "/admin",       "destination": "/admin.html"       },
-    { "source": "/auth/magic",  "destination": "/auth-magic.html"  },
+    { "source": "/auth/magic",  "destination": "/auth-magic"       },
     { "source": "/f/(.*)",      "destination": "/form?s=$1"        }
   ],
 
