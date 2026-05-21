@@ -65,7 +65,7 @@ export function tplWelcomeKey({ ownerName, plan, key, activateUrl }) {
           </td></tr>
         </table>
         <div style="margin-top:24px;color:#475569;font-size:12px">
-          Protein Studio · Pôle de promotion immobilière augmentée par l'IA
+          Protein Studio · Keystone OS — Suite d'applications métiers augmentée par l'IA
         </div>
       </td></tr>
     </table>
@@ -90,7 +90,7 @@ function _emailShell({ title, body, ctaLabel, ctaUrl, footer }) {
     <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 0 24px 0"><tr><td>
       <a href="${ctaUrl}" style="display:inline-block;background:#c9a96e;color:#0a0e14;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:15px">${escapeHtml(ctaLabel)}</a>
     </td></tr></table>` : '';
-  const foot = footer || 'Protein Studio · Keystone OS — Pôle de promotion immobilière augmentée par l\'IA';
+  const foot = footer || 'Protein Studio · Keystone OS — Suite d\'applications métiers augmentée par l\'IA';
   return `
   <!DOCTYPE html><html><head><meta charset="utf-8"/></head>
   <body style="margin:0;padding:0;background:#0a0e14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
