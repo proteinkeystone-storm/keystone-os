@@ -159,17 +159,28 @@ export const DEMO_CHRONO_CSS = `
 .ks-demo-chrono {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 16px;
+  margin-bottom: 14px;     /* respiration vs heure/date hero */
+  margin-left: auto;       /* pousse à droite dans .hero-meta */
+  min-width: 112px;        /* largeur cohérente quelle que soit la valeur (5j vs 12j) */
   border-radius: 999px;
   border: 1px solid currentColor;
   background: color-mix(in srgb, currentColor 8%, transparent);
   font-size: 12px;
   line-height: 1;
   letter-spacing: 0.02em;
+  white-space: nowrap;
   user-select: none;
   cursor: default;
   transition: color 220ms ease, background 220ms ease, border-color 220ms ease;
+}
+/* Quand inséré dans .hero-meta, s'assure que la pill est sur sa propre
+   ligne (sinon elle peut se mettre à côté de l'heure si parent inline). */
+.hero-meta .ks-demo-chrono {
+  flex: 0 0 auto;
+  align-self: flex-end;
 }
 .ks-demo-chrono-svg {
   flex: 0 0 auto;
