@@ -1517,3 +1517,75 @@ html.light-mode .modal-close:hover {
   padding: 11px 22px;
   font-size: 14px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Demo menu — popover dropdown sous le bouton sparkles topbar
+   ═══════════════════════════════════════════════════════════════ */
+.ws-demo-menu {
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  background: var(--ws-surface, var(--navy2));
+  border: 1px solid var(--ws-border-strong, var(--bd));
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+  animation: ws-popover-in 180ms cubic-bezier(.16, .96, .42, 1);
+}
+@keyframes ws-popover-in {
+  from { transform: translateY(-4px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.ws-demo-menu-head {
+  padding: 0 4px 10px 4px;
+  border-bottom: 1px solid var(--ws-border, var(--bd));
+  margin-bottom: 8px;
+}
+.ws-demo-menu-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+  color: var(--gold, var(--ws-accent));
+  margin-bottom: 4px;
+}
+.ws-demo-menu-sub {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ws-text-soft);
+  line-height: 1.45;
+}
+.ws-demo-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ws-demo-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.ws-demo-menu-item:hover {
+  background: var(--ws-bg, rgba(255,255,255,.04));
+  border-color: var(--ws-border, var(--bd));
+}
+.ws-demo-menu-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ws-text);
+}
+.ws-demo-menu-item-sub {
+  font-size: 11.5px;
+  color: var(--ws-text-soft);
+  line-height: 1.45;
+}

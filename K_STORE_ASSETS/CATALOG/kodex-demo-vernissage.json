@@ -1,0 +1,59 @@
+{
+  "version": "2.0",
+  "title": "Démo Lumen — vernissage galerie d'art",
+  "scenario": "Affiche A3 pour annonces vitrines partenaires et hall de la galerie",
+
+  "state": {
+    "view": "destination",
+    "destination": {
+      "category": "large_format",
+      "support_id": "poster-a3",
+      "vendor_id": "pixartprinting",
+      "preset_id": "poster-a3",
+      "standard": {
+        "id": "poster-a3",
+        "type_support": "Affiche papier A3",
+        "product_name": "Affiche papier A3",
+        "vendor": "Pixartprinting",
+        "vendor_id": "pixartprinting",
+        "format_fini": { "width_mm": 297, "height_mm": 420 },
+        "bleed_mm": 1,
+        "safe_margin_mm": 3,
+        "dpi": 300,
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "export_format": "PDF/X-4 ou TIFF haute définition",
+        "material": "Papier offset 170 g/m²",
+        "notes": "Pixartprinting Affiche A3. Tirage 80 exemplaires pour vitrines de 12 commerces partenaires à Avignon + hall galerie + accrochage extérieur. Pelliculage mat indispensable (lumière directe d'été, oxydation à éviter). Vernis sélectif sur le titre si budget."
+      },
+      "vendor_url": "",
+      "specs_pdf": null,
+      "_form_open": false
+    },
+    "content": {
+      "sector": "universal",
+      "fields": {
+        "nom_projet": "Lumen — exposition Yseult Brisson",
+        "lieu": "Galerie Lumen, place du Palais des Papes, Avignon",
+        "echeance": "Vernissage 6 juin 19 h — exposition jusqu'au 30 juin 2026",
+        "argumentaire": "Yseult Brisson présente une nouvelle série de sculptures céramique grand format, conçues spécifiquement pour les volumes de la galerie. Quinze pièces uniques explorent la relation entre lumière naturelle et matière brute, dans un dialogue avec l'architecture provençale du lieu. Première exposition personnelle de l'artiste en France après cinq ans de pratique à Berlin.",
+        "cta": "Vernissage gratuit en présence de l'artiste — samedi 6 juin à 19 h",
+        "infos_specifiques": "Exposition du 7 au 30 juin 2026\nHoraires : mardi-samedi 11 h-19 h, dimanche 14 h-18 h\nVisite guidée par l'artiste samedi 13 juin à 16 h (sur inscription)\nCatalogue 48 pages disponible à la galerie (25 €)\nŒuvres en vente — fourchette 1 200 € à 12 000 €",
+        "mentions_legales": "Galerie Lumen — SIRET 987 654 321 00021 — TVA intracom FR 12 987654321\nDroits photographiques : © Studio Adrien Daste pour les œuvres, © Galerie Lumen pour la scénographie\nEntrée libre et gratuite, dans la limite des places disponibles"
+      }
+    },
+    "assets": {
+      "logo_owned": true,
+      "charte_owned": true,
+      "fonts_owned": false,
+      "charte": {
+        "primary_hex": "#1A1F36",
+        "secondary_hex": "#E8E1D4",
+        "font_title": "Tiempos Headline",
+        "font_body": "Söhne Buch"
+      },
+      "brand_book_url": "",
+      "extra_notes": "Tension entre minéral et lumière — la photo principale doit montrer une œuvre dans son contexte de lumière naturelle (heure dorée). Éviter les codes \"galerie blanche neutre\" : Lumen revendique le contraste avec l'architecture provençale du lieu, exploiter le bleu profond avec une pointe de craie. Pas de logo en gros — laisser respirer le visuel. Inspirations : affiches de la Fondation Maeght, du MAMAC Nice.",
+      "uploads": []
+    }
+  }
+}

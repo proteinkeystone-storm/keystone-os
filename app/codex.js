@@ -409,7 +409,7 @@ function _buildShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
-        <button class="ws-iconbtn" data-act="load-demo" title="Charger un exemple : Les Jardins du Mourillon (Affiche 4×3)"
+        <button class="ws-iconbtn" data-act="load-demo-menu" title="Charger un exemple (3 scénarios disponibles)"
                 style="color:var(--gold);">
           ${icon('sparkles', 18)}
         </button>
@@ -481,7 +481,13 @@ function _onClick(e) {
   if (act === 'download-pdf')   return _downloadBriefPdf();
   // Sprint Kodex-3.1.5 : upload / delete fichiers binaires
   if (act === 'upload-delete')  return _handleDeleteUpload(t.dataset.id);
-  // Démo Prométhée : pré-remplit le brouillon
+  // Démos universelles : 3 scénarios (immobilier / boutique / vernissage)
+  if (act === 'load-demo-menu') return _toggleDemoMenu(t);
+  if (act === 'load-demo-pick') {
+    _closeDemoMenu();
+    return _loadDemoScenario(t.dataset.demo);
+  }
+  // Compat ascendante (legacy handler — au cas où quelque chose l'appelle)
   if (act === 'load-demo')      return _loadDemoScenario();
   // Ouvre le Vault directement sur l'onglet clés API
   if (act === 'open-vault')     return _openVault();
@@ -568,20 +574,103 @@ function _openVault() {
   setTimeout(() => openSettingsTo('acc-api'), 120);
 }
 
-// ─── Démo Prométhée : pré-remplit le brouillon avec un scénario ─
-async function _loadDemoScenario() {
-  if (!confirm('Charger l\'exemple "Les Jardins du Mourillon" ? Votre brouillon actuel sera remplacé.')) return;
+// ─── Catalogue des démos disponibles ────────────────────────────
+// Trois scénarios universels qui couvrent 3 contextes différents pour
+// montrer la palette d'usages de Kodex (un seul ne suffit pas à pitcher).
+// L'ordre est l'ordre d'apparition dans le menu dropdown.
+const DEMO_SCENARIOS = {
+  promethee: {
+    label: 'Promotion immobilière',
+    subtitle: 'Panneau 4×3 m chantier — Les Jardins du Mourillon',
+    file: '/K_STORE_ASSETS/CATALOG/kodex-demo-promethee.json',
+  },
+  boutique: {
+    label: 'Ouverture commerce',
+    subtitle: 'Flyer A5 — concept-store Marius',
+    file: '/K_STORE_ASSETS/CATALOG/kodex-demo-boutique.json',
+  },
+  vernissage: {
+    label: 'Événement culturel',
+    subtitle: 'Affiche A3 — vernissage galerie Lumen',
+    file: '/K_STORE_ASSETS/CATALOG/kodex-demo-vernissage.json',
+  },
+};
+
+// ─── Menu dropdown des démos (popover sous le bouton sparkles) ─
+// Affiche les 3 scénarios disponibles dans un menu compact. Le user
+// clique sur une option → la démo se charge. Click extérieur ou Échap
+// pour fermer.
+function _toggleDemoMenu(triggerBtn) {
+  const existing = _root?.querySelector('[data-slot="demo-menu"]');
+  if (existing) {
+    _closeDemoMenu();
+    return;
+  }
+  const rect = triggerBtn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.dataset.slot = 'demo-menu';
+  menu.className = 'ws-popover ws-demo-menu';
+  // Positionnement : aligné à droite du bouton, sous lui
+  Object.assign(menu.style, {
+    position: 'fixed',
+    top: `${rect.bottom + 6}px`,
+    right: `${Math.max(8, window.innerWidth - rect.right)}px`,
+    zIndex: '10002',
+  });
+  menu.innerHTML = `
+    <div class="ws-demo-menu-head">
+      <span class="ws-demo-menu-eyebrow">${icon('sparkles', 11)} Charger un exemple</span>
+      <p class="ws-demo-menu-sub">Trois scénarios universels pour découvrir Kodex sans repartir d'une page blanche.</p>
+    </div>
+    <div class="ws-demo-menu-list">
+      ${Object.entries(DEMO_SCENARIOS).map(([id, d]) => `
+        <button class="ws-demo-menu-item" data-act="load-demo-pick" data-demo="${_esc(id)}">
+          <span class="ws-demo-menu-item-title">${_esc(d.label)}</span>
+          <span class="ws-demo-menu-item-sub">${_esc(d.subtitle)}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+  _root.appendChild(menu);
+  // Click outside / Échap → close
+  const onDocClick = (e) => {
+    if (menu.contains(e.target) || triggerBtn.contains(e.target)) return;
+    _closeDemoMenu();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); _closeDemoMenu(); }
+  };
+  setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
+  document.addEventListener('keydown', onKey);
+  menu._onDocClick = onDocClick;
+  menu._onKey = onKey;
+}
+
+function _closeDemoMenu() {
+  const menu = _root?.querySelector('[data-slot="demo-menu"]');
+  if (!menu) return;
+  if (menu._onDocClick) document.removeEventListener('mousedown', menu._onDocClick);
+  if (menu._onKey)      document.removeEventListener('keydown', menu._onKey);
+  menu.remove();
+}
+
+// ─── Démo : pré-remplit le brouillon avec un scénario ───────────
+// Compatibilité ascendante : `_loadDemoScenario()` sans argument charge
+// Prométhée (welcome modal + appels legacy).
+async function _loadDemoScenario(demoId = 'promethee') {
+  const demo = DEMO_SCENARIOS[demoId] || DEMO_SCENARIOS.promethee;
+  if (!confirm(`Charger l'exemple « ${demo.label} » (${demo.subtitle}) ? Votre brouillon actuel sera remplacé.`)) return;
   try {
-    const res = await fetch('/K_STORE_ASSETS/CATALOG/kodex-demo-promethee.json', { cache: 'no-cache' });
+    const res = await fetch(demo.file, { cache: 'no-cache' });
     if (!res.ok) throw new Error('Scénario démo introuvable');
-    const demo = await res.json();
+    const demoFile = await res.json();
     // Restore le state à partir du scénario
     _state = {
       ..._state,
-      ...demo.state,
-      destination: { ..._state.destination, ...(demo.state.destination || {}) },
-      content:     { ..._state.content,     ...(demo.state.content     || {}) },
-      assets:      { ..._state.assets,      ...(demo.state.assets      || {}) },
+      ...demoFile.state,
+      destination: { ..._state.destination, ...(demoFile.state.destination || {}) },
+      content:     { ..._state.content,     ...(demoFile.state.content     || {}) },
+      assets:      { ..._state.assets,      ...(demoFile.state.assets      || {}) },
       output:      { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null },
     };
     // Migration v2 → v3 si le scénario démo est encore en ancien format

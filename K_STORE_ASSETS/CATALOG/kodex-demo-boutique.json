@@ -1,0 +1,59 @@
+{
+  "version": "2.0",
+  "title": "Démo Marius — concept-store de quartier",
+  "scenario": "Flyer A5 distribué en boîte aux lettres pour annoncer l'inauguration",
+
+  "state": {
+    "view": "destination",
+    "destination": {
+      "category": "print_paper",
+      "support_id": "flyer-a5",
+      "vendor_id": "vistaprint",
+      "preset_id": "flyer-a5",
+      "standard": {
+        "id": "flyer-a5",
+        "type_support": "Flyer recto-verso A5",
+        "product_name": "Flyer recto-verso A5",
+        "vendor": "Vistaprint",
+        "vendor_id": "vistaprint",
+        "format_fini": { "width_mm": 148, "height_mm": 210 },
+        "bleed_mm": 1.5,
+        "safe_margin_mm": 1.5,
+        "dpi": 300,
+        "color_profile": "CMJN (FOGRA39 ou équivalent)",
+        "export_format": "PDF/X-1a:2001 ou PDF/X-4",
+        "material": "Papier couché 170 g/m²",
+        "notes": "Vistaprint Flyer A5. Bleed et safe 1,5 mm uniformes. Tirage 1 000 exemplaires pour distribution boîtes aux lettres dans le 6e arrondissement de Marseille. Pelliculage mat recommandé pour rendre la palette terre/sable plus chaude."
+      },
+      "vendor_url": "",
+      "specs_pdf": null,
+      "_form_open": false
+    },
+    "content": {
+      "sector": "universal",
+      "fields": {
+        "nom_projet": "Marius — concept-store de quartier",
+        "lieu": "Marseille — 18 rue Paradis, 6e arrondissement",
+        "echeance": "Inauguration le 15 mai 2026, distribution flyers 2 semaines avant",
+        "argumentaire": "Marius est un concept-store qui rassemble une sélection pointue de papeterie illustrée, objets design fabriqués en Méditerranée, cosmétique éthique et petite maroquinerie. L'esprit : du quotidien soigné, des créateurs identifiés, des pièces qui durent. Ouvert tous les jours sauf le dimanche, café offert pendant les 2 premières semaines.",
+        "cta": "Inauguration samedi 15 mai à 18 h — entrée libre",
+        "infos_specifiques": "Plus de 40 créateurs représentés\nFourchette de prix : 8 € à 180 €\nClick & collect disponible dès l'ouverture\nProgramme d'ateliers mensuels (illustration, parfumerie, reliure)",
+        "mentions_legales": "Marius SAS — RCS Marseille 2026 B 12345 — SIRET 123 456 789 00012\nTraitement des données conforme RGPD — voir notre politique sur marius-marseille.fr/rgpd"
+      }
+    },
+    "assets": {
+      "logo_owned": true,
+      "charte_owned": true,
+      "fonts_owned": true,
+      "charte": {
+        "primary_hex": "#2A2620",
+        "secondary_hex": "#D4B896",
+        "font_title": "Söhne Halbfett",
+        "font_body": "Söhne Buch"
+      },
+      "brand_book_url": "",
+      "extra_notes": "Palette ancrée : terre brûlée, sable, noir profond, avec touches de cuivre patiné. Photographie produit en lumière naturelle exclusivement (pas de packshot studio). Éviter les tropes \"boutique tendance Instagram\" — on cherche un ton plus artisanal, presque librairie. Inspirations visuelles : Maison Plisson, Merci, La Trésorerie.",
+        "uploads": []
+    }
+  }
+}
