@@ -40,6 +40,7 @@
 import { json, err, getAllowedOrigin, requireAdmin, generateId, generateToken } from '../lib/auth.js';
 import { requireJWT }                                from '../lib/jwt.js';
 import { ensureSchemaAuthV2 }                        from './licence-v2.js';
+import { audit }                                     from '../lib/audit.js';
 
 // ── Auto-migration Sprint S2.5 (enforcement devices_max) ────────
 // Ajoute les colonnes/index nécessaires à l'enforcement effectif
@@ -254,6 +255,15 @@ export async function enforceDeviceLimit(env, { licence, email, fingerprint } = 
       .bind(licence.key, e)
       .all();
 
+    // Sprint S5.1 — audit du refus pour traçabilité (limite atteinte)
+    await audit(env, {
+      action:   'device_denied_limit',
+      actor:    e,
+      target:   licence.key,
+      tenantId: licence.tenant_id || null,
+      details:  { devicesMax, activeCount, plan: licence.plan },
+    });
+
     return {
       mode:            'denied',
       devicesMax,
@@ -284,6 +294,15 @@ export async function enforceDeviceLimit(env, { licence, email, fingerprint } = 
     .prepare('SELECT * FROM devices WHERE id = ?')
     .bind(id)
     .first();
+
+  // Sprint S5.1 — audit de la création de device pour traçabilité
+  await audit(env, {
+    action:   'device_created',
+    actor:    e,
+    target:   licence.key,
+    tenantId: licence.tenant_id || 'default',
+    details:  { deviceId: id, plan: licence.plan, devicesMax, activeCount, fingerprint: fp.slice(0, 8) + '...' },
+  });
 
   return {
     mode:   'created',
@@ -462,6 +481,20 @@ export async function handleRevokeDevice(request, env, deviceId) {
     .prepare("UPDATE devices SET is_approved = 0, last_seen = datetime('now') WHERE id = ?")
     .bind(deviceId)
     .run();
+
+  // Sprint S5.1 — audit de la révocation device (qui a révoqué quoi)
+  await audit(env, {
+    action:   'device_revoke',
+    actor:    auth.isAdmin ? 'admin' : (auth.email || auth.licenceKey || 'unknown'),
+    target:   deviceId,
+    tenantId: device.tenant_id || null,
+    details:  {
+      device_email:        device.email || null,
+      device_licence_key:  device.licence_key || null,
+      revoked_by_self:     !auth.isAdmin && _normEmail(device.email) === auth.email,
+    },
+    request,
+  });
 
   return json({
     ok:     true,

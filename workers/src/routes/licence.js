@@ -83,6 +83,16 @@ export async function handleActivate(request, env) {
     .bind(key.toUpperCase())
     .first();
 
+  // Sprint S5.1 — trace de la création/update licence pour audit RGPD
+  // (la clé en clair n'est PAS loggée, seulement l'idempotent target).
+  await audit(env, {
+    action:   'licence_activate',
+    target:   key.toUpperCase(),
+    tenantId,
+    details:  { plan, owner, expiresAt: expiresAt || null, hasAssets: !!ownedAssets },
+    request,
+  });
+
   return json({ success: true, licence: _rowToLicence(licence) }, 200, origin);
 }
 

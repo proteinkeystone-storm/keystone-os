@@ -48,6 +48,9 @@ import {
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge } from './routes/qr.js';
+import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
+import { handleListLicencesEnriched, handleToggleLicenceFlag,
+         handleAuditList, handleExpirationRemindersRunNow }            from './routes/admin-s5.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -275,6 +278,15 @@ export default {
         return handleScansCsv(request, env, qrCsvMatch[1]);
       }
 
+      // ── Admin S5 enrichi (Sprint S5.3 — licences + audit + cron) ─
+      if (path === '/api/admin/licences'                 && method === 'GET')  return handleListLicencesEnriched(request, env);
+      if (path === '/api/admin/audit'                    && method === 'GET')  return handleAuditList(request, env);
+      if (path === '/api/admin/expiration-reminders/run-now' && method === 'POST') return handleExpirationRemindersRunNow(request, env);
+      const licenceFlagMatch = path.match(/^\/api\/admin\/licences\/([A-Z0-9-]+)\/flag$/i);
+      if (licenceFlagMatch && method === 'POST') {
+        return handleToggleLicenceFlag(request, env, licenceFlagMatch[1]);
+      }
+
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);
       if (path === '/api/catalog'            && method === 'GET')    return handleGetCatalogPublic(request, env);
@@ -373,6 +385,14 @@ export default {
       handlePulsaPurge(env)
         .then(r => console.log('[pulsa-purge]', JSON.stringify(r)))
         .catch(e => console.warn('[pulsa-purge] failed', e?.message || e))
+    );
+    // Sprint S5.2 — Rappels d'expiration licence (J-7, J-3, J-1).
+    // Kill-switch dormant : KS_EXPIRATION_REMINDERS_ENABLED doit valoir
+    // 'true' pour envoyer réellement les emails. Sinon : audit log only.
+    ctx.waitUntil(
+      handleExpirationReminders(env)
+        .then(r => console.log('[expiration-reminders]', JSON.stringify(r)))
+        .catch(e => console.warn('[expiration-reminders] failed', e?.message || e))
     );
   },
 };

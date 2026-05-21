@@ -43,6 +43,7 @@ import { json, err, parseBody, getAllowedOrigin, generateId, generateToken } fro
 import { signJWT }              from '../lib/jwt.js';
 import { blindIndex }           from '../lib/kdf.js';
 import { sendEmail, tplMagicLink } from '../lib/email-resend.js';
+import { audit }                from '../lib/audit.js';
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const VALID_PURPOSES = new Set(['activation', 'recovery', 'magic_login', 'invite']);
@@ -419,6 +420,21 @@ export async function handleConsumeMagicLink(request, env) {
     isAdmin: planUp === 'ADMIN',
     via:    'magic_link',
   }, env);
+
+  // Sprint S5.1 — audit du login magic-link (= login event critique)
+  await audit(env, {
+    action:   'magic_link_consume',
+    actor:    link.email,
+    target:   licence.key,
+    tenantId: licence.tenant_id || null,
+    details:  {
+      purpose:           link.purpose,
+      plan:              licence.plan,
+      pending_activated: pendingActivated,
+      fingerprint_match: !!link.fingerprint,
+    },
+    request,
+  });
 
   return json({
     ok:                true,
