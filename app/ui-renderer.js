@@ -3,7 +3,7 @@
    Modules : Dashboard · Settings · Modal renderTool · S-CORE-LOGIC
    ═══════════════════════════════════════════════════════════════ */
 
-import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API } from './pads-loader.js';
+import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
 import {
@@ -459,9 +459,13 @@ export function renderDashboard() {
     // ── Classification owned / locked (B2B + Lifetime) ────────
     const ownedIds    = getOwnedIds();
     const lifetimeIds = getLifetimeIds();
+    // Sprint S6 — bypass ADMIN strict : un admin voit TOUT le catalogue,
+    // peu importe ce que dit owned_assets en DB. Élimine la classe de bugs
+    // cross-device où owned_assets:null en DB rendait le dashboard vide.
+    const _admin      = isAdminUser();
 
-    // Un outil est accessible si : mode démo OU abonnement actif OU achat à vie
-    const _isOwned    = id => ownedIds === null || ownedIds.includes(id) || lifetimeIds.includes(id);
+    // Un outil est accessible si : ADMIN OU mode démo OU abonnement actif OU achat à vie
+    const _isOwned    = id => _admin || ownedIds === null || ownedIds.includes(id) || lifetimeIds.includes(id);
     const _isLifetime = id => lifetimeIds.includes(id);
 
     // Source de vérité : sélection faite lors de l'onboarding (null = afficher tout)
@@ -476,8 +480,9 @@ export function renderDashboard() {
         } catch (_) {}
     }
 
-    // Exclure les outils désactivés + appliquer la sélection onboarding
-    const _isSelected = id => _userSel === null || _userSel.includes(id);
+    // Exclure les outils désactivés + appliquer la sélection onboarding.
+    // Sprint S6 — ADMIN bypass : on ignore aussi la sélection (= ADMIN voit TOUT).
+    const _isSelected = id => _admin || _userSel === null || _userSel.includes(id);
 
     const ownedTools = TOOLS.filter(t =>
         _isOwned(t.id) &&
@@ -1287,7 +1292,8 @@ function _renderFeaturedCard(app) {
 
 function _renderAppCardSmall(app) {
     const ownedIds = getOwnedIds();
-    const isOwned  = (ownedIds === null) || ownedIds.includes(app.id);
+    // Sprint S6 — ADMIN voit toujours "✓ Actif" dans le K-Store
+    const isOwned  = isAdminUser() || (ownedIds === null) || ownedIds.includes(app.id);
     // Outil possédé mais retiré du Dashboard → réinstallable
     const isDeactivated = isOwned && app.real && isPadDeactivated(app.id);
     const priceLbl = app.real
@@ -1372,8 +1378,9 @@ function _renderKStoreAppDetail(appId) {
     ).join('');
 
     // ── État d'achat (Notice VEFA seulement pour l'instant) ──
+    // Sprint S6 — ADMIN voit toujours "✓ Actif" dans le détail K-Store
     const ownedIds = getOwnedIds();
-    const isOwned  = app.real && (ownedIds === null || ownedIds.includes(appId));
+    const isOwned  = app.real && (isAdminUser() || ownedIds === null || ownedIds.includes(appId));
     const priceLbl = app.real
         ? (app.price ?? 0).toFixed(2).replace('.', ',') + ' €'
         : '00,00 €';

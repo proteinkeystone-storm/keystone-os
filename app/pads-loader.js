@@ -129,8 +129,8 @@ const LS_OWNED    = 'ks_owned_assets';
 const LS_LIFETIME = 'ks_lifetime_purchases';
 
 /**
- * null   → mode démo (tous les outils visibles)
- * []     → abonnement révoqué
+ * null   → tout owned (ADMIN, démo Enterprise, ou clé jamais activée)
+ * []     → abonnement révoqué / aucun outil
  * [...]  → liste des IDs sous abonnement
  */
 export function getOwnedIds() {
@@ -140,7 +140,33 @@ export function getOwnedIds() {
 }
 
 export function setOwnedIds(ids) {
+    // Sprint S6 — fix critique : si null est passé, on RETIRE la clé
+    // (sémantique "tout owned"). Avant : stockait '[]' = aucun outil owned →
+    // dashboard vide pour les admins / Enterprise post-activation iPad.
+    if (ids === null || ids === undefined) {
+        localStorage.removeItem(LS_OWNED);
+        return;
+    }
     localStorage.setItem(LS_OWNED, JSON.stringify(Array.isArray(ids) ? ids : []));
+}
+
+// Sprint S6 — Helper bypass ADMIN strict.
+// Si l'utilisateur a plan ADMIN (en localStorage OU dans son JWT), il a accès
+// à TOUS les outils du catalogue, peu importe ce que dit owned_assets en DB.
+// C'est la solution structurelle à la classe de bugs cross-device ADMIN où
+// la DB renvoie owned_assets:null et le frontend ne sait pas le gérer.
+export function isAdminUser() {
+    const plan = (localStorage.getItem('ks_licence_plan') || '').toUpperCase();
+    if (plan === 'ADMIN') return true;
+    // Fallback : lire le JWT pour vérifier le claim isAdmin
+    try {
+        const jwt = localStorage.getItem('ks_jwt');
+        if (!jwt) return false;
+        const parts = jwt.split('.');
+        if (parts.length !== 3) return false;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload.isAdmin === true || (payload.plan || '').toUpperCase() === 'ADMIN';
+    } catch (_) { return false; }
 }
 
 export function getLifetimeIds() {
