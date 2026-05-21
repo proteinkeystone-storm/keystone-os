@@ -790,17 +790,29 @@ function _renderBriefCard(b) {
   const date = b._updatedAt
     ? new Date(b._updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
     : '—';
+  // Badge moteur IA : exposé en chip indigo + sparkles si un enrichissement a
+  // été généré, neutre « brief mécanique » sinon (l'utilisateur s'est limité
+  // au PDF sans appel API — comportement par défaut depuis phase 3).
+  const engineBadge = b.brief_model
+    ? `<span class="ws-badge" style="background:var(--ws-accent-soft);color:var(--ws-accent);border:1px solid var(--ws-accent);font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+         ${icon('sparkles', 11)} ${_esc(b.brief_model)}
+       </span>`
+    : `<span class="ws-badge" style="background:var(--ws-surface);color:var(--ws-text-muted);border:1px solid var(--ws-border);font-weight:600;">
+         Brief mécanique
+       </span>`;
   return `
     <div class="ws-card" style="margin-bottom:10px;padding:14px 16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
         <div style="flex:1;min-width:0;">
           <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;">${_esc(b.title || 'Sans titre')}</h3>
-          <p style="margin:0;font-size:12px;color:var(--ws-text-muted);">
+          <p style="margin:0 0 8px 0;font-size:12px;color:var(--ws-text-muted);">
             ${b.vendor ? _esc(b.vendor) + ' · ' : ''}${_esc(b.product_name || '')}
             <span style="margin:0 6px;">·</span>
             ${_esc(date)}
-            ${b.brief_model ? `<span style="margin:0 6px;">·</span><span>${_esc(b.brief_model)}</span>` : ''}
           </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${engineBadge}
+          </div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
           <button class="ws-btn ws-btn--secondary" data-act="lib-open" data-id="${_esc(b.id)}" style="padding:6px 12px;font-size:12px;">

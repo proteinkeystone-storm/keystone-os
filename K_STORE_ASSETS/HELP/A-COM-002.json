@@ -2,23 +2,39 @@
   "title": "Kodex",
   "tldr": "Kodex transforme votre intention créative en cahier des charges technique infaillible pour votre graphiste ou votre imprimeur. Évite l'erreur d'impression à 800 €.",
   "key_points": [
-    "1. Destination : choisissez votre support cible (imprimeur, réseau social, presse). 28 standards inclus.",
-    "2. Message : renseignez votre texte, votre ton, votre cible. Kodex génère 5 punchlines bonus.",
-    "3. Visuels : déposez logo, charte graphique, photos dans le coffre-fort assets.",
-    "4. Brief : récupérez un PDF prêt à envoyer à votre graphiste ou imprimeur, avec calculateur d'échelle pour grands formats."
+    "1. Le support : choisissez votre destination (imprimeur, réseau social, presse). 31 supports × 4 vendors (Exaprint, Vistaprint, Pixartprinting, ou « autre imprimeur ») = 42 specs précises.",
+    "2. Le message : renseignez votre projet (nom, lieu, échéance, argumentaire, mentions légales). Kodex est universel — aucune segmentation métier.",
+    "3. Les visuels : déposez logo, charte graphique, photos dans le coffre-fort assets (jusqu'à 10 Mo par fichier).",
+    "4. Le brief : récupérez un PDF prêt à envoyer. Téléchargement instantané sans IA, enrichissement créatif optionnel avec votre clé API personnelle."
   ],
   "faq": [
     {
-      "q": "Qu'est-ce que le calculateur d'échelle ?",
-      "a": "Pour les grands formats (bâche, 4×3, panneau), Kodex convertit automatiquement vos visuels en dimensions imprimables : DPI, marges, fonds perdus, taille minimale des textes. Vous évitez l'erreur classique de logo pixellisé à 4 mètres."
+      "q": "Faut-il une clé API IA pour utiliser Kodex ?",
+      "a": "Non. Le brief technique est généré mécaniquement à partir de vos saisies et téléchargeable instantanément en PDF, sans la moindre clé. L'IA n'est qu'un bonus optionnel pour ajouter 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en page 2 du PDF. Si vous configurez une clé Claude, GPT, Gemini, Mistral ou xAI dans le Vault, vous pouvez l'activer ; sinon le plan B « copier le Code Maître + coller dans une AI web gratuite » est toujours disponible."
+    },
+    {
+      "q": "Que faire si mon imprimeur n'est pas Exaprint, Vistaprint ou Pixartprinting ?",
+      "a": "Choisissez « Autre imprimeur » dans le sélecteur vendor à l'étape 1 : Kodex applique des standards génériques cohérents (bleed 3-5 mm, CMJN FOGRA39, 300 DPI) et débloque deux champs supplémentaires : URL de la fiche technique officielle + PDF de specs à joindre directement au brief. Votre graphiste suivra ces specs comme référence absolue plutôt que celles d'un vendor par défaut."
+    },
+    {
+      "q": "Quelle taille maximum pour mes uploads d'assets ?",
+      "a": "10 Mo par fichier (encodage base64 inclus, soit environ 7 Mo de binaire réel). Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS, GIF, WebP. Si votre fichier dépasse la limite, utilisez plutôt un lien externe WeTransfer ou Google Drive dans le champ « Brand book complet » des assets."
+    },
+    {
+      "q": "Comment fonctionne le calculateur d'échelle pour les grands formats ?",
+      "a": "Sur un panneau 4×3 m ou une bâche, travailler à l'échelle 1:1 produit des fichiers à 5 Go intraitables. Kodex calcule automatiquement le facteur de réduction (typiquement 1/10) et le DPI de sortie nécessaire en fonction de la distance de vue (autoroute = 50 m, métro = 2 m). Vous obtenez le format de travail exact (mm) + le nombre de pixels finaux + la hauteur minimum lisible des titres + une alerte si un visuel uploadé est sous-résolu pour ce contexte."
+    },
+    {
+      "q": "Mon brief n'a pas la qualité attendue, que faire ?",
+      "a": "Trois leviers : 1) basculez sur un autre moteur IA via le menu « Switch engine » dans la card d'enrichissement — chaque modèle a son style propre, et l'argumentaire peut mieux passer chez Claude que chez GPT (ou inversement) ; 2) enrichissez votre argumentaire à l'étape 2 (plus la promesse est précise, meilleure est la sortie) ; 3) utilisez le « Plan B humain » en bas de l'étape 4 : copiez le Code Maître et collez-le dans une AI web gratuite (Claude.ai, ChatGPT, etc.) pour comparer plusieurs réponses."
     },
     {
       "q": "Quels imprimeurs et plateformes sont supportés ?",
-      "a": "28 standards : Exaprint, Pixartprinting, Vistaprint pour l'impression ; Meta, LinkedIn, Google pour le digital ; Le Figaro, Logic-Immo, Côte Magazine, Surface Privée, La Provence pour la presse."
+      "a": "4 vendors × 31 supports = 42 specs précises. Imprimeurs : Exaprint (référence print FR), Vistaprint, Pixartprinting, ou « Autre imprimeur » (saisie libre). Catégories couvertes : print papier (cartes, flyers, dépliants, brochures), grand format (bâches, panneaux, roll-up), digital (réseaux sociaux), presse / édition (encarts magazine)."
     },
     {
       "q": "Mes visuels sont-ils stockés en sécurité ?",
-      "a": "Oui : ils sont chiffrés AES-256-GCM côté serveur D1, accessibles uniquement par vous. Limite 2 MB par fichier."
+      "a": "Oui : ils sont stockés en base64 dans D1 (Cloudflare EU), accessibles uniquement par vous via JWT. Chaque asset a une URL souveraine (`/api/kodex/asset/UUID`) qui apparaît dans le PDF du brief — votre graphiste peut télécharger directement les bons fichiers sans manipulations parallèles."
     },
     {
       "q": "Le PDF généré est-il prêt à imprimer directement ?",
