@@ -79,6 +79,16 @@ export async function activateLicence(key) {
     // ownedAssets : null = Enterprise (tout accessible), [] = rien, [...] = liste
     setOwnedIds(data.ownedAssets ?? null);
 
+    // Sprint Démo Limited A+B — l'activation d'une vraie licence sort
+    // l'utilisateur du mode démo (chrono, modale fin de démo, etc.)
+    const planUp = (data.plan || '').toUpperCase();
+    if (planUp !== 'DEMO') {
+      localStorage.removeItem('ks_is_demo');
+      localStorage.removeItem('ks_demo_started_at');
+      localStorage.removeItem('ks_demo_last_switch');
+      localStorage.removeItem('ks_demo_nudge_shown_at');
+    }
+
     // ── Hot Reload — signal vers main.js + ui-renderer ─────────
     window.dispatchEvent(new CustomEvent('ks-licence-activated', {
         bubbles: false,
@@ -116,7 +126,13 @@ export function getLicenceStatus() {
 // REVOKE — déconnexion / réinitialisation
 // ═══════════════════════════════════════════════════════════════
 export function revokeLicence() {
-    [LS_KEY, LS_PLAN, LS_OWNER, 'ks_owned_assets'].forEach(k => localStorage.removeItem(k));
+    [
+        LS_KEY, LS_PLAN, LS_OWNER, 'ks_owned_assets',
+        // Sprint Démo Limited A+B — nettoie aussi les marqueurs démo
+        // pour que la prochaine ouverture parte sur un onboarding propre.
+        'ks_is_demo', 'ks_demo_started_at',
+        'ks_demo_last_switch', 'ks_demo_nudge_shown_at',
+    ].forEach(k => localStorage.removeItem(k));
     window.dispatchEvent(new CustomEvent('ks-licence-revoked'));
 }
 

@@ -1868,9 +1868,21 @@ function launchApp() {
     } else {
       localStorage.removeItem('ks_owned_assets');
     }
+    // Sprint Démo Limited A+B — marqueur explicite "mode démo".
+    // Source de vérité pour isDemoMode() côté app/lib/demo-mode.js.
+    // Posé ici (à l'onboarding) car ks_owned_assets ne suffit plus à
+    // distinguer un démo d'un Enterprise (owned=null = accès total).
+    localStorage.setItem('ks_is_demo', '1');
+    // Pose la date de début de démo (TTL 7 jours)
+    if (!localStorage.getItem('ks_demo_started_at')) {
+      localStorage.setItem('ks_demo_started_at', new Date().toISOString());
+    }
   } else {
     // Plans payants : nettoie un éventuel reliquat Demo pour repartir clean
     localStorage.removeItem('ks_owned_assets');
+    localStorage.removeItem('ks_is_demo');
+    localStorage.removeItem('ks_demo_started_at');
+    localStorage.removeItem('ks_demo_last_switch');
   }
   // ks_user_selection = source de vérité du Dashboard (filtre par ID)
   // ks_tools = legacy / compat

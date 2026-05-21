@@ -31,14 +31,37 @@ const ONE_DAY_MS                = 24 * 60 * 60 * 1000;
 // ═══════════════════════════════════════════════════════════════
 // État du mode démo
 // ───────────────────────────────────────────────────────────────
-// Un utilisateur est en démo si :
-//   - getOwnedIds() === null (pas de licence active)
-//   - ET pas d'achat à vie (lifetimeIds vide)
+// Source de vérité v2 (hotfix 2026-05-21) :
+//   localStorage.ks_is_demo === '1'
+// → posé explicitement par l'onboarding quand l'user choisit "Démo".
+//
+// Fallback rétrocompat (users existants qui n'ont jamais fait l'onboarding
+// ou qui sont dans un état legacy) :
+//   ownedIds === null ET pas d'achat à vie ET pas d'admin token
+//
+// Pourquoi l'heuristique ownedIds=null ne suffit plus :
+// L'onboarding pose ks_owned_assets=["1-tool"] en démo pour bloquer
+// l'accès aux autres outils via le check _isOwned du dashboard. Du coup
+// ownedIds!==null en démo aussi. On a besoin d'un marqueur explicite.
 // ═══════════════════════════════════════════════════════════════
 export function isDemoMode() {
-  const owned    = getOwnedIds();
-  const lifetime = getLifetimeIds();
-  return owned === null && (!lifetime || lifetime.length === 0);
+  // 1. Source de vérité explicite (post-onboarding v2)
+  if (localStorage.getItem('ks_is_demo') === '1') {
+    return true;
+  }
+  // 2. Pas démo si licence admin posée (Stéphane sur /admin par ex)
+  if (localStorage.getItem('ks_admin_token')) return false;
+  // 3. Fallback legacy : user vraiment vierge (avant onboarding, ou
+  //    onboarding sauté en file://). On considère démo s'il n'a aucune
+  //    trace de licence.
+  const owned     = getOwnedIds();
+  const lifetime  = getLifetimeIds();
+  const hasOwned  = Array.isArray(owned) && owned.length > 0;
+  const hasLife   = Array.isArray(lifetime) && lifetime.length > 0;
+  const hasJwt    = !!localStorage.getItem('ks_jwt');
+  if (hasOwned || hasLife || hasJwt) return false;
+  // Aucune trace de licence → démo
+  return true;
 }
 
 // Pose la date de début de démo si elle n'existe pas encore.
