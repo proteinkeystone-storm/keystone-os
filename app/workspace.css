@@ -163,6 +163,14 @@ html.light-mode .ws-app {
 .ws-topbar-logo:hover { opacity: .85; transform: scale(1.02); }
 .ws-topbar-logo img   { height: 22px; width: auto; display: block; }
 
+/* Toggle dual logo dark/light pour tous les workspaces fullscreen.
+   Miroir du pattern #ks-logo-dark / #ks-logo-light de la topbar app.html
+   (style.css l.612-614), mais avec des CLASSES pour éviter les IDs
+   dupliqués quand le workspace est ouvert au-dessus du dashboard. */
+.ws-topbar-logo .ws-logo-light { display: none; }
+html.light-mode .ws-topbar-logo .ws-logo-dark  { display: none; }
+html.light-mode .ws-topbar-logo .ws-logo-light { display: block; }
+
 /* Flèche retour : chevron indigo en permanence (couleur identitaire du
    sens de navigation). Animation subtile de glissement vers la gauche au
    survol pour signifier le sens — pas besoin d'écrire « Retour ». */

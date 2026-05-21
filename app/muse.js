@@ -210,7 +210,8 @@ function _buildShell() {
     <header class="ws-topbar">
       <div class="ws-topbar-brand">
         <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
-          <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+          <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark">
+          <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" class="ws-logo-light">
         </a>
         <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
           ${icon('chevron-left', 34)}

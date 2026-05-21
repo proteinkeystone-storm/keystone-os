@@ -183,7 +183,8 @@ function _renderShell() {
       <div class="sdqr-topbar-left">
         <div class="ws-topbar-brand">
           <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
-            <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+            <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark">
+            <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" class="ws-logo-light">
           </a>
           <button class="ws-topbar-back" id="sdqr-close-btn" title="Retour" aria-label="Retour">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><polyline points="15 18 9 12 15 6"/></svg>
