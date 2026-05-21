@@ -242,6 +242,7 @@ const TAB_RENDERERS = {
   messaging:  renderMessaging,
   monitoring: renderMonitoring,
   devices:    renderDevices,
+  audit:      renderAuditLog,   // Sprint S5.4
   settings:   renderSettings,
 };
 
@@ -260,40 +261,103 @@ function switchTab(tab) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// TAB 1 — LICENCES
+// TAB 1 — LICENCES (enrichi Sprint S5.4 — flags S2.5/S4 + stats)
 // ══════════════════════════════════════════════════════════════════
+// Helper de normalisation : convertit les rows de /api/admin/licences
+// (enrichi S5.3) OU /api/licence/list (legacy) vers un format uniforme.
+// Permet le fallback gracieux si l'endpoint enrichi throw.
+function _normalizeLicenceRow(l) {
+  if (!l) return null;
+  return {
+    key:           l.key,
+    owner:         l.owner || '',
+    plan:          l.plan || '',
+    active:        l.is_active === true || l.active === true,
+    createdAt:     l.created_at || l.createdAt || null,
+    expiresAt:     l.expires_at || l.expiresAt || null,
+    tenant_id:     l.tenant_id || null,
+    domain_locked: l.domain_locked || null,
+    devices_max:   typeof l.devices_max === 'number' ? l.devices_max : null,
+    // S2.5 + S4 — flags whitelistés. Absent en legacy → defaultent à false.
+    flag_enforce_devices_v2:         l?.flags?.enforce_devices_v2 === true,
+    flag_enforce_vault_per_email_v2: l?.flags?.enforce_vault_per_email_v2 === true,
+    // Stats S5.3 — absent en legacy → defaultent à null (affichera '—')
+    stats: l.stats || null,
+  };
+}
+
 async function renderLicences(panel) {
   try {
-    const { licences = [], total = 0 } = await api('/api/licence/list');
+    // S5.4 — tente d'abord l'endpoint enrichi (S5.3), fallback legacy.
+    let licences = [];
+    let total = 0;
+    let usingEnriched = false;
+    try {
+      const res = await api('/api/admin/licences');
+      licences = (res.licences || []).map(_normalizeLicenceRow);
+      total = res.total ?? licences.length;
+      usingEnriched = true;
+    } catch (e) {
+      console.warn('[admin] /api/admin/licences a échoué, fallback /api/licence/list', e.message);
+      const res = await api('/api/licence/list');
+      licences = (res.licences || []).map(_normalizeLicenceRow);
+      total = res.total ?? licences.length;
+    }
+
     const active = licences.filter(l => l.active).length;
     panel.innerHTML = `
       <div class="section-header">
         <h2 class="section-title">Licences <span>(${total})</span></h2>
-        <button class="btn btn-primary" id="btn-new-licence">+ Nouvelle licence</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-secondary btn-sm" id="btn-run-reminders" title="Sprint S5.2 — déclenche le cron rappels expiration manuellement (respecte le kill-switch dormant)">⏰ Rappels expiration</button>
+          <button class="btn btn-primary" id="btn-new-licence">+ Nouvelle licence</button>
+        </div>
       </div>
       <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
         <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${total}</div></div>
         <div class="stat-card"><div class="stat-label">Actives</div><div class="stat-value" style="color:#4caf80">${active}</div></div>
         <div class="stat-card"><div class="stat-label">Révoquées</div><div class="stat-value" style="color:#e05c5c">${total - active}</div></div>
       </div>
+      ${!usingEnriched ? '<div style="margin:8px 0 16px 0;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted)">⚠ Mode legacy : flags S2.5/S4 indisponibles, basculez vers /api/admin/licences pour la version enrichie.</div>' : ''}
       ${total === 0
         ? '<div class="empty-state"><div class="icon">🗝</div><p>Aucune licence enregistrée</p></div>'
         : `<table class="data-table"><thead><tr>
-             <th>Clé</th><th>Propriétaire</th><th>Plan</th><th>Statut</th><th>Créée le</th><th>Actions</th>
+             <th>Clé</th><th>Propriétaire</th><th>Plan</th><th>Statut</th><th>Devices</th><th>Flags S2.5 / S4</th><th>Créée le</th><th>Actions</th>
            </tr></thead><tbody id="licences-tbody"></tbody></table>`}`;
 
     panel.querySelector('#btn-new-licence').addEventListener('click', () => showCreateLicenceModal(panel));
+    panel.querySelector('#btn-run-reminders').addEventListener('click', () => runExpirationRemindersNow(panel));
+
     if (total > 0) {
       const tbody = panel.querySelector('#licences-tbody');
       licences.forEach(l => {
         const tr = document.createElement('tr');
         const pb = `badge-plan-${(l.plan || '').toLowerCase()}`;
         const date = l.createdAt ? new Date(l.createdAt).toLocaleDateString('fr-FR') : '—';
+        const devicesCell = l.stats
+          ? `<span style="color:var(--text)">${l.stats.devices_active}</span><span style="color:var(--text-muted)">${l.devices_max != null ? ' / ' + l.devices_max : ''}</span>`
+          : '<span style="color:var(--text-muted)">—</span>';
+
+        const flagsCell = usingEnriched
+          ? `<div style="display:flex;gap:8px;align-items:center">
+              <label class="toggle-switch" title="enforce_devices_v2 (S2.5)" style="display:inline-block">
+                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_devices_v2" ${l.flag_enforce_devices_v2 ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+              <label class="toggle-switch" title="enforce_vault_per_email_v2 (S4)" style="display:inline-block">
+                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_vault_per_email_v2" ${l.flag_enforce_vault_per_email_v2 ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>`
+          : '<span style="color:var(--text-muted)">—</span>';
+
         tr.innerHTML = `
           <td><code style="font-size:12px;font-family:'SF Mono',monospace;color:var(--gold)">${esc(l.key)}</code></td>
           <td>${esc(l.owner || '—')}</td>
           <td><span class="badge ${pb}">${esc(l.plan || '—')}</span></td>
           <td><span class="badge ${l.active ? 'badge-active' : 'badge-revoked'}">${l.active ? 'Active' : 'Révoquée'}</span></td>
+          <td style="font-size:13px">${devicesCell}</td>
+          <td>${flagsCell}</td>
           <td style="color:var(--text-muted);font-size:12px">${date}</td>
           <td style="display:flex;gap:8px;align-items:center">
             ${l.active ? `<button class="btn btn-danger btn-sm" data-key="${esc(l.key)}" data-action="revoke">Révoquer</button>` : ''}
@@ -301,15 +365,68 @@ async function renderLicences(panel) {
           </td>`;
         tbody.appendChild(tr);
       });
+
+      // Actions inline (revoke/edit) — event delegation comme avant
       tbody.addEventListener('click', e => {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
         if (btn.dataset.action === 'revoke') confirmRevoke(btn.dataset.key, panel);
         if (btn.dataset.action === 'edit')   showEditLicenceModal(btn.dataset.key, btn.dataset.owner, btn.dataset.plan, panel);
       });
+
+      // S5.4 — toggle flags via POST /api/admin/licences/:key/flag
+      tbody.addEventListener('change', async e => {
+        const input = e.target.closest('input[type="checkbox"][data-flag]');
+        if (!input) return;
+        const key = input.dataset.key;
+        const flag = input.dataset.flag;
+        const value = input.checked ? 1 : 0;
+        const prevChecked = !input.checked; // pour rollback si erreur
+        input.disabled = true;
+        try {
+          const res = await api(`/api/admin/licences/${encodeURIComponent(key)}/flag`, 'POST', { flag, value });
+          if (res.noop) {
+            // pas de changement effectif côté serveur (= état déjà au target)
+          }
+        } catch (err) {
+          input.checked = prevChecked;  // rollback visuel
+          alert(`Échec toggle ${flag} : ${err.message}`);
+        } finally {
+          input.disabled = false;
+        }
+      });
     }
   } catch (err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// S5.4 — Bouton "Rappels expiration" : trigger manuel du cron S5.2
+async function runExpirationRemindersNow(panel) {
+  const btn = panel.querySelector('#btn-run-reminders');
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Analyse en cours…';
+  try {
+    const res = await api('/api/admin/expiration-reminders/run-now', 'POST');
+    const s = res.summary || {};
+    const mode = s.enabled ? 'ENVOI ACTIF' : 'MODE DORMANT (kill-switch off)';
+    const lines = [
+      `${mode}`,
+      `Scannées : ${s.scanned ?? 0}`,
+      `Éligibles : ${s.eligible ?? 0}`,
+      `Envoyées : ${s.sent ?? 0}`,
+      `Auraient été envoyées : ${s.would_have_sent ?? 0}`,
+      `Ignorées (déjà envoyé/email manquant) : ${s.skipped ?? 0}`,
+      `Erreurs : ${s.errors ?? 0}`,
+    ];
+    alert(`Rappels expiration\n\n${lines.join('\n')}\n\nDétail dans l'onglet Audit Log.`);
+  } catch (err) {
+    alert(`Échec trigger rappels : ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 }
 
@@ -2567,6 +2684,112 @@ function _renderDeviceRows(tbody, devices) {
       </td>`;
     tbody.appendChild(tr);
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB AUDIT LOG (Sprint S5.4) — listing paginé + filtres
+// ══════════════════════════════════════════════════════════════════
+// Consomme GET /api/admin/audit (S5.3). Filtres optionnels :
+//   action, target, tenant, since, limit.
+// Read-only — pas d'action destructive depuis cette vue.
+async function renderAuditLog(panel) {
+  panel.innerHTML = `
+    <div class="section-header">
+      <h2 class="section-title">Audit Log <span>· Sprint Sécu-4 + S5</span></h2>
+      <button class="btn btn-secondary btn-sm" id="btn-audit-refresh">↻ Rafraîchir</button>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--navy-2)">
+      <div style="flex:1;min-width:180px">
+        <label class="form-label" style="display:block;font-size:11px">Action</label>
+        <input type="text" id="audit-f-action" class="form-input" placeholder="ex: licence_revoke" style="width:100%">
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label class="form-label" style="display:block;font-size:11px">Target (clé licence, deviceId...)</label>
+        <input type="text" id="audit-f-target" class="form-input" placeholder="ex: KSTN-XXXX-..." style="width:100%">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label class="form-label" style="display:block;font-size:11px">Tenant</label>
+        <input type="text" id="audit-f-tenant" class="form-input" placeholder="ex: default" style="width:100%">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label class="form-label" style="display:block;font-size:11px">Depuis (ISO)</label>
+        <input type="date" id="audit-f-since" class="form-input" style="width:100%">
+      </div>
+      <div style="flex:0 0 auto;display:flex;align-items:flex-end">
+        <button class="btn btn-primary btn-sm" id="btn-audit-apply">Appliquer</button>
+      </div>
+    </div>
+
+    <div id="audit-table-container"><div class="loading">Chargement…</div></div>
+  `;
+
+  const container = panel.querySelector('#audit-table-container');
+
+  async function loadAudit(filters = {}) {
+    container.innerHTML = '<div class="loading">Chargement…</div>';
+    const qs = new URLSearchParams();
+    if (filters.action) qs.set('action', filters.action);
+    if (filters.target) qs.set('target', filters.target);
+    if (filters.tenant) qs.set('tenant', filters.tenant);
+    if (filters.since)  qs.set('since',  filters.since);
+    qs.set('limit', '200');
+    try {
+      const res = await api('/api/admin/audit' + (qs.toString() ? '?' + qs.toString() : ''));
+      const entries = res.entries || [];
+      if (!entries.length) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>Aucune entrée audit</p></div>';
+        return;
+      }
+      container.innerHTML = `
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Horodatage</th>
+              <th>Action</th>
+              <th>Acteur</th>
+              <th>Target</th>
+              <th>Tenant</th>
+              <th>Détails</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${entries.length} entrée${entries.length > 1 ? 's' : ''} — limite 200</div>
+      `;
+      const tbody = container.querySelector('tbody');
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        const tsStr = e.ts ? new Date(e.ts.replace(' ', 'T') + 'Z').toLocaleString('fr-FR') : '—';
+        const details = e.details ? JSON.stringify(e.details, null, 2) : '';
+        tr.innerHTML = `
+          <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${esc(tsStr)}</td>
+          <td><code style="font-family:'SF Mono',monospace;font-size:12px;color:var(--gold)">${esc(e.action)}</code></td>
+          <td style="font-size:12px">${esc(e.actor || '—')}</td>
+          <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--text)">${esc(e.target || '—')}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${esc(e.tenant_id || '—')}</td>
+          <td><details style="cursor:pointer"><summary style="font-size:11px;color:var(--text-muted)">${details ? 'voir' : '—'}</summary><pre style="font-size:11px;background:var(--navy);padding:8px;border-radius:6px;margin-top:4px;max-width:480px;overflow:auto">${esc(details)}</pre></details></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      container.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+    }
+  }
+
+  panel.querySelector('#btn-audit-refresh').addEventListener('click', () => loadAudit(_currentAuditFilters()));
+  panel.querySelector('#btn-audit-apply').addEventListener('click', () => loadAudit(_currentAuditFilters()));
+
+  function _currentAuditFilters() {
+    return {
+      action: panel.querySelector('#audit-f-action').value.trim(),
+      target: panel.querySelector('#audit-f-target').value.trim(),
+      tenant: panel.querySelector('#audit-f-tenant').value.trim(),
+      since:  panel.querySelector('#audit-f-since').value.trim(),
+    };
+  }
+
+  await loadAudit();
 }
 
 // ══════════════════════════════════════════════════════════════════
