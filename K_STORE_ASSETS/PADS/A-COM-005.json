@@ -1,0 +1,15 @@
+{
+  "id": "A-COM-005",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "Ghost Writer",
+  "subtitle": "Réécrire vos emails et textes — 3 variantes intelligentes",
+  "category": "COM",
+  "icon": "ghostwriter",
+  "ai_optimized": "Gemma 4",
+  "notice": "1. Choisissez le contexte (Email pro · Comm interne · Marketing court · Texte long) — les défauts sont adaptés.\n2. Collez votre texte source à gauche.\n3. Ajustez les critères : action (améliorer / réécrire), ton, public, intention, longueur cible.\n4. Cliquez « Réécrire » → vous obtenez 3 variantes distinctes à droite.\n5. Copier ou enregistrer dans votre bibliothèque (50 dernières conservées localement).",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Ghost Writer transforme vos textes (emails clients, communications internes, copy marketing, articles longs) en 3 variantes calibrées. Onglets pré-réglés par contexte d'usage, 5 critères affinables (action, ton, public, intention, longueur). Backend Gemma 4 sur Cloudflare Workers AI — quasi-gratuit, sans clé API à configurer. Bibliothèque persistante de vos 50 dernières réécritures. Service système accessible aussi en raccourci global Cmd+Shift+G partout dans l'OS."
+}

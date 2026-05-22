@@ -619,6 +619,36 @@ export function openGhostwriter(initialText = '') {
 }
 
 /**
+ * Sprint GW-2 — API publique pour le workspace artefact A-COM-005.
+ * Route la réécriture selon le mode configuré (mock/real/auto).
+ * Idempotent : peut être appelé depuis le service système OU le workspace.
+ *
+ * @param {string} text  Texte source à réécrire (5-5000 chars)
+ * @param {object} opts  { tone?, intent?, vouvoie?, mode?, audience?, action?, lengthTarget? }
+ * @returns {Promise<{variants:Array<{label,text}>, model, usage}>}
+ */
+export async function rewriteText(text, opts = {}) {
+    return _rewrite(text, opts);
+}
+
+/**
+ * Mode courant ('mock' | 'real' | 'auto'). Expose pour affichage UI.
+ */
+export function getGhostwriterMode() { return _getMode(); }
+
+/**
+ * Quota restant aujourd'hui. Expose pour affichage UI.
+ */
+export function getGhostwriterQuotaRemaining() { return _quotaRemaining(); }
+
+/**
+ * Décrémente le quota après un appel réussi. À appeler explicitement
+ * depuis le workspace (le service système ghostwriter.js le fait déjà
+ * automatiquement dans _handleGenerate).
+ */
+export function bumpGhostwriterQuota() { _bumpQuota(); }
+
+/**
  * Helpers exposés pour usage avancé / debug console.
  */
 export const _ghostwriter_debug = {

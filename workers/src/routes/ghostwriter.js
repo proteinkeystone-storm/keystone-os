@@ -82,6 +82,11 @@ export async function handleGhostwriterRewrite(request, env) {
     intent,
     vouvoie,
     maxOutputTokens,
+    // Sprint GW-2 — extensions workspace (artefact A-COM-005)
+    mode,         // 'email' | 'internal' | 'marketing' | 'long'  (optionnel)
+    audience,     // 'client' | 'superior' | 'peer' | 'unknown' | 'partner'  (optionnel)
+    action,       // 'improve' (fluidifier sans dénaturer) | 'rewrite' (réécrire complètement)
+    lengthTarget, // 'shorter-50' | 'keep' | 'longer'  (optionnel)
   } = body;
 
   // Validation texte
@@ -120,6 +125,38 @@ export async function handleGhostwriterRewrite(request, env) {
     ? `Objectif de communication : ${intent}. Optimise les variantes pour cet objectif.`
     : '';
 
+  // Sprint GW-2 — directives additionnelles depuis le workspace artefact.
+  // Restent silencieuses si le client ne les envoie pas → 100% rétro-compat.
+  const MODE_DIRECTIVES = {
+    email:     'Contexte : email professionnel. Structure attendue : ouverture brève, corps clair, clôture polie.',
+    internal:  'Contexte : communication interne d\'équipe. Ton direct, sans formules de politesse excessives, droit au but.',
+    marketing: 'Contexte : copywriting marketing court. Punchy, mémorable, orienté action. Privilégier verbes forts et bénéfices clients.',
+    long:      'Contexte : texte long (article, post LinkedIn, newsletter). Structuration claire, transitions soignées, ton engageant.',
+  };
+  const modeDirective = MODE_DIRECTIVES[mode] || '';
+
+  const AUDIENCE_DIRECTIVES = {
+    client:   'Audience : client externe. Registre courtois, vouvoiement par défaut sauf indication contraire.',
+    superior: 'Audience : supérieur hiérarchique. Registre soutenu, factuel, sans familiarité.',
+    peer:     'Audience : pair / collègue. Registre collaboratif, peut être direct sans froideur.',
+    unknown:  'Audience : destinataire inconnu. Neutralité professionnelle par défaut.',
+    partner:  'Audience : partenaire externe (fournisseur, prestataire). Cordial et clair sur les attentes.',
+  };
+  const audienceDirective = AUDIENCE_DIRECTIVES[audience] || '';
+
+  const ACTION_DIRECTIVES = {
+    improve: 'Action : améliorer et fluidifier le texte EXISTANT en préservant le maximum de tournures. Pas de réécriture en profondeur — juste corrections, fluidité, clarté.',
+    rewrite: 'Action : réécrire complètement le message. Préserver le sens et les faits, mais reformuler librement.',
+  };
+  const actionDirective = ACTION_DIRECTIVES[action] || ACTION_DIRECTIVES.rewrite;
+
+  const LENGTH_DIRECTIVES = {
+    'shorter-50': 'Longueur cible : raccourcir d\'environ 50%. Garder l\'essentiel, supprimer le superflu.',
+    'keep':       'Longueur cible : conserver à peu près la longueur originale (± 20%).',
+    'longer':     'Longueur cible : développer le texte (étoffer arguments, ajouter détails utiles), sans bavardage.',
+  };
+  const lengthDirective = LENGTH_DIRECTIVES[lengthTarget] || '';
+
   const systemPrompt = [
     'Tu es un assistant de réécriture textuelle expert. Tu reformules le texte donné en exactement 3 variantes distinctes, sans le dénaturer.',
     '',
@@ -128,7 +165,11 @@ export async function handleGhostwriterRewrite(request, env) {
     `- Forme d'adresse : ${formalAddress}`,
     `- ${toneDirective}`,
     intentDirective,
-    '- Préserver le sens original',
+    modeDirective,
+    audienceDirective,
+    actionDirective,
+    lengthDirective,
+    '- Préserver le sens original (faits, dates, montants, noms propres)',
     '- Pas de commentaire, pas de préface, pas d\'explication',
     '- Aucun markdown (pas de **, *, _, #, etc.)',
     '',
