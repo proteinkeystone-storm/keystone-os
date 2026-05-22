@@ -498,11 +498,19 @@ export function renderDashboard() {
 
     // Artefacts : en mode démo, toujours dans la section "Outils disponibles" (suggested).
     // En mode licence, dans la grille principale s'ils sont owned.
-    const ownedArts  = ownedIds !== null ? ARTEFACTS.filter(a => _isOwned(a.id) && _isSelected(a.id)) : [];
+    // Sprint S6 (hotfix 2) — ADMIN bypass : on inclut aussi les artefacts dans
+    // la grille principale même si ownedIds === null (= cas ADMIN après le fix
+    // setOwnedIds(null) qui retire la clé). Sans ce bypass, Pulsa/Kodex/Muse
+    // disparaissent du dashboard ADMIN puisqu'ils sont dans ARTEFACTS et que
+    // la condition originale exigeait ownedIds !== null.
+    const ownedArts  = (ownedIds !== null || _admin)
+        ? ARTEFACTS.filter(a => _isOwned(a.id) && _isSelected(a.id))
+        : [];
     const lockedArts = ARTEFACTS.filter(a => {
         const notOwned    = !_isOwned(a.id);
         const notSelected = !_isSelected(a.id);
-        const inDemoMode  = ownedIds === null;
+        // ADMIN n'est jamais en "demo mode" : ses artefacts sont owned, pas suggested
+        const inDemoMode  = ownedIds === null && !_admin;
         return (inDemoMode || notOwned || notSelected) && getCatalogEntry(a.id)?.published !== false;
     });
 
