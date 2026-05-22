@@ -15,6 +15,9 @@ import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArte
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
 import { loadFromCloud, saveToCloud, isCloudReady, installAutoSync } from './cloud-vault.js';
+// Sprint GW-1 — Ghost Writer (service réécriture transversal).
+// Hook global Cmd+Shift+G + Modal Master, behind flag ks_ghostwriter (OFF par défaut).
+import { initGhostwriter }                       from './ghostwriter.js';
 
 // ═══════════════════════════════════════════════════════════════
 // VERSION CHECK — auto-cleanup à chaque déploiement
@@ -60,6 +63,9 @@ function _boot() {
     initInbox();
     // Coach système — règles locales, P2, cooldown 24h, après 1.5s
     setTimeout(runSystemCoach, 1500);
+    // Sprint GW-1 — Ghost Writer hook global (idempotent).
+    // Le module ne déclenche rien tant que ks_ghostwriter n'est pas posé.
+    initGhostwriter();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
