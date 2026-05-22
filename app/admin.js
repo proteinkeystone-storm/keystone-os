@@ -472,7 +472,7 @@ function showCreateLicenceModal(panel) {
       </div>
       <div class="form-group form-full">
         <label class="form-label">Assets autorisés <span style="font-weight:400;text-transform:none">(optionnel — virgules)</span></label>
-        <input type="text" class="form-input" id="m-assets" placeholder="O-IMM-001, O-MKT-001, …">
+        <input type="text" class="form-input" id="m-assets" placeholder="O-IMM-002, O-IMM-010, A-COM-001, …">
       </div>
       <div class="form-group">
         <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(optionnel)</span></label>

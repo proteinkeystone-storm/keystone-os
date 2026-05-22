@@ -20,26 +20,27 @@ const kv = new Redis({
 });
 
 // ── Catalogue des plans — IDs NOMEN-K canoniques ────────────────
+// Sprint cleanup-1 (2026-05-22) : nettoyage des 12 IDs des apps abandonnées
+// (O-IMM-003, O-MKT-001/002, O-ANL-001/002, O-ADM-001, A-IMM-001/002/003,
+//  A-ANL-001/002, A-ADM-001). Le catalogue ne reflète plus que ce qui est
+// réellement livré (Annonces, VEFA Studio, artefacts COM).
 const PLANS = {
   STARTER: {
     label: 'Starter',
     ownedAssets: [
-      'O-IMM-001',   // Notices VEFA
-      'O-IMM-002',   // Annonces Commerciales
-      'O-IMM-003',   // Emails Acquéreurs
-      'O-MKT-001',   // Posts Réseaux Sociaux
-      'O-MKT-002',   // Brief Photo / 3D
+      'O-IMM-001',   // Notices VEFA (deprecated → O-IMM-010)
+      'O-IMM-002',   // Annonces Multi-Portails
+      'O-IMM-010',   // VEFA Studio (Notice + Contrat fusionnés)
     ],
   },
   PRO: {
     label: 'Pro',
     ownedAssets: [
-      'O-IMM-001', 'O-IMM-002', 'O-IMM-003',
-      'O-MKT-001', 'O-MKT-002',
-      'O-ANL-001',   // CR Chantier
-      'O-ANL-002',   // Analyste Foncier
-      'O-ADM-001',   // Objections Acquéreurs
-      'A-IMM-001', 'A-IMM-002', 'A-IMM-003',
+      'O-IMM-001', 'O-IMM-002', 'O-IMM-009', 'O-IMM-010',
+      'A-COM-001',   // Sovereign Dynamic QR
+      'A-COM-002',   // Kodex
+      'A-COM-003',   // Muse
+      'A-COM-004',   // Pulsa
     ],
   },
   MAX: {

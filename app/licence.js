@@ -151,13 +151,15 @@ function _simulateLocal(key) {
     }
 
     // Format valide → plan Pro simulé
+    // Sprint cleanup-1 (2026-05-22) : retiré les 6 IDs des outils abandonnés
+    // (O-IMM-003, O-MKT-001/002, O-ANL-001, O-ADM-001) — ne reste que ce qui
+    // est réellement livré (Annonces, VEFA Studio, artefacts COM).
     if (/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(upper)) {
         return {
             valid: true, plan: 'Pro (simulé)', owner: 'Développement local',
             ownedAssets: [
-                'O-IMM-001', 'O-IMM-002', 'O-IMM-003',
-                'O-MKT-001', 'O-MKT-002',
-                'O-ANL-001', 'O-ADM-001',
+                'O-IMM-002', 'O-IMM-010',
+                'A-COM-001', 'A-COM-002', 'A-COM-003', 'A-COM-004',
             ],
         };
     }
