@@ -1847,9 +1847,15 @@ export function openTool(padId, opts = {}) {
     dismissEditMode();
 
     // ── Garde B2B — outil verrouillé ? ───────────────────────────
+    // S6 — Bypass ADMIN appliqué ici aussi : un user avec plan ADMIN
+    // (ou claim isAdmin dans le JWT) a accès illimité à TOUS les outils,
+    // peu importe ce que dit owned_assets. Corrige le bug où VEFA Studio
+    // déclenchait un paywall malgré une licence ADMIN active (le pad,
+    // ajouté après la dernière sync, n'était pas dans ownedIds).
     const ownedIds    = getOwnedIds();
     const lifetimeIds = getLifetimeIds();
-    const isAccessible = ownedIds === null
+    const isAccessible = isAdminUser()
+        || ownedIds === null
         || ownedIds.includes(padId)
         || lifetimeIds.includes(padId)
         || opts.trial
