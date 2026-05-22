@@ -147,6 +147,22 @@
       "tags": ["immobilier", "vefa", "contrat", "réservation", "juridique", "notaire"]
     },
     {
+      "id": "O-IMM-010",
+      "padKey": null,
+      "title": "VEFA Studio",
+      "subtitle": "Notice + Contrat — un seul lot, deux livrables",
+      "category": "IMM",
+      "plan": "STARTER",
+      "price": 49,
+      "longDesc": "VEFA Studio fusionne la notice descriptive RE 2020 et le contrat de réservation Art. L.261-15 CCH dans un seul espace de travail. Hero à onglets pill : bascule entre les deux documents sans perdre vos saisies. Le bloc Programme (nom, type, surface, étage, orientation, annexes) est saisi UNE seule fois et alimente les deux livrables. Côté contrat : auto-calculs HT/TTC selon TVA, échéancier R.261-14 (35/70/95 %), dépôt plafonné par la loi, conversion montant en lettres. Génération 100 % déterministe (clauses canoniques en bibliothèque). Document indicatif — validation notariale impérative.",
+      "icon": "vefa",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "lifetimePrice": 199,
+      "tags": ["artefact", "immobilier", "vefa", "notice", "contrat", "réservation", "juridique", "notaire", "re2020"]
+    },
+    {
       "id": "A-IMM-001",
       "padKey": null,
       "title": "Sentinelle",

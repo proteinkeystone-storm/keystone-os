@@ -1,0 +1,37 @@
+{
+  "title": "VEFA Studio",
+  "tldr": "Générez en un seul outil la notice descriptive (RE 2020) ET le contrat de réservation (Art. L.261-15 CCH) — saisie des données programme partagée entre les deux documents.",
+  "key_points": [
+    "Le bloc « Programme » en haut (nom, type, surface, étage, orientation, annexes) est saisi UNE seule fois et alimente les deux documents.",
+    "Onglet « Notice descriptive » : descriptif technique complet conforme RE 2020 — sols, cuisine, chauffage, isolation, confort d'été.",
+    "Onglet « Contrat de réservation » : contrat préliminaire prêt à transmettre au notaire — vendeur, acquéreur, prix, dépôt de garantie, clauses particulières.",
+    "Bascule entre les onglets via les pills du hero (ou raccourcis 1 et 2) — vos saisies restent en mémoire pendant toute la session.",
+    "Auto-calculs côté contrat : HT ↔ TTC selon le taux de TVA, échéancier R.261-14 (35 % fondations / 70 % hors d'eau / 95 % achèvement), dépôt plafonné par la loi, montant converti en lettres.",
+    "Génération 100 % déterministe — clauses canoniques en bibliothèque, aucun LLM dans le rendu juridique.",
+    "Document indicatif : validation notariale impérative avant signature du contrat."
+  ],
+  "faq": [
+    {
+      "q": "Pourquoi un seul outil pour deux documents ?",
+      "a": "Parce qu'en pratique, la notice et le contrat concernent le même lot, le même programme, parfois le même acquéreur. Les saisir séparément doublait la saisie de six champs communs (nom du programme, type, surface, étage, orientation, annexes). VEFA Studio mutualise tout ça."
+    },
+    {
+      "q": "Mes brouillons Notice / Contrat existants sont-ils perdus ?",
+      "a": "Non. Si tu avais déjà commencé à remplir l'ancien O-IMM-001 (Notice) ou O-IMM-009 (Contrat), VEFA Studio reprend automatiquement tes saisies au premier lancement. Les anciens outils restent disponibles le temps d'une transition."
+    },
+    {
+      "q": "Comment imprimer ou exporter en PDF ?",
+      "a": "Le bouton « Générer la notice » ou « Générer le contrat » ouvre une fenêtre paginée A4 (Paged.js). Dans cette fenêtre, une barre d'outils en haut propose « Imprimer » et « Télécharger PDF ». Dans le dialog du navigateur, choisis « Enregistrer en PDF »."
+    },
+    {
+      "q": "Le contrat peut-il être signé tel quel ?",
+      "a": "Non. C'est un document indicatif à transmettre à votre notaire pour validation. Le notaire ajustera les clauses spécifiques à votre projet et procédera à la signature dans les formes légales."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "1", "desc": "Basculer sur l'onglet Notice descriptive" },
+    { "keys": "2", "desc": "Basculer sur l'onglet Contrat de réservation" },
+    { "keys": "Échap", "desc": "Fermer l'outil (les saisies sont sauvegardées automatiquement)" }
+  ],
+  "updated_at": "2026-05-22"
+}
