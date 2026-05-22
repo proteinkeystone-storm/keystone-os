@@ -23,14 +23,98 @@ export async function loadPads() {
         window.dispatchEvent(new CustomEvent('ks-catalog-loaded', { detail: _catalogCache }));
     });
 
-    // 2. Enrichissement non-bloquant depuis D1 : merge engines.prompts
+    // 2. Sprint B Phase 2 — Enrichissement non-bloquant depuis JSON.
+    //    Behind flag `ks_pads_from_json` (localStorage) ou
+    //    `window.__KS_PADS_FROM_JSON__`. Désactivé par défaut.
+    //    Quand actif, charge K_STORE_ASSETS/PADS/<NOMEN>.json pour
+    //    chaque pad du manifest et merge par-dessus l'embedded JS.
+    //    Si réseau / fichier indisponible → silencieux, embedded
+    //    reste référence (offline-first préservé via fallback).
+    _enrichFromJSON().catch(() => {});
+
+    // 3. Enrichissement non-bloquant depuis D1 : merge engines.prompts
     //    (les prompts moteurs alternatifs ne sont pas dans pads-data.js).
     _enrichFromD1().catch(() => {});
 
-    // 3. Catalogue Key-Store édité depuis l'admin (longDesc, screenshots…)
+    // 4. Catalogue Key-Store édité depuis l'admin (longDesc, screenshots…)
     _refreshCatalogFromD1().catch(() => {});
 
     return _padsCache;
+}
+
+// ── Feature flag JSON loader (Phase 2) ───────────────────────────
+const _LS_PADS_FROM_JSON = 'ks_pads_from_json';
+
+/**
+ * Détecte si l'enrichissement depuis K_STORE_ASSETS/PADS/*.json doit
+ * être appliqué. Activation :
+ *   - window.__KS_PADS_FROM_JSON__ = true       (in-memory, dev)
+ *   - localStorage.setItem('ks_pads_from_json','1')  (persistant)
+ *
+ * Par défaut : false → seul pads-data.js (embedded) est utilisé,
+ * comportement strictement identique à avant Phase 2.
+ */
+export function isPadsFromJSONEnabled() {
+    if (typeof window === 'undefined') return false;
+    if (window.__KS_PADS_FROM_JSON__ === true) return true;
+    try { return localStorage.getItem(_LS_PADS_FROM_JSON) === '1'; }
+    catch (_) { return false; }
+}
+
+/**
+ * Charge les schemas pads depuis K_STORE_ASSETS/PADS/*.json et les
+ * merge par-dessus l'embedded JS de pads-data.js. Non-bloquant.
+ *
+ * Doctrine : embedded reste la source canonique synchrone (offline-
+ * first garanti). JSON ne fait qu'enrichir / écraser quand le flag
+ * est actif. Si fetch échoue (réseau coupé, 404…), on continue
+ * silencieusement avec l'embedded.
+ *
+ * Préserve les champs uniquement présents dans l'embedded (ex: rien
+ * de spécifique pour l'instant — JSON est cible canonique à terme).
+ */
+async function _enrichFromJSON() {
+    if (!isPadsFromJSONEnabled()) return;
+
+    // Manifest list : quels pads ont un JSON disponible
+    let manifest;
+    try {
+        const res = await fetch('/K_STORE_ASSETS/PADS/manifest.json', { cache: 'no-cache' });
+        if (!res.ok) return;
+        manifest = await res.json();
+    } catch (_) { return; }
+
+    if (!Array.isArray(manifest?.pads)) return;
+
+    // Reverse map : NOMEN-K id → padKey interne (pour retrouver la clé
+    // dans _padsCache qui est indexé par padKey, pas par id).
+    const idToKey = new Map();
+    for (const [key, pad] of Object.entries(_padsCache)) {
+        if (pad?.id) idToKey.set(pad.id, key);
+    }
+
+    // Fetch + merge en parallèle pour chaque pad listé dans le manifest.
+    let mergedCount = 0;
+    await Promise.all(manifest.pads.map(async (nomenId) => {
+        const key = idToKey.get(nomenId);
+        if (!key) return;   // pad pas dans embedded → skip
+        try {
+            const res = await fetch(`/K_STORE_ASSETS/PADS/${nomenId}.json`, { cache: 'no-cache' });
+            if (!res.ok) return;
+            const jsonPad = await res.json();
+            // Merge : JSON wins. _enrichFromD1 (étape 3) appliquera
+            // ensuite ses overrides sur engines.prompts.
+            _padsCache[key] = { ..._padsCache[key], ...jsonPad };
+            mergedCount++;
+        } catch (_) {}
+    }));
+
+    if (mergedCount > 0) {
+        // Notifie l'UI qu'elle peut re-render avec les schemas JSON.
+        window.dispatchEvent(new CustomEvent('ks-pads-refreshed-from-json', {
+            detail: { mergedCount },
+        }));
+    }
 }
 
 async function _enrichFromD1() {
