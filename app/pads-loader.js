@@ -92,15 +92,20 @@ async function _refreshCatalogFromD1() {
 }
 
 // ── Liste dynamique des outils ──────────────────────────────────
+// Les pads avec `replacedBy` sont conservés dans PADS_DATA (compat
+// utilisateurs ayant déjà acheté / brouillons) mais filtrés du
+// dashboard. Sprint VEFA-Studio-1 : A1 et A9 → O-IMM-010.
 export function getToolList() {
-    return Object.values(_padsCache).map(pad => ({
-        id:     pad.id,
-        padKey: pad.padKey || pad.id,
-        name:   pad.title || pad.id,
-        desc:   pad.subtitle || '',
-        icon:   pad.icon || 'zap',
-        engine: pad.ai_optimized || 'Claude',
-    }));
+    return Object.values(_padsCache)
+        .filter(pad => !pad.replacedBy)
+        .map(pad => ({
+            id:     pad.id,
+            padKey: pad.padKey || pad.id,
+            name:   pad.title || pad.id,
+            desc:   pad.subtitle || '',
+            icon:   pad.icon || 'zap',
+            engine: pad.ai_optimized || 'Claude',
+        }));
 }
 
 // ── Liste dynamique des artefacts (depuis CATALOG_DATA) ─────────

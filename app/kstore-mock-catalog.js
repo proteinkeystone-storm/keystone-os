@@ -199,7 +199,7 @@ export const KSTORE_MOCK_APPS = [
 
 // ── "À la une pour vous" — apps mises en avant (rail du haut) ──
 export const KSTORE_FEATURED_IDS = [
-    'O-IMM-001',
+    'O-IMM-010',  // VEFA Studio — remplace O-IMM-001 + O-IMM-009
     'A-COM-002',
     'A-COM-004',
     'A-COM-001',

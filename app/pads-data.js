@@ -8,6 +8,10 @@ export const PADS_DATA = {
 
     A1: {
         id: 'O-IMM-001', padKey: 'A1',
+        // ── Sprint VEFA-Studio-1 — Pad remplacé par O-IMM-010 (VEFA Studio).
+        //    Conservé pour compat utilisateurs ayant déjà acheté/initié des
+        //    brouillons. Filtré du dashboard et du K-Store via replacedBy.
+        replacedBy: 'O-IMM-010',
         title: 'Notices VEFA',
         subtitle: 'Notice descriptive conforme RE 2020 — 2026',
         ai_optimized: 'Claude', icon: 'vefa',
@@ -383,6 +387,10 @@ Le brief inclut : 1) Direction artistique (palette, ambiance, références) 2) L
     // hors AI Assist sur le champ clauses_particulieres.
     A9: {
         id: 'O-IMM-009', padKey: 'A9',
+        // ── Sprint VEFA-Studio-1 — Pad remplacé par O-IMM-010 (VEFA Studio).
+        //    Conservé pour compat utilisateurs ayant déjà acheté/initié des
+        //    brouillons. Filtré du dashboard et du K-Store via replacedBy.
+        replacedBy: 'O-IMM-010',
         title: 'Contrat de Réservation VEFA',
         subtitle: 'Contrat préliminaire — Art. L.261-15 CCH',
         ai_optimized: 'Claude', icon: 'vefa',
@@ -570,7 +578,7 @@ export const CATALOG_DATA = {
     updatedAt: '2026-04-29',
     tools: [
         // ── 8 OUTILS PRINCIPAUX ────────────────────────────────────
-        { id:'O-IMM-001', padKey:'A1', title:'Notices VEFA',          subtitle:'Générez vos notices descriptives en 15 sec',     category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa',    ai_optimized:'Claude',  isNew:false, published:true, timeSaved:25, tags:['immobilier','vefa','notice','juridique','contrat'],
+        { id:'O-IMM-001', padKey:'A1', title:'Notices VEFA',          subtitle:'Générez vos notices descriptives en 15 sec',     category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa',    ai_optimized:'Claude',  isNew:false, published:false, replacedBy:'O-IMM-010', timeSaved:25, tags:['immobilier','vefa','notice','juridique','contrat'],
           longDesc:"Générez des notices descriptives VEFA conformes RE 2020 en quelques secondes. L'IA produit un document structuré, prêt à intégrer dans vos contrats. Gagne 45 à 90 minutes par dossier." },
         { id:'O-IMM-002', padKey:'A2', title:'Annonces Multi-Portails', subtitle:'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'multiportails', ai_optimized:'ChatGPT', isNew:true, published:true, timeSaved:30, tags:['immobilier','annonce','seloger','leboncoin','bienici','diffusion','portails','copywriting'],
           longDesc:"Générez vos annonces immobilières pour 6 portails majeurs (SeLoger, LeBonCoin, Bien'ici, Logic-Immo, Figaro Immo, Avendrealouer) en une seule saisie. L'IA produit une variante par portail respectant titre, description et ton spécifiques. Diffusion multi-canal en 2 minutes au lieu de 30." },
@@ -586,7 +594,7 @@ export const CATALOG_DATA = {
           longDesc:"Analyse de terrain : faisabilité réglementaire, potentiel constructible, bilan prévisionnel et risques. Présentable en comité d'engagement." },
         { id:'O-ADM-001', padKey:'A7', title:'Objections Acquéreurs', subtitle:'3 réponses graduées par objection',              category:'IMM', plan:'PRO',     price:39, lifetimePrice:149, icon:'chat',    ai_optimized:'Claude',  isNew:false, published:true, timeSaved:15, tags:['admin','commercial','objection','vente','argumentation'],
           longDesc:"Réponses calibrées aux objections fréquentes : prix, délais, charges, emplacement. 3 niveaux : douce, affirmée, closing." },
-        { id:'O-IMM-009', padKey:'A9', title:'Contrat Réservation VEFA', subtitle:'Contrat préliminaire Art. L.261-15 — PDF prêt notaire', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa', ai_optimized:'Claude', isNew:true, published:true, timeSaved:30, tags:['immobilier','vefa','contrat','réservation','juridique','notaire'],
+        { id:'O-IMM-009', padKey:'A9', title:'Contrat Réservation VEFA', subtitle:'Contrat préliminaire Art. L.261-15 — PDF prêt notaire', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa', ai_optimized:'Claude', isNew:false, published:false, replacedBy:'O-IMM-010', timeSaved:30, tags:['immobilier','vefa','contrat','réservation','juridique','notaire'],
           longDesc:"Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Réutilise les données du programme déjà saisies." },
 
         // ── ARTEFACTS livrés (workspace fullscreen) ────────────────
