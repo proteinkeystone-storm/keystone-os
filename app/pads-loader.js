@@ -72,8 +72,11 @@ async function _refreshCatalogFromD1() {
     // les métadonnées (engines, etc.) des tools déjà déclarés localement.
     //
     // EXCEPTION : on préserve les champs d'UI embarqués (icon, plan,
-    // pricing) pour ne pas se faire écraser par une version D1 obsolète.
-    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved'];
+    // pricing, title, subtitle) pour ne pas se faire écraser par une
+    // version D1 obsolète. Ajouté title/subtitle 2026-05-22 après le
+    // rename "Sovereign Dynamic QR" → "Dynamic QR" : le code source
+    // est désormais aussi canonique pour le wording UI des tools.
+    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved', 'title', 'subtitle'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {

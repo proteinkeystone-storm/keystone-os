@@ -1,5 +1,5 @@
 {
-  "title": "Sovereign Dynamic QR",
+  "title": "Dynamic QR",
   "tldr": "SDQR crée des QR codes souverains avec tracking RGPD natif. Statiques ou dynamiques (modifiables après impression), brandés à votre charte, sans dépendance Google.",
   "key_points": [
     "1. Choisissez le type de QR (URL, VCard, Wi-Fi, iCal, texte libre)",

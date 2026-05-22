@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes SDQR · Sovereign Dynamic QR (Sprint 1)
+   KEYSTONE OS — Routes SDQR · Dynamic QR (Sprint 1)
 
    Routes :
      GET  /r/:shortId       Public — redirige + log scan (RGPD safe)
@@ -680,7 +680,7 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Politique de transparence — Sovereign Dynamic QR</title>
+<title>Politique de transparence — Dynamic QR</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:linear-gradient(180deg,#0a1024 0%,#060a18 100%);color:#e8edf8;min-height:100vh;line-height:1.65;padding:40px 24px 80px}
@@ -710,7 +710,7 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
 </head>
 <body>
 <div class="wrap">
-  <span class="pill">Sovereign Dynamic QR · Transparence</span>
+  <span class="pill">Dynamic QR · Transparence</span>
   <h1>Ce que ce QR collecte<br>et ce qu'il ne collecte pas</h1>
   <p class="lead">Vous venez de scanner un QR généré par Keystone OS. Voici, en clair, ce qui se passe.</p>
 
@@ -764,7 +764,7 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
   <p>Si vos demandes n'ont pas reçu de réponse satisfaisante, vous pouvez introduire une réclamation auprès de la <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a> (Autorité de contrôle française).</p>
 
   <div class="foot">
-    Politique publiée par <strong>Keystone OS</strong> — éditeur de l'artefact Sovereign Dynamic QR.<br>
+    Politique publiée par <strong>Keystone OS</strong> — éditeur de l'artefact Dynamic QR.<br>
     Version 1.0 · ${new Date().toISOString().slice(0, 10)} · Conforme RGPD UE 2016/679.
   </div>
 </div>

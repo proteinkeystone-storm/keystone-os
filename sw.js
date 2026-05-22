@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.82.1-catalog-local-source-of-truth';
+const VERSION       = 'ks-os-v4.82.2-rename-sdqr-to-dynamic-qr';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

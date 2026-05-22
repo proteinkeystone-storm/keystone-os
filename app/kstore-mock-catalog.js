@@ -68,7 +68,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'A-COM-001',
         category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Sovereign Dynamic QR',
+        title: 'Dynamic QR',
         punchline: 'QR codes souverains · sans GAFAM',
         shortDesc: 'Statiques + Dynamiques · stats RGPD · studio design',
         price: 49,
