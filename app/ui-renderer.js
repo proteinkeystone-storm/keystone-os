@@ -40,6 +40,15 @@ import {
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
     getCategoryLabel, getCategoryPath,
 } from './kstore-mock-catalog.js';
+// ── Sprint B (Master Renderer) — module additif, OFF par défaut ──
+// Activation : window.__KS_MASTER_RENDERER__ = true OU
+//              localStorage.setItem('ks_master_renderer','1').
+// Tant que désactivé, ce module n'est PAS appelé → aucun changement
+// de comportement vs legacy. Voir HANDOFF_MASTER_RENDERER.md.
+import {
+    renderPadModalHTML, renderArtifactModalHTML,
+    isMasterRendererEnabled,
+} from './master-renderer.js';
 
 // ── Icônes SVG ────────────────────────────────────────────────
 const ICONS = {
@@ -2036,6 +2045,21 @@ function _buildModal(pad, tool) {
     const _catCode  = _nomenId.split('-')[1] || '';
     const _catLabel = _CAT_LABELS[_catCode] || _catCode;
 
+    // ── Sprint B (Master Renderer) — bascule du HTML behind flag ──
+    // Quand isMasterRendererEnabled() = true, la GÉNÉRATION DU HTML est
+    // déléguée à master-renderer.js (fidélité 1:1 visée). Les bindings
+    // d'événements (custom selects, multi-select, AI assist, computed
+    // fields, doc export, library, copy…) suivent en sortie de bloc et
+    // restent COMMUNS aux deux chemins. Tant que le flag est off (défaut),
+    // le template legacy ci-dessous est utilisé → zéro changement.
+    if (isMasterRendererEnabled()) {
+        inner.innerHTML = renderPadModalHTML(pad, {
+            icons: ICONS, nomenId: _nomenId, catLabel: _catLabel,
+            engine, hasApiKey: hasKey,
+            helpButtonHTML: helpButtonHTML(_nomenId),
+            ratingButtonHTML: ratingButtonHTML(_nomenId),
+        });
+    } else {
     inner.innerHTML = `
         <div class="modal-handle"></div>
 
@@ -2141,6 +2165,7 @@ function _buildModal(pad, tool) {
             <div class="modal-library-list" id="modal-library-list"></div>
         </div>
     `;
+    } // ── fin bascule Master Renderer (Sprint B) ──
 
     // Notation + aide — widgets partagés avec les artefacts (clé stable
     // = NOMEN-K id, invariant quel que soit padKey ou tool).
