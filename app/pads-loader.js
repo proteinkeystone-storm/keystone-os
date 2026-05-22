@@ -61,21 +61,29 @@ async function _refreshCatalogFromD1() {
     const remote = body?.catalog;
     if (!remote || !Array.isArray(remote.tools)) return;
 
-    // Merge tool-par-tool : D1 prioritaire mais embarqué = fallback.
+    // Merge tool-par-tool : D1 enrichit, embarqué = source de vérité.
+    //
+    // Sprint cleanup-1 (2026-05-22) : le merge ne crée PLUS d'entrées
+    // remote-only. Avant, si D1 contenait un tool absent de CATALOG_DATA
+    // (typique d'une DB obsolète qui retient les anciennes apps), il
+    // était ajouté à _catalogCache.tools → réapparaissait dans le dashboard
+    // et le K-Store même après suppression du code local. Désormais le
+    // local est canonique sur la LISTE des tools ; D1 ne peut qu'enrichir
+    // les métadonnées (engines, etc.) des tools déjà déclarés localement.
+    //
     // EXCEPTION : on préserve les champs d'UI embarqués (icon, plan,
-    // pricing) pour ne pas se faire écraser par une version D1
-    // obsolète qui n'aurait pas été resynchronisée après une mise
-    // à jour des pictogrammes ou du pricing côté Vercel.
+    // pricing) pour ne pas se faire écraser par une version D1 obsolète.
     const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {
         if (!t?.id) return;
         const existing = byId.get(t.id);
-        const merged = { ...(existing || {}), ...t };
+        if (!existing) return;   // Skip les tools remote absents du catalogue local
+        const merged = { ...existing, ...t };
         // Restaure les champs UI depuis la version embarquée
         for (const f of UI_FIELDS_LOCAL_FIRST) {
-            if (existing && existing[f] != null) merged[f] = existing[f];
+            if (existing[f] != null) merged[f] = existing[f];
         }
         byId.set(t.id, merged);
     });
