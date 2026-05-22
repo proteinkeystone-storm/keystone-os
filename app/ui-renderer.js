@@ -18,6 +18,7 @@ import { openKodex }                             from './codex.js';
 import { openMuse }                              from './muse.js';
 import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
+import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -81,6 +82,9 @@ const ICONS = {
     'sdqr':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg>`,
     'muse':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="5.5" height="14" rx="1"/><rect x="9.25" y="3.5" width="5.5" height="17" rx="1"/><rect x="16" y="5.5" width="5.5" height="15" rx="1"/></svg>`,
     'multiportails':  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="5" x2="5" y2="5"/><line x1="8" y1="5" x2="22" y2="5"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="8" y1="12" x2="22" y2="12"/><line x1="2" y1="19" x2="5" y2="19"/><line x1="8" y1="19" x2="22" y2="19"/></svg>`,
+    // ghostwriter : 3 lignes de texte graduées (suggère 3 variantes de longueurs)
+    // + étincelle (sparkle) haut-droite évoquant la transformation IA.
+    'ghostwriter':    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="17" y2="9"/><line x1="3" y1="13" x2="20" y2="13"/><line x1="3" y1="17" x2="13" y2="17"/><line x1="19" y1="3" x2="19" y2="7"/><line x1="17" y1="5" x2="21" y2="5"/></svg>`,
 };
 
 // ── Palette par PLAN (et par type) ────────────────────────────
@@ -1885,6 +1889,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'A-COM-002') { openKodex(); return; }
     if (padId === 'A-COM-003') { openMuse();  return; }
     if (padId === 'A-COM-004') { openPulsa(); return; }
+    if (padId === 'A-COM-005') { openGhostwriterStudio(); return; }
 
     // Résoudre NOMEN-K (O-IMM-001) ou padKey (A1) → pad via pads-loader
     const tool = TOOLS.find(t => t.id === padId);

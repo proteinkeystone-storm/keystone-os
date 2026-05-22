@@ -117,10 +117,24 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    {
+        id: 'A-COM-005',
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Ghost Writer',
+        punchline: 'Vos emails et textes, réécrits en 3 variantes',
+        shortDesc: '4 contextes · 5 critères · backend Gemma 4 quasi-gratuit · raccourci global',
+        price: 49,
+        icon: 'ghostwriter',
+        ai_optimized: 'Gemma 4',
+        ai_compatible: ['Gemma 4', 'Claude', 'GPT 5', 'Mistral', 'Gemini', 'Grok', 'Perplexity', 'Llama'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 ];
 
 // ── "À la une pour vous" — apps mises en avant (rail du haut) ──
 export const KSTORE_FEATURED_IDS = [
+    'A-COM-005',  // Ghost Writer (NEW Sprint GW-2) — mis en featured pour visibilité
     'O-IMM-010',  // VEFA Studio — remplace O-IMM-001 + O-IMM-009
     'A-COM-002',
     'A-COM-004',
