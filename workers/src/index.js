@@ -38,6 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
+import { handleGhostwriterRewrite }                                     from './routes/ghostwriter.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -175,6 +176,13 @@ export default {
       // BYOK : la clé API est passée dans le body, jamais stockée Worker.
       if (path === '/api/proxy/llm' && method === 'POST') {
         return handleProxyLLM(request, env);
+      }
+
+      // ── Ghost Writer (Sprint GW-1 — Workers AI / Gemma 4) ────
+      // Service de réécriture textuelle via env.AI.run() (free tier).
+      // Pré-requis : binding [ai] dans wrangler.toml (cf. ghostwriter.js).
+      if (path === '/api/ghostwriter/rewrite' && method === 'POST') {
+        return handleGhostwriterRewrite(request, env);
       }
 
       // ── CSP violation report endpoint (Sprint Sécu-2 / H5) ────
