@@ -126,7 +126,7 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
 
     A2: {
         id: 'O-IMM-002', padKey: 'A2',
-        title: 'Annonces Multi-Portails',
+        title: 'Annonces Immo',
         subtitle: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
         ai_optimized: 'ChatGPT', icon: 'multiportails',
         notice: `1. Renseignez le programme, la ville, le prix et les atouts.\n2. Cochez les portails cibles — l'IA génère une variante par portail respectant titre / description / ton spécifiques.\n3. Le champ "Atouts" accepte un appel IA (✦) pour pré-rédiger un paragraphe.\n4. Le résultat affiche un bloc par portail, prêt à copier-coller dans l'admin du site.`,
@@ -399,7 +399,7 @@ export const CATALOG_DATA = {
         // ── 8 OUTILS PRINCIPAUX ────────────────────────────────────
         { id:'O-IMM-001', padKey:'A1', title:'Notices VEFA',          subtitle:'Générez vos notices descriptives en 15 sec',     category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa',    ai_optimized:'Claude',  isNew:false, published:false, replacedBy:'O-IMM-010', timeSaved:25, tags:['immobilier','vefa','notice','juridique','contrat'],
           longDesc:"Générez des notices descriptives VEFA conformes RE 2020 en quelques secondes. L'IA produit un document structuré, prêt à intégrer dans vos contrats. Gagne 45 à 90 minutes par dossier." },
-        { id:'O-IMM-002', padKey:'A2', title:'Annonces Multi-Portails', subtitle:'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'multiportails', ai_optimized:'ChatGPT', isNew:true, published:true, timeSaved:30, tags:['immobilier','annonce','seloger','leboncoin','bienici','diffusion','portails','copywriting'],
+        { id:'O-IMM-002', padKey:'A2', title:'Annonces Immo', subtitle:'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'multiportails', ai_optimized:'ChatGPT', isNew:true, published:true, timeSaved:30, tags:['immobilier','annonce','seloger','leboncoin','bienici','diffusion','portails','copywriting'],
           longDesc:"Générez vos annonces immobilières pour 6 portails majeurs (SeLoger, LeBonCoin, Bien'ici, Logic-Immo, Figaro Immo, Avendrealouer) en une seule saisie. L'IA produit une variante par portail respectant titre, description et ton spécifiques. Diffusion multi-canal en 2 minutes au lieu de 30." },
         { id:'O-IMM-009', padKey:'A9', title:'Contrat Réservation VEFA', subtitle:'Contrat préliminaire Art. L.261-15 — PDF prêt notaire', category:'IMM', plan:'STARTER', price:29, lifetimePrice:149, icon:'vefa', ai_optimized:'Claude', isNew:false, published:false, replacedBy:'O-IMM-010', timeSaved:30, tags:['immobilier','vefa','contrat','réservation','juridique','notaire'],
           longDesc:"Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Réutilise les données du programme déjà saisies." },

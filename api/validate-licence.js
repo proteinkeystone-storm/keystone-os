@@ -29,7 +29,7 @@ const PLANS = {
     label: 'Starter',
     ownedAssets: [
       'O-IMM-001',   // Notices VEFA (deprecated → O-IMM-010)
-      'O-IMM-002',   // Annonces Multi-Portails
+      'O-IMM-002',   // Annonces Immo
       'O-IMM-010',   // VEFA Studio (Notice + Contrat fusionnés)
     ],
   },

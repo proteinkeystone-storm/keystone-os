@@ -53,7 +53,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'O-IMM-002',
         category: 'BIZ', subcategory: 'BIZ_IMM',
-        title: 'Annonces Multi-Portails',
+        title: 'Annonces Immo',
         punchline: '6 portails en une saisie',
         shortDesc: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
         price: 29,
