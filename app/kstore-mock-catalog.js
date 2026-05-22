@@ -32,32 +32,11 @@ export const KSTORE_CATEGORIES = [
 // NOMEN-K (lien avec pads-data.js / flow Stripe).
 export const KSTORE_MOCK_APPS = [
     // ── Économie & entreprise > Immobilier ────────────────────
-    {
-        id: 'O-IMM-001',
-        category: 'BIZ', subcategory: 'BIZ_IMM',
-        title: 'Notices VEFA',
-        punchline: 'Notice descriptive conforme RE 2020',
-        shortDesc: 'Générez vos notices descriptives en 15 sec',
-        price: 49,
-        icon: 'vefa',
-        ai_optimized: 'Claude',
-        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
-        copyright: '© 2026-2027 Protein Studio',
-        real: true,
-    },
-    {
-        id: 'O-IMM-009',
-        category: 'BIZ', subcategory: 'BIZ_IMM',
-        title: 'Contrat de Réservation VEFA',
-        punchline: 'Contrat préliminaire Art. L.261-15 CCH',
-        shortDesc: 'PDF prêt notaire en 5 minutes',
-        price: 29,
-        icon: 'vefa',
-        ai_optimized: 'Claude',
-        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
-        copyright: '© 2026-2027 Protein Studio',
-        real: true,
-    },
+    // ── O-IMM-001 (Notices VEFA) et O-IMM-009 (Contrat VEFA) retirés
+    //    du K-Store le 2026-05-22 : remplacés par VEFA Studio (O-IMM-010)
+    //    qui fusionne les deux livrables en un seul outil. Les anciens
+    //    pads restent dans pads-data.js pour les utilisateurs qui les
+    //    ont déjà achetés, et VEFA Studio migre leurs brouillons.
     {
         id: 'O-IMM-010',
         category: 'BIZ', subcategory: 'BIZ_IMM',

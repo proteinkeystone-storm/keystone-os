@@ -104,9 +104,13 @@ export function getToolList() {
 }
 
 // ── Liste dynamique des artefacts (depuis CATALOG_DATA) ─────────
+// Un artefact = tool sans padKey (rendu via son fichier JS dédié,
+// pas via le moteur de form générique de ui-renderer). Le préfixe
+// d'ID (A-* ou O-*) n'est PAS un critère fiable — VEFA Studio est
+// O-IMM-010 mais reste un artefact fullscreen.
 export function getArtefactList() {
     return _catalogCache.tools
-        .filter(t => t.id.startsWith('A-'))
+        .filter(t => t.padKey === null || t.padKey === undefined)
         .map(t => ({
             id:     t.id,
             name:   t.title || t.id,

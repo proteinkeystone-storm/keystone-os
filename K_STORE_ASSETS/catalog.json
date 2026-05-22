@@ -14,7 +14,8 @@
       "icon": "vefa",
       "ai_optimized": "Claude",
       "isNew": false,
-      "published": true,
+      "published": false,
+      "replacedBy": "O-IMM-010",
       "lifetimePrice": 149,
       "tags": ["immobilier", "vefa", "notice", "juridique", "contrat"]
     },
@@ -141,8 +142,9 @@
       "longDesc": "Générez un contrat préliminaire de réservation VEFA conforme aux articles L.261-15 et R.261-25-1 du CCH. Document indicatif à transmettre au notaire pour validation, prêt à signer en 5 minutes. Auto-calculs HT/TTC, échéancier R.261-14, dépôt de garantie plafonné, conversion montant en lettres. Réutilise les données du programme déjà saisies.",
       "icon": "vefa",
       "ai_optimized": "Claude",
-      "isNew": true,
-      "published": true,
+      "isNew": false,
+      "published": false,
+      "replacedBy": "O-IMM-010",
       "lifetimePrice": 149,
       "tags": ["immobilier", "vefa", "contrat", "réservation", "juridique", "notaire"]
     },
