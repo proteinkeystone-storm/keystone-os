@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Ghost Writer Frontend v0.1 (Sprint GW-1 / MVP)
+   KEYSTONE OS — Ghost Writer Frontend v0.2
    ─────────────────────────────────────────────────────────────
    Service système transversal de réécriture textuelle.
    Hook global Cmd+Shift+G + selection listener + Modal 60/40.
@@ -10,12 +10,12 @@
      - localStorage.setItem('ks_ghostwriter','1')    (persistant)
 
    Backend :
-     - Mode 'mock' (défaut) → transformations clientes simples, instantané,
-       pas de réseau. Permet de tester l'UX sans déployer le Worker.
-     - Mode 'real' → POST /api/ghostwriter/rewrite (Gemma 4 via Workers AI).
-       Nécessite ks_jwt en localStorage.
-     - Mode 'auto' → essaie real, fallback mock si erreur.
-     Choix via localStorage.setItem('ks_ghostwriter_mode', 'real' | 'auto' | 'mock').
+     - POST /api/ghostwriter/rewrite → Gemma 4 sur Cloudflare Workers AI.
+     - Nécessite ks_jwt en localStorage (licence active).
+     - Nécessite `[ai] binding = "AI"` dans wrangler.toml côté Worker
+       (cf. HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md).
+     - En cas d'erreur backend, l'UI affiche un message actionnable —
+       PAS de fallback mock (qui serait trompeur).
 
    Quota :
      - V1 : hard-limit 10 calls/jour, tracké via localStorage (bucket
@@ -33,7 +33,6 @@ import { CF_API } from './pads-loader.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
-const MODE_LS_KEY     = 'ks_ghostwriter_mode';   // 'mock' | 'real' | 'auto'
 const QUOTA_LS_KEY    = 'ks_ghostwriter_quota';  // { date, count }
 const QUOTA_PER_DAY   = 10;
 const SHORTCUT_KEY    = 'g';
@@ -56,17 +55,6 @@ export function isGhostwriterEnabled() {
     if (window.__KS_GHOSTWRITER__ === true) return true;
     try { return localStorage.getItem(FLAG_LS_KEY) === '1'; }
     catch (_) { return false; }
-}
-
-/**
- * Mode courant. Défaut : 'mock' (pas de backend nécessaire).
- */
-function _getMode() {
-    try {
-        const m = localStorage.getItem(MODE_LS_KEY);
-        if (m === 'real' || m === 'auto' || m === 'mock') return m;
-    } catch (_) {}
-    return 'mock';
 }
 
 // ── Quota tracking (localStorage, day-bucketed) ───────────────────
@@ -124,124 +112,18 @@ function _trackSelection() {
     _lastSelection = { text, sourceEl };
 }
 
-// ── Backend calls ─────────────────────────────────────────────────
+// ── Backend call (Gemma 4 sur Cloudflare Workers AI) ──────────────
 
 /**
- * Mock backend : transformations clientes "best-effort" pour valider
- * l'UX sans déploiement Worker. Latence simulée 600ms.
- *
- * IMPORTANT — limitations du mock :
- * Le mock ne FAIT PAS de vraie réécriture sémantique. Il applique des
- * transformations syntaxiques basiques (capitalisation, splitting,
- * préfixes, troncature). Pour des reformulations IA réelles qui
- * respectent ton/action/intent/audience, basculer en mode 'real' ou
- * 'auto' (nécessite déploiement du Worker avec binding [ai]).
- *
- * Ce que le mock RESPECTE désormais (pour transparence) :
- * - `lengthTarget` : raccourcit / garde / développe vraiment
- * - `tone` : adapte les LABELS des 3 variantes pour refléter le ton
- * - `action` : 'improve' garde plus de structure d'origine
- *
- * Ce que le mock ne respecte PAS :
- * - `intent` (motiver, négocier…) — aucun effet
- * - `audience` (client, supérieur…) — aucun effet
- * - `mode` (email, marketing…) — aucun effet visible
- * - La sémantique en général : les 3 variantes RESTENT proches du
- *   texte source car le mock ne sait pas reformuler.
- */
-async function _callMock(text, opts = {}) {
-    await new Promise(r => setTimeout(r, 600));
-
-    const trimmed = text.trim();
-    const ending  = /[.!?…]$/.test(trimmed) ? '' : '.';
-    const tone    = opts.tone || '';
-    const action  = opts.action || 'improve';
-    const length  = opts.lengthTarget || '';
-
-    // ── Helper longueur : applique le critère length au texte donné ──
-    function applyLength(s) {
-        if (length === 'shorter-50') {
-            // Garde la moitié des phrases (arrondi sup)
-            const sentences = s.split(/(?<=[.!?…])\s+/).filter(Boolean);
-            const keep = Math.max(1, Math.ceil(sentences.length / 2));
-            return sentences.slice(0, keep).join(' ');
-        }
-        if (length === 'longer') {
-            // Ajoute une phrase générique de politesse en fin selon le contexte
-            const tail = opts.mode === 'email' || opts.audience === 'client'
-                ? ' N\'hésitez pas à revenir vers moi pour tout point à clarifier.'
-                : opts.mode === 'marketing'
-                    ? ' À découvrir sans attendre.'
-                    : ' Pour aller plus loin, je reste disponible.';
-            return s + tail;
-        }
-        return s;
-    }
-
-    // ── Helper labels : choisit 3 labels pertinents selon tone ─────
-    function pickLabels() {
-        const map = {
-            'formel professionnel':  ['Très formel', 'Formel mesuré', 'Formel cordial'],
-            'chaleureux empathique': ['Très chaleureux', 'Empathique', 'Bienveillant'],
-            'concis direct':         ['Très concis', 'Synthétique', 'Direct'],
-            'persuasif vendeur':     ['Très impactant', 'Persuasif mesuré', 'Engageant'],
-            'humble respectueux':    ['Humble', 'Respectueux', 'Modeste'],
-            'enthousiaste':          ['Très enthousiaste', 'Énergique', 'Positif'],
-        };
-        return map[tone] || ['Plus formel', 'Plus concis', 'Plus chaleureux'];
-    }
-    const labels = pickLabels();
-
-    // ── 3 transformations syntaxiques basiques ─────────────────────
-    // V1 — capitalisation + ponctuation propre
-    let v1 = trimmed.charAt(0).toUpperCase()
-        + trimmed.slice(1).replace(/!+/g, '.').replace(/\s+/g, ' ')
-        + ending;
-
-    // V2 — 2 premières phrases (concis intrinsèque), puis applique length
-    let v2Base = trimmed.split(/[.!?]+/).map(s => s.trim()).filter(Boolean).slice(0, 2).join('. ');
-    let v2 = (v2Base || trimmed) + (ending || '.');
-
-    // V3 — préfixe selon ton
-    const prefixByTone = {
-        'chaleureux empathique': 'Avec plaisir : ',
-        'persuasif vendeur':     'Vraiment : ',
-        'humble respectueux':    'Si je peux me permettre : ',
-        'enthousiaste':          'Excellente nouvelle : ',
-    };
-    const prefix = prefixByTone[tone] || '';
-    let v3 = prefix
-        ? prefix + trimmed.charAt(0).toLowerCase() + trimmed.slice(1) + ending
-        : trimmed + ending;
-    v3 = v3.replace(/\s+/g, ' ');
-
-    // ── Applique le critère length à toutes les variantes ─────────
-    v1 = applyLength(v1);
-    v2 = applyLength(v2);
-    v3 = applyLength(v3);
-
-    // ── Action 'improve' vs 'rewrite' : marqueur dans le model ──
-    const actionMarker = action === 'rewrite' ? '+rewrite' : '+improve';
-
-    return {
-        variants: [
-            { label: labels[0], text: v1 },
-            { label: labels[1], text: v2 },
-            { label: labels[2], text: v3 },
-        ],
-        model: `mock-client${actionMarker}${length ? '+' + length : ''}`,
-        usage: null,
-    };
-}
-
-/**
- * Real backend : appel POST /api/ghostwriter/rewrite avec JWT.
+ * Appel POST /api/ghostwriter/rewrite avec JWT.
  * Le Worker doit avoir le binding [ai] configuré dans wrangler.toml.
+ * En cas d'erreur, throw — l'UI doit afficher un message actionnable
+ * (notamment pour les 503 "Workers AI non configuré" → guide deploy).
  */
 async function _callReal(text, opts) {
     const jwt = localStorage.getItem('ks_jwt');
     if (!jwt) {
-        throw new Error('Aucun JWT en session — connectez-vous (mode real nécessite une licence active).');
+        throw new Error('Aucun JWT en session — connectez-vous (Ghost Writer nécessite une licence active).');
     }
 
     const res = await fetch(`${CF_API}/api/ghostwriter/rewrite`, {
@@ -252,9 +134,13 @@ async function _callReal(text, opts) {
         },
         body: JSON.stringify({
             text,
-            tone   : opts?.tone    || null,
-            intent : opts?.intent  || null,
-            vouvoie: opts?.vouvoie ?? null,
+            tone        : opts?.tone         || null,
+            intent      : opts?.intent       || null,
+            vouvoie     : opts?.vouvoie     ?? null,
+            mode        : opts?.mode         || null,
+            audience    : opts?.audience     || null,
+            action      : opts?.action       || null,
+            lengthTarget: opts?.lengthTarget || null,
         }),
     });
 
@@ -264,27 +150,14 @@ async function _callReal(text, opts) {
             const errBody = await res.json();
             msg = errBody.error || errBody.message || msg;
         } catch (_) {}
-        throw new Error(msg);
+        // Marqueur explicite pour l'UI : si 503 ou message backend KO, on
+        // veut afficher un guide de deploy plutôt qu'un message brut.
+        const err = new Error(msg);
+        err.status = res.status;
+        throw err;
     }
 
     return await res.json();
-}
-
-/**
- * Routing par mode actif.
- */
-async function _rewrite(text, opts) {
-    const mode = _getMode();
-    if (mode === 'mock') return _callMock(text, opts);
-    if (mode === 'real') return _callReal(text, opts);
-    // 'auto' : real avec fallback mock si erreur
-    try { return await _callReal(text, opts); }
-    catch (e) {
-        console.warn('[ghostwriter] Real backend KO, fallback mock :', e.message);
-        const result = await _callMock(text, opts);
-        result.model = `mock-fallback (real KO: ${e.message})`;
-        return result;
-    }
 }
 
 // ── CSS (injecté une seule fois au premier open) ──────────────────
@@ -405,7 +278,6 @@ function _injectCSS() {
 
 function _buildModalHTML(initialText) {
     const remaining = _quotaRemaining();
-    const mode = _getMode();
     return `
         <div class="gw-modal" role="dialog" aria-label="Ghost Writer">
             <div class="gw-head">
@@ -433,7 +305,7 @@ function _buildModalHTML(initialText) {
                     <div id="gw-status" class="gw-status"></div>
                     <div class="gw-meta">
                         <span class="gw-quota">${remaining}/${QUOTA_PER_DAY} appels restants aujourd'hui</span>
-                        <span class="gw-mode-chip">Mode : ${mode}</span>
+                        <span class="gw-mode-chip">Gemma 4</span>
                     </div>
                 </div>
                 <div class="gw-right">
@@ -556,7 +428,7 @@ async function _handleGenerate(overlay) {
     _setStatus(status, '', null);
 
     try {
-        const result = await _rewrite(text, { tone: tone || null });
+        const result = await _callReal(text, { tone: tone || null });
         _bumpQuota();
         _renderVariants(variants, result.variants);
         _setStatus(status, `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
@@ -565,11 +437,26 @@ async function _handleGenerate(overlay) {
         const quotaEl = overlay.querySelector('.gw-quota');
         if (quotaEl) quotaEl.textContent = `${_quotaRemaining()}/${QUOTA_PER_DAY} appels restants aujourd'hui`;
     } catch (e) {
-        _setStatus(status, `✗ ${e.message}`, 'error');
+        _setStatus(status, `✗ ${_friendlyError(e)}`, 'error');
     } finally {
         goBtn.disabled = false;
         goBtn.innerHTML = '<span>Réécrire en 3 variantes</span>';
     }
+}
+
+/**
+ * Traduit une erreur backend en message actionnable. Le cas 503 /
+ * "Workers AI non configuré" mérite un guide explicite plutôt qu'un
+ * message brut, car il indique que le binding [ai] manque dans le
+ * Worker (voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md Phase B).
+ */
+function _friendlyError(e) {
+    const msg = String(e?.message || e || '');
+    const isBackendKO = e?.status === 503 || /workers ai non configur/i.test(msg);
+    if (isBackendKO) {
+        return 'Backend Gemma 4 indisponible. Voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md (Phase B).';
+    }
+    return msg;
 }
 
 function _setStatus(el, text, kind) {
@@ -677,7 +564,7 @@ export function initGhostwriter() {
     document.addEventListener('keydown', _handleShortcut);
     document.addEventListener('selectionchange', _trackSelection);
 
-    console.info('[Ghost Writer] Hook initialisé. Raccourci: Cmd/Ctrl+Shift+G. Mode:', _getMode());
+    console.info('[Ghost Writer] Hook initialisé. Raccourci: Cmd/Ctrl+Shift+G. Backend: Gemma 4.');
 }
 
 /**
@@ -693,22 +580,22 @@ export function openGhostwriter(initialText = '') {
 }
 
 /**
- * Sprint GW-2 — API publique pour le workspace artefact A-COM-005.
- * Route la réécriture selon le mode configuré (mock/real/auto).
- * Idempotent : peut être appelé depuis le service système OU le workspace.
+ * API publique pour le workspace artefact A-COM-005 et tout autre
+ * consommateur. Appelle directement le backend Gemma 4 sur Workers AI.
  *
  * @param {string} text  Texte source à réécrire (5-5000 chars)
  * @param {object} opts  { tone?, intent?, vouvoie?, mode?, audience?, action?, lengthTarget? }
  * @returns {Promise<{variants:Array<{label,text}>, model, usage}>}
  */
 export async function rewriteText(text, opts = {}) {
-    return _rewrite(text, opts);
+    return _callReal(text, opts);
 }
 
 /**
- * Mode courant ('mock' | 'real' | 'auto'). Expose pour affichage UI.
+ * Traduit une erreur backend en message actionnable.
+ * Exposé pour le workspace artefact (réutilisation).
  */
-export function getGhostwriterMode() { return _getMode(); }
+export function friendlyGhostwriterError(e) { return _friendlyError(e); }
 
 /**
  * Quota restant aujourd'hui. Expose pour affichage UI.
@@ -726,9 +613,7 @@ export function bumpGhostwriterQuota() { _bumpQuota(); }
  * Helpers exposés pour usage avancé / debug console.
  */
 export const _ghostwriter_debug = {
-    getMode      : _getMode,
     getQuota     : _getQuotaState,
     quotaRemaining: _quotaRemaining,
-    callMock     : _callMock,
     callReal     : _callReal,
 };
