@@ -145,11 +145,16 @@ function _quotaPayload(plan, used) {
 // Gemma 4 fonctionne en mode "raisonnement" sur Workers AI : il consomme
 // une grosse partie du budget tokens dans un champ `reasoning` avant de
 // produire le `content` final. Sans budget suffisant, on observe
-// finish_reason="length" et content=null (vu en prod le 2026-05-23).
-// On double les limites pour laisser de l'air. Coût neurones reste OK
-// sous le free tier 10K/jour.
-const DEFAULT_MAX_TOKENS = 4096;
-const MAX_MAX_TOKENS     = 8192;
+// finish_reason="length" et content=null.
+// Historique :
+//   - 2026-05-23 matin : 2048 → 4096 (vu en prod, texte court)
+//   - 2026-05-23 soir  : 4096 → 8192 (vu en prod sur ADMIN, texte 817
+//     chars + 5 critères stricts + raccourcir 50% → Gemma raisonne ~4K
+//     avant d'écrire). 8192 laisse ~5K pour le raisonnement + ~3K pour
+//     3 variantes (largement assez pour des textes ≤ 5000 chars).
+// Coût neurones reste OK sous le free tier 10K/jour.
+const DEFAULT_MAX_TOKENS = 8192;
+const MAX_MAX_TOKENS     = 16384;
 
 export async function handleGhostwriterRewrite(request, env) {
   const origin = getAllowedOrigin(env, request);
