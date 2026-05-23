@@ -215,7 +215,7 @@ function _buildPanel(quotaLabel) {
         ✦ Ghost Writer
         <span class="gw-inline-quota">${quotaLabel}</span>
       </span>
-      <button class="gw-inline-close" aria-label="Fermer">×</button>
+      <button type="button" class="gw-inline-close" aria-label="Fermer">×</button>
     </div>
     <div class="gw-inline-body">
       <div class="gw-inline-loading">
@@ -236,23 +236,26 @@ function _renderCarousel(body, variants, targetEl, regenCb) {
     </article>
   `).join('');
 
+  // type="button" critique : sans ça, dans un <form> ces boutons submit
+  // le formulaire et provoquent un reload qui éjecte l'utilisateur vers
+  // le Dashboard. Vu en prod 2026-05-23 dans le workspace Annonces Immo.
   const indicatorsHTML = variants.map((_, i) => `
-    <button class="gw-inline-indicator${i === 0 ? ' is-active' : ''}" data-idx="${i}"
+    <button type="button" class="gw-inline-indicator${i === 0 ? ' is-active' : ''}" data-idx="${i}"
             aria-label="Variante ${i + 1}">${i + 1}</button>
   `).join('');
 
   body.innerHTML = `
     <div class="gw-inline-carousel" data-active="0">
-      <button class="gw-inline-nav" data-dir="-1" aria-label="Précédent">‹</button>
+      <button type="button" class="gw-inline-nav" data-dir="-1" aria-label="Précédent">‹</button>
       <div class="gw-inline-slides">${slidesHTML}</div>
-      <button class="gw-inline-nav" data-dir="1" aria-label="Suivant">›</button>
+      <button type="button" class="gw-inline-nav" data-dir="1" aria-label="Suivant">›</button>
     </div>
     <div class="gw-inline-bottom">
       <div class="gw-inline-indicators">${indicatorsHTML}</div>
       <div class="gw-inline-actions">
-        <button class="gw-inline-action gw-inline-action-copy">Copier</button>
-        <button class="gw-inline-action gw-inline-action-regen">↻ Régénérer</button>
-        <button class="gw-inline-action gw-inline-action-use">Utiliser cette variante</button>
+        <button type="button" class="gw-inline-action gw-inline-action-copy">Copier</button>
+        <button type="button" class="gw-inline-action gw-inline-action-regen">↻ Régénérer</button>
+        <button type="button" class="gw-inline-action gw-inline-action-use">Utiliser cette variante</button>
       </div>
     </div>
   `;

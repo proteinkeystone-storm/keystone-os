@@ -35,6 +35,16 @@ import { openGhostwriterInline }                 from './lib/ghostwriter-inline.
 
 const APP_ID    = 'O-IMM-002';
 const DRAFT_KEY = 'ks_annonces_immo_draft_v1';
+// Moteur recommandé pour ce pad (système prompt rédigé en convention
+// ChatGPT — format de sortie markdown, balises HTML allégées tolérées).
+const AI_RECOMMENDED = 'ChatGPT';
+
+// Lit le moteur actif des Réglages (cf. ui-renderer LS_ENGINE).
+// Fallback 'Claude' si jamais saisi. Source unique pour cohérence.
+function _getActiveEngine() {
+  try { return localStorage.getItem('ks_active_engine') || 'Claude'; }
+  catch (_) { return 'Claude'; }
+}
 
 // ══════════════════════════════════════════════════════════════
 // Schéma du formulaire (synchro avec pads-data.js / O-IMM-002)
@@ -270,7 +280,7 @@ function _renderMain() {
         <section class="ai-section">
           <div class="ai-section-head">
             <div class="ai-section-title">Portails de diffusion</div>
-            <div class="ai-section-subtitle">Le prompt ne générera QUE les blocs cochés</div>
+            <div class="ai-section-subtitle">Le prompt à copier ne générera QUE les annonces des portails cochés (Ghost Writer "Atouts" est indépendant de ce choix).</div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_CIBLES)}</div>
         </section>
@@ -278,18 +288,21 @@ function _renderMain() {
         <section class="ai-section">
           <div class="ai-section-head">
             <div class="ai-section-title">Atouts & points forts</div>
-            <div class="ai-section-subtitle">Saisissez vous-même ou demandez à Ghost Writer de rédiger depuis les infos ci-dessus</div>
+            <div class="ai-section-subtitle">Saisissez vous-même ou demandez à Ghost Writer de rédiger depuis les infos du bien ci-dessus (gratuit, dans la fenêtre).</div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_ATOUTS)}</div>
         </section>
 
         <div class="ai-actions">
           <button class="ai-btn-primary" data-act="copy-prompt" type="button">
-            ${icon('file-text', 18)}&nbsp;Copier le prompt pour ChatGPT
+            ${icon('file-text', 18)}&nbsp;Copier le prompt
           </button>
           <button class="ai-btn-secondary" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
             Aperçu
           </button>
+          <span class="ai-engine-chip" title="Moteur recommandé pour ce pad / moteur actuellement sélectionné dans vos Réglages">
+            ${_renderEngineChip()}
+          </span>
         </div>
       </form>
     </div>
@@ -297,6 +310,19 @@ function _renderMain() {
 
   _restoreFormData();
   _wireGhostwriterButtons();
+}
+
+function _renderEngineChip() {
+  const active = _getActiveEngine();
+  if (active === AI_RECOMMENDED) {
+    // Cas optimal : moteur actif = recommandé.
+    return `<span class="ai-engine-ok">✓ Optimisé pour ${_esc(AI_RECOMMENDED)}</span>`;
+  }
+  // Cas mismatch : on informe sans bloquer (le prompt marchera quand
+  // même mais ChatGPT respecte mieux le format markdown demandé).
+  return `<span class="ai-engine-mismatch">
+    Optimisé pour ${_esc(AI_RECOMMENDED)} · vous utilisez <strong>${_esc(active)}</strong>
+  </span>`;
 }
 
 function _renderField(field) {
@@ -732,6 +758,21 @@ function _injectStyles() {
   font-family: inherit;
 }
 .ai-btn-secondary:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
+
+/* Chip moteur recommandé / actif. Discret, informatif, non-bloquant. */
+.ai-engine-chip {
+  font-size: 11.5px; color: var(--text-muted, #888);
+  padding: 6px 12px; border-radius: 100px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  margin-left: auto;
+}
+.ai-engine-ok { color: rgba(120, 220, 160, 0.85); font-weight: 500; }
+.ai-engine-mismatch { color: rgba(220, 180, 100, 0.9); }
+.ai-engine-mismatch strong { color: #fff; font-weight: 600; }
+@media (max-width: 640px) {
+  .ai-engine-chip { margin-left: 0; margin-top: 4px; width: 100%; text-align: center; }
+}
 
 /* Aperçu prompt — overlay */
 .ai-prompt-preview {
