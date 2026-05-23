@@ -40,6 +40,10 @@ import { refreshGhostwriterQuota,
 
 const APP_ID    = 'O-IMM-002';
 const DRAFT_KEY = 'ks_annonces_immo_draft_v1';
+// Bibliothèque locale des générations (pattern Keystone, cf.
+// ghostwriter-studio et pulsa). Stockée client-side, 50 entrées max.
+const LIBRARY_KEY  = 'ks_annonces_immo_library';
+const MAX_LIBRARY  = 50;
 // Moteur recommandé pour ce pad (système prompt rédigé en convention
 // ChatGPT — format de sortie markdown, balises HTML allégées tolérées).
 const AI_RECOMMENDED = 'ChatGPT';
@@ -146,6 +150,48 @@ function _scheduleSave() {
   _saveTimer = setTimeout(_saveDraft, 600);
 }
 
+// ── Bibliothèque locale (50 dernières générations) ──────────────
+// Pattern identique à ghostwriter-studio / pulsa : stockage local
+// (pas Cloud Vault), lecture lazy au render du panneau, écriture
+// unshift + slice MAX_LIBRARY pour rotation FIFO.
+
+function _loadLibrary() {
+  try {
+    const raw = localStorage.getItem(LIBRARY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) { return []; }
+}
+
+function _saveLibrary(items) {
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(items.slice(0, MAX_LIBRARY)));
+  } catch (_) {}
+}
+
+function _addToLibrary(entry) {
+  const items = _loadLibrary();
+  items.unshift(entry);
+  _saveLibrary(items);
+}
+
+function _deleteFromLibrary(uid) {
+  const items = _loadLibrary().filter(it => it.uid !== uid);
+  _saveLibrary(items);
+}
+
+// Construit un titre court lisible à partir des champs du formulaire.
+// Ex: "Résidence Belle Vue · T3 78m² · Marseille 8ème"
+function _autoTitle(snapshot) {
+  const parts = [];
+  if (snapshot?.nom_programme) parts.push(snapshot.nom_programme);
+  const typeBien = (snapshot?.type_bien || '').replace('Appartement ', '');
+  const surface  = snapshot?.surface ? `${snapshot.surface}m²` : '';
+  const typeTxt  = [typeBien, surface].filter(Boolean).join(' ');
+  if (typeTxt) parts.push(typeTxt);
+  if (snapshot?.ville) parts.push(snapshot.ville);
+  return parts.join(' · ') || 'Annonces sans titre';
+}
+
 function _loadDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -212,6 +258,11 @@ function _buildShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
+        <button class="ws-iconbtn" data-act="library"
+                title="Bibliothèque (${_loadLibrary().length} sauvegardes)"
+                aria-label="Ouvrir la bibliothèque">
+          ${icon('book-open', 18)}
+        </button>
         <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer" aria-label="Réinitialiser">
           ${icon('refresh', 18)}
         </button>
@@ -484,7 +535,13 @@ function _onClick(e) {
   if (act === 'close-result')  return _closeResult();
   if (act === 'copy-result')   return _copyResult();
   if (act === 'regen-result')  return _handleGenerateHere();   // re-run même flow
+  if (act === 'save-result')   return _saveCurrentToLibrary();
   if (act === 'ghostwriter')   return _handleGhostwriter(target.dataset.fieldId);
+  if (act === 'library')       return _openLibrary();
+  if (act === 'lib-close')     return _closeLibrary();
+  if (act === 'lib-copy')      return _libCopy(target.dataset.uid);
+  if (act === 'lib-load')      return _libLoad(target.dataset.uid);
+  if (act === 'lib-delete')    return _libDelete(target.dataset.uid, target);
 }
 
 // Wire les boutons ✦ Ghost Writer après le render. La logique
@@ -700,6 +757,10 @@ function _openResultPanel(state, content) {
         <button type="button" class="ai-btn-primary" data-act="copy-result">
           ${icon('copy', 16)}&nbsp;Copier tout
         </button>
+        <button type="button" class="ai-btn-secondary" data-act="save-result"
+                title="Ajouter ces annonces à la Bibliothèque (accessible depuis l'icône 📖 en haut)">
+          ${icon('save', 16)}&nbsp;Sauvegarder
+        </button>
         <button type="button" class="ai-btn-secondary" data-act="regen-result">
           ↻&nbsp;Régénérer
         </button>
@@ -722,6 +783,153 @@ function _copyResult() {
     .catch(() => _toast('Impossible d\'accéder au presse-papier', true));
 }
 
+// ══════════════════════════════════════════════════════════════
+// Bibliothèque — sauvegarde / panneau slide-over / actions
+// ══════════════════════════════════════════════════════════════
+
+function _saveCurrentToLibrary() {
+  if (!_lastGeneratedText) {
+    _toast('Rien à sauvegarder (générez d\'abord des annonces)', true);
+    return;
+  }
+  _collectFormData();
+  const snapshot = { ..._formData };
+  const entry = {
+    uid     : 'ai-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    date    : Date.now(),
+    title   : _autoTitle(snapshot),
+    portails: snapshot.portails || '',
+    formData: snapshot,
+    text    : _lastGeneratedText,
+  };
+  _addToLibrary(entry);
+  _toast('✓ Annonces sauvegardées dans la Bibliothèque');
+  _refreshLibraryButtonCount();
+}
+
+function _refreshLibraryButtonCount() {
+  const btn = _root?.querySelector('[data-act="library"]');
+  if (!btn) return;
+  const n = _loadLibrary().length;
+  btn.setAttribute('title', `Bibliothèque (${n} sauvegarde${n > 1 ? 's' : ''})`);
+}
+
+function _openLibrary() {
+  if (!_root || _root.querySelector('[data-slot="lib-overlay"]')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = _renderLibraryPanel();
+  _root.appendChild(wrap.firstElementChild);
+  requestAnimationFrame(() => {
+    const ov = _root.querySelector('[data-slot="lib-overlay"]');
+    if (ov) ov.classList.add('ai-lib-on');
+  });
+}
+
+function _closeLibrary() {
+  const ov = _root?.querySelector('[data-slot="lib-overlay"]');
+  if (!ov) return;
+  ov.classList.remove('ai-lib-on');
+  setTimeout(() => ov.remove(), 200);
+}
+
+function _renderLibraryPanel() {
+  const items = _loadLibrary();
+  const list = items.length === 0
+    ? `<div class="ai-lib-empty">
+         Aucune sauvegarde pour l'instant.<br>
+         <span style="opacity:.7">Générez des annonces puis cliquez sur "Sauvegarder" dans le panneau résultat.</span>
+       </div>`
+    : items.map(it => `
+        <div class="ai-lib-item" data-uid="${_esc(it.uid)}">
+          <div class="ai-lib-head">
+            <div class="ai-lib-title">${_esc(it.title || 'Sans titre')}</div>
+            <div class="ai-lib-meta">${_esc(it.portails || '—')} · ${_fmtDate(it.date)}</div>
+          </div>
+          <div class="ai-lib-preview">${_esc((it.text || '').slice(0, 220))}${(it.text || '').length > 220 ? '…' : ''}</div>
+          <div class="ai-lib-actions">
+            <button type="button" class="ai-lib-mini" data-act="lib-copy"   data-uid="${_esc(it.uid)}">Copier</button>
+            <button type="button" class="ai-lib-mini" data-act="lib-load"   data-uid="${_esc(it.uid)}">Recharger</button>
+            <button type="button" class="ai-lib-mini ai-lib-mini--danger" data-act="lib-delete" data-uid="${_esc(it.uid)}">Supprimer</button>
+          </div>
+        </div>
+      `).join('');
+
+  return `
+    <div class="ai-lib-overlay" data-slot="lib-overlay">
+      <div class="ai-lib-backdrop" data-act="lib-close"></div>
+      <aside class="ai-lib-panel" role="dialog" aria-label="Bibliothèque Annonces Immo">
+        <header class="ai-lib-header">
+          <div class="ai-lib-title-main">
+            Bibliothèque <span class="ai-lib-count">${items.length}/${MAX_LIBRARY}</span>
+          </div>
+          <button type="button" class="ws-iconbtn" data-act="lib-close" aria-label="Fermer">×</button>
+        </header>
+        <div class="ai-lib-list">${list}</div>
+      </aside>
+    </div>
+  `;
+}
+
+function _libCopy(uid) {
+  const it = _loadLibrary().find(x => x.uid === uid);
+  if (!it?.text) return;
+  navigator.clipboard?.writeText(it.text)
+    .then(() => _toast('✓ Annonces copiées'))
+    .catch(() => _toast('Impossible d\'accéder au presse-papier', true));
+}
+
+function _libLoad(uid) {
+  const it = _loadLibrary().find(x => x.uid === uid);
+  if (!it) return;
+  // Restore le formulaire + le texte généré
+  _formData = { ...(it.formData || {}) };
+  _lastGeneratedText = it.text || '';
+  _saveDraft();
+  _closeLibrary();
+  _renderMain();
+  if (_lastGeneratedText) {
+    _openResultPanel('success', _lastGeneratedText);
+  }
+  _toast('Sauvegarde rechargée');
+}
+
+function _libDelete(uid, btn) {
+  // Confirmation inline : 1er clic transforme en "Confirmer ?",
+  // 2e clic supprime. Évite un confirm() bloquant qui sort du flow.
+  if (btn?.dataset?.confirm === '1') {
+    _deleteFromLibrary(uid);
+    const item = _root?.querySelector(`.ai-lib-item[data-uid="${CSS.escape(uid)}"]`);
+    if (item) item.remove();
+    _refreshLibraryButtonCount();
+    // Si plus rien → re-render le panneau (état vide)
+    if (_loadLibrary().length === 0) {
+      _closeLibrary();
+      setTimeout(_openLibrary, 220);
+    }
+    return;
+  }
+  btn.dataset.confirm = '1';
+  const orig = btn.textContent;
+  btn.textContent = 'Confirmer ?';
+  setTimeout(() => {
+    if (btn?.dataset?.confirm === '1') {
+      btn.dataset.confirm = '';
+      btn.textContent = orig;
+    }
+  }, 3000);
+}
+
+function _fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const ymd = new Date(d); ymd.setHours(0,0,0,0);
+  const sameDay = ymd.getTime() === today.getTime();
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return `Aujourd'hui ${time}`;
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ' ' + time;
+}
+
 function _highlightMissing(missing) {
   const form = _root?.querySelector('.ai-form');
   if (!form) return;
@@ -742,7 +950,9 @@ function _handleKeyDown(e) {
   if (!_root) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (e.key === 'Escape') {
-    // Cascade : preview prompt > panneau résultat > panneau GW inline > workspace
+    // Cascade : library > preview prompt > panneau résultat > panneau GW inline > workspace
+    const lib = _root.querySelector('[data-slot="lib-overlay"]');
+    if (lib) { _closeLibrary(); return; }
     const preview = _root.querySelector('.ai-prompt-preview');
     if (preview) { preview.remove(); return; }
     const result = _root.querySelector('.ai-result-panel');
@@ -993,6 +1203,121 @@ function _injectStyles() {
 html.light-mode .ai-result-panel { background: linear-gradient(135deg, rgba(80, 110, 230, 0.04), rgba(120, 90, 230, 0.04)); }
 html.light-mode .ai-result-body { background: rgba(0, 0, 0, 0.04); color: rgba(30, 30, 50, 0.92); }
 html.light-mode .ai-btn-link { color: rgba(80, 90, 130, 0.85); }
+
+/* ── Bibliothèque (panneau slide-over) ─────────────────────────── */
+.ai-lib-overlay {
+  position: fixed; inset: 0; z-index: 9100;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.ai-lib-overlay.ai-lib-on { opacity: 1; pointer-events: auto; }
+.ai-lib-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.ai-lib-panel {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(480px, 100%);
+  background: var(--bg-secondary, #16161a);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.4);
+}
+.ai-lib-overlay.ai-lib-on .ai-lib-panel { transform: translateX(0); }
+
+.ai-lib-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ai-lib-title-main {
+  font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--text-primary, #fff);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.ai-lib-count {
+  font-size: 11.5px; font-weight: 500;
+  color: var(--text-muted, #888);
+  padding: 2px 9px; border-radius: 100px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-lib-list {
+  flex: 1; overflow-y: auto;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ai-lib-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-size: 13px; line-height: 1.6;
+}
+
+.ai-lib-item {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ai-lib-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(120, 160, 255, 0.3);
+}
+.ai-lib-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin-bottom: 6px; flex-wrap: wrap;
+}
+.ai-lib-title {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+.ai-lib-meta {
+  font-size: 11px; color: var(--text-muted, #888);
+}
+.ai-lib-preview {
+  font-size: 12px; line-height: 1.5;
+  color: rgba(200, 200, 215, 0.85);
+  margin-bottom: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.ai-lib-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-lib-mini {
+  padding: 5px 11px; border-radius: 7px;
+  font-size: 11.5px; font-weight: 500; cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(220, 220, 230, 0.9);
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.ai-lib-mini:hover {
+  background: rgba(120, 160, 255, 0.14);
+  border-color: rgba(120, 160, 255, 0.35);
+  color: #fff;
+}
+.ai-lib-mini--danger {
+  background: rgba(255, 90, 90, 0.06);
+  border-color: rgba(255, 90, 90, 0.2);
+  color: rgba(255, 170, 170, 0.9);
+}
+.ai-lib-mini--danger:hover {
+  background: rgba(255, 90, 90, 0.18);
+  border-color: rgba(255, 90, 90, 0.5);
+  color: #fff;
+}
+
+html.light-mode .ai-lib-panel { background: #fafafb; border-left-color: rgba(0, 0, 0, 0.08); }
+html.light-mode .ai-lib-title-main { color: rgba(20, 20, 30, 0.95); }
+html.light-mode .ai-lib-item { background: rgba(0, 0, 0, 0.025); border-color: rgba(0, 0, 0, 0.06); }
+html.light-mode .ai-lib-item:hover { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .ai-lib-title { color: rgba(20, 20, 30, 0.95); }
+html.light-mode .ai-lib-preview { color: rgba(40, 40, 60, 0.78); }
+html.light-mode .ai-lib-mini { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); color: rgba(30, 30, 50, 0.85); }
 
 /* Chip moteur recommandé / actif. Discret, informatif, non-bloquant. */
 .ai-engine-chip {
