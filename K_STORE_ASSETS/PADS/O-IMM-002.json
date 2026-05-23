@@ -24,20 +24,15 @@
     {
       "id": "atouts", "label": "Atouts & points forts", "type": "textarea",
       "placeholder": "Vue mer, terrasse, parking, livraison T4 2026...", "span": "full",
-      "ai_assist": {
-        "task": "redact-section",
-        "label": "Polir les atouts",
-        "topic": "Les atouts et points forts d'un {type_bien} neuf VEFA \"{nom_programme}\" à {ville}",
-        "include_fields": ["nom_programme","ville","type_bien","surface","prix","dispositif"]
-      },
       "ghostwriter": {
-        "label": "Réécrire en 3 variantes",
+        "label": "Rédiger les atouts avec l'IA",
         "mode": "marketing",
         "audience": "client",
         "action": "rewrite",
         "tone": "persuasif vendeur",
         "lengthTarget": "keep",
-        "context": "Atouts du bien"
+        "context": "Atouts du bien",
+        "include_fields": ["nom_programme","ville","type_bien","surface","prix","dispositif"]
       }
     }
   ],

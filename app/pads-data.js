@@ -145,24 +145,22 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
               default: ['SeLoger','LeBonCoin','Bien\'ici'],
               required: true, span: 'full' },
             { id: 'atouts',        label: 'Atouts & points forts', type: 'textarea', placeholder: 'Vue mer, terrasse, parking, livraison T4 2026...', span: 'full',
-              ai_assist: {
-                task: 'redact-section',
-                label: 'Polir les atouts',
-                topic: 'Les atouts et points forts d\'un {type_bien} neuf VEFA "{nom_programme}" à {ville}',
-                include_fields: ['nom_programme', 'ville', 'type_bien', 'surface', 'prix', 'dispositif'],
-              },
-              // Phase 3 — Ghost Writer natif sur ce champ. Ouvre le modal
-              // Gemma 4 pré-réglé pour reformuler les atouts saisis en 3
-              // variantes calibrées (marketing · persuasif). Le bouton
-              // "Remplacer" écrase le contenu du textarea.
+              // Phase 3 — Ghost Writer Pad-Aware natif. Unifie l'ancien
+              // ai_assist (rédige depuis les autres champs) et la reformulation
+              // 3 variantes en un seul bouton intelligent :
+              //   - Champ vide → Ghost Writer lit include_fields, construit
+              //     un texte source minimal et le réécrit en atouts vendeur.
+              //   - Champ rempli → Ghost Writer reformule ce qu'on lui donne.
+              // Plus de double bouton qui paralysait l'user.
               ghostwriter: {
-                label       : 'Réécrire en 3 variantes',
-                mode        : 'marketing',
-                audience    : 'client',
-                action      : 'rewrite',
-                tone        : 'persuasif vendeur',
-                lengthTarget: 'keep',
-                context     : 'Atouts du bien',
+                label         : 'Rédiger les atouts avec l\'IA',
+                mode          : 'marketing',
+                audience      : 'client',
+                action        : 'rewrite',
+                tone          : 'persuasif vendeur',
+                lengthTarget  : 'keep',
+                context       : 'Atouts du bien',
+                include_fields: ['nom_programme', 'ville', 'type_bien', 'surface', 'prix', 'dispositif'],
               },
             },
         ],

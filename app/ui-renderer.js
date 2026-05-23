@@ -2767,6 +2767,28 @@ function _initGhostwriterButtons(container, pad) {
             const targetEl = container.querySelector(`#f-${fieldId}`);
             const currentText = (targetEl?.value || '').trim();
 
+            // Pad-Aware (Phase 3) — collecte les autres champs du formulaire
+            // déclarés dans include_fields. Ghost Writer les utilisera pour
+            // composer un texte de base si le champ courant est vide (= le
+            // remplaçant fonctionnel de l'ancien ai_assist).
+            // Skip si include_fields absent (pads sans contexte Pad-Aware).
+            let formContext = null;
+            const include = fieldDef.ghostwriter.include_fields;
+            if (Array.isArray(include) && include.length > 0) {
+                formContext = {};
+                for (const fid of include) {
+                    const el = container.querySelector(`#f-${fid}`);
+                    const def = pad.fields.find(f => f.id === fid);
+                    const val = (el?.value || '').trim();
+                    if (val) {
+                        formContext[fid] = { label: def?.label || fid, value: val };
+                    }
+                }
+                // Si aucun champ source rempli → null pour éviter d'envoyer
+                // un objet vide qui pollue le prompt.
+                if (Object.keys(formContext).length === 0) formContext = null;
+            }
+
             // Opts du schéma JSON + cible explicite + mode replace full.
             // `context` = chip visuel (label du champ pour orienter le user).
             openGhostwriter(currentText, {
@@ -2774,6 +2796,7 @@ function _initGhostwriterButtons(container, pad) {
                 targetEl,
                 replaceMode: 'full',
                 context: fieldDef.ghostwriter.context || fieldDef.label,
+                formContext,
             });
         });
     });

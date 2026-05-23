@@ -318,22 +318,77 @@ function _injectCSS() {
 .gw-meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-muted, #888); flex-wrap: wrap; margin-top: 4px; }
 .gw-quota, .gw-mode-chip { padding: 3px 10px; border-radius: 100px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06); }
 .gw-mode-chip { background: rgba(120,160,255,.12); color: #8aaeff; }
-.gw-variants { display: flex; flex-direction: column; gap: 12px; }
-.gw-variant {
-    padding: 14px 16px; border-radius: 12px;
-    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
-    transition: all .15s ease;
+.gw-variants { display: flex; flex-direction: column; gap: 14px; }
+/* Carousel (Phase 3) — 3 slides superposées, seule l'active visible.
+   Hauteur fixe pour éviter le saut UI au changement de slide. */
+.gw-carousel {
+    position: relative;
+    display: grid;
+    grid-template-columns: 28px 1fr 28px;
+    align-items: stretch;
+    gap: 8px;
+    min-height: 220px;
 }
-.gw-variant:hover { border-color: rgba(120,160,255,.3); background: rgba(255,255,255,.05); }
+.gw-slides {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+}
+.gw-slide {
+    position: absolute; inset: 0;
+    padding: 16px 18px;
+    opacity: 0;
+    transform: translateX(8px);
+    transition: opacity .22s ease, transform .22s cubic-bezier(.16,1,.3,1);
+    overflow-y: auto;
+    pointer-events: none;
+}
+.gw-slide.is-active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+.gw-nav {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.08);
+    color: var(--text-muted, #aaa);
+    border-radius: 8px;
+    font-size: 20px; line-height: 1;
+    cursor: pointer;
+    transition: all .15s ease;
+    align-self: stretch;
+}
+.gw-nav:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
 .gw-variant-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8aaeff; margin-bottom: 9px; font-weight: 600; }
 .gw-variant-text { color: var(--text-primary, #f0f0f0); font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-wrap: break-word; }
-.gw-variant-actions { margin-top: 12px; display: flex; gap: 6px; }
+.gw-indicators { display: flex; justify-content: center; gap: 6px; margin-top: 4px; }
+.gw-indicator {
+    min-width: 28px; height: 28px;
+    border-radius: 100px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    color: var(--text-muted, #888);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all .14s ease;
+}
+.gw-indicator.is-active {
+    background: rgba(120,160,255,.18);
+    border-color: rgba(120,160,255,.5);
+    color: #fff;
+}
+.gw-indicator:hover:not(.is-active) { background: rgba(255,255,255,.07); color: #ddd; }
+.gw-actions-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+}
 .gw-mini-btn {
-    padding: 6px 12px; border-radius: 7px; font-size: 11px; font-weight: 500; cursor: pointer;
+    padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
     background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
     color: var(--text-primary, #ddd); transition: all .15s ease;
 }
 .gw-mini-btn:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
+.gw-shortcut-hint { font-size: 11px; color: var(--text-muted, #888); margin-left: auto; }
 .gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 40px 0; line-height: 1.6; }
 .gw-spinner {
     width: 14px; height: 14px;
@@ -422,6 +477,21 @@ function _escapeHtml(s) {
 
 // ── Modal open / close / bindings ────────────────────────────────
 
+// Pad-Aware (Phase 3) — convertit un objet formContext en texte source
+// compact pour Gemma 4. formContext est typé : { fieldId: {label, value} }
+// (cf. ui-renderer._initGhostwriterButtons). On sort un format type
+// "Label1 : valeur — Label2 : valeur" qui se prête bien à la réécriture.
+function _composeSourceFromForm(formContext) {
+    if (!formContext || typeof formContext !== 'object') return '';
+    const parts = [];
+    for (const [_, entry] of Object.entries(formContext)) {
+        if (entry && entry.value) {
+            parts.push(`${entry.label} : ${entry.value}`);
+        }
+    }
+    return parts.join(' — ');
+}
+
 function _openModal(initialText, presetOpts) {
     if (_modalOpen) return;
     _modalOpen = true;
@@ -431,10 +501,23 @@ function _openModal(initialText, presetOpts) {
     // comportement legacy (l'UI fournit le tone, le reste reste à null).
     _presetOpts = presetOpts && typeof presetOpts === 'object' ? { ...presetOpts } : null;
 
+    // Pad-Aware (Phase 3) — si le champ source est vide MAIS qu'on a un
+    // formContext rempli depuis le pad (autres champs du formulaire),
+    // on construit un texte source minimal lisible que Gemma 4 va
+    // ré-écrire en atouts vendeur. Format compact, factuel, sans bla-bla
+    // — Gemma fait le polish.
+    //   Ex: "Type: T2 — Ville: Marseille 8ème — Surface: 65m² — Prix: 245000€"
+    //       → 3 variantes type "Spacieux T2 au cœur du 8ème arrondissement..."
+    const textTrim = (initialText || '').trim();
+    let effectiveText = textTrim;
+    if (!textTrim && _presetOpts?.formContext) {
+        effectiveText = _composeSourceFromForm(_presetOpts.formContext);
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'gw-overlay';
     overlay.id = 'gw-overlay';
-    overlay.innerHTML = _buildModalHTML(initialText || '', _presetOpts);
+    overlay.innerHTML = _buildModalHTML(effectiveText, _presetOpts);
     document.body.appendChild(overlay);
 
     requestAnimationFrame(() => overlay.classList.add('gw-on'));
@@ -522,11 +605,13 @@ async function _handleGenerate(overlay) {
     // modal. L'utilisateur peut surcharger le `tone` via les boutons
     // (data-selected). Si le tone UI vaut '' (Auto), on retombe sur le
     // tone preset s'il existe.
-    // context / targetEl / replaceMode sont des contrôles UI/DOM, ils
+    // context / targetEl / replaceMode / formContext / include_fields /
+    // label sont des contrôles UI / orchestration côté frontend, ils
     // ne doivent JAMAIS partir dans le body fetch — on les destructure
     // pour les retirer avant le spread.
     const {
         context: _ctx, targetEl: _t, replaceMode: _rm,
+        formContext: _fc, include_fields: _if, label: _l,
         tone: presetTone,
         ...presetRest
     } = _presetOpts || {};
@@ -615,37 +700,96 @@ function _renderVariants(container, variants) {
         container.innerHTML = '<div class="gw-empty">Aucune variante générée</div>';
         return;
     }
-    container.innerHTML = variants.map((v, i) => `
-        <div class="gw-variant" data-idx="${i}">
+
+    // Carousel (Phase 3) — les 3 variantes sont superposées en absolute,
+    // seule l'active est visible. Navigation : touches 1/2/3, flèches
+    // ←/→, ou clic sur les indicateurs. Compact : pas de scroll vertical
+    // même avec 3 longs textes — l'utilisateur peut comparer rapidement.
+    const slidesHTML = variants.map((v, i) => `
+        <article class="gw-slide${i === 0 ? ' is-active' : ''}" data-idx="${i}">
             <div class="gw-variant-label">${_escapeHtml(v.label || `Variante ${i + 1}`)}</div>
             <div class="gw-variant-text">${_escapeHtml(v.text)}</div>
-            <div class="gw-variant-actions">
-                <button class="gw-mini-btn gw-mini-copy" data-idx="${i}">Copier</button>
-                <button class="gw-mini-btn gw-mini-replace" data-idx="${i}">Remplacer</button>
-            </div>
-        </div>
+        </article>
     `).join('');
 
-    // Bindings copy
-    container.querySelectorAll('.gw-mini-copy').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx = parseInt(btn.dataset.idx, 10);
-            const text = variants[idx]?.text || '';
-            navigator.clipboard?.writeText(text)?.then(() => {
-                const orig = btn.textContent;
-                btn.textContent = '✓ Copié';
-                setTimeout(() => { btn.textContent = orig; }, 1500);
-            });
-        });
+    const indicatorsHTML = variants.map((_, i) => `
+        <button class="gw-indicator${i === 0 ? ' is-active' : ''}"
+                data-idx="${i}"
+                aria-label="Voir variante ${i + 1} (touche ${i + 1})">${i + 1}</button>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="gw-carousel" data-active="0">
+            <button class="gw-nav gw-nav-prev" data-dir="-1" aria-label="Variante précédente (flèche gauche)">‹</button>
+            <div class="gw-slides">${slidesHTML}</div>
+            <button class="gw-nav gw-nav-next" data-dir="1" aria-label="Variante suivante (flèche droite)">›</button>
+        </div>
+        <div class="gw-indicators">${indicatorsHTML}</div>
+        <div class="gw-actions-row">
+            <button class="gw-mini-btn gw-action-copy">Copier</button>
+            <button class="gw-mini-btn gw-action-replace">Remplacer</button>
+            <span class="gw-shortcut-hint">Naviguez avec ←/→ ou 1/2/3</span>
+        </div>
+    `;
+
+    const carousel  = container.querySelector('.gw-carousel');
+    const slides    = container.querySelectorAll('.gw-slide');
+    const indicators = container.querySelectorAll('.gw-indicator');
+    const copyBtn   = container.querySelector('.gw-action-copy');
+    const replaceBtn = container.querySelector('.gw-action-replace');
+
+    function goTo(idx) {
+        const n = variants.length;
+        if (n === 0) return;
+        // Wrap-around : -1 → n-1, n → 0
+        idx = ((idx % n) + n) % n;
+        carousel.dataset.active = idx;
+        slides.forEach((el, i)     => el.classList.toggle('is-active', i === idx));
+        indicators.forEach((el, i) => el.classList.toggle('is-active', i === idx));
+    }
+    function activeIdx() { return parseInt(carousel.dataset.active, 10) || 0; }
+
+    // Indicateurs cliquables
+    indicators.forEach(btn => {
+        btn.addEventListener('click', () => goTo(parseInt(btn.dataset.idx, 10)));
+    });
+    // Flèches navigation
+    container.querySelectorAll('.gw-nav').forEach(btn => {
+        btn.addEventListener('click', () => goTo(activeIdx() + parseInt(btn.dataset.dir, 10)));
     });
 
-    // Bindings replace
-    container.querySelectorAll('.gw-mini-replace').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx = parseInt(btn.dataset.idx, 10);
-            _replaceSelection(variants[idx]?.text || '', btn);
+    // Actions sur variante active
+    copyBtn.addEventListener('click', () => {
+        const text = variants[activeIdx()]?.text || '';
+        navigator.clipboard?.writeText(text)?.then(() => {
+            const orig = copyBtn.textContent;
+            copyBtn.textContent = '✓ Copié';
+            setTimeout(() => { copyBtn.textContent = orig; }, 1500);
         });
     });
+    replaceBtn.addEventListener('click', () => {
+        _replaceSelection(variants[activeIdx()]?.text || '', replaceBtn);
+    });
+
+    // Raccourcis clavier 1/2/3 + flèches. Attaché au document mais
+    // namespaced pour éviter de polluer entre 2 modals. Cleanup au
+    // close via le check _modalOpen.
+    const keyHandler = (ev) => {
+        if (!_modalOpen) {
+            document.removeEventListener('keydown', keyHandler);
+            return;
+        }
+        // Ignore si user en train de taper dans le textarea source
+        if (ev.target?.tagName === 'TEXTAREA' || ev.target?.tagName === 'INPUT') return;
+        if (ev.key === 'ArrowLeft')  { ev.preventDefault(); goTo(activeIdx() - 1); }
+        if (ev.key === 'ArrowRight') { ev.preventDefault(); goTo(activeIdx() + 1); }
+        const num = parseInt(ev.key, 10);
+        if (num >= 1 && num <= variants.length) {
+            ev.preventDefault();
+            goTo(num - 1);
+        }
+    };
+    document.addEventListener('keydown', keyHandler);
 }
 
 function _replaceSelection(newText, btn) {
