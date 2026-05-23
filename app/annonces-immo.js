@@ -140,6 +140,24 @@ INSTRUCTIONS :
 - Chaque description doit être autonome (lisible sans contexte externe) et inclure 1 call-to-action en fin.
 - HTML allégé autorisé = balises <strong>, <em>, <br>, <ul><li> uniquement (jamais <div>, <span>, <style>).
 
+CONSIGNES QUALITÉ — éviter à tout prix le copy bateau immo :
+- INTERDIT (clichés qui décrédibilisent l'annonce) : "art de vivre raffiné",
+  "adresse exclusive", "bien d'exception", "esthètes en quête de", "écrin
+  de verdure", "havre de paix", "joyau caché", "rare opportunité", "produit
+  rare", "perle rare", "investissement intelligent", "produit d'investissement",
+  "patrimoine d'exception", "résidence de standing" (vide de sens).
+- À FAIRE : phrases CONCRÈTES qui décrivent le quotidien futur de l'acheteur
+  (distance à pied à la plage, vue depuis la terrasse, exposition de la
+  pièce de vie, hauteur sous plafond si connue, équipement précis).
+- À FAIRE : si possible, donner UN chiffre concret par annonce (rendement
+  locatif estimé, défisc Pinel mensuelle, taxe foncière du quartier,
+  prix au m² du secteur). Si l'info n'est pas dans le brief, dis-le
+  factuellement ("Livraison T4 2026") sans inventer.
+- À FAIRE : exploite AU MOINS 70% du quota de caractères autorisé par
+  portail (description) — une annonce trop courte signale du flou.
+- ÉVITER les superlatifs vides ("magnifique", "splendide", "somptueux")
+  sauf justifiés par un fait concret immédiatement après.
+
 FORMAT DE SORTIE — strictement ce gabarit en markdown :
 ## [Nom du portail]
 **Titre** (X car.) : ...
@@ -416,6 +434,10 @@ function _renderMain() {
                     title="Copier le prompt pour le coller dans votre IA favorite (ChatGPT, Claude, autre)">
               ${icon('copy', 16)}&nbsp;Copier le prompt
             </button>
+            <button class="ai-btn-secondary" data-act="paste-save" type="button"
+                    title="Collez ici les annonces obtenues depuis ChatGPT/Claude externe pour les sauvegarder dans la Bibliothèque">
+              ${icon('save', 16)}&nbsp;Coller & sauvegarder
+            </button>
             <button class="ai-btn-link" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
               Aperçu
             </button>
@@ -596,6 +618,9 @@ function _onClick(e) {
   if (act === 'copy-result')   return _copyResult();
   if (act === 'regen-result')  return _handleGenerateByok();   // re-run BYOK
   if (act === 'save-result')   return _saveCurrentToLibrary();
+  if (act === 'paste-save')    return _openPasteSaveModal();
+  if (act === 'paste-confirm') return _confirmPasteSave();
+  if (act === 'paste-close')   return _closePasteSaveModal();
   if (act === 'ghostwriter')   return _handleGhostwriter(target.dataset.fieldId);
   if (act === 'library')       return _openLibrary();
   if (act === 'lib-close')     return _closeLibrary();
@@ -904,6 +929,79 @@ function _saveCurrentToLibrary() {
   _refreshLibraryButtonCount();
 }
 
+// Modal "Coller & sauvegarder" : permet de stocker dans la Bibliothèque
+// le résultat d'une génération externe (ChatGPT/Claude/etc. utilisé
+// hors Keystone via Copier le prompt). Comble le trou laissé par
+// la suppression de la génération Gemma directe.
+function _openPasteSaveModal() {
+  if (!_root || _root.querySelector('.ai-paste-overlay')) return;
+  _collectFormData();
+  const suggestedTitle = _autoTitle(_formData);
+  const overlay = document.createElement('div');
+  overlay.className = 'ai-paste-overlay';
+  overlay.innerHTML = `
+    <div class="ai-paste-card">
+      <div class="ai-paste-head">
+        <strong>Coller & sauvegarder une annonce</strong>
+        <button type="button" class="ai-paste-close" data-act="paste-close" aria-label="Fermer">×</button>
+      </div>
+      <p class="ai-paste-hint">
+        Collez ci-dessous le résultat obtenu depuis ChatGPT, Claude ou autre IA.
+        Le titre est suggéré depuis les infos du bien (modifiable).
+      </p>
+      <label class="ai-paste-label">Titre de la sauvegarde</label>
+      <input type="text" class="ai-paste-title" id="ai-paste-title-input"
+             value="${_esc(suggestedTitle)}" placeholder="Ex: Résidence X · T3 78m² · Marseille">
+      <label class="ai-paste-label">Annonces générées (texte ou markdown)</label>
+      <textarea class="ai-paste-text" id="ai-paste-text-input"
+                placeholder="Collez ici le résultat de votre IA (3-6 annonces par portail)…"></textarea>
+      <div class="ai-paste-actions">
+        <button type="button" class="ai-btn-link" data-act="paste-close">Annuler</button>
+        <button type="button" class="ai-btn-primary" data-act="paste-confirm">
+          ${icon('save', 16)}&nbsp;Enregistrer dans la Bibliothèque
+        </button>
+      </div>
+    </div>
+  `;
+  _root.appendChild(overlay);
+  // Focus textarea après animation
+  setTimeout(() => overlay.querySelector('#ai-paste-text-input')?.focus(), 100);
+  // Click backdrop ferme
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) _closePasteSaveModal(); });
+}
+
+function _closePasteSaveModal() {
+  const ov = _root?.querySelector('.ai-paste-overlay');
+  if (ov) ov.remove();
+}
+
+function _confirmPasteSave() {
+  const titleEl = _root?.querySelector('#ai-paste-title-input');
+  const textEl  = _root?.querySelector('#ai-paste-text-input');
+  const title = (titleEl?.value || '').trim();
+  const text  = (textEl?.value || '').trim();
+  if (!text) {
+    _toast('Collez d\'abord le contenu de l\'annonce avant d\'enregistrer', true);
+    textEl?.focus();
+    return;
+  }
+  _collectFormData();
+  const snapshot = { ..._formData };
+  const entry = {
+    uid     : 'ai-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    date    : Date.now(),
+    title   : title || _autoTitle(snapshot),
+    portails: snapshot.portails || '',
+    formData: snapshot,
+    text    : text,
+    source  : 'external',   // marqueur : annonce collée depuis IA externe
+  };
+  _addToLibrary(entry);
+  _closePasteSaveModal();
+  _toast('✓ Annonce sauvegardée dans la Bibliothèque');
+  _refreshLibraryButtonCount();
+}
+
 function _refreshLibraryButtonCount() {
   const btn = _root?.querySelector('[data-act="library"]');
   if (!btn) return;
@@ -1047,7 +1145,9 @@ function _handleKeyDown(e) {
   if (!_root) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (e.key === 'Escape') {
-    // Cascade : library > preview prompt > panneau résultat > panneau GW inline > workspace
+    // Cascade : paste-save > library > preview prompt > résultat > GW inline > workspace
+    const paste = _root.querySelector('.ai-paste-overlay');
+    if (paste) { _closePasteSaveModal(); return; }
     const lib = _root.querySelector('[data-slot="lib-overlay"]');
     if (lib) { _closeLibrary(); return; }
     const preview = _root.querySelector('.ai-prompt-preview');
@@ -1446,6 +1546,73 @@ html.light-mode .ai-lib-item:hover { background: rgba(0, 0, 0, 0.04); }
 html.light-mode .ai-lib-title { color: rgba(20, 20, 30, 0.95); }
 html.light-mode .ai-lib-preview { color: rgba(40, 40, 60, 0.78); }
 html.light-mode .ai-lib-mini { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); color: rgba(30, 30, 50, 0.85); }
+
+/* ── Modal "Coller & sauvegarder" ──────────────────────────────── */
+.ai-paste-overlay {
+  position: fixed; inset: 0; z-index: 9200;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 5vh 5vw;
+  animation: ai-fadein 0.18s ease;
+}
+.ai-paste-card {
+  width: min(640px, 100%); max-height: 90vh;
+  background: var(--bg-secondary, #16161a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 20px 22px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.ai-paste-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 15px; color: var(--text-primary, #fff);
+}
+.ai-paste-close {
+  background: transparent; border: 0; color: var(--text-muted, #888);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 6px;
+}
+.ai-paste-close:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.ai-paste-hint {
+  margin: 0; font-size: 12.5px; line-height: 1.5;
+  color: var(--text-muted, #999);
+}
+.ai-paste-label {
+  font-size: 11.5px; font-weight: 600; color: var(--text-primary, #ddd);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.ai-paste-title, .ai-paste-text {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary, #fff);
+  font-family: inherit; font-size: 13px;
+  box-sizing: border-box;
+}
+.ai-paste-text {
+  resize: vertical; min-height: 220px; max-height: 50vh;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px; line-height: 1.55;
+}
+.ai-paste-title:focus, .ai-paste-text:focus {
+  outline: 0;
+  border-color: rgba(120, 160, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+.ai-paste-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 6px; flex-wrap: wrap;
+}
+html.light-mode .ai-paste-card { background: #fafafb; }
+html.light-mode .ai-paste-title, html.light-mode .ai-paste-text {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: rgba(20, 20, 30, 0.95);
+}
 
 /* Chip moteur recommandé / actif. Discret, informatif, non-bloquant. */
 .ai-engine-chip {
