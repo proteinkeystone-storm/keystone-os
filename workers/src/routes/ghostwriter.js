@@ -197,17 +197,35 @@ export async function handleGhostwriterRewrite(request, env) {
     return err(`Workers AI erreur : ${e.message || 'inconnue'}`, 502, origin);
   }
 
+  // Log brut pour wrangler tail (utile en cas de bug de format de réponse)
+  try { console.log('[ghostwriter] aiResponse keys:', Object.keys(aiResponse || {})); } catch (_) {}
+
   // ── Extraction de la réponse ─────────────────────────────────
   // Workers AI renvoie selon le modèle :
   //   - { response: "..." } pour les modèles génératifs
   //   - { result: { response: "..." } } pour certains wrapper variants
+  //   - { choices: [...] } pour les modèles OpenAI-compatibles
+  //   - { output: [{ content: [{ text: "..." }] }] } pour certains modèles Llama récents
   const rawText = aiResponse?.response
     || aiResponse?.result?.response
     || aiResponse?.choices?.[0]?.message?.content
+    || aiResponse?.output?.[0]?.content?.[0]?.text
+    || aiResponse?.message?.content
+    || aiResponse?.text
+    || aiResponse?.completion
     || '';
 
   if (!rawText) {
-    return err('Réponse Workers AI vide', 502, origin);
+    // Diagnostic enrichi pour identifier la forme exacte de la réponse.
+    let diag = '';
+    try {
+      const sample = JSON.stringify(aiResponse).slice(0, 400);
+      const keys = aiResponse && typeof aiResponse === 'object'
+        ? Object.keys(aiResponse).join(',')
+        : 'n/a';
+      diag = ` (type=${typeof aiResponse}, keys=[${keys}], sample=${sample})`;
+    } catch (_) { diag = ' (aiResponse non-sérialisable)'; }
+    return err(`Réponse Workers AI vide${diag}`, 502, origin);
   }
 
   // Strip code fences si Gemma a entouré le JSON (pratique fréquente
