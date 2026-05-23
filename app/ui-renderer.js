@@ -19,6 +19,7 @@ import { openMuse }                              from './muse.js';
 import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
+import { openAnnoncesImmo }                      from './annonces-immo.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -1886,6 +1887,7 @@ export function openTool(padId, opts = {}) {
     // Certains artefacts ne suivent pas le pattern "modal pad" classique
     // (form → output) et nécessitent une fenêtre custom multi-écrans.
     // Routing par id : on intercepte AVANT la résolution PADS_DATA.
+    if (padId === 'O-IMM-002') { openAnnoncesImmo(); return; }
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
