@@ -39,6 +39,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
+import { handleAiGenerate }                                              from './routes/ai-generate.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -188,6 +189,14 @@ export default {
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.
       if (path === '/api/ghostwriter/quota' && method === 'GET') {
         return handleGhostwriterQuota(request, env);
+      }
+
+      // Phase 3 — génération texte libre via Gemma 4 (vs /rewrite
+      // qui force {variants:[]}). Cas d'usage : Annonces Immo,
+      // ou tout outil qui veut une réponse Markdown longue.
+      // Quota partagé avec Ghost Writer (même table D1).
+      if (path === '/api/ai/generate' && method === 'POST') {
+        return handleAiGenerate(request, env);
       }
 
       // ── CSP violation report endpoint (Sprint Sécu-2 / H5) ────

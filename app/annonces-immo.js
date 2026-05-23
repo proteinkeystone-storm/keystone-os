@@ -32,6 +32,11 @@ import { ratingButtonHTML, bindRatingButton }    from './lib/rating-widget.js';
 import { burgerHTML, bindBurger }                from './lib/topbar-burger.js';
 import { icon }                                  from './lib/ui-icons.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
+import { CF_API }                                from './pads-loader.js';
+import { refreshGhostwriterQuota,
+         getGhostwriterQuotaRemaining,
+         getGhostwriterQuotaMax,
+         getGhostwriterPlan }                    from './ghostwriter.js';
 
 const APP_ID    = 'O-IMM-002';
 const DRAFT_KEY = 'ks_annonces_immo_draft_v1';
@@ -294,16 +299,24 @@ function _renderMain() {
         </section>
 
         <div class="ai-actions">
-          <button class="ai-btn-primary" data-act="copy-prompt" type="button">
-            ${icon('file-text', 18)}&nbsp;Copier le prompt
+          <button class="ai-btn-primary" data-act="generate-here" type="button"
+                  title="Génère les annonces directement dans Keystone avec Gemma 4 (gratuit, dans la fenêtre)">
+            ${icon('sparkles', 18)}&nbsp;Générer les annonces ici
           </button>
-          <button class="ai-btn-secondary" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
+          <button class="ai-btn-secondary" data-act="copy-prompt" type="button"
+                  title="Copier le prompt pour le coller dans ChatGPT ou Claude (votre abonnement)">
+            ${icon('copy', 16)}&nbsp;Copier le prompt
+          </button>
+          <button class="ai-btn-link" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
             Aperçu
           </button>
-          <span class="ai-engine-chip" title="Moteur recommandé pour ce pad / moteur actuellement sélectionné dans vos Réglages">
+          <span class="ai-engine-chip" title="Moteur recommandé pour ce pad vs moteur sélectionné dans vos Réglages">
             ${_renderEngineChip()}
           </span>
         </div>
+
+        <!-- Panneau résultat (rempli par _handleGenerateHere) -->
+        <div data-slot="result" class="ai-result-slot"></div>
       </form>
     </div>
   `;
@@ -465,9 +478,13 @@ function _onClick(e) {
     }
     return;
   }
-  if (act === 'copy-prompt')  return _handleCopyPrompt();
-  if (act === 'show-prompt')  return _handleShowPrompt();
-  if (act === 'ghostwriter')  return _handleGhostwriter(target.dataset.fieldId);
+  if (act === 'copy-prompt')   return _handleCopyPrompt();
+  if (act === 'show-prompt')   return _handleShowPrompt();
+  if (act === 'generate-here') return _handleGenerateHere();
+  if (act === 'close-result')  return _closeResult();
+  if (act === 'copy-result')   return _copyResult();
+  if (act === 'regen-result')  return _handleGenerateHere();   // re-run même flow
+  if (act === 'ghostwriter')   return _handleGhostwriter(target.dataset.fieldId);
 }
 
 // Wire les boutons ✦ Ghost Writer après le render. La logique
@@ -570,6 +587,141 @@ function _handleShowPrompt() {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
+// ══════════════════════════════════════════════════════════════
+// Génération directe via Gemma 4 (Phase 3 — Annonces in-app)
+// ══════════════════════════════════════════════════════════════
+
+// Mémorise le dernier résultat pour copier sans re-fetch
+let _lastGeneratedText = '';
+
+async function _handleGenerateHere() {
+  const missing = _validateRequired();
+  if (missing.length > 0) {
+    _toast(`Champs requis manquants : ${missing.map(f => f.label).join(', ')}`, true);
+    _highlightMissing(missing);
+    return;
+  }
+
+  _collectFormData();
+
+  // Le system_prompt est utilisé tel quel (Gemma sait suivre des
+  // instructions structurées avec contraintes par portail).
+  // userPrompt = juste un déclencheur factuel : Gemma a déjà tout
+  // dans le system_prompt après interpolation.
+  const interpolated = _interpolate(SYSTEM_PROMPT, _formData);
+  const userPrompt   = `Génère maintenant toutes les annonces selon les instructions ci-dessus, pour les portails suivants : ${_formData.portails || ''}.`;
+
+  _openResultPanel('loading');
+
+  try {
+    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; }})();
+    if (!jwt) {
+      _openResultPanel('error', 'Aucune session active. Reconnectez-vous (Paramètres → Déconnexion complète).');
+      return;
+    }
+
+    const res = await fetch(`${CF_API}/api/ai/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type' : 'application/json',
+        'Authorization': `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({
+        systemPrompt   : interpolated,
+        userPrompt     : userPrompt,
+        maxOutputTokens: 16384,   // sortie longue : 6 portails × ~3000 car possibles
+      }),
+    });
+
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json();
+        msg = errBody.error || errBody.message || msg;
+      } catch (_) {}
+      _openResultPanel('error', msg);
+      return;
+    }
+
+    const payload = await res.json();
+    _lastGeneratedText = String(payload?.text || '').trim();
+    if (!_lastGeneratedText) {
+      _openResultPanel('error', 'Réponse Gemma 4 vide. Réessayez.');
+      return;
+    }
+    // Refresh le quota cache pour le chip GW (cohérence)
+    refreshGhostwriterQuota().catch(() => {});
+    _openResultPanel('success', _lastGeneratedText);
+
+  } catch (e) {
+    _openResultPanel('error', `Erreur réseau : ${e?.message || 'inconnue'}`);
+  }
+}
+
+function _openResultPanel(state, content) {
+  const slot = _root?.querySelector('[data-slot="result"]');
+  if (!slot) return;
+
+  if (state === 'loading') {
+    slot.innerHTML = `
+      <div class="ai-result-panel ai-result-loading">
+        <div class="ai-result-spinner"></div>
+        <span>Génération en cours — Gemma 4 (cela peut prendre 15-30 secondes pour 3-6 portails)…</span>
+      </div>
+    `;
+    slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  if (state === 'error') {
+    slot.innerHTML = `
+      <div class="ai-result-panel ai-result-error">
+        <div class="ai-result-head">
+          <strong>✗ Génération échouée</strong>
+          <button type="button" class="ai-result-close" data-act="close-result" aria-label="Fermer">×</button>
+        </div>
+        <p class="ai-result-error-msg">${_esc(content || '')}</p>
+        <p class="ai-result-error-fallback">Astuce : utilisez plutôt "Copier le prompt" et collez-le dans votre ChatGPT/Claude.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // success
+  slot.innerHTML = `
+    <div class="ai-result-panel ai-result-success">
+      <div class="ai-result-head">
+        <strong>✓ Annonces générées</strong>
+        <span class="ai-result-meta">Gemma 4 · Vérifiez les comptes de caractères par portail avant publication</span>
+        <button type="button" class="ai-result-close" data-act="close-result" aria-label="Fermer">×</button>
+      </div>
+      <pre class="ai-result-body">${_esc(content)}</pre>
+      <div class="ai-result-actions">
+        <button type="button" class="ai-btn-primary" data-act="copy-result">
+          ${icon('copy', 16)}&nbsp;Copier tout
+        </button>
+        <button type="button" class="ai-btn-secondary" data-act="regen-result">
+          ↻&nbsp;Régénérer
+        </button>
+      </div>
+    </div>
+  `;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _closeResult() {
+  const slot = _root?.querySelector('[data-slot="result"]');
+  if (slot) slot.innerHTML = '';
+  _lastGeneratedText = '';
+}
+
+function _copyResult() {
+  if (!_lastGeneratedText) return;
+  navigator.clipboard?.writeText(_lastGeneratedText)
+    .then(() => _toast('✓ Annonces copiées dans le presse-papier'))
+    .catch(() => _toast('Impossible d\'accéder au presse-papier', true));
+}
+
 function _highlightMissing(missing) {
   const form = _root?.querySelector('.ai-form');
   if (!form) return;
@@ -590,9 +742,11 @@ function _handleKeyDown(e) {
   if (!_root) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (e.key === 'Escape') {
-    // Si une preview ou panneau Ghost Writer ouvert → ferme-les d'abord
+    // Cascade : preview prompt > panneau résultat > panneau GW inline > workspace
     const preview = _root.querySelector('.ai-prompt-preview');
     if (preview) { preview.remove(); return; }
+    const result = _root.querySelector('.ai-result-panel');
+    if (result) { _closeResult(); return; }
     const gwPanel = _root.querySelector('.gw-inline');
     if (gwPanel) { gwPanel.remove(); return; }
     closeAnnoncesImmo();
@@ -758,6 +912,87 @@ function _injectStyles() {
   font-family: inherit;
 }
 .ai-btn-secondary:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
+.ai-btn-link {
+  padding: 11px 14px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted, #888);
+  font-size: 12.5px; font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  font-family: inherit;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+}
+.ai-btn-link:hover { color: var(--text-primary, #ddd); text-decoration-color: currentColor; }
+
+/* ── Panneau résultat (génération Gemma 4 inline) ──────────────── */
+.ai-result-slot { margin-top: 16px; }
+.ai-result-panel {
+  border-radius: 14px;
+  padding: 18px 20px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: linear-gradient(135deg, rgba(100, 150, 255, 0.05), rgba(128, 96, 255, 0.04));
+  display: flex; flex-direction: column; gap: 12px;
+}
+.ai-result-loading {
+  flex-direction: row; align-items: center; gap: 12px;
+  color: rgba(200, 210, 240, 0.9); font-size: 13px;
+}
+.ai-result-spinner {
+  width: 18px; height: 18px;
+  border: 2.5px solid rgba(120, 160, 255, 0.25);
+  border-top-color: rgba(180, 200, 255, 0.95);
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+
+.ai-result-head {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13.5px; color: var(--text-primary, #fff);
+}
+.ai-result-meta {
+  font-size: 11.5px; color: var(--text-muted, #888); font-weight: normal;
+  margin-left: 8px; flex: 1;
+}
+.ai-result-close {
+  background: transparent; border: 0; color: var(--text-muted, #888);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 6px;
+}
+.ai-result-close:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+
+.ai-result-body {
+  margin: 0; padding: 16px 18px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: rgba(230, 230, 240, 0.96);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px; line-height: 1.6;
+  white-space: pre-wrap; word-wrap: break-word;
+  max-height: 60vh; overflow-y: auto;
+}
+
+.ai-result-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.ai-result-error {
+  border-color: rgba(255, 90, 90, 0.4);
+  background: rgba(255, 90, 90, 0.06);
+}
+.ai-result-error-msg {
+  margin: 0; padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 180, 180, 0.95); font-size: 12.5px; line-height: 1.5;
+}
+.ai-result-error-fallback {
+  margin: 0; padding: 0 4px;
+  color: var(--text-muted, #888); font-size: 11.5px;
+}
+
+html.light-mode .ai-result-panel { background: linear-gradient(135deg, rgba(80, 110, 230, 0.04), rgba(120, 90, 230, 0.04)); }
+html.light-mode .ai-result-body { background: rgba(0, 0, 0, 0.04); color: rgba(30, 30, 50, 0.92); }
+html.light-mode .ai-btn-link { color: rgba(80, 90, 130, 0.85); }
 
 /* Chip moteur recommandé / actif. Discret, informatif, non-bloquant. */
 .ai-engine-chip {
