@@ -27,12 +27,21 @@
         est activé (modèle @cf/google/gemma-4-26b-a4b-it).
      4. Free tier 10K neurones/jour. Au-delà : 0,011 $/1000 neurones.
 
-   Garde-fous V1 :
+   Garde-fous :
      - Texte ≤ 5000 caractères
      - Texte ≥ 5 caractères significatifs
-     - max_tokens cappé à 2048 (3 variantes ~600 tokens chacune + label)
-     - Pas de quota côté server (hard-limit 10/jour côté frontend en V1).
-       Migration KV pour quota cross-request prévue en Phase 2.
+     - max_tokens cappé à 8192 (3 variantes ~600 tokens chacune + label
+       + budget reasoning Gemma 4)
+     - Quota serveur par licence (Phase 2, 2026-05-23). Grille :
+         DEMO     →  1 appel/jour
+         STARTER  →  3 appels/jour
+         PRO      → 10 appels/jour
+         MAX      → 50 appels/jour
+         ADMIN    → illimité (tracké pour stats, jamais bloqué)
+       Identifiant : claims.sub (lookup_hmac stable de la licence).
+       Stockage : D1 ghostwriter_usage (lookup_hmac, day, count).
+       Atomicité : pre-bump UPSERT puis revert si AI échoue. Évite
+       les races entre devices d'une même licence MAX.
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
@@ -44,6 +53,95 @@ const MODEL_ID = '@cf/google/gemma-4-26b-a4b-it';
 // Garde-fous
 const MAX_TEXT_LENGTH    = 5000;
 const MIN_TEXT_LENGTH    = 5;
+
+// ── Quota par plan (Phase 2 — 2026-05-23) ────────────────────────
+// Retourne le quota /jour pour un plan donné. null = illimité (ADMIN).
+// Ces valeurs sont la source de vérité — le frontend les lit via
+// GET /api/ghostwriter/quota et n'a aucune connaissance hardcodée.
+function _quotaForPlan(plan) {
+  const p = (plan || '').toUpperCase();
+  if (p === 'DEMO')    return 1;
+  if (p === 'STARTER') return 3;
+  if (p === 'PRO')     return 10;
+  if (p === 'MAX')     return 50;
+  if (p === 'ADMIN')   return null;   // illimité
+  return 0;  // plan inconnu → bloque par défaut (fail-closed)
+}
+
+// Jour UTC YYYY-MM-DD. Important : UTC côté serveur, pas locale —
+// sinon un user en GMT+12 et un autre en GMT-12 voient leur quota
+// reset à des heures différentes selon où le Worker s'exécute.
+function _todayUtc() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Auto-migration schema (idempotent, pattern Keystone) ──────────
+// Cf. ensureSchemaAuthV2 dans licence-v2.js pour le même pattern.
+let _schemaReady = false;
+
+async function ensureGhostwriterSchema(env) {
+  if (_schemaReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS ghostwriter_usage (
+      lookup_hmac  TEXT NOT NULL,
+      day          TEXT NOT NULL,
+      count        INTEGER NOT NULL DEFAULT 0,
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (lookup_hmac, day)
+    )
+  `).run().catch(() => {});
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_ghostwriter_usage_day ON ghostwriter_usage(day)'
+  ).run().catch(() => {});
+  _schemaReady = true;
+}
+
+// Lit le compteur du jour pour une licence. Retourne 0 si pas de ligne.
+async function _readUsage(env, lookupHmac) {
+  const row = await env.DB
+    .prepare('SELECT count FROM ghostwriter_usage WHERE lookup_hmac = ? AND day = ?')
+    .bind(lookupHmac, _todayUtc())
+    .first();
+  return row?.count ?? 0;
+}
+
+// Incrémente atomiquement le compteur du jour (UPSERT). Le bump est
+// fait AVANT l'appel AI puis revert si l'AI échoue. Approche choisie
+// pour éviter qu'un user spam ne dépasse son quota via races (un MAX
+// avec 5 devices pourrait sinon faire 5 appels simultanés à 50/50).
+async function _bumpUsage(env, lookupHmac) {
+  await env.DB.prepare(`
+    INSERT INTO ghostwriter_usage (lookup_hmac, day, count, updated_at)
+    VALUES (?, ?, 1, datetime('now'))
+    ON CONFLICT(lookup_hmac, day) DO UPDATE SET
+      count = count + 1,
+      updated_at = datetime('now')
+  `).bind(lookupHmac, _todayUtc()).run();
+}
+
+// Revert d'un bump (en cas d'échec AI post-bump). On clamp à 0 pour
+// éviter un compteur négatif si une race exotique se produit.
+async function _revertUsage(env, lookupHmac) {
+  await env.DB.prepare(`
+    UPDATE ghostwriter_usage
+       SET count = MAX(count - 1, 0),
+           updated_at = datetime('now')
+     WHERE lookup_hmac = ? AND day = ?
+  `).bind(lookupHmac, _todayUtc()).run().catch(() => {});
+}
+
+// Construit l'objet quota exposé au frontend. Centralisé pour que
+// /quota et /rewrite renvoient la même forme.
+function _quotaPayload(plan, used) {
+  const max = _quotaForPlan(plan);
+  return {
+    plan      : (plan || 'UNKNOWN').toUpperCase(),
+    used,
+    max,                                          // null = illimité
+    remaining : max === null ? null : Math.max(0, max - used),
+    unlimited : max === null,
+  };
+}
 // Gemma 4 fonctionne en mode "raisonnement" sur Workers AI : il consomme
 // une grosse partie du budget tokens dans un champ `reasoning` avant de
 // produire le `content` final. Sans budget suffisant, on observe
@@ -64,6 +162,15 @@ export async function handleGhostwriterRewrite(request, env) {
     return err('Authentification requise (JWT licence)', 401, origin);
   }
 
+  // claims.sub = lookup_hmac (cf. licence-public.js handleActivateV2).
+  // Identifiant stable, opaque, non-révélateur de la clé. C'est notre
+  // bucket de quota.
+  const lookupHmac = claims.sub;
+  const plan       = claims.plan;
+  if (!lookupHmac) {
+    return err('JWT incomplet (sub manquant) — re-login requis', 401, origin);
+  }
+
   // ── AI binding check ─────────────────────────────────────────
   // Si binding pas configuré dans wrangler.toml, on renvoie 503 clair.
   // Évite un crash silencieux côté frontend, message d'erreur lisible.
@@ -75,6 +182,40 @@ export async function handleGhostwriterRewrite(request, env) {
       origin,
     );
   }
+
+  // ── Quota check pre-flight (Phase 2) ─────────────────────────
+  // Pre-bump pour atomicité face aux races multi-device (plan MAX
+  // notamment). Si quota dépassé après bump → revert + 429.
+  // ADMIN : on track quand même les stats mais on ne bloque jamais.
+  await ensureGhostwriterSchema(env);
+  const maxAllowed = _quotaForPlan(plan);
+  if (maxAllowed === 0) {
+    return err(
+      `Plan inconnu (${plan}). Ghost Writer indisponible pour cette licence.`,
+      403,
+      origin,
+    );
+  }
+  await _bumpUsage(env, lookupHmac);
+  const usedAfterBump = await _readUsage(env, lookupHmac);
+  if (maxAllowed !== null && usedAfterBump > maxAllowed) {
+    await _revertUsage(env, lookupHmac);
+    return json({
+      error: `Quota Ghost Writer atteint sur le plan ${plan} (${maxAllowed}/jour). `
+           + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
+      quota: _quotaPayload(plan, maxAllowed),  // reflète l'état clampé
+    }, 429, origin);
+  }
+
+  // ── À partir d'ici le quota a été pre-bumpé. Le try/finally
+  //    garantit qu'on revert le bump si on retourne avant le succès
+  //    (body invalide, texte mal formé, AI down, JSON Gemma cassé...).
+  //    Sinon un attaquant pourrait vider le quota d'une licence en
+  //    envoyant 50 requêtes avec body={} (chacune retournerait 400
+  //    mais consommerait 1 appel). committed=true juste avant le
+  //    return de succès neutralise le revert.
+  let committed = false;
+  try {
 
   // ── Parse body ───────────────────────────────────────────────
   const body = await parseBody(request);
@@ -291,9 +432,48 @@ export async function handleGhostwriterRewrite(request, env) {
   }
 
   // ── Réponse normalisée ───────────────────────────────────────
+  // committed=true AVANT le return : le finally verra true et ne
+  // revertra pas. Toute exception après ce point laisserait le
+  // bump appliqué — c'est ce qu'on veut puisque l'AI a déjà run.
+  committed = true;
   return json({
     variants: parsed.variants,
     model   : MODEL_ID,
     usage   : aiResponse?.usage || null,
+    quota   : _quotaPayload(plan, usedAfterBump),
   }, 200, origin);
+
+  } finally {
+    if (!committed) {
+      await _revertUsage(env, lookupHmac).catch(() => {});
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GET /api/ghostwriter/quota — Phase 2
+// ─────────────────────────────────────────────────────────────
+// Retourne l'état du quota pour la licence du JWT. Lecture seule,
+// pas de bump. Le frontend appelle ce endpoint au modal open pour
+// afficher "X/Y appels restants aujourd'hui" sans deviner le plan.
+//
+// Réponse 200 : { plan, used, max, remaining, unlimited }
+//   max=null & unlimited=true → plan ADMIN
+//   max=0                     → plan inconnu (fail-closed)
+// ═══════════════════════════════════════════════════════════════
+export async function handleGhostwriterQuota(request, env) {
+  const origin = getAllowedOrigin(env, request);
+
+  const claims = await requireJWT(request, env);
+  if (!claims) {
+    return err('Authentification requise (JWT licence)', 401, origin);
+  }
+  const lookupHmac = claims.sub;
+  if (!lookupHmac) {
+    return err('JWT incomplet (sub manquant) — re-login requis', 401, origin);
+  }
+
+  await ensureGhostwriterSchema(env);
+  const used = await _readUsage(env, lookupHmac);
+  return json(_quotaPayload(claims.plan, used), 200, origin);
 }

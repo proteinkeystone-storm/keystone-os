@@ -38,7 +38,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
-import { handleGhostwriterRewrite }                                     from './routes/ghostwriter.js';
+import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -183,6 +183,11 @@ export default {
       // Pré-requis : binding [ai] dans wrangler.toml (cf. ghostwriter.js).
       if (path === '/api/ghostwriter/rewrite' && method === 'POST') {
         return handleGhostwriterRewrite(request, env);
+      }
+      // Phase 2 — quota serveur par licence (DEMO=1 / STARTER=3 /
+      // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.
+      if (path === '/api/ghostwriter/quota' && method === 'GET') {
+        return handleGhostwriterQuota(request, env);
       }
 
       // ── CSP violation report endpoint (Sprint Sécu-2 / H5) ────

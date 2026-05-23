@@ -33,7 +33,8 @@ import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
-  bumpGhostwriterQuota, friendlyGhostwriterError,
+  getGhostwriterPlan, refreshGhostwriterQuota,
+  friendlyGhostwriterError,
 } from './ghostwriter.js';
 
 const APP_ID       = 'A-COM-005';
@@ -183,6 +184,13 @@ export function openGhostwriterStudio() {
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
+
+  // Refresh quota serveur en arrière-plan, puis re-render le chip.
+  // Évite d'afficher "—/—" jusqu'au 1er rewrite. Silencieux si offline
+  // ou JWT absent — le caller verra l'erreur au generate si nécessaire.
+  refreshGhostwriterQuota().then(() => {
+    if (_root) _renderMain();
+  }).catch(() => {});
 }
 
 export function closeGhostwriterStudio() {
@@ -246,12 +254,26 @@ function _buildShell() {
 // Rendu principal
 // ══════════════════════════════════════════════════════════════════
 
+// Formate le chip quota en gérant les états indéterminés.
+// Le cache module dans ghostwriter.js peut retourner :
+//   - Infinity (plan ADMIN)
+//   - null     (jamais fetched — JWT manquant ou refresh en cours)
+//   - number   (état normal)
+function _formatQuotaChip() {
+  const remaining = getGhostwriterQuotaRemaining();
+  const max       = getGhostwriterQuotaMax();
+  const plan      = getGhostwriterPlan();
+  if (remaining === Infinity) return '∞ / jour · ADMIN';
+  if (remaining == null || max == null) return '—/— / jour';
+  return `${remaining}/${max} / jour${plan ? ` · ${plan}` : ''}`;
+}
+
 function _renderMain(scrollToTop) {
   const main = _root && _root.querySelector('[data-slot="main"]');
   if (!main) return;
   const prevScroll = scrollToTop ? 0 : main.scrollTop;
   const mode = MODES[_currentMode];
-  const quotaRemaining = getGhostwriterQuotaRemaining();
+  const quotaChipText = _formatQuotaChip();
 
   main.innerHTML = `
     <div class="ws-main-inner gw-wrap">
@@ -284,7 +306,7 @@ function _renderMain(scrollToTop) {
                 : '<span>Réécrire en 3 variantes</span>'}
             </button>
             <div class="gw-meta-chips">
-              <span class="gw-chip gw-chip-quota">${quotaRemaining}/${getGhostwriterQuotaMax()} / jour</span>
+              <span class="gw-chip gw-chip-quota">${quotaChipText}</span>
               <span class="gw-chip gw-chip-engine" title="Moteur backend">Gemma 4</span>
             </div>
           </div>
@@ -507,8 +529,14 @@ async function _handleGenerate() {
     _toast('Texte trop long (max 5000 caractères)', true);
     return;
   }
-  if (getGhostwriterQuotaRemaining() === 0) {
-    _toast(`Quota journalier atteint (${getGhostwriterQuotaMax()}/jour). Réessayez demain.`, true);
+  // Pre-check optimiste — le serveur reste juge ultime (429).
+  // remaining=null → quota jamais fetched (cache cold), on laisse passer.
+  // remaining=Infinity → plan ADMIN.
+  // remaining=0 → certain qu'on est à sec.
+  const remaining = getGhostwriterQuotaRemaining();
+  if (remaining === 0) {
+    const plan = getGhostwriterPlan() || 'cette licence';
+    _toast(`Quota journalier atteint (${getGhostwriterQuotaMax()}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`, true);
     return;
   }
 
@@ -529,7 +557,9 @@ async function _handleGenerate() {
 
   try {
     const result = await rewriteText(text, opts);
-    bumpGhostwriterQuota();
+    // Phase 2 : pas besoin d'appeler bumpGhostwriterQuota() — rewriteText
+    // ingère déjà le quota serveur depuis result.quota. Le double appel
+    // produirait un décalage de -1 dans l'UI vs la réalité serveur.
     _variants = result.variants || [];
     _toast(`✓ ${_variants.length} variantes générées (${result.model || 'AI'})`);
   } catch (err) {

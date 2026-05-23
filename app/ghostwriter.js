@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Ghost Writer Frontend v0.2
+   KEYSTONE OS — Ghost Writer Frontend v0.3 (Phase 2 — quota serveur)
    ─────────────────────────────────────────────────────────────
    Service système transversal de réécriture textuelle.
    Hook global Cmd+Shift+G + selection listener + Modal 60/40.
@@ -11,32 +11,32 @@
 
    Backend :
      - POST /api/ghostwriter/rewrite → Gemma 4 sur Cloudflare Workers AI.
+     - GET  /api/ghostwriter/quota   → état du quota pour la licence.
      - Nécessite ks_jwt en localStorage (licence active).
-     - Nécessite `[ai] binding = "AI"` dans wrangler.toml côté Worker
-       (cf. HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md).
+     - Nécessite `[ai] binding = "AI"` dans wrangler.toml côté Worker.
      - En cas d'erreur backend, l'UI affiche un message actionnable —
        PAS de fallback mock (qui serait trompeur).
 
-   Quota :
-     - V1 : hard-limit 50 calls/jour, tracké via localStorage (bucket
-       day-based, reset 00:00 locale). Largement sous le free tier
-       Workers AI (10K neurones/jour ≈ 70-200 appels Gemma 4).
-     - Phase 2 : migrer vers backend KV pour cross-device + quota par
-       licence (gratuit / standard / MAX).
+   Quota (Phase 2 — 2026-05-23) :
+     - SOT serveur (D1 ghostwriter_usage). Grille :
+         DEMO=1 / STARTER=3 / PRO=10 / MAX=50 / ADMIN=illimité.
+     - Cache module mis à jour à chaque /quota (modal open) et à
+       chaque /rewrite réussi (la réponse renvoie le quota à jour).
+     - Le serveur est juge ; le frontend affiche, pré-désactive
+       le bouton si remaining=0, mais accepte sans broncher un
+       429 si une race se produit cross-device.
 
    Doctrine "Contenant / Contenu" :
      - Module standalone, aucun import des artefacts existants.
-     - Réutilisable depuis n'importe quel pad (cf. BRIEF_GHOST_WRITER §6).
-     - Quand Phase 5 Sprint B est livrée, les pads pourront déclarer
-       `{ "ghostwriter": true }` dans leur JSON pour intégration native.
+     - Réutilisable depuis n'importe quel pad.
+     - Pads pourront déclarer `{ "ghostwriter": true }` dans leur
+       JSON pour intégration native (Phase 5 Sprint B).
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
-const QUOTA_LS_KEY    = 'ks_ghostwriter_quota';  // { date, count }
-const QUOTA_PER_DAY   = 50;
 const SHORTCUT_KEY    = 'g';
 const MIN_TEXT_LENGTH = 5;
 const MAX_TEXT_LENGTH = 5000;
@@ -45,6 +45,24 @@ const MAX_TEXT_LENGTH = 5000;
 let _hookInitialized = false;
 let _modalOpen       = false;
 let _lastSelection   = null;   // { text, sourceEl: { el, start, end } | null }
+
+// ── Cache quota serveur ──────────────────────────────────────────
+// Source de vérité = serveur. Ce cache n'est qu'une projection pour
+// l'UI synchrone (les modals/workspaces appellent getQuotaRemaining()
+// sans await). Rafraîchi par _fetchQuota() (au modal open) et par la
+// réponse de _callReal() (après chaque rewrite réussi).
+//
+// max=null     → plan ADMIN (illimité)
+// max=0        → plan inconnu côté serveur (jamais autorisé)
+// fetchedAt=0  → jamais rafraîchi (l'UI affiche "—" plutôt que 0)
+let _quotaCache = {
+  plan      : null,
+  used      : 0,
+  max       : null,
+  remaining : null,
+  unlimited : false,
+  fetchedAt : 0,
+};
 
 // ── Feature flag ──────────────────────────────────────────────────
 
@@ -59,29 +77,72 @@ export function isGhostwriterEnabled() {
     catch (_) { return false; }
 }
 
-// ── Quota tracking (localStorage, day-bucketed) ───────────────────
+// ── Quota — projection du cache module ────────────────────────────
 
-function _today() { return new Date().toISOString().slice(0, 10); }
-
-function _getQuotaState() {
-    try {
-        const raw = localStorage.getItem(QUOTA_LS_KEY);
-        if (!raw) return { date: _today(), count: 0 };
-        const parsed = JSON.parse(raw);
-        if (parsed.date !== _today()) return { date: _today(), count: 0 };
-        return parsed;
-    } catch (_) { return { date: _today(), count: 0 }; }
+// Met à jour le cache à partir d'un objet quota serveur
+// ({plan, used, max, remaining, unlimited}).
+function _ingestQuota(q) {
+    if (!q || typeof q !== 'object') return;
+    _quotaCache = {
+        plan      : q.plan      ?? null,
+        used      : q.used      ?? 0,
+        max       : q.max       ?? null,
+        remaining : q.remaining ?? null,
+        unlimited : !!q.unlimited,
+        fetchedAt : Date.now(),
+    };
 }
 
-function _bumpQuota() {
-    const state = _getQuotaState();
-    state.count += 1;
-    try { localStorage.setItem(QUOTA_LS_KEY, JSON.stringify(state)); }
-    catch (_) {}
+// Décrémente le cache local (effet visuel immédiat). Le serveur reste
+// SOT — si le cache local diverge, le prochain /quota ou /rewrite le
+// resynchronise. Appelé en optimistic update + après /rewrite.
+function _decrementCache() {
+    if (_quotaCache.unlimited) return;
+    if (typeof _quotaCache.remaining === 'number' && _quotaCache.remaining > 0) {
+        _quotaCache.remaining -= 1;
+        _quotaCache.used      += 1;
+    }
+}
+
+// Fetch /api/ghostwriter/quota et met à jour le cache. Silencieux
+// en cas d'erreur (réseau down → on garde l'ancien cache).
+async function _fetchQuota() {
+    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; }})();
+    if (!jwt) return null;
+    try {
+        const res = await fetch(`${CF_API}/api/ghostwriter/quota`, {
+            headers: { 'Authorization': `Bearer ${jwt}` },
+        });
+        if (!res.ok) return null;
+        const q = await res.json();
+        _ingestQuota(q);
+        return q;
+    } catch (_) { return null; }
 }
 
 function _quotaRemaining() {
-    return Math.max(0, QUOTA_PER_DAY - _getQuotaState().count);
+    if (_quotaCache.unlimited) return Infinity;
+    return _quotaCache.remaining;  // peut être null si jamais fetched
+}
+
+function _quotaMax() {
+    if (_quotaCache.unlimited) return Infinity;
+    return _quotaCache.max;
+}
+
+function _quotaPlan() {
+    return _quotaCache.plan;
+}
+
+// Affichage textuel court pour les chips UI. Tolérant aux états
+// indéterminés (null/Infinity) pour éviter d'afficher "0/null".
+function _quotaLabel() {
+    if (_quotaCache.unlimited) return '∞ / jour (ADMIN)';
+    if (_quotaCache.fetchedAt === 0) return '—/— appels';
+    const r = _quotaCache.remaining;
+    const m = _quotaCache.max;
+    const p = _quotaCache.plan ? ` · ${_quotaCache.plan}` : '';
+    return `${r}/${m} restants aujourd'hui${p}`;
 }
 
 // ── Selection tracking ────────────────────────────────────────────
@@ -148,18 +209,27 @@ async function _callReal(text, opts) {
 
     if (!res.ok) {
         let msg = `HTTP ${res.status}`;
+        let errBody = null;
         try {
-            const errBody = await res.json();
+            errBody = await res.json();
             msg = errBody.error || errBody.message || msg;
         } catch (_) {}
-        // Marqueur explicite pour l'UI : si 503 ou message backend KO, on
-        // veut afficher un guide de deploy plutôt qu'un message brut.
-        const err = new Error(msg);
-        err.status = res.status;
-        throw err;
+        // 429 = quota dépassé. Le backend renvoie {error, quota:{...}}
+        // — on resync le cache pour que l'UI affiche le bon "0/max".
+        if (res.status === 429 && errBody?.quota) {
+            _ingestQuota(errBody.quota);
+        }
+        const e = new Error(msg);
+        e.status = res.status;
+        e.quota  = errBody?.quota || null;
+        throw e;
     }
 
-    return await res.json();
+    // Réponse 200 — la Phase 2 enrichit le payload avec {quota:{...}}.
+    // On l'ingère pour resync le cache (autoritatif côté serveur).
+    const payload = await res.json();
+    if (payload?.quota) _ingestQuota(payload.quota);
+    return payload;
 }
 
 // ── CSS (injecté une seule fois au premier open) ──────────────────
@@ -279,7 +349,6 @@ function _injectCSS() {
 // ── Modal builder ────────────────────────────────────────────────
 
 function _buildModalHTML(initialText) {
-    const remaining = _quotaRemaining();
     return `
         <div class="gw-modal" role="dialog" aria-label="Ghost Writer">
             <div class="gw-head">
@@ -306,7 +375,7 @@ function _buildModalHTML(initialText) {
                     </button>
                     <div id="gw-status" class="gw-status"></div>
                     <div class="gw-meta">
-                        <span class="gw-quota">${remaining}/${QUOTA_PER_DAY} appels restants aujourd'hui</span>
+                        <span class="gw-quota">${_quotaLabel()}</span>
                         <span class="gw-mode-chip">Gemma 4</span>
                     </div>
                 </div>
@@ -349,6 +418,19 @@ function _openModal(initialText) {
 
     // Focus le textarea après animation
     setTimeout(() => overlay.querySelector('#gw-source')?.focus(), 250);
+
+    // Fetch quota frais en arrière-plan (cache initial ou périmé > 60s).
+    // L'UI affiche "—/—" puis se met à jour quand la réponse arrive.
+    const stale = Date.now() - _quotaCache.fetchedAt > 60_000;
+    if (stale) {
+        _fetchQuota().then(() => _refreshQuotaChip(overlay)).catch(() => {});
+    }
+}
+
+// Met à jour le chip quota dans un modal déjà rendu.
+function _refreshQuotaChip(overlay) {
+    const el = overlay?.querySelector?.('.gw-quota');
+    if (el) el.textContent = _quotaLabel();
 }
 
 function _closeModal() {
@@ -419,9 +501,12 @@ async function _handleGenerate(overlay) {
         return;
     }
 
-    // Quota check
+    // Quota check (optimiste — le serveur reste juge ultime via 429).
+    // remaining=null = quota jamais fetched → on laisse passer, le
+    // serveur tranchera. remaining=0 = certain qu'on est à sec.
     if (_quotaRemaining() === 0) {
-        _setStatus(status, `Quota journalier atteint (${QUOTA_PER_DAY}/jour). Réessayez demain.`, 'error');
+        const plan = _quotaPlan() || 'cette licence';
+        _setStatus(status, `Quota journalier atteint (${_quotaMax()}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`, 'error');
         return;
     }
 
@@ -429,17 +514,28 @@ async function _handleGenerate(overlay) {
     goBtn.innerHTML = '<span class="gw-spinner"></span><span>Génération…</span>';
     _setStatus(status, '', null);
 
+    // Optimistic update : décrémente le cache immédiatement pour que
+    // l'utilisateur voie le quota baisser. Si le serveur renvoie un
+    // quota différent dans la réponse, _ingestQuota le resync.
+    _decrementCache();
+    _refreshQuotaChip(overlay);
+
     try {
         const result = await _callReal(text, { tone: tone || null });
-        _bumpQuota();
         _renderVariants(variants, result.variants);
         _setStatus(status, `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
-
-        // Refresh quota chip
-        const quotaEl = overlay.querySelector('.gw-quota');
-        if (quotaEl) quotaEl.textContent = `${_quotaRemaining()}/${QUOTA_PER_DAY} appels restants aujourd'hui`;
+        _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
     } catch (e) {
         _setStatus(status, `✗ ${_friendlyError(e)}`, 'error');
+        // Sur 429 _callReal a déjà resync le cache. Sur autre erreur
+        // (5xx, réseau), le backend a fait bump+revert donc le serveur
+        // a rétabli l'état ; on resync pour annuler notre décrément
+        // optimiste (sinon l'UI affiche un quota faussement diminué).
+        if (e?.status === 429) {
+            _refreshQuotaChip(overlay);
+        } else {
+            _fetchQuota().then(() => _refreshQuotaChip(overlay)).catch(() => {});
+        }
     } finally {
         goBtn.disabled = false;
         goBtn.innerHTML = '<span>Réécrire en 3 variantes</span>';
@@ -458,6 +554,8 @@ function _friendlyError(e) {
     if (isBackendKO) {
         return 'Backend Gemma 4 indisponible. Voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md (Phase B).';
     }
+    // 429 → message déjà formaté par le backend (mentionne plan + reset UTC)
+    if (e?.status === 429) return msg;
     return msg;
 }
 
@@ -600,29 +698,49 @@ export async function rewriteText(text, opts = {}) {
 export function friendlyGhostwriterError(e) { return _friendlyError(e); }
 
 /**
- * Quota restant aujourd'hui. Expose pour affichage UI.
+ * Quota restant aujourd'hui (projection cache serveur).
+ * - Infinity si plan ADMIN
+ * - null si jamais fetched (le caller doit afficher "—" plutôt que 0)
+ * - number sinon
  */
 export function getGhostwriterQuotaRemaining() { return _quotaRemaining(); }
 
 /**
- * Quota maximum quotidien (constante). Expose pour affichage UI
- * dans le workspace / modal léger. Centraliser ici évite les
- * hardcodings divergents (cf. bump 10→50 le 2026-05-23).
+ * Quota maximum quotidien pour le plan courant (lecture cache serveur).
+ * Variable selon plan : DEMO=1 / STARTER=3 / PRO=10 / MAX=50 / ADMIN=∞.
+ * - Infinity si plan ADMIN
+ * - null si jamais fetched
  */
-export function getGhostwriterQuotaMax() { return QUOTA_PER_DAY; }
+export function getGhostwriterQuotaMax() { return _quotaMax(); }
 
 /**
- * Décrémente le quota après un appel réussi. À appeler explicitement
- * depuis le workspace (le service système ghostwriter.js le fait déjà
- * automatiquement dans _handleGenerate).
+ * Plan courant ('DEMO' | 'STARTER' | 'PRO' | 'MAX' | 'ADMIN' | null).
  */
-export function bumpGhostwriterQuota() { _bumpQuota(); }
+export function getGhostwriterPlan() { return _quotaPlan(); }
+
+/**
+ * Force un refresh du cache quota depuis le serveur.
+ * À appeler depuis un workspace à l'ouverture pour avoir l'état frais.
+ * Retourne le payload serveur ({plan, used, max, remaining, unlimited})
+ * ou null si pas de JWT / erreur réseau.
+ */
+export async function refreshGhostwriterQuota() { return _fetchQuota(); }
+
+/**
+ * Décrémente optimistement le cache local (effet visuel immédiat).
+ * Le serveur reste SOT — la prochaine réponse /rewrite ou /quota
+ * resynchronise si divergence. Gardé exporté pour rétro-compat avec
+ * le workspace artefact (ghostwriter-studio.js) qui l'appelle après
+ * rewriteText() success.
+ */
+export function bumpGhostwriterQuota() { _decrementCache(); }
 
 /**
  * Helpers exposés pour usage avancé / debug console.
  */
 export const _ghostwriter_debug = {
-    getQuota     : _getQuotaState,
+    cache         : () => _quotaCache,
     quotaRemaining: _quotaRemaining,
-    callReal     : _callReal,
+    fetchQuota    : _fetchQuota,
+    callReal      : _callReal,
 };
