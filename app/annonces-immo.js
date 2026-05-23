@@ -33,10 +33,6 @@ import { burgerHTML, bindBurger }                from './lib/topbar-burger.js';
 import { icon }                                  from './lib/ui-icons.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { CF_API }                                from './pads-loader.js';
-import { refreshGhostwriterQuota,
-         getGhostwriterQuotaRemaining,
-         getGhostwriterQuotaMax,
-         getGhostwriterPlan }                    from './ghostwriter.js';
 
 const APP_ID    = 'O-IMM-002';
 const DRAFT_KEY = 'ks_annonces_immo_draft_v1';
@@ -53,6 +49,34 @@ const AI_RECOMMENDED = 'ChatGPT';
 function _getActiveEngine() {
   try { return localStorage.getItem('ks_active_engine') || 'Claude'; }
   catch (_) { return 'Claude'; }
+}
+
+// Mapping label affichage → engine id PromptEngine (cf. ui-renderer
+// _ENGINE_LABEL_TO_PROMPT_ENGINE, dupliqué ici pour éviter import croisé).
+const _ENGINE_LABEL_TO_ID = {
+  'Claude'    : 'claude',
+  'ChatGPT'   : 'gpt',
+  'Gemini'    : 'gemini',
+  'Grok'      : 'grok',
+  'Perplexity': 'perplexity',
+  'Mistral'   : 'mistral',
+  'Llama'     : 'llama',
+};
+
+// Retourne {id, label, hasApiKey} pour le moteur actif. Si l'utilisateur
+// a configuré une clé pour ce moteur (Réglages → Vault), hasApiKey=true
+// et on pourra envoyer la requête en BYOK direct (qualité Pro garantie,
+// zéro coût Keystone).
+function _getActiveEngineInfo() {
+  const label = _getActiveEngine();
+  const id    = _ENGINE_LABEL_TO_ID[label] || 'claude';
+  let hasApiKey = false;
+  try {
+    const engines = window.promptEngine?.listEngines() || [];
+    const e = engines.find(x => x.id === id);
+    hasApiKey = !!e?.hasApiKey;
+  } catch (_) {}
+  return { id, label, hasApiKey };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -305,6 +329,20 @@ function _renderMain() {
     .map(_renderField)
     .join('');
 
+  // Bouton BYOK conditionnel : visible UNIQUEMENT si l'user a configuré
+  // une clé API pour son moteur actif (Réglages → Vault). Sinon on
+  // affiche un lien discret qui invite à configurer.
+  const eng = _getActiveEngineInfo();
+  const byokBtn = eng.hasApiKey
+    ? `<button class="ai-btn-primary" data-act="generate-byok" type="button"
+              title="Envoie le prompt directement à ${_esc(eng.label)} avec votre clé API (qualité Pro, consomme votre quota chez ${_esc(eng.label)})">
+         ${icon('zap', 18)}&nbsp;Générer avec ${_esc(eng.label)}
+       </button>`
+    : `<a class="ai-btn-link" href="javascript:void(0)" data-act="open-settings"
+          title="Configurer une clé API ${_esc(eng.label)} pour générer directement depuis Keystone">
+         🔑&nbsp;Configurer ${_esc(eng.label)} pour générer ici
+       </a>`;
+
   main.innerHTML = `
     <div class="ws-main-inner ai-wrap">
       <div class="ai-hero">
@@ -312,62 +350,83 @@ function _renderMain() {
           ${icon('multiportails', 13)}&nbsp;O-IMM-002 — SeLoger · LeBonCoin · Bien'ici · Logic-Immo · Figaro Immo · Avendrealouer
         </div>
         <h1 class="ai-hero-title">Annonces Immo</h1>
-        <p class="ai-hero-subtitle">Une saisie, un prompt prêt à coller dans ChatGPT pour générer une annonce par portail respectant ses contraintes propres.</p>
+        <p class="ai-hero-subtitle">Décrivez le bien, copiez le prompt généré dans votre IA — ou envoyez-le directement à ${_esc(eng.label)} si votre clé API est configurée.</p>
       </div>
 
       <form class="ai-form" autocomplete="off" novalidate>
 
         <section class="ai-section">
           <div class="ai-section-head">
-            <div class="ai-section-title">Le bien</div>
-            <div class="ai-section-subtitle">Caractéristiques essentielles</div>
+            <span class="ai-step-num">1</span>
+            <div class="ai-section-head-text">
+              <div class="ai-section-title">Le bien</div>
+              <div class="ai-section-subtitle">Caractéristiques essentielles</div>
+            </div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_BIEN)}</div>
         </section>
 
         <section class="ai-section">
           <div class="ai-section-head">
-            <div class="ai-section-title">Angle commercial</div>
-            <div class="ai-section-subtitle">Le ton sera décliné par portail si vous laissez "Équilibré"</div>
+            <span class="ai-step-num">2</span>
+            <div class="ai-section-head-text">
+              <div class="ai-section-title">Angle commercial</div>
+              <div class="ai-section-subtitle">Le ton sera décliné par portail si vous laissez "Équilibré"</div>
+            </div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_ANGLE)}</div>
         </section>
 
         <section class="ai-section">
           <div class="ai-section-head">
-            <div class="ai-section-title">Portails de diffusion</div>
-            <div class="ai-section-subtitle">Le prompt à copier ne générera QUE les annonces des portails cochés (Ghost Writer "Atouts" est indépendant de ce choix).</div>
+            <span class="ai-step-num">3</span>
+            <div class="ai-section-head-text">
+              <div class="ai-section-title">Portails de diffusion</div>
+              <div class="ai-section-subtitle">L'IA ne générera QUE les annonces des portails cochés</div>
+            </div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_CIBLES)}</div>
         </section>
 
         <section class="ai-section">
           <div class="ai-section-head">
-            <div class="ai-section-title">Atouts & points forts</div>
-            <div class="ai-section-subtitle">Saisissez vous-même ou demandez à Ghost Writer de rédiger depuis les infos du bien ci-dessus (gratuit, dans la fenêtre).</div>
+            <span class="ai-step-num">4</span>
+            <div class="ai-section-head-text">
+              <div class="ai-section-title">Atouts du bien</div>
+              <div class="ai-section-subtitle">
+                Saisissez-les vous-même, ou cliquez sur <strong>✦ Rédiger les atouts</strong> pour que Ghost Writer rédige cette zone à partir des infos du bien.
+                <br><em style="opacity:.7">Ghost Writer aide UNIQUEMENT à remplir ce champ. L'annonce complète sera générée à l'étape suivante.</em>
+              </div>
+            </div>
           </div>
           <div class="ai-fields">${renderSection(SECTION_ATOUTS)}</div>
         </section>
 
-        <div class="ai-actions">
-          <button class="ai-btn-primary" data-act="generate-here" type="button"
-                  title="Génère les annonces directement dans Keystone avec Gemma 4 (gratuit, dans la fenêtre)">
-            ${icon('sparkles', 18)}&nbsp;Générer les annonces ici
-          </button>
-          <button class="ai-btn-secondary" data-act="copy-prompt" type="button"
-                  title="Copier le prompt pour le coller dans ChatGPT ou Claude (votre abonnement)">
-            ${icon('copy', 16)}&nbsp;Copier le prompt
-          </button>
-          <button class="ai-btn-link" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
-            Aperçu
-          </button>
-          <span class="ai-engine-chip" title="Moteur recommandé pour ce pad vs moteur sélectionné dans vos Réglages">
-            ${_renderEngineChip()}
-          </span>
-        </div>
+        <section class="ai-section ai-section-final">
+          <div class="ai-section-head">
+            <span class="ai-step-num">5</span>
+            <div class="ai-section-head-text">
+              <div class="ai-section-title">Générer les annonces</div>
+              <div class="ai-section-subtitle">Une annonce par portail coché, respectant ses contraintes propres</div>
+            </div>
+          </div>
+          <div class="ai-actions">
+            ${byokBtn}
+            <button class="ai-btn-secondary" data-act="copy-prompt" type="button"
+                    title="Copier le prompt pour le coller dans votre IA favorite (ChatGPT, Claude, autre)">
+              ${icon('copy', 16)}&nbsp;Copier le prompt
+            </button>
+            <button class="ai-btn-link" data-act="show-prompt" type="button" title="Voir le prompt avant de le coller">
+              Aperçu
+            </button>
+            <span class="ai-engine-chip" title="Moteur recommandé pour ce pad / moteur sélectionné dans vos Réglages">
+              ${_renderEngineChip()}
+            </span>
+          </div>
+          <!-- Panneau résultat (rempli après "Générer avec [Moteur]") -->
+          <div data-slot="result" class="ai-result-slot"></div>
+        </section>
 
-        <!-- Panneau résultat (rempli par _handleGenerateHere) -->
-        <div data-slot="result" class="ai-result-slot"></div>
       </form>
     </div>
   `;
@@ -531,10 +590,11 @@ function _onClick(e) {
   }
   if (act === 'copy-prompt')   return _handleCopyPrompt();
   if (act === 'show-prompt')   return _handleShowPrompt();
-  if (act === 'generate-here') return _handleGenerateHere();
+  if (act === 'generate-byok') return _handleGenerateByok();
+  if (act === 'open-settings') return _openSettingsHint();
   if (act === 'close-result')  return _closeResult();
   if (act === 'copy-result')   return _copyResult();
-  if (act === 'regen-result')  return _handleGenerateHere();   // re-run même flow
+  if (act === 'regen-result')  return _handleGenerateByok();   // re-run BYOK
   if (act === 'save-result')   return _saveCurrentToLibrary();
   if (act === 'ghostwriter')   return _handleGhostwriter(target.dataset.fieldId);
   if (act === 'library')       return _openLibrary();
@@ -645,13 +705,24 @@ function _handleShowPrompt() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Génération directe via Gemma 4 (Phase 3 — Annonces in-app)
+// Génération BYOK via le moteur configuré (Claude/GPT/Gemini/etc.)
 // ══════════════════════════════════════════════════════════════
+// On n'utilise PAS Gemma 4 ici (qualité copywriting insuffisante sur
+// ce format multi-annonces avec contraintes strictes — vu en prod
+// 2026-05-23). À la place, on appelle DIRECTEMENT le moteur configuré
+// par l'user dans Réglages → Vault (BYOK = sa clé, sa qualité, son
+// budget chez le vendor). Zéro coût Keystone, qualité Pro garantie.
+//
+// Le flow :
+//   1. Détecter le moteur actif (Settings) et sa clé API (Vault)
+//   2. Si pas de clé → bouton désactivé + lien Settings
+//   3. Si clé → POST /api/proxy/llm avec {engine, apiKey, system, messages}
+//   4. Afficher la réponse dans le panneau résultat (réutilisable)
 
-// Mémorise le dernier résultat pour copier sans re-fetch
+// Mémorise le dernier résultat pour copier / sauvegarder en biblio
 let _lastGeneratedText = '';
 
-async function _handleGenerateHere() {
+async function _handleGenerateByok() {
   const missing = _validateRequired();
   if (missing.length > 0) {
     _toast(`Champs requis manquants : ${missing.map(f => f.label).join(', ')}`, true);
@@ -659,55 +730,71 @@ async function _handleGenerateHere() {
     return;
   }
 
+  const eng = _getActiveEngineInfo();
+  if (!eng.hasApiKey) {
+    _openResultPanel('error',
+      `Aucune clé API ${eng.label} configurée. Allez dans Paramètres → Clés API — Moteurs pour en ajouter une.`);
+    return;
+  }
+
   _collectFormData();
 
-  // Le system_prompt est utilisé tel quel (Gemma sait suivre des
-  // instructions structurées avec contraintes par portail).
-  // userPrompt = juste un déclencheur factuel : Gemma a déjà tout
-  // dans le system_prompt après interpolation.
-  const interpolated = _interpolate(SYSTEM_PROMPT, _formData);
-  const userPrompt   = `Génère maintenant toutes les annonces selon les instructions ci-dessus, pour les portails suivants : ${_formData.portails || ''}.`;
+  // Interpolation du system_prompt avec les valeurs du formulaire
+  const systemPrompt = _interpolate(SYSTEM_PROMPT, _formData);
+  // userPrompt minimal : déclencheur. Tout le brief est dans le system.
+  const userPrompt = `Génère maintenant toutes les annonces selon les instructions ci-dessus, pour les portails suivants : ${_formData.portails || ''}.`;
+
+  // Récupère la clé API depuis la Vault locale (même convention que
+  // prompt-engine.js : ks_api_<provider>). Le mapping engine→provider
+  // vient de window.promptEngine.listEngines() (passé par main.js).
+  const engines  = (window.promptEngine?.listEngines?.() || []);
+  const engEntry = engines.find(x => x.id === eng.id);
+  const provider = engEntry?.provider;
+  const apiKey   = provider ? (localStorage.getItem('ks_api_' + provider) || '') : '';
+  if (!apiKey) {
+    _openResultPanel('error',
+      `Clé API ${eng.label} introuvable dans le vault. Reconfigurez-la dans Paramètres.`);
+    return;
+  }
 
   _openResultPanel('loading');
 
   try {
-    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; }})();
+    const jwt = localStorage.getItem('ks_jwt') || '';
     if (!jwt) {
-      _openResultPanel('error', 'Aucune session active. Reconnectez-vous (Paramètres → Déconnexion complète).');
+      _openResultPanel('error', 'Session expirée. Reconnectez-vous (Paramètres → Déconnexion complète).');
       return;
     }
 
-    const res = await fetch(`${CF_API}/api/ai/generate`, {
-      method: 'POST',
+    const res = await fetch(`${CF_API}/api/proxy/llm`, {
+      method : 'POST',
       headers: {
         'Content-Type' : 'application/json',
         'Authorization': `Bearer ${jwt}`,
       },
       body: JSON.stringify({
-        systemPrompt   : interpolated,
-        userPrompt     : userPrompt,
-        maxOutputTokens: 16384,   // sortie longue : 6 portails × ~3000 car possibles
+        engine    : eng.id,        // 'claude' | 'gpt' | 'gemini' | ...
+        apiKey    : apiKey,        // BYOK, jamais stocké côté Worker
+        system    : systemPrompt,  // brief complet interpolé
+        messages  : [{ role: 'user', content: userPrompt }],
+        max_tokens: 8000,          // sortie longue (6 portails × ~3000 car)
       }),
     });
 
+    let payload = null;
+    try { payload = await res.json(); } catch (_) {}
+
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try {
-        const errBody = await res.json();
-        msg = errBody.error || errBody.message || msg;
-      } catch (_) {}
+      const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
       _openResultPanel('error', msg);
       return;
     }
 
-    const payload = await res.json();
     _lastGeneratedText = String(payload?.text || '').trim();
     if (!_lastGeneratedText) {
-      _openResultPanel('error', 'Réponse Gemma 4 vide. Réessayez.');
+      _openResultPanel('error', `Réponse ${eng.label} vide. Réessayez.`);
       return;
     }
-    // Refresh le quota cache pour le chip GW (cohérence)
-    refreshGhostwriterQuota().catch(() => {});
     _openResultPanel('success', _lastGeneratedText);
 
   } catch (e) {
@@ -715,15 +802,24 @@ async function _handleGenerateHere() {
   }
 }
 
+// Indique à l'utilisateur où configurer sa clé API.
+// On n'ouvre pas Settings programmatiquement (pas de pont depuis ici) —
+// on guide juste avec un toast clair.
+function _openSettingsHint() {
+  const label = _getActiveEngineInfo().label;
+  _toast(`Ouvrez Paramètres (icône ⚙️ en haut à droite du Dashboard) → "Clés API — Moteurs" pour ajouter votre clé ${label}.`, false);
+}
+
 function _openResultPanel(state, content) {
   const slot = _root?.querySelector('[data-slot="result"]');
   if (!slot) return;
 
   if (state === 'loading') {
+    const lbl = _getActiveEngineInfo().label;
     slot.innerHTML = `
       <div class="ai-result-panel ai-result-loading">
         <div class="ai-result-spinner"></div>
-        <span>Génération en cours — Gemma 4 (cela peut prendre 15-30 secondes pour 3-6 portails)…</span>
+        <span>Génération en cours via ${_esc(lbl)} (cela peut prendre 10-30 secondes selon le nombre de portails)…</span>
       </div>
     `;
     slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -745,11 +841,12 @@ function _openResultPanel(state, content) {
   }
 
   // success
+  const lbl = _getActiveEngineInfo().label;
   slot.innerHTML = `
     <div class="ai-result-panel ai-result-success">
       <div class="ai-result-head">
-        <strong>✓ Annonces générées</strong>
-        <span class="ai-result-meta">Gemma 4 · Vérifiez les comptes de caractères par portail avant publication</span>
+        <strong>✓ Annonces générées via ${_esc(lbl)}</strong>
+        <span class="ai-result-meta">Vérifiez les comptes de caractères par portail avant publication</span>
         <button type="button" class="ai-result-close" data-act="close-result" aria-label="Fermer">×</button>
       </div>
       <pre class="ai-result-body">${_esc(content)}</pre>
@@ -1037,15 +1134,46 @@ function _injectStyles() {
   border-radius: 14px;
   padding: 20px 22px;
 }
-.ai-section-head { margin-bottom: 14px; }
+.ai-section-head {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 14px;
+}
+.ai-section-head-text { flex: 1; min-width: 0; }
 .ai-section-title {
   font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
   color: var(--text-primary, #fff);
 }
 .ai-section-subtitle {
   font-size: 12px; color: var(--text-muted, #888);
-  margin-top: 2px;
+  margin-top: 4px; line-height: 1.5;
 }
+.ai-section-subtitle strong { color: rgba(220, 200, 255, 1); font-weight: 600; }
+
+/* Étape numérotée — cercle violet/rose à gauche du titre de section.
+   Phase 3 / 2026-05-23 : clarifie l'ordre du workflow et lève
+   l'ambiguïté sur le rôle de chaque CTA. */
+.ai-step-num {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(120, 160, 255, 0.22), rgba(168, 130, 255, 0.22));
+  border: 1px solid rgba(120, 160, 255, 0.45);
+  color: rgba(220, 230, 255, 1);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 1px;
+}
+.ai-section-final .ai-step-num {
+  background: linear-gradient(135deg, rgba(168, 130, 255, 0.32), rgba(220, 110, 200, 0.28));
+  border-color: rgba(168, 130, 255, 0.55);
+}
+html.light-mode .ai-step-num {
+  background: linear-gradient(135deg, rgba(80, 110, 230, 0.12), rgba(150, 110, 230, 0.12));
+  border-color: rgba(80, 110, 230, 0.4);
+  color: rgba(60, 80, 170, 1);
+}
+html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
 .ai-fields {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 16px;
 }
