@@ -28,6 +28,12 @@ binding      = "DB"
 database_name = "keystone-os"
 database_id  = "f5d21b1a-74a5-436f-849a-e971ab9d44ac"
 
+# ── Workers AI (Ghost Writer — Gemma 4) ───────────────────────
+# Active env.AI.run() pour le modèle @cf/google/gemma-4-26b-a4b-it.
+# Free tier : 10 000 neurones/jour. Au-delà : 0,011 $/1000 neurones.
+[ai]
+binding = "AI"
+
 # ── Variables publiques (non-secrètes) ─────────────────────────
 # CSV multi-origin : production Vercel + previews + dev local.
 # Le Worker renvoie l'origin qui correspond à celle de la requête
