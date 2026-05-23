@@ -254,6 +254,7 @@ function _renderMain(scrollToTop) {
   main.innerHTML = `
     <div class="ws-main-inner gw-wrap">
       ${_renderHero(mode)}
+      ${_renderModeBanner(gwMode)}
       <div class="gw-grid">
         <section class="gw-pane gw-pane-source">
           <div class="gw-pane-label">Texte source</div>
@@ -320,6 +321,31 @@ function _renderHero(mode) {
         ${tabs}
       </nav>
       <p class="gw-hero-subtitle">${_esc(mode.subtitle)}</p>
+    </div>
+  `;
+}
+
+/**
+ * Affiche une bannière d'avertissement quand le mode est 'mock' (défaut
+ * sans backend déployé). Le mock ne fait PAS de vraie réécriture IA —
+ * juste des transformations syntaxiques basiques. L'utilisateur doit
+ * savoir que les variantes restent proches du texte source et que pour
+ * obtenir de vraies reformulations différenciées, il faut basculer en
+ * mode 'real' ou 'auto' (= backend Worker déployé avec binding [ai]).
+ */
+function _renderModeBanner(currentMode) {
+  if (currentMode !== 'mock') return '';
+  return `
+    <div class="gw-mode-banner">
+      <div class="gw-mode-banner-icon">⚠</div>
+      <div class="gw-mode-banner-body">
+        <div class="gw-mode-banner-title">Mode mock — variantes indicatives</div>
+        <div class="gw-mode-banner-text">
+          Le backend Gemma 4 n'est pas activé. Les 3 variantes sont des transformations syntaxiques basiques (capitalisation, troncature, préfixes) — elles RESTENT proches du texte source. Le critère « Longueur cible » est respecté, les autres critères (ton, action, intention, audience) n'affectent que les labels.<br><br>
+          Pour des reformulations IA réelles différenciées selon tous tes critères, déploie le Worker Cloudflare (ajout <code>[ai] binding = "AI"</code> dans <code>wrangler.toml</code> + <code>wrangler deploy</code>), puis console :
+          <code>localStorage.setItem('ks_ghostwriter_mode', 'auto'); location.reload();</code>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -660,6 +686,24 @@ function _injectStyles() {
 .gw-tab:hover:not(.is-active) { background: rgba(255,255,255,.07); color: #ddd; }
 .gw-tab-emoji { font-size: 14px; line-height: 1; }
 .gw-hero-subtitle { color: var(--text-muted, #888); font-size: 13px; margin: 0; }
+
+/* Mode mock banner — avertissement honnête */
+.gw-mode-banner {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px 18px; margin-bottom: 20px;
+  background: rgba(255, 180, 60, .08); border: 1px solid rgba(255, 180, 60, .25);
+  border-radius: 10px; color: #ffd089;
+  font-size: 12.5px; line-height: 1.55;
+}
+.gw-mode-banner-icon { font-size: 18px; flex-shrink: 0; line-height: 1.2; }
+.gw-mode-banner-body { flex: 1; min-width: 0; }
+.gw-mode-banner-title { font-weight: 600; margin-bottom: 4px; color: #ffc066; font-size: 13px; }
+.gw-mode-banner-text { color: rgba(255, 220, 180, .9); }
+.gw-mode-banner-text code {
+  background: rgba(0, 0, 0, .35); padding: 1px 6px; border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  color: #ffe0b3;
+}
 
 .gw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 @media (max-width: 1000px) { .gw-grid { grid-template-columns: 1fr; } }

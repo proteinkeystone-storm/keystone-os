@@ -127,35 +127,109 @@ function _trackSelection() {
 // ── Backend calls ─────────────────────────────────────────────────
 
 /**
- * Mock backend : transformations clientes simples. Pour valider l'UX
- * sans dépendre d'un déploiement Worker. Latence simulée 600ms.
+ * Mock backend : transformations clientes "best-effort" pour valider
+ * l'UX sans déploiement Worker. Latence simulée 600ms.
+ *
+ * IMPORTANT — limitations du mock :
+ * Le mock ne FAIT PAS de vraie réécriture sémantique. Il applique des
+ * transformations syntaxiques basiques (capitalisation, splitting,
+ * préfixes, troncature). Pour des reformulations IA réelles qui
+ * respectent ton/action/intent/audience, basculer en mode 'real' ou
+ * 'auto' (nécessite déploiement du Worker avec binding [ai]).
+ *
+ * Ce que le mock RESPECTE désormais (pour transparence) :
+ * - `lengthTarget` : raccourcit / garde / développe vraiment
+ * - `tone` : adapte les LABELS des 3 variantes pour refléter le ton
+ * - `action` : 'improve' garde plus de structure d'origine
+ *
+ * Ce que le mock ne respecte PAS :
+ * - `intent` (motiver, négocier…) — aucun effet
+ * - `audience` (client, supérieur…) — aucun effet
+ * - `mode` (email, marketing…) — aucun effet visible
+ * - La sémantique en général : les 3 variantes RESTENT proches du
+ *   texte source car le mock ne sait pas reformuler.
  */
-async function _callMock(text, opts) {
+async function _callMock(text, opts = {}) {
     await new Promise(r => setTimeout(r, 600));
 
     const trimmed = text.trim();
     const ending  = /[.!?…]$/.test(trimmed) ? '' : '.';
+    const tone    = opts.tone || '';
+    const action  = opts.action || 'improve';
+    const length  = opts.lengthTarget || '';
 
-    // Variante "Plus formel" : capitalise + ponctuation propre + suffixe poli
-    const formal = trimmed.charAt(0).toUpperCase()
+    // ── Helper longueur : applique le critère length au texte donné ──
+    function applyLength(s) {
+        if (length === 'shorter-50') {
+            // Garde la moitié des phrases (arrondi sup)
+            const sentences = s.split(/(?<=[.!?…])\s+/).filter(Boolean);
+            const keep = Math.max(1, Math.ceil(sentences.length / 2));
+            return sentences.slice(0, keep).join(' ');
+        }
+        if (length === 'longer') {
+            // Ajoute une phrase générique de politesse en fin selon le contexte
+            const tail = opts.mode === 'email' || opts.audience === 'client'
+                ? ' N\'hésitez pas à revenir vers moi pour tout point à clarifier.'
+                : opts.mode === 'marketing'
+                    ? ' À découvrir sans attendre.'
+                    : ' Pour aller plus loin, je reste disponible.';
+            return s + tail;
+        }
+        return s;
+    }
+
+    // ── Helper labels : choisit 3 labels pertinents selon tone ─────
+    function pickLabels() {
+        const map = {
+            'formel professionnel':  ['Très formel', 'Formel mesuré', 'Formel cordial'],
+            'chaleureux empathique': ['Très chaleureux', 'Empathique', 'Bienveillant'],
+            'concis direct':         ['Très concis', 'Synthétique', 'Direct'],
+            'persuasif vendeur':     ['Très impactant', 'Persuasif mesuré', 'Engageant'],
+            'humble respectueux':    ['Humble', 'Respectueux', 'Modeste'],
+            'enthousiaste':          ['Très enthousiaste', 'Énergique', 'Positif'],
+        };
+        return map[tone] || ['Plus formel', 'Plus concis', 'Plus chaleureux'];
+    }
+    const labels = pickLabels();
+
+    // ── 3 transformations syntaxiques basiques ─────────────────────
+    // V1 — capitalisation + ponctuation propre
+    let v1 = trimmed.charAt(0).toUpperCase()
         + trimmed.slice(1).replace(/!+/g, '.').replace(/\s+/g, ' ')
         + ending;
 
-    // Variante "Plus concis" : 2 premières phrases max
-    const concise = trimmed.split(/[.!?]+/).map(s => s.trim()).filter(Boolean).slice(0, 2).join('. ')
-        + (ending || '.');
+    // V2 — 2 premières phrases (concis intrinsèque), puis applique length
+    let v2Base = trimmed.split(/[.!?]+/).map(s => s.trim()).filter(Boolean).slice(0, 2).join('. ');
+    let v2 = (v2Base || trimmed) + (ending || '.');
 
-    // Variante "Plus chaleureux" : préfixe accueillant + remplace points par phrases positives
-    const warm = `Avec plaisir : ${trimmed.charAt(0).toLowerCase() + trimmed.slice(1)}${ending}`
-        .replace(/\s+/g, ' ');
+    // V3 — préfixe selon ton
+    const prefixByTone = {
+        'chaleureux empathique': 'Avec plaisir : ',
+        'persuasif vendeur':     'Vraiment : ',
+        'humble respectueux':    'Si je peux me permettre : ',
+        'enthousiaste':          'Excellente nouvelle : ',
+    };
+    const prefix = prefixByTone[tone] || '';
+    let v3 = prefix
+        ? prefix + trimmed.charAt(0).toLowerCase() + trimmed.slice(1) + ending
+        : trimmed + ending;
+    v3 = v3.replace(/\s+/g, ' ');
+
+    // ── Applique le critère length à toutes les variantes ─────────
+    v1 = applyLength(v1);
+    v2 = applyLength(v2);
+    v3 = applyLength(v3);
+
+    // ── Action 'improve' vs 'rewrite' : marqueur dans le model ──
+    const actionMarker = action === 'rewrite' ? '+rewrite' : '+improve';
 
     return {
         variants: [
-            { label: 'Plus formel',     text: formal },
-            { label: 'Plus concis',     text: concise },
-            { label: 'Plus chaleureux', text: warm },
+            { label: labels[0], text: v1 },
+            { label: labels[1], text: v2 },
+            { label: labels[2], text: v3 },
         ],
-        model: 'mock-client',
+        model: `mock-client${actionMarker}${length ? '+' + length : ''}`,
         usage: null,
     };
 }
