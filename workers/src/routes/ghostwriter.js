@@ -44,8 +44,14 @@ const MODEL_ID = '@cf/google/gemma-4-26b-a4b-it';
 // Garde-fous
 const MAX_TEXT_LENGTH    = 5000;
 const MIN_TEXT_LENGTH    = 5;
-const DEFAULT_MAX_TOKENS = 2048;
-const MAX_MAX_TOKENS     = 4096;
+// Gemma 4 fonctionne en mode "raisonnement" sur Workers AI : il consomme
+// une grosse partie du budget tokens dans un champ `reasoning` avant de
+// produire le `content` final. Sans budget suffisant, on observe
+// finish_reason="length" et content=null (vu en prod le 2026-05-23).
+// On double les limites pour laisser de l'air. Coût neurones reste OK
+// sous le free tier 10K/jour.
+const DEFAULT_MAX_TOKENS = 4096;
+const MAX_MAX_TOKENS     = 8192;
 
 export async function handleGhostwriterRewrite(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -200,11 +206,26 @@ export async function handleGhostwriterRewrite(request, env) {
   // Log brut pour wrangler tail (utile en cas de bug de format de réponse)
   try { console.log('[ghostwriter] aiResponse keys:', Object.keys(aiResponse || {})); } catch (_) {}
 
+  // ── Détection du cas "tronqué par max_tokens" ────────────────
+  // Spécifique aux modèles raisonneurs (Gemma 4 sur Workers AI) qui
+  // consomment leur budget dans `reasoning` avant `content`. Vu en
+  // prod le 2026-05-23 avec max_tokens=2048 → finish_reason="length"
+  // et content=null. Solution : DEFAULT_MAX_TOKENS bumpé à 4096.
+  const choice0 = aiResponse?.choices?.[0];
+  if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
+    return err(
+      `Gemma 4 a épuisé son budget tokens (max=${cappedMaxTokens}) en mode raisonnement `
+      + `avant d'écrire la réponse. Réessaie ou augmente maxOutputTokens dans le body.`,
+      502,
+      origin,
+    );
+  }
+
   // ── Extraction de la réponse ─────────────────────────────────
   // Workers AI renvoie selon le modèle :
   //   - { response: "..." } pour les modèles génératifs
   //   - { result: { response: "..." } } pour certains wrapper variants
-  //   - { choices: [...] } pour les modèles OpenAI-compatibles
+  //   - { choices: [...] } pour les modèles OpenAI-compatibles (Gemma 4)
   //   - { output: [{ content: [{ text: "..." }] }] } pour certains modèles Llama récents
   const rawText = aiResponse?.response
     || aiResponse?.result?.response
