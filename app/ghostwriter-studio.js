@@ -43,28 +43,29 @@ const MAX_LIBRARY  = 50;
 
 // ── Onglets de contexte (4) ─────────────────────────────────────
 // Chaque mode pré-règle les défauts ton/audience/intent.
+// `iconName` réfère au catalog `app/lib/ui-icons.js` (outline 1.5 stroke).
 const MODES = {
   email: {
     label: 'Email pro',
-    emoji: '✉',
+    iconName: 'mail',
     subtitle: 'Réponse client, relance, demande info, suivi commercial',
     defaults: { tone: 'professionnel chaleureux', audience: 'client',  intent: '' },
   },
   internal: {
     label: 'Comm interne',
-    emoji: '👥',
+    iconName: 'share-2',
     subtitle: 'Message équipe, brief, compte-rendu, annonce interne',
     defaults: { tone: 'direct collaboratif', audience: 'peer', intent: '' },
   },
   marketing: {
     label: 'Marketing',
-    emoji: '⚡',
+    iconName: 'zap',
     subtitle: 'Punchline, hook social, micro-copy, slogan, accroche',
     defaults: { tone: 'persuasif vendeur', audience: 'unknown', intent: 'vendre' },
   },
   long: {
     label: 'Texte long',
-    emoji: '📄',
+    iconName: 'file-text',
     subtitle: 'Article, post LinkedIn, newsletter, rédactionnel',
     defaults: { tone: 'engageant', audience: 'unknown', intent: '' },
   },
@@ -307,7 +308,7 @@ function _renderHero(mode) {
             type="button" role="tab"
             aria-selected="${key === _currentMode}"
             title="Raccourci : touche ${i + 1}">
-      <span class="gw-tab-emoji">${m.emoji}</span>
+      <span class="gw-tab-icon">${icon(m.iconName, 16)}</span>
       <span class="gw-tab-label">${_esc(m.label)}</span>
     </button>
   `).join('');
@@ -659,7 +660,8 @@ function _injectStyles() {
   color: var(--text-primary, #fff);
 }
 .gw-tab:hover:not(.is-active) { background: rgba(255,255,255,.07); color: #ddd; }
-.gw-tab-emoji { font-size: 14px; line-height: 1; }
+.gw-tab-icon { display: inline-flex; align-items: center; line-height: 1; opacity: .85; }
+.gw-tab.is-active .gw-tab-icon { opacity: 1; }
 .gw-hero-subtitle { color: var(--text-muted, #888); font-size: 13px; margin: 0; }
 
 .gw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
