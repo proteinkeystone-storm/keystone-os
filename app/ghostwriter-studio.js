@@ -32,7 +32,8 @@ import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
 import {
-  rewriteText, getGhostwriterQuotaRemaining, bumpGhostwriterQuota, friendlyGhostwriterError,
+  rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
+  bumpGhostwriterQuota, friendlyGhostwriterError,
 } from './ghostwriter.js';
 
 const APP_ID       = 'A-COM-005';
@@ -282,7 +283,7 @@ function _renderMain(scrollToTop) {
                 : '<span>Réécrire en 3 variantes</span>'}
             </button>
             <div class="gw-meta-chips">
-              <span class="gw-chip gw-chip-quota">${quotaRemaining}/10 / jour</span>
+              <span class="gw-chip gw-chip-quota">${quotaRemaining}/${getGhostwriterQuotaMax()} / jour</span>
               <span class="gw-chip gw-chip-engine" title="Moteur backend">Gemma 4</span>
             </div>
           </div>
@@ -506,7 +507,7 @@ async function _handleGenerate() {
     return;
   }
   if (getGhostwriterQuotaRemaining() === 0) {
-    _toast('Quota journalier atteint (10/jour). Réessayez demain.', true);
+    _toast(`Quota journalier atteint (${getGhostwriterQuotaMax()}/jour). Réessayez demain.`, true);
     return;
   }
 
