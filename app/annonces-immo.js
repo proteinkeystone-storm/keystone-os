@@ -358,7 +358,7 @@ function _renderMain() {
        </button>`
     : `<a class="ai-btn-link" href="javascript:void(0)" data-act="open-settings"
           title="Configurer une clé API ${_esc(eng.label)} pour générer directement depuis Keystone">
-         🔑&nbsp;Configurer ${_esc(eng.label)} pour générer ici
+         ${icon('lock', 14)}&nbsp;Configurer ${_esc(eng.label)} pour générer ici
        </a>`;
 
   main.innerHTML = `
@@ -496,16 +496,20 @@ function _renderField(field) {
     </select>`;
 
   } else if (field.type === 'multiselect') {
+    // Pattern miroir de Kodex / Pulsa : label + checkbox hidden + SVG check
+    // outline qui apparaît quand .is-on. Plus de checkbox native moche.
     const current = rawVal.split(',').map(s => s.trim()).filter(Boolean);
-    const checkboxes = (field.options || []).map(o => {
+    const checkSvg = '<svg class="ai-chip-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const chips = (field.options || []).map(o => {
       const ov = _esc(o);
-      const checked = current.includes(o) ? ' checked' : '';
-      return `<label class="ai-checkbox">
-        <input type="checkbox" value="${ov}"${checked}> <span>${ov}</span>
+      const on = current.includes(o);
+      return `<label class="ai-chip${on ? ' is-on' : ''}">
+        <input type="checkbox" value="${ov}"${on ? ' checked' : ''} hidden>
+        ${checkSvg}<span>${ov}</span>
       </label>`;
     }).join('');
     input = `<div class="ai-multiselect" data-field="${_esc(field.id)}" id="f-${_esc(field.id)}">
-      ${checkboxes}
+      ${chips}
       <input type="hidden" name="${_esc(field.id)}" value="${val}">
     </div>`;
 
@@ -574,9 +578,12 @@ function _collectFormData() {
 function _onInput(e) {
   const el = e.target;
   if (!el) return;
-  // Multiselect : mettre à jour le hidden et le formData
+  // Multiselect (chips Portails) : maj hidden + formData + toggle .is-on
+  // sur le label parent pour que le picto outline check s'affiche.
   const multiWrap = el.closest?.('.ai-multiselect');
   if (multiWrap && el.type === 'checkbox') {
+    const chipLabel = el.closest('.ai-chip');
+    if (chipLabel) chipLabel.classList.toggle('is-on', el.checked);
     const checked = [...multiWrap.querySelectorAll('input[type="checkbox"]:checked')].map(c => c.value);
     const csv = checked.join(', ');
     multiWrap.querySelector('input[type="hidden"]').value = csv;
@@ -1301,7 +1308,10 @@ html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
 }
-.ai-checkbox {
+/* Chip portail — pattern miroir de Kodex/Pulsa : input hidden, picto
+   outline check qui apparaît quand .is-on. Cohérence visuelle avec
+   le reste de Keystone (plus de checkbox native moche). */
+.ai-chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 100px;
   background: rgba(255, 255, 255, 0.04);
@@ -1310,13 +1320,23 @@ html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
   cursor: pointer; user-select: none;
   transition: all 0.15s ease;
 }
-.ai-checkbox input[type="checkbox"] { accent-color: rgba(120, 160, 255, 0.9); cursor: pointer; }
-.ai-checkbox:has(input:checked) {
+.ai-chip-check {
+  width: 14px; height: 14px;
+  opacity: 0; transform: scale(0.6);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  color: rgba(120, 160, 255, 1);
+  flex-shrink: 0;
+}
+.ai-chip.is-on {
   background: rgba(120, 160, 255, 0.16);
   border-color: rgba(120, 160, 255, 0.45);
   color: #fff;
 }
-.ai-checkbox:hover:not(:has(input:checked)) { background: rgba(255, 255, 255, 0.07); }
+.ai-chip.is-on .ai-chip-check { opacity: 1; transform: scale(1); }
+.ai-chip:hover:not(.is-on) { background: rgba(255, 255, 255, 0.07); }
+html.light-mode .ai-chip { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.08); color: rgba(30, 30, 50, 0.85); }
+html.light-mode .ai-chip.is-on { background: rgba(80, 110, 230, 0.14); border-color: rgba(80, 110, 230, 0.45); color: rgba(40, 60, 180, 1); }
+html.light-mode .ai-chip-check { color: rgba(80, 110, 230, 1); }
 
 .ai-actions {
   display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
@@ -1688,8 +1708,6 @@ html.light-mode .ai-paste-title, html.light-mode .ai-paste-text {
 /* Mode clair */
 html.light-mode .ai-section { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.06); }
 html.light-mode .ai-multiselect { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.08); }
-html.light-mode .ai-checkbox { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.08); color: rgba(20, 20, 30, 0.85); }
-html.light-mode .ai-checkbox:has(input:checked) { background: rgba(80, 110, 230, 0.12); border-color: rgba(80, 110, 230, 0.4); color: rgba(40, 60, 180, 0.95); }
 html.light-mode .ai-prompt-preview-card { background: #fafafb; }
 html.light-mode .ai-prompt-body { background: rgba(0, 0, 0, 0.04); color: rgba(30, 30, 50, 0.92); }
 html.light-mode .ai-toast { background: #1a1a20; color: #fff; }
