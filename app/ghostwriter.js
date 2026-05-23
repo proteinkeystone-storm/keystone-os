@@ -18,9 +18,11 @@
        PAS de fallback mock (qui serait trompeur).
 
    Quota :
-     - V1 : hard-limit 10 calls/jour, tracké via localStorage (bucket
-       day-based, reset 00:00 locale).
-     - Phase 2 : migrer vers backend KV pour cross-device.
+     - V1 : hard-limit 50 calls/jour, tracké via localStorage (bucket
+       day-based, reset 00:00 locale). Largement sous le free tier
+       Workers AI (10K neurones/jour ≈ 70-200 appels Gemma 4).
+     - Phase 2 : migrer vers backend KV pour cross-device + quota par
+       licence (gratuit / standard / MAX).
 
    Doctrine "Contenant / Contenu" :
      - Module standalone, aucun import des artefacts existants.
@@ -34,7 +36,7 @@ import { CF_API } from './pads-loader.js';
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
 const QUOTA_LS_KEY    = 'ks_ghostwriter_quota';  // { date, count }
-const QUOTA_PER_DAY   = 10;
+const QUOTA_PER_DAY   = 50;
 const SHORTCUT_KEY    = 'g';
 const MIN_TEXT_LENGTH = 5;
 const MAX_TEXT_LENGTH = 5000;
@@ -601,6 +603,13 @@ export function friendlyGhostwriterError(e) { return _friendlyError(e); }
  * Quota restant aujourd'hui. Expose pour affichage UI.
  */
 export function getGhostwriterQuotaRemaining() { return _quotaRemaining(); }
+
+/**
+ * Quota maximum quotidien (constante). Expose pour affichage UI
+ * dans le workspace / modal léger. Centraliser ici évite les
+ * hardcodings divergents (cf. bump 10→50 le 2026-05-23).
+ */
+export function getGhostwriterQuotaMax() { return QUOTA_PER_DAY; }
 
 /**
  * Décrémente le quota après un appel réussi. À appeler explicitement
