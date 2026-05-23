@@ -20,6 +20,7 @@ import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
+import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -2765,13 +2766,13 @@ function _initGhostwriterButtons(container, pad) {
             // Récupère le textarea/input du champ via convention id "f-<id>"
             // (cf. _buildField : le for du label cible "f-${f.id}").
             const targetEl = container.querySelector(`#f-${fieldId}`);
-            const currentText = (targetEl?.value || '').trim();
 
-            // Pad-Aware (Phase 3) — collecte les autres champs du formulaire
-            // déclarés dans include_fields. Ghost Writer les utilisera pour
-            // composer un texte de base si le champ courant est vide (= le
-            // remplaçant fonctionnel de l'ancien ai_assist).
-            // Skip si include_fields absent (pads sans contexte Pad-Aware).
+            // Pad-Aware — collecte TOUJOURS les autres champs du formulaire
+            // déclarés dans include_fields. Le composant inline les
+            // ajoutera à l'intent même si le textarea est déjà rempli,
+            // pour que Gemma 4 ait toujours le contexte du bien.
+            // (Retour Stéphane 2026-05-23 : cumul texte saisi + contexte
+            // formulaire — sinon les infos du haut sont perdues.)
             let formContext = null;
             const include = fieldDef.ghostwriter.include_fields;
             if (Array.isArray(include) && include.length > 0) {
@@ -2784,17 +2785,16 @@ function _initGhostwriterButtons(container, pad) {
                         formContext[fid] = { label: def?.label || fid, value: val };
                     }
                 }
-                // Si aucun champ source rempli → null pour éviter d'envoyer
-                // un objet vide qui pollue le prompt.
                 if (Object.keys(formContext).length === 0) formContext = null;
             }
 
-            // Opts du schéma JSON + cible explicite + mode replace full.
-            // `context` = chip visuel (label du champ pour orienter le user).
-            openGhostwriter(currentText, {
+            // Ghost Writer invisible (Phase 3, retour Stéphane) — au lieu
+            // d'ouvrir un modal fullscreen qui sort du pad, on déclenche
+            // un panneau inline juste sous le textarea. L'utilisateur ne
+            // quitte jamais Annonces Immo, choisit sa variante, et le
+            // textarea est rempli sur place.
+            openGhostwriterInline(targetEl, {
                 ...fieldDef.ghostwriter,
-                targetEl,
-                replaceMode: 'full',
                 context: fieldDef.ghostwriter.context || fieldDef.label,
                 formContext,
             });
