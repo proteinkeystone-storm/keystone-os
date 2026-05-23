@@ -45,6 +45,11 @@ const MAX_TEXT_LENGTH = 5000;
 let _hookInitialized = false;
 let _modalOpen       = false;
 let _lastSelection   = null;   // { text, sourceEl: { el, start, end } | null }
+// Opts pré-réglés passés via openGhostwriter(text, opts) — utilisés
+// au moment du generate. Réinitialisés à la fermeture du modal pour
+// éviter que des opts d'un précédent open contaminent le prochain.
+// L'utilisateur peut toujours surcharger le `tone` via les boutons UI.
+let _presetOpts      = null;
 
 // ── Cache quota serveur ──────────────────────────────────────────
 // Source de vérité = serveur. Ce cache n'est qu'une projection pour
@@ -348,7 +353,22 @@ function _injectCSS() {
 
 // ── Modal builder ────────────────────────────────────────────────
 
-function _buildModalHTML(initialText) {
+function _buildModalHTML(initialText, presetOpts) {
+    // Si un preset.tone matche un des chips, on pré-sélectionne ce chip
+    // pour que l'utilisateur voie le ton choisi par défaut. Sinon "Auto"
+    // reste actif et le preset complet (tone + autres opts) est appliqué
+    // au generate via _presetOpts (cf. _handleGenerate).
+    const presetTone = presetOpts?.tone || '';
+    const isOn = (t) => (t === presetTone ? 'gw-on' : '');
+    const autoOn = presetTone ? '' : 'gw-on';
+
+    // Chip contextuel si on est en mode "pré-réglé depuis un pad" — donne
+    // à l'utilisateur une indication visuelle qu'il n'est pas en modal
+    // libre mais qu'un contexte d'invocation existe (ex: champ Atouts d'A2).
+    const contextChip = presetOpts?.context
+        ? `<span class="gw-mode-chip" title="Mode pré-réglé depuis le champ source">${_escapeHtml(presetOpts.context)}</span>`
+        : '';
+
     return `
         <div class="gw-modal" role="dialog" aria-label="Ghost Writer">
             <div class="gw-head">
@@ -363,12 +383,12 @@ function _buildModalHTML(initialText) {
                     <div class="gw-label">Texte source</div>
                     <textarea id="gw-source" class="gw-source" placeholder="Collez ou tapez votre texte ici…">${_escapeHtml(initialText)}</textarea>
                     <div class="gw-label">Ton souhaité</div>
-                    <div class="gw-options" id="gw-tones" data-selected="">
-                        <button class="gw-option-btn gw-on" data-tone="">Auto</button>
-                        <button class="gw-option-btn" data-tone="formel professionnel">Formel</button>
-                        <button class="gw-option-btn" data-tone="chaleureux empathique">Chaleureux</button>
-                        <button class="gw-option-btn" data-tone="concis direct">Concis</button>
-                        <button class="gw-option-btn" data-tone="persuasif vendeur">Persuasif</button>
+                    <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
+                        <button class="gw-option-btn ${autoOn}" data-tone="">Auto</button>
+                        <button class="gw-option-btn ${isOn('formel professionnel')}" data-tone="formel professionnel">Formel</button>
+                        <button class="gw-option-btn ${isOn('chaleureux empathique')}" data-tone="chaleureux empathique">Chaleureux</button>
+                        <button class="gw-option-btn ${isOn('concis direct')}" data-tone="concis direct">Concis</button>
+                        <button class="gw-option-btn ${isOn('persuasif vendeur')}" data-tone="persuasif vendeur">Persuasif</button>
                     </div>
                     <button id="gw-go" class="gw-go">
                         <span>Réécrire en 3 variantes</span>
@@ -377,6 +397,7 @@ function _buildModalHTML(initialText) {
                     <div class="gw-meta">
                         <span class="gw-quota">${_quotaLabel()}</span>
                         <span class="gw-mode-chip">Gemma 4</span>
+                        ${contextChip}
                     </div>
                 </div>
                 <div class="gw-right">
@@ -401,15 +422,19 @@ function _escapeHtml(s) {
 
 // ── Modal open / close / bindings ────────────────────────────────
 
-function _openModal(initialText) {
+function _openModal(initialText, presetOpts) {
     if (_modalOpen) return;
     _modalOpen = true;
     _injectCSS();
 
+    // Mémorise les opts pré-réglés pour _handleGenerate. Si null/absent,
+    // comportement legacy (l'UI fournit le tone, le reste reste à null).
+    _presetOpts = presetOpts && typeof presetOpts === 'object' ? { ...presetOpts } : null;
+
     const overlay = document.createElement('div');
     overlay.className = 'gw-overlay';
     overlay.id = 'gw-overlay';
-    overlay.innerHTML = _buildModalHTML(initialText || '');
+    overlay.innerHTML = _buildModalHTML(initialText || '', _presetOpts);
     document.body.appendChild(overlay);
 
     requestAnimationFrame(() => overlay.classList.add('gw-on'));
@@ -436,11 +461,12 @@ function _refreshQuotaChip(overlay) {
 function _closeModal() {
     if (!_modalOpen) return;
     const overlay = document.getElementById('gw-overlay');
-    if (!overlay) { _modalOpen = false; return; }
+    if (!overlay) { _modalOpen = false; _presetOpts = null; return; }
     overlay.classList.remove('gw-on');
     setTimeout(() => {
         overlay.remove();
-        _modalOpen = false;
+        _modalOpen  = false;
+        _presetOpts = null;  // reset pour ne pas contaminer le prochain open
     }, 200);
 }
 
@@ -491,6 +517,24 @@ async function _handleGenerate(overlay) {
     const goBtn    = overlay.querySelector('#gw-go');
     const tone     = overlay.querySelector('#gw-tones').dataset.selected || '';
 
+    // Fusion preset + UI : les opts pré-réglés (mode, audience, action,
+    // intent, lengthTarget, vouvoie) viennent du pad qui a ouvert le
+    // modal. L'utilisateur peut surcharger le `tone` via les boutons
+    // (data-selected). Si le tone UI vaut '' (Auto), on retombe sur le
+    // tone preset s'il existe.
+    // context / targetEl / replaceMode sont des contrôles UI/DOM, ils
+    // ne doivent JAMAIS partir dans le body fetch — on les destructure
+    // pour les retirer avant le spread.
+    const {
+        context: _ctx, targetEl: _t, replaceMode: _rm,
+        tone: presetTone,
+        ...presetRest
+    } = _presetOpts || {};
+    const callOpts = {
+        ...presetRest,
+        tone: tone || presetTone || null,
+    };
+
     const text = (source?.value || '').trim();
     if (text.length < MIN_TEXT_LENGTH) {
         _setStatus(status, `Texte trop court (min ${MIN_TEXT_LENGTH} caractères)`, 'error');
@@ -521,7 +565,7 @@ async function _handleGenerate(overlay) {
     _refreshQuotaChip(overlay);
 
     try {
-        const result = await _callReal(text, { tone: tone || null });
+        const result = await _callReal(text, callOpts);
         _renderVariants(variants, result.variants);
         _setStatus(status, `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
         _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
@@ -605,7 +649,26 @@ function _renderVariants(container, variants) {
 }
 
 function _replaceSelection(newText, btn) {
-    // Si pas de cible (sélection hors champ éditable), fallback clipboard
+    // Phase 3 — intégration native dans les pads.
+    // Priorité 1 : preset.targetEl + replaceMode='full' (clic depuis le
+    // bouton ✨ d'un champ pad) → remplace tout le contenu du champ.
+    // Priorité 2 : _lastSelection.sourceEl (Cmd+Shift+G sur sélection)
+    //              → remplace la sélection capturée, garde le reste.
+    // Fallback   : clipboard si rien ne pointe vers une cible éditable.
+    const presetTarget = _presetOpts?.targetEl;
+    if (presetTarget && typeof presetTarget.value === 'string'
+        && _presetOpts?.replaceMode === 'full') {
+        presetTarget.value = newText;
+        presetTarget.focus();
+        presetTarget.selectionStart = presetTarget.selectionEnd = newText.length;
+        presetTarget.dispatchEvent(new Event('input',  { bubbles: true }));
+        presetTarget.dispatchEvent(new Event('change', { bubbles: true }));
+        btn.textContent = '✓ Remplacé';
+        setTimeout(_closeModal, 500);
+        return;
+    }
+
+    // Pas de cible explicite → tente la sélection capturée (legacy)
     if (!_lastSelection?.sourceEl) {
         navigator.clipboard?.writeText(newText)?.then(() => {
             const orig = btn.textContent;
@@ -668,15 +731,29 @@ export function initGhostwriter() {
 }
 
 /**
- * Ouvre le modal programmatiquement, optionnellement avec un texte
- * préchargé. Respecte le flag (no-op si désactivé).
+ * Ouvre le modal programmatiquement avec un texte préchargé et,
+ * optionnellement, des opts pré-réglés depuis un pad.
+ *
+ * @param {string} initialText  Texte source à pré-remplir
+ * @param {object} [presetOpts] Pré-réglages : {tone, intent, vouvoie,
+ *                              mode, audience, action, lengthTarget,
+ *                              context?}
+ *                              `context` est purement visuel (chip dans
+ *                              le modal), ne part pas dans le backend.
+ *                              `tone` est pré-sélectionné dans le UI ;
+ *                              l'utilisateur peut le changer.
+ *
+ * Respecte le flag (no-op si Ghost Writer désactivé).
+ *
+ * NB : pour usage Phase 3 (intégration native dans les pads), passer
+ * les opts depuis le schéma JSON du champ : `f.ghostwriter`.
  */
-export function openGhostwriter(initialText = '') {
+export function openGhostwriter(initialText = '', presetOpts = null) {
     if (!isGhostwriterEnabled()) {
         console.warn('[Ghost Writer] Flag désactivé. Active : localStorage.setItem("ks_ghostwriter", "1")');
         return;
     }
-    _openModal(initialText);
+    _openModal(initialText, presetOpts);
 }
 
 /**

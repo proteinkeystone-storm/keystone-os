@@ -150,7 +150,20 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
                 label: 'Polir les atouts',
                 topic: 'Les atouts et points forts d\'un {type_bien} neuf VEFA "{nom_programme}" à {ville}',
                 include_fields: ['nom_programme', 'ville', 'type_bien', 'surface', 'prix', 'dispositif'],
-              }
+              },
+              // Phase 3 — Ghost Writer natif sur ce champ. Ouvre le modal
+              // Gemma 4 pré-réglé pour reformuler les atouts saisis en 3
+              // variantes calibrées (marketing · persuasif). Le bouton
+              // "Remplacer" écrase le contenu du textarea.
+              ghostwriter: {
+                label       : 'Réécrire en 3 variantes',
+                mode        : 'marketing',
+                audience    : 'client',
+                action      : 'rewrite',
+                tone        : 'persuasif vendeur',
+                lengthTarget: 'keep',
+                context     : 'Atouts du bien',
+              },
             },
         ],
         system_prompt: `Tu es un copywriter expert en immobilier neuf, spécialisé en diffusion multi-portails. Rédige une annonce optimisée pour CHAQUE portail coché dans la liste, en respectant STRICTEMENT ses contraintes propres.

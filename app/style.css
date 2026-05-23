@@ -2892,6 +2892,53 @@ html.light-mode .tool-modal[data-palette="indigo"]  { --tool-c:var(--gold); --to
 .ai-assist-status-success  { color: rgba(120, 220, 160, 0.95); }
 .ai-assist-status-error    { color: rgba(255, 130, 130, 0.95); }
 
+/* ── Ghost Writer (Phase 3) — bouton "Réécrire en 3 variantes" ──
+   Pattern miroir d'ai-assist mais teinte violet/rose pour distinguer :
+   ai-assist  = première rédaction (bleu-violet)
+   ghostwriter = reformulation 3 variantes (violet-rose)
+   Cohabite parfois sur le même champ — couleurs distinctes pour clarté. */
+.gw-assist-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.gw-assist-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(168, 130, 255, 0.12), rgba(220, 110, 200, 0.12));
+  border: 1px solid rgba(168, 130, 255, 0.35);
+  border-radius: 8px;
+  color: rgba(210, 190, 255, 1);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.06s;
+  font-family: inherit;
+}
+.gw-assist-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(168, 130, 255, 0.22), rgba(220, 110, 200, 0.22));
+  border-color: rgba(168, 130, 255, 0.6);
+  color: rgba(235, 220, 255, 1);
+}
+.gw-assist-btn:active:not(:disabled) { transform: scale(0.98); }
+.gw-assist-icon { font-size: 13px; line-height: 1; }
+
+html.light-mode .gw-assist-btn {
+  background: linear-gradient(135deg, rgba(140, 100, 220, 0.08), rgba(200, 90, 180, 0.08));
+  border-color: rgba(140, 100, 220, 0.3);
+  color: rgba(110, 70, 180, 1);
+}
+html.light-mode .gw-assist-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(140, 100, 220, 0.16), rgba(200, 90, 180, 0.16));
+  border-color: rgba(140, 100, 220, 0.55);
+  color: rgba(90, 50, 160, 1);
+}
+
 /* Mode clair */
 html.light-mode .ai-assist-btn {
   background: linear-gradient(135deg, rgba(80, 110, 230, 0.08), rgba(150, 110, 230, 0.08));

@@ -19,6 +19,7 @@ import { openMuse }                              from './muse.js';
 import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
+import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
@@ -2194,6 +2195,10 @@ function _buildModal(pad, tool) {
     // Sprint P3 — Boutons AI Assist (PromptEngine) sur les champs déclarés
     if (toolForm) _initAIAssistButtons(toolForm, pad);
 
+    // Phase 3 — Boutons Ghost Writer (Gemma 4 / Workers AI) sur les
+    // champs déclarés. Pattern miroir d'AI Assist, indépendant.
+    if (toolForm) _initGhostwriterButtons(toolForm, pad);
+
     // Sprint 4.2 — Auto-calculs déclaratifs (HT/TTC, échéancier, lettres)
     // No-op si pad.computed_fields absent.
     if (toolForm) initComputedFields(toolForm, pad);
@@ -2556,11 +2561,30 @@ function _buildField(f) {
             <span class="ai-assist-status" id="ai-status-${f.id}"></span>
         </div>` : '';
 
+    // ── Phase 3 — Bouton Ghost Writer (réécriture 3 variantes) ──────
+    // Si le champ déclare `ghostwriter`, on ajoute un bouton ✨ distinct
+    // qui ouvre le modal Ghost Writer pré-rempli avec le texte courant
+    // et les opts du schéma (mode/audience/action/tone/lengthTarget).
+    // Indépendant et complémentaire de ai_assist : un même champ peut
+    // déclarer les deux (ai_assist = première rédaction depuis le
+    // formulaire, ghostwriter = reformulation du texte déjà saisi).
+    // Binding dans _initGhostwriterButtons() après injection HTML.
+    const ghostwriterBtn = f.ghostwriter ? `
+        <div class="gw-assist-wrap">
+            <button type="button" class="gw-assist-btn"
+                    data-field-id="${f.id}"
+                    aria-label="Réécrire avec Ghost Writer">
+                <span class="gw-assist-icon">✦</span>
+                <span class="gw-assist-label">${f.ghostwriter.label || 'Réécrire en 3 variantes'}</span>
+            </button>
+        </div>` : '';
+
     return `
         <div class="form-field${spanCls}">
             <label class="form-label" for="${f.type === 'select' ? 'ks-btn-' : 'f-'}${f.id}" style="text-transform:none;letter-spacing:normal;font-size:14px;font-weight:500;">${f.label}${req}</label>
             ${input}
             ${aiAssistBtn}
+            ${ghostwriterBtn}
         </div>
     `;
 }
@@ -2706,6 +2730,52 @@ function _initAIAssistButtons(container, pad) {
         if (!fieldDef?.ai_assist) return;
 
         btn.addEventListener('click', () => _handleAIAssist(btn, fieldId, fieldDef.ai_assist, pad));
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GHOST WRITER (Phase 3) — boutons "✦ Réécrire en 3 variantes"
+// ══════════════════════════════════════════════════════════════════
+// Branche un bouton sur chaque champ qui déclare `ghostwriter` dans le
+// JSON. Au clic :
+//   1. Lit la valeur courante du champ (textarea / input)
+//   2. Active le flag Ghost Writer (idempotent) — un user qui n'a pas
+//      explicitement activé Ghost Writer s'attend quand même à ce que
+//      le bouton marche puisqu'il est visible dans le pad
+//   3. Ouvre le modal pré-rempli avec opts du schéma + targetEl + chip
+//      contextuel + replaceMode='full' pour que "Remplacer" écrase tout
+//      le contenu du champ (pas une sélection partielle)
+//
+// Comportement si valeur courante vide : on ouvre quand même (le user
+// peut taper dans le modal), mais sans pré-remplissage. Le contrôle
+// MIN_TEXT_LENGTH côté Ghost Writer affichera l'erreur si nécessaire.
+function _initGhostwriterButtons(container, pad) {
+    container.querySelectorAll('.gw-assist-btn').forEach(btn => {
+        const fieldId = btn.dataset.fieldId;
+        const fieldDef = pad.fields.find(f => f.id === fieldId);
+        if (!fieldDef?.ghostwriter) return;
+
+        btn.addEventListener('click', () => {
+            // Auto-active le flag si pas encore (pad visible = intent clair).
+            // Le bouton ne s'affiche que pour les pads qui déclarent
+            // ghostwriter, donc l'utilisateur s'attend à ce que ça marche.
+            if (!isGhostwriterEnabled()) {
+                try { localStorage.setItem('ks_ghostwriter', '1'); } catch (_) {}
+            }
+            // Récupère le textarea/input du champ via convention id "f-<id>"
+            // (cf. _buildField : le for du label cible "f-${f.id}").
+            const targetEl = container.querySelector(`#f-${fieldId}`);
+            const currentText = (targetEl?.value || '').trim();
+
+            // Opts du schéma JSON + cible explicite + mode replace full.
+            // `context` = chip visuel (label du champ pour orienter le user).
+            openGhostwriter(currentText, {
+                ...fieldDef.ghostwriter,
+                targetEl,
+                replaceMode: 'full',
+                context: fieldDef.ghostwriter.context || fieldDef.label,
+            });
+        });
     });
 }
 

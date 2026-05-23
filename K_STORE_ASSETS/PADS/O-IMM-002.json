@@ -29,6 +29,15 @@
         "label": "Polir les atouts",
         "topic": "Les atouts et points forts d'un {type_bien} neuf VEFA \"{nom_programme}\" à {ville}",
         "include_fields": ["nom_programme","ville","type_bien","surface","prix","dispositif"]
+      },
+      "ghostwriter": {
+        "label": "Réécrire en 3 variantes",
+        "mode": "marketing",
+        "audience": "client",
+        "action": "rewrite",
+        "tone": "persuasif vendeur",
+        "lengthTarget": "keep",
+        "context": "Atouts du bien"
       }
     }
   ],
