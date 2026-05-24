@@ -26,6 +26,9 @@ import { burgerHTML, bindBurger }              from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
 import { docEngine }                           from './lib/doc-engine.js';
 import { initComputedFields }                  from './lib/form-computed.js';
+// GW-integration 2026-05-24 : bouton ✦ inline Pad-Aware sur les
+// champs déclarant `ghostwriter:` (pattern Annonces Immo validé 23/05).
+import { openGhostwriterInline }               from './lib/ghostwriter-inline.js';
 
 // ── Identifiants ──────────────────────────────────────────────
 const APP_ID    = 'O-IMM-010';
@@ -58,7 +61,18 @@ const MODE_NOTICE = {
     { id: 're2020',       label: 'Conformité RE 2020', type: 'select', options: ['Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)','Seuil 2028 (IC construction ≤ 415 kgCO₂eq/m²)','Seuil 2031 (Objectif bas carbone)'], required: true },
     { id: 'confort_ete',  label: 'Confort d\'été', type: 'select', options: ['Brise-soleil orientables (BSO)','Volets roulants motorisés','Double vitrage à contrôle solaire','BSO + Volets motorisés','Sans dispositif spécifique'] },
     { id: 'isolation',    label: 'Type d\'isolation',        type: 'select', options: ['Biosourcée (laine de bois, chanvre, ouate)','Synthétique (PSE, laine de verre)','Mixte biosourcée + synthétique','ITI béton banché renforcé'] },
-    { id: 'specificites', label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia…', span: 'full' },
+    { id: 'specificites', label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia…', span: 'full',
+      ghostwriter: {
+        label         : 'Enrichir la description avec l\'IA',
+        mode          : 'technique',
+        audience      : 'client',
+        action        : 'rewrite',
+        tone          : 'descriptif premium',
+        lengthTarget  : 'expand',
+        context       : 'Spécificités techniques d\'un logement neuf VEFA RE 2020',
+        include_fields: ['nom_programme', 'type_logement', 'surface', 'etage', 'orientation', 'annexes', 'sols', 'cuisine', 'chauffage', 're2020', 'confort_ete', 'isolation'],
+      },
+    },
   ],
   computed_fields: [],
   templateId: 'vefa-notice-v1',
@@ -143,6 +157,16 @@ const MODE_CONTRAT = {
       type:        'textarea',
       placeholder: 'Modifications spécifiques au cas d\'espèce, options retenues, prestations sur mesure, conditions négociées…',
       span:        'full',
+      ghostwriter: {
+        label         : 'Formuler les clauses avec l\'IA',
+        mode          : 'juridique',
+        audience      : 'notaire',
+        action        : 'rewrite',
+        tone          : 'juridique précis',
+        lengthTarget  : 'keep',
+        context       : 'Clauses particulières d\'un contrat de réservation VEFA (Art. L.261-15 CCH)',
+        include_fields: ['nom_programme', 'type_logement', 'surface', 'prix_ttc', 'depot_pourcentage', 'notaire', 'lieu_signature', 'livraison'],
+      },
     },
   ],
   computed_fields: [
@@ -444,7 +468,9 @@ function _renderField(field) {
 
   let input;
   if (field.type === 'textarea') {
+    // GW-integration : id="f-..." pour que _handleGhostwriter retrouve l'élément
     input = `<textarea class="ws-input ws-textarea"
+      id="f-${_esc(field.id)}"
       name="${_esc(field.id)}" data-field="${_esc(field.id)}"
       placeholder="${_esc(field.placeholder || '')}"
       rows="3">${val}</textarea>`;
@@ -468,10 +494,23 @@ function _renderField(field) {
       value="${val}"${field.type === 'number' ? ' step="any" min="0"' : ''}>`;
   }
 
+  // GW-integration : bouton ✦ Ghost Writer si le champ déclare ghostwriter
+  // (même structure que annonces-immo.js — réutilise la CSS .gw-assist-* globale).
+  const gwBtn = field.ghostwriter ? `
+    <div class="gw-assist-wrap">
+      <button type="button" class="gw-assist-btn"
+              data-act="ghostwriter" data-field-id="${_esc(field.id)}"
+              aria-label="Réécrire avec Ghost Writer">
+        <span class="gw-assist-icon">✦</span>
+        <span class="gw-assist-label">${_esc(field.ghostwriter.label || 'Réécrire en 3 variantes')}</span>
+      </button>
+    </div>` : '';
+
   return `
     <div class="vefa-field"${span}>
       <label class="ws-label">${_esc(field.label)}${req}</label>
       ${input}
+      ${gwBtn}
     </div>`;
 }
 
@@ -532,6 +571,42 @@ function _onClick(e) {
   }
   if (act === 'switch-mode') { _switchMode(btn.dataset.mode); return; }
   if (act === 'generate')    { _generate(); return; }
+  if (act === 'ghostwriter') { _handleGhostwriter(btn.dataset.fieldId); return; }
+}
+
+// ── Ghost Writer Pad-Aware (2026-05-24) ──────────────────────
+// Cherche le champ dans SHARED_FIELDS, MODE_NOTICE.fields, MODE_CONTRAT.fields
+// (VEFA Studio a 3 arrays distincts contrairement à Annonces Immo qui a un FIELDS unique).
+// Construit le context Pad-Aware (autres champs déjà saisis listés dans
+// include_fields) puis ouvre le panneau Ghost Writer inline.
+function _handleGhostwriter(fieldId) {
+  const allFields = [...SHARED_FIELDS, ...MODE_NOTICE.fields, ...MODE_CONTRAT.fields];
+  const field = allFields.find(f => f.id === fieldId);
+  if (!field?.ghostwriter) return;
+
+  const targetEl = _root?.querySelector(`#f-${fieldId}`);
+  if (!targetEl) return;
+
+  // Pad-Aware : collecte les autres champs du formulaire pour donner
+  // à Ghost Writer le contexte du bien (nom du programme, surface, etc.).
+  let formContext = null;
+  const include = field.ghostwriter.include_fields;
+  if (Array.isArray(include) && include.length > 0) {
+    formContext = {};
+    for (const fid of include) {
+      const def = allFields.find(f => f.id === fid);
+      const el  = _root?.querySelector(`[name="${fid}"]`);
+      const val = (el?.value || '').trim();
+      if (val) formContext[fid] = { label: def?.label || fid, value: val };
+    }
+    if (Object.keys(formContext).length === 0) formContext = null;
+  }
+
+  openGhostwriterInline(targetEl, {
+    ...field.ghostwriter,
+    context: field.ghostwriter.context || field.label,
+    formContext,
+  });
 }
 
 function _onInput(e) {

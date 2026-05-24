@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.99.1-ux11-landing-persist-licence-key';
+const VERSION       = 'ks-os-v5.0.0-gw-vefa-studio-integration';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
