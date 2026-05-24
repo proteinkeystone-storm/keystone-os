@@ -947,12 +947,10 @@ function _buildKStorePanel() {
     if (_ksPanelReady) return;
     _ksPanelReady = true;
 
-    // ── Sidebar (catégories + plans + utilisateur) ──────────────
-    const userLabel = (() => {
-        try { return localStorage.getItem('ks_user_name') || 'Compte Keystone'; }
-        catch { return 'Compte Keystone'; }
-    })();
-    const userInitial = (userLabel || 'K').trim().charAt(0).toUpperCase();
+    // ── Sidebar (catégories + plans + Mon Compte) ──────────────
+    // UX-6.1 — Bloc utilisateur du bas retiré (purement décoratif, info
+    // dupliquée avec le Dashboard hero "Bonjour, X"). Supprime aussi une
+    // source du hardcoding ks_user_name → moins de bruit pour UX-3.
 
     const sidebarHTML = `
         <div class="ksfs-sidebar-top">
@@ -1032,13 +1030,6 @@ function _buildKStorePanel() {
             </ul>
         </div>
 
-        <div class="ksfs-sidebar-user">
-            <div class="ksfs-user-avatar">${userInitial}</div>
-            <div class="ksfs-user-meta">
-                <div class="ksfs-user-name">${userLabel}</div>
-                <div class="ksfs-user-sub">Propriétaire du compte</div>
-            </div>
-        </div>
     `;
 
     const wrap = document.createElement('div');
