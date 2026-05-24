@@ -908,10 +908,34 @@ function _openKStorePanel(view = 'catalogue') {
 
     if (view === 'plans') {
         _ksFilter = { kind: 'plans', id: null };
+    } else if (view === 'mine') {
+        _ksFilter = { kind: 'mine', id: null };
     } else {
         _ksFilter = { kind: 'all', id: null };
     }
     _renderKStoreItems();
+    _updateKStoreMineBadge();
+}
+
+// UX-6 — Met à jour le badge "X" à côté de "Mes Outils" dans la sidebar
+// du K-Store quand au moins un outil possédé est désactivé.
+function _updateKStoreMineBadge() {
+    const badge = document.getElementById('ksfs-mine-badge');
+    if (!badge) return;
+    const ownedIds = getOwnedIds();
+    const allApps  = _ksGetAllApps();
+    const deactCount = allApps.filter(a =>
+        a.real
+        && (isAdminUser() || ownedIds === null || ownedIds.includes(a.id))
+        && isPadDeactivated(a.id)
+    ).length;
+    if (deactCount > 0) {
+        badge.textContent = String(deactCount);
+        badge.hidden = false;
+    } else {
+        badge.textContent = '';
+        badge.hidden = true;
+    }
 }
 
 function _closeKStorePanel() {
@@ -987,6 +1011,25 @@ function _buildKStorePanel() {
                     </button>
                 </li>
             </ul>
+
+            <!-- UX-6 : section Mon Compte → vue "Mes Outils" qui regroupe
+                 les outils de la licence en 2 zones (Actifs / Désactivés à
+                 réinstaller). Donne enfin une porte d'entrée claire pour
+                 retrouver un outil supprimé par long-press du dashboard. -->
+            <div class="ksfs-nav-title ksfs-nav-title--mt">Mon Compte</div>
+            <ul class="ksfs-nav-list">
+                <li class="ksfs-nav-item">
+                    <button class="ksfs-nav-btn" data-action="mine">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                             style="width:12px;height:12px;flex-shrink:0;opacity:.8">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        </svg>
+                        <span>Mes Outils</span>
+                        <span class="ksfs-nav-badge" id="ksfs-mine-badge" hidden></span>
+                    </button>
+                </li>
+            </ul>
         </div>
 
         <div class="ksfs-sidebar-user">
@@ -1047,6 +1090,7 @@ function _buildKStorePanel() {
         if (action === 'cat')   _ksFilter = { kind: 'cat', id };
         if (action === 'sub')   _ksFilter = { kind: 'sub', id };
         if (action === 'plans') _ksFilter = { kind: 'plans', id: null };
+        if (action === 'mine')  _ksFilter = { kind: 'mine', id: null };
         _renderKStoreItems();
     });
 
@@ -1193,6 +1237,10 @@ function _renderKStoreItems() {
     const content = document.getElementById('ksfs-content');
     if (!content) return;
 
+    // UX-6 — Badge "Mes Outils" toujours à jour (réactivation, désactivation
+    // ou ouverture du panneau passent tous par _renderKStoreItems).
+    _updateKStoreMineBadge();
+
     // Sync sidebar — surligne l'entrée active
     document.querySelectorAll('.ksfs-nav-btn').forEach(b => b.classList.remove('active'));
     if (_ksFilter.kind === 'cat' || _ksFilter.kind === 'sub') {
@@ -1201,6 +1249,8 @@ function _renderKStoreItems() {
         )?.classList.add('active');
     } else if (_ksFilter.kind === 'plans') {
         document.querySelector('.ksfs-nav-btn[data-action="plans"]')?.classList.add('active');
+    } else if (_ksFilter.kind === 'mine') {
+        document.querySelector('.ksfs-nav-btn[data-action="mine"]')?.classList.add('active');
     }
 
     // Vue Détail App (Phase B) — fiche complète style Mac App Store
@@ -1219,6 +1269,47 @@ function _renderKStoreItems() {
             <div id="ks-plans-view" class="ks-plans-view"></div>
         `;
         _renderKStorePlans();
+        return;
+    }
+
+    // UX-6 — Vue "Mes Outils" : tous les outils de la licence, groupés en
+    // Actifs vs Désactivés. Sert de point d'entrée évident pour réinstaller
+    // un outil supprimé par long-press (sans devoir scroller le catalogue).
+    if (_ksFilter.kind === 'mine') {
+        const ownedIds = getOwnedIds();
+        const allApps  = _ksGetAllApps();
+        const owned    = allApps.filter(a =>
+            a.real && (isAdminUser() || ownedIds === null || ownedIds.includes(a.id))
+        );
+        const active   = owned.filter(a => !isPadDeactivated(a.id));
+        const deact    = owned.filter(a =>  isPadDeactivated(a.id));
+
+        content.innerHTML = `
+            <div class="ksfs-section-head">
+                <h1 class="ksfs-section-title">Mes Outils</h1>
+                <p class="ksfs-section-sub">
+                    ${owned.length} outil${owned.length !== 1 ? 's' : ''} dans votre licence
+                    ${deact.length > 0 ? ` · <strong style="color:var(--accent)">${deact.length} à réinstaller</strong>` : ''}
+                </p>
+            </div>
+
+            ${deact.length > 0 ? `
+            <section class="ksfs-section">
+                <h2 class="ksfs-section-h">⊘ Désactivés — à réinstaller</h2>
+                <p class="ksfs-section-sub" style="margin:0 0 16px;color:var(--mut)">
+                    Ces outils font partie de votre licence mais ont été retirés de votre dashboard.
+                    Cliquez sur "Réinstaller" pour les rétablir.
+                </p>
+                <div class="ksfs-grid">${deact.map(_renderAppCardSmall).join('')}</div>
+            </section>` : ''}
+
+            <section class="ksfs-section">
+                <h2 class="ksfs-section-h">✓ Actifs dans le Dashboard</h2>
+                ${active.length === 0
+                    ? `<div class="ksfs-empty">Aucun outil actif dans votre dashboard.</div>`
+                    : `<div class="ksfs-grid">${active.map(_renderAppCardSmall).join('')}</div>`}
+            </section>
+        `;
         return;
     }
 
@@ -3950,6 +4041,16 @@ function _renderSettingsBody() {
                         <div class="sp-user-hint" id="lic-feedback" style="min-height:16px"></div>
                     </div>
                     ${lic.active ? `<button class="sp-danger-btn" id="licence-revoke" style="margin-top:4px">Révoquer la licence</button>` : ''}
+                    <!-- UX-6 — Raccourci vers l'onglet "Mes Outils" du K-Store.
+                         Donne une porte d'entrée évidente pour réinstaller un
+                         outil supprimé du dashboard par long-press. -->
+                    ${lic.active ? `
+                    <button class="api-key-save-btn" id="licence-manage-tools" style="margin-top:12px;width:100%;background:transparent;border:1px solid var(--bd);color:var(--tx)">
+                        Gérer mes outils →
+                    </button>
+                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
+                        Voir vos outils actifs et réinstaller ceux que vous avez retirés du dashboard.
+                    </p>` : ''}
                     <!-- S5.6 — Bouton de push manuel vers le Cloud Vault.
                          Utile au 1er login sur un nouvel appareil, ou si l'admin
                          vient de poser son ks_jwt et veut push toute sa config
@@ -4170,6 +4271,13 @@ function _renderSettingsBody() {
         revokeLicence();
         // Fermer les settings et laisser le hot reload gérer l'UI
         document.getElementById('settings-panel')?.classList.remove('open');
+    });
+
+    // UX-6 — Raccourci "Gérer mes outils" : ferme la Settings et ouvre le
+    // K-Store directement sur l'onglet "Mes Outils".
+    body.querySelector('#licence-manage-tools')?.addEventListener('click', () => {
+        document.getElementById('settings-panel')?.classList.remove('open');
+        _openKStorePanel('mine');
     });
 
     // S5.6 — Bouton « Forcer la synchronisation Cloud »
