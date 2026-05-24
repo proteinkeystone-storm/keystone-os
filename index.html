@@ -1702,12 +1702,15 @@ async function activateLicence() {
     _deviceLimit = detectEmailType(email) === 'personal' ? 3 : 99;
 
     // Capitalisation pour rester compatible avec TOOL_QUOTA / ks_plan
-    // (Demo, Start, Pro, Max — voir bloc onboarding)
+    // (Demo, Start, Pro, Max, Admin — voir bloc onboarding)
+    // UX-2 : ADMIN ajouté pour ne plus tomber en fallback 'Start' (=> quota 3
+    // alors qu'un admin a accès illimité).
     const planUI = ({
       DEMO:    'Demo',
       STARTER: 'Start',
       PRO:     'Pro',
       MAX:     'Max',
+      ADMIN:   'Admin',
     })[_activePlan.toUpperCase()] || 'Start';
     _activePlan = planUI;
 
@@ -1733,15 +1736,18 @@ async function activateLicence() {
 /* ═══════════════════════════════════════════
    ONBOARDING
 ═══════════════════════════════════════════ */
-const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': 7 };
+// UX-2 : Admin = quota illimité (Infinity n'est jamais atteint dans toggleTool)
+const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': 7, 'Admin': Infinity };
 
 // Hiérarchie cumulative des plans : un plan voit son tag + ceux du dessous.
 // Demo a accès à tout le catalogue (l'utilisateur n'en choisira qu'un).
+// UX-2 : Admin voit aussi tout le catalogue (accès complet).
 const PLAN_TIERS = {
   'Demo':  ['STARTER', 'PRO', 'MAX'],
   'Start': ['STARTER'],
   'Pro':   ['STARTER', 'PRO'],
   'Max':   ['STARTER', 'PRO', 'MAX'],
+  'Admin': ['STARTER', 'PRO', 'MAX'],
 };
 
 // Source de vérité : app/pads-data.js (CATALOG_DATA). On importe dynamiquement
@@ -1823,15 +1829,27 @@ function buildToolsGrid() {
   const label = document.getElementById('ob-quota-label');
   const tools = _toolsForPlan();
   label.style.color = '';
-  label.textContent = _activePlan === 'Demo'
-    ? `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`
-    : `Sélectionnez vos ${quota} Assistants Certifiés inclus dans votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
-  grid.innerHTML = tools.map(tool => `
-    <div class="ob-tool-item" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota})">
-      <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
-      <span class="ob-tool-label">${tool.name}</span>
-    </div>
-  `).join('');
+  if (_activePlan === 'Admin') {
+    // UX-2 : libellé dédié + tous les outils pré-cochés (accès complet)
+    label.textContent = `Plan ADMIN — accès complet. Tous les outils sont pré-sélectionnés ; vous pouvez en retirer si vous le souhaitez.`;
+  } else if (_activePlan === 'Demo') {
+    label.textContent = `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`;
+  } else {
+    label.textContent = `Sélectionnez vos ${quota} Assistants Certifiés inclus dans votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
+  }
+  // UX-2 : pour ADMIN, on pré-coche TOUS les outils (quota illimité)
+  if (_activePlan === 'Admin') {
+    _selectedTools = new Set(tools.map(t => t.id));
+  }
+  grid.innerHTML = tools.map(tool => {
+    const selected = _selectedTools.has(tool.id) ? ' selected' : '';
+    return `
+      <div class="ob-tool-item${selected}" data-id="${tool.id}" onclick="toggleTool(this,'${tool.id}',${quota})">
+        <svg width="13" height="13" style="color:var(--gold);flex-shrink:0"><use href="#ico-check"/></svg>
+        <span class="ob-tool-label">${tool.name}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 function toggleTool(el, id, quota) {
