@@ -14,10 +14,17 @@
 //   3. Créer le pendant côté Worker (workers/src/routes/smart-templates/<id>.js)
 // ══════════════════════════════════════════════════════════════════
 
-import phraseSimple from './phrase-simple.js';
+import phraseSimple    from './phrase-simple.js';
+// V2 — Famille Immobilier (3 templates)
+import panneauAVendre  from './panneau-a-vendre.js';
+import visiteVirtuelle from './visite-virtuelle.js';
+import demandeRappel   from './demande-rappel.js';
 
 const TEMPLATES = {
-  [phraseSimple.id]: phraseSimple,
+  [phraseSimple.id]:    phraseSimple,
+  [panneauAVendre.id]:  panneauAVendre,
+  [visiteVirtuelle.id]: visiteVirtuelle,
+  [demandeRappel.id]:   demandeRappel,
 };
 
 export function getTemplate(id) {

@@ -780,6 +780,25 @@ async function _handleCreate(panel) {
     }
   }
 
+  // V2 — Validation des fields du template Smart (en plus du type QR)
+  if (_creating.mode === 'smart') {
+    const tpl = getTemplate(_creating.template_id);
+    if (tpl?.fields?.length) {
+      for (const f of tpl.fields) {
+        if (f.required && !(_creating.template_data[f.id] || '').toString().trim()) {
+          return _showMsg(msg, `Champ obligatoire (template) : ${f.label}`, 'err');
+        }
+      }
+    }
+    // Validation custom du template (peut renvoyer plusieurs erreurs)
+    if (typeof tpl?.validate === 'function') {
+      const errors = tpl.validate(_creating.template_data || {});
+      if (Array.isArray(errors) && errors.length) {
+        return _showMsg(msg, errors[0], 'err');
+      }
+    }
+  }
+
   const tags = (_creating.tags || '').split(',').map(s => s.trim()).filter(Boolean);
 
   _busy = true;
