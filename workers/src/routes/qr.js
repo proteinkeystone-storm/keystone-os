@@ -76,6 +76,12 @@ function isValidUrl(s) {
 async function _authTenant(request, env) {
   if (requireAdmin(request, env)) return 'default';
   const claims = await requireJWT(request, env);
+  // Hotfix 2026-05-24 : un user authentifié en JWT avec claims.isAdmin === true
+  // doit voir le tenant 'default' (où vivent les QRs créés via /admin avec
+  // KS_ADMIN_SECRET). Sans ça, l'admin loggé en landing/magic-link perdait
+  // l'accès à ses QRs créés dans une session précédente via /admin
+  // (cas Stéphane "QR Prométhée invisible après reset" 24/05).
+  if (claims?.isAdmin) return 'default';
   if (claims?.sub) return claims.sub;
   const device = await requireDevice(request, env);
   if (device?.tenant_id) return device.tenant_id;

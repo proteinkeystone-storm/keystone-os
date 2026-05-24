@@ -34,7 +34,12 @@ async function _resolveOwner(request, env) {
   }
   const claims = await requireJWT(request, env);
   if (claims?.sub) {
-    return { sub: claims.sub, tenant: claims.sub, isAdmin: false };
+    // Hotfix 2026-05-24 : honorer claims.isAdmin du JWT pour que l'admin
+    // loggé via landing/magic-link voie aussi les forms créés via /admin
+    // (owner_sub = 'admin'), et pas seulement ceux qui matchent son
+    // lookup_hmac. Sinon la Biennale (créée via /admin) devient invisible
+    // après un re-login en JWT classique (cas Stéphane 24/05).
+    return { sub: claims.sub, tenant: claims.sub, isAdmin: !!claims.isAdmin };
   }
   const device = await requireDevice(request, env);
   if (device?.tenant_id) {
