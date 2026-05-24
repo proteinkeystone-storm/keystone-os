@@ -449,7 +449,8 @@ function _openCreateForm(panel) {
   panel.querySelectorAll('.sdqr-li.is-selected').forEach(el => el.classList.remove('is-selected'));
 
   // Reset l'état de création à chaque ouverture
-  _creating = { mode: 'dynamic', type: 'url', payload: {}, name: '', tags: '' };
+  // SDQR Smart 2026-05-24 : ajout du champ metier_brief (utilisé en mode 'smart')
+  _creating = { mode: 'dynamic', type: 'url', payload: {}, name: '', tags: '', metier_brief: '' };
 
   content.innerHTML = `
     <div class="sdqr-form-wrap">
@@ -458,8 +459,15 @@ function _openCreateForm(panel) {
         <p class="sdqr-form-sub">Choisis le mode et le type, puis remplis les champs. Le QR sera prévisualisé après création.</p>
       </div>
 
-      <!-- Mode toggle (Statique / Dynamique) -->
+      <!-- Mode toggle (Statique / Dynamique / Smart) -->
       <div class="sdqr-mode-toggle" id="sdqr-mode-toggle">
+        <button class="sdqr-mode-btn" data-mode="static">
+          <span class="sdqr-mode-dot"></span>
+          <div class="sdqr-mode-txt">
+            <strong>Standard</strong>
+            <small>Données dans les pixels · offline · non modifiable</small>
+          </div>
+        </button>
         <button class="sdqr-mode-btn" data-mode="dynamic">
           <span class="sdqr-mode-dot"></span>
           <div class="sdqr-mode-txt">
@@ -467,13 +475,23 @@ function _openCreateForm(panel) {
             <small>URL modifiable · stats trackées · nécessite connexion</small>
           </div>
         </button>
-        <button class="sdqr-mode-btn" data-mode="static">
+        <button class="sdqr-mode-btn" data-mode="smart">
           <span class="sdqr-mode-dot"></span>
           <div class="sdqr-mode-txt">
-            <strong>Statique</strong>
-            <small>Données dans les pixels · offline · non modifiable</small>
+            <strong>Smart ✦</strong>
+            <small>Interstitiel IA contextuel · brief métier · dynamique +</small>
           </div>
         </button>
+      </div>
+
+      <!-- Brief métier (visible uniquement si mode === 'smart') -->
+      <div id="sdqr-smart-brief-wrap" hidden style="margin:14px 0 0">
+        <label class="sdqr-field sdqr-field--full">
+          <span class="sdqr-field-lbl">Brief métier <small style="opacity:.7">— alimente l'IA contextuelle des scans</small></span>
+          <textarea id="sdqr-f-metier-brief" class="sdqr-input" rows="4"
+            placeholder="Décrivez votre activité, vos horaires, vos spécialités, votre public cible. L'IA s'en sert pour générer une phrase d'accueil contextuelle à chaque scan. Ex : 'Promoteur immobilier neuf à Toulon, spécialité VEFA + Pinel, agence ouverte lun-ven 9h-19h et samedi matin.'"
+            style="min-height:90px;font-family:inherit"></textarea>
+        </label>
       </div>
 
       <!-- Cartes de type -->
@@ -509,9 +527,10 @@ function _openCreateForm(panel) {
   _renderModeToggle(content);
   _renderFormFields(content);
 
-  // Bindings persistants (nom + tags)
+  // Bindings persistants (nom + tags + brief métier)
   content.querySelector('#sdqr-f-name')?.addEventListener('input', e => { _creating.name = e.target.value; });
   content.querySelector('#sdqr-f-tags')?.addEventListener('input', e => { _creating.tags = e.target.value; });
+  content.querySelector('#sdqr-f-metier-brief')?.addEventListener('input', e => { _creating.metier_brief = e.target.value; });
 
   content.querySelector('#sdqr-cancel')?.addEventListener('click', () => {
     content.innerHTML = _renderEmptyStudio();
@@ -543,7 +562,9 @@ function _renderTypeCards(root) {
       _creating.type = newType;
       _creating.payload = {};                       // reset payload (champs ≠)
       const def = QR_TYPES[newType];
-      if (!def.supports.dynamic && _creating.mode === 'dynamic') {
+      // Smart partage les contraintes de Dynamic → auto-bascule en static
+      // si on choisit un type static-only (Wi-Fi).
+      if (!def.supports.dynamic && (_creating.mode === 'dynamic' || _creating.mode === 'smart')) {
         _creating.mode = 'static';                  // auto-bascule
       }
       _renderTypeCards(root);
@@ -557,11 +578,13 @@ function _renderModeToggle(root) {
   const wrap = root.querySelector('#sdqr-mode-toggle');
   if (!wrap) return;
   const def = QR_TYPES[_creating.type];
+  // Smart partage les contraintes de Dynamic (besoin de short_id, donc
+  // pas pour Wi-Fi qui est static-only).
   const dynDisabled = !def?.supports?.dynamic;
   wrap.querySelectorAll('.sdqr-mode-btn').forEach(btn => {
     const mode = btn.dataset.mode;
     btn.classList.toggle('is-active', _creating.mode === mode);
-    if (mode === 'dynamic') {
+    if (mode === 'dynamic' || mode === 'smart') {
       btn.disabled = dynDisabled;
       btn.title    = dynDisabled ? `Le type ${def?.label} n'existe qu'en mode statique.` : '';
     }
@@ -569,8 +592,19 @@ function _renderModeToggle(root) {
       if (btn.disabled) return;
       _creating.mode = mode;
       _renderModeToggle(root);
+      _toggleSmartBriefVisibility(root);
     };
   });
+  // Premier render : aligne la visibilité du brief avec le mode courant
+  _toggleSmartBriefVisibility(root);
+}
+
+// SDQR Smart 2026-05-24 — Affiche le champ "Brief métier" uniquement en
+// mode 'smart' (il n'a aucun sens en static/dynamic).
+function _toggleSmartBriefVisibility(root) {
+  const wrap = root.querySelector('#sdqr-smart-brief-wrap');
+  if (!wrap) return;
+  wrap.hidden = _creating.mode !== 'smart';
 }
 
 // Rend les champs du form en fonction du type sélectionné.
@@ -672,14 +706,19 @@ async function _handleCreate(panel) {
       mode    : _creating.mode,
       payload : _creating.payload,
     };
-    // Mode dynamique URL : target_url = la valeur du champ url
-    if (_creating.mode === 'dynamic' && _creating.type === 'url') {
+    // SDQR Smart 2026-05-24 : brief métier envoyé uniquement en mode smart
+    if (_creating.mode === 'smart' && _creating.metier_brief?.trim()) {
+      body.metier_brief = _creating.metier_brief.trim();
+    }
+    // Mode dynamique OU smart URL : target_url = la valeur du champ url
+    // (smart utilise la même mécanique short_id que dynamic côté backend)
+    const needsRedirect = (_creating.mode === 'dynamic' || _creating.mode === 'smart');
+    if (needsRedirect && _creating.type === 'url') {
       body.target_url = _creating.payload.url || '';
     }
-    // Mode dynamique non-URL : on pre-encode cote client et on envoie
-    // la string finale (le Worker stocke dans qr_redirects.encoded_payload
-    // pour servir le bon contenu au scan).
-    if (_creating.mode === 'dynamic' && _creating.type !== 'url') {
+    // Mode dynamic/smart non-URL : pre-encode côté client (le Worker stocke
+    // dans qr_redirects.encoded_payload pour servir le bon contenu au scan).
+    if (needsRedirect && _creating.type !== 'url') {
       body.encoded_payload = encodePayload(_creating.type, _creating.payload);
     }
     const qr = await _apiCreate(body);

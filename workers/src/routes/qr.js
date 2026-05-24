@@ -127,6 +127,38 @@ export async function handleQrRedirect(request, env, shortId) {
     console.warn('[qr-redirect] scan log failed:', e.message);
   }
 
+  // SDQR Smart 2026-05-24 — Si le QR est en mode "smart", on intercepte
+  // la redirection pour servir l'interstitiel IA. On lit le mode depuis
+  // entities (la colonne qr_redirects ne porte pas le mode pour ne pas
+  // exiger de migration). Bypass si query param `?direct=1` (utile pour
+  // le bouton "Continuer" qui force le redirect après l'interstitiel).
+  const url = new URL(request.url);
+  const isDirectBypass = url.searchParams.get('direct') === '1';
+  if (!isDirectBypass) {
+    try {
+      const entityRow = await env.DB
+        .prepare(`SELECT data FROM entities
+                  WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                  AND deleted_at IS NULL LIMIT 1`)
+        .bind(shortId)
+        .first();
+      if (entityRow?.data) {
+        const data = JSON.parse(entityRow.data);
+        if (data.mode === 'smart') {
+          // Délègue à handleSmartQrInterstitial — renvoie l'HTML interstitiel
+          return await handleSmartQrInterstitial(request, env, shortId, {
+            qr: data, target_url: row.target_url, qr_type: row.qr_type,
+            encoded_payload: row.encoded_payload, scan: { country, device, os, ua },
+          });
+        }
+      }
+    } catch (e) {
+      // Si la résolution entity échoue, on tombe sur le comportement standard
+      // (redirect direct) — fail-safe pour ne jamais bloquer un scan.
+      console.warn('[qr-redirect] smart mode lookup failed, falling back to direct:', e.message);
+    }
+  }
+
   const type = row.qr_type || 'url';
 
   // ── URL : 302 standard ──────────────────────────────────────
@@ -237,17 +269,25 @@ export async function handleCreateQr(request, env) {
 
   const name    = (body.name || '').toString().trim();
   const type    = (body.type || 'url').toString().toLowerCase();
-  const mode    = (body.mode || 'dynamic').toString().toLowerCase() === 'static' ? 'static' : 'dynamic';
+  // SDQR Smart 2026-05-24 : 3e mode "smart" qui se comporte comme
+  // "dynamic" côté tracking/short_id mais sert un interstitiel IA
+  // contextuel avant la redirection finale.
+  const rawMode = (body.mode || 'dynamic').toString().toLowerCase();
+  const mode    = ['static', 'dynamic', 'smart'].includes(rawMode) ? rawMode : 'dynamic';
   const payload = (body.payload && typeof body.payload === 'object') ? body.payload : {};
   const design  = (body.design  && typeof body.design  === 'object') ? body.design  : {};
   const tags    = Array.isArray(body.tags) ? body.tags.slice(0, 12) : [];
+  // Brief métier rempli par le propriétaire pour alimenter l'IA des
+  // interstitiels Smart QR. Optionnel — si vide, l'IA se débrouille
+  // avec les autres signaux (type, target_url, scan context).
+  const metier_brief = (body.metier_brief || '').toString().trim().slice(0, 2000);
 
   if (!name)                  return err('Le nom est obligatoire', 400, origin);
   if (!ALLOWED_TYPES.has(type)) return err(`Type inconnu : ${type}`, 400, origin);
 
   // Validation mode/type : Wi-Fi reste static-only (cf. spec SDQR-2.5).
-  // URL/Text/vCard/iCal supportent les deux modes.
-  if (mode === 'dynamic' && type === 'wifi') {
+  // URL/Text/vCard/iCal supportent les 2 autres modes (dynamic + smart).
+  if (mode !== 'static' && type === 'wifi') {
     return err('Wi-Fi ne supporte que le mode statique.', 400, origin);
   }
 
@@ -257,15 +297,19 @@ export async function handleCreateQr(request, env) {
   let encoded_payload = (body.encoded_payload || '').toString();
   let short = null;
 
-  if (mode === 'dynamic') {
+  // dynamic + smart partagent : génération short_id, ligne qr_redirects.
+  // La différence smart vs dynamic se joue à la lecture (handleQrRedirect),
+  // pas à la création.
+  const needsShortId = (mode === 'dynamic' || mode === 'smart');
+  if (needsShortId) {
     if (type === 'url') {
       target_url = (body.target_url || payload?.url || '').toString().trim();
       if (!isValidUrl(target_url)) return err('target_url invalide (http/https requis)', 400, origin);
     } else {
-      // Pour text/vcard/ical dynamiques, le frontend pre-encode le payload
+      // Pour text/vcard/ical, le frontend pre-encode le payload
       // et nous envoie la string a servir. Worker ne refait pas l encoding.
       if (!encoded_payload.trim()) {
-        return err('encoded_payload manquant pour QR dynamique non-URL.', 400, origin);
+        return err('encoded_payload manquant pour QR dynamique/smart non-URL.', 400, origin);
       }
     }
 
@@ -284,10 +328,13 @@ export async function handleCreateQr(request, env) {
     id, tenant_id: tenantId, type: 'qr_codes',
     name, qr_type: type, mode, payload, design, tags,
     short_id: short, status: 'active', created_at: now, updated_at: now,
+    // Smart QR — brief métier pour alimenter l'IA contextuelle. Stocké
+    // dans entities.data (JSON blob) — pas de migration SQL nécessaire.
+    metier_brief: metier_brief || null,
   };
 
   try {
-    if (mode === 'dynamic') {
+    if (needsShortId) {
       await env.DB
         .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, qr_type, encoded_payload, status)
                   VALUES (?, ?, ?, ?, ?, ?, 'active')`)
@@ -820,4 +867,303 @@ export async function handleScheduledPurge(env) {
       value      = excluded.value,
       updated_at = excluded.updated_at
   `).bind(JSON.stringify({ status, purged, error, retentionDays })).run().catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SDQR Smart QR — Interstitiel IA contextuel (2026-05-24)
+// ───────────────────────────────────────────────────────────────────
+// MVP killer feature : un scan de QR mode "smart" → page intermédiaire
+// avec contenu IA contextuel (Gemma 4 Workers AI) avant la redirection
+// finale. Inputs du prompt : type, label, target_url, brief métier du
+// propriétaire + contexte scan (country, device, heure).
+//
+// Architecture 2-step pour UX mobile fluide :
+//   1. handleSmartQrInterstitial → HTML page (spinner immédiat)
+//   2. fetch /api/smartqr/generate-interstitial → JSON contenu IA
+//   3. Fade-in + bouton "Continuer →" → /r/:short?direct=1
+//
+// Cache : qr_interstitial_cache par (short_id, country, device_kind)
+// TTL 1h pour rester contextuel sans cramer les neurones AI.
+// ══════════════════════════════════════════════════════════════════
+
+const SMARTQR_MODEL_ID  = '@cf/google/gemma-4-26b-a4b-it';
+const SMARTQR_MAX_TOK   = 1024;   // Phrase courte, pas besoin de plus
+const SMARTQR_CACHE_TTL = 60 * 60 * 1000; // 1h en ms
+
+// Auto-migration cache table (idempotent)
+let _smartCacheReady = false;
+async function _ensureSmartCacheTable(env) {
+  if (_smartCacheReady) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS qr_interstitial_cache (
+        short_id     TEXT NOT NULL,
+        country      TEXT NOT NULL DEFAULT '?',
+        device_kind  TEXT NOT NULL DEFAULT '?',
+        content_json TEXT NOT NULL,
+        generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (short_id, country, device_kind)
+      )
+    `).run();
+    _smartCacheReady = true;
+  } catch (e) {
+    console.warn('[smartqr] cache table init failed:', e.message);
+  }
+}
+
+// Renvoie l'HTML interstitiel léger qui fetch ensuite /api/smartqr/generate.
+// Appelé depuis handleQrRedirect quand data.mode === 'smart'.
+export async function handleSmartQrInterstitial(request, env, shortId, ctx) {
+  const html = _renderSmartInterstitialHTML(shortId, ctx);
+  return new Response(html, {
+    status:  200,
+    headers: {
+      'Content-Type':  'text/html; charset=utf-8',
+      'Cache-Control': 'no-store', // contextuel par essence
+    },
+  });
+}
+
+// POST /api/smartqr/generate-interstitial { short_id }
+// Endpoint PUBLIC (appelé depuis l'HTML servi à n'importe quel scanneur),
+// donc pas d'auth. Mitigations abus : cache D1 par (short, country, device).
+export async function handleSmartQrGenerate(request, env) {
+  const origin = '*'; // public — pas d'auth, pas de credentials
+  await _ensureSmartCacheTable(env);
+
+  const body    = await parseBody(request);
+  const shortId = (body.short_id || '').toString().trim();
+  if (!shortId || shortId.length < 4 || shortId.length > 32) {
+    return err('short_id invalide', 400, origin);
+  }
+
+  // Récupère le QR via entities (mode smart obligatoire)
+  let qrData = null;
+  try {
+    const entityRow = await env.DB
+      .prepare(`SELECT data FROM entities
+                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                AND deleted_at IS NULL LIMIT 1`)
+      .bind(shortId)
+      .first();
+    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
+  } catch (e) {
+    return err('Lookup entity échoué : ' + e.message, 500, origin);
+  }
+  if (!qrData) return err('QR introuvable', 404, origin);
+  if (qrData.mode !== 'smart') return err('QR non Smart', 400, origin);
+
+  // Récupère target_url depuis qr_redirects
+  const redirectRow = await env.DB
+    .prepare('SELECT target_url, qr_type FROM qr_redirects WHERE short_id = ?')
+    .bind(shortId)
+    .first();
+
+  // Contexte scan
+  const ua      = request.headers.get('User-Agent') || '';
+  const country = request.cf?.country || '?';
+  const { device } = parseUA(ua);
+  const deviceKey = device || '?';
+
+  // Check cache
+  try {
+    const cached = await env.DB
+      .prepare(`SELECT content_json, generated_at FROM qr_interstitial_cache
+                WHERE short_id = ? AND country = ? AND device_kind = ?`)
+      .bind(shortId, country, deviceKey)
+      .first();
+    if (cached?.content_json) {
+      const ageMs = Date.now() - new Date(cached.generated_at + 'Z').getTime();
+      if (ageMs < SMARTQR_CACHE_TTL) {
+        return json({ ...JSON.parse(cached.content_json), cached: true }, 200, origin);
+      }
+    }
+  } catch (e) { /* miss = no-op */ }
+
+  // Compose prompt Gemma 4
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return err('Workers AI non configuré', 503, origin);
+  }
+
+  const now      = new Date();
+  const hourFr   = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
+  const dayFr    = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+  const targetSnippet = (redirectRow?.target_url || qrData.payload?.url || '')
+    .toString().slice(0, 200);
+
+  const systemPrompt = [
+    'Tu es l\'assistant Smart QR de Keystone OS. Quand un utilisateur scanne un QR Code,',
+    'tu génères UNE phrase courte (max 18 mots) de contexte personnalisée AVANT la redirection.',
+    '',
+    'Règles strictes :',
+    '- Une seule phrase, max 18 mots',
+    '- Ton chaleureux, naturel, jamais commercial agressif',
+    '- Mentionne au moins UN signal contextuel (heure, jour, pays, device, brief métier)',
+    '- Ne mens jamais, ne donne pas d\'horaires/coordonnées que tu n\'as pas',
+    '- Termine sans CTA — un bouton "Continuer" s\'affichera automatiquement',
+    '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
+    '  - phrase = la phrase contextuelle',
+    '  - title  = 3-5 mots punchy (ex: "Bienvenue !", "À 2 min de chez vous", "Bonsoir")',
+  ].join('\n');
+
+  const userPrompt = [
+    `Type de QR : ${qrData.qr_type || 'url'}`,
+    `Nom du QR : ${qrData.name || '(sans nom)'}`,
+    targetSnippet ? `URL/cible : ${targetSnippet}` : null,
+    qrData.metier_brief ? `Brief métier du propriétaire : ${qrData.metier_brief.slice(0, 800)}` : null,
+    '',
+    'Contexte du scan en cours :',
+    `- Jour : ${dayFr}`,
+    `- Heure (Paris) : ${hourFr}h`,
+    `- Pays scanné : ${country}`,
+    `- Device : ${deviceKey}`,
+    '',
+    'Génère le JSON {"phrase","title"} maintenant.',
+  ].filter(Boolean).join('\n');
+
+  let aiResponse;
+  try {
+    aiResponse = await env.AI.run(SMARTQR_MODEL_ID, {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: userPrompt },
+      ],
+      max_tokens: SMARTQR_MAX_TOK,
+    });
+  } catch (e) {
+    return err('Workers AI erreur : ' + e.message, 502, origin);
+  }
+
+  // Parsing JSON tolérant (Gemma 4 enrobe parfois dans ```json...```)
+  const rawText = aiResponse?.response || aiResponse?.content || '';
+  let parsed = null;
+  try {
+    const cleaned = rawText.replace(/```json|```/g, '').trim();
+    const jsonStart = cleaned.indexOf('{');
+    const jsonEnd   = cleaned.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+    }
+  } catch (e) { /* fallthrough */ }
+
+  // Fallback si parse échoue : phrase générique safe
+  const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200)
+    || 'Vous êtes sur le point d\'accéder au contenu de ce QR Code.';
+  const title  = (parsed?.title  || '').toString().trim().slice(0, 50)
+    || 'Bienvenue';
+
+  // Cache result
+  const content = { phrase, title, generated_at: new Date().toISOString() };
+  try {
+    await env.DB
+      .prepare(`INSERT INTO qr_interstitial_cache (short_id, country, device_kind, content_json, generated_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(short_id, country, device_kind) DO UPDATE SET
+                  content_json = excluded.content_json,
+                  generated_at = excluded.generated_at`)
+      .bind(shortId, country, deviceKey, JSON.stringify(content))
+      .run();
+  } catch (e) {
+    console.warn('[smartqr] cache write failed:', e.message);
+  }
+
+  return json({ ...content, cached: false }, 200, origin);
+}
+
+// Template HTML interstitiel — léger, mobile-first, Apple Premium
+function _renderSmartInterstitialHTML(shortId, ctx) {
+  const safeShort   = String(shortId).replace(/[^a-zA-Z0-9]/g, '');
+  const safeName    = (ctx?.qr?.name || '').replace(/[<>&"']/g, '');
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Smart QR · ${safeName || 'Keystone'}</title>
+<style>
+  :root { --bg:#0a0e14; --card:#111720; --bd:#1f2a37; --tx:#f1f5f9; --mut:#94a3b8; --acc:#7c8af9; --gold:#c9a96e; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--tx);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em; min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; padding: 24px; }
+  .sq-card { max-width: 460px; width: 100%; background: var(--card);
+    border: 1px solid var(--bd); border-radius: 16px; padding: 40px 28px 28px;
+    text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.4);
+    animation: zoom-in 320ms cubic-bezier(.18,.8,.3,1); }
+  @keyframes zoom-in { from { opacity:0; transform: scale(.96); } to { opacity:1; transform: scale(1); } }
+  .sq-brand { font-size: 11px; letter-spacing: .2em; color: var(--gold);
+    text-transform: uppercase; margin-bottom: 20px; }
+  .sq-spinner { width: 44px; height: 44px; border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--acc) 22%, transparent);
+    border-top-color: var(--acc); animation: spin 900ms linear infinite;
+    margin: 12px auto 18px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sq-state { transition: opacity .32s ease; }
+  .sq-title { font-size: 22px; font-weight: 700; margin: 0 0 12px;
+    letter-spacing: -.02em; }
+  .sq-phrase { color: var(--mut); font-size: 15px; line-height: 1.55;
+    margin: 0 0 28px; }
+  .sq-cta { display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 28px; border-radius: 12px; border: 0;
+    background: var(--acc); color: #fff; font-size: 15px; font-weight: 600;
+    text-decoration: none; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(124,138,249,.32);
+    transition: transform .12s ease, box-shadow .12s ease; }
+  .sq-cta:hover { transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(124,138,249,.4); }
+  .sq-cta:active { transform: scale(.98); }
+  .sq-foot { margin-top: 28px; color: #64748b; font-size: 11px; line-height: 1.5; }
+  .sq-foot a { color: var(--mut); text-decoration: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="sq-card" role="status" aria-live="polite">
+  <div class="sq-brand">Keystone Smart QR</div>
+  <div id="sq-loading" class="sq-state">
+    <div class="sq-spinner" aria-hidden="true"></div>
+    <p class="sq-phrase">Préparation de votre accès…</p>
+  </div>
+  <div id="sq-ready" class="sq-state" hidden>
+    <h1 class="sq-title" id="sq-title"></h1>
+    <p class="sq-phrase" id="sq-phrase"></p>
+    <a class="sq-cta" id="sq-continue" href="/r/${safeShort}?direct=1">
+      Continuer
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </a>
+  </div>
+  <div id="sq-error" class="sq-state" hidden>
+    <h1 class="sq-title">Redirection</h1>
+    <p class="sq-phrase">Vous allez être redirigé vers votre destination.</p>
+    <a class="sq-cta" href="/r/${safeShort}?direct=1">Continuer</a>
+  </div>
+  <p class="sq-foot">Contenu généré contextuellement par Keystone · <a href="/sdqr-privacy">Vie privée</a></p>
+</div>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  function show(name) {
+    ['loading','ready','error'].forEach(s => $('sq-' + s).hidden = (s !== name));
+  }
+  try {
+    const r = await fetch('/api/smartqr/generate-interstitial', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ short_id: '${safeShort}' }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    $('sq-title').textContent  = data.title  || 'Bienvenue';
+    $('sq-phrase').textContent = data.phrase || '';
+    show('ready');
+  } catch (e) {
+    console.warn('[smart-qr]', e);
+    // Fail-safe : passe directement à l'écran "Continuer" sans IA
+    show('error');
+  }
+})();
+</script>
+</body>
+</html>`;
 }
