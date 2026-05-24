@@ -1791,15 +1791,16 @@ const PLAN_TIERS = {
 // Source de vérité : app/pads-data.js (CATALOG_DATA). On importe dynamiquement
 // pour éviter toute désynchronisation outils/artefacts/plans. Fallback minimal
 // si l'import échoue (file:// ou réseau coupé).
+// UX-4 : fallback resynchronisé avec les 7 outils réellement publiés au
+// 2026-05-24. Avant : 8 entrées obsolètes (6 outils supprimés) + SDQR absent.
 let ALL_TOOLS = [
-  { id: 'O-IMM-001', name: 'Notices VEFA',          plan: 'STARTER' },
-  { id: 'O-IMM-002', name: 'Annonces Multi-Portails', plan: 'STARTER' },
-  { id: 'O-IMM-003', name: 'Emails Acquéreurs',     plan: 'STARTER' },
-  { id: 'O-MKT-001', name: 'Posts Réseaux Sociaux', plan: 'STARTER' },
-  { id: 'O-MKT-002', name: 'Brief Photo / 3D',      plan: 'STARTER' },
-  { id: 'O-ANL-001', name: 'CR Chantier',           plan: 'PRO' },
-  { id: 'O-ANL-002', name: 'Analyste Foncier',      plan: 'PRO' },
-  { id: 'O-ADM-001', name: 'Objections Acquéreurs', plan: 'PRO' },
+  { id: 'O-IMM-002', name: 'Annonces Immo',  plan: 'STARTER' },
+  { id: 'O-IMM-010', name: 'VEFA Studio',    plan: 'STARTER' },
+  { id: 'A-COM-001', name: 'Dynamic QR',     plan: 'PRO'     },
+  { id: 'A-COM-002', name: 'Kodex',          plan: 'STARTER' },
+  { id: 'A-COM-003', name: 'Muse',           plan: 'STARTER' },
+  { id: 'A-COM-004', name: 'Pulsa',          plan: 'STARTER' },
+  { id: 'A-COM-005', name: 'Ghost Writer',   plan: 'STARTER' },
 ];
 
 const _toolsReady = import('./app/pads-data.js')

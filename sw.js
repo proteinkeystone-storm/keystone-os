@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.98.2-ux37-key-type-password-eye-toggle';
+const VERSION       = 'ks-os-v4.99.0-ux4-onboarding-fallback-resync';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
