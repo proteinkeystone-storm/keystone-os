@@ -31,6 +31,7 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { encrypt, decrypt }                       from '../lib/crypto.js';
 import { requireJWT }                             from '../lib/jwt.js';
+import { audit }                                  from '../lib/audit.js';
 
 const MAX_BLOB_BYTES = 64 * 1024;
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -232,6 +233,73 @@ export async function handleVaultSave(request, env) {
   }
 
   return json({ ok: true, savedAt: new Date().toISOString(), scope }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DELETE /api/vault/delete  (UX-3.5 — droit à l'oubli RGPD)
+// ───────────────────────────────────────────────────────────────
+// Supprime DÉFINITIVEMENT le profil cloud de l'utilisateur courant
+// (PREFS_KEYS : prénom, photo, brouillons, paramètres outils, etc.).
+// La clé de licence et l'auth restent intacts — c'est seulement
+// l'hydratation du profil qui est purgée.
+//
+// On purge depuis les DEUX tables (legacy `user_vaults` + S4
+// `user_vaults_email`) pour le même `sub` afin de couvrir tous
+// les scopes possibles (legacy seul, S4 seul, ou les deux).
+//
+// Idempotent : un 2e appel sur un vault déjà vide renvoie ok=true
+// avec deleted=0. Pas d'erreur.
+// ═══════════════════════════════════════════════════════════════
+export async function handleVaultDelete(request, env) {
+  const origin = getAllowedOrigin(env, request);
+
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('JWT invalide ou expiré', 401, origin);
+
+  await ensureSchemaVaultV2(env);
+
+  let deletedLegacy = 0;
+  let deletedEmail  = 0;
+
+  // 1. Purge legacy table (PK = sub)
+  try {
+    const r = await env.DB
+      .prepare('DELETE FROM user_vaults WHERE sub = ?')
+      .bind(claims.sub)
+      .run();
+    deletedLegacy = r.meta?.changes || 0;
+  } catch (e) {
+    console.warn('[vault delete] legacy purge failed:', e?.message);
+  }
+
+  // 2. Purge S4 scoped table (PK = (sub, email)) — toutes les rows
+  //    de ce sub, quel que soit l'email scope.
+  try {
+    const r = await env.DB
+      .prepare('DELETE FROM user_vaults_email WHERE sub = ?')
+      .bind(claims.sub)
+      .run();
+    deletedEmail = r.meta?.changes || 0;
+  } catch (e) {
+    // Table peut ne pas exister en env legacy — non bloquant.
+    console.warn('[vault delete] email purge failed:', e?.message);
+  }
+
+  // Audit : login event critique pour RGPD (preuve d'effacement)
+  await audit(env, {
+    action:   'vault_delete',
+    actor:    _claimEmailIfValid(claims) || claims.sub,
+    target:   claims.sub,
+    tenantId: null,
+    details:  { deleted_legacy: deletedLegacy, deleted_email: deletedEmail },
+    request,
+  });
+
+  return json({
+    ok: true,
+    deleted: deletedLegacy + deletedEmail,
+    detail:  { legacy: deletedLegacy, email: deletedEmail },
+  }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════

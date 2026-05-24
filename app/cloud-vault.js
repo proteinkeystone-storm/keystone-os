@@ -11,7 +11,7 @@
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
 const PROVIDERS  = ['anthropic','openai','gemini','xai','perplexity','mistral','meta'];
-const PREFS_KEYS = [
+export const PREFS_KEYS = [
     'ks_active_engine','ks_user_name','ks_user_photo',
     'ks_lock_style','ks_lock_enabled','ks_lock_delay',
     'ks_pad_order',
@@ -133,6 +133,41 @@ export function scheduleCloudSave() {
 }
 
 export function isCloudReady() { return !!_jwt(); }
+
+// ═══════════════════════════════════════════════════════════════
+// UX-3.5 — Effacer le profil cloud (droit à l'oubli RGPD)
+// ───────────────────────────────────────────────────────────────
+// Appelle DELETE /api/vault/delete qui purge user_vaults +
+// user_vaults_email pour ce sub. Idempotent côté serveur.
+//
+// IMPORTANT : annule aussi le timer de save en cours pour éviter
+// qu'une écriture en file ne ré-uploade le snapshot juste après
+// la suppression.
+// ═══════════════════════════════════════════════════════════════
+export async function deleteCloudVault() {
+    const jwt = _jwt();
+    if (!jwt) return { ok: false, reason: 'no-jwt' };
+
+    // Annule le save debouncé (sinon il ré-uploaderait juste après)
+    clearTimeout(_saveTimer);
+
+    try {
+        const res = await fetch(`${API_BASE}/api/vault/delete`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${jwt}` },
+        });
+        if (!res.ok) {
+            return { ok: false, reason: `http-${res.status}` };
+        }
+        const data = await res.json();
+        window.dispatchEvent(new CustomEvent('ks-cloud-vault-deleted', {
+            detail: { deleted: data.deleted || 0 },
+        }));
+        return { ok: true, deleted: data.deleted || 0 };
+    } catch (e) {
+        return { ok: false, reason: 'network', error: e.message };
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Auto-sync — surveille toutes les écritures localStorage

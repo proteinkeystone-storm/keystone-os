@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.97.0-ux3-no-hardcoded-stephane';
+const VERSION       = 'ks-os-v4.98.0-ux35-vault-delete-rgpd';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

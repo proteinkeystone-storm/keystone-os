@@ -4081,7 +4081,19 @@ function _renderSettingsBody() {
         {
             id: 'acc-rgpd', icon: ACC_ICONS.rgpd, title: 'RGPD & Données',
             open: false,
-            content: `<div class="sp-placeholder">Vos clés API et données de profil sont stockées localement dans votre navigateur (localStorage). Aucune donnée n'est transmise à nos serveurs.</div>`,
+            content: `<div class="sp-user-form">
+                <p class="sp-user-hint" style="font-size:12px;line-height:1.55;color:var(--tx2);margin:0 0 12px">
+                    Vos clés API et données métier (brouillons, formulaires, etc.) sont stockées <strong style="color:var(--tx)">localement</strong> dans votre navigateur. Votre profil (prénom, photo, préférences) est en plus <strong style="color:var(--tx)">synchronisé chiffré</strong> via notre Cloud Vault (Cloudflare D1, AES-GCM) pour vous retrouver sur tous vos appareils.
+                </p>
+                <!-- UX-3.5 — Droit à l'oubli : efface le profil cloud (PREFS_KEYS)
+                     pour repartir de zéro sans toucher à la licence ni à l'auth. -->
+                <button class="sp-danger-btn" id="rgpd-vault-delete" style="margin-top:8px;background:transparent;border:1px solid var(--bd);color:var(--tx2);width:100%">
+                    Effacer mon profil du Cloud
+                </button>
+                <p class="sp-user-hint" id="rgpd-vault-feedback" style="margin-top:6px;font-size:11px;line-height:1.4;min-height:14px">
+                    Supprime votre prénom, photo, préférences et brouillons synchronisés côté serveur. Votre licence et votre auth ne sont pas affectées.
+                </p>
+            </div>`,
         },
         {
             id: 'acc-support', icon: ACC_ICONS.support, title: 'Support',
@@ -4313,6 +4325,43 @@ function _renderSettingsBody() {
     // à taper /app?ks_reset=1 manuellement, mais accessible depuis l'UI.
     // Utile pour : changer d'appareil, debug d'un état corrompu, perdre
     // accès à une licence collée sur un device. Ne touche QUE le local.
+    // UX-3.5 — Effacer mon profil cloud (RGPD droit à l'oubli)
+    body.querySelector('#rgpd-vault-delete')?.addEventListener('click', async (e) => {
+        if (!confirm('Effacer votre profil du Cloud ?\n\n' +
+            'Va supprimer définitivement côté serveur : votre prénom, photo, ' +
+            'préférences outils, brouillons synchronisés.\n\n' +
+            'Votre licence et votre authentification restent intactes. ' +
+            'L\'app sera rechargée pour repartir sur un profil vierge.')) return;
+        const btn = e.currentTarget;
+        const fb  = body.querySelector('#rgpd-vault-feedback');
+        const originalLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Suppression…';
+        if (fb) { fb.textContent = ''; fb.style.color = ''; }
+        try {
+            const { deleteCloudVault, PREFS_KEYS } = await import('./cloud-vault.js');
+            const result = await deleteCloudVault();
+            if (!result.ok) {
+                if (fb) { fb.textContent = `✗ Échec (${result.reason})`; fb.style.color = '#f26a4b'; }
+                btn.disabled = false;
+                btn.textContent = originalLabel;
+                return;
+            }
+            // Purge aussi les clés locales du profil pour éviter qu'un
+            // autosave juste après ne ré-upload le snapshot pré-delete.
+            // (Le timer est déjà annulé côté deleteCloudVault, mais un
+            // setItem futur déclencherait une nouvelle save.)
+            (PREFS_KEYS || []).forEach(k => localStorage.removeItem(k));
+            if (fb) { fb.textContent = `✓ Profil effacé (${result.deleted} entrée${result.deleted !== 1 ? 's' : ''}). Rechargement…`; fb.style.color = '#6bffb8'; }
+            // Léger délai pour que l'user lise le message
+            setTimeout(() => location.reload(), 900);
+        } catch (err) {
+            if (fb) { fb.textContent = `✗ ${err.message}`; fb.style.color = '#f26a4b'; }
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+        }
+    });
+
     body.querySelector('#licence-local-reset')?.addEventListener('click', async () => {
         if (!confirm('Déconnexion complète de cet appareil ?\n\n' +
             'Va vider : préférences locales, cache PWA, brouillons Kodex et Pulsa, ' +
