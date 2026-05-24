@@ -3933,7 +3933,7 @@ function _renderSettingsBody() {
             content: `<div class="sp-user-form">
                 <div class="sp-user-row">
                     <label class="sp-user-label" for="user-name-input">Prénom affiché</label>
-                    <input class="sp-user-input" id="user-name-input" type="text" placeholder="Ex : Stéphane" value="${savedName}">
+                    <input class="sp-user-input" id="user-name-input" type="text" placeholder="Ex : votre prénom" value="${savedName}">
                 </div>
                 <div class="sp-user-row">
                     <label class="sp-user-label">Photo / Logo</label>
@@ -4690,12 +4690,16 @@ function _applyLightMode(on) {
 
 // ── Identity zone — pilotée par ks_user_name + ks_user_photo ─
 function _updateIdentityZone() {
-    const name  = localStorage.getItem(LS_USER_NAME)  || 'Stéphane';
+    // UX-3 : plus de fallback hardcodé 'Stéphane'. Si pas de prénom posé,
+    // on n'affiche que "Bonjour" (le tail virgule+prénom est masqué).
+    const name  = localStorage.getItem(LS_USER_NAME)  || '';
     const photo = localStorage.getItem(LS_USER_PHOTO) || '';
 
     // Nom dans le hero
     const nameEl = document.querySelector('.hero-name');
+    const tailEl = document.querySelector('.hero-greeting-tail');
     if (nameEl) nameEl.textContent = name;
+    if (tailEl) tailEl.hidden = !name;
 
     // Slot identité — logo ou photo
     const slot = document.getElementById('identity-slot');
