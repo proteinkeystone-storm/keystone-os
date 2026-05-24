@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.98.0-ux35-vault-delete-rgpd';
+const VERSION       = 'ks-os-v4.98.1-ux36-form-autofill-keychain';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

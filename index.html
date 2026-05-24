@@ -1388,14 +1388,20 @@ footer {
           <svg width="24" height="24"><use href="#ico-key"/></svg>
         </div>
         <h3 class="title-md" style="text-align:center">Accéder à Keystone OS</h3>
-        <div class="activate-fields">
-          <input class="act-input" type="email" id="act-email" placeholder="votre@email.com" autocomplete="email">
-          <input class="act-input mono" type="text" id="act-key" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19" autocomplete="off" spellcheck="false">
-          <button class="act-btn" id="act-btn" onclick="activateLicence()">
+        <!-- UX-3.6 : vrai <form> + autocomplete="current-password" + name="password"
+             pour que le Trousseau iCloud (et 1Password / Bitwarden) reconnaisse la
+             clé de licence comme un mdp à sauvegarder + auto-remplir au prochain login. -->
+        <form class="activate-fields" id="act-form" onsubmit="event.preventDefault(); activateLicence(); return false;">
+          <input class="act-input" type="email" id="act-email" name="username"
+                 placeholder="votre@email.com" autocomplete="username">
+          <input class="act-input mono" type="text" id="act-key" name="password"
+                 placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19"
+                 autocomplete="current-password" spellcheck="false">
+          <button class="act-btn" id="act-btn" type="submit">
             Activer l'accès
             <svg width="14" height="14"><use href="#ico-arrow-r"/></svg>
           </button>
-        </div>
+        </form>
         <p class="act-status" id="act-status"></p>
         <p class="act-demo">
           Clé de démonstration : <code onclick="fillDemo()">DEMO-KEYS-TONE-2026</code>
