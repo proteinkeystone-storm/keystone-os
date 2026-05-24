@@ -34,7 +34,10 @@ async function _resolveOwner(request, env) {
   }
   const claims = await requireJWT(request, env);
   if (claims?.sub) {
-    return { sub: claims.sub, tenant: claims.sub, isAdmin: false };
+    // Hotfix 2026-05-24 : honorer claims.isAdmin du JWT (sinon admin
+    // loggé en landing/magic-link reçoit 403 Forbidden quand il consulte
+    // les réponses d'un form créé via /admin — cf. cas Biennale 24/05).
+    return { sub: claims.sub, tenant: claims.sub, isAdmin: !!claims.isAdmin };
   }
   const device = await requireDevice(request, env);
   if (device?.tenant_id) {

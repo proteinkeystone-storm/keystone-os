@@ -44,7 +44,10 @@ async function _resolveOwner(request, env) {
   }
   const claims = await requireJWT(request, env);
   if (claims?.sub) {
-    return { sub: claims.sub, tenant: claims.sub, isAdmin: false };
+    // Hotfix 2026-05-24 : préventif, même fix que pulsa-forms et
+    // pulsa-responses. Admin loggé en JWT classique doit aussi voir
+    // ses uploads Kodex faits via /admin (sub='admin').
+    return { sub: claims.sub, tenant: claims.sub, isAdmin: !!claims.isAdmin };
   }
   const device = await requireDevice(request, env);
   if (device?.tenant_id) {
