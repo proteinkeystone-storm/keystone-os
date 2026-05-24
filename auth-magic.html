@@ -259,10 +259,11 @@
     // ─── Persistance JWT + nettoyage démo ────────────────────────
     function persistAuth(data) {
       if (!data) return;
-      if (data.jwt)   localStorage.setItem('ks_jwt',           data.jwt);
-      if (data.plan)  localStorage.setItem('ks_licence_plan',  data.plan);
-      if (data.owner) localStorage.setItem('ks_licence_owner', data.owner);
-      if (data.email) localStorage.setItem('ks_user_email',    data.email);
+      if (data.jwt)         localStorage.setItem('ks_jwt',           data.jwt);
+      if (data.licence_key) localStorage.setItem('ks_licence_key',   data.licence_key);
+      if (data.plan)        localStorage.setItem('ks_licence_plan',  data.plan);
+      if (data.owner)       localStorage.setItem('ks_licence_owner', data.owner);
+      if (data.email)       localStorage.setItem('ks_user_email',    data.email);
 
       // Sort de mode démo si l'user y était : la licence est réelle
       const planUp = (data.plan || '').toUpperCase();

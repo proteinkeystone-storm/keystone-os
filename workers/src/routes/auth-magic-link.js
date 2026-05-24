@@ -439,6 +439,7 @@ export async function handleConsumeMagicLink(request, env) {
   return json({
     ok:                true,
     jwt,
+    licence_key:       licence.key,
     plan:              licence.plan,
     owner:             licence.owner,
     email:             link.email,
