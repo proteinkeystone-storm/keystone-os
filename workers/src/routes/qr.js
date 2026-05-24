@@ -887,7 +887,11 @@ export async function handleScheduledPurge(env) {
 // ══════════════════════════════════════════════════════════════════
 
 const SMARTQR_MODEL_ID  = '@cf/google/gemma-4-26b-a4b-it';
-const SMARTQR_MAX_TOK   = 1024;   // Phrase courte, pas besoin de plus
+// Gemma 4 = modèle raisonneur : consomme TOUT son budget dans `reasoning`
+// avant de produire `content`. 1024 = fallback systématique (vu en prod
+// 24/05 sur iPhone Stéphane, et confirmé Living Layer même date). 4096 =
+// seuil mini validé pour produire un JSON {"phrase","title"}.
+const SMARTQR_MAX_TOK   = 4096;
 const SMARTQR_CACHE_TTL = 60 * 60 * 1000; // 1h en ms
 
 // Auto-migration cache table (idempotent)
@@ -1034,17 +1038,29 @@ export async function handleSmartQrGenerate(request, env) {
     return err('Workers AI erreur : ' + e.message, 502, origin);
   }
 
-  // Parsing JSON tolérant (Gemma 4 enrobe parfois dans ```json...```)
-  const rawText = aiResponse?.response || aiResponse?.content || '';
+  // Workers AI renvoie selon le modèle. Gemma 4 OpenAI-compat → choices[].
+  // Pattern repris de ghostwriter.js / living-layer.js (mêmes leçons mai 2026).
+  const rawText = aiResponse?.response
+    || aiResponse?.result?.response
+    || aiResponse?.choices?.[0]?.message?.content
+    || aiResponse?.output?.[0]?.content?.[0]?.text
+    || aiResponse?.message?.content
+    || aiResponse?.text
+    || aiResponse?.completion
+    || '';
+
   let parsed = null;
   try {
-    const cleaned = rawText.replace(/```json|```/g, '').trim();
+    const cleaned = rawText
+      .replace(/^```(?:json)?\s*/im, '')
+      .replace(/\s*```\s*$/m, '')
+      .trim();
     const jsonStart = cleaned.indexOf('{');
     const jsonEnd   = cleaned.lastIndexOf('}');
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
       parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
     }
-  } catch (e) { /* fallthrough */ }
+  } catch (e) { /* fallthrough vers fallback */ }
 
   // Fallback si parse échoue : phrase générique safe
   const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200)
