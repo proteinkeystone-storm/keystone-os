@@ -19,12 +19,28 @@ import phraseSimple    from './phrase-simple.js';
 import panneauAVendre  from './panneau-a-vendre.js';
 import visiteVirtuelle from './visite-virtuelle.js';
 import demandeRappel   from './demande-rappel.js';
+// V3 — Famille Restauration (4 templates)
+import menuDuJour       from './menu-du-jour.js';
+import carteVins        from './carte-vins.js';
+import formuleMidi      from './formule-midi.js';
+import evenementSpecial from './evenement-special.js';
+// V3 — Famille Loisirs/Bowling (3 templates)
+import tournoiBowling      from './tournoi-bowling.js';
+import anniversaireEnfant  from './anniversaire-enfant.js';
+import happyHour           from './happy-hour.js';
 
 const TEMPLATES = {
-  [phraseSimple.id]:    phraseSimple,
-  [panneauAVendre.id]:  panneauAVendre,
-  [visiteVirtuelle.id]: visiteVirtuelle,
-  [demandeRappel.id]:   demandeRappel,
+  [phraseSimple.id]:        phraseSimple,
+  [panneauAVendre.id]:      panneauAVendre,
+  [visiteVirtuelle.id]:     visiteVirtuelle,
+  [demandeRappel.id]:       demandeRappel,
+  [menuDuJour.id]:          menuDuJour,
+  [carteVins.id]:           carteVins,
+  [formuleMidi.id]:         formuleMidi,
+  [evenementSpecial.id]:    evenementSpecial,
+  [tournoiBowling.id]:      tournoiBowling,
+  [anniversaireEnfant.id]:  anniversaireEnfant,
+  [happyHour.id]:           happyHour,
 };
 
 export function getTemplate(id) {
