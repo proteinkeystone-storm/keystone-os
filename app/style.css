@@ -608,6 +608,29 @@ html.light-mode .engine-logo-light { display: block !important; }
 .hero-name { color: var(--gold); }
 .hero-sub  { font-size: 13px; color: var(--text); min-height: 1.5em; }
 
+/* Living Layer — phrase IA contextuelle sous "Bonjour, X" (2026-05-24) */
+.ks-living {
+  font-size: 13.5px;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  opacity: .82;
+  margin: 2px 0 4px;
+  animation: ks-living-fade 480ms cubic-bezier(.18,.8,.3,1) both;
+  max-width: 56ch;
+}
+.ks-living::before {
+  content: "✦";
+  color: var(--gold);
+  font-style: normal;
+  margin-right: 6px;
+  opacity: .7;
+}
+@keyframes ks-living-fade {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: .82; transform: translateY(0); }
+}
+
 /* Dual logo dark/light */
 #ks-logo-light { display: none; }
 html.light-mode #ks-logo-dark  { display: none; }
@@ -6706,6 +6729,11 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-detail-pill--stat {
   background: rgba(99,102,241,.10);
   color: var(--gold2);
+}
+.sdqr-detail-pill--smart {
+  background: linear-gradient(135deg, rgba(201,169,110,.18), rgba(124,138,249,.18));
+  color: var(--gold, #c9a96e);
+  border: 1px solid rgba(201,169,110,.35);
 }
 .sdqr-detail-summary {
   padding: 12px 14px;

@@ -35,6 +35,9 @@ export const PREFS_KEYS = [
     'ks_is_demo',
     'ks_demo_started_at',
     'ks_demo_last_switch',
+    // Living Layer (2026-05-24) — toggle on/off sync entre devices.
+    // Le cache ks_living_cache reste local (régénéré à la demande).
+    'ks_living_layer_on',
 ];
 
 let _saveTimer = null;

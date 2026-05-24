@@ -168,6 +168,10 @@ const LS_PREFIX     = 'ks_api_';
 const LS_ENGINE     = 'ks_active_engine';
 const LS_USER_NAME  = 'ks_user_name';
 const LS_USER_PHOTO = 'ks_user_photo';
+// Living Layer (2026-05-24)
+const LS_LIVING_ON    = 'ks_living_layer_on';
+const LS_LIVING_CACHE = 'ks_living_cache';
+const LIVING_TTL_MS   = 30 * 60 * 1000;
 
 const saveKey       = (id, key) => key ? localStorage.setItem(LS_PREFIX + id, key) : localStorage.removeItem(LS_PREFIX + id);
 const loadKey       = (id)      => localStorage.getItem(LS_PREFIX + id) || '';
@@ -3911,6 +3915,7 @@ function _renderSettingsBody() {
     const lockEnabled     = localStorage.getItem('ks_lock_enabled') !== 'false';
     const lockDelay       = localStorage.getItem('ks_lock_delay')   || '300000';
     const lockStyle       = localStorage.getItem('ks_lock_style')   || 'abyss';
+    const livingOn        = localStorage.getItem(LS_LIVING_ON) === '1';
     const previewHTML     = savedPhoto
         ? `<img src="${savedPhoto}" alt="Photo">`
         : `<span class="sp-user-photo-preview-empty">👤</span>`;
@@ -3999,6 +4004,20 @@ function _renderSettingsBody() {
                     </div>
                 </div>
                 <div class="sp-user-hint">L'écran de veille se déclenche après une période d'inactivité. Cliquez ou appuyez sur Échap pour déverrouiller.</div>
+            </div>`,
+        },
+        {
+            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦',
+            open: false,
+            content: `<div class="sp-user-form">
+                <div class="sp-user-row sp-row-toggle">
+                    <label class="sp-user-label" for="living-on-toggle">Activer Living Layer</label>
+                    <label class="sp-toggle-wrap">
+                        <input type="checkbox" id="living-on-toggle" ${livingOn ? 'checked' : ''}>
+                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                    </label>
+                </div>
+                <div class="sp-user-hint">Ajoute une phrase IA contextuelle sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" sur le Dashboard. Mise à jour toutes les 30 minutes. Bundle MAX exclusif.</div>
             </div>`,
         },
         {
@@ -4232,6 +4251,21 @@ function _renderSettingsBody() {
             localStorage.setItem('ks_lock_style', card.dataset.style);
             window.dispatchEvent(new Event('ks-lock-settings-changed'));
         });
+    });
+
+    // ── Living Layer toggle (2026-05-24) ─────────────────────────
+    body.querySelector('#living-on-toggle')?.addEventListener('change', e => {
+        const on = e.target.checked;
+        localStorage.setItem(LS_LIVING_ON, on ? '1' : '0');
+        if (!on) {
+            // OFF immédiat — vide cache + masque l'élément
+            localStorage.removeItem(LS_LIVING_CACHE);
+            const el = document.getElementById('ks-living');
+            if (el) { el.hidden = true; el.textContent = ''; }
+        } else {
+            // ON — fetch immédiatement (la fonction gère le cache)
+            _renderLivingLayer();
+        }
     });
 
     // ── Activation de licence (Sprint 3) ─────────────────────────
@@ -4477,6 +4511,8 @@ export function initSettings() {
 
     // Synchroniser le hero avec les données utilisateur sauvegardées
     _updateIdentityZone();
+    // Living Layer — phrase IA contextuelle sous "Bonjour, X" (off par défaut)
+    _renderLivingLayer();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4736,6 +4772,75 @@ function _applyLightMode(on) {
     // hormis basculer la classe racine.
     document.documentElement.classList.toggle('light-mode', on);
 }
+
+// ── Living Layer — phrase IA contextuelle (2026-05-24) ──────
+// Sous "Bonjour, X" : 1 phrase courte vivante générée par Gemma 4.
+// Cache localStorage 30 min · toggle "ks_living_layer_on" (off par
+// défaut, activé dans Settings). Échec silencieux : si l'API ou le
+// cache foire, on laisse l'élément hidden — pas de spam d'erreur.
+// Constantes LS_LIVING_* déclarées en tête de fichier (TDZ-safe).
+
+async function _renderLivingLayer() {
+    const el = document.getElementById('ks-living');
+    if (!el) return;
+    // Off par défaut — n'affiche rien si le toggle Settings n'est pas activé
+    if (localStorage.getItem(LS_LIVING_ON) !== '1') {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+    }
+
+    // Cache localStorage 30 min — économise les neurones Workers AI
+    try {
+        const raw = localStorage.getItem(LS_LIVING_CACHE);
+        if (raw) {
+            const cached = JSON.parse(raw);
+            if (cached?.phrase && cached?.ts && (Date.now() - cached.ts < LIVING_TTL_MS)) {
+                el.textContent = cached.phrase;
+                el.hidden = false;
+                return;
+            }
+        }
+    } catch (e) { /* cache corrompu — on regénère */ }
+
+    // Préparer le contexte : prénom + heure + jour + outils installés
+    const firstName = (localStorage.getItem(LS_USER_NAME) || '').trim() || 'toi';
+    const now       = new Date();
+    const hour      = now.getHours();
+    const weekday   = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+    let recentTools = [];
+    try {
+        const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');
+        recentTools = Array.isArray(sel) ? sel.slice(0, 5) : [];
+    } catch (e) { /* no-op */ }
+
+    try {
+        const r = await fetch(`${CF_API}/api/livinglayer/greeting`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ firstName, hour, weekday, recentTools }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        if (!data?.phrase) throw new Error('phrase vide');
+
+        el.textContent = data.phrase;
+        el.hidden = false;
+        try {
+            localStorage.setItem(LS_LIVING_CACHE, JSON.stringify({ phrase: data.phrase, ts: Date.now() }));
+        } catch (e) { /* localStorage plein — on s'en fout */ }
+    } catch (e) {
+        // Échec silencieux : l'utilisateur ne voit juste rien
+        console.warn('[living-layer]', e.message);
+        el.hidden = true;
+    }
+}
+
+// Expose pour permettre un refresh manuel depuis Settings
+window.__ksLivingRefresh = () => {
+    localStorage.removeItem(LS_LIVING_CACHE);
+    _renderLivingLayer();
+};
 
 // ── Identity zone — pilotée par ks_user_name + ks_user_photo ─
 function _updateIdentityZone() {

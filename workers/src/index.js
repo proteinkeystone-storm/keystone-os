@@ -40,6 +40,7 @@ import { handleDataDispatch }                                           from './
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
+import { handleLivingLayerGreeting }                                     from './routes/living-layer.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -286,6 +287,13 @@ export default {
       // SDQR Smart QR 2026-05-24 — endpoint public (pas d'auth, appelé
       // depuis l'HTML interstitiel servi à n'importe quel scanneur).
       if (path === '/api/smartqr/generate-interstitial' && method === 'POST') return handleSmartQrGenerate(request, env);
+
+      // ── Living Layer (2026-05-24) ────────────────────────────
+      // Phrase courte vivante sous "Bonjour, X" du dashboard.
+      // Public (pas de donnée privée fuitée), cache localStorage 30min.
+      if (path === '/api/livinglayer/greeting' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleLivingLayerGreeting(request, env);
+      }
       if (path.startsWith('/api/qr/') && method === 'PATCH') {
         const qrId = path.split('/').pop();
         return handleUpdateQr(request, env, qrId);

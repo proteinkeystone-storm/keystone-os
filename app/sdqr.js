@@ -791,13 +791,15 @@ async function _openQrDetail(panel, qr) {
   // wire ; les refresh DOM ultérieurs (upload logo) le preserveront.
   _editingDesign = null;
 
-  const isDynamic   = (qr.mode || 'dynamic') === 'dynamic';
-  const typeDef     = QR_TYPES[qr.qr_type] || QR_TYPES.url;
-  const redirectUrl = qr.short_id ? `${CF_API}/r/${qr.short_id}` : '';
+  const isDynamic    = (qr.mode || 'dynamic') === 'dynamic';
+  const isSmart      = qr.mode === 'smart';
+  const isRedirected = isDynamic || isSmart; // les 2 modes passent par /r/SHORTID
+  const typeDef      = QR_TYPES[qr.qr_type] || QR_TYPES.url;
+  const redirectUrl  = qr.short_id ? `${CF_API}/r/${qr.short_id}` : '';
   // Ce qui est encodé dans les pixels :
-  //   - dynamic URL → l'URL de redirect
-  //   - static *    → le payload encodé (vcard, wifi, ical, text, url direct)
-  const encodedForQr = isDynamic && qr.qr_type === 'url'
+  //   - dynamic/smart URL → l'URL de redirect (le Worker dispatch ensuite)
+  //   - static *          → le payload encodé (vcard, wifi, ical, text, url direct)
+  const encodedForQr = isRedirected && qr.qr_type === 'url'
     ? redirectUrl
     : encodePayload(qr.qr_type, qr.payload || {});
 
@@ -811,8 +813,8 @@ async function _openQrDetail(panel, qr) {
             <div class="sdqr-empty-mini">Génération…</div>
           </div>
           <div class="sdqr-detail-shortid">
-            <span class="sdqr-detail-shortid-lbl">${isDynamic ? 'URL de redirection' : 'Contenu encodé'}</span>
-            <code class="sdqr-detail-shortid-val">${_esc(isDynamic ? redirectUrl : (encodedForQr.length > 200 ? encodedForQr.slice(0, 200) + '…' : encodedForQr))}</code>
+            <span class="sdqr-detail-shortid-lbl">${isRedirected ? 'URL de redirection' : 'Contenu encodé'}</span>
+            <code class="sdqr-detail-shortid-val">${_esc(isRedirected ? redirectUrl : (encodedForQr.length > 200 ? encodedForQr.slice(0, 200) + '…' : encodedForQr))}</code>
             <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-payload">Copier</button>
           </div>
           <!-- SDQR-3 : Export PNG / SVG haute résolution pour impression -->
@@ -837,21 +839,21 @@ async function _openQrDetail(panel, qr) {
 
         <div class="sdqr-detail-meta">
           <span class="sdqr-detail-pill">${typeDef.icon} ${_esc(typeDef.label)}</span>
-          <span class="sdqr-detail-pill ${isDynamic ? 'sdqr-detail-pill--dyn' : 'sdqr-detail-pill--stat'}">${isDynamic ? 'Dynamique' : 'Statique'}</span>
+          <span class="sdqr-detail-pill ${isSmart ? 'sdqr-detail-pill--smart' : (isDynamic ? 'sdqr-detail-pill--dyn' : 'sdqr-detail-pill--stat')}">${isSmart ? 'Smart ✦' : (isDynamic ? 'Dynamique' : 'Statique')}</span>
           <span class="sdqr-detail-pill ${qr.status === 'archived' ? 'sdqr-detail-pill--off' : ''}">${qr.status === 'archived' ? 'Archivé' : 'Actif'}</span>
-          ${isDynamic ? `<span class="sdqr-detail-stat">${qr.scans_total || 0} scan(s)</span>` : ''}
+          ${isRedirected ? `<span class="sdqr-detail-stat">${qr.scans_total || 0} scan(s)</span>` : ''}
         </div>
 
         ${summary ? `<div class="sdqr-detail-summary">${_esc(summary)}</div>` : ''}
 
-        ${isDynamic && qr.qr_type === 'url' ? `
+        ${isRedirected && qr.qr_type === 'url' ? `
         <label class="sdqr-field sdqr-field--inline">
           <span class="sdqr-field-lbl">URL de destination</span>
           <input type="url" id="sdqr-edit-url" class="sdqr-input" value="${_esc(qr.target_url || '')}">
           <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-save-url" title="Modifier la cible sans regénérer le QR">Mettre à jour</button>
         </label>
         <div class="sdqr-detail-notice">
-          <strong>Édition dynamique :</strong> tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.
+          <strong>${isSmart ? 'Mode Smart ✦' : 'Édition dynamique'} :</strong> ${isSmart ? 'le QR affiche d\'abord une page IA contextuelle avant la redirection. Tu peux changer la cible à tout moment.' : 'tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.'}
         </div>
         ` : isDynamic ? `
         <!-- Sprint SDQR-2.5 — édition du payload pour dynamic non-URL -->
@@ -875,7 +877,7 @@ async function _openQrDetail(panel, qr) {
 
         <div class="sdqr-detail-actions">
           <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
-          ${isDynamic ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
+          ${isRedirected ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
           ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
         </div>
 
@@ -930,7 +932,7 @@ async function _openQrDetail(panel, qr) {
 
   // Copier (URL redirect OU payload encodé selon mode)
   content.querySelector('#sdqr-copy-payload')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(isDynamic ? redirectUrl : encodedForQr).then(() => {
+    navigator.clipboard.writeText(isRedirected ? redirectUrl : encodedForQr).then(() => {
       const b = content.querySelector('#sdqr-copy-payload');
       if (b) { b.textContent = '✓ Copié'; setTimeout(() => { b.textContent = 'Copier'; }, 1500); }
     });
