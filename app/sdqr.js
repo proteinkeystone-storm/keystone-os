@@ -19,6 +19,8 @@
 
 import { CF_API } from './pads-loader.js';
 import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
+// Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
+import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
@@ -449,8 +451,13 @@ function _openCreateForm(panel) {
   panel.querySelectorAll('.sdqr-li.is-selected').forEach(el => el.classList.remove('is-selected'));
 
   // Reset l'état de création à chaque ouverture
-  // SDQR Smart 2026-05-24 : ajout du champ metier_brief (utilisé en mode 'smart')
-  _creating = { mode: 'dynamic', type: 'url', payload: {}, name: '', tags: '', metier_brief: '' };
+  // SDQR Smart 2026-05-24 : metier_brief (mode 'smart')
+  // SDQR Smart V2 2026-05-24 : template_id + template_data (registry programmable)
+  _creating = {
+    mode: 'dynamic', type: 'url', payload: {},
+    name: '', tags: '', metier_brief: '',
+    template_id: 'phrase-simple', template_data: {},
+  };
 
   content.innerHTML = `
     <div class="sdqr-form-wrap">
@@ -484,6 +491,14 @@ function _openCreateForm(panel) {
         </button>
       </div>
 
+      <!-- Sélecteur de template (visible uniquement si mode === 'smart') V2 -->
+      <div id="sdqr-smart-template-wrap" hidden style="margin:14px 0 0">
+        <label class="sdqr-field sdqr-field--full">
+          <span class="sdqr-field-lbl">Template d'interstitiel <small style="opacity:.7">— choisis le scénario d'expérience qui s'affiche au scan</small></span>
+          <div class="sdqr-template-cards" id="sdqr-template-cards"></div>
+        </label>
+      </div>
+
       <!-- Brief métier (visible uniquement si mode === 'smart') -->
       <div id="sdqr-smart-brief-wrap" hidden style="margin:14px 0 0">
         <label class="sdqr-field sdqr-field--full">
@@ -492,6 +507,11 @@ function _openCreateForm(panel) {
             placeholder="Décrivez votre activité, vos horaires, vos spécialités, votre public cible. L'IA s'en sert pour générer une phrase d'accueil contextuelle à chaque scan. Ex : 'Promoteur immobilier neuf à Toulon, spécialité VEFA + Pinel, agence ouverte lun-ven 9h-19h et samedi matin.'"
             style="min-height:90px;font-family:inherit"></textarea>
         </label>
+      </div>
+
+      <!-- Champs spécifiques au template (rendus par master-renderer.renderField) V2 -->
+      <div id="sdqr-smart-template-fields-wrap" hidden style="margin:14px 0 0">
+        <div class="sdqr-form-grid" id="sdqr-smart-template-fields"></div>
       </div>
 
       <!-- Cartes de type -->
@@ -599,12 +619,76 @@ function _renderModeToggle(root) {
   _toggleSmartBriefVisibility(root);
 }
 
-// SDQR Smart 2026-05-24 — Affiche le champ "Brief métier" uniquement en
-// mode 'smart' (il n'a aucun sens en static/dynamic).
+// SDQR Smart 2026-05-24 — Affiche le champ "Brief métier" + V2 le sélecteur
+// de template + ses fields uniquement en mode 'smart'.
 function _toggleSmartBriefVisibility(root) {
-  const wrap = root.querySelector('#sdqr-smart-brief-wrap');
+  const isSmart = _creating.mode === 'smart';
+
+  const briefWrap    = root.querySelector('#sdqr-smart-brief-wrap');
+  const templateWrap = root.querySelector('#sdqr-smart-template-wrap');
+  const fieldsWrap   = root.querySelector('#sdqr-smart-template-fields-wrap');
+
+  if (briefWrap)    briefWrap.hidden    = !isSmart;
+  if (templateWrap) templateWrap.hidden = !isSmart;
+  if (fieldsWrap)   fieldsWrap.hidden   = !isSmart;
+
+  if (isSmart) {
+    _renderTemplateCards(root);
+    _renderTemplateFields(root);
+  }
+}
+
+// SDQR Smart V2 — Rend les cards des templates disponibles (sélecteur).
+function _renderTemplateCards(root) {
+  const wrap = root.querySelector('#sdqr-template-cards');
   if (!wrap) return;
-  wrap.hidden = _creating.mode !== 'smart';
+  const tpls = listTemplates();
+  wrap.innerHTML = tpls.map(t => {
+    const isActive = _creating.template_id === t.id;
+    return `
+      <button type="button" class="sdqr-template-card ${isActive ? 'is-active' : ''}" data-template-id="${_esc(t.id)}">
+        <span class="sdqr-template-ico">${t.icon || '✦'}</span>
+        <span class="sdqr-template-label">${_esc(t.label)}</span>
+        <span class="sdqr-template-desc">${_esc(t.description || '')}</span>
+      </button>
+    `;
+  }).join('');
+  wrap.querySelectorAll('.sdqr-template-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const newId = card.dataset.templateId;
+      if (!isKnownTemplate(newId)) return;
+      _creating.template_id   = newId;
+      _creating.template_data = {}; // reset à chaque changement
+      _renderTemplateCards(root);
+      _renderTemplateFields(root);
+    });
+  });
+}
+
+// SDQR Smart V2 — Rend les fields déclaratifs du template sélectionné.
+// Utilise _renderField (le même que pour les champs de type QR) pour la
+// cohérence visuelle. Le contrat fields[] est identique à QR_TYPES.fields.
+// (Master Renderer plus avancé pourra être câblé en Phase 3.)
+function _renderTemplateFields(root) {
+  const wrap = root.querySelector('#sdqr-smart-template-fields');
+  if (!wrap) return;
+  const tpl = getTemplate(_creating.template_id);
+  if (!tpl || !Array.isArray(tpl.fields) || tpl.fields.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = tpl.fields.map(f => _renderField(f, _creating.template_data)).join('');
+  // Bind change listeners (write to template_data, pas payload)
+  wrap.querySelectorAll('[data-payload-key]').forEach(el => {
+    el.addEventListener('input', () => {
+      const k = el.dataset.payloadKey;
+      _creating.template_data[k] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    el.addEventListener('change', () => {
+      const k = el.dataset.payloadKey;
+      _creating.template_data[k] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+  });
 }
 
 // Rend les champs du form en fonction du type sélectionné.
@@ -637,10 +721,14 @@ function _renderFormFields(root) {
   });
 }
 
-function _renderField(f) {
+function _renderField(f, store) {
+  // V2 : un 2e param `store` (object) permet de lire la valeur depuis un
+  // autre bucket que _creating.payload (ex: _creating.template_data).
+  // Rétrocompat : si absent, garde le comportement historique.
+  const src  = store || _creating.payload;
   const span = f.span === 'full' ? ' sdqr-field--full' : '';
   const req  = f.required ? ' <span class="sdqr-req">*</span>' : '';
-  const val  = _esc(_creating.payload[f.id] ?? f.default ?? '');
+  const val  = _esc(src[f.id] ?? f.default ?? '');
   const ph   = _esc(f.placeholder || '');
 
   let input = '';
@@ -709,6 +797,12 @@ async function _handleCreate(panel) {
     // SDQR Smart 2026-05-24 : brief métier envoyé uniquement en mode smart
     if (_creating.mode === 'smart' && _creating.metier_brief?.trim()) {
       body.metier_brief = _creating.metier_brief.trim();
+    }
+    // SDQR Smart V2 : template_id + template_data envoyés en mode smart.
+    // Fallback côté Worker = 'phrase-simple' si absents.
+    if (_creating.mode === 'smart') {
+      body.template_id   = _creating.template_id || 'phrase-simple';
+      body.template_data = _creating.template_data || {};
     }
     // Mode dynamique OU smart URL : target_url = la valeur du champ url
     // (smart utilise la même mécanique short_id que dynamic côté backend)

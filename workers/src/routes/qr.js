@@ -17,6 +17,8 @@
 
 import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+// Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
+import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -281,6 +283,27 @@ export async function handleCreateQr(request, env) {
   // interstitiels Smart QR. Optionnel — si vide, l'IA se débrouille
   // avec les autres signaux (type, target_url, scan context).
   const metier_brief = (body.metier_brief || '').toString().trim().slice(0, 2000);
+  // Smart QR V2 — template_id sélectionné par le propriétaire (registry
+  // ./smart-templates/). Optionnel : fallback 'phrase-simple' au scan
+  // (handleSmartQrInterstitial gère le fallback). Ici on valide juste
+  // que l'id est connu ou vide.
+  const template_id_raw = (body.template_id || '').toString().trim();
+  if (mode === 'smart' && template_id_raw && !isKnownTemplate(template_id_raw)) {
+    return err(`template_id inconnu : ${template_id_raw}`, 400, origin);
+  }
+  const template_id   = mode === 'smart' ? (template_id_raw || 'phrase-simple') : null;
+  // template_data : blob JSON libre (schéma défini par chaque template).
+  // Limité à 32 KB pour éviter les abus / quotas D1.
+  const template_data_raw = body.template_data && typeof body.template_data === 'object'
+    ? body.template_data : null;
+  let template_data = null;
+  if (template_data_raw) {
+    const json_str = JSON.stringify(template_data_raw);
+    if (json_str.length > 32 * 1024) {
+      return err('template_data trop volumineux (max 32 KB)', 400, origin);
+    }
+    template_data = template_data_raw;
+  }
 
   if (!name)                  return err('Le nom est obligatoire', 400, origin);
   if (!ALLOWED_TYPES.has(type)) return err(`Type inconnu : ${type}`, 400, origin);
@@ -331,6 +354,8 @@ export async function handleCreateQr(request, env) {
     // Smart QR — brief métier pour alimenter l'IA contextuelle. Stocké
     // dans entities.data (JSON blob) — pas de migration SQL nécessaire.
     metier_brief: metier_brief || null,
+    // V2 templates programmables (cf. ./smart-templates/)
+    template_id, template_data,
   };
 
   try {
@@ -916,9 +941,18 @@ async function _ensureSmartCacheTable(env) {
 }
 
 // Renvoie l'HTML interstitiel léger qui fetch ensuite /api/smartqr/generate.
-// Appelé depuis handleQrRedirect quand data.mode === 'smart'.
+// Appelé depuis handleQrRedirect quand data.mode === 'smart'. V2 : dispatcher
+// vers le registry de templates (cf. ./smart-templates/index.js). Le QR porte
+// son template_id dans entities.data (fallback 'phrase-simple' si absent).
 export async function handleSmartQrInterstitial(request, env, shortId, ctx) {
-  const html = _renderSmartInterstitialHTML(shortId, ctx);
+  const qrData      = ctx?.qr || {};
+  const template    = getTemplate(qrData.template_id || 'phrase-simple');
+  // Injecte short_id dans qrData pour que renderHTML puisse construire les
+  // URLs /r/SHORTID?direct=1 (le QR data en base n'a pas toujours short_id
+  // dénormalisé selon les contextes d'appel).
+  const enrichedQr  = { ...qrData, short_id: shortId };
+  const scanCtx     = ctx?.scan || {};
+  const html        = template.renderHTML(enrichedQr, scanCtx);
   return new Response(html, {
     status:  200,
     headers: {
@@ -984,46 +1018,19 @@ export async function handleSmartQrGenerate(request, env) {
     }
   } catch (e) { /* miss = no-op */ }
 
-  // Compose prompt Gemma 4
+  // Compose prompt Gemma 4 via le template (V2 — registry programmable)
   if (!env.AI || typeof env.AI.run !== 'function') {
     return err('Workers AI non configuré', 503, origin);
   }
 
-  const now      = new Date();
-  const hourFr   = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-  const dayFr    = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-  const targetSnippet = (redirectRow?.target_url || qrData.payload?.url || '')
-    .toString().slice(0, 200);
-
-  const systemPrompt = [
-    'Tu es l\'assistant Smart QR de Keystone OS. Quand un utilisateur scanne un QR Code,',
-    'tu génères UNE phrase courte (max 18 mots) de contexte personnalisée AVANT la redirection.',
-    '',
-    'Règles strictes :',
-    '- Une seule phrase, max 18 mots',
-    '- Ton chaleureux, naturel, jamais commercial agressif',
-    '- Mentionne au moins UN signal contextuel (heure, jour, pays, device, brief métier)',
-    '- Ne mens jamais, ne donne pas d\'horaires/coordonnées que tu n\'as pas',
-    '- Termine sans CTA — un bouton "Continuer" s\'affichera automatiquement',
-    '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    '  - phrase = la phrase contextuelle',
-    '  - title  = 3-5 mots punchy (ex: "Bienvenue !", "À 2 min de chez vous", "Bonsoir")',
-  ].join('\n');
-
-  const userPrompt = [
-    `Type de QR : ${qrData.qr_type || 'url'}`,
-    `Nom du QR : ${qrData.name || '(sans nom)'}`,
-    targetSnippet ? `URL/cible : ${targetSnippet}` : null,
-    qrData.metier_brief ? `Brief métier du propriétaire : ${qrData.metier_brief.slice(0, 800)}` : null,
-    '',
-    'Contexte du scan en cours :',
-    `- Jour : ${dayFr}`,
-    `- Heure (Paris) : ${hourFr}h`,
-    `- Pays scanné : ${country}`,
-    `- Device : ${deviceKey}`,
-    '',
-    'Génère le JSON {"phrase","title"} maintenant.',
-  ].filter(Boolean).join('\n');
+  const template = getTemplate(qrData.template_id || 'phrase-simple');
+  const scanCtx  = {
+    country,
+    device:        deviceKey,
+    target_url:    redirectRow?.target_url || '',
+    qr_type:       redirectRow?.qr_type    || qrData.qr_type || 'url',
+  };
+  const { system: systemPrompt, user: userPrompt } = template.buildAiPrompt(qrData, scanCtx);
 
   let aiResponse;
   try {
@@ -1032,7 +1039,7 @@ export async function handleSmartQrGenerate(request, env) {
         { role: 'system', content: systemPrompt },
         { role: 'user',   content: userPrompt },
       ],
-      max_tokens: SMARTQR_MAX_TOK,
+      max_tokens: template.ai_max_tokens || SMARTQR_MAX_TOK,
     });
   } catch (e) {
     return err('Workers AI erreur : ' + e.message, 502, origin);
@@ -1062,9 +1069,9 @@ export async function handleSmartQrGenerate(request, env) {
     }
   } catch (e) { /* fallthrough vers fallback */ }
 
-  // Fallback si parse échoue : phrase générique safe
+  // Fallback si parse échoue : phrase générique safe (polish V1)
   const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200)
-    || 'Vous êtes sur le point d\'accéder au contenu de ce QR Code.';
+    || 'Votre destination est prête. Merci d\'avoir scanné.';
   const title  = (parsed?.title  || '').toString().trim().slice(0, 50)
     || 'Bienvenue';
 
@@ -1086,100 +1093,7 @@ export async function handleSmartQrGenerate(request, env) {
   return json({ ...content, cached: false }, 200, origin);
 }
 
-// Template HTML interstitiel — léger, mobile-first, Apple Premium
-function _renderSmartInterstitialHTML(shortId, ctx) {
-  const safeShort   = String(shortId).replace(/[^a-zA-Z0-9]/g, '');
-  const safeName    = (ctx?.qr?.name || '').replace(/[<>&"']/g, '');
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex">
-<title>Smart QR · ${safeName || 'Keystone'}</title>
-<style>
-  :root { --bg:#0a0e14; --card:#111720; --bd:#1f2a37; --tx:#f1f5f9; --mut:#94a3b8; --acc:#7c8af9; --gold:#c9a96e; }
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--tx);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    letter-spacing: -0.02em; min-height: 100vh; display: flex; align-items: center;
-    justify-content: center; padding: 24px; }
-  .sq-card { max-width: 460px; width: 100%; background: var(--card);
-    border: 1px solid var(--bd); border-radius: 16px; padding: 40px 28px 28px;
-    text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.4);
-    animation: zoom-in 320ms cubic-bezier(.18,.8,.3,1); }
-  @keyframes zoom-in { from { opacity:0; transform: scale(.96); } to { opacity:1; transform: scale(1); } }
-  .sq-brand { font-size: 11px; letter-spacing: .2em; color: var(--gold);
-    text-transform: uppercase; margin-bottom: 20px; }
-  .sq-spinner { width: 44px; height: 44px; border-radius: 50%;
-    border: 1.5px solid color-mix(in srgb, var(--acc) 22%, transparent);
-    border-top-color: var(--acc); animation: spin 900ms linear infinite;
-    margin: 12px auto 18px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .sq-state { transition: opacity .32s ease; }
-  .sq-title { font-size: 22px; font-weight: 700; margin: 0 0 12px;
-    letter-spacing: -.02em; }
-  .sq-phrase { color: var(--mut); font-size: 15px; line-height: 1.55;
-    margin: 0 0 28px; }
-  .sq-cta { display: inline-flex; align-items: center; gap: 8px;
-    padding: 14px 28px; border-radius: 12px; border: 0;
-    background: var(--acc); color: #fff; font-size: 15px; font-weight: 600;
-    text-decoration: none; cursor: pointer;
-    box-shadow: 0 8px 24px rgba(124,138,249,.32);
-    transition: transform .12s ease, box-shadow .12s ease; }
-  .sq-cta:hover { transform: translateY(-1px);
-    box-shadow: 0 12px 28px rgba(124,138,249,.4); }
-  .sq-cta:active { transform: scale(.98); }
-  .sq-foot { margin-top: 28px; color: #64748b; font-size: 11px; line-height: 1.5; }
-  .sq-foot a { color: var(--mut); text-decoration: none; }
-  [hidden] { display: none !important; }
-</style>
-</head>
-<body>
-<div class="sq-card" role="status" aria-live="polite">
-  <div class="sq-brand">Keystone Smart QR</div>
-  <div id="sq-loading" class="sq-state">
-    <div class="sq-spinner" aria-hidden="true"></div>
-    <p class="sq-phrase">Préparation de votre accès…</p>
-  </div>
-  <div id="sq-ready" class="sq-state" hidden>
-    <h1 class="sq-title" id="sq-title"></h1>
-    <p class="sq-phrase" id="sq-phrase"></p>
-    <a class="sq-cta" id="sq-continue" href="/r/${safeShort}?direct=1">
-      Continuer
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-    </a>
-  </div>
-  <div id="sq-error" class="sq-state" hidden>
-    <h1 class="sq-title">Redirection</h1>
-    <p class="sq-phrase">Vous allez être redirigé vers votre destination.</p>
-    <a class="sq-cta" href="/r/${safeShort}?direct=1">Continuer</a>
-  </div>
-  <p class="sq-foot">Contenu généré contextuellement par Keystone · <a href="/sdqr-privacy">Vie privée</a></p>
-</div>
-<script>
-(async () => {
-  const $ = id => document.getElementById(id);
-  function show(name) {
-    ['loading','ready','error'].forEach(s => $('sq-' + s).hidden = (s !== name));
-  }
-  try {
-    const r = await fetch('/api/smartqr/generate-interstitial', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ short_id: '${safeShort}' }),
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    $('sq-title').textContent  = data.title  || 'Bienvenue';
-    $('sq-phrase').textContent = data.phrase || '';
-    show('ready');
-  } catch (e) {
-    console.warn('[smart-qr]', e);
-    // Fail-safe : passe directement à l'écran "Continuer" sans IA
-    show('error');
-  }
-})();
-</script>
-</body>
-</html>`;
-}
+// Template HTML interstitiel — déplacé V2 dans ./smart-templates/phrase-simple.js
+// Le dispatcher handleSmartQrInterstitial appelle template.renderHTML() depuis
+// le registry. Pour ajouter un nouveau layout (menu, tombola, etc.), créer un
+// nouveau template dans ./smart-templates/ — aucune modification de qr.js requise.
