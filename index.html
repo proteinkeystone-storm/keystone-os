@@ -1390,13 +1390,29 @@ footer {
         <h3 class="title-md" style="text-align:center">Accéder à Keystone OS</h3>
         <!-- UX-3.6 : vrai <form> + autocomplete="current-password" + name="password"
              pour que le Trousseau iCloud (et 1Password / Bitwarden) reconnaisse la
-             clé de licence comme un mdp à sauvegarder + auto-remplir au prochain login. -->
+             clé de licence comme un mdp à sauvegarder + auto-remplir au prochain login.
+             UX-3.7 : type="password" (au lieu de "text") car Safari Keychain ne
+             reconnaît le champ comme mdp qu'avec type="password". Bouton 👁️ pour
+             toggle visible/masqué (préserve la possibilité de relire la clé). -->
         <form class="activate-fields" id="act-form" onsubmit="event.preventDefault(); activateLicence(); return false;">
           <input class="act-input" type="email" id="act-email" name="username"
                  placeholder="votre@email.com" autocomplete="username">
-          <input class="act-input mono" type="text" id="act-key" name="password"
-                 placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19"
-                 autocomplete="current-password" spellcheck="false">
+          <div class="act-key-wrap" style="position:relative">
+            <input class="act-input mono" type="password" id="act-key" name="password"
+                   placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19"
+                   autocomplete="current-password" spellcheck="false"
+                   style="padding-right:44px">
+            <button type="button" id="act-key-toggle" aria-label="Afficher la clé"
+                    onclick="toggleKeyVisibility()"
+                    style="position:absolute;top:50%;right:10px;transform:translateY(-50%);background:transparent;border:0;color:var(--text-3);cursor:pointer;padding:6px;display:flex;align-items:center;border-radius:6px">
+              <svg id="act-key-eye-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg id="act-key-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
           <button class="act-btn" id="act-btn" type="submit">
             Activer l'accès
             <svg width="14" height="14"><use href="#ico-arrow-r"/></svg>
@@ -1581,6 +1597,22 @@ document.getElementById('act-key').addEventListener('keydown', e => {
 function fillDemo() {
   document.getElementById('act-email').value = 'demo@keystone-os.app';
   document.getElementById('act-key').value = 'DEMO-KEYS-TONE-2026';
+}
+
+// UX-3.7 — Toggle visibilité de la clé de licence (eye icon).
+// type="password" est obligatoire pour que le Trousseau iCloud reconnaisse
+// le champ et propose autofill. Mais l'utilisateur peut vouloir relire
+// la clé qu'il a tapée (ou collée) → bascule en type="text".
+function toggleKeyVisibility() {
+  const inp     = document.getElementById('act-key');
+  const eyeOn   = document.getElementById('act-key-eye-on');
+  const eyeOff  = document.getElementById('act-key-eye-off');
+  const toggle  = document.getElementById('act-key-toggle');
+  const isMasked = inp.type === 'password';
+  inp.type = isMasked ? 'text' : 'password';
+  eyeOn.style.display  = isMasked ? 'none' : '';
+  eyeOff.style.display = isMasked ? '' : 'none';
+  toggle.setAttribute('aria-label', isMasked ? 'Masquer la clé' : 'Afficher la clé');
 }
 
 /* ═══════════════════════════════════════════
