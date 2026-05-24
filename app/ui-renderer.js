@@ -1078,7 +1078,14 @@ function _buildKStorePanel() {
         if (!btn) return;
         const action = btn.dataset.action;
         const id     = btn.dataset.id;
-        if (action === 'cat')   _ksFilter = { kind: 'cat', id };
+        if (action === 'cat') {
+            _ksFilter = { kind: 'cat', id };
+            // UX-6.2 — Si la catégorie a des sous-rubriques, le clic bascule
+            // aussi expand/collapse pour permettre de replier la liste.
+            // Le chevron `v` ↔ `>` reflète l'état via CSS .collapsed.
+            const li = btn.closest('.ksfs-nav-item--has-sub');
+            if (li) li.classList.toggle('collapsed');
+        }
         if (action === 'sub')   _ksFilter = { kind: 'sub', id };
         if (action === 'plans') _ksFilter = { kind: 'plans', id: null };
         if (action === 'mine')  _ksFilter = { kind: 'mine', id: null };

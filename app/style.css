@@ -5376,6 +5376,15 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 .ksfs-nav-item--has-sub > .ksfs-nav-btn .ksfs-nav-chev {
     transform: rotate(0deg);
+    transition: transform .18s ease;
+}
+
+/* UX-6.2 — Catégorie repliée : sub-list masquée + chevron pointe à droite */
+.ksfs-nav-item--has-sub.collapsed > .ksfs-nav-sub {
+    display: none;
+}
+.ksfs-nav-item--has-sub.collapsed > .ksfs-nav-btn .ksfs-nav-chev {
+    transform: rotate(-90deg);
 }
 
 .ksfs-nav-sub {
