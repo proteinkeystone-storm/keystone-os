@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v4.99.0-ux4-onboarding-fallback-resync';
+const VERSION       = 'ks-os-v4.99.1-ux11-landing-persist-licence-key';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 

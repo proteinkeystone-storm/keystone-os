@@ -1753,12 +1753,20 @@ async function activateLicence() {
     _activePlan = planUI;
 
     localStorage.setItem('ks_email',        email);
-    localStorage.setItem('ks_jwt',          data.jwt);     // ← JWT au lieu de la clé
+    localStorage.setItem('ks_jwt',          data.jwt);     // ← JWT pour l'auth API
     localStorage.setItem('ks_plan',         planUI);
     localStorage.setItem('ks_device_limit', _deviceLimit);
     localStorage.setItem('ks_device_fp',    fingerprint);
-
-    // Nettoyage : si une ancienne version stockait la clé en clair
+    // UX-1.1 : on persiste AUSSI la clé en local pour cohérence avec
+    // les autres flux (magic-link auth-magic.html + admin.js). Settings
+    // → Ma Licence lit ks_licence_key pour afficher le badge "Active"
+    // et le bouton "Gérer mes outils". Sans ça, le user voit "Non activée"
+    // après s'être pourtant logué correctement.
+    // Note : la clé n'est pas plus sensible ici qu'elle ne l'était dans
+    // le DOM 100ms avant — l'attaque "JS tiers lit ks_licence_key"
+    // suppose un attaquant same-origin, contexte déjà perdu.
+    localStorage.setItem('ks_licence_key',  key);
+    // Nettoyage : si une ancienne version stockait la clé sous l'ancien nom
     localStorage.removeItem('ks_licence');
 
     status.textContent = '';
