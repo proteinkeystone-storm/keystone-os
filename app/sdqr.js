@@ -491,12 +491,15 @@ function _openCreateForm(panel) {
         </button>
       </div>
 
-      <!-- Sélecteur de template (visible uniquement si mode === 'smart') V2 -->
+      <!-- Sélecteur de template (visible uniquement si mode === 'smart') V2
+           Volontairement PAS dans un <label> : les <button> à l'intérieur d'un
+           label voient leur click parasité par le re-focus du label sur certains
+           navigateurs (bug observé 24/05). Le titre est juste un <div> stylé. -->
       <div id="sdqr-smart-template-wrap" hidden style="margin:14px 0 0">
-        <label class="sdqr-field sdqr-field--full">
-          <span class="sdqr-field-lbl">Template d'interstitiel <small style="opacity:.7">— choisis le scénario d'expérience qui s'affiche au scan</small></span>
+        <div class="sdqr-field sdqr-field--full">
+          <div class="sdqr-field-lbl">Template d'interstitiel <small style="opacity:.7">— choisis le scénario d'expérience qui s'affiche au scan</small></div>
           <div class="sdqr-template-cards" id="sdqr-template-cards"></div>
-        </label>
+        </div>
       </div>
 
       <!-- Brief métier (visible uniquement si mode === 'smart') -->
