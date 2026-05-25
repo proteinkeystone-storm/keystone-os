@@ -14,33 +14,15 @@
 //   3. Créer le pendant côté Worker (workers/src/routes/smart-templates/<id>.js)
 // ══════════════════════════════════════════════════════════════════
 
-import phraseSimple    from './phrase-simple.js';
-// V2 — Famille Immobilier (3 templates)
-import panneauAVendre  from './panneau-a-vendre.js';
-import visiteVirtuelle from './visite-virtuelle.js';
-import demandeRappel   from './demande-rappel.js';
-// V3 — Famille Restauration (4 templates)
-import menuDuJour       from './menu-du-jour.js';
-import carteVins        from './carte-vins.js';
-import formuleMidi      from './formule-midi.js';
-import evenementSpecial from './evenement-special.js';
-// V3 — Famille Loisirs/Bowling (3 templates)
-import tournoiBowling      from './tournoi-bowling.js';
-import anniversaireEnfant  from './anniversaire-enfant.js';
-import happyHour           from './happy-hour.js';
+import phraseSimple from './phrase-simple.js';
+// V4 (à venir, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
+// 7 templates d'expérience d'attente interactive (storytelling brand,
+// machine à sous, carte à gratter, compte à rebours, quiz, fidélité,
+// boîte cadeau). Les anciens templates V2+V3 ont été supprimés le
+// 24/05 car ils faisaient doublon avec le site web des entreprises.
 
 const TEMPLATES = {
-  [phraseSimple.id]:        phraseSimple,
-  [panneauAVendre.id]:      panneauAVendre,
-  [visiteVirtuelle.id]:     visiteVirtuelle,
-  [demandeRappel.id]:       demandeRappel,
-  [menuDuJour.id]:          menuDuJour,
-  [carteVins.id]:           carteVins,
-  [formuleMidi.id]:         formuleMidi,
-  [evenementSpecial.id]:    evenementSpecial,
-  [tournoiBowling.id]:      tournoiBowling,
-  [anniversaireEnfant.id]:  anniversaireEnfant,
-  [happyHour.id]:           happyHour,
+  [phraseSimple.id]: phraseSimple,
 };
 
 export function getTemplate(id) {

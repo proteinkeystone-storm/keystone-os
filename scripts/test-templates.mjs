@@ -52,17 +52,10 @@ const MOCK_SCAN = {
 };
 
 const MOCK_DATA = {
-  'phrase-simple':       {},
-  'panneau-a-vendre':    { titre_bien: 'Villa T5 vue mer', prix: '890 000 €', surface: '180 m²', dpe: 'B', points_forts: 'Vue mer\nGarage' },
-  'visite-virtuelle':    { titre_bien: 'Villa contemporaine', type_visite: 'Visite 3D', agence: 'Test Agency' },
-  'demande-rappel':      { nom_agent: 'Stéphane Benedetti', agence: 'Protein Immo', tel_agent: '+33612345678', creneau_default: 'Lun-ven 9h-19h' },
-  'menu-du-jour':        { nom_etablissement: 'Le Bistrot', specialite: 'Méditerranéenne', plats: 'Risotto cèpes — 22€\nLoup grillé — 32€', entrees: 'Tartare — 14€', desserts: 'Tarte fine — 9€' },
-  'carte-vins':          { nom_etablissement: 'La Cave', type_carte: 'Carte des vins', selections: 'Bandol Tempier — Provence — 78€\nNégroni — — 14€' },
-  'formule-midi':        { nom_etablissement: 'Le Bistrot', formule_titre: 'Express', prix: '19,90 €', horaires: '12h-14h30', composition: 'Entrée\nPlat\nDessert' },
-  'evenement-special':   { nom_evenement: 'Soirée Truffe', date_evenement: 'Vendredi 12 juin', heure: '20h', theme: 'Menu 6 services', description: 'Chef invité', prix: '85€', places_restantes: '8' },
-  'tournoi-bowling':     { nom_etablissement: 'Bowling Strike', nom_tournoi: 'Open Printemps', activite: 'Bowling', jackpot: '500 €', places_initiales: '32', joueurs_inscrits: '24', date_finale: 'Sam 15/06', prix_inscription: '25 €' },
-  'anniversaire-enfant': { nom_etablissement: 'Bowling Strike', activite_principale: 'Pack Anniversaire', age_min: '6', age_max: '12', prix_par_enfant: '18 €', duree: '2h', inclus: 'Bowling\nGoûter', creneaux_dispo: 'Mer/Sam 14h-16h' },
-  'happy-hour':          { nom_etablissement: 'Le Bar des Halles', heure_debut: '18:00', heure_fin: '20:00', jours: 'Lun-ven', offres: 'Pintes — 4€\nCocktails — 7€' },
+  'phrase-simple': {},
+  // V4 (à venir) : ajouter les mocks pour les 7 nouveaux templates interactifs
+  // (storytelling, machine-a-sous, carte-a-gratter, countdown, quiz,
+  //  fidelite, boite-cadeau). Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
 };
 
 // ── Tests : Backend (Worker) ──────────────────────────────────
@@ -152,12 +145,11 @@ async function testFrontend() {
     assert(typeof summary === 'string' && summary.length > 5,                        `${tpl.id} : summary() retourne string`);
   }
 
-  // 5. canUseTemplate (tier gating)
+  // 5. canUseTemplate (tier gating) + isKnownTemplate
   assert(canUseTemplate('phrase-simple', 'starter') === true,                       `gating : starter peut utiliser phrase-simple`);
-  assert(canUseTemplate('panneau-a-vendre', 'starter') === false,                   `gating : starter ne peut PAS utiliser panneau-a-vendre (pro)`);
-  assert(canUseTemplate('panneau-a-vendre', 'pro') === true,                        `gating : pro peut utiliser panneau-a-vendre`);
-  assert(canUseTemplate('panneau-a-vendre', 'max') === true,                        `gating : max peut utiliser panneau-a-vendre`);
-  assert(isKnownTemplate('menu-du-jour') === true,                                  `isKnownTemplate(menu-du-jour) = true`);
+  assert(canUseTemplate('phrase-simple', 'pro') === true,                           `gating : pro peut utiliser phrase-simple`);
+  assert(canUseTemplate('phrase-simple', 'max') === true,                           `gating : max peut utiliser phrase-simple`);
+  assert(isKnownTemplate('phrase-simple') === true,                                 `isKnownTemplate(phrase-simple) = true`);
   assert(isKnownTemplate('inexistant-xyz') === false,                               `isKnownTemplate(inconnu) = false`);
 }
 
