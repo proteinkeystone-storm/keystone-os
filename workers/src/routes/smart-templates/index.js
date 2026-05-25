@@ -36,15 +36,20 @@
 //   }
 // ══════════════════════════════════════════════════════════════════
 
-import phraseSimple from './phrase-simple.js';
-// V4 (à venir, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
-// 7 templates d'expérience d'attente interactive (storytelling brand,
-// machine à sous, carte à gratter, compte à rebours, quiz, fidélité,
-// boîte cadeau). Les anciens templates V2+V3 ont été supprimés le
-// 24/05 car ils faisaient doublon avec le site web des entreprises.
+import phraseSimple      from './phrase-simple.js';
+import storytellingBrand from './storytelling-brand.js';
+import countdownProduit  from './countdown-produit.js';
+// V4 (en cours, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
+// V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
+// V4.2 à V4.5 à venir : quiz, boîte cadeau, machine à sous, carte
+// à gratter, carte de fidélité. Les anciens templates V2+V3 ont été
+// supprimés le 24/05 car ils faisaient doublon avec le site web
+// des entreprises.
 
 const TEMPLATES = {
-  [phraseSimple.id]: phraseSimple,
+  [phraseSimple.id]:      phraseSimple,
+  [storytellingBrand.id]: storytellingBrand,
+  [countdownProduit.id]:  countdownProduit,
 };
 
 /**

@@ -2,8 +2,8 @@
 /* ═══════════════════════════════════════════════════════════════
    Smart QR Templates — tests unitaires
    ─────────────────────────────────────────────────────────────
-   Valide les 11 templates (1 V1 + 3 V2 + 7 V3) sans toucher à
-   la prod. Chaque template doit :
+   Valide les templates V1 + V4 livrés sans toucher à la prod.
+   Chaque template doit :
      - renderHTML() : retourne un HTML > 500 bytes, structure complète,
        slot IA présent, CTA continuer présent
      - buildAiPrompt() : retourne {system, user} non vides
@@ -53,9 +53,28 @@ const MOCK_SCAN = {
 
 const MOCK_DATA = {
   'phrase-simple': {},
-  // V4 (à venir) : ajouter les mocks pour les 7 nouveaux templates interactifs
-  // (storytelling, machine-a-sous, carte-a-gratter, countdown, quiz,
-  //  fidelite, boite-cadeau). Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
+  // V4.1 livré 2026-05-26
+  'storytelling-brand': {
+    nom_marque:   'Maison Lumière',
+    slogan:       'L\'art de bien recevoir',
+    logo_url:     'https://example.com/logo.png',
+    visuel_url:   'https://example.com/visuel.jpg',
+    accent_color: '#c9a96e',
+    style_motion: 'Élégant',
+  },
+  'countdown-produit': {
+    nom_produit:  'Drop Sneaker LX',
+    // Date dans le futur (2 jours pour rester réaliste après date du jour)
+    date_sortie:  new Date(Date.now() + 2 * 86400e3).toISOString().slice(0, 16),
+    nom_marque:   'Atelier Sud',
+    teaser_text:  'Une silhouette inédite, en série limitée.',
+    logo_url:     'https://example.com/logo.png',
+    visuel_url:   'https://example.com/sneaker.jpg',
+    accent_color: '#ff6b35',
+    compte_scans: false,
+  },
+  // V4.2+ : quiz, boîte cadeau, machine à sous, carte à gratter,
+  //         carte de fidélité. Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
 };
 
 // ── Tests : Backend (Worker) ──────────────────────────────────
@@ -103,6 +122,18 @@ async function testBackend() {
     // 5. validate avec data complète → 0 erreurs
     const errsFull = tpl.validate(data);
     assert(Array.isArray(errsFull) && errsFull.length === 0,                          `${tpl.id} : validate(mock data) = 0 erreurs`);
+
+    // 6. XSS hardening : si on injecte une charge dans tous les champs string
+    //    du mock, le rendu HTML ne doit JAMAIS contenir la charge brute.
+    //    Vérifie que escHtml / safeUrl / safeColor du _shared.js font leur job.
+    const XSS = '"><script>alert(1)</script>';
+    const dataXss = Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, typeof v === 'string' ? XSS + v : v])
+    );
+    const qrXss = { ...MOCK_QR, template_id: tpl.id, template_data: dataXss };
+    const htmlXss = tpl.renderHTML(qrXss, MOCK_SCAN);
+    assert(!htmlXss.includes('<script>alert(1)</script>'),                            `${tpl.id} : pas de script XSS brut injecté`);
+    assert(!htmlXss.includes('"><script'),                                            `${tpl.id} : pas d'attribut break-out injecté`);
   }
 }
 
@@ -129,7 +160,7 @@ async function testFrontend() {
     for (const f of tpl.fields) {
       assert(typeof f.id === 'string' && f.id,                                       `${tpl.id} : field.${f.id || '?'} id présent`);
       assert(typeof f.label === 'string' && f.label,                                 `${tpl.id}.${f.id} : label présent`);
-      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
+      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
       if (f.type === 'select') {
         assert(Array.isArray(f.options) && f.options.length > 0,                     `${tpl.id}.${f.id} : options select présentes`);
       }
@@ -176,7 +207,7 @@ async function testSymmetry() {
 // ── Main ──────────────────────────────────────────────────────
 (async () => {
   console.log(`${C.bold}${C.cyan}╔══════════════════════════════════════════════════════════╗${C.reset}`);
-  console.log(`${C.bold}${C.cyan}║   Smart QR Templates — tests V1 + V2 + V3                 ║${C.reset}`);
+  console.log(`${C.bold}${C.cyan}║   Smart QR Templates — tests V1 + V4                      ║${C.reset}`);
   console.log(`${C.bold}${C.cyan}╚══════════════════════════════════════════════════════════╝${C.reset}`);
 
   await testBackend();

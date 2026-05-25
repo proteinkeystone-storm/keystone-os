@@ -6739,6 +6739,26 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   background: var(--gold, #6366f1);
   border-color: var(--gold, #6366f1);
 }
+/* V4 — Champs color picker + datetime-local (templates Smart QR V4.1+).
+   Le natif <input type=color> a un padding interne fixe qui casse la
+   hauteur des autres .sdqr-input, et type=datetime-local affiche du
+   texte gris foncé illisible sur fond dark. On ajuste juste l'essentiel. */
+.sdqr-input[type="color"] {
+  padding: 4px 6px;
+  height: 38px;
+  min-width: 64px;
+  cursor: pointer;
+}
+.sdqr-input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.sdqr-input[type="color"]::-webkit-color-swatch {
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px;
+}
+.sdqr-input[type="datetime-local"] {
+  color-scheme: dark;
+  font-variant-numeric: tabular-nums;
+}
+
 .sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
   content: "";
   width: 9px; height: 5px;
