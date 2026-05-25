@@ -149,12 +149,15 @@ const TEMPLATE = {
   .sq-card {
     position: relative; z-index: 1;
     max-width: 480px; width: 100%;
-    background: var(--card);
+    background: linear-gradient(180deg, #0e141b 0%, var(--card) 100%);
     border: 1px solid var(--bd);
-    border-radius: 20px;
+    border-radius: 24px;
     padding: 36px 24px 26px;
     text-align: center;
-    box-shadow: 0 32px 72px rgba(0,0,0,.55);
+    box-shadow:
+      0 32px 72px rgba(0,0,0,.55),
+      0 0 0 1px ${accent}1a inset,
+      0 1px 0 0 rgba(255,255,255,.04) inset;
     animation: card-in 600ms cubic-bezier(.16,.84,.3,1);
   }
   @keyframes card-in {
@@ -164,7 +167,51 @@ const TEMPLATE = {
 
   .sq-brand-cap { font-size: 10.5px; letter-spacing: .26em;
     color: var(--gold); text-transform: uppercase;
-    margin-bottom: 22px; font-weight: 600; opacity: .85; }
+    margin-bottom: 12px; font-weight: 600; opacity: .85; }
+
+  /* Badge dynamique d'urgence — change selon le temps restant */
+  .sq-urgency {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px 4px;
+    margin: 0 auto 18px;
+    background: rgba(124,138,249,.10);
+    border: 1px solid ${accent}33;
+    border-radius: 999px;
+    font-size: 10.5px; letter-spacing: .14em;
+    color: ${accent};
+    text-transform: uppercase; font-weight: 700;
+    transition: background .3s ease, border-color .3s ease, color .3s ease;
+  }
+  .sq-urgency::before {
+    content: ""; display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: ${accent};
+    animation: urg-pulse 2s ease-in-out infinite;
+  }
+  @keyframes urg-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.4); opacity: .55; }
+  }
+  body.is-soon .sq-urgency {
+    background: rgba(251,191,36,.10);
+    border-color: rgba(251,191,36,.45);
+    color: #fbbf24;
+  }
+  body.is-soon .sq-urgency::before { background: #fbbf24; }
+  body.is-now .sq-urgency {
+    background: rgba(248,113,113,.12);
+    border-color: rgba(248,113,113,.55);
+    color: #fca5a5;
+  }
+  body.is-now .sq-urgency::before { background: #f87171;
+    animation-duration: .9s; }
+  body.is-live .sq-urgency {
+    background: linear-gradient(135deg, ${accent}33, rgba(74,222,128,.20));
+    border-color: rgba(74,222,128,.55);
+    color: #86efac;
+  }
+  body.is-live .sq-urgency::before { background: #4ade80;
+    animation-duration: 1.4s; }
 
   /* Header : logo + marque + nom produit */
   .sq-head { margin-bottom: 22px; }
@@ -232,25 +279,73 @@ const TEMPLATE = {
     color: var(--mut); text-transform: uppercase;
     margin-top: 6px;
   }
-  .sq-cd-tick { animation: tick 240ms ease; }
-  @keyframes tick {
-    0%   { transform: translateY(0);   opacity: 1; }
-    50%  { transform: translateY(-3px); opacity: .6; }
-    100% { transform: translateY(0);   opacity: 1; }
+  /* Tick effet flip-clock simplifié : translation + scale + glow accent */
+  .sq-cd-tick {
+    animation: tick-flip 420ms cubic-bezier(.42,0,.18,1);
+  }
+  @keyframes tick-flip {
+    0%   { transform: translateY(0)    scale(1);   filter: brightness(1); }
+    35%  { transform: translateY(-12px) scale(1.12); filter: brightness(1.4); }
+    70%  { transform: translateY(2px)  scale(.96);  filter: brightness(1); }
+    100% { transform: translateY(0)    scale(1);   filter: brightness(1); }
   }
 
-  /* Mode "Live" : countdown disparu, message d'ouverture */
+  /* Mode "Live" : countdown disparu, message d'ouverture grandiose */
   .sq-live-msg {
     margin: 24px 0 16px;
     font-family: 'Cormorant Garamond', Georgia, serif;
-    font-size: 26px; font-weight: 700;
-    color: ${accent}; letter-spacing: -.01em;
-    animation: live-in 700ms cubic-bezier(.16,.84,.3,1);
+    font-size: 38px; font-weight: 700;
+    letter-spacing: -.015em; line-height: 1.1;
+    background: linear-gradient(135deg, var(--tx), ${accent}, var(--tx));
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: live-in 700ms cubic-bezier(.16,.84,.3,1),
+               live-shine 4s ease-in-out infinite;
   }
   @keyframes live-in {
-    from { opacity: 0; transform: scale(.92); }
+    from { opacity: 0; transform: scale(.85); }
     to   { opacity: 1; transform: scale(1); }
   }
+  @keyframes live-shine {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
+  }
+
+  /* Confettis CSS au passage en mode live */
+  .sq-confetti {
+    position: absolute; pointer-events: none;
+    inset: 0; overflow: hidden;
+    opacity: 0; transition: opacity .3s ease;
+  }
+  body.is-live .sq-confetti { opacity: 1; }
+  .sq-confetti i {
+    position: absolute; top: -20px;
+    width: 8px; height: 12px;
+    background: ${accent};
+    opacity: 0;
+    animation: confetti-fall 4s ease-in infinite;
+  }
+  body:not(.is-live) .sq-confetti i { animation-play-state: paused; }
+  @keyframes confetti-fall {
+    0%   { transform: translateY(0)    rotate(0deg);   opacity: 0; }
+    10%  { opacity: 1; }
+    100% { transform: translateY(120vh) rotate(720deg); opacity: 0; }
+  }
+  .sq-confetti i:nth-child(1) { left: 8%;  background: #c9a96e;
+    animation-duration: 4.2s; animation-delay: .1s; }
+  .sq-confetti i:nth-child(2) { left: 22%; background: ${accent};
+    animation-duration: 5.1s; animation-delay: .8s; width: 6px; }
+  .sq-confetti i:nth-child(3) { left: 38%; background: #fbbf24;
+    animation-duration: 3.6s; animation-delay: .3s; height: 10px; }
+  .sq-confetti i:nth-child(4) { left: 50%; background: #4ade80;
+    animation-duration: 4.8s; animation-delay: 1.2s; }
+  .sq-confetti i:nth-child(5) { left: 62%; background: ${accent};
+    animation-duration: 4.4s; animation-delay: .6s; width: 10px; }
+  .sq-confetti i:nth-child(6) { left: 76%; background: #c9a96e;
+    animation-duration: 3.9s; animation-delay: 1.4s; }
+  .sq-confetti i:nth-child(7) { left: 88%; background: #f472b6;
+    animation-duration: 5.3s; animation-delay: .9s; height: 14px; }
 
   /* Teaser */
   .sq-teaser {
@@ -338,8 +433,13 @@ const TEMPLATE = {
 </head>
 <body>
 <div class="sq-bg" aria-hidden="true"></div>
+<div class="sq-confetti" aria-hidden="true">
+  <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+</div>
 <div class="sq-card" role="status" aria-live="polite">
   <div class="sq-brand-cap">Keystone Smart QR</div>
+
+  <div class="sq-urgency" id="sq-urgency">Bientôt</div>
 
   <div class="sq-head">
     ${logoUrl ? `<img class="sq-logo" src="${logoUrl}" alt="${nomMarque}" loading="eager">` : ''}
@@ -396,9 +496,22 @@ ${renderAiFetchScript(safeShort)}
   const el = id => document.getElementById(id);
   const wrap = el('sq-countdown-wrap');
   const live = el('sq-live-msg');
+  const urg  = el('sq-urgency');
   const cdD = el('cd-d'), cdH = el('cd-h'), cdM = el('cd-m'), cdS = el('cd-s');
 
   function pad(n) { return String(Math.max(0, n)).padStart(2, '0'); }
+
+  let isLive = false;
+
+  function updateUrgencyBadge(remMs, days) {
+    if (!urg) return;
+    if (isLive) { urg.textContent = 'C\\'est ouvert ✦'; return; }
+    if (remMs < 3600e3)  { urg.textContent = 'Dernière heure'; return; }
+    if (remMs < 86400e3) { urg.textContent = 'Dernières heures'; return; }
+    if (days === 1)      { urg.textContent = 'Demain'; return; }
+    if (days <= 7)       { urg.textContent = 'J-' + days; return; }
+    urg.textContent = 'Bientôt';
+  }
 
   function tickValue(node, newVal) {
     if (!node) return;
@@ -409,7 +522,6 @@ ${renderAiFetchScript(safeShort)}
     node.classList.add('sq-cd-tick');
   }
 
-  let isLive = false;
   function applyUrgencyClass(remMs) {
     document.body.classList.remove('is-soon', 'is-now', 'is-live');
     if (isLive)              document.body.classList.add('is-live');
@@ -423,6 +535,7 @@ ${renderAiFetchScript(safeShort)}
       if (live) live.hidden = false;
       isLive = true;
       applyUrgencyClass(0);
+      updateUrgencyBadge(0, 0);
       return;
     }
     const remMs = targetMs - Date.now();
@@ -432,6 +545,7 @@ ${renderAiFetchScript(safeShort)}
         if (wrap) wrap.hidden = true;
         if (live) live.hidden = false;
         applyUrgencyClass(0);
+        updateUrgencyBadge(0, 0);
       }
       return;
     }
@@ -445,6 +559,7 @@ ${renderAiFetchScript(safeShort)}
     tickValue(cdM, pad(m));
     tickValue(cdS, pad(s));
     applyUrgencyClass(remMs);
+    updateUrgencyBadge(remMs, d);
   }
 
   refresh();

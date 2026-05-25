@@ -72,6 +72,17 @@ const TEMPLATE = {
     const dateFr = dt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
     return `Countdown « ${nom} » — ${dateFr}`;
   },
+
+  // V4.1-design : mini-preview animée. 4 cells J/H/M/S avec le dernier
+  // qui ticke (anim tc-tick définie dans app/style.css).
+  previewMini() {
+    return `<div class="sq-mini-cd">
+      <div class="sq-mini-cd-cell"><div class="sq-mini-cd-num">03</div><div class="sq-mini-cd-unit">J</div></div>
+      <div class="sq-mini-cd-cell"><div class="sq-mini-cd-num">12</div><div class="sq-mini-cd-unit">H</div></div>
+      <div class="sq-mini-cd-cell"><div class="sq-mini-cd-num">34</div><div class="sq-mini-cd-unit">M</div></div>
+      <div class="sq-mini-cd-cell"><div class="sq-mini-cd-num">22</div><div class="sq-mini-cd-unit">S</div></div>
+    </div>`;
+  },
 };
 
 export default TEMPLATE;

@@ -58,6 +58,16 @@ const TEMPLATE = {
       ? `Storytelling « ${nom} » — ${slogan.slice(0, 60)}`
       : `Storytelling « ${nom} »`;
   },
+
+  // V4.1-design : mini-preview animée. Logo qui scale-in + slogan
+  // typewriter, en boucle. CSS-only via @keyframes définies dans
+  // app/style.css (.sq-mini-story / tc-logo-in / tc-type / tc-caret).
+  previewMini() {
+    return `<div class="sq-mini-story">
+      <div class="sq-mini-story-logo">M</div>
+      <div class="sq-mini-story-slogan">L'art de bien recevoir</div>
+    </div>`;
+  },
 };
 
 export default TEMPLATE;

@@ -30,6 +30,12 @@ const TEMPLATE = {
   summary(template_data) {
     return 'Une phrase IA chaleureuse adaptée au scanneur, suivie d\'un bouton de redirection.';
   },
+
+  // V4.1-design : mini-preview animée révélée quand la card est active.
+  // Doit être pure CSS (aucun JS), s'auto-anime en boucle.
+  previewMini() {
+    return `<div class="sq-mini-phrase">Bonsoir, votre destination est prête</div>`;
+  },
 };
 
 export default TEMPLATE;

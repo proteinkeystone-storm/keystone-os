@@ -642,17 +642,34 @@ function _toggleSmartBriefVisibility(root) {
 }
 
 // SDQR Smart V2 — Rend les cards des templates disponibles (sélecteur).
+// V4.1-design (2026-05-26) : cards enrichies — badge tier (Pro/Max),
+// hierarchy visuelle Apple Premium, et mini-preview animée révélée
+// uniquement quand la card est active (chaque template frontend peut
+// déclarer une méthode `previewMini()` optionnelle qui retourne un
+// fragment HTML auto-animé via CSS).
 function _renderTemplateCards(root) {
   const wrap = root.querySelector('#sdqr-template-cards');
   if (!wrap) return;
   const tpls = listTemplates();
+
+  const tierLabels = { starter: 'Starter', pro: 'Pro', max: 'Max', admin: 'Admin' };
+
   wrap.innerHTML = tpls.map(t => {
     const isActive = _creating.template_id === t.id;
+    const tier     = t.tier_required || 'starter';
+    const tierLbl  = tierLabels[tier] || 'Starter';
+    const preview  = isActive && typeof t.previewMini === 'function'
+      ? `<div class="sdqr-template-preview" aria-hidden="true">${t.previewMini()}</div>`
+      : '';
     return `
       <button type="button" class="sdqr-template-card ${isActive ? 'is-active' : ''}" data-template-id="${_esc(t.id)}">
-        <span class="sdqr-template-ico">${t.icon || '✦'}</span>
+        <div class="sdqr-template-card-head">
+          <span class="sdqr-template-ico">${t.icon || '✦'}</span>
+          <span class="sdqr-template-tier sdqr-template-tier--${tier}">${tierLbl}</span>
+        </div>
         <span class="sdqr-template-label">${_esc(t.label)}</span>
         <span class="sdqr-template-desc">${_esc(t.description || '')}</span>
+        ${preview}
       </button>
     `;
   }).join('');

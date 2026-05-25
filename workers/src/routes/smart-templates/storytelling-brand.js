@@ -110,32 +110,74 @@ const TEMPLATE = {
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--tx);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     letter-spacing: -0.02em; min-height: 100vh;
-    overflow-x: hidden; }
+    overflow-x: hidden; overflow-y: hidden; }
   body { display: flex; align-items: center; justify-content: center;
-    padding: 20px; min-height: 100vh; }
+    padding: 20px; min-height: 100vh; position: relative; }
 
-  /* Halo accent color en arrière-plan, s'étend doucement */
+  /* Halo accent color en arrière-plan — pulse lente continue */
   .sq-bg-halo {
     position: fixed; inset: 0; pointer-events: none; z-index: 0;
     background: radial-gradient(ellipse at center,
-      ${accent}33 0%, ${accent}11 30%, transparent 65%);
-    opacity: 0; transform: scale(.7);
-    animation: halo-grow 4s 2.4s cubic-bezier(.16,.84,.3,1) forwards;
+      ${accent}44 0%, ${accent}1a 32%, transparent 65%);
+    opacity: 0; transform: scale(.6);
+    animation: halo-grow 4s 1.6s cubic-bezier(.16,.84,.3,1) forwards,
+               halo-pulse 7s 5.6s ease-in-out infinite;
   }
   @keyframes halo-grow {
-    from { opacity: 0; transform: scale(.7); }
+    from { opacity: 0; transform: scale(.6); }
     to   { opacity: 1; transform: scale(1.1); }
   }
+  @keyframes halo-pulse {
+    0%, 100% { transform: scale(1.1); opacity: 1; }
+    50%      { transform: scale(1.25); opacity: .7; }
+  }
+
+  /* Particules flottantes — montent doucement et se renouvellent */
+  .sq-particles { position: fixed; inset: 0; pointer-events: none;
+    z-index: 0; overflow: hidden; }
+  .sq-particle {
+    position: absolute; bottom: -20px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: radial-gradient(circle, ${accent}cc, ${accent}33);
+    opacity: 0;
+    animation: particle-up linear infinite;
+    will-change: transform, opacity;
+  }
+  @keyframes particle-up {
+    0%   { transform: translateY(0) scale(.4);
+           opacity: 0; }
+    15%  { opacity: .8; }
+    85%  { opacity: .6; }
+    100% { transform: translateY(-110vh) scale(1.1);
+           opacity: 0; }
+  }
+  .sq-particle:nth-child(1) { left: 10%;  width: 5px; height: 5px;
+    animation-duration: 13s; animation-delay: 0s; }
+  .sq-particle:nth-child(2) { left: 22%;  width: 4px; height: 4px;
+    animation-duration: 16s; animation-delay: 2s; }
+  .sq-particle:nth-child(3) { left: 35%;  width: 7px; height: 7px;
+    animation-duration: 11s; animation-delay: 4s; }
+  .sq-particle:nth-child(4) { left: 50%;  width: 4px; height: 4px;
+    animation-duration: 18s; animation-delay: 1s; }
+  .sq-particle:nth-child(5) { left: 64%;  width: 6px; height: 6px;
+    animation-duration: 14s; animation-delay: 6s; }
+  .sq-particle:nth-child(6) { left: 78%;  width: 5px; height: 5px;
+    animation-duration: 12s; animation-delay: 3s; }
+  .sq-particle:nth-child(7) { left: 89%;  width: 7px; height: 7px;
+    animation-duration: 15s; animation-delay: 5s; }
 
   .sq-card {
     position: relative; z-index: 1;
     max-width: 480px; width: 100%;
-    background: var(--card);
+    background: linear-gradient(180deg, #0e141b 0%, var(--card) 100%);
     border: 1px solid var(--bd);
-    border-radius: 20px;
+    border-radius: 24px;
     padding: 40px 28px 26px;
     text-align: center;
-    box-shadow: 0 32px 72px rgba(0,0,0,.55);
+    box-shadow:
+      0 32px 72px rgba(0,0,0,.55),
+      0 0 0 1px ${accent}1a inset,
+      0 1px 0 0 rgba(255,255,255,.04) inset;
     animation: card-in 600ms cubic-bezier(.16,.84,.3,1);
   }
   @keyframes card-in {
@@ -253,8 +295,12 @@ const TEMPLATE = {
     to   { opacity: 1; transform: translateY(0); }
   }
   .sq-title {
-    font-size: 24px; font-weight: 700; margin: 4px 0 12px;
-    letter-spacing: -.025em; line-height: 1.18;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 30px; font-weight: 700; margin: 4px 0 14px;
+    letter-spacing: -.015em; line-height: 1.15;
+    background: linear-gradient(135deg, var(--tx), ${accent});
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
   #sq-phrase {
     color: var(--mut); font-size: 15.5px; line-height: 1.55;
@@ -278,17 +324,39 @@ const TEMPLATE = {
   .sq-foot { margin-top: 28px; color: #64748b; font-size: 11px; line-height: 1.5; }
   .sq-foot a { color: var(--mut); text-decoration: none; }
 
-  /* Variations style_motion : tweaks subtils sur les timings */
+  /* Variations style_motion : différenciation visuelle marquée */
   body.is-dynamic .sq-card { animation-duration: 420ms; }
   body.is-dynamic .sq-logo-wrap { animation-duration: 800ms; }
-  body.is-minimal .sq-card { animation-duration: 750ms; }
+  body.is-dynamic .sq-bg-halo { animation-duration: 3s, 4s; }
+  body.is-dynamic .sq-particle { animation-duration: 8s; }
+  body.is-dynamic .sq-title { letter-spacing: -.03em; }
+
+  body.is-minimal .sq-card {
+    animation-duration: 750ms;
+    border-radius: 14px;
+    box-shadow: 0 24px 56px rgba(0,0,0,.45);
+  }
   body.is-minimal .sq-logo-wrap { animation-duration: 1400ms; }
+  body.is-minimal .sq-particles { display: none; }
+  body.is-minimal .sq-bg-halo { opacity: .5 !important; }
+  body.is-minimal .sq-title {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 700; -webkit-text-fill-color: var(--tx);
+    background: none;
+  }
+  body.is-minimal .sq-visuel-wrap { display: none; }
 
   [hidden] { display: none !important; }
 </style>
 </head>
 <body class="is-${styleSlug}">
 <div class="sq-bg-halo" aria-hidden="true"></div>
+${styleSlug !== 'minimal' ? `<div class="sq-particles" aria-hidden="true">
+  <span class="sq-particle"></span><span class="sq-particle"></span>
+  <span class="sq-particle"></span><span class="sq-particle"></span>
+  <span class="sq-particle"></span><span class="sq-particle"></span>
+  <span class="sq-particle"></span>
+</div>` : ''}
 <div class="sq-card" role="status" aria-live="polite">
   <div class="sq-brand-cap">Keystone Smart QR</div>
 
