@@ -24,16 +24,28 @@ export function escHtml(s) {
 }
 
 /**
- * Valide une URL http(s) propriétaire (logo, visuel). Refuse javascript:,
- * data:, file:, vbscript: etc. Retourne '' si invalide pour faciliter le
- * test ternaire dans le HTML (ex: `${safeUrl(x) ? `<img src="${safeUrl(x)}">` : ''}`).
+ * Valide une URL d'image (logo, visuel). Accepte :
+ *   1. http(s)://...
+ *   2. data:image/(png|jpeg|jpg|gif|svg+xml|webp);base64,... (upload local
+ *      via le widget frontend type='image')
+ * Refuse explicitement data:text/html, data:application/javascript, file:,
+ * javascript:, vbscript: etc. → vecteurs XSS / SSRF.
+ * Retourne '' si invalide pour faciliter le test ternaire dans le HTML.
  */
 export function safeUrl(u) {
   const s = String(u || '').trim();
   if (!s) return '';
-  if (!/^https?:\/\//i.test(s)) return '';
-  // Re-escape les caractères qui casseraient un attribut HTML.
-  return s.replace(/["'<>]/g, '');
+  // Cas 1 : URL HTTP(S)
+  if (/^https?:\/\//i.test(s)) {
+    return s.replace(/["'<>]/g, '');
+  }
+  // Cas 2 : data:image/... uniquement (whitelist explicite des subtypes
+  // image safe). Le pattern impose ;base64, pour rejeter les variantes
+  // exotiques (charset=, etc.) qui ouvriraient des trous XSS.
+  if (/^data:image\/(png|jpe?g|gif|svg\+xml|webp);base64,[A-Za-z0-9+/=]+$/i.test(s)) {
+    return s;
+  }
+  return '';
 }
 
 /**

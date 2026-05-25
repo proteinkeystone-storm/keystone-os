@@ -30,12 +30,12 @@ const TEMPLATE = {
       placeholder: 'Une phrase qui donne envie d\'attendre…', span: 'full',
     },
     {
-      id: 'logo_url', type: 'url', label: 'URL du logo',
-      placeholder: 'https://…', span: 'full',
+      id: 'logo_url', type: 'image', label: 'Logo',
+      span: 'full',
     },
     {
-      id: 'visuel_url', type: 'url', label: 'URL du visuel produit/teaser',
-      placeholder: 'https://…', span: 'full',
+      id: 'visuel_url', type: 'image', label: 'Visuel produit / teaser',
+      span: 'full',
     },
     {
       id: 'accent_color', type: 'color', label: 'Couleur d\'accent',

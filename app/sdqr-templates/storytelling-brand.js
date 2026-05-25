@@ -23,12 +23,12 @@ const TEMPLATE = {
       placeholder: 'Ex: L\'art de bien recevoir', span: 'full',
     },
     {
-      id: 'logo_url', type: 'url', label: 'URL du logo (PNG transparent ou SVG)',
-      placeholder: 'https://…', span: 'full',
+      id: 'logo_url', type: 'image', label: 'Logo (PNG transparent ou SVG idéal)',
+      span: 'full',
     },
     {
-      id: 'visuel_url', type: 'url', label: 'URL du visuel brand (photo 16/9 idéale)',
-      placeholder: 'https://…', span: 'full',
+      id: 'visuel_url', type: 'image', label: 'Visuel brand (photo 16/9 idéale)',
+      span: 'full',
     },
     {
       id: 'accent_color', type: 'color', label: 'Couleur d\'accent',

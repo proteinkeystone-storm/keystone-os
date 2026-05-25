@@ -698,8 +698,12 @@ function _renderTemplateFields(root) {
     return;
   }
   wrap.innerHTML = tpl.fields.map(f => _renderField(f, _creating.template_data)).join('');
-  // Bind change listeners (write to template_data, pas payload)
-  wrap.querySelectorAll('[data-payload-key]').forEach(el => {
+  // Bind change listeners (write to template_data, pas payload).
+  // Exclut les hidden inputs des widgets image : leur valeur est écrite
+  // directement par _bindImageWidgets après compression/clear/URL ; un
+  // listener input/change sur du hidden ne se déclencherait pas et un
+  // double-binding causerait des écrasements de data URI.
+  wrap.querySelectorAll('[data-payload-key]:not(.sdqr-image-widget input[type="hidden"])').forEach(el => {
     el.addEventListener('input', () => {
       const k = el.dataset.payloadKey;
       _creating.template_data[k] = el.type === 'checkbox' ? el.checked : el.value;
@@ -709,6 +713,7 @@ function _renderTemplateFields(root) {
       _creating.template_data[k] = el.type === 'checkbox' ? el.checked : el.value;
     });
   });
+  _bindImageWidgets(wrap, _creating.template_data);
 }
 
 // Rend les champs du form en fonction du type sélectionné.
@@ -720,8 +725,9 @@ function _renderFormFields(root) {
   const def = QR_TYPES[_creating.type];
   if (!def) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = def.fields.map(f => _renderField(f)).join('');
-  // Bind change listeners
-  wrap.querySelectorAll('[data-payload-key]').forEach(el => {
+  // Bind change listeners — exclut les hidden des widgets image (idem
+  // raisonnement que _renderTemplateFields).
+  wrap.querySelectorAll('[data-payload-key]:not(.sdqr-image-widget input[type="hidden"])').forEach(el => {
     el.addEventListener('input', () => {
       const k = el.dataset.payloadKey;
       _creating.payload[k] = el.type === 'checkbox' ? el.checked : el.value;
@@ -731,6 +737,7 @@ function _renderFormFields(root) {
       _creating.payload[k] = el.type === 'checkbox' ? el.checked : el.value;
     });
   });
+  _bindImageWidgets(wrap, _creating.payload);
   // Toggle password visibility (œil)
   wrap.querySelectorAll('.sdqr-pw-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -741,6 +748,141 @@ function _renderFormFields(root) {
   });
 }
 
+// V4.1 (2026-05-26) — Compresse une image (File) en data URI base64 sous
+// la limite maxBytes. PNG/JPEG redimensionnés via canvas + qualité dégradée
+// itérativement. SVG/GIF/WebP retournés tels quels si déjà sous la limite.
+// Lance une exception explicite si impossible.
+async function _compressImageToDataUri(file, maxBytes = 12000) {
+  const initial = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    r.readAsDataURL(file);
+  });
+
+  // SVG, GIF, WebP : non recompressibles (perdrait l'anim / le vectoriel).
+  // On accepte si déjà sous la limite, sinon on refuse explicitement.
+  if (/^data:image\/(svg\+xml|gif|webp)/i.test(initial)) {
+    if (initial.length <= maxBytes) return initial;
+    const kb = Math.round(initial.length / 1024);
+    throw new Error(`Image trop lourde (${kb} Ko, max 12 Ko). Convertis-la en PNG/JPEG (compression auto) ou utilise une URL externe.`);
+  }
+
+  // PNG, JPEG : compression itérative via canvas
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload  = () => resolve(i);
+    i.onerror = () => reject(new Error('Image illisible.'));
+    i.src = initial;
+  });
+
+  let maxDim  = 800;
+  let quality = 0.88;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width  * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width  = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL('image/jpeg', quality);
+    if (out.length <= maxBytes) return out;
+    maxDim  = Math.round(maxDim * 0.8);
+    quality = Math.max(0.45, quality - 0.1);
+  }
+  throw new Error('Image impossible à compresser sous 12 Ko. Essaie une image plus simple ou utilise une URL externe.');
+}
+
+// V4.1 (2026-05-26) — Binde tous les widgets image présents dans `wrap`
+// au store fourni (_creating.template_data ou _creating.payload). Doit
+// être appelé après chaque render qui peut contenir des widgets image.
+function _bindImageWidgets(wrap, store) {
+  if (!wrap || !store) return;
+  wrap.querySelectorAll('.sdqr-image-widget').forEach(widget => {
+    const hidden  = widget.querySelector('input[type="hidden"][data-payload-key]');
+    const fileIn  = widget.querySelector('.sdqr-image-file');
+    const clearBt = widget.querySelector('.sdqr-image-clear');
+    const urlIn   = widget.querySelector('.sdqr-image-url');
+    const errP    = widget.querySelector('.sdqr-image-err');
+    if (!hidden) return;
+    const key = hidden.dataset.payloadKey;
+
+    function setError(msg) {
+      if (!errP) return;
+      errP.textContent = msg || '';
+      errP.hidden = !msg;
+    }
+
+    function setValue(newVal) {
+      const v = newVal || '';
+      hidden.value = v;
+      store[key] = v;
+      _updateImageWidgetPreview(widget, v);
+    }
+
+    fileIn?.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      setError('');
+      try {
+        if (!/^image\//.test(f.type)) {
+          throw new Error('Le fichier sélectionné n\'est pas une image.');
+        }
+        const compressed = await _compressImageToDataUri(f, 12000);
+        setValue(compressed);
+        // Reset URL field pour ne pas garder une URL périmée
+        if (urlIn) urlIn.value = '';
+      } catch (err) {
+        setError(err.message || 'Erreur inattendue.');
+      } finally {
+        // Permet de re-sélectionner le même fichier après une erreur
+        e.target.value = '';
+      }
+    });
+
+    clearBt?.addEventListener('click', () => {
+      setValue('');
+      if (urlIn) urlIn.value = '';
+      setError('');
+    });
+
+    urlIn?.addEventListener('input', () => {
+      const u = urlIn.value.trim();
+      if (u && !/^https?:\/\//i.test(u)) {
+        setError('L\'URL doit commencer par http:// ou https://.');
+        return;
+      }
+      setError('');
+      setValue(u);
+    });
+  });
+}
+
+// V4.1 — Met à jour le rendu visuel d'un widget image (preview + label
+// bouton + visibilité bouton effacer) en fonction de la nouvelle valeur.
+function _updateImageWidgetPreview(widget, val) {
+  const preview = widget.querySelector('.sdqr-image-preview');
+  const lblSpan = widget.querySelector('.sdqr-image-btn-lbl');
+  const clearBt = widget.querySelector('.sdqr-image-clear');
+  if (val) {
+    if (preview) {
+      preview.classList.add('has-image');
+      const safeSrc = String(val).replace(/"/g, '&quot;');
+      preview.innerHTML = `<img alt="" src="${safeSrc}">`;
+    }
+    if (lblSpan) lblSpan.textContent = 'Remplacer';
+    if (clearBt) clearBt.hidden = false;
+  } else {
+    if (preview) {
+      preview.classList.remove('has-image');
+      preview.innerHTML = '<span class="sdqr-image-placeholder">Aucune image</span>';
+    }
+    if (lblSpan) lblSpan.textContent = 'Choisir une image…';
+    if (clearBt) clearBt.hidden = true;
+  }
+}
+
 function _renderField(f, store) {
   // V2 : un 2e param `store` (object) permet de lire la valeur depuis un
   // autre bucket que _creating.payload (ex: _creating.template_data).
@@ -748,12 +890,44 @@ function _renderField(f, store) {
   const src  = store || _creating.payload;
   const span = f.span === 'full' ? ' sdqr-field--full' : '';
   const req  = f.required ? ' <span class="sdqr-req">*</span>' : '';
-  const val  = _esc(src[f.id] ?? f.default ?? '');
+  const rawVal = src[f.id] ?? f.default ?? '';
+  const val  = _esc(rawVal);
   const ph   = _esc(f.placeholder || '');
 
   let input = '';
   if (f.type === 'textarea') {
     input = `<textarea data-payload-key="${f.id}" class="sdqr-input sdqr-input--textarea" placeholder="${ph}">${val}</textarea>`;
+  } else if (f.type === 'image') {
+    // V4.1 (2026-05-26) — Widget upload local : convertit en data URI
+    // base64 avec compression auto (12 KB max). Stocké dans un hidden
+    // input avec data-payload-key qui marche pareil que les autres
+    // fields. Bind interactif via _bindImageWidgets(wrap, store).
+    const hasVal   = !!rawVal;
+    const urlVal   = (typeof rawVal === 'string' && rawVal.startsWith('http')) ? val : '';
+    const previewSrc = hasVal ? val : '';
+    input = `<div class="sdqr-image-widget">
+      <input type="hidden" data-payload-key="${f.id}" value="${previewSrc}">
+      <div class="sdqr-image-preview${hasVal ? ' has-image' : ''}">
+        ${hasVal ? `<img alt="" src="${previewSrc}">` : `<span class="sdqr-image-placeholder">Aucune image</span>`}
+      </div>
+      <div class="sdqr-image-actions">
+        <label class="sdqr-image-btn">
+          <input type="file" accept="image/*" hidden class="sdqr-image-file">
+          <span class="sdqr-image-btn-lbl">${hasVal ? 'Remplacer' : 'Choisir une image…'}</span>
+        </label>
+        <button type="button" class="sdqr-image-btn sdqr-image-btn--ghost sdqr-image-clear" ${hasVal ? '' : 'hidden'}>Effacer</button>
+      </div>
+      <details class="sdqr-image-url-fallback">
+        <summary>ou utiliser une URL externe</summary>
+        <input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value="${urlVal}">
+      </details>
+      <p class="sdqr-image-help">Compressée auto à 12 Ko (PNG/JPEG redimensionnés à 800px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-err" hidden></p>
+    </div>`;
+    return `<div class="sdqr-field${span}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      ${input}
+    </div>`;
   } else if (f.type === 'select') {
     const opts = (f.options || []).map(o =>
       `<option value="${_esc(o)}" ${o === val ? 'selected' : ''}>${_esc(o)}</option>`

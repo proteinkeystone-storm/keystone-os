@@ -160,7 +160,7 @@ async function testFrontend() {
     for (const f of tpl.fields) {
       assert(typeof f.id === 'string' && f.id,                                       `${tpl.id} : field.${f.id || '?'} id présent`);
       assert(typeof f.label === 'string' && f.label,                                 `${tpl.id}.${f.id} : label présent`);
-      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
+      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local','image'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
       if (f.type === 'select') {
         assert(Array.isArray(f.options) && f.options.length > 0,                     `${tpl.id}.${f.id} : options select présentes`);
       }
@@ -182,6 +182,52 @@ async function testFrontend() {
   assert(canUseTemplate('phrase-simple', 'max') === true,                           `gating : max peut utiliser phrase-simple`);
   assert(isKnownTemplate('phrase-simple') === true,                                 `isKnownTemplate(phrase-simple) = true`);
   assert(isKnownTemplate('inexistant-xyz') === false,                               `isKnownTemplate(inconnu) = false`);
+}
+
+// ── Tests : helpers _shared.js (sécurité XSS / SSRF) ──────────
+async function testSharedHelpers() {
+  console.log(`\n${C.bold}${C.cyan}━━━ HELPERS _shared.js (sécurité) ━━━${C.reset}\n`);
+  const { safeUrl, safeColor, escHtml } = await import(join(ROOT, 'workers/src/routes/smart-templates/_shared.js'));
+
+  // safeUrl : accepte http(s) + data:image, refuse tout le reste
+  assert(safeUrl('https://example.com/logo.png') === 'https://example.com/logo.png',
+    'safeUrl : accepte HTTPS');
+  assert(safeUrl('http://example.com/logo.png') === 'http://example.com/logo.png',
+    'safeUrl : accepte HTTP');
+  assert(safeUrl('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=') !== '',
+    'safeUrl : accepte data:image/png;base64');
+  assert(safeUrl('data:image/jpeg;base64,/9j/4AAQ') !== '',
+    'safeUrl : accepte data:image/jpeg');
+  assert(safeUrl('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDov') !== '',
+    'safeUrl : accepte data:image/svg+xml');
+  assert(safeUrl('data:image/webp;base64,UklGRg') !== '',
+    'safeUrl : accepte data:image/webp');
+  assert(safeUrl('data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==') === '',
+    'safeUrl : REFUSE data:text/html (XSS)');
+  assert(safeUrl('data:application/javascript;base64,YWxlcnQoMSk=') === '',
+    'safeUrl : REFUSE data:application/javascript');
+  assert(safeUrl('javascript:alert(1)') === '',
+    'safeUrl : REFUSE javascript:');
+  assert(safeUrl('vbscript:msgbox(1)') === '',
+    'safeUrl : REFUSE vbscript:');
+  assert(safeUrl('file:///etc/passwd') === '',
+    'safeUrl : REFUSE file://');
+  assert(safeUrl('data:image/png;charset=utf-8,iVBOR') === '',
+    'safeUrl : REFUSE data:image sans ;base64,');
+  assert(safeUrl('') === '' && safeUrl(null) === '' && safeUrl(undefined) === '',
+    'safeUrl : gère vide/null/undefined');
+
+  // safeColor : whitelist hex stricte
+  assert(safeColor('#7c8af9') === '#7c8af9', 'safeColor : accepte #rrggbb');
+  assert(safeColor('#abc') === '#abc',       'safeColor : accepte #rgb');
+  assert(safeColor('red') === '#7c8af9',     'safeColor : refuse nom couleur → fallback');
+  assert(safeColor('rgb(0,0,0)') === '#7c8af9', 'safeColor : refuse rgb() → fallback');
+  assert(safeColor('') === '#7c8af9',        'safeColor : vide → fallback');
+
+  // escHtml : tous les caractères dangereux
+  assert(escHtml('<script>') === '&lt;script&gt;', 'escHtml : <> escaped');
+  assert(escHtml('"&\'<>') === '&quot;&amp;&#39;&lt;&gt;', 'escHtml : 5 chars dangereux escaped');
+  assert(escHtml(null) === '' && escHtml(undefined) === '', 'escHtml : null/undefined → ""');
 }
 
 // ── Tests : Symétrie Backend ↔ Frontend ────────────────────────
@@ -212,6 +258,7 @@ async function testSymmetry() {
 
   await testBackend();
   await testFrontend();
+  await testSharedHelpers();
   await testSymmetry();
 
   console.log(`\n${C.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
