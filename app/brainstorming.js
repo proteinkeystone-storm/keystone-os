@@ -44,10 +44,15 @@ const ORCHESTRATION_MAX_TURNS = 3;
 const TYPEWRITER_TICK_MS    = 50;    // 1 char tous les 50ms → 20 chars/sec
 const TYPEWRITER_PAUSE_END  = 280;   // pause supplémentaire après . ! ?
 const TYPEWRITER_PAUSE_SOFT = 120;   // pause supplémentaire après , ; :
-// Si le LLM dump trop de chars d'avance (≥ 200 en buffer), on accélère
-// pour pas avoir 15s de retard. Mais on reste lisible.
-const TYPEWRITER_CATCHUP_THRESHOLD = 200;
-const TYPEWRITER_CATCHUP_CHARS     = 3;     // 3 chars/tick = 60 chars/sec
+// En sequential mode (Sprint 2 fix), chaque agent attend que le précédent
+// soit drainé avant de démarrer. Du coup le buffer peut accumuler la
+// totalité de la réplique d'un agent (souvent 200-350 chars) avant que
+// le typewriter ne commence à drainer. Pour rester proche d'une dictée
+// vocale, on garde 1 char/tick même sur ces buffers — le catch-up ne
+// s'active qu'en cas de buffer vraiment énorme (un agent qui dépasse
+// largement les 2-3 phrases attendues).
+const TYPEWRITER_CATCHUP_THRESHOLD = 500;
+const TYPEWRITER_CATCHUP_CHARS     = 2;     // 2 chars/tick = 40 chars/sec
 
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
@@ -545,9 +550,19 @@ async function _callOrchestration(panel) {
 
         case 'agent_start': {
           const aid = evt.agent_id;
+          // Gate Sprint 2 fix : si un autre agent est encore en train
+          // d'afficher (typewriter buffer non drainé), on ATTEND qu'il
+          // finisse avant de créer la bulle de celui-ci.
+          // Sans ce gate, agent N+1 commence à écrire pendant qu'agent N
+          // n'a pas fini sa réplique → pas la sensation de conversation.
+          // Pendant l'attente, les chunks de cet agent arrivent du
+          // Worker et sont bufferisés côté TCP. Ils seront parsés après
+          // le flush et pushés normalement dans son buffer typewriter.
+          if (_typewriter.buffers.size > 0) {
+            await _waitForTypewriterFlush();
+          }
           const { textEl } = _appendMessage(panel, aid, '', { streaming: true });
           activeBubbles.set(aid, { textEl, fullText: '' });
-          // Initialise le buffer typewriter pour cet agent
           _typewriterPush(panel, aid, textEl, '');
           _setAgentSpeaking(panel, aid, true);
           break;
