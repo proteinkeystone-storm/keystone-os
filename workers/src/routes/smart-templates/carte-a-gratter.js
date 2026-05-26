@@ -297,19 +297,6 @@ const TEMPLATE = {
     box-shadow: 0 8px 20px ${accent}55;
   }
   .sq-download-btn:active { transform: scale(.96); }
-  .sq-rescan-hint, .sq-verify-hint {
-    font-size: 11.5px; color: var(--mut);
-    line-height: 1.5; margin: 0;
-    padding: 9px 12px;
-    background: rgba(124,138,249,.08);
-    border-left: 2px solid ${accent}55;
-    border-radius: 4px;
-    text-align: left;
-  }
-  .sq-rescan-hint::before { content: "💡"; margin-right: 6px; }
-  .sq-verify-hint { background: rgba(74,222,128,.06);
-    border-left-color: rgba(74,222,128,.4); }
-  .sq-verify-hint::before { content: "🔒"; margin-right: 6px; }
 
   /* Confettis quand gagnant */
   .sq-confetti {
@@ -425,8 +412,6 @@ const TEMPLATE = {
     </div>
     <button type="button" class="sq-download-btn" id="sq-download-btn">🎫 Télécharger mon bon (.png)</button>
     <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
-    <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
-    <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut le vérifier sur <strong>/verify-win.html?code=…</strong></p>
   </div>
 
   <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
