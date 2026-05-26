@@ -20,9 +20,10 @@
 
 import { AGENTS } from './brainstorming-agents.js';
 
-// Limite Sprint 2 : 3 messages d'agents consécutifs sans intervention
-// utilisateur, puis auto-pause pour éviter le burn de tokens.
-const DEFAULT_MAX_AGENT_TURNS_WITHOUT_USER = 3;
+// Sprint 7.1 — tour de table complet : 8 agents non-Synthesizer parlent
+// dans un cycle (au lieu des 3 messages du Sprint 2). pickNextAgent
+// dédupplique pour qu'aucun agent ne parle deux fois dans le cycle.
+const DEFAULT_MAX_AGENT_TURNS_WITHOUT_USER = 8;
 
 // ─────────────────────────────────────────────────────────────────
 // detectMentionInText
@@ -179,13 +180,17 @@ export function getArcForMode(mode) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// pickNextAgent — heuristiques Sprint 7
+// pickNextAgent — heuristiques Sprint 7.1 (round-table complet)
 // ─────────────────────────────────────────────────────────────────
 // Règles dans l'ordre :
 //   1. Si history vide → Strategic Lead (ouvre toujours la discussion)
 //   2. Si la dernière intervention est de 'user' → Strategic Lead (re-cadre)
 //   3. Si le dernier message contient une mention explicite → cet agent
-//   4. Sinon → rotation selon l'arc du mode cognitif courant
+//   4. Sinon → rotation selon l'arc du mode, avec déduplication :
+//      si l'agent suivant dans l'arc a déjà parlé depuis la dernière
+//      intervention user, on avance dans l'arc jusqu'à trouver un agent
+//      qui n'a pas encore parlé. Garantit un tour de table complet
+//      sans répétition.
 // ─────────────────────────────────────────────────────────────────
 export function pickNextAgent(history, mode = 'exploration') {
   if (!Array.isArray(history) || history.length === 0) return 'strategic';
@@ -199,9 +204,29 @@ export function pickNextAgent(history, mode = 'exploration') {
   const mentioned = detectMentionInText(last.content);
   if (mentioned && mentioned !== last.agent_id) return mentioned;
 
+  // Sprint 7.1 — collecte des agents qui ont déjà parlé depuis le dernier
+  // reset user (ou depuis le début si pas de reset). Synth n'est jamais
+  // dans le pool de dédup (c'est un agent spécial déclenché manuellement).
+  const spokenSinceReset = new Set();
+  for (let i = history.length - 1; i >= 0; i--) {
+    const a = history[i].agent_id;
+    if (a === 'user') break;
+    if (a && a !== 'synth') spokenSinceReset.add(a);
+  }
+
   // Rotation adaptée — Sprint 7 : chaque mode a son arc dédié
+  // Sprint 7.1 — dédup : si le successeur naturel a déjà parlé, on avance
+  // dans l'arc jusqu'à trouver un agent vierge. Max 9 sauts (1 par agent)
+  // pour éviter toute boucle infinie.
   const arc = getArcForMode(mode);
-  return arc[last.agent_id] || 'strategic';
+  let candidate = arc[last.agent_id] || 'strategic';
+  for (let i = 0; i < 9; i++) {
+    if (!spokenSinceReset.has(candidate)) return candidate;
+    candidate = arc[candidate] || 'strategic';
+  }
+  // Tous les agents ont déjà parlé → on retombe sur strategic (en pratique
+  // shouldAutoPause aura déjà coupé avant ce point)
+  return 'strategic';
 }
 
 // ─────────────────────────────────────────────────────────────────

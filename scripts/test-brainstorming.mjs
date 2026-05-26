@@ -298,6 +298,52 @@ try {
   const arcExpl    = getArcForMode('exploration');
   if (arcInvalid.strategic === arcExpl.strategic) ok('mode inconnu → fallback exploration');
   else                                              ko('fallback exploration cassé', '');
+
+  // ─── Sprint 7.1 — déduplication round-table ──────────────────────
+  // 5.12 — Si l'agent suivant dans l'arc a déjà parlé, on saute
+  const hist4 = [
+    { agent_id: 'strategic', content: 'ouverture' },
+    { agent_id: 'creative',  content: 'concept fort' },
+    { agent_id: 'devil',     content: 'mais...' },
+    { agent_id: 'consumer',  content: 'côté humain' },
+  ];
+  const next4 = pickNextAgent(hist4, 'exploration');
+  // Successeur naturel de consumer = cultural (jamais parlé) → cultural
+  if (next4 === 'cultural') ok('dedup : history 4 agents → cultural (successeur vierge)');
+  else                       ko('dedup KO 4 agents', `attendu cultural, reçu ${next4}`);
+
+  // 5.13 — Simulation d'un round-table complet 8 tours : aucun agent
+  // ne doit être appelé 2 fois.
+  const sim = [];
+  const calls = new Set();
+  let lastId = null;
+  // 1er tour : history vide → strategic
+  for (let i = 0; i < 8; i++) {
+    const aid = pickNextAgent(sim, 'exploration');
+    sim.push({ agent_id: aid, content: `tour ${i+1}` });
+    if (calls.has(aid)) {
+      ko(`round-table dedup : ${aid} appelé 2x au tour ${i+1}`, JSON.stringify([...calls]));
+      lastId = 'DUP';
+      break;
+    }
+    calls.add(aid);
+    lastId = aid;
+  }
+  if (lastId !== 'DUP' && calls.size === 8) ok('round-table 8 tours : 8 agents distincts (zéro répétition)');
+
+  // 5.14 — Intervention user au milieu reset la dédup (cycle redémarre)
+  const histReset = [
+    { agent_id: 'strategic', content: 'ouverture' },
+    { agent_id: 'creative',  content: 'idée' },
+    { agent_id: 'devil',     content: 'doute' },
+    { agent_id: 'user',      content: 'recadre svp' },
+    { agent_id: 'strategic', content: 'compris, on focus' },
+  ];
+  // Après le reset user, seul strategic a parlé dans le cycle courant
+  // → successeur naturel de strategic = creative (en exploration)
+  const nextReset = pickNextAgent(histReset, 'exploration');
+  if (nextReset === 'creative') ok('dedup : user reset → cycle redémarre');
+  else                           ko('dedup user reset KO', `attendu creative, reçu ${nextReset}`);
 } catch (e) { ko('Worker orchestrator : import KO', e.message); }
 
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis

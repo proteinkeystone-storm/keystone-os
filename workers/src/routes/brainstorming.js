@@ -45,7 +45,8 @@ const MAX_TOKENS  = 180;     // ~150 mots max — force court et concis
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
-const DEFAULT_MAX_TURNS = 3;
+// Sprint 7.1 — tour de table complet : 8 agents non-Synthesizer en un cycle
+const DEFAULT_MAX_TURNS = 8;
 const MAX_SENTENCES_PER_TURN = 2;   // post-process : on coupe à 2 phrases max
 
 // Strip les artefacts alphabétiques de fin (Llama 3.3 fp8 bug), au cas
@@ -380,7 +381,8 @@ export async function handleBrainstormingAgentRespond(request, env) {
   if (!Array.isArray(history) || history.length > MAX_HISTORY) {
     return err(`history invalide (max ${MAX_HISTORY} entrées)`, 400, origin);
   }
-  const turnsCap = Math.max(1, Math.min(6, Number(max_turns) || DEFAULT_MAX_TURNS));
+  // Sprint 7.1 — cap relevé à 10 pour permettre un tour de table complet (8) + marge
+  const turnsCap = Math.max(1, Math.min(10, Number(max_turns) || DEFAULT_MAX_TURNS));
 
   if (!env.AI || typeof env.AI.run !== 'function') {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);

@@ -33,9 +33,11 @@ const APP_ID = 'A-COM-003';
 const DEFAULT_MODE         = 'exploration';      // hardcodé Sprint 1, sélecteur Sprint 7
 const BOOT_DELAY_PER_AGENT = 280;                // ms entre chaque allumage
 const SESSION_KEY          = 'ks_brainstorming_session_draft';
-// Sprint 2 : orchestration auto (3 agents enchaînés max), Sprint 3 ajoute
-// le retour de la pondération via intervention user.
-const ORCHESTRATION_MAX_TURNS = 3;
+// Sprint 7.1 — Tour de table complet : 8 agents non-Synthesizer parlent
+// dans un cycle avant auto-pause. Le worker dédupplique pour qu'aucun
+// agent ne parle deux fois dans le même cycle, et le frontend déclenche
+// auto la synthèse à 8/8.
+const ORCHESTRATION_MAX_TURNS = 8;
 
 // ── Typewriter (rythme dictée vocale) ────────────────────────────
 // Le LLM streame très vite (~50-100 chars/sec). Pour donner la sensation
@@ -54,6 +56,9 @@ const TYPEWRITER_PAUSE_SOFT = 120;   // pause supplémentaire après , ; :
 const TYPEWRITER_CATCHUP_THRESHOLD = 500;
 const TYPEWRITER_CATCHUP_CHARS     = 2;     // 2 chars/tick = 40 chars/sec
 
+// Sprint 7.1 — seuil de tour complet (les 8 agents non-Synthesizer ont parlé)
+// → déclenche auto la synthèse pour livrer une analyse riche sans clic.
+const ROUNDTABLE_FULL_TURNS = 8;
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
 
@@ -722,8 +727,17 @@ async function _callOrchestration(panel) {
 
         case 'complete': {
           complete = true;
-          // Attendre que le typewriter ait fini d'afficher avant la note
-          if (evt.reason === 'auto_pause' || evt.reason === 'max_turns') {
+          const isRoundComplete = (evt.reason === 'auto_pause' || evt.reason === 'max_turns')
+                                  && (evt.turns || 0) >= ROUNDTABLE_FULL_TURNS;
+          if (isRoundComplete && !_currentSession?.synthesis) {
+            // Sprint 7.1 — tour de table complet : auto-synthèse
+            _waitForTypewriterFlush().then(() => {
+              _appendOrchestrationNote(panel,
+                'Tour de table complet — synthèse stratégique en cours…');
+              // Petit délai pour laisser respirer après le dernier typewriter
+              setTimeout(() => { _callSynthesize(panel); }, 600);
+            });
+          } else if (evt.reason === 'auto_pause' || evt.reason === 'max_turns') {
             _waitForTypewriterFlush().then(() => {
               _appendOrchestrationNote(panel,
                 'Le tour de table est suspendu. Intervenez pour orienter la suite ou validez par une nouvelle direction.');
