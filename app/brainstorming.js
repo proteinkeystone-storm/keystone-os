@@ -275,7 +275,7 @@ function _renderShell() {
       <div class="wr-rail-spacer"></div>
     </aside>
 
-    <!-- Sub-header : mode courant + consensus arc -->
+    <!-- Sub-header : mode courant + consensus arc + (mobile) bouton signals -->
     <div class="wr-subheader">
       <div class="wr-subheader-mode" id="wr-subtitle">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</div>
       <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
@@ -287,8 +287,12 @@ function _renderShell() {
           </svg>
           <div class="wr-consensus-val" id="wr-consensus-val">0%</div>
         </div>
-        <span>Consensus</span>
+        <span class="wr-consensus-label">Consensus</span>
       </div>
+      <!-- Sprint 6 — bouton signaux (visible uniquement < 1024px) -->
+      <button type="button" class="wr-signals-toggle" id="wr-signals-toggle" aria-label="Afficher les signaux">
+        ${_iconSvg('sliders')}
+      </button>
     </div>
 
     <!-- Agents row -->
@@ -382,6 +386,20 @@ function _wireShell(panel) {
   if (railBtns[0]) {
     railBtns[0].addEventListener('click', () => _openLibraryModal(panel));
   }
+
+  // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
+  const signalsToggle = panel.querySelector('#wr-signals-toggle');
+  if (signalsToggle) {
+    signalsToggle.addEventListener('click', () => {
+      panel.classList.toggle('signals-open');
+    });
+  }
+  // Click sur le backdrop des signals ferme la sheet
+  panel.querySelector('.wr-signals')?.addEventListener('click', (e) => {
+    if (e.target.classList.contains('wr-signals')) {
+      panel.classList.remove('signals-open');
+    }
+  });
 
   // Esc key
   const onKey = (e) => {
