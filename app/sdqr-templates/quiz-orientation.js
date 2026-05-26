@@ -1,15 +1,15 @@
 // ══════════════════════════════════════════════════════════════════
-// KEYSTONE OS — Smart Template Frontend · quiz-orientation (V4.2)
+// KEYSTONE OS — Smart Template Frontend · quiz-orientation (V4.5)
 // ───────────────────────────────────────────────────────────────────
 // Pendant frontend de workers/src/routes/smart-templates/quiz-orientation.js.
-// Pas d'état serveur (anonyme et instantané) — le tag choisi est passé
-// à l'IA via le context étendu de /api/smartqr/generate-interstitial.
+// Pivot V4.5 (2026-05-26) : abandon de la phrase IA. Chaque réponse
+// a sa propre URL de destination → routeur immédiat.
 // ══════════════════════════════════════════════════════════════════
 
 const TEMPLATE = {
   id:              'quiz-orientation',
   label:           'Quiz d\'orientation',
-  description:     '1 question + 2 à 4 réponses iconiques. L\'IA recommande LE produit ou service pertinent selon la réponse.',
+  description:     'Routeur intelligent : 1 question + 2-4 réponses. Chaque tap redirige immédiatement vers la bonne page produit/service.',
   icon:            '❓',
   tier_required:   'pro',
 
@@ -25,10 +25,11 @@ const TEMPLATE = {
     },
     {
       id: 'reponses', type: 'textarea',
-      label: 'Réponses (2 à 4 — format emoji|libellé|tag, 1 par ligne)',
-      placeholder: '👶|Bébé|baby\n🧒|Enfant|kid\n🧑|Ado|teen\n👴|Senior|senior',
-      default: '🛍️|Pour moi|self\n🎁|Pour offrir|gift',
+      label: 'Réponses (2 à 4 — format emoji|libellé|URL de destination, 1 par ligne)',
+      placeholder: '👶|Bébé|https://mamarque.fr/rayon-bebe\n🧒|Enfant|https://mamarque.fr/rayon-enfant\n🧑|Ado|https://mamarque.fr/rayon-ado',
+      default: '🛍️|Pour moi|https://example.com/pour-moi\n🎁|Pour offrir|https://example.com/cadeaux',
       span: 'full',
+      allowIcons: true,
     },
     {
       id: 'logo_url', type: 'image', label: 'Logo (optionnel)',
@@ -56,6 +57,16 @@ const TEMPLATE = {
     if (lines.length > 4) {
       errors.push('Maximum 4 réponses pour rester lisible.');
     }
+    // Vérifie que chaque ligne a bien une URL (3ᵉ segment) http(s).
+    for (let i = 0; i < lines.length; i++) {
+      const parts = lines[i].split('|');
+      const url = (parts[2] || '').trim();
+      if (!url) {
+        errors.push(`Réponse ${i + 1} : URL de destination manquante.`);
+      } else if (!/^https?:\/\//i.test(url)) {
+        errors.push(`Réponse ${i + 1} : URL doit commencer par http:// ou https://.`);
+      }
+    }
     return errors;
   },
 
@@ -66,7 +77,6 @@ const TEMPLATE = {
     return `Quiz « ${nom} » — ${q}`;
   },
 
-  // Mini-preview animée : 3 cards mini avec emoji qui pulse en cascade
   previewMini() {
     return `<div class="sq-mini-quiz">
       <div class="sq-mini-quiz-card sq-mini-quiz-card--a">👶</div>

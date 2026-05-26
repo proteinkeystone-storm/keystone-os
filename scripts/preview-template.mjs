@@ -30,7 +30,8 @@ const MOCK = {
   'quiz-orientation': {
     nom_marque:   'Boutique Solène',
     question:     'Vous cherchez pour ?',
-    reponses:     '👶|Bébé|baby\n🧒|Enfant|kid\n🧑|Ado|teen\n👴|Senior|senior',
+    // V4.5 — format emoji|libellé|URL (quiz routeur)
+    reponses:     '👶|Bébé|https://example.com/bebe\n🧒|Enfant|https://example.com/enfant\n🧑|Ado|https://example.com/ado\n👴|Senior|https://example.com/senior',
     logo_url:     '',
     accent_color: '#7c8af9',
   },

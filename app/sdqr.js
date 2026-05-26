@@ -724,6 +724,7 @@ function _renderTemplateFields(root) {
     });
   });
   _bindImageWidgets(wrap, _creating.template_data);
+  _bindIconPickers(wrap);
 }
 
 // Rend les champs du form en fonction du type sélectionné.
@@ -748,6 +749,7 @@ function _renderFormFields(root) {
     });
   });
   _bindImageWidgets(wrap, _creating.payload);
+  _bindIconPickers(wrap);
   // Toggle password visibility (œil)
   wrap.querySelectorAll('.sdqr-pw-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -939,9 +941,15 @@ function _renderField(f, store) {
       ${input}
     </div>`;
   } else if (f.type === 'select') {
-    const opts = (f.options || []).map(o =>
-      `<option value="${_esc(o)}" ${o === val ? 'selected' : ''}>${_esc(o)}</option>`
-    ).join('');
+    // V4.4 (2026-05-26) : on supporte 2 formats d'options pour les select :
+    //   - strings simples : ['Élégant', 'Dynamique'] (legacy storytelling-brand)
+    //   - objets {value, label} : [{value:'encre', label:'Tampon encré ✓'}] (V4.4+)
+    // Le label affiché reste descriptif tandis que la value reste machine.
+    const opts = (f.options || []).map(o => {
+      const value = (typeof o === 'object' && o) ? o.value : o;
+      const label = (typeof o === 'object' && o) ? (o.label ?? o.value) : o;
+      return `<option value="${_esc(value)}" ${value === val ? 'selected' : ''}>${_esc(label)}</option>`;
+    }).join('');
     input = `<select data-payload-key="${f.id}" class="sdqr-input">${opts}</select>`;
   } else if (f.type === 'checkbox') {
     input = `<label class="sdqr-checkbox-lbl">
@@ -960,12 +968,42 @@ function _renderField(f, store) {
     input = `<input type="${f.type}" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">`;
   }
 
+  // V4.5 (2026-05-26) — Bouton "Choisir un picto" qui ouvre la bibliothèque
+  // d'emojis curés. Activable via field.allowIcons = true. L'emoji choisi
+  // est inséré à la position du curseur (input/textarea). Le binding du
+  // click est fait par _bindIconPickers(wrap) après _renderField.
+  const pickerBtn = f.allowIcons
+    ? `<button type="button" class="sdqr-icon-picker-btn"
+              data-icon-picker-target="${f.id}"
+              aria-label="Choisir un picto">🎨 Picto</button>`
+    : '';
+
   return `
     <label class="sdqr-field${span}">
       <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
-      ${input}
+      ${pickerBtn ? `<div class="sdqr-input-with-picker">${input}${pickerBtn}</div>` : input}
     </label>
   `;
+}
+
+// V4.5 — Bind les boutons "Choisir un picto" dans une zone donnée.
+// Pour chaque bouton, click → ouvre la modale, l'emoji choisi est inséré
+// au curseur du champ cible (data-icon-picker-target = id du field).
+async function _bindIconPickers(wrap) {
+  const btns = wrap?.querySelectorAll('.sdqr-icon-picker-btn[data-icon-picker-target]');
+  if (!btns || !btns.length) return;
+  const mod = await import('./sdqr-icon-picker.js');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-icon-picker-target');
+      const target = wrap.querySelector(`[data-payload-key="${targetId}"]`);
+      if (!target) return;
+      mod.openIconPicker({
+        onPick: (icon) => mod.insertIconAtCaret(target, icon),
+        anchorLabel: 'Choisir un picto',
+      });
+    });
+  });
 }
 
 async function _handleCreate(panel) {
@@ -1062,9 +1100,14 @@ function _renderEditPayloadField(f, currentValue) {
   if (f.type === 'textarea') {
     input = `<textarea data-payload-key="${f.id}" class="sdqr-input sdqr-input--textarea" placeholder="${ph}">${val}</textarea>`;
   } else if (f.type === 'select') {
-    const opts = (f.options || []).map(o =>
-      `<option value="${_esc(o)}" ${o === (currentValue ?? f.default) ? 'selected' : ''}>${_esc(o)}</option>`
-    ).join('');
+    // V4.4 (2026-05-26) : 2 formats d'options supportés — strings simples
+    // (legacy) ou objets {value, label} (V4.4+ avec libellés descriptifs).
+    const selVal = currentValue ?? f.default;
+    const opts = (f.options || []).map(o => {
+      const value = (typeof o === 'object' && o) ? o.value : o;
+      const label = (typeof o === 'object' && o) ? (o.label ?? o.value) : o;
+      return `<option value="${_esc(value)}" ${value === selVal ? 'selected' : ''}>${_esc(label)}</option>`;
+    }).join('');
     input = `<select data-payload-key="${f.id}" class="sdqr-input">${opts}</select>`;
   } else if (f.type === 'checkbox') {
     return `<div class="sdqr-field${span}">

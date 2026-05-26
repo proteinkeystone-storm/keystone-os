@@ -7081,6 +7081,149 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
    externe. Compression auto à 12 Ko via canvas côté frontend ; stocké
    en data URI base64 dans template_data. Fallback URL externe en
    accordion pour ceux qui préfèrent. */
+
+/* ──────────────────────────────────────────────────────────────────
+   V4.5 (2026-05-26) — Bibliothèque de pictogrammes intégrée
+   Bouton qui ouvre une modale avec ~90 emojis curés par catégorie.
+   Activable via field.allowIcons = true sur n'importe quel champ.
+   ────────────────────────────────────────────────────────────────── */
+.sdqr-input-with-picker {
+  display: flex; gap: 8px; align-items: stretch;
+}
+.sdqr-input-with-picker > .sdqr-input,
+.sdqr-input-with-picker > textarea.sdqr-input {
+  flex: 1;
+}
+.sdqr-icon-picker-btn {
+  appearance: none; border: 1px solid rgba(201,169,110,.4);
+  background: rgba(201,169,110,.08);
+  color: var(--gold, #c9a96e);
+  font-family: inherit; font-weight: 600; font-size: 13px;
+  letter-spacing: .02em;
+  padding: 0 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s ease, transform .14s ease, border-color .14s ease;
+  align-self: stretch;
+}
+.sdqr-icon-picker-btn:hover {
+  background: rgba(201,169,110,.16);
+  border-color: rgba(201,169,110,.7);
+}
+.sdqr-icon-picker-btn:active { transform: scale(.97); }
+
+/* Modale */
+.sdqr-icon-modal {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+.sdqr-icon-modal.is-shown { opacity: 1; pointer-events: auto; }
+.sdqr-icon-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(7,9,13,.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.sdqr-icon-panel {
+  position: relative;
+  width: 480px; max-width: calc(100vw - 32px);
+  max-height: 80vh;
+  background: linear-gradient(180deg, #0e141b 0%, #0d1218 100%);
+  border: 1px solid #1c2632;
+  border-radius: 16px;
+  box-shadow: 0 32px 72px rgba(0,0,0,.6),
+              0 0 0 1px rgba(201,169,110,.1) inset;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transform: scale(.96);
+  transition: transform .25s cubic-bezier(.18,.89,.32,1.28);
+}
+.sdqr-icon-modal.is-shown .sdqr-icon-panel { transform: scale(1); }
+
+.sdqr-icon-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.sdqr-icon-head h2 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 20px; font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 0;
+  color: var(--gold, #c9a96e);
+}
+.sdqr-icon-close {
+  appearance: none; border: 0; background: transparent;
+  color: rgba(255,255,255,.6); cursor: pointer;
+  padding: 6px; border-radius: 6px;
+  transition: background .14s, color .14s;
+}
+.sdqr-icon-close:hover { background: rgba(255,255,255,.06); color: #fff; }
+
+/* Tabs catégories */
+.sdqr-icon-cats {
+  display: flex; gap: 4px;
+  padding: 10px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.sdqr-icon-cats::-webkit-scrollbar { height: 4px; }
+.sdqr-icon-cats::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+.sdqr-icon-cat {
+  appearance: none; border: 0; background: transparent;
+  color: rgba(255,255,255,.55);
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  letter-spacing: .02em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s, color .14s;
+}
+.sdqr-icon-cat:hover { background: rgba(255,255,255,.04); color: #fff; }
+.sdqr-icon-cat.is-active {
+  background: rgba(201,169,110,.16);
+  color: var(--gold, #c9a96e);
+}
+
+/* Grille d'emojis */
+.sdqr-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.sdqr-icon-cell {
+  appearance: none; border: 1px solid transparent;
+  background: rgba(255,255,255,.03);
+  font-size: 26px; line-height: 1;
+  padding: 12px 0; margin: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .14s cubic-bezier(.18,.89,.32,1.28);
+}
+.sdqr-icon-cell:hover {
+  background: rgba(201,169,110,.12);
+  border-color: rgba(201,169,110,.4);
+  transform: scale(1.12);
+}
+.sdqr-icon-cell:active { transform: scale(1.02); }
+
+.sdqr-icon-hint {
+  text-align: center; font-size: 11.5px;
+  color: rgba(255,255,255,.4);
+  padding: 8px 16px 14px;
+  margin: 0;
+  border-top: 1px solid rgba(255,255,255,.04);
+  font-style: italic;
+}
+
+/* Form contextuel : champs dynamiques (suite — ancien anchor) */
 .sdqr-image-widget {
   display: flex; flex-direction: column; gap: 10px;
 }

@@ -24,6 +24,7 @@ const TEMPLATE = {
       placeholder: '🍒\n🍋\n⭐\n🔔\n💎\n7️⃣',
       default: '🍒\n🍋\n⭐\n🔔\n💎\n7️⃣',
       span: 'full',
+      allowIcons: true,
     },
     {
       id: 'taux_de_gain', type: 'number',
