@@ -268,12 +268,12 @@ function _renderShell() {
       </div>
     </header>
 
-    <!-- Left rail (3 icônes — sessions / agents / modes) -->
+    <!-- Left rail (3 icônes — historique / personnalités agents / modes) -->
     <aside class="wr-rail">
-      <button class="wr-rail-btn active" title="Sessions" aria-label="Sessions">
-        ${_iconSvg('chat')}
+      <button class="wr-rail-btn" title="Historique des sessions" aria-label="Sessions">
+        ${_iconSvg('history')}
       </button>
-      <button class="wr-rail-btn" title="Agents" aria-label="Agents">
+      <button class="wr-rail-btn" title="Personnalités des agents" aria-label="Agents">
         ${_iconSvg('users')}
       </button>
       <button class="wr-rail-btn" title="Modes cognitifs" aria-label="Modes">
@@ -371,6 +371,7 @@ function _iconSvg(name) {
   const inlineFallback = {
     users:    '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'arrow-up': '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
   };
   const fallback = inlineFallback[name];
   if (fallback) {
@@ -388,12 +389,14 @@ function _wireShell(panel) {
   // Close button (rail bottom)
   panel.querySelector('#wr-close-btn')?.addEventListener('click', closeBrainstorming);
 
-  // Sprint 5 — Click sur l'icône Sessions du rail ouvre la bibliothèque
-  // Sprint 7 — Click sur l'icône Modes cognitifs ouvre la modale sélecteur
-  // Index 0 = Sessions, 1 = Agents (Sprint futur), 2 = Modes
+  // Rail buttons : Sessions (0), Agents (1), Modes (2)
+  // Sprint 5 — Sessions ; Sprint 7 — Modes ; Sprint 7.5 — Agents
   const railBtns = panel.querySelectorAll('.wr-rail-btn');
   if (railBtns[0]) {
     railBtns[0].addEventListener('click', () => _openLibraryModal(panel));
+  }
+  if (railBtns[1]) {
+    railBtns[1].addEventListener('click', () => _openAgentsModal(panel));
   }
   if (railBtns[2]) {
     railBtns[2].addEventListener('click', () => _openModesModal(panel));
@@ -1369,24 +1372,81 @@ function _openModesModal(panel) {
   });
 }
 
-function _openLibraryModal(panel) {
+// Sprint 7.5 — Modale Personnalités des agents (lecture seule)
+// Permet à l'utilisateur de comprendre QUI parle dans le débat et quel
+// est le rôle de chaque agent. Branchée sur le bouton "Agents" du rail.
+function _openAgentsModal(panel) {
+  let modal = panel.querySelector('#wr-agents-modal');
+  if (modal) { modal.remove(); return; }
+  modal = document.createElement('div');
+  modal.id = 'wr-agents-modal';
+  modal.className = 'wr-agents-modal';
+  const cards = AGENTS.map(a => `
+    <div class="wr-agent-card" style="--agent-color: ${a.color}; --agent-glow: ${a.color}40;">
+      <div class="wr-agent-card-head">
+        <div class="wr-agent-card-icon">${_iconSvg(a.icon)}</div>
+        <div class="wr-agent-card-name">${_esc(a.name)}</div>
+      </div>
+      <div class="wr-agent-card-role">${_esc(a.role)}</div>
+      <div class="wr-agent-card-fn">${_esc(a.function || '')}</div>
+      <div class="wr-agent-card-traits">
+        ${(a.personality || []).map(t => `<span class="wr-agent-trait">${_esc(t)}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  modal.innerHTML = `
+    <div class="wr-agents-inner">
+      <div class="wr-agents-head">
+        <div class="wr-agents-title">Personnalités du boardroom</div>
+        <div class="wr-agents-sub">9 expertises distinctes qui dialoguent en direct. Chacune intervient quand le débat appelle son angle.</div>
+        <button type="button" class="wr-agents-close" aria-label="Fermer">${_iconSvg('x')}</button>
+      </div>
+      <div class="wr-agents-grid">${cards}</div>
+    </div>
+  `;
+  panel.appendChild(modal);
+  modal.querySelector('.wr-agents-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    modal.remove();
+  });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+// Sprint 7.5 — Suppression d'une session de la bibliothèque
+function _deleteSessionFromLibrary(sessionId) {
   const all = _loadLibrary();
+  const next = all.filter(s => s.id !== sessionId);
+  try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); }
+  catch (e) { /* quota */ }
+}
+
+function _openLibraryModal(panel) {
   let modal = panel.querySelector('#wr-library-modal');
   if (modal) { modal.remove(); return; }
   modal = document.createElement('div');
   modal.id = 'wr-library-modal';
   modal.className = 'wr-library-modal';
+  _renderLibraryModal(panel, modal);
+  panel.appendChild(modal);
+}
+
+// Sprint 7.5 — Render isolé (réutilisé après suppression pour refresh)
+function _renderLibraryModal(panel, modal) {
+  const all = _loadLibrary();
   const items = all.map(s => {
     const date = new Date(s.updated_at || s.started_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
     const hasSynth = s.synthesis ? '<span class="wr-library-tag">synthèse</span>' : '';
-    const brief = _esc(s.brief).slice(0, 100) + (s.brief.length > 100 ? '…' : '');
+    const brief = _esc((s.brief || '').slice(0, 100)) + ((s.brief || '').length > 100 ? '…' : '');
     return `
       <li class="wr-library-item" data-session-id="${_esc(s.id)}">
-        <div class="wr-library-item-head">
-          <span class="wr-library-date">${date}</span>
-          ${hasSynth}
+        <div class="wr-library-item-body">
+          <div class="wr-library-item-head">
+            <span class="wr-library-date">${date}</span>
+            ${hasSynth}
+          </div>
+          <div class="wr-library-brief">${brief}</div>
         </div>
-        <div class="wr-library-brief">${brief}</div>
+        <button type="button" class="wr-library-item-del" data-session-id="${_esc(s.id)}" title="Supprimer cette session" aria-label="Supprimer">${_iconSvg('trash-2')}</button>
       </li>`;
   }).join('');
   modal.innerHTML = `
@@ -1401,15 +1461,44 @@ function _openLibraryModal(panel) {
       }
     </div>
   `;
-  panel.appendChild(modal);
-  modal.querySelector('.wr-library-close').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-  modal.querySelectorAll('.wr-library-item').forEach(li => {
-    li.addEventListener('click', () => {
-      const sid = li.dataset.sessionId;
-      const session = all.find(s => s.id === sid);
-      if (session) _restoreSession(panel, session);
-      modal.remove();
+  // Close button — utilise closest() pour matcher le SVG enfant en cas de click dessus
+  modal.querySelector('.wr-library-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    modal.remove();
+  });
+  // Backdrop click ferme uniquement si on clique sur le backdrop nu (pas un enfant)
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+  // Click sur le bouton supprimer (n'ouvre PAS la session)
+  modal.querySelectorAll('.wr-library-item-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.sessionId;
+      if (!sid) return;
+      const confirmed = confirm('Supprimer définitivement cette session ?');
+      if (!confirmed) return;
+      _deleteSessionFromLibrary(sid);
+      _renderLibraryModal(panel, modal);  // refresh la liste
+    });
+  });
+  // Click sur le corps de l'item charge la session
+  modal.querySelectorAll('.wr-library-item-body').forEach(body => {
+    body.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const li = body.closest('.wr-library-item');
+      const sid = li?.dataset.sessionId;
+      if (!sid) return;
+      const session = _loadLibrary().find(s => s.id === sid);
+      if (!session) return;
+      try {
+        _restoreSession(panel, session);
+        modal.remove();
+      } catch (err) {
+        console.error('[brainstorming] _restoreSession failed:', err);
+        _appendErrorMessage(panel, `Impossible de charger cette session : ${err?.message || err}. Le format est peut-être obsolète.`);
+        modal.remove();
+      }
     });
   });
 }
