@@ -20,7 +20,7 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "3. Carte à gratter"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript, renderWinPngScript } from './_shared.js';
 
 const TEMPLATE = {
   id:              'carte-a-gratter',
@@ -246,34 +246,70 @@ const TEMPLATE = {
     align-items: stretch;
   }
   body.is-win .sq-win-actions { display: flex; }
-  .sq-copy-btn {
+
+  /* Encart code signé */
+  .sq-win-code-box {
+    margin: 0 0 4px;
+    padding: 14px 16px 12px;
+    background: linear-gradient(135deg,
+      rgba(7,9,13,.65), rgba(${parseInt(accent.slice(1,3),16)},${parseInt(accent.slice(3,5),16)},${parseInt(accent.slice(5,7),16)},.06));
+    border: 1.5px solid ${accent}55;
+    border-radius: 12px;
+    text-align: center;
+  }
+  .sq-win-code-lbl {
+    font-size: 10px; letter-spacing: .22em;
+    color: ${accent}; opacity: .9;
+    text-transform: uppercase; font-weight: 700;
+    margin: 0 0 6px;
+  }
+  .sq-win-code-val {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 24px; font-weight: 700;
+    color: #fff;
+    letter-spacing: .05em;
+    display: block;
+  }
+  .sq-copy-btn, .sq-download-btn {
     appearance: none; border: 0; cursor: pointer;
-    background: linear-gradient(135deg, ${accent}, ${accent}cc);
-    color: #fff; font-family: inherit;
-    font-size: 14px; font-weight: 700; letter-spacing: .02em;
+    font-family: inherit; font-weight: 700; letter-spacing: .02em;
     padding: 13px 22px;
     border-radius: 10px;
-    box-shadow: 0 8px 20px ${accent}55;
     transition: transform .14s ease, box-shadow .18s ease;
     -webkit-tap-highlight-color: transparent;
+  }
+  .sq-copy-btn {
+    background: rgba(255,255,255,.06);
+    color: var(--tx);
+    font-size: 13.5px;
+    border: 1px solid rgba(255,255,255,.12);
   }
   .sq-copy-btn:active { transform: scale(.96); }
   .sq-copy-btn.is-copied {
     background: linear-gradient(135deg, #4ade80, #22c55e);
+    color: #fff;
     box-shadow: 0 8px 20px rgba(74,222,128,.4);
+    border-color: transparent;
   }
-  .sq-rescan-hint {
-    font-size: 12px; color: var(--mut);
+  .sq-download-btn {
+    background: linear-gradient(135deg, ${accent}, ${accent}cc);
+    color: #fff; font-size: 14.5px;
+    box-shadow: 0 8px 20px ${accent}55;
+  }
+  .sq-download-btn:active { transform: scale(.96); }
+  .sq-rescan-hint, .sq-verify-hint {
+    font-size: 11.5px; color: var(--mut);
     line-height: 1.5; margin: 0;
-    padding: 10px 14px;
+    padding: 9px 12px;
     background: rgba(124,138,249,.08);
     border-left: 2px solid ${accent}55;
     border-radius: 4px;
     text-align: left;
   }
-  .sq-rescan-hint::before {
-    content: "💡"; margin-right: 6px;
-  }
+  .sq-rescan-hint::before { content: "💡"; margin-right: 6px; }
+  .sq-verify-hint { background: rgba(74,222,128,.06);
+    border-left-color: rgba(74,222,128,.4); }
+  .sq-verify-hint::before { content: "🔒"; margin-right: 6px; }
 
   /* Confettis quand gagnant */
   .sq-confetti {
@@ -383,8 +419,14 @@ const TEMPLATE = {
   <p class="sq-replay-note" id="sq-replay-note" hidden>Tu as déjà joué — voici ton résultat précédent (rescannable à tout moment).</p>
 
   <div class="sq-win-actions">
+    <div class="sq-win-code-box">
+      <p class="sq-win-code-lbl">Ton code unique</p>
+      <code class="sq-win-code-val" id="sq-win-code">—</code>
+    </div>
+    <button type="button" class="sq-download-btn" id="sq-download-btn">🎫 Télécharger mon bon (.png)</button>
     <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
     <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
+    <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut le vérifier sur <strong>/verify-win.html?code=…</strong></p>
   </div>
 
   <div class="sq-ia" id="sq-ia">
@@ -536,8 +578,9 @@ const TEMPLATE = {
     if (ratio >= REVEAL_THRESHOLD) doReveal();
   }
 
-  // V4.3 UX (2026-05-26) — Copie le code de gain dans le presse-papiers
-  let currentWinCode = '';
+  // V4.3 UX (2026-05-26) — Code signé + clipboard + PNG téléchargeable
+  let currentWinCode    = '';
+  let currentWinMessage = '';
   function copyToClipboard(text) {
     if (navigator.clipboard && window.isSecureContext) {
       return navigator.clipboard.writeText(text);
@@ -554,7 +597,9 @@ const TEMPLATE = {
       } catch (e) { reject(e); }
     });
   }
-  const copyBtn = document.getElementById('sq-copy-btn');
+  const copyBtn     = document.getElementById('sq-copy-btn');
+  const downloadBtn = document.getElementById('sq-download-btn');
+  const winCodeEl   = document.getElementById('sq-win-code');
   copyBtn?.addEventListener('click', () => {
     if (!currentWinCode) return;
     copyToClipboard(currentWinCode).then(() => {
@@ -568,6 +613,26 @@ const TEMPLATE = {
     }).catch(() => {
       copyBtn.textContent = '⚠ Copie impossible';
       setTimeout(() => copyBtn.textContent = '📋 Copier le code', 2400);
+    });
+  });
+  downloadBtn?.addEventListener('click', () => {
+    if (!currentWinCode || typeof window.downloadWinPng !== 'function') return;
+    downloadBtn.disabled = true;
+    const originalText = downloadBtn.textContent;
+    downloadBtn.textContent = '⏳ Génération…';
+    window.downloadWinPng(currentWinCode, currentWinMessage).then(() => {
+      downloadBtn.textContent = '✓ Bon téléchargé';
+      vibrate(60);
+      setTimeout(() => {
+        downloadBtn.textContent = originalText;
+        downloadBtn.disabled = false;
+      }, 2400);
+    }).catch(() => {
+      downloadBtn.textContent = '⚠ Erreur génération';
+      setTimeout(() => {
+        downloadBtn.textContent = originalText;
+        downloadBtn.disabled = false;
+      }, 2400);
     });
   });
 
@@ -585,7 +650,9 @@ const TEMPLATE = {
       revealIcon.textContent = isWin ? '🎉' : '🍀';
       revealTitle.textContent = isWin ? 'Gagné !' : 'Pas cette fois';
       revealMsg.textContent = data.message || '';
-      currentWinCode = (data.code_won || data.message || '').toString();
+      currentWinCode    = (data.code_won || '').toString();
+      currentWinMessage = (data.message_gain || data.message || '').toString();
+      if (winCodeEl) winCodeEl.textContent = currentWinCode || '—';
       replayNote.hidden = !data.replay_blocked;
       ctaWrap.classList.add('is-shown');
       if (isWin) vibrate([90, 60, 90, 60, 140]);
@@ -633,6 +700,7 @@ const TEMPLATE = {
 })();
 </script>
 ${renderAiFetchScript(safeShort)}
+${renderWinPngScript(nomMarque, logoUrl, accent)}
 </body>
 </html>`;
   },

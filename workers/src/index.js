@@ -50,7 +50,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGenerate, handleSmartQrGamePlay } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGenerate, handleSmartQrGamePlay, handleSmartQrVerifyWin } from './routes/qr.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -291,6 +291,9 @@ export default {
       // à sous + carte à gratter). Tire l'aléatoire serveur, anti-rejouage
       // par device_hash, gère le stock de lots_disponibles.
       if (path === '/api/smartqr/game-play' && method === 'POST') return handleSmartQrGamePlay(request, env);
+      // V4.3 UX (2026-05-26) — Vérification d'authenticité d'un code WIN-XXXX-XXXX
+      // par le commerçant. Public, GET avec query ?code=WIN-XXXX-XXXX.
+      if (path === '/api/smartqr/verify-win' && method === 'GET') return handleSmartQrVerifyWin(request, env);
 
       // ── Living Layer (2026-05-24) ────────────────────────────
       // Phrase courte vivante sous "Bonjour, X" du dashboard.

@@ -1148,6 +1148,26 @@ async function _deviceHash(request) {
   return hex.slice(0, 16);
 }
 
+// V4.3 UX (2026-05-26) — Génère un code de gain unique cryptographiquement
+// signé. Format : WIN-XXXX-XXXX (8 chars hex en 2 blocs). Impossible à
+// inventer sans le secret serveur. Reproductible : 2 appels avec les mêmes
+// (shortId, deviceHash, ts) donnent le même code.
+//
+// Le secret SMARTQR_SIGN_SECRET doit être configuré en prod via :
+//   wrangler secret put SMARTQR_SIGN_SECRET
+// En dev (ou si non configuré) fallback à un secret constant. Pas critique
+// car le but est juste l'anti-falsification triviale, pas la résistance NSA.
+async function _generateWinCode(env, shortId, deviceHash, ts) {
+  const secret = env.SMARTQR_SIGN_SECRET || 'keystone-dev-secret-2026-05';
+  const seed   = `${shortId}|${deviceHash}|${ts}|${secret}`;
+  const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
+  const hex    = Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+  return `WIN-${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
+}
+
 function _pickRandomSymbols(symbols, isWin) {
   // symbols : array de 5-10 symboles/emojis fournis par le proprio
   // Si gain : 3 fois le même
@@ -1227,6 +1247,7 @@ export async function handleSmartQrGamePlay(request, env) {
           result:          prev.result,
           symboles:        trio,
           code_won:        prev.code_won || '',
+          message_gain:    td.message_gain || 'Bravo !',
           message:         prev.result === 'win'
                              ? (td.message_gain || 'Bravo !')
                              : (td.message_perte || 'Pas cette fois — reviens demain !'),
@@ -1260,8 +1281,14 @@ export async function handleSmartQrGamePlay(request, env) {
     .map(s => s.trim()).filter(Boolean);
   const trio = _pickRandomSymbols(symbols, isWin);
 
-  // Enregistrer le play
-  const codeWon = isWin ? (td.message_gain || '').toString().slice(0, 200) : '';
+  // Générer le code de gain signé (uniquement si gain)
+  let codeWon = '';
+  if (isWin) {
+    const ts = Date.now().toString();
+    codeWon = await _generateWinCode(env, shortId, deviceH, ts);
+  }
+
+  // Enregistrer le play (code_won = code signé ou '')
   try {
     await env.DB
       .prepare(`INSERT INTO smartqr_game_plays
@@ -1276,13 +1303,77 @@ export async function handleSmartQrGamePlay(request, env) {
   }
 
   return json({
-    result:   isWin ? 'win' : 'lose',
-    symboles: trio,
-    code_won: codeWon,
-    message:  isWin
-                ? (td.message_gain || 'Bravo, tu as gagné !')
-                : (td.message_perte || 'Pas cette fois — réessaie demain.'),
+    result:       isWin ? 'win' : 'lose',
+    symboles:     trio,
+    code_won:     codeWon,
+    message_gain: td.message_gain || 'Bravo, tu as gagné !',
+    message:      isWin
+                    ? (td.message_gain || 'Bravo, tu as gagné !')
+                    : (td.message_perte || 'Pas cette fois — réessaie demain.'),
     replay_blocked: false,
+  }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// V4.3 (2026-05-26) — Endpoint de vérification d'authenticité d'un code
+// de gain. Permet au commerçant de confirmer qu'un code WIN-XXXX-XXXX
+// présenté par un client est bien authentique (issu d'un vrai gain
+// enregistré dans D1) et de récupérer le contexte (QR concerné, date,
+// message du commerçant).
+//
+// Contrat : GET /api/smartqr/verify-win?code=WIN-XXXX-XXXX
+//   → 200 { valid: true, short_id, played_at, message_gain, qr_name }
+//   → 200 { valid: false } si code inconnu (404 serait gênant pour le
+//                          commerçant qui croirait à une erreur réseau)
+// ══════════════════════════════════════════════════════════════════
+export async function handleSmartQrVerifyWin(request, env) {
+  const origin = '*';
+  await _ensureSmartGameTable(env);
+
+  const url  = new URL(request.url);
+  const code = (url.searchParams.get('code') || '').trim().toUpperCase();
+  // Format strict : WIN-XXXX-XXXX (8 chars hex en 2 blocs)
+  if (!/^WIN-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code)) {
+    return json({ valid: false, reason: 'format_invalide' }, 200, origin);
+  }
+
+  let row = null;
+  try {
+    row = await env.DB
+      .prepare(`SELECT short_id, played_at FROM smartqr_game_plays
+                WHERE code_won = ? AND result = 'win' LIMIT 1`)
+      .bind(code)
+      .first();
+  } catch (e) {
+    return err('Lookup échoué : ' + e.message, 500, origin);
+  }
+
+  if (!row) {
+    return json({ valid: false, reason: 'code_inconnu' }, 200, origin);
+  }
+
+  // Récupère le QR pour donner contexte au commerçant
+  let qrName = '', messageGain = '';
+  try {
+    const entityRow = await env.DB
+      .prepare(`SELECT data FROM entities
+                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                AND deleted_at IS NULL LIMIT 1`)
+      .bind(row.short_id)
+      .first();
+    if (entityRow?.data) {
+      const qr = JSON.parse(entityRow.data);
+      qrName      = (qr.name || '').toString().slice(0, 80);
+      messageGain = (qr?.template_data?.message_gain || '').toString().slice(0, 240);
+    }
+  } catch (e) { /* contexte best-effort */ }
+
+  return json({
+    valid:        true,
+    short_id:     row.short_id,
+    played_at:    row.played_at,
+    qr_name:      qrName,
+    message_gain: messageGain,
   }, 200, origin);
 }
 

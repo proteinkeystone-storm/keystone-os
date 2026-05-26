@@ -86,6 +86,143 @@ export function renderKeystoneFoot() {
  * Le template décide quand révéler (souvent : après que la séquence
  * motion graphique est terminée).
  */
+/**
+ * V4.3 UX (2026-05-26) — Script inline qui génère un bon de gain
+ * téléchargeable au format PNG via Canvas 2D. Appelle window.downloadWinPng
+ * (à invoquer depuis le bouton du template) pour produire et télécharger
+ * une image 800×500 avec : gradient fond + logo brand + nom marque +
+ * code en gros monospace + message + date + mention vérification.
+ *
+ * Arguments injectés au render-time (depuis renderHTML) :
+ *   - nomMarque : string (déjà escapée pour HTML mais on s'en moque côté canvas)
+ *   - logoUrl   : string (https:// ou data:image/...) ou ''
+ *   - accent    : string couleur hex
+ */
+export function renderWinPngScript(nomMarque, logoUrl, accent) {
+  // Tout est encodé en JSON pour échapper proprement les quotes/specials
+  // sans risque d'injection (les valeurs viennent de safeColor/safeUrl/escHtml).
+  return `<script>
+(() => {
+  const PNG_NOM    = ${JSON.stringify(nomMarque)};
+  const PNG_LOGO   = ${JSON.stringify(logoUrl)};
+  const PNG_ACCENT = ${JSON.stringify(accent)};
+
+  async function loadImage(src) {
+    if (!src) return null;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload  = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+
+  function fmtDate() {
+    const d = new Date();
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+         + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  window.downloadWinPng = async function(winCode, messageGain) {
+    const W = 800, H = 500;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Fond gradient sombre + halo accent
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#0e141b');
+    bg.addColorStop(1, '#1a2331');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    const halo = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, 380);
+    halo.addColorStop(0, PNG_ACCENT + '55');
+    halo.addColorStop(1, PNG_ACCENT + '00');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Bordure dorée
+    ctx.strokeStyle = PNG_ACCENT;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(16, 16, W - 32, H - 32);
+    ctx.strokeStyle = PNG_ACCENT + '55';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(24, 24, W - 48, H - 48);
+
+    // 3. Logo brand (en haut à gauche si dispo)
+    const logo = await loadImage(PNG_LOGO);
+    if (logo) {
+      const maxH = 70, maxW = 180;
+      const ratio = Math.min(maxH / logo.height, maxW / logo.width, 1);
+      const lw = logo.width * ratio, lh = logo.height * ratio;
+      ctx.drawImage(logo, 50, 50, lw, lh);
+    }
+
+    // 4. Nom marque (top right)
+    ctx.fillStyle = PNG_ACCENT;
+    ctx.font = 'bold 32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(PNG_NOM || 'Keystone', W - 50, 60);
+
+    // 5. Label "BON DE GAIN"
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 14px -apple-system, sans-serif';
+    ctx.letterSpacing = '0.2em';
+    ctx.textAlign = 'center';
+    ctx.fillText('BON DE GAIN', W / 2, 175);
+
+    // 6. Code en GROS monospace (signature visuelle forte)
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 60px "SF Mono", Menlo, Consolas, monospace';
+    ctx.fillText(winCode, W / 2, 230);
+
+    // 7. Message gain (multi-line wrap simple)
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '18px -apple-system, sans-serif';
+    const msg = (messageGain || '').toString().slice(0, 240);
+    const words = msg.split(' ');
+    const maxWidth = W - 120;
+    let line = '', y = 330;
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, W / 2, y);
+        y += 24;
+        line = word;
+        if (y > 410) break; // max 4 lignes
+      } else {
+        line = test;
+      }
+    }
+    if (line && y <= 410) ctx.fillText(line, W / 2, y);
+
+    // 8. Footer : date + mention vérification
+    ctx.fillStyle = '#64748b';
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.fillText('Émis le ' + fmtDate(), W / 2, H - 70);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 11px -apple-system, sans-serif';
+    ctx.fillText('Vérification : ' + location.origin + '/verify-win.html?code=' + winCode, W / 2, H - 50);
+
+    // 9. Téléchargement
+    canvas.toBlob((blob) => {
+      const a = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = 'bon-' + winCode + '.png';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(a.href);
+        a.remove();
+      }, 1000);
+    }, 'image/png', 0.95);
+  };
+})();
+</script>`;
+}
+
 export function renderAiFetchScript(safeShort) {
   return `<script>
 (() => {

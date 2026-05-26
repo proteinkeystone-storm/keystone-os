@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Vérification d'un code de gain · Keystone</title>
+<style>
+  :root {
+    --bg: #07090d; --card: #0d1218; --bd: #1c2632;
+    --tx: #f1f5f9; --mut: #94a3b8; --gold: #c9a96e;
+    --ok: #4ade80; --ko: #f87171;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--tx);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em; min-height: 100vh;
+    -webkit-tap-highlight-color: transparent; }
+  body { display: flex; align-items: center; justify-content: center;
+    padding: 20px; min-height: 100vh; }
+
+  .card {
+    max-width: 480px; width: 100%;
+    background: linear-gradient(180deg, #0e141b 0%, var(--card) 100%);
+    border: 1px solid var(--bd);
+    border-radius: 20px;
+    padding: 32px 26px 28px;
+    box-shadow: 0 32px 72px rgba(0,0,0,.55);
+  }
+  .brand-cap {
+    font-size: 10.5px; letter-spacing: .26em;
+    color: var(--gold); text-transform: uppercase;
+    margin-bottom: 18px; font-weight: 600; opacity: .85;
+    text-align: center;
+  }
+  h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 26px; font-weight: 700;
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: 0 0 18px;
+    text-align: center; color: var(--tx);
+  }
+  .field {
+    margin: 14px 0;
+  }
+  .field-lbl {
+    display: block; font-size: 11px; letter-spacing: .14em;
+    color: var(--mut); text-transform: uppercase;
+    font-weight: 600; margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    color: var(--tx);
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 18px; font-weight: 700;
+    letter-spacing: .04em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .field input:focus {
+    outline: none; border-color: var(--gold);
+    background: rgba(201,169,110,.04);
+  }
+  .verify-btn {
+    width: 100%;
+    appearance: none; border: 0; cursor: pointer;
+    margin-top: 10px;
+    padding: 14px 22px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--gold), #92702e);
+    color: #fff;
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    letter-spacing: .04em;
+    box-shadow: 0 8px 20px rgba(201,169,110,.4);
+    transition: transform .14s ease;
+  }
+  .verify-btn:active { transform: scale(.97); }
+  .verify-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .result {
+    margin-top: 22px;
+    padding: 18px 16px;
+    border-radius: 12px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    display: none;
+  }
+  .result.is-shown { display: block; }
+  .result.is-ok {
+    background: rgba(74,222,128,.08);
+    border: 1.5px solid rgba(74,222,128,.45);
+    color: var(--ok);
+  }
+  .result.is-ko {
+    background: rgba(248,113,113,.08);
+    border: 1.5px solid rgba(248,113,113,.45);
+    color: var(--ko);
+  }
+  .result-icon {
+    font-size: 32px; line-height: 1;
+    margin-bottom: 10px; display: block;
+    text-align: center;
+  }
+  .result-status {
+    font-size: 18px; font-weight: 700;
+    text-align: center; margin: 0 0 12px;
+  }
+  .result-meta {
+    color: var(--tx);
+    font-size: 13px; line-height: 1.6;
+    margin: 8px 0 0;
+  }
+  .result-meta dt {
+    display: inline-block; min-width: 90px;
+    color: var(--mut);
+    letter-spacing: .04em; font-size: 11px;
+    text-transform: uppercase; font-weight: 600;
+  }
+  .result-meta dd {
+    display: inline; margin: 0;
+  }
+  .result-meta dd::after { content: ""; display: block; margin-bottom: 6px; }
+
+  .help {
+    margin-top: 24px;
+    font-size: 11.5px; color: var(--mut);
+    line-height: 1.55; opacity: .8;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand-cap">Keystone · Vérification</div>
+  <h1>Authentifier un code de gain</h1>
+
+  <div class="field">
+    <label class="field-lbl" for="code-input">Code à vérifier</label>
+    <input type="text" id="code-input" placeholder="WIN-XXXX-XXXX" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  </div>
+  <button type="button" class="verify-btn" id="verify-btn">Vérifier l'authenticité</button>
+
+  <div class="result" id="result"></div>
+
+  <p class="help">Cette page permet aux commerçants partenaires de confirmer qu'un code WIN-XXXX-XXXX présenté par un client est bien issu d'un vrai gain enregistré. Le code reste valide tant que le QR existe.</p>
+</div>
+
+<script>
+(() => {
+  const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
+  const input  = document.getElementById('code-input');
+  const btn    = document.getElementById('verify-btn');
+  const result = document.getElementById('result');
+
+  // Pré-remplit le code depuis ?code= dans l'URL (lien partagé)
+  try {
+    const url = new URL(location.href);
+    const c   = (url.searchParams.get('code') || '').trim().toUpperCase();
+    if (c) input.value = c;
+  } catch (e) { /* no-op */ }
+
+  function showResult(html, kind) {
+    result.className = 'result is-shown is-' + kind;
+    result.innerHTML = html;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '?';
+    const d = new Date(iso + 'Z');
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+         + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function verify() {
+    const code = (input.value || '').trim().toUpperCase();
+    if (!/^WIN-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code)) {
+      showResult('<span class="result-icon">⚠</span><p class="result-status">Format invalide</p><p class="result-meta">Un code doit avoir la forme WIN-XXXX-XXXX (chiffres et lettres A-F).</p>', 'ko');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = '⏳ Vérification…';
+    try {
+      const r = await fetch(API_BASE + '/api/smartqr/verify-win?code=' + encodeURIComponent(code));
+      const data = await r.json();
+      if (data.valid) {
+        showResult(
+          '<span class="result-icon">✓</span>' +
+          '<p class="result-status">Code authentique</p>' +
+          '<dl class="result-meta">' +
+            '<dt>QR</dt><dd>' + (data.qr_name || data.short_id) + '</dd>' +
+            '<dt>Gagné le</dt><dd>' + fmtDate(data.played_at) + '</dd>' +
+            (data.message_gain ? '<dt>Offre</dt><dd>' + data.message_gain + '</dd>' : '') +
+          '</dl>',
+          'ok'
+        );
+      } else {
+        const reason = data.reason === 'format_invalide' ? 'Format invalide'
+                      : data.reason === 'code_inconnu'   ? 'Code inconnu dans notre système'
+                      : 'Code non reconnu';
+        showResult('<span class="result-icon">✗</span><p class="result-status">' + reason + '</p><p class="result-meta">Ce code ne correspond à aucun gain enregistré. Demande au client de rescanner son QR original.</p>', 'ko');
+      }
+    } catch (e) {
+      showResult('<span class="result-icon">⚠</span><p class="result-status">Erreur réseau</p><p class="result-meta">Impossible de joindre le serveur. Réessaie dans quelques secondes.</p>', 'ko');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Vérifier l\'authenticité';
+    }
+  }
+
+  btn.addEventListener('click', verify);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') verify(); });
+  // Auto-verify si code en query string
+  if (input.value) setTimeout(verify, 200);
+})();
+</script>
+</body>
+</html>
