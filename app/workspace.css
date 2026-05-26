@@ -1032,15 +1032,6 @@ html.light-mode .modal-close:hover {
      qui a un rail à 60px) → l'alignement strict n'a plus de sens et la
      largeur 220px pousse le burger hors écran. */
   .ws-topbar-brand { width: auto; padding: 0 12px 0 16px; }
-}
-
-/* Sprint 7.7 — Sur viewport étroit (mobile portrait), on cache le logo
-   Keystone (le back chevron suffit pour revenir au Dashboard) afin de
-   donner toute la place au nom de l'outil courant. Sur tablette ≥ 480px
-   le logo reste visible. */
-@media (max-width: 480px) {
-  .ws-topbar-logo { display: none; }
-  .ws-topbar-brand { padding: 0 8px 0 12px; }
 
   /* Crumb masquée sur narrow (pas la place) */
   .ws-topbar-title .crumb { display: none; }
@@ -1081,6 +1072,15 @@ html.light-mode .modal-close:hover {
     padding: 0 12px;
     gap: 10px;
   }
+}
+
+/* Sprint 7.7 — Sur viewport étroit (mobile portrait), on cache le logo
+   Keystone (le back chevron suffit pour revenir au Dashboard) afin de
+   donner toute la place au nom de l'outil courant. Sur tablette ≥ 480px
+   le logo reste visible. */
+@media (max-width: 480px) {
+  .ws-topbar-logo { display: none; }
+  .ws-topbar-brand { padding: 0 8px 0 12px; }
 }
 
 @media (max-width: 768px) {
