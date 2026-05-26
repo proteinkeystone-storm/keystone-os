@@ -495,6 +495,74 @@ try {
   }
 } catch (e) { ko('Worker agents.js : read KO', e.message); }
 
+// ─── Sprint 7.3 — directives comportementales par agent ──────────
+try {
+  const workerRoute = await readFile(join(ROOT, 'workers/src/routes/brainstorming.js'), 'utf8');
+
+  // 5.25 — MAX_SENTENCES_PER_TURN passé à 3
+  if (workerRoute.match(/MAX_SENTENCES_PER_TURN\s*=\s*3/))
+    ok('Sprint 7.3 : MAX_SENTENCES_PER_TURN = 3 (au lieu de 2)');
+  else
+    ko('Sprint 7.3 : MAX_SENTENCES_PER_TURN pas à 3', '');
+
+  // 5.26 — MAX_TOKENS augmenté
+  const tokensMatch = workerRoute.match(/MAX_TOKENS\s*=\s*(\d+)/);
+  if (tokensMatch && Number(tokensMatch[1]) >= 240)
+    ok(`Sprint 7.3 : MAX_TOKENS = ${tokensMatch[1]} (>= 240)`);
+  else
+    ko('Sprint 7.3 : MAX_TOKENS pas augmenté', tokensMatch?.[1] || 'absent');
+
+  // 5.27 — AGENT_BEHAVIOR_DIRECTIVES présent avec les 9 agents
+  if (workerRoute.includes('AGENT_BEHAVIOR_DIRECTIVES')) {
+    const agentIds = ['creative', 'growth', 'consumer', 'brand', 'cultural', 'data', 'devil', 'synth'];
+    let allPresent = true;
+    for (const aid of agentIds) {
+      if (!workerRoute.match(new RegExp(`${aid}\\s*:\\s*\\{`))) {
+        ko(`Sprint 7.3 : directive ${aid} manquante`, '');
+        allPresent = false;
+      }
+    }
+    if (allPresent) ok('Sprint 7.3 : AGENT_BEHAVIOR_DIRECTIVES contient les 8 agents non-Strategic');
+  } else {
+    ko('Sprint 7.3 : AGENT_BEHAVIOR_DIRECTIVES manquant', '');
+  }
+
+  // 5.28 — Trigger contient les nouvelles interdictions
+  const interdictionsToFind = [
+    'Ce qui vient d\\\'être dit',  // pattern à interdire
+    'INTERVENTION ATTENDUE',         // section nouveau prompt
+    'CONTREDIRE',                    // posture friction
+    'PIVOTER',
+    'RADICALISER',
+  ];
+  let interdictMissing = [];
+  for (const pat of interdictionsToFind) {
+    if (!workerRoute.match(new RegExp(pat, 'i'))) interdictMissing.push(pat);
+  }
+  if (interdictMissing.length === 0)
+    ok('Sprint 7.3 : trigger contient interdictions + posture débat (contredire/pivoter/radicaliser)');
+  else
+    ko('Sprint 7.3 : trigger incomplet', `manque : ${interdictMissing.join(', ')}`);
+
+  // 5.29 — Directive devil contient "challenger" / "interroge"
+  if (workerRoute.match(/devil\s*:\s*\{[^}]*(?:INTERROGE|CHALLENGE|challenger)/i))
+    ok('Sprint 7.3 : devil dirigé vers challenge frontal');
+  else
+    ko('Sprint 7.3 : devil pas assez tranchant', '');
+
+  // 5.30 — Directive data demande chiffres appuyés
+  if (workerRoute.match(/data\s*:\s*\{[^}]*(?:CAC|LTV|ratio|ordre de grandeur)/i))
+    ok('Sprint 7.3 : data demande chiffres appuyés sur ratio (CAC/LTV/ratio standard)');
+  else
+    ko('Sprint 7.3 : data pas assez précis sur chiffres', '');
+
+  // 5.31 — Directive cultural demande référent nommé
+  if (workerRoute.match(/cultural\s*:\s*\{[^}]*(?:référent|compte|niche|courant)/i))
+    ok('Sprint 7.3 : cultural demande référent nommé (compte/courant/niche)');
+  else
+    ko('Sprint 7.3 : cultural pas assez précis sur référent', '');
+} catch (e) { ko('Worker route : read KO', e.message); }
+
 // ─────────────────────────────────────────────────────────────────
 // SOMMAIRE
 // ─────────────────────────────────────────────────────────────────

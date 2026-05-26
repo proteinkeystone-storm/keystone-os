@@ -41,13 +41,63 @@ import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrato
 // petit, plus rapide, et largement suffisant pour des répliques courtes
 // 2 phrases. Multilingue FR natif.
 const MODEL_ID    = '@cf/meta/llama-3.1-8b-instruct';
-const MAX_TOKENS  = 180;     // ~150 mots max — force court et concis
+// Sprint 7.3 — bump à 240 tokens (~190 mots) pour permettre 3 phrases
+// concrètes au lieu de 2 (Stéphane : conversation trop pauvre).
+const MAX_TOKENS  = 240;
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
 // Sprint 7.1 — tour de table complet : 8 agents non-Synthesizer en un cycle
 const DEFAULT_MAX_TURNS = 8;
-const MAX_SENTENCES_PER_TURN = 2;   // post-process : on coupe à 2 phrases max
+// Sprint 7.3 — passé à 3 phrases pour permettre angle propre + élément
+// concret (chiffre/référent/visuel) + implication, au lieu de simple
+// validation + paraphrase comme en mai 2026.
+const MAX_SENTENCES_PER_TURN = 3;
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 7.3 — AGENT_BEHAVIOR_DIRECTIVES
+// ─────────────────────────────────────────────────────────────────
+// Force chaque agent à un comportement CONCRET et DIFFÉRENCIÉ. Avant
+// Sprint 7.3, les system prompts étaient trop abstraits ("sophistiqué,
+// exigeant") → le LLM Llama 3.1 8B faisait du remix paraphrasé d'un
+// agent à l'autre. Ici on impose un TYPE D'INTERVENTION précis par tour.
+//
+// Format : { angle: instruction positive, forbid: anti-pattern spécifique }
+// ─────────────────────────────────────────────────────────────────
+const AGENT_BEHAVIOR_DIRECTIVES = {
+  creative: {
+    angle: `Propose UNE idée créative IMAGÉE et NOMMABLE : un visuel précis (la scène, le cadre), une accroche en 5 mots, un nom de campagne, un symbole, un dispositif (ex. "un compteur visible des heures rendues à l'utilisateur"). Pas d'abstraction.`,
+    forbid: `INTERDIT : "une campagne qui montre des gens", "des histoires personnelles", "des images émouvantes" — c'est creux. DONNE l'image exacte, la phrase d'accroche, ou le concept en un nom.`,
+  },
+  growth: {
+    angle: `Donne UN levier d'acquisition PRÉCIS sous le format : canal NOMMÉ + mécanisme + KPI chiffré. Exemple : "LinkedIn Ads ciblage CSP+ B2B, CPL visé 35-60€, conversion essai gratuit 4-7%". Sois affirmatif et chiffré.`,
+    forbid: `INTERDIT : "créer un canal d'acquisition sur TikTok" sans chiffres, "mécanisme viral pour partager des récompenses" générique, "nous devrions" au conditionnel.`,
+  },
+  consumer: {
+    angle: `Révèle UN insight humain CONTRE-INTUITIF : une contradiction (ce qu'on dit ≠ ce qu'on fait), une frustration que personne ne formule, un comportement observable précis. Format : "ce qu'ils disent vouloir : X. Ce qu'ils font : Y. Donc : Z".`,
+    forbid: `INTERDIT : "les gens veulent libérer du temps", "ils se sentent prisonniers" — c'est générique. Cite un comportement OBSERVABLE (clic, abandon, achat, refus).`,
+  },
+  brand: {
+    angle: `IMPOSE UNE règle de cohérence OU REFUSE une proposition précédente qui dilue la marque. Ton AUTORITAIRE et tranchant. Exemple : "Refus du levier gamification — ça abîme le positionnement premium qu'on vise sur le segment décideurs."`,
+    forbid: `INTERDIT : "notre identité est basée sur la libération du temps" descriptif. SOIS DIRECTIF. Si quelque chose est brand-toxique, dis-le sans nuance.`,
+  },
+  cultural: {
+    angle: `Cite UN référent culturel précis (compte Twitter/TikTok/LinkedIn nommé, courant Substack, niche Discord, mème en cours, événement) + donne UN TIMING ("on est trop tôt", "fenêtre de 6 mois", "déjà saturé"). Format : "[Référent X] porte cette tension depuis [période] — c'est le moment / trop tard".`,
+    forbid: `INTERDIT : "la tendance actuelle des routines", "les utilisateurs partagent" — c'est vague. Nomme un compte/courant/niche SPÉCIFIQUE et son TIMING.`,
+  },
+  data: {
+    angle: `Donne UN ordre de grandeur chiffré APPUYÉ sur un ratio crédible (CAC/LTV, taux conversion SaaS B2B, marge brute, taille marché TAM/SAM/SOM). Si tu ne sais pas, pointe précisément QUELLE hypothèse à fort impact n'est pas vérifiée. Ton froid, neutre, presque cassant.`,
+    forbid: `INTERDIT : "500 000 à 1 million d'euros" sortis du chapeau, "selon mes estimations" sans appui. APPUIE chaque chiffre sur un ratio standard du secteur, OU dis "hypothèse non vérifiée à fort impact : X".`,
+  },
+  devil: {
+    angle: `INTERROGE l'argument LE PLUS FAIBLE qui vient d'être posé. Utilise : "Et si l'inverse ?", "Qu'est-ce qui prouve que [X] ?", "On a vu ce pattern 1000 fois, ça finit comment ?", "Cette idée ressemble à [marque concurrente qui a échoué] — pourquoi ce serait différent ?". TU EXISTES POUR CHALLENGER, pas pour valider.`,
+    forbid: `INTERDIT : "la difficulté de valider" tiède, validation polie déguisée. ATTAQUE l'hypothèse la plus fragile FRONTALEMENT. Si tout te semble juste, dis "ce consensus est suspect — voici ce qu'on rate".`,
+  },
+  synth: {
+    angle: `Synthèse mini en 2 phrases : (1) "Ce qui émerge clairement : ...", (2) "Ce qui reste à trancher : ...". Aucune opinion personnelle, tu condenses uniquement.`,
+    forbid: `INTERDIT : ajouter un avis perso, faire un plan d'actions ici (réservé à la synthèse finale).`,
+  },
+};
 
 // Strip les artefacts alphabétiques de fin (Llama 3.3 fp8 bug), au cas
 // où le modèle continue de générer. Pattern : ≥ 6 lettres minuscules
@@ -463,32 +513,45 @@ export async function handleBrainstormingAgentRespond(request, env) {
             });
           }
 
-          // Sprint 7.2 — Orchestration organique : plus aucun agent ne nomme
-          // les autres. Strategic ouvre/recadre avec une question stratégique
-          // ouverte ; le worker pick le suivant via scoring sémantique selon
-          // ce qui a été dit. Conversation perçue comme un vrai débat.
+          // Sprint 7.3 — Différenciation forte par agent + interdiction des
+          // amorces creuses + obligation de friction. Cf. AGENT_BEHAVIOR_DIRECTIVES.
           const isFirstTurn = localHistory.length === 0;
           const isStrategic = currentAgentId === 'strategic';
           let triggerContent;
           if (isFirstTurn) {
-            triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES.
-- Phrase 1 : reformule l'enjeu central en 1 phrase (sans répéter le brief mot à mot).
-- Phrase 2 : pose UNE question stratégique ouverte qui appelle naturellement une réaction (sans nommer personne).
-- INTERDICTION de citer un agent. La parole sera prise par celui qui se sent appelé par ta question.`;
+            triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 3 PHRASES.
+- Phrase 1 : RE-FORMULE l'enjeu en gardant les TERMES CONCRETS du brief (produit, audience, objectif). Ne dérive pas vers de la généralité.
+- Phrase 2 : Identifie UN angle stratégique non-évident à explorer en priorité.
+- Phrase 3 : Pose UNE question stratégique précise qui appelle un type d'expertise (ex. "où se cache l'audience qui paierait DÈS LE PREMIER JOUR ?", "quel angle marque résiste à 5 ans ?").
+- INTERDIT : citer un agent par son nom, généraliser le brief, "Bonjour", "Excellente question".`;
           } else if (isStrategic) {
-            triggerContent = `Tu interviens comme Strategic Lead pour RE-CADRER après une intervention. CONTRAINTES :
-- MAX 2 phrases courtes (60 mots TOTAL).
-- Phrase 1 : synthétise en 1 phrase la direction émergente (ce qui semble se dessiner).
-- Phrase 2 : pose UNE question stratégique ouverte pour relancer (sans nommer personne).
-- INTERDICTION de citer un autre agent. Pas de "X a raison", pas de "Y, à toi".`;
+            triggerContent = `Tu interviens comme Strategic Lead pour RE-CADRER après un échange. CONTRAINTES :
+- MAX 3 phrases.
+- Phrase 1 : POINTE LA TENSION qui émerge (ex. "Deux directions se dessinent : X vs Y").
+- Phrase 2 : ARBITRE ou tranche : laquelle prioriser et pourquoi.
+- Phrase 3 : Pose UNE question précise qui ouvre l'étape suivante.
+- INTERDIT : citer un agent par son nom, "X a raison", validation polie, résumé creux.`;
           } else {
-            triggerContent = `Tu interviens comme ${agent.name}. CONTRAINTES ABSOLUES :
-- MAX 2 phrases courtes (60 mots TOTAL).
-- TU PRENDS LA PAROLE parce que ce qui vient d'être dit appelle ton expertise (${agent.role}). Pas d'introduction, entre dans le vif du sujet.
-- INTERDICTION ABSOLUE de nommer un autre agent. Pas de "Strategic Lead a raison", pas de "Je rejoins X", pas de "Comme Y l'a dit". JAMAIS un nom d'agent.
-- Pour rebondir, utilise : "cet angle", "cette piste", "ce point", "ce qui vient d'être dit", OU enchaîne directement.
-- Apporte TON angle propre, pas un commentaire sur le précédent.
-- PAS de salutation, PAS de résumé, PAS de liste à puces.`;
+            const directive = AGENT_BEHAVIOR_DIRECTIVES[currentAgentId] || { angle: 'apporte ton angle propre', forbid: '' };
+            triggerContent = `Tu interviens comme ${agent.name} (${agent.role}). CONTRAINTES ABSOLUES :
+
+MAX 3 PHRASES (90 mots TOTAL). Pas de salutation, pas de résumé, pas de liste à puces.
+
+INTERVENTION ATTENDUE — TON RÔLE PRÉCIS CE TOUR
+${directive.angle}
+${directive.forbid ? '\n' + directive.forbid : ''}
+
+INTERDICTIONS DE FORMULATION (le post-process serveur tronque ou rejette sinon)
+- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE concret.
+- JAMAIS nommer un autre agent. Pas de "X a raison", pas de "Je rejoins Y", pas de "Comme Z l'a dit".
+- JAMAIS valider poliment le précédent. Si tu es d'accord, ENRICHIS d'un élément neuf. Si tu n'es pas d'accord, CONTREDIS frontalement.
+- JAMAIS paraphraser le précédent — apporte UN ÉLÉMENT QUI N'A PAS ÉTÉ DIT.
+
+POSTURE
+- Tu peux CONTREDIRE ("Pas d'accord, l'angle X ignore Y").
+- Tu peux PIVOTER ("Le vrai sujet n'est pas X mais Y").
+- Tu peux RADICALISER ("Pousser plus loin : Z").
+- Tu DOIS apporter du CONCRET : un chiffre, un référent nommé, un visuel précis, une hypothèse falsifiable.`;
           }
           messages.push({ role: 'user', content: triggerContent });
 
