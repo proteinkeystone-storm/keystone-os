@@ -561,6 +561,49 @@ try {
     ok('Sprint 7.3 : cultural demande référent nommé (compte/courant/niche)');
   else
     ko('Sprint 7.3 : cultural pas assez précis sur référent', '');
+
+  // ─── Sprint 7.4 — hybride Llama (streaming) + Gemma (synth/insights) ─
+  // 5.32 — MODEL_ID_HEAVY = Gemma 4 26B
+  if (workerRoute.match(/MODEL_ID_HEAVY\s*=\s*['"]@cf\/google\/gemma-4-26b-a4b-it['"]/))
+    ok('Sprint 7.4 : MODEL_ID_HEAVY = Gemma 4 26B (synthesizer + insights)');
+  else
+    ko('Sprint 7.4 : MODEL_ID_HEAVY manquant ou pas Gemma 4', '');
+
+  // 5.33 — MODEL_ID streaming reste Llama 3.1 8B
+  if (workerRoute.match(/MODEL_ID\s*=\s*['"]@cf\/meta\/llama-3\.1-8b-instruct['"]/))
+    ok('Sprint 7.4 : MODEL_ID streaming reste Llama 3.1 8B (dictée vocale)');
+  else
+    ko('Sprint 7.4 : MODEL_ID streaming a bougé !', '');
+
+  // 5.34 — _generateSynthesis appelle MODEL_ID_HEAVY
+  // (on cherche un bloc qui contient "_generateSynthesis" puis "MODEL_ID_HEAVY")
+  const synthBlock = workerRoute.split('_generateSynthesis')[1]?.split('async function')[0] || '';
+  if (synthBlock.includes('MODEL_ID_HEAVY'))
+    ok('Sprint 7.4 : _generateSynthesis utilise MODEL_ID_HEAVY (Gemma 4)');
+  else
+    ko('Sprint 7.4 : _generateSynthesis encore sur Llama', '');
+
+  // 5.35 — _extractInsights appelle MODEL_ID_HEAVY
+  const insightsBlock = workerRoute.split('_extractInsights')[1]?.split('async function')[0] || '';
+  if (insightsBlock.includes('MODEL_ID_HEAVY'))
+    ok('Sprint 7.4 : _extractInsights utilise MODEL_ID_HEAVY (Gemma 4)');
+  else
+    ko('Sprint 7.4 : _extractInsights encore sur Llama', '');
+
+  // 5.36 — Streaming agents reste sur MODEL_ID (Llama)
+  // Cherche le bloc où on a aiStream = await env.AI.run(... — il doit
+  // utiliser MODEL_ID (Llama), pas MODEL_ID_HEAVY
+  const streamMatch = workerRoute.match(/aiStream\s*=\s*await\s+env\.AI\.run\((MODEL_ID(?:_HEAVY)?)/);
+  if (streamMatch && streamMatch[1] === 'MODEL_ID')
+    ok('Sprint 7.4 : streaming agents reste sur MODEL_ID (Llama, pour la dictée vocale)');
+  else
+    ko('Sprint 7.4 : streaming agents bascule sur HEAVY (KO Gemma raisonneur !)', streamMatch?.[1] || 'introuvable');
+
+  // 5.37 — Détection finish_reason=length pour Gemma (pattern Ghost Writer)
+  if (workerRoute.includes('finish_reason') && workerRoute.includes('length'))
+    ok('Sprint 7.4 : détection finish_reason="length" présente (cap Gemma raisonneur)');
+  else
+    ko('Sprint 7.4 : pas de détection finish_reason=length', '');
 } catch (e) { ko('Worker route : read KO', e.message); }
 
 // ─────────────────────────────────────────────────────────────────

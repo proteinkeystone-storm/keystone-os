@@ -40,10 +40,31 @@ import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrato
 // quantization fp8 sur cette taille. Llama 3.1 8B est plus stable, plus
 // petit, plus rapide, et largement suffisant pour des répliques courtes
 // 2 phrases. Multilingue FR natif.
-const MODEL_ID    = '@cf/meta/llama-3.1-8b-instruct';
-// Sprint 7.3 — bump à 240 tokens (~190 mots) pour permettre 3 phrases
-// concrètes au lieu de 2 (Stéphane : conversation trop pauvre).
+// Sprint 7.4 — Architecture LLM hybride
+// ──────────────────────────────────────────────────────────────────
+//  MODEL_ID         (Llama 3.1 8B)  → STREAMING multi-agent (8 tours)
+//                                      Streaming temps réel mot par mot
+//                                      essentiel pour la dictée vocale.
+//                                      Gemma 4 KO ici (raisonneur qui
+//                                      brûle son budget dans `reasoning`,
+//                                      bulles vides, finish_reason length).
+//  MODEL_ID_HEAVY   (Gemma 4 26B)   → ONE-SHOT : Synthesizer + insights
+//                                      Pas de streaming visible, on a
+//                                      le droit d'avoir 3-5s de latence
+//                                      pour une réponse JSON riche et
+//                                      structurée. Pattern Ghost Writer.
+// ──────────────────────────────────────────────────────────────────
+const MODEL_ID       = '@cf/meta/llama-3.1-8b-instruct';
+const MODEL_ID_HEAVY = '@cf/google/gemma-4-26b-a4b-it';
+
+// Streaming agents — bump à 240 tokens (~190 mots) pour permettre 3
+// phrases concrètes au lieu de 2 (Sprint 7.3).
 const MAX_TOKENS  = 240;
+// Synthesizer (Gemma 4 raisonneur) — 4096 minimum sinon finish_reason
+// "length" et content vide (cf. Ghost Writer Phase 1 fix mai 2026).
+const MAX_TOKENS_HEAVY_SYNTH    = 4096;
+// Insights extraction (Gemma 4) — 2048 suffisant pour 2-3 bullets JSON.
+const MAX_TOKENS_HEAVY_INSIGHTS = 2048;
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
@@ -263,15 +284,28 @@ async function _generateSynthesis(env, brief, history, todayIso) {
   }
 
   try {
-    const res = await env.AI.run(MODEL_ID, {
+    // Sprint 7.4 — Synthesizer bascule sur Gemma 4 26B (raisonneur, riche
+    // pour la structuration JSON). max_tokens=4096 obligatoire sinon
+    // finish_reason="length" et content vide.
+    const res = await env.AI.run(MODEL_ID_HEAVY, {
       messages: [
         { role: 'system', content: SYNTHESIZER_PROMPT },
         { role: 'user',   content: `DATE DU JOUR : ${todayIso}\n\nBRIEF INITIAL : ${brief}\n\nDIALOGUE INTÉGRAL DU BRAINSTORMING :\n${dialogue}\n\nProduis le JSON Plan d'actions strict.` },
       ],
-      max_tokens: 900,
+      max_tokens: MAX_TOKENS_HEAVY_SYNTH,
       stream:     false,
     });
-    const raw = (res?.response || '').trim();
+    // Détection budget tokens épuisé en reasoning (cf. Ghost Writer)
+    const choice0 = res?.choices?.[0];
+    if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
+      return { error: 'Gemma 4 a épuisé son budget tokens en mode raisonnement. Relancez la synthèse.' };
+    }
+    // Extraction multi-format (Gemma 4 peut renvoyer 4 wrappings)
+    const raw = (res?.response
+      || res?.result?.response
+      || res?.choices?.[0]?.message?.content
+      || res?.output?.[0]?.content?.[0]?.text
+      || '').trim();
     // Parse JSON strict avec fallback regex
     let parsed;
     try {
@@ -350,15 +384,28 @@ async function _extractInsights(env, brief, history) {
   if (!dialogue) return [];
 
   try {
-    const res = await env.AI.run(MODEL_ID, {
+    // Sprint 7.4 — Insights extraction bascule sur Gemma 4 26B (richesse
+    // analytique > Llama 8B). max_tokens=2048 pour absorber le reasoning
+    // tout en restant rapide.
+    const res = await env.AI.run(MODEL_ID_HEAVY, {
       messages: [
         { role: 'system', content: INSIGHTS_PROMPT },
         { role: 'user',   content: `BRIEF : ${brief}\n\nDIALOGUE :\n${dialogue}\n\nExtrais 2-3 insights stratégiques au format JSON strict.` },
       ],
-      max_tokens: 300,
+      max_tokens: MAX_TOKENS_HEAVY_INSIGHTS,
       stream:     false,
     });
-    const raw = (res?.response || '').trim();
+    // Détection budget tokens épuisé (insights non-critique, on échoue silencieusement)
+    const choice0 = res?.choices?.[0];
+    if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
+      return [];
+    }
+    // Extraction multi-format (Gemma 4 peut renvoyer 4 wrappings)
+    const raw = (res?.response
+      || res?.result?.response
+      || res?.choices?.[0]?.message?.content
+      || res?.output?.[0]?.content?.[0]?.text
+      || '').trim();
     // Tentative 1 : parse JSON strict
     try {
       const m = raw.match(/\{[\s\S]*"insights"[\s\S]*\}/);
