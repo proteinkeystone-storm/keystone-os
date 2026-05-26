@@ -26,6 +26,76 @@ import { AGENTS } from './brainstorming-agents.js';
 const DEFAULT_MAX_AGENT_TURNS_WITHOUT_USER = 8;
 
 // ─────────────────────────────────────────────────────────────────
+// Sprint 7.2 — AGENT_TRIGGERS : déclencheurs sémantiques par agent
+// ─────────────────────────────────────────────────────────────────
+// Chaque agent intervient quand le dernier message contient des mots-clés
+// liés à sa spécialité. Plus le score est élevé, plus l'agent est
+// pertinent pour rebondir. strategic est exclu du scoring (il n'intervient
+// qu'en ouverture ou après reset user).
+//
+// Mots-clés en minuscules, sans accents quand possible (matchage simple).
+// On match aussi les variantes avec accents grâce à un includes() permissif.
+// ─────────────────────────────────────────────────────────────────
+export const AGENT_TRIGGERS = {
+  creative: [
+    'concept', 'idée', 'idee', 'rupture', 'audacieux', 'audace', 'visuel',
+    'émotion', 'emotion', 'storytelling', 'créatif', 'creatif', 'angle créatif',
+    'angle creatif', 'narratif', 'impactant', 'puissant', 'manifeste', 'symbole',
+    'campagne', 'esthétique', 'esthetique', 'inspirant', 'mémorable', 'memorable',
+  ],
+  growth: [
+    'acquisition', 'rétention', 'retention', 'viralité', 'viralite', 'canal',
+    'kpi', 'conversion', 'roi', 'scale', 'growth', 'funnel', 'lead', 'leads',
+    'traffic', 'trafic', 'channel', 'mécanisme viral', 'mecanisme viral',
+    'levier', 'leviers', 'distribution', 'monétisation', 'monetisation',
+    'pricing', 'paywall', 'onboarding', 'churn',
+  ],
+  consumer: [
+    'audience', 'client', 'clients', 'utilisateur', 'utilisateurs', 'désir',
+    'desir', 'frustration', 'comportement', 'motivation', 'persona', 'humain',
+    'psychologie', 'besoin', 'besoins', 'émotionnel', 'emotionnel', 'attente',
+    'attentes', 'cible', 'public', 'expérience', 'experience', 'usage', 'pain',
+    'douleur', 'jobs-to-be-done', 'jtbd', 'insight',
+  ],
+  brand: [
+    'identité', 'identite', 'marque', 'ton', 'perception', 'valeur', 'valeurs',
+    'image', 'cohérence', 'coherence', 'long-terme', 'positionnement',
+    'réputation', 'reputation', 'manifeste', 'signature', 'voix', 'voice',
+    'tone of voice', 'archetype', 'archétype', 'premium', 'luxe', 'prestige',
+    'haut de gamme',
+  ],
+  cultural: [
+    'tendance', 'tendances', 'moment', 'culture', 'mouvement', 'tiktok',
+    'reddit', 'twitter', 'instagram', 'linkedin', 'niche', 'communauté',
+    'communaute', 'génération', 'generation', 'signal', 'signaux', 'viral',
+    'buzz', 'mème', 'meme', 'gen z', 'millennials', 'sous-culture', 'micro-influenceur',
+    'créateur', 'createur', 'influenceur',
+  ],
+  data: [
+    'chiffre', 'chiffres', 'données', 'donnees', 'marché', 'marche', 'taille',
+    'ordre de grandeur', 'estimation', 'cac', 'ltv', 'marge', 'stat',
+    'pourcentage', 'b2b', 'b2c', 'métriques', 'metriques', 'mesurer', 'quantif',
+    'roi', 'revenue', 'revenu', 'arr', 'mrr', 'tam', 'sam', 'som', 'segment',
+    'volumes', 'volume', 'million', 'milliard', 'taux',
+  ],
+  devil: [
+    'risque', 'risques', 'faiblesse', 'faiblesses', 'limite', 'limites',
+    'concurrent', 'concurrence', 'concurrents', 'danger', 'doute', 'hypothèse',
+    'hypothese', 'cliché', 'cliche', 'saturé', 'sature', 'fragile', 'incertain',
+    'difficulté', 'difficulte', 'défi', 'defi', 'obstacle', 'biais', 'naïf',
+    'naif', 'évident', 'evident', 'banal', 'générique', 'generique', 'safe',
+    'consensus', 'mou', 'sans relief',
+  ],
+};
+
+// Sprint 7.2 — Garantie tour de table complet : à partir de ce nombre
+// d'agents qui ont déjà parlé dans le cycle, on bascule du scoring
+// sémantique vers le fallback arc pour forcer les agents restants à
+// passer (Devil's Advocate inclus, même si peu de mots-clés "négatifs"
+// dans le débat).
+const SCORING_CUTOFF_SPOKEN = 5;
+
+// ─────────────────────────────────────────────────────────────────
 // detectMentionInText
 // ─────────────────────────────────────────────────────────────────
 // Cherche un nom d'agent mentionné dans le texte (case-insensitive).
@@ -180,21 +250,53 @@ export function getArcForMode(mode) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// pickNextAgent — heuristiques Sprint 7.1.1 (round-table robuste)
+// scoreAgentRelevance — Sprint 7.2
 // ─────────────────────────────────────────────────────────────────
-// Règles dans l'ordre :
-//   1. Si history vide → Strategic Lead (ouvre toujours la discussion)
-//   2. Si la dernière intervention est de 'user' → Strategic Lead (re-cadre)
-//   3. Si STRATEGIC LEAD vient de parler ET cite un agent vierge → cet agent
-//      (la mention n'est honorée QUE si Strategic distribue la parole —
-//      son rôle explicite. Les autres agents citent le précédent par
-//      politesse forcée par le system prompt ; ce n'est PAS une passe de
-//      parole et doit être ignoré, sinon ping-pong infini.)
-//   4. Sinon → rotation selon l'arc du mode, avec déduplication :
-//      si l'agent suivant dans l'arc a déjà parlé depuis la dernière
-//      intervention user, on avance dans l'arc jusqu'à trouver un agent
-//      qui n'a pas encore parlé. Garantit un tour de table complet
-//      sans répétition.
+// Compte le nombre de triggers de l'agent présents dans le texte. Le
+// match est case-insensitive et accent-insensitive léger (les triggers
+// existent en double pour les formes accentuées). Score = nombre de
+// triggers distincts trouvés.
+// ─────────────────────────────────────────────────────────────────
+export function scoreAgentRelevance(agentId, text) {
+  const triggers = AGENT_TRIGGERS[agentId];
+  if (!triggers || typeof text !== 'string') return 0;
+  const lower = text.toLowerCase();
+  let score = 0;
+  const seen = new Set();
+  for (const t of triggers) {
+    // On considère un trigger comme "matché" si présent en sous-chaîne
+    // entourée de séparateurs (évite "ron" match dans "Aaron")
+    const idx = lower.indexOf(t);
+    if (idx < 0) continue;
+    const before = idx === 0 ? ' ' : lower[idx - 1];
+    const after  = lower[idx + t.length] || ' ';
+    if (/[\s,.;:!?'"()«»\-]/.test(before) && /[\s,.;:!?'"()«»\-]/.test(after)) {
+      // Dédupliquer les triggers qui matchent la même portion de texte
+      const key = `${idx}:${t.length}`;
+      if (!seen.has(key)) { seen.add(key); score++; }
+    }
+  }
+  return score;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pickNextAgent — heuristiques Sprint 7.2 (boardroom organique)
+// ─────────────────────────────────────────────────────────────────
+// Logique :
+//   1. Si history vide → Strategic Lead (ouvre)
+//   2. Si dernière intervention = 'user' → Strategic Lead (re-cadre)
+//   3. Si Strategic vient de parler ET cite un agent vierge → cet agent
+//      (filet de sécurité, normalement Strategic ne nomme plus en
+//      Sprint 7.2 — seulement en ouverture)
+//   4. Si moins de SCORING_CUTOFF_SPOKEN agents ont parlé :
+//      SCORING SÉMANTIQUE. Chaque agent non-parlé est scoré sur sa
+//      pertinence par rapport au dernier message (via AGENT_TRIGGERS).
+//      Le meilleur score gagne. Si plusieurs ex-aequo, on prend le 1er
+//      dans l'ordre de l'arc.
+//   5. Sinon (≥ SCORING_CUTOFF_SPOKEN agents ont parlé) OU aucun
+//      candidat pertinent : FALLBACK ARC. On suit l'arc du mode avec
+//      dédup, ce qui garantit que les agents restants (Devil inclus)
+//      passent avant la fin du cycle.
 // ─────────────────────────────────────────────────────────────────
 export function pickNextAgent(history, mode = 'exploration') {
   if (!Array.isArray(history) || history.length === 0) return 'strategic';
@@ -204,9 +306,7 @@ export function pickNextAgent(history, mode = 'exploration') {
   // L'utilisateur vient d'intervenir → Strategic Lead reprend la coordination
   if (last.agent_id === 'user') return 'strategic';
 
-  // Sprint 7.1 — collecte des agents qui ont déjà parlé depuis le dernier
-  // reset user (ou depuis le début si pas de reset). Synth n'est jamais
-  // dans le pool de dédup (c'est un agent spécial déclenché manuellement).
+  // Collecte des agents qui ont déjà parlé depuis le dernier reset user
   const spokenSinceReset = new Set();
   for (let i = history.length - 1; i >= 0; i--) {
     const a = history[i].agent_id;
@@ -214,11 +314,7 @@ export function pickNextAgent(history, mode = 'exploration') {
     if (a && a !== 'synth') spokenSinceReset.add(a);
   }
 
-  // Sprint 7.1.1 — Mention honorée UNIQUEMENT si Strategic Lead vient de
-  // parler ET que l'agent mentionné n'a pas encore parlé dans le cycle.
-  // Sinon, on suit strictement l'arc (les "citations rétroactives" type
-  // "Strategic Lead a raison" sont du discours conversationnel, pas un
-  // passage de parole).
+  // Sprint 7.1.1 — Mention par Strategic Lead (filet de sécurité)
   if (last.agent_id === 'strategic') {
     const mentioned = detectMentionInText(last.content);
     if (mentioned && mentioned !== 'strategic' && !spokenSinceReset.has(mentioned)) {
@@ -226,18 +322,37 @@ export function pickNextAgent(history, mode = 'exploration') {
     }
   }
 
-  // Rotation adaptée — Sprint 7 : chaque mode a son arc dédié
-  // Sprint 7.1 — dédup : si le successeur naturel a déjà parlé, on avance
-  // dans l'arc jusqu'à trouver un agent vierge. Max 9 sauts (1 par agent)
-  // pour éviter toute boucle infinie.
+  // Sprint 7.2 — Scoring sémantique pour la phase d'exploration (5 premiers)
+  // À partir de SCORING_CUTOFF_SPOKEN agents parlés, on garantit le tour
+  // de table en suivant l'arc (Devil inclus).
+  if (spokenSinceReset.size < SCORING_CUTOFF_SPOKEN) {
+    const candidates = [];
+    for (const agentId of Object.keys(AGENT_TRIGGERS)) {
+      if (spokenSinceReset.has(agentId)) continue;
+      if (agentId === last.agent_id) continue;
+      if (agentId === 'strategic') continue; // Strategic ne reprend pas spontanément
+      const score = scoreAgentRelevance(agentId, last.content || '');
+      if (score > 0) candidates.push({ agentId, score });
+    }
+    if (candidates.length > 0) {
+      // Trier par score décroissant. Ex-aequo : ordre de l'arc du mode
+      const arcForTiebreak = getArcForMode(mode);
+      const arcOrder = Object.keys(arcForTiebreak);
+      candidates.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return arcOrder.indexOf(a.agentId) - arcOrder.indexOf(b.agentId);
+      });
+      return candidates[0].agentId;
+    }
+  }
+
+  // Fallback arc — dédup, garantit que tous les agents passent (Devil inclus)
   const arc = getArcForMode(mode);
   let candidate = arc[last.agent_id] || 'strategic';
   for (let i = 0; i < 9; i++) {
     if (!spokenSinceReset.has(candidate)) return candidate;
     candidate = arc[candidate] || 'strategic';
   }
-  // Tous les agents ont déjà parlé → on retombe sur strategic (en pratique
-  // shouldAutoPause aura déjà coupé avant ce point)
   return 'strategic';
 }
 

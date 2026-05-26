@@ -463,28 +463,31 @@ export async function handleBrainstormingAgentRespond(request, env) {
             });
           }
 
-          // Sprint 7.1.2 — Trigger différencié pour casser l'effet "appel
-          // d'amphi" (les agents s'appelaient systématiquement par leur nom,
-          // ce qui rendait la conversation artificielle). Seul Strategic
-          // Lead a le droit de nommer (son rôle = distribuer la parole).
-          // Les 8 autres rebondissent sur l'angle sans citation nominative.
+          // Sprint 7.2 — Orchestration organique : plus aucun agent ne nomme
+          // les autres. Strategic ouvre/recadre avec une question stratégique
+          // ouverte ; le worker pick le suivant via scoring sémantique selon
+          // ce qui a été dit. Conversation perçue comme un vrai débat.
           const isFirstTurn = localHistory.length === 0;
           const isStrategic = currentAgentId === 'strategic';
           let triggerContent;
           if (isFirstTurn) {
-            triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES. Cadre l'angle stratégique majeur et INVITE explicitement UN agent spécifique à réagir en le nommant (ex. "Creative Director, ton angle ?").`;
+            triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES.
+- Phrase 1 : reformule l'enjeu central en 1 phrase (sans répéter le brief mot à mot).
+- Phrase 2 : pose UNE question stratégique ouverte qui appelle naturellement une réaction (sans nommer personne).
+- INTERDICTION de citer un agent. La parole sera prise par celui qui se sent appelé par ta question.`;
           } else if (isStrategic) {
-            // Strategic Lead reprend en cours (après user reset) — re-cadre + redistribue
-            triggerContent = `Tu interviens comme Strategic Lead. CONTRAINTES STRICTES :
+            triggerContent = `Tu interviens comme Strategic Lead pour RE-CADRER après une intervention. CONTRAINTES :
 - MAX 2 phrases courtes (60 mots TOTAL).
-- RE-CADRE la discussion en 1 phrase + DISTRIBUE la parole à UN agent en le nommant explicitement (ex. "Brand Guardian, à toi").
-- PAS de "X a raison", PAS de résumé. Juste cadrer puis donner la parole.`;
+- Phrase 1 : synthétise en 1 phrase la direction émergente (ce qui semble se dessiner).
+- Phrase 2 : pose UNE question stratégique ouverte pour relancer (sans nommer personne).
+- INTERDICTION de citer un autre agent. Pas de "X a raison", pas de "Y, à toi".`;
           } else {
             triggerContent = `Tu interviens comme ${agent.name}. CONTRAINTES ABSOLUES :
 - MAX 2 phrases courtes (60 mots TOTAL).
-- REBONDIS sur l'angle qui vient d'être posé SANS NOMMER ton interlocuteur. Utilise "cet angle", "cette piste", "ce point", "ce qui vient d'être dit", OU enchaîne directement avec ton propre angle.
-- INTERDICTION ABSOLUE de nommer un autre agent. Pas de "Strategic Lead a raison", pas de "Je rejoins Creative Director", pas de "Comme Devil's Advocate l'a dit". JAMAIS le nom d'un autre agent dans ta réponse.
-- Apporte TON angle propre depuis ton rôle (${agent.role}).
+- TU PRENDS LA PAROLE parce que ce qui vient d'être dit appelle ton expertise (${agent.role}). Pas d'introduction, entre dans le vif du sujet.
+- INTERDICTION ABSOLUE de nommer un autre agent. Pas de "Strategic Lead a raison", pas de "Je rejoins X", pas de "Comme Y l'a dit". JAMAIS un nom d'agent.
+- Pour rebondir, utilise : "cet angle", "cette piste", "ce point", "ce qui vient d'être dit", OU enchaîne directement.
+- Apporte TON angle propre, pas un commentaire sur le précédent.
 - PAS de salutation, PAS de résumé, PAS de liste à puces.`;
           }
           messages.push({ role: 'user', content: triggerContent });

@@ -400,6 +400,86 @@ try {
     ok('Sprint 7.1.1 : round-table 8 tours avec mentions parasites → 8 agents distincts');
   else
     ko('Sprint 7.1.1 : ping-pong persiste avec mentions parasites', dupAt || `seulement ${realCalls.size} agents`);
+
+  // ─── Sprint 7.2 — scoring sémantique organique ───────────────────
+  const { scoreAgentRelevance, AGENT_TRIGGERS } = orchMod;
+
+  // 5.18 — scoreAgentRelevance exposé
+  if (typeof scoreAgentRelevance === 'function' && AGENT_TRIGGERS)
+    ok('Sprint 7.2 : scoreAgentRelevance + AGENT_TRIGGERS exportés');
+  else
+    ko('Sprint 7.2 : export manquant', '');
+
+  // 5.19 — Mots-clés data activent data
+  if (scoreAgentRelevance('data', 'Quel est le ordre de grandeur du marché B2B ? CAC plausible ?') >= 2)
+    ok('Sprint 7.2 : triggers data activés sur "marché / CAC / ordre de grandeur"');
+  else
+    ko('Sprint 7.2 : data triggers KO', '');
+
+  // 5.20 — Mots-clés devil activent devil
+  if (scoreAgentRelevance('devil', 'La concurrence est saturée et la différenciation reste fragile') >= 2)
+    ok('Sprint 7.2 : triggers devil activés sur "concurrence saturée / fragile"');
+  else
+    ko('Sprint 7.2 : devil triggers KO', '');
+
+  // 5.21 — Mots-clés cultural activent cultural
+  if (scoreAgentRelevance('cultural', 'On capte un signal sur TikTok dans cette niche Gen Z') >= 2)
+    ok('Sprint 7.2 : triggers cultural activés sur "signal / TikTok / niche"');
+  else
+    ko('Sprint 7.2 : cultural triggers KO', '');
+
+  // 5.22 — Scoring choisit le bon agent (mode launch, après strategic
+  // qui parle de marché B2B et conversion → data devrait gagner)
+  const histScoring = [
+    { agent_id: 'strategic', content: 'Keystone vise le marché B2B avec un objectif de conversion mesurable.' },
+  ];
+  const nextScoring = pickNextAgent(histScoring, 'launch');
+  // Data a 'marché' + 'b2b' (2 triggers) ; growth a 'conversion' (1 trigger)
+  // Donc data > growth → data devrait être choisi
+  if (nextScoring === 'data')
+    ok(`Sprint 7.2 : scoring choisit data (le plus pertinent sur "marché B2B / conversion")`);
+  else if (nextScoring === 'growth')
+    ok(`Sprint 7.2 : scoring choisit growth (acceptable, "conversion" matche aussi)`);
+  else
+    ko('Sprint 7.2 : scoring KO', `attendu data ou growth, reçu ${nextScoring}`);
+
+  // 5.23 — Garantie tour complet avec contradicteur. Simulation : on
+  // construit un débat où seuls les premiers thèmes "positifs" sont
+  // discutés (concept, audience, marque, croissance). Devil doit
+  // quand même parler dans le cycle grâce au fallback arc.
+  const simPositive = [];
+  const positiveContents = [
+    'Keystone est un outil B2B.',
+    'Notre concept émotionnel est puissant et inspirant.', // creative ++
+    'Cette audience cherche une expérience humaine.',       // consumer ++
+    'Notre identité de marque doit rester premium.',         // brand ++
+    'Le canal d\'acquisition par viralité est notre levier.',// growth ++
+    'On capte un signal culturel sur Gen Z TikTok.',         // cultural ++
+    'Le marché B2B est large, CAC plausible.',               // data ++
+    // 7e tour : il reste devil + on est ≥ SCORING_CUTOFF_SPOKEN → fallback arc
+  ];
+  for (let i = 0; i < positiveContents.length; i++) {
+    const aid = pickNextAgent(simPositive, 'launch');
+    simPositive.push({ agent_id: aid, content: positiveContents[i] });
+  }
+  // Au tour 8, il reste devil. Le fallback arc doit l'amener.
+  const tour8 = pickNextAgent(simPositive, 'launch');
+  if (tour8 === 'devil')
+    ok('Sprint 7.2 : Devil\'s Advocate force-parle au tour 8 (garantie tour complet)');
+  else
+    ko('Sprint 7.2 : Devil saute au tour 8', `attendu devil, reçu ${tour8} ; déjà parlés : ${simPositive.map(t => t.agent_id).join(',')}`);
+
+  // 5.24 — Strategic ne se ré-élit pas spontanément en cours de débat
+  // (il intervient sur reset user uniquement, ou en ouverture)
+  const histStratNoRepeat = [
+    { agent_id: 'strategic', content: 'On lance Keystone, outil de productivité.' },
+    { agent_id: 'creative',  content: 'Concept fort possible avec storytelling.' },
+  ];
+  const nextNoStrat = pickNextAgent(histStratNoRepeat, 'launch');
+  if (nextNoStrat !== 'strategic')
+    ok(`Sprint 7.2 : Strategic ne reprend pas spontanément (next = ${nextNoStrat})`);
+  else
+    ko('Sprint 7.2 : Strategic reprend à tort', '');
 } catch (e) { ko('Worker orchestrator : import KO', e.message); }
 
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis
