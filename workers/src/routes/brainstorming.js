@@ -74,6 +74,37 @@ function _capSentences(text, maxN = MAX_SENTENCES_PER_TURN) {
   if (!parts || parts.length <= maxN) return text.trim();
   return parts.slice(0, maxN).join(' ').trim();
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 3 — Génération de réactions emoji entre agents
+// ─────────────────────────────────────────────────────────────────
+// À chaque tour, un agent a ~35% de chance de poser une réaction sur
+// le message qui vient d'être prononcé. Donne le ressenti d'une vraie
+// table où les gens hochent / lèvent un sourcil. Choix d'emoji pondéré
+// selon la personnalité du réacteur.
+//
+// Sprint 3 : probabilité fixe + choix dans set fini.
+// Sprint 4+ : pondération selon sentiment du message + état consensus.
+const REACTION_PROBABILITY = 0.35;
+const REACTION_PALETTE = {
+  // Par défaut : tout le monde a accès aux 4
+  default : ['💯', '🔥', '🤔', '👀'],
+  // Surcharge par agent (personnalité)
+  devil   : ['🤔', '👀', '🤔'],            // Devil's Advocate plus sceptique
+  data    : ['🤔', '👀', '👀'],            // Data Analyst plus sceptique
+  creative: ['🔥', '💯', '🔥'],            // Creative Director s'enthousiasme
+  growth  : ['🔥', '💯'],                  // Growth Hacker valide les leviers
+  synth   : ['💯', '💯'],                  // Synthesizer note l'accord
+};
+
+function _maybeGenerateReaction(reactorAgentId, previousTurn) {
+  if (!previousTurn || previousTurn.agent_id === 'user') return null;
+  if (previousTurn.agent_id === reactorAgentId) return null;
+  if (Math.random() > REACTION_PROBABILITY) return null;
+  const palette = REACTION_PALETTE[reactorAgentId] || REACTION_PALETTE.default;
+  const emoji = palette[Math.floor(Math.random() * palette.length)];
+  return { emoji, target_agent_id: previousTurn.agent_id };
+}
 const SUPPORTED_AGENTS = new Set([
   'strategic', 'creative', 'growth', 'consumer', 'brand',
   'cultural', 'data', 'devil', 'synth', 'auto',
@@ -169,13 +200,26 @@ export async function handleBrainstormingAgentRespond(request, env) {
             break;
           }
 
-          // Annonce le début du message de l'agent
-          send({ type: 'agent_start', agent_id: currentAgentId });
-
           // Construction des messages pour le LLM
           // Trouver le dernier intervenant (hors user) pour forcer la réaction
           const previousTurn = [...localHistory].reverse().find(t => t && t.agent_id && t.agent_id !== 'user') || null;
           const previousAgent = previousTurn ? getAgent(previousTurn.agent_id) : null;
+
+          // Sprint 3 — Réaction emoji éventuelle sur le message précédent
+          // (envoyée AVANT agent_start pour que le frontend ait le temps
+          // de l'afficher avant que la nouvelle bulle apparaisse)
+          const reaction = _maybeGenerateReaction(currentAgentId, previousTurn);
+          if (reaction) {
+            send({
+              type: 'agent_react',
+              agent_id: currentAgentId,
+              target_agent_id: reaction.target_agent_id,
+              emoji: reaction.emoji,
+            });
+          }
+
+          // Annonce le début du message de l'agent
+          send({ type: 'agent_start', agent_id: currentAgentId });
 
           const agentList    = getAgentNamesForPrompt(currentAgentId);
           const systemPrompt = agent.systemPrompt(cognitive_mode, brief, agentList, previousTurn, previousAgent);

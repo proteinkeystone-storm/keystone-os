@@ -181,6 +181,23 @@
   0%, 100% { transform: scale(1);   opacity: 0.7; }
   50%      { transform: scale(1.12); opacity: 0.2; }
 }
+
+/* Sprint 3 — État "listening" : tous les agents pulsent en synchro
+   quand l'utilisateur intervient (toute la table écoute). Plus discret
+   que .speaking (anneau plus fin, opacité plus basse, animation plus
+   lente). */
+.wr-agent-cell.listening .wr-agent-icon::before {
+  content: '';
+  position: absolute; inset: -3px;
+  border: 1px solid var(--agent-color, var(--wr-text-muted));
+  border-radius: 50%;
+  animation: wrListeningPulse 2.2s ease-in-out infinite;
+  opacity: 0.4;
+}
+@keyframes wrListeningPulse {
+  0%, 100% { transform: scale(1);    opacity: 0.4; }
+  50%      { transform: scale(1.08); opacity: 0.1; }
+}
 .wr-agent-icon {
   position: relative;
   width: 44px; height: 44px;
@@ -310,6 +327,70 @@
 }
 /* Quand le cursor ▍ apparaît (après les premiers chunks), on cache les dots */
 .wr-msg-text.streaming:not(:empty)::before { content: none; }
+
+/* ═════════════════════════════════════════════════════════════════
+   SPRINT 3 — RÉACTIONS EMOJI (entre agents + utilisateur)
+   ═════════════════════════════════════════════════════════════════ */
+.wr-msg-reactions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px;
+}
+.wr-reaction {
+  font-size: 12px;
+  padding: 2px 8px 2px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--reactor-color, var(--wr-border));
+  border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 4px;
+  line-height: 1.4;
+  animation: wrReactionPop 0.35s ease both;
+  cursor: default;
+}
+.wr-reaction-emoji { font-size: 13px; line-height: 1; }
+.wr-reaction-label { font-size: 10.5px; color: var(--wr-text-muted); letter-spacing: 0.02em; }
+.wr-reaction-user {
+  border-color: var(--wr-border-strong);
+  background: rgba(255,255,255,0.06);
+}
+@keyframes wrReactionPop {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* Picker tap-react */
+.wr-msg { position: relative; }
+.wr-msg-body { cursor: pointer; }
+.wr-msg-body:hover .wr-msg-name { opacity: 0.85; }
+.wr-react-picker {
+  position: absolute;
+  left: 44px; top: -8px;
+  display: flex; gap: 2px;
+  padding: 4px;
+  background: var(--wr-bg-elevated, var(--wr-bg-subtle));
+  border: 1px solid var(--wr-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  z-index: 10;
+  animation: wrPickerIn 0.18s ease both;
+}
+@keyframes wrPickerIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.wr-react-pick {
+  width: 32px; height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 17px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.wr-react-pick:hover {
+  background: rgba(255,255,255,0.08);
+  transform: scale(1.15);
+}
 
 /* ═════════════════════════════════════════════════════════════════
    INPUT ROW — saisie + pills d'intention

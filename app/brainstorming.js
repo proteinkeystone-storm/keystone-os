@@ -385,16 +385,26 @@ function _wireShell(panel) {
   // Send button
   panel.querySelector('#wr-send')?.addEventListener('click', () => _submit(panel));
 
-  // Pills d'intention — Sprint 1 : injectent juste le texte dans l'input
+  // Sprint 3 — Pills d'intention cliquables actives.
+  // Si la session est déjà démarrée et qu'il n'y a pas de génération en
+  // cours, un clic envoie DIRECTEMENT la pill comme intervention user
+  // (sans re-remplir l'input). Sinon, on pré-remplit l'input.
   panel.querySelectorAll('.wr-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = panel.querySelector('#wr-input');
-      if (!input) return;
+      const send  = panel.querySelector('#wr-send');
+      if (!input || !send) return;
       const v = btn.dataset.pill || '';
-      input.value = input.value
-        ? `${input.value.trim()} — ${v}`
-        : v;
-      input.focus();
+      // Si pas de session active OU input déjà rempli OU génération en cours
+      // → on injecte juste le texte dans l'input (user complète)
+      if (!_currentSession?.started || input.value.trim() || send.disabled) {
+        input.value = input.value ? `${input.value.trim()} — ${v}` : v;
+        input.focus();
+        return;
+      }
+      // Sinon : clic = intervention auto-submise
+      input.value = v;
+      _submit(panel);
     });
   });
 }
@@ -448,14 +458,33 @@ async function _submit(panel) {
   input.value = '';
   send.disabled = true;
 
+  // Sprint 3 — Animation "agents écoutent" : si c'est une intervention
+  // (pas le brief initial), tous les pictos pulsent en attendant que
+  // Strategic Lead reformule. Donne le ressenti d'une table qui écoute.
+  const isIntervention = _currentSession.history.length > 0
+    && _currentSession.history[_currentSession.history.length - 1].agent_id === 'user';
+  if (isIntervention) {
+    _setAllAgentsListening(panel, true);
+  }
+
   try {
     await _callOrchestration(panel);
   } catch (e) {
     _appendErrorMessage(panel, e?.message || 'Erreur réseau');
   } finally {
+    _setAllAgentsListening(panel, false);
     send.disabled = false;
     input.focus();
   }
+}
+
+// Marque tous les pictos agents en mode "listening" (ring fin pulsant
+// à l'unisson). Pas la même classe que .speaking — c'est un état collectif
+// d'écoute pendant que l'utilisateur intervient.
+function _setAllAgentsListening(panel, listening) {
+  panel.querySelectorAll('.wr-agent-cell').forEach(cell => {
+    cell.classList.toggle('listening', listening);
+  });
 }
 
 function _updateHeader(panel, brief) {
@@ -599,6 +628,13 @@ async function _callOrchestration(panel) {
           break;
         }
 
+        // Sprint 3 — Réaction emoji posée par un agent sur le message
+        // précédent. Envoyé par le Worker AVANT le prochain agent_start.
+        case 'agent_react': {
+          _appendAgentReaction(panel, evt.agent_id, evt.target_agent_id, evt.emoji);
+          break;
+        }
+
         case 'complete': {
           complete = true;
           // Attendre que le typewriter ait fini d'afficher avant la note
@@ -647,8 +683,100 @@ function _appendMessage(panel, agentId, text, opts = {}) {
   if (textEl) textEl.textContent = text;
 
   feed.appendChild(msgEl);
+  // Sprint 3 — Bind tap-react (clic sur la bulle ouvre picker emoji)
+  _bindTapReact(panel, msgEl, agentId);
   _scrollToBottom(panel);
   return { textEl, msgEl };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 3 — Système de réactions (entre agents + utilisateur)
+// ─────────────────────────────────────────────────────────────────
+function _ensureReactionsContainer(msgEl) {
+  let el = msgEl.querySelector('.wr-msg-reactions');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'wr-msg-reactions';
+    msgEl.querySelector('.wr-msg-body').appendChild(el);
+  }
+  return el;
+}
+
+function _appendAgentReaction(panel, reactorAgentId, targetAgentId, emoji) {
+  if (!reactorAgentId || !targetAgentId || !emoji) return;
+  // La cible : la DERNIÈRE bulle de targetAgentId dans le feed
+  const bubbles = panel.querySelectorAll(`.wr-msg[data-agent-id="${targetAgentId}"]`);
+  const target  = bubbles[bubbles.length - 1];
+  if (!target) return;
+
+  const reactor = getAgent(reactorAgentId);
+  const container = _ensureReactionsContainer(target);
+  const badge = document.createElement('span');
+  badge.className = 'wr-reaction wr-reaction-agent';
+  badge.style.setProperty('--reactor-color', reactor?.color || '#fff');
+  badge.title = `${reactor?.name || reactorAgentId} : ${emoji}`;
+  badge.innerHTML = `<span class="wr-reaction-emoji">${emoji}</span>`;
+  container.appendChild(badge);
+}
+
+const REACTION_EMOJIS = ['💯', '🔥', '🤔', '👀'];
+function _bindTapReact(panel, msgEl, agentId) {
+  // Ne bind pas sur les messages user ou les notes système
+  if (agentId === 'user' || agentId === '__note__') return;
+  msgEl.addEventListener('click', (e) => {
+    // Éviter ouverture si on a cliqué sur un badge existant
+    if (e.target.closest('.wr-reaction') || e.target.closest('.wr-react-picker')) return;
+    // Toggle existing picker
+    const existing = msgEl.querySelector('.wr-react-picker');
+    if (existing) { existing.remove(); return; }
+    const picker = document.createElement('div');
+    picker.className = 'wr-react-picker';
+    picker.innerHTML = REACTION_EMOJIS.map(em =>
+      `<button class="wr-react-pick" data-emoji="${em}" type="button" aria-label="Réagir avec ${em}">${em}</button>`
+    ).join('');
+    msgEl.querySelector('.wr-msg-body').appendChild(picker);
+    // Click sur un emoji = ajout badge user
+    picker.querySelectorAll('.wr-react-pick').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        _appendUserReaction(msgEl, btn.dataset.emoji);
+        picker.remove();
+      });
+    });
+    // Close au clic extérieur
+    setTimeout(() => {
+      const onOutside = (ev) => {
+        if (!picker.contains(ev.target) && !msgEl.contains(ev.target)) {
+          picker.remove();
+          document.removeEventListener('click', onOutside);
+        }
+      };
+      document.addEventListener('click', onOutside);
+    }, 0);
+  });
+}
+
+function _appendUserReaction(msgEl, emoji) {
+  if (!msgEl || !emoji) return;
+  const container = _ensureReactionsContainer(msgEl);
+  // Éviter doublon : si déjà cette emoji de la part du user, ignorer
+  if (container.querySelector(`.wr-reaction-user[data-emoji="${emoji}"]`)) return;
+  const badge = document.createElement('span');
+  badge.className = 'wr-reaction wr-reaction-user';
+  badge.dataset.emoji = emoji;
+  badge.title = `Votre réaction : ${emoji}`;
+  badge.innerHTML = `<span class="wr-reaction-emoji">${emoji}</span><span class="wr-reaction-label">Vous</span>`;
+  container.appendChild(badge);
+  // Sprint 4 utilisera cette réaction pour pondérer le consensus côté
+  // orchestrateur. Pour Sprint 3 on stocke juste dans la session.
+  const agentId = msgEl.dataset.agentId;
+  if (_currentSession && agentId) {
+    const entry = _currentSession.history.find(h => h.agent_id === agentId);
+    if (entry) {
+      entry.userReactions = entry.userReactions || [];
+      if (!entry.userReactions.includes(emoji)) entry.userReactions.push(emoji);
+    }
+  }
 }
 
 function _appendUserMessage(panel, text) {
