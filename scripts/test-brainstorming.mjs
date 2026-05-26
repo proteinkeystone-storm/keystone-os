@@ -344,6 +344,62 @@ try {
   const nextReset = pickNextAgent(histReset, 'exploration');
   if (nextReset === 'creative') ok('dedup : user reset → cycle redémarre');
   else                           ko('dedup user reset KO', `attendu creative, reçu ${nextReset}`);
+
+  // ─── Sprint 7.1.1 — fix bug ping-pong (mention parasite) ─────────
+  // 5.15 — Si un agent NON-strategic cite "Strategic Lead" dans son texte
+  // (citation polie forcée par le system prompt), pickNextAgent ne doit
+  // PAS pivoter vers strategic. Il doit suivre l'arc.
+  const histParasite = [
+    { agent_id: 'strategic', content: 'Keystone est un outil. Creative Director, ton angle ?' },
+    { agent_id: 'growth',    content: 'Je comprends où Strategic Lead veut en venir, mais...' },
+  ];
+  const nextParasite = pickNextAgent(histParasite, 'launch');
+  // last=growth, strategic+growth déjà parlés. Arc launch growth→creative.
+  // creative pas encore parlé → return creative. La citation parasite
+  // "Strategic Lead" ne doit PAS faire repartir sur strategic.
+  if (nextParasite === 'creative')
+    ok('Sprint 7.1.1 : mention parasite (citation polie) ignorée → arc continue');
+  else
+    ko('Sprint 7.1.1 : ping-pong non corrigé', `attendu creative, reçu ${nextParasite}`);
+
+  // 5.16 — Strategic Lead distribue la parole : mention HONORÉE
+  const histDistribute = [
+    { agent_id: 'strategic', content: 'On lance. Brand Guardian, à toi de poser le cadre.' },
+  ];
+  const nextDistribute = pickNextAgent(histDistribute, 'launch');
+  // last=strategic, mention=brand, brand pas encore parlé → return brand
+  // (override l'arc launch qui aurait dit growth)
+  if (nextDistribute === 'brand')
+    ok('Sprint 7.1.1 : Strategic distribue la parole → mention honored');
+  else
+    ko('Sprint 7.1.1 : distribution Strategic KO', `attendu brand, reçu ${nextDistribute}`);
+
+  // 5.17 — Simulation réaliste round-table 8 tours avec mentions parasites
+  // dans chaque message (comme en prod). Vérifie qu'on a bien 8 agents distincts.
+  const simReal = [];
+  const realCalls = new Set();
+  let dupAt = null;
+  // Mentions parasites typiques produites par les agents (politesse)
+  const parasites = [
+    '. Strategic Lead a raison.',
+    '. Je rejoins Creative Director.',
+    '. Comme l\'a dit Devil\'s Advocate, ...',
+    '. Growth Hacker propose une approche pertinente.',
+    '. Consumer Psychologist apporte une vraie clé.',
+    '. Cultural Analyst pointe juste.',
+    '. Brand Guardian a raison.',
+    '. Data Analyst pose les bons ordres de grandeur.',
+  ];
+  for (let i = 0; i < 8; i++) {
+    const aid = pickNextAgent(simReal, 'launch');
+    simReal.push({ agent_id: aid, content: `Tour ${i+1}${parasites[i] || ''}` });
+    if (realCalls.has(aid)) { dupAt = `${aid} au tour ${i+1}`; break; }
+    realCalls.add(aid);
+  }
+  if (!dupAt && realCalls.size === 8)
+    ok('Sprint 7.1.1 : round-table 8 tours avec mentions parasites → 8 agents distincts');
+  else
+    ko('Sprint 7.1.1 : ping-pong persiste avec mentions parasites', dupAt || `seulement ${realCalls.size} agents`);
 } catch (e) { ko('Worker orchestrator : import KO', e.message); }
 
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis

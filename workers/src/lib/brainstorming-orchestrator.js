@@ -180,12 +180,16 @@ export function getArcForMode(mode) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// pickNextAgent — heuristiques Sprint 7.1 (round-table complet)
+// pickNextAgent — heuristiques Sprint 7.1.1 (round-table robuste)
 // ─────────────────────────────────────────────────────────────────
 // Règles dans l'ordre :
 //   1. Si history vide → Strategic Lead (ouvre toujours la discussion)
 //   2. Si la dernière intervention est de 'user' → Strategic Lead (re-cadre)
-//   3. Si le dernier message contient une mention explicite → cet agent
+//   3. Si STRATEGIC LEAD vient de parler ET cite un agent vierge → cet agent
+//      (la mention n'est honorée QUE si Strategic distribue la parole —
+//      son rôle explicite. Les autres agents citent le précédent par
+//      politesse forcée par le system prompt ; ce n'est PAS une passe de
+//      parole et doit être ignoré, sinon ping-pong infini.)
 //   4. Sinon → rotation selon l'arc du mode, avec déduplication :
 //      si l'agent suivant dans l'arc a déjà parlé depuis la dernière
 //      intervention user, on avance dans l'arc jusqu'à trouver un agent
@@ -200,10 +204,6 @@ export function pickNextAgent(history, mode = 'exploration') {
   // L'utilisateur vient d'intervenir → Strategic Lead reprend la coordination
   if (last.agent_id === 'user') return 'strategic';
 
-  // Mention explicite ("Creative Director, ton angle ?")
-  const mentioned = detectMentionInText(last.content);
-  if (mentioned && mentioned !== last.agent_id) return mentioned;
-
   // Sprint 7.1 — collecte des agents qui ont déjà parlé depuis le dernier
   // reset user (ou depuis le début si pas de reset). Synth n'est jamais
   // dans le pool de dédup (c'est un agent spécial déclenché manuellement).
@@ -212,6 +212,18 @@ export function pickNextAgent(history, mode = 'exploration') {
     const a = history[i].agent_id;
     if (a === 'user') break;
     if (a && a !== 'synth') spokenSinceReset.add(a);
+  }
+
+  // Sprint 7.1.1 — Mention honorée UNIQUEMENT si Strategic Lead vient de
+  // parler ET que l'agent mentionné n'a pas encore parlé dans le cycle.
+  // Sinon, on suit strictement l'arc (les "citations rétroactives" type
+  // "Strategic Lead a raison" sont du discours conversationnel, pas un
+  // passage de parole).
+  if (last.agent_id === 'strategic') {
+    const mentioned = detectMentionInText(last.content);
+    if (mentioned && mentioned !== 'strategic' && !spokenSinceReset.has(mentioned)) {
+      return mentioned;
+    }
   }
 
   // Rotation adaptée — Sprint 7 : chaque mode a son arc dédié
