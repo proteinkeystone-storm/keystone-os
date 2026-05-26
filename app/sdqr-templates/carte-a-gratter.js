@@ -47,7 +47,8 @@ const TEMPLATE = {
     },
     {
       id: 'un_jeu_par_appareil', type: 'checkbox',
-      label: 'Limiter à 1 grattage par appareil (anti-abus)',
+      label: 'Limiter à 1 grattage par appareil (recommandé — permet au gagnant de rescanner pour revoir son code)',
+      default: true,
     },
     {
       id: 'logo_url', type: 'image', label: 'Logo (optionnel)',

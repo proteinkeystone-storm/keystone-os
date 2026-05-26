@@ -697,6 +697,16 @@ function _renderTemplateFields(root) {
     wrap.innerHTML = '';
     return;
   }
+  // V4.3 (2026-05-26) — Pré-remplir template_data avec les defaults des
+  // fields qui n'ont pas encore de valeur. Sans ça, un checkbox avec
+  // default:true reste à `undefined` côté backend tant que l'utilisateur
+  // ne le clique pas — ce qui désactive silencieusement l'anti-rejouage
+  // (vu 26/05 sur un_jeu_par_appareil des templates jeux).
+  for (const f of tpl.fields) {
+    if (_creating.template_data[f.id] === undefined && f.default !== undefined) {
+      _creating.template_data[f.id] = f.default;
+    }
+  }
   wrap.innerHTML = tpl.fields.map(f => _renderField(f, _creating.template_data)).join('');
   // Bind change listeners (write to template_data, pas payload).
   // Exclut les hidden inputs des widgets image : leur valeur est écrite

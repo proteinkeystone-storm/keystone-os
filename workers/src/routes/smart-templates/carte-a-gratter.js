@@ -238,6 +238,43 @@ const TEMPLATE = {
     margin-top: -8px; margin-bottom: 14px; font-style: italic;
   }
 
+  /* Bloc "présenter en caisse" (gain uniquement) */
+  .sq-win-actions {
+    display: none;
+    margin: 6px 0 12px;
+    flex-direction: column; gap: 10px;
+    align-items: stretch;
+  }
+  body.is-win .sq-win-actions { display: flex; }
+  .sq-copy-btn {
+    appearance: none; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, ${accent}, ${accent}cc);
+    color: #fff; font-family: inherit;
+    font-size: 14px; font-weight: 700; letter-spacing: .02em;
+    padding: 13px 22px;
+    border-radius: 10px;
+    box-shadow: 0 8px 20px ${accent}55;
+    transition: transform .14s ease, box-shadow .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sq-copy-btn:active { transform: scale(.96); }
+  .sq-copy-btn.is-copied {
+    background: linear-gradient(135deg, #4ade80, #22c55e);
+    box-shadow: 0 8px 20px rgba(74,222,128,.4);
+  }
+  .sq-rescan-hint {
+    font-size: 12px; color: var(--mut);
+    line-height: 1.5; margin: 0;
+    padding: 10px 14px;
+    background: rgba(124,138,249,.08);
+    border-left: 2px solid ${accent}55;
+    border-radius: 4px;
+    text-align: left;
+  }
+  .sq-rescan-hint::before {
+    content: "💡"; margin-right: 6px;
+  }
+
   /* Confettis quand gagnant */
   .sq-confetti {
     position: fixed; inset: 0; pointer-events: none;
@@ -296,14 +333,23 @@ const TEMPLATE = {
     pointer-events: none; }
   .sq-cta-wrap.is-shown { opacity: 1; pointer-events: auto; }
   .sq-cta {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 12px 24px; border-radius: 10px; border: 1px solid ${accent}55;
-    background: transparent; color: ${accent};
-    font-size: 13px; font-weight: 600;
-    text-decoration: none; cursor: pointer;
-    transition: background .14s ease, transform .14s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 8px;
+    background: transparent; color: var(--mut);
+    font-size: 12.5px; font-weight: 500;
+    text-decoration: underline; text-decoration-color: rgba(148,163,184,.32);
+    text-underline-offset: 3px;
+    cursor: pointer;
+    transition: color .14s ease, text-decoration-color .14s ease;
   }
-  .sq-cta:hover { background: ${accent}11; transform: translateY(-1px); }
+  .sq-cta:hover { color: ${accent};
+    text-decoration-color: ${accent}88; }
+  body.is-lose .sq-cta {
+    border: 1px solid ${accent}55; text-decoration: none;
+    color: ${accent}; padding: 12px 24px; font-size: 13px;
+    font-weight: 600;
+  }
+  body.is-lose .sq-cta:hover { background: ${accent}11; transform: translateY(-1px); }
 
   .sq-foot { margin-top: 22px; color: #64748b; font-size: 11px; line-height: 1.5; }
   .sq-foot a { color: var(--mut); text-decoration: none; }
@@ -334,7 +380,12 @@ const TEMPLATE = {
     <div class="sq-scratch-hint">Gratte ici 👆</div>
   </div>
 
-  <p class="sq-replay-note" id="sq-replay-note" hidden>Tu as déjà joué — voici ton résultat précédent.</p>
+  <p class="sq-replay-note" id="sq-replay-note" hidden>Tu as déjà joué — voici ton résultat précédent (rescannable à tout moment).</p>
+
+  <div class="sq-win-actions">
+    <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
+    <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
+  </div>
 
   <div class="sq-ia" id="sq-ia">
     <div id="sq-ia-loading">
@@ -485,6 +536,41 @@ const TEMPLATE = {
     if (ratio >= REVEAL_THRESHOLD) doReveal();
   }
 
+  // V4.3 UX (2026-05-26) — Copie le code de gain dans le presse-papiers
+  let currentWinCode = '';
+  function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('execCommand failed'));
+      } catch (e) { reject(e); }
+    });
+  }
+  const copyBtn = document.getElementById('sq-copy-btn');
+  copyBtn?.addEventListener('click', () => {
+    if (!currentWinCode) return;
+    copyToClipboard(currentWinCode).then(() => {
+      copyBtn.classList.add('is-copied');
+      copyBtn.textContent = '✓ Code copié';
+      vibrate(40);
+      setTimeout(() => {
+        copyBtn.classList.remove('is-copied');
+        copyBtn.textContent = '📋 Copier le code';
+      }, 2400);
+    }).catch(() => {
+      copyBtn.textContent = '⚠ Copie impossible';
+      setTimeout(() => copyBtn.textContent = '📋 Copier le code', 2400);
+    });
+  });
+
   function doReveal() {
     if (revealed) return;
     revealed = true;
@@ -499,6 +585,7 @@ const TEMPLATE = {
       revealIcon.textContent = isWin ? '🎉' : '🍀';
       revealTitle.textContent = isWin ? 'Gagné !' : 'Pas cette fois';
       revealMsg.textContent = data.message || '';
+      currentWinCode = (data.code_won || data.message || '').toString();
       replayNote.hidden = !data.replay_blocked;
       ctaWrap.classList.add('is-shown');
       if (isWin) vibrate([90, 60, 90, 60, 140]);

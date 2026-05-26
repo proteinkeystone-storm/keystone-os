@@ -255,10 +255,11 @@ const TEMPLATE = {
     margin: 0 0 8px;
   }
   .sq-result-msg {
-    font-size: 14.5px; line-height: 1.55;
-    color: var(--mut);
+    font-size: 15px; line-height: 1.55;
+    color: var(--tx);
     margin: 0 0 6px;
   }
+  body.is-lose .sq-result-msg { color: var(--mut); }
   body.is-win .sq-result-title {
     background: linear-gradient(135deg, var(--tx), ${accent}, var(--tx));
     background-size: 200% 100%;
@@ -271,6 +272,43 @@ const TEMPLATE = {
     50%      { background-position: 100% 50%; }
   }
   body.is-lose .sq-result-title { color: var(--mut); }
+
+  /* Bloc "présenter en caisse" (gain uniquement) */
+  .sq-win-actions {
+    display: none;
+    margin-top: 14px;
+    flex-direction: column; gap: 10px;
+    align-items: stretch;
+  }
+  body.is-win .sq-win-actions { display: flex; }
+  .sq-copy-btn {
+    appearance: none; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, ${accent}, ${accent}cc);
+    color: #fff; font-family: inherit;
+    font-size: 14px; font-weight: 700; letter-spacing: .02em;
+    padding: 13px 22px;
+    border-radius: 10px;
+    box-shadow: 0 8px 20px ${accent}55;
+    transition: transform .14s ease, box-shadow .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sq-copy-btn:active { transform: scale(.96); }
+  .sq-copy-btn.is-copied {
+    background: linear-gradient(135deg, #4ade80, #22c55e);
+    box-shadow: 0 8px 20px rgba(74,222,128,.4);
+  }
+  .sq-rescan-hint {
+    font-size: 12px; color: var(--mut);
+    line-height: 1.5; margin: 4px 0 0;
+    padding: 10px 14px;
+    background: rgba(124,138,249,.08);
+    border-left: 2px solid ${accent}55;
+    border-radius: 4px;
+    text-align: left;
+  }
+  .sq-rescan-hint::before {
+    content: "💡"; margin-right: 6px;
+  }
 
   .sq-replay-note {
     font-size: 11.5px; color: ${accent}; opacity: .8;
@@ -338,15 +376,27 @@ const TEMPLATE = {
   .sq-cta-wrap.is-shown {
     opacity: 1; pointer-events: auto;
   }
+  /* Pour les gagnants, le bouton Continuer devient un lien discret
+     (pour ne pas attirer le clic avant qu'ils aient noté/copié leur code). */
+  body.is-win .sq-cta-wrap { margin-top: 14px; }
   .sq-cta {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 12px 24px; border-radius: 10px; border: 1px solid ${accent}55;
-    background: transparent; color: ${accent};
-    font-size: 13px; font-weight: 600;
-    text-decoration: none; cursor: pointer;
-    transition: background .14s ease, transform .14s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 8px;
+    background: transparent; color: var(--mut);
+    font-size: 12.5px; font-weight: 500;
+    text-decoration: underline; text-decoration-color: rgba(148,163,184,.32);
+    text-underline-offset: 3px;
+    cursor: pointer;
+    transition: color .14s ease, text-decoration-color .14s ease;
   }
-  .sq-cta:hover { background: ${accent}11; transform: translateY(-1px); }
+  .sq-cta:hover { color: ${accent};
+    text-decoration-color: ${accent}88; }
+  body.is-lose .sq-cta {
+    border: 1px solid ${accent}55; text-decoration: none;
+    color: ${accent}; padding: 12px 24px; font-size: 13px;
+    font-weight: 600;
+  }
+  body.is-lose .sq-cta:hover { background: ${accent}11; transform: translateY(-1px); }
 
   .sq-foot { margin-top: 22px; color: #64748b; font-size: 11px; line-height: 1.5; }
   .sq-foot a { color: var(--mut); text-decoration: none; }
@@ -382,6 +432,10 @@ const TEMPLATE = {
   <div class="sq-result" id="sq-result" hidden>
     <h2 class="sq-result-title" id="sq-result-title"></h2>
     <p class="sq-result-msg" id="sq-result-msg"></p>
+    <div class="sq-win-actions">
+      <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
+      <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
+    </div>
     <p class="sq-replay-note" id="sq-replay-note" hidden></p>
   </div>
 
@@ -417,9 +471,47 @@ const TEMPLATE = {
   const resultTitle = el('sq-result-title');
   const resultMsg = el('sq-result-msg');
   const replayNote = el('sq-replay-note');
+  const copyBtn = el('sq-copy-btn');
   const iaBlock = el('sq-ia');
   const ctaWrap = el('sq-cta-wrap');
   const reels = [el('reel-1'), el('reel-2'), el('reel-3')];
+
+  // V4.3 UX (2026-05-26) — Copie le code de gain dans le presse-papiers,
+  // pour que le gagnant puisse le coller dans Notes/Messages/etc. en
+  // complément du rescan du QR.
+  let currentWinCode = '';
+  function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    // Fallback ancien : execCommand
+    return new Promise((resolve, reject) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('execCommand failed'));
+      } catch (e) { reject(e); }
+    });
+  }
+  copyBtn?.addEventListener('click', () => {
+    if (!currentWinCode) return;
+    copyToClipboard(currentWinCode).then(() => {
+      copyBtn.classList.add('is-copied');
+      copyBtn.textContent = '✓ Code copié';
+      vibrate(40);
+      setTimeout(() => {
+        copyBtn.classList.remove('is-copied');
+        copyBtn.textContent = '📋 Copier le code';
+      }, 2400);
+    }).catch(() => {
+      copyBtn.textContent = '⚠ Copie impossible';
+      setTimeout(() => copyBtn.textContent = '📋 Copier le code', 2400);
+    });
+  });
 
   let isPlaying = false;
   let aiResult  = null; // bufferise la phrase IA si elle arrive avant la fin
@@ -500,9 +592,12 @@ const TEMPLATE = {
       document.body.classList.add(isWin ? 'is-win' : 'is-lose');
       resultTitle.textContent = isWin ? '🎉 Gagné !' : 'Pas cette fois';
       resultMsg.textContent = data.message || '';
+      // Pour le bouton Copier — le code à copier est le code_won serveur,
+      // fallback au message si pas de code_won explicite.
+      currentWinCode = (data.code_won || data.message || '').toString();
       replayNote.hidden = !data.replay_blocked;
       if (data.replay_blocked) {
-        replayNote.textContent = 'Tu as déjà joué — voici ton résultat précédent.';
+        replayNote.textContent = 'Tu as déjà joué — voici ton résultat précédent (rescannable à tout moment).';
       }
       result.hidden = false;
       if (isWin) vibrate([90, 60, 90, 60, 140]);
