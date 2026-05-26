@@ -179,25 +179,25 @@
       "id": "A-COM-003",
       "padKey": null,
       "title": "Brainstorming",
-      "subtitle": "La planche d'ambiance pour votre studio 3D · 1 prompt → 1 moodboard complet",
+      "subtitle": "9 personnalités IA dialoguent pour enrichir votre réflexion",
       "category": "COM",
       "plan": "STARTER",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Brainstorming prépare la planche d'ambiance que vous transmettrez à votre studio 3D spécialisé en illustration immobilière. Configurez le cadrage de l'illustration finale (drone, piéton, intérieur, terrasse, macro), l'atmosphère (lumière, saison, palette végétale, figuration, matériaux) et votre moteur d'image (Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion). Brainstorming assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT). En retour, un fichier HTML avec un bouton 'Copier' unique qui produit, en une seule génération, une planche moodboard professionnelle de 6 vignettes cohérentes (architecture, lumière, palette végétale, matériaux, lifestyle, détail signature). Pratique standard des studios 3D : une planche cohérente vaut mieux que quatre images éparses à assembler à la main.",
+      "longDesc": "Brainstorming est un atelier de réflexion collective où 9 personnalités IA spécialisées dialoguent en direct pour enrichir votre pensée stratégique. Vous posez un sujet (lancement, repositionnement, idéation, campagne) et choisissez un mode de réflexion (Exploration, Lancement, Branding…). Strategic Lead coordonne, Creative Director propose des angles audacieux, Growth Hacker traduit en leviers, Consumer Psychologist révèle les motivations, Brand Guardian veille à la cohérence, Cultural Analyst capte les signaux émergents, Data Analyst confronte aux ordres de grandeur, Devil's Advocate remet en question, Synthesizer conclut. Vous orientez la conversation à la volée. Synthèse structurée + plan d'actions exportable PDF.",
       "icon": "muse",
-      "ai_optimized": "Claude",
+      "ai_optimized": "Claude + Gemma 4",
       "isNew": true,
       "published": true,
       "tags": [
         "artefact",
-        "moodboard",
-        "planche-ambiance",
-        "studio-3d",
-        "illustration-immobiliere",
-        "midjourney",
-        "flux",
-        "muse"
+        "brainstorming",
+        "ideation",
+        "creatif",
+        "multi-agent",
+        "synthese",
+        "reflexion",
+        "strategie"
       ]
     }
   ]

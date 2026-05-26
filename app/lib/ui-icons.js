@@ -80,7 +80,10 @@ export const ICONS = {
   'kodex': '<circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
   'pulsa': '<rect x="2" y="2" width="14" height="14" rx="2"/><line x1="5" y1="6.5" x2="13" y2="6.5"/><line x1="5" y1="10.5" x2="11" y2="10.5"/><circle cx="17" cy="17" r="5"/><line x1="17" y1="14.5" x2="17" y2="19.5"/><line x1="14.5" y1="17" x2="19.5" y2="17"/>',
   'sdqr': '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/>',
-  'muse': '<rect x="2.5" y="6" width="5.5" height="14" rx="1"/><rect x="9.25" y="3.5" width="5.5" height="17" rx="1"/><rect x="16" y="5.5" width="5.5" height="15" rx="1"/>',
+  // muse : 9 nœuds en table ronde — AI War Room (V2, mai 2026).
+  // Le picto reprend l'identité « boardroom multi-agent » de l'artefact
+  // refondu (anciennement nuancier 3 swatches du moodboard studio 3D).
+  'muse': '<circle cx="12" cy="12" r="8.5" opacity="0.3"/><circle cx="12" cy="3.5" r="1.3"/><circle cx="17.5" cy="5.5" r="1.3"/><circle cx="20.5" cy="10.5" r="1.3"/><circle cx="19.4" cy="16.3" r="1.3"/><circle cx="14.9" cy="20" r="1.3"/><circle cx="9.1" cy="20" r="1.3"/><circle cx="4.6" cy="16.3" r="1.3"/><circle cx="3.5" cy="10.5" r="1.3"/><circle cx="6.5" cy="5.5" r="1.3"/>',
   // Sprint VEFA-Studio-1 — Pictogramme miroir de ICONS['vefa'] dans ui-renderer.js
   // pour réutilisation dans la topbar de l'artefact O-IMM-010.
   'vefa': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/>',
@@ -91,6 +94,21 @@ export const ICONS = {
   // Sprint GW-2 — Pictogramme miroir de ICONS['ghostwriter'] dans ui-renderer.js
   // pour réutilisation dans la topbar de l'artefact A-COM-005.
   'ghostwriter': '<line x1="3" y1="9" x2="17" y2="9"/><line x1="3" y1="13" x2="20" y2="13"/><line x1="3" y1="17" x2="13" y2="17"/><line x1="19" y1="3" x2="19" y2="7"/><line x1="17" y1="5" x2="21" y2="5"/>',
+
+  // ── AI War Room — 9 personnalités-agents (Sprint 0, mai 2026) ──
+  // Pictos outline 1.8 (style Lucide), 1 par agent du boardroom.
+  // Couleur appliquée via CSS (currentColor) en accord avec la
+  // personnalité de l'agent (bleu profond, violet, vert, ambre,
+  // or, cyan, argent, rouge, blanc neutre).
+  'agent-strategic': '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>',
+  'agent-creative' : '<path d="M9 18h6"/><path d="M10 21.5h4"/><path d="M12 2.5a6.5 6.5 0 0 0-3.7 11.8c.7.5 1.2 1.2 1.2 2v.7"/><path d="M14.5 17v-.7c0-.8.5-1.5 1.2-2A6.5 6.5 0 0 0 12 2.5z"/>',
+  'agent-growth'   : '<polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/>',
+  'agent-consumer' : '<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/>',
+  'agent-brand'    : '<path d="M12 2.5 3.5 5.5v6c0 5.2 3.7 9.8 8.5 11 4.8-1.2 8.5-5.8 8.5-11v-6L12 2.5z"/>',
+  'agent-cultural' : '<path d="M5 12.5a8 8 0 0 1 14 0"/><path d="M2 9a13 13 0 0 1 20 0"/><path d="M8.5 16.5a4 4 0 0 1 7 0"/><circle cx="12" cy="20" r="1.2" fill="currentColor"/>',
+  'agent-data'     : '<line x1="3" y1="20.5" x2="21" y2="20.5"/><line x1="6.5" y1="20.5" x2="6.5" y2="14"/><line x1="12" y1="20.5" x2="12" y2="9"/><line x1="17.5" y1="20.5" x2="17.5" y2="11.5"/>',
+  'agent-devil'    : '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  'agent-synth'    : '<path d="M12 3l1.6 4.4 4.4 1.6-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M18 16l.7 1.9 1.9.7-1.9.7L18 21l-.7-1.9L15.4 18.6l1.9-.7L18 16z"/>',
 };
 
 /**

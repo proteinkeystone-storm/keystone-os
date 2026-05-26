@@ -15,7 +15,7 @@ import { setKeystoneStatus, dismissDSTMessage, setDefaultStatusPool } from './ds
 import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
-import { openMuse }                              from './muse.js';
+import { openBrainstorming }                     from './brainstorming.js';
 import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
@@ -83,7 +83,11 @@ const ICONS = {
     'kodex':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`,
     'pulsa':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="14" height="14" rx="2"/><line x1="5" y1="6.5" x2="13" y2="6.5"/><line x1="5" y1="10.5" x2="11" y2="10.5"/><circle cx="17" cy="17" r="5"/><line x1="17" y1="14.5" x2="17" y2="19.5"/><line x1="14.5" y1="17" x2="19.5" y2="17"/></svg>`,
     'sdqr':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg>`,
-    'muse':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="5.5" height="14" rx="1"/><rect x="9.25" y="3.5" width="5.5" height="17" rx="1"/><rect x="16" y="5.5" width="5.5" height="15" rx="1"/></svg>`,
+    // muse : 9 nœuds en table ronde — AI War Room (V2, mai 2026).
+    // L'artefact A-COM-003 a pivoté du moodboard studio 3D vers un
+    // boardroom IA multi-agent. Le picto reprend cette nouvelle
+    // identité (anciennement nuancier 3 swatches en éventail).
+    'muse':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5" opacity="0.3"/><circle cx="12" cy="3.5" r="1.3"/><circle cx="17.5" cy="5.5" r="1.3"/><circle cx="20.5" cy="10.5" r="1.3"/><circle cx="19.4" cy="16.3" r="1.3"/><circle cx="14.9" cy="20" r="1.3"/><circle cx="9.1" cy="20" r="1.3"/><circle cx="4.6" cy="16.3" r="1.3"/><circle cx="3.5" cy="10.5" r="1.3"/><circle cx="6.5" cy="5.5" r="1.3"/></svg>`,
     'multiportails':  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="5" x2="5" y2="5"/><line x1="8" y1="5" x2="22" y2="5"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="8" y1="12" x2="22" y2="12"/><line x1="2" y1="19" x2="5" y2="19"/><line x1="8" y1="19" x2="22" y2="19"/></svg>`,
     // ghostwriter : 3 lignes de texte graduées (suggère 3 variantes de longueurs)
     // + étincelle (sparkle) haut-droite évoquant la transformation IA.
@@ -1984,7 +1988,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
-    if (padId === 'A-COM-003') { openMuse();  return; }
+    if (padId === 'A-COM-003') { openBrainstorming();  return; }
     if (padId === 'A-COM-004') { openPulsa(); return; }
     if (padId === 'A-COM-005') { openGhostwriterStudio(); return; }
 

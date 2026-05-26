@@ -1,33 +1,40 @@
 {
   "title": "Brainstorming",
-  "tldr": "Brainstorming prépare une planche d'ambiance pour votre studio 3D : en une seule génération IA, vous obtenez 6 vignettes cohérentes (architecture, lumière, palette, matériaux, lifestyle, détail signature).",
+  "tldr": "9 personnalités IA spécialisées dialoguent en direct autour de votre brief créatif. Vous orientez la conversation à la volée, le Synthesizer livre une synthèse structurée à la fin.",
   "key_points": [
-    "1. Cadrage : choisissez la perspective de l'illustration finale (drone, piéton, intérieur, terrasse, macro)",
-    "2. Atmosphère : configurez lumière, saison, palette végétale, matériaux, figuration",
-    "3. Moteur d'image : Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion",
-    "4. Prompt Maître : copiez le prompt structuré généré, collez-le dans votre IA",
-    "5. Résultat : un fichier HTML avec bouton 'Copier' unique, qui produit la planche moodboard en une génération"
+    "1. Brief : posez votre sujet de réflexion (lancement, repositionnement, idéation…)",
+    "2. Mode : choisissez un angle de réflexion (Exploration, Lancement, Branding…)",
+    "3. Allumage : les 9 personnalités s'allument progressivement et ouvrent la discussion",
+    "4. Dialogue : Strategic Lead, Creative Director, Devil's Advocate et 6 autres échangent en direct",
+    "5. Intervention : tapez « Plus premium », « Plus disruptif » pour réorienter la conversation",
+    "6. Synthèse : le Synthesizer condense l'échange en plan d'actions structuré",
+    "7. Export PDF : récupérez la note de synthèse complète"
   ],
   "faq": [
     {
-      "q": "Brainstorming génère-t-il les images directement ?",
-      "a": "Non, et c'est volontaire. Brainstorming produit le PROMPT optimisé. La génération reste chez votre IA (Midjourney, Flux, etc.) pour vous laisser le contrôle qualité et le coût maîtrisé."
+      "q": "Quelle est la différence avec ChatGPT ou Claude ?",
+      "a": "ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif."
     },
     {
-      "q": "Est-ce compatible avec le travail de mon studio 3D ?",
-      "a": "Oui, c'est même fait pour. Brainstorming produit un MOODBOARD de référence (\"in the same spirit, analogous to\") — jamais une illustration du projet lui-même. Le studio 3D garde la responsabilité de modéliser votre programme sur plan."
+      "q": "Quels moteurs IA sont utilisés ?",
+      "a": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
     },
     {
-      "q": "Combien de temps pour avoir la planche finale ?",
-      "a": "5 à 8 minutes : 2 min pour configurer dans Brainstorming, 1 min pour copier dans votre IA, 2-3 min pour la génération, 1 min pour télécharger la planche HTML."
+      "q": "Combien de temps dure une session ?",
+      "a": "8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure."
     },
     {
-      "q": "Puis-je modifier le prompt avant de l'envoyer à l'IA ?",
-      "a": "Oui, le prompt généré est affiché en clair dans Brainstorming. Copiez-le, modifiez-le si besoin, puis collez dans votre IA. Aucun verrouillage."
+      "q": "Mes sessions sont-elles sauvegardées ?",
+      "a": "Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF."
+    },
+    {
+      "q": "Pourquoi Devil's Advocate est-il intégré comme rôle système ?",
+      "a": "Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique."
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" },
+    { "keys": "Cmd+Enter", "desc": "Envoyer une intervention dans la discussion" }
   ],
-  "updated_at": "2026-05-14"
+  "updated_at": "2026-05-26"
 }
