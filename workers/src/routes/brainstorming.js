@@ -34,19 +34,46 @@ import { requireJWT } from '../lib/jwt.js';
 import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
 
-// Sprint 2 fix (26/05/2026) — switch Gemma 4 → Llama 3.3 70B Fast.
-// Pourquoi : Gemma 4 est un modèle "raisonneur" qui consomme son budget
-// dans `reasoning` AVANT de produire `content`. Pour un brainstorming
-// streaming où chaque agent ne produit que 2-3 phrases courtes, c'était
-// catastrophique : bulles vides + latence x10. Llama 3.3 70B en mode
-// fp8-fast sort du texte direct, idéal pour des répliques courtes en
-// streaming temps réel. Multilingue OK (FR natif).
-const MODEL_ID    = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const MAX_TOKENS  = 512;     // 2-3 phrases courtes suffisent largement
+// Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
+// Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
+// après son EOT token ("abdefghijklmnoprstuvxyz1234") — bug connu de la
+// quantization fp8 sur cette taille. Llama 3.1 8B est plus stable, plus
+// petit, plus rapide, et largement suffisant pour des répliques courtes
+// 2 phrases. Multilingue FR natif.
+const MODEL_ID    = '@cf/meta/llama-3.1-8b-instruct';
+const MAX_TOKENS  = 180;     // ~150 mots max — force court et concis
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
 const DEFAULT_MAX_TURNS = 3;
+const MAX_SENTENCES_PER_TURN = 2;   // post-process : on coupe à 2 phrases max
+
+// Strip les artefacts alphabétiques de fin (Llama 3.3 fp8 bug), au cas
+// où le modèle continue de générer. Pattern : ≥ 6 lettres minuscules
+// consécutives en fin de réponse, optionnellement suivies de digits.
+const _ALPHA_GIBBERISH_RE = /[a-z]{6,}\d{0,6}[\s.,;:!?]*$/i;
+
+function _stripAlphaGibberish(text) {
+  if (!text) return text;
+  // On retire d'éventuels suffixes d'alphabet, mais on protège les vrais
+  // mots français (qui font rarement ≥ 6 lettres consécutives en fin de
+  // phrase sans suivi de ponctuation ou espace AVANT le mot).
+  // Heuristique : si on a une vraie phrase, le dernier mot est suivi de
+  // ponctuation. L'alphabet bizarre n'a PAS d'espace avant — il colle
+  // direct au dernier caractère du texte légitime. Donc on cherche le
+  // pattern collé "[mot.] + alphabet".
+  return text.replace(/([\s.!?;:,])([a-z]{6,}\d{0,6})\s*$/i, '$1').trim();
+}
+
+// Post-process : coupe à N phrases max (Llama ignore les contraintes
+// de format dans le prompt — on les enforce ici).
+function _capSentences(text, maxN = MAX_SENTENCES_PER_TURN) {
+  if (!text) return text;
+  // Split sur ponctuation forte suivie d'espace ou fin
+  const parts = text.match(/[^.!?]+[.!?]+/g);
+  if (!parts || parts.length <= maxN) return text.trim();
+  return parts.slice(0, maxN).join(' ').trim();
+}
 const SUPPORTED_AGENTS = new Set([
   'strategic', 'creative', 'growth', 'consumer', 'brand',
   'cultural', 'data', 'devil', 'synth', 'auto',
@@ -145,26 +172,36 @@ export async function handleBrainstormingAgentRespond(request, env) {
           // Annonce le début du message de l'agent
           send({ type: 'agent_start', agent_id: currentAgentId });
 
-          // Construction des messages pour Gemma 4
+          // Construction des messages pour le LLM
+          // Trouver le dernier intervenant (hors user) pour forcer la réaction
+          const previousTurn = [...localHistory].reverse().find(t => t && t.agent_id && t.agent_id !== 'user') || null;
+          const previousAgent = previousTurn ? getAgent(previousTurn.agent_id) : null;
+
           const agentList    = getAgentNamesForPrompt(currentAgentId);
-          const systemPrompt = agent.systemPrompt(cognitive_mode, brief, agentList);
+          const systemPrompt = agent.systemPrompt(cognitive_mode, brief, agentList, previousTurn, previousAgent);
 
           const messages = [{ role: 'system', content: systemPrompt }];
-          for (const turn of localHistory) {
+          // On donne au LLM uniquement les 3 derniers tours (sinon il
+          // se disperse) — la réaction au précédent est forcée via
+          // le system prompt.
+          const recent = localHistory.slice(-3);
+          for (const turn of recent) {
             if (!turn || !turn.content) continue;
             messages.push({
               role:    turn.agent_id === 'user' ? 'user' : 'assistant',
-              content: String(turn.content),
+              content: turn.agent_id === 'user'
+                ? String(turn.content)
+                : `[${getAgent(turn.agent_id)?.name || turn.agent_id}] ${String(turn.content)}`,
             });
           }
 
-          // Trigger : on demande explicitement à l'agent d'intervenir
+          // Trigger : on force la brièveté + la réaction explicite
           const isFirstTurn = localHistory.length === 0;
           messages.push({
             role:    'user',
             content: isFirstTurn
-              ? `Le brief vient d'être posé. Ouvre la discussion stratégique en respectant strictement ton rôle de ${agent.name}.`
-              : `Interviens maintenant en respectant strictement ton rôle de ${agent.name}. Tiens compte de ce qui vient d'être dit.`,
+              ? `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES. Cadre l'angle stratégique majeur et invite UN agent spécifique à réagir.`
+              : `Tu interviens MAINTENANT comme ${agent.name}. CONTRAINTES STRICTES :\n- MAX 2 phrases courtes (60 mots TOTAL).\n- RÉAGIS d'abord à ce que ${previousAgent?.name || 'l\'intervenant précédent'} vient de dire (cite-le ou rebondis explicitement).\n- ENSUITE seulement, apporte ton angle propre depuis ton rôle.\n- PAS de salutation, PAS de résumé, PAS de liste à puces.`,
           });
 
           // Lance l'inférence Workers AI en streaming
@@ -219,13 +256,19 @@ export async function handleBrainstormingAgentRespond(request, env) {
             }
           }
 
-          // Fin de message
-          send({ type: 'agent_end', agent_id: currentAgentId, full_text: fullText });
+          // Post-process : strip alphabet gibberish + cap 2 phrases
+          let cleanedText = _stripAlphaGibberish(fullText);
+          cleanedText = _capSentences(cleanedText, MAX_SENTENCES_PER_TURN);
+
+          // Fin de message — envoie le texte propre comme full_text
+          // (le frontend appendera le delta si différence avec ce que
+          // les chunks ont accumulé)
+          send({ type: 'agent_end', agent_id: currentAgentId, full_text: cleanedText });
 
           // Ajout à l'historique local pour le prochain tour
           localHistory.push({
             agent_id : currentAgentId,
-            content  : fullText,
+            content  : cleanedText,
             timestamp: Date.now(),
           });
           turnsDone++;

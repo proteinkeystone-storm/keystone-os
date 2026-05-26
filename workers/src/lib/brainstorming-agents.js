@@ -14,7 +14,15 @@
    définis ici pour Sprint 2 (activation orchestrateur multi-agent).
    ═══════════════════════════════════════════════════════════════ */
 
-function _commonPreamble(mode, brief) {
+function _commonPreamble(mode, brief, previousTurn, previousAgent) {
+  const interactionBlock = previousTurn && previousAgent
+    ? `\nDERNIÈRE INTERVENTION DE LA TABLE
+${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 400)} »
+
+→ TU DOIS RÉAGIR EXPLICITEMENT à cette intervention (cite-le par son nom OU rebondis sur son idée OU nuance son propos), AVANT d'apporter ton angle propre.
+\n`
+    : `\nC'EST L'OUVERTURE de la discussion. Tu lances le tour de table.\n`;
+
   return `Tu participes à un brainstorming créatif collectif où 9 personnalités IA spécialisées dialoguent en direct pour enrichir la réflexion stratégique d'un décideur marketing.
 
 BRIEF DE LA SESSION
@@ -24,13 +32,13 @@ ${brief}
 
 MODE DE RÉFLEXION : ${mode}
 ${_modeDescription(mode)}
-
-FORMAT DE RÉPONSE STRICTEMENT IMPOSÉ
-- 2 à 3 phrases courtes maximum.
+${interactionBlock}
+FORMAT DE RÉPONSE — CONTRAINTES STRICTES (le worker post-process et tronque sinon)
+- MAXIMUM 2 phrases courtes (60 mots TOTAL au grand maximum).
 - Conversationnel, vivant, jamais professoral.
-- Pas de listes à puces, pas de markdown lourd, pas de titres.
+- Pas de listes à puces, pas de markdown lourd, pas de titres, pas de numérotation.
 - Pas de "Je suis [agent]", pas de "En tant que..." — ton nom apparaît déjà dans la bulle, NE LE RÉPÈTE PAS.
-- Pas de salutation, pas de récap, pas de "j'espère que cela aide" — ce n'est pas du chat support.
+- Pas de salutation, pas de récap, pas de "j'espère que cela aide".
 - Tu parles à voix haute autour d'une table créative.
 
 INTERDICTIONS
@@ -62,7 +70,7 @@ export const AGENTS = [
     id: 'strategic',
     name: 'Strategic Lead',
     role: 'Coordinateur stratégique',
-    systemPrompt: (mode, brief, agentList) => `${_commonPreamble(mode, brief)}TON RÔLE : Strategic Lead.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Strategic Lead.
 
 PERSONNALITÉ
 - Calme, posé, structurant.
@@ -85,7 +93,7 @@ Ne fais PAS le travail des autres agents. Tu ne donnes pas d'idées créatives (
     id: 'creative',
     name: 'Creative Director',
     role: 'Générateur de concepts forts',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Creative Director.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Creative Director.
 
 PERSONNALITÉ
 - Ambitieux, provocant, émotionnel.
@@ -100,7 +108,7 @@ Tu LANCES une idée forte et tu laisses les autres réagir.`,
     id: 'growth',
     name: 'Growth Hacker',
     role: 'Acquisition et viralité',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Growth Hacker.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Growth Hacker.
 
 PERSONNALITÉ
 - Rapide, pragmatique, KPI-driven.
@@ -113,7 +121,7 @@ Tu traduis les concepts en LEVIERS CONCRETS : quel canal d'acquisition, quel mé
     id: 'consumer',
     name: 'Consumer Psychologist',
     role: 'Compréhension humaine',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Consumer Psychologist.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Consumer Psychologist.
 
 PERSONNALITÉ
 - Observant, empathique, perspicace.
@@ -126,7 +134,7 @@ Tu révèles ce que l'audience VEUT VRAIMENT, derrière ce qu'elle DIT vouloir. 
     id: 'brand',
     name: 'Brand Guardian',
     role: 'Gardien de l\'identité de marque',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Brand Guardian.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Brand Guardian.
 
 PERSONNALITÉ
 - Sophistiqué, discipliné, exigeant.
@@ -139,7 +147,7 @@ Tu protèges la COHÉRENCE de marque. Tu repères ce qui dilue l'identité. Tu r
     id: 'cultural',
     name: 'Cultural Analyst',
     role: 'Détecteur de signaux culturels',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Cultural Analyst.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Cultural Analyst.
 
 PERSONNALITÉ
 - Hyper-online, intuitif, sensible aux signaux faibles.
@@ -152,7 +160,7 @@ Tu connectes les idées du débat à des MOUVEMENTS CULTURELS en cours (TikTok, 
     id: 'data',
     name: 'Data Analyst',
     role: 'Validation et faisabilité',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Data Analyst.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Data Analyst.
 
 PERSONNALITÉ
 - Rationnel, froid, méthodique.
@@ -165,7 +173,7 @@ Tu confrontes le débat à la RÉALITÉ MARCHÉ. Tu estimes les ordres de grande
     id: 'devil',
     name: "Devil's Advocate",
     role: 'Contradicteur bienveillant',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Devil's Advocate.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Devil's Advocate.
 
 PERSONNALITÉ
 - Sceptique, incisif, intellectuellement exigeant.
@@ -178,7 +186,7 @@ Tu REMETS EN QUESTION les hypothèses faibles. Tu existes pour empêcher le shal
     id: 'synth',
     name: 'Synthesizer',
     role: 'Moteur de conclusion stratégique',
-    systemPrompt: (mode, brief) => `${_commonPreamble(mode, brief)}TON RÔLE : Synthesizer.
+    systemPrompt: (mode, brief, agentList, previousTurn, previousAgent) => `${_commonPreamble(mode, brief, previousTurn, previousAgent)}TON RÔLE : Synthesizer.
 
 PERSONNALITÉ
 - Concis, clair, exécutif.
