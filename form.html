@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="theme-color" content="#0a2741" data-slot="theme">
-  <title>Pulsa — Formulaire</title>
+  <title>Key Form — Formulaire</title>
   <style>
     /* ═══════════════════════════════════════════════════════════════
        PULSA · Page publique de formulaire (P3.2)
@@ -2199,7 +2199,7 @@
       const meta = _form.meta || {};
       const sections = _form.sections || [];
       const totalFields = sections.reduce((a, s) => a + (s.fields?.length || 0), 0);
-      document.title = (meta.title || 'Pulsa') + ' — Formulaire';
+      document.title = (meta.title || 'Key Form') + ' — Formulaire';
 
       const logoHtml = (meta.logo_data_url || meta.logo_url)
         ? `<img src="${escape(meta.logo_data_url || meta.logo_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pf-logo-fallback',textContent:'P'}))">`
@@ -2251,7 +2251,7 @@
           </div>
 
           <p class="pf-footer">
-            Formulaire propulsé par <a href="https://protein-keystone.com" target="_blank" rel="noopener">Keystone OS</a> · Pulsa
+            Formulaire propulsé par <a href="https://protein-keystone.com" target="_blank" rel="noopener">Keystone OS</a> · Key Form
           </p>
         </div>
       `;

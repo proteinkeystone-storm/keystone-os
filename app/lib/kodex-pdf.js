@@ -165,7 +165,7 @@ function _renderUploads(assets) {
   return `
     <h2 class="section">Fichiers à transmettre au graphiste</h2>
     <p style="font-size:10pt;color:#555;margin:0 0 10pt 0;">
-      Les fichiers ci-dessous ont été téléversés par le client dans Kodex. Communiquez les URLs au graphiste — accès direct, hébergement souverain.
+      Les fichiers ci-dessous ont été téléversés par le client dans Brief Prod. Communiquez les URLs au graphiste — accès direct, hébergement souverain.
     </p>
     <ul class="uploads" style="font-size:10pt;line-height:1.7;">${items}</ul>
   `;
@@ -217,7 +217,7 @@ export async function exportBriefAsPDF(state, sector) {
     || f.nom_programme
     || f.nom_enseigne
     || f.nom_etablissement
-    || 'Brief Kodex';
+    || 'Brief Prod';
   const supportLabel = std.type_support || std.product_name || 'Support à produire';
   const title = projectLabel + ' — ' + supportLabel;
   const dateStr = brief?.generated_at

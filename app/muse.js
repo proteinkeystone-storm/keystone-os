@@ -44,7 +44,7 @@ import {
 // ── Métadonnées workspace ─────────────────────────────────────
 const WORKSPACE_META = {
   id        : 'A-COM-003',
-  name      : 'Muse',
+  name      : 'Brainstorming',
   punchline : 'Le plateau de jeu créatif de votre com immobilière',
 };
 

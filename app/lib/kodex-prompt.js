@@ -140,7 +140,7 @@ function _renderAssetsBlock(assets) {
   const uploads = assets.uploads || [];
   if (uploads.length) {
     lines.push('');
-    lines.push('### Fichiers fournis par le client (téléversés dans Kodex) :');
+    lines.push('### Fichiers fournis par le client (téléversés dans Brief Prod) :');
     for (const u of uploads) {
       const sizeKo = u.size_bytes ? Math.round(u.size_bytes / 1024) : '?';
       lines.push(`- **${u.kind || 'autre'}** — ${u.filename} (${u.mime}, ${sizeKo} Ko)`);

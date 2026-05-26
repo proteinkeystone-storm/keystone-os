@@ -1,20 +1,20 @@
 {
-  "title": "Kodex",
-  "tldr": "Kodex transforme votre intention créative en cahier des charges technique infaillible pour votre graphiste ou votre imprimeur. Évite l'erreur d'impression à 800 €.",
+  "title": "Brief Prod",
+  "tldr": "Brief Prod transforme votre intention créative en cahier des charges technique infaillible pour votre graphiste ou votre imprimeur. Évite l'erreur d'impression à 800 €.",
   "key_points": [
     "1. Le support : choisissez votre destination (imprimeur, réseau social, presse). 31 supports × 4 vendors (Exaprint, Vistaprint, Pixartprinting, ou « autre imprimeur ») = 42 specs précises.",
-    "2. Le message : renseignez votre projet (nom, lieu, échéance, argumentaire, mentions légales). Kodex est universel — aucune segmentation métier.",
+    "2. Le message : renseignez votre projet (nom, lieu, échéance, argumentaire, mentions légales). Brief Prod est universel — aucune segmentation métier.",
     "3. Les visuels : déposez logo, charte graphique, photos dans le coffre-fort assets (jusqu'à 10 Mo par fichier).",
     "4. Le brief : récupérez un PDF prêt à envoyer. Téléchargement instantané sans IA, enrichissement créatif optionnel avec votre clé API personnelle."
   ],
   "faq": [
     {
-      "q": "Faut-il une clé API IA pour utiliser Kodex ?",
+      "q": "Faut-il une clé API IA pour utiliser Brief Prod ?",
       "a": "Non. Le brief technique est généré mécaniquement à partir de vos saisies et téléchargeable instantanément en PDF, sans la moindre clé. L'IA n'est qu'un bonus optionnel pour ajouter 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en page 2 du PDF. Si vous configurez une clé Claude, GPT, Gemini, Mistral ou xAI dans le Vault, vous pouvez l'activer ; sinon le plan B « copier le Code Maître + coller dans une AI web gratuite » est toujours disponible."
     },
     {
       "q": "Que faire si mon imprimeur n'est pas Exaprint, Vistaprint ou Pixartprinting ?",
-      "a": "Choisissez « Autre imprimeur » dans le sélecteur vendor à l'étape 1 : Kodex applique des standards génériques cohérents (bleed 3-5 mm, CMJN FOGRA39, 300 DPI) et débloque deux champs supplémentaires : URL de la fiche technique officielle + PDF de specs à joindre directement au brief. Votre graphiste suivra ces specs comme référence absolue plutôt que celles d'un vendor par défaut."
+      "a": "Choisissez « Autre imprimeur » dans le sélecteur vendor à l'étape 1 : Brief Prod applique des standards génériques cohérents (bleed 3-5 mm, CMJN FOGRA39, 300 DPI) et débloque deux champs supplémentaires : URL de la fiche technique officielle + PDF de specs à joindre directement au brief. Votre graphiste suivra ces specs comme référence absolue plutôt que celles d'un vendor par défaut."
     },
     {
       "q": "Quelle taille maximum pour mes uploads d'assets ?",
@@ -22,7 +22,7 @@
     },
     {
       "q": "Comment fonctionne le calculateur d'échelle pour les grands formats ?",
-      "a": "Sur un panneau 4×3 m ou une bâche, travailler à l'échelle 1:1 produit des fichiers à 5 Go intraitables. Kodex calcule automatiquement le facteur de réduction (typiquement 1/10) et le DPI de sortie nécessaire en fonction de la distance de vue (autoroute = 50 m, métro = 2 m). Vous obtenez le format de travail exact (mm) + le nombre de pixels finaux + la hauteur minimum lisible des titres + une alerte si un visuel uploadé est sous-résolu pour ce contexte."
+      "a": "Sur un panneau 4×3 m ou une bâche, travailler à l'échelle 1:1 produit des fichiers à 5 Go intraitables. Brief Prod calcule automatiquement le facteur de réduction (typiquement 1/10) et le DPI de sortie nécessaire en fonction de la distance de vue (autoroute = 50 m, métro = 2 m). Vous obtenez le format de travail exact (mm) + le nombre de pixels finaux + la hauteur minimum lisible des titres + une alerte si un visuel uploadé est sous-résolu pour ce contexte."
     },
     {
       "q": "Mon brief n'a pas la qualité attendue, que faire ?",

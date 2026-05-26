@@ -56,7 +56,7 @@ import { openPulsa } from './pulsa.js';
 // ── Métadonnées workspace (override par artefact) ──────────────
 const WORKSPACE_META = {
   id        : 'A-COM-002',
-  name      : 'Kodex',
+  name      : 'Brief Prod',
   punchline : 'Le brief print/digital infaillible',
 };
 

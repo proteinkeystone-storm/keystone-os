@@ -142,7 +142,7 @@ export async function buildPromptMaitre(state) {
   if (style?.prompt_anchor)      anchorLines.push(`- style: ${style.prompt_anchor}`);
 
   // ── Assemblage final ─────────────────────────────────────────
-  return `Tu es directeur artistique senior et conseiller en communication immobilière. Voici un brief créatif structuré, issu de Muse (module du système Keystone OS, Protein Studio).
+  return `Tu es directeur artistique senior et conseiller en communication immobilière. Voici un brief créatif structuré, issu de Brainstorming (module du système Keystone OS, Protein Studio).
 
 # Nature exacte de ta tâche — à lire impérativement
 

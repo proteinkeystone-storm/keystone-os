@@ -250,8 +250,8 @@ export const FIELD_TYPES = {
   // Le payload n'est jamais soumis (aucun input), donc aucun impact sur
   // la collecte de réponses ni sur les forms Pulsa V1 existants (Biennale).
   'brief-readonly': {
-    label: 'Brief Kodex',
-    sub: 'Bloc d\'information lecture seule (auto-injecté par Kodex)',
+    label: 'Brief Prod',
+    sub: 'Bloc d\'information lecture seule (auto-injecté par Brief Prod)',
     ico: 'file-text',
     group: 'kodex-readonly',
     defaults: {
