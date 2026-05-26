@@ -1173,7 +1173,8 @@ async function _openQrDetail(panel, qr) {
           </p>
           <div class="sdqr-verify-url-row">
             <code class="sdqr-verify-url" id="sdqr-verify-url">${location.origin}/verify-win.html</code>
-            <button type="button" class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-verify-url" title="Copier l'URL dans le presse-papiers">📋 Copier l'URL</button>
+            <a class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-open-verify-url" href="${location.origin}/verify-win.html" target="_blank" rel="noopener" title="Ouvrir la page de vérification dans un nouvel onglet">↗ Ouvrir</a>
+            <button type="button" class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-verify-url" title="Copier l'URL dans le presse-papiers">📋 Copier</button>
           </div>
         </div>
         ` : ''}
