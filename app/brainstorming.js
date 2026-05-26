@@ -17,6 +17,8 @@
 
 import { icon } from './lib/ui-icons.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
+import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
+import { burgerHTML, bindBurger } from './lib/topbar-burger.js';
 import {
   AGENTS,
   getAgent,
@@ -24,6 +26,8 @@ import {
   COGNITIVE_MODES,
   getCognitiveMode,
 } from './lib/brainstorming-agents.js';
+
+const APP_ID = 'A-COM-003';
 
 // ── Constantes Sprint 1 ──────────────────────────────────────────
 const SPRINT1_ACTIVE_AGENT = 'strategic';        // seul agent qui répond
@@ -58,7 +62,9 @@ export function openBrainstorming() {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'wr-fullscreen';
-    panel.className = 'wr-fullscreen';
+    // ws-app : applique les CSS vars Keystone (palette navy/gold).
+    // wr-fullscreen : layout grid spécifique Brainstorming.
+    panel.className = 'ws-app wr-fullscreen';
     document.body.appendChild(panel);
   }
   panel.innerHTML = _renderShell();
@@ -75,7 +81,9 @@ export function openBrainstorming() {
   };
 
   _wireShell(panel);
-  bindHelpButton(panel, 'A-COM-003');
+  bindHelpButton(panel, APP_ID);
+  bindRatingButton(panel, APP_ID);
+  bindBurger(panel);
   _bootAgents(panel);
 }
 
@@ -98,11 +106,30 @@ export const openMuse = openBrainstorming;
 function _renderShell() {
   const mode = getCognitiveMode(DEFAULT_MODE);
   return `
-    <!-- Left rail (3 icônes) -->
-    <aside class="wr-rail">
-      <div class="wr-rail-logo" title="Keystone OS">
-        <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone">
+    <!-- Header standard Keystone (cohérence cross-tools) -->
+    <header class="ws-topbar">
+      <div class="ws-topbar-brand">
+        <a class="ws-topbar-logo" href="./app" title="Retour au Dashboard Keystone" aria-label="Retour au Dashboard">
+          <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark">
+          <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" class="ws-logo-light">
+        </a>
+        <button class="ws-topbar-back" id="wr-close-btn" title="Retour (Échap)" aria-label="Retour au Dashboard">
+          ${icon('chevron-left', 34)}
+        </button>
       </div>
+      <div class="ws-topbar-title">
+        <span class="ws-topbar-app-picto">${icon('muse', 24)}</span>
+        <span class="name">Brainstorming</span>
+      </div>
+      ${burgerHTML()}
+      <div class="ws-topbar-actions">
+        ${helpButtonHTML(APP_ID)}
+        ${ratingButtonHTML(APP_ID)}
+      </div>
+    </header>
+
+    <!-- Left rail (3 icônes — sessions / agents / modes) -->
+    <aside class="wr-rail">
       <button class="wr-rail-btn active" title="Sessions" aria-label="Sessions">
         ${_iconSvg('chat')}
       </button>
@@ -113,32 +140,23 @@ function _renderShell() {
         ${_iconSvg('sparkles')}
       </button>
       <div class="wr-rail-spacer"></div>
-      <button class="wr-rail-btn" id="wr-close-btn" title="Fermer" aria-label="Fermer">
-        ${_iconSvg('x')}
-      </button>
     </aside>
 
-    <!-- Header -->
-    <header class="wr-header">
-      <div class="wr-header-left">
-        <div class="wr-header-title" id="wr-title">Brainstorming</div>
-        <div class="wr-header-subtitle" id="wr-subtitle">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</div>
-      </div>
-      <div class="wr-header-right">
-        <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
-          <div class="wr-consensus-arc">
-            <svg viewBox="0 0 32 32" width="32" height="32">
-              <circle class="bg" cx="16" cy="16" r="13.5"/>
-              <circle class="fg" cx="16" cy="16" r="13.5"
-                stroke-dasharray="84.82" stroke-dashoffset="84.82" stroke-linecap="round"/>
-            </svg>
-            <div class="wr-consensus-val" id="wr-consensus-val">0%</div>
-          </div>
-          <span>Consensus</span>
+    <!-- Sub-header : mode courant + consensus arc -->
+    <div class="wr-subheader">
+      <div class="wr-subheader-mode" id="wr-subtitle">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</div>
+      <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
+        <div class="wr-consensus-arc">
+          <svg viewBox="0 0 32 32" width="32" height="32">
+            <circle class="bg" cx="16" cy="16" r="13.5"/>
+            <circle class="fg" cx="16" cy="16" r="13.5"
+              stroke-dasharray="84.82" stroke-dashoffset="84.82" stroke-linecap="round"/>
+          </svg>
+          <div class="wr-consensus-val" id="wr-consensus-val">0%</div>
         </div>
-        ${helpButtonHTML({ extraClass: 'wr-header-btn' })}
+        <span>Consensus</span>
       </div>
-    </header>
+    </div>
 
     <!-- Agents row -->
     <div class="wr-agents-row">
