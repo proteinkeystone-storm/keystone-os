@@ -974,6 +974,12 @@ export async function handleSmartQrGenerate(request, env) {
   if (!shortId || shortId.length < 4 || shortId.length > 32) {
     return err('short_id invalide', 400, origin);
   }
+  // V4.2 (2026-05-26) : context optionnel — permet à un template de passer
+  // un contexte spécifique à son scénario (ex: tag d'une réponse choisie
+  // par l'utilisateur dans le quiz d'orientation). Si présent, on sait que
+  // la phrase doit être personnalisée → on saute le cache.
+  const userContext = (body && typeof body.context === 'object' && body.context)
+                    ? body.context : null;
 
   // Récupère le QR via entities (mode smart obligatoire)
   let qrData = null;
@@ -1003,20 +1009,23 @@ export async function handleSmartQrGenerate(request, env) {
   const { device } = parseUA(ua);
   const deviceKey = device || '?';
 
-  // Check cache
-  try {
-    const cached = await env.DB
-      .prepare(`SELECT content_json, generated_at FROM qr_interstitial_cache
-                WHERE short_id = ? AND country = ? AND device_kind = ?`)
-      .bind(shortId, country, deviceKey)
-      .first();
-    if (cached?.content_json) {
-      const ageMs = Date.now() - new Date(cached.generated_at + 'Z').getTime();
-      if (ageMs < SMARTQR_CACHE_TTL) {
-        return json({ ...JSON.parse(cached.content_json), cached: true }, 200, origin);
+  // Check cache (skip si un userContext personnalisé est fourni — la phrase
+  // doit refléter ce contexte, donc le cache global serait incorrect).
+  if (!userContext) {
+    try {
+      const cached = await env.DB
+        .prepare(`SELECT content_json, generated_at FROM qr_interstitial_cache
+                  WHERE short_id = ? AND country = ? AND device_kind = ?`)
+        .bind(shortId, country, deviceKey)
+        .first();
+      if (cached?.content_json) {
+        const ageMs = Date.now() - new Date(cached.generated_at + 'Z').getTime();
+        if (ageMs < SMARTQR_CACHE_TTL) {
+          return json({ ...JSON.parse(cached.content_json), cached: true }, 200, origin);
+        }
       }
-    }
-  } catch (e) { /* miss = no-op */ }
+    } catch (e) { /* miss = no-op */ }
+  }
 
   // Compose prompt Gemma 4 via le template (V2 — registry programmable)
   if (!env.AI || typeof env.AI.run !== 'function') {
@@ -1029,6 +1038,9 @@ export async function handleSmartQrGenerate(request, env) {
     device:        deviceKey,
     target_url:    redirectRow?.target_url || '',
     qr_type:       redirectRow?.qr_type    || qrData.qr_type || 'url',
+    // V4.2 — context fourni par le client (ex: { quiz_tag: 'teen' }), passé
+    // tel quel au template pour qu'il l'utilise dans son prompt si pertinent.
+    user_context:  userContext,
   };
   const { system: systemPrompt, user: userPrompt } = template.buildAiPrompt(qrData, scanCtx);
 
@@ -1075,19 +1087,22 @@ export async function handleSmartQrGenerate(request, env) {
   const title  = (parsed?.title  || '').toString().trim().slice(0, 50)
     || 'Bienvenue';
 
-  // Cache result
+  // Cache result (skip si userContext personnalisé — sinon on polluerait le
+  // cache global avec une phrase ciblée pour un seul scanneur).
   const content = { phrase, title, generated_at: new Date().toISOString() };
-  try {
-    await env.DB
-      .prepare(`INSERT INTO qr_interstitial_cache (short_id, country, device_kind, content_json, generated_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                ON CONFLICT(short_id, country, device_kind) DO UPDATE SET
-                  content_json = excluded.content_json,
-                  generated_at = excluded.generated_at`)
-      .bind(shortId, country, deviceKey, JSON.stringify(content))
-      .run();
-  } catch (e) {
-    console.warn('[smartqr] cache write failed:', e.message);
+  if (!userContext) {
+    try {
+      await env.DB
+        .prepare(`INSERT INTO qr_interstitial_cache (short_id, country, device_kind, content_json, generated_at)
+                  VALUES (?, ?, ?, ?, datetime('now'))
+                  ON CONFLICT(short_id, country, device_kind) DO UPDATE SET
+                    content_json = excluded.content_json,
+                    generated_at = excluded.generated_at`)
+        .bind(shortId, country, deviceKey, JSON.stringify(content))
+        .run();
+    } catch (e) {
+      console.warn('[smartqr] cache write failed:', e.message);
+    }
   }
 
   return json({ ...content, cached: false }, 200, origin);

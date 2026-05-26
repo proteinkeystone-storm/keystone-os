@@ -42,13 +42,17 @@ import countdownProduit  from './countdown-produit.js';
 import machineASous     from './machine-a-sous.js';
 import carteAGratter    from './carte-a-gratter.js';
 import carteFidelite   from './carte-fidelite.js';
+import quizOrientation from './quiz-orientation.js';
+import boiteCadeau     from './boite-cadeau.js';
 // V4 (en cours, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter) — vrais jeux
 // avec aléatoire authoritative serveur via /api/smartqr/game-play.
 // V4.4 livré 2026-05-26 (carte-fidelite) — état cumulatif cross-scan
 // via /api/smartqr/loyalty-stamp + table D1 smartqr_loyalty_stamps.
-// V4.2 (quiz + boîte cadeau) à venir.
+// V4.2 livré 2026-05-26 (quiz-orientation + boite-cadeau) — interactivité
+// simple sans état serveur, le quiz utilise le body.context étendu de
+// /api/smartqr/generate-interstitial pour personnaliser la phrase IA.
 
 const TEMPLATES = {
   [phraseSimple.id]:      phraseSimple,
@@ -57,6 +61,8 @@ const TEMPLATES = {
   [machineASous.id]:      machineASous,
   [carteAGratter.id]:     carteAGratter,
   [carteFidelite.id]:     carteFidelite,
+  [quizOrientation.id]:   quizOrientation,
+  [boiteCadeau.id]:       boiteCadeau,
 };
 
 /**

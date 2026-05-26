@@ -106,8 +106,25 @@ const MOCK_DATA = {
     logo_url:         'https://example.com/logo.png',
     accent_color:     '#c9a96e',
   },
-  // V4.2 : quiz d'orientation + boîte cadeau.
-  //        Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
+  // V4.2 livré 2026-05-26
+  'quiz-orientation': {
+    nom_marque:   'Boutique Solène',
+    question:     'Vous cherchez pour ?',
+    reponses:     '👶|Bébé|baby\n🧒|Enfant|kid\n🧑|Ado|teen\n👴|Senior|senior',
+    logo_url:     'https://example.com/logo.png',
+    accent_color: '#7c8af9',
+  },
+  'boite-cadeau': {
+    nom_marque:    'Boutique Solène',
+    occasion:      'Saint Valentin',
+    code_promo:    'SAINT-VAL-2026',
+    valeur_offre:  '-25% sur tout',
+    validite:      'Valable jusqu\'au 14/02',
+    couleur_boite: '#7c1d1d',
+    couleur_ruban: '#e11d48',
+    logo_url:      'https://example.com/logo.png',
+    accent_color:  '#e11d48',
+  },
 };
 
 // ── Tests : Backend (Worker) ──────────────────────────────────
