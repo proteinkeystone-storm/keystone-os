@@ -6951,6 +6951,44 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   background: var(--gold, #6366f1);
   border-color: var(--gold, #6366f1);
 }
+/* V4.3 UX (2026-05-26) — Encart "URL de vérification caisse" affiché
+   dans le détail d'un QR Smart de template machine-a-sous ou carte-a-
+   gratter. Permet au commerçant de bookmarker l'URL pour valider les
+   bons WIN-XXXX-XXXX présentés par les clients. */
+.sdqr-verify-block {
+  margin: 16px 0;
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg,
+    rgba(74,222,128,.04), rgba(74,222,128,.08));
+  border: 1px solid rgba(74,222,128,.32);
+  border-radius: 10px;
+}
+.sdqr-verify-block-head {
+  font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  color: #86efac; margin-bottom: 6px;
+}
+.sdqr-verify-block-desc {
+  font-size: 12px; line-height: 1.55;
+  color: rgba(220,225,240,.65);
+  margin: 0 0 10px;
+}
+.sdqr-verify-url-row {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.sdqr-verify-url {
+  flex: 1; min-width: 0;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--tx, #f1f5f9);
+  background: rgba(7,9,13,.55);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
 /* V4 — Widget upload image (type='image' dans fields[]).
    Permet d'uploader un logo/visuel depuis l'ordinateur sans hébergement
    externe. Compression auto à 12 Ko via canvas côté frontend ; stocké

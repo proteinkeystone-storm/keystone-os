@@ -1163,6 +1163,21 @@ async function _openQrDetail(panel, qr) {
 
         ${summary ? `<div class="sdqr-detail-summary">${_esc(summary)}</div>` : ''}
 
+        ${isSmart && (qr.template_id === 'machine-a-sous' || qr.template_id === 'carte-a-gratter') ? `
+        <div class="sdqr-verify-block">
+          <div class="sdqr-verify-block-head">🔒 Vérification client en caisse</div>
+          <p class="sdqr-verify-block-desc">
+            Donne cette URL à ton équipe en caisse. Quand un client présente un bon WIN-XXXX-XXXX,
+            elle ouvre cette page, tape le code, et voit en 2 secondes si le code est authentique.
+            Bookmark recommandé sur le téléphone du commerce.
+          </p>
+          <div class="sdqr-verify-url-row">
+            <code class="sdqr-verify-url" id="sdqr-verify-url">${location.origin}/verify-win.html</code>
+            <button type="button" class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-copy-verify-url" title="Copier l'URL dans le presse-papiers">📋 Copier l'URL</button>
+          </div>
+        </div>
+        ` : ''}
+
         ${isRedirected && qr.qr_type === 'url' ? `
         <label class="sdqr-field sdqr-field--inline">
           <span class="sdqr-field-lbl">URL de destination</span>
@@ -1252,6 +1267,17 @@ async function _openQrDetail(panel, qr) {
     navigator.clipboard.writeText(isRedirected ? redirectUrl : encodedForQr).then(() => {
       const b = content.querySelector('#sdqr-copy-payload');
       if (b) { b.textContent = '✓ Copié'; setTimeout(() => { b.textContent = 'Copier'; }, 1500); }
+    });
+  });
+
+  // V4.3 UX (2026-05-26) — Copier l'URL de vérification caisse (templates
+  // jeux uniquement, bouton conditionnellement rendu plus haut).
+  content.querySelector('#sdqr-copy-verify-url')?.addEventListener('click', () => {
+    const url = content.querySelector('#sdqr-verify-url')?.textContent || '';
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      const b = content.querySelector('#sdqr-copy-verify-url');
+      if (b) { b.textContent = '✓ Copié'; setTimeout(() => { b.textContent = '📋 Copier l\'URL'; }, 1800); }
     });
   });
 
