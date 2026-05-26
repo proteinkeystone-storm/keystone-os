@@ -179,25 +179,25 @@
       "id": "A-COM-003",
       "padKey": null,
       "title": "Brainstorming",
-      "subtitle": "La planche d'ambiance pour votre studio 3D · 1 prompt → 1 moodboard complet",
+      "subtitle": "Votre boardroom IA stratégique · 9 personnalités débattent en direct",
       "category": "COM",
       "plan": "STARTER",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Brainstorming prépare la planche d'ambiance que vous transmettrez à votre studio 3D spécialisé en illustration immobilière. Configurez le cadrage de l'illustration finale (drone, piéton, intérieur, terrasse, macro), l'atmosphère (lumière, saison, palette végétale, figuration, matériaux) et votre moteur d'image (Midjourney v8.1, Flux, DALL-E, Gemini Imagen, Stable Diffusion). Brainstorming assemble un Prompt Maître structuré à coller dans votre IA (Claude, Gemini, ChatGPT). En retour, un fichier HTML avec un bouton 'Copier' unique qui produit, en une seule génération, une planche moodboard professionnelle de 6 vignettes cohérentes (architecture, lumière, palette végétale, matériaux, lifestyle, détail signature). Pratique standard des studios 3D : une planche cohérente vaut mieux que quatre images éparses à assembler à la main.",
+      "longDesc": "Brainstorming AI War Room est un environnement de pensée stratégique multi-agent. Vous entrez un brief (lancement, repositionnement, crise, campagne), vous choisissez un mode cognitif (Exploration, Launch, Crisis…) et 9 personnalités IA spécialisées débattent en direct : Strategic Lead coordonne, Creative Director provoque, Growth Hacker pragmatise, Consumer Psychologist révèle les motivations, Brand Guardian discipline, Cultural Analyst détecte les signaux, Data Analyst valide, Devil's Advocate challenge, Synthesizer conclut. Vous intervenez à la volée (« Plus premium », « Ignore TikTok »). En fin de session, une note exécutive structurée + plan d'actions exportable PDF. Le produit n'est pas la réponse — c'est la réflexion collective.",
       "icon": "muse",
-      "ai_optimized": "Claude",
+      "ai_optimized": "Claude + Gemma 4",
       "isNew": true,
       "published": true,
       "tags": [
         "artefact",
-        "moodboard",
-        "planche-ambiance",
-        "studio-3d",
-        "illustration-immobiliere",
-        "midjourney",
-        "flux",
-        "muse"
+        "strategie",
+        "boardroom",
+        "multi-agent",
+        "synthese-executive",
+        "decision",
+        "marketing",
+        "war-room"
       ]
     }
   ]
