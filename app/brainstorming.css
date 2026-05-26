@@ -493,9 +493,44 @@
   content: '';
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: var(--wr-text-muted);
+  background: var(--wr-accent, var(--gold, #6366f1));
   flex-shrink: 0;
   transform: translateY(4px);
+}
+
+/* ── Sprint 4 — Pacing dots dans "Prochaine synthèse" ───────────── */
+.wr-pacing-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.wr-pacing-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+.wr-pacing-dot.filled {
+  background: var(--wr-accent, var(--gold, #6366f1));
+  transform: scale(1.05);
+}
+
+/* ── Sprint 4 — Tension indicator (subtle, sur le consensus) ────── */
+.wr-consensus.tense .wr-consensus-arc .fg {
+  stroke: var(--ks-agent-devil, var(--danger, #e05c5c));
+  animation: wrConsensusTense 1.8s ease-in-out infinite;
+}
+@keyframes wrConsensusTense {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+.wr-consensus.tense::after {
+  content: ' · tension';
+  font-style: italic;
+  color: var(--ks-agent-devil, var(--danger));
+  opacity: 0.75;
+  font-size: 11px;
+  margin-left: -2px;
 }
 
 /* ═════════════════════════════════════════════════════════════════

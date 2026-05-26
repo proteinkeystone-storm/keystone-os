@@ -105,6 +105,111 @@ function _maybeGenerateReaction(reactorAgentId, previousTurn) {
   const emoji = palette[Math.floor(Math.random() * palette.length)];
   return { emoji, target_agent_id: previousTurn.agent_id };
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 4 — Consensus & Tension (heuristiques)
+// ─────────────────────────────────────────────────────────────────
+// Le consensus mesure l'alignement émergent entre les agents :
+//   - +0.10 par réaction 💯 ou 🔥 (agent ou user)
+//   - -0.08 par réaction 🤔 ou 👀
+//   - -0.05 par tour du Devil's Advocate (par construction : challenge)
+//   - +0.05 si Synthesizer intervient (par construction : il acte)
+//
+// La tension mesure l'intensité du désaccord (inverse partiel du consensus
+// mais avec une dynamique différente : c'est l'agitation visible).
+//
+// Sprint 5+ : remplacer par mini-LLM sentiment qui lit le texte.
+// Sprint 4 reste heuristique car déjà valuable pour le ressenti.
+const REACTIONS_POSITIVE = new Set(['💯', '🔥']);
+const REACTIONS_NEGATIVE = new Set(['🤔', '👀']);
+
+function _computeConsensus(history) {
+  if (!Array.isArray(history) || history.length === 0) return 0;
+  let score = 0.5;     // démarre neutre
+  let reactionsCount = 0;
+  for (const turn of history) {
+    if (!turn) continue;
+    if (turn.agent_id === 'devil')  score -= 0.05;
+    if (turn.agent_id === 'synth')  score += 0.05;
+    // userReactions = [emoji, ...] (Sprint 3, stocké frontend)
+    // Note : côté worker on ne reçoit pas les userReactions par défaut.
+    // Sprint 5 ajoutera leur transmission via le body de la requête.
+  }
+  return Math.max(0, Math.min(1, score));
+}
+
+function _computeTension(history) {
+  if (!Array.isArray(history) || history.length < 2) return 0;
+  let tension = 0;
+  const last3 = history.slice(-3);
+  for (const t of last3) {
+    if (t?.agent_id === 'devil') tension += 0.25;
+    if (t?.agent_id === 'data')  tension += 0.10;  // rationnel = friction douce
+  }
+  return Math.max(0, Math.min(1, tension));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 4 — Extraction des insights émergents (Llama 3.1 light call)
+// ─────────────────────────────────────────────────────────────────
+// Après le complete d'un cycle, on lance UN call LLM séparé qui condense
+// la discussion en 2-3 insights courts (~10 mots chacun). Affichés
+// dans la card "Points clés émergents" du right panel.
+//
+// Format de réponse attendu : JSON {"insights": ["...", "...", "..."]}.
+// Le LLM tend à ne pas respecter le JSON strict — on prévoit un parser
+// défensif qui regex-extrait des bullets si le JSON est mal formé.
+const INSIGHTS_PROMPT = `Tu es un assistant d'extraction d'insights stratégiques.
+
+À partir du dialogue ci-dessous (brainstorming entre personnalités IA spécialisées), identifie 2 à 3 POINTS CLÉS ÉMERGENTS — les insights stratégiques majeurs qui ressortent du débat.
+
+CONTRAINTES STRICTES
+- 2 ou 3 insights MAXIMUM.
+- Chaque insight = 1 phrase de 8 à 14 mots.
+- Pas de "il faut", pas de "on devrait" — formule comme des constats stratégiques.
+- Pas de paraphrase d'un seul agent — capture ce qui ÉMERGE de l'échange.
+- Sortie JSON STRICT : {"insights": ["...", "...", "..."]}
+- AUCUN texte avant ou après le JSON.`;
+
+async function _extractInsights(env, brief, history) {
+  if (!env.AI || typeof env.AI.run !== 'function') return [];
+  // Récupère le dialogue récent
+  const dialogue = history
+    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
+    .slice(-6)
+    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .join('\n\n');
+  if (!dialogue) return [];
+
+  try {
+    const res = await env.AI.run(MODEL_ID, {
+      messages: [
+        { role: 'system', content: INSIGHTS_PROMPT },
+        { role: 'user',   content: `BRIEF : ${brief}\n\nDIALOGUE :\n${dialogue}\n\nExtrais 2-3 insights stratégiques au format JSON strict.` },
+      ],
+      max_tokens: 300,
+      stream:     false,
+    });
+    const raw = (res?.response || '').trim();
+    // Tentative 1 : parse JSON strict
+    try {
+      const m = raw.match(/\{[\s\S]*"insights"[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (Array.isArray(parsed.insights)) {
+          return parsed.insights.filter(s => typeof s === 'string' && s.length > 5).slice(0, 3);
+        }
+      }
+    } catch (e) { /* fallback */ }
+    // Tentative 2 : regex sur les bullets / lignes contenant des phrases
+    const lines = raw.split(/[\n•\-]+/)
+      .map(s => s.replace(/^["'\s]+|["'\s,.]+$/g, '').trim())
+      .filter(s => s.length > 10 && s.length < 140);
+    return lines.slice(0, 3);
+  } catch (e) {
+    return [];
+  }
+}
 const SUPPORTED_AGENTS = new Set([
   'strategic', 'creative', 'growth', 'consumer', 'brand',
   'cultural', 'data', 'devil', 'synth', 'auto',
@@ -317,6 +422,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
           });
           turnsDone++;
 
+          // Sprint 4 — Update des signaux (consensus + tension)
+          send({
+            type: 'signals_update',
+            consensus: _computeConsensus(localHistory),
+            tension:   _computeTension(localHistory),
+            turns_done: turnsDone,
+            turns_total: turnsCap,
+          });
+
           // Conditions d'arrêt
           if (!isAuto) {
             completeReason = 'single';
@@ -333,6 +447,18 @@ export async function handleBrainstormingAgentRespond(request, env) {
         }
 
         send({ type: 'complete', reason: completeReason, turns: turnsDone });
+
+        // Sprint 4 — Extraction des insights émergents en background.
+        // On lance UN seul call LLM léger qui condense le débat en
+        // 2-3 bullets. Envoyé via insights_update juste après complete.
+        if (turnsDone >= 2) {
+          try {
+            const insights = await _extractInsights(env, brief, localHistory);
+            if (insights.length > 0) {
+              send({ type: 'insights_update', items: insights });
+            }
+          } catch (e) { /* silencieux : extraction non-critique */ }
+        }
       } catch (e) {
         send({ type: 'error', message: `Stream error: ${e?.message || e}` });
       } finally {

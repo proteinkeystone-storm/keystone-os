@@ -635,6 +635,19 @@ async function _callOrchestration(panel) {
           break;
         }
 
+        // Sprint 4 — Update signaux (consensus + tension + pacing dots)
+        case 'signals_update': {
+          _updateConsensus(panel, evt.consensus, evt.tension);
+          _updatePacing(panel, evt.turns_done, evt.turns_total);
+          break;
+        }
+
+        // Sprint 4 — Insights émergents extraits par Llama post-cycle
+        case 'insights_update': {
+          _updateInsights(panel, evt.items);
+          break;
+        }
+
         case 'complete': {
           complete = true;
           // Attendre que le typewriter ait fini d'afficher avant la note
@@ -850,4 +863,78 @@ function _scrollToBottom(panel) {
 function _formatTime(ts) {
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPRINT 4 — Signals (consensus arc + insights + pacing)
+// ═══════════════════════════════════════════════════════════════
+
+// Circonférence du cercle SVG (r=13.5) — DOIT matcher le stroke-dasharray
+// dans le HTML de _renderShell (84.82 ≈ 2π × 13.5)
+const CONSENSUS_CIRCUMFERENCE = 2 * Math.PI * 13.5;
+
+function _updateConsensus(panel, value, tension) {
+  if (typeof value !== 'number') return;
+  const widget = panel.querySelector('#wr-consensus');
+  if (!widget) return;
+  widget.style.visibility = 'visible';
+
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  const valEl = panel.querySelector('#wr-consensus-val');
+  if (valEl) valEl.textContent = `${pct}%`;
+
+  const fgCircle = widget.querySelector('.wr-consensus-arc .fg');
+  if (fgCircle) {
+    const offset = CONSENSUS_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, value)));
+    fgCircle.setAttribute('stroke-dashoffset', String(offset));
+  }
+
+  // Tension indicator (subtle, optionnel)
+  if (typeof tension === 'number' && tension > 0.4) {
+    widget.classList.add('tense');
+  } else {
+    widget.classList.remove('tense');
+  }
+}
+
+function _updateInsights(panel, items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  // La première card .wr-signal-card du panel signals = "Points clés émergents"
+  const card = panel.querySelector('.wr-signals .wr-signal-card');
+  if (!card) return;
+  const titleEl = card.querySelector('.wr-signal-title');
+  // Vider le contenu sauf le titre
+  card.querySelectorAll('.wr-signal-empty, .wr-signal-list').forEach(el => el.remove());
+  const list = document.createElement('ul');
+  list.className = 'wr-signal-list';
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = 'wr-signal-item';
+    li.textContent = String(item).replace(/^["'\s]+|["'\s]+$/g, '');
+    list.appendChild(li);
+  }
+  card.appendChild(list);
+}
+
+function _updatePacing(panel, done, total) {
+  if (typeof done !== 'number' || typeof total !== 'number') return;
+  // 2e card du panel signals = "Prochaine synthèse"
+  const cards = panel.querySelectorAll('.wr-signals .wr-signal-card');
+  if (cards.length < 2) return;
+  const card = cards[1];
+  let dotsEl = card.querySelector('.wr-pacing-dots');
+  if (!dotsEl) {
+    dotsEl = document.createElement('div');
+    dotsEl.className = 'wr-pacing-dots';
+    card.appendChild(dotsEl);
+  }
+  // Construire les dots
+  const ratio = Math.max(0, Math.min(1, done / Math.max(1, total)));
+  const filledCount = Math.round(ratio * total);
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('span');
+    d.className = 'wr-pacing-dot' + (i < filledCount ? ' filled' : '');
+    dotsEl.appendChild(d);
+  }
 }
