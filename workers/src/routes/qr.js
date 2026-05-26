@@ -1093,6 +1093,199 @@ export async function handleSmartQrGenerate(request, env) {
   return json({ ...content, cached: false }, 200, origin);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Smart QR V4.3 (2026-05-26) — Endpoint authoritative pour les jeux
+// ───────────────────────────────────────────────────────────────────
+// Endpoint PUBLIC appelé depuis les templates machine-a-sous + carte-a-
+// gratter. Tire l'aléatoire CÔTÉ SERVEUR (jamais côté client = anti-
+// triche), enregistre le play en D1 pour l'anti-rejouage, et retourne
+// le résultat. Le client n'a qu'à animer le résultat reçu.
+//
+// Contrat : POST /api/smartqr/game-play { short_id }
+//   → { result: 'win'|'lose', symboles?: [s1,s2,s3], code_won?: string,
+//       message: string, replay_blocked?: boolean }
+//
+// Anti-abus :
+//   - device_hash = sha256(UA + cf-connecting-ip).slice(0,16) — anonyme
+//   - Si template_data.un_jeu_par_appareil=true → 1 play par device_hash
+//   - lots_disponibles : check COUNT(*) WHERE result='win' avant de
+//     tirer. Race condition possible sur le dernier lot (acceptée V1).
+// ══════════════════════════════════════════════════════════════════
+
+let _smartGameTableReady = false;
+async function _ensureSmartGameTable(env) {
+  if (_smartGameTableReady) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS smartqr_game_plays (
+        short_id    TEXT NOT NULL,
+        device_hash TEXT NOT NULL,
+        played_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        result      TEXT NOT NULL,
+        code_won    TEXT,
+        PRIMARY KEY (short_id, device_hash, played_at)
+      )
+    `).run();
+    // Index pour les COUNT(*) WHERE result='win' rapides
+    await env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_smartqr_game_wins
+      ON smartqr_game_plays (short_id, result)
+    `).run();
+    _smartGameTableReady = true;
+  } catch (e) {
+    console.warn('[smartqr] game-plays table init failed:', e.message);
+  }
+}
+
+async function _deviceHash(request) {
+  const ua = request.headers.get('User-Agent') || '?';
+  const ip = request.headers.get('cf-connecting-ip')
+          || request.headers.get('x-forwarded-for')
+          || '?';
+  const seed = ua + '|' + ip;
+  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
+  const hex  = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 16);
+}
+
+function _pickRandomSymbols(symbols, isWin) {
+  // symbols : array de 5-10 symboles/emojis fournis par le proprio
+  // Si gain : 3 fois le même
+  // Si perte : 3 symboles non-tous-identiques (au moins 1 différent)
+  const safe = Array.isArray(symbols) && symbols.length >= 1 ? symbols : ['🍒', '🍋', '⭐', '🔔', '💎'];
+  const pick = () => safe[Math.floor(Math.random() * safe.length)];
+  if (isWin) {
+    const s = pick();
+    return [s, s, s];
+  }
+  // Perte : tirer 3 et garantir que ce n'est pas tous identiques
+  for (let i = 0; i < 6; i++) {
+    const trio = [pick(), pick(), pick()];
+    if (!(trio[0] === trio[1] && trio[1] === trio[2])) return trio;
+  }
+  // Fallback si symbols n'a qu'un seul élément (forçage win impossible) :
+  // on retourne quand même 3 identiques mais on marque comme perte côté
+  // caller. Pas idéal mais le proprio aurait dû fournir + de symboles.
+  return [pick(), pick(), pick()];
+}
+
+export async function handleSmartQrGamePlay(request, env) {
+  const origin = '*'; // public, pas d'auth
+  await _ensureSmartGameTable(env);
+
+  const body    = await parseBody(request);
+  const shortId = (body.short_id || '').toString().trim();
+  if (!shortId || shortId.length < 4 || shortId.length > 32) {
+    return err('short_id invalide', 400, origin);
+  }
+
+  // Récupère le QR (mode smart obligatoire, template machine-a-sous ou carte-a-gratter)
+  let qrData = null;
+  try {
+    const entityRow = await env.DB
+      .prepare(`SELECT data FROM entities
+                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                AND deleted_at IS NULL LIMIT 1`)
+      .bind(shortId)
+      .first();
+    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
+  } catch (e) {
+    return err('Lookup entity échoué : ' + e.message, 500, origin);
+  }
+  if (!qrData) return err('QR introuvable', 404, origin);
+  if (qrData.mode !== 'smart') return err('QR non Smart', 400, origin);
+
+  const tplId = qrData.template_id || '';
+  if (tplId !== 'machine-a-sous' && tplId !== 'carte-a-gratter') {
+    return err('Template non-jeu', 400, origin);
+  }
+
+  const td = qrData.template_data || {};
+  const tauxGain = Math.max(0, Math.min(100, Number(td.taux_de_gain) || 20));
+  const lotsMax  = Number.isFinite(Number(td.lots_disponibles)) && Number(td.lots_disponibles) > 0
+                 ? Math.floor(Number(td.lots_disponibles))
+                 : null; // null = illimité
+  const unParAppareil = td.un_jeu_par_appareil === true || td.un_jeu_par_appareil === 'true';
+
+  const deviceH = await _deviceHash(request);
+
+  // Anti-rejouage si activé
+  if (unParAppareil) {
+    try {
+      const prev = await env.DB
+        .prepare(`SELECT result, code_won FROM smartqr_game_plays
+                  WHERE short_id = ? AND device_hash = ?
+                  ORDER BY played_at DESC LIMIT 1`)
+        .bind(shortId, deviceH)
+        .first();
+      if (prev) {
+        // Renvoie le résultat précédent + flag replay_blocked
+        const symbols = (td.symboles_cylindre || '').toString().split('\n')
+          .map(s => s.trim()).filter(Boolean);
+        const trio = _pickRandomSymbols(symbols, prev.result === 'win');
+        return json({
+          result:          prev.result,
+          symboles:        trio,
+          code_won:        prev.code_won || '',
+          message:         prev.result === 'win'
+                             ? (td.message_gain || 'Bravo !')
+                             : (td.message_perte || 'Pas cette fois — reviens demain !'),
+          replay_blocked:  true,
+        }, 200, origin);
+      }
+    } catch (e) { /* miss = on continue normalement */ }
+  }
+
+  // Check stock si lots limités : count wins déjà attribués
+  let stockEpuise = false;
+  if (lotsMax !== null) {
+    try {
+      const winsRow = await env.DB
+        .prepare(`SELECT COUNT(*) AS n FROM smartqr_game_plays
+                  WHERE short_id = ? AND result = 'win'`)
+        .bind(shortId)
+        .first();
+      const winsCount = Number(winsRow?.n || 0);
+      if (winsCount >= lotsMax) stockEpuise = true;
+    } catch (e) { /* on continue */ }
+  }
+
+  // Tirage aléatoire authoritative
+  const draw  = Math.random() * 100;
+  const isWin = !stockEpuise && draw < tauxGain;
+
+  // Préparer symboles à montrer (machine à sous uniquement, le client
+  // décide d'afficher ou non selon le template_id)
+  const symbols = (td.symboles_cylindre || '').toString().split('\n')
+    .map(s => s.trim()).filter(Boolean);
+  const trio = _pickRandomSymbols(symbols, isWin);
+
+  // Enregistrer le play
+  const codeWon = isWin ? (td.message_gain || '').toString().slice(0, 200) : '';
+  try {
+    await env.DB
+      .prepare(`INSERT INTO smartqr_game_plays
+                (short_id, device_hash, played_at, result, code_won)
+                VALUES (?, ?, datetime('now'), ?, ?)`)
+      .bind(shortId, deviceH, isWin ? 'win' : 'lose', codeWon)
+      .run();
+  } catch (e) {
+    console.warn('[smartqr] game-play insert failed:', e.message);
+    // On continue quand même : l'utilisateur a son résultat, juste pas
+    // tracké (rare, peut arriver si conflit clé primaire ultra-improbable)
+  }
+
+  return json({
+    result:   isWin ? 'win' : 'lose',
+    symboles: trio,
+    code_won: codeWon,
+    message:  isWin
+                ? (td.message_gain || 'Bravo, tu as gagné !')
+                : (td.message_perte || 'Pas cette fois — réessaie demain.'),
+    replay_blocked: false,
+  }, 200, origin);
+}
+
 // Template HTML interstitiel — déplacé V2 dans ./smart-templates/phrase-simple.js
 // Le dispatcher handleSmartQrInterstitial appelle template.renderHTML() depuis
 // le registry. Pour ajouter un nouveau layout (menu, tombola, etc.), créer un

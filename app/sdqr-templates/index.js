@@ -17,14 +17,19 @@
 import phraseSimple      from './phrase-simple.js';
 import storytellingBrand from './storytelling-brand.js';
 import countdownProduit  from './countdown-produit.js';
+import machineASous     from './machine-a-sous.js';
+import carteAGratter    from './carte-a-gratter.js';
 // V4 (en cours, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
-// V4.2 à V4.5 à venir.
+// V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter).
+// V4.2 (quiz + boîte cadeau) et V4.4 (carte fidélité) à venir.
 
 const TEMPLATES = {
   [phraseSimple.id]:      phraseSimple,
   [storytellingBrand.id]: storytellingBrand,
   [countdownProduit.id]:  countdownProduit,
+  [machineASous.id]:      machineASous,
+  [carteAGratter.id]:     carteAGratter,
 };
 
 export function getTemplate(id) {

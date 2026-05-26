@@ -73,8 +73,31 @@ const MOCK_DATA = {
     accent_color: '#ff6b35',
     compte_scans: false,
   },
-  // V4.2+ : quiz, boîte cadeau, machine à sous, carte à gratter,
-  //         carte de fidélité. Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
+  // V4.3 livré 2026-05-26
+  'machine-a-sous': {
+    nom_marque:         'Café du Port',
+    symboles_cylindre:  '🍒\n🍋\n⭐\n🔔\n💎\n7️⃣',
+    taux_de_gain:       20,
+    lots_disponibles:   50,
+    message_gain:       'Bravo ! Une glace offerte avec ce QR.',
+    message_perte:      'Pas cette fois — retente demain !',
+    un_jeu_par_appareil: true,
+    logo_url:           'https://example.com/logo.png',
+    accent_color:       '#c9a96e',
+  },
+  'carte-a-gratter': {
+    nom_marque:          'Boulangerie Marius',
+    texture_grattage:    'Or',
+    taux_de_gain:        25,
+    lots_disponibles:    30,
+    message_gain:        'Bravo, un croissant offert avec ce QR !',
+    message_perte:       'Pas de chance — reviens demain !',
+    un_jeu_par_appareil: true,
+    logo_url:            'https://example.com/logo.png',
+    accent_color:        '#c9a96e',
+  },
+  // V4.2+ : quiz, boîte cadeau, carte de fidélité.
+  //         Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
 };
 
 // ── Tests : Backend (Worker) ──────────────────────────────────

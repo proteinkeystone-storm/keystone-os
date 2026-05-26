@@ -6805,6 +6805,69 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   50%      { border-right-color: transparent; }
 }
 
+/* Mini-preview : Machine à sous — 3 mini-cylindres qui tournent */
+.sq-mini-slot {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 3px; width: 100%; max-width: 140px;
+}
+.sq-mini-slot-cell {
+  height: 28px; overflow: hidden;
+  background: linear-gradient(180deg, #0a0d12, #1a2331, #0a0d12);
+  border-radius: 4px;
+  border: 1px solid rgba(201,169,110,.32);
+  display: flex; align-items: center; justify-content: center;
+}
+.sq-mini-slot-strip {
+  font-size: 14px; line-height: 1;
+  letter-spacing: -.02em;
+  animation: tc-slot-roll 1.4s linear infinite;
+}
+.sq-mini-slot-strip--mid  { animation-duration: 1.7s; }
+.sq-mini-slot-strip--slow { animation-duration: 2.1s; }
+@keyframes tc-slot-roll {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-28px); }
+}
+
+/* Mini-preview : Carte à gratter — surface qui se gratte en boucle */
+.sq-mini-scratch {
+  position: relative;
+  width: 100%; max-width: 140px; height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(7,9,13,.55);
+  border: 1px solid rgba(201,169,110,.32);
+}
+.sq-mini-scratch-hidden {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; color: var(--gold, #c9a96e);
+  z-index: 1;
+}
+.sq-mini-scratch-foil {
+  position: absolute; inset: 0; z-index: 2;
+  background: linear-gradient(135deg, #fde68a 0%, #c9a96e 50%, #92400e 100%);
+  animation: tc-scratch-reveal 3.2s ease-in-out infinite;
+}
+@keyframes tc-scratch-reveal {
+  0%, 10%   { clip-path: inset(0 0 0 0); }
+  45%       { clip-path: inset(0 0 0 70%); }
+  55%       { clip-path: inset(0 0 0 70%); }
+  90%, 100% { clip-path: inset(0 0 0 0); }
+}
+.sq-mini-scratch-finger {
+  position: absolute; bottom: 4px; right: 12px; z-index: 3;
+  font-size: 13px;
+  animation: tc-scratch-finger 3.2s ease-in-out infinite;
+}
+@keyframes tc-scratch-finger {
+  0%, 10%   { transform: translateX(0)    rotate(-10deg); opacity: .6; }
+  20%       { opacity: 1; }
+  45%       { transform: translateX(-70px) rotate(-15deg); opacity: 1; }
+  55%       { transform: translateX(-70px) rotate(-15deg); opacity: 0; }
+  90%, 100% { transform: translateX(0)    rotate(-10deg); opacity: .6; }
+}
+
 /* Mini-preview : Countdown produit — 4 cells qui tickent */
 .sq-mini-cd {
   display: grid; grid-template-columns: repeat(4, 1fr);
