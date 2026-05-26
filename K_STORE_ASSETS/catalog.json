@@ -179,25 +179,25 @@
       "id": "A-COM-003",
       "padKey": null,
       "title": "Brainstorming",
-      "subtitle": "Votre boardroom IA stratégique · 9 personnalités débattent en direct",
+      "subtitle": "9 personnalités IA dialoguent pour enrichir votre réflexion",
       "category": "COM",
       "plan": "STARTER",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Brainstorming AI War Room est un environnement de pensée stratégique multi-agent. Vous entrez un brief (lancement, repositionnement, crise, campagne), vous choisissez un mode cognitif (Exploration, Launch, Crisis…) et 9 personnalités IA spécialisées débattent en direct : Strategic Lead coordonne, Creative Director provoque, Growth Hacker pragmatise, Consumer Psychologist révèle les motivations, Brand Guardian discipline, Cultural Analyst détecte les signaux, Data Analyst valide, Devil's Advocate challenge, Synthesizer conclut. Vous intervenez à la volée (« Plus premium », « Ignore TikTok »). En fin de session, une note exécutive structurée + plan d'actions exportable PDF. Le produit n'est pas la réponse — c'est la réflexion collective.",
+      "longDesc": "Brainstorming est un atelier de réflexion collective où 9 personnalités IA spécialisées dialoguent en direct pour enrichir votre pensée stratégique. Vous posez un sujet (lancement, repositionnement, idéation, campagne) et choisissez un mode de réflexion (Exploration, Lancement, Branding…). Strategic Lead coordonne, Creative Director propose des angles audacieux, Growth Hacker traduit en leviers, Consumer Psychologist révèle les motivations, Brand Guardian veille à la cohérence, Cultural Analyst capte les signaux émergents, Data Analyst confronte aux ordres de grandeur, Devil's Advocate remet en question, Synthesizer conclut. Vous orientez la conversation à la volée. Synthèse structurée + plan d'actions exportable PDF.",
       "icon": "muse",
       "ai_optimized": "Claude + Gemma 4",
       "isNew": true,
       "published": true,
       "tags": [
         "artefact",
-        "strategie",
-        "boardroom",
+        "brainstorming",
+        "ideation",
+        "creatif",
         "multi-agent",
-        "synthese-executive",
-        "decision",
-        "marketing",
-        "war-room"
+        "synthese",
+        "reflexion",
+        "strategie"
       ]
     }
   ]

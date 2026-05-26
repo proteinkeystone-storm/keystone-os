@@ -18,30 +18,35 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Variables des 9 agents (cohérent avec lib/brainstorming-agents.js) ── */
+/* Revu 26/05/2026 — couleurs alignées palette Keystone (indigo + sémantiques)
+   + redistribuées pour max différenciation (Consumer pink, Data slate, Synth teal). */
 :root {
-  --ks-agent-strategic: #5b8def;
-  --ks-agent-creative : #a78bfa;
-  --ks-agent-growth   : #4ade80;
-  --ks-agent-consumer : #fbbf24;
-  --ks-agent-brand    : #fcd34d;
-  --ks-agent-cultural : #22d3ee;
-  --ks-agent-data     : #a3a3a3;
-  --ks-agent-devil    : #ef4444;
-  --ks-agent-synth    : #f5f5f5;
+  --ks-agent-strategic: #6366f1;  /* indigo-500 Keystone */
+  --ks-agent-creative : #a78bfa;  /* violet-400 */
+  --ks-agent-growth   : #22c55e;  /* green-500 Keystone */
+  --ks-agent-consumer : #f472b6;  /* pink-400 */
+  --ks-agent-brand    : #fcd34d;  /* amber-300 (or) */
+  --ks-agent-cultural : #22d3ee;  /* cyan-400 */
+  --ks-agent-data     : #94a3b8;  /* slate-400 (bleu acier) */
+  --ks-agent-devil    : #e05c5c;  /* danger Keystone (rouge brique) */
+  --ks-agent-synth    : #14b8a6;  /* teal-500 */
 
-  /* Layout War Room */
+  /* Layout brainstorming */
   --wr-rail-w       : 60px;
   --wr-right-w      : 300px;
   --wr-header-h     : 64px;
   --wr-agents-row-h : 96px;
   --wr-input-h      : 132px;
-  --wr-bg           : #0a0a0c;
-  --wr-bg-subtle    : #111114;
-  --wr-border       : rgba(255, 255, 255, 0.08);
-  --wr-border-strong: rgba(255, 255, 255, 0.16);
-  --wr-text         : #f5f5f7;
-  --wr-text-muted   : rgba(255, 255, 255, 0.55);
-  --wr-text-dim     : rgba(255, 255, 255, 0.35);
+  /* Palette de fond — slate-950 Keystone (au lieu de #0a0a0c trop noir absolu) */
+  --wr-bg           : var(--navy,  #131826);
+  --wr-bg-subtle    : var(--navy2, #1c2234);
+  --wr-bg-elevated  : var(--navy3, #242d42);
+  --wr-border       : var(--bd, rgba(255, 255, 255, 0.07));
+  --wr-border-strong: rgba(255, 255, 255, 0.14);
+  --wr-text         : var(--text, #f8fafc);
+  --wr-text-muted   : var(--tx2,  rgba(248,250,252, 0.55));
+  --wr-text-dim     : var(--tx3,  rgba(248,250,252, 0.30));
+  --wr-accent       : var(--gold, #6366f1);
 }
 
 /* ═════════════════════════════════════════════════════════════════
@@ -141,7 +146,7 @@
 .wr-consensus-arc svg { transform: rotate(-90deg); }
 .wr-consensus-arc circle { fill: none; stroke-width: 2.4; }
 .wr-consensus-arc .bg { stroke: var(--wr-border); }
-.wr-consensus-arc .fg { stroke: var(--ks-agent-growth); transition: stroke-dashoffset 0.6s ease; }
+.wr-consensus-arc .fg { stroke: var(--ks-agent-growth, var(--green)); transition: stroke-dashoffset 0.6s ease; }
 .wr-consensus-val {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;

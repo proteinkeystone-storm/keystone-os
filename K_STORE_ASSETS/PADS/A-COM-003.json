@@ -5,9 +5,9 @@
   "kind": "artefact",
   "real": true,
   "title": "Brainstorming",
-  "punchline": "Votre boardroom IA stratégique en direct",
-  "shortDesc": "9 personnalités IA débattent en temps réel pour orienter vos décisions marketing · synthèse exécutive + plan d'actions",
-  "longDesc": "Brainstorming AI War Room est un environnement de pensée stratégique multi-agent. Vous entrez un brief (lancement, repositionnement, crise, campagne), vous choisissez un mode cognitif (Exploration, Launch, Crisis…) et 9 personnalités IA spécialisées débattent en direct : Strategic Lead coordonne, Creative Director provoque, Growth Hacker pragmatise, Consumer Psychologist révèle les motivations, Brand Guardian discipline, Cultural Analyst détecte les signaux, Data Analyst valide, Devil's Advocate challenge, Synthesizer conclut. Les agents s'écoutent, se contredisent, réagissent entre eux. Vous intervenez en cours via des phrases simples (« Plus premium », « Ignore TikTok », « Plus disruptif »). En fin de session, le Synthesizer produit une note exécutive structurée : positionnement, opportunités, risques, plan d'actions daté, exportable PDF. Le produit n'est pas la réponse — c'est la réflexion collective.",
+  "punchline": "9 personnalités IA dialoguent pour enrichir votre réflexion",
+  "shortDesc": "Atelier de brainstorming créatif où 9 personnalités IA dialoguent en direct · synthèse + plan d'actions",
+  "longDesc": "Brainstorming est un atelier de réflexion collective où 9 personnalités IA spécialisées dialoguent en direct pour enrichir votre pensée stratégique. Vous posez un sujet (lancement, repositionnement, idéation, campagne) et choisissez un mode de réflexion (Exploration, Lancement, Branding…). Les 9 personnalités s'allument une à une : Strategic Lead coordonne, Creative Director propose des angles audacieux, Growth Hacker traduit en leviers concrets, Consumer Psychologist révèle les motivations humaines, Brand Guardian veille à la cohérence, Cultural Analyst capte les signaux émergents, Data Analyst confronte aux ordres de grandeur, Devil's Advocate remet en question les évidences, Synthesizer conclut. Vous orientez la discussion à la volée (« Plus premium », « Plus disruptif »…). En fin de session, une synthèse structurée + plan d'actions exportable PDF. Le produit n'est pas la réponse — c'est la réflexion enrichie.",
   "icon": "muse",
   "price": 49,
   "plan": "STARTER",
@@ -17,7 +17,7 @@
   "ai_optimized": "Claude + Gemma 4",
   "ai_compatible": ["Claude", "Gemini", "ChatGPT", "Mistral", "Grok", "Perplexity"],
   "copyright": "© 2026-2027 Protein Studio",
-  "version": "2.0.0-warroom-sprint0",
-  "killer_feature": "boardroom-ia-multi-agent",
-  "tags": ["communication", "strategie", "boardroom", "multi-agent", "synthese-executive", "decision", "marketing", "war-room"]
+  "version": "2.0.0-brainstorming-sprint1",
+  "killer_feature": "brainstorming-multi-personnalites",
+  "tags": ["communication", "brainstorming", "idéation", "créatif", "multi-agent", "synthèse", "réflexion", "stratégie"]
 }

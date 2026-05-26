@@ -121,8 +121,8 @@ function _renderShell() {
     <!-- Header -->
     <header class="wr-header">
       <div class="wr-header-left">
-        <div class="wr-header-title" id="wr-title">AI War Room</div>
-        <div class="wr-header-subtitle" id="wr-subtitle">Mode ${mode.label} · Aucune session active</div>
+        <div class="wr-header-title" id="wr-title">Brainstorming</div>
+        <div class="wr-header-subtitle" id="wr-subtitle">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</div>
       </div>
       <div class="wr-header-right">
         <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
@@ -148,10 +148,10 @@ function _renderShell() {
     <!-- Feed -->
     <main class="wr-feed" id="wr-feed">
       <div class="wr-feed-empty" id="wr-feed-empty">
-        <div class="wr-feed-empty-title">AI War Room</div>
+        <div class="wr-feed-empty-title">Brainstorming créatif</div>
         <div class="wr-feed-empty-text">
-          Décrivez votre challenge stratégique (lancement, repositionnement, crise…).
-          Strategic Lead ouvrira le débat.
+          Posez votre sujet de réflexion (lancement, repositionnement, idéation…).
+          Strategic Lead ouvrira la discussion, les 8 autres personnalités enrichiront le dialogue.
         </div>
       </div>
     </main>
@@ -160,7 +160,7 @@ function _renderShell() {
     <div class="wr-input-row">
       <div class="wr-input-box">
         <input class="wr-input" id="wr-input" type="text"
-          placeholder="Décrivez votre challenge stratégique…"
+          placeholder="Posez votre sujet de réflexion…"
           autocomplete="off"/>
         <button class="wr-input-send" id="wr-send" title="Envoyer (Cmd+Enter)" aria-label="Envoyer">
           ${_iconSvg('arrow-up')}
@@ -314,6 +314,8 @@ function _updateHeader(panel, brief) {
     subtitle.textContent = `Mode ${getCognitiveMode(DEFAULT_MODE).label} · ${trimmed}`;
   }
 }
+
+// (Living Layer phrase d'ouverture — texte créatif, pas militaire)
 
 function _hideEmpty(panel) {
   const empty = panel.querySelector('#wr-feed-empty');

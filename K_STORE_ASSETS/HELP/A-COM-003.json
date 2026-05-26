@@ -1,35 +1,35 @@
 {
-  "title": "AI War Room",
-  "tldr": "9 personnalités IA débattent en temps réel sur votre brief stratégique. Vous orientez la discussion à la volée, le Synthesizer livre une note exécutive structurée à la fin.",
+  "title": "Brainstorming",
+  "tldr": "9 personnalités IA spécialisées dialoguent en direct autour de votre brief créatif. Vous orientez la conversation à la volée, le Synthesizer livre une synthèse structurée à la fin.",
   "key_points": [
-    "1. Brief : décrivez votre challenge stratégique (lancement, repositionnement, crise…)",
-    "2. Mode cognitif : choisissez l'angle de réflexion (Exploration, Launch, Crisis…)",
-    "3. Roundtable : les 9 agents s'allument et lancent la discussion",
-    "4. Discussion live : Strategic Lead, Creative Director, Devil's Advocate et 6 autres débattent en direct",
-    "5. Intervention : tapez « Plus premium », « Ignore TikTok » pour réorienter à la volée",
-    "6. Synthèse : le Synthesizer produit positionnement + opportunités + risques + plan d'actions",
-    "7. Export PDF : récupérez la note exécutive complète"
+    "1. Brief : posez votre sujet de réflexion (lancement, repositionnement, idéation…)",
+    "2. Mode : choisissez un angle de réflexion (Exploration, Lancement, Branding…)",
+    "3. Allumage : les 9 personnalités s'allument progressivement et ouvrent la discussion",
+    "4. Dialogue : Strategic Lead, Creative Director, Devil's Advocate et 6 autres échangent en direct",
+    "5. Intervention : tapez « Plus premium », « Plus disruptif » pour réorienter la conversation",
+    "6. Synthèse : le Synthesizer condense l'échange en plan d'actions structuré",
+    "7. Export PDF : récupérez la note de synthèse complète"
   ],
   "faq": [
     {
       "q": "Quelle est la différence avec ChatGPT ou Claude ?",
-      "a": "ChatGPT et Claude vous donnent UNE réponse. AI War Room simule un débat entre 9 spécialistes — vous voyez la friction, les désaccords, l'évolution stratégique. Le livrable n'est pas une réponse unique, c'est une décision informée par un collectif."
+      "a": "ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif."
     },
     {
       "q": "Quels moteurs IA sont utilisés ?",
-      "a": "Stratégie hybride : Synthesizer et Strategic Lead passent par Claude via votre clé BYOK (finesse maximale sur les rôles critiques) · les 7 autres agents via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous les agents tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
+      "a": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
     },
     {
       "q": "Combien de temps dure une session ?",
-      "a": "8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et déclencher la synthèse en sollicitant le Synthesizer."
+      "a": "8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure."
     },
     {
       "q": "Mes sessions sont-elles sauvegardées ?",
-      "a": "Oui, les 20 dernières sessions restent en bibliothèque locale accessible depuis la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF."
+      "a": "Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF."
     },
     {
       "q": "Pourquoi Devil's Advocate est-il intégré comme rôle système ?",
-      "a": "Pour casser le consensus-bias inhérent aux LLM. Les autres agents tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de détruire les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre verrou méthodologique."
+      "a": "Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique."
     }
   ],
   "shortcuts": [
