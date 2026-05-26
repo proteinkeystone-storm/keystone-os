@@ -463,14 +463,31 @@ export async function handleBrainstormingAgentRespond(request, env) {
             });
           }
 
-          // Trigger : on force la brièveté + la réaction explicite
+          // Sprint 7.1.2 — Trigger différencié pour casser l'effet "appel
+          // d'amphi" (les agents s'appelaient systématiquement par leur nom,
+          // ce qui rendait la conversation artificielle). Seul Strategic
+          // Lead a le droit de nommer (son rôle = distribuer la parole).
+          // Les 8 autres rebondissent sur l'angle sans citation nominative.
           const isFirstTurn = localHistory.length === 0;
-          messages.push({
-            role:    'user',
-            content: isFirstTurn
-              ? `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES. Cadre l'angle stratégique majeur et invite UN agent spécifique à réagir.`
-              : `Tu interviens MAINTENANT comme ${agent.name}. CONTRAINTES STRICTES :\n- MAX 2 phrases courtes (60 mots TOTAL).\n- RÉAGIS d'abord à ce que ${previousAgent?.name || 'l\'intervenant précédent'} vient de dire (cite-le ou rebondis explicitement).\n- ENSUITE seulement, apporte ton angle propre depuis ton rôle.\n- PAS de salutation, PAS de résumé, PAS de liste à puces.`,
-          });
+          const isStrategic = currentAgentId === 'strategic';
+          let triggerContent;
+          if (isFirstTurn) {
+            triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 2 PHRASES COURTES. Cadre l'angle stratégique majeur et INVITE explicitement UN agent spécifique à réagir en le nommant (ex. "Creative Director, ton angle ?").`;
+          } else if (isStrategic) {
+            // Strategic Lead reprend en cours (après user reset) — re-cadre + redistribue
+            triggerContent = `Tu interviens comme Strategic Lead. CONTRAINTES STRICTES :
+- MAX 2 phrases courtes (60 mots TOTAL).
+- RE-CADRE la discussion en 1 phrase + DISTRIBUE la parole à UN agent en le nommant explicitement (ex. "Brand Guardian, à toi").
+- PAS de "X a raison", PAS de résumé. Juste cadrer puis donner la parole.`;
+          } else {
+            triggerContent = `Tu interviens comme ${agent.name}. CONTRAINTES ABSOLUES :
+- MAX 2 phrases courtes (60 mots TOTAL).
+- REBONDIS sur l'angle qui vient d'être posé SANS NOMMER ton interlocuteur. Utilise "cet angle", "cette piste", "ce point", "ce qui vient d'être dit", OU enchaîne directement avec ton propre angle.
+- INTERDICTION ABSOLUE de nommer un autre agent. Pas de "Strategic Lead a raison", pas de "Je rejoins Creative Director", pas de "Comme Devil's Advocate l'a dit". JAMAIS le nom d'un autre agent dans ta réponse.
+- Apporte TON angle propre depuis ton rôle (${agent.role}).
+- PAS de salutation, PAS de résumé, PAS de liste à puces.`;
+          }
+          messages.push({ role: 'user', content: triggerContent });
 
           // Lance l'inférence Workers AI en streaming
           let aiStream;
