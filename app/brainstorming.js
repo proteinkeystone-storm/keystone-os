@@ -37,8 +37,130 @@ const SESSION_KEY          = 'ks_brainstorming_session_draft';
 // le retour de la pondération via intervention user.
 const ORCHESTRATION_MAX_TURNS = 3;
 
+// ── Typewriter (rythme dictée vocale) ────────────────────────────
+// Le LLM streame très vite (~50-100 chars/sec). Pour donner la sensation
+// d'un dialogue lu à voix haute, on bufferise et on affiche à un rythme
+// contrôlé. Cible : ~15-20 chars/sec (≈ dictée vocale 130-150 wpm).
+const TYPEWRITER_TICK_MS    = 50;    // 1 char tous les 50ms → 20 chars/sec
+const TYPEWRITER_PAUSE_END  = 280;   // pause supplémentaire après . ! ?
+const TYPEWRITER_PAUSE_SOFT = 120;   // pause supplémentaire après , ; :
+// Si le LLM dump trop de chars d'avance (≥ 200 en buffer), on accélère
+// pour pas avoir 15s de retard. Mais on reste lisible.
+const TYPEWRITER_CATCHUP_THRESHOLD = 200;
+const TYPEWRITER_CATCHUP_CHARS     = 3;     // 3 chars/tick = 60 chars/sec
+
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
+
+// Typewriter state (réinitialisé à chaque ouverture du workspace)
+const _typewriter = {
+  buffers: new Map(),   // agent_id → { pending, textEl, ended, delayUntil, panel }
+  intervalId: null,
+};
+
+function _typewriterReset() {
+  if (_typewriter.intervalId) {
+    clearInterval(_typewriter.intervalId);
+    _typewriter.intervalId = null;
+  }
+  _typewriter.buffers.clear();
+}
+
+function _typewriterTick() {
+  const now = Date.now();
+  for (const [aid, state] of _typewriter.buffers.entries()) {
+    if (state.delayUntil && now < state.delayUntil) continue;
+    state.delayUntil = 0;
+
+    if (state.pending.length === 0) {
+      // Buffer vide → si le serveur a annoncé agent_end, on finalise
+      if (state.ended) {
+        state.textEl.classList.remove('streaming');
+        _setAgentSpeaking(state.panel, aid, false);
+        _typewriter.buffers.delete(aid);
+      }
+      continue;
+    }
+
+    // Catch-up : si on a beaucoup de retard, pop plusieurs chars d'un coup
+    const popN = state.pending.length >= TYPEWRITER_CATCHUP_THRESHOLD
+      ? TYPEWRITER_CATCHUP_CHARS
+      : 1;
+    const chunk = state.pending.slice(0, popN);
+    state.pending = state.pending.slice(popN);
+    state.textEl.textContent += chunk;
+
+    // Pause après ponctuation (sur le DERNIER char poppé)
+    const lastChar = chunk[chunk.length - 1];
+    if (/[.!?]/.test(lastChar)) {
+      state.delayUntil = now + TYPEWRITER_PAUSE_END;
+    } else if (/[,;:]/.test(lastChar)) {
+      state.delayUntil = now + TYPEWRITER_PAUSE_SOFT;
+    }
+  }
+
+  // Auto-scroll uniquement si l'utilisateur est déjà en bas du feed
+  // (sinon on respecte sa position de lecture)
+  for (const [, state] of _typewriter.buffers) {
+    const feed = state.panel.querySelector('#wr-feed');
+    if (feed && (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 80)) {
+      feed.scrollTop = feed.scrollHeight;
+    }
+    break;
+  }
+
+  // Aucune bulle en cours → arrête le timer
+  if (_typewriter.buffers.size === 0) {
+    clearInterval(_typewriter.intervalId);
+    _typewriter.intervalId = null;
+  }
+}
+
+function _typewriterPush(panel, agentId, textEl, chunk) {
+  let state = _typewriter.buffers.get(agentId);
+  if (!state) {
+    state = { pending: '', textEl, ended: false, delayUntil: 0, panel };
+    _typewriter.buffers.set(agentId, state);
+  }
+  state.pending += chunk;
+  if (!_typewriter.intervalId) {
+    _typewriter.intervalId = setInterval(_typewriterTick, TYPEWRITER_TICK_MS);
+  }
+}
+
+function _typewriterMarkEnded(agentId, fullText) {
+  const state = _typewriter.buffers.get(agentId);
+  if (!state) return;
+  // Si le full_text serveur est plus long que ce qu'on a déjà bufferisé
+  // + affiché, on append le delta (sécurité contre chunks perdus)
+  if (typeof fullText === 'string') {
+    const displayed = state.textEl.textContent || '';
+    const totalKnown = displayed + state.pending;
+    if (fullText.length > totalKnown.length) {
+      state.pending += fullText.slice(totalKnown.length);
+    }
+  }
+  state.ended = true;
+}
+
+function _typewriterIsFlushed() {
+  for (const state of _typewriter.buffers.values()) {
+    if (state.pending.length > 0 || !state.ended) return false;
+  }
+  return true;
+}
+
+function _waitForTypewriterFlush(timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (_typewriterIsFlushed()) return resolve();
+      if (Date.now() - start > timeoutMs) return resolve();
+      setTimeout(check, 100);
+    };
+    check();
+  });
+}
 
 // ── API Worker — URL résolue dynamiquement (cf. ui-renderer) ──────
 function _apiBase() {
@@ -97,6 +219,7 @@ export function closeBrainstorming() {
   }
   document.body.style.overflow = '';
   _currentSession = null;
+  _typewriterReset();
 }
 
 // Alias pour compat ui-renderer.js (ancien import openMuse)
@@ -422,9 +545,10 @@ async function _callOrchestration(panel) {
 
         case 'agent_start': {
           const aid = evt.agent_id;
-          // Crée la bulle pour cet agent
           const { textEl } = _appendMessage(panel, aid, '', { streaming: true });
           activeBubbles.set(aid, { textEl, fullText: '' });
+          // Initialise le buffer typewriter pour cet agent
+          _typewriterPush(panel, aid, textEl, '');
           _setAgentSpeaking(panel, aid, true);
           break;
         }
@@ -435,8 +559,8 @@ async function _callOrchestration(panel) {
           const bubble = activeBubbles.get(aid);
           if (!bubble || !text) break;
           bubble.fullText += text;
-          bubble.textEl.textContent = bubble.fullText;
-          _scrollToBottom(panel);
+          // Push dans le buffer typewriter (pas direct dans textEl)
+          _typewriterPush(panel, aid, bubble.textEl, text);
           break;
         }
 
@@ -444,30 +568,30 @@ async function _callOrchestration(panel) {
           const aid    = evt.agent_id;
           const bubble = activeBubbles.get(aid);
           if (bubble) {
-            bubble.textEl.classList.remove('streaming');
-            // Si full_text fourni par le Worker, on l'utilise (autoritaire)
-            if (typeof evt.full_text === 'string' && evt.full_text.length) {
-              bubble.fullText = evt.full_text;
-              bubble.textEl.textContent = evt.full_text;
-            }
-            // Ajout à l'historique de session
+            const finalText = (typeof evt.full_text === 'string' && evt.full_text.length)
+              ? evt.full_text
+              : bubble.fullText;
+            // Marker la fin côté typewriter (le buffer va se vider à son rythme)
+            _typewriterMarkEnded(aid, finalText);
+            // Ajout à l'historique IMMÉDIAT (pas besoin d'attendre l'affichage)
             _currentSession.history.push({
               agent_id : aid,
-              content  : bubble.fullText,
+              content  : finalText,
               timestamp: Date.now(),
             });
             activeBubbles.delete(aid);
           }
-          _setAgentSpeaking(panel, aid, false);
           break;
         }
 
         case 'complete': {
           complete = true;
-          // Optionnel : ajouter une note discrète si auto_pause
+          // Attendre que le typewriter ait fini d'afficher avant la note
           if (evt.reason === 'auto_pause' || evt.reason === 'max_turns') {
-            _appendOrchestrationNote(panel,
-              'Le tour de table est suspendu. Intervenez pour orienter la suite ou validez par une nouvelle direction.');
+            _waitForTypewriterFlush().then(() => {
+              _appendOrchestrationNote(panel,
+                'Le tour de table est suspendu. Intervenez pour orienter la suite ou validez par une nouvelle direction.');
+            });
           }
           break;
         }
@@ -478,12 +602,6 @@ async function _callOrchestration(panel) {
       }
     }
   }
-
-  // Nettoyage : s'assurer qu'aucune bulle ne reste en streaming
-  activeBubbles.forEach((bubble, aid) => {
-    bubble.textEl.classList.remove('streaming');
-    _setAgentSpeaking(panel, aid, false);
-  });
 }
 
 // ════════════════════════════════════════════════════════════════
