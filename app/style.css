@@ -6900,6 +6900,35 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   text-transform: uppercase; margin-top: 3px;
 }
 
+/* Mini-preview : Carte de fidélité — 5 cases dont 3 tamponnées, la 3ᵉ pulse */
+.sq-mini-loyalty {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 4px; width: 100%;
+}
+.sq-mini-loyalty-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255,255,255,.04);
+  border: 1.2px dashed rgba(201,169,110,.32);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,.18);
+}
+.sq-mini-loyalty-cell.is-stamped {
+  background: radial-gradient(circle at 35% 30%,
+    rgba(201,169,110,.85), rgba(201,169,110,.45) 60%);
+  border: 1.2px solid var(--gold, #c9a96e);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(201,169,110,.4);
+}
+.sq-mini-loyalty-cell--pulse {
+  animation: tc-loyalty-pulse 2.4s ease-in-out infinite;
+}
+@keyframes tc-loyalty-pulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 2px 6px rgba(201,169,110,.4); }
+  50%      { transform: scale(1.18); box-shadow: 0 4px 14px rgba(201,169,110,.7); }
+}
+
 /* Form contextuel : champs dynamiques */
 .sdqr-input--textarea {
   min-height: 80px; resize: vertical;

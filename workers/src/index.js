@@ -50,7 +50,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGenerate, handleSmartQrGamePlay, handleSmartQrVerifyWin } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGenerate, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp } from './routes/qr.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -294,6 +294,10 @@ export default {
       // V4.3 UX (2026-05-26) — Vérification d'authenticité d'un code WIN-XXXX-XXXX
       // par le commerçant. Public, GET avec query ?code=WIN-XXXX-XXXX.
       if (path === '/api/smartqr/verify-win' && method === 'GET') return handleSmartQrVerifyWin(request, env);
+      // Smart QR V4.4 (2026-05-26) — endpoint authoritative carte de fidélité.
+      // Incrémente le compteur de tampons côté serveur, applique la règle
+      // de validité, débloque la récompense au Nᵉ tampon avec code signé.
+      if (path === '/api/smartqr/loyalty-stamp' && method === 'POST') return handleSmartQrLoyaltyStamp(request, env);
 
       // ── Living Layer (2026-05-24) ────────────────────────────
       // Phrase courte vivante sous "Bonjour, X" du dashboard.

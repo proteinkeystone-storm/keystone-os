@@ -96,8 +96,18 @@ const MOCK_DATA = {
     logo_url:            'https://example.com/logo.png',
     accent_color:        '#c9a96e',
   },
-  // V4.2+ : quiz, boîte cadeau, carte de fidélité.
-  //         Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
+  // V4.4 livré 2026-05-26
+  'carte-fidelite': {
+    nom_marque:       'Café du Port',
+    nom_recompense:   'Café offert',
+    nb_tampons_total: 10,
+    validite_jours:   90,
+    style_tampon:     'encre',
+    logo_url:         'https://example.com/logo.png',
+    accent_color:     '#c9a96e',
+  },
+  // V4.2 : quiz d'orientation + boîte cadeau.
+  //        Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md
 };
 
 // ── Tests : Backend (Worker) ──────────────────────────────────

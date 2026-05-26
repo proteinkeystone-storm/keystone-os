@@ -1377,6 +1377,213 @@ export async function handleSmartQrVerifyWin(request, env) {
   }, 200, origin);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Smart QR V4.4 (2026-05-26) — Endpoint authoritative carte de fidélité
+// ───────────────────────────────────────────────────────────────────
+// Endpoint PUBLIC appelé au load du template carte-fidelite. Incrémente
+// le compteur de tampons côté SERVEUR (jamais côté client = anti-triche),
+// applique la règle de validité (reset si trop de jours depuis le 1er
+// tampon), et débloque la récompense au Nᵉ tampon avec code signé.
+//
+// Contrat : POST /api/smartqr/loyalty-stamp { short_id }
+//   → {
+//       stamps_count    : number,   // total tampons dans le cycle actuel
+//       stamps_total    : number,   // objectif (nb_tampons_total config)
+//       stamps_added    : 0|1,      // 1 si on a réellement ajouté un tampon
+//       reward_unlocked : boolean,  // true si stamps_count ≥ stamps_total
+//       reward_code     : string,   // code WIN-XXXX-XXXX (vide si pas débloqué)
+//       reward_name     : string,   // libellé proprio (ex "Café offert")
+//       cycle_reset     : boolean,  // true si la validité expirée a remis à 0
+//       first_stamp_at  : string,   // ISO du 1er tampon du cycle
+//     }
+//
+// Anti-abus :
+//   - device_hash = sha256(UA + cf-connecting-ip).slice(0,16) — anonyme
+//   - Délai mini 60s entre 2 tampons par device → empêche un user de
+//     spammer le bouton refresh. Au-delà du seuil "stamps_added=0",
+//     on renvoie l'état actuel sans incrémenter (le client peut quand
+//     même afficher la carte).
+// ══════════════════════════════════════════════════════════════════
+
+let _smartLoyaltyTableReady = false;
+async function _ensureSmartLoyaltyTable(env) {
+  if (_smartLoyaltyTableReady) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS smartqr_loyalty_stamps (
+        short_id       TEXT NOT NULL,
+        device_hash    TEXT NOT NULL,
+        stamps_count   INTEGER NOT NULL DEFAULT 0,
+        first_stamp_at TEXT NOT NULL,
+        last_stamp_at  TEXT NOT NULL,
+        redeemed_at    TEXT,
+        reward_code    TEXT,
+        PRIMARY KEY (short_id, device_hash)
+      )
+    `).run();
+    _smartLoyaltyTableReady = true;
+  } catch (e) {
+    console.warn('[smartqr] loyalty-stamps table init failed:', e.message);
+  }
+}
+
+const _LOYALTY_MIN_INTERVAL_MS = 60 * 1000; // 60s minimum entre 2 tampons
+
+export async function handleSmartQrLoyaltyStamp(request, env) {
+  const origin = '*';
+  await _ensureSmartLoyaltyTable(env);
+
+  const body    = await parseBody(request);
+  const shortId = (body.short_id || '').toString().trim();
+  if (!shortId || shortId.length < 4 || shortId.length > 32) {
+    return err('short_id invalide', 400, origin);
+  }
+
+  // Récupère le QR (mode smart, template carte-fidelite obligatoire)
+  let qrData = null;
+  try {
+    const entityRow = await env.DB
+      .prepare(`SELECT data FROM entities
+                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                AND deleted_at IS NULL LIMIT 1`)
+      .bind(shortId)
+      .first();
+    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
+  } catch (e) {
+    return err('Lookup entity échoué : ' + e.message, 500, origin);
+  }
+  if (!qrData) return err('QR introuvable', 404, origin);
+  if (qrData.mode !== 'smart') return err('QR non Smart', 400, origin);
+  if (qrData.template_id !== 'carte-fidelite') {
+    return err('Template non-fidélité', 400, origin);
+  }
+
+  const td = qrData.template_data || {};
+  const stampsTotalRaw = Number(td.nb_tampons_total);
+  const stampsTotal = Number.isFinite(stampsTotalRaw) && stampsTotalRaw >= 3 && stampsTotalRaw <= 30
+                    ? Math.floor(stampsTotalRaw) : 10;
+  const validityDaysRaw = Number(td.validite_jours);
+  const validityDays = Number.isFinite(validityDaysRaw) && validityDaysRaw > 0
+                     ? Math.floor(validityDaysRaw) : 90;
+  const rewardName = (td.nom_recompense || 'Récompense fidélité').toString().slice(0, 80);
+
+  const deviceH = await _deviceHash(request);
+  const nowIso  = new Date().toISOString();
+  const nowMs   = Date.now();
+
+  // Lit l'état actuel pour ce (short_id, device_hash)
+  let row = null;
+  try {
+    row = await env.DB
+      .prepare(`SELECT stamps_count, first_stamp_at, last_stamp_at, reward_code
+                FROM smartqr_loyalty_stamps
+                WHERE short_id = ? AND device_hash = ?`)
+      .bind(shortId, deviceH)
+      .first();
+  } catch (e) {
+    // Miss = on continue avec row=null (nouveau scanneur)
+  }
+
+  let stampsCount   = 0;
+  let firstStampIso = nowIso;
+  let lastStampIso  = nowIso;
+  let rewardCode    = '';
+  let stampsAdded   = 0;
+  let cycleReset    = false;
+
+  if (!row) {
+    // 1er scan : insertion d'une ligne vierge à 1 tampon
+    stampsCount = 1;
+    stampsAdded = 1;
+    try {
+      await env.DB
+        .prepare(`INSERT INTO smartqr_loyalty_stamps
+                  (short_id, device_hash, stamps_count, first_stamp_at, last_stamp_at, reward_code)
+                  VALUES (?, ?, 1, ?, ?, NULL)`)
+        .bind(shortId, deviceH, nowIso, nowIso)
+        .run();
+    } catch (e) {
+      console.warn('[smartqr] loyalty insert failed:', e.message);
+    }
+  } else {
+    // Scan suivant : vérifie validité, anti-spam, incrément
+    const firstAtMs = new Date(row.first_stamp_at).getTime();
+    const lastAtMs  = new Date(row.last_stamp_at).getTime();
+    const ageDays   = Number.isFinite(firstAtMs)
+                    ? (nowMs - firstAtMs) / (24 * 3600 * 1000) : 0;
+    const sinceLastMs = Number.isFinite(lastAtMs) ? (nowMs - lastAtMs) : Infinity;
+
+    // Cas 1 : cycle expiré → reset (nouveau cycle à 1 tampon)
+    if (ageDays > validityDays) {
+      stampsCount = 1;
+      stampsAdded = 1;
+      cycleReset  = true;
+      firstStampIso = nowIso;
+      try {
+        await env.DB
+          .prepare(`UPDATE smartqr_loyalty_stamps
+                    SET stamps_count = 1, first_stamp_at = ?, last_stamp_at = ?,
+                        reward_code = NULL, redeemed_at = NULL
+                    WHERE short_id = ? AND device_hash = ?`)
+          .bind(nowIso, nowIso, shortId, deviceH)
+          .run();
+      } catch (e) { console.warn('[smartqr] loyalty reset failed:', e.message); }
+    }
+    // Cas 2 : cycle complet, récompense déjà débloquée → renvoie l'état
+    else if (row.stamps_count >= stampsTotal && row.reward_code) {
+      stampsCount   = row.stamps_count;
+      stampsAdded   = 0;
+      firstStampIso = row.first_stamp_at;
+      lastStampIso  = row.last_stamp_at;
+      rewardCode    = row.reward_code;
+    }
+    // Cas 3 : anti-spam, scan trop rapproché → renvoie état sans incrémenter
+    else if (sinceLastMs < _LOYALTY_MIN_INTERVAL_MS) {
+      stampsCount   = row.stamps_count;
+      stampsAdded   = 0;
+      firstStampIso = row.first_stamp_at;
+      lastStampIso  = row.last_stamp_at;
+      rewardCode    = row.reward_code || '';
+    }
+    // Cas 4 : incrément normal
+    else {
+      stampsCount   = row.stamps_count + 1;
+      stampsAdded   = 1;
+      firstStampIso = row.first_stamp_at;
+      lastStampIso  = nowIso;
+
+      // Génère le code de récompense si on atteint le seuil
+      if (stampsCount >= stampsTotal && !row.reward_code) {
+        rewardCode = await _generateWinCode(env, shortId, deviceH, nowMs.toString());
+      } else {
+        rewardCode = row.reward_code || '';
+      }
+
+      try {
+        await env.DB
+          .prepare(`UPDATE smartqr_loyalty_stamps
+                    SET stamps_count = ?, last_stamp_at = ?, reward_code = ?
+                    WHERE short_id = ? AND device_hash = ?`)
+          .bind(stampsCount, nowIso, rewardCode || null, shortId, deviceH)
+          .run();
+      } catch (e) { console.warn('[smartqr] loyalty update failed:', e.message); }
+    }
+  }
+
+  const rewardUnlocked = stampsCount >= stampsTotal && !!rewardCode;
+
+  return json({
+    stamps_count:    stampsCount,
+    stamps_total:    stampsTotal,
+    stamps_added:    stampsAdded,
+    reward_unlocked: rewardUnlocked,
+    reward_code:     rewardCode || '',
+    reward_name:     rewardName,
+    cycle_reset:     cycleReset,
+    first_stamp_at:  firstStampIso,
+  }, 200, origin);
+}
+
 // Template HTML interstitiel — déplacé V2 dans ./smart-templates/phrase-simple.js
 // Le dispatcher handleSmartQrInterstitial appelle template.renderHTML() depuis
 // le registry. Pour ajouter un nouveau layout (menu, tombola, etc.), créer un
