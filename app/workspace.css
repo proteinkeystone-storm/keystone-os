@@ -1024,7 +1024,14 @@ html.light-mode .modal-close:hover {
 }
 
 @media (max-width: 1024px) {
-  .ws-topbar-burger { display: inline-flex; margin-right: 16px; }
+  .ws-topbar-burger { display: inline-flex; margin-right: 16px; flex-shrink: 0; }
+
+  /* Sprint 7.6 — Brand passe en width auto sur narrow.
+     En desktop il est fixé à 220px pour aligner avec le rail sidebar,
+     mais en narrow le rail est masqué (ou différent comme Brainstorming
+     qui a un rail à 60px) → l'alignement strict n'a plus de sens et la
+     largeur 220px pousse le burger hors écran. */
+  .ws-topbar-brand { width: auto; padding: 0 12px 0 16px; }
 
   /* Crumb masquée sur narrow (pas la place) */
   .ws-topbar-title .crumb { display: none; }
@@ -1036,7 +1043,7 @@ html.light-mode .modal-close:hover {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .ws-topbar-title { padding-left: 16px; min-width: 0; }
+  .ws-topbar-title { padding-left: 12px; min-width: 0; flex: 1 1 0; }
 
   /* Actions : cachées par défaut, deviennent un dropdown vertical au clic du burger */
   .ws-topbar-actions {
