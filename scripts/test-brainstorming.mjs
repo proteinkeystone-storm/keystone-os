@@ -203,6 +203,117 @@ if (skipNet) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// SUITE 5 — Sprint 7 cognitive modes (activation + arcs différenciés)
+// ─────────────────────────────────────────────────────────────────
+console.log('\n\x1b[1m▶ Suite 5 — Sprint 7 cognitive modes\x1b[0m');
+
+const EXPECTED_MODES = ['exploration', 'launch', 'branding', 'growth', 'crisis', 'positioning', 'repositioning'];
+
+try {
+  const frontendMod = await import(`file://${join(ROOT, 'app/lib/brainstorming-agents.js')}`);
+  const { COGNITIVE_MODES, getCognitiveMode, getEnabledCognitiveModes } = frontendMod;
+
+  // 5.1 — Les 7 modes existent
+  if (COGNITIVE_MODES?.length === 7) ok('COGNITIVE_MODES : 7 modes définis');
+  else                                ko('COGNITIVE_MODES : nombre incorrect', String(COGNITIVE_MODES?.length));
+
+  // 5.2 — Tous les modes attendus sont présents
+  for (const mid of EXPECTED_MODES) {
+    const m = COGNITIVE_MODES?.find(x => x.id === mid);
+    if (m) ok(`COGNITIVE_MODES : ${mid} présent`);
+    else    ko(`COGNITIVE_MODES : ${mid} absent`, '');
+  }
+
+  // 5.3 — Les 7 modes sont activés (enabled: true)
+  const enabled = COGNITIVE_MODES?.filter(m => m.enabled);
+  if (enabled?.length === 7) ok('COGNITIVE_MODES : 7 modes enabled:true');
+  else                        ko('COGNITIVE_MODES : tous les modes ne sont pas enabled', `${enabled?.length}/7`);
+
+  // 5.4 — Helper getEnabledCognitiveModes exporté et fonctionne
+  if (typeof getEnabledCognitiveModes === 'function' && getEnabledCognitiveModes().length === 7)
+    ok('getEnabledCognitiveModes() retourne 7 modes');
+  else
+    ko('getEnabledCognitiveModes() KO', String(getEnabledCognitiveModes?.()?.length));
+
+  // 5.5 — Chaque mode a color + colorVar + invite (champs Sprint 7)
+  for (const mid of EXPECTED_MODES) {
+    const m = getCognitiveMode(mid);
+    if (m.color && m.colorVar && m.invite)
+      ok(`mode ${mid} : color + colorVar + invite OK`);
+    else
+      ko(`mode ${mid} : champs Sprint 7 manquants`, JSON.stringify({ color: m.color, colorVar: m.colorVar, invite: !!m.invite }));
+  }
+
+  // 5.6 — Les 7 colorVar sont uniques (pas de collision)
+  const colorVars = COGNITIVE_MODES.map(m => m.colorVar);
+  const uniqColorVars = new Set(colorVars);
+  if (uniqColorVars.size === 7) ok('colorVars : 7 distincts');
+  else                            ko('colorVars : collision détectée', `${uniqColorVars.size}/7 uniques`);
+} catch (e) { ko('Frontend agents.js : import KO', e.message); }
+
+try {
+  const orchMod = await import(`file://${join(ROOT, 'workers/src/lib/brainstorming-orchestrator.js')}`);
+  const { pickNextAgent, getArcForMode, ARCS_BY_MODE } = orchMod;
+
+  // 5.7 — ARCS_BY_MODE exporté avec les 7 entrées
+  if (ARCS_BY_MODE && Object.keys(ARCS_BY_MODE).length === 7)
+    ok('ARCS_BY_MODE : 7 arcs définis');
+  else
+    ko('ARCS_BY_MODE : nombre incorrect', String(Object.keys(ARCS_BY_MODE || {}).length));
+
+  // 5.8 — Chaque mode a un arc qui contient les 9 agents en clés
+  const AGENT_IDS = ['strategic', 'creative', 'growth', 'consumer', 'brand', 'cultural', 'data', 'devil', 'synth'];
+  for (const mid of EXPECTED_MODES) {
+    const arc = getArcForMode(mid);
+    const missing = AGENT_IDS.filter(a => !arc[a]);
+    if (missing.length === 0) ok(`arc ${mid} : 9 agents mappés`);
+    else                       ko(`arc ${mid} : agents manquants`, missing.join(','));
+  }
+
+  // 5.9 — Les arcs sont différenciés : on compare le successeur de 'strategic'
+  // entre tous les modes. Au moins 3 modes doivent avoir un successeur DIFFÉRENT
+  // de exploration (creative) — sinon l'arc n'est pas vraiment customisé.
+  const stratNext = {};
+  for (const mid of EXPECTED_MODES) {
+    stratNext[mid] = getArcForMode(mid).strategic;
+  }
+  const uniqNext = new Set(Object.values(stratNext));
+  if (uniqNext.size >= 4)
+    ok(`arcs différenciés : ${uniqNext.size} successeurs distincts pour strategic`);
+  else
+    ko('arcs différenciés : trop similaires', JSON.stringify(stratNext));
+
+  // 5.10 — pickNextAgent honore le mode passé en argument
+  // (history avec un dernier message du strategic → next dépend du mode)
+  const history = [{ agent_id: 'strategic', content: 'cadrage ok' }];
+  const nextExpl = pickNextAgent(history, 'exploration');
+  const nextCris = pickNextAgent(history, 'crisis');
+  if (nextExpl !== nextCris)
+    ok(`pickNextAgent honore le mode (exploration→${nextExpl}, crisis→${nextCris})`);
+  else
+    ko('pickNextAgent ignore le mode', `${nextExpl} === ${nextCris}`);
+
+  // 5.11 — Mode inconnu → fallback exploration (pas d'erreur)
+  const arcInvalid = getArcForMode('mode_inexistant');
+  const arcExpl    = getArcForMode('exploration');
+  if (arcInvalid.strategic === arcExpl.strategic) ok('mode inconnu → fallback exploration');
+  else                                              ko('fallback exploration cassé', '');
+} catch (e) { ko('Worker orchestrator : import KO', e.message); }
+
+// 5.12 — Worker _modeDescription contient les 7 modes enrichis
+try {
+  const workerAgents = await readFile(join(ROOT, 'workers/src/lib/brainstorming-agents.js'), 'utf8');
+  for (const mid of EXPECTED_MODES) {
+    if (workerAgents.includes(`${mid}:`) && workerAgents.includes('INTERDIT'))
+      ok(`worker _modeDescription : ${mid} présent + contient INTERDIT`);
+    else if (!workerAgents.includes(`${mid}:`))
+      ko(`worker _modeDescription : ${mid} absent`, '');
+    else
+      ok(`worker _modeDescription : ${mid} présent (sans INTERDIT)`);
+  }
+} catch (e) { ko('Worker agents.js : read KO', e.message); }
+
+// ─────────────────────────────────────────────────────────────────
 // SOMMAIRE
 // ─────────────────────────────────────────────────────────────────
 console.log(`\n\x1b[1m═══ Sommaire ═══\x1b[0m`);

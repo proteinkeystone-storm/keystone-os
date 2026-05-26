@@ -53,13 +53,139 @@ export function detectMentionInText(text) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// pickNextAgent — heuristiques Sprint 2
+// ARCS_BY_MODE — Sprint 7
+// ─────────────────────────────────────────────────────────────────
+// Chaque mode cognitif a son propre arc narratif. L'arc dicte qui parle
+// après qui. La règle : les agents leaders (les plus pertinents pour ce
+// mode) sont placés tôt dans la séquence, les agents périphériques en
+// fin de cycle.
+//
+// Tous les arcs s'ouvrent par Strategic Lead (cadrage) et reviennent à
+// Strategic Lead après Data (cycle de 8 agents). Synthesizer reste hors
+// arc (invoqué sur déclencheur Sprint 5).
+//
+// Convention : ARCS_BY_MODE[mode][previousAgent] = nextAgent
+// ─────────────────────────────────────────────────────────────────
+export const ARCS_BY_MODE = {
+  // Cadrage → idée → challenge → humain → culture → croissance → marque → marché
+  // (séquence pré-Sprint 7, éprouvée mai 2026)
+  exploration: {
+    strategic : 'creative',
+    creative  : 'devil',
+    devil     : 'consumer',
+    consumer  : 'cultural',
+    cultural  : 'growth',
+    growth    : 'brand',
+    brand     : 'data',
+    data      : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // Tempo serré, vitesse + impact mesurable. Growth + Data ouvrent fort,
+  // Devil challenge le timing, Brand surveille la cohérence, Consumer +
+  // Cultural en fin de cycle pour l'audience.
+  launch: {
+    strategic : 'growth',
+    growth    : 'creative',
+    creative  : 'data',
+    data      : 'devil',
+    devil     : 'brand',
+    brand     : 'cultural',
+    cultural  : 'consumer',
+    consumer  : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // Identité, ton, perception long-terme. Brand + Consumer + Creative en
+  // ouverture. Cultural pour le timing identitaire. Devil pour stresser
+  // les contradictions de marque. Data + Growth en queue (non-prioritaires).
+  branding: {
+    strategic : 'brand',
+    brand     : 'consumer',
+    consumer  : 'creative',
+    creative  : 'cultural',
+    cultural  : 'devil',
+    devil     : 'data',
+    data      : 'growth',
+    growth    : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // KPI-driven. Growth + Data + Consumer en tête (acquisition / mesure /
+  // motivation). Devil challenge les ordres de grandeur. Brand garde
+  // la cohérence long-terme malgré l'urgence d'acquisition.
+  growth: {
+    strategic : 'growth',
+    growth    : 'data',
+    data      : 'consumer',
+    consumer  : 'devil',
+    devil     : 'creative',
+    creative  : 'cultural',
+    cultural  : 'brand',
+    brand     : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // Dense, rapide, décisions immédiates. Devil interroge tôt, Data
+  // quantifie l'ampleur, Brand protège l'image, Consumer pour l'empathie
+  // publique. Creative en fin (recadrage narratif post-urgence).
+  crisis: {
+    strategic : 'devil',
+    devil     : 'data',
+    data      : 'brand',
+    brand     : 'consumer',
+    consumer  : 'growth',
+    growth    : 'cultural',
+    cultural  : 'creative',
+    creative  : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // Différenciation marché + audience cible. Consumer pour l'insight
+  // humain, Cultural pour le timing culturel, Brand pour la cohérence,
+  // Devil challenge les clichés, Data quantifie la taille de marché.
+  positioning: {
+    strategic : 'consumer',
+    consumer  : 'cultural',
+    cultural  : 'brand',
+    brand     : 'devil',
+    devil     : 'creative',
+    creative  : 'data',
+    data      : 'growth',
+    growth    : 'strategic',
+    synth     : 'strategic',
+  },
+
+  // Challenge du statu quo, pivots. Devil ouvre fort (interroger
+  // l'existant), Cultural détecte les signaux de pivot, Creative propose
+  // la rupture, Brand identifie ce qu'on garde, Consumer + Data en fin
+  // (audience + risque).
+  repositioning: {
+    strategic : 'devil',
+    devil     : 'cultural',
+    cultural  : 'creative',
+    creative  : 'brand',
+    brand     : 'consumer',
+    consumer  : 'data',
+    data      : 'growth',
+    growth    : 'strategic',
+    synth     : 'strategic',
+  },
+};
+
+// Helper exposé pour les tests : retourne l'arc d'un mode (ou exploration en fallback)
+export function getArcForMode(mode) {
+  return ARCS_BY_MODE[mode] || ARCS_BY_MODE.exploration;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pickNextAgent — heuristiques Sprint 7
 // ─────────────────────────────────────────────────────────────────
 // Règles dans l'ordre :
 //   1. Si history vide → Strategic Lead (ouvre toujours la discussion)
 //   2. Si la dernière intervention est de 'user' → Strategic Lead (re-cadre)
 //   3. Si le dernier message contient une mention explicite → cet agent
-//   4. Sinon → rotation adaptée selon qui vient de parler
+//   4. Sinon → rotation selon l'arc du mode cognitif courant
 // ─────────────────────────────────────────────────────────────────
 export function pickNextAgent(history, mode = 'exploration') {
   if (!Array.isArray(history) || history.length === 0) return 'strategic';
@@ -73,23 +199,9 @@ export function pickNextAgent(history, mode = 'exploration') {
   const mentioned = detectMentionInText(last.content);
   if (mentioned && mentioned !== last.agent_id) return mentioned;
 
-  // Rotation adaptée — Sprint 2 : séquence fixée pour le mode "exploration"
-  // qui suit un arc narratif éprouvé (cadrage → idée → challenge → humain →
-  // culture → marché → cadrage).
-  // Sprint 7 : chaque mode aura son propre arc (Launch privilégie growth+data,
-  // Crisis privilégie devil+brand, etc.).
-  const explorationArc = {
-    strategic : 'creative',
-    creative  : 'devil',
-    devil     : 'consumer',
-    consumer  : 'cultural',
-    cultural  : 'growth',
-    growth    : 'brand',
-    brand     : 'data',
-    data      : 'strategic',
-    synth     : 'strategic',
-  };
-  return explorationArc[last.agent_id] || 'strategic';
+  // Rotation adaptée — Sprint 7 : chaque mode a son arc dédié
+  const arc = getArcForMode(mode);
+  return arc[last.agent_id] || 'strategic';
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -216,6 +216,8 @@ export function openBrainstorming() {
   bindHelpButton(panel, APP_ID);
   bindRatingButton(panel, APP_ID);
   bindBurger(panel);
+  // Sprint 7 — Appliquer le mode par défaut (fixe --wr-mode-accent + invite)
+  _applyMode(panel, DEFAULT_MODE);
   _bootAgents(panel);
 }
 
@@ -382,9 +384,14 @@ function _wireShell(panel) {
   panel.querySelector('#wr-close-btn')?.addEventListener('click', closeBrainstorming);
 
   // Sprint 5 — Click sur l'icône Sessions du rail ouvre la bibliothèque
+  // Sprint 7 — Click sur l'icône Modes cognitifs ouvre la modale sélecteur
+  // Index 0 = Sessions, 1 = Agents (Sprint futur), 2 = Modes
   const railBtns = panel.querySelectorAll('.wr-rail-btn');
   if (railBtns[0]) {
     railBtns[0].addEventListener('click', () => _openLibraryModal(panel));
+  }
+  if (railBtns[2]) {
+    railBtns[2].addEventListener('click', () => _openModesModal(panel));
   }
 
   // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
@@ -516,9 +523,45 @@ function _setAllAgentsListening(panel, listening) {
 
 function _updateHeader(panel, brief) {
   const subtitle = panel.querySelector('#wr-subtitle');
+  if (!subtitle) return;
+  const modeId   = _currentSession?.mode || DEFAULT_MODE;
+  const mode     = getCognitiveMode(modeId);
+  const trimmed  = brief.length > 120 ? brief.slice(0, 117) + '…' : brief;
+  subtitle.textContent = `Mode ${mode.label} · ${trimmed}`;
+}
+
+// Sprint 7 — Appliquer un mode cognitif : persistance session + couleur
+// d'accent + label subheader + état actif modale. Centralise toutes les
+// conséquences d'un changement de mode.
+function _applyMode(panel, modeId) {
+  const mode = getCognitiveMode(modeId);
+  if (!_currentSession) return;
+  _currentSession.mode = mode.id;
+  // Variable CSS d'accent (subheader, rail btn actif, modale active)
+  panel.style.setProperty('--wr-mode-accent', `var(${mode.colorVar})`);
+  // Subheader : si brief déjà saisi → "Mode X · brief", sinon invite contextuelle
+  const subtitle = panel.querySelector('#wr-subtitle');
   if (subtitle) {
-    const trimmed = brief.length > 120 ? brief.slice(0, 117) + '…' : brief;
-    subtitle.textContent = `Mode ${getCognitiveMode(DEFAULT_MODE).label} · ${trimmed}`;
+    if (_currentSession.brief) {
+      const trimmed = _currentSession.brief.length > 120
+        ? _currentSession.brief.slice(0, 117) + '…'
+        : _currentSession.brief;
+      subtitle.textContent = `Mode ${mode.label} · ${trimmed}`;
+    } else {
+      subtitle.textContent = `Mode ${mode.label} · ${mode.invite || 'Posez votre brief pour ouvrir la discussion'}`;
+    }
+  }
+  // Input placeholder calé sur l'invite du mode (si pas de brief encore)
+  if (!_currentSession.started) {
+    const input = panel.querySelector('#wr-input');
+    if (input) input.placeholder = mode.invite || 'Posez votre sujet de réflexion…';
+  }
+  // Rafraîchir la modale si elle est ouverte
+  const modal = panel.querySelector('#wr-modes-modal');
+  if (modal) {
+    modal.querySelectorAll('.wr-mode-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.modeId === mode.id);
+    });
   }
 }
 
@@ -1263,6 +1306,55 @@ function _saveSessionToLibrary(session) {
   catch (e) { /* quota — ignore */ }
 }
 
+// Sprint 7 — Modale sélecteur de mode cognitif
+// Grid de 7 cards (1 actif + 6 autres) avec couleur d'accent, label,
+// description, état "actif". Click sur une card = _applyMode + close.
+function _openModesModal(panel) {
+  let modal = panel.querySelector('#wr-modes-modal');
+  if (modal) { modal.remove(); return; }
+  const enabled = COGNITIVE_MODES.filter(m => m.enabled);
+  const current = _currentSession?.mode || DEFAULT_MODE;
+  modal = document.createElement('div');
+  modal.id = 'wr-modes-modal';
+  modal.className = 'wr-modes-modal';
+  const cards = enabled.map(m => {
+    const isActive = m.id === current;
+    return `
+      <button type="button"
+              class="wr-mode-card${isActive ? ' active' : ''}"
+              data-mode-id="${m.id}"
+              style="--mode-color: var(${m.colorVar});">
+        <div class="wr-mode-card-head">
+          <span class="wr-mode-card-dot"></span>
+          <span class="wr-mode-card-label">${_esc(m.label)}</span>
+          ${isActive ? '<span class="wr-mode-card-badge">Actif</span>' : ''}
+        </div>
+        <div class="wr-mode-card-short">${_esc(m.short || '')}</div>
+        <div class="wr-mode-card-desc">${_esc(m.description)}</div>
+      </button>`;
+  }).join('');
+  modal.innerHTML = `
+    <div class="wr-modes-inner">
+      <div class="wr-modes-head">
+        <div class="wr-modes-title">Modes cognitifs</div>
+        <div class="wr-modes-sub">Le mode oriente l'arc narratif du débat et le focus de chaque agent.</div>
+        <button type="button" class="wr-modes-close" aria-label="Fermer">${_iconSvg('x')}</button>
+      </div>
+      <div class="wr-modes-grid">${cards}</div>
+    </div>
+  `;
+  panel.appendChild(modal);
+  modal.querySelector('.wr-modes-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('.wr-mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const mid = card.dataset.modeId;
+      if (mid && mid !== _currentSession?.mode) _applyMode(panel, mid);
+      modal.remove();
+    });
+  });
+}
+
 function _openLibraryModal(panel) {
   const all = _loadLibrary();
   let modal = panel.querySelector('#wr-library-modal');
@@ -1320,6 +1412,8 @@ function _restoreSession(panel, session) {
     synthesis:      session.synthesis,
     synthesizedAt:  session.synthesizedAt,
   };
+  // Sprint 7 — restaurer aussi la couleur d'accent du mode de la session
+  _applyMode(panel, _currentSession.mode);
   _updateHeader(panel, session.brief);
   _hideEmpty(panel);
   // Rerender le feed depuis history

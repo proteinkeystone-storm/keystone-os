@@ -49,15 +49,24 @@ INTERDICTIONS
 `;
 }
 
+// Sprint 7 — Descriptions enrichies pour incarner chaque mode dans la réponse.
+// Chaque entrée donne au modèle : (1) le focus du mode, (2) le tempo attendu,
+// (3) une interdiction spécifique pour éviter la dérive vers exploration.
 function _modeDescription(mode) {
   const modes = {
-    exploration: `Mode Exploration : la discussion ouvre largement le champ. Identifier 2-3 angles stratégiques non-évidents avant tout. Ne PAS se précipiter sur une conclusion.`,
-    launch:      `Mode Lancement : la discussion priorise vitesse d'exécution + impact mesurable au lancement.`,
-    branding:    `Mode Branding : la discussion creuse identité, ton, perception, cohérence long-terme.`,
-    growth:      `Mode Croissance : la discussion priorise acquisition, rétention, KPI mesurables.`,
-    crisis:      `Mode Crise : la discussion est dense, rapide, orientée décisions immédiates et limitation des dégâts.`,
-    positioning: `Mode Positionnement : la discussion creuse différenciation marché + audience cible.`,
-    repositioning: `Mode Repositionnement : la discussion challenge le statu quo et explore les pivots possibles.`,
+    exploration: `Mode Exploration. Champ stratégique LARGE. Tu identifies des angles non-évidents avant de conclure. Tempo POSÉ — tu peux nuancer, dérouler, douter. INTERDIT : trancher prématurément en faveur d'une seule direction, fermer trop tôt le débat.`,
+
+    launch: `Mode Lancement. Vitesse d'exécution + impact mesurable. Tu privilégies le concret immédiat (canal, hook, KPI, levier actionnable sous 30 jours). Tempo SERRÉ, phrases courtes, propositions précises. INTERDIT : élucubrations long-terme, hypothèses non-actionnables, "ça pourrait éventuellement".`,
+
+    branding: `Mode Branding. Identité, ton, perception long-terme. Tu raisonnes sur 3-5 ans, tu cherches la cohérence narrative et la voix juste. Tempo POSÉ, attentif aux nuances. INTERDIT : tactiques court-termistes, leviers d'acquisition pure, growth hacks qui abîment la perception durable.`,
+
+    growth: `Mode Croissance. Acquisition, rétention, KPI mesurables. Tu raisonnes en LEVIER × ORDRE DE GRANDEUR × TEST. Tu chiffres dès que possible (même approximativement). INTERDIT : idées non-mesurables, "ça fait du bruit", "ça crée du buzz" sans métrique attachée.`,
+
+    crisis: `Mode Crise. Décisions immédiates, limitation des dégâts. Tu es DENSE, tu coupes les développements, tu donnes des actions concrètes sous 24-72h. Tempo PRESSANT. INTERDIT : tour d'horizon, "il faudrait peut-être", élaborations stratégiques longues — chaque heure compte.`,
+
+    positioning: `Mode Positionnement. Différenciation marché + audience cible précise. Tu raisonnes PAR CONTRASTE (vs concurrents, vs catégories voisines) et PAR AUDIENCE (jobs-to-be-done, segments). INTERDIT : généralités du type "il faut se démarquer", positionnement flou sans angle distinctif explicite.`,
+
+    repositioning: `Mode Repositionnement. Challenge du statu quo, exploration de pivots. Tu interroges ce qui NE MARCHE PLUS, tu cherches le PROCHAIN positionnement (pas une réparation à la marge). Tu acceptes l'inconfort du pivot. INTERDIT : conservatisme déguisé ("ajustons un peu"), nostalgie du passé, demi-mesures.`,
   };
   return modes[mode] || modes.exploration;
 }
