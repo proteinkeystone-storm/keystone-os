@@ -89,5 +89,12 @@ export function getAllowedOrigin(env, request) {
   const allowed = config.split(',').map(s => s.trim()).filter(Boolean);
   const reqOrigin = request?.headers?.get('Origin') || '';
   if (reqOrigin && allowed.includes(reqOrigin)) return reqOrigin;
+  // Auto-whitelist des previews Vercel du projet keystone-os (team
+  // storms-projects-01b49fbc). Évite de devoir ajouter manuellement
+  // chaque URL de preview lors des sprints sur branche dédiée.
+  // Pattern : https://keystone-<hash>-storms-projects-01b49fbc.vercel.app
+  if (reqOrigin && /^https:\/\/keystone(-[\w-]+)?-storms-projects-01b49fbc\.vercel\.app$/.test(reqOrigin)) {
+    return reqOrigin;
+  }
   return allowed[0] || '*';
 }
