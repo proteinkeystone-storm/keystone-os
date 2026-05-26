@@ -171,6 +171,123 @@ CONTRAINTES STRICTES
 - Sortie JSON STRICT : {"insights": ["...", "...", "..."]}
 - AUCUN texte avant ou après le JSON.`;
 
+// ─────────────────────────────────────────────────────────────────
+// Sprint 5 — Synthesizer : Plan d'actions structuré
+// ─────────────────────────────────────────────────────────────────
+// Sur demande explicite du client (POST /api/brainstorming/synthesize),
+// on génère un JSON complet avec positionnement, opportunités, risques,
+// plan d'actions daté. Exporté en PDF côté frontend.
+const SYNTHESIZER_PROMPT = `Tu es Synthesizer, l'agent de conclusion stratégique du brainstorming AI Keystone.
+
+Ta mission UNIQUE est de transformer le débat ci-dessous en un PLAN D'ACTIONS structuré et exécutable.
+
+CONTRAINTES DE FORMAT STRICTES
+- Sortie JSON STRICT, AUCUN texte avant ou après.
+- Schema EXACT :
+  {
+    "positioning": "<1 phrase de 15-25 mots résumant le positionnement émergent>",
+    "opportunities": ["<10-15 mots>", "<10-15 mots>", "<10-15 mots>"],
+    "risks": ["<10-15 mots>", "<10-15 mots>"],
+    "next_actions": [
+      { "action": "<8-12 mots, verbe d'action>", "deadline": "YYYY-MM-DD" },
+      { "action": "<...>", "deadline": "YYYY-MM-DD" },
+      { "action": "<...>", "deadline": "YYYY-MM-DD" }
+    ]
+  }
+- 3 opportunities, 2 risks, 3 next_actions.
+- Deadlines RÉALISTES : entre J+7 et J+90 par rapport à aujourd'hui.
+- Pas de jargon corporate, pas de "synergie", pas de "leverage".
+- Ton EXÉCUTIF (note pour direction marketing, pas pour étudiant).`;
+
+async function _generateSynthesis(env, brief, history, todayIso) {
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return { error: 'Workers AI non disponible' };
+  }
+  const dialogue = history
+    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
+    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .join('\n\n');
+  if (!dialogue || dialogue.length < 50) {
+    return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
+  }
+
+  try {
+    const res = await env.AI.run(MODEL_ID, {
+      messages: [
+        { role: 'system', content: SYNTHESIZER_PROMPT },
+        { role: 'user',   content: `DATE DU JOUR : ${todayIso}\n\nBRIEF INITIAL : ${brief}\n\nDIALOGUE INTÉGRAL DU BRAINSTORMING :\n${dialogue}\n\nProduis le JSON Plan d'actions strict.` },
+      ],
+      max_tokens: 900,
+      stream:     false,
+    });
+    const raw = (res?.response || '').trim();
+    // Parse JSON strict avec fallback regex
+    let parsed;
+    try {
+      const m = raw.match(/\{[\s\S]*"positioning"[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+    } catch (e) { /* fallback below */ }
+    if (!parsed) {
+      return { error: 'Synthèse non parsable. Veuillez relancer.', raw: raw.slice(0, 500) };
+    }
+    // Validation soft + cleanup
+    const result = {
+      positioning:   typeof parsed.positioning === 'string' ? parsed.positioning : '',
+      opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.slice(0, 4).map(String) : [],
+      risks:         Array.isArray(parsed.risks)         ? parsed.risks.slice(0, 3).map(String)         : [],
+      next_actions:  Array.isArray(parsed.next_actions)
+        ? parsed.next_actions.slice(0, 4).map(a => ({
+            action:   typeof a?.action === 'string' ? a.action : '',
+            deadline: typeof a?.deadline === 'string' ? a.deadline : '',
+          })).filter(a => a.action)
+        : [],
+    };
+    return result;
+  } catch (e) {
+    return { error: `Erreur génération : ${e?.message || e}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/brainstorming/synthesize
+// ─────────────────────────────────────────────────────────────────
+export async function handleBrainstormingSynthesize(request, env) {
+  const origin = getAllowedOrigin(env, request);
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin':  origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('Authentification requise', 401, origin);
+
+  const body = await parseBody(request);
+  if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
+
+  const { brief, history = [] } = body;
+  if (typeof brief !== 'string' || brief.trim().length < MIN_BRIEF) {
+    return err(`brief requis (${MIN_BRIEF} caractères min)`, 400, origin);
+  }
+  if (!Array.isArray(history) || history.length < 2) {
+    return err('history requis (au moins 2 tours)', 400, origin);
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const synthesis = await _generateSynthesis(env, brief, history, todayIso);
+
+  if (synthesis.error) {
+    return json({ error: synthesis.error, raw: synthesis.raw }, 422, origin);
+  }
+  return json({ synthesis, generated_at: new Date().toISOString() }, 200, origin);
+}
+
 async function _extractInsights(env, brief, history) {
   if (!env.AI || typeof env.AI.run !== 'function') return [];
   // Récupère le dialogue récent

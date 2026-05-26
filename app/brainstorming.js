@@ -207,6 +207,9 @@ export function openBrainstorming() {
     mode: DEFAULT_MODE,
     history: [],     // [{agent_id, content, timestamp}]
     started: false,
+    startedAt: Date.now(),
+    synthesis: null,
+    synthesizedAt: null,
   };
 
   _wireShell(panel);
@@ -373,6 +376,12 @@ function _iconSvg(name) {
 function _wireShell(panel) {
   // Close button (rail bottom)
   panel.querySelector('#wr-close-btn')?.addEventListener('click', closeBrainstorming);
+
+  // Sprint 5 — Click sur l'icône Sessions du rail ouvre la bibliothèque
+  const railBtns = panel.querySelectorAll('.wr-rail-btn');
+  if (railBtns[0]) {
+    railBtns[0].addEventListener('click', () => _openLibraryModal(panel));
+  }
 
   // Esc key
   const onKey = (e) => {
@@ -623,6 +632,8 @@ async function _callOrchestration(panel) {
               content  : finalText,
               timestamp: Date.now(),
             });
+            // Sprint 5 — Autosave dans la bibliothèque locale à chaque tour
+            _saveSessionToLibrary(_currentSession);
             activeBubbles.delete(aid);
           }
           break;
@@ -928,7 +939,6 @@ function _updatePacing(panel, done, total) {
     dotsEl.className = 'wr-pacing-dots';
     card.appendChild(dotsEl);
   }
-  // Construire les dots
   const ratio = Math.max(0, Math.min(1, done / Math.max(1, total)));
   const filledCount = Math.round(ratio * total);
   dotsEl.innerHTML = '';
@@ -936,5 +946,377 @@ function _updatePacing(panel, done, total) {
     const d = document.createElement('span');
     d.className = 'wr-pacing-dot' + (i < filledCount ? ' filled' : '');
     dotsEl.appendChild(d);
+  }
+
+  // Sprint 5 — Bouton "Lancer la synthèse" actif dès turns_done >= 2
+  let btn = card.querySelector('.wr-synthesize-btn');
+  if (done >= 2) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'wr-synthesize-btn';
+      btn.innerHTML = `${_iconSvg('sparkles')}<span>Lancer la synthèse</span>`;
+      btn.addEventListener('click', () => _callSynthesize(panel));
+      card.appendChild(btn);
+    }
+  } else if (btn) {
+    btn.remove();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// SPRINT 5 — Synthesizer : Plan d'actions + Drawer + Export PDF
+// ════════════════════════════════════════════════════════════════
+async function _callSynthesize(panel) {
+  if (!_currentSession || _currentSession.history.length < 2) return;
+  const btn = panel.querySelector('.wr-synthesize-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.querySelector('span').textContent = 'Synthèse en cours…';
+  }
+
+  try {
+    const res = await fetch(`${_apiBase()}/api/brainstorming/synthesize`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({
+        brief:   _currentSession.brief,
+        history: _currentSession.history,
+      }),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { const j = await res.json(); detail = j.error || ''; } catch (e) {}
+      throw new Error(`HTTP ${res.status}${detail ? ' — ' + detail : ''}`);
+    }
+    const payload = await res.json();
+    if (!payload.synthesis) throw new Error('Synthèse manquante dans la réponse');
+
+    _currentSession.synthesis = payload.synthesis;
+    _currentSession.synthesizedAt = payload.generated_at;
+    _saveSessionToLibrary(_currentSession);
+
+    _openSynthesisDrawer(panel, payload.synthesis);
+  } catch (e) {
+    _appendErrorMessage(panel, `Synthèse impossible : ${e?.message || e}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btn.querySelector('span').textContent = 'Relancer la synthèse';
+    }
+  }
+}
+
+function _openSynthesisDrawer(panel, synthesis) {
+  let drawer = panel.querySelector('#wr-synthesis-drawer');
+  if (!drawer) {
+    drawer = document.createElement('div');
+    drawer.id = 'wr-synthesis-drawer';
+    drawer.className = 'wr-synthesis-drawer';
+    panel.appendChild(drawer);
+  }
+  const brief = _currentSession?.brief || '';
+  const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const oppList = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
+  const riskList = (synthesis.risks || []).map(r => `<li>${_esc(r)}</li>`).join('');
+  const actionList = (synthesis.next_actions || []).map(a => `
+    <li class="wr-action-item">
+      <div class="wr-action-text">${_esc(a.action)}</div>
+      <div class="wr-action-deadline">${_formatDeadline(a.deadline)}</div>
+    </li>
+  `).join('');
+
+  drawer.innerHTML = `
+    <div class="wr-synthesis-inner">
+      <header class="wr-synthesis-head">
+        <div class="wr-synthesis-meta">
+          <div class="wr-synthesis-eyebrow">Synthèse stratégique · ${today}</div>
+          <h2 class="wr-synthesis-brief">${_esc(brief)}</h2>
+        </div>
+        <div class="wr-synthesis-actions">
+          <button type="button" class="wr-synthesis-btn-secondary" data-act="reprendre">Reprendre la discussion</button>
+          <button type="button" class="wr-synthesis-btn-primary"   data-act="export-pdf">${_iconSvg('printer')} Export PDF</button>
+          <button type="button" class="wr-synthesis-btn-close"     data-act="close" aria-label="Fermer">${_iconSvg('x')}</button>
+        </div>
+      </header>
+
+      <section class="wr-synthesis-section wr-synthesis-positioning">
+        <div class="wr-synthesis-label">Positionnement émergent</div>
+        <p class="wr-synthesis-positioning-text">${_esc(synthesis.positioning || '—')}</p>
+      </section>
+
+      <div class="wr-synthesis-grid">
+        <section class="wr-synthesis-section">
+          <div class="wr-synthesis-label wr-label-opp">Opportunités</div>
+          <ul class="wr-synthesis-list">${oppList || '<li>—</li>'}</ul>
+        </section>
+        <section class="wr-synthesis-section">
+          <div class="wr-synthesis-label wr-label-risk">Risques</div>
+          <ul class="wr-synthesis-list">${riskList || '<li>—</li>'}</ul>
+        </section>
+      </div>
+
+      <section class="wr-synthesis-section">
+        <div class="wr-synthesis-label wr-label-actions">Plan d'actions</div>
+        <ol class="wr-synthesis-actions-list">${actionList || '<li>—</li>'}</ol>
+      </section>
+
+      <footer class="wr-synthesis-foot">
+        <span>Généré par Brainstorming · Keystone OS</span>
+      </footer>
+    </div>
+  `;
+  requestAnimationFrame(() => drawer.classList.add('open'));
+
+  // Wire boutons
+  drawer.querySelector('[data-act="close"]').addEventListener('click', () => _closeSynthesisDrawer(panel));
+  drawer.querySelector('[data-act="reprendre"]').addEventListener('click', () => _closeSynthesisDrawer(panel));
+  drawer.querySelector('[data-act="export-pdf"]').addEventListener('click', () => _exportSynthesisPDF(synthesis, brief));
+  // Esc
+  const onKey = (e) => { if (e.key === 'Escape') { _closeSynthesisDrawer(panel); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+}
+
+function _closeSynthesisDrawer(panel) {
+  const drawer = panel.querySelector('#wr-synthesis-drawer');
+  if (!drawer) return;
+  drawer.classList.remove('open');
+  setTimeout(() => drawer.remove(), 300);
+}
+
+function _formatDeadline(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  // ISO YYYY-MM-DD → "15 juin"
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return `${parseInt(m[3],10)} ${months[parseInt(m[2],10)-1]}`;
+}
+
+function _esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 5 — Export PDF de la synthèse
+// ─────────────────────────────────────────────────────────────────
+// Ouvre une fenêtre print-friendly avec un layout A4 premium et
+// déclenche window.print(). L'utilisateur peut sauvegarder en PDF
+// via le dialog navigateur natif (Cmd+P → Enregistrer en PDF).
+function _exportSynthesisPDF(synthesis, brief) {
+  const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const opp  = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
+  const risk = (synthesis.risks || []).map(r => `<li>${_esc(r)}</li>`).join('');
+  const acts = (synthesis.next_actions || []).map(a => `
+    <li class="action-item">
+      <div class="action-text">${_esc(a.action)}</div>
+      <div class="action-deadline">${_esc(_formatDeadline(a.deadline))}</div>
+    </li>
+  `).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Synthèse Brainstorming — ${_esc(brief.slice(0, 60))}</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 22mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    color: #0f172a; line-height: 1.55; margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; border-bottom: 2px solid #0f172a; margin-bottom: 24px; }
+  .brand { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #475569; }
+  .date  { font-size: 11px; color: #64748b; }
+  h1 { font-size: 28px; font-weight: 900; letter-spacing: -0.025em; margin: 4px 0 6px; line-height: 1.1; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #6366f1; font-weight: 600; margin-bottom: 18px; }
+  .positioning {
+    background: #f1f5f9;
+    border-left: 4px solid #6366f1;
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin-bottom: 28px;
+  }
+  .positioning .label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #6366f1; font-weight: 700; margin-bottom: 8px; }
+  .positioning .text  { font-size: 16px; font-weight: 600; color: #0f172a; line-height: 1.45; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 28px; }
+  .section h2 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #0f172a; margin: 0 0 12px; font-weight: 800; }
+  .section.opp h2  { color: #16a34a; }
+  .section.risk h2 { color: #c53030; }
+  .section.acts h2 { color: #0f172a; }
+  ul, ol { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 8px; font-size: 13.5px; }
+  .action-item { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .action-text { flex: 1; font-weight: 500; }
+  .action-deadline { font-size: 11px; color: #475569; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; background: #e2e8f0; border-radius: 999px; }
+  .foot { position: fixed; bottom: 12mm; left: 18mm; right: 18mm; font-size: 9px; color: #94a3b8; text-align: center; letter-spacing: 0.05em; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <div class="brand">Keystone OS · Brainstorming</div>
+      <h1>${_esc(brief)}</h1>
+    </div>
+    <div class="date">${today}</div>
+  </div>
+
+  <div class="eyebrow">Synthèse stratégique</div>
+
+  <div class="positioning">
+    <div class="label">Positionnement émergent</div>
+    <div class="text">${_esc(synthesis.positioning || '—')}</div>
+  </div>
+
+  <div class="grid">
+    <div class="section opp">
+      <h2>Opportunités</h2>
+      <ul>${opp || '<li>—</li>'}</ul>
+    </div>
+    <div class="section risk">
+      <h2>Risques</h2>
+      <ul>${risk || '<li>—</li>'}</ul>
+    </div>
+  </div>
+
+  <div class="section acts">
+    <h2>Plan d'actions</h2>
+    <ol>${acts || '<li>—</li>'}</ol>
+  </div>
+
+  <div class="foot">Généré par Keystone OS — A-COM-003 Brainstorming · protein-keystone.com</div>
+
+  <script>
+    window.onload = () => setTimeout(() => window.print(), 250);
+  </script>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert('Le pop-up a été bloqué. Autorise les pop-ups pour exporter en PDF.');
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sprint 5 — Bibliothèque locale des sessions
+// ─────────────────────────────────────────────────────────────────
+const LIBRARY_KEY = 'ks_brainstorming_sessions';
+const LIBRARY_MAX = 20;
+
+function _loadLibrary() {
+  try {
+    const raw = localStorage.getItem(LIBRARY_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+function _saveSessionToLibrary(session) {
+  if (!session || !session.id || !session.brief) return;
+  const all = _loadLibrary();
+  // Si la session existe déjà (par id), on la remplace ; sinon on l'ajoute
+  const existing = all.findIndex(s => s.id === session.id);
+  const entry = {
+    id:             session.id,
+    brief:          session.brief,
+    mode:           session.mode,
+    started_at:     session.startedAt || Date.now(),
+    updated_at:     Date.now(),
+    history:        session.history || [],
+    synthesis:      session.synthesis || null,
+    synthesizedAt:  session.synthesizedAt || null,
+  };
+  if (existing >= 0) all[existing] = entry;
+  else all.unshift(entry);
+  // Trim LRU
+  const trimmed = all.slice(0, LIBRARY_MAX);
+  try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(trimmed)); }
+  catch (e) { /* quota — ignore */ }
+}
+
+function _openLibraryModal(panel) {
+  const all = _loadLibrary();
+  let modal = panel.querySelector('#wr-library-modal');
+  if (modal) { modal.remove(); return; }
+  modal = document.createElement('div');
+  modal.id = 'wr-library-modal';
+  modal.className = 'wr-library-modal';
+  const items = all.map(s => {
+    const date = new Date(s.updated_at || s.started_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const hasSynth = s.synthesis ? '<span class="wr-library-tag">synthèse</span>' : '';
+    const brief = _esc(s.brief).slice(0, 100) + (s.brief.length > 100 ? '…' : '');
+    return `
+      <li class="wr-library-item" data-session-id="${_esc(s.id)}">
+        <div class="wr-library-item-head">
+          <span class="wr-library-date">${date}</span>
+          ${hasSynth}
+        </div>
+        <div class="wr-library-brief">${brief}</div>
+      </li>`;
+  }).join('');
+  modal.innerHTML = `
+    <div class="wr-library-inner">
+      <div class="wr-library-head">
+        <div class="wr-library-title">Bibliothèque de sessions</div>
+        <button type="button" class="wr-library-close" aria-label="Fermer">${_iconSvg('x')}</button>
+      </div>
+      ${all.length === 0
+        ? '<div class="wr-library-empty">Aucune session enregistrée pour le moment. Lance ton premier brainstorming et la synthèse sera archivée ici.</div>'
+        : `<ul class="wr-library-list">${items}</ul>`
+      }
+    </div>
+  `;
+  panel.appendChild(modal);
+  modal.querySelector('.wr-library-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('.wr-library-item').forEach(li => {
+    li.addEventListener('click', () => {
+      const sid = li.dataset.sessionId;
+      const session = all.find(s => s.id === sid);
+      if (session) _restoreSession(panel, session);
+      modal.remove();
+    });
+  });
+}
+
+function _restoreSession(panel, session) {
+  // Recharger la session courante
+  _currentSession = {
+    id:             session.id,
+    brief:          session.brief,
+    mode:           session.mode || DEFAULT_MODE,
+    history:        session.history || [],
+    started:        true,
+    startedAt:      session.started_at,
+    synthesis:      session.synthesis,
+    synthesizedAt:  session.synthesizedAt,
+  };
+  _updateHeader(panel, session.brief);
+  _hideEmpty(panel);
+  // Rerender le feed depuis history
+  const feed = panel.querySelector('#wr-feed');
+  if (feed) feed.innerHTML = '';
+  for (const turn of session.history) {
+    if (turn.agent_id === 'user') {
+      _appendUserMessage(panel, turn.content);
+    } else {
+      const { textEl } = _appendMessage(panel, turn.agent_id, turn.content, { streaming: false });
+      // Pas de streaming, le texte est déjà là
+    }
+  }
+  // Si la session a une synthèse, ré-affiche le drawer
+  if (session.synthesis) {
+    _openSynthesisDrawer(panel, session.synthesis);
   }
 }
