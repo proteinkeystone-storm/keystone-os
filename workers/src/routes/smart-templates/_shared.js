@@ -198,13 +198,12 @@ export function renderWinPngScript(nomMarque, logoUrl, accent) {
     }
     if (line && y <= 410) ctx.fillText(line, W / 2, y);
 
-    // 8. Footer : date + mention vérification
+    // 8. Footer : date d'émission uniquement (la mention vérification a
+    //    été retirée car illisible et redondante — le rescan du QR
+    //    original reste la preuve définitive).
     ctx.fillStyle = '#64748b';
-    ctx.font = '12px -apple-system, sans-serif';
-    ctx.fillText('Émis le ' + fmtDate(), W / 2, H - 70);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 11px -apple-system, sans-serif';
-    ctx.fillText('Vérification : ' + location.origin + '/verify-win.html?code=' + winCode, W / 2, H - 50);
+    ctx.font = '13px -apple-system, sans-serif';
+    ctx.fillText('Émis le ' + fmtDate(), W / 2, H - 55);
 
     // 9. Téléchargement
     canvas.toBlob((blob) => {

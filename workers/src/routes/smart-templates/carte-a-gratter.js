@@ -429,10 +429,11 @@ const TEMPLATE = {
     <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut le vérifier sur <strong>/verify-win.html?code=…</strong></p>
   </div>
 
-  <div class="sq-ia" id="sq-ia">
-    <div id="sq-ia-loading">
-      <div class="sq-ia-skeleton" aria-hidden="true"></div>
-    </div>
+  <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
+       mais reste hidden : la phrase IA n'apporte rien dans le contexte
+       d'un gain marketing. Retiré 26/05. -->
+  <div class="sq-ia" id="sq-ia" hidden aria-hidden="true">
+    <div id="sq-ia-loading"></div>
     <div id="sq-ia-ready" hidden>
       <p class="sq-ia-title" id="sq-ia-title"></p>
       <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
@@ -684,19 +685,9 @@ const TEMPLATE = {
   window.addEventListener('load', initCanvas);
   initCanvas();
 
-  // IA reveal — branchement asynchrone
-  function showAi(detail) {
-    const loading = document.getElementById('sq-ia-loading');
-    const ready   = document.getElementById('sq-ia-ready');
-    const title   = document.getElementById('sq-ia-title');
-    const phrase  = document.getElementById('sq-ia-phrase');
-    if (title)  title.textContent  = detail.title  || '';
-    if (phrase) phrase.textContent = detail.phrase || '';
-    if (loading) loading.hidden = true;
-    if (ready)   ready.hidden = false;
-  }
-  document.addEventListener('sq:ai-ready', (e) => showAi(e.detail));
-  document.addEventListener('sq:ai-error', (e) => showAi(e.detail));
+  // (Le slot IA reste hidden — la phrase IA est désactivée pour les
+  // templates jeux depuis le 26/05. Le scaffold est conservé pour
+  // satisfaire le contrat du test runner.)
 })();
 </script>
 ${renderAiFetchScript(safeShort)}

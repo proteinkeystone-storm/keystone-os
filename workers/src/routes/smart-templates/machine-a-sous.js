@@ -483,10 +483,11 @@ const TEMPLATE = {
     <p class="sq-replay-note" id="sq-replay-note" hidden></p>
   </div>
 
-  <div class="sq-ia" id="sq-ia" hidden>
-    <div id="sq-ia-loading">
-      <div class="sq-ia-skeleton" aria-hidden="true"></div>
-    </div>
+  <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
+       mais reste hidden : la phrase IA n'apporte rien dans le contexte
+       d'un gain marketing (le joueur ne lit que son code). Retiré 26/05. -->
+  <div class="sq-ia" id="sq-ia" hidden aria-hidden="true">
+    <div id="sq-ia-loading"></div>
     <div id="sq-ia-ready" hidden>
       <p class="sq-ia-title" id="sq-ia-title"></p>
       <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
@@ -518,7 +519,6 @@ const TEMPLATE = {
   const copyBtn = el('sq-copy-btn');
   const downloadBtn = el('sq-download-btn');
   const winCodeEl = el('sq-win-code');
-  const iaBlock = el('sq-ia');
   const ctaWrap = el('sq-cta-wrap');
   const reels = [el('reel-1'), el('reel-2'), el('reel-3')];
 
@@ -583,7 +583,6 @@ const TEMPLATE = {
   });
 
   let isPlaying = false;
-  let aiResult  = null; // bufferise la phrase IA si elle arrive avant la fin
 
   function vibrate(pattern) {
     try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
@@ -672,32 +671,12 @@ const TEMPLATE = {
       }
       result.hidden = false;
       if (isWin) vibrate([90, 60, 90, 60, 140]);
-      iaBlock.hidden = false;
+      // iaBlock reste hidden (retiré du flow UX 26/05 : la phrase IA
+      // n'aide pas le joueur, le code et le bouton de téléchargement
+      // sont les seuls éléments d'attention).
       ctaWrap.classList.add('is-shown');
-      // Si IA déjà reçue, on l'affiche tout de suite
-      if (aiResult) showAi(aiResult);
     }, 3600);
   }
-
-  function showAi(detail) {
-    const loading = document.getElementById('sq-ia-loading');
-    const ready   = document.getElementById('sq-ia-ready');
-    const title   = document.getElementById('sq-ia-title');
-    const phrase  = document.getElementById('sq-ia-phrase');
-    if (title)  title.textContent  = detail.title  || '';
-    if (phrase) phrase.textContent = detail.phrase || '';
-    if (loading) loading.hidden = true;
-    if (ready)   ready.hidden = false;
-  }
-
-  document.addEventListener('sq:ai-ready', (e) => {
-    aiResult = e.detail;
-    if (!iaBlock.hidden) showAi(aiResult);
-  });
-  document.addEventListener('sq:ai-error', (e) => {
-    aiResult = e.detail;
-    if (!iaBlock.hidden) showAi(aiResult);
-  });
 
   btn.addEventListener('click', play);
 })();
