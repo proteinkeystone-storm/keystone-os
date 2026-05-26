@@ -188,13 +188,22 @@
       const r = await fetch(API_BASE + '/api/smartqr/verify-win?code=' + encodeURIComponent(code));
       const data = await r.json();
       if (data.valid) {
+        // V4.4 (2026-05-26) : data.source distingue les codes jeux des codes
+        // récompense de fidélité (pour adapter le libellé "Gagné" / "Débloqué").
+        const isLoyalty = data.source === 'loyalty';
+        const dateLabel = isLoyalty ? 'Débloqué le' : 'Gagné le';
+        const offreLabel = isLoyalty ? 'Récompense' : 'Offre';
+        const sourceTag  = isLoyalty
+          ? '<dt>Type</dt><dd>Carte de fidélité</dd>'
+          : '<dt>Type</dt><dd>Jeu (machine à sous / carte à gratter)</dd>';
         showResult(
           '<span class="result-icon">✓</span>' +
           '<p class="result-status">Code authentique</p>' +
           '<dl class="result-meta">' +
             '<dt>QR</dt><dd>' + (data.qr_name || data.short_id) + '</dd>' +
-            '<dt>Gagné le</dt><dd>' + fmtDate(data.played_at) + '</dd>' +
-            (data.message_gain ? '<dt>Offre</dt><dd>' + data.message_gain + '</dd>' : '') +
+            sourceTag +
+            '<dt>' + dateLabel + '</dt><dd>' + fmtDate(data.played_at) + '</dd>' +
+            (data.message_gain ? '<dt>' + offreLabel + '</dt><dd>' + data.message_gain + '</dd>' : '') +
           '</dl>',
           'ok'
         );

@@ -1329,6 +1329,7 @@ export async function handleSmartQrGamePlay(request, env) {
 export async function handleSmartQrVerifyWin(request, env) {
   const origin = '*';
   await _ensureSmartGameTable(env);
+  await _ensureSmartLoyaltyTable(env);
 
   const url  = new URL(request.url);
   const code = (url.searchParams.get('code') || '').trim().toUpperCase();
@@ -1337,15 +1338,34 @@ export async function handleSmartQrVerifyWin(request, env) {
     return json({ valid: false, reason: 'format_invalide' }, 200, origin);
   }
 
+  // V4.4 (2026-05-26) : un même code peut provenir soit d'un gain jeu
+  // (machine à sous, carte à gratter), soit d'une récompense fidélité
+  // (carte de fidélité). On cherche dans les 2 tables et on garde le
+  // résultat. `source` distingue le type pour que la page commerçant
+  // puisse afficher le bon libellé.
   let row = null;
+  let source = '';
   try {
     row = await env.DB
-      .prepare(`SELECT short_id, played_at FROM smartqr_game_plays
+      .prepare(`SELECT short_id, played_at AS issued_at FROM smartqr_game_plays
                 WHERE code_won = ? AND result = 'win' LIMIT 1`)
       .bind(code)
       .first();
+    if (row) source = 'game';
   } catch (e) {
-    return err('Lookup échoué : ' + e.message, 500, origin);
+    return err('Lookup jeu échoué : ' + e.message, 500, origin);
+  }
+  if (!row) {
+    try {
+      row = await env.DB
+        .prepare(`SELECT short_id, last_stamp_at AS issued_at FROM smartqr_loyalty_stamps
+                  WHERE reward_code = ? LIMIT 1`)
+        .bind(code)
+        .first();
+      if (row) source = 'loyalty';
+    } catch (e) {
+      return err('Lookup fidélité échoué : ' + e.message, 500, origin);
+    }
   }
 
   if (!row) {
@@ -1363,15 +1383,23 @@ export async function handleSmartQrVerifyWin(request, env) {
       .first();
     if (entityRow?.data) {
       const qr = JSON.parse(entityRow.data);
-      qrName      = (qr.name || '').toString().slice(0, 80);
-      messageGain = (qr?.template_data?.message_gain || '').toString().slice(0, 240);
+      qrName = (qr.name || '').toString().slice(0, 80);
+      // Le message à montrer en caisse dépend de la source :
+      //   - jeu      → template_data.message_gain ("Glace offerte avec ce QR")
+      //   - fidélité → template_data.nom_recompense ("Café offert")
+      if (source === 'loyalty') {
+        messageGain = (qr?.template_data?.nom_recompense || '').toString().slice(0, 240);
+      } else {
+        messageGain = (qr?.template_data?.message_gain || '').toString().slice(0, 240);
+      }
     }
   } catch (e) { /* contexte best-effort */ }
 
   return json({
     valid:        true,
+    source:       source,           // 'game' ou 'loyalty' (V4.4)
     short_id:     row.short_id,
-    played_at:    row.played_at,
+    played_at:    row.issued_at,    // legacy name conservé pour la page commerçant
     qr_name:      qrName,
     message_gain: messageGain,
   }, 200, origin);
