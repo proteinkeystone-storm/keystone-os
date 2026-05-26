@@ -29,11 +29,13 @@ import {
 
 const APP_ID = 'A-COM-003';
 
-// ── Constantes Sprint 1 ──────────────────────────────────────────
-const SPRINT1_ACTIVE_AGENT = 'strategic';        // seul agent qui répond
-const DEFAULT_MODE         = 'exploration';      // hardcodé pour Sprint 1
+// ── Constantes Sprint 2 ──────────────────────────────────────────
+const DEFAULT_MODE         = 'exploration';      // hardcodé Sprint 1, sélecteur Sprint 7
 const BOOT_DELAY_PER_AGENT = 280;                // ms entre chaque allumage
 const SESSION_KEY          = 'ks_brainstorming_session_draft';
+// Sprint 2 : orchestration auto (3 agents enchaînés max), Sprint 3 ajoute
+// le retour de la pondération via intervention user.
+const ORCHESTRATION_MAX_TURNS = 3;
 
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
@@ -278,7 +280,10 @@ function _bootAgents(panel) {
     setTimeout(() => {
       cell.classList.add('lit');
       // Strategic Lead = actif dès Sprint 1, les autres restent "présents"
-      if (cell.dataset.agentId === SPRINT1_ACTIVE_AGENT) {
+      // Strategic Lead reste "active" en permanence (coordinateur du débat)
+      // — les autres agents deviennent "speaking" temporairement quand ils
+      // prennent la parole, puis retournent à l'état "lit" entre 2 tours.
+      if (cell.dataset.agentId === 'strategic') {
         cell.classList.add('active');
       }
     }, 200 + i * BOOT_DELAY_PER_AGENT);
@@ -316,7 +321,7 @@ async function _submit(panel) {
   send.disabled = true;
 
   try {
-    await _callAgent(panel, SPRINT1_ACTIVE_AGENT);
+    await _callOrchestration(panel);
   } catch (e) {
     _appendErrorMessage(panel, e?.message || 'Erreur réseau');
   } finally {
@@ -350,24 +355,24 @@ function _hideEmpty(panel) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// AGENT CALL — fetch SSE stream depuis le Worker
+// ORCHESTRATION — fetch SSE multi-agent depuis le Worker
 // ════════════════════════════════════════════════════════════════
-async function _callAgent(panel, agentId) {
-  const agent = getAgent(agentId);
-  if (!agent) throw new Error(`Agent inconnu : ${agentId}`);
-
-  // UI : marquer l'agent comme "speaking"
-  _setAgentSpeaking(panel, agentId, true);
-
-  // Préparer la bulle qui va recevoir les chunks
-  const { textEl, msgEl } = _appendMessage(panel, agentId, '', { streaming: true });
-
+// Format SSE attendu (cf. workers/src/routes/brainstorming.js) :
+//   data: {"type":"agent_start","agent_id":"strategic"}
+//   data: {"type":"chunk","agent_id":"strategic","text":"…"}
+//   data: {"type":"agent_end","agent_id":"strategic","full_text":"…"}
+//   data: {"type":"agent_start","agent_id":"creative"}
+//   …
+//   data: {"type":"complete","reason":"auto_pause","turns":3}
+// ════════════════════════════════════════════════════════════════
+async function _callOrchestration(panel) {
   const url = `${_apiBase()}/api/brainstorming/agent-respond`;
   const payload = {
-    agent_id      : agentId,
+    agent_id      : 'auto',                     // → orchestrateur Sprint 2
     brief         : _currentSession.brief,
     cognitive_mode: _currentSession.mode,
     history       : _currentSession.history,
+    max_turns     : ORCHESTRATION_MAX_TURNS,
   };
 
   let res;
@@ -378,58 +383,106 @@ async function _callAgent(panel, agentId) {
       body:    JSON.stringify(payload),
     });
   } catch (e) {
-    _setAgentSpeaking(panel, agentId, false);
-    textEl.classList.remove('streaming');
     throw new Error('Connexion impossible au Worker');
   }
 
   if (!res.ok) {
-    _setAgentSpeaking(panel, agentId, false);
-    textEl.classList.remove('streaming');
     let detail = '';
     try { const j = await res.json(); detail = j.error || ''; } catch (e) {}
     throw new Error(`HTTP ${res.status}${detail ? ' — ' + detail : ''}`);
   }
 
-  // Stream SSE — chunks lines "data: ..."
+  // Bulles courantes indexées par agent_id (Sprint 2 : 1 bulle par tour
+  // d'agent ; si le même agent reprend la parole 2 fois consécutives —
+  // rare — on crée 2 bulles distinctes via un compteur)
+  const activeBubbles = new Map();  // agent_id → { textEl, fullText }
+
   const reader  = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let   buffer  = '';
-  let   fullText = '';
+  let   complete = false;
 
-  while (true) {
+  while (!complete) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
+
     for (const line of lines) {
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
       if (!data || data === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(data);
-        // Format Worker AI : { response: "..." } OU { text: "..." }
-        // (les deux acceptés selon stream / non-stream)
-        const chunk = parsed.response ?? parsed.text ?? '';
-        if (chunk) {
-          fullText += chunk;
-          textEl.textContent = fullText;
-          _scrollToBottom(panel);
+
+      let evt;
+      try { evt = JSON.parse(data); }
+      catch (e) { continue; }
+
+      switch (evt.type) {
+
+        case 'agent_start': {
+          const aid = evt.agent_id;
+          // Crée la bulle pour cet agent
+          const { textEl } = _appendMessage(panel, aid, '', { streaming: true });
+          activeBubbles.set(aid, { textEl, fullText: '' });
+          _setAgentSpeaking(panel, aid, true);
+          break;
         }
-      } catch (e) { /* line malformée — on ignore */ }
+
+        case 'chunk': {
+          const aid    = evt.agent_id;
+          const text   = evt.text || '';
+          const bubble = activeBubbles.get(aid);
+          if (!bubble || !text) break;
+          bubble.fullText += text;
+          bubble.textEl.textContent = bubble.fullText;
+          _scrollToBottom(panel);
+          break;
+        }
+
+        case 'agent_end': {
+          const aid    = evt.agent_id;
+          const bubble = activeBubbles.get(aid);
+          if (bubble) {
+            bubble.textEl.classList.remove('streaming');
+            // Si full_text fourni par le Worker, on l'utilise (autoritaire)
+            if (typeof evt.full_text === 'string' && evt.full_text.length) {
+              bubble.fullText = evt.full_text;
+              bubble.textEl.textContent = evt.full_text;
+            }
+            // Ajout à l'historique de session
+            _currentSession.history.push({
+              agent_id : aid,
+              content  : bubble.fullText,
+              timestamp: Date.now(),
+            });
+            activeBubbles.delete(aid);
+          }
+          _setAgentSpeaking(panel, aid, false);
+          break;
+        }
+
+        case 'complete': {
+          complete = true;
+          // Optionnel : ajouter une note discrète si auto_pause
+          if (evt.reason === 'auto_pause' || evt.reason === 'max_turns') {
+            _appendOrchestrationNote(panel,
+              'Le tour de table est suspendu. Intervenez pour orienter la suite ou validez par une nouvelle direction.');
+          }
+          break;
+        }
+
+        case 'error': {
+          throw new Error(evt.message || 'Erreur orchestrateur');
+        }
+      }
     }
   }
 
-  // Finalisation
-  textEl.classList.remove('streaming');
-  _setAgentSpeaking(panel, agentId, false);
-
-  // Ajout à l'historique de session
-  _currentSession.history.push({
-    agent_id : agentId,
-    content  : fullText,
-    timestamp: Date.now(),
+  // Nettoyage : s'assurer qu'aucune bulle ne reste en streaming
+  activeBubbles.forEach((bubble, aid) => {
+    bubble.textEl.classList.remove('streaming');
+    _setAgentSpeaking(panel, aid, false);
   });
 }
 
@@ -489,6 +542,16 @@ function _appendUserMessage(panel, text) {
     content  : text,
     timestamp: Date.now(),
   });
+}
+
+function _appendOrchestrationNote(panel, text) {
+  const feed = panel.querySelector('#wr-feed');
+  if (!feed) return;
+  const note = document.createElement('div');
+  note.className = 'wr-living';
+  note.textContent = text;
+  feed.appendChild(note);
+  _scrollToBottom(panel);
 }
 
 function _appendErrorMessage(panel, errText) {
