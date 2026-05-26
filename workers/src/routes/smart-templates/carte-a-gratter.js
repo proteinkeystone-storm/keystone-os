@@ -297,6 +297,24 @@ const TEMPLATE = {
     box-shadow: 0 8px 20px ${accent}55;
   }
   .sq-download-btn:active { transform: scale(.96); }
+  /* V4.3 UX 26/05 — Bouton raccourci vers la page de vérif */
+  .sq-verify-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    appearance: none;
+    background: transparent;
+    color: #86efac;
+    border: 1px solid rgba(74,222,128,.4);
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 11px 18px;
+    border-radius: 10px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .14s ease, border-color .14s ease, transform .14s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sq-verify-btn:hover { background: rgba(74,222,128,.08);
+    border-color: rgba(74,222,128,.65); transform: translateY(-1px); }
+  .sq-verify-btn:active { transform: scale(.97); }
   .sq-rescan-hint, .sq-verify-hint {
     font-size: 11.5px; color: var(--mut);
     line-height: 1.5; margin: 0;
@@ -425,8 +443,9 @@ const TEMPLATE = {
     </div>
     <button type="button" class="sq-download-btn" id="sq-download-btn">🎫 Télécharger mon bon (.png)</button>
     <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
+    <a class="sq-verify-btn" id="sq-verify-btn" href="#" target="_blank" rel="noopener">🔒 Vérifier ce code</a>
     <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
-    <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut le vérifier sur <strong>/verify-win.html?code=…</strong></p>
+    <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut vérifier l'authenticité en 1 tap.</p>
   </div>
 
   <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
@@ -600,6 +619,7 @@ const TEMPLATE = {
   }
   const copyBtn     = document.getElementById('sq-copy-btn');
   const downloadBtn = document.getElementById('sq-download-btn');
+  const verifyBtn   = document.getElementById('sq-verify-btn');
   const winCodeEl   = document.getElementById('sq-win-code');
   copyBtn?.addEventListener('click', () => {
     if (!currentWinCode) return;
@@ -654,6 +674,9 @@ const TEMPLATE = {
       currentWinCode    = (data.code_won || '').toString();
       currentWinMessage = (data.message_gain || data.message || '').toString();
       if (winCodeEl) winCodeEl.textContent = currentWinCode || '—';
+      if (verifyBtn && currentWinCode) {
+        verifyBtn.href = location.origin + '/verify-win.html?code=' + encodeURIComponent(currentWinCode);
+      }
       replayNote.hidden = !data.replay_blocked;
       ctaWrap.classList.add('is-shown');
       if (isWin) vibrate([90, 60, 90, 60, 140]);

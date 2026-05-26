@@ -399,6 +399,25 @@ const TEMPLATE = {
     box-shadow: 0 8px 20px ${accent}55;
   }
   .sq-download-btn:active { transform: scale(.96); }
+  /* V4.3 UX 26/05 — Bouton raccourci vers la page de vérif (commerçant
+     peut vérifier le code en 1 tap depuis le téléphone du client) */
+  .sq-verify-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    appearance: none;
+    background: transparent;
+    color: #86efac;
+    border: 1px solid rgba(74,222,128,.4);
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 11px 18px;
+    border-radius: 10px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .14s ease, border-color .14s ease, transform .14s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sq-verify-btn:hover { background: rgba(74,222,128,.08);
+    border-color: rgba(74,222,128,.65); transform: translateY(-1px); }
+  .sq-verify-btn:active { transform: scale(.97); }
   .sq-rescan-hint, .sq-verify-hint {
     font-size: 11.5px; color: var(--mut);
     line-height: 1.5; margin: 4px 0 0;
@@ -548,8 +567,9 @@ const TEMPLATE = {
       </div>
       <button type="button" class="sq-download-btn" id="sq-download-btn">🎫 Télécharger mon bon (.png)</button>
       <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
+      <a class="sq-verify-btn" id="sq-verify-btn" href="#" target="_blank" rel="noopener">🔒 Vérifier ce code</a>
       <p class="sq-rescan-hint">Rescanne ce QR à tout moment pour revoir ton gain et le présenter en caisse.</p>
-      <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut le vérifier sur <strong>/verify-win.html?code=…</strong></p>
+      <p class="sq-verify-hint">Code cryptographiquement signé. Le commerçant peut vérifier l'authenticité en 1 tap.</p>
     </div>
 
     <p class="sq-replay-note" id="sq-replay-note" hidden></p>
@@ -591,6 +611,7 @@ const TEMPLATE = {
   const replayNote = el('sq-replay-note');
   const copyBtn = el('sq-copy-btn');
   const downloadBtn = el('sq-download-btn');
+  const verifyBtn = el('sq-verify-btn');
   const winCodeEl = el('sq-win-code');
   const ctaWrap = el('sq-cta-wrap');
   const reels = [el('reel-1'), el('reel-2'), el('reel-3')];
@@ -737,6 +758,9 @@ const TEMPLATE = {
       currentWinCode    = (data.code_won || '').toString();
       currentWinMessage = (data.message_gain || data.message || '').toString();
       if (winCodeEl) winCodeEl.textContent = currentWinCode || '—';
+      if (verifyBtn && currentWinCode) {
+        verifyBtn.href = location.origin + '/verify-win.html?code=' + encodeURIComponent(currentWinCode);
+      }
       replayNote.hidden = !data.replay_blocked;
       if (data.replay_blocked) {
         replayNote.textContent = 'Tu as déjà joué — voici ton résultat précédent (rescannable à tout moment).';
