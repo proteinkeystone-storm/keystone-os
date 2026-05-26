@@ -43,7 +43,7 @@ import { DEMO_VEFA_FORM } from './lib/pulsa-demo.js';
 // ── Métadonnées de l'artefact ─────────────────────────────────
 const WORKSPACE_META = {
   id: 'A-COM-004',
-  name: 'Pulsa',
+  name: 'Key Form',
   punchline: 'Le formulaire intelligent qui collecte sans friction',
 };
 
@@ -1854,7 +1854,7 @@ function _renderDelivery(main) {
       <label class="pulsa-fld">
         <span class="pulsa-fld-label">Objet du mail de notification</span>
         <input class="pulsa-input" type="text"
-               placeholder="Nouvelle réponse — ${_escape(m.title || 'Pulsa')}"
+               placeholder="Nouvelle réponse — ${_escape(m.title || 'Key Form')}"
                data-bind="form.delivery.notification_subject"
                value="${_escape(d.notification_subject || '')}">
       </label>

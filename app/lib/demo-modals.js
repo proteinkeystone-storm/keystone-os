@@ -153,8 +153,8 @@ export function showDemoExpiredModal() {
         </a>
       </div>
       <p class="ks-demo-modal-footnote">
-        Tes données restent sauvegardées 30 jours. Tu retrouveras tes formulaires Pulsa,
-        briefs Kodex et QR codes dès l'activation.
+        Tes données restent sauvegardées 30 jours. Tu retrouveras tes formulaires Key Form,
+        briefs Brief Prod et QR codes dès l'activation.
       </p>
     </div>
   `;

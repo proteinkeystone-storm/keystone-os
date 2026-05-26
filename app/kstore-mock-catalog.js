@@ -68,7 +68,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'A-COM-001',
         category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Dynamic QR',
+        title: 'Smart Dynamic QR',
         punchline: 'QR codes souverains · sans GAFAM',
         shortDesc: 'Statiques + Dynamiques · stats RGPD · studio design',
         price: 49,
@@ -81,7 +81,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'A-COM-002',
         category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Kodex',
+        title: 'Brief Prod',
         punchline: 'Le brief print/digital infaillible',
         shortDesc: 'Cahier des charges technique · calculateur d\'échelle pour grands formats',
         price: 49,
@@ -94,7 +94,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'A-COM-003',
         category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Muse',
+        title: 'Brainstorming',
         punchline: 'La planche d\'ambiance pour votre studio 3D',
         shortDesc: 'Une planche moodboard professionnelle en une seule génération · 6 vignettes cohérentes',
         price: 49,
@@ -107,7 +107,7 @@ export const KSTORE_MOCK_APPS = [
     {
         id: 'A-COM-004',
         category: 'BIZ', subcategory: 'BIZ_COM',
-        title: 'Pulsa',
+        title: 'Key Form',
         punchline: 'Le formulaire intelligent qui collecte sans friction',
         shortDesc: 'Builder de questionnaires · URL partageable · notification mail direction',
         price: 49,
