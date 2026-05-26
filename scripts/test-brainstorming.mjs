@@ -575,9 +575,9 @@ try {
   else
     ko('Sprint 7.4 : MODEL_ID streaming a bougé !', '');
 
-  // 5.34 — _generateSynthesis appelle MODEL_ID_HEAVY
-  // (on cherche un bloc qui contient "_generateSynthesis" puis "MODEL_ID_HEAVY")
-  const synthBlock = workerRoute.split('_generateSynthesis')[1]?.split('async function')[0] || '';
+  // 5.34 — _generateSynthesis (Gemma) appelle MODEL_ID_HEAVY
+  // On cible précisément la fonction Gemma (paramètre env), pas Claude
+  const synthBlock = workerRoute.split(/async function _generateSynthesis\(env/)[1]?.split('async function')[0] || '';
   if (synthBlock.includes('MODEL_ID_HEAVY'))
     ok('Sprint 7.4 : _generateSynthesis utilise MODEL_ID_HEAVY (Gemma 4)');
   else
@@ -604,6 +604,39 @@ try {
     ok('Sprint 7.4 : détection finish_reason="length" présente (cap Gemma raisonneur)');
   else
     ko('Sprint 7.4 : pas de détection finish_reason=length', '');
+
+  // ─── Sprint 7.8 — pondération userReactions dans _computeConsensus ───
+  // 5.38 — Le code itère sur turn.userReactions avec REACTIONS_POSITIVE/NEGATIVE
+  const consensusBlock = workerRoute.split('_computeConsensus')[1]?.split('function _')[0] || '';
+  if (consensusBlock.includes('userReactions') && consensusBlock.includes('REACTIONS_POSITIVE'))
+    ok('Sprint 7.8 : _computeConsensus pondère userReactions (REACTIONS_POSITIVE/NEGATIVE)');
+  else
+    ko('Sprint 7.8 : userReactions non pondéré', '');
+
+  // 5.39 — Cap ±0.16 par tour pour éviter sur-pondération
+  if (consensusBlock.match(/Math\.max\(-?0\.16/) || consensusBlock.match(/Math\.min\(0\.16/))
+    ok('Sprint 7.8 : cap ±0.16 par tour présent (anti-spam)');
+  else
+    ko('Sprint 7.8 : cap par tour manquant', '');
+
+  // ─── Sprint 7.9 — BYOK Claude pour Synthesizer ──────────────────
+  // 5.40 — _generateSynthesisClaude fait fetch vers Anthropic API
+  if (workerRoute.includes('_generateSynthesisClaude') && workerRoute.includes('api.anthropic.com/v1/messages'))
+    ok('Sprint 7.9 : _generateSynthesisClaude appelle Anthropic API');
+  else
+    ko('Sprint 7.9 : _generateSynthesisClaude absent ou incorrect', '');
+
+  // 5.41 — Routing engine='claude' dans handleBrainstormingSynthesize
+  if (workerRoute.match(/engine\s*===\s*['"]claude['"]/) && workerRoute.includes('apiKey'))
+    ok('Sprint 7.9 : route synthesize accepte engine=claude + apiKey');
+  else
+    ko('Sprint 7.9 : routing BYOK Claude absent', '');
+
+  // 5.42 — Fallback transparent Gemma si Claude échoue
+  if (workerRoute.includes('gemma-fallback') || workerRoute.match(/Claude\s+KO/i))
+    ok('Sprint 7.9 : fallback Gemma transparent si Claude échoue');
+  else
+    ko('Sprint 7.9 : pas de fallback Gemma', '');
 } catch (e) { ko('Worker route : read KO', e.message); }
 
 // ─────────────────────────────────────────────────────────────────

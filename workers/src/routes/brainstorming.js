@@ -198,14 +198,27 @@ const REACTIONS_NEGATIVE = new Set(['🤔', '👀']);
 function _computeConsensus(history) {
   if (!Array.isArray(history) || history.length === 0) return 0;
   let score = 0.5;     // démarre neutre
-  let reactionsCount = 0;
   for (const turn of history) {
     if (!turn) continue;
     if (turn.agent_id === 'devil')  score -= 0.05;
     if (turn.agent_id === 'synth')  score += 0.05;
-    // userReactions = [emoji, ...] (Sprint 3, stocké frontend)
-    // Note : côté worker on ne reçoit pas les userReactions par défaut.
-    // Sprint 5 ajoutera leur transmission via le body de la requête.
+    // Sprint 7.8 — pondération userReactions : le frontend transmet
+    // turn.userReactions = ['🔥', '👀', ...] dans le payload history.
+    // 🔥 / 💯 = signal positif (l'humain valide) → +0.08 par réaction.
+    // 👀 / 🤔 = signal de doute (l'humain questionne) → -0.06 par réaction.
+    // L'humain pèse plus que l'arc d'agents (0.08 > 0.05) car c'est lui
+    // qui décide in fine. Cap au max ±0.16 par tour pour éviter qu'un
+    // spam de réactions sur 1 message ne sature le consensus.
+    if (Array.isArray(turn.userReactions) && turn.userReactions.length > 0) {
+      let delta = 0;
+      for (const emoji of turn.userReactions) {
+        if (REACTIONS_POSITIVE.has(emoji)) delta += 0.08;
+        else if (REACTIONS_NEGATIVE.has(emoji)) delta -= 0.06;
+      }
+      // Cap par tour pour éviter sur-pondération
+      delta = Math.max(-0.16, Math.min(0.16, delta));
+      score += delta;
+    }
   }
   return Math.max(0, Math.min(1, score));
 }
@@ -271,6 +284,77 @@ CONTRAINTES DE FORMAT STRICTES
 - Pas de jargon corporate, pas de "synergie", pas de "leverage".
 - Ton EXÉCUTIF (note pour direction marketing, pas pour étudiant).`;
 
+// Sprint 7.9 — Sanitization soft d'une synthèse parsée (Claude ou Gemma)
+function _normalizeSynthesis(parsed) {
+  return {
+    positioning:   typeof parsed.positioning === 'string' ? parsed.positioning : '',
+    opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.slice(0, 4).map(String) : [],
+    risks:         Array.isArray(parsed.risks)         ? parsed.risks.slice(0, 3).map(String)         : [],
+    next_actions:  Array.isArray(parsed.next_actions)
+      ? parsed.next_actions.slice(0, 4).map(a => ({
+          action:   typeof a?.action === 'string' ? a.action : '',
+          deadline: typeof a?.deadline === 'string' ? a.deadline : '',
+        })).filter(a => a.action)
+      : [],
+  };
+}
+
+// Sprint 7.9 — Synthèse via Claude (BYOK). Plus de profondeur stratégique
+// que Gemma 4 pour le boardroom premium. Fetch direct Anthropic API.
+// Pattern repris de proxy-llm.js (_proxyAnthropic).
+async function _generateSynthesisClaude(apiKey, brief, history, todayIso) {
+  const dialogue = history
+    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
+    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .join('\n\n');
+  if (!dialogue || dialogue.length < 50) {
+    return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
+  }
+
+  const userMsg = `DATE DU JOUR : ${todayIso}\n\nBRIEF INITIAL : ${brief}\n\nDIALOGUE INTÉGRAL DU BRAINSTORMING :\n${dialogue}\n\nProduis le JSON Plan d'actions strict, sans préambule.`;
+
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key'        : apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type'     : 'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-5-20250929',
+        system:     SYNTHESIZER_PROMPT,
+        messages:   [{ role: 'user', content: userMsg }],
+        max_tokens: 2000,
+      }),
+    });
+  } catch (e) {
+    return { error: `Claude API network error: ${e.message}` };
+  }
+
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j?.error?.message || ''; } catch (_) {}
+    return { error: `Claude API HTTP ${res.status}${detail ? ' — ' + detail : ''}` };
+  }
+
+  const data = await res.json();
+  // Anthropic Messages API : { content: [{ type: 'text', text: '...' }] }
+  const raw = (data?.content?.[0]?.text || '').trim();
+  if (!raw) return { error: 'Réponse Claude vide' };
+
+  let parsed;
+  try {
+    const m = raw.match(/\{[\s\S]*"positioning"[\s\S]*\}/);
+    if (m) parsed = JSON.parse(m[0]);
+  } catch (e) { /* fallback */ }
+  if (!parsed) {
+    return { error: 'Synthèse Claude non parsable', raw: raw.slice(0, 500) };
+  }
+  return _normalizeSynthesis(parsed);
+}
+
 async function _generateSynthesis(env, brief, history, todayIso) {
   if (!env.AI || typeof env.AI.run !== 'function') {
     return { error: 'Workers AI non disponible' };
@@ -315,19 +399,7 @@ async function _generateSynthesis(env, brief, history, todayIso) {
     if (!parsed) {
       return { error: 'Synthèse non parsable. Veuillez relancer.', raw: raw.slice(0, 500) };
     }
-    // Validation soft + cleanup
-    const result = {
-      positioning:   typeof parsed.positioning === 'string' ? parsed.positioning : '',
-      opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.slice(0, 4).map(String) : [],
-      risks:         Array.isArray(parsed.risks)         ? parsed.risks.slice(0, 3).map(String)         : [],
-      next_actions:  Array.isArray(parsed.next_actions)
-        ? parsed.next_actions.slice(0, 4).map(a => ({
-            action:   typeof a?.action === 'string' ? a.action : '',
-            deadline: typeof a?.deadline === 'string' ? a.deadline : '',
-          })).filter(a => a.action)
-        : [],
-    };
-    return result;
+    return _normalizeSynthesis(parsed);
   } catch (e) {
     return { error: `Erreur génération : ${e?.message || e}` };
   }
@@ -356,7 +428,7 @@ export async function handleBrainstormingSynthesize(request, env) {
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
 
-  const { brief, history = [] } = body;
+  const { brief, history = [], engine, apiKey } = body;
   if (typeof brief !== 'string' || brief.trim().length < MIN_BRIEF) {
     return err(`brief requis (${MIN_BRIEF} caractères min)`, 400, origin);
   }
@@ -365,12 +437,31 @@ export async function handleBrainstormingSynthesize(request, env) {
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
-  const synthesis = await _generateSynthesis(env, brief, history, todayIso);
+  // Sprint 7.9 — Routage BYOK Claude. Si engine='claude' + apiKey fourni,
+  // on appelle Claude Sonnet via Anthropic API directe (synthèse premium).
+  // Sinon fallback Gemma 4 26B (Sprint 7.4) qui reste excellent.
+  let synthesis;
+  let engineUsed = 'gemma';
+  if (engine === 'claude' && typeof apiKey === 'string' && apiKey.length > 10) {
+    synthesis = await _generateSynthesisClaude(apiKey, brief, history, todayIso);
+    engineUsed = 'claude';
+    // En cas d'échec Claude (clé invalide, quota...), fallback transparent sur Gemma
+    if (synthesis.error) {
+      const claudeErr = synthesis.error;
+      synthesis = await _generateSynthesis(env, brief, history, todayIso);
+      engineUsed = 'gemma-fallback';
+      if (synthesis.error) {
+        return json({ error: `Claude KO (${claudeErr}) + Gemma KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
+      }
+    }
+  } else {
+    synthesis = await _generateSynthesis(env, brief, history, todayIso);
+  }
 
   if (synthesis.error) {
     return json({ error: synthesis.error, raw: synthesis.raw }, 422, origin);
   }
-  return json({ synthesis, generated_at: new Date().toISOString() }, 200, origin);
+  return json({ synthesis, generated_at: new Date().toISOString(), engine: engineUsed }, 200, origin);
 }
 
 async function _extractInsights(env, brief, history) {

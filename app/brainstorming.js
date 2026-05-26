@@ -188,6 +188,16 @@ function _authHeaders() {
   return headers;
 }
 
+// Sprint 7.9 — BYOK Claude pour Synthesizer
+// Le user configure sa clé dans Réglages → Vault. On la lit pour
+// activer Claude Sonnet sur la synthèse finale (plus profonde que Gemma).
+function _getClaudeBYOKKey() {
+  try {
+    const k = localStorage.getItem('ks_api_anthropic') || '';
+    return k.length > 10 ? k : '';
+  } catch { return ''; }
+}
+
 // ════════════════════════════════════════════════════════════════
 // PUBLIC API
 // ════════════════════════════════════════════════════════════════
@@ -1056,13 +1066,23 @@ async function _callSynthesize(panel) {
   }
 
   try {
+    // Sprint 7.9 — Si BYOK Claude configuré (Réglages → Vault), on demande
+    // au worker d'utiliser Claude Sonnet pour une synthèse premium.
+    // Sinon fallback Gemma 4 26B (Sprint 7.4).
+    const claudeKey = _getClaudeBYOKKey();
+    const bodyPayload = {
+      brief:   _currentSession.brief,
+      history: _currentSession.history,
+    };
+    if (claudeKey) {
+      bodyPayload.engine = 'claude';
+      bodyPayload.apiKey = claudeKey;
+    }
+
     const res = await fetch(`${_apiBase()}/api/brainstorming/synthesize`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({
-        brief:   _currentSession.brief,
-        history: _currentSession.history,
-      }),
+      body:    JSON.stringify(bodyPayload),
     });
     if (!res.ok) {
       let detail = '';
@@ -1074,6 +1094,7 @@ async function _callSynthesize(panel) {
 
     _currentSession.synthesis = payload.synthesis;
     _currentSession.synthesizedAt = payload.generated_at;
+    _currentSession.synthesisEngine = payload.engine || 'gemma';
     _saveSessionToLibrary(_currentSession);
 
     _openSynthesisDrawer(panel, payload.synthesis);
