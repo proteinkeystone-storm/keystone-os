@@ -277,7 +277,9 @@
   word-wrap: break-word;
   white-space: pre-wrap;
 }
-.wr-msg-text.streaming::after {
+/* Cursor ▍ uniquement quand la bulle a déjà du texte (sinon ce sont les
+   thinking dots ci-dessous qui prennent le relais). */
+.wr-msg-text.streaming:not(:empty)::after {
   content: '▍';
   display: inline-block;
   margin-left: 2px;
@@ -286,6 +288,28 @@
   opacity: 0.7;
 }
 @keyframes wrCursorBlink { 50% { opacity: 0; } }
+
+/* Thinking dots : affichés tant qu'aucun chunk n'est arrivé dans la
+   bulle, pour donner un signal visuel que l'agent réfléchit. Le cursor
+   ▍ prend le relais dès le premier chunk. */
+.wr-msg-text.streaming:empty::before {
+  content: '';
+  display: inline-block;
+  width: 36px; height: 8px;
+  background:
+    radial-gradient(circle 3px at 6px 4px,  var(--agent-color, var(--wr-text-muted)) 100%, transparent 0) 0 0 / 12px 8px no-repeat,
+    radial-gradient(circle 3px at 18px 4px, var(--agent-color, var(--wr-text-muted)) 100%, transparent 0) 0 0 / 24px 8px no-repeat,
+    radial-gradient(circle 3px at 30px 4px, var(--agent-color, var(--wr-text-muted)) 100%, transparent 0) 0 0 / 36px 8px no-repeat;
+  animation: wrThinking 1.2s ease-in-out infinite;
+  opacity: 0.5;
+  vertical-align: middle;
+}
+@keyframes wrThinking {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 0.9; }
+}
+/* Quand le cursor ▍ apparaît (après les premiers chunks), on cache les dots */
+.wr-msg-text.streaming:not(:empty)::before { content: none; }
 
 /* ═════════════════════════════════════════════════════════════════
    INPUT ROW — saisie + pills d'intention

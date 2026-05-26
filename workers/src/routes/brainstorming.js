@@ -34,8 +34,15 @@ import { requireJWT } from '../lib/jwt.js';
 import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
 
-const MODEL_ID    = '@cf/google/gemma-4-26b-a4b-it';
-const MAX_TOKENS  = 4096;
+// Sprint 2 fix (26/05/2026) — switch Gemma 4 → Llama 3.3 70B Fast.
+// Pourquoi : Gemma 4 est un modèle "raisonneur" qui consomme son budget
+// dans `reasoning` AVANT de produire `content`. Pour un brainstorming
+// streaming où chaque agent ne produit que 2-3 phrases courtes, c'était
+// catastrophique : bulles vides + latence x10. Llama 3.3 70B en mode
+// fp8-fast sort du texte direct, idéal pour des répliques courtes en
+// streaming temps réel. Multilingue OK (FR natif).
+const MODEL_ID    = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const MAX_TOKENS  = 512;     // 2-3 phrases courtes suffisent largement
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
@@ -174,7 +181,10 @@ export async function handleBrainstormingAgentRespond(request, env) {
           }
 
           // Consomme le stream Workers AI ligne par ligne et re-stream
-          // en format custom multi-agent
+          // en format custom multi-agent.
+          // Note formats : Llama 3.3 envoie {response:"..."} par chunk.
+          // On garde un fallback large pour absorber d'autres formats
+          // (au cas où Cloudflare change le wrapping selon le modèle).
           const reader  = aiStream.getReader();
           const decoder = new TextDecoder('utf-8');
           let   buffer  = '';
@@ -192,7 +202,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
               if (!data || data === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(data);
-                const chunk = parsed.response ?? parsed.text ?? '';
+                // Fallback agressif pour récupérer le texte quelle que
+                // soit la structure (OpenAI-like, Anthropic-like, etc.)
+                const chunk =
+                  parsed.response                         ??  // Workers AI standard
+                  parsed.text                             ??  // Anthropic legacy
+                  parsed.choices?.[0]?.delta?.content     ??  // OpenAI
+                  parsed.delta?.text                      ??  // Anthropic stream
+                  parsed.p                                ??  // Workers AI compact
+                  '';
                 if (chunk) {
                   fullText += chunk;
                   send({ type: 'chunk', agent_id: currentAgentId, text: chunk });
