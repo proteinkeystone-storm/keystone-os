@@ -173,17 +173,100 @@ const TEMPLATE = {
     color: ${accent};
   }
 
+  /* Wrapper machine + levier — flex centré */
+  .sq-machine-wrap {
+    display: flex; justify-content: center; align-items: stretch;
+    gap: 8px;
+    margin: 16px auto 22px;
+    max-width: 380px;
+  }
+
   /* Machine = 3 cylindres dans une frame dorée */
   .sq-machine {
+    flex: 1;
     background: linear-gradient(180deg, #0a0d12 0%, #161e29 100%);
     border: 2px solid ${accent};
     border-radius: 14px;
     padding: 12px;
-    margin: 16px auto 22px;
     max-width: 320px;
     box-shadow: 0 0 32px ${accent}55,
                 0 0 0 4px rgba(255,255,255,.04) inset;
   }
+
+  /* V4.3 UX 26/05 (transposé de la carte à gratter) — Levier tactile
+     draggable au lieu du bouton 'Tirer'. Métaphore physique réelle de
+     la machine à sous : la poignée descend avec le doigt, déclenche le
+     tirage au seuil 70% (ou au release après seuil), spring-back animé. */
+  .sq-lever-wrap {
+    position: relative;
+    width: 38px;
+    align-self: stretch;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .sq-lever-track {
+    position: absolute;
+    left: 50%; top: 10px; bottom: 10px;
+    width: 8px;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, #1a2331, #0a0d12, #1a2331);
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.04) inset;
+  }
+  .sq-lever-track::before {
+    content: ""; position: absolute;
+    left: 50%; top: 0; bottom: 0;
+    width: 2px; transform: translateX(-50%);
+    background: linear-gradient(180deg, ${accent}55, ${accent}11);
+    border-radius: 2px;
+  }
+  .sq-lever-handle {
+    position: absolute;
+    left: 50%; top: 0;
+    width: 36px; height: 36px;
+    transform: translate(-50%, 0);
+    background: radial-gradient(circle at 35% 30%, #ef4444, #b91c1c 70%, #7f1d1d);
+    border-radius: 50%;
+    box-shadow:
+      0 6px 14px rgba(127,29,29,.55),
+      0 0 0 3px rgba(255,255,255,.06) inset,
+      0 -2px 6px rgba(0,0,0,.3) inset;
+    cursor: grab;
+    transition: none;
+  }
+  .sq-lever-handle:active { cursor: grabbing; }
+  .sq-lever-handle.is-springing {
+    transition: transform 700ms cubic-bezier(.18,.89,.32,1.28);
+  }
+  .sq-lever-handle::after {
+    content: "↓"; position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.55);
+    font-size: 18px; font-weight: 700;
+    pointer-events: none;
+    animation: lever-hint 2s ease-in-out infinite;
+  }
+  body.is-spinning .sq-lever-handle::after,
+  body.is-win      .sq-lever-handle::after,
+  body.is-lose     .sq-lever-handle::after { display: none; }
+  @keyframes lever-hint {
+    0%, 100% { opacity: .4; transform: translateY(0); }
+    50%      { opacity: .9; transform: translateY(2px); }
+  }
+  .sq-lever-hint {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--mut);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    opacity: .75;
+    transition: opacity .2s;
+  }
+  body.is-spinning .sq-lever-hint,
+  body.is-win      .sq-lever-hint,
+  body.is-lose     .sq-lever-hint { opacity: 0; }
   .sq-reels {
     display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 6px;
@@ -226,25 +309,9 @@ const TEMPLATE = {
     transition: transform 600ms cubic-bezier(.18,.89,.32,1.28);
   }
 
-  /* Bouton Lancer */
-  .sq-action-wrap { margin-top: 8px; }
-  .sq-action {
-    appearance: none; border: 0; cursor: pointer;
-    background: linear-gradient(135deg, ${accent}, ${accent}cc);
-    color: #fff; font-family: inherit;
-    font-size: 17px; font-weight: 700; letter-spacing: .04em;
-    text-transform: uppercase;
-    padding: 16px 38px;
-    border-radius: 999px;
-    box-shadow: 0 10px 28px ${accent}55, 0 0 0 4px rgba(255,255,255,.04) inset;
-    transition: transform .14s ease, box-shadow .18s ease, opacity .18s ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .sq-action:active { transform: scale(.95); }
-  .sq-action:disabled {
-    opacity: .55; cursor: not-allowed;
-    box-shadow: 0 4px 12px rgba(0,0,0,.3);
-  }
+  /* Le bouton .sq-action a été remplacé par le levier tactile
+     (.sq-lever-wrap ci-dessus) le 26/05 — métaphore plus immersive
+     alignée avec la mécanique physique réelle d'une machine à sous. */
 
   /* Résultat */
   .sq-result { margin-top: 22px; min-height: 60px; }
@@ -453,17 +520,22 @@ const TEMPLATE = {
     ${nomMarque ? `<h1 class="sq-marque">${nomMarque}</h1>` : ''}
   </div>
 
-  <div class="sq-machine">
-    <div class="sq-reels">
-      <div class="sq-reel"><div class="sq-reel-strip" id="reel-1">${stripHtml}</div></div>
-      <div class="sq-reel"><div class="sq-reel-strip" id="reel-2">${stripHtml}</div></div>
-      <div class="sq-reel"><div class="sq-reel-strip" id="reel-3">${stripHtml}</div></div>
+  <div class="sq-machine-wrap">
+    <div class="sq-machine">
+      <div class="sq-reels">
+        <div class="sq-reel"><div class="sq-reel-strip" id="reel-1">${stripHtml}</div></div>
+        <div class="sq-reel"><div class="sq-reel-strip" id="reel-2">${stripHtml}</div></div>
+        <div class="sq-reel"><div class="sq-reel-strip" id="reel-3">${stripHtml}</div></div>
+      </div>
+    </div>
+
+    <div class="sq-lever-wrap" id="sq-lever-wrap">
+      <div class="sq-lever-track" aria-hidden="true"></div>
+      <button type="button" class="sq-lever-handle" id="sq-lever-handle"
+              aria-label="Tirer le levier pour jouer"></button>
     </div>
   </div>
-
-  <div class="sq-action-wrap">
-    <button type="button" class="sq-action" id="sq-play-btn">Tirer pour jouer</button>
-  </div>
+  <p class="sq-lever-hint" id="sq-lever-hint">Tire le levier ↓</p>
 
   <div class="sq-result" id="sq-result" hidden>
     <h2 class="sq-result-title" id="sq-result-title"></h2>
@@ -511,7 +583,8 @@ const TEMPLATE = {
   const CELL_PX = 96;
 
   const el = id => document.getElementById(id);
-  const btn = el('sq-play-btn');
+  const leverHandle = el('sq-lever-handle');
+  const leverHint   = el('sq-lever-hint');
   const result = el('sq-result');
   const resultTitle = el('sq-result-title');
   const resultMsg = el('sq-result-msg');
@@ -616,7 +689,6 @@ const TEMPLATE = {
   async function play() {
     if (isPlaying) return;
     isPlaying = true;
-    btn.disabled = true;
 
     // Reset visuel
     result.hidden = true;
@@ -678,7 +750,71 @@ const TEMPLATE = {
     }, 3600);
   }
 
-  btn.addEventListener('click', play);
+  // V4.3 UX 26/05 — Mécanique du levier draggable (transposée de la
+  // logique tactile de carte-a-gratter). L'utilisateur attrape la
+  // poignée et la tire vers le bas. Au seuil 70% (ou au release si
+  // déjà passé), on déclenche play(). Toujours spring-back animé.
+  const LEVER_MAX_TRAVEL = 120; // px max vers le bas
+  const LEVER_TRIGGER    = 0.7; // 70% du travel = trigger
+  let leverDragging = false;
+  let leverStartY   = 0;
+  let leverY        = 0;
+  let leverTriggered = false;
+
+  function leverGetY(e) {
+    const t = e.touches ? e.touches[0] : e;
+    return t.clientY;
+  }
+  function leverSetY(y, withTransition) {
+    leverHandle.classList.toggle('is-springing', !!withTransition);
+    leverHandle.style.transform = 'translate(-50%, ' + y + 'px)';
+  }
+  function leverStart(e) {
+    if (isPlaying) return;
+    leverDragging  = true;
+    leverTriggered = false;
+    leverStartY    = leverGetY(e);
+    leverSetY(0, false);
+    e.preventDefault();
+  }
+  function leverMove(e) {
+    if (!leverDragging) return;
+    const dy = leverGetY(e) - leverStartY;
+    leverY = Math.max(0, Math.min(LEVER_MAX_TRAVEL, dy));
+    leverSetY(leverY, false);
+    // Trigger automatique dès qu'on dépasse le seuil pendant le drag
+    if (!leverTriggered && leverY >= LEVER_MAX_TRAVEL * LEVER_TRIGGER) {
+      leverTriggered = true;
+      vibrate(50);
+      play();
+      // Spring-back immédiat même sans release
+      leverEnd();
+    }
+    e.preventDefault();
+  }
+  function leverEnd() {
+    if (!leverDragging) return;
+    leverDragging = false;
+    // Spring-back animé
+    leverSetY(0, true);
+    leverY = 0;
+  }
+
+  leverHandle.addEventListener('mousedown',  leverStart);
+  window.addEventListener('mousemove',       leverMove);
+  window.addEventListener('mouseup',         leverEnd);
+  leverHandle.addEventListener('touchstart', leverStart, { passive: false });
+  leverHandle.addEventListener('touchmove',  leverMove,  { passive: false });
+  leverHandle.addEventListener('touchend',   leverEnd);
+  leverHandle.addEventListener('touchcancel',leverEnd);
+  // Accessibilité : clic simple = tire le levier (sans drag) →
+  // pour utilisateurs souris pressés ou lecteurs d'écran qui activent
+  // le bouton via Enter.
+  leverHandle.addEventListener('click', (e) => {
+    if (isPlaying) return;
+    if (leverY > 0) return; // déjà déclenché par drag
+    play();
+  });
 })();
 </script>
 ${renderAiFetchScript(safeShort)}
