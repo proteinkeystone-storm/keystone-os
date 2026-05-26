@@ -284,7 +284,7 @@ function _renderShell() {
 
     <!-- Sub-header : mode courant + consensus arc + (mobile) bouton signals -->
     <div class="wr-subheader">
-      <div class="wr-subheader-mode" id="wr-subtitle">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</div>
+      <div class="wr-subheader-mode" id="wr-subtitle"><span class="wr-subheader-dot"></span><span class="wr-subheader-label">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</span></div>
       <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
         <div class="wr-consensus-arc">
           <svg viewBox="0 0 32 32" width="32" height="32">
@@ -530,12 +530,12 @@ function _setAllAgentsListening(panel, listening) {
 }
 
 function _updateHeader(panel, brief) {
-  const subtitle = panel.querySelector('#wr-subtitle');
-  if (!subtitle) return;
+  const label = panel.querySelector('#wr-subtitle .wr-subheader-label');
+  if (!label) return;
   const modeId   = _currentSession?.mode || DEFAULT_MODE;
   const mode     = getCognitiveMode(modeId);
   const trimmed  = brief.length > 120 ? brief.slice(0, 117) + '…' : brief;
-  subtitle.textContent = `Mode ${mode.label} · ${trimmed}`;
+  label.textContent = `Mode ${mode.label} · ${trimmed}`;
 }
 
 // Sprint 7 — Appliquer un mode cognitif : persistance session + couleur
@@ -548,15 +548,16 @@ function _applyMode(panel, modeId) {
   // Variable CSS d'accent (subheader, rail btn actif, modale active)
   panel.style.setProperty('--wr-mode-accent', `var(${mode.colorVar})`);
   // Subheader : si brief déjà saisi → "Mode X · brief", sinon invite contextuelle
-  const subtitle = panel.querySelector('#wr-subtitle');
-  if (subtitle) {
+  // Le texte va sur .wr-subheader-label (la pastille .wr-subheader-dot reste).
+  const label = panel.querySelector('#wr-subtitle .wr-subheader-label');
+  if (label) {
     if (_currentSession.brief) {
       const trimmed = _currentSession.brief.length > 120
         ? _currentSession.brief.slice(0, 117) + '…'
         : _currentSession.brief;
-      subtitle.textContent = `Mode ${mode.label} · ${trimmed}`;
+      label.textContent = `Mode ${mode.label} · ${trimmed}`;
     } else {
-      subtitle.textContent = `Mode ${mode.label} · ${mode.invite || 'Posez votre brief pour ouvrir la discussion'}`;
+      label.textContent = `Mode ${mode.label} · ${mode.invite || 'Posez votre brief pour ouvrir la discussion'}`;
     }
   }
   // Input placeholder calé sur l'invite du mode (si pas de brief encore)
