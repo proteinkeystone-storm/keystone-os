@@ -15,7 +15,7 @@ import { setKeystoneStatus, dismissDSTMessage, setDefaultStatusPool } from './ds
 import { initComputedFields }                    from './lib/form-computed.js';
 import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
-import { openMuse }                              from './muse.js';
+import { openBrainstorming }                     from './brainstorming.js';
 import { openPulsa }                             from './pulsa.js';
 import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
@@ -1988,7 +1988,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
-    if (padId === 'A-COM-003') { openMuse();  return; }
+    if (padId === 'A-COM-003') { openBrainstorming();  return; }
     if (padId === 'A-COM-004') { openPulsa(); return; }
     if (padId === 'A-COM-005') { openGhostwriterStudio(); return; }
 
