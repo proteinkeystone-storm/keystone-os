@@ -6694,6 +6694,14 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   font-size: 22px; line-height: 1;
   color: var(--gold, #c9a96e);
   filter: drop-shadow(0 2px 8px rgba(201,169,110,.35));
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* V4.5 (2026-05-26) — Icônes outline (style Lucide) en SVG. Hérite de
+   currentColor depuis le span parent doré pour rester cohérent avec
+   la charte Keystone (vs emojis colorés natifs). */
+.sdqr-template-ico svg {
+  width: 26px; height: 26px;
+  display: block;
 }
 .sdqr-template-tier {
   font-size: 9px; letter-spacing: .14em;

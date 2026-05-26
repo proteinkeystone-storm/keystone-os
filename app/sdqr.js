@@ -21,6 +21,7 @@ import { CF_API } from './pads-loader.js';
 import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
+import { getTemplateIconSvg } from './sdqr-template-icons.js';
 import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
@@ -664,7 +665,7 @@ function _renderTemplateCards(root) {
     return `
       <button type="button" class="sdqr-template-card ${isActive ? 'is-active' : ''}" data-template-id="${_esc(t.id)}">
         <div class="sdqr-template-card-head">
-          <span class="sdqr-template-ico">${t.icon || '✦'}</span>
+          <span class="sdqr-template-ico">${getTemplateIconSvg(t.id) || t.icon || '✦'}</span>
           <span class="sdqr-template-tier sdqr-template-tier--${tier}">${tierLbl}</span>
         </div>
         <span class="sdqr-template-label">${_esc(t.label)}</span>
