@@ -54,33 +54,41 @@ MODE DE RÉFLEXION : ${mode}
 ${_modeDescription(mode)}
 
 FORMAT DE RÉPONSE STRICTEMENT IMPOSÉ
-- 2 à 3 phrases courtes maximum.
-- Conversationnel, vivant, jamais professoral.
+- MAXIMUM 3 phrases (90 mots).
+- Conversationnel, VIF, jamais professoral. Table de stratégie, pas chat support.
 - Pas de listes à puces, pas de markdown lourd, pas de titres.
-- Pas de "Je suis [agent]", pas de "En tant que..." — ton nom apparaît déjà dans la bulle, NE LE RÉPÈTE PAS.
-- Pas de salutation, pas de récap, pas de "j'espère que cela aide" — ce n'est pas du chat support.
-- Tu parles à voix haute autour d'une table créative.
+- Pas de "Je suis [agent]", pas de "En tant que..." — ton nom apparaît déjà dans la bulle.
 
-INTERDICTIONS
-- Pas de jargon corporate vide ("synergie", "leverage", "ecosystem", "best-in-class").
-- Pas de clarifications complaisantes ("c'est une excellente question !").
-- Pas de monologue.
+INTERDICTIONS (Sprint 7.3)
+- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions/pourrions". Démarre par TON ANGLE CONCRET.
+- JAMAIS valider poliment ("X a raison", "bonne idée", "intéressant").
+- JAMAIS paraphraser le précédent — apporte UN ÉLÉMENT QUI N'A PAS ÉTÉ DIT.
+- JAMAIS nommer un autre agent par son nom.
+- Pas de jargon corporate vide.
+- Pas de monologue, pas de tirade.
+
+POSTURE DE DÉBAT
+- Tu peux CONTREDIRE ("Pas d'accord, l'angle ignore X").
+- Tu peux PIVOTER ("Le vrai sujet n'est pas X mais Y").
+- Tu peux RADICALISER ("Pousser plus loin : Z").
+- Tu APPORTES TOUJOURS quelque chose de NEUF.
 
 `;
 }
 
 // ── Description du mode cognitif courant ──────────────────────────
-// Sprint 1 : seul "exploration" est actif. Les autres modes seront
-// activés au Sprint 7 (un par un).
+// Sprint 7 — Les 7 modes sont activés. Cette fonction côté frontend
+// est un miroir de la version worker (workers/src/lib/brainstorming-agents.js).
+// Toute modification ICI doit être répercutée côté worker.
 function _modeDescription(mode) {
   const modes = {
-    exploration: `Mode Exploration : la discussion ouvre largement le champ. Identifier 2-3 angles stratégiques non-évidents avant tout. Ne PAS se précipiter sur une conclusion.`,
-    launch:      `Mode Lancement : la discussion priorise vitesse d'exécution + impact mesurable au lancement.`,
-    branding:    `Mode Branding : la discussion creuse identité, ton, perception, cohérence long-terme.`,
-    growth:      `Mode Croissance : la discussion priorise acquisition, rétention, KPI mesurables.`,
-    crisis:      `Mode Crise : la discussion est dense, rapide, orientée décisions immédiates et limitation des dégâts.`,
-    positioning: `Mode Positionnement : la discussion creuse différenciation marché + audience cible.`,
-    repositioning: `Mode Repositionnement : la discussion challenge le statu quo et explore les pivots possibles.`,
+    exploration: `Mode Exploration. Champ stratégique LARGE. Tu identifies des angles non-évidents avant de conclure. Tempo POSÉ — tu peux nuancer, dérouler, douter. INTERDIT : trancher prématurément en faveur d'une seule direction, fermer trop tôt le débat.`,
+    launch: `Mode Lancement. Vitesse d'exécution + impact mesurable. Tu privilégies le concret immédiat (canal, hook, KPI, levier actionnable sous 30 jours). Tempo SERRÉ, phrases courtes, propositions précises. INTERDIT : élucubrations long-terme, hypothèses non-actionnables, "ça pourrait éventuellement".`,
+    branding: `Mode Branding. Identité, ton, perception long-terme. Tu raisonnes sur 3-5 ans, tu cherches la cohérence narrative et la voix juste. Tempo POSÉ, attentif aux nuances. INTERDIT : tactiques court-termistes, leviers d'acquisition pure, growth hacks qui abîment la perception durable.`,
+    growth: `Mode Croissance. Acquisition, rétention, KPI mesurables. Tu raisonnes en LEVIER × ORDRE DE GRANDEUR × TEST. Tu chiffres dès que possible (même approximativement). INTERDIT : idées non-mesurables, "ça fait du bruit", "ça crée du buzz" sans métrique attachée.`,
+    crisis: `Mode Crise. Décisions immédiates, limitation des dégâts. Tu es DENSE, tu coupes les développements, tu donnes des actions concrètes sous 24-72h. Tempo PRESSANT. INTERDIT : tour d'horizon, "il faudrait peut-être", élaborations stratégiques longues — chaque heure compte.`,
+    positioning: `Mode Positionnement. Différenciation marché + audience cible précise. Tu raisonnes PAR CONTRASTE (vs concurrents, vs catégories voisines) et PAR AUDIENCE (jobs-to-be-done, segments). INTERDIT : généralités du type "il faut se démarquer", positionnement flou sans angle distinctif explicite.`,
+    repositioning: `Mode Repositionnement. Challenge du statu quo, exploration de pivots. Tu interroges ce qui NE MARCHE PLUS, tu cherches le PROCHAIN positionnement (pas une réparation à la marge). Tu acceptes l'inconfort du pivot. INTERDIT : conservatisme déguisé ("ajustons un peu"), nostalgie du passé, demi-mesures.`,
   };
   return modes[mode] || modes.exploration;
 }
@@ -349,18 +357,110 @@ export function getAgentNamesForPrompt(excludeId) {
 }
 
 // ── Modes cognitifs ──────────────────────────────────────────────
-// Sprint 1 : seul "exploration" est actif. Les autres seront ajoutés
-// un par un au Sprint 7.
+// Sprint 7 (mai 2026) — les 7 modes sont activés. Chaque mode a une
+// couleur d'accent distincte de la palette agents (les modes et les
+// agents ne coexistent jamais dans le même contexte visuel : le mode
+// pilote le subheader, les agents pilotent le feed).
+//
+// Convention couleur :
+//   exploration   indigo Keystone (mode par défaut, identitaire)
+//   launch        orange — vitesse, intensité
+//   branding      or premium — identité, prestige long-terme
+//   growth        vert profond — croissance, KPI durables
+//   crisis        rouge dense — urgence, décisions immédiates
+//   positioning   violet — perception, clarté
+//   repositioning cyan — pivot, nouveau cap
+//
+// Chaque mode pilote en aval :
+//   1. La description du préambule prompt (worker `_modeDescription`)
+//   2. L'arc narratif de pickNextAgent (worker orchestrateur)
+//   3. La couleur d'accent du subheader + de la modale sélecteur
+//   4. La phrase d'invite affichée dans le feed empty state
 export const COGNITIVE_MODES = [
-  { id: 'exploration', label: 'Exploration', enabled: true,  description: 'Ouvre largement le champ stratégique avant de conclure.' },
-  { id: 'launch',      label: 'Lancement',   enabled: false, description: 'Vitesse + impact mesurable.' },
-  { id: 'branding',    label: 'Branding',    enabled: false, description: 'Identité, ton, perception long-terme.' },
-  { id: 'growth',      label: 'Croissance',  enabled: false, description: 'Acquisition, rétention, KPI.' },
-  { id: 'crisis',      label: 'Crise',       enabled: false, description: 'Décisions immédiates, limitation des dégâts.' },
-  { id: 'positioning', label: 'Positionnement', enabled: false, description: 'Différenciation marché + audience cible.' },
-  { id: 'repositioning', label: 'Repositionnement', enabled: false, description: 'Challenge le statu quo, explore les pivots.' },
+  {
+    id: 'exploration',
+    label: 'Exploration',
+    enabled: true,
+    color: '#6366f1',
+    colorVar: '--ks-mode-exploration',
+    icon: 'sparkles',
+    short: 'Ouverture stratégique',
+    description: 'Ouvre largement le champ avant de conclure. Pour défricher, cartographier, identifier des angles non-évidents.',
+    invite: 'Posez votre sujet de réflexion (idéation, exploration de marché, défrichage…).',
+  },
+  {
+    id: 'launch',
+    label: 'Lancement',
+    enabled: true,
+    color: '#f97316',
+    colorVar: '--ks-mode-launch',
+    icon: 'rocket',
+    short: 'Vitesse + impact',
+    description: 'Priorise vitesse d\'exécution et impact mesurable au lancement. Tempo serré, décisions concrètes, leviers actionables.',
+    invite: 'Décrivez le lancement à préparer (produit, campagne, feature, ouverture…).',
+  },
+  {
+    id: 'branding',
+    label: 'Branding',
+    enabled: true,
+    color: '#d4af37',
+    colorVar: '--ks-mode-branding',
+    icon: 'gem',
+    short: 'Identité long-terme',
+    description: 'Creuse identité, ton, perception, cohérence long-terme. Pour bâtir ou consolider une marque qui dure.',
+    invite: 'Décrivez l\'identité de marque à creuser (positionnement, ton, manifeste, refonte…).',
+  },
+  {
+    id: 'growth',
+    label: 'Croissance',
+    enabled: true,
+    color: '#16a34a',
+    colorVar: '--ks-mode-growth',
+    icon: 'trending-up',
+    short: 'KPI mesurables',
+    description: 'Priorise acquisition, rétention, KPI mesurables. Pour transformer une idée en machine à croître.',
+    invite: 'Décrivez l\'objectif de croissance (acquisition, rétention, viralité, conversion…).',
+  },
+  {
+    id: 'crisis',
+    label: 'Crise',
+    enabled: true,
+    color: '#dc2626',
+    colorVar: '--ks-mode-crisis',
+    icon: 'alert-triangle',
+    short: 'Décisions immédiates',
+    description: 'Dense, rapide, orientée décisions immédiates et limitation des dégâts. Pour les situations où l\'inaction coûte plus que l\'erreur.',
+    invite: 'Décrivez la situation de crise (bad buzz, churn brutal, concurrent agressif, défaillance produit…).',
+  },
+  {
+    id: 'positioning',
+    label: 'Positionnement',
+    enabled: true,
+    color: '#7c3aed',
+    colorVar: '--ks-mode-positioning',
+    icon: 'crosshair',
+    short: 'Différenciation marché',
+    description: 'Creuse différenciation marché et audience cible. Pour trouver l\'angle qui rend une offre indispensable à un public précis.',
+    invite: 'Décrivez l\'offre à positionner (produit, service, persona, segment…).',
+  },
+  {
+    id: 'repositioning',
+    label: 'Repositionnement',
+    enabled: true,
+    color: '#0891b2',
+    colorVar: '--ks-mode-repositioning',
+    icon: 'refresh-cw',
+    short: 'Pivot, nouveau cap',
+    description: 'Challenge le statu quo et explore les pivots possibles. Pour rompre avec un positionnement épuisé et trouver le prochain.',
+    invite: 'Décrivez le contexte du repositionnement (perte de pertinence, érosion, pivot envisagé…).',
+  },
 ];
 
 export function getCognitiveMode(id) {
   return COGNITIVE_MODES.find(m => m.id === id) || COGNITIVE_MODES[0];
+}
+
+// Liste des modes activés (utilisé par la modale sélecteur)
+export function getEnabledCognitiveModes() {
+  return COGNITIVE_MODES.filter(m => m.enabled);
 }

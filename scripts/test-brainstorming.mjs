@@ -203,6 +203,410 @@ if (skipNet) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// SUITE 5 — Sprint 7 cognitive modes (activation + arcs différenciés)
+// ─────────────────────────────────────────────────────────────────
+console.log('\n\x1b[1m▶ Suite 5 — Sprint 7 cognitive modes\x1b[0m');
+
+const EXPECTED_MODES = ['exploration', 'launch', 'branding', 'growth', 'crisis', 'positioning', 'repositioning'];
+
+try {
+  const frontendMod = await import(`file://${join(ROOT, 'app/lib/brainstorming-agents.js')}`);
+  const { COGNITIVE_MODES, getCognitiveMode, getEnabledCognitiveModes } = frontendMod;
+
+  // 5.1 — Les 7 modes existent
+  if (COGNITIVE_MODES?.length === 7) ok('COGNITIVE_MODES : 7 modes définis');
+  else                                ko('COGNITIVE_MODES : nombre incorrect', String(COGNITIVE_MODES?.length));
+
+  // 5.2 — Tous les modes attendus sont présents
+  for (const mid of EXPECTED_MODES) {
+    const m = COGNITIVE_MODES?.find(x => x.id === mid);
+    if (m) ok(`COGNITIVE_MODES : ${mid} présent`);
+    else    ko(`COGNITIVE_MODES : ${mid} absent`, '');
+  }
+
+  // 5.3 — Les 7 modes sont activés (enabled: true)
+  const enabled = COGNITIVE_MODES?.filter(m => m.enabled);
+  if (enabled?.length === 7) ok('COGNITIVE_MODES : 7 modes enabled:true');
+  else                        ko('COGNITIVE_MODES : tous les modes ne sont pas enabled', `${enabled?.length}/7`);
+
+  // 5.4 — Helper getEnabledCognitiveModes exporté et fonctionne
+  if (typeof getEnabledCognitiveModes === 'function' && getEnabledCognitiveModes().length === 7)
+    ok('getEnabledCognitiveModes() retourne 7 modes');
+  else
+    ko('getEnabledCognitiveModes() KO', String(getEnabledCognitiveModes?.()?.length));
+
+  // 5.5 — Chaque mode a color + colorVar + invite (champs Sprint 7)
+  for (const mid of EXPECTED_MODES) {
+    const m = getCognitiveMode(mid);
+    if (m.color && m.colorVar && m.invite)
+      ok(`mode ${mid} : color + colorVar + invite OK`);
+    else
+      ko(`mode ${mid} : champs Sprint 7 manquants`, JSON.stringify({ color: m.color, colorVar: m.colorVar, invite: !!m.invite }));
+  }
+
+  // 5.6 — Les 7 colorVar sont uniques (pas de collision)
+  const colorVars = COGNITIVE_MODES.map(m => m.colorVar);
+  const uniqColorVars = new Set(colorVars);
+  if (uniqColorVars.size === 7) ok('colorVars : 7 distincts');
+  else                            ko('colorVars : collision détectée', `${uniqColorVars.size}/7 uniques`);
+} catch (e) { ko('Frontend agents.js : import KO', e.message); }
+
+try {
+  const orchMod = await import(`file://${join(ROOT, 'workers/src/lib/brainstorming-orchestrator.js')}`);
+  const { pickNextAgent, getArcForMode, ARCS_BY_MODE } = orchMod;
+
+  // 5.7 — ARCS_BY_MODE exporté avec les 7 entrées
+  if (ARCS_BY_MODE && Object.keys(ARCS_BY_MODE).length === 7)
+    ok('ARCS_BY_MODE : 7 arcs définis');
+  else
+    ko('ARCS_BY_MODE : nombre incorrect', String(Object.keys(ARCS_BY_MODE || {}).length));
+
+  // 5.8 — Chaque mode a un arc qui contient les 9 agents en clés
+  const AGENT_IDS = ['strategic', 'creative', 'growth', 'consumer', 'brand', 'cultural', 'data', 'devil', 'synth'];
+  for (const mid of EXPECTED_MODES) {
+    const arc = getArcForMode(mid);
+    const missing = AGENT_IDS.filter(a => !arc[a]);
+    if (missing.length === 0) ok(`arc ${mid} : 9 agents mappés`);
+    else                       ko(`arc ${mid} : agents manquants`, missing.join(','));
+  }
+
+  // 5.9 — Les arcs sont différenciés : on compare le successeur de 'strategic'
+  // entre tous les modes. Au moins 3 modes doivent avoir un successeur DIFFÉRENT
+  // de exploration (creative) — sinon l'arc n'est pas vraiment customisé.
+  const stratNext = {};
+  for (const mid of EXPECTED_MODES) {
+    stratNext[mid] = getArcForMode(mid).strategic;
+  }
+  const uniqNext = new Set(Object.values(stratNext));
+  if (uniqNext.size >= 4)
+    ok(`arcs différenciés : ${uniqNext.size} successeurs distincts pour strategic`);
+  else
+    ko('arcs différenciés : trop similaires', JSON.stringify(stratNext));
+
+  // 5.10 — pickNextAgent honore le mode passé en argument
+  // (history avec un dernier message du strategic → next dépend du mode)
+  const history = [{ agent_id: 'strategic', content: 'cadrage ok' }];
+  const nextExpl = pickNextAgent(history, 'exploration');
+  const nextCris = pickNextAgent(history, 'crisis');
+  if (nextExpl !== nextCris)
+    ok(`pickNextAgent honore le mode (exploration→${nextExpl}, crisis→${nextCris})`);
+  else
+    ko('pickNextAgent ignore le mode', `${nextExpl} === ${nextCris}`);
+
+  // 5.11 — Mode inconnu → fallback exploration (pas d'erreur)
+  const arcInvalid = getArcForMode('mode_inexistant');
+  const arcExpl    = getArcForMode('exploration');
+  if (arcInvalid.strategic === arcExpl.strategic) ok('mode inconnu → fallback exploration');
+  else                                              ko('fallback exploration cassé', '');
+
+  // ─── Sprint 7.1 — déduplication round-table ──────────────────────
+  // 5.12 — Si l'agent suivant dans l'arc a déjà parlé, on saute
+  const hist4 = [
+    { agent_id: 'strategic', content: 'ouverture' },
+    { agent_id: 'creative',  content: 'concept fort' },
+    { agent_id: 'devil',     content: 'mais...' },
+    { agent_id: 'consumer',  content: 'côté humain' },
+  ];
+  const next4 = pickNextAgent(hist4, 'exploration');
+  // Successeur naturel de consumer = cultural (jamais parlé) → cultural
+  if (next4 === 'cultural') ok('dedup : history 4 agents → cultural (successeur vierge)');
+  else                       ko('dedup KO 4 agents', `attendu cultural, reçu ${next4}`);
+
+  // 5.13 — Simulation d'un round-table complet 8 tours : aucun agent
+  // ne doit être appelé 2 fois.
+  const sim = [];
+  const calls = new Set();
+  let lastId = null;
+  // 1er tour : history vide → strategic
+  for (let i = 0; i < 8; i++) {
+    const aid = pickNextAgent(sim, 'exploration');
+    sim.push({ agent_id: aid, content: `tour ${i+1}` });
+    if (calls.has(aid)) {
+      ko(`round-table dedup : ${aid} appelé 2x au tour ${i+1}`, JSON.stringify([...calls]));
+      lastId = 'DUP';
+      break;
+    }
+    calls.add(aid);
+    lastId = aid;
+  }
+  if (lastId !== 'DUP' && calls.size === 8) ok('round-table 8 tours : 8 agents distincts (zéro répétition)');
+
+  // 5.14 — Intervention user au milieu reset la dédup (cycle redémarre)
+  const histReset = [
+    { agent_id: 'strategic', content: 'ouverture' },
+    { agent_id: 'creative',  content: 'idée' },
+    { agent_id: 'devil',     content: 'doute' },
+    { agent_id: 'user',      content: 'recadre svp' },
+    { agent_id: 'strategic', content: 'compris, on focus' },
+  ];
+  // Après le reset user, seul strategic a parlé dans le cycle courant
+  // → successeur naturel de strategic = creative (en exploration)
+  const nextReset = pickNextAgent(histReset, 'exploration');
+  if (nextReset === 'creative') ok('dedup : user reset → cycle redémarre');
+  else                           ko('dedup user reset KO', `attendu creative, reçu ${nextReset}`);
+
+  // ─── Sprint 7.1.1 — fix bug ping-pong (mention parasite) ─────────
+  // 5.15 — Si un agent NON-strategic cite "Strategic Lead" dans son texte
+  // (citation polie forcée par le system prompt), pickNextAgent ne doit
+  // PAS pivoter vers strategic. Il doit suivre l'arc.
+  const histParasite = [
+    { agent_id: 'strategic', content: 'Keystone est un outil. Creative Director, ton angle ?' },
+    { agent_id: 'growth',    content: 'Je comprends où Strategic Lead veut en venir, mais...' },
+  ];
+  const nextParasite = pickNextAgent(histParasite, 'launch');
+  // last=growth, strategic+growth déjà parlés. Arc launch growth→creative.
+  // creative pas encore parlé → return creative. La citation parasite
+  // "Strategic Lead" ne doit PAS faire repartir sur strategic.
+  if (nextParasite === 'creative')
+    ok('Sprint 7.1.1 : mention parasite (citation polie) ignorée → arc continue');
+  else
+    ko('Sprint 7.1.1 : ping-pong non corrigé', `attendu creative, reçu ${nextParasite}`);
+
+  // 5.16 — Strategic Lead distribue la parole : mention HONORÉE
+  const histDistribute = [
+    { agent_id: 'strategic', content: 'On lance. Brand Guardian, à toi de poser le cadre.' },
+  ];
+  const nextDistribute = pickNextAgent(histDistribute, 'launch');
+  // last=strategic, mention=brand, brand pas encore parlé → return brand
+  // (override l'arc launch qui aurait dit growth)
+  if (nextDistribute === 'brand')
+    ok('Sprint 7.1.1 : Strategic distribue la parole → mention honored');
+  else
+    ko('Sprint 7.1.1 : distribution Strategic KO', `attendu brand, reçu ${nextDistribute}`);
+
+  // 5.17 — Simulation réaliste round-table 8 tours avec mentions parasites
+  // dans chaque message (comme en prod). Vérifie qu'on a bien 8 agents distincts.
+  const simReal = [];
+  const realCalls = new Set();
+  let dupAt = null;
+  // Mentions parasites typiques produites par les agents (politesse)
+  const parasites = [
+    '. Strategic Lead a raison.',
+    '. Je rejoins Creative Director.',
+    '. Comme l\'a dit Devil\'s Advocate, ...',
+    '. Growth Hacker propose une approche pertinente.',
+    '. Consumer Psychologist apporte une vraie clé.',
+    '. Cultural Analyst pointe juste.',
+    '. Brand Guardian a raison.',
+    '. Data Analyst pose les bons ordres de grandeur.',
+  ];
+  for (let i = 0; i < 8; i++) {
+    const aid = pickNextAgent(simReal, 'launch');
+    simReal.push({ agent_id: aid, content: `Tour ${i+1}${parasites[i] || ''}` });
+    if (realCalls.has(aid)) { dupAt = `${aid} au tour ${i+1}`; break; }
+    realCalls.add(aid);
+  }
+  if (!dupAt && realCalls.size === 8)
+    ok('Sprint 7.1.1 : round-table 8 tours avec mentions parasites → 8 agents distincts');
+  else
+    ko('Sprint 7.1.1 : ping-pong persiste avec mentions parasites', dupAt || `seulement ${realCalls.size} agents`);
+
+  // ─── Sprint 7.2 — scoring sémantique organique ───────────────────
+  const { scoreAgentRelevance, AGENT_TRIGGERS } = orchMod;
+
+  // 5.18 — scoreAgentRelevance exposé
+  if (typeof scoreAgentRelevance === 'function' && AGENT_TRIGGERS)
+    ok('Sprint 7.2 : scoreAgentRelevance + AGENT_TRIGGERS exportés');
+  else
+    ko('Sprint 7.2 : export manquant', '');
+
+  // 5.19 — Mots-clés data activent data
+  if (scoreAgentRelevance('data', 'Quel est le ordre de grandeur du marché B2B ? CAC plausible ?') >= 2)
+    ok('Sprint 7.2 : triggers data activés sur "marché / CAC / ordre de grandeur"');
+  else
+    ko('Sprint 7.2 : data triggers KO', '');
+
+  // 5.20 — Mots-clés devil activent devil
+  if (scoreAgentRelevance('devil', 'La concurrence est saturée et la différenciation reste fragile') >= 2)
+    ok('Sprint 7.2 : triggers devil activés sur "concurrence saturée / fragile"');
+  else
+    ko('Sprint 7.2 : devil triggers KO', '');
+
+  // 5.21 — Mots-clés cultural activent cultural
+  if (scoreAgentRelevance('cultural', 'On capte un signal sur TikTok dans cette niche Gen Z') >= 2)
+    ok('Sprint 7.2 : triggers cultural activés sur "signal / TikTok / niche"');
+  else
+    ko('Sprint 7.2 : cultural triggers KO', '');
+
+  // 5.22 — Scoring choisit le bon agent (mode launch, après strategic
+  // qui parle de marché B2B et conversion → data devrait gagner)
+  const histScoring = [
+    { agent_id: 'strategic', content: 'Keystone vise le marché B2B avec un objectif de conversion mesurable.' },
+  ];
+  const nextScoring = pickNextAgent(histScoring, 'launch');
+  // Data a 'marché' + 'b2b' (2 triggers) ; growth a 'conversion' (1 trigger)
+  // Donc data > growth → data devrait être choisi
+  if (nextScoring === 'data')
+    ok(`Sprint 7.2 : scoring choisit data (le plus pertinent sur "marché B2B / conversion")`);
+  else if (nextScoring === 'growth')
+    ok(`Sprint 7.2 : scoring choisit growth (acceptable, "conversion" matche aussi)`);
+  else
+    ko('Sprint 7.2 : scoring KO', `attendu data ou growth, reçu ${nextScoring}`);
+
+  // 5.23 — Garantie tour complet avec contradicteur. Simulation : on
+  // construit un débat où seuls les premiers thèmes "positifs" sont
+  // discutés (concept, audience, marque, croissance). Devil doit
+  // quand même parler dans le cycle grâce au fallback arc.
+  const simPositive = [];
+  const positiveContents = [
+    'Keystone est un outil B2B.',
+    'Notre concept émotionnel est puissant et inspirant.', // creative ++
+    'Cette audience cherche une expérience humaine.',       // consumer ++
+    'Notre identité de marque doit rester premium.',         // brand ++
+    'Le canal d\'acquisition par viralité est notre levier.',// growth ++
+    'On capte un signal culturel sur Gen Z TikTok.',         // cultural ++
+    'Le marché B2B est large, CAC plausible.',               // data ++
+    // 7e tour : il reste devil + on est ≥ SCORING_CUTOFF_SPOKEN → fallback arc
+  ];
+  for (let i = 0; i < positiveContents.length; i++) {
+    const aid = pickNextAgent(simPositive, 'launch');
+    simPositive.push({ agent_id: aid, content: positiveContents[i] });
+  }
+  // Au tour 8, il reste devil. Le fallback arc doit l'amener.
+  const tour8 = pickNextAgent(simPositive, 'launch');
+  if (tour8 === 'devil')
+    ok('Sprint 7.2 : Devil\'s Advocate force-parle au tour 8 (garantie tour complet)');
+  else
+    ko('Sprint 7.2 : Devil saute au tour 8', `attendu devil, reçu ${tour8} ; déjà parlés : ${simPositive.map(t => t.agent_id).join(',')}`);
+
+  // 5.24 — Strategic ne se ré-élit pas spontanément en cours de débat
+  // (il intervient sur reset user uniquement, ou en ouverture)
+  const histStratNoRepeat = [
+    { agent_id: 'strategic', content: 'On lance Keystone, outil de productivité.' },
+    { agent_id: 'creative',  content: 'Concept fort possible avec storytelling.' },
+  ];
+  const nextNoStrat = pickNextAgent(histStratNoRepeat, 'launch');
+  if (nextNoStrat !== 'strategic')
+    ok(`Sprint 7.2 : Strategic ne reprend pas spontanément (next = ${nextNoStrat})`);
+  else
+    ko('Sprint 7.2 : Strategic reprend à tort', '');
+} catch (e) { ko('Worker orchestrator : import KO', e.message); }
+
+// 5.12 — Worker _modeDescription contient les 7 modes enrichis
+try {
+  const workerAgents = await readFile(join(ROOT, 'workers/src/lib/brainstorming-agents.js'), 'utf8');
+  for (const mid of EXPECTED_MODES) {
+    if (workerAgents.includes(`${mid}:`) && workerAgents.includes('INTERDIT'))
+      ok(`worker _modeDescription : ${mid} présent + contient INTERDIT`);
+    else if (!workerAgents.includes(`${mid}:`))
+      ko(`worker _modeDescription : ${mid} absent`, '');
+    else
+      ok(`worker _modeDescription : ${mid} présent (sans INTERDIT)`);
+  }
+} catch (e) { ko('Worker agents.js : read KO', e.message); }
+
+// ─── Sprint 7.3 — directives comportementales par agent ──────────
+try {
+  const workerRoute = await readFile(join(ROOT, 'workers/src/routes/brainstorming.js'), 'utf8');
+
+  // 5.25 — MAX_SENTENCES_PER_TURN passé à 3
+  if (workerRoute.match(/MAX_SENTENCES_PER_TURN\s*=\s*3/))
+    ok('Sprint 7.3 : MAX_SENTENCES_PER_TURN = 3 (au lieu de 2)');
+  else
+    ko('Sprint 7.3 : MAX_SENTENCES_PER_TURN pas à 3', '');
+
+  // 5.26 — MAX_TOKENS augmenté
+  const tokensMatch = workerRoute.match(/MAX_TOKENS\s*=\s*(\d+)/);
+  if (tokensMatch && Number(tokensMatch[1]) >= 240)
+    ok(`Sprint 7.3 : MAX_TOKENS = ${tokensMatch[1]} (>= 240)`);
+  else
+    ko('Sprint 7.3 : MAX_TOKENS pas augmenté', tokensMatch?.[1] || 'absent');
+
+  // 5.27 — AGENT_BEHAVIOR_DIRECTIVES présent avec les 9 agents
+  if (workerRoute.includes('AGENT_BEHAVIOR_DIRECTIVES')) {
+    const agentIds = ['creative', 'growth', 'consumer', 'brand', 'cultural', 'data', 'devil', 'synth'];
+    let allPresent = true;
+    for (const aid of agentIds) {
+      if (!workerRoute.match(new RegExp(`${aid}\\s*:\\s*\\{`))) {
+        ko(`Sprint 7.3 : directive ${aid} manquante`, '');
+        allPresent = false;
+      }
+    }
+    if (allPresent) ok('Sprint 7.3 : AGENT_BEHAVIOR_DIRECTIVES contient les 8 agents non-Strategic');
+  } else {
+    ko('Sprint 7.3 : AGENT_BEHAVIOR_DIRECTIVES manquant', '');
+  }
+
+  // 5.28 — Trigger contient les nouvelles interdictions
+  const interdictionsToFind = [
+    'Ce qui vient d\\\'être dit',  // pattern à interdire
+    'INTERVENTION ATTENDUE',         // section nouveau prompt
+    'CONTREDIRE',                    // posture friction
+    'PIVOTER',
+    'RADICALISER',
+  ];
+  let interdictMissing = [];
+  for (const pat of interdictionsToFind) {
+    if (!workerRoute.match(new RegExp(pat, 'i'))) interdictMissing.push(pat);
+  }
+  if (interdictMissing.length === 0)
+    ok('Sprint 7.3 : trigger contient interdictions + posture débat (contredire/pivoter/radicaliser)');
+  else
+    ko('Sprint 7.3 : trigger incomplet', `manque : ${interdictMissing.join(', ')}`);
+
+  // 5.29 — Directive devil contient "challenger" / "interroge"
+  if (workerRoute.match(/devil\s*:\s*\{[^}]*(?:INTERROGE|CHALLENGE|challenger)/i))
+    ok('Sprint 7.3 : devil dirigé vers challenge frontal');
+  else
+    ko('Sprint 7.3 : devil pas assez tranchant', '');
+
+  // 5.30 — Directive data demande chiffres appuyés
+  if (workerRoute.match(/data\s*:\s*\{[^}]*(?:CAC|LTV|ratio|ordre de grandeur)/i))
+    ok('Sprint 7.3 : data demande chiffres appuyés sur ratio (CAC/LTV/ratio standard)');
+  else
+    ko('Sprint 7.3 : data pas assez précis sur chiffres', '');
+
+  // 5.31 — Directive cultural demande référent nommé
+  if (workerRoute.match(/cultural\s*:\s*\{[^}]*(?:référent|compte|niche|courant)/i))
+    ok('Sprint 7.3 : cultural demande référent nommé (compte/courant/niche)');
+  else
+    ko('Sprint 7.3 : cultural pas assez précis sur référent', '');
+
+  // ─── Sprint 7.4 — hybride Llama (streaming) + Gemma (synth/insights) ─
+  // 5.32 — MODEL_ID_HEAVY = Gemma 4 26B
+  if (workerRoute.match(/MODEL_ID_HEAVY\s*=\s*['"]@cf\/google\/gemma-4-26b-a4b-it['"]/))
+    ok('Sprint 7.4 : MODEL_ID_HEAVY = Gemma 4 26B (synthesizer + insights)');
+  else
+    ko('Sprint 7.4 : MODEL_ID_HEAVY manquant ou pas Gemma 4', '');
+
+  // 5.33 — MODEL_ID streaming reste Llama 3.1 8B
+  if (workerRoute.match(/MODEL_ID\s*=\s*['"]@cf\/meta\/llama-3\.1-8b-instruct['"]/))
+    ok('Sprint 7.4 : MODEL_ID streaming reste Llama 3.1 8B (dictée vocale)');
+  else
+    ko('Sprint 7.4 : MODEL_ID streaming a bougé !', '');
+
+  // 5.34 — _generateSynthesis appelle MODEL_ID_HEAVY
+  // (on cherche un bloc qui contient "_generateSynthesis" puis "MODEL_ID_HEAVY")
+  const synthBlock = workerRoute.split('_generateSynthesis')[1]?.split('async function')[0] || '';
+  if (synthBlock.includes('MODEL_ID_HEAVY'))
+    ok('Sprint 7.4 : _generateSynthesis utilise MODEL_ID_HEAVY (Gemma 4)');
+  else
+    ko('Sprint 7.4 : _generateSynthesis encore sur Llama', '');
+
+  // 5.35 — _extractInsights appelle MODEL_ID_HEAVY
+  const insightsBlock = workerRoute.split('_extractInsights')[1]?.split('async function')[0] || '';
+  if (insightsBlock.includes('MODEL_ID_HEAVY'))
+    ok('Sprint 7.4 : _extractInsights utilise MODEL_ID_HEAVY (Gemma 4)');
+  else
+    ko('Sprint 7.4 : _extractInsights encore sur Llama', '');
+
+  // 5.36 — Streaming agents reste sur MODEL_ID (Llama)
+  // Cherche le bloc où on a aiStream = await env.AI.run(... — il doit
+  // utiliser MODEL_ID (Llama), pas MODEL_ID_HEAVY
+  const streamMatch = workerRoute.match(/aiStream\s*=\s*await\s+env\.AI\.run\((MODEL_ID(?:_HEAVY)?)/);
+  if (streamMatch && streamMatch[1] === 'MODEL_ID')
+    ok('Sprint 7.4 : streaming agents reste sur MODEL_ID (Llama, pour la dictée vocale)');
+  else
+    ko('Sprint 7.4 : streaming agents bascule sur HEAVY (KO Gemma raisonneur !)', streamMatch?.[1] || 'introuvable');
+
+  // 5.37 — Détection finish_reason=length pour Gemma (pattern Ghost Writer)
+  if (workerRoute.includes('finish_reason') && workerRoute.includes('length'))
+    ok('Sprint 7.4 : détection finish_reason="length" présente (cap Gemma raisonneur)');
+  else
+    ko('Sprint 7.4 : pas de détection finish_reason=length', '');
+} catch (e) { ko('Worker route : read KO', e.message); }
+
+// ─────────────────────────────────────────────────────────────────
 // SOMMAIRE
 // ─────────────────────────────────────────────────────────────────
 console.log(`\n\x1b[1m═══ Sommaire ═══\x1b[0m`);

@@ -1024,7 +1024,14 @@ html.light-mode .modal-close:hover {
 }
 
 @media (max-width: 1024px) {
-  .ws-topbar-burger { display: inline-flex; margin-right: 16px; }
+  .ws-topbar-burger { display: inline-flex; margin-right: 16px; flex-shrink: 0; }
+
+  /* Sprint 7.6 — Brand passe en width auto sur narrow.
+     En desktop il est fixé à 220px pour aligner avec le rail sidebar,
+     mais en narrow le rail est masqué (ou différent comme Brainstorming
+     qui a un rail à 60px) → l'alignement strict n'a plus de sens et la
+     largeur 220px pousse le burger hors écran. */
+  .ws-topbar-brand { width: auto; padding: 0 12px 0 16px; }
 
   /* Crumb masquée sur narrow (pas la place) */
   .ws-topbar-title .crumb { display: none; }
@@ -1036,7 +1043,7 @@ html.light-mode .modal-close:hover {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .ws-topbar-title { padding-left: 16px; min-width: 0; }
+  .ws-topbar-title { padding-left: 12px; min-width: 0; flex: 1 1 0; }
 
   /* Actions : cachées par défaut, deviennent un dropdown vertical au clic du burger */
   .ws-topbar-actions {
@@ -1065,6 +1072,15 @@ html.light-mode .modal-close:hover {
     padding: 0 12px;
     gap: 10px;
   }
+}
+
+/* Sprint 7.7 — Sur viewport étroit (mobile portrait), on cache le logo
+   Keystone (le back chevron suffit pour revenir au Dashboard) afin de
+   donner toute la place au nom de l'outil courant. Sur tablette ≥ 480px
+   le logo reste visible. */
+@media (max-width: 480px) {
+  .ws-topbar-logo { display: none; }
+  .ws-topbar-brand { padding: 0 8px 0 12px; }
 }
 
 @media (max-width: 768px) {
