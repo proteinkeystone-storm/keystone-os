@@ -63,8 +63,11 @@ const MAX_TOKENS  = 240;
 // Synthesizer (Gemma 4 raisonneur) — 4096 minimum sinon finish_reason
 // "length" et content vide (cf. Ghost Writer Phase 1 fix mai 2026).
 const MAX_TOKENS_HEAVY_SYNTH    = 4096;
-// Insights extraction (Gemma 4) — 2048 suffisant pour 2-3 bullets JSON.
-const MAX_TOKENS_HEAVY_INSIGHTS = 2048;
+// Insights extraction (Gemma 4) — 4096 obligatoire car raisonneur :
+// le bloc `reasoning` interne consomme 1500-3000 tokens avant de
+// produire le `content` JSON. Vu en prod 27/05 : panel insights restait
+// vide avec 2048 → bump à 4096 (même cap que Synthesizer Sprint 7.4).
+const MAX_TOKENS_HEAVY_INSIGHTS = 4096;
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
 const MAX_HISTORY = 40;
@@ -479,20 +482,38 @@ export async function handleBrainstormingSynthesize(request, env) {
   return json({ synthesis, generated_at: new Date().toISOString(), engine: engineUsed }, 200, origin);
 }
 
+// Sprint 7.12 — Parse défensif d'une réponse LLM en JSON insights
+function _parseInsightsFromText(raw) {
+  if (!raw) return [];
+  // Tentative 1 : parse JSON strict
+  try {
+    const m = raw.match(/\{[\s\S]*"insights"[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (Array.isArray(parsed.insights)) {
+        return parsed.insights.filter(s => typeof s === 'string' && s.length > 5).slice(0, 3);
+      }
+    }
+  } catch (e) { /* fallback */ }
+  // Tentative 2 : regex sur les bullets / lignes
+  const lines = raw.split(/[\n•\-]+/)
+    .map(s => s.replace(/^["'\s]+|["'\s,.]+$/g, '').trim())
+    .filter(s => s.length > 10 && s.length < 140);
+  return lines.slice(0, 3);
+}
+
 async function _extractInsights(env, brief, history) {
   if (!env.AI || typeof env.AI.run !== 'function') return [];
-  // Récupère le dialogue récent
+  // Sprint 7.12 — capture tout le tour de table (8 agents) au lieu des 6 derniers
   const dialogue = history
     .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
-    .slice(-6)
+    .slice(-9)
     .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
     .join('\n\n');
   if (!dialogue) return [];
 
+  // Tentative 1 : Gemma 4 26B (richesse analytique max_tokens=4096)
   try {
-    // Sprint 7.4 — Insights extraction bascule sur Gemma 4 26B (richesse
-    // analytique > Llama 8B). max_tokens=2048 pour absorber le reasoning
-    // tout en restant rapide.
     const res = await env.AI.run(MODEL_ID_HEAVY, {
       messages: [
         { role: 'system', content: INSIGHTS_PROMPT },
@@ -501,36 +522,44 @@ async function _extractInsights(env, brief, history) {
       max_tokens: MAX_TOKENS_HEAVY_INSIGHTS,
       stream:     false,
     });
-    // Détection budget tokens épuisé (insights non-critique, on échoue silencieusement)
     const choice0 = res?.choices?.[0];
-    if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
-      return [];
+    const gemmaLengthExhausted = choice0?.finish_reason === 'length' && !choice0?.message?.content;
+    if (!gemmaLengthExhausted) {
+      const raw = (res?.response
+        || res?.result?.response
+        || res?.choices?.[0]?.message?.content
+        || res?.output?.[0]?.content?.[0]?.text
+        || '').trim();
+      const parsed = _parseInsightsFromText(raw);
+      if (parsed.length > 0) return parsed;
     }
-    // Extraction multi-format (Gemma 4 peut renvoyer 4 wrappings)
+    // Si Gemma a renvoyé vide ou tronqué, on fallback sur Llama 8B
+    try { console.log('[insights] Gemma KO ou vide, fallback Llama 8B'); } catch (_) {}
+  } catch (e) {
+    try { console.log('[insights] Gemma exception, fallback Llama:', e?.message || e); } catch (_) {}
+  }
+
+  // Tentative 2 : Llama 3.1 8B fallback (qualité moindre mais visible)
+  try {
+    const res = await env.AI.run(MODEL_ID, {
+      messages: [
+        { role: 'system', content: INSIGHTS_PROMPT },
+        { role: 'user',   content: `BRIEF : ${brief}\n\nDIALOGUE :\n${dialogue}\n\nExtrais 2-3 insights stratégiques au format JSON strict.` },
+      ],
+      max_tokens: 400,
+      stream:     false,
+    });
     const raw = (res?.response
       || res?.result?.response
       || res?.choices?.[0]?.message?.content
-      || res?.output?.[0]?.content?.[0]?.text
       || '').trim();
-    // Tentative 1 : parse JSON strict
-    try {
-      const m = raw.match(/\{[\s\S]*"insights"[\s\S]*\}/);
-      if (m) {
-        const parsed = JSON.parse(m[0]);
-        if (Array.isArray(parsed.insights)) {
-          return parsed.insights.filter(s => typeof s === 'string' && s.length > 5).slice(0, 3);
-        }
-      }
-    } catch (e) { /* fallback */ }
-    // Tentative 2 : regex sur les bullets / lignes contenant des phrases
-    const lines = raw.split(/[\n•\-]+/)
-      .map(s => s.replace(/^["'\s]+|["'\s,.]+$/g, '').trim())
-      .filter(s => s.length > 10 && s.length < 140);
-    return lines.slice(0, 3);
+    return _parseInsightsFromText(raw);
   } catch (e) {
+    try { console.log('[insights] Llama fallback exception:', e?.message || e); } catch (_) {}
     return [];
   }
 }
+
 const SUPPORTED_AGENTS = new Set([
   'strategic', 'creative', 'growth', 'consumer', 'brand',
   'cultural', 'data', 'devil', 'synth', 'auto',
