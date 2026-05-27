@@ -2221,7 +2221,17 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     btn.disabled = true; btn.textContent = '⏳ …';
     try {
       await _apiUpdate(qr.id, { design: _editingDesign });
-      qr.design = { ..._editingDesign };
+      // Fix 2026-05-26 — Bug : le design persistait en DB mais quand
+      // l'utilisateur rouvrait le QR depuis la sidebar, c'était l'ancienne
+      // version en cache (_cachedQrs) qui s'affichait → symptôme
+      // "il faut recommencer pour que ça soit pris en compte".
+      // Solution : deep-clone le design dans qr.design ET dans _cachedQrs
+      // (les autres save handlers passent par _refreshList, mais ici un
+      // refresh API serait excessif pour juste une modif design).
+      const designSnapshot = JSON.parse(JSON.stringify(_editingDesign));
+      qr.design = designSnapshot;
+      const cached = _cachedQrs.find(x => x.id === qr.id);
+      if (cached) cached.design = JSON.parse(JSON.stringify(designSnapshot));
       btn.textContent = '✓ Design sauvegardé';
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
     } catch (e) {
