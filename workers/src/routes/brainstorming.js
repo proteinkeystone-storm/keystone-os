@@ -195,32 +195,47 @@ function _maybeGenerateReaction(reactorAgentId, previousTurn) {
 const REACTIONS_POSITIVE = new Set(['💯', '🔥']);
 const REACTIONS_NEGATIVE = new Set(['🤔', '👀']);
 
+// Sprint 7.11 — Renommé conceptuellement "Consensus" → "Avancement".
+// L'ancienne formule (base 0.5, Devil -0.05, etc.) ne pouvait jamais
+// atteindre 100% car Devil parle obligatoirement (garantie Sprint 7.2)
+// et pénalisait mécaniquement le score. Stéphane remontait "Pourquoi
+// on n'arrive jamais à 100% après la concertation ?".
+//
+// Nouvelle formule (progression du tour de table) :
+//   - 0% à history vide
+//   - +12.5% par AGENT DISTINCT non-Synth qui a parlé (max 90% à 8 agents)
+//   - Synthesizer présent (si jamais dans l'history) : +10% bonus
+//   - userReactions : ajustement final ±10% max
+//
+// Devil's Advocate compte comme contribution positive — son challenge
+// fait avancer le débat, il n'est plus une pénalité.
 function _computeConsensus(history) {
   if (!Array.isArray(history) || history.length === 0) return 0;
-  let score = 0.5;     // démarre neutre
+  const distinctAgents = new Set();
+  let synthSpoke = false;
+  let reactionsScore = 0;
   for (const turn of history) {
-    if (!turn) continue;
-    if (turn.agent_id === 'devil')  score -= 0.05;
-    if (turn.agent_id === 'synth')  score += 0.05;
-    // Sprint 7.8 — pondération userReactions : le frontend transmet
-    // turn.userReactions = ['🔥', '👀', ...] dans le payload history.
-    // 🔥 / 💯 = signal positif (l'humain valide) → +0.08 par réaction.
-    // 👀 / 🤔 = signal de doute (l'humain questionne) → -0.06 par réaction.
-    // L'humain pèse plus que l'arc d'agents (0.08 > 0.05) car c'est lui
-    // qui décide in fine. Cap au max ±0.16 par tour pour éviter qu'un
-    // spam de réactions sur 1 message ne sature le consensus.
+    if (!turn || !turn.agent_id) continue;
+    if (turn.agent_id === 'user') continue;
+    if (turn.agent_id === 'synth') synthSpoke = true;
+    else distinctAgents.add(turn.agent_id);
+    // Sprint 7.8 — pondération userReactions
     if (Array.isArray(turn.userReactions) && turn.userReactions.length > 0) {
       let delta = 0;
       for (const emoji of turn.userReactions) {
-        if (REACTIONS_POSITIVE.has(emoji)) delta += 0.08;
-        else if (REACTIONS_NEGATIVE.has(emoji)) delta -= 0.06;
+        if (REACTIONS_POSITIVE.has(emoji)) delta += 0.04;
+        else if (REACTIONS_NEGATIVE.has(emoji)) delta -= 0.03;
       }
-      // Cap par tour pour éviter sur-pondération
-      delta = Math.max(-0.16, Math.min(0.16, delta));
-      score += delta;
+      // Cap par tour ±0.08 (pour totaliser max ±10% sur l'ensemble du débat)
+      reactionsScore += Math.max(-0.08, Math.min(0.08, delta));
     }
   }
-  return Math.max(0, Math.min(1, score));
+  // 8 agents distincts × 12.5% = 90% (réservons 10% pour les réactions positives)
+  const progressScore = Math.min(distinctAgents.size, 8) * (0.9 / 8);
+  const synthBonus = synthSpoke ? 0.1 : 0;
+  // Cap réactions ±10% sur le score global
+  const reactionsAdjusted = Math.max(-0.1, Math.min(0.1, reactionsScore));
+  return Math.max(0, Math.min(1, progressScore + synthBonus + reactionsAdjusted));
 }
 
 function _computeTension(history) {
@@ -786,11 +801,10 @@ POSTURE
           }
         }
 
-        send({ type: 'complete', reason: completeReason, turns: turnsDone });
-
         // Sprint 4 — Extraction des insights émergents en background.
-        // On lance UN seul call LLM léger qui condense le débat en
-        // 2-3 bullets. Envoyé via insights_update juste après complete.
+        // Sprint 7.11 — DOIT être envoyé AVANT l'event 'complete' : le
+        // frontend exit sa boucle SSE dès qu'il reçoit 'complete', donc
+        // tout event envoyé après est ignoré côté client.
         if (turnsDone >= 2) {
           try {
             const insights = await _extractInsights(env, brief, localHistory);
@@ -799,6 +813,8 @@ POSTURE
             }
           } catch (e) { /* silencieux : extraction non-critique */ }
         }
+
+        send({ type: 'complete', reason: completeReason, turns: turnsDone });
       } catch (e) {
         send({ type: 'error', message: `Stream error: ${e?.message || e}` });
       } finally {

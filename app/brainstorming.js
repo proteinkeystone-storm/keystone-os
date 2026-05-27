@@ -304,7 +304,7 @@ function _renderShell() {
           </svg>
           <div class="wr-consensus-val" id="wr-consensus-val">0%</div>
         </div>
-        <span class="wr-consensus-label">Consensus</span>
+        <span class="wr-consensus-label">Avancement</span>
       </div>
       <!-- Sprint 6 — bouton signaux (visible uniquement < 1024px) -->
       <button type="button" class="wr-signals-toggle" id="wr-signals-toggle" aria-label="Afficher les signaux">
@@ -356,7 +356,7 @@ function _renderShell() {
       <div class="wr-signal-card">
         <div class="wr-signal-title">Prochaine synthèse</div>
         <div class="wr-signal-empty">
-          Le Synthesizer interviendra quand le consensus atteindra un seuil optimal.
+          La synthèse stratégique se déclenchera automatiquement à la fin du tour de table (8 agents).
         </div>
       </div>
     </aside>

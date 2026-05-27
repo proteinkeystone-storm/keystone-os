@@ -605,7 +605,7 @@ try {
   else
     ko('Sprint 7.4 : pas de détection finish_reason=length', '');
 
-  // ─── Sprint 7.8 — pondération userReactions dans _computeConsensus ───
+  // ─── Sprint 7.8 + 7.11 — pondération userReactions + formule Avancement ───
   // 5.38 — Le code itère sur turn.userReactions avec REACTIONS_POSITIVE/NEGATIVE
   const consensusBlock = workerRoute.split('_computeConsensus')[1]?.split('function _')[0] || '';
   if (consensusBlock.includes('userReactions') && consensusBlock.includes('REACTIONS_POSITIVE'))
@@ -613,11 +613,11 @@ try {
   else
     ko('Sprint 7.8 : userReactions non pondéré', '');
 
-  // 5.39 — Cap ±0.16 par tour pour éviter sur-pondération
-  if (consensusBlock.match(/Math\.max\(-?0\.16/) || consensusBlock.match(/Math\.min\(0\.16/))
-    ok('Sprint 7.8 : cap ±0.16 par tour présent (anti-spam)');
+  // 5.39 — Sprint 7.11 : formule progression linéaire (distinctAgents.size)
+  if (consensusBlock.includes('distinctAgents') && consensusBlock.match(/0\.9\s*\/\s*8/))
+    ok('Sprint 7.11 : formule Avancement = (agents distincts / 8) × 90%');
   else
-    ko('Sprint 7.8 : cap par tour manquant', '');
+    ko('Sprint 7.11 : formule progression absente', '');
 
   // ─── Sprint 7.9 — BYOK Claude pour Synthesizer ──────────────────
   // 5.40 — _generateSynthesisClaude fait fetch vers Anthropic API
