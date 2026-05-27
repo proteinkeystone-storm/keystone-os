@@ -1038,19 +1038,42 @@ function _updatePacing(panel, done, total) {
   }
 
   // Sprint 5 — Bouton "Lancer la synthèse" actif dès turns_done >= 2
+  // Sprint 7.10 — refactor pour éviter résidus visuels du label précédent.
   let btn = card.querySelector('.wr-synthesize-btn');
   if (done >= 2) {
     if (!btn) {
       btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'wr-synthesize-btn';
-      btn.innerHTML = `${_iconSvg('sparkles')}<span>Lancer la synthèse</span>`;
       btn.addEventListener('click', () => _callSynthesize(panel));
       card.appendChild(btn);
     }
+    // Au render, on (re)pose l'état initial pour garantir UN SEUL label
+    // visible (idle ou done selon que la synthèse a déjà été produite).
+    const state = _currentSession?.synthesis ? 'done' : 'idle';
+    _setSynthesizeBtnState(btn, state);
   } else if (btn) {
     btn.remove();
   }
+}
+
+// Sprint 7.10 — Helper unique qui réécrit le bouton synthèse proprement.
+// Avant : on faisait `btn.querySelector('span').textContent = '...'` à 3
+// endroits, ce qui pouvait laisser des résidus DOM dans certains
+// transitions (vu en prod : "e er  Lancer la synthèse" affiché). Maintenant
+// on reconstruit l'innerHTML à chaque changement d'état → garantit un
+// seul span avec un seul texte.
+function _setSynthesizeBtnState(btn, state) {
+  if (!btn) return;
+  const labels = {
+    idle:    'Lancer la synthèse',
+    loading: 'Synthèse en cours…',
+    done:    'Relancer la synthèse',
+  };
+  const label = labels[state] || labels.idle;
+  btn.innerHTML = `${_iconSvg('sparkles')}<span>${_esc(label)}</span>`;
+  btn.disabled = (state === 'loading');
+  btn.classList.toggle('loading', state === 'loading');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1059,11 +1082,8 @@ function _updatePacing(panel, done, total) {
 async function _callSynthesize(panel) {
   if (!_currentSession || _currentSession.history.length < 2) return;
   const btn = panel.querySelector('.wr-synthesize-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.classList.add('loading');
-    btn.querySelector('span').textContent = 'Synthèse en cours…';
-  }
+  // Sprint 7.10 — utilise l'helper pour garantir un seul label propre
+  _setSynthesizeBtnState(btn, 'loading');
 
   try {
     // Sprint 7.9 — Si BYOK Claude configuré (Réglages → Vault), on demande
@@ -1101,11 +1121,8 @@ async function _callSynthesize(panel) {
   } catch (e) {
     _appendErrorMessage(panel, `Synthèse impossible : ${e?.message || e}`);
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      btn.querySelector('span').textContent = 'Relancer la synthèse';
-    }
+    // Sprint 7.10 — reset propre via l'helper (état 'done' = "Relancer la synthèse")
+    _setSynthesizeBtnState(btn, 'done');
   }
 }
 
@@ -1254,7 +1271,10 @@ function _exportSynthesisPDF(synthesis, brief) {
   .action-item { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
   .action-text { flex: 1; font-weight: 500; }
   .action-deadline { font-size: 11px; color: #475569; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; background: #e2e8f0; border-radius: 999px; }
-  .foot { position: fixed; bottom: 12mm; left: 18mm; right: 18mm; font-size: 9px; color: #94a3b8; text-align: center; letter-spacing: 0.05em; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  /* Sprint 7.10 — footer en flux normal (pas position:fixed qui se
+     superposait au contenu quand le PDF débordait sur plusieurs pages).
+     Apparaît une fois en fin de document, après le contenu. */
+  .foot { margin-top: 36px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 9px; color: #94a3b8; text-align: center; letter-spacing: 0.05em; }
 </style>
 </head>
 <body>
@@ -1289,7 +1309,7 @@ function _exportSynthesisPDF(synthesis, brief) {
     <ol>${acts || '<li>—</li>'}</ol>
   </div>
 
-  <div class="foot">Généré par Keystone OS — A-COM-003 Brainstorming · protein-keystone.com</div>
+  <div class="foot">Généré par Keystone OS · protein-keystone.com</div>
 
   <script>
     window.onload = () => setTimeout(() => window.print(), 250);

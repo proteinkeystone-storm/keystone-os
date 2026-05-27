@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.8.0-sprint78-79-byok-reactions';
+const VERSION       = 'ks-os-v5.8.1-sprint710-cta-pdf-fix';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
