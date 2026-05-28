@@ -42,6 +42,12 @@ import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize } from './routes/brainstorming.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
 import { handleLivingLayerGreeting }                                     from './routes/living-layer.js';
+// Living Layer V2 — Ordinateur de bord (2026-05-28)
+import { handleLivingBoard }                                             from './routes/living-layer-board.js';
+import {
+  handleLivingListAdmin, handleLivingCreate, handleLivingUpdate,
+  handleLivingDelete, handleLivingArchive,
+} from './routes/living-messages-admin.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -317,6 +323,24 @@ export default {
       // Public (pas de donnée privée fuitée), cache localStorage 30min.
       if (path === '/api/livinglayer/greeting' && (method === 'POST' || method === 'OPTIONS')) {
         return handleLivingLayerGreeting(request, env);
+      }
+      // ── Living Layer V2 — Ordinateur de bord (2026-05-28) ────
+      // /board : endpoint unique pour la zone Living Layer du dashboard.
+      // Agrège capteurs serveur (Smart QR / Pulsa / GW) + capteurs client
+      // (Brainstorming / Annonces / Kodex via body.clientSensors). Retourne
+      // un { mode, text, icon } selon priorité Pilotable URGENT > IA > Pilotable > Calculateur.
+      if (path === '/api/livinglayer/board' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleLivingBoard(request, env);
+      }
+      // CRUD admin Pilotables (auth KS_ADMIN_SECRET)
+      if (path === '/api/admin/living-messages') {
+        if (method === 'GET')    return handleLivingListAdmin(request, env);
+        if (method === 'POST')   return handleLivingCreate(request, env);
+        if (method === 'PATCH')  return handleLivingUpdate(request, env);
+        if (method === 'DELETE') return handleLivingDelete(request, env);
+      }
+      if (path === '/api/admin/living-messages/archive' && method === 'POST') {
+        return handleLivingArchive(request, env);
       }
       if (path.startsWith('/api/qr/') && method === 'PATCH') {
         const qrId = path.split('/').pop();

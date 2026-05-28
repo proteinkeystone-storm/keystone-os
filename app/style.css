@@ -608,27 +608,58 @@ html.light-mode .engine-logo-light { display: block !important; }
 .hero-name { color: var(--gold); }
 .hero-sub  { font-size: 13px; color: var(--text); min-height: 1.5em; }
 
-/* Living Layer — phrase IA contextuelle sous "Bonjour, X" (2026-05-24) */
+/* ── Living Layer V2 — Ordinateur de bord (2026-05-28) ─────
+   Zone unique sous "Bonjour, X" qui rotate entre 3 modes :
+   📊 Calculateur (stats)  ·  ✦ IA  ·  📢 Pilotable (annonce admin)
+   Le picto SVG outline 1.5 vient de lib/ui-icons.js, couleur via
+   data-mode. Crossfade 300ms géré par les classes .fade-in / .fade-out. */
 .ks-living {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13.5px;
-  font-style: italic;
   letter-spacing: -0.01em;
   color: var(--text);
-  opacity: .82;
-  margin: 2px 0 4px;
-  animation: ks-living-fade 480ms cubic-bezier(.18,.8,.3,1) both;
+  opacity: .9;
+  margin: 4px 0 6px;
   max-width: 56ch;
+  min-height: 1.6em;
+  transition: opacity 300ms cubic-bezier(.18,.8,.3,1),
+              transform 300ms cubic-bezier(.18,.8,.3,1);
 }
-.ks-living::before {
-  content: "✦";
-  color: var(--gold);
-  font-style: normal;
-  margin-right: 6px;
-  opacity: .7;
+.ks-living .ks-living-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 14px; height: 14px;
+  opacity: .75;
+  transition: color 200ms ease;
 }
-@keyframes ks-living-fade {
-  from { opacity: 0; transform: translateY(-2px); }
-  to   { opacity: .82; transform: translateY(0); }
+/* Couleurs charte par mode — outline monochrome qui hérite de currentColor */
+.ks-living .ks-living-icon[data-mode="calculator"] { color: var(--tx3); }     /* stats → discret */
+.ks-living .ks-living-icon[data-mode="ai"]         { color: var(--gold); }    /* IA → or Keystone */
+.ks-living .ks-living-icon[data-mode="pilotable"]  { color: #ff9b3d; }        /* annonce admin → ambre */
+.ks-living .ks-living-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Crossfade 300ms entre les phrases */
+.ks-living.fade-out { opacity: 0; transform: translateY(-2px); }
+.ks-living.fade-in  { opacity: .9; transform: translateY(0); }
+/* Premier affichage : animation discrète */
+@keyframes ks-living-fade-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: .9; transform: translateY(0); }
+}
+.ks-living:not(.fade-out):not(.fade-in) {
+  animation: ks-living-fade-in 480ms cubic-bezier(.18,.8,.3,1) both;
+}
+/* Responsive : sur mobile, autoriser le wrap pour les phrases longues */
+@media (max-width: 640px) {
+  .ks-living .ks-living-text { white-space: normal; }
+  .ks-living { max-width: 100%; }
 }
 
 /* Dual logo dark/light */

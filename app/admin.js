@@ -261,9 +261,10 @@ const TAB_RENDERERS = {
   tools:      renderTools,
   catalog:    renderCatalog,
   messaging:  renderMessaging,
+  living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
   monitoring: renderMonitoring,
   devices:    renderDevices,
-  audit:      renderAuditLog,   // Sprint S5.4
+  audit:      renderAuditLog,      // Sprint S5.4
   settings:   renderSettings,
 };
 
@@ -3456,6 +3457,250 @@ function showMessageModal(panel, existing = null) {
       } catch (err) {
         toast(err.message, 'error');
       }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — LIVING LAYER (Ordinateur de bord, 2026-05-28)
+// Pilotables : phrases COURTES rotatives dans le hero du dashboard
+// Différent de Messagerie (DST popups dismissables) : ici c'est une
+// zone permanente sous "Bonjour, X" qui rotate entre 3 modes.
+// ══════════════════════════════════════════════════════════════════
+async function renderLivingLayer(panel) {
+  try {
+    const { messages = [], total = 0 } = await api('/api/admin/living-messages');
+    const active    = messages.filter(m => m.effective_status === 'active').length;
+    const scheduled = messages.filter(m => m.effective_status === 'scheduled').length;
+    const expired   = messages.filter(m => m.effective_status === 'expired').length;
+    const archived  = messages.filter(m => m.effective_status === 'archived').length;
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">✦ Living Layer — Pilotables <span>(${total})</span></h2>
+        <button class="btn btn-primary" id="btn-new-living">+ Nouveau message</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:13px;margin:0 0 16px;max-width:720px">
+        Annonces poussées dans la zone Living Layer du dashboard.
+        Affichées en mode 📢 avec priorité décroissante. Priorité ≥ 80 = URGENT (prend la main sur le cycle IA/Calculateur).
+      </p>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-label">Actifs</div><div class="stat-value" style="color:#4caf80">${active}</div></div>
+        <div class="stat-card"><div class="stat-label">Programmés</div><div class="stat-value" style="color:#5cb0e0">${scheduled}</div></div>
+        <div class="stat-card"><div class="stat-label">Expirés</div><div class="stat-value" style="color:var(--text-muted)">${expired}</div></div>
+        <div class="stat-card"><div class="stat-label">Archivés</div><div class="stat-value" style="color:#888">${archived}</div></div>
+      </div>
+      ${total === 0
+        ? '<div class="empty-state"><div class="icon">✦</div><p>Aucun message Pilotable</p><p style="font-size:12px;color:var(--text-muted)">Crée-en un pour qu\'il apparaisse en mode 📢 sur le dashboard.</p></div>'
+        : `<table class="data-table">
+            <thead><tr>
+              <th>Statut</th><th>Priorité</th><th>Message</th>
+              <th>Audience</th><th>Période</th><th style="min-width:240px">Actions</th>
+            </tr></thead>
+            <tbody>${messages.map(_renderLivingRow).join('')}</tbody>
+          </table>`}
+    `;
+
+    const byId = Object.fromEntries(messages.map(m => [m.id, m]));
+
+    panel.querySelector('#btn-new-living')?.addEventListener('click', () => showLivingMessageModal(panel));
+
+    panel.querySelectorAll('[data-action="edit-living"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msg = byId[btn.dataset.id];
+        if (msg) showLivingMessageModal(panel, msg);
+      });
+    });
+
+    panel.querySelectorAll('[data-action="archive-living"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Archiver ce message ?\n\nIl ne sera plus visible mais reste consultable dans la liste.')) return;
+        btn.disabled = true;
+        try {
+          await api('/api/admin/living-messages/archive', 'POST', { id: btn.dataset.id });
+          toast('Message archivé ✓');
+          renderLivingLayer(panel);
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+      });
+    });
+
+    panel.querySelectorAll('[data-action="delete-living"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Supprimer définitivement ce message ?\n\nCette action est irréversible.')) return;
+        btn.disabled = true;
+        try {
+          await api('/api/admin/living-messages', 'DELETE', { id: btn.dataset.id });
+          toast('Message supprimé', 'error');
+          renderLivingLayer(panel);
+        } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
+      });
+    });
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+function _renderLivingRow(m) {
+  const statusColor = m.effective_status === 'active'    ? '#4caf80'
+                    : m.effective_status === 'scheduled' ? '#5cb0e0'
+                    : m.effective_status === 'expired'   ? 'var(--text-muted)' : '#888';
+  const statusLabel = m.effective_status === 'active'    ? 'Actif'
+                    : m.effective_status === 'scheduled' ? 'Programmé'
+                    : m.effective_status === 'expired'   ? 'Expiré' : 'Archivé';
+  const prioLabel = m.priority >= 80 ? `🔴 ${m.priority} URGENT` : `🟢 ${m.priority}`;
+  const text = m.text.length > 60 ? esc(m.text.slice(0, 58)) + '…' : esc(m.text);
+  const aud  = m.audience === 'all' ? 'Tous' : esc(m.audience).toUpperCase();
+
+  const fmt = (iso) => {
+    try {
+      return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    } catch (e) { return esc(iso); }
+  };
+  const period = `${fmt(m.start_at)} → ${fmt(m.end_at)}`;
+
+  const editBtn = `<button class="btn btn-sm" data-action="edit-living" data-id="${esc(m.id)}" title="Modifier">✏ Modifier</button>`;
+  const archBtn = m.status !== 'archived'
+    ? `<button class="btn btn-sm" data-action="archive-living" data-id="${esc(m.id)}" title="Archiver" style="color:#e0a25c">📦 Archiver</button>`
+    : '';
+  const delBtn  = `<button class="btn btn-sm" data-action="delete-living" data-id="${esc(m.id)}" title="Supprimer définitivement" style="color:#e05c5c;border-color:rgba(224,92,92,.35)">🗑 Supprimer</button>`;
+
+  return `
+    <tr>
+      <td><span style="color:${statusColor};font-weight:600">${statusLabel}</span></td>
+      <td>${prioLabel}</td>
+      <td title="${esc(m.text)}" style="max-width:280px">${text}</td>
+      <td><span style="font-size:11px;padding:2px 8px;background:rgba(255,255,255,.05);border-radius:10px">${aud}</span></td>
+      <td style="font-size:11px;color:var(--text-muted)">${period}</td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap">${editBtn}${archBtn}${delBtn}</div></td>
+    </tr>
+  `;
+}
+
+// Conversion ISO → datetime-local (input HTML5)
+function _toDatetimeLocal(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch (e) { return ''; }
+}
+
+function showLivingMessageModal(panel, existing = null) {
+  const isEdit = !!existing;
+  const v = existing || {};
+  // Défauts : start = maintenant, end = +7 jours
+  const now    = new Date();
+  const plus7d = new Date(Date.now() + 7 * 86400000);
+
+  const startVal = _toDatetimeLocal(v.start_at || now.toISOString());
+  const endVal   = _toDatetimeLocal(v.end_at   || plus7d.toISOString());
+
+  openModal(isEdit ? 'Modifier le message Pilotable' : 'Nouveau message Pilotable', `
+    <div class="form-grid" style="display:grid;gap:14px">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Texte (max 120 caractères)</label>
+        <textarea id="liv-text" class="form-input" maxlength="120" rows="3"
+                  placeholder="Ex : Brainstorming V2 est sorti — découvre le multi-agent IA"
+                  style="resize:vertical;font-family:inherit">${esc(v.text || '')}</textarea>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          <span id="liv-text-count">${(v.text || '').length}</span> / 120 caractères
+        </div>
+      </div>
+
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Début</label>
+          <input type="datetime-local" id="liv-start" class="form-input" value="${esc(startVal)}">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Fin</label>
+          <input type="datetime-local" id="liv-end" class="form-input" value="${esc(endVal)}">
+        </div>
+      </div>
+
+      <div>
+        <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">
+          Priorité : <span id="liv-prio-value">${v.priority ?? 50}</span> / 100
+          <span id="liv-prio-tag" style="margin-left:8px;font-weight:600">${(v.priority ?? 50) >= 80 ? '🔴 URGENT' : '🟢 Normal'}</span>
+        </label>
+        <input type="range" id="liv-prio" min="0" max="100" step="5" value="${v.priority ?? 50}" style="width:100%">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">≥ 80 = URGENT : prend la main sur les modes IA et Calculateur.</div>
+      </div>
+
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Audience</label>
+          <select id="liv-audience" class="form-input">
+            <option value="all"     ${v.audience === 'all'     || !v.audience ? 'selected' : ''}>Tous les plans</option>
+            <option value="demo"    ${v.audience === 'demo'    ? 'selected' : ''}>DEMO uniquement</option>
+            <option value="starter" ${v.audience === 'starter' ? 'selected' : ''}>STARTER uniquement</option>
+            <option value="pro"     ${v.audience === 'pro'     ? 'selected' : ''}>PRO uniquement</option>
+            <option value="max"     ${v.audience === 'max'     ? 'selected' : ''}>MAX uniquement</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px">Statut</label>
+          <select id="liv-status" class="form-input">
+            <option value="active"   ${v.status === 'active'   || !v.status ? 'selected' : ''}>Actif (visible)</option>
+            <option value="draft"    ${v.status === 'draft'    ? 'selected' : ''}>Brouillon</option>
+            <option value="archived" ${v.status === 'archived' ? 'selected' : ''}>Archivé</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-secondary" id="btn-cancel-liv">Annuler</button>
+    <button class="btn btn-primary"   id="btn-send-liv">${isEdit ? 'Enregistrer' : 'Publier'}</button>
+  `);
+
+  // Compteur live + slider de priorité
+  const textEl  = document.getElementById('liv-text');
+  const countEl = document.getElementById('liv-text-count');
+  textEl.addEventListener('input', () => { countEl.textContent = textEl.value.length; });
+
+  const prioEl    = document.getElementById('liv-prio');
+  const prioVal   = document.getElementById('liv-prio-value');
+  const prioTag   = document.getElementById('liv-prio-tag');
+  prioEl.addEventListener('input', () => {
+    prioVal.textContent = prioEl.value;
+    const isUrgent = +prioEl.value >= 80;
+    prioTag.textContent = isUrgent ? '🔴 URGENT' : '🟢 Normal';
+  });
+
+  document.getElementById('btn-cancel-liv').addEventListener('click', closeModal);
+  document.getElementById('btn-send-liv').addEventListener('click', async () => {
+    const text = textEl.value.trim();
+    if (!text) { toast('Le texte est requis', 'error'); return; }
+    if (text.length > 120) { toast('Texte trop long (max 120)', 'error'); return; }
+
+    const startIso = new Date(document.getElementById('liv-start').value).toISOString();
+    const endIso   = new Date(document.getElementById('liv-end').value).toISOString();
+    if (!startIso || !endIso) { toast('Dates invalides', 'error'); return; }
+    if (endIso <= startIso)   { toast('La fin doit être après le début', 'error'); return; }
+
+    const payload = {
+      text,
+      priority: +prioEl.value,
+      start_at: startIso,
+      end_at:   endIso,
+      audience: document.getElementById('liv-audience').value,
+      status:   document.getElementById('liv-status').value,
+    };
+
+    try {
+      if (isEdit) {
+        payload.id = existing.id;
+        await api('/api/admin/living-messages', 'PATCH', payload);
+        toast('Message modifié ✓');
+      } else {
+        await api('/api/admin/living-messages', 'POST', payload);
+        toast('Message publié ✓');
+      }
+      closeModal();
+      renderLivingLayer(panel);
+    } catch (err) {
+      toast(err.message, 'error');
     }
   });
 }

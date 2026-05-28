@@ -41,6 +41,9 @@ export const ICONS = {
   'mail'       : '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
   'send'       : '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
   'bar-chart'  : '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  // Living Layer V2 — mode Pilotable (annonce admin pushée par Stéphane).
+  // Picto outline 1.5 cohérent avec la charte Keystone.
+  'megaphone'  : '<path d="M3 11v3a1 1 0 0 0 1 1h2.51L11 18.5V6.5L6.51 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a4 4 0 0 1 0 8"/><path d="M19 5a8 8 0 0 1 0 14"/>',
 
   // Steps / catégories
   'target'     : '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',

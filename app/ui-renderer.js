@@ -28,6 +28,7 @@ import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
 import { ratingButtonHTML, bindRatingButton }                          from './lib/rating-widget.js';
+import { icon as uiIcon }                                              from './lib/ui-icons.js';
 import { helpButtonHTML, bindHelpButton }                              from './lib/help-overlay.js';
 // Sprint Démo Limited A+B — TTL 7j + 1 app simultanée
 import {
@@ -3919,7 +3920,8 @@ function _renderSettingsBody() {
     const lockEnabled     = localStorage.getItem('ks_lock_enabled') !== 'false';
     const lockDelay       = localStorage.getItem('ks_lock_delay')   || '300000';
     const lockStyle       = localStorage.getItem('ks_lock_style')   || 'abyss';
-    const livingOn        = localStorage.getItem(LS_LIVING_ON) === '1';
+    // V2 : ON par défaut. Off uniquement si l'utilisateur l'a explicitement désactivé.
+    const livingOn        = localStorage.getItem(LS_LIVING_ON) !== '0';
     const previewHTML     = savedPhoto
         ? `<img src="${savedPhoto}" alt="Photo">`
         : `<span class="sp-user-photo-preview-empty">👤</span>`;
@@ -4011,17 +4013,17 @@ function _renderSettingsBody() {
             </div>`,
         },
         {
-            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦',
+            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦ (Ordinateur de bord)',
             open: false,
             content: `<div class="sp-user-form">
                 <div class="sp-user-row sp-row-toggle">
-                    <label class="sp-user-label" for="living-on-toggle">Activer Living Layer</label>
+                    <label class="sp-user-label" for="living-on-toggle">Activer l'ordinateur de bord</label>
                     <label class="sp-toggle-wrap">
                         <input type="checkbox" id="living-on-toggle" ${livingOn ? 'checked' : ''}>
                         <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
                     </label>
                 </div>
-                <div class="sp-user-hint">Ajoute une phrase IA contextuelle sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" sur le Dashboard. Mise à jour toutes les 30 minutes. Bundle MAX exclusif.</div>
+                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : 📊 statistiques certifiées, ✦ phrases IA contextuelles, et 📢 annonces. Rotation toutes les 10 secondes. Activé par défaut.</div>
             </div>`,
         },
         {
@@ -4777,72 +4779,179 @@ function _applyLightMode(on) {
     document.documentElement.classList.toggle('light-mode', on);
 }
 
-// ── Living Layer — phrase IA contextuelle (2026-05-24) ──────
-// Sous "Bonjour, X" : 1 phrase courte vivante générée par Gemma 4.
-// Cache localStorage 30 min · toggle "ks_living_layer_on" (off par
-// défaut, activé dans Settings). Échec silencieux : si l'API ou le
-// cache foire, on laisse l'élément hidden — pas de spam d'erreur.
-// Constantes LS_LIVING_* déclarées en tête de fichier (TDZ-safe).
+// ── Living Layer V2 — Ordinateur de bord (2026-05-28) ───────
+// Zone unique sous "Bonjour, X" qui rotate entre 3 modes :
+//   📊 Calculateur (stats certifiées serveur, fallback toujours dispo)
+//   ✦  IA          (phrase actionnable Llama 3.1 8B sur signaux capteurs)
+//   📢 Pilotable   (annonces admin pushées par Stéphane, table D1)
+//
+// Le serveur (/api/livinglayer/board) choisit le mode selon la priorité :
+//   Pilotable URGENT (priority ≥ 80) > IA (si signaux) > Pilotable normal > Calculateur
+// Le frontend peut forcer un mode via preferMode lors de la rotation.
+//
+// Capteurs serveur (Smart QR / Pulsa / GW) → lus en D1
+// Capteurs client  (Brainstorming / Annonces / Kodex) → poussés via body
+//
+// ON par défaut V2 (avant : off). Désactivable dans Settings.
+// Toggle "ks_living_layer_on" : '0' = off explicite, autre = on.
 
-async function _renderLivingLayer() {
-    const el = document.getElementById('ks-living');
-    if (!el) return;
-    // Off par défaut — n'affiche rien si le toggle Settings n'est pas activé
-    if (localStorage.getItem(LS_LIVING_ON) !== '1') {
-        el.hidden = true;
-        el.textContent = '';
+let _livingRotationInterval = null;
+let _livingCycleStep         = 0;
+// Cycle : null = best-choice serveur, puis force calculator, puis ai.
+// Pilotable n'est pas dans le cycle car il est imposé par priorité serveur.
+const LIVING_CYCLE     = [null, 'calculator', 'ai'];
+const LIVING_ROTATE_MS = 10000;  // 10s entre chaque rotation
+
+function _escapeLivingText(s) {
+    return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+}
+
+function _collectClientSensors() {
+    const sensors = {};
+    // Brainstorming — bibliothèque de sessions sauvegardées
+    try {
+        const sessions = JSON.parse(localStorage.getItem('ks_brainstorming_sessions') || '[]');
+        sensors.brainstormingSessions = Array.isArray(sessions) ? sessions.length : 0;
+    } catch (e) { sensors.brainstormingSessions = 0; }
+    // Brainstorming — draft en cours (âge en heures pour nudge "tu as laissé en pause")
+    try {
+        const draft = JSON.parse(localStorage.getItem('ks_brainstorming_session_draft') || 'null');
+        if (draft?.lastEditedAt) {
+            sensors.brainstormingDraftAgeHours = (Date.now() - new Date(draft.lastEditedAt).getTime()) / 3600000;
+        }
+    } catch (e) { /* no-op */ }
+    // Annonces Immo — brouillons non-publiés
+    try {
+        const lib = JSON.parse(localStorage.getItem('ks_annonces_immo_library') || '[]');
+        sensors.annoncesDrafts = Array.isArray(lib)
+            ? lib.filter(d => d && (d.status === 'draft' || !d.publishedAt)).length
+            : 0;
+    } catch (e) { sensors.annoncesDrafts = 0; }
+    // Kodex (Brief Prod) — briefs en bibliothèque + âge du dernier
+    try {
+        const kodexLib = JSON.parse(localStorage.getItem('ks_kodex_library') || '[]');
+        if (Array.isArray(kodexLib)) {
+            sensors.kodexBriefs = kodexLib.length;
+            if (kodexLib.length > 0) {
+                const last = kodexLib.reduce((a, b) =>
+                    (b?.created_at || '') > (a?.created_at || '') ? b : a, {});
+                if (last?.created_at) {
+                    sensors.kodexLastBriefAgeDays = (Date.now() - new Date(last.created_at).getTime()) / 86400000;
+                }
+            }
+        }
+    } catch (e) { /* no-op */ }
+    return sensors;
+}
+
+function _paintLivingState(el, data) {
+    const iconName = data.icon || 'bar-chart';
+    const iconHtml = uiIcon(iconName, 14);
+    const newHtml  = `<span class="ks-living-icon" data-mode="${_escapeLivingText(data.mode || 'calculator')}">${iconHtml}</span><span class="ks-living-text">${_escapeLivingText(data.text)}</span>`;
+
+    // Si contenu identique, juste s'assurer que c'est visible (pas de re-fade inutile)
+    if (el.innerHTML === newHtml) {
+        el.hidden = false;
         return;
     }
 
-    // Cache localStorage 30 min — économise les neurones Workers AI
-    try {
-        const raw = localStorage.getItem(LS_LIVING_CACHE);
-        if (raw) {
-            const cached = JSON.parse(raw);
-            if (cached?.phrase && cached?.ts && (Date.now() - cached.ts < LIVING_TTL_MS)) {
-                el.textContent = cached.phrase;
-                el.hidden = false;
-                return;
-            }
+    // Premier paint ou ré-affichage après hidden → fade-in direct
+    if (!el.innerHTML || el.hidden) {
+        el.innerHTML = newHtml;
+        el.classList.remove('fade-out');
+        el.classList.add('fade-in');
+        el.hidden = false;
+        return;
+    }
+
+    // Crossfade 300ms : fade-out → swap contenu → fade-in
+    el.classList.add('fade-out');
+    setTimeout(() => {
+        el.innerHTML = newHtml;
+        el.classList.remove('fade-out');
+        el.classList.add('fade-in');
+    }, 280);
+}
+
+async function _renderLivingLayer(preferMode = null) {
+    const el = document.getElementById('ks-living');
+    if (!el) return;
+
+    // V2 : ON par défaut. Off uniquement si l'utilisateur l'a explicitement désactivé via Settings.
+    if (localStorage.getItem(LS_LIVING_ON) === '0') {
+        el.hidden = true;
+        el.innerHTML = '';
+        if (_livingRotationInterval) {
+            clearInterval(_livingRotationInterval);
+            _livingRotationInterval = null;
         }
-    } catch (e) { /* cache corrompu — on regénère */ }
+        return;
+    }
 
-    // Préparer le contexte : prénom + heure + jour + outils installés
-    const firstName = (localStorage.getItem(LS_USER_NAME) || '').trim() || 'toi';
-    const now       = new Date();
-    const hour      = now.getHours();
-    const weekday   = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    let recentTools = [];
-    try {
-        const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');
-        recentTools = Array.isArray(sel) ? sel.slice(0, 5) : [];
-    } catch (e) { /* no-op */ }
+    const firstName     = (localStorage.getItem(LS_USER_NAME) || '').trim() || 'toi';
+    const clientSensors = _collectClientSensors();
+    const jwt           = localStorage.getItem('ks_jwt') || '';
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (jwt) headers['Authorization'] = 'Bearer ' + jwt;
 
     try {
-        const r = await fetch(`${CF_API}/api/livinglayer/greeting`, {
+        const r = await fetch(`${CF_API}/api/livinglayer/board`, {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ firstName, hour, weekday, recentTools }),
+            headers,
+            body:    JSON.stringify({ firstName, clientSensors, preferMode }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        if (!data?.phrase) throw new Error('phrase vide');
+        if (!data?.text) throw new Error('réponse vide');
 
-        el.textContent = data.phrase;
-        el.hidden = false;
+        // Cache localStorage du dernier état (restauration instantanée au reload)
         try {
-            localStorage.setItem(LS_LIVING_CACHE, JSON.stringify({ phrase: data.phrase, ts: Date.now() }));
-        } catch (e) { /* localStorage plein — on s'en fout */ }
+            localStorage.setItem(LS_LIVING_CACHE, JSON.stringify({ data, ts: Date.now() }));
+        } catch (e) { /* localStorage plein, on s'en fout */ }
+
+        _paintLivingState(el, data);
+
+        // Démarre la rotation après le premier render réussi
+        _startLivingRotation();
     } catch (e) {
-        // Échec silencieux : l'utilisateur ne voit juste rien
-        console.warn('[living-layer]', e.message);
+        console.warn('[living-layer V2]', e.message);
+        // Fallback : restaurer depuis le cache si possible
+        try {
+            const raw = localStorage.getItem(LS_LIVING_CACHE);
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached?.data?.text && (Date.now() - cached.ts < LIVING_TTL_MS)) {
+                    _paintLivingState(el, cached.data);
+                    return;
+                }
+            }
+        } catch (e2) { /* cache corrompu */ }
+        // Échec total : on cache discrètement
         el.hidden = true;
     }
 }
 
-// Expose pour permettre un refresh manuel depuis Settings
+function _startLivingRotation() {
+    if (_livingRotationInterval) return;
+    _livingRotationInterval = setInterval(() => {
+        // Pause si onglet en arrière-plan (économise neurones AI + bande passante)
+        if (document.hidden) return;
+        // Stop si l'utilisateur a désactivé entretemps
+        if (localStorage.getItem(LS_LIVING_ON) === '0') {
+            clearInterval(_livingRotationInterval);
+            _livingRotationInterval = null;
+            return;
+        }
+        _livingCycleStep = (_livingCycleStep + 1) % LIVING_CYCLE.length;
+        _renderLivingLayer(LIVING_CYCLE[_livingCycleStep]);
+    }, LIVING_ROTATE_MS);
+}
+
+// Refresh manuel depuis Settings (ou autres triggers comme login/sync)
 window.__ksLivingRefresh = () => {
     localStorage.removeItem(LS_LIVING_CACHE);
+    _livingCycleStep = 0;
     _renderLivingLayer();
 };
 
