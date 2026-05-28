@@ -431,7 +431,10 @@
         sw.postMessage('GET_VERSION', [ch.port2]);
         setTimeout(() => resolve(null), 1500);
       });
-      if (build) el.textContent = build;
+      if (build) {
+        const m = String(build).match(/v\d+\.\d+\.\d+/);
+        el.textContent = m ? m[0] : build;
+      }
     } catch (e) {}
   })();
 </script>

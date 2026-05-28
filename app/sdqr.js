@@ -2129,6 +2129,28 @@ const THEME_PRESETS = [
     module: 'dot',     outer: 'dot',     inner: 'dot',     color: 'synthwave' },
 ];
 
+// Une carte de palette couleur est active si le design courant lui correspond.
+function _colorPresetActive(p, d) {
+  const lc = v => String(v || '').toLowerCase();
+  const gOn = !!(d.gradient && d.gradient.enabled);
+  if (p.gradient) {
+    return gOn && lc(d.gradient.from) === lc(p.gradient.from) && lc(d.gradient.to) === lc(p.gradient.to) && lc(d.bg) === lc(p.bg);
+  }
+  return !gOn && lc(d.fg) === lc(p.fg) && lc(d.bg) === lc(p.bg);
+}
+
+// Champ couleur façon KeyForm : color-picker natif + saisie hexadécimale.
+function _colorField(label, id, value) {
+  return `
+    <label class="sdqr-color-field">
+      <span class="sdqr-design-lbl-sm">${label}</span>
+      <span class="sdqr-color-row">
+        <input type="color" id="${id}" value="${_esc(value)}">
+        <input type="text" class="sdqr-hex" id="${id}-hex" value="${_esc(value)}" maxlength="7" spellcheck="false" autocomplete="off">
+      </span>
+    </label>`;
+}
+
 function _renderDesignPanel(qr) {
   const d = mergeDesign(qr.design);
   return `
@@ -2180,18 +2202,17 @@ function _renderDesignPanel(qr) {
         <!-- COULEURS : palettes + custom -->
         <div class="sdqr-design-section">
           <div class="sdqr-design-section-title">Couleurs</div>
-          <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Palettes</span>
-            <div class="sdqr-color-swatches">
-              ${COLOR_PRESETS.map(p => `
-                <button class="sdqr-color-swatch" data-color-preset="${p.id}" title="${_esc(p.label)}">
-                  <span class="sdqr-color-swatch-preview" style="background:${p.gradient
-                    ? `linear-gradient(${p.gradient.angle}deg, ${p.gradient.from}, ${p.gradient.to})`
-                    : p.fg}; border: 2px solid ${p.bg};"></span>
-                  <span class="sdqr-color-swatch-lbl">${_esc(p.label)}</span>
-                </button>
-              `).join('')}
-            </div>
+          <div class="sdqr-pal-grid">
+            ${COLOR_PRESETS.map(p => {
+              const bg = p.gradient
+                ? `linear-gradient(${p.gradient.angle}deg, ${p.gradient.from}, ${p.gradient.to})`
+                : p.fg;
+              return `
+                <button class="sdqr-pal-card ${_colorPresetActive(p, d) ? 'is-on' : ''}" data-color-preset="${p.id}" title="${_esc(p.label)}">
+                  <span class="sdqr-pal-swatch" style="background:${bg}"></span>
+                  <span class="sdqr-pal-name">${_esc(p.label)}</span>
+                </button>`;
+            }).join('')}
           </div>
 
           <div class="sdqr-design-row">
@@ -2202,33 +2223,18 @@ function _renderDesignPanel(qr) {
             </div>
           </div>
 
-          <div class="sdqr-design-row sdqr-design-row--colors" data-when-solid hidden="${d.gradient.enabled ? 'hidden' : ''}">
-            <label class="sdqr-color-field">
-              <span class="sdqr-design-lbl-sm">Couleur</span>
-              <input type="color" id="sdqr-color-fg" value="${_esc(d.fg)}">
-            </label>
-            <label class="sdqr-color-field">
-              <span class="sdqr-design-lbl-sm">Fond</span>
-              <input type="color" id="sdqr-color-bg" value="${_esc(d.bg)}">
-            </label>
+          <div class="sdqr-color-grid" data-when-solid ${d.gradient.enabled ? 'hidden' : ''}>
+            ${_colorField('Couleur', 'sdqr-color-fg', d.fg)}
+            ${_colorField('Fond', 'sdqr-color-bg', d.bg)}
           </div>
 
-          <div class="sdqr-design-row sdqr-design-row--colors" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
-            <label class="sdqr-color-field">
-              <span class="sdqr-design-lbl-sm">Départ</span>
-              <input type="color" id="sdqr-grad-from" value="${_esc(d.gradient.from)}">
-            </label>
-            <label class="sdqr-color-field">
-              <span class="sdqr-design-lbl-sm">Fin</span>
-              <input type="color" id="sdqr-grad-to" value="${_esc(d.gradient.to)}">
-            </label>
-            <label class="sdqr-color-field">
-              <span class="sdqr-design-lbl-sm">Fond</span>
-              <input type="color" id="sdqr-color-bg-grad" value="${_esc(d.bg)}">
-            </label>
+          <div class="sdqr-color-grid" data-when-gradient ${d.gradient.enabled ? '' : 'hidden'}>
+            ${_colorField('Départ', 'sdqr-grad-from', d.gradient.from)}
+            ${_colorField('Fin', 'sdqr-grad-to', d.gradient.to)}
+            ${_colorField('Fond', 'sdqr-color-bg-grad', d.bg)}
           </div>
 
-          <div class="sdqr-design-row" data-when-gradient hidden="${d.gradient.enabled ? '' : 'hidden'}">
+          <div class="sdqr-design-row" data-when-gradient ${d.gradient.enabled ? '' : 'hidden'}>
             <span class="sdqr-design-lbl">Angle</span>
             <div class="sdqr-slider-wrap">
               <input type="range" id="sdqr-grad-angle" min="0" max="360" step="5" value="${d.gradient.angle}">
@@ -2460,14 +2466,22 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     });
   });
 
-  // Couleurs unies
-  panel.querySelector('#sdqr-color-fg')?.addEventListener('input', e => { _editingDesign.fg = e.target.value; _liveRerender(); });
-  panel.querySelector('#sdqr-color-bg')?.addEventListener('input', e => { _editingDesign.bg = e.target.value; _liveRerender(); });
-
-  // Couleurs gradient
-  panel.querySelector('#sdqr-grad-from')?.addEventListener('input', e => { _editingDesign.gradient.from = e.target.value; _liveRerender(); });
-  panel.querySelector('#sdqr-grad-to')?.addEventListener('input', e => { _editingDesign.gradient.to = e.target.value; _liveRerender(); });
-  panel.querySelector('#sdqr-color-bg-grad')?.addEventListener('input', e => { _editingDesign.bg = e.target.value; _liveRerender(); });
+  // Couleurs (color-picker + saisie hex synchronisés) — unie + dégradé
+  const _bindColor = (id, apply) => {
+    const c = panel.querySelector('#' + id);
+    const h = panel.querySelector('#' + id + '-hex');
+    if (!c) return;
+    c.addEventListener('input', e => { apply(e.target.value); if (h) h.value = e.target.value; _liveRerender(); });
+    if (h) h.addEventListener('input', e => {
+      const v = e.target.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) { apply(v); c.value = v; _liveRerender(); }
+    });
+  };
+  _bindColor('sdqr-color-fg',      v => { _editingDesign.fg = v; });
+  _bindColor('sdqr-color-bg',      v => { _editingDesign.bg = v; });
+  _bindColor('sdqr-grad-from',     v => { _editingDesign.gradient.from = v; });
+  _bindColor('sdqr-grad-to',       v => { _editingDesign.gradient.to = v; });
+  _bindColor('sdqr-color-bg-grad', v => { _editingDesign.bg = v; });
 
   // Angle dégradé
   panel.querySelector('#sdqr-grad-angle')?.addEventListener('input', e => {
