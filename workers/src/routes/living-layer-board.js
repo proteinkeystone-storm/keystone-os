@@ -169,10 +169,13 @@ async function _fetchActivePilotable(env, audience) {
 
 // ── Génère une phrase mode Calculateur depuis les sensors ─────────
 // Toujours une phrase utile. Pas de LLM, zéro risque qualité.
-function _buildCalculatorPhrase(sensors) {
+// variantIndex : permet la ROTATION entre les candidats (pas toujours
+// le top-score). On trie par pertinence puis on pioche le N-ième.
+function _buildCalculatorPhrase(sensors, variantIndex = 0) {
   const { smartqr, pulsa, ghostwriter, clientSensors = {} } = sensors;
   const candidates = [];
 
+  // ── Candidats basés sur signaux forts (chiffres réels) ──────────
   if (smartqr.scans24h > 0) {
     candidates.push({
       text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} ces dernières 24 h.`,
@@ -185,11 +188,29 @@ function _buildCalculatorPhrase(sensors) {
       score: 75 + Math.min(pulsa.responses24h * 3, 20),
     });
   }
+  if (clientSensors.annoncesDrafts > 0) {
+    candidates.push({
+      text:  `${clientSensors.annoncesDrafts} annonce${clientSensors.annoncesDrafts > 1 ? 's' : ''} immo prête${clientSensors.annoncesDrafts > 1 ? 's' : ''} à publier.`,
+      score: 60,
+    });
+  }
   if (ghostwriter.usedToday > 0 && ghostwriter.quotaToday != null) {
     const remaining = Math.max(0, ghostwriter.quotaToday - ghostwriter.usedToday);
     candidates.push({
       text:  `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday} aujourd'hui, ${remaining} restant${remaining > 1 ? 's' : ''}.`,
-      score: 50,
+      score: 52,
+    });
+  }
+  if (clientSensors.brainstormingSessions > 0) {
+    candidates.push({
+      text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming sauvegardée${clientSensors.brainstormingSessions > 1 ? 's' : ''}.`,
+      score: 48,
+    });
+  }
+  if (pulsa.publishedForms > 0) {
+    candidates.push({
+      text:  `${pulsa.publishedForms} formulaire${pulsa.publishedForms > 1 ? 's' : ''} Key Form publié${pulsa.publishedForms > 1 ? 's' : ''} en ligne.`,
+      score: 42,
     });
   }
   if (smartqr.scansTotal >= 50) {
@@ -198,58 +219,68 @@ function _buildCalculatorPhrase(sensors) {
       score: 40,
     });
   }
-  if (pulsa.publishedForms > 0) {
-    candidates.push({
-      text:  `${pulsa.publishedForms} formulaire${pulsa.publishedForms > 1 ? 's' : ''} Key Form publié${pulsa.publishedForms > 1 ? 's' : ''} en ligne.`,
-      score: 35,
-    });
-  }
-  if (clientSensors.brainstormingSessions > 0) {
-    candidates.push({
-      text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming sauvegardée${clientSensors.brainstormingSessions > 1 ? 's' : ''}.`,
-      score: 45,
-    });
-  }
-  if (clientSensors.annoncesDrafts > 0) {
-    candidates.push({
-      text:  `${clientSensors.annoncesDrafts} annonce${clientSensors.annoncesDrafts > 1 ? 's' : ''} immo prête${clientSensors.annoncesDrafts > 1 ? 's' : ''} à publier.`,
-      score: 55,
-    });
-  }
   if (clientSensors.kodexBriefs > 0) {
     candidates.push({
       text:  `${clientSensors.kodexBriefs} brief${clientSensors.kodexBriefs > 1 ? 's' : ''} Brief Prod en bibliothèque.`,
-      score: 30,
+      score: 38,
     });
   }
 
-  // Fallback ultime : phrase générique mais factuelle
-  if (!candidates.length) {
-    return 'Votre suite Keystone est prête — 7 outils à portée de main.';
-  }
+  // ── Candidats d'ambiance (toujours présents → garantit la VARIÉTÉ
+  //    même quand un seul signal fort domine, ex: que des scans QR) ──
+  const toolsCount = Number.isFinite(+clientSensors.toolsCount) && +clientSensors.toolsCount > 0
+    ? +clientSensors.toolsCount : 7;
+  const hour    = new Date().getHours();
+  const weekday = new Date().toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+  const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matinée' : hour < 18 ? 'après-midi' : 'soirée';
 
+  candidates.push({
+    text:  `${toolsCount} assistants IA prêts à travailler sur vos projets.`,
+    score: 25,
+  });
+  candidates.push({
+    text:  `Belle ${moment} de ${weekday} — votre suite Keystone est à jour.`,
+    score: 20,
+  });
+  candidates.push({
+    text:  `Votre poste de commande Keystone est opérationnel.`,
+    score: 15,
+  });
+
+  // Tri par pertinence décroissante puis ROTATION sur l'index demandé.
   candidates.sort((a, b) => b.score - a.score);
-  return candidates[0].text;
+  const idx = ((variantIndex % candidates.length) + candidates.length) % candidates.length;
+  return candidates[idx].text;
 }
 
 // ── Génère une phrase mode IA (Llama 3.1 8B) ──────────────────────
 // Une phrase actionnable, contextuelle, basée sur les signaux les plus
 // chargés. Échec → null (le caller fallback sur Calculateur).
-async function _buildAiPhrase(env, sensors, firstName) {
+async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
   if (!env.AI || typeof env.AI.run !== 'function') return null;
 
   // Si aucun signal n'est intéressant, on ne dérange pas le LLM
   const { smartqr, pulsa, ghostwriter, clientSensors = {} } = sensors;
-  const signals = [
+  let signals = [
     smartqr.scans24h        > 0 ? `Smart QR : ${smartqr.scans24h} scans dernières 24h`           : null,
     pulsa.responses24h      > 0 ? `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`      : null,
     ghostwriter.usedToday   > 0 ? `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui` : null,
     clientSensors.brainstormingDraftAgeHours > 0 ? `Brainstorming en pause depuis ${Math.round(clientSensors.brainstormingDraftAgeHours)}h` : null,
-    clientSensors.annoncesDrafts > 0 ? `${clientSensors.annoncesDrafts} annonces immo brouillons` : null,
+    clientSensors.brainstormingSessions > 0 ? `${clientSensors.brainstormingSessions} sessions Brainstorming en bibliothèque` : null,
+    clientSensors.annoncesDrafts > 0 ? `${clientSensors.annoncesDrafts} annonces immo en brouillon` : null,
+    clientSensors.kodexBriefs > 0 ? `${clientSensors.kodexBriefs} briefs Brief Prod en bibliothèque` : null,
     clientSensors.kodexLastBriefAgeDays > 0 ? `Dernier brief Brief Prod il y a ${Math.round(clientSensors.kodexLastBriefAgeDays)} jours` : null,
   ].filter(Boolean);
 
   if (!signals.length) return null;
+
+  // Permutation : on fait tourner l'ordre des signaux selon variantIndex.
+  // Le LLM tend à privilégier le premier signal → en changeant le premier
+  // à chaque rotation, on évite de toujours parler du même sujet (ex: QR).
+  if (signals.length > 1) {
+    const shift = ((variantIndex % signals.length) + signals.length) % signals.length;
+    signals = [...signals.slice(shift), ...signals.slice(0, shift)];
+  }
 
   const hour    = new Date().getHours();
   const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
@@ -270,10 +301,10 @@ async function _buildAiPhrase(env, sensors, firstName) {
 
   const userPrompt = [
     `Contexte : ${moment} de ${weekday}, prénom ${firstName}.`,
-    'Signaux disponibles :',
-    ...signals.map(s => `- ${s}`),
+    'Signaux disponibles (par ordre de priorité) :',
+    ...signals.map((s, i) => `${i + 1}. ${s}`),
     '',
-    'Choisis le signal le plus pertinent et formule une phrase courte qui fait gagner du temps à l\'utilisateur (rappel utile, observation factuelle, ou nudge léger). Pas d\'invention de chiffre.',
+    'Formule une phrase courte basée EN PRIORITÉ sur le signal n°1, qui fait gagner du temps à l\'utilisateur (rappel utile, observation factuelle, ou nudge léger). Pas d\'invention de chiffre.',
     'Génère le JSON {"phrase"} maintenant.',
   ].join('\n');
 
@@ -336,6 +367,10 @@ export async function handleLivingBoard(request, env) {
   const firstName     = (body.firstName || '').toString().trim().slice(0, 40) || 'toi';
   const clientSensors = (body.clientSensors && typeof body.clientSensors === 'object') ? body.clientSensors : {};
   const preferMode    = ['pilotable', 'calculator', 'ai'].includes(body.preferMode) ? body.preferMode : null;
+  // variantIndex : compteur de rotation côté client → fait varier le
+  // candidat Calculateur ET le focus du mode IA (évite de répéter le
+  // même sujet, ex: ne parler que des scans QR).
+  const variantIndex  = Number.isFinite(+body.variantIndex) ? Math.abs(Math.trunc(+body.variantIndex)) : 0;
 
   // JWT optionnel — si présent, on identifie la licence (audience + sensors personnels)
   let claims = null;
@@ -375,32 +410,36 @@ export async function handleLivingBoard(request, env) {
 
   // Si preferMode demande explicitement un mode, on tente celui-là
   if (preferMode === 'ai') {
-    const aiText = await _buildAiPhrase(env, sensors, firstName);
+    const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex);
     if (aiText) {
       return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
     }
     // sinon fallback Calculateur
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
   if (preferMode === 'calculator') {
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
-  if (preferMode === 'pilotable' && pilotable) {
-    return json({
-      mode: 'pilotable',
-      text: pilotable.text,
-      icon: 'megaphone',
-      ttl:  60,
-      messageId: pilotable.id,
-      priority: pilotable.priority,
-      expiresAt: pilotable.end_at,
-    }, 200, origin);
+  if (preferMode === 'pilotable') {
+    if (pilotable) {
+      return json({
+        mode: 'pilotable',
+        text: pilotable.text,
+        icon: 'megaphone',
+        ttl:  60,
+        messageId: pilotable.id,
+        priority: pilotable.priority,
+        expiresAt: pilotable.end_at,
+      }, 200, origin);
+    }
+    // Pas de Pilotable actif → fallback Calculateur (variété + économie LLM)
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
 
   // 2. Pas de preferMode → cycle par défaut au boot
   // Premier appel : on commence par le mode IA si signaux disponibles, sinon Calculateur.
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
-  const aiText = await _buildAiPhrase(env, sensors, firstName);
+  const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex);
   if (aiText) {
     return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
   }
@@ -421,7 +460,7 @@ export async function handleLivingBoard(request, env) {
   // 4. Fallback : Calculateur
   return json({
     mode: 'calculator',
-    text: _buildCalculatorPhrase(sensors),
+    text: _buildCalculatorPhrase(sensors, variantIndex),
     icon: 'bar-chart',
     ttl:  90,
   }, 200, origin);

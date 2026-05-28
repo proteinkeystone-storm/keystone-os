@@ -4259,17 +4259,26 @@ function _renderSettingsBody() {
         });
     });
 
-    // ── Living Layer toggle (2026-05-24) ─────────────────────────
+    // ── Living Layer toggle (2026-05-24, V2 2026-05-28) ──────────
     body.querySelector('#living-on-toggle')?.addEventListener('change', e => {
         const on = e.target.checked;
         localStorage.setItem(LS_LIVING_ON, on ? '1' : '0');
         if (!on) {
-            // OFF immédiat — vide cache + masque l'élément
+            // OFF immédiat — stoppe la rotation, vide cache, masque la zone
+            // et rend la ligne DST d'ambiance (comportement legacy).
             localStorage.removeItem(LS_LIVING_CACHE);
+            if (_livingRotationInterval) {
+                clearInterval(_livingRotationInterval);
+                _livingRotationInterval = null;
+            }
             const el = document.getElementById('ks-living');
-            if (el) { el.hidden = true; el.textContent = ''; }
+            if (el) { el.hidden = true; el.innerHTML = ''; }
+            _setHeroDstVisible(true);
         } else {
-            // ON — fetch immédiatement (la fonction gère le cache)
+            // ON — reset cycle + fetch immédiatement
+            _livingCycleStep  = 0;
+            _livingVariant    = 0;
+            _livingUrgentLock = false;
             _renderLivingLayer();
         }
     });
@@ -4797,9 +4806,13 @@ function _applyLightMode(on) {
 
 let _livingRotationInterval = null;
 let _livingCycleStep         = 0;
-// Cycle : null = best-choice serveur, puis force calculator, puis ai.
-// Pilotable n'est pas dans le cycle car il est imposé par priorité serveur.
-const LIVING_CYCLE     = [null, 'calculator', 'ai'];
+let _livingVariant           = 0;     // incrémenté à chaque tour → varie le contenu serveur
+let _livingUrgentLock        = false; // true si un Pilotable URGENT (≥80) monopolise l'affichage
+// Cycle équilibré : Calculateur (stats) → IA → Pilotable (annonce admin).
+// variantIndex fait varier le contenu de chaque mode pour ne pas répéter
+// le même sujet. Le Pilotable n'apparaît que s'il y en a un actif côté
+// serveur (sinon fallback Calculateur).
+const LIVING_CYCLE     = ['calculator', 'ai', 'pilotable'];
 const LIVING_ROTATE_MS = 10000;  // 10s entre chaque rotation
 
 function _escapeLivingText(s) {
@@ -4841,13 +4854,33 @@ function _collectClientSensors() {
             }
         }
     } catch (e) { /* no-op */ }
+    // Nombre d'outils installés (pour la phrase d'ambiance "N assistants IA")
+    try {
+        const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');
+        if (Array.isArray(sel) && sel.length > 0) sensors.toolsCount = sel.length;
+    } catch (e) { /* no-op */ }
     return sensors;
 }
 
+// Masque/affiche la ligne DST d'ambiance (#hero-dst) sous le Living Layer.
+// Quand le V2 est ON, c'est lui qui parle → on évite la double ligne.
+// Quand OFF, le DST legacy reprend la main.
+function _setHeroDstVisible(visible) {
+    const dst = document.getElementById('hero-dst');
+    if (dst) dst.style.display = visible ? '' : 'none';
+}
+
 function _paintLivingState(el, data) {
+    // URGENT lock : un Pilotable priorité ≥ 80 monopolise l'affichage
+    // (pas de rotation) tant qu'il est actif côté serveur.
+    _livingUrgentLock = (data.mode === 'pilotable' && (+data.priority || 0) >= 80);
+
     const iconName = data.icon || 'bar-chart';
     const iconHtml = uiIcon(iconName, 14);
     const newHtml  = `<span class="ks-living-icon" data-mode="${_escapeLivingText(data.mode || 'calculator')}">${iconHtml}</span><span class="ks-living-text">${_escapeLivingText(data.text)}</span>`;
+
+    // Living V2 affiche quelque chose → on masque la ligne DST d'ambiance
+    _setHeroDstVisible(false);
 
     // Si contenu identique, juste s'assurer que c'est visible (pas de re-fade inutile)
     if (el.innerHTML === newHtml) {
@@ -4885,8 +4918,15 @@ async function _renderLivingLayer(preferMode = null) {
             clearInterval(_livingRotationInterval);
             _livingRotationInterval = null;
         }
+        // Living OFF → on rend la ligne DST d'ambiance (comportement legacy)
+        _setHeroDstVisible(true);
         return;
     }
+
+    // Living ON → on masque la ligne DST d'ambiance dès maintenant pour
+    // éviter le flash "double ligne" pendant le fetch. Réaffichée seulement
+    // si le board échoue ET qu'aucun cache n'est dispo (fallback gracieux).
+    _setHeroDstVisible(false);
 
     const firstName     = (localStorage.getItem(LS_USER_NAME) || '').trim() || 'toi';
     const clientSensors = _collectClientSensors();
@@ -4899,7 +4939,7 @@ async function _renderLivingLayer(preferMode = null) {
         const r = await fetch(`${CF_API}/api/livinglayer/board`, {
             method:  'POST',
             headers,
-            body:    JSON.stringify({ firstName, clientSensors, preferMode }),
+            body:    JSON.stringify({ firstName, clientSensors, preferMode, variantIndex: _livingVariant }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
@@ -4927,8 +4967,10 @@ async function _renderLivingLayer(preferMode = null) {
                 }
             }
         } catch (e2) { /* cache corrompu */ }
-        // Échec total : on cache discrètement
+        // Échec total (API down + pas de cache) : on cache la zone Living
+        // et on rend la ligne DST d'ambiance comme filet de sécurité.
         el.hidden = true;
+        _setHeroDstVisible(true);
     }
 }
 
@@ -4941,9 +4983,18 @@ function _startLivingRotation() {
         if (localStorage.getItem(LS_LIVING_ON) === '0') {
             clearInterval(_livingRotationInterval);
             _livingRotationInterval = null;
+            _setHeroDstVisible(true);
             return;
         }
+        // URGENT lock : on garde le Pilotable prioritaire affiché (re-fetch
+        // pour vérifier qu'il est toujours actif, sans avancer le cycle).
+        if (_livingUrgentLock) {
+            _renderLivingLayer('pilotable');
+            return;
+        }
+        // Rotation normale : avance le cycle + incrémente le variant (variété)
         _livingCycleStep = (_livingCycleStep + 1) % LIVING_CYCLE.length;
+        _livingVariant++;
         _renderLivingLayer(LIVING_CYCLE[_livingCycleStep]);
     }, LIVING_ROTATE_MS);
 }
@@ -4951,7 +5002,9 @@ function _startLivingRotation() {
 // Refresh manuel depuis Settings (ou autres triggers comme login/sync)
 window.__ksLivingRefresh = () => {
     localStorage.removeItem(LS_LIVING_CACHE);
-    _livingCycleStep = 0;
+    _livingCycleStep  = 0;
+    _livingVariant    = 0;
+    _livingUrgentLock = false;
     _renderLivingLayer();
 };
 
