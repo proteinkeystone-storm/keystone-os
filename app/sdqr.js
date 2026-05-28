@@ -396,6 +396,15 @@ async function _refreshList(panel) {
 // Dérive et rend la barre de dossiers depuis _cachedQrs. Phase 1 (plats) :
 // un dossier "existe" tant qu'au moins 1 QR le référence — pas de registre.
 // "Tous" + un chip par dossier (compteur + ✎ renommer) + "Non classés".
+// Pictogrammes dossiers — SVG outline monochrome (charte Keystone, style
+// Lucide : fill:none + stroke:currentColor). Jamais d'emoji dans le studio.
+const _ICO = {
+  all:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
+  folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>`,
+  none:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>`,
+  pencil: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+};
+
 function _renderFolders(panel) {
   const bar = panel.querySelector('#sdqr-folders');
   if (!bar) return;
@@ -409,19 +418,20 @@ function _renderFolders(panel) {
   const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'fr'));
   if (names.length === 0) { bar.innerHTML = ''; return; }   // aucun dossier → barre masquée (:empty)
 
-  const chip = (key, label, count, extra = '') =>
+  const chip = (key, icon, label, count, extra = '') =>
     `<button class="sdqr-folder-chip ${_filter.folder === key ? 'is-active' : ''}" data-folder="${_esc(key)}">
+       <span class="sdqr-folder-ico">${icon}</span>
        <span class="sdqr-folder-chip-lbl">${label}</span>
        <span class="sdqr-folder-chip-n">${count}</span>${extra}
      </button>`;
 
   let html = `<div class="sdqr-folder-bar-head">Dossiers</div><div class="sdqr-folder-chips">`;
-  html += chip('all', '📂 Tous', _cachedQrs.length);
+  html += chip('all', _ICO.all, 'Tous', _cachedQrs.length);
   for (const n of names) {
-    html += chip(n, `📁 ${_esc(n)}`, counts.get(n),
-      `<span class="sdqr-folder-rename" data-rename="${_esc(n)}" title="Renommer ce dossier">✎</span>`);
+    html += chip(n, _ICO.folder, _esc(n), counts.get(n),
+      `<span class="sdqr-folder-rename" data-rename="${_esc(n)}" title="Renommer ce dossier">${_ICO.pencil}</span>`);
   }
-  if (unfiled) html += chip('__none__', '🗂 Non classés', unfiled);
+  if (unfiled) html += chip('__none__', _ICO.none, 'Non classés', unfiled);
   bar.innerHTML = html + `</div>`;
 
   bar.querySelectorAll('.sdqr-folder-chip').forEach(btn => {
@@ -488,7 +498,7 @@ function _renderList(panel) {
           <span class="sdqr-li-type">${typeDef.icon} ${_esc(typeDef.label)}</span>
           <span class="sdqr-li-mode ${isDyn ? 'sdqr-li-mode--dyn' : 'sdqr-li-mode--stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
           ${q.status === 'archived' ? '<span class="sdqr-li-status">Archivé</span>' : ''}
-          ${q.folder ? `<span class="sdqr-li-folder">📁 ${_esc(q.folder)}</span>` : ''}
+          ${q.folder ? `<span class="sdqr-li-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
         </div>
         ${tags ? `<div class="sdqr-li-tags">${tags}</div>` : ''}
       </button>

@@ -7442,8 +7442,13 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-folder-rename:hover { opacity: 1; color: #fff; }
 .sdqr-li-folder {
   font-size: 10.5px; color: rgba(220,225,240,.6);
-  display: inline-flex; align-items: center; gap: 3px;
+  display: inline-flex; align-items: center; gap: 4px;
 }
+.sdqr-li-folder svg { width: 11px; height: 11px; flex: 0 0 auto; }
+.sdqr-folder-ico { flex: 0 0 auto; display: inline-flex; opacity: .78; }
+.sdqr-folder-ico svg { width: 16px; height: 16px; }
+.sdqr-folder-chip.is-active .sdqr-folder-ico { opacity: 1; }
+.sdqr-folder-rename svg { width: 13px; height: 13px; display: block; }
 
 .sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
   content: "";
