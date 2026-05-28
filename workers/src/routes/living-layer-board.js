@@ -399,14 +399,14 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [])
   return candidates[idx].text;
 }
 
-// ── Génère une phrase mode IA (Llama 3.1 8B) ──────────────────────
-// Une phrase actionnable, contextuelle, basée sur les signaux les plus
-// chargés. Échec → null (le caller fallback sur Calculateur).
-async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
-  if (!env.AI || typeof env.AI.run !== 'function') return null;
+// Claude Haiku 4.5 — modèle BYOK pour le mode IA (Chantier 2, 2026-05-28).
+// Bien plus fin que Llama 3.1 8B pour le français court, rapide et peu cher.
+// Pattern repris du Brainstorming Synthesizer (Sprint 7.9).
+const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
-  // Si aucun signal n'est intéressant, on ne dérange pas le LLM.
-  // Tous ces signaux sont des chiffres RÉELS (D1 serveur ou localStorage).
+// Construit les prompts système + user à partir des signaux (partagé
+// Llama/Claude). Retourne null si aucun signal exploitable.
+function _buildAiPrompts(sensors, firstName, variantIndex) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
   let signals = [
     smartqr.scans24h        > 0 ? `Smart QR : ${smartqr.scans24h} scans dernières 24h`           : null,
@@ -420,9 +420,8 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
 
   if (!signals.length) return null;
 
-  // Permutation : on fait tourner l'ordre des signaux selon variantIndex.
-  // Le LLM tend à privilégier le premier signal → en changeant le premier
-  // à chaque rotation, on évite de toujours parler du même sujet (ex: QR).
+  // Permutation selon variantIndex : le LLM privilégie le 1er signal, donc
+  // changer le 1er à chaque rotation évite de répéter le même sujet.
   if (signals.length > 1) {
     const shift = ((variantIndex % signals.length) + signals.length) % signals.length;
     signals = [...signals.slice(shift), ...signals.slice(0, shift)];
@@ -440,6 +439,7 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
     '- Une seule phrase, max 16 mots, point final',
     '- Ton naturel, opérationnel, jamais corporate ni décoratif',
     '- DOIS exploiter UN signal concret de la liste fournie (chiffre ou état)',
+    '- Ne JAMAIS inventer ni déformer un chiffre, ni ajouter d\'interprétation hasardeuse',
     '- Pas de "Bonjour" / "Salut" (déjà dit au-dessus)',
     '- Pas d\'emoji, pas de question vide, pas de CTA fictif',
     '- Réponse JSON STRICT : {"phrase":"..."}',
@@ -454,6 +454,63 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
     'Génère le JSON {"phrase"} maintenant.',
   ].join('\n');
 
+  return { systemPrompt, userPrompt };
+}
+
+// Parsing commun : extrait {"phrase":"..."} d'une sortie LLM (tolérant
+// aux ```json, préambules, etc.). Retourne la phrase ou null.
+function _parseAiPhrase(rawText) {
+  let parsed = null;
+  try {
+    const cleaned = (rawText || '')
+      .replace(/^```(?:json)?\s*/im, '')
+      .replace(/\s*```\s*$/m, '')
+      .trim();
+    const jsonStart = cleaned.indexOf('{');
+    const jsonEnd   = cleaned.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+    }
+  } catch (e) { /* fallthrough */ }
+  const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200);
+  return phrase.length >= 8 ? phrase : null;
+}
+
+// Mode IA via Claude Haiku 4.5 (Anthropic API directe, BYOK). Retourne
+// la phrase, ou null en cas d'échec (clé invalide, réseau, quota…) →
+// le caller fallback alors sur Llama.
+async function _buildAiPhraseClaude(apiKey, systemPrompt, userPrompt) {
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key'        : apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type'     : 'application/json',
+      },
+      body: JSON.stringify({
+        model:      LIVING_CLAUDE_MODEL,
+        system:     systemPrompt,
+        messages:   [{ role: 'user', content: userPrompt }],
+        max_tokens: 200,
+      }),
+    });
+  } catch (e) {
+    return null;
+  }
+  if (!res.ok) return null;
+  let data;
+  try { data = await res.json(); } catch (e) { return null; }
+  // Anthropic Messages API : { content: [{ type:'text', text:'...' }] }
+  const raw = (data?.content?.[0]?.text || '').trim();
+  return _parseAiPhrase(raw);
+}
+
+// Mode IA via Llama 3.1 8B (Cloudflare Workers AI, gratuit). Fallback par
+// défaut quand pas de clé BYOK.
+async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
+  if (!env.AI || typeof env.AI.run !== 'function') return null;
   let aiResponse;
   try {
     aiResponse = await env.AI.run(LIVING_MODEL_ID, {
@@ -466,7 +523,6 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
   } catch (e) {
     return null;
   }
-
   const rawText = aiResponse?.response
     || aiResponse?.result?.response
     || aiResponse?.choices?.[0]?.message?.content
@@ -475,23 +531,24 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
     || aiResponse?.text
     || aiResponse?.completion
     || '';
+  return _parseAiPhrase(rawText);
+}
 
-  let parsed = null;
-  try {
-    const cleaned = rawText
-      .replace(/^```(?:json)?\s*/im, '')
-      .replace(/\s*```\s*$/m, '')
-      .trim();
-    const jsonStart = cleaned.indexOf('{');
-    const jsonEnd   = cleaned.lastIndexOf('}');
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
-    }
-  } catch (e) { /* fallthrough */ }
+// ── Génère une phrase mode IA ─────────────────────────────────────
+// Dispatch : Claude Haiku si clé BYOK présente (qualité premium), sinon
+// Llama 3.1 8B. Si Claude échoue → fallback transparent Llama. Échec
+// total → null (le caller bascule sur le Calculateur).
+async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey = null) {
+  const prompts = _buildAiPrompts(sensors, firstName, variantIndex);
+  if (!prompts) return null;  // aucun signal exploitable
 
-  const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200);
-  // Garde-fou : si phrase vide ou trop courte, on rejette
-  return phrase.length >= 8 ? phrase : null;
+  // BYOK Claude prioritaire si clé valide fournie
+  if (typeof apiKey === 'string' && apiKey.length > 10) {
+    const claudePhrase = await _buildAiPhraseClaude(apiKey, prompts.systemPrompt, prompts.userPrompt);
+    if (claudePhrase) return claudePhrase;
+    // Claude KO → fallback transparent Llama
+  }
+  return _buildAiPhraseLlama(env, prompts.systemPrompt, prompts.userPrompt);
 }
 
 // ── Endpoint principal ────────────────────────────────────────────
@@ -517,6 +574,9 @@ export async function handleLivingBoard(request, env) {
   // candidat Calculateur ET le focus du mode IA (évite de répéter le
   // même sujet, ex: ne parler que des scans QR).
   const variantIndex  = Number.isFinite(+body.variantIndex) ? Math.abs(Math.trunc(+body.variantIndex)) : 0;
+  // Clé Anthropic BYOK (optionnelle) → mode IA via Claude Haiku au lieu de
+  // Llama. Envoyée par le frontend depuis le Vault (localStorage ks_api_anthropic).
+  const apiKey        = (typeof body.apiKey === 'string' && body.apiKey.length > 10) ? body.apiKey : null;
 
   // JWT optionnel — si présent, on identifie la licence (audience + sensors personnels)
   let claims = null;
@@ -577,7 +637,7 @@ export async function handleLivingBoard(request, env) {
 
   // Si preferMode demande explicitement un mode, on tente celui-là
   if (preferMode === 'ai') {
-    const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex);
+    const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
     if (aiText) {
       return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
     }
@@ -606,7 +666,7 @@ export async function handleLivingBoard(request, env) {
   // 2. Pas de preferMode → cycle par défaut au boot
   // Premier appel : on commence par le mode IA si signaux disponibles, sinon Calculateur.
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
-  const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex);
+  const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
   if (aiText) {
     return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
   }

@@ -4916,15 +4916,22 @@ async function _renderLivingLayer(preferMode = null) {
     const firstName     = (localStorage.getItem(LS_USER_NAME) || '').trim() || 'toi';
     const clientSensors = _collectClientSensors();
     const jwt           = localStorage.getItem('ks_jwt') || '';
+    // BYOK Claude Haiku (optionnel) : si l'utilisateur a posé sa clé Anthropic
+    // dans le Vault, le mode IA passe par Claude (phrases bien plus fines).
+    // Sinon le serveur fallback sur Llama 3.1 8B. Même clé que le Brainstorming.
+    const anthropicKey  = localStorage.getItem('ks_api_anthropic') || '';
 
     const headers = { 'Content-Type': 'application/json' };
     if (jwt) headers['Authorization'] = 'Bearer ' + jwt;
+
+    const payload = { firstName, clientSensors, preferMode, variantIndex: _livingVariant };
+    if (anthropicKey.length > 10) payload.apiKey = anthropicKey;
 
     try {
         const r = await fetch(`${CF_API}/api/livinglayer/board`, {
             method:  'POST',
             headers,
-            body:    JSON.stringify({ firstName, clientSensors, preferMode, variantIndex: _livingVariant }),
+            body:    JSON.stringify(payload),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
