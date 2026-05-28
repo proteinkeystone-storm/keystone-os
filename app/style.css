@@ -7408,6 +7408,43 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   box-shadow: 0 0 0 3px rgba(239,68,68,.12);
 }
 
+/* V4.6 — Dossiers « Mes QR » (Phase 1, plats) */
+.sdqr-folder-bar { padding: 0 12px 8px; }
+.sdqr-folder-bar:empty { display: none; }
+.sdqr-folder-bar-head {
+  font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: rgba(220,225,240,.45); margin: 6px 2px;
+}
+.sdqr-folder-chips { display: flex; flex-direction: column; gap: 3px; }
+.sdqr-folder-chip {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 9px; border-radius: 7px;
+  background: transparent; border: 1px solid transparent;
+  color: rgba(220,225,240,.78); font: inherit; font-size: 12.5px;
+  text-align: left; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.sdqr-folder-chip:hover { background: rgba(255,255,255,.04); }
+.sdqr-folder-chip.is-active {
+  background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.4); color: #fff;
+}
+.sdqr-folder-chip-lbl { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdqr-folder-chip-n {
+  flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums;
+  color: rgba(220,225,240,.5); background: rgba(255,255,255,.06);
+  border-radius: 999px; padding: 1px 7px;
+}
+.sdqr-folder-rename {
+  flex: 0 0 auto; opacity: 0; color: rgba(220,225,240,.5);
+  font-size: 12px; padding: 0 2px; transition: opacity .15s, color .15s;
+}
+.sdqr-folder-chip:hover .sdqr-folder-rename { opacity: .7; }
+.sdqr-folder-rename:hover { opacity: 1; color: #fff; }
+.sdqr-li-folder {
+  font-size: 10.5px; color: rgba(220,225,240,.6);
+  display: inline-flex; align-items: center; gap: 3px;
+}
+
 .sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
   content: "";
   width: 9px; height: 5px;

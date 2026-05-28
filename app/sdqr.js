@@ -40,6 +40,7 @@ let _filter = {
   search: '',                  // matcher nom + tags
   status: 'all',               // all | active | archived
   type  : 'all',               // all | url | text | vcard | wifi | ical
+  folder: 'all',               // all | <nom de dossier> | __none__ (non classés)
 };
 
 // État de la fenêtre de création (Sprint SDQR-2)
@@ -233,6 +234,7 @@ function _renderShell() {
             <button class="sdqr-filter-pill" data-status="archived">Archivés</button>
           </div>
         </div>
+        <div class="sdqr-folder-bar" id="sdqr-folders"></div>
         <div class="sdqr-sidebar-list" id="sdqr-list">
           <div class="sdqr-empty-mini">Chargement…</div>
         </div>
@@ -361,6 +363,11 @@ function _applyFilters(qrs) {
   return qrs.filter(q => {
     if (_filter.status !== 'all' && q.status !== _filter.status) return false;
     if (_filter.type   !== 'all' && q.qr_type !== _filter.type)  return false;
+    if (_filter.folder !== 'all') {
+      const fld = (q.folder || '').trim();
+      if (_filter.folder === '__none__') { if (fld) return false; }
+      else if (fld !== _filter.folder)   return false;
+    }
     if (_filter.search) {
       const haystack = [
         q.name || '',
@@ -386,10 +393,65 @@ async function _refreshList(panel) {
   _renderList(panel);
 }
 
+// Dérive et rend la barre de dossiers depuis _cachedQrs. Phase 1 (plats) :
+// un dossier "existe" tant qu'au moins 1 QR le référence — pas de registre.
+// "Tous" + un chip par dossier (compteur + ✎ renommer) + "Non classés".
+function _renderFolders(panel) {
+  const bar = panel.querySelector('#sdqr-folders');
+  if (!bar) return;
+  const counts = new Map();
+  let unfiled = 0;
+  for (const q of _cachedQrs) {
+    const f = (q.folder || '').trim();
+    if (f) counts.set(f, (counts.get(f) || 0) + 1);
+    else unfiled++;
+  }
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'fr'));
+  if (names.length === 0) { bar.innerHTML = ''; return; }   // aucun dossier → barre masquée (:empty)
+
+  const chip = (key, label, count, extra = '') =>
+    `<button class="sdqr-folder-chip ${_filter.folder === key ? 'is-active' : ''}" data-folder="${_esc(key)}">
+       <span class="sdqr-folder-chip-lbl">${label}</span>
+       <span class="sdqr-folder-chip-n">${count}</span>${extra}
+     </button>`;
+
+  let html = `<div class="sdqr-folder-bar-head">Dossiers</div><div class="sdqr-folder-chips">`;
+  html += chip('all', '📂 Tous', _cachedQrs.length);
+  for (const n of names) {
+    html += chip(n, `📁 ${_esc(n)}`, counts.get(n),
+      `<span class="sdqr-folder-rename" data-rename="${_esc(n)}" title="Renommer ce dossier">✎</span>`);
+  }
+  if (unfiled) html += chip('__none__', '🗂 Non classés', unfiled);
+  bar.innerHTML = html + `</div>`;
+
+  bar.querySelectorAll('.sdqr-folder-chip').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.closest('.sdqr-folder-rename')) return;   // ✎ géré séparément
+      _filter.folder = btn.dataset.folder;
+      _renderList(panel);
+    });
+  });
+  bar.querySelectorAll('.sdqr-folder-rename').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const oldName = el.dataset.rename;
+      const next = (window.prompt(`Renommer le dossier « ${oldName} » en :`, oldName) || '').trim().slice(0, 80);
+      if (!next || next === oldName) return;
+      const targets = _cachedQrs.filter(q => (q.folder || '').trim() === oldName);
+      try {
+        for (const q of targets) { await _apiUpdate(q.id, { folder: next }); q.folder = next; }
+        if (_filter.folder === oldName) _filter.folder = next;
+        _renderList(panel);
+      } catch (err) { window.alert('Renommage échoué : ' + err.message); }
+    });
+  });
+}
+
 // Render seul depuis _cachedQrs (appelé par les filter handlers — no fetch)
 function _renderList(panel) {
   const listEl = panel.querySelector('#sdqr-list');
   if (!listEl) return;
+  _renderFolders(panel);
 
   // Filtrage local (recherche + status)
   const filtered = _applyFilters(_cachedQrs);
@@ -401,7 +463,7 @@ function _renderList(panel) {
   if (filtered.length === 0) {
     listEl.innerHTML = `<div class="sdqr-empty-mini">Aucun résultat pour ce filtre.<br><button class="sdqr-empty-reset" id="sdqr-filter-reset">Réinitialiser</button></div>`;
     listEl.querySelector('#sdqr-filter-reset')?.addEventListener('click', () => {
-      _filter = { search: '', status: 'all', type: 'all' };
+      _filter = { search: '', status: 'all', type: 'all', folder: 'all' };
       const searchInput = panel.querySelector('#sdqr-search');
       if (searchInput) searchInput.value = '';
       panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(b => {
@@ -426,6 +488,7 @@ function _renderList(panel) {
           <span class="sdqr-li-type">${typeDef.icon} ${_esc(typeDef.label)}</span>
           <span class="sdqr-li-mode ${isDyn ? 'sdqr-li-mode--dyn' : 'sdqr-li-mode--stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
           ${q.status === 'archived' ? '<span class="sdqr-li-status">Archivé</span>' : ''}
+          ${q.folder ? `<span class="sdqr-li-folder">📁 ${_esc(q.folder)}</span>` : ''}
         </div>
         ${tags ? `<div class="sdqr-li-tags">${tags}</div>` : ''}
       </button>
@@ -1261,6 +1324,19 @@ async function _openQrDetail(panel, qr) {
           <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-save-name" title="Renommer ce QR">Renommer</button>
         </label>
 
+        ${(() => {
+          const all = [...new Set(_cachedQrs.map(q => (q.folder || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+          const cur = (qr.folder || '').trim();
+          const opts = ['<option value="">— Aucun dossier —</option>']
+            .concat(all.map(f => `<option value="${_esc(f)}" ${f === cur ? 'selected' : ''}>${_esc(f)}</option>`))
+            .concat([`<option value="__new__">+ Nouveau dossier…</option>`])
+            .join('');
+          return `<label class="sdqr-field sdqr-field--inline">
+          <span class="sdqr-field-lbl">Dossier</span>
+          <select id="sdqr-edit-folder" class="sdqr-input">${opts}</select>
+        </label>`;
+        })()}
+
         <div class="sdqr-detail-meta">
           <span class="sdqr-detail-pill">${typeDef.icon} ${_esc(typeDef.label)}</span>
           <span class="sdqr-detail-pill ${isSmart ? 'sdqr-detail-pill--smart' : (isDynamic ? 'sdqr-detail-pill--dyn' : 'sdqr-detail-pill--stat')}">${isSmart ? 'Smart ✦' : (isDynamic ? 'Dynamique' : 'Statique')}</span>
@@ -1504,6 +1580,32 @@ async function _openQrDetail(panel, qr) {
       await _refreshList(panel);   // reflète le nouveau nom dans la sidebar
     } catch (e) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
+  // Déplacer vers un dossier (auto-save au change). "+ Nouveau…" → prompt.
+  content.querySelector('#sdqr-edit-folder')?.addEventListener('change', async (e) => {
+    const sel = e.target;
+    const msg = content.querySelector('#sdqr-detail-msg');
+    const prev = (qr.folder || '');
+    let folder = sel.value;
+    if (folder === '__new__') {
+      folder = (window.prompt('Nom du nouveau dossier :', '') || '').trim().slice(0, 80);
+      if (!folder) { sel.value = prev; return; }
+    }
+    try {
+      await _apiUpdate(qr.id, { folder: folder || null });
+      qr.folder = folder;
+      if (folder && !Array.from(sel.options).some(o => o.value === folder)) {
+        const o = document.createElement('option'); o.value = folder; o.textContent = folder;
+        sel.insertBefore(o, sel.querySelector('option[value="__new__"]'));
+      }
+      sel.value = folder || '';
+      if (msg) { msg.hidden = false; msg.textContent = folder ? `✓ Rangé dans « ${folder} »` : '✓ Retiré du dossier'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+      await _refreshList(panel);
+    } catch (err) {
+      sel.value = prev;
+      if (msg) { msg.hidden = false; msg.textContent = err.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });
 

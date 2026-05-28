@@ -455,6 +455,9 @@ export async function handleUpdateQr(request, env, qrId) {
   let encodedPayloadChanged  = false;
   if (body.name !== undefined)    entity.name   = String(body.name).trim() || entity.name;
   if (body.tags !== undefined)    entity.tags   = Array.isArray(body.tags) ? body.tags.slice(0, 12) : entity.tags;
+  // Dossiers "Mes QR" (Phase 1, plats) : un nom libre stocké sur le QR,
+  // comme un tag unique. null = retiré du dossier.
+  if (body.folder !== undefined)  entity.folder = body.folder ? String(body.folder).trim().slice(0, 80) : null;
   if (body.design !== undefined)  entity.design = body.design;
   if (body.payload !== undefined) entity.payload = body.payload;
   if (body.status !== undefined && ['active', 'archived'].includes(body.status)) {
