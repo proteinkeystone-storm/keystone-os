@@ -1282,7 +1282,7 @@ export async function handleSmartQrGamePlay(request, env) {
           message_gain:    wonPrev,
           message:         prev.result === 'win'
                              ? wonPrev
-                             : (td.message_perte || 'Pas cette fois — reviens demain !'),
+                             : (td.message_perte || 'Merci d\'avoir tenté ta chance — à bientôt !'),
           replay_blocked:  true,
         }, 200, origin);
       }
@@ -1381,7 +1381,7 @@ export async function handleSmartQrGamePlay(request, env) {
     message_gain: winMsg,
     message:      isWin
                     ? winMsg
-                    : (td.message_perte || 'Pas cette fois — réessaie demain.'),
+                    : (td.message_perte || 'Merci d\'avoir tenté ta chance — à bientôt !'),
     replay_blocked: false,
   }, 200, origin);
 }

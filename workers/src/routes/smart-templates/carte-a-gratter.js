@@ -416,7 +416,7 @@ const TEMPLATE = {
     <div class="sq-scratch-hint">Gratte ici 👆</div>
   </div>
 
-  <p class="sq-replay-note" id="sq-replay-note" hidden>Tu as déjà joué — voici ton résultat précédent (rescannable à tout moment).</p>
+  <p class="sq-replay-note" id="sq-replay-note" hidden>Tu as déjà joué — une seule participation par appareil.</p>
 
   <div class="sq-win-actions">
     <div class="sq-win-code-box">
@@ -653,6 +653,11 @@ const TEMPLATE = {
       currentWinMessage = (data.message_gain || data.message || '').toString();
       if (winCodeEl) winCodeEl.textContent = currentWinCode || '—';
       replayNote.hidden = !data.replay_blocked;
+      if (data.replay_blocked) {
+        replayNote.textContent = isWin
+          ? 'Tu as déjà joué — rescanne ce QR quand tu veux pour retrouver ton code.'
+          : 'Tu as déjà joué — une seule participation par appareil.';
+      }
       ctaWrap.classList.add('is-shown');
       if (isWin) vibrate([90, 60, 90, 60, 140]);
     };

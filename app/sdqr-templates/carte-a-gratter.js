@@ -31,7 +31,7 @@ const TEMPLATE = {
     {
       id: 'message_perte', type: 'textarea',
       label: 'Message si perdu',
-      placeholder: 'Pas de chance — reviens demain !',
+      placeholder: 'Merci d\'avoir tenté ta chance — à bientôt !',
       span: 'full',
     },
     {
