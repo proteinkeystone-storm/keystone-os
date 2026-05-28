@@ -290,15 +290,22 @@ CONTRAINTES STRICTES
 // Sur demande explicite du client (POST /api/brainstorming/synthesize),
 // on génère un JSON complet avec positionnement, opportunités, risques,
 // plan d'actions daté. Exporté en PDF côté frontend.
-const SYNTHESIZER_PROMPT = `Tu es Synthesizer, l'agent de conclusion stratégique du brainstorming AI Keystone.
+const SYNTHESIZER_PROMPT = `Tu es Synthesizer, l'agent de conclusion du brainstorming AI Keystone.
 
-Ta mission UNIQUE est de transformer le débat ci-dessous en un PLAN D'ACTIONS structuré et exécutable.
+Ta mission : transformer le débat en une conclusion qui RÉPOND DIRECTEMENT à la demande du brief. Une synthèse qui ne répond pas à la question posée est un échec.
+
+ÉTAPE 1 — IDENTIFIE LE TYPE DE DEMANDE
+- Si le brief demande un LIVRABLE CONCRET (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, un concept à choisir, des options à départager…) → tu DOIS fournir des PROPOSITIONS concrètes, nommées et directement utilisables. C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite quand on attend des propositions.
+- Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "proposals": [].
 
 CONTRAINTES DE FORMAT STRICTES
 - Sortie JSON STRICT, AUCUN texte avant ou après.
 - Schema EXACT :
   {
-    "positioning": "<1 phrase de 15-25 mots résumant le positionnement émergent>",
+    "proposals": [
+      { "label": "<LA proposition concrète : un vrai nom / slogan / idée — 1 à 6 mots>", "rationale": "<pourquoi elle marche, 8-15 mots>" }
+    ],
+    "positioning": "<1 phrase de 15-25 mots résumant l'angle retenu>",
     "opportunities": ["<10-15 mots>", "<10-15 mots>", "<10-15 mots>"],
     "risks": ["<10-15 mots>", "<10-15 mots>"],
     "next_actions": [
@@ -307,14 +314,25 @@ CONTRAINTES DE FORMAT STRICTES
       { "action": "<...>", "deadline": "YYYY-MM-DD" }
     ]
   }
+- "proposals" : 5 à 7 candidats SI le brief appelle un livrable, sinon [].
+  Chaque "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Cockpit", "Pulse OS"…), PAS une description abstraite ("un nom évoquant la performance").
+  Si le débat n'a pas produit de candidats concrets, GÉNÈRE-les toi-même à partir du contexte du brief. Ne renvoie jamais une demande de nom sans noms.
 - 3 opportunities, 2 risks, 3 next_actions.
 - Deadlines RÉALISTES : entre J+7 et J+90 par rapport à aujourd'hui.
 - Pas de jargon corporate, pas de "synergie", pas de "leverage".
-- Ton EXÉCUTIF (note pour direction marketing, pas pour étudiant).`;
+- Ton EXÉCUTIF (note pour direction, pas pour étudiant).`;
 
 // Sprint 7.9 — Sanitization soft d'une synthèse parsée (Claude ou Gemma)
+// 2026-05-28 — ajout proposals (livrables concrets : noms, slogans, idées…)
 function _normalizeSynthesis(parsed) {
   return {
+    // Propositions concrètes en vedette quand le brief appelle un livrable.
+    proposals:     Array.isArray(parsed.proposals)
+      ? parsed.proposals.slice(0, 8).map(p => ({
+          label:     typeof p?.label === 'string' ? p.label : (typeof p === 'string' ? p : ''),
+          rationale: typeof p?.rationale === 'string' ? p.rationale : '',
+        })).filter(p => p.label)
+      : [],
     positioning:   typeof parsed.positioning === 'string' ? parsed.positioning : '',
     opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.slice(0, 4).map(String) : [],
     risks:         Array.isArray(parsed.risks)         ? parsed.risks.slice(0, 3).map(String)         : [],

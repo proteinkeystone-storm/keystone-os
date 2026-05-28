@@ -710,6 +710,56 @@
 .wr-label-opp     { color: var(--ks-agent-growth); }
 .wr-label-risk    { color: var(--ks-agent-devil); }
 .wr-label-actions { color: var(--wr-accent, var(--gold)); }
+.wr-label-proposals { color: var(--gold, #d4af6a); }
+
+/* ── Propositions concrètes (livrable : noms, slogans, idées) ──────
+   Affichées EN VEDETTE en haut de la synthèse quand le brief appelait
+   un livrable. C'est LA réponse à la question — design premium. */
+.wr-synthesis-proposals { margin-bottom: 32px; }
+.wr-proposals-list {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.wr-proposal-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(212,175,106,0.10), rgba(212,175,106,0.03));
+  border: 1px solid rgba(212,175,106,0.22);
+  border-radius: 10px;
+  transition: border-color .2s ease, transform .2s ease;
+}
+.wr-proposal-card:hover {
+  border-color: rgba(212,175,106,0.5);
+  transform: translateX(2px);
+}
+.wr-proposal-rank {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--gold, #d4af6a);
+  color: #1a1505;
+  font-size: 12px; font-weight: 800;
+  margin-top: 2px;
+}
+.wr-proposal-body { flex: 1; min-width: 0; }
+.wr-proposal-label {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--wr-text);
+  line-height: 1.25;
+}
+.wr-proposal-rationale {
+  font-size: 13px;
+  color: var(--wr-text-muted);
+  margin-top: 4px;
+  line-height: 1.45;
+}
 
 .wr-synthesis-positioning {
   background: rgba(99, 102, 241, 0.06);

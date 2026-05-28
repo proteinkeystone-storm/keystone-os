@@ -1143,6 +1143,25 @@ function _openSynthesisDrawer(panel, synthesis) {
   const brief = _currentSession?.brief || '';
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
+  // Propositions concrètes (noms, slogans, idées) — affichées EN VEDETTE
+  // en haut quand le brief appelait un livrable. Vide sinon (réflexion pure).
+  const proposals = Array.isArray(synthesis.proposals) ? synthesis.proposals : [];
+  const proposalCards = proposals.map((p, i) => `
+    <li class="wr-proposal-card">
+      <span class="wr-proposal-rank">${i + 1}</span>
+      <div class="wr-proposal-body">
+        <div class="wr-proposal-label">${_esc(p.label)}</div>
+        ${p.rationale ? `<div class="wr-proposal-rationale">${_esc(p.rationale)}</div>` : ''}
+      </div>
+    </li>
+  `).join('');
+  const proposalsSection = proposals.length ? `
+      <section class="wr-synthesis-section wr-synthesis-proposals">
+        <div class="wr-synthesis-label wr-label-proposals">Propositions</div>
+        <ul class="wr-proposals-list">${proposalCards}</ul>
+      </section>
+  ` : '';
+
   const oppList = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
   const riskList = (synthesis.risks || []).map(r => `<li>${_esc(r)}</li>`).join('');
   const actionList = (synthesis.next_actions || []).map(a => `
@@ -1166,6 +1185,7 @@ function _openSynthesisDrawer(panel, synthesis) {
         </div>
       </header>
 
+${proposalsSection}
       <section class="wr-synthesis-section wr-synthesis-positioning">
         <div class="wr-synthesis-label">Positionnement émergent</div>
         <p class="wr-synthesis-positioning-text">${_esc(synthesis.positioning || '—')}</p>
@@ -1231,6 +1251,13 @@ function _esc(s) {
 // via le dialog navigateur natif (Cmd+P → Enregistrer en PDF).
 function _exportSynthesisPDF(synthesis, brief) {
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const proposals = Array.isArray(synthesis.proposals) ? synthesis.proposals : [];
+  const props = proposals.map((p, i) => `
+    <li class="prop-item">
+      <span class="prop-rank">${i + 1}</span>
+      <span class="prop-body"><strong>${_esc(p.label)}</strong>${p.rationale ? ` — <span class="prop-why">${_esc(p.rationale)}</span>` : ''}</span>
+    </li>
+  `).join('');
   const opp  = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
   const risk = (synthesis.risks || []).map(r => `<li>${_esc(r)}</li>`).join('');
   const acts = (synthesis.next_actions || []).map(a => `
@@ -1277,6 +1304,13 @@ function _exportSynthesisPDF(synthesis, brief) {
   .action-item { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
   .action-text { flex: 1; font-weight: 500; }
   .action-deadline { font-size: 11px; color: #475569; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; background: #e2e8f0; border-radius: 999px; }
+  .proposals { margin-bottom: 28px; }
+  .proposals h2 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #b8860b; margin: 0 0 12px; font-weight: 800; }
+  .proposals ul { list-style: none; padding: 0; }
+  .prop-item { display: flex; gap: 12px; align-items: baseline; margin-bottom: 10px; padding: 10px 14px; background: #fdf6e3; border: 1px solid #ecd9a8; border-radius: 8px; }
+  .prop-rank { flex-shrink: 0; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #b8860b; color: #fff; font-size: 11px; font-weight: 800; }
+  .prop-body strong { font-size: 16px; font-weight: 800; color: #0f172a; }
+  .prop-why { font-size: 12.5px; color: #475569; }
   /* Sprint 7.10 — footer en flux normal (pas position:fixed qui se
      superposait au contenu quand le PDF débordait sur plusieurs pages).
      Apparaît une fois en fin de document, après le contenu. */
@@ -1293,6 +1327,11 @@ function _exportSynthesisPDF(synthesis, brief) {
   </div>
 
   <div class="eyebrow">Synthèse stratégique</div>
+
+  ${proposals.length ? `<div class="proposals">
+    <h2>Propositions</h2>
+    <ul>${props}</ul>
+  </div>` : ''}
 
   <div class="positioning">
     <div class="label">Positionnement émergent</div>
