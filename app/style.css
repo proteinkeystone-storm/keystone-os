@@ -7913,8 +7913,11 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 
 /* Sections groupées dans le panneau */
 .sdqr-design-section {
-  padding: 12px 0;
+  padding: 14px 0;
   border-bottom: 1px solid rgba(255,255,255,.05);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;   /* aère les rangées (Mode / couleurs / Angle) qui se touchaient */
 }
 .sdqr-design-section:last-of-type { border-bottom: none; }
 .sdqr-design-section-head {
