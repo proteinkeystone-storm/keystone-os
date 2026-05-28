@@ -6603,6 +6603,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 10px;
+  margin-top: 18px;     /* sépare des champs au-dessus (ex: Couleur d'accent en mode Smart) */
   margin-bottom: 18px;
 }
 .sdqr-type-card {
