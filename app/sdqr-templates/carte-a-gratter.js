@@ -55,6 +55,11 @@ const TEMPLATE = {
       span: 'full',
     },
     {
+      id: 'image_fond', type: 'image',
+      label: 'Image révélée sous le grattage (optionnel)',
+      span: 'full',
+    },
+    {
       id: 'accent_color', type: 'color', label: 'Couleur d\'accent',
       default: '#c9a96e',
     },

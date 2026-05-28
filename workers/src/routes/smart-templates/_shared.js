@@ -98,7 +98,7 @@ export function renderKeystoneFoot() {
  *   - logoUrl   : string (https:// ou data:image/...) ou ''
  *   - accent    : string couleur hex
  */
-export function renderWinPngScript(nomMarque, logoUrl, accent) {
+export function renderWinPngScript(nomMarque, logoUrl, accent, bgImage = '') {
   // Tout est encodé en JSON pour échapper proprement les quotes/specials
   // sans risque d'injection (les valeurs viennent de safeColor/safeUrl/escHtml).
   return `<script>
@@ -106,6 +106,7 @@ export function renderWinPngScript(nomMarque, logoUrl, accent) {
   const PNG_NOM    = ${JSON.stringify(nomMarque)};
   const PNG_LOGO   = ${JSON.stringify(logoUrl)};
   const PNG_ACCENT = ${JSON.stringify(accent)};
+  const PNG_BG     = ${JSON.stringify(bgImage)};
 
   async function loadImage(src) {
     if (!src) return null;
@@ -136,6 +137,19 @@ export function renderWinPngScript(nomMarque, logoUrl, accent) {
     bg.addColorStop(1, '#1a2331');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
+
+    // 1b. V4.6 — Image de fond du client (cover) + voile sombre pour garder
+    //     code + message lisibles. URL externe sans CORS peut tainter le
+    //     canvas (toBlob échoue) ; l'upload local data URI est le cas nominal.
+    const bgImg = await loadImage(PNG_BG);
+    if (bgImg) {
+      const cover = Math.max(W / bgImg.width, H / bgImg.height);
+      const iw = bgImg.width * cover, ih = bgImg.height * cover;
+      ctx.drawImage(bgImg, (W - iw) / 2, (H - ih) / 2, iw, ih);
+      ctx.fillStyle = 'rgba(7,9,13,.72)';
+      ctx.fillRect(0, 0, W, H);
+    }
+
     const halo = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, 380);
     halo.addColorStop(0, PNG_ACCENT + '55');
     halo.addColorStop(1, PNG_ACCENT + '00');

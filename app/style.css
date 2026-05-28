@@ -7372,6 +7372,42 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   font-variant-numeric: tabular-nums;
 }
 
+/* V4.6 — Widget couleur : pastille (picker natif) + saisie hexadécimale.
+   Permet de coller un code de charte exact (#RRGGBB) au lieu de viser à la
+   souris dans la roue. Le champ texte porte data-payload-key. */
+.sdqr-color-widget {
+  display: flex; align-items: stretch; gap: 8px;
+}
+.sdqr-color-swatch {
+  flex: 0 0 auto;
+  width: 46px; height: 38px;
+  padding: 4px 5px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.sdqr-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.sdqr-color-swatch::-webkit-color-swatch {
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px;
+}
+.sdqr-color-swatch::-moz-color-swatch {
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px;
+}
+.sdqr-color-hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.sdqr-color-widget.is-invalid .sdqr-color-hex {
+  border-color: rgba(239,68,68,.65);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+
 .sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
   content: "";
   width: 9px; height: 5px;

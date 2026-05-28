@@ -86,6 +86,7 @@ const TEMPLATE = {
     const safeShort = String(qrData?.short_id || '').replace(/[^a-zA-Z0-9]/g, '');
     const nomMarque = escHtml((d.nom_marque || '').toString().slice(0, 60));
     const logoUrl   = safeUrl(d.logo_url);
+    const imgFond   = safeUrl(d.image_fond);
     const accent    = safeColor(d.accent_color, '#c9a96e');
     const texture   = ['Argent', 'Or', 'Cuivre'].includes(d.texture_grattage)
                       ? d.texture_grattage : 'Or';
@@ -95,6 +96,14 @@ const TEMPLATE = {
       'Cuivre': { c1: '#fdba74', c2: '#c2410c', c3: '#7c2d12', label: '#3b1004' },
     };
     const tx = texMap[texture];
+    // V4.6 — Fond de la zone révélée : image du client (sous le grattage)
+    // + voile sombre pour garder le message Gagné/Perdu lisible quelle que
+    // soit l'image. Sans image → dégradé sombre historique (rétrocompat
+    // des cartes déjà créées en prod). imgFond passe par safeUrl() : data
+    // URI base64 ou URL http(s) sans quote, donc sûr dans url('…').
+    const revealBg = imgFond
+      ? `linear-gradient(rgba(7,9,13,.66), rgba(7,9,13,.74)), url('${imgFond}') center / cover no-repeat`
+      : `linear-gradient(135deg, #0e141b, #1a2331)`;
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -179,7 +188,7 @@ const TEMPLATE = {
     align-items: center; justify-content: center;
     padding: 18px 22px;
     text-align: center;
-    background: linear-gradient(135deg, #0e141b, #1a2331);
+    background: ${revealBg};
   }
   .sq-scratch-reveal-icon {
     font-size: 38px; margin-bottom: 6px;
@@ -205,6 +214,12 @@ const TEMPLATE = {
   .sq-scratch-reveal-msg {
     font-size: 13px; line-height: 1.5;
     color: var(--mut); margin: 0;
+  }
+  /* V4.6 — Lisibilité texte sur image de fond : ombre portée + message plus
+     clair, appliqués seulement quand une image est présente (.has-bg). */
+  .sq-scratch-reveal.has-bg .sq-scratch-reveal-title { text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+  .sq-scratch-reveal.has-bg .sq-scratch-reveal-msg {
+    color: #eef2f8; text-shadow: 0 1px 8px rgba(0,0,0,.95);
   }
   .sq-scratch-canvas {
     position: absolute; inset: 0;
@@ -394,7 +409,7 @@ const TEMPLATE = {
   </div>
 
   <div class="sq-scratch-wrap">
-    <div class="sq-scratch-reveal" id="sq-reveal">
+    <div class="sq-scratch-reveal${imgFond ? ' has-bg' : ''}" id="sq-reveal">
       <div class="sq-scratch-reveal-icon" id="sq-reveal-icon">✦</div>
       <h2 class="sq-scratch-reveal-title" id="sq-reveal-title">Prêt à gratter…</h2>
       <p class="sq-scratch-reveal-msg" id="sq-reveal-msg"></p>
@@ -676,7 +691,7 @@ const TEMPLATE = {
 })();
 </script>
 ${renderAiFetchScript(safeShort)}
-${renderWinPngScript(nomMarque, logoUrl, accent)}
+${renderWinPngScript(nomMarque, logoUrl, accent, imgFond)}
 </body>
 </html>`;
   },

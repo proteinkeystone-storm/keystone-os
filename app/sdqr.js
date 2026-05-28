@@ -725,6 +725,7 @@ function _renderTemplateFields(root) {
     });
   });
   _bindImageWidgets(wrap, _creating.template_data);
+  _bindColorWidgets(wrap);
   _bindIconPickers(wrap);
 }
 
@@ -750,6 +751,7 @@ function _renderFormFields(root) {
     });
   });
   _bindImageWidgets(wrap, _creating.payload);
+  _bindColorWidgets(wrap);
   _bindIconPickers(wrap);
   // Toggle password visibility (œil)
   wrap.querySelectorAll('.sdqr-pw-toggle').forEach(btn => {
@@ -896,6 +898,54 @@ function _updateImageWidgetPreview(widget, val) {
   }
 }
 
+// V4.6 — Étend un hex court (#rgb) ou sans dièse en #RRGGBB canonique.
+function _hex6(v) {
+  const s = String(v || '').trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{3}$/.test(s)) return '#' + s.split('').map(c => c + c).join('');
+  if (/^[0-9a-fA-F]{6}$/.test(s)) return '#' + s;
+  return '#000000';
+}
+
+// V4.6 — Binde les widgets couleur : la pastille (picker natif) et le champ
+// texte hexadécimal restent synchronisés. Le champ texte porte
+// data-payload-key (source de vérité, lu par le listener générique). Au
+// blur, la valeur est figée en #RRGGBB canonique pour que safeColor()
+// l'accepte (sinon une saisie "c9a96e" sans dièse partirait en fallback).
+function _bindColorWidgets(wrap) {
+  if (!wrap) return;
+  const HEX_RE = /^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+  wrap.querySelectorAll('.sdqr-color-widget').forEach(widget => {
+    const swatch = widget.querySelector('.sdqr-color-swatch');
+    const hex    = widget.querySelector('.sdqr-color-hex');
+    if (!swatch || !hex) return;
+
+    swatch.addEventListener('input', () => {
+      hex.value = swatch.value.toUpperCase();
+      widget.classList.remove('is-invalid');
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    hex.addEventListener('input', () => {
+      const v = hex.value.trim().replace(/^#/, '');
+      if (HEX_RE.test(v)) {
+        swatch.value = _hex6(v);
+        widget.classList.remove('is-invalid');
+      } else {
+        widget.classList.toggle('is-invalid', !!hex.value.trim());
+      }
+    });
+
+    hex.addEventListener('change', () => {
+      const v = hex.value.trim().replace(/^#/, '');
+      if (!HEX_RE.test(v)) return;
+      hex.value    = _hex6(v).toUpperCase();
+      swatch.value = _hex6(v);
+      widget.classList.remove('is-invalid');
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+}
+
 function _renderField(f, store) {
   // V2 : un 2e param `store` (object) permet de lire la valeur depuis un
   // autre bucket que _creating.payload (ex: _creating.template_data).
@@ -964,6 +1014,19 @@ function _renderField(f, store) {
       <button type="button" class="sdqr-pw-toggle" aria-label="Afficher / masquer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
+    </div>`;
+  } else if (f.type === 'color') {
+    // V4.6 — Widget couleur : pastille picker + saisie hexadécimale
+    // (#RRGGBB) synchronisées. On retourne directement (comme le widget
+    // image) pour ne pas envelopper deux inputs dans un <label>.
+    const initHex = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(rawVal)
+      ? String(rawVal) : (f.default || '#000000');
+    return `<div class="sdqr-field${span}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      <div class="sdqr-color-widget">
+        <input type="color" class="sdqr-color-swatch" value="${_esc(_hex6(initHex))}" aria-label="Sélecteur visuel de couleur" tabindex="-1">
+        <input type="text" data-payload-key="${f.id}" class="sdqr-input sdqr-color-hex" value="${val}" placeholder="#RRGGBB" maxlength="7" spellcheck="false" autocapitalize="none" autocomplete="off">
+      </div>
     </div>`;
   } else {
     input = `<input type="${f.type}" data-payload-key="${f.id}" class="sdqr-input" placeholder="${ph}" value="${val}">`;
