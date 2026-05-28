@@ -43,7 +43,7 @@ import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize } from '
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
 import { handleLivingLayerGreeting }                                     from './routes/living-layer.js';
 // Living Layer V2 — Ordinateur de bord (2026-05-28)
-import { handleLivingBoard }                                             from './routes/living-layer-board.js';
+import { handleLivingBoard, handleLivingFeedback }                       from './routes/living-layer-board.js';
 import {
   handleLivingListAdmin, handleLivingCreate, handleLivingUpdate,
   handleLivingDelete, handleLivingArchive,
@@ -331,6 +331,10 @@ export default {
       // un { mode, text, icon } selon priorité Pilotable URGENT > IA > Pilotable > Calculateur.
       if (path === '/api/livinglayer/board' && (method === 'POST' || method === 'OPTIONS')) {
         return handleLivingBoard(request, env);
+      }
+      // Feedback loop : impression / engagement par topic (apprend ce qui t'intéresse)
+      if (path === '/api/livinglayer/feedback' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleLivingFeedback(request, env);
       }
       // CRUD admin Pilotables (auth KS_ADMIN_SECRET)
       if (path === '/api/admin/living-messages') {

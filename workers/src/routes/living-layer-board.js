@@ -84,6 +84,54 @@ async function ensureMetricsSchema(env) {
   _metricsSchemaReady = true;
 }
 
+// ── Auto-migration feedback loop (Chantier 3, 2026-05-28) ─────────
+// Apprend ce qui intéresse l'utilisateur : compte les impressions (phrase
+// affichée) et engagements (outil ouvert après) par topic. Le scoring
+// ajuste alors le mix de phrases. Pattern userReactions (Brainstorming 7.8).
+let _feedbackSchemaReady = false;
+async function ensureFeedbackSchema(env) {
+  if (_feedbackSchemaReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS living_feedback (
+      tenant_id   TEXT NOT NULL,
+      topic       TEXT NOT NULL,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      engagements INTEGER NOT NULL DEFAULT 0,
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (tenant_id, topic)
+    )
+  `).run().catch(() => {});
+  _feedbackSchemaReady = true;
+}
+
+// Lit les feedbacks d'un tenant → map { topic: {impressions, engagements} }.
+async function _readFeedback(env, tenantId) {
+  if (!tenantId) return {};
+  await ensureFeedbackSchema(env);
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT topic, impressions, engagements FROM living_feedback WHERE tenant_id = ?`
+    ).bind(tenantId).all();
+    const map = {};
+    for (const r of (results || [])) {
+      map[r.topic] = { impressions: r.impressions || 0, engagements: r.engagements || 0 };
+    }
+    return map;
+  } catch (e) { return {}; }
+}
+
+// Multiplicateur de score appris pour un topic (borné, pattern userReactions).
+// Pas assez de données (< 5 impressions) → neutre (1.0).
+// Topic engagé (ratio élevé) → jusqu'à ×1.4. Topic ignoré → jusqu'à ×0.6.
+function _topicMultiplier(feedback, topic) {
+  const f = feedback?.[topic];
+  if (!f || f.impressions < 5) return 1.0;
+  const rate     = f.engagements / f.impressions;   // 0..1
+  const baseline = 0.15;                             // engagement "attendu"
+  const bonus    = Math.max(-0.4, Math.min(0.4, (rate - baseline) * 1.5));
+  return 1 + bonus;
+}
+
 // Snapshot lazy des cumuls du jour (1 écriture/jour/tenant, idempotent).
 // Capture les totaux pour pouvoir calculer des deltas dans le temps.
 async function _recordDailySnapshot(env, tenantId, cumuls) {
@@ -134,7 +182,7 @@ async function _computeTrendCandidates(env, tenantId, current) {
     if (delta > 0) {
       candidates.push({
         text:  `${delta} nouveau${delta > 1 ? 'x' : ''} scan${delta > 1 ? 's' : ''} Smart QR depuis hier.`,
-        score: 82,
+        score: 82, topic: 'smartqr',
       });
     }
   }
@@ -144,7 +192,7 @@ async function _computeTrendCandidates(env, tenantId, current) {
     if (delta > 0) {
       candidates.push({
         text:  `${delta} nouvelle${delta > 1 ? 's' : ''} réponse${delta > 1 ? 's' : ''} Key Form depuis hier.`,
-        score: 84,
+        score: 84, topic: 'pulsa',
       });
     }
   }
@@ -154,7 +202,7 @@ async function _computeTrendCandidates(env, tenantId, current) {
     if (weekDelta > 0) {
       candidates.push({
         text:  `${weekDelta} scan${weekDelta > 1 ? 's' : ''} Smart QR sur les 7 derniers jours.`,
-        score: 68,
+        score: 68, topic: 'smartqr',
       });
     }
   }
@@ -312,7 +360,7 @@ async function _fetchActivePilotable(env, audience) {
 // Toujours une phrase utile. Pas de LLM, zéro risque qualité.
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
-function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = []) {
+function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
@@ -322,13 +370,13 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [])
   if (smartqr.scans24h > 0) {
     candidates.push({
       text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} ces dernières 24 h.`,
-      score: 70 + Math.min(smartqr.scans24h, 20),
+      score: 70 + Math.min(smartqr.scans24h, 20), topic: 'smartqr',
     });
   }
   if (pulsa.responses24h > 0) {
     candidates.push({
       text:  `${pulsa.responses24h} nouvelle${pulsa.responses24h > 1 ? 's' : ''} réponse${pulsa.responses24h > 1 ? 's' : ''} Key Form depuis hier.`,
-      score: 75 + Math.min(pulsa.responses24h * 3, 20),
+      score: 75 + Math.min(pulsa.responses24h * 3, 20), topic: 'pulsa',
     });
   }
   // Annonces : la "bibliothèque" = annonces générées sauvegardées localement.
@@ -336,39 +384,39 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [])
   if (clientSensors.annoncesLibrary > 0) {
     candidates.push({
       text:  `${clientSensors.annoncesLibrary} annonce${clientSensors.annoncesLibrary > 1 ? 's' : ''} immo dans votre bibliothèque.`,
-      score: 58,
+      score: 58, topic: 'annonces',
     });
   }
   if (ghostwriter.usedToday > 0 && ghostwriter.quotaToday != null) {
     const remaining = Math.max(0, ghostwriter.quotaToday - ghostwriter.usedToday);
     candidates.push({
       text:  `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday} aujourd'hui, ${remaining} restant${remaining > 1 ? 's' : ''}.`,
-      score: 52,
+      score: 52, topic: 'ghostwriter',
     });
   }
   if (clientSensors.brainstormingSessions > 0) {
     candidates.push({
       text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming dans votre bibliothèque.`,
-      score: 48,
+      score: 48, topic: 'brainstorming',
     });
   }
   if (pulsa.publishedForms > 0) {
     candidates.push({
       text:  `${pulsa.publishedForms} formulaire${pulsa.publishedForms > 1 ? 's' : ''} Key Form publié${pulsa.publishedForms > 1 ? 's' : ''} en ligne.`,
-      score: 42,
+      score: 42, topic: 'pulsa',
     });
   }
   if (smartqr.scansTotal >= 50) {
     candidates.push({
       text:  `${smartqr.scansTotal} scans cumulés sur vos Smart QR.`,
-      score: 40,
+      score: 40, topic: 'smartqr',
     });
   }
   // Kodex : chiffre serveur exact (data fabric codex_briefs).
   if (kodex.briefs > 0) {
     candidates.push({
       text:  `${kodex.briefs} brief${kodex.briefs > 1 ? 's' : ''} Brief Prod dans votre bibliothèque.`,
-      score: 38,
+      score: 38, topic: 'kodex',
     });
   }
 
@@ -382,21 +430,28 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [])
 
   candidates.push({
     text:  `${toolsCount} assistants IA prêts à travailler sur vos projets.`,
-    score: 25,
+    score: 25, topic: 'ambiance',
   });
   candidates.push({
     text:  `Belle ${moment} de ${weekday} — votre suite Keystone est à jour.`,
-    score: 20,
+    score: 20, topic: 'ambiance',
   });
   candidates.push({
     text:  `Votre poste de commande Keystone est opérationnel.`,
-    score: 15,
+    score: 15, topic: 'ambiance',
   });
 
-  // Tri par pertinence décroissante puis ROTATION sur l'index demandé.
+  // Pondération apprise : ajuste le score de chaque candidat selon
+  // l'engagement passé sur son topic (apprend ce qui t'intéresse).
+  for (const c of candidates) {
+    c.score = c.score * _topicMultiplier(feedback, c.topic || 'ambiance');
+  }
+
+  // Tri par pertinence (apprise) décroissante puis ROTATION sur l'index.
   candidates.sort((a, b) => b.score - a.score);
   const idx = ((variantIndex % candidates.length) + candidates.length) % candidates.length;
-  return candidates[idx].text;
+  const chosen = candidates[idx];
+  return { text: chosen.text, topic: chosen.topic || 'ambiance' };
 }
 
 // Claude Haiku 4.5 — modèle BYOK pour le mode IA (Chantier 2, 2026-05-28).
@@ -409,13 +464,13 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 function _buildAiPrompts(sensors, firstName, variantIndex) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
   let signals = [
-    smartqr.scans24h        > 0 ? `Smart QR : ${smartqr.scans24h} scans dernières 24h`           : null,
-    pulsa.responses24h      > 0 ? `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`      : null,
-    ghostwriter.usedToday   > 0 ? `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui` : null,
-    clientSensors.brainstormingSessions > 0 ? `${clientSensors.brainstormingSessions} sessions Brainstorming en bibliothèque` : null,
-    clientSensors.annoncesLibrary > 0 ? `${clientSensors.annoncesLibrary} annonces immo en bibliothèque` : null,
-    kodex.briefs > 0 ? `${kodex.briefs} briefs Brief Prod en bibliothèque` : null,
-    kodex.lastBriefAgeDays > 7 ? `Dernier brief Brief Prod il y a ${Math.round(kodex.lastBriefAgeDays)} jours` : null,
+    smartqr.scans24h        > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h`, topic: 'smartqr' }           : null,
+    pulsa.responses24h      > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' }         : null,
+    ghostwriter.usedToday   > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
+    clientSensors.brainstormingSessions > 0 ? { t: `${clientSensors.brainstormingSessions} sessions Brainstorming en bibliothèque`, topic: 'brainstorming' } : null,
+    clientSensors.annoncesLibrary > 0 ? { t: `${clientSensors.annoncesLibrary} annonces immo en bibliothèque`, topic: 'annonces' } : null,
+    kodex.briefs > 0 ? { t: `${kodex.briefs} briefs Brief Prod en bibliothèque`, topic: 'kodex' } : null,
+    kodex.lastBriefAgeDays > 7 ? { t: `Dernier brief Brief Prod il y a ${Math.round(kodex.lastBriefAgeDays)} jours`, topic: 'kodex' } : null,
   ].filter(Boolean);
 
   if (!signals.length) return null;
@@ -426,6 +481,8 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
     const shift = ((variantIndex % signals.length) + signals.length) % signals.length;
     signals = [...signals.slice(shift), ...signals.slice(0, shift)];
   }
+  // Le topic dominant = celui du signal n°1 (que le LLM doit privilégier).
+  const topic = signals[0].topic;
 
   const hour    = new Date().getHours();
   const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
@@ -448,13 +505,13 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
   const userPrompt = [
     `Contexte : ${moment} de ${weekday}, prénom ${firstName}.`,
     'Signaux disponibles (par ordre de priorité) :',
-    ...signals.map((s, i) => `${i + 1}. ${s}`),
+    ...signals.map((s, i) => `${i + 1}. ${s.t}`),
     '',
     'Formule une phrase courte basée EN PRIORITÉ sur le signal n°1, qui fait gagner du temps à l\'utilisateur (rappel utile, observation factuelle, ou nudge léger). Pas d\'invention de chiffre.',
     'Génère le JSON {"phrase"} maintenant.',
   ].join('\n');
 
-  return { systemPrompt, userPrompt };
+  return { systemPrompt, userPrompt, topic };
 }
 
 // Parsing commun : extrait {"phrase":"..."} d'une sortie LLM (tolérant
@@ -542,13 +599,16 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey 
   const prompts = _buildAiPrompts(sensors, firstName, variantIndex);
   if (!prompts) return null;  // aucun signal exploitable
 
+  let text = null;
   // BYOK Claude prioritaire si clé valide fournie
   if (typeof apiKey === 'string' && apiKey.length > 10) {
-    const claudePhrase = await _buildAiPhraseClaude(apiKey, prompts.systemPrompt, prompts.userPrompt);
-    if (claudePhrase) return claudePhrase;
+    text = await _buildAiPhraseClaude(apiKey, prompts.systemPrompt, prompts.userPrompt);
     // Claude KO → fallback transparent Llama
   }
-  return _buildAiPhraseLlama(env, prompts.systemPrompt, prompts.userPrompt);
+  if (!text) {
+    text = await _buildAiPhraseLlama(env, prompts.systemPrompt, prompts.userPrompt);
+  }
+  return text ? { text, topic: prompts.topic } : null;
 }
 
 // ── Endpoint principal ────────────────────────────────────────────
@@ -611,15 +671,23 @@ export async function handleLivingBoard(request, env) {
     codexBriefs:         kodex.briefs             || 0,
   };
   let trendCandidates = [];
+  let feedback = {};
   if (lookupHmac) {
-    // Snapshot + tendances en parallèle (le snapshot du jour n'affecte pas
-    // le calcul de tendance qui compare J-1/J-7, donc ordre indifférent).
-    const [, trends] = await Promise.all([
+    // Snapshot + tendances + feedback en parallèle.
+    const [, trends, fb] = await Promise.all([
       _recordDailySnapshot(env, lookupHmac, cumuls),
       _computeTrendCandidates(env, lookupHmac, cumuls),
+      _readFeedback(env, lookupHmac),
     ]);
     trendCandidates = trends || [];
+    feedback = fb || {};
   }
+
+  // Helper réponse Calculateur (factorisé — renvoie aussi le topic appris)
+  const calcResponse = () => {
+    const c = _buildCalculatorPhrase(sensors, variantIndex, trendCandidates, feedback);
+    return json({ mode: 'calculator', text: c.text, topic: c.topic, icon: 'bar-chart', ttl: 90 }, 200, origin);
+  };
 
   // ── Sélection du mode ───────────────────────────────────────────
   // 1. Pilotable URGENT actif → prend la main
@@ -637,15 +705,15 @@ export async function handleLivingBoard(request, env) {
 
   // Si preferMode demande explicitement un mode, on tente celui-là
   if (preferMode === 'ai') {
-    const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
-    if (aiText) {
-      return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
+    const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
+    if (ai) {
+      return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120 }, 200, origin);
     }
     // sinon fallback Calculateur
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return calcResponse();
   }
   if (preferMode === 'calculator') {
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return calcResponse();
   }
   if (preferMode === 'pilotable') {
     if (pilotable) {
@@ -660,15 +728,15 @@ export async function handleLivingBoard(request, env) {
       }, 200, origin);
     }
     // Pas de Pilotable actif → fallback Calculateur (variété + économie LLM)
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return calcResponse();
   }
 
   // 2. Pas de preferMode → cycle par défaut au boot
   // Premier appel : on commence par le mode IA si signaux disponibles, sinon Calculateur.
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
-  const aiText = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
-  if (aiText) {
-    return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
+  const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
+  if (ai) {
+    return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120 }, 200, origin);
   }
 
   // 3. Pilotable normal actif
@@ -685,10 +753,55 @@ export async function handleLivingBoard(request, env) {
   }
 
   // 4. Fallback : Calculateur
-  return json({
-    mode: 'calculator',
-    text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates),
-    icon: 'bar-chart',
-    ttl:  90,
-  }, 200, origin);
+  return calcResponse();
+}
+
+// ── POST /api/livinglayer/feedback (Chantier 3) ───────────────────
+// Enregistre une impression (phrase affichée) ou un engagement (outil
+// ouvert après la phrase). Requiert JWT (tenant). Sans JWT → no-op.
+// Body : { topic, type: 'impression' | 'engagement' }
+const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance'];
+
+export async function handleLivingFeedback(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin'  : origin,
+        'Access-Control-Allow-Methods' : 'POST, OPTIONS',
+        'Access-Control-Allow-Headers' : 'Content-Type, Authorization',
+      },
+    });
+  }
+
+  // JWT requis pour identifier le tenant (sinon rien à apprendre)
+  let claims = null;
+  try {
+    const authHeader = request.headers.get('Authorization') || '';
+    if (authHeader.startsWith('Bearer ')) claims = await verifyJWT(authHeader.slice(7), env);
+  } catch (e) { /* ignore */ }
+  const tenantId = claims?.sub || null;
+  if (!tenantId) return json({ ok: true, skipped: 'no-tenant' }, 200, origin);
+
+  const body  = await parseBody(request);
+  const topic = (body.topic || '').toString().toLowerCase();
+  const type  = body.type === 'engagement' ? 'engagement' : 'impression';
+  if (!_VALID_TOPICS.includes(topic)) return json({ ok: true, skipped: 'invalid-topic' }, 200, origin);
+
+  await ensureFeedbackSchema(env);
+  const col = type === 'engagement' ? 'engagements' : 'impressions';
+  try {
+    // UPSERT : crée la ligne (topic vu pour la 1ère fois) ou incrémente.
+    await env.DB.prepare(
+      `INSERT INTO living_feedback (tenant_id, topic, ${col}, updated_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(tenant_id, topic) DO UPDATE SET
+         ${col} = ${col} + 1,
+         updated_at = datetime('now')`
+    ).bind(tenantId, topic).run();
+  } catch (e) {
+    return json({ ok: false, error: e.message }, 200, origin);
+  }
+  return json({ ok: true, topic, type }, 200, origin);
 }

@@ -1960,6 +1960,10 @@ export function openTool(padId, opts = {}) {
     // (évite que Renommer/Masquer/Supprimer restent visibles par-dessus le modal)
     dismissEditMode();
 
+    // Living Layer feedback : si cet outil correspond au dernier topic
+    // affiché récemment, c'est un signal d'intérêt (engagement).
+    _livingTrackToolOpen(padId);
+
     // ── Garde B2B — outil verrouillé ? ───────────────────────────
     // S6 — Bypass ADMIN appliqué ici aussi : un user avec plan ADMIN
     // (ou claim isAdmin dans le JWT) a accès illimité à TOUS les outils,
@@ -4819,6 +4823,59 @@ function _escapeLivingText(s) {
     return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
 }
 
+// ── Feedback loop (Chantier 3) — apprend ce qui t'intéresse ──
+// On mémorise le dernier topic affiché. Si l'utilisateur ouvre l'outil
+// correspondant peu après, c'est un signal d'INTÉRÊT fort → engagement.
+// Les impressions sont throttlées (5 min/topic) pour garder un ratio
+// engagement/impression significatif malgré la rotation 10s.
+let _livingLastShown = null;  // { topic, ts }
+const LIVING_PAD_TOPIC = {
+    'O-IMM-002': 'annonces',
+    'A-COM-001': 'smartqr',
+    'A-COM-002': 'kodex',
+    'A-COM-003': 'brainstorming',
+    'A-COM-004': 'pulsa',
+    'A-COM-005': 'ghostwriter',
+};
+const LIVING_ENGAGE_WINDOW_MS = 3 * 60 * 1000;   // 3 min après affichage
+const LIVING_IMP_THROTTLE_MS  = 5 * 60 * 1000;   // 1 impression/topic/5min
+
+function _sendLivingFeedback(topic, type) {
+    if (!topic || topic === 'ambiance') return;  // l'ambiance n'a pas d'outil à ouvrir
+    const jwt = localStorage.getItem('ks_jwt') || '';
+    if (!jwt) return;  // feedback nominatif uniquement (tenant requis)
+    try {
+        fetch(`${CF_API}/api/livinglayer/feedback`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+            body:    JSON.stringify({ topic, type }),
+            keepalive: true,   // survit à une navigation
+        }).catch(() => {});
+    } catch (e) { /* best effort */ }
+}
+
+function _maybeSendImpression(topic) {
+    if (!topic || topic === 'ambiance') return;
+    try {
+        const k    = 'ks_living_imp_' + topic;
+        const last = +(localStorage.getItem(k) || 0);
+        if (Date.now() - last < LIVING_IMP_THROTTLE_MS) return;  // throttle
+        localStorage.setItem(k, String(Date.now()));
+        _sendLivingFeedback(topic, 'impression');
+    } catch (e) { /* no-op */ }
+}
+
+// Appelé par openTool : si l'outil ouvert correspond au dernier topic
+// affiché récemment, on enregistre un engagement (signal d'intérêt).
+function _livingTrackToolOpen(padId) {
+    const topic = LIVING_PAD_TOPIC[padId];
+    if (!topic || !_livingLastShown) return;
+    if (_livingLastShown.topic !== topic) return;
+    if (Date.now() - _livingLastShown.ts > LIVING_ENGAGE_WINDOW_MS) return;
+    _sendLivingFeedback(topic, 'engagement');
+    _livingLastShown = null;  // évite le double comptage
+}
+
 function _collectClientSensors() {
     const sensors = {};
     // Brainstorming — bibliothèque de sessions sauvegardées (clé réelle
@@ -4859,6 +4916,12 @@ function _paintLivingState(el, data) {
     // URGENT lock : un Pilotable priorité ≥ 80 monopolise l'affichage
     // (pas de rotation) tant qu'il est actif côté serveur.
     _livingUrgentLock = (data.mode === 'pilotable' && (+data.priority || 0) >= 80);
+
+    // Feedback loop : mémorise le topic affiché + impression throttlée.
+    if (data.topic) {
+        _livingLastShown = { topic: data.topic, ts: Date.now() };
+        _maybeSendImpression(data.topic);
+    }
 
     const iconName = data.icon || 'bar-chart';
     const iconHtml = uiIcon(iconName, 14);
