@@ -4821,39 +4821,24 @@ function _escapeLivingText(s) {
 
 function _collectClientSensors() {
     const sensors = {};
-    // Brainstorming — bibliothèque de sessions sauvegardées
+    // Brainstorming — bibliothèque de sessions sauvegardées (clé réelle
+    // ks_brainstorming_sessions, structure {id, brief, mode, started_at,
+    // updated_at, history, synthesis}). Count exact.
     try {
         const sessions = JSON.parse(localStorage.getItem('ks_brainstorming_sessions') || '[]');
         sensors.brainstormingSessions = Array.isArray(sessions) ? sessions.length : 0;
     } catch (e) { sensors.brainstormingSessions = 0; }
-    // Brainstorming — draft en cours (âge en heures pour nudge "tu as laissé en pause")
-    try {
-        const draft = JSON.parse(localStorage.getItem('ks_brainstorming_session_draft') || 'null');
-        if (draft?.lastEditedAt) {
-            sensors.brainstormingDraftAgeHours = (Date.now() - new Date(draft.lastEditedAt).getTime()) / 3600000;
-        }
-    } catch (e) { /* no-op */ }
-    // Annonces Immo — brouillons non-publiés
+    // Annonces Immo — total en bibliothèque locale. Structure réelle des
+    // entrées : {uid, date, title, portails, formData, text} → AUCUN champ
+    // "status"/"publishedAt". On compte donc le total honnêtement (pas de
+    // filtre "brouillon" fictif). Le board affiche "N annonces en bibliothèque".
     try {
         const lib = JSON.parse(localStorage.getItem('ks_annonces_immo_library') || '[]');
-        sensors.annoncesDrafts = Array.isArray(lib)
-            ? lib.filter(d => d && (d.status === 'draft' || !d.publishedAt)).length
-            : 0;
-    } catch (e) { sensors.annoncesDrafts = 0; }
-    // Kodex (Brief Prod) — briefs en bibliothèque + âge du dernier
-    try {
-        const kodexLib = JSON.parse(localStorage.getItem('ks_kodex_library') || '[]');
-        if (Array.isArray(kodexLib)) {
-            sensors.kodexBriefs = kodexLib.length;
-            if (kodexLib.length > 0) {
-                const last = kodexLib.reduce((a, b) =>
-                    (b?.created_at || '') > (a?.created_at || '') ? b : a, {});
-                if (last?.created_at) {
-                    sensors.kodexLastBriefAgeDays = (Date.now() - new Date(last.created_at).getTime()) / 86400000;
-                }
-            }
-        }
-    } catch (e) { /* no-op */ }
+        sensors.annoncesLibrary = Array.isArray(lib) ? lib.length : 0;
+    } catch (e) { sensors.annoncesLibrary = 0; }
+    // NB : Kodex (Brief Prod) n'est PAS lu ici — sa bibliothèque vit côté
+    // serveur (data fabric codex_briefs). Le board la lit via _sensorKodex
+    // pour un chiffre exact. Idem inutile de dupliquer en localStorage.
     // Nombre d'outils installés (pour la phrase d'ambiance "N assistants IA")
     try {
         const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');

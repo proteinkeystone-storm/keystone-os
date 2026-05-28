@@ -67,23 +67,61 @@ async function ensureLivingSchema(env) {
 
 // ── Helpers sensor (côté serveur) ─────────────────────────────────
 
-// Smart QR : nombre de scans des dernières 24h + redemptions cumulées.
-// Agrégat global pour le MVP single-tenant. Un futur multi-tenant
-// filtrera par tenant_id via JOIN qr_redirects.
-async function _sensorSmartQR(env) {
+// Smart QR : nombre de scans des dernières 24h + total cumulé.
+// Si tenantId (= claims.sub) fourni → filtre les scans des QR appartenant
+// à ce propriétaire (JOIN qr_redirects.tenant_id). Sinon (anonyme/démo) →
+// agrégat global. Garantit l'EXACTITUDE : on ne compte que TES scans.
+async function _sensorSmartQR(env, tenantId) {
   try {
-    const scans24h = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM qr_scans WHERE ts >= datetime('now', '-1 day')`
-    ).first().catch(() => null);
-    const scansTotal = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM qr_scans`
-    ).first().catch(() => null);
+    let scans24h, scansTotal;
+    if (tenantId) {
+      scans24h = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM qr_scans s
+         JOIN qr_redirects r ON r.short_id = s.short_id
+         WHERE r.tenant_id = ? AND s.ts >= datetime('now', '-1 day')`
+      ).bind(tenantId).first().catch(() => null);
+      scansTotal = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM qr_scans s
+         JOIN qr_redirects r ON r.short_id = s.short_id
+         WHERE r.tenant_id = ?`
+      ).bind(tenantId).first().catch(() => null);
+    } else {
+      scans24h = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM qr_scans WHERE ts >= datetime('now', '-1 day')`
+      ).first().catch(() => null);
+      scansTotal = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM qr_scans`
+      ).first().catch(() => null);
+    }
     return {
       scans24h:   scans24h?.n   || 0,
       scansTotal: scansTotal?.n || 0,
     };
   } catch (e) {
     return { scans24h: 0, scansTotal: 0 };
+  }
+}
+
+// Kodex (Brief Prod) : nombre de briefs en bibliothèque + âge du dernier.
+// La biblio Kodex vit côté SERVEUR (data fabric entities type=codex_briefs,
+// tenant_id = claims.sub) — surtout PAS en localStorage. Capteur serveur
+// obligatoire pour un chiffre exact. Sans JWT → 0 (rien à dire).
+async function _sensorKodex(env, tenantId) {
+  if (!tenantId) return { briefs: 0 };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS n, MAX(updated_at) AS last_at
+       FROM entities
+       WHERE tenant_id = ? AND type = 'codex_briefs' AND deleted_at IS NULL`
+    ).bind(tenantId).first().catch(() => null);
+    const result = { briefs: row?.n || 0 };
+    if (row?.last_at) {
+      const ageDays = (Date.now() - new Date(row.last_at.replace(' ', 'T') + 'Z').getTime()) / 86400000;
+      if (Number.isFinite(ageDays) && ageDays >= 0) result.lastBriefAgeDays = ageDays;
+    }
+    return result;
+  } catch (e) {
+    return { briefs: 0 };
   }
 }
 
@@ -172,7 +210,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0) {
-  const { smartqr, pulsa, ghostwriter, clientSensors = {} } = sensors;
+  const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
   const candidates = [];
 
   // ── Candidats basés sur signaux forts (chiffres réels) ──────────
@@ -188,10 +226,12 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0) {
       score: 75 + Math.min(pulsa.responses24h * 3, 20),
     });
   }
-  if (clientSensors.annoncesDrafts > 0) {
+  // Annonces : la "bibliothèque" = annonces générées sauvegardées localement.
+  // PAS de notion de "brouillon à publier" → on dit "en bibliothèque" (exact).
+  if (clientSensors.annoncesLibrary > 0) {
     candidates.push({
-      text:  `${clientSensors.annoncesDrafts} annonce${clientSensors.annoncesDrafts > 1 ? 's' : ''} immo prête${clientSensors.annoncesDrafts > 1 ? 's' : ''} à publier.`,
-      score: 60,
+      text:  `${clientSensors.annoncesLibrary} annonce${clientSensors.annoncesLibrary > 1 ? 's' : ''} immo dans votre bibliothèque.`,
+      score: 58,
     });
   }
   if (ghostwriter.usedToday > 0 && ghostwriter.quotaToday != null) {
@@ -203,7 +243,7 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0) {
   }
   if (clientSensors.brainstormingSessions > 0) {
     candidates.push({
-      text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming sauvegardée${clientSensors.brainstormingSessions > 1 ? 's' : ''}.`,
+      text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming dans votre bibliothèque.`,
       score: 48,
     });
   }
@@ -215,13 +255,14 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0) {
   }
   if (smartqr.scansTotal >= 50) {
     candidates.push({
-      text:  `${smartqr.scansTotal} scans cumulés sur tous vos Smart QR.`,
+      text:  `${smartqr.scansTotal} scans cumulés sur vos Smart QR.`,
       score: 40,
     });
   }
-  if (clientSensors.kodexBriefs > 0) {
+  // Kodex : chiffre serveur exact (data fabric codex_briefs).
+  if (kodex.briefs > 0) {
     candidates.push({
-      text:  `${clientSensors.kodexBriefs} brief${clientSensors.kodexBriefs > 1 ? 's' : ''} Brief Prod en bibliothèque.`,
+      text:  `${kodex.briefs} brief${kodex.briefs > 1 ? 's' : ''} Brief Prod dans votre bibliothèque.`,
       score: 38,
     });
   }
@@ -259,17 +300,17 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0) {
 async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0) {
   if (!env.AI || typeof env.AI.run !== 'function') return null;
 
-  // Si aucun signal n'est intéressant, on ne dérange pas le LLM
-  const { smartqr, pulsa, ghostwriter, clientSensors = {} } = sensors;
+  // Si aucun signal n'est intéressant, on ne dérange pas le LLM.
+  // Tous ces signaux sont des chiffres RÉELS (D1 serveur ou localStorage).
+  const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
   let signals = [
     smartqr.scans24h        > 0 ? `Smart QR : ${smartqr.scans24h} scans dernières 24h`           : null,
     pulsa.responses24h      > 0 ? `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`      : null,
     ghostwriter.usedToday   > 0 ? `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui` : null,
-    clientSensors.brainstormingDraftAgeHours > 0 ? `Brainstorming en pause depuis ${Math.round(clientSensors.brainstormingDraftAgeHours)}h` : null,
     clientSensors.brainstormingSessions > 0 ? `${clientSensors.brainstormingSessions} sessions Brainstorming en bibliothèque` : null,
-    clientSensors.annoncesDrafts > 0 ? `${clientSensors.annoncesDrafts} annonces immo en brouillon` : null,
-    clientSensors.kodexBriefs > 0 ? `${clientSensors.kodexBriefs} briefs Brief Prod en bibliothèque` : null,
-    clientSensors.kodexLastBriefAgeDays > 0 ? `Dernier brief Brief Prod il y a ${Math.round(clientSensors.kodexLastBriefAgeDays)} jours` : null,
+    clientSensors.annoncesLibrary > 0 ? `${clientSensors.annoncesLibrary} annonces immo en bibliothèque` : null,
+    kodex.briefs > 0 ? `${kodex.briefs} briefs Brief Prod en bibliothèque` : null,
+    kodex.lastBriefAgeDays > 7 ? `Dernier brief Brief Prod il y a ${Math.round(kodex.lastBriefAgeDays)} jours` : null,
   ].filter(Boolean);
 
   if (!signals.length) return null;
@@ -385,14 +426,16 @@ export async function handleLivingBoard(request, env) {
   const plan       = (claims?.plan || '').toLowerCase() || 'all';
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, pulsa, ghostwriter, pilotable] = await Promise.all([
-    _sensorSmartQR(env),
+  // tenantId = lookupHmac (claims.sub) → filtre les chiffres sur TES données.
+  const [smartqr, pulsa, ghostwriter, kodex, pilotable] = await Promise.all([
+    _sensorSmartQR(env, lookupHmac),
     _sensorPulsa(env, lookupHmac),
     _sensorGhostWriter(env, lookupHmac, claims?.plan),
+    _sensorKodex(env, lookupHmac),
     _fetchActivePilotable(env, plan),
   ]);
 
-  const sensors = { smartqr, pulsa, ghostwriter, clientSensors };
+  const sensors = { smartqr, pulsa, ghostwriter, kodex, clientSensors };
 
   // ── Sélection du mode ───────────────────────────────────────────
   // 1. Pilotable URGENT actif → prend la main
