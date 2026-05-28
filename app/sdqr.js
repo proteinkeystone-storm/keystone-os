@@ -1402,7 +1402,6 @@ async function _openQrDetail(panel, qr) {
             <span class="sdqr-svg-hint" data-svg-hint hidden>SVG verrouillé — logo non vectoriel</span>
           </div>
         </div>
-        ${_renderDesignPanel(qr)}
       </div>
       <div class="sdqr-detail-right">
         <label class="sdqr-field sdqr-field--inline">
@@ -1477,6 +1476,8 @@ async function _openQrDetail(panel, qr) {
           <span style="opacity:.7">Pas de tracking, pas de connexion requise, mais le contenu n'est plus modifiable après création.</span>
         </div>
         `}
+
+        ${_renderDesignPanel(qr)}
 
         <div class="sdqr-detail-actions">
           <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
@@ -2131,7 +2132,7 @@ const THEME_PRESETS = [
 function _renderDesignPanel(qr) {
   const d = mergeDesign(qr.design);
   return `
-    <details class="sdqr-design-panel" id="sdqr-design-panel">
+    <details class="sdqr-design-panel" id="sdqr-design-panel" open>
       <summary class="sdqr-design-summary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2a10 10 0 1 0 10 10c0-2.74-2.84-3.18-5-3.5"/></svg>
         Personnaliser le design
