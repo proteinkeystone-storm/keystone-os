@@ -11,13 +11,15 @@
 // future si abus.
 // ══════════════════════════════════════════════════════════════════
 
-const LIVING_MODEL_ID = '@cf/google/gemma-4-26b-a4b-it';
-// Gemma 4 = modèle raisonneur : consomme TOUT son budget dans `reasoning`
-// avant de produire `content` (vu en prod 23/05 sur Ghost Writer et confirmé
-// 24/05 sur Living Layer — finish_reason="length" + content=null à 1024).
-// 4096 = même seuil que Ghost Writer, validé pour générer du Markdown long
-// ET pour produire un simple JSON {"phrase"}.
-const LIVING_MAX_TOK  = 4096;
+// Switch Llama 3.1 8B (2026-05-26 soir) — sur Smart QR le temps est
+// critique : le client scanne et attend devant son écran. Gemma 4
+// raisonneur prenait 5-8s avant le premier token (budget reasoning).
+// Llama 3.1 8B sort direct en ~500ms-1s pour le même résultat de qualité
+// suffisante (1 phrase courte). Confirmé sur Brainstorming Sprint 2.
+const LIVING_MODEL_ID = '@cf/meta/llama-3.1-8b-instruct';
+// Plus de budget reasoning à prévoir : 300 tokens suffisent largement
+// pour 1 phrase de greeting (max 60-80 chars en pratique).
+const LIVING_MAX_TOK  = 300;
 
 function _cors(origin) {
   return {

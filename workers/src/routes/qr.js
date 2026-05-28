@@ -911,12 +911,17 @@ export async function handleScheduledPurge(env) {
 // TTL 1h pour rester contextuel sans cramer les neurones AI.
 // ══════════════════════════════════════════════════════════════════
 
-const SMARTQR_MODEL_ID  = '@cf/google/gemma-4-26b-a4b-it';
-// Gemma 4 = modèle raisonneur : consomme TOUT son budget dans `reasoning`
-// avant de produire `content`. 1024 = fallback systématique (vu en prod
-// 24/05 sur iPhone Stéphane, et confirmé Living Layer même date). 4096 =
-// seuil mini validé pour produire un JSON {"phrase","title"}.
-const SMARTQR_MAX_TOK   = 4096;
+// Switch Llama 3.1 8B (2026-05-26 soir) — interstitiel Smart QR : le
+// client est devant son écran à attendre, chaque seconde compte.
+// Gemma 4 raisonneur prenait 5-8s avant le premier token (budget
+// reasoning). Llama 3.1 8B sort direct en ~500ms-1.5s pour le même
+// résultat de qualité suffisante (1 phrase + 1 titre courts).
+// Validé sur Brainstorming Sprint 2 et migré sur Living Layer le même
+// jour (cohérence cross-Smart QR).
+const SMARTQR_MODEL_ID  = '@cf/meta/llama-3.1-8b-instruct';
+// Plus de budget reasoning à prévoir. 400 tokens suffisent pour un JSON
+// court {"phrase":"...","title":"..."} (chaque champ < 100 chars).
+const SMARTQR_MAX_TOK   = 400;
 const SMARTQR_CACHE_TTL = 60 * 60 * 1000; // 1h en ms
 
 // Auto-migration cache table (idempotent)
