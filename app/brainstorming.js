@@ -620,6 +620,12 @@ async function _callOrchestration(panel) {
     history       : _currentSession.history,
     max_turns     : ORCHESTRATION_MAX_TURNS,
   };
+  // BYOK Claude Haiku (2026-05-28) — si une clé Anthropic est posée dans le
+  // Vault, le Devil's Advocate (agent premium) parlera via Claude Haiku au
+  // lieu de Llama (caractère affûté). Le serveur ignore la clé pour les 8
+  // autres agents. Sans clé → tout reste sur Llama.
+  const _claudeKey = _getClaudeBYOKKey();
+  if (_claudeKey) payload.apiKey = _claudeKey;
 
   let res;
   try {

@@ -57,6 +57,16 @@ import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrato
 const MODEL_ID       = '@cf/meta/llama-3.1-8b-instruct';
 const MODEL_ID_HEAVY = '@cf/google/gemma-4-26b-a4b-it';
 
+// ── Agent premium sur Claude Haiku (BYOK, 2026-05-28) ─────────────
+// Le Devil's Advocate est l'agent dont le caractère porte le plus le
+// débat (friction, contradiction). Llama 3.1 8B le rend parfois mou.
+// Si l'utilisateur a posé sa clé Anthropic (Vault), CE seul agent passe
+// sur Claude Haiku 4.5 en streaming → contradictions incisives et nuancées.
+// Les 8 autres restent sur Llama (MODEL_ID inchangé → tests 5.33 OK).
+// Fallback transparent Llama si pas de clé ou si Claude échoue.
+const PREMIUM_AGENT_ID      = 'devil';
+const BRAINSTORM_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+
 // Streaming agents — bump à 240 tokens (~190 mots) pour permettre 3
 // phrases concrètes au lieu de 2 (Sprint 7.3).
 const MAX_TOKENS  = 240;
@@ -566,6 +576,104 @@ const SUPPORTED_AGENTS = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────────
+// Agent premium — Claude Haiku (BYOK, 2026-05-28)
+// ─────────────────────────────────────────────────────────────────
+// Couche d'incarnation ajoutée au system prompt du Devil's Advocate
+// UNIQUEMENT quand il tourne sur Claude Haiku. Exploite la finesse du
+// modèle pour un caractère vraiment tranché (Llama garde son prompt court,
+// sinon il se perd). Les contraintes de format restent celles du préambule.
+function _enrichDevilPromptForClaude(basePrompt) {
+  return `${basePrompt}
+
+INCARNATION RENFORCÉE (tu es joué par un modèle premium — exploite-le)
+- Tu es l'esprit critique le plus aiguisé de la table : un mélange de Christopher Hitchens et d'un associé de cabinet qui a vu mille pitchs mourir.
+- Frappe le maillon FAIBLE, jamais l'accessoire : vise l'hypothèse cachée sur laquelle tout repose, celle que personne n'ose nommer.
+- Sois CHIRURGICAL, pas grincheux : une objection précise et fondée vaut dix sarcasmes. Nomme le risque concret (le coût, le délai, le contre-exemple réel, le biais).
+- Quand tu démontes, OUVRE une faille exploitable : "ça casse SI X — donc prouvez X d'abord". Tu fais avancer en résistant, pas en bloquant.
+- Une formule qui marque > un paragraphe tiède. Reste sous 3 phrases, mais qu'elles laissent une trace.`;
+}
+
+// Streaming d'un tour d'agent via l'API Anthropic (Claude Haiku).
+// Renvoie le texte complet, ou null en cas d'échec (clé invalide, réseau,
+// quota, réponse vide) → le caller bascule alors sur Llama.
+// Le format SSE Anthropic (content_block_delta → delta.text) est re-streamé
+// au client dans le MÊME format custom que Llama (events {type:'chunk'}).
+async function _streamAgentClaude(apiKey, systemPrompt, userContent, send, agentId) {
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key'        : apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type'     : 'application/json',
+      },
+      body: JSON.stringify({
+        model:      BRAINSTORM_CLAUDE_MODEL,
+        system:     systemPrompt,
+        messages:   [{ role: 'user', content: userContent }],
+        max_tokens: MAX_TOKENS,
+        stream:     true,
+      }),
+    });
+  } catch (e) {
+    return null;
+  }
+  if (!res.ok || !res.body) return null;
+
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let   buffer  = '';
+  let   fullText = '';
+
+  // try/catch global : une coupure réseau en cours de stream ne doit
+  // jamais casser la session — on renvoie ce qu'on a (ou null → Llama).
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          // Anthropic stream : { type:'content_block_delta', delta:{ type:'text_delta', text:'...' } }
+          const chunk = parsed?.delta?.text ?? '';
+          if (chunk) {
+            fullText += chunk;
+            send({ type: 'chunk', agent_id: agentId, text: chunk });
+          }
+        } catch (e) { /* ignore malformed line */ }
+      }
+    }
+  } catch (e) {
+    // Stream interrompu : si on a déjà du texte, on le garde (pas de
+    // fallback Llama qui dupliquerait les chunks déjà envoyés au client).
+    return fullText || null;
+  }
+  return fullText || null;
+}
+
+// Assemble le contexte conversationnel (3 derniers tours) + l'instruction
+// du tour en UN message user pour Claude (Anthropic exige system séparé +
+// alternance stricte — un message user unique est le plus robuste).
+function _buildClaudeUserContent(recent, triggerContent) {
+  const ctx = (recent || [])
+    .filter(t => t && t.content)
+    .map(t => t.agent_id === 'user'
+      ? `[Brief / décideur] ${String(t.content)}`
+      : `[${getAgent(t.agent_id)?.name || t.agent_id}] ${String(t.content)}`)
+    .join('\n');
+  return ctx
+    ? `CONTEXTE RÉCENT DE LA TABLE :\n${ctx}\n\n${triggerContent}`
+    : triggerContent;
+}
+
+// ─────────────────────────────────────────────────────────────────
 // POST /api/brainstorming/agent-respond
 // ─────────────────────────────────────────────────────────────────
 export async function handleBrainstormingAgentRespond(request, env) {
@@ -598,7 +706,9 @@ export async function handleBrainstormingAgentRespond(request, env) {
     cognitive_mode = 'exploration',
     history        = [],
     max_turns      = DEFAULT_MAX_TURNS,
+    apiKey,                          // BYOK Claude (optionnel) — agent premium Devil's Advocate
   } = body;
+  const claudeKey = (typeof apiKey === 'string' && apiKey.length > 10) ? apiKey : null;
 
   // Validation
   if (!agent_id || !SUPPORTED_AGENTS.has(agent_id)) {
@@ -737,55 +847,74 @@ POSTURE
           }
           messages.push({ role: 'user', content: triggerContent });
 
-          // Lance l'inférence Workers AI en streaming
-          let aiStream;
-          try {
-            aiStream = await env.AI.run(MODEL_ID, {
-              messages,
-              stream:     true,
-              max_tokens: MAX_TOKENS,
-            });
-          } catch (e) {
-            send({ type: 'error', agent_id: currentAgentId, message: `AI run failed: ${e?.message || e}` });
-            break;
+          let fullText  = '';
+          let streamed  = false;
+
+          // ── Agent premium : Devil's Advocate sur Claude Haiku ──────
+          // Si la clé BYOK est fournie ET que c'est le tour du Devil's
+          // Advocate, on streame via Claude Haiku (caractère affûté). En
+          // cas d'échec (clé invalide, réseau…), on retombe sur Llama.
+          if (currentAgentId === PREMIUM_AGENT_ID && claudeKey) {
+            const enrichedSystem = _enrichDevilPromptForClaude(systemPrompt);
+            const claudeUser     = _buildClaudeUserContent(recent, triggerContent);
+            const claudeText     = await _streamAgentClaude(claudeKey, enrichedSystem, claudeUser, send, currentAgentId);
+            if (claudeText) {
+              fullText = claudeText;
+              streamed = true;
+            }
+            // claudeText null → fallback Llama ci-dessous (transparent)
           }
 
-          // Consomme le stream Workers AI ligne par ligne et re-stream
-          // en format custom multi-agent.
-          // Note formats : Llama 3.3 envoie {response:"..."} par chunk.
-          // On garde un fallback large pour absorber d'autres formats
-          // (au cas où Cloudflare change le wrapping selon le modèle).
-          const reader  = aiStream.getReader();
-          const decoder = new TextDecoder('utf-8');
-          let   buffer  = '';
-          let   fullText = '';
+          // ── Inférence Llama (par défaut + fallback agent premium) ──
+          if (!streamed) {
+            let aiStream;
+            try {
+              aiStream = await env.AI.run(MODEL_ID, {
+                messages,
+                stream:     true,
+                max_tokens: MAX_TOKENS,
+              });
+            } catch (e) {
+              send({ type: 'error', agent_id: currentAgentId, message: `AI run failed: ${e?.message || e}` });
+              break;
+            }
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-              if (!line.startsWith('data:')) continue;
-              const data = line.slice(5).trim();
-              if (!data || data === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(data);
-                // Fallback agressif pour récupérer le texte quelle que
-                // soit la structure (OpenAI-like, Anthropic-like, etc.)
-                const chunk =
-                  parsed.response                         ??  // Workers AI standard
-                  parsed.text                             ??  // Anthropic legacy
-                  parsed.choices?.[0]?.delta?.content     ??  // OpenAI
-                  parsed.delta?.text                      ??  // Anthropic stream
-                  parsed.p                                ??  // Workers AI compact
-                  '';
-                if (chunk) {
-                  fullText += chunk;
-                  send({ type: 'chunk', agent_id: currentAgentId, text: chunk });
-                }
-              } catch (e) { /* ignore malformed line */ }
+            // Consomme le stream Workers AI ligne par ligne et re-stream
+            // en format custom multi-agent.
+            // Note formats : Llama 3.3 envoie {response:"..."} par chunk.
+            // On garde un fallback large pour absorber d'autres formats
+            // (au cas où Cloudflare change le wrapping selon le modèle).
+            const reader  = aiStream.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let   buffer  = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                if (!line.startsWith('data:')) continue;
+                const data = line.slice(5).trim();
+                if (!data || data === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(data);
+                  // Fallback agressif pour récupérer le texte quelle que
+                  // soit la structure (OpenAI-like, Anthropic-like, etc.)
+                  const chunk =
+                    parsed.response                         ??  // Workers AI standard
+                    parsed.text                             ??  // Anthropic legacy
+                    parsed.choices?.[0]?.delta?.content     ??  // OpenAI
+                    parsed.delta?.text                      ??  // Anthropic stream
+                    parsed.p                                ??  // Workers AI compact
+                    '';
+                  if (chunk) {
+                    fullText += chunk;
+                    send({ type: 'chunk', agent_id: currentAgentId, text: chunk });
+                  }
+                } catch (e) { /* ignore malformed line */ }
+              }
             }
           }
 

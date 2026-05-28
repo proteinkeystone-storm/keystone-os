@@ -637,6 +637,37 @@ try {
     ok('Sprint 7.9 : fallback Gemma transparent si Claude échoue');
   else
     ko('Sprint 7.9 : pas de fallback Gemma', '');
+
+  // ── Devil's Advocate sur Claude Haiku (BYOK, 2026-05-28) ────────
+  // 5.43 — agent premium = devil
+  if (workerRoute.match(/PREMIUM_AGENT_ID\s*=\s*['"]devil['"]/))
+    ok("Devil-Haiku : PREMIUM_AGENT_ID = 'devil'");
+  else
+    ko("Devil-Haiku : PREMIUM_AGENT_ID absent ou != devil", '');
+
+  // 5.44 — modèle Claude Haiku 4.5
+  if (workerRoute.match(/BRAINSTORM_CLAUDE_MODEL\s*=\s*['"]claude-haiku-4-5/))
+    ok('Devil-Haiku : BRAINSTORM_CLAUDE_MODEL = Claude Haiku 4.5');
+  else
+    ko('Devil-Haiku : modèle Haiku absent', '');
+
+  // 5.45 — _streamAgentClaude streame via Anthropic API
+  if (workerRoute.includes('_streamAgentClaude') && workerRoute.includes('api.anthropic.com/v1/messages'))
+    ok('Devil-Haiku : _streamAgentClaude appelle Anthropic API en streaming');
+  else
+    ko('Devil-Haiku : _streamAgentClaude absent ou incorrect', '');
+
+  // 5.46 — fallback Llama transparent (le bloc Llama reste conditionnel)
+  if (workerRoute.includes('if (!streamed)'))
+    ok('Devil-Haiku : fallback Llama transparent si Claude KO ou pas de clé');
+  else
+    ko('Devil-Haiku : pas de fallback Llama (if (!streamed))', '');
+
+  // 5.47 — MODEL_ID reste Llama pour les 8 autres agents (non régressé)
+  if (workerRoute.match(/MODEL_ID\s*=\s*['"]@cf\/meta\/llama-3\.1-8b-instruct['"]/))
+    ok('Devil-Haiku : les 8 autres agents restent sur Llama (MODEL_ID intact)');
+  else
+    ko('Devil-Haiku : MODEL_ID a bougé !', '');
 } catch (e) { ko('Worker route : read KO', e.message); }
 
 // ─────────────────────────────────────────────────────────────────
