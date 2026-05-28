@@ -415,37 +415,25 @@
   }
 </script>
 
-<!-- Footer Réglages : la vraie version de build (interrogée au Service Worker)
-     en infobulle au survol + au tap, pour vérifier les déploiements d'un coup
-     d'œil. Le texte visible reste "v2.0 — 2026" côté client. -->
+<!-- Footer Réglages : affiche en permanence la version de build (interrogée au
+     Service Worker) pour vérifier les déploiements d'un coup d'œil. -->
 <script>
   (async () => {
     const el = document.querySelector('.sp-footer-ver');
     if (!el || !('serviceWorker' in navigator)) return;
-    let build = null;
     try {
       const reg = await navigator.serviceWorker.ready;
       const sw = reg.active || navigator.serviceWorker.controller;
-      if (sw) {
-        build = await new Promise((resolve) => {
-          const ch = new MessageChannel();
-          ch.port1.onmessage = (e) => resolve(e.data);
-          sw.postMessage('GET_VERSION', [ch.port2]);
-          setTimeout(() => resolve(null), 1500);
-        });
-      }
+      if (!sw) return;
+      const build = await new Promise((resolve) => {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = (e) => resolve(e.data);
+        sw.postMessage('GET_VERSION', [ch.port2]);
+        setTimeout(() => resolve(null), 1500);
+      });
+      if (build) el.textContent = build;
     } catch (e) {}
-    if (!build) return;
-    const label = el.textContent;
-    el.title = 'Build ' + build;
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', () => {
-      el.textContent = build;
-      clearTimeout(el._verT);
-      el._verT = setTimeout(() => { el.textContent = label; }, 4000);
-    });
   })();
-</script>
 </script>
 
 <script type="module" src="./app/main.js"></script>
