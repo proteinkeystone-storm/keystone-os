@@ -294,6 +294,8 @@ const SYNTHESIZER_PROMPT = `Tu es Synthesizer, l'agent de conclusion du brainsto
 
 Ta mission : transformer le débat en une conclusion qui RÉPOND DIRECTEMENT à la demande du brief. Une synthèse qui ne répond pas à la question posée est un échec.
 
+Tu parles EN DERNIER, une fois que toute l'équipe s'est exprimée : exploite la matière de TOUS les agents (pas seulement les derniers messages). Récupère chaque candidat, chaque angle, chaque objection valable qui a émergé.
+
 ÉTAPE 1 — IDENTIFIE LE TYPE DE DEMANDE
 - Si le brief demande un LIVRABLE GÉNÉRATIF (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, des options à départager…) → tu produis une IDÉATION RICHE ET ORGANISÉE (champ "ideation"). C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite.
 - Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "ideation": null.
@@ -889,15 +891,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - INTERDIT : théoriser sur ce que le livrable "devrait évoquer", citer un agent, "Bonjour".`;
             } else if (isStrategic) {
               triggerContent = `IDÉATION en cours. Tu RECADRES pour faire converger. MAX 3 phrases :
-- Phrase 1 : pointe les 1-2 directions les plus prometteuses parmi les candidats déjà sur la table.
+- Phrase 1 : pointe les 1-2 directions les plus prometteuses parmi les candidats déjà sur la table (nomme l'agent dont la piste tient le mieux).
 - Phrase 2 : écarte la piste la plus faible (dis pourquoi en 4 mots).
 - Phrase 3 : relance 2 NOUVEAUX candidats nommés dans la meilleure direction.
-- INTERDIT : citer un agent, validation polie, théorie abstraite.`;
+- INTERDIT : validation polie, théorie abstraite.`;
             } else {
               triggerContent = `Demande d'IDÉATION. Tu interviens comme ${agent.name} (${agent.role}). MAX 3 phrases :
-- Propose 3 CANDIDATS concrets et NOMMÉS vus depuis TON prisme de ${agent.role} (ton angle colore le STYLE des propositions).
-- Puis, en 1 phrase : garde le meilleur candidat déjà proposé par la table OU écarte le plus faible (avec raison courte).
-- INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, paraphraser, citer un agent. DONNE DE VRAIS NOMS, directement utilisables.`;
+- DÉMARRE en réagissant DIRECTEMENT à un candidat déjà sur la table : nomme l'agent et conteste ou prolonge sa proposition ("Le nom de tel agent est trop générique" / "Je pars du sien et je pousse plus loin").
+- Puis propose 3 CANDIDATS concrets et NOMMÉS vus depuis TON prisme de ${agent.role} (ton angle colore le STYLE des propositions).
+- INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, valider poliment, paraphraser. DONNE DE VRAIS NOMS, directement utilisables.`;
             }
           } else if (isFirstTurn) {
             triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 3 PHRASES.
@@ -923,10 +925,12 @@ ${directive.angle}
 ${directive.forbid ? '\n' + directive.forbid : ''}
 
 INTERDICTIONS DE FORMULATION (le post-process serveur tronque ou rejette sinon)
-- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE concret.
-- JAMAIS nommer un autre agent. Pas de "X a raison", pas de "Je rejoins Y", pas de "Comme Z l'a dit".
-- JAMAIS valider poliment le précédent. Si tu es d'accord, ENRICHIS d'un élément neuf. Si tu n'es pas d'accord, CONTREDIS frontalement.
+- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE concret OU par l'interpellation directe de l'agent précédent.
+- JAMAIS valider poliment ("X a raison", "Je rejoins Y", "Comme Z l'a dit"). Si tu cites un agent, c'est pour le CONTREDIRE ou PROLONGER, jamais pour l'approuver.
 - JAMAIS paraphraser le précédent — apporte UN ÉLÉMENT QUI N'A PAS ÉTÉ DIT.
+
+INTERACTION (c'est un débat vivant, pas des monologues)
+- Tu PEUX et tu DOIS interpeller les autres agents par leur nom pour rebondir/contredire ("Non, l'angle de tel agent ignore…", "Là où tel autre s'arrête, je pousse…").
 
 POSTURE
 - Tu peux CONTREDIRE ("Pas d'accord, l'angle X ignore Y").

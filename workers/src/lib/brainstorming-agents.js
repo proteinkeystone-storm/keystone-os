@@ -19,7 +19,7 @@ function _commonPreamble(mode, brief, previousTurn, previousAgent) {
     ? `\nDERNIÈRE INTERVENTION DE LA TABLE
 ${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 400)} »
 
-→ TU DOIS RÉAGIR EXPLICITEMENT à cette intervention (cite-le par son nom OU rebondis sur son idée OU nuance son propos), AVANT d'apporter ton angle propre.
+→ DÉMARRE en t'adressant DIRECTEMENT à ${previousAgent.name} par son nom pour le CONTREDIRE, PROLONGER ou NUANCER son idée (ex. « ${previousAgent.name}, ton angle oublie que… » ou « Là où ${previousAgent.name} voit X, moi je vois Y »). C'est une vraie conversation : on se répond, on se relance. PUIS apporte ton angle propre.
 \n`
     : `\nC'EST L'OUVERTURE de la discussion. Tu lances le tour de table.\n`;
 
@@ -41,12 +41,15 @@ FORMAT DE RÉPONSE — CONTRAINTES STRICTES (le worker post-process et tronque s
 - Pas de salutation, pas de récap, pas de "j'espère que cela aide".
 
 INTERDICTIONS (Sprint 7.3 — la qualité dépend du respect strict de ces règles)
-- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE CONCRET.
-- JAMAIS valider poliment ("X a raison", "bonne idée", "intéressant", "excellente question").
+- JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE CONCRET (ou par l'interpellation directe d'un agent).
+- JAMAIS valider poliment ("X a raison", "bonne idée", "intéressant", "excellente question") — l'interpellation sert à CONTREDIRE ou PROLONGER, jamais à flatter.
 - JAMAIS paraphraser le message précédent — apporte UN ÉLÉMENT QUI N'A PAS ÉTÉ DIT.
-- JAMAIS nommer un autre agent par son nom.
 - Pas de jargon corporate vide ("synergie", "leverage", "ecosystem", "best-in-class").
 - Pas de monologue, pas de tirade.
+
+INTERACTION ENTRE AGENTS (c'est un vrai débat, pas des monologues côte à côte)
+- Tu PEUX et tu DOIS nommer les autres agents pour rebondir, contredire ou pousser leur idée plus loin ("${''}Non, l'angle de tel agent ignore…", "Je pars de là où s'est arrêté tel autre…").
+- Adresse-toi à eux comme à des collègues autour d'une table. Une idée naît, un autre la conteste, un troisième la fait évoluer.
 - Pas de "nous pourrions créer une campagne qui montre" générique — DONNE le concret (la phrase, le visuel, le KPI, le compte, le chiffre).
 
 POSTURE DE DÉBAT

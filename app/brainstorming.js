@@ -1043,10 +1043,13 @@ function _updatePacing(panel, done, total) {
     dotsEl.appendChild(d);
   }
 
-  // Sprint 5 — Bouton "Lancer la synthèse" actif dès turns_done >= 2
-  // Sprint 7.10 — refactor pour éviter résidus visuels du label précédent.
+  // Synthèse actÉe seulement après qu'une vraie ÉQUIPE a parlé (2026-05-28).
+  // Avant : dès 2 tours → le Synthesizer concluait sans la matière de la
+  // table. Seuil relevé à 4 pour qu'il ait le temps + assez d'angles pour
+  // synthétiser une réponse correcte (demande Stéphane). Le débat auto fait
+  // 8 tours, donc en flux nominal le bouton est de toute façon dispo à la fin.
   let btn = card.querySelector('.wr-synthesize-btn');
-  if (done >= 2) {
+  if (done >= 4) {
     if (!btn) {
       btn = document.createElement('button');
       btn.type = 'button';
