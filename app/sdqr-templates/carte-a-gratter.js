@@ -24,19 +24,8 @@ const TEMPLATE = {
       default: 'Or',
     },
     {
-      id: 'taux_de_gain', type: 'number',
-      label: 'Taux de gain (%, entre 0 et 100)',
-      default: 20,
-    },
-    {
-      id: 'lots_disponibles', type: 'number',
-      label: 'Stock total de lots (vide = illimité)',
-      placeholder: '50',
-    },
-    {
-      id: 'message_gain', type: 'textarea',
-      label: 'Message si gagné', required: true,
-      placeholder: 'Bravo, un croissant offert avec ce QR !',
+      id: 'lots', type: 'lots',
+      label: 'Lots à gagner (jusqu\'à 3)',
       span: 'full',
     },
     {
@@ -71,12 +60,20 @@ const TEMPLATE = {
     if (!d.nom_marque || !String(d.nom_marque).trim()) {
       errors.push('Le nom de la marque est obligatoire.');
     }
-    if (!d.message_gain || !String(d.message_gain).trim()) {
-      errors.push('Le message en cas de gain est obligatoire.');
-    }
-    const taux = Number(d.taux_de_gain);
-    if (!Number.isFinite(taux) || taux < 0 || taux > 100) {
-      errors.push('Le taux de gain doit être un nombre entre 0 et 100.');
+    const lots = Array.isArray(d.lots) ? d.lots.filter(l => l && String(l.label || '').trim()) : [];
+    if (lots.length === 0) {
+      errors.push('Ajoute au moins un lot à gagner (nom + % de chance).');
+    } else {
+      let sum = 0;
+      for (const l of lots) {
+        const p = Number(l.proba);
+        if (!Number.isFinite(p) || p <= 0 || p > 100) {
+          errors.push(`Le % de chance du lot « ${String(l.label).trim()} » doit être entre 1 et 100.`);
+          return errors;
+        }
+        sum += p;
+      }
+      if (sum > 100) errors.push(`La somme des % de chance dépasse 100 % (${sum} %). Réduis-les.`);
     }
     return errors;
   },
@@ -84,9 +81,10 @@ const TEMPLATE = {
   summary(template_data) {
     const d = template_data || {};
     const nom = (d.nom_marque || 'Marque').toString().trim();
-    const taux = Number.isFinite(Number(d.taux_de_gain)) ? Number(d.taux_de_gain) : 20;
+    const lots = Array.isArray(d.lots) ? d.lots.filter(l => l && String(l.label || '').trim()) : [];
     const tx = d.texture_grattage || 'Or';
-    return `Carte à gratter « ${nom} » — ${tx}, ${taux}% gain`;
+    const n = lots.length;
+    return `Carte à gratter « ${nom} » — ${tx}, ${n} lot${n > 1 ? 's' : ''}`;
   },
 
   // V4.3 — mini-preview : carte métal qui se gratte en boucle (un trait

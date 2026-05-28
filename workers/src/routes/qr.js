@@ -1146,9 +1146,15 @@ async function _ensureSmartGameTable(env) {
         played_at   TEXT NOT NULL DEFAULT (datetime('now')),
         result      TEXT NOT NULL,
         code_won    TEXT,
+        tier_label  TEXT,
         PRIMARY KEY (short_id, device_hash, played_at)
       )
     `).run();
+    // V4.7 — tier_label : libellé du lot gagné (carte à gratter multi-lots).
+    // ALTER idempotent pour les bases créées avant V4.7.
+    try {
+      await env.DB.prepare(`ALTER TABLE smartqr_game_plays ADD COLUMN tier_label TEXT`).run();
+    } catch (e) { /* colonne déjà présente */ }
     // Index pour les COUNT(*) WHERE result='win' rapides
     await env.DB.prepare(`
       CREATE INDEX IF NOT EXISTS idx_smartqr_game_wins
@@ -1256,23 +1262,26 @@ export async function handleSmartQrGamePlay(request, env) {
   if (unParAppareil) {
     try {
       const prev = await env.DB
-        .prepare(`SELECT result, code_won FROM smartqr_game_plays
+        .prepare(`SELECT result, code_won, tier_label FROM smartqr_game_plays
                   WHERE short_id = ? AND device_hash = ?
                   ORDER BY played_at DESC LIMIT 1`)
         .bind(shortId, deviceH)
         .first();
       if (prev) {
-        // Renvoie le résultat précédent + flag replay_blocked
+        // Renvoie le résultat précédent + flag replay_blocked. En multi-lots,
+        // tier_label = le lot précis regagné ; sinon message_gain unique.
         const symbols = (td.symboles_cylindre || '').toString().split('\n')
           .map(s => s.trim()).filter(Boolean);
         const trio = _pickRandomSymbols(symbols, prev.result === 'win');
+        const wonPrev = prev.tier_label || td.message_gain || 'Bravo !';
         return json({
           result:          prev.result,
           symboles:        trio,
           code_won:        prev.code_won || '',
-          message_gain:    td.message_gain || 'Bravo !',
+          won_lot:         prev.result === 'win' ? (prev.tier_label || '') : '',
+          message_gain:    wonPrev,
           message:         prev.result === 'win'
-                             ? (td.message_gain || 'Bravo !')
+                             ? wonPrev
                              : (td.message_perte || 'Pas cette fois — reviens demain !'),
           replay_blocked:  true,
         }, 200, origin);
@@ -1280,58 +1289,98 @@ export async function handleSmartQrGamePlay(request, env) {
     } catch (e) { /* miss = on continue normalement */ }
   }
 
-  // Check stock si lots limités : count wins déjà attribués
-  let stockEpuise = false;
-  if (lotsMax !== null) {
-    try {
-      const winsRow = await env.DB
-        .prepare(`SELECT COUNT(*) AS n FROM smartqr_game_plays
-                  WHERE short_id = ? AND result = 'win'`)
-        .bind(shortId)
-        .first();
-      const winsCount = Number(winsRow?.n || 0);
-      if (winsCount >= lotsMax) stockEpuise = true;
-    } catch (e) { /* on continue */ }
+  // ── Multi-lots (carte à gratter, V4.7) ─────────────────────────
+  // Si des `lots` sont définis (carte-a-gratter uniquement), on tire QUEL
+  // lot selon sa probabilité, avec plafond de gagnants par lot. Sinon →
+  // binaire historique (taux global + message unique). La machine à sous
+  // n'a jamais de `lots` → elle reste strictement sur le chemin binaire.
+  const lots = (tplId === 'carte-a-gratter' && Array.isArray(td.lots))
+    ? td.lots.map(l => ({
+        label: String(l?.label || '').trim(),
+        proba: Math.max(0, Math.min(100, Number(l?.proba) || 0)),
+        max:   Number.isFinite(Number(l?.max)) && Number(l?.max) > 0 ? Math.floor(Number(l.max)) : 0,
+      })).filter(l => l.label).slice(0, 3)
+    : [];
+  const multi = lots.length > 0;
+
+  let isWin = false;
+  let wonLabel = '';
+
+  if (multi) {
+    // Bandes de probabilité cumulées, dans l'ordre des lots. Un lot dont le
+    // plafond est atteint conserve sa bande mais ne paie plus → le tirage y
+    // tombe en "perdu" (le lot est épuisé). Les probas restent donc fixes.
+    const draw = Math.random() * 100;
+    let cumul = 0;
+    for (const lot of lots) {
+      const lo = cumul, hi = cumul + lot.proba;
+      cumul = hi;
+      if (draw >= lo && draw < hi) {
+        if (lot.max > 0) {
+          let n = 0;
+          try {
+            const r = await env.DB
+              .prepare(`SELECT COUNT(*) AS n FROM smartqr_game_plays
+                        WHERE short_id = ? AND result = 'win' AND tier_label = ?`)
+              .bind(shortId, lot.label).first();
+            n = Number(r?.n || 0);
+          } catch (e) { /* best-effort */ }
+          if (n < lot.max) { isWin = true; wonLabel = lot.label; }
+        } else {
+          isWin = true; wonLabel = lot.label;
+        }
+        break;
+      }
+    }
+  } else {
+    // Binaire historique (+ stock global lots_disponibles).
+    let stockEpuise = false;
+    if (lotsMax !== null) {
+      try {
+        const winsRow = await env.DB
+          .prepare(`SELECT COUNT(*) AS n FROM smartqr_game_plays
+                    WHERE short_id = ? AND result = 'win'`)
+          .bind(shortId).first();
+        if (Number(winsRow?.n || 0) >= lotsMax) stockEpuise = true;
+      } catch (e) { /* on continue */ }
+    }
+    isWin = !stockEpuise && (Math.random() * 100) < tauxGain;
+    if (isWin) wonLabel = td.message_gain || 'Bravo, tu as gagné !';
   }
 
-  // Tirage aléatoire authoritative
-  const draw  = Math.random() * 100;
-  const isWin = !stockEpuise && draw < tauxGain;
-
-  // Préparer symboles à montrer (machine à sous uniquement, le client
-  // décide d'afficher ou non selon le template_id)
+  // Symboles (machine à sous uniquement ; le client affiche selon template_id)
   const symbols = (td.symboles_cylindre || '').toString().split('\n')
     .map(s => s.trim()).filter(Boolean);
   const trio = _pickRandomSymbols(symbols, isWin);
 
-  // Générer le code de gain signé (uniquement si gain)
+  // Code de gain signé (uniquement si gain)
   let codeWon = '';
   if (isWin) {
     const ts = Date.now().toString();
     codeWon = await _generateWinCode(env, shortId, deviceH, ts);
   }
 
-  // Enregistrer le play (code_won = code signé ou '')
+  // Enregistre le play (tier_label = lot gagné en multi-lots, sinon '')
   try {
     await env.DB
       .prepare(`INSERT INTO smartqr_game_plays
-                (short_id, device_hash, played_at, result, code_won)
-                VALUES (?, ?, datetime('now'), ?, ?)`)
-      .bind(shortId, deviceH, isWin ? 'win' : 'lose', codeWon)
+                (short_id, device_hash, played_at, result, code_won, tier_label)
+                VALUES (?, ?, datetime('now'), ?, ?, ?)`)
+      .bind(shortId, deviceH, isWin ? 'win' : 'lose', codeWon, isWin ? wonLabel : '')
       .run();
   } catch (e) {
     console.warn('[smartqr] game-play insert failed:', e.message);
-    // On continue quand même : l'utilisateur a son résultat, juste pas
-    // tracké (rare, peut arriver si conflit clé primaire ultra-improbable)
   }
 
+  const winMsg = wonLabel || td.message_gain || 'Bravo, tu as gagné !';
   return json({
     result:       isWin ? 'win' : 'lose',
     symboles:     trio,
     code_won:     codeWon,
-    message_gain: td.message_gain || 'Bravo, tu as gagné !',
+    won_lot:      isWin ? wonLabel : '',
+    message_gain: winMsg,
     message:      isWin
-                    ? (td.message_gain || 'Bravo, tu as gagné !')
+                    ? winMsg
                     : (td.message_perte || 'Pas cette fois — réessaie demain.'),
     replay_blocked: false,
   }, 200, origin);
@@ -1370,7 +1419,7 @@ export async function handleSmartQrVerifyWin(request, env) {
   let source = '';
   try {
     row = await env.DB
-      .prepare(`SELECT short_id, played_at AS issued_at FROM smartqr_game_plays
+      .prepare(`SELECT short_id, played_at AS issued_at, tier_label FROM smartqr_game_plays
                 WHERE code_won = ? AND result = 'win' LIMIT 1`)
       .bind(code)
       .first();
@@ -1413,7 +1462,9 @@ export async function handleSmartQrVerifyWin(request, env) {
       if (source === 'loyalty') {
         messageGain = (qr?.template_data?.nom_recompense || '').toString().slice(0, 240);
       } else {
-        messageGain = (qr?.template_data?.message_gain || '').toString().slice(0, 240);
+        // Multi-lots : le lot précis gagné est mémorisé sur la partie ;
+        // sinon (binaire) on retombe sur le message_gain unique du QR.
+        messageGain = (row.tier_label || qr?.template_data?.message_gain || '').toString().slice(0, 240);
       }
     }
   } catch (e) { /* contexte best-effort */ }

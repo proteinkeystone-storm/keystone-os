@@ -88,9 +88,11 @@ const MOCK_DATA = {
   'carte-a-gratter': {
     nom_marque:          'Boulangerie Marius',
     texture_grattage:    'Or',
-    taux_de_gain:        25,
-    lots_disponibles:    30,
-    message_gain:        'Bravo, un croissant offert avec ce QR !',
+    lots: [
+      { label: 'Une partie offerte', proba: 1,  max: 2 },
+      { label: 'Un menu',            proba: 5,  max: 20 },
+      { label: 'Un soda',            proba: 15, max: 0 },
+    ],
     message_perte:       'Pas de chance — reviens demain !',
     un_jeu_par_appareil: true,
     logo_url:            'https://example.com/logo.png',
@@ -211,7 +213,7 @@ async function testFrontend() {
     for (const f of tpl.fields) {
       assert(typeof f.id === 'string' && f.id,                                       `${tpl.id} : field.${f.id || '?'} id présent`);
       assert(typeof f.label === 'string' && f.label,                                 `${tpl.id}.${f.id} : label présent`);
-      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local','image'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
+      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local','image','lots'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
       if (f.type === 'select') {
         assert(Array.isArray(f.options) && f.options.length > 0,                     `${tpl.id}.${f.id} : options select présentes`);
       }

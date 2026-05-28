@@ -34,12 +34,10 @@ const TEMPLATE = {
     if (!d.nom_marque || !String(d.nom_marque).trim()) {
       errors.push('Le nom de la marque est obligatoire.');
     }
-    if (!d.message_gain || !String(d.message_gain).trim()) {
-      errors.push('Le message en cas de gain est obligatoire.');
-    }
-    const taux = Number(d.taux_de_gain);
-    if (!Number.isFinite(taux) || taux < 0 || taux > 100) {
-      errors.push('Le taux de gain doit être un nombre entre 0 et 100.');
+    const lots = Array.isArray(d.lots) ? d.lots.filter(l => l && String(l.label || '').trim()) : [];
+    // Multi-lots (V4.7) ou message_gain unique (legacy) : au moins l'un des deux.
+    if (lots.length === 0 && (!d.message_gain || !String(d.message_gain).trim())) {
+      errors.push('Ajoute au moins un lot à gagner.');
     }
     return errors;
   },

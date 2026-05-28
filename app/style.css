@@ -7450,6 +7450,37 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-folder-chip.is-active .sdqr-folder-ico { opacity: 1; }
 .sdqr-folder-rename svg { width: 13px; height: 13px; display: block; }
 
+/* V4.7 — Répéteur de lots (carte à gratter multi-lots) */
+.sdqr-lots-rows { display: flex; flex-direction: column; gap: 8px; }
+.sdqr-lot-row {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px 11px; border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px; background: rgba(255,255,255,.02);
+}
+.sdqr-lot-label { width: 100%; }
+.sdqr-lot-nums { display: flex; align-items: flex-end; gap: 10px; }
+.sdqr-lot-num { display: flex; flex-direction: column; gap: 3px; flex: 1 1 auto; min-width: 0; }
+.sdqr-lot-num > span { font-size: 10.5px; color: rgba(220,225,240,.55); letter-spacing: .02em; }
+.sdqr-lot-num .sdqr-input { width: 100%; }
+.sdqr-lot-del {
+  flex: 0 0 auto; width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px; color: rgba(220,225,240,.6); cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.sdqr-lot-del:hover { color: #f87171; border-color: rgba(248,113,113,.5); }
+.sdqr-lot-del svg { width: 16px; height: 16px; }
+.sdqr-lots-add {
+  margin-top: 8px; align-self: flex-start;
+  background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.4);
+  color: #c7cbff; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 12px; border-radius: 7px; cursor: pointer;
+}
+.sdqr-lots-add:hover { background: rgba(99,102,241,.2); }
+.sdqr-lots-hint { font-size: 11px; color: rgba(220,225,240,.45); margin: 8px 0 0; line-height: 1.45; }
+.sdqr-lots-err { font-size: 11.5px; color: #f87171; margin: 6px 0 0; }
+
 .sdqr-checkbox-lbl input[type="checkbox"]:checked::after {
   content: "";
   width: 9px; height: 5px;

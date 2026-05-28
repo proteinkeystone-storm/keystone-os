@@ -799,6 +799,7 @@ function _renderTemplateFields(root) {
   });
   _bindImageWidgets(wrap, _creating.template_data);
   _bindColorWidgets(wrap);
+  _bindLotsWidgets(wrap, _creating.template_data);
   _bindIconPickers(wrap);
 }
 
@@ -1019,6 +1020,69 @@ function _bindColorWidgets(wrap) {
   });
 }
 
+// V4.7 — Répéteur de lots (carte à gratter multi-lots). Une ligne = un lot
+// { label, proba %, max gagnants }. Picto X outline (charte).
+function _lotRowHtml(lot = {}) {
+  const label = _esc(lot.label || '');
+  const proba = (lot.proba === undefined || lot.proba === null || lot.proba === '' || Number(lot.proba) === 0) ? '' : _esc(lot.proba);
+  const max   = (lot.max === undefined || lot.max === null || lot.max === '' || Number(lot.max) === 0) ? '' : _esc(lot.max);
+  return `<div class="sdqr-lot-row">
+    <input type="text" class="sdqr-input sdqr-lot-label" placeholder="Nom du lot (ex : Une partie offerte)" value="${label}">
+    <div class="sdqr-lot-nums">
+      <label class="sdqr-lot-num"><span>% de chance</span><input type="number" class="sdqr-input sdqr-lot-proba" min="1" max="100" step="1" placeholder="5" value="${proba}"></label>
+      <label class="sdqr-lot-num"><span>max gagnants</span><input type="number" class="sdqr-input sdqr-lot-max" min="0" step="1" placeholder="∞" value="${max}"></label>
+      <button type="button" class="sdqr-lot-del" title="Retirer ce lot" aria-label="Retirer ce lot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+  </div>`;
+}
+
+function _bindLotsWidgets(wrap, store) {
+  if (!wrap || !store) return;
+  wrap.querySelectorAll('[data-lots-key]').forEach(field => {
+    const key    = field.getAttribute('data-lots-key');
+    const rowsEl = field.querySelector('.sdqr-lots-rows');
+    const addBtn = field.querySelector('.sdqr-lots-add');
+    const errP   = field.querySelector('.sdqr-lots-err');
+    if (!rowsEl) return;
+
+    const read = () => [...rowsEl.querySelectorAll('.sdqr-lot-row')].map(r => ({
+      label: r.querySelector('.sdqr-lot-label')?.value.trim() || '',
+      proba: Number(r.querySelector('.sdqr-lot-proba')?.value) || 0,
+      max:   Number(r.querySelector('.sdqr-lot-max')?.value)   || 0,
+    })).filter(l => l.label);
+
+    const sync = () => {
+      const arr = read();
+      store[key] = arr;
+      const sum = arr.reduce((s, l) => s + (Number(l.proba) || 0), 0);
+      if (errP) {
+        if (sum > 100) { errP.textContent = `Somme des % = ${sum} % (au-delà de 100). Réduis les chances.`; errP.hidden = false; }
+        else errP.hidden = true;
+      }
+      if (addBtn) addBtn.style.display = rowsEl.querySelectorAll('.sdqr-lot-row').length >= 3 ? 'none' : '';
+    };
+
+    rowsEl.addEventListener('input', sync);
+    addBtn?.addEventListener('click', () => {
+      if (rowsEl.querySelectorAll('.sdqr-lot-row').length >= 3) return;
+      rowsEl.insertAdjacentHTML('beforeend', _lotRowHtml({}));
+      sync();
+    });
+    rowsEl.addEventListener('click', (e) => {
+      const del = e.target.closest('.sdqr-lot-del');
+      if (!del) return;
+      const rows = rowsEl.querySelectorAll('.sdqr-lot-row');
+      if (rows.length <= 1) {
+        del.closest('.sdqr-lot-row').querySelectorAll('input').forEach(i => { i.value = ''; });
+      } else {
+        del.closest('.sdqr-lot-row').remove();
+      }
+      sync();
+    });
+    sync();   // initialise store[key] + état du bouton
+  });
+}
+
 function _renderField(f, store) {
   // V2 : un 2e param `store` (object) permet de lire la valeur depuis un
   // autre bucket que _creating.payload (ex: _creating.template_data).
@@ -1087,6 +1151,19 @@ function _renderField(f, store) {
       <button type="button" class="sdqr-pw-toggle" aria-label="Afficher / masquer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
+    </div>`;
+  } else if (f.type === 'lots') {
+    // V4.7 — Répéteur de lots (valeur = tableau) ; bind dédié _bindLotsWidgets.
+    const arr  = (Array.isArray(rawVal) && rawVal.length) ? rawVal : [{}];
+    const rows = arr.slice(0, 3).map(_lotRowHtml).join('');
+    return `<div class="sdqr-field${span}" data-lots-key="${f.id}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      <div class="sdqr-lots">
+        <div class="sdqr-lots-rows">${rows}</div>
+        <button type="button" class="sdqr-lots-add">+ Ajouter un lot</button>
+        <p class="sdqr-lots-hint">Chaque lot a son % de chance ; la somme = chance totale de gagner, le reste = perdu. « max gagnants » vide = illimité.</p>
+        <p class="sdqr-lots-err" hidden></p>
+      </div>
     </div>`;
   } else if (f.type === 'color') {
     // V4.6 — Widget couleur : pastille picker + saisie hexadécimale
