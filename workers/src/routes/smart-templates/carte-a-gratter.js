@@ -408,8 +408,8 @@ const TEMPLATE = {
 
   <div class="sq-scratch-wrap">
     <div class="sq-scratch-reveal${imgFond ? ' has-bg' : ''}" id="sq-reveal">
-      <div class="sq-scratch-reveal-icon" id="sq-reveal-icon">✦</div>
-      <h2 class="sq-scratch-reveal-title" id="sq-reveal-title">Prêt à gratter…</h2>
+      <div class="sq-scratch-reveal-icon" id="sq-reveal-icon"></div>
+      <h2 class="sq-scratch-reveal-title" id="sq-reveal-title"></h2>
       <p class="sq-scratch-reveal-msg" id="sq-reveal-msg"></p>
     </div>
     <canvas class="sq-scratch-canvas" id="sq-canvas"></canvas>
