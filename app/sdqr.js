@@ -2034,6 +2034,30 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
     }
     ctx.drawImage(img, 0, 0, sizePx, sizePx);
 
+    // Le <image> du logo imbriqué dans le SVG ne se rasterise PAS quand le SVG
+    // est chargé comme <img> (mode statique restreint du navigateur) → le PNG
+    // sortait avec un trou au centre. On dessine donc le logo nous-mêmes sur le
+    // canvas (le masque/cercle de fond, lui, est vectoriel → déjà rasterisé).
+    const logoUrl = design?.logo?.dataUrl;
+    if (logoUrl) {
+      try {
+        const logoImg = await new Promise((res, rej) => {
+          const li = new Image();
+          li.onload  = () => res(li);
+          li.onerror = () => rej(new Error('logo load failed'));
+          li.src = logoUrl;
+        });
+        const ratio = Math.min(0.30, Math.max(0.10, design.logo.size || 0.20));
+        const box   = sizePx * ratio;
+        const fit   = Math.min(box / logoImg.width, box / logoImg.height) || 0;
+        const w = logoImg.width * fit, h = logoImg.height * fit;
+        ctx.drawImage(logoImg, (sizePx - w) / 2, (sizePx - h) / 2, w, h);
+      } catch (e) {
+        console.warn('[sdqr] logo non composé sur le PNG :', e.message);
+        // On garde le QR (quitte à avoir le trou) plutôt que d'échouer l'export.
+      }
+    }
+
     const pngBlob = await new Promise((res, rej) => {
       canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
     });

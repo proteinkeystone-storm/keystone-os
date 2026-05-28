@@ -242,12 +242,12 @@ export async function renderQrCustom(text, design, sizePx = 280) {
     const my = sizePx / 2;
     logoBlock = `
       <circle cx="${mx}" cy="${my}" r="${logoMaskSize / 2}" fill="${_esc(d.bg && d.bg !== 'transparent' ? d.bg : '#ffffff')}"/>
-      <image href="${_esc(d.logo.dataUrl)}" x="${lx}" y="${ly}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>
+      <image href="${_esc(d.logo.dataUrl)}" xlink:href="${_esc(d.logo.dataUrl)}" x="${lx}" y="${ly}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>
     `;
   }
 
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${sizePx}" height="${sizePx}" viewBox="0 0 ${sizePx} ${sizePx}">
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${sizePx}" height="${sizePx}" viewBox="0 0 ${sizePx} ${sizePx}">
       ${defs ? `<defs>${defs}</defs>` : ''}
       ${bg}
       <g fill="${fgFill}">
