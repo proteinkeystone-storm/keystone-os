@@ -898,7 +898,7 @@ function _appendUserReaction(msgEl, emoji) {
   }
 }
 
-function _appendUserMessage(panel, text) {
+function _appendUserMessage(panel, text, opts = {}) {
   const feed = panel.querySelector('#wr-feed');
   if (!feed) return;
   const msgEl = document.createElement('div');
@@ -917,11 +917,15 @@ function _appendUserMessage(panel, text) {
   msgEl.querySelector('.wr-msg-text').textContent = text;
   feed.appendChild(msgEl);
   _scrollToBottom(panel);
-  _currentSession.history.push({
-    agent_id : 'user',
-    content  : text,
-    timestamp: Date.now(),
-  });
+  // En restauration l'historique est déjà chargé : ne pas re-push (sinon
+  // doublons + mutation du tableau itéré par _restoreSession).
+  if (!opts.restore) {
+    _currentSession.history.push({
+      agent_id : 'user',
+      content  : text,
+      timestamp: Date.now(),
+    });
+  }
 }
 
 function _appendOrchestrationNote(panel, text) {
@@ -1625,12 +1629,16 @@ function _renderLibraryModal(panel, modal) {
 }
 
 function _restoreSession(panel, session) {
+  // Snapshot figé : on itère sur une COPIE et _currentSession.history est une
+  // COPIE indépendante. _appendUserMessage push 'user' dans _currentSession.history ;
+  // sans copie, ce push mutait le tableau itéré ci-dessous → for...of infini → UI figée.
+  const savedTurns = [...(session.history || [])];
   // Recharger la session courante
   _currentSession = {
     id:             session.id,
     brief:          session.brief,
     mode:           session.mode || DEFAULT_MODE,
-    history:        session.history || [],
+    history:        savedTurns.slice(),
     started:        true,
     startedAt:      session.started_at,
     synthesis:      session.synthesis,
@@ -1640,12 +1648,12 @@ function _restoreSession(panel, session) {
   _applyMode(panel, _currentSession.mode);
   _updateHeader(panel, session.brief);
   _hideEmpty(panel);
-  // Rerender le feed depuis history
+  // Rerender le feed depuis le snapshot (jamais muté)
   const feed = panel.querySelector('#wr-feed');
   if (feed) feed.innerHTML = '';
-  for (const turn of session.history) {
+  for (const turn of savedTurns) {
     if (turn.agent_id === 'user') {
-      _appendUserMessage(panel, turn.content);
+      _appendUserMessage(panel, turn.content, { restore: true });
     } else {
       const { textEl } = _appendMessage(panel, turn.agent_id, turn.content, { streaming: false });
       // Pas de streaming, le texte est déjà là
