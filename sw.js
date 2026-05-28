@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.9.16-fix-brainstorm-restore-loop';
+const VERSION       = 'ks-os-v5.9.17-version-footer';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
@@ -64,6 +64,14 @@ self.addEventListener('activate', event => {
     );
     await self.clients.claim();
   })());
+});
+
+// ── Message : la page peut demander la version du SW actif ────
+// Sert au footer Réglages à afficher la vraie version de build (vérif déploiement).
+self.addEventListener('message', (event) => {
+  if (event.data === 'GET_VERSION') {
+    event.ports[0]?.postMessage(VERSION);
+  }
 });
 
 // ── Helpers ────────────────────────────────────────────────────
