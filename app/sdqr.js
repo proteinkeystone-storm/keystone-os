@@ -2149,7 +2149,7 @@ function _renderDesignPanel(qr) {
             </button>
           </div>
           <div class="sdqr-theme-cards">
-            ${THEME_PRESETS.map(t => _renderThemeCard(t)).join('')}
+            ${THEME_PRESETS.map(t => _renderThemeCard(t, d)).join('')}
           </div>
         </div>
 
@@ -2281,42 +2281,51 @@ function _renderDesignPanel(qr) {
 
 // Mini-preview SVG rendu directement pour les thèmes : un QR ultra-simplifié
 // 5x5 qui montre les formes module + ancres + couleurs.
-function _renderThemeCard(theme) {
+// Trame QR stylisée PARTAGÉE (mire pictogramme cohérente sur toutes les
+// cartes) — recolorée par thème. `fillRef` = couleur unie (#hex) ou
+// url(#id) si dégradé ; `defs` = bloc <defs> du dégradé. Toutes les cartes
+// affichent la même trame : seul varie la couleur/dégradé (look Palette).
+function _qrTrameSvg(fillRef, defs = '') {
+  const eye = (x, y) =>
+    `<rect x="${x}" y="${y}" width="12" height="12" rx="3" fill="none" stroke="${fillRef}" stroke-width="2.4"/>` +
+    `<rect x="${x + 4}" y="${y + 4}" width="4" height="4" rx="1.2" fill="${fillRef}" stroke="none"/>`;
+  const dots = [
+    [19,19],[26,20],[33,19],[20,26],[27,27],[34,26],
+    [19,33],[26,34],[33,33],[39,30],[24,40],[39,39],
+  ].map(([x, y]) => `<rect x="${x}" y="${y}" width="3.4" height="3.4" rx="1" fill="${fillRef}" stroke="none"/>`).join('');
+  return `<svg viewBox="0 0 44 44" class="sdqr-theme-svg" aria-hidden="true">${defs}${eye(2,2)}${eye(30,2)}${eye(2,30)}${dots}</svg>`;
+}
+
+// Une carte de thème est "active" si le design courant correspond exactement
+// à sa combinaison formes + couleurs (pour la bordure de sélection).
+function _themeIsActive(theme, d) {
+  const c = COLOR_PRESETS.find(x => x.id === theme.color);
+  if (!c) return false;
+  const lc = v => String(v || '').toLowerCase();
+  if (d.module.shape !== theme.module) return false;
+  if (d.anchor.outer.shape !== theme.outer) return false;
+  if (d.anchor.inner.shape !== theme.inner) return false;
+  if (lc(d.fg) !== lc(c.fg) || lc(d.bg) !== lc(c.bg)) return false;
+  const gradOn = !!(d.gradient && d.gradient.enabled);
+  if (gradOn !== !!c.gradient) return false;
+  if (c.gradient && (lc(d.gradient.from) !== lc(c.gradient.from) || lc(d.gradient.to) !== lc(c.gradient.to))) return false;
+  return true;
+}
+
+function _renderThemeCard(theme, d) {
   const color = COLOR_PRESETS.find(c => c.id === theme.color);
-  const fill = color.gradient
-    ? `url(#g-${theme.id})`
-    : color.fg;
-  const grad = color.gradient
-    ? `<defs><linearGradient id="g-${theme.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${color.gradient.from}"/><stop offset="100%" stop-color="${color.gradient.to}"/></linearGradient></defs>`
+  const gid   = `qrtrame-${theme.id}`;
+  const fill  = color.gradient ? `url(#${gid})` : color.fg;
+  const defs  = color.gradient
+    ? `<defs><linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${color.gradient.from}"/><stop offset="100%" stop-color="${color.gradient.to}"/></linearGradient></defs>`
     : '';
-
-  // Modules : 3 points centraux selon la forme
-  const moduleShape = SHAPE_OPTS.find(s => s.id === theme.module).svg;
-  const outerShape  = ANCHOR_OUTER_OPTS.find(s => s.id === theme.outer).svg;
-  const innerShape  = ANCHOR_INNER_OPTS.find(s => s.id === theme.inner).svg;
-
+  const active = d ? _themeIsActive(theme, d) : false;
   return `
-    <button class="sdqr-theme-card" data-theme="${theme.id}">
-      <div class="sdqr-theme-preview" style="background:${color.bg}">
-        <svg viewBox="0 0 60 60" class="sdqr-theme-svg">
-          ${grad}
-          <g fill="${fill}" stroke="${fill}">
-            <!-- Ancre TL (top-left) miniaturisée -->
-            <g transform="translate(2,2) scale(0.55)">${outerShape}${innerShape}</g>
-            <!-- Ancre TR -->
-            <g transform="translate(38,2) scale(0.55)">${outerShape}${innerShape}</g>
-            <!-- Ancre BL -->
-            <g transform="translate(2,38) scale(0.55)">${outerShape}${innerShape}</g>
-            <!-- 3 modules au centre -->
-            <g transform="translate(26,26) scale(0.4)">${moduleShape}</g>
-            <g transform="translate(35,32) scale(0.4)">${moduleShape}</g>
-            <g transform="translate(28,40) scale(0.4)">${moduleShape}</g>
-            <g transform="translate(40,42) scale(0.4)">${moduleShape}</g>
-            <g transform="translate(22,34) scale(0.4)">${moduleShape}</g>
-          </g>
-        </svg>
-      </div>
-      <div class="sdqr-theme-label">${_esc(theme.label)}</div>
+    <button class="sdqr-theme-card ${active ? 'is-on' : ''}" data-theme="${theme.id}" title="${_esc(theme.label)}">
+      <span class="sdqr-theme-preview" style="background:${color.bg}">
+        ${_qrTrameSvg(fill, defs)}
+      </span>
+      <span class="sdqr-theme-label">${_esc(theme.label)}</span>
     </button>
   `;
 }
