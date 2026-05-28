@@ -295,16 +295,28 @@ const SYNTHESIZER_PROMPT = `Tu es Synthesizer, l'agent de conclusion du brainsto
 Ta mission : transformer le débat en une conclusion qui RÉPOND DIRECTEMENT à la demande du brief. Une synthèse qui ne répond pas à la question posée est un échec.
 
 ÉTAPE 1 — IDENTIFIE LE TYPE DE DEMANDE
-- Si le brief demande un LIVRABLE CONCRET (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, un concept à choisir, des options à départager…) → tu DOIS fournir des PROPOSITIONS concrètes, nommées et directement utilisables. C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite quand on attend des propositions.
-- Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "proposals": [].
+- Si le brief demande un LIVRABLE GÉNÉRATIF (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, des options à départager…) → tu produis une IDÉATION RICHE ET ORGANISÉE (champ "ideation"). C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite.
+- Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "ideation": null.
+
+ÉTAPE 2 — SI IDÉATION : compile + organise + complète + sélectionne
+- RÉCUPÈRE tous les candidats concrets proposés par les agents dans le débat.
+- ORGANISE-les en 4 à 5 DIRECTIONS thématiques claires (ex. "Executive / Premium", "AI-native / futuriste", "Luxe tech / 1 mot", "Control Center / opérationnel").
+- COMPLÈTE chaque direction pour atteindre 6 à 10 candidats (génère les manquants toi-même, de grande qualité).
+- SÉLECTIONNE un TOP 8-10 transversal, les plus forts, chacun avec une justification courte.
+- Total visé : 30 à 50 candidats. Sois généreux et créatif, comme un directeur de création.
 
 CONTRAINTES DE FORMAT STRICTES
 - Sortie JSON STRICT, AUCUN texte avant ou après.
 - Schema EXACT :
   {
-    "proposals": [
-      { "label": "<LA proposition concrète : un vrai nom / slogan / idée — 1 à 6 mots>", "rationale": "<pourquoi elle marche, 8-15 mots>" }
-    ],
+    "ideation": {
+      "groups": [
+        { "direction": "<thème, 2-4 mots>", "items": ["<vrai candidat 1>", "<vrai candidat 2>", "...6 à 10 par groupe..."] }
+      ],
+      "top": [
+        { "label": "<le meilleur candidat>", "rationale": "<pourquoi il gagne, 6-12 mots>" }
+      ]
+    },
     "positioning": "<1 phrase de 15-25 mots résumant l'angle retenu>",
     "opportunities": ["<10-15 mots>", "<10-15 mots>", "<10-15 mots>"],
     "risks": ["<10-15 mots>", "<10-15 mots>"],
@@ -314,25 +326,51 @@ CONTRAINTES DE FORMAT STRICTES
       { "action": "<...>", "deadline": "YYYY-MM-DD" }
     ]
   }
-- "proposals" : 5 à 7 candidats SI le brief appelle un livrable, sinon [].
-  Chaque "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Cockpit", "Pulse OS"…), PAS une description abstraite ("un nom évoquant la performance").
-  Si le débat n'a pas produit de candidats concrets, GÉNÈRE-les toi-même à partir du contexte du brief. Ne renvoie jamais une demande de nom sans noms.
-- 3 opportunities, 2 risks, 3 next_actions.
+- "ideation" : rempli SI le brief appelle un livrable génératif, sinon null.
+  Chaque "item" et "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Keystone Nexus", "Cortex", "Pulse OS"…), JAMAIS une description abstraite ("un nom évoquant la performance").
+  4-5 groups, 6-10 items chacun, top de 8-10. Ne renvoie jamais une demande de nom sans une foule de noms concrets.
+- 3 opportunities, 2 risks, 3 next_actions (toujours, ils contextualisent l'idéation).
 - Deadlines RÉALISTES : entre J+7 et J+90 par rapport à aujourd'hui.
 - Pas de jargon corporate, pas de "synergie", pas de "leverage".
 - Ton EXÉCUTIF (note pour direction, pas pour étudiant).`;
 
 // Sprint 7.9 — Sanitization soft d'une synthèse parsée (Claude ou Gemma)
-// 2026-05-28 — ajout proposals (livrables concrets : noms, slogans, idées…)
-function _normalizeSynthesis(parsed) {
-  return {
-    // Propositions concrètes en vedette quand le brief appelle un livrable.
-    proposals:     Array.isArray(parsed.proposals)
-      ? parsed.proposals.slice(0, 8).map(p => ({
+// 2026-05-28 — idéation riche organisée (groups par direction + top), façon
+// directeur de création. Rétrocompat avec l'ancien format plat "proposals".
+function _normalizeIdeation(parsed) {
+  const src = parsed.ideation;
+  // Format riche {groups, top}
+  if (src && typeof src === 'object') {
+    const groups = Array.isArray(src.groups)
+      ? src.groups.slice(0, 6).map(g => ({
+          direction: typeof g?.direction === 'string' ? g.direction : '',
+          items: Array.isArray(g?.items)
+            ? g.items.map(it => (typeof it === 'string' ? it : (it?.label || ''))).filter(Boolean).slice(0, 12)
+            : [],
+        })).filter(g => g.direction && g.items.length)
+      : [];
+    const top = Array.isArray(src.top)
+      ? src.top.slice(0, 12).map(p => ({
           label:     typeof p?.label === 'string' ? p.label : (typeof p === 'string' ? p : ''),
           rationale: typeof p?.rationale === 'string' ? p.rationale : '',
         })).filter(p => p.label)
-      : [],
+      : [];
+    if (groups.length || top.length) return { groups, top };
+  }
+  // Rétrocompat : ancien champ plat "proposals" → top
+  if (Array.isArray(parsed.proposals) && parsed.proposals.length) {
+    const top = parsed.proposals.slice(0, 12).map(p => ({
+      label:     typeof p?.label === 'string' ? p.label : (typeof p === 'string' ? p : ''),
+      rationale: typeof p?.rationale === 'string' ? p.rationale : '',
+    })).filter(p => p.label);
+    if (top.length) return { groups: [], top };
+  }
+  return null;
+}
+
+function _normalizeSynthesis(parsed) {
+  return {
+    ideation:      _normalizeIdeation(parsed),
     positioning:   typeof parsed.positioning === 'string' ? parsed.positioning : '',
     opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities.slice(0, 4).map(String) : [],
     risks:         Array.isArray(parsed.risks)         ? parsed.risks.slice(0, 3).map(String)         : [],
@@ -372,7 +410,9 @@ async function _generateSynthesisClaude(apiKey, brief, history, todayIso) {
         model:      'claude-sonnet-4-5-20250929',
         system:     SYNTHESIZER_PROMPT,
         messages:   [{ role: 'user', content: userMsg }],
-        max_tokens: 2000,
+        // 4000 : l'idéation riche (30-50 candidats organisés + top + contexte)
+        // demande plus de sortie qu'une synthèse stratégique simple.
+        max_tokens: 4000,
       }),
     });
   } catch (e) {
@@ -593,6 +633,15 @@ const SUPPORTED_AGENTS = new Set([
   'cultural', 'data', 'devil', 'synth', 'auto',
 ]);
 
+// ── Détection d'un brief d'IDÉATION (2026-05-28) ──────────────────
+// Quand l'utilisateur demande un LIVRABLE génératif (nom, slogan, idées…),
+// le débat doit PRODUIRE des candidats concrets et converger vers les
+// meilleurs — pas théoriser. On adapte alors les triggers des agents.
+const _IDEATION_RE = /\b(nom|noms|nommer|appeler|baptiser|rebaptiser|renommer|slogan|baseline|accroche|tagline|signature|punchline|id[ée]e|id[ée]es|trouve[rz]?|propose[rz]?|sugg[èe]re|sugg[ée]rer|brainstorm|liste de|des options|des pistes|titres?)\b/i;
+function _isIdeationBrief(brief) {
+  return _IDEATION_RE.test(String(brief || ''));
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Agent premium — Claude Haiku (BYOK, 2026-05-28)
 // ─────────────────────────────────────────────────────────────────
@@ -753,6 +802,9 @@ export async function handleBrainstormingAgentRespond(request, env) {
   // ─────────────────────────────────────────────────────────────
   const encoder = new TextEncoder();
   const isAuto  = agent_id === 'auto';
+  // Mode idéation : le débat doit produire des candidats concrets et
+  // converger vers les meilleurs (travail d'équipe), pas théoriser.
+  const ideation = _isIdeationBrief(brief);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -828,7 +880,26 @@ export async function handleBrainstormingAgentRespond(request, env) {
           const isFirstTurn = localHistory.length === 0;
           const isStrategic = currentAgentId === 'strategic';
           let triggerContent;
-          if (isFirstTurn) {
+          if (ideation) {
+            // ── MODE IDÉATION : l'équipe PRODUIT des candidats et converge ──
+            if (isFirstTurn) {
+              triggerContent = `Demande d'IDÉATION. Tu OUVRES l'atelier. MAX 3 phrases :
+- Phrase 1 : cadre 3-4 DIRECTIONS créatives à explorer (ex. premium/exécutif, AI-native, luxe tech, control center).
+- Phrases 2-3 : LANCE immédiatement 3 candidats concrets et NOMMÉS (de vraies propositions, pas des descriptions).
+- INTERDIT : théoriser sur ce que le livrable "devrait évoquer", citer un agent, "Bonjour".`;
+            } else if (isStrategic) {
+              triggerContent = `IDÉATION en cours. Tu RECADRES pour faire converger. MAX 3 phrases :
+- Phrase 1 : pointe les 1-2 directions les plus prometteuses parmi les candidats déjà sur la table.
+- Phrase 2 : écarte la piste la plus faible (dis pourquoi en 4 mots).
+- Phrase 3 : relance 2 NOUVEAUX candidats nommés dans la meilleure direction.
+- INTERDIT : citer un agent, validation polie, théorie abstraite.`;
+            } else {
+              triggerContent = `Demande d'IDÉATION. Tu interviens comme ${agent.name} (${agent.role}). MAX 3 phrases :
+- Propose 3 CANDIDATS concrets et NOMMÉS vus depuis TON prisme de ${agent.role} (ton angle colore le STYLE des propositions).
+- Puis, en 1 phrase : garde le meilleur candidat déjà proposé par la table OU écarte le plus faible (avec raison courte).
+- INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, paraphraser, citer un agent. DONNE DE VRAIS NOMS, directement utilisables.`;
+            }
+          } else if (isFirstTurn) {
             triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 3 PHRASES.
 - Phrase 1 : RE-FORMULE l'enjeu en gardant les TERMES CONCRETS du brief (produit, audience, objectif). Ne dérive pas vers de la généralité.
 - Phrase 2 : Identifie UN angle stratégique non-évident à explorer en priorité.

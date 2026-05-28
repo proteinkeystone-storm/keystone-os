@@ -1143,10 +1143,13 @@ function _openSynthesisDrawer(panel, synthesis) {
   const brief = _currentSession?.brief || '';
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  // Propositions concrètes (noms, slogans, idées) — affichées EN VEDETTE
-  // en haut quand le brief appelait un livrable. Vide sinon (réflexion pure).
-  const proposals = Array.isArray(synthesis.proposals) ? synthesis.proposals : [];
-  const proposalCards = proposals.map((p, i) => `
+  // Idéation riche (noms, slogans, idées) — TOP en vedette + GROUPES par
+  // direction. Affichée en haut quand le brief appelait un livrable génératif.
+  const ideation = synthesis.ideation && typeof synthesis.ideation === 'object' ? synthesis.ideation : null;
+  const idTop    = ideation && Array.isArray(ideation.top) ? ideation.top : [];
+  const idGroups = ideation && Array.isArray(ideation.groups) ? ideation.groups : [];
+
+  const topCards = idTop.map((p, i) => `
     <li class="wr-proposal-card">
       <span class="wr-proposal-rank">${i + 1}</span>
       <div class="wr-proposal-body">
@@ -1155,11 +1158,23 @@ function _openSynthesisDrawer(panel, synthesis) {
       </div>
     </li>
   `).join('');
-  const proposalsSection = proposals.length ? `
-      <section class="wr-synthesis-section wr-synthesis-proposals">
-        <div class="wr-synthesis-label wr-label-proposals">Propositions</div>
-        <ul class="wr-proposals-list">${proposalCards}</ul>
-      </section>
+
+  const groupBlocks = idGroups.map(g => `
+    <div class="wr-id-group">
+      <div class="wr-id-group-dir">${_esc(g.direction)}</div>
+      <div class="wr-id-chips">${(g.items || []).map(it => `<span class="wr-id-chip">${_esc(it)}</span>`).join('')}</div>
+    </div>
+  `).join('');
+
+  const ideationSection = (idTop.length || idGroups.length) ? `
+      ${idTop.length ? `<section class="wr-synthesis-section wr-synthesis-proposals">
+        <div class="wr-synthesis-label wr-label-proposals">Top propositions</div>
+        <ul class="wr-proposals-list">${topCards}</ul>
+      </section>` : ''}
+      ${idGroups.length ? `<section class="wr-synthesis-section wr-id-explore">
+        <div class="wr-synthesis-label wr-label-proposals">Toutes les pistes</div>
+        <div class="wr-id-groups">${groupBlocks}</div>
+      </section>` : ''}
   ` : '';
 
   const oppList = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
@@ -1185,7 +1200,7 @@ function _openSynthesisDrawer(panel, synthesis) {
         </div>
       </header>
 
-${proposalsSection}
+${ideationSection}
       <section class="wr-synthesis-section wr-synthesis-positioning">
         <div class="wr-synthesis-label">Positionnement émergent</div>
         <p class="wr-synthesis-positioning-text">${_esc(synthesis.positioning || '—')}</p>
@@ -1251,12 +1266,20 @@ function _esc(s) {
 // via le dialog navigateur natif (Cmd+P → Enregistrer en PDF).
 function _exportSynthesisPDF(synthesis, brief) {
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-  const proposals = Array.isArray(synthesis.proposals) ? synthesis.proposals : [];
-  const props = proposals.map((p, i) => `
+  const ideation = synthesis.ideation && typeof synthesis.ideation === 'object' ? synthesis.ideation : null;
+  const idTop    = ideation && Array.isArray(ideation.top) ? ideation.top : [];
+  const idGroups = ideation && Array.isArray(ideation.groups) ? ideation.groups : [];
+  const props = idTop.map((p, i) => `
     <li class="prop-item">
       <span class="prop-rank">${i + 1}</span>
       <span class="prop-body"><strong>${_esc(p.label)}</strong>${p.rationale ? ` — <span class="prop-why">${_esc(p.rationale)}</span>` : ''}</span>
     </li>
+  `).join('');
+  const groupsHtml = idGroups.map(g => `
+    <div class="id-group">
+      <div class="id-dir">${_esc(g.direction)}</div>
+      <div class="id-chips">${(g.items || []).map(it => `<span class="id-chip">${_esc(it)}</span>`).join('')}</div>
+    </div>
   `).join('');
   const opp  = (synthesis.opportunities || []).map(o => `<li>${_esc(o)}</li>`).join('');
   const risk = (synthesis.risks || []).map(r => `<li>${_esc(r)}</li>`).join('');
@@ -1311,6 +1334,10 @@ function _exportSynthesisPDF(synthesis, brief) {
   .prop-rank { flex-shrink: 0; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #b8860b; color: #fff; font-size: 11px; font-weight: 800; }
   .prop-body strong { font-size: 16px; font-weight: 800; color: #0f172a; }
   .prop-why { font-size: 12.5px; color: #475569; }
+  .id-group { margin-bottom: 14px; }
+  .id-dir { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: #b8860b; margin-bottom: 6px; text-transform: uppercase; }
+  .id-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .id-chip { display: inline-block; padding: 4px 10px; font-size: 12.5px; font-weight: 600; color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; }
   /* Sprint 7.10 — footer en flux normal (pas position:fixed qui se
      superposait au contenu quand le PDF débordait sur plusieurs pages).
      Apparaît une fois en fin de document, après le contenu. */
@@ -1328,9 +1355,13 @@ function _exportSynthesisPDF(synthesis, brief) {
 
   <div class="eyebrow">Synthèse stratégique</div>
 
-  ${proposals.length ? `<div class="proposals">
-    <h2>Propositions</h2>
+  ${idTop.length ? `<div class="proposals">
+    <h2>Top propositions</h2>
     <ul>${props}</ul>
+  </div>` : ''}
+  ${idGroups.length ? `<div class="proposals">
+    <h2>Toutes les pistes</h2>
+    ${groupsHtml}
   </div>` : ''}
 
   <div class="positioning">
