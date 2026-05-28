@@ -65,6 +65,102 @@ async function ensureLivingSchema(env) {
   _schemaReady = true;
 }
 
+// ── Auto-migration mémoire des chiffres (Chantier 1, 2026-05-28) ──
+let _metricsSchemaReady = false;
+async function ensureMetricsSchema(env) {
+  if (_metricsSchemaReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS living_metrics_daily (
+      tenant_id   TEXT NOT NULL,
+      day         TEXT NOT NULL,
+      metrics     TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (tenant_id, day)
+    )
+  `).run().catch(() => {});
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_living_metrics_tenant_day ON living_metrics_daily(tenant_id, day DESC)'
+  ).run().catch(() => {});
+  _metricsSchemaReady = true;
+}
+
+// Snapshot lazy des cumuls du jour (1 écriture/jour/tenant, idempotent).
+// Capture les totaux pour pouvoir calculer des deltas dans le temps.
+async function _recordDailySnapshot(env, tenantId, cumuls) {
+  if (!tenantId) return;
+  await ensureMetricsSchema(env);
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO living_metrics_daily (tenant_id, day, metrics) VALUES (?, ?, ?)`
+    ).bind(tenantId, today, JSON.stringify(cumuls)).run();
+  } catch (e) { /* best effort, jamais bloquant */ }
+}
+
+// Lit le snapshot le plus proche d'une date cible (≤ targetDay), pour
+// absorber les jours sans connexion (pas de snapshot ce jour précis).
+async function _readSnapshotNear(env, tenantId, targetDay) {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT metrics, day FROM living_metrics_daily
+       WHERE tenant_id = ? AND day <= ?
+       ORDER BY day DESC LIMIT 1`
+    ).bind(tenantId, targetDay).first().catch(() => null);
+    if (!row) return null;
+    return { metrics: JSON.parse(row.metrics), day: row.day };
+  } catch (e) { return null; }
+}
+
+// Calcule des candidats "tendance" à partir de l'historique.
+// Compare les cumuls d'aujourd'hui avec hier (J-1) et la semaine passée (J-7).
+// Retourne des phrases factuelles à fort intérêt (deltas réels, zéro invention).
+async function _computeTrendCandidates(env, tenantId, current) {
+  if (!tenantId) return [];
+  await ensureMetricsSchema(env);
+  const candidates = [];
+  const dayMs = 86400000;
+  const fmtDay = (d) => new Date(d).toISOString().slice(0, 10);
+  const yesterday = fmtDay(Date.now() - dayMs);
+  const weekAgo   = fmtDay(Date.now() - 7 * dayMs);
+
+  const [snapY, snapW] = await Promise.all([
+    _readSnapshotNear(env, tenantId, yesterday),
+    _readSnapshotNear(env, tenantId, weekAgo),
+  ]);
+
+  // Δ scans depuis hier (cumul total scans)
+  if (snapY?.metrics && Number.isFinite(snapY.metrics.scansTotal)) {
+    const delta = (current.scansTotal || 0) - snapY.metrics.scansTotal;
+    if (delta > 0) {
+      candidates.push({
+        text:  `${delta} nouveau${delta > 1 ? 'x' : ''} scan${delta > 1 ? 's' : ''} Smart QR depuis hier.`,
+        score: 82,
+      });
+    }
+  }
+  // Δ réponses Key Form depuis hier
+  if (snapY?.metrics && Number.isFinite(snapY.metrics.pulsaResponsesTotal)) {
+    const delta = (current.pulsaResponsesTotal || 0) - snapY.metrics.pulsaResponsesTotal;
+    if (delta > 0) {
+      candidates.push({
+        text:  `${delta} nouvelle${delta > 1 ? 's' : ''} réponse${delta > 1 ? 's' : ''} Key Form depuis hier.`,
+        score: 84,
+      });
+    }
+  }
+  // Tendance hebdo scans (semaine glissante)
+  if (snapW?.metrics && Number.isFinite(snapW.metrics.scansTotal)) {
+    const weekDelta = (current.scansTotal || 0) - snapW.metrics.scansTotal;
+    if (weekDelta > 0) {
+      candidates.push({
+        text:  `${weekDelta} scan${weekDelta > 1 ? 's' : ''} Smart QR sur les 7 derniers jours.`,
+        score: 68,
+      });
+    }
+  }
+  return candidates;
+}
+
 // ── Helpers sensor (côté serveur) ─────────────────────────────────
 
 // Smart QR : nombre de scans des dernières 24h + total cumulé.
@@ -147,12 +243,19 @@ async function _sensorPulsa(env, ownerSub) {
         ? `SELECT COUNT(*) AS n FROM pulsa_forms WHERE owner_sub = ? AND status = 'published'`
         : `SELECT COUNT(*) AS n FROM pulsa_forms WHERE status = 'published'`
     ).bind(...(ownerSub ? [ownerSub] : [])).first().catch(() => null);
+    // Total cumulé (pour la mémoire des chiffres / tendances)
+    const totalResp = await env.DB.prepare(
+      ownerSub
+        ? `SELECT COUNT(*) AS n FROM pulsa_responses r JOIN pulsa_forms f ON f.id = r.form_id WHERE f.owner_sub = ?`
+        : `SELECT COUNT(*) AS n FROM pulsa_responses`
+    ).bind(...(ownerSub ? [ownerSub] : [])).first().catch(() => null);
     return {
       responses24h: row?.n || 0,
+      responsesTotal: totalResp?.n || 0,
       publishedForms: totalForms?.n || 0,
     };
   } catch (e) {
-    return { responses24h: 0, publishedForms: 0 };
+    return { responses24h: 0, responsesTotal: 0, publishedForms: 0 };
   }
 }
 
@@ -209,9 +312,11 @@ async function _fetchActivePilotable(env, audience) {
 // Toujours une phrase utile. Pas de LLM, zéro risque qualité.
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
-function _buildCalculatorPhrase(sensors, variantIndex = 0) {
+function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = []) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
-  const candidates = [];
+  // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
+  // avec un score élevé : un delta réel est plus parlant qu'un total brut.
+  const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
 
   // ── Candidats basés sur signaux forts (chiffres réels) ──────────
   if (smartqr.scans24h > 0) {
@@ -437,6 +542,25 @@ export async function handleLivingBoard(request, env) {
 
   const sensors = { smartqr, pulsa, ghostwriter, kodex, clientSensors };
 
+  // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
+  // Cumuls du jour pour l'historique + calcul des tendances (deltas).
+  // tenantId requis (pas d'historique en mode démo anonyme).
+  const cumuls = {
+    scansTotal:          smartqr.scansTotal      || 0,
+    pulsaResponsesTotal: pulsa.responsesTotal     || 0,
+    codexBriefs:         kodex.briefs             || 0,
+  };
+  let trendCandidates = [];
+  if (lookupHmac) {
+    // Snapshot + tendances en parallèle (le snapshot du jour n'affecte pas
+    // le calcul de tendance qui compare J-1/J-7, donc ordre indifférent).
+    const [, trends] = await Promise.all([
+      _recordDailySnapshot(env, lookupHmac, cumuls),
+      _computeTrendCandidates(env, lookupHmac, cumuls),
+    ]);
+    trendCandidates = trends || [];
+  }
+
   // ── Sélection du mode ───────────────────────────────────────────
   // 1. Pilotable URGENT actif → prend la main
   if (pilotable && pilotable.priority >= URGENT_PRIORITY && preferMode !== 'calculator' && preferMode !== 'ai') {
@@ -458,10 +582,10 @@ export async function handleLivingBoard(request, env) {
       return json({ mode: 'ai', text: aiText, icon: 'sparkles', ttl: 120 }, 200, origin);
     }
     // sinon fallback Calculateur
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
   if (preferMode === 'calculator') {
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
   if (preferMode === 'pilotable') {
     if (pilotable) {
@@ -476,7 +600,7 @@ export async function handleLivingBoard(request, env) {
       }, 200, origin);
     }
     // Pas de Pilotable actif → fallback Calculateur (variété + économie LLM)
-    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex), icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates), icon: 'bar-chart', ttl: 90 }, 200, origin);
   }
 
   // 2. Pas de preferMode → cycle par défaut au boot
@@ -503,7 +627,7 @@ export async function handleLivingBoard(request, env) {
   // 4. Fallback : Calculateur
   return json({
     mode: 'calculator',
-    text: _buildCalculatorPhrase(sensors, variantIndex),
+    text: _buildCalculatorPhrase(sensors, variantIndex, trendCandidates),
     icon: 'bar-chart',
     ttl:  90,
   }, 200, origin);
