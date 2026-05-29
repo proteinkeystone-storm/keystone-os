@@ -5517,45 +5517,6 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 
 .ksfs-content { max-width: 1400px; }
 
-/* ── "À la une pour vous" — featured rail ──────────────────── */
-.ksfs-featured { margin-bottom: 32px; }
-.ksfs-featured-title {
-    font-size: 18px; font-weight: 600;
-    color: rgba(255,255,255,.95);
-    margin: 0 0 14px;
-}
-.ksfs-featured-rail {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 14px;
-}
-.ksfs-feat-card {
-    cursor: pointer;
-    transition: transform .15s ease;
-}
-.ksfs-feat-card:hover { transform: translateY(-2px); }
-.ksfs-feat-cover {
-    aspect-ratio: 16 / 10;
-    background: #fff;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    box-shadow: 0 2px 14px rgba(0,0,0,.18);
-}
-.ksfs-feat-cat {
-    font-size: 10px; font-weight: 500;
-    color: rgba(255,255,255,.5);
-    margin-bottom: 4px;
-}
-.ksfs-feat-name {
-    font-size: 14px; font-weight: 700;
-    color: #fff;
-    margin-bottom: 4px;
-}
-.ksfs-feat-punch {
-    font-size: 11px;
-    color: rgba(255,255,255,.55);
-}
-
 /* ── Sections "Pour gagner du temps" ─────────────────────────── */
 .ksfs-section {
     border-top: 1px solid rgba(255,255,255,.07);
@@ -5574,21 +5535,31 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     margin: 4px 0 0;
 }
 
+/* Refonte 2026-05-29 — grille unique auto-adaptative (s'ajuste seule à la
+   largeur, plus de nombre de colonnes figé → responsive sans media-query). */
 .ksfs-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px 22px;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 16px;
 }
 
+/* Carte verticale propre : icône + catégorie en tête, nom, promesse de
+   valeur (jusqu'à 2 lignes, plus de troncature nowrap), CTA collé en bas
+   (margin-top:auto) pour des hauteurs de cartes alignées. */
 .ksfs-app-card {
-    display: flex; gap: 12px;
-    padding: 8px;
-    border-radius: 10px;
+    display: flex; flex-direction: column;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.025);
+    border: 1px solid rgba(255,255,255,.07);
     cursor: pointer;
-    transition: background .12s ease;
-    align-items: flex-start;
+    transition: background .14s ease, border-color .14s ease, transform .14s ease;
 }
-.ksfs-app-card:hover { background: rgba(255,255,255,.04); }
+.ksfs-app-card:hover {
+    background: rgba(255,255,255,.05);
+    border-color: rgba(255,255,255,.14);
+    transform: translateY(-2px);
+}
 .ksfs-app-icon {
     /* Specs IDENTIQUES à .pad-icon du dashboard (style.css l.1032)
        pour cohérence visuelle parfaite entre Dashboard et K-Store.
@@ -5621,17 +5592,37 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .ksfs-app-card[data-palette="indigo"]  { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 .ksfs-app-card[data-palette="violet"]  { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
 .ksfs-app-card[data-palette="amber"]   { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
-.ksfs-app-body { flex: 1; min-width: 0; padding-top: 2px; }
+.ksfs-app-card-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.ksfs-app-cat {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase;
+    color: rgba(255,255,255,.42);
+    white-space: nowrap;
+}
 .ksfs-app-name {
-    font-size: 13px; font-weight: 700;
+    font-size: 15px; font-weight: 700;
     color: #fff;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.25;
+    margin-bottom: 5px;
 }
 .ksfs-app-desc {
-    font-size: 11px;
+    font-size: 12px;
+    line-height: 1.45;
     color: rgba(255,255,255,.55);
-    margin: 2px 0 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    /* 2 lignes max, plus de coupe brutale en milieu de mot */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.ksfs-app-foot {
+    margin-top: auto;
+    padding-top: 14px;
+    display: flex;
 }
 .ksfs-buy-btn {
     display: inline-block;
@@ -5677,16 +5668,55 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     margin: 0;
 }
 
-/* Responsive — sous 1100px on serre la grille */
-@media (max-width: 1100px) {
-    .ksfs-grid,
-    .ksfs-featured-rail { grid-template-columns: repeat(3, 1fr); }
+/* Responsive — la grille catalogue ET le rail "Également pour vous" utilisent
+   tous deux .ksfs-grid (auto-fill) : ils s'ajustent seuls, sans surcharge de
+   colonnes. */
+
+/* Burger d'ouverture du drawer — masqué sur desktop (sidebar visible). */
+.ksfs-burger {
+    display: none;
+    align-items: center; gap: 8px;
+    margin-bottom: 18px;
+    padding: 9px 13px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    color: rgba(255,255,255,.88);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: background .14s ease;
 }
-@media (max-width: 720px) {
-    .ksfs { grid-template-columns: 200px 1fr; }
-    .ksfs-main { padding: 24px 20px 32px; }
-    .ksfs-grid,
-    .ksfs-featured-rail { grid-template-columns: repeat(2, 1fr); }
+.ksfs-burger:hover { background: rgba(255,255,255,.09); }
+.ksfs-backdrop { display: none; }
+
+/* ── Mobile / tablette portrait : sidebar repliable en drawer ───── */
+@media (max-width: 860px) {
+    .ksfs { grid-template-columns: 1fr; }
+    .ksfs-main { padding: 20px 16px 32px; }
+
+    .ksfs-burger { display: inline-flex; }
+
+    /* Sidebar hors-écran par défaut, glisse depuis la gauche au tap burger */
+    .ksfs-sidebar {
+        position: absolute; top: 0; left: 0; bottom: 0;
+        width: min(82vw, 300px);
+        z-index: 30;
+        transform: translateX(-100%);
+        transition: transform .26s cubic-bezier(.4, 0, .2, 1);
+        box-shadow: 0 0 40px rgba(0,0,0,.5);
+    }
+    .ksfs.nav-open .ksfs-sidebar { transform: translateX(0); }
+
+    /* Voile sombre derrière le drawer ouvert */
+    .ksfs-backdrop {
+        display: block;
+        position: absolute; inset: 0;
+        background: rgba(0,0,0,.55);
+        opacity: 0; pointer-events: none;
+        transition: opacity .26s ease;
+        z-index: 20;
+    }
+    .ksfs.nav-open .ksfs-backdrop { opacity: 1; pointer-events: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -5710,7 +5740,7 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 /* ── Header app ──────────────────────────────────────────────── */
 .ksfs-detail-head {
     display: grid;
-    grid-template-columns: 96px 1fr auto auto;
+    grid-template-columns: 96px 1fr auto;
     gap: 24px 28px;
     align-items: start;
     padding-bottom: 18px;
@@ -5722,7 +5752,24 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     background: #fff;
     border-radius: 22px;
     box-shadow: 0 4px 18px rgba(0,0,0,.22);
+    background-size: cover;
+    background-position: center;
 }
+/* Icône sans image uploadée : pictogramme de marque sur fond palette
+   (réplique agrandie de .ksfs-app-icon — plus de carré blanc vide). */
+.ksfs-detail-icon[data-palette] {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--tool-bg, rgba(99,102,241,.12));
+    border: 1px solid var(--tool-bd, rgba(255,255,255,.12));
+    color: var(--tool-c, var(--gold));
+    box-shadow: none;
+}
+.ksfs-detail-icon[data-palette] > svg { width: 46px; height: 46px; display: block; }
+.ksfs-detail-icon[data-palette="slate"]  { --tool-c:#94a3b8; --tool-bg:rgba(148,163,184,.12); --tool-bd:rgba(148,163,184,.25); }
+.ksfs-detail-icon[data-palette="blue"]   { --tool-c:#38bdf8; --tool-bg:rgba(56,189,248,.12);  --tool-bd:rgba(56,189,248,.25); }
+.ksfs-detail-icon[data-palette="indigo"] { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
+.ksfs-detail-icon[data-palette="violet"] { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
+.ksfs-detail-icon[data-palette="amber"]  { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
 .ksfs-detail-head-main { min-width: 0; padding-top: 4px; }
 .ksfs-detail-title {
     font-size: 26px; font-weight: 700; color: #fff;
@@ -5753,23 +5800,6 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 }
 .ksfs-detail-buy--soon {
     opacity: .55; cursor: not-allowed;
-}
-
-.ksfs-detail-rating { text-align: left; min-width: 130px; }
-.ksfs-detail-rating-lbl {
-    font-size: 11px; font-weight: 600;
-    color: rgba(255,255,255,.6);
-    margin-bottom: 6px;
-    letter-spacing: .02em;
-}
-.ksfs-detail-rating-val {
-    font-size: 38px; font-weight: 300; color: #fff;
-    line-height: 1;
-    display: flex; align-items: baseline; gap: 8px;
-}
-.ksfs-detail-rating-max {
-    font-size: 12px; color: rgba(255,255,255,.45);
-    font-weight: 400;
 }
 
 .ksfs-detail-meta {
@@ -5896,39 +5926,11 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
         grid-template-columns: 80px 1fr;
     }
     .ksfs-detail-icon { width: 80px; height: 80px; }
-    .ksfs-detail-rating,
     .ksfs-detail-meta { grid-column: span 2; }
     .ksfs-detail-shot { flex-basis: calc((100% - 16px) / 2); }
 }
 @media (max-width: 720px) {
     .ksfs-detail-shot { flex-basis: 100%; }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   KEY-STORE — Notation cliquable (Option 2)
-   Étoiles cliquables dans la fiche détail (sync ks_rating_<id>)
-   ═══════════════════════════════════════════════════════════════ */
-.ksfs-detail-stars {
-    display: flex; gap: 2px;
-    margin-top: 8px;
-}
-.ksfs-detail-star {
-    background: transparent;
-    border: 0;
-    color: rgba(255,255,255,.22);
-    font-size: 20px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0 1px;
-    transition: color .12s ease, transform .12s ease;
-}
-.ksfs-detail-star:hover { color: var(--warn); transform: scale(1.15); }
-.ksfs-detail-star.on    { color: var(--warn); }
-.ksfs-detail-rating-hint {
-    font-size: 10px;
-    color: rgba(255,255,255,.4);
-    margin-top: 6px;
-    line-height: 1.3;
 }
 
 /* ═══════════════════════════════════════════════════════════════

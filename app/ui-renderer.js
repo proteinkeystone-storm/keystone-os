@@ -1048,11 +1048,27 @@ function _buildKStorePanel() {
     wrap.setAttribute('aria-label', 'Key-Store');
     wrap.innerHTML = `
         <aside class="ksfs-sidebar">${sidebarHTML}</aside>
+        <div class="ksfs-backdrop" id="ksfs-backdrop"></div>
         <main class="ksfs-main">
+            <button class="ksfs-burger" id="ksfs-burger" aria-label="Ouvrir les catégories">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     style="width:16px;height:16px">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+                <span>Catégories</span>
+            </button>
             <div id="ksfs-content" class="ksfs-content"></div>
         </main>
     `;
     document.body.appendChild(wrap);
+
+    // ── Drawer mobile : burger ouvre, voile/Échap ferme ────────────
+    const _ksCloseNav = () => wrap.classList.remove('nav-open');
+    wrap.querySelector('#ksfs-burger')?.addEventListener('click',
+        () => wrap.classList.toggle('nav-open'));
+    wrap.querySelector('#ksfs-backdrop')?.addEventListener('click', _ksCloseNav);
 
     // ── Listeners ──────────────────────────────────────────────
     // Retour unifié : la flèche en haut à gauche est le SEUL point de
@@ -1098,6 +1114,12 @@ function _buildKStorePanel() {
         if (action === 'sub')   _ksFilter = { kind: 'sub', id };
         if (action === 'plans') _ksFilter = { kind: 'plans', id: null };
         if (action === 'mine')  _ksFilter = { kind: 'mine', id: null };
+        // Mobile : refermer le drawer dès qu'un filtre final est choisi
+        // (on garde le drawer ouvert sur un clic 'cat' qui ne fait que
+        // déplier/replier ses sous-rubriques).
+        if (action === 'sub' || action === 'plans' || action === 'mine') {
+            wrap.classList.remove('nav-open');
+        }
         _renderKStoreItems();
     });
 
@@ -1106,39 +1128,6 @@ function _buildKStorePanel() {
         // Retour depuis la fiche détail
         if (e.target.closest('#ksfs-detail-back')) {
             _backFromKStoreDetail();
-            return;
-        }
-
-        // Notation (étoiles cliquables sur fiche détail)
-        // Update DOM en place — pas de re-render pour éviter le décalage visuel.
-        const star = e.target.closest('.ksfs-detail-star');
-        if (star) {
-            e.stopPropagation();
-            const val  = parseInt(star.dataset.rate, 10);
-            const id   = star.dataset.id;
-            const prev = parseInt(localStorage.getItem('ks_rating_' + id) || '0', 10);
-            const remove = (prev === val); // re-clic sur la même valeur → retire
-            if (remove) localStorage.removeItem('ks_rating_' + id);
-            else       localStorage.setItem('ks_rating_' + id, String(val));
-            scheduleAutoSave?.();
-
-            // Update visuel local — étoiles, valeur, hint
-            const newRaw  = remove ? 0 : val;
-            const display = newRaw > 0 ? newRaw : 4.7;
-            const rounded = Math.round(display);
-            document.querySelectorAll('.ksfs-detail-star').forEach(s => {
-                s.classList.toggle('on', parseInt(s.dataset.rate, 10) <= rounded);
-            });
-            const valEl = document.querySelector('.ksfs-detail-rating-val');
-            if (valEl) {
-                valEl.firstChild.textContent = display.toFixed(1).replace('.', ',');
-            }
-            const hintEl = document.querySelector('.ksfs-detail-rating-hint');
-            if (hintEl) {
-                hintEl.textContent = newRaw > 0
-                    ? 'Votre note · cliquez pour modifier'
-                    : 'Cliquez pour noter cette app';
-            }
             return;
         }
 
@@ -1368,61 +1357,47 @@ function _renderKStoreItems() {
         return;
     }
 
-    // ── Vue "all" (catalogue par défaut) : featured rail + sections ──
-    const featured = KSTORE_FEATURED_IDS.map(_ksGetApp).filter(Boolean);
-
-    // (Recherche globale gérée en amont — voir bloc `if (search)` plus haut.)
-
-    // Sections "Pour gagner du temps" — une par catégorie ayant des apps
-    const sections = KSTORE_CATEGORIES.map(c => {
-        const inCat = _ksGetAppsByCategory(c.id);
-        return inCat.length > 0 ? { cat: c, apps: inCat } : null;
-    }).filter(Boolean);
+    // ── Vue "all" (catalogue par défaut) : grille unique épurée ──
+    // Refonte 2026-05-29 : suppression du rail "À la une" (doublon visuel sur
+    // un catalogue de 7 apps) et des rayons répétés tous nommés "Pour gagner
+    // du temps". Une seule grille lisible de tous les outils du Key-Store.
+    const all = _ksGetAllApps();
 
     content.innerHTML = `
-        <div class="ksfs-featured">
-            <h2 class="ksfs-featured-title">À la une pour vous :</h2>
-            <div class="ksfs-featured-rail">
-                ${featured.map(_renderFeaturedCard).join('')}
-            </div>
+        <div class="ksfs-section-head">
+            <h1 class="ksfs-section-title">Applications</h1>
+            <p class="ksfs-section-sub">
+                ${all.length} outil${all.length !== 1 ? 's' : ''} pour gagner du temps au quotidien
+            </p>
         </div>
-
-        ${sections.map(({ cat, apps }) => `
-            <section class="ksfs-section">
-                <h2 class="ksfs-section-h">Pour gagner du temps</h2>
-                <div class="ksfs-grid">
-                    ${apps.map(_renderAppCardSmall).join('')}
-                </div>
-            </section>
-        `).join('')}
+        ${all.length === 0
+            ? `<div class="ksfs-empty">Le catalogue est momentanément vide.</div>`
+            : `<div class="ksfs-grid">${all.map(_renderAppCardSmall).join('')}</div>`}
     `;
 }
 
-// ── Helpers de rendu de cards ─────────────────────────────────
-function _renderFeaturedCard(app) {
-    const coverStyle = app.coverId
-        ? `style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.coverId)}');background-size:cover;background-position:center;background-color:transparent"`
-        : '';
-    return `
-        <article class="ksfs-feat-card" data-app-id="${app.id}">
-            <div class="ksfs-feat-cover" ${coverStyle}></div>
-            <div class="ksfs-feat-cat">${getCategoryLabel(app.category)}</div>
-            <div class="ksfs-feat-name">${app.title}</div>
-            <div class="ksfs-feat-punch">${app.punchline || ''}</div>
-        </article>
-    `;
-}
-
+// ── Helper de rendu de card ───────────────────────────────────
 function _renderAppCardSmall(app) {
     const ownedIds = getOwnedIds();
     // Sprint S6 — ADMIN voit toujours "✓ Actif" dans le K-Store
     const isOwned  = isAdminUser() || (ownedIds === null) || ownedIds.includes(app.id);
     // Outil possédé mais retiré du Dashboard → réinstallable
     const isDeactivated = isOwned && app.real && isPadDeactivated(app.id);
-    const priceLbl = app.real
-        ? (isDeactivated ? 'Réinstaller' : (isOwned ? '✓ Actif' : `${(app.price ?? 0).toFixed(2).replace('.', ',')} €`))
-        : '00,00 €';
-    const action   = app.real && (!isOwned || isDeactivated) ? 'obtenir' : 'soon';
+
+    // Refonte 2026-05-29 — Logique abonnement : on n'affiche plus de prix par
+    // app (le bouton n'encaisse rien, il reflète la licence). États possibles :
+    // Bientôt (coquille) · Réinstaller (possédé, retiré du dashboard) ·
+    // ✓ Actif (possédé, span non cliquable) · Obtenir (non possédé).
+    let cta;
+    if (!app.real) {
+        cta = `<button class="ksfs-buy-btn ksfs-buy-btn--soon" data-action="soon" aria-disabled="true">Bientôt</button>`;
+    } else if (isDeactivated) {
+        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Réinstaller</button>`;
+    } else if (isOwned) {
+        cta = `<span class="ksfs-buy-btn ksfs-buy-btn--owned">✓ Actif</span>`;
+    } else {
+        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Obtenir</button>`;
+    }
 
     // Trois sources possibles pour l'icône, dans cet ordre :
     // 1. Screenshot uploadé via admin (iconId) — background image
@@ -1437,20 +1412,21 @@ function _renderAppCardSmall(app) {
 
     // Palette du plan (indigo pour PRO, blue pour STARTER, violet pour MAX,
     // amber pour les artefacts A-*, slate pour les mocks)
-    const palette = getToolPalette(app.id);
+    const palette  = getToolPalette(app.id);
+    const catLabel = getCategoryLabel(app.subcategory || app.category);
+    // La punchline est la promesse de valeur courte ("6 portails en une saisie")
+    // — plus lisible que shortDesc en grille. Fallback shortDesc puis vide.
+    const desc = app.punchline || app.shortDesc || '';
 
     return `
         <article class="ksfs-app-card" data-app-id="${app.id}" data-palette="${palette}">
-            <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
-            <div class="ksfs-app-body">
-                <div class="ksfs-app-name">${app.title}</div>
-                <div class="ksfs-app-desc">${app.shortDesc || ''}</div>
-                <button class="ksfs-buy-btn${isOwned && app.real && !isDeactivated ? ' ksfs-buy-btn--owned' : ''}"
-                        data-action="${action}" data-id="${app.id}"
-                        ${!app.real ? 'aria-disabled="true"' : ''}>
-                    ${priceLbl}
-                </button>
+            <div class="ksfs-app-card-top">
+                <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
+                ${catLabel ? `<span class="ksfs-app-cat">${catLabel}</span>` : ''}
             </div>
+            <div class="ksfs-app-name">${app.title}</div>
+            <div class="ksfs-app-desc">${desc}</div>
+            <div class="ksfs-app-foot">${cta}</div>
         </article>
     `;
 }
@@ -1489,24 +1465,10 @@ function _renderKStoreAppDetail(appId) {
         return;
     }
 
-    // ── Note utilisateur (ks_rating_<id>) — fallback à 4,7 si non noté ──
-    const rawRating = parseInt(localStorage.getItem('ks_rating_' + appId) || '0', 10);
-    const userRated = rawRating > 0;
-    const ratingNum = userRated ? rawRating : 4.7;
-    const ratingStr = ratingNum.toFixed(1).replace('.', ',');
-    const starsHTML = [1,2,3,4,5].map(v =>
-        `<button class="ksfs-detail-star${v <= Math.round(ratingNum) ? ' on' : ''}"
-                 data-rate="${v}" data-id="${appId}"
-                 aria-label="Noter ${v} étoile${v > 1 ? 's' : ''}">★</button>`
-    ).join('');
-
     // ── État d'achat (Notice VEFA seulement pour l'instant) ──
     // Sprint S6 — ADMIN voit toujours "✓ Actif" dans le détail K-Store
     const ownedIds = getOwnedIds();
     const isOwned  = app.real && (isAdminUser() || ownedIds === null || ownedIds.includes(appId));
-    const priceLbl = app.real
-        ? (app.price ?? 0).toFixed(2).replace('.', ',') + ' €'
-        : '00,00 €';
 
     // ── Méta : catégorie + copyright ──
     const catLabel  = getCategoryPath(app.category, app.subcategory);
@@ -1528,29 +1490,29 @@ function _renderKStoreAppDetail(appId) {
         if (isOwned) {
             return `<span class="ksfs-detail-buy ksfs-detail-buy--owned">✓ Actif</span>`;
         }
-        return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">${priceLbl}</button>`;
+        return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">Obtenir</button>`;
     })();
 
-    // ── "Également pour vous" — 5 apps de la même catégorie (hors self) ──
+    // ── "Également pour vous" — 4 apps de la même catégorie (hors self) ──
     const related = _ksGetAllApps()
         .filter(a => a.id !== appId && a.category === app.category)
-        .slice(0, 5);
-    // Compléter avec featured si <5
-    if (related.length < 5) {
+        .slice(0, 4);
+    // Compléter avec featured si <4
+    if (related.length < 4) {
         for (const id of KSTORE_FEATURED_IDS) {
-            if (related.length >= 5) break;
+            if (related.length >= 4) break;
             if (id === appId || related.some(r => r.id === id)) continue;
             const f = _ksGetApp(id); if (f) related.push(f);
         }
     }
 
     // ── Blocs texte : 100% éditables depuis l'admin (avec fallbacks) ──
-    const DEFAULT_DESC_TITLE = 'Bloc texte explicatif pour cette application';
+    const DEFAULT_DESC_TITLE = `À propos de ${app.title}`;
     const DEFAULT_DESC_TEXT  = app.real
-        ? 'Cette application Keystone OS a été pensée pour des professionnels exigeants. Renseignez la description complète dans l\'admin (Catalogue → 📝 Éditer).'
-        : 'Cette application n\'est pas encore disponible — la coquille vous permet de visualiser la structure de la fiche détail.';
+        ? (app.shortDesc || app.punchline || 'Un outil Keystone OS pensé pour faire gagner du temps aux professionnels exigeants.')
+        : 'Cette application n\'est pas encore disponible — elle arrive prochainement dans le Key-Store.';
 
-    const DEFAULT_RGPD_TITLE = 'Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU';
+    const DEFAULT_RGPD_TITLE = 'Confidentialité & RGPD';
     const DEFAULT_RGPD_TEXT  = 'Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l\'Union Européenne. Aucune donnée saisie n\'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d\'IA que vous avez explicitement configuré.';
 
     const descTitle = app.descTitle || DEFAULT_DESC_TITLE;
@@ -1564,11 +1526,14 @@ function _renderKStoreAppDetail(appId) {
         .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
         .join('');
 
-    // ── Icône d'app (uploadable côté admin via app.iconId) ──
+    // ── Icône d'app : image uploadée (D1) sinon pictogramme de marque ──
+    // On réutilise la palette + le glyph SVG de la card → plus de carré blanc vide.
+    const detailPalette = getToolPalette(app.id);
+    const detailGlyph   = ICONS[app.icon] || ICONS['package'] || '';
     const iconHtml = app.iconId
         ? `<div class="ksfs-detail-icon ksfs-detail-icon--filled"
                 style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.iconId)}')"></div>`
-        : `<div class="ksfs-detail-icon"></div>`;
+        : `<div class="ksfs-detail-icon" data-palette="${detailPalette}">${detailGlyph}</div>`;
 
     // ── Assistance → mailto ──
     const SUPPORT_EMAIL = 'protein.keystone@gmail.com';
@@ -1592,15 +1557,6 @@ function _renderKStoreAppDetail(appId) {
                     <div class="ksfs-detail-action-row">${btnAction}</div>
                 </div>
 
-                <div class="ksfs-detail-rating">
-                    <div class="ksfs-detail-rating-lbl">Notes</div>
-                    <div class="ksfs-detail-rating-val">${ratingStr}<span class="ksfs-detail-rating-max">sur 5</span></div>
-                    <div class="ksfs-detail-stars">${starsHTML}</div>
-                    <div class="ksfs-detail-rating-hint">
-                        ${userRated ? 'Votre note · cliquez pour modifier' : 'Cliquez pour noter cette app'}
-                    </div>
-                </div>
-
                 <div class="ksfs-detail-meta">
                     <a class="ksfs-detail-meta-lbl ksfs-detail-meta-support"
                        href="${supportMailto}">Assistance</a>
@@ -1615,31 +1571,26 @@ function _renderKStoreAppDetail(appId) {
                 </div>
             </header>
 
-            <!-- Carousel screenshots — vraies images si présentes dans D1, sinon placeholders -->
-            <div class="ksfs-detail-shots-wrap">
-                <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--prev" aria-label="Précédent">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                         style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
-                <div class="ksfs-detail-shots">
-                    ${(() => {
-                        const shots = Array.isArray(app.screenshots) ? app.screenshots : [];
-                        const slots = [];
-                        for (let i = 0; i < Math.max(3, shots.length); i++) {
-                            slots.push(shots[i]
-                                ? `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
-                                        style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(shots[i])}')">
-                                  </div>`
-                                : `<div class="ksfs-detail-shot"></div>`);
-                        }
-                        return slots.join('');
-                    })()}
-                </div>
-                <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--next" aria-label="Suivant">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                         style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-            </div>
+            <!-- Captures : affichées uniquement si de vraies images existent (D1) -->
+            ${(() => {
+                const shots = (Array.isArray(app.screenshots) ? app.screenshots : []).filter(Boolean);
+                if (shots.length === 0) return '';
+                return `
+                <div class="ksfs-detail-shots-wrap">
+                    <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--prev" aria-label="Précédent">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                             style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <div class="ksfs-detail-shots">
+                        ${shots.map(s => `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
+                                style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(s)}')"></div>`).join('')}
+                    </div>
+                    <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--next" aria-label="Suivant">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                             style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>`;
+            })()}
 
             <!-- Badges moteurs IA -->
             <div class="ksfs-detail-engines">
@@ -1665,12 +1616,12 @@ function _renderKStoreAppDetail(appId) {
                 ${paragraphify(rgpdText)}
             </div>
 
-            <!-- Également pour vous -->
+            <!-- Également pour vous : mêmes cards que le catalogue (icône de marque, CTA abonnement) -->
             ${related.length > 0 ? `
                 <section class="ksfs-detail-related">
-                    <h2 class="ksfs-detail-related-h">Également pour vous :</h2>
-                    <div class="ksfs-featured-rail">
-                        ${related.map(_renderFeaturedCard).join('')}
+                    <h2 class="ksfs-detail-related-h">Également pour vous</h2>
+                    <div class="ksfs-grid">
+                        ${related.map(_renderAppCardSmall).join('')}
                     </div>
                 </section>
             ` : ''}
