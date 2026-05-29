@@ -346,6 +346,22 @@ export async function handleGhostwriterRewrite(request, env) {
       max_tokens: cappedMaxTokens,
     });
   } catch (e) {
+    // Cas spécifique : budget Workers AI gratuit épuisé (Cloudflare code
+    // 4006). Ce n'est PAS le quota Ghost Writer de la licence (ADMIN =
+    // illimité) — c'est l'allocation gratuite quotidienne du COMPTE
+    // Cloudflare (10 000 neurones/jour), partagée par TOUS les outils IA
+    // (Ghost Writer, Brainstorming, Living Layer, Smart QR). Vu en prod le
+    // 2026-05-29 : Brainstorming (9 agents streaming) avait vidé le pot.
+    // On renvoie un code stable que le frontend traduit en message clair,
+    // au lieu d'exposer l'erreur anglaise brute « 4006: ... neurons ».
+    const m = String(e?.message || e || '');
+    if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
+      return json({
+        error: 'Budget IA quotidien épuisé (allocation gratuite Cloudflare Workers AI, '
+             + 'partagée par tous les outils Keystone). Réinitialisation à 00h00 UTC.',
+        code : 'AI_BUDGET_EXHAUSTED',
+      }, 429, origin);
+    }
     return err(`Workers AI erreur : ${e.message || 'inconnue'}`, 502, origin);
   }
 

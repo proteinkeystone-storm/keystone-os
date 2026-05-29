@@ -227,6 +227,7 @@ async function _callReal(text, opts) {
         const e = new Error(msg);
         e.status = res.status;
         e.quota  = errBody?.quota || null;
+        e.code   = errBody?.code  || null;   // ex: 'AI_BUDGET_EXHAUSTED'
         throw e;
     }
 
@@ -656,11 +657,13 @@ async function _handleGenerate(overlay) {
         _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
     } catch (e) {
         _setStatus(status, `✗ ${_friendlyError(e)}`, 'error');
-        // Sur 429 _callReal a déjà resync le cache. Sur autre erreur
-        // (5xx, réseau), le backend a fait bump+revert donc le serveur
-        // a rétabli l'état ; on resync pour annuler notre décrément
-        // optimiste (sinon l'UI affiche un quota faussement diminué).
-        if (e?.status === 429) {
+        // Vrai quota GW dépassé (429 AVEC objet quota) : _callReal a déjà
+        // resync le cache, on rafraîchit juste la pastille. Tout autre cas
+        // — budget compte Cloudflare épuisé (429 sans quota), 5xx, réseau —
+        // le backend a fait bump+revert donc le quota réel est inchangé : on
+        // resync pour annuler notre décrément optimiste (sinon l'UI affiche
+        // un quota faussement diminué).
+        if (e?.status === 429 && e?.quota) {
             _refreshQuotaChip(overlay);
         } else {
             _fetchQuota().then(() => _refreshQuotaChip(overlay)).catch(() => {});
@@ -679,6 +682,16 @@ async function _handleGenerate(overlay) {
  */
 function _friendlyError(e) {
     const msg = String(e?.message || e || '');
+    // Budget IA quotidien Cloudflare épuisé (code serveur AI_BUDGET_EXHAUSTED,
+    // ou erreur brute 4006). C'est l'allocation gratuite du COMPTE (10 000
+    // neurones/jour), partagée par TOUS les outils IA Keystone — PAS le quota
+    // Ghost Writer de la licence. Se réinitialise à 00h UTC (~2h du matin FR).
+    // Message explicite pour ne pas laisser croire à une limite personnelle.
+    if (e?.code === 'AI_BUDGET_EXHAUSTED' || /\b4006\b|daily free allocation|neurons|workers paid/i.test(msg)) {
+        return 'Budget IA quotidien épuisé. C\'est l\'allocation gratuite Cloudflare partagée par tous '
+             + 'les outils IA de Keystone (Brainstorming, Smart QR…), pas ton quota Ghost Writer. '
+             + 'Il se réinitialise à 00h UTC, soit ~2h du matin (heure française) — réessaie après.';
+    }
     const isBackendKO = e?.status === 503 || /workers ai non configur/i.test(msg);
     if (isBackendKO) {
         return 'Backend Gemma 4 indisponible. Voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md (Phase B).';
