@@ -1457,20 +1457,31 @@ function _renderAppCardSmall(app) {
 }
 
 // ── Header promo "À la une" — grand bandeau publicitaire ──────
-// Carrousel affiché en haut de l'accueil du Key-Store. Les slides viennent
-// de KSTORE_PROMOS (kstore-mock-catalog.js) : c'est l'espace pub piloté par
-// la donnée. Si une slide a une `image`, elle remplit le bandeau ; sinon un
-// dégradé vif coloré par `palette` sert de fond.
+// Carrousel affiché en haut de l'accueil du Key-Store. Les slides sont
+// pilotées par la donnée : on lit d'abord catalog.promos (édité depuis
+// l'admin → onglet "À la une"), sinon on retombe sur les bandeaux
+// embarqués KSTORE_PROMOS. La photo d'illustration vient de `imageId`
+// (uploadée en admin → /api/screenshot/:id) ou d'une `image` URL legacy.
+// Slide avec photo : panneau couleur à gauche en dégradé vers la photo à
+// droite. Slide sans photo : dégradé vif plein coloré par `palette`.
 function _renderKStoreHero() {
-    const promos = (Array.isArray(KSTORE_PROMOS) ? KSTORE_PROMOS : []).filter(Boolean);
+    const catalog   = getCatalog();
+    // catalog.promos défini (même vide) = source de vérité admin ; sinon statique.
+    const promos = (Array.isArray(catalog?.promos)
+        ? catalog.promos
+        : (Array.isArray(KSTORE_PROMOS) ? KSTORE_PROMOS : [])
+    ).filter(Boolean);
     if (promos.length === 0) return '';
 
     const slides = promos.map(p => {
         const pal       = p.palette || 'indigo';
-        const hasImg    = !!p.image;
+        const imgUrl    = p.imageId
+            ? `${CF_API}/api/screenshot/${encodeURIComponent(p.imageId)}`
+            : (p.image || '');
+        const hasImg    = !!imgUrl;
         const hasText   = !!(p.eyebrow || p.title || p.subtitle);
         const clickable = !!p.appId;
-        const bgStyle   = hasImg ? `background-image:url('${p.image}')` : '';
+        const bgStyle   = hasImg ? `background-image:url('${imgUrl}')` : '';
 
         const ctaArrow = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
             style="width:15px;height:15px"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;

@@ -5546,17 +5546,28 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     overflow: hidden;
     background-size: cover;
     background-position: center;
-    /* dégradé par défaut (palette indigo) si une slide n'a pas de data-palette */
-    background-color: #4338ca;
+    /* couleur de secours = couleur primaire de la palette (--hero-c, cf. ci-dessous) */
+    background-color: var(--hero-c, #4338ca);
 }
 .ksfs-hero-slide--link { cursor: pointer; }
 
-/* Dégradés vifs par univers — c'est ce qui colore et différencie le Store. */
-.ksfs-hero-slide[data-palette="indigo"]  { background-image: linear-gradient(120deg, #6366f1 0%, #4338ca 52%, #312e81 100%); }
-.ksfs-hero-slide[data-palette="violet"]  { background-image: linear-gradient(120deg, #a855f7 0%, #7c3aed 52%, #4c1d95 100%); }
-.ksfs-hero-slide[data-palette="blue"]    { background-image: linear-gradient(120deg, #38bdf8 0%, #0284c7 52%, #075985 100%); }
-.ksfs-hero-slide[data-palette="amber"]   { background-image: linear-gradient(120deg, #fbbf24 0%, #f59e0b 50%, #b45309 100%); }
-.ksfs-hero-slide[data-palette="emerald"] { background-image: linear-gradient(120deg, #34d399 0%, #059669 52%, #065f46 100%); }
+/* Couleur primaire par univers — pilote À LA FOIS le dégradé plein (slides
+   sans photo) ET le panneau de couleur à gauche (slides avec photo).
+   --hero-c0 clair · --hero-c primaire · --hero-c2 foncé · --hero-ct = primaire
+   transparente (pour fondre vers la photo sans virer au noir). */
+.ksfs-hero-slide[data-palette="indigo"]  { --hero-c0:#6366f1; --hero-c:#4338ca; --hero-c2:#312e81; --hero-ct:rgba(67,56,202,0); }
+.ksfs-hero-slide[data-palette="violet"]  { --hero-c0:#a855f7; --hero-c:#7c3aed; --hero-c2:#4c1d95; --hero-ct:rgba(124,58,237,0); }
+.ksfs-hero-slide[data-palette="blue"]    { --hero-c0:#38bdf8; --hero-c:#0284c7; --hero-c2:#075985; --hero-ct:rgba(2,132,199,0); }
+.ksfs-hero-slide[data-palette="amber"]   { --hero-c0:#fbbf24; --hero-c:#f59e0b; --hero-c2:#b45309; --hero-ct:rgba(245,158,11,0); }
+.ksfs-hero-slide[data-palette="emerald"] { --hero-c0:#34d399; --hero-c:#059669; --hero-c2:#065f46; --hero-ct:rgba(5,150,105,0); }
+
+/* Slide SANS photo : dégradé vif plein — c'est ce qui colore et différencie le Store. */
+.ksfs-hero-slide:not(.ksfs-hero-slide--img) {
+    background-image: linear-gradient(120deg, var(--hero-c0) 0%, var(--hero-c) 52%, var(--hero-c2) 100%);
+}
+/* Slide AVEC photo : la photo (background-image posée en inline) est ancrée à
+   droite pour garder sa partie utile visible sous la zone transparente. */
+.ksfs-hero-slide--img { background-position: right center; }
 
 /* Sheen lumineux haut-droite (gloss premium) — seulement sur les dégradés,
    pas sur les visuels image pour ne pas les délaver. */
@@ -5565,17 +5576,25 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     position: absolute; inset: 0; pointer-events: none;
     background: radial-gradient(80% 130% at 88% -15%, rgba(255,255,255,.20), transparent 60%);
 }
-/* Slide avec image + texte : voile sombre dégradé à gauche pour la lisibilité. */
+/* Slide avec photo + texte : panneau de couleur à gauche, en dégradé vers la
+   photo à droite. La couleur de la palette tient le texte lisible côté gauche
+   et se fond dans l'illustration côté droit (vers --hero-ct = même teinte, alpha 0). */
 .ksfs-hero-slide--img.ksfs-hero-slide--hastext::before {
     content: '';
     position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(90deg, rgba(8,10,18,.74) 0%, rgba(8,10,18,.38) 46%, transparent 76%);
+    background: linear-gradient(90deg,
+        var(--hero-c) 0%,
+        var(--hero-c) 36%,
+        var(--hero-ct) 72%);
 }
 
 .ksfs-hero-text {
     position: relative; z-index: 1;
     max-width: 60%;
 }
+/* Slide avec photo : on resserre le texte pour qu'il reste sur le panneau de
+   couleur (à gauche) et laisse respirer la photo (à droite). */
+.ksfs-hero-slide--img .ksfs-hero-text { max-width: 52%; }
 .ksfs-hero-eyebrow {
     display: inline-block;
     font-size: 11px; font-weight: 700;
@@ -5657,6 +5676,9 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     .ksfs-hero { margin-bottom: 22px; }
     .ksfs-hero-slide { height: 184px; padding: 0 24px; }
     .ksfs-hero-text { max-width: 86%; }
+    /* Sur mobile, peu de place : on rouvre la largeur du texte même sur les
+       slides avec photo (sinon le 52% desktop écraserait le texte ici). */
+    .ksfs-hero-slide--img .ksfs-hero-text { max-width: 78%; }
     .ksfs-hero-title { font-size: 22px; }
     .ksfs-hero-sub { font-size: 13px; }
     .ksfs-hero-cta { margin-top: 13px; padding: 8px 14px; }

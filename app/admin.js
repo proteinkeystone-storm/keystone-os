@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { renderArtifactResult } from './artifact-renderer.js';
-import { KSTORE_CATEGORIES }    from './kstore-mock-catalog.js';
+import { KSTORE_CATEGORIES, KSTORE_PROMOS } from './kstore-mock-catalog.js';
 import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
 import { VEFA_CONTRAT_CLAUSES_V1 } from './lib/doc-templates/vefa-contrat-clauses-seed.js';
@@ -260,6 +260,7 @@ const TAB_RENDERERS = {
   licences:   renderLicences,
   tools:      renderTools,
   catalog:    renderCatalog,
+  promos:     renderPromos,        // À la une — éditeur des bandeaux du hero Key-Store (2026-05-29)
   messaging:  renderMessaging,
   living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
   budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
@@ -1722,6 +1723,282 @@ async function renderCatalog(panel) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TAB — À LA UNE (bandeaux promo du hero Key-Store)
+// Éditeur complet du grand carrousel en haut du Key-Store. Chaque
+// bandeau : étiquette / titre / sous-titre / bouton / app liée /
+// couleur + photo d'illustration (drag&drop). Persiste dans
+// catalogData.promos (même blob D1 que le catalogue → POST /api/admin/catalog).
+// Le frontend (_renderKStoreHero) lit catalog.promos, fallback KSTORE_PROMOS.
+// ══════════════════════════════════════════════════════════════════
+const PROMO_PALETTES = ['indigo', 'violet', 'blue', 'amber', 'emerald'];
+function _newPromoId() { return `promo-${Date.now().toString(36)}`; }
+function _promoCount(n) { return `(${n} bandeau${n > 1 ? 'x' : ''})`; }
+
+// Barre d'actions visible en bas d'une image deja uploadee (toutes les zones admin).
+// `delAttrs` = attribut(s) HTML du bouton Effacer (id/class propre a chaque zone, pour
+// que le handler delete existant continue de fonctionner). Le bouton Remplacer n'a
+// pas de handler dedie : son clic remonte au slot qui ouvre deja le selecteur de fichier.
+// `compact` (slot etroit type icone 100px) = pictos seuls sans libelle.
+function _imgActionsBar(delAttrs, compact = false) {
+  const ICON_REPLACE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px;flex:none"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>`;
+  const ICON_TRASH   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px;flex:none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+  const btn = (extra, label, ico, title) => `
+        <button type="button" ${extra} title="${title}"
+                style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;
+                       padding:${compact ? '5px 0' : '6px 8px'};border-radius:7px;cursor:pointer;
+                       font-size:11px;font-weight:600;line-height:1;white-space:nowrap;overflow:hidden;
+                       backdrop-filter:blur(4px);${title.includes('Effacer')
+                         ? 'border:1px solid rgba(224,92,92,.45);background:rgba(224,92,92,.18);color:#ff9b9b;'
+                         : 'border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.13);color:#fff;'}">
+          ${ico}${compact ? '' : `<span>${label}</span>`}
+        </button>`;
+  return `
+      <div class="img-act-bar" style="position:absolute;left:0;right:0;bottom:0;display:flex;gap:6px;
+                  padding:${compact ? '5px' : '7px'};background:linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,0))">
+        ${btn('class="img-act-replace"', 'Remplacer', ICON_REPLACE, 'Remplacer cette image')}
+        ${btn(delAttrs, 'Effacer', ICON_TRASH, 'Effacer cette image')}
+      </div>`;
+}
+
+async function renderPromos(panel) {
+  try {
+    // Partage le même catalogData que renderCatalog (tools + promos dans le
+    // même blob). On le (re)charge si l'admin ouvre cet onglet en premier.
+    if (!catalogData) {
+      let loaded = null;
+      try {
+        const res = await api('/api/admin/catalog?tenantId=default');
+        if (res && res.catalog) loaded = res.catalog;
+      } catch (_) { /* fallback ci-dessous */ }
+      if (!loaded) loaded = await fetchJSON('/K_STORE_ASSETS/catalog.json');
+      catalogData = loaded;
+    }
+    // Amorce : jamais édité → on part des bandeaux live embarqués (KSTORE_PROMOS)
+    // pour que « ce que l'admin voit = ce qui est en ligne ». Une fois sauvegardé,
+    // catalogData.promos devient la source de vérité (override le statique).
+    if (!Array.isArray(catalogData.promos)) {
+      catalogData.promos = (Array.isArray(KSTORE_PROMOS) ? KSTORE_PROMOS : []).map(p => ({
+        id: p.id || _newPromoId(),
+        eyebrow: p.eyebrow || '', title: p.title || '', subtitle: p.subtitle || '',
+        cta: p.cta || '', appId: p.appId || '', palette: p.palette || 'indigo',
+        imageId: p.imageId || '',
+      }));
+    }
+    const promos = catalogData.promos;
+    const apps   = (catalogData.tools || []).filter(t => t && t.id);
+
+    // Lecture fichier → base64 (sans le préfixe "data:...,"). Helper local :
+    // celui de openKStoreFicheEditor est hors de portée ici.
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => { const r = reader.result; const i = r.indexOf(','); resolve(i >= 0 ? r.slice(i + 1) : r); };
+      reader.onerror = () => reject(new Error('Lecture du fichier échouée'));
+      reader.readAsDataURL(file);
+    });
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">À la une <span>${_promoCount(promos.length)}</span></h2>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-secondary" id="btn-add-promo">+ Nouveau bandeau</button>
+          <button class="btn btn-primary"   id="btn-save-promos">Sauvegarder</button>
+        </div>
+      </div>
+      <p style="margin:-6px 0 18px;font-size:12.5px;color:var(--text-muted);max-width:780px;line-height:1.55">
+        Ces bandeaux composent le grand carrousel en haut du Key-Store. Pour chaque
+        bandeau, le texte s'affiche à gauche sur un panneau de couleur qui se fond vers
+        une <strong>photo d'illustration à droite</strong>. Glissez une image dans
+        l'emplacement photo (ou laissez vide pour un dégradé de couleur plein).
+        Réorganisez l'ordre avec ↑ ↓, puis cliquez <strong>Sauvegarder</strong>.
+      </p>
+      <div id="promos-list" style="display:flex;flex-direction:column;gap:16px"></div>`;
+
+    const listEl = panel.querySelector('#promos-list');
+    const setCount = () => {
+      const span = panel.querySelector('.section-title span');
+      if (span) span.textContent = _promoCount(promos.length);
+    };
+
+    const photoSlotInner = (p) => p.imageId
+      ? `<img src="${API_BASE}/api/screenshot/${esc(p.imageId)}" alt=""
+              style="width:100%;height:100%;object-fit:cover;object-position:right center;pointer-events:none">
+         ${_imgActionsBar('class="promo-photo-del"')}`
+      : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;
+                     color:rgba(255,255,255,.45);font-size:11px;text-align:center;padding:12px;gap:6px;pointer-events:none">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:22px;height:22px;opacity:.6">
+             <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+           </svg>
+           <div><strong>Photo d'illustration</strong></div>
+           <div style="opacity:.75">Glissez une image ou cliquez</div>
+         </div>`;
+
+    const cardHTML = (p, i) => `
+      <div class="promo-card" data-i="${i}"
+           style="border:1px solid var(--border);border-radius:14px;padding:16px;
+                  display:grid;grid-template-columns:210px 1fr;gap:18px;background:rgba(255,255,255,.02)">
+        <div>
+          <div class="promo-photo-slot" data-i="${i}"
+               style="position:relative;height:120px;border:1.5px dashed var(--border);border-radius:10px;
+                      overflow:hidden;cursor:pointer;background:rgba(255,255,255,.02)">${photoSlotInner(p)}</div>
+          <input type="file" accept="image/*" class="promo-photo-input" data-i="${i}" style="display:none">
+          <label style="display:block;margin-top:9px;font-size:11px;color:var(--text-muted)">Couleur du panneau</label>
+          <select class="form-select promo-f" data-i="${i}" data-field="palette"
+                  style="width:100%;padding:6px 8px;font-size:12px;margin-top:3px">
+            ${PROMO_PALETTES.map(c => `<option value="${c}" ${p.palette === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;gap:6px;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--text-muted)">Bandeau ${i + 1}</span>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-secondary promo-up"   data-i="${i}" title="Monter"    ${i === 0 ? 'disabled' : ''} style="padding:4px 9px">↑</button>
+              <button class="btn btn-secondary promo-down" data-i="${i}" title="Descendre" ${i === promos.length - 1 ? 'disabled' : ''} style="padding:4px 9px">↓</button>
+              <button class="btn btn-secondary promo-del"  data-i="${i}" title="Supprimer ce bandeau" style="padding:4px 9px;color:#e05c5c">✕</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+            <div>
+              <label style="font-size:11px;color:var(--text-muted)">Étiquette</label>
+              <input class="form-input promo-f" data-i="${i}" data-field="eyebrow" value="${esc(p.eyebrow || '')}"
+                     placeholder="Nouveau" style="width:100%;padding:7px 9px;font-size:13px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-muted)">Titre</label>
+              <input class="form-input promo-f" data-i="${i}" data-field="title" value="${esc(p.title || '')}"
+                     placeholder="Titre du bandeau" style="width:100%;padding:7px 9px;font-size:13px;margin-top:3px">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-muted)">Sous-titre</label>
+            <input class="form-input promo-f" data-i="${i}" data-field="subtitle" value="${esc(p.subtitle || '')}"
+                   placeholder="Phrase d'accroche" style="width:100%;padding:7px 9px;font-size:13px;margin-top:3px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+            <div>
+              <label style="font-size:11px;color:var(--text-muted)">Bouton (CTA)</label>
+              <input class="form-input promo-f" data-i="${i}" data-field="cta" value="${esc(p.cta || '')}"
+                     placeholder="Découvrir" style="width:100%;padding:7px 9px;font-size:13px;margin-top:3px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-muted)">App liée (clic sur le bandeau)</label>
+              <select class="form-select promo-f" data-i="${i}" data-field="appId"
+                      style="width:100%;padding:7px 9px;font-size:13px;margin-top:3px">
+                <option value="">— aucune (bandeau non cliquable) —</option>
+                ${apps.map(a => `<option value="${esc(a.id)}" ${p.appId === a.id ? 'selected' : ''}>${esc(a.title || a.id)} · ${esc(a.id)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const renderList = () => { listEl.innerHTML = promos.map((p, i) => cardHTML(p, i)).join(''); wire(); };
+
+    // Upload photo d'un bandeau (réutilise le pipeline screenshot du catalogue).
+    const uploadPhoto = async (file, i) => {
+      if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) { toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error'); return; }
+      if (file.size > 3 * 1024 * 1024) { toast('Image trop volumineuse (max 3 Mo)', 'error'); return; }
+      const slot = listEl.querySelector(`.promo-photo-slot[data-i="${i}"]`);
+      if (slot) slot.style.opacity = '.5';
+      try {
+        const dataBase64 = await fileToBase64(file);
+        const res = await api('/api/admin/screenshot', 'POST', {
+          appId: `promo:${promos[i].id}`, mime: file.type, dataBase64, tenantId: 'default',
+        });
+        if (!res?.id) throw new Error('Réponse upload invalide');
+        if (promos[i].imageId) api(`/api/admin/screenshot/${encodeURIComponent(promos[i].imageId)}`, 'DELETE').catch(() => {});
+        promos[i].imageId = res.id;
+        renderList();
+        toast('Photo du bandeau uploadée ✓');
+      } catch (err) {
+        if (slot) slot.style.opacity = '';
+        toast(err.message || 'Erreur upload', 'error');
+      }
+    };
+
+    function wire() {
+      // Champs texte/select → met à jour catalogData.promos en mémoire.
+      listEl.querySelectorAll('.promo-f').forEach(el => {
+        el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+          promos[+el.dataset.i][el.dataset.field] = el.value;
+        });
+      });
+      // Slots photo : clic (ouvre le sélecteur / supprime) + glisser-déposer.
+      listEl.querySelectorAll('.promo-photo-slot').forEach(slot => {
+        const i = +slot.dataset.i;
+        const input = listEl.querySelector(`.promo-photo-input[data-i="${i}"]`);
+        slot.addEventListener('click', (e) => {
+          if (e.target.closest('.promo-photo-del')) {
+            if (promos[i].imageId) api(`/api/admin/screenshot/${encodeURIComponent(promos[i].imageId)}`, 'DELETE').catch(() => {});
+            promos[i].imageId = '';
+            renderList(); toast('Photo retirée'); return;
+          }
+          input.value = ''; input.click();
+        });
+        slot.addEventListener('dragover',  (e) => { e.preventDefault(); slot.style.borderColor = '#6366f1'; slot.style.background = 'rgba(99,102,241,.08)'; });
+        slot.addEventListener('dragleave', ()  => { slot.style.borderColor = ''; slot.style.background = ''; });
+        slot.addEventListener('drop', (e) => {
+          e.preventDefault(); slot.style.borderColor = ''; slot.style.background = '';
+          const file = e.dataTransfer?.files?.[0]; if (file) uploadPhoto(file, i);
+        });
+        input.addEventListener('change', () => { const f = input.files?.[0]; if (f) uploadPhoto(f, i); });
+      });
+      // Réordonnancement + suppression.
+      listEl.querySelectorAll('.promo-up').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.i; if (i <= 0) return;
+        [promos[i - 1], promos[i]] = [promos[i], promos[i - 1]]; renderList();
+      }));
+      listEl.querySelectorAll('.promo-down').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.i; if (i >= promos.length - 1) return;
+        [promos[i + 1], promos[i]] = [promos[i], promos[i + 1]]; renderList();
+      }));
+      listEl.querySelectorAll('.promo-del').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.i;
+        if (!confirm('Supprimer ce bandeau ?')) return;
+        // On NE supprime PAS la photo côté serveur : tant que ce n'est pas
+        // sauvegardé, le bandeau live (D1) la référence encore. Orpheline = sans gravité.
+        promos.splice(i, 1); renderList(); setCount();
+      }));
+    }
+
+    renderList();
+
+    panel.querySelector('#btn-add-promo').addEventListener('click', () => {
+      promos.push({
+        id: _newPromoId(), eyebrow: '', title: '', subtitle: '', cta: 'Découvrir',
+        appId: '', palette: PROMO_PALETTES[promos.length % PROMO_PALETTES.length], imageId: '',
+      });
+      renderList(); setCount();
+      listEl.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    panel.querySelector('#btn-save-promos').addEventListener('click', async () => {
+      const btn = panel.querySelector('#btn-save-promos');
+      btn.disabled = true; btn.textContent = '…';
+      catalogData.promos = promos.map(p => ({
+        id: p.id || _newPromoId(),
+        eyebrow:  (p.eyebrow  || '').trim(),
+        title:    (p.title    || '').trim(),
+        subtitle: (p.subtitle || '').trim(),
+        cta:      (p.cta      || '').trim(),
+        appId:    p.appId || '',
+        palette:  PROMO_PALETTES.includes(p.palette) ? p.palette : 'indigo',
+        imageId:  p.imageId || '',
+      }));
+      catalogData.updatedAt = new Date().toISOString().slice(0, 10);
+      try {
+        await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+        toast('Bandeaux « À la une » enregistrés ✓');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      btn.disabled = false; btn.textContent = 'Sauvegarder';
+    });
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
 // Champs metadata sync depuis le fichier statique vers D1 (Sprint sync v2).
 // Exclut category/published/price/lifetimePrice/plan car ces champs sont
 // souvent ajustes manuellement en admin D1 (pricing par tenant, etc.).
@@ -1973,12 +2250,7 @@ function openKStoreFicheEditor(idx, panel) {
                   overflow:hidden;cursor:pointer;transition:border-color .12s ease, background .12s ease">
         <img src="${API_BASE}/api/screenshot/${esc(shotIds[i])}" alt=""
              style="width:100%;height:100%;object-fit:cover;border-radius:8px;pointer-events:none">
-        <button type="button" class="ks-shot-delete" data-shot="${i}"
-                style="position:absolute;top:6px;right:6px;width:24px;height:24px;
-                       border-radius:50%;background:rgba(0,0,0,.75);color:#fff;
-                       border:0;cursor:pointer;font-size:12px;line-height:1;
-                       display:flex;align-items:center;justify-content:center"
-                title="Supprimer cette capture">✕</button>
+        ${_imgActionsBar('class="ks-shot-delete" data-shot="' + i + '"', true)}
       </div>`;
 
   // Tuile d'ajout en fin de liste (target = 'add').
@@ -2005,11 +2277,7 @@ function openKStoreFicheEditor(idx, panel) {
   const iconPreviewHTML = () => currentIconId
     ? `<img src="${API_BASE}/api/screenshot/${esc(currentIconId)}" alt=""
             style="width:100%;height:100%;object-fit:cover;border-radius:18px;pointer-events:none">
-       <button type="button" id="ksf-icon-delete"
-               style="position:absolute;top:4px;right:4px;width:22px;height:22px;
-                      border-radius:50%;background:rgba(0,0,0,.78);color:#fff;
-                      border:0;cursor:pointer;font-size:11px"
-               title="Retirer l'icône">✕</button>`
+       ${_imgActionsBar('id="ksf-icon-delete"', true)}`
     : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
                    height:100%;color:rgba(255,255,255,.45);font-size:10px;
                    text-align:center;padding:8px;gap:4px;pointer-events:none">
@@ -2394,11 +2662,7 @@ function openKStoreFicheEditor(idx, panel) {
   const coverPreviewHTML = () => currentCoverId
     ? `<img src="${API_BASE}/api/screenshot/${esc(currentCoverId)}" alt=""
             style="width:100%;height:100%;object-fit:cover;pointer-events:none">
-       <button type="button" id="ksf-cover-delete"
-               style="position:absolute;top:6px;right:6px;width:24px;height:24px;
-                      border-radius:50%;background:rgba(0,0,0,.78);color:#fff;
-                      border:0;cursor:pointer;font-size:12px"
-               title="Retirer la photo">✕</button>`
+       ${_imgActionsBar('id="ksf-cover-delete"')}`
     : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
                    height:100%;color:rgba(255,255,255,.45);font-size:11px;text-align:center;
                    padding:14px;gap:6px;pointer-events:none">
