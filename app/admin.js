@@ -1960,43 +1960,44 @@ function openKStoreFicheEditor(idx, panel) {
     </label>
   `).join('');
 
-  // Slots screenshots — drag-and-drop fonctionnel
-  // shotIds est cloné pour permettre l'annulation (revert sur cancel modal)
-  const shotIds = Array.isArray(item.screenshots) ? [...item.screenshots] : [];
+  // Slots screenshots — nombre ILLIMITÉ (carrousel fiche détail).
+  // shotIds est cloné (revert possible sur annulation) et tenu sans trous :
+  // une suppression splice l'entrée, un ajout push à la fin.
+  let shotIds = (Array.isArray(item.screenshots) ? item.screenshots : []).filter(Boolean);
 
-  const shotSlot = (i) => {
-    const sid = shotIds[i];
-    const preview = sid
-      ? `<img src="${API_BASE}/api/screenshot/${esc(sid)}" alt=""
-              style="width:100%;height:100%;object-fit:cover;border-radius:8px;
-                     pointer-events:none">
-         <button type="button" class="ks-shot-delete" data-shot="${i}"
-                 style="position:absolute;top:6px;right:6px;width:24px;height:24px;
-                        border-radius:50%;background:rgba(0,0,0,.75);color:#fff;
-                        border:0;cursor:pointer;font-size:12px;line-height:1;
-                        display:flex;align-items:center;justify-content:center"
-                 title="Supprimer cette capture">✕</button>`
-      : `<div class="ks-shot-empty"
-              style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-                     height:100%;color:rgba(255,255,255,.45);font-size:11px;text-align:center;
-                     padding:14px;gap:6px;pointer-events:none">
-           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                style="width:22px;height:22px;opacity:.6">
-             <rect x="3" y="3" width="18" height="18" rx="2"/>
-             <circle cx="8.5" cy="8.5" r="1.5"/>
-             <polyline points="21 15 16 10 5 21"/>
-           </svg>
-           <div><strong>Capture ${i+1}</strong></div>
-           <div style="opacity:.75">Glissez une image ici<br>ou cliquez pour parcourir</div>
-         </div>`;
-    return `
+  // Tuile d'une capture déjà uploadée (index i dans shotIds).
+  const filledShotSlot = (i) => `
       <div class="ks-shot-slot" data-shot="${i}"
+           style="position:relative;aspect-ratio:16/10;background:rgba(255,255,255,.04);
+                  border:1.5px solid rgba(255,255,255,.10);border-radius:8px;
+                  overflow:hidden;cursor:pointer;transition:border-color .12s ease, background .12s ease">
+        <img src="${API_BASE}/api/screenshot/${esc(shotIds[i])}" alt=""
+             style="width:100%;height:100%;object-fit:cover;border-radius:8px;pointer-events:none">
+        <button type="button" class="ks-shot-delete" data-shot="${i}"
+                style="position:absolute;top:6px;right:6px;width:24px;height:24px;
+                       border-radius:50%;background:rgba(0,0,0,.75);color:#fff;
+                       border:0;cursor:pointer;font-size:12px;line-height:1;
+                       display:flex;align-items:center;justify-content:center"
+                title="Supprimer cette capture">✕</button>
+      </div>`;
+
+  // Tuile d'ajout en fin de liste (target = 'add').
+  const addShotSlot = () => `
+      <div class="ks-shot-slot ks-shot-add" data-shot="add"
            style="position:relative;aspect-ratio:16/10;background:rgba(255,255,255,.04);
                   border:1.5px dashed rgba(255,255,255,.12);border-radius:8px;
                   overflow:hidden;cursor:pointer;transition:border-color .12s ease, background .12s ease">
-        ${preview}
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100%;color:rgba(255,255,255,.45);font-size:11px;text-align:center;
+                    padding:14px;gap:6px;pointer-events:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+               style="width:22px;height:22px;opacity:.6">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <div><strong>Ajouter une capture</strong></div>
+          <div style="opacity:.75">Glissez une image ici<br>ou cliquez pour parcourir</div>
+        </div>
       </div>`;
-  };
 
   // ── Icône (pictogramme de profil app) ──
   let currentIconId  = item.iconId  || null;
@@ -2134,9 +2135,9 @@ function openKStoreFicheEditor(idx, panel) {
         </p>
       </div>
 
-      <!-- Photo de présentation (cover "À la une pour vous") -->
+      <!-- Image de tête de la carte (cover) -->
       <div>
-        <label class="form-label">Photo de présentation (cards "À la une pour vous")</label>
+        <label class="form-label">Image de tête de la carte</label>
         <div id="ksf-cover-slot"
              style="position:relative;aspect-ratio:16/10;max-width:340px;
                     background:rgba(255,255,255,.04);
@@ -2147,21 +2148,21 @@ function openKStoreFicheEditor(idx, panel) {
         <input type="file" id="ksf-cover-input" accept="image/jpeg,image/png,image/webp,image/gif"
                style="display:none">
         <p class="form-hint" style="opacity:.55;margin-top:4px">
-          Format 16:10 recommandé. Affichée dans le rail "À la une pour vous"
-          et "Également pour vous" du Key-Store.
+          Format 16:10 recommandé. C'est l'image affichée en HAUT de la carte de
+          l'app partout dans le Key-Store (catalogue, "À la une", "Également pour
+          vous"). Sans image, un léger dégradé de couleur prend le relais.
         </p>
       </div>
 
       <div>
-        <label class="form-label">Captures d'écran (3 max)</label>
-        <div id="ksf-shots" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px">
-          ${shotSlot(0)}${shotSlot(1)}${shotSlot(2)}
-        </div>
+        <label class="form-label">Captures d'écran (carrousel — autant que vous voulez)</label>
+        <div id="ksf-shots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px"></div>
         <input type="file" id="ksf-file-input" accept="image/jpeg,image/png,image/webp,image/gif"
                style="display:none">
         <p class="form-hint" style="opacity:.55;margin-top:4px">
-          JPG, PNG, WebP ou GIF — 3 Mo max par image. L'upload est immédiat ;
-          n'oubliez pas de cliquer "Enregistrer la fiche" pour valider.
+          JPG, PNG, WebP ou GIF — 3 Mo max par image. Ajoutez-en autant que vous
+          voulez : elles défilent dans le carrousel de la fiche détail de l'app.
+          L'upload est immédiat ; cliquez "Enregistrer la fiche" pour valider.
         </p>
       </div>
     </div>
@@ -2181,19 +2182,20 @@ function openKStoreFicheEditor(idx, panel) {
     subSel.innerHTML = buildSubOptions(catSel.value, null);
   });
 
-  // ── Drag-and-drop / click upload des screenshots ──────────────
-  const shotsContainer = document.getElementById('ksf-shots');
-  const fileInput      = document.getElementById('ksf-file-input');
-  let pendingSlotIdx   = -1;   // slot ciblé par le file picker
+  // ── Drag-and-drop / click upload des screenshots (illimité) ───
+  const shotsContainer  = document.getElementById('ksf-shots');
+  const fileInput       = document.getElementById('ksf-file-input');
+  let pendingShotTarget = null;   // index numérique d'un slot OU 'add'
 
-  // Re-render un slot en place (sans toucher au reste du formulaire)
-  const refreshSlot = (i) => {
-    const old = shotsContainer.querySelector(`.ks-shot-slot[data-shot="${i}"]`);
-    if (!old) return;
-    const tmp = document.createElement('div');
-    tmp.innerHTML = shotSlot(i).trim();
-    old.replaceWith(tmp.firstChild);
+  // Rebuild complet de la grille : toutes les captures + la tuile d'ajout finale.
+  const renderShots = () => {
+    shotsContainer.innerHTML =
+      shotIds.map((_, i) => filledShotSlot(i)).join('') + addShotSlot();
   };
+  renderShots();
+
+  // Normalise data-shot ('add' ou index numérique).
+  const targetOf = (slot) => slot.dataset.shot === 'add' ? 'add' : +slot.dataset.shot;
 
   // Lecture fichier → base64 (sans le préfixe "data:...,")
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -2207,8 +2209,8 @@ function openKStoreFicheEditor(idx, panel) {
     reader.readAsDataURL(file);
   });
 
-  // Upload + assign à un slot
-  const uploadToSlot = async (file, slotIdx) => {
+  // Upload + ajout (target='add') ou remplacement (target=index)
+  const uploadShot = async (file, target) => {
     if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) {
       toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
       return;
@@ -2218,7 +2220,7 @@ function openKStoreFicheEditor(idx, panel) {
       return;
     }
 
-    const slotEl = shotsContainer.querySelector(`.ks-shot-slot[data-shot="${slotIdx}"]`);
+    const slotEl = shotsContainer.querySelector(`.ks-shot-slot[data-shot="${target}"]`);
     if (slotEl) {
       slotEl.style.opacity = '.5';
       slotEl.style.pointerEvents = 'none';
@@ -2234,16 +2236,19 @@ function openKStoreFicheEditor(idx, panel) {
       });
       if (!res || !res.id) throw new Error('Réponse upload invalide');
 
-      // Si un screenshot existait déjà sur ce slot, supprime-le côté serveur
-      const oldId = shotIds[slotIdx];
-      if (oldId) {
-        api(`/api/admin/screenshot/${encodeURIComponent(oldId)}`, 'DELETE')
-          .catch(() => { /* best-effort */ });
+      if (target === 'add') {
+        shotIds.push(res.id);
+      } else {
+        // Remplacement : supprime l'ancien côté serveur (best-effort)
+        const oldId = shotIds[target];
+        if (oldId) {
+          api(`/api/admin/screenshot/${encodeURIComponent(oldId)}`, 'DELETE')
+            .catch(() => { /* best-effort */ });
+        }
+        shotIds[target] = res.id;
       }
-
-      shotIds[slotIdx] = res.id;
-      refreshSlot(slotIdx);
-      toast(`Capture ${slotIdx + 1} uploadée ✓`);
+      renderShots();
+      toast('Capture uploadée ✓');
     } catch (err) {
       if (slotEl) {
         slotEl.style.opacity = '';
@@ -2259,22 +2264,22 @@ function openKStoreFicheEditor(idx, panel) {
     const delBtn = e.target.closest('.ks-shot-delete');
     if (delBtn) {
       e.stopPropagation();
-      const i = +delBtn.dataset.shot;
+      const i  = +delBtn.dataset.shot;
       const id = shotIds[i];
       if (id) {
         api(`/api/admin/screenshot/${encodeURIComponent(id)}`, 'DELETE')
           .catch(() => { /* best-effort */ });
       }
-      shotIds[i] = undefined;
-      refreshSlot(i);
-      toast(`Capture ${i + 1} supprimée`);
+      shotIds.splice(i, 1);
+      renderShots();
+      toast('Capture supprimée');
       return;
     }
 
     // Clic sur un slot → ouvre le file picker
     const slot = e.target.closest('.ks-shot-slot');
     if (slot) {
-      pendingSlotIdx = +slot.dataset.shot;
+      pendingShotTarget = targetOf(slot);
       fileInput.value = '';
       fileInput.click();
     }
@@ -2301,13 +2306,13 @@ function openKStoreFicheEditor(idx, panel) {
     slot.style.borderColor = '';
     slot.style.background  = '';
     const file = e.dataTransfer?.files?.[0];
-    if (file) uploadToSlot(file, +slot.dataset.shot);
+    if (file) uploadShot(file, targetOf(slot));
   });
 
   // Sélection via file picker
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
-    if (file && pendingSlotIdx >= 0) uploadToSlot(file, pendingSlotIdx);
+    if (file && pendingShotTarget !== null) uploadShot(file, pendingShotTarget);
   });
 
   // ── Upload / delete icône (pictogramme) ───────────────────────

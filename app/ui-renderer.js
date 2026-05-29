@@ -1429,13 +1429,21 @@ function _renderAppCardSmall(app) {
     // — plus lisible que shortDesc en grille. Fallback shortDesc puis vide.
     const desc = app.punchline || app.shortDesc || '';
 
-    // Carte "produit" façon App Store : bande de couleur (cover) en tête avec
+    // Photo de tête (cover) uploadée depuis l'admin (coverId). Si présente, elle
+    // remplit le haut de la carte ; sinon un léger lavé de la palette sert de fond.
+    // La couleur vive de la palette n'est plus qu'un liseré séparant haut et bas.
+    const hasCover   = !!app.coverId;
+    const coverStyle = hasCover
+        ? `background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.coverId)}')`
+        : '';
+
+    // Carte "produit" façon App Store : image de tête (cover) + liseré couleur,
     // l'icône qui chevauche le bas + étiquette catégorie, puis corps sombre
     // (nom, promesse, CTA). Volontairement différente du pad lanceur du
     // Dashboard (tuile pleine sobre) pour qu'on ne confonde plus les deux.
     return `
         <article class="ksfs-app-card" data-app-id="${app.id}" data-palette="${palette}">
-            <div class="ksfs-app-cover">
+            <div class="ksfs-app-cover${hasCover ? ' ksfs-app-cover--img' : ''}" style="${coverStyle}">
                 ${catLabel ? `<span class="ksfs-app-cat">${catLabel}</span>` : ''}
                 <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
             </div>
