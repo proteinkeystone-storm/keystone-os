@@ -33,6 +33,7 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -42,20 +43,18 @@ import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrato
 // 2 phrases. Multilingue FR natif.
 // Sprint 7.4 — Architecture LLM hybride
 // ──────────────────────────────────────────────────────────────────
-//  MODEL_ID         (Llama 3.1 8B)  → STREAMING multi-agent (8 tours)
-//                                      Streaming temps réel mot par mot
-//                                      essentiel pour la dictée vocale.
-//                                      Gemma 4 KO ici (raisonneur qui
-//                                      brûle son budget dans `reasoning`,
-//                                      bulles vides, finish_reason length).
-//  MODEL_ID_HEAVY   (Gemma 4 26B)   → ONE-SHOT : Synthesizer + insights
-//                                      Pas de streaming visible, on a
-//                                      le droit d'avoir 3-5s de latence
-//                                      pour une réponse JSON riche et
-//                                      structurée. Pattern Ghost Writer.
+//  Depuis le 2026-05-29, les DEUX usages tournent sur le même moteur
+//  unique Keystone (Mistral Small 3.1, cf. lib/ai-model.js) :
+//  MODEL_ID         → STREAMING multi-agent (8 tours). Mistral streame
+//                     proprement, sans préambule de raisonnement — exit
+//                     le piège Gemma 4 (raisonneur, bulles vides).
+//  MODEL_ID_HEAVY   → ONE-SHOT : Synthesizer + insights (JSON riche).
+//                     Même modèle ; on garde la constante distincte car
+//                     l'usage diffère (latence/max_tokens), pas le moteur.
+//  (Les agents premium Claude Sonnet/Haiku BYOK restent gérés à part.)
 // ──────────────────────────────────────────────────────────────────
-const MODEL_ID       = '@cf/meta/llama-3.1-8b-instruct';
-const MODEL_ID_HEAVY = '@cf/google/gemma-4-26b-a4b-it';
+const MODEL_ID       = KS_AI_MODEL;
+const MODEL_ID_HEAVY = KS_AI_MODEL;
 
 // ── Agent premium sur Claude Haiku (BYOK, 2026-05-28) ─────────────
 // Le Devil's Advocate est l'agent dont le caractère porte le plus le
@@ -529,17 +528,17 @@ export async function handleBrainstormingSynthesize(request, env) {
   // on appelle Claude Sonnet via Anthropic API directe (synthèse premium).
   // Sinon fallback Gemma 4 26B (Sprint 7.4) qui reste excellent.
   let synthesis;
-  let engineUsed = 'gemma';
+  let engineUsed = 'mistral';
   if (engine === 'claude' && typeof apiKey === 'string' && apiKey.length > 10) {
     synthesis = await _generateSynthesisClaude(apiKey, brief, history, todayIso);
     engineUsed = 'claude';
-    // En cas d'échec Claude (clé invalide, quota...), fallback transparent sur Gemma
+    // En cas d'échec Claude (clé invalide, quota...), fallback transparent sur Mistral
     if (synthesis.error) {
       const claudeErr = synthesis.error;
       synthesis = await _generateSynthesis(env, brief, history, todayIso);
-      engineUsed = 'gemma-fallback';
+      engineUsed = 'mistral-fallback';
       if (synthesis.error) {
-        return json({ error: `Claude KO (${claudeErr}) + Gemma KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
+        return json({ error: `Claude KO (${claudeErr}) + Mistral KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
       }
     }
   } else {

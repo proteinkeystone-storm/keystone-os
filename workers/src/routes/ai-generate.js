@@ -28,12 +28,14 @@
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
 // Réutilise la grille de quota côté ghostwriter.js. Idéalement on
 // importerait depuis là-bas, mais ghostwriter.js n'exporte pas ses
 // internals. Dupliqué temporairement — à factoriser dans lib/quota.js
 // quand on aura le 3e endpoint qui partage le quota.
-const MODEL_ID = '@cf/google/gemma-4-26b-a4b-it';
+// Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js), ex-Gemma 4.
+const MODEL_ID = KS_AI_MODEL;
 const MAX_USER_PROMPT_LENGTH   = 20000;   // budget large : pad avec system_prompt long + variables
 const MAX_SYSTEM_PROMPT_LENGTH = 30000;
 const DEFAULT_MAX_TOKENS = 8192;

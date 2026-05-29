@@ -452,7 +452,7 @@ function _buildModalHTML(initialText, presetOpts) {
                     <div id="gw-status" class="gw-status"></div>
                     <div class="gw-meta">
                         <span class="gw-quota">${_quotaLabel()}</span>
-                        <span class="gw-mode-chip">Gemma 4</span>
+                        <span class="gw-mode-chip">Mistral</span>
                         ${contextChip}
                     </div>
                 </div>
@@ -692,7 +692,7 @@ function _friendlyError(e) {
     }
     const isBackendKO = e?.status === 503 || /workers ai non configur/i.test(msg);
     if (isBackendKO) {
-        return 'Backend Gemma 4 indisponible. Voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md (Phase B).';
+        return 'Backend IA indisponible. Voir HANDOFF_GHOSTWRITER_DEPLOY_AND_CLEANUP.md (Phase B).';
     }
     // 429 → message déjà formaté par le backend (mentionne plan + reset UTC)
     if (e?.status === 429) return msg;
@@ -882,7 +882,7 @@ export function initGhostwriter() {
     document.addEventListener('keydown', _handleShortcut);
     document.addEventListener('selectionchange', _trackSelection);
 
-    console.info('[Ghost Writer] Hook initialisé. Raccourci: Cmd/Ctrl+Shift+G. Backend: Gemma 4.');
+    console.info('[Ghost Writer] Hook initialisé. Raccourci: Cmd/Ctrl+Shift+G. Backend: Mistral.');
 }
 
 /**

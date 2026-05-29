@@ -19,6 +19,7 @@ import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } f
 import { requireJWT } from '../lib/jwt.js';
 // Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
 import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -921,7 +922,8 @@ export async function handleScheduledPurge(env) {
 // résultat de qualité suffisante (1 phrase + 1 titre courts).
 // Validé sur Brainstorming Sprint 2 et migré sur Living Layer le même
 // jour (cohérence cross-Smart QR).
-const SMARTQR_MODEL_ID  = '@cf/meta/llama-3.1-8b-instruct';
+// 2026-05-29 : moteur unique Keystone (Mistral Small 3.1, cf. lib/ai-model.js), ex-Llama.
+const SMARTQR_MODEL_ID  = KS_AI_MODEL;
 // Plus de budget reasoning à prévoir. 400 tokens suffisent pour un JSON
 // court {"phrase":"...","title":"..."} (chaque champ < 100 chars).
 const SMARTQR_MAX_TOK   = 400;

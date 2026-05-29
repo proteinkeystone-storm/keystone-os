@@ -11,12 +11,13 @@
 // future si abus.
 // ══════════════════════════════════════════════════════════════════
 
-// Switch Llama 3.1 8B (2026-05-26 soir) — sur Smart QR le temps est
-// critique : le client scanne et attend devant son écran. Gemma 4
-// raisonneur prenait 5-8s avant le premier token (budget reasoning).
-// Llama 3.1 8B sort direct en ~500ms-1s pour le même résultat de qualité
-// suffisante (1 phrase courte). Confirmé sur Brainstorming Sprint 2.
-const LIVING_MODEL_ID = '@cf/meta/llama-3.1-8b-instruct';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
+
+// Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
+// Latence OK pour une phrase courte de greeting, et AUCUN budget
+// « reasoning » à prévoir (contrairement à Gemma 4, qui prenait 5-8s
+// avant le 1er token). Remplace Llama 3.1 8B le 2026-05-29.
+const LIVING_MODEL_ID = KS_AI_MODEL;
 // Plus de budget reasoning à prévoir : 300 tokens suffisent largement
 // pour 1 phrase de greeting (max 60-80 chars en pratique).
 const LIVING_MAX_TOK  = 300;

@@ -1127,7 +1127,7 @@ async function _callSynthesize(panel) {
 
     _currentSession.synthesis = payload.synthesis;
     _currentSession.synthesizedAt = payload.generated_at;
-    _currentSession.synthesisEngine = payload.engine || 'gemma';
+    _currentSession.synthesisEngine = payload.engine || 'mistral';
     _saveSessionToLibrary(_currentSession);
 
     _openSynthesisDrawer(panel, payload.synthesis);

@@ -32,8 +32,12 @@
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { verifyJWT } from '../lib/jwt.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
-const LIVING_MODEL_ID = '@cf/meta/llama-3.1-8b-instruct';
+// Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
+// Remplace Llama 3.1 8B le 2026-05-29. (Mode IA premium Claude Haiku
+// BYOK conservé plus bas, inchangé.)
+const LIVING_MODEL_ID = KS_AI_MODEL;
 const LIVING_MAX_TOK  = 300;
 const URGENT_PRIORITY = 80;
 

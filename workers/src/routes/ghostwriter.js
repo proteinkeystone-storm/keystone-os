@@ -23,8 +23,8 @@
           [ai]
           binding = "AI"
      2. Re-deploy : wrangler deploy
-     3. Vérifier dans le dashboard Cloudflare > Workers AI que Gemma 4
-        est activé (modèle @cf/google/gemma-4-26b-a4b-it).
+     3. Vérifier dans le dashboard Cloudflare > Workers AI que le modèle
+        Mistral Small 3.1 est activé (@cf/mistralai/mistral-small-3.1-24b-instruct).
      4. Free tier 10K neurones/jour. Au-delà : 0,011 $/1000 neurones.
 
    Garde-fous :
@@ -46,9 +46,11 @@
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
-// Modèle Gemma 4 sur Workers AI (April 2026 — MoE 26B / 4B actifs)
-const MODEL_ID = '@cf/google/gemma-4-26b-a4b-it';
+// Modèle par défaut Keystone : Mistral Small 3.1 24B (cf. lib/ai-model.js,
+// source de vérité unique). Remplace Gemma 4 depuis le 2026-05-29.
+const MODEL_ID = KS_AI_MODEL;
 
 // Garde-fous
 const MAX_TEXT_LENGTH    = 5000;
@@ -142,18 +144,12 @@ function _quotaPayload(plan, used) {
     unlimited : max === null,
   };
 }
-// Gemma 4 fonctionne en mode "raisonnement" sur Workers AI : il consomme
-// une grosse partie du budget tokens dans un champ `reasoning` avant de
-// produire le `content` final. Sans budget suffisant, on observe
-// finish_reason="length" et content=null.
-// Historique :
-//   - 2026-05-23 matin : 2048 → 4096 (vu en prod, texte court)
-//   - 2026-05-23 soir  : 4096 → 8192 (vu en prod sur ADMIN, texte 817
-//     chars + 5 critères stricts + raccourcir 50% → Gemma raisonne ~4K
-//     avant d'écrire). 8192 laisse ~5K pour le raisonnement + ~3K pour
-//     3 variantes (largement assez pour des textes ≤ 5000 chars).
-// Coût neurones reste OK sous le free tier 10K/jour.
-const DEFAULT_MAX_TOKENS = 8192;
+// Mistral Small 3.1 N'EST PAS un modèle raisonneur : il écrit directement
+// le `content`, sans brûler de budget dans un champ `reasoning` (au
+// contraire de Gemma 4 qui exigeait 8192). 4096 suffit donc largement pour
+// 3 variantes d'un texte ≤ 5000 chars, et c'est moins de neurones consommés.
+// Historique : 2048 → 4096 → 8192 (ère Gemma 4) → 4096 (passage Mistral, 2026-05-29).
+const DEFAULT_MAX_TOKENS = 4096;
 const MAX_MAX_TOKENS     = 16384;
 
 export async function handleGhostwriterRewrite(request, env) {

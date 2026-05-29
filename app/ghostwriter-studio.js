@@ -307,7 +307,7 @@ function _renderMain(scrollToTop) {
             </button>
             <div class="gw-meta-chips">
               <span class="gw-chip gw-chip-quota">${quotaChipText}</span>
-              <span class="gw-chip gw-chip-engine" title="Moteur backend">Gemma 4</span>
+              <span class="gw-chip gw-chip-engine" title="Moteur backend">Mistral</span>
             </div>
           </div>
         </section>
@@ -363,7 +363,7 @@ function _renderSelect(fieldId, label, options, currentVal) {
 
 function _renderVariants() {
   if (_generating) {
-    return `<div class="gw-empty"><span class="gw-spinner gw-spinner-lg"></span><br>Gemma 4 réfléchit…</div>`;
+    return `<div class="gw-empty"><span class="gw-spinner gw-spinner-lg"></span><br>Mistral rédige…</div>`;
   }
   if (!_variants || _variants.length === 0) {
     return `<div class="gw-empty">Cliquez sur <strong>« Réécrire »</strong> pour obtenir 3 variantes calibrées selon le contexte et vos critères.</div>`;
