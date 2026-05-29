@@ -142,6 +142,57 @@ export const KSTORE_FEATURED_IDS = [
     'O-IMM-002',
 ];
 
+// ── Header promo "À la une" — bandeaux publicitaires du Key-Store ──
+// Grand header en carrousel affiché en haut de l'accueil du Key-Store.
+// C'est VOTRE espace publicitaire : ajoutez/retirez des slides librement.
+//
+// Champs d'une slide :
+//   eyebrow   : petite étiquette en haut (ex : "Nouveau", "Immobilier")  [option]
+//   title     : grand titre du bandeau                                    [option]
+//   subtitle  : phrase d'accroche sous le titre                           [option]
+//   cta       : libellé du bouton (n'apparaît que si appId est défini)    [option]
+//   appId     : id d'une app → clic sur le bandeau ouvre sa fiche         [option]
+//   palette   : couleur du dégradé si pas d'image
+//               'indigo' | 'violet' | 'blue' | 'amber' | 'emerald'
+//   image     : URL d'un visuel publicitaire plein cadre.                 [option]
+//               Si renseigné, l'image remplit tout le bandeau (le texte
+//               se pose dessus avec un voile pour rester lisible).
+//               Laissez '' pour un bandeau "dégradé + texte".
+//
+// Pour un visuel pub 100 % image : mettez 'image' et laissez title/subtitle vides.
+export const KSTORE_PROMOS = [
+    {
+        id: 'promo-ghostwriter',
+        eyebrow: 'Nouveau',
+        title: 'Ghost Writer',
+        subtitle: 'Vos emails et vos textes, réécrits en 3 variantes — sans quitter Keystone.',
+        cta: 'Découvrir',
+        appId: 'A-COM-005',
+        palette: 'violet',
+        image: '',
+    },
+    {
+        id: 'promo-vefa',
+        eyebrow: 'Immobilier',
+        title: 'VEFA Studio',
+        subtitle: 'Notice descriptive + contrat de réservation : un seul outil, deux livrables.',
+        cta: 'En savoir plus',
+        appId: 'O-IMM-010',
+        palette: 'blue',
+        image: '',
+    },
+    {
+        id: 'promo-sdqr',
+        eyebrow: 'Communication',
+        title: 'Smart Dynamic QR',
+        subtitle: 'Des QR codes souverains, traçables et personnalisés — sans GAFAM.',
+        cta: 'Découvrir',
+        appId: 'A-COM-001',
+        palette: 'amber',
+        image: '',
+    },
+];
+
 // ── Helpers ──
 export function getMockApp(id) {
     return KSTORE_MOCK_APPS.find(a => a.id === id) || null;

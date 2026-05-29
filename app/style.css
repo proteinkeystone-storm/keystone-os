@@ -5517,6 +5517,152 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 
 .ksfs-content { max-width: 1400px; }
 
+/* ── Header promo "À la une" — grand bandeau publicitaire ─────────
+   Carrousel coloré en haut de l'accueil du Key-Store. Donne au Store
+   une identité visuelle propre (dégradés vifs) qui tranche avec le
+   Dashboard, et sert d'espace pub (slides image plein cadre). */
+.ksfs-hero {
+    position: relative;
+    margin: 0 0 30px;
+}
+.ksfs-hero-viewport {
+    overflow: hidden;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 18px 48px -22px rgba(0,0,0,.7);
+}
+.ksfs-hero-track {
+    display: flex;
+    transition: transform .5s cubic-bezier(.4,0,.2,1);
+}
+.ksfs-hero-slide {
+    position: relative;
+    flex: 0 0 100%;
+    min-width: 100%;
+    height: 232px;
+    display: flex;
+    align-items: center;
+    padding: 0 48px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    /* dégradé par défaut (palette indigo) si une slide n'a pas de data-palette */
+    background-color: #4338ca;
+}
+.ksfs-hero-slide--link { cursor: pointer; }
+
+/* Dégradés vifs par univers — c'est ce qui colore et différencie le Store. */
+.ksfs-hero-slide[data-palette="indigo"]  { background-image: linear-gradient(120deg, #6366f1 0%, #4338ca 52%, #312e81 100%); }
+.ksfs-hero-slide[data-palette="violet"]  { background-image: linear-gradient(120deg, #a855f7 0%, #7c3aed 52%, #4c1d95 100%); }
+.ksfs-hero-slide[data-palette="blue"]    { background-image: linear-gradient(120deg, #38bdf8 0%, #0284c7 52%, #075985 100%); }
+.ksfs-hero-slide[data-palette="amber"]   { background-image: linear-gradient(120deg, #fbbf24 0%, #f59e0b 50%, #b45309 100%); }
+.ksfs-hero-slide[data-palette="emerald"] { background-image: linear-gradient(120deg, #34d399 0%, #059669 52%, #065f46 100%); }
+
+/* Sheen lumineux haut-droite (gloss premium) — seulement sur les dégradés,
+   pas sur les visuels image pour ne pas les délaver. */
+.ksfs-hero-slide:not(.ksfs-hero-slide--img)::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(80% 130% at 88% -15%, rgba(255,255,255,.20), transparent 60%);
+}
+/* Slide avec image + texte : voile sombre dégradé à gauche pour la lisibilité. */
+.ksfs-hero-slide--img.ksfs-hero-slide--hastext::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(8,10,18,.74) 0%, rgba(8,10,18,.38) 46%, transparent 76%);
+}
+
+.ksfs-hero-text {
+    position: relative; z-index: 1;
+    max-width: 60%;
+}
+.ksfs-hero-eyebrow {
+    display: inline-block;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: #fff;
+    background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.28);
+    padding: 4px 11px; border-radius: 999px;
+    margin-bottom: 13px;
+    backdrop-filter: blur(4px);
+}
+.ksfs-hero-title {
+    font-size: 30px; font-weight: 900;
+    letter-spacing: -.02em; line-height: 1.08;
+    color: #fff;
+    margin: 0 0 9px;
+    text-shadow: 0 2px 14px rgba(0,0,0,.22);
+}
+.ksfs-hero-sub {
+    font-size: 15px; line-height: 1.45;
+    color: rgba(255,255,255,.92);
+    margin: 0; max-width: 540px;
+    text-shadow: 0 1px 10px rgba(0,0,0,.2);
+}
+.ksfs-hero-cta {
+    display: inline-flex; align-items: center; gap: 7px;
+    margin-top: 17px;
+    font-size: 13px; font-weight: 700;
+    color: #fff;
+    background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.32);
+    padding: 9px 17px; border-radius: 11px;
+    backdrop-filter: blur(4px);
+    transition: background .15s ease, transform .15s ease;
+}
+.ksfs-hero-slide--link:hover .ksfs-hero-cta {
+    background: rgba(255,255,255,.30);
+    transform: translateX(2px);
+}
+
+/* Pastilles de pagination */
+.ksfs-hero-dots {
+    position: absolute; bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 2;
+}
+.ksfs-hero-dot {
+    width: 8px; height: 8px; padding: 0;
+    border: none; border-radius: 50%;
+    background: rgba(255,255,255,.45);
+    cursor: pointer;
+    transition: background .2s ease, width .2s ease, border-radius .2s ease;
+}
+.ksfs-hero-dot.active {
+    background: #fff; width: 22px; border-radius: 4px;
+}
+
+/* Flèches (apparaissent au survol du bandeau) */
+.ksfs-hero-nav {
+    position: absolute; top: 50%;
+    transform: translateY(-50%);
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: rgba(0,0,0,.32);
+    border: 1px solid rgba(255,255,255,.22);
+    color: #fff; cursor: pointer; z-index: 2;
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0;
+    backdrop-filter: blur(4px);
+    transition: opacity .2s ease, background .15s ease;
+}
+.ksfs-hero:hover .ksfs-hero-nav { opacity: 1; }
+.ksfs-hero-nav:hover { background: rgba(0,0,0,.52); }
+.ksfs-hero-nav--prev { left: 14px; }
+.ksfs-hero-nav--next { right: 14px; }
+.ksfs-hero-nav svg { width: 18px; height: 18px; }
+
+@media (max-width: 860px) {
+    .ksfs-hero { margin-bottom: 22px; }
+    .ksfs-hero-slide { height: 184px; padding: 0 24px; }
+    .ksfs-hero-text { max-width: 86%; }
+    .ksfs-hero-title { font-size: 22px; }
+    .ksfs-hero-sub { font-size: 13px; }
+    .ksfs-hero-cta { margin-top: 13px; padding: 8px 14px; }
+    .ksfs-hero-nav { display: none; }
+}
+
 /* ── Sections "Pour gagner du temps" ─────────────────────────── */
 .ksfs-section {
     border-top: 1px solid rgba(255,255,255,.07);

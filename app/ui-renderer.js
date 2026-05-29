@@ -41,7 +41,7 @@ import {
   DEMO_MODAL_CSS,
 } from './lib/demo-modals.js';
 import {
-    KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS,
+    KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS, KSTORE_PROMOS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
     getCategoryLabel, getCategoryPath,
 } from './kstore-mock-catalog.js';
@@ -808,6 +808,8 @@ const KS_PLANS = [
 // _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
 let _ksFilter     = { kind: 'all', id: null };
 let _ksPrevFilter = null;   // utilisé pour le bouton retour depuis la vue détail
+let _ksHeroTimer  = null;   // intervalle d'auto-rotation du header promo
+let _ksHeroIndex  = 0;      // slide promo courante
 
 // Re-render le Key-Store s'il est ouvert quand le catalogue D1 arrive
 // (édité depuis l'admin → pads-loader dispatche `ks-catalog-loaded`).
@@ -950,6 +952,7 @@ function _updateKStoreMineBadge() {
 function _closeKStorePanel() {
     document.getElementById('ks-fullscreen')?.classList.remove('open');
     document.body.style.overflow = '';
+    clearInterval(_ksHeroTimer); _ksHeroTimer = null;
 }
 
 function _buildKStorePanel() {
@@ -1233,6 +1236,10 @@ function _renderKStoreItems() {
     const content = document.getElementById('ksfs-content');
     if (!content) return;
 
+    // Le header promo n'existe que sur l'accueil : toute (re)navigation coupe
+    // l'auto-rotation pour éviter qu'un timer orphelin tourne sur une autre vue.
+    clearInterval(_ksHeroTimer); _ksHeroTimer = null;
+
     // UX-6 — Badge "Mes Outils" toujours à jour (réactivation, désactivation
     // ou ouverture du panneau passent tous par _renderKStoreItems).
     _updateKStoreMineBadge();
@@ -1364,6 +1371,7 @@ function _renderKStoreItems() {
     const all = _ksGetAllApps();
 
     content.innerHTML = `
+        ${_renderKStoreHero()}
         <div class="ksfs-section-head">
             <h1 class="ksfs-section-title">Applications</h1>
             <p class="ksfs-section-sub">
@@ -1374,6 +1382,9 @@ function _renderKStoreItems() {
             ? `<div class="ksfs-empty">Le catalogue est momentanément vide.</div>`
             : `<div class="ksfs-grid">${all.map(_renderAppCardSmall).join('')}</div>`}
     `;
+
+    // Carrousel promo : câblage dots/flèches/auto-rotation après injection DOM.
+    _initKStoreHero();
 }
 
 // ── Helper de rendu de card ───────────────────────────────────
@@ -1429,6 +1440,110 @@ function _renderAppCardSmall(app) {
             <div class="ksfs-app-foot">${cta}</div>
         </article>
     `;
+}
+
+// ── Header promo "À la une" — grand bandeau publicitaire ──────
+// Carrousel affiché en haut de l'accueil du Key-Store. Les slides viennent
+// de KSTORE_PROMOS (kstore-mock-catalog.js) : c'est l'espace pub piloté par
+// la donnée. Si une slide a une `image`, elle remplit le bandeau ; sinon un
+// dégradé vif coloré par `palette` sert de fond.
+function _renderKStoreHero() {
+    const promos = (Array.isArray(KSTORE_PROMOS) ? KSTORE_PROMOS : []).filter(Boolean);
+    if (promos.length === 0) return '';
+
+    const slides = promos.map(p => {
+        const pal       = p.palette || 'indigo';
+        const hasImg    = !!p.image;
+        const hasText   = !!(p.eyebrow || p.title || p.subtitle);
+        const clickable = !!p.appId;
+        const bgStyle   = hasImg ? `background-image:url('${p.image}')` : '';
+
+        const ctaArrow = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            style="width:15px;height:15px"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+        const cta = (p.cta && clickable)
+            ? `<span class="ksfs-hero-cta">${p.cta}${ctaArrow}</span>` : '';
+
+        const textBlock = hasText ? `
+            <div class="ksfs-hero-text">
+                ${p.eyebrow  ? `<span class="ksfs-hero-eyebrow">${p.eyebrow}</span>` : ''}
+                ${p.title    ? `<h2 class="ksfs-hero-title">${p.title}</h2>` : ''}
+                ${p.subtitle ? `<p class="ksfs-hero-sub">${p.subtitle}</p>` : ''}
+                ${cta}
+            </div>` : '';
+
+        const cls = [
+            'ksfs-hero-slide',
+            hasImg ? 'ksfs-hero-slide--img' : '',
+            (hasImg && hasText) ? 'ksfs-hero-slide--hastext' : '',
+            clickable ? 'ksfs-hero-slide--link' : '',
+        ].filter(Boolean).join(' ');
+
+        return `<div class="${cls}" data-palette="${pal}"${clickable ? ` data-app-id="${p.appId}"` : ''}
+            style="${bgStyle}">${textBlock}</div>`;
+    }).join('');
+
+    const multi = promos.length > 1;
+    const dots = multi
+        ? `<div class="ksfs-hero-dots">${promos.map((_, i) =>
+            `<button class="ksfs-hero-dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="Bandeau ${i + 1}"></button>`
+          ).join('')}</div>`
+        : '';
+    const arrows = multi
+        ? `<button class="ksfs-hero-nav ksfs-hero-nav--prev" aria-label="Précédent">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
+           </button>
+           <button class="ksfs-hero-nav ksfs-hero-nav--next" aria-label="Suivant">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+           </button>`
+        : '';
+
+    return `
+        <div class="ksfs-hero" id="ksfs-hero">
+            <div class="ksfs-hero-viewport"><div class="ksfs-hero-track">${slides}</div></div>
+            ${arrows}
+            ${dots}
+        </div>
+    `;
+}
+
+// Câblage du carrousel après injection (dots, flèches, auto-rotation, clic).
+// Le hero étant recréé à chaque rendu de l'accueil, on attache les listeners
+// sur l'élément frais ; seul _ksHeroTimer (timer) est géré globalement.
+function _initKStoreHero() {
+    clearInterval(_ksHeroTimer); _ksHeroTimer = null;
+    const hero = document.getElementById('ksfs-hero');
+    if (!hero) return;
+    const track  = hero.querySelector('.ksfs-hero-track');
+    const slides = hero.querySelectorAll('.ksfs-hero-slide');
+    const dots   = hero.querySelectorAll('.ksfs-hero-dot');
+    const n = slides.length;
+    if (!track || n === 0) return;
+    _ksHeroIndex = 0;
+
+    const go = (i) => {
+        _ksHeroIndex = (i + n) % n;
+        track.style.transform = `translateX(-${_ksHeroIndex * 100}%)`;
+        dots.forEach((d, k) => d.classList.toggle('active', k === _ksHeroIndex));
+    };
+    const start = () => {
+        clearInterval(_ksHeroTimer);
+        if (n > 1) _ksHeroTimer = setInterval(() => go(_ksHeroIndex + 1), 6000);
+    };
+
+    hero.addEventListener('click', (e) => {
+        const dot = e.target.closest('.ksfs-hero-dot');
+        if (dot) { e.stopPropagation(); go(Number(dot.dataset.i)); start(); return; }
+        const prev = e.target.closest('.ksfs-hero-nav--prev');
+        const next = e.target.closest('.ksfs-hero-nav--next');
+        if (prev || next) { e.stopPropagation(); go(_ksHeroIndex + (prev ? -1 : 1)); start(); return; }
+        const slide = e.target.closest('.ksfs-hero-slide[data-app-id]');
+        if (slide) { e.stopPropagation(); _openKStoreAppDetail(slide.dataset.appId); }
+    });
+    hero.addEventListener('mouseenter', () => clearInterval(_ksHeroTimer));
+    hero.addEventListener('mouseleave', start);
+
+    go(0);
+    start();
 }
 
 // ── Page Détail App (Phase B) — style Mac App Store ──────────
