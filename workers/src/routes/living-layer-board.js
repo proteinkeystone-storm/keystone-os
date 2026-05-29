@@ -33,6 +33,7 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { verifyJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { isThrottled, recordUsage } from '../lib/ai-budget.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Remplace Llama 3.1 8B le 2026-05-29. (Mode IA premium Claude Haiku
@@ -572,6 +573,10 @@ async function _buildAiPhraseClaude(apiKey, systemPrompt, userPrompt) {
 // défaut quand pas de clé BYOK.
 async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
   if (!env.AI || typeof env.AI.run !== 'function') return null;
+  // Bridage budget IA (admin) : on saute le mode IA Workers AI → le caller
+  // retombe sur le Calculateur (stats certifiées, 0 neurone). Le Claude
+  // BYOK n'est PAS concerné (facturé ailleurs, hors neurones Cloudflare).
+  if (await isThrottled(env)) return null;
   let aiResponse;
   try {
     aiResponse = await env.AI.run(LIVING_MODEL_ID, {
@@ -592,6 +597,12 @@ async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
     || aiResponse?.text
     || aiResponse?.completion
     || '';
+  // Compteur budget IA (best-effort)
+  await recordUsage(env, 'living-layer', {
+    usage : aiResponse?.usage,
+    inText: systemPrompt + userPrompt,
+    outText: rawText,
+  });
   return _parseAiPhrase(rawText);
 }
 

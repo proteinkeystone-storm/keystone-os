@@ -262,6 +262,7 @@ const TAB_RENDERERS = {
   catalog:    renderCatalog,
   messaging:  renderMessaging,
   living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
+  budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
   monitoring: renderMonitoring,
   devices:    renderDevices,
   audit:      renderAuditLog,      // Sprint S5.4
@@ -2593,6 +2594,300 @@ async function renderMonitoring(panel) {
     panel.querySelector('#btn-refresh').addEventListener('click', () => renderMonitoring(panel));
   } catch(err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — BUDGET IA (compteur neurones Workers AI + bridage) · 2026-05-29
+// ══════════════════════════════════════════════════════════════════
+// Compte NOUS-MÊMES chaque appel Workers AI (Cloudflare n'expose aucune
+// conso temps réel fiable — tableaux à plusieurs heures de retard).
+//   • neurones = chiffre solide (notre comptage)
+//   • € = ESTIMATION à caler sur la 1re vraie facture Cloudflare
+//   • appels BYOK (Claude/Gemini via clé perso) = hors neurones, non comptés
+// Endpoints : GET /api/admin/ai-budget · POST .../throttle · POST .../threshold
+let _budgetRefreshTimer = null;
+
+const _BUDGET_TOOL_LABELS = {
+  'ghostwriter'  : 'Ghost Writer',
+  'brainstorming': 'Brainstorming',
+  'living-layer' : 'Living Layer',
+  'smart-qr'     : 'Smart QR',
+  'ai-generate'  : 'Génération texte',
+};
+function _budgetToolLabel(t) { return _BUDGET_TOOL_LABELS[t] || (t || '—'); }
+function _fmtNeurons(n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR'); }
+function _fmtEur(n)     { return (Number(n) || 0).toFixed(2).replace('.', ',') + ' €'; }
+function _budgetSvg(paths, size = 16) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex-shrink:0">${paths}</svg>`;
+}
+function _budgetBar(pct, color) {
+  const w = Math.max(0, Math.min(100, pct));
+  return `<div style="height:8px;background:var(--navy);border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+    <div style="height:100%;width:${w}%;background:${color};transition:width .35s ease"></div></div>`;
+}
+
+async function renderBudget(panel) {
+  clearInterval(_budgetRefreshTimer);
+  let state;
+  try {
+    state = await api('/api/admin/ai-budget');
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+    return;
+  }
+
+  const modelShort = (state.pricing?.model || '').includes('mistral-small-3.1')
+    ? 'Mistral Small 3.1 (24B)' : (state.pricing?.model || '—');
+
+  panel.innerHTML = `
+    <div class="section-header">
+      <h2 class="section-title" style="display:flex;align-items:center;gap:9px">
+        ${_budgetSvg('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>', 20)} Budget IA
+      </h2>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;color:var(--text-muted)">Actualisation auto · 15 s</span>
+        <button class="btn btn-secondary btn-sm" id="budget-refresh">↻ Rafraîchir</button>
+      </div>
+    </div>
+
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 18px;max-width:760px">
+      Compteur maison des appels au moteur IA interne (${esc(modelShort)}).
+      Le chiffre en <strong style="color:var(--text)">neurones</strong> est fiable&nbsp;;
+      le chiffre en <strong style="color:var(--text)">€ est une estimation</strong> à caler sur ta 1<sup>re</sup> facture Cloudflare.
+      Les générations via ta propre clé (Claude/Gemini) sont facturées ailleurs et ne sont pas comptées ici.
+    </p>
+
+    <div id="budget-banner"></div>
+    <div id="budget-meter"></div>
+
+    <!-- ── CONTRÔLES ───────────────────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
+
+      <!-- Bridage manuel -->
+      <div class="stat-card" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+          ${_budgetSvg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>')} Interrupteur IA
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0">
+          Coupe immédiatement toutes les fonctions IA internes. Les outils continuent de marcher,
+          seules les générations IA sont mises en pause.
+        </p>
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;margin-top:2px">
+          <span class="toggle-switch">
+            <input type="checkbox" id="budget-throttle" ${state.control?.throttle_on ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </span>
+          <span id="budget-throttle-label" style="font-size:13px;font-weight:600;color:${state.control?.throttle_on ? 'var(--danger)' : 'var(--success)'}">
+            ${state.control?.throttle_on ? 'IA en pause — cliquer pour réactiver' : 'IA active — cliquer pour couper'}
+          </span>
+        </label>
+        <p style="font-size:11px;color:var(--text-muted);margin:0;line-height:1.45">
+          ⚠ Réactiver l'IA désactive aussi l'auto-bridage (pour qu'il ne se redéclenche pas tout de suite).
+          Réactive l'auto-bridage ci-contre si besoin.
+        </p>
+      </div>
+
+      <!-- Auto-bridage au seuil -->
+      <div class="stat-card" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+          ${_budgetSvg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')} Coupure automatique
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0">
+          Coupe l'IA toute seule quand l'estimation du mois dépasse ce plafond.
+        </p>
+        <div style="display:flex;align-items:flex-end;gap:10px">
+          <div class="form-group" style="flex:1">
+            <label class="form-label" for="budget-threshold">Plafond mensuel (€)</label>
+            <input type="number" id="budget-threshold" class="form-input" min="0" max="10000" step="1"
+                   value="${Number(state.control?.threshold_eur ?? 10)}">
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:11px;white-space:nowrap">
+            <span class="toggle-switch">
+              <input type="checkbox" id="budget-auto" ${state.control?.auto_on ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </span>
+            <span style="font-size:12px;font-weight:600">Auto</span>
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" id="budget-save" style="align-self:flex-start">Enregistrer le réglage</button>
+      </div>
+    </div>
+  `;
+
+  _paintBudget(panel, state);
+
+  // ── Câblage des contrôles ────────────────────────────────────
+  panel.querySelector('#budget-refresh')?.addEventListener('click', () => renderBudget(panel));
+
+  panel.querySelector('#budget-throttle')?.addEventListener('change', async (e) => {
+    const on = e.target.checked;
+    e.target.disabled = true;
+    try {
+      const fresh = await api('/api/admin/ai-budget/throttle', 'POST', { on });
+      toast(on ? 'IA mise en pause' : 'IA réactivée', on ? 'error' : 'success');
+      renderBudget(panel); // resync complet (l'auto a pu être désactivé)
+      return fresh;
+    } catch (err) {
+      toast(err.message, 'error');
+      e.target.checked = !on; e.target.disabled = false;
+    }
+  });
+
+  panel.querySelector('#budget-save')?.addEventListener('click', async (e) => {
+    const eur  = Number(panel.querySelector('#budget-threshold')?.value);
+    const auto = !!panel.querySelector('#budget-auto')?.checked;
+    e.target.disabled = true; e.target.textContent = '…';
+    try {
+      await api('/api/admin/ai-budget/threshold', 'POST', { eur, auto });
+      toast('Réglage enregistré ✓');
+      renderBudget(panel);
+    } catch (err) {
+      toast(err.message, 'error');
+      e.target.disabled = false; e.target.textContent = 'Enregistrer le réglage';
+    }
+  });
+
+  // ── Auto-refresh du compteur (read-only), s'auto-coupe hors onglet ─
+  _budgetRefreshTimer = setInterval(async () => {
+    const p = document.getElementById('tab-budget');
+    if (!p || !p.classList.contains('active')) { clearInterval(_budgetRefreshTimer); return; }
+    try {
+      const fresh = await api('/api/admin/ai-budget');
+      _paintBudget(panel, fresh);
+    } catch (_) { /* silencieux : on retentera au prochain tick */ }
+  }, 15000);
+}
+
+// Peint UNIQUEMENT les zones read-only (bannière + compteur) + resynchronise
+// l'état du toggle de bridage. Ne touche jamais au champ seuil si l'admin est
+// en train de le saisir (évite d'écraser sa frappe pendant l'auto-refresh).
+function _paintBudget(panel, state) {
+  const c = state.control || {};
+  const today = state.today || {};
+  const month = state.month || {};
+
+  // ── Bannière d'état ──
+  const banner = panel.querySelector('#budget-banner');
+  if (banner) {
+    let bg, border, color, icon, title, sub;
+    if (c.throttle_on) {
+      bg = 'rgba(224,92,92,0.10)'; border = 'rgba(224,92,92,0.32)'; color = 'var(--danger)';
+      icon = _budgetSvg('<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>', 18);
+      title = 'IA en pause';
+      sub = (c.reason === 'auto')
+        ? `Coupure automatique : plafond de ${_fmtEur(c.threshold_eur)} atteint.`
+        : 'Bridage manuel activé depuis cet écran.';
+      if (c.throttled_at) { try { sub += ' Depuis le ' + new Date(c.throttled_at).toLocaleString('fr-FR'); } catch (_) {} }
+    } else if (c.near_threshold) {
+      bg = 'rgba(201,168,76,0.10)'; border = 'var(--border)'; color = 'var(--gold)';
+      icon = _budgetSvg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', 18);
+      title = `Proche du plafond (${c.pct}%)`;
+      sub = `Estimation du mois : ${_fmtEur(month.eur_est)} sur un plafond de ${_fmtEur(c.threshold_eur)}.`;
+    } else {
+      bg = 'rgba(76,175,128,0.08)'; border = 'rgba(76,175,128,0.26)'; color = 'var(--success)';
+      icon = _budgetSvg('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>', 18);
+      title = 'IA active';
+      sub = c.auto_on
+        ? `Coupure automatique armée à ${_fmtEur(c.threshold_eur)}/mois.`
+        : 'Coupure automatique désactivée.';
+    }
+    banner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:13px;background:${bg};border:1px solid ${border};border-radius:var(--radius);padding:14px 18px;margin-bottom:20px">
+        <span style="color:${color}">${icon}</span>
+        <div style="flex:1">
+          <div style="font-weight:800;font-size:14px;color:${color};letter-spacing:-0.02em">${title}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(sub)}</div>
+        </div>
+      </div>`;
+  }
+
+  // ── Compteur (stats + barres + détail par outil) ──
+  const meter = panel.querySelector('#budget-meter');
+  if (meter) {
+    const freePct  = today.free_used_pct || 0;
+    const freeColor = freePct >= 100 ? 'var(--danger)' : freePct >= 80 ? 'var(--gold)' : 'var(--success)';
+    const thrPct   = c.pct || 0;
+    const thrColor = thrPct >= 100 ? 'var(--danger)' : thrPct >= 80 ? 'var(--gold)' : 'var(--success)';
+    const byTool   = today.by_tool || [];
+
+    meter.innerHTML = `
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card">
+          <div class="stat-label">Aujourd'hui · neurones</div>
+          <div class="stat-value" style="font-size:26px">${_fmtNeurons(today.neurons)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${today.calls || 0} appel${(today.calls || 0) > 1 ? 's' : ''}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Aujourd'hui · € estimés</div>
+          <div class="stat-value" style="font-size:26px;color:${(today.eur_est || 0) > 0 ? 'var(--gold)' : 'var(--success)'}">${_fmtEur(today.eur_est)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">au-delà de l'enveloppe offerte</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ce mois · neurones</div>
+          <div class="stat-value" style="font-size:26px">${_fmtNeurons(month.neurons)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${month.calls || 0} appel${(month.calls || 0) > 1 ? 's' : ''} · ${esc(month.prefix || '')}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ce mois · € estimés</div>
+          <div class="stat-value" style="font-size:26px;color:${(month.eur_est || 0) > 0 ? 'var(--gold)' : 'var(--success)'}">${_fmtEur(month.eur_est)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">facturé par Cloudflare</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px">
+        <div class="stat-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+            <span class="stat-label" style="margin:0">Enveloppe offerte du jour</span>
+            <span style="font-size:12px;font-weight:700;color:${freeColor}">${freePct}%</span>
+          </div>
+          ${_budgetBar(freePct, freeColor)}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+            ${_fmtNeurons(today.neurons)} / ${_fmtNeurons(today.free_per_day)} neurones gratuits par jour
+          </div>
+        </div>
+        <div class="stat-card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+            <span class="stat-label" style="margin:0">Plafond mensuel</span>
+            <span style="font-size:12px;font-weight:700;color:${thrColor}">${thrPct}%</span>
+          </div>
+          ${_budgetBar(thrPct, thrColor)}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+            ${_fmtEur(month.eur_est)} estimés / ${_fmtEur(c.threshold_eur)} de plafond
+          </div>
+        </div>
+      </div>
+
+      <h3 style="font-size:13px;font-weight:700;letter-spacing:-0.02em;margin:0 0 12px">Détail du jour par outil</h3>
+      ${byTool.length === 0
+        ? '<div class="empty-state" style="padding:32px"><p style="font-size:13px">Aucun appel IA aujourd\'hui.</p></div>'
+        : `<table class="data-table">
+            <thead><tr><th>Outil</th><th>Appels</th><th>Neurones</th><th>Part du jour</th></tr></thead>
+            <tbody>${byTool.map(r => {
+              const part = today.neurons > 0 ? Math.round((r.neurons / today.neurons) * 100) : 0;
+              return `<tr>
+                <td style="font-weight:600">${esc(_budgetToolLabel(r.tool))}</td>
+                <td style="color:var(--text-muted)">${r.calls || 0}</td>
+                <td>${_fmtNeurons(r.neurons)}</td>
+                <td style="color:var(--text-muted)">${part}%</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>`}
+      <p style="font-size:11px;color:var(--text-muted);margin:14px 0 24px;line-height:1.5">
+        Barème indicatif : ${state.pricing?.usd_per_1k_neurons} $ / 1 000 neurones au-delà de
+        ${_fmtNeurons(state.pricing?.free_neurons_per_day)} offerts/jour, converti en € au taux ${state.pricing?.usd_to_eur}.
+      </p>`;
+  }
+
+  // ── Resync non-destructif du toggle de bridage ──
+  const tg = panel.querySelector('#budget-throttle');
+  if (tg && document.activeElement !== tg) {
+    tg.checked = !!c.throttle_on;
+    const lbl = panel.querySelector('#budget-throttle-label');
+    if (lbl) {
+      lbl.textContent = c.throttle_on ? 'IA en pause — cliquer pour réactiver' : 'IA active — cliquer pour couper';
+      lbl.style.color = c.throttle_on ? 'var(--danger)' : 'var(--success)';
+    }
   }
 }
 

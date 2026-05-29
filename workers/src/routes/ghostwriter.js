@@ -47,6 +47,7 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 
 // Modèle par défaut Keystone : Mistral Small 3.1 24B (cf. lib/ai-model.js,
 // source de vérité unique). Remplace Gemma 4 depuis le 2026-05-29.
@@ -183,6 +184,12 @@ export async function handleGhostwriterRewrite(request, env) {
       origin,
     );
   }
+
+  // ── Bridage budget IA (admin) — AVANT le pre-bump quota ──────
+  // Si le bridage global est actif, on coupe ici sans toucher au quota
+  // de la licence. Le frontend affiche un message clair (graceful).
+  const _throttled = await budgetGuard(env, origin);
+  if (_throttled) return _throttled;
 
   // ── Quota check pre-flight (Phase 2) ─────────────────────────
   // Pre-bump pour atomicité face aux races multi-device (plan MAX
@@ -446,6 +453,13 @@ export async function handleGhostwriterRewrite(request, env) {
       v.label = `Variante ${i + 1}`;  // fallback silencieux
     }
   }
+
+  // ── Compteur budget IA (best-effort, ne casse jamais la réponse) ──
+  await recordUsage(env, 'ghostwriter', {
+    usage : aiResponse?.usage,
+    inText: systemPrompt + text,
+    outText: rawText,
+  });
 
   // ── Réponse normalisée ───────────────────────────────────────
   // committed=true AVANT le return : le finally verra true et ne

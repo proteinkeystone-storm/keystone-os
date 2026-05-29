@@ -20,6 +20,7 @@ import { requireJWT } from '../lib/jwt.js';
 // Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
 import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { recordUsage } from '../lib/ai-budget.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -1077,6 +1078,15 @@ export async function handleSmartQrGenerate(request, env) {
     || aiResponse?.text
     || aiResponse?.completion
     || '';
+
+  // Compteur budget IA (best-effort). On COMPTE l'interstitiel mais on ne
+  // le BRIDE PAS : c'est client-facing (scans Bowling/Prométhée), peu
+  // coûteux et caché en D1 par QR — il doit toujours fonctionner.
+  await recordUsage(env, 'smart-qr', {
+    usage : aiResponse?.usage,
+    inText: systemPrompt + userPrompt,
+    outText: rawText,
+  });
 
   let parsed = null;
   try {

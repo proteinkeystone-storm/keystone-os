@@ -41,6 +41,8 @@ import { handleProxyLLM }                                               from './
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize } from './routes/brainstorming.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
+// Budget IA — compteur neurones Workers AI + bridage (2026-05-29)
+import { handleAiBudgetGet, handleAiBudgetThrottle, handleAiBudgetThreshold } from './routes/ai-budget-admin.js';
 import { handleLivingLayerGreeting }                                     from './routes/living-layer.js';
 // Living Layer V2 — Ordinateur de bord (2026-05-28)
 import { handleLivingBoard, handleLivingFeedback }                       from './routes/living-layer-board.js';
@@ -376,6 +378,13 @@ export default {
       if (licenceFlagMatch && method === 'POST') {
         return handleToggleLicenceFlag(request, env, licenceFlagMatch[1]);
       }
+
+      // ── Budget IA (2026-05-29 — compteur neurones + bridage) ──────
+      // Compteur Workers AI maison (Cloudflare n'expose aucune conso temps
+      // réel fiable) + pilotage du bridage manuel/auto. Auth KS_ADMIN_SECRET.
+      if (path === '/api/admin/ai-budget'           && method === 'GET')  return handleAiBudgetGet(request, env);
+      if (path === '/api/admin/ai-budget/throttle'  && method === 'POST') return handleAiBudgetThrottle(request, env);
+      if (path === '/api/admin/ai-budget/threshold' && method === 'POST') return handleAiBudgetThreshold(request, env);
 
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);

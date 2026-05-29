@@ -34,6 +34,7 @@ import { requireJWT } from '../lib/jwt.js';
 import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai-budget.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -446,6 +447,11 @@ async function _generateSynthesis(env, brief, history, todayIso) {
   if (!env.AI || typeof env.AI.run !== 'function') {
     return { error: 'Workers AI non disponible' };
   }
+  // Bridage budget IA (admin) : synthèse Workers AI en pause. Le Claude
+  // BYOK (appelé en amont dans le handler) reste possible, lui.
+  if (await isThrottled(env)) {
+    return { error: 'Bridage IA actif — synthèse en pause (réactivable depuis l’admin).' };
+  }
   const dialogue = history
     .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
     .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
@@ -477,6 +483,11 @@ async function _generateSynthesis(env, brief, history, todayIso) {
       || res?.choices?.[0]?.message?.content
       || res?.output?.[0]?.content?.[0]?.text
       || '').trim();
+    await recordUsage(env, 'brainstorming', {
+      usage : res?.usage,
+      inText: SYNTHESIZER_PROMPT + brief + dialogue,
+      outText: raw,
+    });
     // Parse JSON strict avec fallback regex
     let parsed;
     try {
@@ -573,6 +584,8 @@ function _parseInsightsFromText(raw) {
 
 async function _extractInsights(env, brief, history) {
   if (!env.AI || typeof env.AI.run !== 'function') return [];
+  // Bridage budget IA : insights = bonus non-critique → on n'en dépense pas.
+  if (await isThrottled(env)) return [];
   // Sprint 7.12 — capture tout le tour de table (8 agents) au lieu des 6 derniers
   const dialogue = history
     .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
@@ -599,6 +612,11 @@ async function _extractInsights(env, brief, history) {
         || res?.choices?.[0]?.message?.content
         || res?.output?.[0]?.content?.[0]?.text
         || '').trim();
+      await recordUsage(env, 'brainstorming', {
+        usage : res?.usage,
+        inText: INSIGHTS_PROMPT + brief + dialogue,
+        outText: raw,
+      });
       const parsed = _parseInsightsFromText(raw);
       if (parsed.length > 0) return parsed;
     }
@@ -622,6 +640,11 @@ async function _extractInsights(env, brief, history) {
       || res?.result?.response
       || res?.choices?.[0]?.message?.content
       || '').trim();
+    await recordUsage(env, 'brainstorming', {
+      usage : res?.usage,
+      inText: INSIGHTS_PROMPT + brief + dialogue,
+      outText: raw,
+    });
     return _parseInsightsFromText(raw);
   } catch (e) {
     try { console.log('[insights] Llama fallback exception:', e?.message || e); } catch (_) {}
@@ -798,6 +821,12 @@ export async function handleBrainstormingAgentRespond(request, env) {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
   }
 
+  // Bridage budget IA (admin) : le débat multi-agent (8 agents Workers AI)
+  // est de loin le plus gros poste de neurones → c'est le vrai levier du
+  // plafond. On coupe net ici avant d'ouvrir le stream.
+  const _throttled = await budgetGuard(env, origin);
+  if (_throttled) return _throttled;
+
   // ─────────────────────────────────────────────────────────────
   // Stream custom multi-agent
   // ─────────────────────────────────────────────────────────────
@@ -819,6 +848,11 @@ export async function handleBrainstormingAgentRespond(request, env) {
       const localHistory = [...history];
       let turnsDone = 0;
       let completeReason = 'single';
+      // Compteur budget IA : on accumule les tokens des tours Workers AI
+      // sur toute la session puis on écrit UNE fois en fin de stream (évite
+      // une écriture D1 dans la boucle chaude qui ralentirait le live).
+      let sessionInTok  = 0;
+      let sessionOutTok = 0;
 
       try {
         while (true) {
@@ -1010,6 +1044,13 @@ POSTURE
             }
           }
 
+          // Compteur budget IA : on n'accumule QUE la voie Workers AI
+          // (le Devil's Advocate via Claude BYOK est facturé ailleurs).
+          if (!streamed) {
+            sessionInTok  += estimateTokens(JSON.stringify(messages));
+            sessionOutTok += estimateTokens(fullText);
+          }
+
           // Post-process : strip alphabet gibberish + cap 2 phrases
           let cleanedText = _stripAlphaGibberish(fullText);
           cleanedText = _capSentences(cleanedText, MAX_SENTENCES_PER_TURN);
@@ -1062,6 +1103,11 @@ POSTURE
               send({ type: 'insights_update', items: insights });
             }
           } catch (e) { /* silencieux : extraction non-critique */ }
+        }
+
+        // Compteur budget IA : 1 écriture par session (best-effort).
+        if (sessionInTok > 0 || sessionOutTok > 0) {
+          await recordUsage(env, 'brainstorming', { inTokens: sessionInTok, outTokens: sessionOutTok });
         }
 
         send({ type: 'complete', reason: completeReason, turns: turnsDone });

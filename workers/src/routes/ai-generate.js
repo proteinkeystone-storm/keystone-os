@@ -29,6 +29,7 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 
 // Réutilise la grille de quota côté ghostwriter.js. Idéalement on
 // importerait depuis là-bas, mais ghostwriter.js n'exporte pas ses
@@ -125,6 +126,10 @@ export async function handleAiGenerate(request, env) {
       503, origin,
     );
   }
+
+  // ── Bridage budget IA (admin) ───────────────────────────────
+  const _throttled = await budgetGuard(env, origin);
+  if (_throttled) return _throttled;
 
   // ── Quota check + pre-bump ──────────────────────────────────
   await _ensureSchema(env);
@@ -223,6 +228,13 @@ export async function handleAiGenerate(request, env) {
       } catch (_) { diag = ' (aiResponse non-sérialisable)'; }
       return err(`Réponse Workers AI vide${diag}`, 502, origin);
     }
+
+    // Compteur budget IA (best-effort, ne casse jamais la réponse)
+    await recordUsage(env, 'ai-generate', {
+      usage : aiResponse?.usage,
+      inText: systemPrompt + userPrompt,
+      outText: rawText,
+    });
 
     // Succès — commit le quota et retourne le texte
     committed = true;

@@ -12,6 +12,7 @@
 // ══════════════════════════════════════════════════════════════════
 
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { isThrottled, recordUsage } from '../lib/ai-budget.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Latence OK pour une phrase courte de greeting, et AUCUN budget
@@ -72,6 +73,19 @@ export async function handleLivingLayerGreeting(request, env) {
   // Buckets contextuels pour le ton
   const moment = hour < 6 ? 'nuit' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
 
+  // Phrase de secours (réutilisée si bridage IA actif OU si parse KO)
+  const fallback = moment === 'nuit'        ? 'La nuit porte conseil — Keystone veille avec toi.'
+                 : moment === 'matin'       ? 'Une nouvelle journée, un atelier prêt à servir.'
+                 : moment === 'après-midi' ? 'L\'après-midi est à toi — bon flow.'
+                 :                            'Bonne fin de journée, on continue ensemble.';
+
+  // Bridage budget IA (admin) : greeting purement cosmétique → on ne
+  // dépense pas de neurones, on sert directement la phrase de secours
+  // (aucune erreur visible sous "Bonjour, X").
+  if (await isThrottled(env)) {
+    return _json({ phrase: fallback, moment, generated_at: new Date().toISOString(), throttled: true }, 200, origin);
+  }
+
   const systemPrompt = [
     'Tu es Living Layer, la couche IA chaleureuse de Keystone OS.',
     'Tu écris UNE phrase courte (max 14 mots) affichée sous "Bonjour, ' + firstName + '".',
@@ -124,6 +138,13 @@ export async function handleLivingLayerGreeting(request, env) {
     || aiResponse?.completion
     || '';
 
+  // Compteur budget IA (best-effort, ne casse jamais le greeting)
+  await recordUsage(env, 'living-layer', {
+    usage : aiResponse?.usage,
+    inText: systemPrompt + userPrompt,
+    outText: rawText,
+  });
+
   let parsed = null;
   try {
     const cleaned = rawText
@@ -137,12 +158,7 @@ export async function handleLivingLayerGreeting(request, env) {
     }
   } catch (e) { /* fallthrough vers fallback */ }
 
-  // Fallback safe si parse échoue
-  const fallback = moment === 'nuit'        ? 'La nuit porte conseil — Keystone veille avec toi.'
-                 : moment === 'matin'       ? 'Une nouvelle journée, un atelier prêt à servir.'
-                 : moment === 'après-midi' ? 'L\'après-midi est à toi — bon flow.'
-                 :                            'Bonne fin de journée, on continue ensemble.';
-
+  // Fallback safe si parse échoue (déclaré plus haut, réutilisé ici)
   const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200) || fallback;
 
   return _json({ phrase, moment, generated_at: new Date().toISOString() }, 200, origin);
