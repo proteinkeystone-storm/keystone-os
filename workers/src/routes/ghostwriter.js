@@ -357,8 +357,7 @@ export async function handleGhostwriterRewrite(request, env) {
     const m = String(e?.message || e || '');
     if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
       return json({
-        error: 'Budget IA quotidien épuisé (allocation gratuite Cloudflare Workers AI, '
-             + 'partagée par tous les outils Keystone). Réinitialisation à 00h00 UTC.',
+        error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).',
         code : 'AI_BUDGET_EXHAUSTED',
       }, 429, origin);
     }

@@ -688,9 +688,7 @@ function _friendlyError(e) {
     // Ghost Writer de la licence. Se réinitialise à 00h UTC (~2h du matin FR).
     // Message explicite pour ne pas laisser croire à une limite personnelle.
     if (e?.code === 'AI_BUDGET_EXHAUSTED' || /\b4006\b|daily free allocation|neurons|workers paid/i.test(msg)) {
-        return 'Budget IA quotidien épuisé. C\'est l\'allocation gratuite Cloudflare partagée par tous '
-             + 'les outils IA de Keystone (Brainstorming, Smart QR…), pas ton quota Ghost Writer. '
-             + 'Il se réinitialise à 00h UTC, soit ~2h du matin (heure française) — réessaie après.';
+        return 'Limite IA quotidienne atteinte — ça repart vers 2h du matin (heure française).';
     }
     const isBackendKO = e?.status === 503 || /workers ai non configur/i.test(msg);
     if (isBackendKO) {
