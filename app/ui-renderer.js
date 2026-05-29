@@ -1429,15 +1429,21 @@ function _renderAppCardSmall(app) {
     // — plus lisible que shortDesc en grille. Fallback shortDesc puis vide.
     const desc = app.punchline || app.shortDesc || '';
 
+    // Carte "produit" façon App Store : bande de couleur (cover) en tête avec
+    // l'icône qui chevauche le bas + étiquette catégorie, puis corps sombre
+    // (nom, promesse, CTA). Volontairement différente du pad lanceur du
+    // Dashboard (tuile pleine sobre) pour qu'on ne confonde plus les deux.
     return `
         <article class="ksfs-app-card" data-app-id="${app.id}" data-palette="${palette}">
-            <div class="ksfs-app-card-top">
-                <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
+            <div class="ksfs-app-cover">
                 ${catLabel ? `<span class="ksfs-app-cat">${catLabel}</span>` : ''}
+                <div class="ksfs-app-icon" style="${iconStyle}">${iconInline}</div>
             </div>
-            <div class="ksfs-app-name">${app.title}</div>
-            <div class="ksfs-app-desc">${desc}</div>
-            <div class="ksfs-app-foot">${cta}</div>
+            <div class="ksfs-app-body">
+                <div class="ksfs-app-name">${app.title}</div>
+                <div class="ksfs-app-desc">${desc}</div>
+                <div class="ksfs-app-foot">${cta}</div>
+            </div>
         </article>
     `;
 }
