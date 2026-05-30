@@ -195,7 +195,7 @@ const TEMPLATE = {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     letter-spacing: -0.02em; min-height: 100vh; -webkit-font-smoothing: antialiased; }
   body { display: flex; justify-content: center;
-    padding: 22px 16px 30px; min-height: 100vh; }
+    padding: 22px 16px calc(112px + env(safe-area-inset-bottom, 0px)); min-height: 100vh; }
 
   .cg-shell { width: 100%; max-width: 560px; position: relative; }
 
@@ -234,10 +234,18 @@ const TEMPLATE = {
   /* Cartes de comparaison */
   .cg-cards-h { font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
     color: var(--mut); font-weight: 700; margin: 22px 4px 10px; }
-  .cg-cards { display: grid; gap: 12px; }
-  @media (min-width: 460px) { .cg-cards { grid-template-columns: 1fr 1fr; } }
-  .cg-card { border: 1px solid var(--bd); border-radius: 14px; padding: 14px 14px 12px;
+  /* Carrousel horizontal — slide lateral au doigt, snap par carte, bleed
+     jusqu'aux bords de la fenetre, peek de la carte suivante (signal scroll). */
+  .cg-cards { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    margin: 0 -18px; padding: 4px 18px 12px; scroll-padding-left: 18px;
+    scrollbar-width: none; }
+  .cg-cards::-webkit-scrollbar { display: none; }
+  .cg-card { flex: 0 0 80%; max-width: 264px; scroll-snap-align: start;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--bd); border-radius: 14px; padding: 14px 14px 12px;
     background: var(--surface); transition: border-color .15s ease, transform .15s ease; }
+  @media (min-width: 460px) { .cg-card { flex-basis: 244px; } }
   .cg-card.is-vendu { opacity: .56; }
   .cg-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .cg-card-ref { font-size: 15.5px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
@@ -255,7 +263,7 @@ const TEMPLATE = {
   .cg-spec dd { margin: 1px 0 0; font-size: 13.5px; font-weight: 600; color: var(--tx);
     white-space: nowrap; }
   .cg-card-price { font-size: 17px; font-weight: 800; color: var(--acc);
-    letter-spacing: -.01em; margin-top: 2px; white-space: nowrap; }
+    letter-spacing: -.01em; margin-top: auto; padding-top: 2px; white-space: nowrap; }
   .cg-card.is-vendu .cg-card-price { color: var(--mut); }
   /* Generic (S8) : la valeur d'un attribut libre peut être longue → wrap autorisé. */
   .cg-card-gen .cg-spec dd { white-space: normal; }
@@ -310,20 +318,35 @@ const TEMPLATE = {
     50%      { transform: scale(1.06); opacity: 1;  box-shadow: 0 0 0 7px transparent; }
   }
 
-  /* Barre de saisie */
-  .cg-inputbar { display: flex; gap: 8px; align-items: center; margin: 14px 0 2px;
-    background: var(--surface); border: 1px solid var(--bd); border-radius: 14px;
-    padding: 5px 5px 5px 14px; transition: border-color .15s ease; }
-  .cg-inputbar:focus-within { border-color: var(--acc); }
+  /* Dock de saisie — barre sticky en bas d'ecran, TOUJOURS visible. Centree
+     sur la largeur de la fenetre, fond degrade pour la detacher du contenu. */
+  .cg-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display: flex; justify-content: center; pointer-events: none;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--bg) 56%, #f6f7f900); }
+  .cg-dock-inner { width: 100%; max-width: 560px; pointer-events: auto; }
+
+  /* Barre de saisie — flashy : bord accent agence, halo colore, elevation */
+  .cg-inputbar { display: flex; gap: 8px; align-items: center;
+    background: var(--surface); border: 1.5px solid ${accent}55; border-radius: 16px;
+    padding: 6px 6px 6px 16px;
+    box-shadow: 0 12px 36px rgba(15,23,42,.18), 0 0 0 4px ${accent}14;
+    transition: border-color .18s ease, box-shadow .18s ease; }
+  .cg-inputbar:focus-within { border-color: var(--acc);
+    box-shadow: 0 16px 44px ${accent}3a, 0 0 0 4px ${accent}2a; }
   .cg-input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
-    font-family: inherit; font-size: 14.5px; color: var(--tx); letter-spacing: -.01em; padding: 9px 0; }
+    font-family: inherit; font-size: 15px; color: var(--tx); letter-spacing: -.01em; padding: 10px 0; }
   .cg-input::placeholder { color: var(--mut); }
-  .cg-send { flex: 0 0 auto; width: 38px; height: 38px; border: 0; border-radius: 10px;
-    cursor: pointer; background: var(--acc); color: var(--on-acc);
-    display: flex; align-items: center; justify-content: center; transition: opacity .15s ease, transform .12s ease; }
-  .cg-send:disabled { opacity: .45; cursor: default; }
+  .cg-send { flex: 0 0 auto; width: 44px; height: 44px; border: 0; border-radius: 13px;
+    cursor: pointer; color: var(--on-acc);
+    background: linear-gradient(135deg, var(--acc), var(--acc2));
+    box-shadow: 0 6px 16px ${accent}55;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .15s ease, transform .12s ease, box-shadow .15s ease; }
+  .cg-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 9px 22px ${accent}66; }
+  .cg-send:disabled { opacity: .45; cursor: default; box-shadow: none; }
   .cg-send:not(:disabled):active { transform: scale(.94); }
-  .cg-send svg { width: 17px; height: 17px; stroke: var(--on-acc); }
+  .cg-send svg { width: 18px; height: 18px; stroke: var(--on-acc); }
 
   /* CTA chauffé sur intention (après 2 questions / sujet prix-dispo) */
   .cg-cta.cg-cta-hot { animation: cg-glow 1.7s ease-in-out infinite; }
@@ -372,14 +395,6 @@ const TEMPLATE = {
       ${chipsHtml ? `<div class="cg-chips">${chipsHtml}</div>` : ''}
 
       <div class="cg-thread" id="cg-thread" aria-live="polite"></div>
-
-      <div class="cg-inputbar">
-        <input class="cg-input" id="cg-input" type="text" autocomplete="off" enterkeyhint="send"
-               maxlength="500" placeholder="Posez votre question…" aria-label="Votre question">
-        <button class="cg-send" id="cg-send" type="button" aria-label="Envoyer la question">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </div>
     </section>
 
     <div class="cg-cta-wrap">
@@ -396,6 +411,18 @@ const TEMPLATE = {
   </div>
 
   <div class="cg-keyfoot">${renderKeystoneFoot()}</div>
+</div>
+
+<div class="cg-dock" id="cg-dock">
+  <div class="cg-dock-inner">
+    <div class="cg-inputbar">
+      <input class="cg-input" id="cg-input" type="text" autocomplete="off" enterkeyhint="send"
+             maxlength="500" placeholder="Posez votre question…" aria-label="Votre question">
+      <button class="cg-send" id="cg-send" type="button" aria-label="Envoyer la question">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -418,7 +445,23 @@ const TEMPLATE = {
   var nbAsked = 0;
 
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
-  function down() { try { window.scrollTo(0, document.body.scrollHeight); } catch (e) {} }
+  var dock = document.getElementById('cg-dock');
+  // Dock sticky en bas : on garde le dernier message AU-DESSUS du dock. Le fil
+  // n'est pas le dernier element du body (CTA + footer sont dessous), donc on
+  // vise le bas du dernier message + la hauteur du dock, pas le bas de page.
+  function down() {
+    try {
+      var clear = (dock ? dock.offsetHeight : 84) + 14;
+      var last = thread.lastElementChild;
+      if (last) {
+        var bottom = last.getBoundingClientRect().bottom + window.scrollY;
+        var target = bottom - window.innerHeight + clear;
+        if (target > window.scrollY) window.scrollTo(0, target);
+      } else {
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+    } catch (e) {}
+  }
 
   function addUser(text) {
     var row = el('div', 'cg-row cg-row-user');
