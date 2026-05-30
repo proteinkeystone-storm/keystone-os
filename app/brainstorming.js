@@ -152,7 +152,8 @@ function _typewriterMarkEnded(agentId, fullText) {
     // full_text = version serveur autoritaire (nettoyée + capée). On la
     // mémorise pour réconcilier l'affichage à la fin du flush : ça retire
     // toute queue de parasites que l'animation a déjà peinte mais que
-    // full_text ne contient plus (cas Llama 3.1 8B, suffixe alphanumérique).
+    // full_text ne contient plus (suffixe alphanumérique émis par le moteur
+    // Workers AI, actuellement Mistral Small 3.1 24B).
     state.finalText = fullText;
     // Si le full_text serveur est plus long que ce qu'on a déjà bufferisé
     // + affiché, on append le delta (sécurité contre chunks perdus).

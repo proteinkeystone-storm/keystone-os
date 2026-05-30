@@ -59,11 +59,12 @@ const MODEL_ID_HEAVY = KS_AI_MODEL;
 
 // ── Agent premium sur Claude Haiku (BYOK, 2026-05-28) ─────────────
 // Le Devil's Advocate est l'agent dont le caractère porte le plus le
-// débat (friction, contradiction). Llama 3.1 8B le rend parfois mou.
+// débat (friction, contradiction). Le moteur de base le rend parfois mou.
 // Si l'utilisateur a posé sa clé Anthropic (Vault), CE seul agent passe
 // sur Claude Haiku 4.5 en streaming → contradictions incisives et nuancées.
-// Les 8 autres restent sur Llama (MODEL_ID inchangé → tests 5.33 OK).
-// Fallback transparent Llama si pas de clé ou si Claude échoue.
+// Les 8 autres restent sur MODEL_ID (= Mistral Small 3.1 24B depuis le
+// 2026-05-29, cf. lib/ai-model.js). Fallback transparent sur MODEL_ID si
+// pas de clé Anthropic ou si Claude échoue.
 const PREMIUM_AGENT_ID      = 'devil';
 const BRAINSTORM_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -135,10 +136,12 @@ const AGENT_BEHAVIOR_DIRECTIVES = {
 
 // Strip les artefacts de fin de génération (les modèles Workers AI
 // continuent parfois d'émettre des tokens parasites après la vraie
-// réponse). Deux signatures connues, deux passes :
-//   - Llama 3.3 fp8 : suffixe de ≥ 6 lettres minuscules consécutives.
-//   - Llama 3.1 8B  : queue "base36" entrelacée (lettres ET chiffres
-//     mêlés, ex. "Pulse".mpk0ef46zhyl).
+// réponse). Deux signatures rencontrées, deux passes — volontairement
+// AGNOSTIQUE du modèle (le moteur Keystone peut changer, cf. lib/ai-model.js) :
+//   - lettres pures : suffixe de ≥ 6 lettres minuscules (ancien mix Llama 3.3 fp8).
+//   - alphanumérique entrelacé : queue "base36" lettres+chiffres mêlés collée
+//     à la ponctuation finale, ex. "Pulse".mpk0ef46zhyl (vu sur le moteur
+//     actuel Mistral Small 3.1 24B).
 const _ALPHA_GIBBERISH_RE = /[a-z]{6,}\d{0,6}[\s.,;:!?]*$/i;
 
 function _stripAlphaGibberish(text) {
@@ -150,8 +153,9 @@ function _stripAlphaGibberish(text) {
   // Passe 1 — ancien bug Llama 3.3 fp8 : ≥ 6 lettres pures (+ digits).
   let out = text.replace(/([\s.!?;:,"'’»)\]])([a-z]{6,}\d{0,6})\s*$/i, '$1');
 
-  // Passe 2 — bug Llama 3.1 8B : token alphanumérique minuscule ≥ 10 chars
-  // mélangeant lettres ET chiffres. Un vrai mot français ne contient jamais
+  // Passe 2 — queue alphanumérique entrelacée (vue sur Mistral Small 3.1 24B) :
+  // token minuscule ≥ 10 chars mélangeant lettres ET chiffres. Un vrai mot
+  // français ne contient jamais
   // de chiffre → exiger les deux classes rend le faux positif quasi nul
   // (années, "Web3", codes à tirets… restent intacts). Sensible à la casse :
   // les noms propres "Title-Cased" ont une majuscule et ne matchent pas.
