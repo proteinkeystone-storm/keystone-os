@@ -133,21 +133,33 @@ const AGENT_BEHAVIOR_DIRECTIVES = {
   },
 };
 
-// Strip les artefacts alphabétiques de fin (Llama 3.3 fp8 bug), au cas
-// où le modèle continue de générer. Pattern : ≥ 6 lettres minuscules
-// consécutives en fin de réponse, optionnellement suivies de digits.
+// Strip les artefacts de fin de génération (les modèles Workers AI
+// continuent parfois d'émettre des tokens parasites après la vraie
+// réponse). Deux signatures connues, deux passes :
+//   - Llama 3.3 fp8 : suffixe de ≥ 6 lettres minuscules consécutives.
+//   - Llama 3.1 8B  : queue "base36" entrelacée (lettres ET chiffres
+//     mêlés, ex. "Pulse".mpk0ef46zhyl).
 const _ALPHA_GIBBERISH_RE = /[a-z]{6,}\d{0,6}[\s.,;:!?]*$/i;
 
 function _stripAlphaGibberish(text) {
   if (!text) return text;
-  // On retire d'éventuels suffixes d'alphabet, mais on protège les vrais
-  // mots français (qui font rarement ≥ 6 lettres consécutives en fin de
-  // phrase sans suivi de ponctuation ou espace AVANT le mot).
-  // Heuristique : si on a une vraie phrase, le dernier mot est suivi de
-  // ponctuation. L'alphabet bizarre n'a PAS d'espace avant — il colle
-  // direct au dernier caractère du texte légitime. Donc on cherche le
-  // pattern collé "[mot.] + alphabet".
-  return text.replace(/([\s.!?;:,])([a-z]{6,}\d{0,6})\s*$/i, '$1').trim();
+  // Heuristique commune : la vraie phrase se termine par de la ponctuation.
+  // Le parasite colle DIRECT derrière ce séparateur final, sans espace. On
+  // ne touche donc qu'un token collé en toute fin de texte, jamais le corps.
+
+  // Passe 1 — ancien bug Llama 3.3 fp8 : ≥ 6 lettres pures (+ digits).
+  let out = text.replace(/([\s.!?;:,"'’»)\]])([a-z]{6,}\d{0,6})\s*$/i, '$1');
+
+  // Passe 2 — bug Llama 3.1 8B : token alphanumérique minuscule ≥ 10 chars
+  // mélangeant lettres ET chiffres. Un vrai mot français ne contient jamais
+  // de chiffre → exiger les deux classes rend le faux positif quasi nul
+  // (années, "Web3", codes à tirets… restent intacts). Sensible à la casse :
+  // les noms propres "Title-Cased" ont une majuscule et ne matchent pas.
+  out = out.replace(/([\s.!?;:,"'’»)\]])([a-z0-9]{10,})\s*$/, (m, sep, blob) =>
+    (/[a-z]/.test(blob) && /\d/.test(blob)) ? sep : m
+  );
+
+  return out.trim();
 }
 
 // Post-process : coupe à N phrases max (Llama ignore les contraintes

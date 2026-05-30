@@ -85,6 +85,13 @@ function _typewriterTick() {
     if (state.pending.length === 0) {
       // Buffer vide → si le serveur a annoncé agent_end, on finalise
       if (state.ended) {
+        // Réconcilie au texte serveur autoritaire : retire la queue de
+        // parasites éventuellement peinte pendant l'animation (full_text
+        // est plus court car nettoyé côté Worker).
+        if (typeof state.finalText === 'string' &&
+            state.textEl.textContent !== state.finalText) {
+          state.textEl.textContent = state.finalText;
+        }
         state.textEl.classList.remove('streaming');
         _setAgentSpeaking(state.panel, aid, false);
         _typewriter.buffers.delete(aid);
@@ -141,9 +148,14 @@ function _typewriterPush(panel, agentId, textEl, chunk) {
 function _typewriterMarkEnded(agentId, fullText) {
   const state = _typewriter.buffers.get(agentId);
   if (!state) return;
-  // Si le full_text serveur est plus long que ce qu'on a déjà bufferisé
-  // + affiché, on append le delta (sécurité contre chunks perdus)
   if (typeof fullText === 'string') {
+    // full_text = version serveur autoritaire (nettoyée + capée). On la
+    // mémorise pour réconcilier l'affichage à la fin du flush : ça retire
+    // toute queue de parasites que l'animation a déjà peinte mais que
+    // full_text ne contient plus (cas Llama 3.1 8B, suffixe alphanumérique).
+    state.finalText = fullText;
+    // Si le full_text serveur est plus long que ce qu'on a déjà bufferisé
+    // + affiché, on append le delta (sécurité contre chunks perdus).
     const displayed = state.textEl.textContent || '';
     const totalKnown = displayed + state.pending;
     if (fullText.length > totalKnown.length) {
