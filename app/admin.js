@@ -160,6 +160,66 @@ async function fetchJSON(url) {
 }
 function iconEmoji(name) { return ICON_MAP[name] || ICON_MAP.default; }
 
+// ── Compression d'image avant upload ──────────────────────────────
+// POURQUOI : les images partaient brutes en base64 (jusqu'à ~4 Mo) vers D1,
+// qui plafonne la taille d'une ligne — et Safari échoue en « Load failed »
+// sur ces gros POST cross-origin. On redimensionne + ré-encode côté navigateur
+// (canvas) pour rester largement sous un budget d'octets.
+//   - format 'jpeg' (photos : cover, captures, bandeau) → léger.
+//   - format 'png'  (icône/logo) → conserve la transparence.
+//   - GIF animé déjà sous budget → laissé tel quel (le canvas l'aplatirait).
+// Retourne { base64, mime } (base64 = payload brut, sans préfixe "data:...,").
+function _readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Lecture du fichier échouée'));
+    r.readAsDataURL(file);
+  });
+}
+function _loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => reject(new Error('Image illisible (format non supporté ?)'));
+    img.src = src;
+  });
+}
+async function compressImageForUpload(file, { maxDim = 1600, budgetBytes = 700 * 1024, format = 'jpeg' } = {}) {
+  const dataUrl     = await _readFileAsDataURL(file);
+  const stripPrefix = (u) => u.slice(u.indexOf(',') + 1);
+
+  // GIF : ne pas recompresser s'il tient déjà dans le budget (préserve l'anim).
+  if (file.type === 'image/gif') {
+    const b64 = stripPrefix(dataUrl);
+    if (b64.length <= budgetBytes) return { base64: b64, mime: 'image/gif' };
+    format = 'jpeg';  // trop lourd → on l'aplatit (perd l'anim, mais upload OK)
+  }
+
+  const img     = await _loadImageEl(dataUrl);
+  const outMime = format === 'png' ? 'image/png' : 'image/jpeg';
+  let dim       = maxDim;
+  let quality   = 0.85;
+
+  // Itère : baisse d'abord la qualité JPEG, puis la dimension, jusqu'au budget.
+  for (let i = 0; i < 12; i++) {
+    const scale = Math.min(1, dim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width  * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    const out = outMime === 'image/png'
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', quality);
+    const b64 = stripPrefix(out);
+    if (b64.length <= budgetBytes) return { base64: b64, mime: outMime };
+    if (outMime === 'image/jpeg' && quality > 0.5) quality -= 0.1;
+    else dim = Math.round(dim * 0.82);
+  }
+  throw new Error('Image impossible à compresser sous la limite. Essaie une image plus légère.');
+}
+
 // ── Toast ──────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, type = 'success') {
@@ -1788,15 +1848,6 @@ async function renderPromos(panel) {
     const promos = catalogData.promos;
     const apps   = (catalogData.tools || []).filter(t => t && t.id);
 
-    // Lecture fichier → base64 (sans le préfixe "data:...,"). Helper local :
-    // celui de openKStoreFicheEditor est hors de portée ici.
-    const fileToBase64 = (file) => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => { const r = reader.result; const i = r.indexOf(','); resolve(i >= 0 ? r.slice(i + 1) : r); };
-      reader.onerror = () => reject(new Error('Lecture du fichier échouée'));
-      reader.readAsDataURL(file);
-    });
-
     panel.innerHTML = `
       <div class="section-header">
         <h2 class="section-title">À la une <span>${_promoCount(promos.length)}</span></h2>
@@ -1897,13 +1948,13 @@ async function renderPromos(panel) {
     // Upload photo d'un bandeau (réutilise le pipeline screenshot du catalogue).
     const uploadPhoto = async (file, i) => {
       if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) { toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error'); return; }
-      if (file.size > 3 * 1024 * 1024) { toast('Image trop volumineuse (max 3 Mo)', 'error'); return; }
+      if (file.size > 25 * 1024 * 1024) { toast('Image trop volumineuse (max 25 Mo)', 'error'); return; }
       const slot = listEl.querySelector(`.promo-photo-slot[data-i="${i}"]`);
       if (slot) slot.style.opacity = '.5';
       try {
-        const dataBase64 = await fileToBase64(file);
+        const { base64: dataBase64, mime } = await compressImageForUpload(file, { maxDim: 1920, budgetBytes: 800 * 1024 });
         const res = await api('/api/admin/screenshot', 'POST', {
-          appId: `promo:${promos[i].id}`, mime: file.type, dataBase64, tenantId: 'default',
+          appId: `promo:${promos[i].id}`, mime, dataBase64, tenantId: 'default',
         });
         if (!res?.id) throw new Error('Réponse upload invalide');
         if (promos[i].imageId) api(`/api/admin/screenshot/${encodeURIComponent(promos[i].imageId)}`, 'DELETE').catch(() => {});
@@ -2465,26 +2516,14 @@ function openKStoreFicheEditor(idx, panel) {
   // Normalise data-shot ('add' ou index numérique).
   const targetOf = (slot) => slot.dataset.shot === 'add' ? 'add' : +slot.dataset.shot;
 
-  // Lecture fichier → base64 (sans le préfixe "data:...,")
-  const fileToBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => {
-      const r = reader.result;
-      const i = r.indexOf(',');
-      resolve(i >= 0 ? r.slice(i + 1) : r);
-    };
-    reader.onerror = () => reject(new Error('Lecture du fichier échouée'));
-    reader.readAsDataURL(file);
-  });
-
   // Upload + ajout (target='add') ou remplacement (target=index)
   const uploadShot = async (file, target) => {
     if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) {
       toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      toast('Image trop volumineuse (max 3 Mo)', 'error');
+    if (file.size > 25 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 25 Mo)', 'error');
       return;
     }
 
@@ -2495,10 +2534,10 @@ function openKStoreFicheEditor(idx, panel) {
     }
 
     try {
-      const dataBase64 = await fileToBase64(file);
+      const { base64: dataBase64, mime } = await compressImageForUpload(file, { maxDim: 1600, budgetBytes: 700 * 1024 });
       const res = await api('/api/admin/screenshot', 'POST', {
         appId: item.id,
-        mime: file.type,
+        mime,
         dataBase64,
         tenantId: 'default',
       });
@@ -2594,16 +2633,17 @@ function openKStoreFicheEditor(idx, panel) {
       toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      toast('Image trop volumineuse (max 3 Mo)', 'error');
+    if (file.size > 25 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 25 Mo)', 'error');
       return;
     }
     iconSlot.style.opacity = '.5';
     try {
-      const dataBase64 = await fileToBase64(file);
+      // Icône/logo : PNG pour préserver la transparence, petite dimension.
+      const { base64: dataBase64, mime } = await compressImageForUpload(file, { maxDim: 512, budgetBytes: 300 * 1024, format: 'png' });
       const res = await api('/api/admin/screenshot', 'POST', {
         appId: item.id + ':icon',  // namespace dédié
-        mime: file.type, dataBase64, tenantId: 'default',
+        mime, dataBase64, tenantId: 'default',
       });
       if (!res?.id) throw new Error('Réponse upload invalide');
 
@@ -2684,16 +2724,16 @@ function openKStoreFicheEditor(idx, panel) {
       toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error');
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      toast('Image trop volumineuse (max 3 Mo)', 'error');
+    if (file.size > 25 * 1024 * 1024) {
+      toast('Image trop volumineuse (max 25 Mo)', 'error');
       return;
     }
     coverSlot.style.opacity = '.5';
     try {
-      const dataBase64 = await fileToBase64(file);
+      const { base64: dataBase64, mime } = await compressImageForUpload(file, { maxDim: 1600, budgetBytes: 700 * 1024 });
       const res = await api('/api/admin/screenshot', 'POST', {
         appId: item.id + ':cover',
-        mime: file.type, dataBase64, tenantId: 'default',
+        mime, dataBase64, tenantId: 'default',
       });
       if (!res?.id) throw new Error('Réponse upload invalide');
       if (currentCoverId) {
