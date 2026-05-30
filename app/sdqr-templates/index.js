@@ -20,6 +20,7 @@ import machineASous     from './machine-a-sous.js';
 import carteAGratter    from './carte-a-gratter.js';
 import carteFidelite   from './carte-fidelite.js';
 import boiteCadeau     from './boite-cadeau.js';
+import concierge       from './concierge.js';
 // V4 (brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter).
@@ -27,6 +28,8 @@ import boiteCadeau     from './boite-cadeau.js';
 // V4.2 livré 2026-05-26 (boite-cadeau).
 // 2026-05-30 : IA retirée (titre + message saisis en direct) ; templates
 // phrase-simple et quiz-orientation supprimés.
+// Concierge VEFA (brief BRIEF_CONCIERGE_VEFA.md) : éditeur nesté dédié
+// au Sprint 4 (programme + configs répéteur + branding couleurs/logo).
 
 const TEMPLATES = {
   [storytellingBrand.id]: storytellingBrand,
@@ -35,6 +38,7 @@ const TEMPLATES = {
   [carteAGratter.id]:     carteAGratter,
   [carteFidelite.id]:     carteFidelite,
   [boiteCadeau.id]:       boiteCadeau,
+  [concierge.id]:         concierge,
 };
 
 export function getTemplate(id) {

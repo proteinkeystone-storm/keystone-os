@@ -29,10 +29,17 @@ import { initComputedFields }                  from './lib/form-computed.js';
 // GW-integration 2026-05-24 : bouton ✦ inline Pad-Aware sur les
 // champs déclarant `ghostwriter:` (pattern Annonces Immo validé 23/05).
 import { openGhostwriterInline }               from './lib/ghostwriter-inline.js';
+// Concierge S6 : forme « à plat » programme (source de vérité PURE,
+// alignée sur vefaProgramToBlock côté Worker). Cf. lib/concierge-program.js.
+import {
+  blankProgram, blankLot, coerceProgram, validateProgramLight,
+  LOT_STATUTS, PROGRAM_STORAGE_KEY,
+}                                                from './lib/concierge-program.js';
 
 // ── Identifiants ──────────────────────────────────────────────
 const APP_ID    = 'O-IMM-010';
 const DRAFT_KEY = 'ks_vefa_studio_draft_v1';
+const MAX_QUESTIONS = 6;
 
 // ══════════════════════════════════════════════════════════════
 // Définition des champs
@@ -40,25 +47,25 @@ const DRAFT_KEY = 'ks_vefa_studio_draft_v1';
 
 // ── Bloc partagé Programme ────────────────────────────────────
 const SHARED_FIELDS = [
-  { id: 'nom_programme',  label: 'Nom du programme',          type: 'text',   placeholder: 'ex : Les Jardins du Midi',                   required: true, span: 'full' },
+  { id: 'nom_programme',  label: 'Nom du programme',          type: 'text',   placeholder: 'ex : Les Jardins du Midi',                   required: true, span: 'full' },
   { id: 'type_logement',  label: 'Type de logement',          type: 'select', options: ['T2','T3','T4','T5','Villa','Penthouse'],              required: true },
-  { id: 'surface',        label: 'Surface habitable (m²)', type: 'number', placeholder: 'ex : 75',                             required: true },
-  { id: 'etage',          label: 'Étage / Situation',    type: 'text',   placeholder: 'ex : 3ème étage, vue dégagée' },
+  { id: 'surface',        label: 'Surface habitable (m²)', type: 'number', placeholder: 'ex : 75',                             required: true },
+  { id: 'etage',          label: 'Étage / Situation',    type: 'text',   placeholder: 'ex : 3ème étage, vue dégagée' },
   { id: 'orientation',    label: 'Orientation',               type: 'select', options: ['Sud','Sud-Est','Sud-Ouest','Est','Ouest','Nord-Est','Nord-Ouest','Nord'] },
-  { id: 'annexes',        label: 'Annexes (libellé court)', type: 'text', placeholder: 'ex : Cave n°14 + Parking IRVE n°22', span: 'full' },
+  { id: 'annexes',        label: 'Annexes (libellé court)', type: 'text', placeholder: 'ex : Cave n°14 + Parking IRVE n°22', span: 'full' },
 ];
 
 // ── Mode Notice descriptive ───────────────────────────────────
 const MODE_NOTICE = {
   id:           'notice',
   label:        'Notice descriptive',
-  subtitle:     'Conforme RE 2020 — 2026',
+  subtitle:     'Conforme RE 2020 — 2026',
   action_label: 'Générer la notice',
   fields: [
     { id: 'sols',         label: 'Revêtements sols',    type: 'select', options: ['Carrelage grand format','Parquet chêne naturel','Béton ciré','Marbre','Travertin'] },
     { id: 'cuisine',      label: 'Cuisine',                  type: 'select', options: ['Entièrement équipée','Partiellement équipée (attentes)','Non équipée'] },
     { id: 'chauffage',    label: 'Mode de chauffage',        type: 'select', options: ['PAC collective','PAC individuelle','Réseau de chaleur urbain (CPCU)','Plancher chauffant électrique','Pompe à chaleur air/air'], required: true },
-    { id: 're2020',       label: 'Conformité RE 2020', type: 'select', options: ['Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)','Seuil 2028 (IC construction ≤ 415 kgCO₂eq/m²)','Seuil 2031 (Objectif bas carbone)'], required: true },
+    { id: 're2020',       label: 'Conformité RE 2020', type: 'select', options: ['Seuil 2025 (IC construction ≤ 490 kgCO₂eq/m²)','Seuil 2028 (IC construction ≤ 415 kgCO₂eq/m²)','Seuil 2031 (Objectif bas carbone)'], required: true },
     { id: 'confort_ete',  label: 'Confort d\'été', type: 'select', options: ['Brise-soleil orientables (BSO)','Volets roulants motorisés','Double vitrage à contrôle solaire','BSO + Volets motorisés','Sans dispositif spécifique'] },
     { id: 'isolation',    label: 'Type d\'isolation',        type: 'select', options: ['Biosourcée (laine de bois, chanvre, ouate)','Synthétique (PSE, laine de verre)','Mixte biosourcée + synthétique','ITI béton banché renforcé'] },
     { id: 'specificites', label: 'Spécificités & équipements', type: 'textarea', placeholder: 'Terrasse, domotique, VMC double flux, loggia…', span: 'full',
@@ -99,58 +106,58 @@ const MODE_CONTRAT = {
   subtitle:     'Art. L.261-15 CCH',
   action_label: 'Générer le contrat',
   fields: [
-    { id: 'adresse_programme',       label: 'Adresse du programme',              type: 'text',   placeholder: 'ex : 12 avenue des Lauriers, 83110 Sanary', span: 'full' },
-    { id: 'lot_numero',              label: 'Numéro de lot',                type: 'text',   placeholder: 'ex : A-203', required: true },
-    { id: 'surface_carrez',          label: 'Surface Loi Carrez (m²)',      type: 'number', placeholder: 'ex : 72.4', required: true },
-    { id: 'cadastre',                label: 'Référence cadastrale',    type: 'text',   placeholder: 'ex : Section AB n°123' },
-    { id: 'quote_parts',             label: 'Quote-parts copropriété', type: 'text',   placeholder: 'ex : 285 / 10 000' },
-    { id: 'ville',                   label: 'Ville',                             type: 'text',   placeholder: 'ex : Sanary' },
-    { id: 'departement',             label: 'Département',                  type: 'text',   placeholder: 'ex : Var (83)' },
+    { id: 'adresse_programme',       label: 'Adresse du programme',              type: 'text',   placeholder: 'ex : 12 avenue des Lauriers, 83110 Sanary', span: 'full' },
+    { id: 'lot_numero',              label: 'Numéro de lot',                type: 'text',   placeholder: 'ex : A-203', required: true },
+    { id: 'surface_carrez',          label: 'Surface Loi Carrez (m²)',      type: 'number', placeholder: 'ex : 72.4', required: true },
+    { id: 'cadastre',                label: 'Référence cadastrale',    type: 'text',   placeholder: 'ex : Section AB n°123' },
+    { id: 'quote_parts',             label: 'Quote-parts copropriété', type: 'text',   placeholder: 'ex : 285 / 10 000' },
+    { id: 'ville',                   label: 'Ville',                             type: 'text',   placeholder: 'ex : Sanary' },
+    { id: 'departement',             label: 'Département',                  type: 'text',   placeholder: 'ex : Var (83)' },
     { id: 'region',                  label: 'Région',                       type: 'select', options: ["Provence-Alpes-Côte d'Azur","Occitanie","Nouvelle-Aquitaine","Île-de-France","Auvergne-Rhône-Alpes","Bretagne","Pays de la Loire","Hauts-de-France","Grand Est","Bourgogne-Franche-Comté","Normandie","Centre-Val de Loire","Corse","DOM-TOM"] },
 
-    { id: 'vendeur_nom',             label: 'Vendeur — Raison sociale',    type: 'text',   placeholder: 'ex : SCCV Les Jardins du Midi', required: true, span: 'full' },
-    { id: 'vendeur_siren',           label: 'SIREN',                             type: 'text',   placeholder: 'ex : 123 456 789' },
-    { id: 'vendeur_rcs',             label: 'RCS',                               type: 'text',   placeholder: 'ex : Toulon B 123 456 789' },
-    { id: 'vendeur_capital',         label: 'Capital social',                    type: 'text',   placeholder: 'ex : 1 000 €' },
-    { id: 'vendeur_siege',           label: 'Siège social',                 type: 'text',   placeholder: 'ex : 5 rue Hoche, 83000 Toulon', span: 'full' },
-    { id: 'vendeur_representant',    label: 'Représenté par',          type: 'text',   placeholder: 'ex : M. Jean DUPONT, gérant' },
+    { id: 'vendeur_nom',             label: 'Vendeur — Raison sociale',    type: 'text',   placeholder: 'ex : SCCV Les Jardins du Midi', required: true, span: 'full' },
+    { id: 'vendeur_siren',           label: 'SIREN',                             type: 'text',   placeholder: 'ex : 123 456 789' },
+    { id: 'vendeur_rcs',             label: 'RCS',                               type: 'text',   placeholder: 'ex : Toulon B 123 456 789' },
+    { id: 'vendeur_capital',         label: 'Capital social',                    type: 'text',   placeholder: 'ex : 1 000 €' },
+    { id: 'vendeur_siege',           label: 'Siège social',                 type: 'text',   placeholder: 'ex : 5 rue Hoche, 83000 Toulon', span: 'full' },
+    { id: 'vendeur_representant',    label: 'Représenté par',          type: 'text',   placeholder: 'ex : M. Jean DUPONT, gérant' },
 
-    { id: 'acquereur_nom',           label: 'Acquéreur — Nom & prénom', type: 'text', placeholder: 'ex : Mme Sophie MARTIN', required: true, span: 'full' },
-    { id: 'acquereur_civilite',      label: 'Civilité / Profession',        type: 'text',   placeholder: 'ex : Mme, cadre' },
-    { id: 'acquereur_naissance',     label: 'Date de naissance',                 type: 'text',   placeholder: 'ex : 14/03/1985' },
-    { id: 'acquereur_lieu_naissance',label: 'Lieu de naissance',                 type: 'text',   placeholder: 'ex : Marseille (13)' },
-    { id: 'acquereur_adresse',       label: 'Adresse',                           type: 'text',   placeholder: 'ex : 22 rue de la République, 13001 Marseille', span: 'full' },
+    { id: 'acquereur_nom',           label: 'Acquéreur — Nom & prénom', type: 'text', placeholder: 'ex : Mme Sophie MARTIN', required: true, span: 'full' },
+    { id: 'acquereur_civilite',      label: 'Civilité / Profession',        type: 'text',   placeholder: 'ex : Mme, cadre' },
+    { id: 'acquereur_naissance',     label: 'Date de naissance',                 type: 'text',   placeholder: 'ex : 14/03/1985' },
+    { id: 'acquereur_lieu_naissance',label: 'Lieu de naissance',                 type: 'text',   placeholder: 'ex : Marseille (13)' },
+    { id: 'acquereur_adresse',       label: 'Adresse',                           type: 'text',   placeholder: 'ex : 22 rue de la République, 13001 Marseille', span: 'full' },
     { id: 'acquereur_regime',        label: 'Régime matrimonial',           type: 'select', options: ['Célibataire','Marié(e) — communauté légale','Marié(e) — séparation de biens','Marié(e) — participation aux acquêts','Pacsé(e) — indivision','Pacsé(e) — séparation','Divorcé(e)','Veuf / Veuve'] },
 
-    { id: 'prix_ht',                 label: 'Prix HT (€)',                  type: 'number', placeholder: 'ex : 233 333', required: true },
-    { id: 'prix_ttc',                label: 'Prix TTC (€)',                 type: 'number', placeholder: 'ex : 280 000', required: true },
+    { id: 'prix_ht',                 label: 'Prix HT (€)',                  type: 'number', placeholder: 'ex : 233 333', required: true },
+    { id: 'prix_ttc',                label: 'Prix TTC (€)',                 type: 'number', placeholder: 'ex : 280 000', required: true },
     { id: 'tva_taux',                label: 'Taux de TVA',                       type: 'select', options: ['20 %','5,5 % (zone ANRU / PSLA)','10 %'] },
-    { id: 'tva_montant',             label: 'Montant TVA (€)',              type: 'number', placeholder: 'ex : 46 667' },
-    { id: 'repartition_foncier_bati',label: 'Répartition foncier / bâti', type: 'text', placeholder: 'ex : 25 % foncier — 75 % bâti', span: 'full' },
-    { id: 'ech_fondations',          label: 'Échéance — Fondations (35 %)',  type: 'number', placeholder: 'ex : 98 000' },
-    { id: 'ech_hors_eau',            label: 'Échéance — Hors d\'eau (70 %)', type: 'number', placeholder: 'ex : 196 000' },
-    { id: 'ech_achevement',          label: 'Échéance — Achèvement (95 %)', type: 'number', placeholder: 'ex : 266 000' },
+    { id: 'tva_montant',             label: 'Montant TVA (€)',              type: 'number', placeholder: 'ex : 46 667' },
+    { id: 'repartition_foncier_bati',label: 'Répartition foncier / bâti', type: 'text', placeholder: 'ex : 25 % foncier — 75 % bâti', span: 'full' },
+    { id: 'ech_fondations',          label: 'Échéance — Fondations (35 %)',  type: 'number', placeholder: 'ex : 98 000' },
+    { id: 'ech_hors_eau',            label: 'Échéance — Hors d\'eau (70 %)', type: 'number', placeholder: 'ex : 196 000' },
+    { id: 'ech_achevement',          label: 'Échéance — Achèvement (95 %)', type: 'number', placeholder: 'ex : 266 000' },
 
-    { id: 'depot_montant',           label: 'Dépôt — Montant (€)',        type: 'number', placeholder: 'ex : 14 000', required: true },
-    { id: 'depot_montant_lettres',   label: 'Dépôt — Montant en lettres',     type: 'text',   placeholder: 'ex : quatorze mille euros' },
+    { id: 'depot_montant',           label: 'Dépôt — Montant (€)',        type: 'number', placeholder: 'ex : 14 000', required: true },
+    { id: 'depot_montant_lettres',   label: 'Dépôt — Montant en lettres',     type: 'text',   placeholder: 'ex : quatorze mille euros' },
     { id: 'depot_pourcentage',       label: 'Dépôt — Pourcentage',            type: 'select', options: ['5 % (livraison < 1 an)','2 % (livraison < 2 ans)','0 % (livraison > 2 ans)'], required: true },
-    { id: 'depot_plafond_legal',     label: 'Plafond légal applicable',                 type: 'text',   placeholder: 'ex : Art. R.261-28 CCH — 5 % max si livraison < 1 an' },
+    { id: 'depot_plafond_legal',     label: 'Plafond légal applicable',                 type: 'text',   placeholder: 'ex : Art. R.261-28 CCH — 5 % max si livraison < 1 an' },
     { id: 'depot_mode_versement',    label: 'Mode de versement',                             type: 'select', options: ['Virement bancaire','Chèque de banque'] },
-    { id: 'sequestre_etablissement', label: 'Séquestre — Établissement',      type: 'text',   placeholder: 'ex : Étude Maître Dupont, Toulon' },
-    { id: 'sequestre_compte',        label: 'Séquestre — Référence compte', type: 'text', placeholder: 'ex : Compte CARPA n°…' },
+    { id: 'sequestre_etablissement', label: 'Séquestre — Établissement',      type: 'text',   placeholder: 'ex : Étude Maître Dupont, Toulon' },
+    { id: 'sequestre_compte',        label: 'Séquestre — Référence compte', type: 'text', placeholder: 'ex : Compte CARPA n°…' },
 
-    { id: 'pret_montant',            label: 'Prêt — Montant sollicité (€)', type: 'number', placeholder: 'ex : 224 000' },
-    { id: 'pret_taux_max',           label: 'Prêt — Taux maximum (%)',              type: 'number', placeholder: 'ex : 4.5' },
-    { id: 'pret_duree_max',          label: 'Prêt — Durée maximum (ans)',      type: 'number', placeholder: 'ex : 25' },
-    { id: 'pret_delai',              label: 'Prêt — Délai d\'obtention (jours)', type: 'number', placeholder: 'ex : 45' },
+    { id: 'pret_montant',            label: 'Prêt — Montant sollicité (€)', type: 'number', placeholder: 'ex : 224 000' },
+    { id: 'pret_taux_max',           label: 'Prêt — Taux maximum (%)',              type: 'number', placeholder: 'ex : 4.5' },
+    { id: 'pret_duree_max',          label: 'Prêt — Durée maximum (ans)',      type: 'number', placeholder: 'ex : 25' },
+    { id: 'pret_delai',              label: 'Prêt — Délai d\'obtention (jours)', type: 'number', placeholder: 'ex : 45' },
 
-    { id: 'livraison',               label: 'Date de livraison prévisionnelle', type: 'text', placeholder: 'ex : T4 2027' },
-    { id: 'date_acte_authentique',   label: 'Date prévue acte authentique',    type: 'text', placeholder: 'ex : 30/09/2026' },
-    { id: 'penalites_retard',        label: 'Pénalités de retard',        type: 'text', placeholder: 'ex : 1/3000ème du prix par jour de retard', span: 'full' },
-    { id: 'notaire',                 label: 'Notaire instrumentaire',               type: 'text', placeholder: 'ex : Étude Maître Dupont, Toulon', span: 'full' },
-    { id: 'lieu_signature',          label: 'Lieu de signature',                    type: 'text', placeholder: 'ex : Toulon' },
-    { id: 'date_signature',          label: 'Date de signature',                    type: 'text', placeholder: 'ex : 11/05/2026' },
-    { id: 'nb_exemplaires',          label: 'Nombre d\'exemplaires',                type: 'number', placeholder: 'ex : 3' },
+    { id: 'livraison',               label: 'Date de livraison prévisionnelle', type: 'text', placeholder: 'ex : T4 2027' },
+    { id: 'date_acte_authentique',   label: 'Date prévue acte authentique',    type: 'text', placeholder: 'ex : 30/09/2026' },
+    { id: 'penalites_retard',        label: 'Pénalités de retard',        type: 'text', placeholder: 'ex : 1/3000ème du prix par jour de retard', span: 'full' },
+    { id: 'notaire',                 label: 'Notaire instrumentaire',               type: 'text', placeholder: 'ex : Étude Maître Dupont, Toulon', span: 'full' },
+    { id: 'lieu_signature',          label: 'Lieu de signature',                    type: 'text', placeholder: 'ex : Toulon' },
+    { id: 'date_signature',          label: 'Date de signature',                    type: 'text', placeholder: 'ex : 11/05/2026' },
+    { id: 'nb_exemplaires',          label: 'Nombre d\'exemplaires',                type: 'number', placeholder: 'ex : 3' },
     {
       id:          'clauses_particulieres',
       label:       'Clauses particulières & adaptations',
@@ -244,6 +251,7 @@ const MODES = { notice: MODE_NOTICE, contrat: MODE_CONTRAT };
 let _root            = null;
 let _currentMode     = 'notice';
 let _formData        = {};
+let _program         = blankProgram();   // S6 — mode « concierge »
 let _cleanupComputed = null;
 let _stylesInjected  = false;
 let _saveTimer       = null;
@@ -254,9 +262,9 @@ let _toastTimer      = null;
 // ══════════════════════════════════════════════════════════════
 
 function _saveDraft() {
-  _collectFormData();
+  _collectFormData();                         // no-op en mode concierge (.vefa-form absent)
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ mode: _currentMode, data: _formData }));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ mode: _currentMode, data: _formData, program: _program }));
     import('./vault.js').then(m => m.scheduleAutoSave?.()).catch(() => {});
   } catch (_) {}
 }
@@ -271,8 +279,9 @@ function _loadDraft() {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      _currentMode = MODES[saved.mode] ? saved.mode : 'notice';
+      _currentMode = (MODES[saved.mode] || saved.mode === 'concierge') ? saved.mode : 'notice';
       _formData    = saved.data || {};
+      _program     = coerceProgram(saved.program);
       return true;
     }
   } catch (_) {}
@@ -385,6 +394,7 @@ function _buildShell() {
 function _renderMain(scrollToTop) {
   const main = _root && _root.querySelector('[data-slot="main"]');
   if (!main) return;
+  if (_currentMode === 'concierge') { _renderConcierge(scrollToTop); return; }
   const prevScroll = scrollToTop ? 0 : main.scrollTop;
   const mode = MODES[_currentMode];
 
@@ -445,18 +455,27 @@ function _renderHero() {
                 data-act="switch-mode" data-mode="notice"
                 type="button" role="tab"
                 aria-selected="${_currentMode === 'notice'}"
-                title="Raccourci clavier : touche 1">
+                title="Raccourci clavier : touche 1">
           ${icon('file-text', 14)}&nbsp;Notice descriptive
         </button>
         <button class="vefa-tab${_currentMode === 'contrat' ? ' is-active' : ''}"
                 data-act="switch-mode" data-mode="contrat"
                 type="button" role="tab"
                 aria-selected="${_currentMode === 'contrat'}"
-                title="Raccourci clavier : touche 2">
+                title="Raccourci clavier : touche 2">
           ${icon('edit', 14)}&nbsp;Contrat de réservation
         </button>
+        <button class="vefa-tab${_currentMode === 'concierge' ? ' is-active' : ''}"
+                data-act="switch-mode" data-mode="concierge"
+                type="button" role="tab"
+                aria-selected="${_currentMode === 'concierge'}"
+                title="Raccourci clavier : touche 3">
+          ${icon('sparkles', 14)}&nbsp;Concierge IA
+        </button>
       </nav>
-      <p class="vefa-hero-subtitle">${_esc(MODES[_currentMode].subtitle)}</p>
+      <p class="vefa-hero-subtitle">${_esc(
+        MODES[_currentMode] ? MODES[_currentMode].subtitle : 'Concierge IA — 1 QR, tout le programme'
+      )}</p>
     </div>`;
 }
 
@@ -560,9 +579,10 @@ function _onClick(e) {
   if (act === 'close') { closeVefaStudio(); return; }
   if (act === 'save')  { _saveDraft(); _toast('Brouillon sauvegardé'); return; }
   if (act === 'reset') {
-    if (confirm('Effacer tout votre brouillon VEFA Studio et recommencer ?')) {
+    if (confirm('Effacer tout votre brouillon VEFA Studio et recommencer ?')) {
       try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
       _formData    = {};
+      _program     = blankProgram();
       _currentMode = 'notice';
       _renderMain(true);
       _toast('Brouillon réinitialisé');
@@ -572,6 +592,18 @@ function _onClick(e) {
   if (act === 'switch-mode') { _switchMode(btn.dataset.mode); return; }
   if (act === 'generate')    { _generate(); return; }
   if (act === 'ghostwriter') { _handleGhostwriter(btn.dataset.fieldId); return; }
+  // ── Mode Concierge (S6) : repeaters lots / FAQ / questions + envoi ──
+  if (act === 'vp-add-lot')      { _program.lots.push(blankLot());     _scheduleSave(); _renderMain(); return; }
+  if (act === 'vp-del-lot')      { _vpDelete('lots',      +btn.dataset.idx, true); return; }
+  if (act === 'vp-add-faq')      { _program.faq.push({ q: '', r: '' }); _scheduleSave(); _renderMain(); return; }
+  if (act === 'vp-del-faq')      { _vpDelete('faq',       +btn.dataset.idx, false); return; }
+  if (act === 'vp-add-question') {
+    if (_program.questions.length < MAX_QUESTIONS) { _program.questions.push(''); _scheduleSave(); _renderMain(); }
+    else _toast(`Maximum ${MAX_QUESTIONS} questions suggérées.`, true);
+    return;
+  }
+  if (act === 'vp-del-question') { _vpDelete('questions', +btn.dataset.idx, false); return; }
+  if (act === 'send-concierge')  { _sendToConcierge(); return; }
 }
 
 // ── Ghost Writer Pad-Aware (2026-05-24) ──────────────────────
@@ -611,7 +643,16 @@ function _handleGhostwriter(fieldId) {
 
 function _onInput(e) {
   const el = e.target;
-  const fieldId = (el.dataset && el.dataset.field) || el.name;
+  const d  = el.dataset || {};
+  // Mode Concierge : la saisie écrit directement dans _program (état vif),
+  // jamais dans _formData. Routage par attribut data-vp-*.
+  if (_currentMode === 'concierge') {
+    if (d.vpPath     != null) { _vpSetPath(d.vpPath, el);            _scheduleSave(); return; }
+    if (d.vpLot      != null) { _vpSetLot(+d.vpLot, d.vpKey, el);    _scheduleSave(); return; }
+    if (d.vpFaq      != null) { _vpSetFaq(+d.vpFaq, d.vpKey, el.value); _scheduleSave(); return; }
+    if (d.vpQuestion != null) { _program.questions[+d.vpQuestion] = el.value; _scheduleSave(); return; }
+  }
+  const fieldId = d.field || el.name;
   if (!fieldId) return;
   _formData[fieldId] = el.value;
   _scheduleSave();
@@ -621,6 +662,7 @@ function _onInput(e) {
  * Raccourcis globaux (actifs uniquement hors champ de saisie).
  *   1 → Notice descriptive
  *   2 → Contrat de réservation
+ *   3 → Concierge IA
  *   Échap → Fermer VEFA Studio
  */
 function _handleKeyDown(e) {
@@ -628,8 +670,9 @@ function _handleKeyDown(e) {
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (e.key === 'Escape') { closeVefaStudio(); return; }
-  if ((e.key === '1') && !e.ctrlKey && !e.metaKey) { _switchMode('notice');  return; }
-  if ((e.key === '2') && !e.ctrlKey && !e.metaKey) { _switchMode('contrat'); return; }
+  if ((e.key === '1') && !e.ctrlKey && !e.metaKey) { _switchMode('notice');    return; }
+  if ((e.key === '2') && !e.ctrlKey && !e.metaKey) { _switchMode('contrat');   return; }
+  if ((e.key === '3') && !e.ctrlKey && !e.metaKey) { _switchMode('concierge'); return; }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -637,11 +680,305 @@ function _handleKeyDown(e) {
 // ══════════════════════════════════════════════════════════════
 
 function _switchMode(mode) {
-  if (!MODES[mode] || mode === _currentMode) return;
-  _collectFormData();                                            // snapshot avant destroy
+  if (mode === _currentMode) return;
+  if (mode !== 'concierge' && !MODES[mode]) return;
+  // En mode concierge, _program est tenu à jour en continu par _onInput :
+  // rien à figer. Sinon on snapshote le formulaire notice/contrat.
+  if (_currentMode !== 'concierge') _collectFormData();          // snapshot avant destroy
   if (_cleanupComputed) { _cleanupComputed(); _cleanupComputed = null; }
   _currentMode = mode;
   _renderMain(true);                                             // scroll to top
+}
+
+// ══════════════════════════════════════════════════════════════
+// Mode Concierge (S6) — fenêtre Programme multi-lots
+// ───────────────────────────────────────────────────────────────
+// VEFA Studio saisit la « forme à plat » programme (lib/concierge-program.js)
+// puis l'envoie au Pad Smart Dynamic QR, où le QR Concierge est réellement
+// créé et géré (vue source 2 du moteur, cf. vefaProgramToBlock côté Worker).
+// L'état _program est tenu à jour en continu par _onInput ; les boutons
+// add/del re-rendent la fenêtre depuis _program.
+// ══════════════════════════════════════════════════════════════
+
+const STATUT_LABELS = { disponible: 'Disponible', optionne: 'Optionné', vendu: 'Vendu' };
+
+function _renderConcierge(scrollToTop) {
+  const main = _root && _root.querySelector('[data-slot="main"]');
+  if (!main) return;
+  const prevScroll = scrollToTop ? 0 : main.scrollTop;
+  const p     = _program;
+  const total = p.lots.length;
+
+  main.innerHTML = `
+    <div class="ws-main-inner vefa-wrap">
+      ${_renderHero()}
+      <div class="vefa-concierge">
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">Programme</div>
+            <div class="vefa-section-subtitle">Identité du programme — en-tête du concierge</div>
+          </div>
+          <div class="vefa-fields">
+            ${_vpScalar('Nom du programme', 'nom', p.nom, { span: true, required: true, placeholder: 'ex : Les Terrasses d\'Ollioules' })}
+            ${_vpScalar('Promoteur', 'promoteur', p.promoteur, { placeholder: 'ex : Promoteur Horizon' })}
+            ${_vpScalar('Ville', 'ville', p.ville, { placeholder: 'ex : Ollioules' })}
+            ${_vpScalar('Livraison prévue', 'livraison_prevue', p.livraison_prevue, { span: true, placeholder: 'ex : T4 2026' })}
+          </div>
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">Lots / Modèles</div>
+            <div class="vefa-section-subtitle">Chaque lot devient une carte comparée dans le concierge</div>
+          </div>
+          ${p.lots.map((lot, i) => _vpLotRow(lot, i, total)).join('')}
+          <button type="button" class="vefa-vp-add" data-act="vp-add-lot">${icon('plus', 14)}&nbsp;Ajouter un lot</button>
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">FAQ validée</div>
+            <div class="vefa-section-subtitle">Réponses sûres, servies telles quelles (sans IA)</div>
+          </div>
+          ${p.faq.map((f, i) => _vpFaqRow(f, i)).join('') || '<p class="vefa-vp-empty">Aucune Q/R pour l\'instant.</p>'}
+          <button type="button" class="vefa-vp-add" data-act="vp-add-faq">${icon('plus', 14)}&nbsp;Ajouter une Q/R</button>
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">Questions suggérées</div>
+            <div class="vefa-section-subtitle">Puces cliquables au scan (max ${MAX_QUESTIONS})</div>
+          </div>
+          ${p.questions.map((q, i) => _vpQuestionRow(q, i)).join('') || '<p class="vefa-vp-empty">Aucune question suggérée.</p>'}
+          ${p.questions.length < MAX_QUESTIONS
+            ? `<button type="button" class="vefa-vp-add" data-act="vp-add-question">${icon('plus', 14)}&nbsp;Ajouter une question</button>`
+            : ''}
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">Contact &amp; mentions</div>
+            <div class="vefa-section-subtitle">Relais humain proposé + mentions légales</div>
+          </div>
+          <div class="vefa-fields">
+            ${_vpScalar('Contact — Nom', 'contact.nom', p.contact.nom, { placeholder: 'ex : Service commercial' })}
+            ${_vpScalar('Contact — Téléphone', 'contact.tel', p.contact.tel, { placeholder: 'ex : 04 94 00 00 00' })}
+            ${_vpScalar('Contact — Email', 'contact.email', p.contact.email, { span: true, placeholder: 'ex : contact@agence.fr' })}
+            ${_vpScalar('Disclaimer / mentions', 'disclaimer', p.disclaimer, { type: 'textarea', span: true, placeholder: 'ex : Informations non contractuelles, sous réserve de disponibilité.' })}
+          </div>
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
+            <div class="vefa-section-title">Agence (white-label)</div>
+            <div class="vefa-section-subtitle">Nom, logo et couleurs — habille le concierge à vos marques</div>
+          </div>
+          <div class="vefa-fields">
+            ${_vpScalar('Nom de l\'agence', 'agence.nom', p.agence.nom, { span: true, required: true, placeholder: 'ex : Agence Horizon' })}
+            ${_vpScalar('Logo (URL)', 'agence.logo_url', p.agence.logo_url, { span: true, placeholder: 'https://…/logo.png' })}
+            ${_vpColor('Couleur primaire', 'agence.couleur_primaire', p.agence.couleur_primaire)}
+            ${_vpColor('Couleur secondaire', 'agence.couleur_secondaire', p.agence.couleur_secondaire)}
+          </div>
+        </div>
+
+        <div class="vefa-actions">
+          <p class="vefa-actions-hint">
+            ${icon('qr-code', 13)}&nbsp;Le QR Concierge se crée et se gère dans Smart Dynamic QR.
+          </p>
+          <button class="vefa-btn-primary" data-act="send-concierge" type="button">
+            ${icon('arrow-right', 18)}&nbsp;Envoyer vers Smart Dynamic QR
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  main.scrollTop = prevScroll;
+}
+
+// ── Builders de lignes (repeaters) ────────────────────────────
+function _vpScalar(label, path, value, opts = {}) {
+  const span = opts.span ? ' style="grid-column:1/-1"' : '';
+  const req  = opts.required ? ' <span class="vefa-req" aria-hidden="true">*</span>' : '';
+  const val  = _esc(String(value != null ? value : ''));
+  const ph   = _esc(opts.placeholder || '');
+  let input;
+  if (opts.type === 'textarea') {
+    input = `<textarea class="ws-input ws-textarea" rows="2" data-vp-path="${path}" placeholder="${ph}">${val}</textarea>`;
+  } else {
+    const t = opts.type === 'number' ? 'number' : 'text';
+    input = `<input class="ws-input" type="${t}" data-vp-path="${path}" value="${val}" placeholder="${ph}"${opts.type === 'number' ? ' min="0" step="any"' : ''}>`;
+  }
+  return `<div class="vefa-field"${span}><label class="ws-label">${_esc(label)}${req}</label>${input}</div>`;
+}
+
+function _vpColor(label, path, value) {
+  const v = _esc(value || '');
+  return `
+    <div class="vefa-field">
+      <label class="ws-label">${_esc(label)}</label>
+      <div class="vefa-vp-color">
+        <input type="color" class="vefa-vp-swatch" data-vp-path="${path}" value="${v}">
+        <input type="text" class="ws-input vefa-vp-hex" data-vp-path="${path}" value="${v}" maxlength="7" placeholder="#2563eb">
+      </div>
+    </div>`;
+}
+
+function _vpLotRow(lot, i, total) {
+  const v = (k) => _esc(String(lot[k] != null ? lot[k] : ''));
+  const stOpts = LOT_STATUTS.map((s) =>
+    `<option value="${s}"${lot.statut === s ? ' selected' : ''}>${_esc(STATUT_LABELS[s] || s)}</option>`
+  ).join('');
+  const prest = Array.isArray(lot.prestations) ? lot.prestations.join('\n') : '';
+  return `
+    <div class="vefa-vp-row">
+      <div class="vefa-vp-row-head">
+        <span class="vefa-vp-row-title">Lot ${i + 1}</span>
+        <button type="button" class="vefa-vp-del" data-act="vp-del-lot" data-idx="${i}"${total <= 1 ? ' disabled' : ''} aria-label="Supprimer ce lot">
+          ${icon('minus', 14)}
+        </button>
+      </div>
+      <div class="vefa-fields">
+        <div class="vefa-field" style="grid-column:1/-1">
+          <label class="ws-label">Référence / Modèle <span class="vefa-req" aria-hidden="true">*</span></label>
+          <input class="ws-input" type="text" data-vp-lot="${i}" data-vp-key="reference" value="${v('reference')}" placeholder="ex : Maison A">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Type</label>
+          <input class="ws-input" type="text" data-vp-lot="${i}" data-vp-key="type" value="${v('type')}" placeholder="ex : T4 / Villa">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Statut</label>
+          <select class="ws-input ws-select" data-vp-lot="${i}" data-vp-key="statut">${stOpts}</select>
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Chambres</label>
+          <input class="ws-input" type="number" min="0" step="any" data-vp-lot="${i}" data-vp-key="nb_chambres" value="${v('nb_chambres')}" placeholder="ex : 3">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Surface habitable (m²)</label>
+          <input class="ws-input" type="number" min="0" step="any" data-vp-lot="${i}" data-vp-key="surface_habitable_m2" value="${v('surface_habitable_m2')}" placeholder="ex : 92">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Jardin (m²)</label>
+          <input class="ws-input" type="number" min="0" step="any" data-vp-lot="${i}" data-vp-key="jardin_m2" value="${v('jardin_m2')}" placeholder="ex : 250">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Exposition</label>
+          <input class="ws-input" type="text" data-vp-lot="${i}" data-vp-key="exposition" value="${v('exposition')}" placeholder="ex : Sud">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Prix TTC (€)</label>
+          <input class="ws-input" type="number" min="0" step="any" data-vp-lot="${i}" data-vp-key="prix_ttc" value="${v('prix_ttc')}" placeholder="ex : 389000">
+        </div>
+        <div class="vefa-field">
+          <label class="ws-label">Stationnement</label>
+          <input class="ws-input" type="text" data-vp-lot="${i}" data-vp-key="stationnement" value="${v('stationnement')}" placeholder="ex : 2 places">
+        </div>
+        <div class="vefa-field vefa-vp-check">
+          <label class="ws-label">
+            <input type="checkbox" data-vp-lot="${i}" data-vp-key="garage"${lot.garage ? ' checked' : ''}>
+            Garage
+          </label>
+        </div>
+        <div class="vefa-field" style="grid-column:1/-1">
+          <label class="ws-label">Prestations (une par ligne)</label>
+          <textarea class="ws-input ws-textarea" rows="2" data-vp-lot="${i}" data-vp-key="prestations" placeholder="Cuisine équipée&#10;Volets roulants motorisés">${_esc(prest)}</textarea>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _vpFaqRow(faq, i) {
+  return `
+    <div class="vefa-vp-row vefa-vp-row--compact">
+      <div class="vefa-vp-row-head">
+        <span class="vefa-vp-row-title">Q/R ${i + 1}</span>
+        <button type="button" class="vefa-vp-del" data-act="vp-del-faq" data-idx="${i}" aria-label="Supprimer cette Q/R">
+          ${icon('minus', 14)}
+        </button>
+      </div>
+      <div class="vefa-fields">
+        <div class="vefa-field" style="grid-column:1/-1">
+          <label class="ws-label">Question</label>
+          <input class="ws-input" type="text" data-vp-faq="${i}" data-vp-key="q" value="${_esc(faq.q || '')}" placeholder="ex : Frais de notaire réduits ?">
+        </div>
+        <div class="vefa-field" style="grid-column:1/-1">
+          <label class="ws-label">Réponse (servie telle quelle)</label>
+          <textarea class="ws-input ws-textarea" rows="2" data-vp-faq="${i}" data-vp-key="r" placeholder="Réponse validée par l'agence…">${_esc(faq.r || '')}</textarea>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _vpQuestionRow(q, i) {
+  return `
+    <div class="vefa-vp-inline">
+      <input class="ws-input" type="text" data-vp-question="${i}" value="${_esc(q || '')}" placeholder="ex : Quels lots sont encore disponibles ?">
+      <button type="button" class="vefa-vp-del" data-act="vp-del-question" data-idx="${i}" aria-label="Supprimer cette question">
+        ${icon('minus', 14)}
+      </button>
+    </div>`;
+}
+
+// ── Handlers d'état _program ──────────────────────────────────
+function _vpSetPath(path, el) {
+  const parts = path.split('.');
+  let obj = _program;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (obj[parts[i]] == null || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {};
+    obj = obj[parts[i]];
+  }
+  obj[parts[parts.length - 1]] = el.value;
+  // Sync des widgets partageant le même chemin (swatch couleur ↔ champ hex).
+  if (_root) {
+    _root.querySelectorAll(`[data-vp-path="${path}"]`).forEach((o) => {
+      if (o !== el && o.value !== el.value) o.value = el.value;
+    });
+  }
+}
+
+function _vpSetLot(idx, key, el) {
+  const lot = _program.lots[idx];
+  if (!lot) return;
+  if (key === 'garage')           lot.garage = !!el.checked;
+  else if (key === 'prestations') lot.prestations = String(el.value).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+  else                            lot[key] = el.value;
+}
+
+function _vpSetFaq(idx, key, val) {
+  const f = _program.faq[idx];
+  if (f) f[key] = val;
+}
+
+function _vpDelete(arrName, idx, keepMin) {
+  const arr = _program[arrName];
+  if (!Array.isArray(arr) || idx < 0 || idx >= arr.length) return;
+  arr.splice(idx, 1);
+  if (keepMin && arr.length === 0) arr.push(blankLot());
+  _scheduleSave();
+  _renderMain();
+}
+
+// ── Envoi vers Smart Dynamic QR (relais localStorage, consommé en S7) ──
+async function _sendToConcierge() {
+  const errors = validateProgramLight(_program);
+  if (errors.length) { _toast(errors[0], true); return; }
+  try {
+    localStorage.setItem(PROGRAM_STORAGE_KEY, JSON.stringify({ program: _program, ts: Date.now() }));
+  } catch (_) {}
+  _saveDraft();
+  _toast('Programme prêt — ouverture de Smart Dynamic QR…');
+  try {
+    const m = await import('./sdqr.js');
+    closeVefaStudio();
+    m.openSDQR?.();
+  } catch (err) {
+    console.error('[VefaStudio] openSDQR', err);
+    _toast('Ouvrez Smart Dynamic QR pour créer le QR Concierge.', true);
+  }
 }
 
 async function _generate() {
@@ -660,7 +997,7 @@ async function _generate() {
 
   if (missing.length > 0) {
     const labels = missing.map(f => f.label).join(', ');
-    _toast(`Champs requis manquants : ${labels}`, true);
+    _toast(`Champs requis manquants : ${labels}`, true);
     // Highlight visuel temporaire
     const form = _root && _root.querySelector('.vefa-form');
     if (form) {
@@ -692,7 +1029,7 @@ async function _generate() {
     await docEngine.render({ templateId: mode.templateId, variables, mode: 'preview' });
   } catch (err) {
     console.error('[VefaStudio] docEngine.render', err);
-    _toast('Erreur de génération : ' + ((err && err.message) || 'inconnue'), true);
+    _toast('Erreur de génération : ' + ((err && err.message) || 'inconnue'), true);
   }
 }
 
@@ -917,6 +1254,117 @@ function _injectStyles() {
 }
 .vefa-toast--error { background: #b91c1c; color: #fff; }
 
+/* ── Concierge : repeaters (lots / FAQ / questions) ── */
+.vefa-vp-row {
+  background: var(--ws-bg, rgba(255, 255, 255, .02));
+  border: 1px solid var(--ws-border);
+  border-radius: 12px;
+  padding: 18px 20px 8px;
+  margin-bottom: 14px;
+}
+.vefa-vp-row--compact { padding-bottom: 18px; }
+.vefa-vp-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.vefa-vp-row-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--ws-text-muted);
+}
+.vefa-vp-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--ws-border);
+  background: transparent;
+  color: var(--ws-text-muted);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.vefa-vp-del:hover:not([disabled]) {
+  color: var(--ws-danger, #f85149);
+  border-color: var(--ws-danger, #f85149);
+  background: rgba(248, 81, 73, .08);
+}
+.vefa-vp-del[disabled] { opacity: .35; cursor: not-allowed; }
+.vefa-vp-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 9px 16px;
+  border-radius: var(--ws-radius-pill);
+  border: 1px dashed var(--ws-border);
+  background: transparent;
+  color: var(--ws-accent);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: -.01em;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.vefa-vp-add:hover {
+  border-color: var(--ws-accent);
+  background: rgba(99, 102, 241, .08);
+}
+.vefa-vp-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.vefa-vp-inline .ws-input { flex: 1 1 auto; }
+.vefa-vp-empty {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ws-text-muted);
+}
+.vefa-vp-check { justify-content: flex-end; }
+.vefa-vp-check .ws-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding-bottom: 9px;
+}
+.vefa-vp-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ws-accent);
+  cursor: pointer;
+}
+.vefa-vp-color {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vefa-vp-swatch {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.vefa-vp-hex {
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+}
+
 /* ── Responsive (≤ 640 px) ── */
 @media (max-width: 640px) {
   .vefa-wrap { padding: 0 16px 80px; }
@@ -927,6 +1375,8 @@ function _injectStyles() {
   .vefa-actions-hint { max-width: 100%; }
   .vefa-btn-primary { justify-content: center; }
   .vefa-section { padding: 18px 16px; }
+  .vefa-vp-row { padding: 14px 14px 6px; }
+  .vefa-vp-check { justify-content: flex-start; }
 }
 `;
   document.head.appendChild(style);

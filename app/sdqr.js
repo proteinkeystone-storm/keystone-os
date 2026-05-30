@@ -26,6 +26,13 @@ import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLev
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
+// Concierge VEFA (Sprint 7) — relai VEFA Studio -> SDQR + garde-fou léger.
+// Module pur partagé (importable front ET Node) : SEULE source de la forme
+// « à plat » du programme. L'adaptation source->bloc reste côté Worker.
+import {
+  PROGRAM_STORAGE_KEY, coerceProgram, validateProgramLight,
+  blankKeyform, blankKeyformItem, coerceKeyform, validateKeyformLight,
+} from './lib/concierge-program.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -51,6 +58,25 @@ let _creating = {
   name    : '',
   tags    : '',
 };
+
+// ── Concierge VEFA (S7) — relai VEFA Studio -> SDQR ────────────────
+// VEFA Studio dépose { program, ts } sous PROGRAM_STORAGE_KEY puis ouvre
+// SDQR. À l'ouverture, on auto-saute dans le formulaire concierge si le
+// relai est FRAIS (< 3 min) et pas déjà consommé pendant cette session
+// (anti re-saut à chaque réouverture de SDQR).
+const VEFA_RELAY_FRESH_MS = 3 * 60 * 1000;
+let _lastVefaRelayTs = 0;
+
+// Lit + parse le relai. Retourne { program (forme garantie), ts } ou null.
+function _readVefaRelay() {
+  try {
+    const raw = localStorage.getItem(PROGRAM_STORAGE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== 'object' || !obj.program) return null;
+    return { program: coerceProgram(obj.program), ts: Number(obj.ts) || 0 };
+  } catch { return null; }
+}
 
 // ── Lazy import du QR encoder ──────────────────────────────────
 async function _loadQrLib() {
@@ -174,6 +200,21 @@ export function openSDQR() {
   bindHelpButton(panel, 'A-COM-001');
   bindBurger(panel);
   _refreshList(panel);
+  // Concierge VEFA (S7) — si VEFA Studio vient de relayer un programme frais.
+  _maybeAutoOpenVefaConcierge(panel);
+}
+
+// Concierge VEFA (S7) — auto-saut dans le formulaire concierge quand VEFA
+// Studio a déposé un programme FRAIS (< 3 min) non encore consommé pendant
+// cette session. Sinon : ouverture normale (liste). Le relai reste en
+// storage (l'aperçu le relit), borné par la fenêtre de fraîcheur.
+function _maybeAutoOpenVefaConcierge(panel) {
+  const relay = _readVefaRelay();
+  if (!relay) return;
+  const fresh = relay.ts && relay.ts > (Date.now() - VEFA_RELAY_FRESH_MS);
+  if (!fresh || relay.ts === _lastVefaRelayTs) return;
+  _lastVefaRelayTs = relay.ts;                 // consommé : pas de re-saut
+  _openCreateForm(panel, { conciergeVefa: relay });
 }
 
 export function closeSDQR() {
@@ -497,6 +538,7 @@ function _renderList(panel) {
         <div class="sdqr-li-meta">
           <span class="sdqr-li-type">${typeDef.icon} ${_esc(typeDef.label)}</span>
           <span class="sdqr-li-mode ${isDyn ? 'sdqr-li-mode--dyn' : 'sdqr-li-mode--stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
+          ${q.template_id === 'concierge' ? '<span class="sdqr-li-concierge" title="QR Concierge VEFA">Concierge</span>' : ''}
           ${q.status === 'archived' ? '<span class="sdqr-li-status">Archivé</span>' : ''}
           ${q.folder ? `<span class="sdqr-li-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
         </div>
@@ -518,7 +560,7 @@ function _renderList(panel) {
 // Studio — formulaire création / détail QR
 // ══════════════════════════════════════════════════════════════════
 
-function _openCreateForm(panel) {
+function _openCreateForm(panel, opts = {}) {
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
   _selectedId = null;
@@ -531,7 +573,22 @@ function _openCreateForm(panel) {
     mode: 'dynamic', type: 'url', payload: {},
     name: '', tags: '', smart_title: '', smart_message: '',
     template_id: 'storytelling-brand', template_data: {},
+    // Concierge VEFA (S7) — source du bloc (inline | vefa) + programme « à
+    // plat » relayé par VEFA Studio (le Worker l'adapte au save).
+    concierge_source: 'inline', concierge_payload: null,
   };
+
+  // Concierge VEFA (S7) — auto-ouverture depuis le relai VEFA Studio :
+  // bascule directement en concierge/smart, source « vefa », programme chargé,
+  // nom interne pré-rempli. _renderModeToggle ci-dessous rendra l'aperçu.
+  if (opts && opts.conciergeVefa && opts.conciergeVefa.program) {
+    const prog = opts.conciergeVefa.program;
+    _creating.mode              = 'smart';
+    _creating.template_id       = 'concierge';
+    _creating.concierge_source  = 'vefa';
+    _creating.concierge_payload = prog;
+    if (prog.nom) _creating.name = prog.nom;
+  }
 
   content.innerHTML = `
     <div class="sdqr-form-wrap">
@@ -634,6 +691,10 @@ function _openCreateForm(panel) {
   content.querySelector('#sdqr-f-tags')?.addEventListener('input', e => { _creating.tags = e.target.value; });
   content.querySelector('#sdqr-f-smart-title')?.addEventListener('input', e => { _creating.smart_title = e.target.value; });
   content.querySelector('#sdqr-f-smart-message')?.addEventListener('input', e => { _creating.smart_message = e.target.value; });
+
+  // Reflète un nom interne pré-rempli (auto-ouverture VEFA) dans le champ.
+  const _nameEl = content.querySelector('#sdqr-f-name');
+  if (_nameEl && _creating.name) _nameEl.value = _creating.name;
 
   content.querySelector('#sdqr-cancel')?.addEventListener('click', () => {
     content.innerHTML = _renderEmptyStudio();
@@ -772,6 +833,11 @@ function _renderTemplateCards(root) {
 function _renderTemplateFields(root) {
   const wrap = root.querySelector('#sdqr-smart-template-fields');
   if (!wrap) return;
+  // Concierge VEFA (Sprint 4) — bloc de connaissance NESTÉ (programme +
+  // configurations répéteur + branding + faq…). Ne se mappe pas sur le
+  // master-renderer plat : éditeur dédié. On court-circuite AVANT le
+  // early-return fields.length===0 qui viderait le wrap.
+  if (_creating.template_id === 'concierge') { _renderConciergeEditor(wrap); return; }
   const tpl = getTemplate(_creating.template_id);
   if (!tpl || !Array.isArray(tpl.fields) || tpl.fields.length === 0) {
     wrap.innerHTML = '';
@@ -807,6 +873,723 @@ function _renderTemplateFields(root) {
   _bindColorWidgets(wrap);
   _bindLotsWidgets(wrap, _creating.template_data);
   _bindIconPickers(wrap);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONCIERGE VEFA — Éditeur nesté (Sprint 4)
+// ───────────────────────────────────────────────────────────────────
+// Le template concierge a fields:[] : son bloc de connaissance ne se
+// mappe pas sur le master-renderer plat (programme{} + configurations[]
+// + branding{} + faq[] + contact{}…). On construit ici un éditeur dédié
+// qui écrit DIRECTEMENT dans _creating.template_data. La validation et
+// l'envoi passent par le chemin standard (_handleCreate appelle déjà
+// tpl.validate(template_data) + envoie body.template_data en mode smart).
+//
+// Scalaires : data-cg-path="programme.nom" + listener délégué _cgOnScalar.
+// Répéteurs : configurations / questions / faq via binders dédiés (même
+// modèle que _bindLotsWidgets). Couleurs : _bindColorWidgets (le hex
+// porte data-cg-path). Logo : _bindImageWidgets (hidden data-payload-key
+// "logo_url", store = branding).
+// ══════════════════════════════════════════════════════════════════
+
+function _cgSetPath(obj, path, val) {
+  const keys = String(path).split('.');
+  let o = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (o[keys[i]] == null || typeof o[keys[i]] !== 'object') o[keys[i]] = {};
+    o = o[keys[i]];
+  }
+  o[keys[keys.length - 1]] = val;
+}
+
+// Listener scalaire délégué (posé une seule fois sur le wrap). N'agit
+// que sur les éléments porteurs de data-cg-path ; ignore tout le reste
+// (notamment les inputs des répéteurs, gérés par leurs propres binders).
+// SOURCE-AWARE (S7.5) : inline écrit dans le bloc canonique (template_data) ;
+// le gabarit générique écrit dans la submission à plat (concierge_payload),
+// que le Worker passe à keyformToBlock au save.
+function _cgOnScalar(e) {
+  const t = e.target;
+  const path = t && t.dataset ? t.dataset.cgPath : '';
+  if (!path) return;
+  const store = _creating.concierge_source === 'keyform'
+    ? _creating.concierge_payload
+    : _creating.template_data;
+  if (!store) return;
+  _cgSetPath(store, path, t.type === 'checkbox' ? t.checked : t.value);
+}
+
+// Pose le listener scalaire délégué une seule fois sur le wrap (idempotent
+// via le flag _cgScalarBound). Partagé par l'éditeur inline ET le gabarit
+// générique — le wrap est le même nœud DOM à travers les switchs de source
+// (seul innerHTML change), donc le flag persiste et on n'empile pas.
+function _cgBindScalarListener(wrap) {
+  if (wrap._cgScalarBound) return;
+  wrap.addEventListener('input',  _cgOnScalar);
+  wrap.addEventListener('change', _cgOnScalar);
+  wrap._cgScalarBound = true;
+}
+
+// Seed le squelette de données la 1re fois (template_data est remis à {}
+// à chaque sélection de template / ouverture du form). Valeurs sensées
+// par défaut pour branding/persona/disclaimer ; programme + agence +
+// contact restent vides (à remplir par l'utilisateur).
+function _cgEnsureData() {
+  const d = _creating.template_data;
+  if (!d.programme || typeof d.programme !== 'object') d.programme = {};
+  if (!d.branding  || typeof d.branding  !== 'object') {
+    d.branding = { couleur_primaire: '#2563EB', couleur_secondaire: '#C9A96E', fond: 'clair' };
+  }
+  if (!Array.isArray(d.configurations) || d.configurations.length === 0) {
+    d.configurations = [_cgBlankConfig()];
+  }
+  if (!Array.isArray(d.questions_suggerees)) {
+    d.questions_suggerees = ['Quels modèles sont disponibles ?', 'Quelle date de livraison ?'];
+  }
+  if (!Array.isArray(d.faq_validee)) d.faq_validee = [];
+  if (!d.contact_humain || typeof d.contact_humain !== 'object') d.contact_humain = {};
+  if (d.disclaimer === undefined) {
+    d.disclaimer = 'Pour toute information contractuelle, référez-vous à la notice descriptive et à votre conseiller.';
+  }
+  if (!d.persona || typeof d.persona !== 'object') {
+    d.persona = { ton: 'professionnel et chaleureux', langue_par_defaut: 'fr' };
+  }
+}
+
+function _cgBlankConfig() {
+  return { reference: '', type: '', statut: 'disponible', surfaces_annexes: { garage: false }, prestations: [] };
+}
+
+// ── Petits constructeurs de champs scalaires (data-cg-path) ──────────
+function _cgText(path, label, ph, value, opts) {
+  opts = opts || {};
+  const req  = opts.req ? ' <span class="sdqr-req">*</span>' : '';
+  const ml   = opts.maxlength ? ` maxlength="${opts.maxlength}"` : '';
+  const type = opts.type || 'text';
+  return `<label class="sdqr-field sdqr-field--full">
+    <span class="sdqr-field-lbl">${label}${req}</span>
+    <input type="${type}" data-cg-path="${path}" class="sdqr-input" placeholder="${_esc(ph || '')}"${ml} value="${_esc(value ?? '')}">
+  </label>`;
+}
+function _cgTextarea(path, label, ph, value, rows) {
+  return `<label class="sdqr-field sdqr-field--full">
+    <span class="sdqr-field-lbl">${label}</span>
+    <textarea data-cg-path="${path}" class="sdqr-input sdqr-input--textarea" rows="${rows || 2}" placeholder="${_esc(ph || '')}">${_esc(value ?? '')}</textarea>
+  </label>`;
+}
+function _cgColor(path, label, value, fallback) {
+  const raw = value || fallback || '#000000';
+  const initHex = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw) ? raw : (fallback || '#000000');
+  return `<div class="sdqr-field sdqr-field--full">
+    <span class="sdqr-field-lbl">${label}</span>
+    <div class="sdqr-color-widget">
+      <input type="color" class="sdqr-color-swatch" value="${_esc(_hex6(initHex))}" aria-label="Sélecteur visuel de couleur" tabindex="-1">
+      <input type="text" data-cg-path="${path}" class="sdqr-input sdqr-color-hex" value="${_esc(value || '')}" placeholder="#RRGGBB" maxlength="7" spellcheck="false" autocapitalize="none" autocomplete="off">
+    </div>
+  </div>`;
+}
+function _cgLogoWidget(key, label) {
+  key   = key   || 'logo_url';
+  label = label || "Logo de l'agence";
+  return `<div class="sdqr-field sdqr-field--full">
+    <span class="sdqr-field-lbl">${label}</span>
+    <div class="sdqr-image-widget">
+      <input type="hidden" data-payload-key="${key}" value="">
+      <div class="sdqr-image-preview"><span class="sdqr-image-placeholder">Aucune image</span></div>
+      <div class="sdqr-image-actions">
+        <label class="sdqr-image-btn"><input type="file" accept="image/*" hidden class="sdqr-image-file"><span class="sdqr-image-btn-lbl">Choisir une image…</span></label>
+        <button type="button" class="sdqr-image-btn sdqr-image-btn--ghost sdqr-image-clear" hidden>Effacer</button>
+      </div>
+      <details class="sdqr-image-url-fallback"><summary>ou utiliser une URL externe</summary><input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value=""></details>
+      <p class="sdqr-image-help">Compressée auto à 12 Ko (PNG/JPEG redimensionnés à 800px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-err" hidden></p>
+    </div>
+  </div>`;
+}
+
+const _CG_DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+// ── Répéteur Configurations ──────────────────────────────────────────
+function _cgConfigRowHtml(c) {
+  c = c || {};
+  const ann   = c.surfaces_annexes || {};
+  const v     = (x) => _esc(x ?? '');
+  const num   = (x) => (x === undefined || x === null || x === '') ? '' : _esc(x);
+  const statut = ['disponible', 'optionne', 'vendu'].includes(c.statut) ? c.statut : 'disponible';
+  const opt   = (val, lbl) => `<option value="${val}" ${statut === val ? 'selected' : ''}>${lbl}</option>`;
+  const garage = (ann.garage === true || ann.garage === 'true') ? 'checked' : '';
+  const prest = Array.isArray(c.prestations) ? c.prestations.join('\n') : '';
+  return `<div class="sdqr-cg-config">
+    <div class="sdqr-cg-config-h">
+      <span class="sdqr-cg-config-n">Configuration</span>
+      <button type="button" class="sdqr-cg-del sdqr-cg-config-del" title="Retirer cette configuration" aria-label="Retirer cette configuration">${_CG_DEL_SVG}</button>
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input cg-c-ref" maxlength="60" placeholder="Référence * (ex : Maison A)" value="${v(c.reference)}">
+      <input type="text" class="sdqr-input cg-c-type" maxlength="24" placeholder="Type (ex : T3)" value="${v(c.type)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="number" class="sdqr-input cg-c-chambres" min="0" step="1" placeholder="Chambres" value="${num(c.nb_chambres)}">
+      <select class="sdqr-input cg-c-statut">${opt('disponible', 'Disponible')}${opt('optionne', 'Optionné')}${opt('vendu', 'Vendu')}</select>
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="number" class="sdqr-input cg-c-surface" min="0" step="1" placeholder="Surface habitable (m²)" value="${num(c.surface_habitable_m2)}">
+      <input type="number" class="sdqr-input cg-c-prix" min="0" step="1000" placeholder="Prix TTC (€)" value="${num(c.prix_ttc)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input cg-c-expo" maxlength="40" placeholder="Exposition (ex : Sud)" value="${v(c.exposition)}">
+      <input type="number" class="sdqr-input cg-c-jardin" min="0" step="1" placeholder="Jardin (m²)" value="${num(ann.jardin_m2)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input cg-c-stationnement" maxlength="80" placeholder="Stationnement (ex : 1 garage + 1 place)" value="${v(c.stationnement)}">
+      <label class="sdqr-checkbox-lbl"><input type="checkbox" class="cg-c-garage" ${garage}><span>Garage</span></label>
+    </div>
+    <textarea class="sdqr-input sdqr-input--textarea cg-c-prestations" rows="2" placeholder="Prestations (une par ligne)">${_esc(prest)}</textarea>
+  </div>`;
+}
+
+function _cgReadConfig(row) {
+  const q    = (sel) => row.querySelector(sel);
+  const txt  = (sel) => (q(sel)?.value || '').trim();
+  const numv = (sel) => { const x = (q(sel)?.value || '').trim(); return x === '' ? undefined : Number(x); };
+  const prest = (q('.cg-c-prestations')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  return {
+    reference:            txt('.cg-c-ref'),
+    type:                 txt('.cg-c-type'),
+    nb_chambres:          numv('.cg-c-chambres'),
+    statut:               q('.cg-c-statut')?.value || 'disponible',
+    surface_habitable_m2: numv('.cg-c-surface'),
+    prix_ttc:             numv('.cg-c-prix'),
+    exposition:           txt('.cg-c-expo'),
+    stationnement:        txt('.cg-c-stationnement'),
+    surfaces_annexes:     { jardin_m2: numv('.cg-c-jardin'), garage: !!q('.cg-c-garage')?.checked },
+    prestations:          prest,
+  };
+}
+
+function _cgUpdateConfigLabels(rowsEl) {
+  [...rowsEl.querySelectorAll('.sdqr-cg-config')].forEach((row, i) => {
+    const ref = (row.querySelector('.cg-c-ref')?.value || '').trim();
+    const n   = row.querySelector('.sdqr-cg-config-n');
+    if (n) n.textContent = 'Configuration ' + (i + 1) + (ref ? ' — ' + ref : '');
+  });
+}
+
+function _cgBindConfigs(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-configs');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-config');
+  if (!rowsEl) return;
+  const sync = () => {
+    _creating.template_data.configurations =
+      [...rowsEl.querySelectorAll('.sdqr-cg-config')].map(_cgReadConfig);
+    _cgUpdateConfigLabels(rowsEl);
+  };
+  rowsEl.addEventListener('input',  sync);
+  rowsEl.addEventListener('change', sync);
+  addBtn?.addEventListener('click', () => {
+    rowsEl.insertAdjacentHTML('beforeend', _cgConfigRowHtml(_cgBlankConfig()));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.sdqr-cg-config-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-config');
+    if (rows.length <= 1) {
+      const row = del.closest('.sdqr-cg-config');
+      row.querySelectorAll('input').forEach(i => { if (i.type === 'checkbox') i.checked = false; else i.value = ''; });
+      row.querySelectorAll('textarea').forEach(t => { t.value = ''; });
+      row.querySelectorAll('select').forEach(s => { s.value = 'disponible'; });
+    } else {
+      del.closest('.sdqr-cg-config').remove();
+    }
+    sync();
+  });
+  sync();
+}
+
+// ── Répéteur Questions suggérées (cap 6) ─────────────────────────────
+function _cgQuestionRowHtml(q) {
+  return `<div class="sdqr-cg-line sdqr-cg-q">
+    <input type="text" class="sdqr-input cg-q-text" maxlength="120" placeholder="Question suggérée (ex : Quels modèles sont disponibles ?)" value="${_esc(q || '')}">
+    <button type="button" class="sdqr-cg-del sdqr-cg-q-del" title="Retirer cette question" aria-label="Retirer cette question">${_CG_DEL_SVG}</button>
+  </div>`;
+}
+function _cgBindQuestions(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-questions');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-question');
+  if (!rowsEl) return;
+  const CAP = 6;
+  const sync = () => {
+    _creating.template_data.questions_suggerees =
+      [...rowsEl.querySelectorAll('.cg-q-text')].map(i => i.value.trim()).filter(Boolean).slice(0, CAP);
+    if (addBtn) addBtn.style.display = rowsEl.querySelectorAll('.sdqr-cg-q').length >= CAP ? 'none' : '';
+  };
+  rowsEl.addEventListener('input', sync);
+  addBtn?.addEventListener('click', () => {
+    if (rowsEl.querySelectorAll('.sdqr-cg-q').length >= CAP) return;
+    rowsEl.insertAdjacentHTML('beforeend', _cgQuestionRowHtml(''));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.sdqr-cg-q-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-q');
+    if (rows.length <= 1) del.closest('.sdqr-cg-q').querySelector('input').value = '';
+    else del.closest('.sdqr-cg-q').remove();
+    sync();
+  });
+  sync();
+}
+
+// ── Répéteur FAQ validée ({q, r}) ────────────────────────────────────
+function _cgFaqRowHtml(item) {
+  item = item || {};
+  return `<div class="sdqr-cg-faq">
+    <input type="text" class="sdqr-input cg-faq-q" maxlength="160" placeholder="Question (ex : Quels sont les frais de notaire ?)" value="${_esc(item.q || '')}">
+    <textarea class="sdqr-input sdqr-input--textarea cg-faq-r" rows="2" placeholder="Réponse validée">${_esc(item.r || '')}</textarea>
+    <button type="button" class="sdqr-cg-del sdqr-cg-faq-del cg-faq-del" title="Retirer" aria-label="Retirer cette question/réponse">${_CG_DEL_SVG}</button>
+  </div>`;
+}
+function _cgBindFaq(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-faqs');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-faq');
+  if (!rowsEl) return;
+  const sync = () => {
+    _creating.template_data.faq_validee =
+      [...rowsEl.querySelectorAll('.sdqr-cg-faq')].map(row => ({
+        q: (row.querySelector('.cg-faq-q')?.value || '').trim(),
+        r: (row.querySelector('.cg-faq-r')?.value || '').trim(),
+      })).filter(x => x.q);
+  };
+  rowsEl.addEventListener('input', sync);
+  addBtn?.addEventListener('click', () => {
+    rowsEl.insertAdjacentHTML('beforeend', _cgFaqRowHtml({}));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.cg-faq-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-faq');
+    if (rows.length <= 1) del.closest('.sdqr-cg-faq').querySelectorAll('input, textarea').forEach(i => { i.value = ''; });
+    else del.closest('.sdqr-cg-faq').remove();
+    sync();
+  });
+  sync();
+}
+
+function _renderConciergeEditor(wrap) {
+  // Sélecteur de source : saisie directe immo (inline) · import VEFA Studio
+  // (vefa) · gabarit générique tous métiers (keyform, S7.5).
+  const src    = _creating.concierge_source;
+  const source = (src === 'vefa' || src === 'keyform') ? src : 'inline';
+  const picker = `
+    <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
+      <button type="button" class="sdqr-cg-source-btn ${source === 'inline' ? 'is-active' : ''}" data-cg-source="inline">
+        <strong>Saisie directe</strong>
+        <small>Programme immobilier, saisi ici</small>
+      </button>
+      <button type="button" class="sdqr-cg-source-btn ${source === 'vefa' ? 'is-active' : ''}" data-cg-source="vefa">
+        <strong>Depuis VEFA Studio</strong>
+        <small>J'importe le programme préparé dans VEFA Studio</small>
+      </button>
+      <button type="button" class="sdqr-cg-source-btn ${source === 'keyform' ? 'is-active' : ''}" data-cg-source="keyform">
+        <strong>Gabarit générique</strong>
+        <small>Tous métiers — offres, FAQ, contact</small>
+      </button>
+    </div>`;
+
+  // Source « vefa » : aperçu en lecture seule du programme relayé. Le bloc
+  // canonique est dérivé côté Worker (vefaProgramToBlock) à la publication ;
+  // pour modifier les chiffres, on repasse par VEFA Studio.
+  if (source === 'vefa') {
+    wrap.innerHTML = picker + _cgVefaPreviewHtml();
+    _cgBindSourcePicker(wrap);
+    return;
+  }
+
+  // Source « keyform » (S7.5) : éditeur générique. La submission à plat
+  // (concierge_payload, keyée par KEYFORM_GABARIT_FIELDS) est dérivée en bloc
+  // canonique générique côté Worker (keyformToBlock) à la publication.
+  if (source === 'keyform') {
+    _cgEnsureKeyform();
+    wrap.innerHTML = picker + _cgKeyformEditorHtml();
+    _cgBindSourcePicker(wrap);
+    _cgBindKeyform(wrap);
+    return;
+  }
+
+  _cgEnsureData();
+  const d       = _creating.template_data;
+  const prog    = d.programme;
+  const b       = d.branding;
+  const contact = d.contact_humain;
+  const persona = d.persona;
+  const cfgRows = (d.configurations.length ? d.configurations : [_cgBlankConfig()]).map(_cgConfigRowHtml).join('');
+  const qRows   = (d.questions_suggerees.length ? d.questions_suggerees : ['']).map(_cgQuestionRowHtml).join('');
+  const faqRows = (d.faq_validee.length ? d.faq_validee : [{}]).map(_cgFaqRowHtml).join('');
+
+  wrap.innerHTML = picker + `
+    <div class="sdqr-cg-editor">
+      <p class="sdqr-cg-hint">Concierge VEFA — 1 QR = 1 programme complet. Les chiffres saisis ici sont la SEULE source de vérité : l'IA répond uniquement à partir de ce bloc, sans rien inventer.</p>
+
+      <section class="sdqr-cg-section">
+        <h4 class="sdqr-cg-section-h">Programme</h4>
+        ${_cgText('programme.nom', 'Nom du programme', "Ex : Les Terrasses d'Ollioules", prog.nom, { req: true, maxlength: 120 })}
+        ${_cgText('programme.promoteur', 'Promoteur', 'Ex : Sud Habitat', prog.promoteur, { maxlength: 120 })}
+        ${_cgText('programme.ville', 'Ville', 'Ex : Ollioules', prog.ville, { maxlength: 80 })}
+        ${_cgText('programme.livraison_prevue', 'Livraison prévue', 'Ex : 4e trimestre 2026', prog.livraison_prevue, { maxlength: 80 })}
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-brand">
+        <h4 class="sdqr-cg-section-h">Agence <small>— c'est l'agence qui signe la page (logo + couleurs)</small></h4>
+        ${_cgText('branding.nom_agence', "Nom de l'agence", 'Ex : Agence Horizon', b.nom_agence, { req: true, maxlength: 80 })}
+        ${_cgLogoWidget()}
+        ${_cgColor('branding.couleur_primaire', 'Couleur principale', b.couleur_primaire, '#2563EB')}
+        ${_cgColor('branding.couleur_secondaire', 'Couleur secondaire', b.couleur_secondaire, '#C9A96E')}
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-configs">
+        <h4 class="sdqr-cg-section-h">Configurations <small>— les modèles du programme (au moins un)</small></h4>
+        <div class="sdqr-cg-configs">${cfgRows}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-config">+ Ajouter une configuration</button>
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-questions">
+        <h4 class="sdqr-cg-section-h">Questions suggérées <small>— les puces proposées au visiteur (max 6)</small></h4>
+        <div class="sdqr-cg-questions">${qRows}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-question">+ Ajouter une question</button>
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-faq">
+        <h4 class="sdqr-cg-section-h">FAQ validée <small>— réponses pré-approuvées que l'IA peut citer</small></h4>
+        <div class="sdqr-cg-faqs">${faqRows}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-faq">+ Ajouter une question/réponse</button>
+      </section>
+
+      <section class="sdqr-cg-section">
+        <h4 class="sdqr-cg-section-h">Conseiller <small>— vers qui renvoyer le visiteur</small></h4>
+        ${_cgText('contact_humain.nom', 'Nom du conseiller', 'Ex : Camille Martin', contact.nom, { maxlength: 80 })}
+        ${_cgText('contact_humain.tel', 'Téléphone', 'Ex : 04 94 00 00 00', contact.tel, { maxlength: 40, type: 'tel' })}
+        ${_cgText('contact_humain.email', 'Email', 'Ex : contact@agence.fr', contact.email, { maxlength: 120, type: 'email' })}
+      </section>
+
+      <section class="sdqr-cg-section">
+        <h4 class="sdqr-cg-section-h">Mention légale & ton</h4>
+        ${_cgTextarea('disclaimer', 'Disclaimer permanent', 'Affiché en bas de page, toujours visible.', d.disclaimer, 2)}
+        ${_cgText('persona.ton', "Ton de l'IA", 'Ex : professionnel et chaleureux', persona.ton, { maxlength: 80 })}
+        ${_cgText('persona.langue_par_defaut', 'Langue par défaut', 'Ex : fr', persona.langue_par_defaut, { maxlength: 8 })}
+      </section>
+    </div>`;
+
+  _cgBindSourcePicker(wrap);
+  // Scalaires : un seul listener délégué sur le wrap (idempotent + lit
+  // _creating.template_data en direct), posé une fois pour ne pas
+  // s'empiler si on re-rend l'éditeur (switch de template puis retour).
+  _cgBindScalarListener(wrap);
+  _bindColorWidgets(wrap);
+  _bindImageWidgets(wrap.querySelector('.sdqr-cg-brand') || wrap, b);
+  _cgBindConfigs(wrap);
+  _cgBindQuestions(wrap);
+  _cgBindFaq(wrap);
+}
+
+// Aperçu lecture seule du programme relayé par VEFA Studio (source « vefa »).
+// Vide => guide vers VEFA Studio. Les boutons du picker restent au-dessus.
+function _cgVefaPreviewHtml() {
+  const prog = _creating.concierge_payload;
+  if (!prog || typeof prog !== 'object') {
+    return `
+      <div class="sdqr-cg-vefa-empty">
+        <p class="sdqr-cg-vefa-empty-h">Aucun programme reçu de VEFA Studio</p>
+        <p class="sdqr-cg-vefa-empty-p">Ouvrez VEFA Studio, remplissez l'onglet « Concierge IA » (programme, lots, agence), puis cliquez « Envoyer vers Concierge ». Le programme s'affichera ici, prêt à publier.</p>
+      </div>`;
+  }
+  const lots    = Array.isArray(prog.lots) ? prog.lots : [];
+  const withRef = lots.filter(l => l && String(l.reference || '').trim());
+  const statuts = withRef.reduce((m, l) => {
+    const s = l.statut || 'disponible'; m[s] = (m[s] || 0) + 1; return m;
+  }, {});
+  const statutChips = Object.entries(statuts)
+    .map(([s, n]) => `<span class="sdqr-cg-vefa-chip">${n}&nbsp;${_esc(s)}</span>`).join('');
+  const sampleRefs = withRef.slice(0, 6)
+    .map(l => `<span class="sdqr-cg-vefa-ref">${_esc(l.reference)}</span>`).join('');
+  const more = withRef.length > 6
+    ? `<span class="sdqr-cg-vefa-ref sdqr-cg-vefa-ref--more">+${withRef.length - 6}</span>` : '';
+  const row = (k, v) => `<div class="sdqr-cg-vefa-row"><span class="sdqr-cg-vefa-k">${k}</span><span class="sdqr-cg-vefa-v">${v}</span></div>`;
+  return `
+    <div class="sdqr-cg-vefa-card">
+      ${row('Programme', _esc(prog.nom || '—'))}
+      ${prog.promoteur ? row('Promoteur', _esc(prog.promoteur)) : ''}
+      ${prog.ville ? row('Ville', _esc(prog.ville)) : ''}
+      ${prog.livraison_prevue ? row('Livraison', _esc(prog.livraison_prevue)) : ''}
+      ${row('Agence', _esc((prog.agence && prog.agence.nom) || '—'))}
+      ${row('Lots', `${withRef.length} avec référence${statutChips ? ' · ' + statutChips : ''}`)}
+      ${sampleRefs ? `<div class="sdqr-cg-vefa-refs">${sampleRefs}${more}</div>` : ''}
+      <p class="sdqr-cg-vefa-note">Données envoyées telles quelles et validées à la publication. Pour les modifier, repassez par VEFA Studio.</p>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// S7.5 — Éditeur GABARIT GÉNÉRIQUE (source « keyform »)
+// ───────────────────────────────────────────────────────────────────
+// Saisie DIRECTE dans le studio SDQR (décision Option B 2026-05-30) — pas
+// le builder Key Form, pas le formulaire Biennale live. On assemble une
+// SUBMISSION à plat keyée par les ids FIGÉS de KEYFORM_GABARIT_FIELDS
+// (cf. concierge-program.js : blankKeyform/coerceKeyform), stockée dans
+// _creating.concierge_payload. Le Worker la passe à keyformToBlock au save.
+// Scalaires : data-cg-path = clé plate (cg_nom_enseigne…) + listener délégué
+// _cgOnScalar (source-aware). Répéteurs : items/faq/questions via binders
+// dédiés. Logo : _bindImageWidgets (hidden data-payload-key "cg_logo",
+// store = concierge_payload). Couleurs : _bindColorWidgets.
+// ══════════════════════════════════════════════════════════════════
+
+// Seed la submission générique la 1re fois qu'on bascule sur cette source
+// (concierge_payload pouvait être null ou un programme VEFA). Non destructif
+// si c'est déjà un gabarit (présence de cg_items) -> garde le brouillon.
+function _cgEnsureKeyform() {
+  const p = _creating.concierge_payload;
+  if (!p || typeof p !== 'object' || Array.isArray(p) || !('cg_items' in p)) {
+    _creating.concierge_payload = blankKeyform();
+  }
+}
+
+// ── Répéteur Offres (items) — 3 attributs libres label/valeur + prix + desc
+function _cgKfItemRowHtml(it) {
+  it = it || {};
+  const v = (x) => _esc(x ?? '');
+  return `<div class="sdqr-cg-config sdqr-cg-kfitem">
+    <div class="sdqr-cg-config-h">
+      <span class="sdqr-cg-config-n">Offre</span>
+      <button type="button" class="sdqr-cg-del sdqr-cg-kfitem-del" title="Retirer cette offre" aria-label="Retirer cette offre">${_CG_DEL_SVG}</button>
+    </div>
+    <input type="text" class="sdqr-input kf-i-nom" maxlength="80" placeholder="Intitulé * (ex : Formule Découverte)" value="${v(it.item_nom)}">
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input kf-i-a1l" maxlength="40" placeholder="Attribut 1 — libellé (ex : Durée)" value="${v(it.item_attr1_label)}">
+      <input type="text" class="sdqr-input kf-i-a1v" maxlength="60" placeholder="Valeur (ex : 1 h)" value="${v(it.item_attr1_value)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input kf-i-a2l" maxlength="40" placeholder="Attribut 2 — libellé" value="${v(it.item_attr2_label)}">
+      <input type="text" class="sdqr-input kf-i-a2v" maxlength="60" placeholder="Valeur" value="${v(it.item_attr2_value)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="text" class="sdqr-input kf-i-a3l" maxlength="40" placeholder="Attribut 3 — libellé" value="${v(it.item_attr3_label)}">
+      <input type="text" class="sdqr-input kf-i-a3v" maxlength="60" placeholder="Valeur" value="${v(it.item_attr3_value)}">
+    </div>
+    <div class="sdqr-cg-line">
+      <input type="number" class="sdqr-input kf-i-prix" min="0" step="1" placeholder="Prix (€) — vide = sur demande" value="${(it.item_prix === undefined || it.item_prix === null || it.item_prix === '') ? '' : v(it.item_prix)}">
+    </div>
+    <textarea class="sdqr-input sdqr-input--textarea kf-i-desc" rows="2" placeholder="Description courte (optionnel)">${v(it.item_desc)}</textarea>
+  </div>`;
+}
+
+function _cgReadKfItem(row) {
+  const txt = (sel) => (row.querySelector(sel)?.value || '').trim();
+  return {
+    item_nom:         txt('.kf-i-nom'),
+    item_attr1_label: txt('.kf-i-a1l'), item_attr1_value: txt('.kf-i-a1v'),
+    item_attr2_label: txt('.kf-i-a2l'), item_attr2_value: txt('.kf-i-a2v'),
+    item_attr3_label: txt('.kf-i-a3l'), item_attr3_value: txt('.kf-i-a3v'),
+    item_prix:        txt('.kf-i-prix'),
+    item_desc:        txt('.kf-i-desc'),
+  };
+}
+
+function _cgUpdateKfItemLabels(rowsEl) {
+  [...rowsEl.querySelectorAll('.sdqr-cg-kfitem')].forEach((row, i) => {
+    const nom = (row.querySelector('.kf-i-nom')?.value || '').trim();
+    const n   = row.querySelector('.sdqr-cg-config-n');
+    if (n) n.textContent = 'Offre ' + (i + 1) + (nom ? ' — ' + nom : '');
+  });
+}
+
+function _cgBindKfItems(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-kfitems');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-kfitem');
+  if (!rowsEl) return;
+  const sync = () => {
+    _creating.concierge_payload.cg_items =
+      [...rowsEl.querySelectorAll('.sdqr-cg-kfitem')].map(_cgReadKfItem);
+    _cgUpdateKfItemLabels(rowsEl);
+  };
+  rowsEl.addEventListener('input',  sync);
+  rowsEl.addEventListener('change', sync);
+  addBtn?.addEventListener('click', () => {
+    rowsEl.insertAdjacentHTML('beforeend', _cgKfItemRowHtml(blankKeyformItem()));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.sdqr-cg-kfitem-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-kfitem');
+    if (rows.length <= 1) {
+      const row = del.closest('.sdqr-cg-kfitem');
+      row.querySelectorAll('input').forEach(i => { i.value = ''; });
+      row.querySelectorAll('textarea').forEach(t => { t.value = ''; });
+    } else {
+      del.closest('.sdqr-cg-kfitem').remove();
+    }
+    sync();
+  });
+  sync();
+}
+
+// ── Répéteur Questions suggérées (cap 6) — strings cg_questions ──────
+function _cgKfQuestionRowHtml(q) {
+  return `<div class="sdqr-cg-line sdqr-cg-kfq">
+    <input type="text" class="sdqr-input kf-q-text" maxlength="120" placeholder="Question suggérée (ex : Quelles sont vos offres ?)" value="${_esc(q || '')}">
+    <button type="button" class="sdqr-cg-del sdqr-cg-kfq-del" title="Retirer cette question" aria-label="Retirer cette question">${_CG_DEL_SVG}</button>
+  </div>`;
+}
+function _cgBindKfQuestions(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-kfquestions');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-kfquestion');
+  if (!rowsEl) return;
+  const CAP = 6;
+  const sync = () => {
+    _creating.concierge_payload.cg_questions =
+      [...rowsEl.querySelectorAll('.kf-q-text')].map(i => i.value.trim()).filter(Boolean).slice(0, CAP);
+    if (addBtn) addBtn.style.display = rowsEl.querySelectorAll('.sdqr-cg-kfq').length >= CAP ? 'none' : '';
+  };
+  rowsEl.addEventListener('input', sync);
+  addBtn?.addEventListener('click', () => {
+    if (rowsEl.querySelectorAll('.sdqr-cg-kfq').length >= CAP) return;
+    rowsEl.insertAdjacentHTML('beforeend', _cgKfQuestionRowHtml(''));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.sdqr-cg-kfq-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-kfq');
+    if (rows.length <= 1) del.closest('.sdqr-cg-kfq').querySelector('input').value = '';
+    else del.closest('.sdqr-cg-kfq').remove();
+    sync();
+  });
+  sync();
+}
+
+// ── Répéteur FAQ validée ({faq_q, faq_r}) ───────────────────────────
+function _cgKfFaqRowHtml(item) {
+  item = item || {};
+  return `<div class="sdqr-cg-faq sdqr-cg-kffaq">
+    <input type="text" class="sdqr-input kf-faq-q" maxlength="160" placeholder="Question (ex : Quels sont vos horaires ?)" value="${_esc(item.faq_q || '')}">
+    <textarea class="sdqr-input sdqr-input--textarea kf-faq-r" rows="2" placeholder="Réponse validée">${_esc(item.faq_r || '')}</textarea>
+    <button type="button" class="sdqr-cg-del sdqr-cg-faq-del sdqr-cg-kffaq-del" title="Retirer" aria-label="Retirer cette question/réponse">${_CG_DEL_SVG}</button>
+  </div>`;
+}
+function _cgBindKfFaq(wrap) {
+  const rowsEl = wrap.querySelector('.sdqr-cg-kffaqs');
+  const addBtn = wrap.querySelector('.sdqr-cg-add-kffaq');
+  if (!rowsEl) return;
+  const sync = () => {
+    _creating.concierge_payload.cg_faq =
+      [...rowsEl.querySelectorAll('.sdqr-cg-kffaq')].map(row => ({
+        faq_q: (row.querySelector('.kf-faq-q')?.value || '').trim(),
+        faq_r: (row.querySelector('.kf-faq-r')?.value || '').trim(),
+      })).filter(x => x.faq_q || x.faq_r);
+  };
+  rowsEl.addEventListener('input', sync);
+  addBtn?.addEventListener('click', () => {
+    rowsEl.insertAdjacentHTML('beforeend', _cgKfFaqRowHtml({}));
+    sync();
+  });
+  rowsEl.addEventListener('click', (e) => {
+    const del = e.target.closest('.sdqr-cg-kffaq-del');
+    if (!del) return;
+    const rows = rowsEl.querySelectorAll('.sdqr-cg-kffaq');
+    if (rows.length <= 1) del.closest('.sdqr-cg-kffaq').querySelectorAll('input, textarea').forEach(i => { i.value = ''; });
+    else del.closest('.sdqr-cg-kffaq').remove();
+    sync();
+  });
+  sync();
+}
+
+function _cgKeyformEditorHtml() {
+  const s     = _creating.concierge_payload;
+  const items = (Array.isArray(s.cg_items)     && s.cg_items.length     ? s.cg_items     : [blankKeyformItem()]).map(_cgKfItemRowHtml).join('');
+  const faqs  = (Array.isArray(s.cg_faq)       && s.cg_faq.length       ? s.cg_faq       : [{}]).map(_cgKfFaqRowHtml).join('');
+  const qs    = (Array.isArray(s.cg_questions) && s.cg_questions.length ? s.cg_questions : ['']).map(_cgKfQuestionRowHtml).join('');
+  return `
+    <div class="sdqr-cg-editor">
+      <p class="sdqr-cg-hint">Gabarit générique — tous métiers. Les infos saisies ici sont la SEULE source de vérité : l'IA répond uniquement à partir de ce bloc, sans rien inventer.</p>
+
+      <section class="sdqr-cg-section sdqr-cg-brand">
+        <h4 class="sdqr-cg-section-h">Enseigne <small>— c'est elle qui signe la page (logo + couleurs)</small></h4>
+        ${_cgText('cg_nom_enseigne', "Nom de l'enseigne", 'Ex : Studio Pilates Bandol', s.cg_nom_enseigne, { req: true, maxlength: 80 })}
+        ${_cgText('cg_titre_offre', "Titre de l'offre", 'Ex : Nos abonnements', s.cg_titre_offre, { maxlength: 120 })}
+        ${_cgText('cg_ville', 'Ville', 'Ex : Bandol', s.cg_ville, { maxlength: 80 })}
+        ${_cgLogoWidget('cg_logo', "Logo de l'enseigne")}
+        ${_cgColor('cg_couleur_primaire', 'Couleur principale', s.cg_couleur_primaire, '#2563EB')}
+        ${_cgColor('cg_couleur_secondaire', 'Couleur secondaire', s.cg_couleur_secondaire, '#C9A96E')}
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-configs">
+        <h4 class="sdqr-cg-section-h">Offres <small>— vos prestations/produits (au moins une)</small></h4>
+        <div class="sdqr-cg-kfitems">${items}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-kfitem">+ Ajouter une offre</button>
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-questions">
+        <h4 class="sdqr-cg-section-h">Questions suggérées <small>— les puces proposées au visiteur (max 6)</small></h4>
+        <div class="sdqr-cg-kfquestions">${qs}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-kfquestion">+ Ajouter une question</button>
+      </section>
+
+      <section class="sdqr-cg-section sdqr-cg-sec-faq">
+        <h4 class="sdqr-cg-section-h">FAQ validée <small>— réponses pré-approuvées que l'IA peut citer</small></h4>
+        <div class="sdqr-cg-kffaqs">${faqs}</div>
+        <button type="button" class="sdqr-cg-add sdqr-cg-add-kffaq">+ Ajouter une question/réponse</button>
+      </section>
+
+      <section class="sdqr-cg-section">
+        <h4 class="sdqr-cg-section-h">Contact <small>— vers qui renvoyer le visiteur</small></h4>
+        ${_cgText('cg_contact_nom', 'Nom du contact', 'Ex : Camille Martin', s.cg_contact_nom, { maxlength: 80 })}
+        ${_cgText('cg_contact_tel', 'Téléphone', 'Ex : 04 94 00 00 00', s.cg_contact_tel, { maxlength: 40, type: 'tel' })}
+        ${_cgText('cg_contact_email', 'Email', 'Ex : contact@enseigne.fr', s.cg_contact_email, { maxlength: 120, type: 'email' })}
+      </section>
+
+      <section class="sdqr-cg-section">
+        <h4 class="sdqr-cg-section-h">Mention légale</h4>
+        ${_cgTextarea('cg_disclaimer', 'Disclaimer permanent', 'Affiché en bas de page, toujours visible.', s.cg_disclaimer, 2)}
+      </section>
+    </div>`;
+}
+
+function _cgBindKeyform(wrap) {
+  _cgBindScalarListener(wrap);
+  _bindColorWidgets(wrap);
+  _bindImageWidgets(wrap.querySelector('.sdqr-cg-brand') || wrap, _creating.concierge_payload);
+  _cgBindKfItems(wrap);
+  _cgBindKfQuestions(wrap);
+  _cgBindKfFaq(wrap);
+}
+
+// Branche les boutons du sélecteur de source. Switch vers « vefa » => relit
+// le relai en direct (storage) dans _creating.concierge_payload + pré-remplit
+// le nom interne si vide. Switch vers « keyform » => seed une submission
+// générique vierge si besoin. Re-rend l'éditeur (innerHTML) ; le listener
+// scalaire délégué persiste sur le wrap.
+function _cgBindSourcePicker(wrap) {
+  wrap.querySelectorAll('[data-cg-source]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw = btn.dataset.cgSource;
+      const src = (raw === 'vefa' || raw === 'keyform') ? raw : 'inline';
+      if (src === _creating.concierge_source) return;
+      _creating.concierge_source = src;
+      if (src === 'vefa') {
+        const relay = _readVefaRelay();
+        _creating.concierge_payload = relay ? relay.program : null;
+        const prog = _creating.concierge_payload;
+        if (prog && prog.nom && !(_creating.name || '').trim()) {
+          _creating.name = prog.nom;
+          const nameEl = document.getElementById('sdqr-f-name');
+          if (nameEl) nameEl.value = prog.nom;
+        }
+      } else if (src === 'keyform') {
+        _cgEnsureKeyform();
+      }
+      _renderConciergeEditor(wrap);
+    });
+  });
 }
 
 // Rend les champs du form en fonction du type sélectionné.
@@ -1244,19 +2027,34 @@ async function _handleCreate(panel) {
 
   // V2 — Validation des fields du template Smart (en plus du type QR)
   if (_creating.mode === 'smart') {
-    const tpl = getTemplate(_creating.template_id);
-    if (tpl?.fields?.length) {
-      for (const f of tpl.fields) {
-        if (f.required && !(_creating.template_data[f.id] || '').toString().trim()) {
-          return _showMsg(msg, `Champ obligatoire (template) : ${f.label}`, 'err');
+    // Concierge VEFA — source « vefa » : template_data est vide (le bloc est
+    // dérivé côté Worker depuis le programme à plat). On valide donc le
+    // PROGRAMME relayé (garde-fou léger ; validateBlock complet reste moteur)
+    // et on saute la validation du bloc canonique inline (tpl.validate).
+    if (_creating.template_id === 'concierge' && _creating.concierge_source === 'vefa') {
+      const errs = validateProgramLight(_creating.concierge_payload);
+      if (errs.length) return _showMsg(msg, errs[0], 'err');
+    } else if (_creating.template_id === 'concierge' && _creating.concierge_source === 'keyform') {
+      // Gabarit générique (S7.5) : template_data vide, le bloc générique est
+      // dérivé côté Worker (keyformToBlock). On valide la submission à plat
+      // (garde-fou léger ; validateBlock generic complet reste moteur).
+      const errs = validateKeyformLight(_creating.concierge_payload);
+      if (errs.length) return _showMsg(msg, errs[0], 'err');
+    } else {
+      const tpl = getTemplate(_creating.template_id);
+      if (tpl?.fields?.length) {
+        for (const f of tpl.fields) {
+          if (f.required && !(_creating.template_data[f.id] || '').toString().trim()) {
+            return _showMsg(msg, `Champ obligatoire (template) : ${f.label}`, 'err');
+          }
         }
       }
-    }
-    // Validation custom du template (peut renvoyer plusieurs erreurs)
-    if (typeof tpl?.validate === 'function') {
-      const errors = tpl.validate(_creating.template_data || {});
-      if (Array.isArray(errors) && errors.length) {
-        return _showMsg(msg, errors[0], 'err');
+      // Validation custom du template (peut renvoyer plusieurs erreurs)
+      if (typeof tpl?.validate === 'function') {
+        const errors = tpl.validate(_creating.template_data || {});
+        if (Array.isArray(errors) && errors.length) {
+          return _showMsg(msg, errors[0], 'err');
+        }
       }
     }
   }
@@ -1283,8 +2081,23 @@ async function _handleCreate(panel) {
     // SDQR Smart V2 : template_id + template_data envoyés en mode smart.
     // Fallback côté Worker = 'storytelling-brand' si absents.
     if (_creating.mode === 'smart') {
-      body.template_id   = _creating.template_id || 'storytelling-brand';
-      body.template_data = _creating.template_data || {};
+      body.template_id = _creating.template_id || 'storytelling-brand';
+      // Concierge VEFA — source « vefa » : on n'envoie PAS template_data ;
+      // le Worker dérive le bloc canonique depuis concierge_payload
+      // (vefaProgramToBlock + validateBlock). Inline => bloc verbatim.
+      if (_creating.template_id === 'concierge' && _creating.concierge_source === 'vefa') {
+        body.concierge_source  = 'vefa';
+        body.concierge_payload = _creating.concierge_payload || null;
+      } else if (_creating.template_id === 'concierge' && _creating.concierge_source === 'keyform') {
+        // Gabarit générique (S7.5) : on envoie la submission à plat ; le Worker
+        // dérive le bloc générique (keyformToBlock + validateBlock). Pas de
+        // template_data inline.
+        body.concierge_source  = 'keyform';
+        body.concierge_payload = _creating.concierge_payload || null;
+      } else {
+        body.template_data = _creating.template_data || {};
+        if (_creating.template_id === 'concierge') body.concierge_source = 'inline';
+      }
     }
     // Mode dynamique OU smart URL : target_url = la valeur du champ url
     // (smart utilise la même mécanique short_id que dynamic côté backend)

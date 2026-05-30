@@ -19,6 +19,14 @@ import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } f
 import { requireJWT } from '../lib/jwt.js';
 // Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
 import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
+// Concierge VEFA (Sprint 2) — prompt déterministe + moteur IA + garde-fou budget.
+import { buildConciergePrompt } from './smart-templates/concierge.js';
+// Concierge VEFA (Sprint 7) — adaptation source « vefa » -> bloc canonique au
+// save. Le front ne peut pas importer le contrat (module backend) ; l'adaptation
+// se fait donc ICI, à la création/édition du QR concierge.
+import { buildConciergeBlockFromVefa, buildConciergeBlockFromKeyform } from './smart-templates/concierge-schema.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -292,17 +300,35 @@ export async function handleCreateQr(request, env) {
     return err(`template_id inconnu : ${template_id_raw}`, 400, origin);
   }
   const template_id   = mode === 'smart' ? (template_id_raw || 'storytelling-brand') : null;
+  // Concierge VEFA (S7 / S7.5) — provenance du bloc de connaissance :
+  //   'inline' (défaut) : le studio SDQR a saisi le bloc canonique -> verbatim.
+  //   'vefa'            : programme « à plat » de VEFA Studio (immo) adapté ICI.
+  //   'keyform'         : submission générique du gabarit studio SDQR adaptée ICI.
+  const concierge_source = (body.concierge_source || '').toString().trim().toLowerCase();
   // template_data : blob JSON libre (schéma défini par chaque template).
   // Limité à 32 KB pour éviter les abus / quotas D1.
-  const template_data_raw = body.template_data && typeof body.template_data === 'object'
-    ? body.template_data : null;
   let template_data = null;
-  if (template_data_raw) {
-    const json_str = JSON.stringify(template_data_raw);
-    if (json_str.length > 32 * 1024) {
-      return err('template_data trop volumineux (max 32 KB)', 400, origin);
+  if (mode === 'smart' && template_id === 'concierge' && concierge_source === 'vefa') {
+    // Adaptation source -> bloc canonique au save (cf. concierge-schema.js).
+    // validateBlock + cap 32 KB sont appliqués dans le helper.
+    const res = buildConciergeBlockFromVefa(body.concierge_payload);
+    if (res.error) return err(res.error, 400, origin);
+    template_data = res.block;
+  } else if (mode === 'smart' && template_id === 'concierge' && concierge_source === 'keyform') {
+    // Source générique : keyformToBlock + validateBlock + cap dans le helper.
+    const res = buildConciergeBlockFromKeyform(body.concierge_payload);
+    if (res.error) return err(res.error, 400, origin);
+    template_data = res.block;
+  } else {
+    const template_data_raw = body.template_data && typeof body.template_data === 'object'
+      ? body.template_data : null;
+    if (template_data_raw) {
+      const json_str = JSON.stringify(template_data_raw);
+      if (json_str.length > 32 * 1024) {
+        return err('template_data trop volumineux (max 32 KB)', 400, origin);
+      }
+      template_data = template_data_raw;
     }
-    template_data = template_data_raw;
   }
 
   if (!name)                  return err('Le nom est obligatoire', 400, origin);
@@ -357,6 +383,9 @@ export async function handleCreateQr(request, env) {
     smart_message: smart_message || null,
     // V2 templates programmables (cf. ./smart-templates/)
     template_id, template_data,
+    // Concierge VEFA (S7) — provenance du bloc (inline | vefa), pour le miroir
+    // SDQR et la ré-édition. null hors concierge (zéro bruit sur les autres QR).
+    concierge_source: (template_id === 'concierge' && concierge_source) ? concierge_source : null,
   };
 
   try {
@@ -468,6 +497,34 @@ export async function handleUpdateQr(request, env, qrId) {
   }
   if (body.smart_message !== undefined) {
     entity.smart_message = String(body.smart_message).trim().slice(0, 400) || null;
+  }
+  // Concierge VEFA (S7 / S7.5) — ré-adaptation du bloc à l'édition. Gated sur
+  // template_id === 'concierge' (zéro impact sur les autres templates smart,
+  // qui n'éditent pas template_data via PATCH). Symétrique du create :
+  //   'vefa'    : programme « à plat » de VEFA Studio ré-adapté au save ;
+  //   'keyform' : submission générique du gabarit studio ré-adaptée au save ;
+  //   sinon     : template_data canonique verbatim (cap 32 KB).
+  // Absent (ni source vefa/keyform ni template_data) => bloc existant intact.
+  if (entity.template_id === 'concierge') {
+    const upd_source = (body.concierge_source || '').toString().trim().toLowerCase();
+    if (upd_source === 'vefa') {
+      const res = buildConciergeBlockFromVefa(body.concierge_payload);
+      if (res.error) return err(res.error, 400, origin);
+      entity.template_data    = res.block;
+      entity.concierge_source = 'vefa';
+    } else if (upd_source === 'keyform') {
+      const res = buildConciergeBlockFromKeyform(body.concierge_payload);
+      if (res.error) return err(res.error, 400, origin);
+      entity.template_data    = res.block;
+      entity.concierge_source = 'keyform';
+    } else if (body.template_data !== undefined && typeof body.template_data === 'object') {
+      const json_str = JSON.stringify(body.template_data);
+      if (json_str.length > 32 * 1024) {
+        return err('template_data trop volumineux (max 32 KB)', 400, origin);
+      }
+      entity.template_data    = body.template_data;
+      entity.concierge_source = upd_source || entity.concierge_source || 'inline';
+    }
   }
   if (body.status !== undefined && ['active', 'archived'].includes(body.status)) {
     entity.status = body.status;
@@ -1512,3 +1569,188 @@ export async function handleSmartQrLoyaltyStamp(request, env) {
 // Le dispatcher handleSmartQrInterstitial appelle template.renderHTML() depuis
 // le registry. Pour ajouter un nouveau layout (menu, tombola, etc.), créer un
 // nouveau template dans ./smart-templates/ — aucune modification de qr.js requise.
+
+// ══════════════════════════════════════════════════════════════════
+// Smart QR Concierge VEFA (2026-05-30, Sprint 2) — Chat live SSE
+// ───────────────────────────────────────────────────────────────────
+// Endpoint PUBLIC (visiteur anonyme qui scanne) : reçoit une QUESTION
+// libre, charge le bloc de connaissance du programme (entities.data),
+// construit le system prompt déterministe (buildConciergePrompt), appelle
+// Mistral Small 3.1 24B en STREAM et relaie la réponse en SSE.
+//
+// L'IA n'intervient QUE sur la question libre (jugement requis) ; accueil,
+// cartes et chiffres restent déterministes (renderHTML). Cohérent avec le
+// principe directeur du brief (un appel LLM seulement si l'entrée est
+// vraiment inconnue ET exige du jugement).
+//
+// Contrat : POST /api/smartqr/concierge { short_id, question, history? }
+//   history? = [{ role:'user'|'assistant', content:string }, …] (capé)
+//   SSE →  data: {"type":"start"}
+//          data: {"type":"chunk","text":"…"}      (×N)
+//          data: {"type":"done","full_text":"…"}
+//          data: {"type":"error","message":"…"}   (en cas d'échec)
+//
+// Pas d'auth (comme game-play / loyalty-stamp) → garde-fou budget IA
+// global (admin) pour protéger le wallet sur un endpoint ouvert.
+// ══════════════════════════════════════════════════════════════════
+const CONCIERGE_MIN_Q    = 2;
+const CONCIERGE_MAX_Q    = 500;
+const CONCIERGE_MAX_HIST = 8;
+const CONCIERGE_MAX_TOK  = 600;
+
+export async function handleSmartQrConcierge(request, env) {
+  const origin = '*'; // public, pas d'auth (visiteur anonyme)
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin':  origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
+  const body     = await parseBody(request);
+  const shortId  = (body?.short_id || '').toString().trim();
+  const question = (body?.question || '').toString().trim();
+  const histIn   = Array.isArray(body?.history) ? body.history : [];
+
+  if (!shortId || shortId.length < 4 || shortId.length > 32) {
+    return err('short_id invalide', 400, origin);
+  }
+  if (question.length < CONCIERGE_MIN_Q) {
+    return err('Question trop courte', 400, origin);
+  }
+  if (question.length > CONCIERGE_MAX_Q) {
+    return err(`Question trop longue (${CONCIERGE_MAX_Q} caractères max)`, 400, origin);
+  }
+
+  // Charge l'entité QR (mode smart + template concierge obligatoires)
+  let qrData = null;
+  try {
+    const entityRow = await env.DB
+      .prepare(`SELECT data FROM entities
+                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
+                AND deleted_at IS NULL LIMIT 1`)
+      .bind(shortId)
+      .first();
+    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
+  } catch (e) {
+    return err('Lookup entity échoué : ' + e.message, 500, origin);
+  }
+  if (!qrData) return err('QR introuvable', 404, origin);
+  if (qrData.mode !== 'smart') return err('QR non Smart', 400, origin);
+  if ((qrData.template_id || '') !== 'concierge') return err('Template non-concierge', 400, origin);
+
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
+  }
+
+  // Garde-fou budget IA global (admin) — endpoint public = protège le wallet.
+  const throttled = await budgetGuard(env, origin);
+  if (throttled) return throttled;
+
+  // System prompt déterministe (bloc + règles §3).
+  const block        = qrData.template_data || {};
+  const systemPrompt = buildConciergePrompt(block);
+
+  // Historique : ne garde que les tours bien formés, capé + tronqué.
+  const history = histIn
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .slice(-CONCIERGE_MAX_HIST)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, CONCIERGE_MAX_Q) }));
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history,
+    { role: 'user', content: question },
+  ];
+
+  const encoder = new TextEncoder();
+  const stream  = new ReadableStream({
+    async start(controller) {
+      const send = (obj) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); }
+        catch (e) { /* stream peut être fermé */ }
+      };
+
+      send({ type: 'start' });
+      let fullText = '';
+
+      try {
+        let aiStream;
+        try {
+          aiStream = await env.AI.run(KS_AI_MODEL, {
+            messages,
+            stream:     true,
+            max_tokens: CONCIERGE_MAX_TOK,
+          });
+        } catch (e) {
+          send({ type: 'error', message: `AI run failed: ${e?.message || e}` });
+          try { controller.close(); } catch (_) { /* déjà fermé */ }
+          return;
+        }
+
+        // Consomme le stream Workers AI ligne par ligne. Fallback large sur
+        // la forme du chunk (cf. brainstorming.js) pour absorber d'éventuels
+        // changements de wrapping Cloudflare selon le modèle.
+        const reader  = aiStream.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let   buffer  = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              const chunk =
+                parsed.response                     ??
+                parsed.text                         ??
+                parsed.choices?.[0]?.delta?.content ??
+                parsed.delta?.text                  ??
+                parsed.p                            ??
+                '';
+              if (chunk) {
+                fullText += chunk;
+                send({ type: 'chunk', text: chunk });
+              }
+            } catch (e) { /* ligne malformée ignorée */ }
+          }
+        }
+
+        const clean = fullText.trim();
+        send({ type: 'done', full_text: clean });
+
+        // Compteur budget IA (best-effort, 1 écriture).
+        try {
+          await recordUsage(env, 'smartqr-concierge', {
+            inTokens:  estimateTokens(JSON.stringify(messages)),
+            outTokens: estimateTokens(clean),
+          });
+        } catch (e) { /* non-critique */ }
+      } catch (e) {
+        send({ type: 'error', message: `Stream error: ${e?.message || e}` });
+      } finally {
+        try { controller.close(); } catch (e) { /* déjà fermé */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type':                'text/event-stream; charset=utf-8',
+      'Cache-Control':               'no-cache',
+      'Connection':                  'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+    },
+  });
+}

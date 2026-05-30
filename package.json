@@ -13,7 +13,9 @@
   },
   "main": "sw.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node scripts/test-templates.mjs && node scripts/test-concierge-endpoint.mjs",
+    "test:templates": "node scripts/test-templates.mjs",
+    "test:concierge": "node scripts/test-concierge-endpoint.mjs",
     "bump-sw": "node scripts/bump-sw-version.js"
   },
   "repository": {

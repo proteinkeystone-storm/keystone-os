@@ -59,7 +59,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -316,6 +316,10 @@ export default {
       // Incrémente le compteur de tampons côté serveur, applique la règle
       // de validité, débloque la récompense au Nᵉ tampon avec code signé.
       if (path === '/api/smartqr/loyalty-stamp' && method === 'POST') return handleSmartQrLoyaltyStamp(request, env);
+      // Concierge VEFA (2026-05-30, Sprint 2) — chat live SSE sur question
+      // libre du visiteur. Charge le bloc programme, construit le prompt
+      // déterministe, stream Mistral Small 3.1 24B. Public, pas d'auth.
+      if (path === '/api/smartqr/concierge' && (method === 'POST' || method === 'OPTIONS')) return handleSmartQrConcierge(request, env);
 
       // ── Living Layer (2026-05-24) ────────────────────────────
       // Phrase courte vivante sous "Bonjour, X" du dashboard.

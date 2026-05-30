@@ -39,6 +39,7 @@ import machineASous     from './machine-a-sous.js';
 import carteAGratter    from './carte-a-gratter.js';
 import carteFidelite   from './carte-fidelite.js';
 import boiteCadeau     from './boite-cadeau.js';
+import concierge       from './concierge.js';
 // V4 (brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter) — vrais jeux
@@ -49,6 +50,10 @@ import boiteCadeau     from './boite-cadeau.js';
 // 2026-05-30 : IA retirée de tous les templates (titre + message saisis
 // en direct par le propriétaire) ; templates phrase-simple et
 // quiz-orientation supprimés.
+// Concierge VEFA (brief BRIEF_CONCIERGE_VEFA.md) : 1er template à CHAT
+// LIVE (endpoint /api/smartqr/concierge, Sprint 2). L'IA y regagne sa
+// place car l'entrée (question libre du visiteur) exige du jugement —
+// distinct des interstitiels figés ci-dessus.
 
 const TEMPLATES = {
   [storytellingBrand.id]: storytellingBrand,
@@ -57,6 +62,7 @@ const TEMPLATES = {
   [carteAGratter.id]:     carteAGratter,
   [carteFidelite.id]:     carteFidelite,
   [boiteCadeau.id]:       boiteCadeau,
+  [concierge.id]:         concierge,
 };
 
 /**
