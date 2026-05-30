@@ -27,14 +27,6 @@ const MOCK = {
     logo_url:         '',
     accent_color:     '#c9a96e',
   },
-  'quiz-orientation': {
-    nom_marque:   'Boutique Solène',
-    question:     'Vous cherchez pour ?',
-    // V4.5 — format emoji|libellé|URL (quiz routeur)
-    reponses:     '👶|Bébé|https://example.com/bebe\n🧒|Enfant|https://example.com/enfant\n🧑|Ado|https://example.com/ado\n👴|Senior|https://example.com/senior',
-    logo_url:     '',
-    accent_color: '#7c8af9',
-  },
   'boite-cadeau': {
     nom_marque:    'Boutique Solène',
     occasion:      'Saint Valentin',
@@ -53,7 +45,8 @@ const qr = {
   name: 'QR Preview ' + templateId,
   qr_type: 'url',
   mode: 'smart',
-  metier_brief: 'Boutique mode féminine, prêt-à-porter et accessoires, à Marseille.',
+  smart_title: 'Bienvenue chez nous !',
+  smart_message: 'Merci de votre visite, on vous redirige vers notre site.',
   payload: { url: 'https://example.com' },
   template_id: templateId,
   template_data: MOCK[templateId] || {},
@@ -84,22 +77,6 @@ const stub = `
             first_stamp_at:  new Date(Date.now() - 30*86400e3).toISOString(),
           }),
         });
-      }
-      // Phrase IA (quiz personnalisée selon body.context si présent)
-      if (typeof url === 'string' && url.includes('/api/smartqr/generate-interstitial')) {
-        let userCtx = null;
-        try {
-          const body = opts && opts.body ? JSON.parse(opts.body) : null;
-          userCtx = body && body.context ? body.context : null;
-        } catch (e) { /* noop */ }
-        const phrase = userCtx && userCtx.quiz_label
-          ? 'Pour ' + userCtx.quiz_label + ', notre coffret signature est exactement ce qu\\'il te faut.'
-          : 'Joyeuse occasion — profite de ton code pour t\\'offrir ce qui te ressemble.';
-        const title  = userCtx && userCtx.quiz_label ? 'Notre conseil' : 'Une surprise pour toi';
-        return new Promise(resolve => setTimeout(() => resolve({
-          ok: true,
-          json: () => Promise.resolve({ title, phrase }),
-        }), 800));
       }
       return _fetch.apply(this, arguments);
     };

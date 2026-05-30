@@ -22,11 +22,6 @@ function _svg(paths, viewBox = '0 0 24 24') {
 }
 
 export const TEMPLATE_ICONS = {
-  // Phrase simple : bulle de dialogue minimaliste (message-square Lucide)
-  'phrase-simple': _svg(`
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  `),
-
   // Storytelling Brand : clapperboard / pellicule (film Lucide)
   'storytelling-brand': _svg(`
     <rect x="2" y="2" width="20" height="20" rx="2.18"/>
@@ -75,13 +70,6 @@ export const TEMPLATE_ICONS = {
     <line x1="7.4" y1="13.6" x2="9"  y2="12.2"/>
     <line x1="10.6" y1="13" x2="11.4" y2="13.6"/>
     <line x1="11.4" y1="13.6" x2="13" y2="12.2"/>
-  `),
-
-  // Quiz d'orientation : cercle avec point d'interrogation (help-circle Lucide)
-  'quiz-orientation': _svg(`
-    <circle cx="12" cy="12" r="10"/>
-    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-    <line x1="12" y1="17" x2="12.01" y2="17"/>
   `),
 
   // Boîte cadeau : boîte avec ruban (gift Lucide)

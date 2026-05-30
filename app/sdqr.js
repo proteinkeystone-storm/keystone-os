@@ -525,12 +525,12 @@ function _openCreateForm(panel) {
   panel.querySelectorAll('.sdqr-li.is-selected').forEach(el => el.classList.remove('is-selected'));
 
   // Reset l'état de création à chaque ouverture
-  // SDQR Smart 2026-05-24 : metier_brief (mode 'smart')
+  // SDQR Smart : titre + message statiques saisis en direct (mode 'smart', plus d'IA)
   // SDQR Smart V2 2026-05-24 : template_id + template_data (registry programmable)
   _creating = {
     mode: 'dynamic', type: 'url', payload: {},
-    name: '', tags: '', metier_brief: '',
-    template_id: 'phrase-simple', template_data: {},
+    name: '', tags: '', smart_title: '', smart_message: '',
+    template_id: 'storytelling-brand', template_data: {},
   };
 
   content.innerHTML = `
@@ -560,7 +560,7 @@ function _openCreateForm(panel) {
           <span class="sdqr-mode-dot"></span>
           <div class="sdqr-mode-txt">
             <strong>Smart ✦</strong>
-            <small>Interstitiel IA contextuel · brief métier · dynamique +</small>
+            <small>Interstitiel personnalisé · titre + message · dynamique +</small>
           </div>
         </button>
       </div>
@@ -576,13 +576,18 @@ function _openCreateForm(panel) {
         </div>
       </div>
 
-      <!-- Brief métier (visible uniquement si mode === 'smart') -->
-      <div id="sdqr-smart-brief-wrap" hidden style="margin:14px 0 0">
+      <!-- Titre + message statiques (visibles uniquement si mode === 'smart') -->
+      <div id="sdqr-smart-text-wrap" hidden style="margin:14px 0 0">
         <label class="sdqr-field sdqr-field--full">
-          <span class="sdqr-field-lbl">Brief métier <small style="opacity:.7">— alimente l'IA contextuelle des scans</small></span>
-          <textarea id="sdqr-f-metier-brief" class="sdqr-input" rows="4"
-            placeholder="Décrivez votre activité, vos horaires, vos spécialités, votre public cible. L'IA s'en sert pour générer une phrase d'accueil contextuelle à chaque scan. Ex : 'Promoteur immobilier neuf à Toulon, spécialité VEFA + Pinel, agence ouverte lun-ven 9h-19h et samedi matin.'"
-            style="min-height:90px;font-family:inherit"></textarea>
+          <span class="sdqr-field-lbl">Titre <small style="opacity:.7">— le titre affiché sur la page d'attente au scan</small></span>
+          <input id="sdqr-f-smart-title" class="sdqr-input" type="text" maxlength="80"
+            placeholder="Ex : Bienvenue chez nous !" />
+        </label>
+        <label class="sdqr-field sdqr-field--full" style="margin-top:10px">
+          <span class="sdqr-field-lbl">Message <small style="opacity:.7">— le texte affiché sous le titre</small></span>
+          <textarea id="sdqr-f-smart-message" class="sdqr-input" rows="3" maxlength="400"
+            placeholder="Ex : Merci de votre visite. Un instant, on vous redirige vers notre site."
+            style="min-height:80px;font-family:inherit"></textarea>
         </label>
       </div>
 
@@ -624,10 +629,11 @@ function _openCreateForm(panel) {
   _renderModeToggle(content);
   _renderFormFields(content);
 
-  // Bindings persistants (nom + tags + brief métier)
+  // Bindings persistants (nom + tags + titre/message Smart)
   content.querySelector('#sdqr-f-name')?.addEventListener('input', e => { _creating.name = e.target.value; });
   content.querySelector('#sdqr-f-tags')?.addEventListener('input', e => { _creating.tags = e.target.value; });
-  content.querySelector('#sdqr-f-metier-brief')?.addEventListener('input', e => { _creating.metier_brief = e.target.value; });
+  content.querySelector('#sdqr-f-smart-title')?.addEventListener('input', e => { _creating.smart_title = e.target.value; });
+  content.querySelector('#sdqr-f-smart-message')?.addEventListener('input', e => { _creating.smart_message = e.target.value; });
 
   content.querySelector('#sdqr-cancel')?.addEventListener('click', () => {
     content.innerHTML = _renderEmptyStudio();
@@ -692,20 +698,20 @@ function _renderModeToggle(root) {
       _toggleSmartBriefVisibility(root);
     };
   });
-  // Premier render : aligne la visibilité du brief avec le mode courant
+  // Premier render : aligne la visibilité des champs Smart avec le mode courant
   _toggleSmartBriefVisibility(root);
 }
 
-// SDQR Smart 2026-05-24 — Affiche le champ "Brief métier" + V2 le sélecteur
+// SDQR Smart — Affiche les champs "Titre + Message" + V2 le sélecteur
 // de template + ses fields uniquement en mode 'smart'.
 function _toggleSmartBriefVisibility(root) {
   const isSmart = _creating.mode === 'smart';
 
-  const briefWrap    = root.querySelector('#sdqr-smart-brief-wrap');
+  const textWrap     = root.querySelector('#sdqr-smart-text-wrap');
   const templateWrap = root.querySelector('#sdqr-smart-template-wrap');
   const fieldsWrap   = root.querySelector('#sdqr-smart-template-fields-wrap');
 
-  if (briefWrap)    briefWrap.hidden    = !isSmart;
+  if (textWrap)     textWrap.hidden     = !isSmart;
   if (templateWrap) templateWrap.hidden = !isSmart;
   if (fieldsWrap)   fieldsWrap.hidden   = !isSmart;
 
@@ -1269,14 +1275,15 @@ async function _handleCreate(panel) {
       mode    : _creating.mode,
       payload : _creating.payload,
     };
-    // SDQR Smart 2026-05-24 : brief métier envoyé uniquement en mode smart
-    if (_creating.mode === 'smart' && _creating.metier_brief?.trim()) {
-      body.metier_brief = _creating.metier_brief.trim();
+    // SDQR Smart : titre + message statiques envoyés uniquement en mode smart
+    if (_creating.mode === 'smart') {
+      if (_creating.smart_title?.trim())   body.smart_title   = _creating.smart_title.trim();
+      if (_creating.smart_message?.trim()) body.smart_message = _creating.smart_message.trim();
     }
     // SDQR Smart V2 : template_id + template_data envoyés en mode smart.
-    // Fallback côté Worker = 'phrase-simple' si absents.
+    // Fallback côté Worker = 'storytelling-brand' si absents.
     if (_creating.mode === 'smart') {
-      body.template_id   = _creating.template_id || 'phrase-simple';
+      body.template_id   = _creating.template_id || 'storytelling-brand';
       body.template_data = _creating.template_data || {};
     }
     // Mode dynamique OU smart URL : target_url = la valeur du champ url
@@ -1455,7 +1462,7 @@ async function _openQrDetail(panel, qr) {
           <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-save-url" title="Modifier la cible sans regénérer le QR">Mettre à jour</button>
         </label>
         <div class="sdqr-detail-notice">
-          <strong>${isSmart ? 'Mode Smart ✦' : 'Édition dynamique'} :</strong> ${isSmart ? 'le QR affiche d\'abord une page IA contextuelle avant la redirection. Tu peux changer la cible à tout moment.' : 'tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.'}
+          <strong>${isSmart ? 'Mode Smart ✦' : 'Édition dynamique'} :</strong> ${isSmart ? 'le QR affiche d\'abord une page d\'accueil personnalisée avant la redirection. Tu peux changer la cible à tout moment.' : 'tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.'}
         </div>
         ` : isDynamic ? `
         <!-- Sprint SDQR-2.5 — édition du payload pour dynamic non-URL -->

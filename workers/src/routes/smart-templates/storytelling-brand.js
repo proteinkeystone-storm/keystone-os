@@ -2,29 +2,28 @@
 // KEYSTONE OS — Smart Template · storytelling-brand (V4.1)
 // ───────────────────────────────────────────────────────────────────
 // Séquence motion graphics 3 actes qui s'enchaînent automatiquement et
-// mettent la marque en scène, avec la phrase IA en climax final.
+// mettent la marque en scène, avec le titre + message du propriétaire en
+// climax final.
 //
-// Timeline (autonome côté CSS — l'IA charge en parallèle) :
+// Timeline (autonome côté CSS) :
 //   T+0      ouverture : logo qui scale-in + glow accent color
 //   T+1.6s   slogan reveal (lettre par lettre via CSS animation-delay)
 //   T+3.4s   visuel brand crossfade + accent color qui s'étend
-//   T+5.0s   skeleton IA visible (shimmer)
-//   T+ai     reveal phrase IA (déclenché par event sq:ai-ready)
+//   T+5.2s   reveal du climax (titre + message saisis par le propriétaire)
 //
-// L'IA arrive généralement entre 5-15s. Si elle arrive avant T+5s
-// la révélation est mise en attente jusqu'à la fin de la séquence.
-// Si elle plante, fallback IA s'affiche après la séquence.
+// Le titre et le message sont saisis directement par le propriétaire dans
+// le studio (champs smart_title / smart_message), rendus côté serveur.
+// Plus aucun appel IA.
 //
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "1. Storytelling Brand"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot } from './_shared.js';
 
 const TEMPLATE = {
   id:              'storytelling-brand',
   label:           'Storytelling Brand',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -33,45 +32,6 @@ const TEMPLATE = {
       errors.push('Le nom de la marque est obligatoire.');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d        = qrData?.template_data || {};
-    const nom      = (d.nom_marque || '').toString().slice(0, 60);
-    const slogan   = (d.slogan || '').toString().slice(0, 120);
-    const style    = (d.style_motion || 'Élégant').toString();
-    const now      = new Date();
-    const dayFr    = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr   = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient de voir une séquence de storytelling brand',
-      'présentant une marque. Tu écris LE climax final : une phrase courte qui clôt la séquence avec émotion.',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots, accroche émotionnelle (ex: "Bienvenue dans l\'univers", "À nous deux")',
-      '- phrase : 1 seule phrase, max 18 mots, contextuelle (heure, jour, pays, brief métier)',
-      '- Ton aligné sur le style de motion : Élégant=raffiné, Dynamique=énergique, Minimaliste=sobre',
-      '- Pas de CTA, pas d\'horaires inventés, jamais commercial agressif',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nom || '(sans nom)'}`,
-      slogan ? `Slogan affiché : ${slogan}` : null,
-      `Style de motion : ${style}`,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -85,6 +45,9 @@ const TEMPLATE = {
     const style     = ['Élégant', 'Dynamique', 'Minimaliste'].includes(d.style_motion)
       ? d.style_motion : 'Élégant';
     const styleSlug = { 'Élégant': 'elegant', 'Dynamique': 'dynamic', 'Minimaliste': 'minimal' }[style];
+    // Climax saisi par le propriétaire (studio) — rendu directement, sans IA.
+    const smartTitle   = escHtml((qrData?.smart_title   || '').toString().slice(0, 80));
+    const smartMessage = escHtml((qrData?.smart_message || '').toString().slice(0, 400));
 
     // Slogan reveal lettre par lettre : on découpe et on applique un delay incrémental.
     // Limité à 120 caractères pour éviter une overflow d'éléments DOM.
@@ -248,7 +211,7 @@ const TEMPLATE = {
     font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
   }
 
-  /* Slot IA — skeleton puis reveal */
+  /* Slot climax — fade-in après la séquence motion */
   .sq-ia {
     margin-top: 18px;
     opacity: 0;
@@ -256,37 +219,7 @@ const TEMPLATE = {
   }
   @keyframes ia-in { from { opacity: 0; } to { opacity: 1; } }
 
-  .sq-skeleton-title {
-    height: 22px; width: 55%; margin: 4px auto 12px;
-    border-radius: 6px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}40 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  .sq-skeleton-line {
-    height: 13px; margin: 7px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      rgba(148,163,184,.10) 0%, rgba(148,163,184,.26) 50%, rgba(148,163,184,.10) 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  .sq-skeleton-line.w85 { width: 85%; }
-  .sq-skeleton-line.w65 { width: 65%; }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  .sq-hint { margin-top: 16px; font-size: 12px; color: var(--mut);
-    opacity: .65; letter-spacing: 0; font-style: italic; }
-  .sq-hint::before { content: "✦"; color: var(--gold); margin-right: 6px;
-    opacity: .85; font-style: normal; display: inline-block;
-    animation: pulse 1.8s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
-
-  /* Climax : phrase IA reveal */
+  /* Climax : titre + message reveal */
   .sq-final { display: none; }
   .sq-final.is-shown { display: block;
     animation: final-in 600ms cubic-bezier(.16,.84,.3,1); }
@@ -375,15 +308,9 @@ ${styleSlug !== 'minimal' ? `<div class="sq-particles" aria-hidden="true">
   </div>
 
   <div class="sq-ia" id="sq-ia">
-    <div id="sq-loading">
-      <div class="sq-skeleton-title" aria-hidden="true"></div>
-      <div class="sq-skeleton-line w85" aria-hidden="true"></div>
-      <div class="sq-skeleton-line w65" aria-hidden="true"></div>
-      <p class="sq-hint">L'IA prépare votre accueil…</p>
-    </div>
     <div class="sq-final" id="sq-final">
-      <h1 class="sq-title" id="sq-title"></h1>
-      <p id="sq-phrase"></p>
+      ${smartTitle ? `<h1 class="sq-title">${smartTitle}</h1>` : ''}
+      ${smartMessage ? `<p id="sq-phrase">${smartMessage}</p>` : ''}
       <a class="sq-cta" id="sq-continue" href="/r/${safeShort}?direct=1">
         Continuer
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -394,32 +321,16 @@ ${styleSlug !== 'minimal' ? `<div class="sq-particles" aria-hidden="true">
   ${renderKeystoneFoot()}
 </div>
 
-${renderAiFetchScript(safeShort)}
 <script>
 (() => {
-  // Reveal IA = max(fin-séquence-motion, réponse-IA). La séquence dure
-  // ~5s (logo + slogan + visuel + halo) ; on ne révèle pas avant pour
-  // laisser le storytelling se dérouler entièrement.
+  // Reveal du climax après la séquence motion (~5s : logo + slogan + visuel
+  // + halo). On laisse le storytelling se dérouler entièrement avant de
+  // montrer le titre/message + bouton Continuer. Contenu rendu côté serveur.
   const MIN_REVEAL_MS = 5200;
-  const t0 = Date.now();
-
-  function reveal(detail) {
-    const elapsed = Date.now() - t0;
-    const wait    = Math.max(0, MIN_REVEAL_MS - elapsed);
-    setTimeout(() => {
-      const loading = document.getElementById('sq-loading');
-      const final   = document.getElementById('sq-final');
-      const title   = document.getElementById('sq-title');
-      const phrase  = document.getElementById('sq-phrase');
-      if (title)  title.textContent  = detail.title  || 'Bienvenue';
-      if (phrase) phrase.textContent = detail.phrase || '';
-      if (loading) loading.hidden = true;
-      if (final)   final.classList.add('is-shown');
-    }, wait);
-  }
-
-  document.addEventListener('sq:ai-ready', (e) => reveal(e.detail));
-  document.addEventListener('sq:ai-error', (e) => reveal(e.detail));
+  setTimeout(() => {
+    const final = document.getElementById('sq-final');
+    if (final) final.classList.add('is-shown');
+  }, MIN_REVEAL_MS);
 })();
 </script>
 </body>

@@ -3,8 +3,8 @@
 // ───────────────────────────────────────────────────────────────────
 // Countdown paramétrable jusqu'à une date précise (lancement, drop,
 // sortie album, ouverture, soldes flash). Affichage 4 blocs J/H/M/S
-// avec animation tick chaque seconde. Phrase IA d'anticipation arrive
-// en parallèle (T+5s mini).
+// avec animation tick chaque seconde. Titre + message d'anticipation
+// saisis par le propriétaire, révélés à T+5s.
 //
 // Si la date est passée, le countdown affiche "C'est ouvert !" + CTA
 // direct vers la cible — le QR continue de marcher sans modification.
@@ -12,13 +12,12 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "4. Compte à rebours produit"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, safeDate, renderKeystoneFoot, renderAiFetchScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, safeDate, renderKeystoneFoot } from './_shared.js';
 
 const TEMPLATE = {
   id:              'countdown-produit',
   label:           'Compte à rebours produit',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -32,62 +31,6 @@ const TEMPLATE = {
       errors.push('La date de sortie est invalide (format attendu : 2026-12-31T18:00).');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d         = qrData?.template_data || {};
-    const nomMarque = (d.nom_marque || '').toString().slice(0, 60);
-    const nomProduit = (d.nom_produit || '').toString().slice(0, 80);
-    const teaser    = (d.teaser_text || '').toString().slice(0, 240);
-    const target    = safeDate(d.date_sortie);
-    const now       = Date.now();
-    const remMs     = Number.isFinite(target) ? Math.max(0, target - now) : 0;
-    const remH      = Math.floor(remMs / 3_600_000);
-    const remD      = Math.floor(remMs / 86_400_000);
-    const isLive    = Number.isFinite(target) && now >= target;
-
-    const remLabel = isLive
-      ? 'déjà disponible (date passée)'
-      : remD >= 2
-        ? `${remD} jours restants`
-        : remH >= 1
-          ? `${remH} heures restantes`
-          : 'moins d\'une heure restante';
-
-    const nowDate   = new Date();
-    const dayFr     = nowDate.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr    = nowDate.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient de voir un compte à rebours',
-      'avant la sortie d\'un produit. Tu écris la phrase d\'anticipation qui accompagne le countdown.',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots, urgence ou anticipation (ex: "J-3", "Bientôt", "C\'est aujourd\'hui")',
-      '- phrase : 1 seule phrase, max 18 mots, qui crée le désir sans surpromettre',
-      '- Si la date est passée, célèbre l\'ouverture/disponibilité',
-      '- Sinon, joue sur l\'attente, l\'imminence, le contexte',
-      '- Pas de CTA explicite (un bouton est déjà affiché), pas d\'horaires inventés',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nomMarque || '(non précisée)'}`,
-      `Produit : ${nomProduit || '(non précisé)'}`,
-      teaser ? `Teaser propriétaire : ${teaser}` : null,
-      `Statut : ${remLabel}`,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -105,6 +48,11 @@ const TEMPLATE = {
       ? new Date(targetMs).toISOString()
       : '';
     const compteScans = d.compte_scans === true || d.compte_scans === 'true';
+
+    // Titre + message saisis par le propriétaire (remplacent l'ancienne
+    // phrase IA). Révélés à T+5s pour respecter le rythme du countdown.
+    const smartTitle   = escHtml((qrData?.smart_title   || '').toString().slice(0, 80));
+    const smartMessage = escHtml((qrData?.smart_message || '').toString().slice(0, 400));
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -361,38 +309,8 @@ const TEMPLATE = {
     margin: 8px 0 4px; opacity: .8;
   }
 
-  /* Slot IA — skeleton puis reveal */
-  .sq-ia { margin-top: 18px; min-height: 80px; }
-
-  .sq-skeleton-title {
-    height: 20px; width: 50%; margin: 4px auto 10px;
-    border-radius: 5px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}40 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  .sq-skeleton-line {
-    height: 12px; margin: 6px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      rgba(148,163,184,.10) 0%, rgba(148,163,184,.26) 50%, rgba(148,163,184,.10) 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  .sq-skeleton-line.w80 { width: 80%; }
-  .sq-skeleton-line.w60 { width: 60%; }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  .sq-hint { margin-top: 14px; font-size: 12px; color: var(--mut);
-    opacity: .65; font-style: italic; }
-  .sq-hint::before { content: "✦"; color: var(--gold); margin-right: 6px;
-    opacity: .85; font-style: normal; display: inline-block;
-    animation: pulse 1.8s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+  /* Slot titre + message propriétaire — révélé à T+5s */
+  .sq-ia { margin-top: 18px; }
 
   .sq-final { display: none; }
   .sq-final.is-shown { display: block;
@@ -464,18 +382,12 @@ const TEMPLATE = {
   ${teaser ? `<p class="sq-teaser">${teaser}</p>` : ''}
   ${compteScans ? `<p class="sq-scancount" id="sq-scancount" hidden></p>` : ''}
 
-  <div class="sq-ia" id="sq-ia">
-    <div id="sq-loading">
-      <div class="sq-skeleton-title" aria-hidden="true"></div>
-      <div class="sq-skeleton-line w80" aria-hidden="true"></div>
-      <div class="sq-skeleton-line w60" aria-hidden="true"></div>
-      <p class="sq-hint">L'IA prépare votre annonce…</p>
-    </div>
+  ${(smartTitle || smartMessage) ? `<div class="sq-ia" id="sq-ia">
     <div class="sq-final" id="sq-final">
-      <h2 class="sq-title" id="sq-title"></h2>
-      <p id="sq-phrase"></p>
+      ${smartTitle ? `<h2 class="sq-title">${smartTitle}</h2>` : ''}
+      ${smartMessage ? `<p id="sq-phrase">${smartMessage}</p>` : ''}
     </div>
-  </div>
+  </div>` : ''}
 
   <div class="sq-cta-wrap">
     <a class="sq-cta" id="sq-continue" href="/r/${safeShort}?direct=1">
@@ -487,7 +399,6 @@ const TEMPLATE = {
   ${renderKeystoneFoot()}
 </div>
 
-${renderAiFetchScript(safeShort)}
 <script>
 (() => {
   const TARGET_ISO = ${JSON.stringify(targetIso)};
@@ -565,28 +476,12 @@ ${renderAiFetchScript(safeShort)}
   refresh();
   setInterval(refresh, 1000);
 
-  // Reveal IA = max(T+5s, réponse IA). Le countdown reste l'élément
-  // hero ; la phrase IA arrive en second plan d'anticipation.
-  const MIN_REVEAL_MS = 5000;
-  const t0 = Date.now();
-
-  function reveal(detail) {
-    const elapsed = Date.now() - t0;
-    const wait    = Math.max(0, MIN_REVEAL_MS - elapsed);
-    setTimeout(() => {
-      const loading = document.getElementById('sq-loading');
-      const final   = document.getElementById('sq-final');
-      const title   = document.getElementById('sq-title');
-      const phrase  = document.getElementById('sq-phrase');
-      if (title)  title.textContent  = detail.title  || (isLive ? 'C\\'est parti' : 'Bientôt');
-      if (phrase) phrase.textContent = detail.phrase || '';
-      if (loading) loading.hidden = true;
-      if (final)   final.classList.add('is-shown');
-    }, wait);
-  }
-
-  document.addEventListener('sq:ai-ready', (e) => reveal(e.detail));
-  document.addEventListener('sq:ai-error', (e) => reveal(e.detail));
+  // Titre + message du propriétaire (déjà rendus côté serveur) révélés
+  // à T+5s pour ne pas voler la vedette au countdown.
+  setTimeout(() => {
+    const final = document.getElementById('sq-final');
+    if (final) final.classList.add('is-shown');
+  }, 5000);
 })();
 </script>
 </body>

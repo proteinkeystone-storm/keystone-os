@@ -18,13 +18,12 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "2. Machine à sous"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript, renderWinPngScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderWinPngScript } from './_shared.js';
 
 const TEMPLATE = {
   id:              'machine-a-sous',
   label:           'Machine à sous',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -40,47 +39,6 @@ const TEMPLATE = {
       errors.push('Le taux de gain doit être un nombre entre 0 et 100.');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d         = qrData?.template_data || {};
-    const nom       = (d.nom_marque || '').toString().slice(0, 60);
-    const messageG  = (d.message_gain || '').toString().slice(0, 200);
-    const messageP  = (d.message_perte || '').toString().slice(0, 200);
-    const now       = new Date();
-    const dayFr     = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr    = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient de jouer à une',
-      'machine à sous marketing. Tu écris UNE phrase courte qui contextualise le',
-      'résultat sans savoir si c\'est gain ou perte (réponse générique mais chaleureuse).',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots accrocheurs (ex: "Bravo joueur", "À ton tour")',
-      '- phrase : 1 seule phrase max 18 mots, ton ludique, contextuelle (jour, heure)',
-      '- Si le brief métier parle d\'un produit (café, glace, etc.), tu peux y faire',
-      '  une allusion gourmande/positive sans rien promettre',
-      '- Pas de CTA, pas d\'horaires inventés',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nom || '(sans nom)'}`,
-      `Message gain configuré : ${messageG}`,
-      messageP ? `Message perte configuré : ${messageP}` : null,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -438,27 +396,6 @@ const TEMPLATE = {
   .sq-confetti i:nth-child(7) { left: 88%; background: #f472b6;
     animation-duration: 5.3s; animation-delay: .9s; height: 14px; }
 
-  /* Slot IA */
-  .sq-ia { margin-top: 18px; min-height: 50px;
-    opacity: 0; animation: ia-in 600ms 4500ms ease-out forwards; }
-  @keyframes ia-in { from { opacity: 0; } to { opacity: 1; } }
-  .sq-ia-title { font-size: 14px; font-weight: 600;
-    color: ${accent}; margin: 0 0 4px; letter-spacing: .02em; }
-  .sq-ia-phrase { color: var(--mut); font-size: 13px;
-    line-height: 1.5; margin: 0; font-style: italic; }
-  .sq-ia-skeleton {
-    height: 12px; width: 70%; margin: 4px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}33 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
   /* CTA Continuer (apparaît après le résultat) */
   .sq-cta-wrap { margin-top: 16px;
     opacity: 0; transition: opacity .42s ease;
@@ -538,17 +475,6 @@ const TEMPLATE = {
     </div>
 
     <p class="sq-replay-note" id="sq-replay-note" hidden></p>
-  </div>
-
-  <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
-       mais reste hidden : la phrase IA n'apporte rien dans le contexte
-       d'un gain marketing (le joueur ne lit que son code). Retiré 26/05. -->
-  <div class="sq-ia" id="sq-ia" hidden aria-hidden="true">
-    <div id="sq-ia-loading"></div>
-    <div id="sq-ia-ready" hidden>
-      <p class="sq-ia-title" id="sq-ia-title"></p>
-      <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
-    </div>
   </div>
 
   <div class="sq-cta-wrap" id="sq-cta-wrap">
@@ -728,9 +654,6 @@ const TEMPLATE = {
       }
       result.hidden = false;
       if (isWin) vibrate([90, 60, 90, 60, 140]);
-      // iaBlock reste hidden (retiré du flow UX 26/05 : la phrase IA
-      // n'aide pas le joueur, le code et le bouton de téléchargement
-      // sont les seuls éléments d'attention).
       ctaWrap.classList.add('is-shown');
     }, 3600);
   }
@@ -802,7 +725,6 @@ const TEMPLATE = {
   });
 })();
 </script>
-${renderAiFetchScript(safeShort)}
 ${renderWinPngScript(nomMarque, logoUrl, accent)}
 </body>
 </html>`;

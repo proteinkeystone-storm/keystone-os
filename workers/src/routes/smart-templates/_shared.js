@@ -78,15 +78,6 @@ export function renderKeystoneFoot() {
 }
 
 /**
- * Script JS inline standard qui fetch /api/smartqr/generate-interstitial
- * et révèle le slot IA quand la réponse arrive. À insérer en bas de page
- * dans chaque template V4. Variables exposées :
- *   - window.SQ_AI_READY = promise qui résout {title, phrase} ou rejette
- *   - event 'sq:ai-ready' dispatché sur document avec detail = {title, phrase}
- * Le template décide quand révéler (souvent : après que la séquence
- * motion graphique est terminée).
- */
-/**
  * V4.3 UX (2026-05-26) — Script inline qui génère un bon de gain
  * téléchargeable au format PNG via Canvas 2D. Appelle window.downloadWinPng
  * (à invoquer depuis le bouton du template) pour produire et télécharger
@@ -232,35 +223,6 @@ export function renderWinPngScript(nomMarque, logoUrl, accent, bgImage = '') {
       }, 1000);
     }, 'image/png', 0.95);
   };
-})();
-</script>`;
-}
-
-export function renderAiFetchScript(safeShort) {
-  return `<script>
-(() => {
-  const SHORT = ${JSON.stringify(safeShort)};
-  window.SQ_AI_READY = (async () => {
-    try {
-      const r = await fetch('/api/smartqr/generate-interstitial', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ short_id: SHORT }),
-      });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
-      const detail = {
-        title:  (data && data.title)  || 'Bienvenue',
-        phrase: (data && data.phrase) || '',
-      };
-      document.dispatchEvent(new CustomEvent('sq:ai-ready', { detail }));
-      return detail;
-    } catch (e) {
-      console.warn('[smart-qr]', e);
-      const fallback = { title: 'Votre destination est prête', phrase: 'Merci d\\'avoir scanné. Continuons.' };
-      document.dispatchEvent(new CustomEvent('sq:ai-error', { detail: fallback }));
-      throw e;
-    }
-  })();
 })();
 </script>`;
 }

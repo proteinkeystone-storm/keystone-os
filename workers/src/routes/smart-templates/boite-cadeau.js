@@ -19,13 +19,12 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "7. Boîte cadeau"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot } from './_shared.js';
 
 const TEMPLATE = {
   id:              'boite-cadeau',
   label:           'Boîte cadeau',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -37,50 +36,6 @@ const TEMPLATE = {
       errors.push('Le code promo est obligatoire.');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d         = qrData?.template_data || {};
-    const nom       = (d.nom_marque || '').toString().slice(0, 60);
-    const occasion  = (d.occasion || '').toString().slice(0, 60);
-    const codePromo = (d.code_promo || '').toString().slice(0, 40);
-    const valeur    = (d.valeur_offre || '').toString().slice(0, 80);
-    const now       = new Date();
-    const dayFr     = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr    = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient d\'ouvrir',
-      'une boîte cadeau virtuelle qui contient un code promo. Tu écris UNE',
-      'phrase courte chaleureuse qui accompagne la révélation, en t\'appuyant',
-      'sur l\'occasion (anniversaire, Noël, Saint-Valentin, bienvenue, etc.).',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots chaleureux (ex: "Joyeux Noël", "Une surprise pour toi")',
-      '- phrase : 1 seule phrase max 18 mots, ton complice et festif',
-      '- Tu peux faire allusion à l\'occasion si elle est donnée',
-      '- Ne pas répéter le code promo dans la phrase (il est déjà affiché à part)',
-      '- Pas de CTA texte, pas d\'horaires inventés',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nom || '(sans nom)'}`,
-      occasion  ? `Occasion : ${occasion}` : null,
-      codePromo ? `Code promo (informatif, ne pas le réciter) : ${codePromo}` : null,
-      valeur    ? `Valeur de l'offre : ${valeur}` : null,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -95,6 +50,11 @@ const TEMPLATE = {
     const valeurOffre = escHtml((d.valeur_offre || '').toString().slice(0, 80));
     const validite    = escHtml((d.validite || '').toString().slice(0, 100));
     const occasion    = escHtml((d.occasion || '').toString().slice(0, 60));
+
+    // Titre + message saisis par le propriétaire (remplacent l'ancienne
+    // phrase IA). Révélés en fondu à l'ouverture de la boîte.
+    const smartTitle   = escHtml((qrData?.smart_title   || '').toString().slice(0, 80));
+    const smartMessage = escHtml((qrData?.smart_message || '').toString().slice(0, 400));
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -387,26 +347,14 @@ const TEMPLATE = {
     border-color: transparent;
   }
 
-  /* Slot IA */
-  .sq-ia { margin-top: 18px; min-height: 50px;
+  /* Slot titre + message du propriétaire — révélé à l'ouverture */
+  .sq-ia { margin-top: 18px;
     opacity: 0; transition: opacity .5s ease 2.2s; }
   body.is-open .sq-ia { opacity: 1; }
   .sq-ia-title { font-size: 14px; font-weight: 600;
     color: ${accent}; margin: 0 0 4px; letter-spacing: .02em; }
   .sq-ia-phrase { color: var(--mut); font-size: 13px;
     line-height: 1.5; margin: 0; font-style: italic; }
-  .sq-ia-skeleton {
-    height: 12px; width: 70%; margin: 4px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}33 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   /* CTA Continuer */
   .sq-cta-wrap { margin-top: 18px;
@@ -463,15 +411,10 @@ const TEMPLATE = {
     ${validite ? `<p class="sq-reveal-validite">${validite}</p>` : ''}
   </div>
 
-  <div class="sq-ia" id="sq-ia">
-    <div id="sq-ia-loading">
-      <div class="sq-ia-skeleton"></div>
-    </div>
-    <div id="sq-ia-ready" hidden>
-      <p class="sq-ia-title" id="sq-ia-title"></p>
-      <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
-    </div>
-  </div>
+  ${(smartTitle || smartMessage) ? `<div class="sq-ia" id="sq-ia">
+    ${smartTitle ? `<p class="sq-ia-title">${smartTitle}</p>` : ''}
+    ${smartMessage ? `<p class="sq-ia-phrase">${smartMessage}</p>` : ''}
+  </div>` : ''}
 
   <div class="sq-cta-wrap" id="sq-cta-wrap">
     <a class="sq-cta" href="/r/${safeShort}?direct=1">
@@ -555,23 +498,8 @@ const TEMPLATE = {
       setTimeout(() => copyBtn.textContent = '📋 Copier le code', 2400);
     });
   });
-
-  // Slot IA : hook l'event renderAiFetchScript pour révéler le texte
-  document.addEventListener('sq:ai-ready', (e) => {
-    const t = el('sq-ia-title'), p = el('sq-ia-phrase');
-    const loading = el('sq-ia-loading'), ready = el('sq-ia-ready');
-    if (t) t.textContent = e.detail.title || '';
-    if (p) p.textContent = e.detail.phrase || '';
-    if (loading) loading.hidden = true;
-    if (ready) ready.hidden = false;
-  });
-  document.addEventListener('sq:ai-error', () => {
-    const loading = el('sq-ia-loading');
-    if (loading) loading.hidden = true;
-  });
 })();
 </script>
-${renderAiFetchScript(safeShort)}
 </body>
 </html>`;
   },

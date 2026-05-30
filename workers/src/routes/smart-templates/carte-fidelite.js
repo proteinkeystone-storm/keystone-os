@@ -20,13 +20,12 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "6. Carte de fidélité"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript, renderWinPngScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderWinPngScript } from './_shared.js';
 
 const TEMPLATE = {
   id:              'carte-fidelite',
   label:           'Carte de fidélité',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -42,48 +41,6 @@ const TEMPLATE = {
       errors.push('Le nombre de tampons doit être entre 3 et 30.');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d         = qrData?.template_data || {};
-    const nom       = (d.nom_marque || '').toString().slice(0, 60);
-    const recompense = (d.nom_recompense || '').toString().slice(0, 80);
-    const total     = Math.max(3, Math.min(30, Number(d.nb_tampons_total) || 10));
-    const now       = new Date();
-    const dayFr     = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr    = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient d\'ajouter',
-      'un tampon à sa carte de fidélité (programme de retours répétés). Tu écris',
-      'UNE phrase courte chaleureuse qui encourage la prochaine visite — sans',
-      'connaître l\'avancement exact (phrase générique applicable à tout stade).',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots chaleureux (ex: "Tampon ajouté", "À bientôt")',
-      '- phrase : 1 seule phrase max 18 mots, ton fidèle et accueillant',
-      '- Si le brief métier parle d\'un produit (café, croissant, etc.), tu peux y',
-      '  faire une allusion gourmande/positive sans rien promettre',
-      '- Pas de CTA, pas d\'horaires inventés, pas de chiffres précis',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nom || '(sans nom)'}`,
-      `Récompense visée : ${recompense}`,
-      `Objectif : ${total} tampons à collecter`,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -110,6 +67,11 @@ const TEMPLATE = {
 
     // Grid responsive : si total ≤ 10 → 5 col, sinon → 6 col
     const gridCols = stampsTotal <= 10 ? 5 : 6;
+
+    // Titre + message d'encouragement saisis par le propriétaire
+    // (remplacent l'ancienne phrase IA). Révélés en fondu à T+1.2s.
+    const smartTitle   = escHtml((qrData?.smart_title   || '').toString().slice(0, 80));
+    const smartMessage = escHtml((qrData?.smart_message || '').toString().slice(0, 400));
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -400,26 +362,14 @@ const TEMPLATE = {
   .sq-confetti i:nth-child(7) { left: 88%; background: #f472b6;
     animation-duration: 5.3s; animation-delay: .9s; height: 14px; }
 
-  /* Slot IA — visible cette fois (phrase d'encouragement utile) */
-  .sq-ia { margin-top: 18px; min-height: 50px;
+  /* Slot titre + message d'encouragement du propriétaire */
+  .sq-ia { margin-top: 18px;
     opacity: 0; animation: ia-in 600ms 1200ms ease-out forwards; }
   @keyframes ia-in { from { opacity: 0; } to { opacity: 1; } }
   .sq-ia-title { font-size: 14px; font-weight: 600;
     color: ${accent}; margin: 0 0 4px; letter-spacing: .02em; }
   .sq-ia-phrase { color: var(--mut); font-size: 13px;
     line-height: 1.5; margin: 0; font-style: italic; }
-  .sq-ia-skeleton {
-    height: 12px; width: 70%; margin: 4px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}33 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   /* CTA Continuer */
   .sq-cta-wrap { margin-top: 18px;
@@ -486,15 +436,10 @@ const TEMPLATE = {
     </div>
   </div>
 
-  <div class="sq-ia" id="sq-ia">
-    <div id="sq-ia-loading">
-      <div class="sq-ia-skeleton"></div>
-    </div>
-    <div id="sq-ia-ready" hidden>
-      <p class="sq-ia-title" id="sq-ia-title"></p>
-      <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
-    </div>
-  </div>
+  ${(smartTitle || smartMessage) ? `<div class="sq-ia" id="sq-ia">
+    ${smartTitle ? `<p class="sq-ia-title">${smartTitle}</p>` : ''}
+    ${smartMessage ? `<p class="sq-ia-phrase">${smartMessage}</p>` : ''}
+  </div>` : ''}
 
   <div class="sq-cta-wrap" id="sq-cta-wrap">
     <a class="sq-cta" href="/r/${safeShort}?direct=1">
@@ -665,23 +610,8 @@ const TEMPLATE = {
     // CTA visible après ≈ animation
     setTimeout(() => ctaWrap.classList.add('is-shown'), 1400);
   })();
-
-  // Slot IA : hook l'event renderAiFetchScript pour révéler le texte
-  document.addEventListener('sq:ai-ready', (e) => {
-    const t = el('sq-ia-title'), p = el('sq-ia-phrase');
-    const loading = el('sq-ia-loading'), ready = el('sq-ia-ready');
-    if (t) t.textContent = e.detail.title || '';
-    if (p) p.textContent = e.detail.phrase || '';
-    if (loading) loading.hidden = true;
-    if (ready) ready.hidden = false;
-  });
-  document.addEventListener('sq:ai-error', () => {
-    const loading = el('sq-ia-loading');
-    if (loading) loading.hidden = true;
-  });
 })();
 </script>
-${renderAiFetchScript(safeShort)}
 ${renderWinPngScript(nomMarque, logoUrl, accent)}
 </body>
 </html>`;

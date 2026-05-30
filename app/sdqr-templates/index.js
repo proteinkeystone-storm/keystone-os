@@ -14,33 +14,31 @@
 //   3. Créer le pendant côté Worker (workers/src/routes/smart-templates/<id>.js)
 // ══════════════════════════════════════════════════════════════════
 
-import phraseSimple      from './phrase-simple.js';
 import storytellingBrand from './storytelling-brand.js';
 import countdownProduit  from './countdown-produit.js';
 import machineASous     from './machine-a-sous.js';
 import carteAGratter    from './carte-a-gratter.js';
 import carteFidelite   from './carte-fidelite.js';
-import quizOrientation from './quiz-orientation.js';
 import boiteCadeau     from './boite-cadeau.js';
-// V4 (en cours, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
+// V4 (brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter).
 // V4.4 livré 2026-05-26 (carte-fidelite) — état cumulatif serveur.
-// V4.2 livré 2026-05-26 (quiz-orientation + boite-cadeau).
+// V4.2 livré 2026-05-26 (boite-cadeau).
+// 2026-05-30 : IA retirée (titre + message saisis en direct) ; templates
+// phrase-simple et quiz-orientation supprimés.
 
 const TEMPLATES = {
-  [phraseSimple.id]:      phraseSimple,
   [storytellingBrand.id]: storytellingBrand,
   [countdownProduit.id]:  countdownProduit,
   [machineASous.id]:      machineASous,
   [carteAGratter.id]:     carteAGratter,
   [carteFidelite.id]:     carteFidelite,
-  [quizOrientation.id]:   quizOrientation,
   [boiteCadeau.id]:       boiteCadeau,
 };
 
 export function getTemplate(id) {
-  return TEMPLATES[id] || TEMPLATES['phrase-simple'];
+  return TEMPLATES[id] || TEMPLATES['storytelling-brand'];
 }
 
 export function listTemplates() {

@@ -19,8 +19,6 @@ import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } f
 import { requireJWT } from '../lib/jwt.js';
 // Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
 import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
-import { KS_AI_MODEL } from '../lib/ai-model.js';
-import { recordUsage } from '../lib/ai-budget.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -281,19 +279,19 @@ export async function handleCreateQr(request, env) {
   const payload = (body.payload && typeof body.payload === 'object') ? body.payload : {};
   const design  = (body.design  && typeof body.design  === 'object') ? body.design  : {};
   const tags    = Array.isArray(body.tags) ? body.tags.slice(0, 12) : [];
-  // Brief métier rempli par le propriétaire pour alimenter l'IA des
-  // interstitiels Smart QR. Optionnel — si vide, l'IA se débrouille
-  // avec les autres signaux (type, target_url, scan context).
-  const metier_brief = (body.metier_brief || '').toString().trim().slice(0, 2000);
+  // Smart QR — titre + message saisis en direct par le propriétaire,
+  // affichés tels quels sur l'interstitiel (plus d'IA depuis 2026-05-30).
+  const smart_title   = (body.smart_title   || '').toString().trim().slice(0, 80);
+  const smart_message = (body.smart_message || '').toString().trim().slice(0, 400);
   // Smart QR V2 — template_id sélectionné par le propriétaire (registry
-  // ./smart-templates/). Optionnel : fallback 'phrase-simple' au scan
+  // ./smart-templates/). Optionnel : fallback 'storytelling-brand' au scan
   // (handleSmartQrInterstitial gère le fallback). Ici on valide juste
   // que l'id est connu ou vide.
   const template_id_raw = (body.template_id || '').toString().trim();
   if (mode === 'smart' && template_id_raw && !isKnownTemplate(template_id_raw)) {
     return err(`template_id inconnu : ${template_id_raw}`, 400, origin);
   }
-  const template_id   = mode === 'smart' ? (template_id_raw || 'phrase-simple') : null;
+  const template_id   = mode === 'smart' ? (template_id_raw || 'storytelling-brand') : null;
   // template_data : blob JSON libre (schéma défini par chaque template).
   // Limité à 32 KB pour éviter les abus / quotas D1.
   const template_data_raw = body.template_data && typeof body.template_data === 'object'
@@ -353,9 +351,10 @@ export async function handleCreateQr(request, env) {
     id, tenant_id: tenantId, type: 'qr_codes',
     name, qr_type: type, mode, payload, design, tags,
     short_id: short, status: 'active', created_at: now, updated_at: now,
-    // Smart QR — brief métier pour alimenter l'IA contextuelle. Stocké
-    // dans entities.data (JSON blob) — pas de migration SQL nécessaire.
-    metier_brief: metier_brief || null,
+    // Smart QR — titre + message statiques affichés sur l'interstitiel.
+    // Stockés dans entities.data (JSON blob) — pas de migration SQL.
+    smart_title:   smart_title   || null,
+    smart_message: smart_message || null,
     // V2 templates programmables (cf. ./smart-templates/)
     template_id, template_data,
   };
@@ -462,6 +461,14 @@ export async function handleUpdateQr(request, env, qrId) {
   if (body.folder !== undefined)  entity.folder = body.folder ? String(body.folder).trim().slice(0, 80) : null;
   if (body.design !== undefined)  entity.design = body.design;
   if (body.payload !== undefined) entity.payload = body.payload;
+  // Smart QR — titre + message statiques de l'interstitiel, éditables après
+  // création (comme la cible d'un QR dynamique). null = champ vidé.
+  if (body.smart_title !== undefined) {
+    entity.smart_title = String(body.smart_title).trim().slice(0, 80) || null;
+  }
+  if (body.smart_message !== undefined) {
+    entity.smart_message = String(body.smart_message).trim().slice(0, 400) || null;
+  }
   if (body.status !== undefined && ['active', 'archived'].includes(body.status)) {
     entity.status = body.status;
   }
@@ -900,64 +907,22 @@ export async function handleScheduledPurge(env) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SDQR Smart QR — Interstitiel IA contextuel (2026-05-24)
+// SDQR Smart QR — Interstitiel statique (2026-05-24, IA retirée 2026-05-30)
 // ───────────────────────────────────────────────────────────────────
-// MVP killer feature : un scan de QR mode "smart" → page intermédiaire
-// avec contenu IA contextuel (Gemma 4 Workers AI) avant la redirection
-// finale. Inputs du prompt : type, label, target_url, brief métier du
-// propriétaire + contexte scan (country, device, heure).
-//
-// Architecture 2-step pour UX mobile fluide :
-//   1. handleSmartQrInterstitial → HTML page (spinner immédiat)
-//   2. fetch /api/smartqr/generate-interstitial → JSON contenu IA
-//   3. Fade-in + bouton "Continuer →" → /r/:short?direct=1
-//
-// Cache : qr_interstitial_cache par (short_id, country, device_kind)
-// TTL 1h pour rester contextuel sans cramer les neurones AI.
+// Un scan de QR mode "smart" → page intermédiaire (template d'expérience
+// d'attente) avant la redirection finale. Le titre + message affichés sont
+// saisis en direct par le propriétaire (smart_title / smart_message) et
+// rendus en statique côté serveur — plus d'appel IA ni de cache D1.
+// handleSmartQrInterstitial dispatche vers le registry de templates
+// (cf. ./smart-templates/index.js) ; chaque template rend sa page complète.
 // ══════════════════════════════════════════════════════════════════
 
-// Switch Llama 3.1 8B (2026-05-26 soir) — interstitiel Smart QR : le
-// client est devant son écran à attendre, chaque seconde compte.
-// Gemma 4 raisonneur prenait 5-8s avant le premier token (budget
-// reasoning). Llama 3.1 8B sort direct en ~500ms-1.5s pour le même
-// résultat de qualité suffisante (1 phrase + 1 titre courts).
-// Validé sur Brainstorming Sprint 2 et migré sur Living Layer le même
-// jour (cohérence cross-Smart QR).
-// 2026-05-29 : moteur unique Keystone (Mistral Small 3.1, cf. lib/ai-model.js), ex-Llama.
-const SMARTQR_MODEL_ID  = KS_AI_MODEL;
-// Plus de budget reasoning à prévoir. 400 tokens suffisent pour un JSON
-// court {"phrase":"...","title":"..."} (chaque champ < 100 chars).
-const SMARTQR_MAX_TOK   = 400;
-const SMARTQR_CACHE_TTL = 60 * 60 * 1000; // 1h en ms
-
-// Auto-migration cache table (idempotent)
-let _smartCacheReady = false;
-async function _ensureSmartCacheTable(env) {
-  if (_smartCacheReady) return;
-  try {
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS qr_interstitial_cache (
-        short_id     TEXT NOT NULL,
-        country      TEXT NOT NULL DEFAULT '?',
-        device_kind  TEXT NOT NULL DEFAULT '?',
-        content_json TEXT NOT NULL,
-        generated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (short_id, country, device_kind)
-      )
-    `).run();
-    _smartCacheReady = true;
-  } catch (e) {
-    console.warn('[smartqr] cache table init failed:', e.message);
-  }
-}
-
-// Renvoie l'HTML interstitiel léger qui fetch ensuite /api/smartqr/generate.
-// Appelé depuis handleQrRedirect quand data.mode === 'smart'. V2 : dispatcher
-// vers le registry de templates (cf. ./smart-templates/index.js). Le QR porte
-// son template_id dans entities.data (fallback 'phrase-simple' si absent).
+// Appelé depuis handleQrRedirect quand data.mode === 'smart'. Dispatcher
+// vers le registry de templates. Le QR porte son template_id dans
+// entities.data (fallback 'storytelling-brand' si absent ou supprimé).
 export async function handleSmartQrInterstitial(request, env, shortId, ctx) {
   const qrData      = ctx?.qr || {};
-  const template    = getTemplate(qrData.template_id || 'phrase-simple');
+  const template    = getTemplate(qrData.template_id || 'storytelling-brand');
   // Injecte short_id dans qrData pour que renderHTML puisse construire les
   // URLs /r/SHORTID?direct=1 (le QR data en base n'a pas toujours short_id
   // dénormalisé selon les contextes d'appel).
@@ -971,161 +936,6 @@ export async function handleSmartQrInterstitial(request, env, shortId, ctx) {
       'Cache-Control': 'no-store', // contextuel par essence
     },
   });
-}
-
-// POST /api/smartqr/generate-interstitial { short_id }
-// Endpoint PUBLIC (appelé depuis l'HTML servi à n'importe quel scanneur),
-// donc pas d'auth. Mitigations abus : cache D1 par (short, country, device).
-export async function handleSmartQrGenerate(request, env) {
-  const origin = '*'; // public — pas d'auth, pas de credentials
-  await _ensureSmartCacheTable(env);
-
-  const body    = await parseBody(request);
-  const shortId = (body.short_id || '').toString().trim();
-  if (!shortId || shortId.length < 4 || shortId.length > 32) {
-    return err('short_id invalide', 400, origin);
-  }
-  // V4.2 (2026-05-26) : context optionnel — permet à un template de passer
-  // un contexte spécifique à son scénario (ex: tag d'une réponse choisie
-  // par l'utilisateur dans le quiz d'orientation). Si présent, on sait que
-  // la phrase doit être personnalisée → on saute le cache.
-  const userContext = (body && typeof body.context === 'object' && body.context)
-                    ? body.context : null;
-
-  // Récupère le QR via entities (mode smart obligatoire)
-  let qrData = null;
-  try {
-    const entityRow = await env.DB
-      .prepare(`SELECT data FROM entities
-                WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
-                AND deleted_at IS NULL LIMIT 1`)
-      .bind(shortId)
-      .first();
-    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
-  } catch (e) {
-    return err('Lookup entity échoué : ' + e.message, 500, origin);
-  }
-  if (!qrData) return err('QR introuvable', 404, origin);
-  if (qrData.mode !== 'smart') return err('QR non Smart', 400, origin);
-
-  // Récupère target_url depuis qr_redirects
-  const redirectRow = await env.DB
-    .prepare('SELECT target_url, qr_type FROM qr_redirects WHERE short_id = ?')
-    .bind(shortId)
-    .first();
-
-  // Contexte scan
-  const ua      = request.headers.get('User-Agent') || '';
-  const country = request.cf?.country || '?';
-  const { device } = parseUA(ua);
-  const deviceKey = device || '?';
-
-  // Check cache (skip si un userContext personnalisé est fourni — la phrase
-  // doit refléter ce contexte, donc le cache global serait incorrect).
-  if (!userContext) {
-    try {
-      const cached = await env.DB
-        .prepare(`SELECT content_json, generated_at FROM qr_interstitial_cache
-                  WHERE short_id = ? AND country = ? AND device_kind = ?`)
-        .bind(shortId, country, deviceKey)
-        .first();
-      if (cached?.content_json) {
-        const ageMs = Date.now() - new Date(cached.generated_at + 'Z').getTime();
-        if (ageMs < SMARTQR_CACHE_TTL) {
-          return json({ ...JSON.parse(cached.content_json), cached: true }, 200, origin);
-        }
-      }
-    } catch (e) { /* miss = no-op */ }
-  }
-
-  // Compose prompt Gemma 4 via le template (V2 — registry programmable)
-  if (!env.AI || typeof env.AI.run !== 'function') {
-    return err('Workers AI non configuré', 503, origin);
-  }
-
-  const template = getTemplate(qrData.template_id || 'phrase-simple');
-  const scanCtx  = {
-    country,
-    device:        deviceKey,
-    target_url:    redirectRow?.target_url || '',
-    qr_type:       redirectRow?.qr_type    || qrData.qr_type || 'url',
-    // V4.2 — context fourni par le client (ex: { quiz_tag: 'teen' }), passé
-    // tel quel au template pour qu'il l'utilise dans son prompt si pertinent.
-    user_context:  userContext,
-  };
-  const { system: systemPrompt, user: userPrompt } = template.buildAiPrompt(qrData, scanCtx);
-
-  let aiResponse;
-  try {
-    aiResponse = await env.AI.run(SMARTQR_MODEL_ID, {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt },
-      ],
-      max_tokens: template.ai_max_tokens || SMARTQR_MAX_TOK,
-    });
-  } catch (e) {
-    return err('Workers AI erreur : ' + e.message, 502, origin);
-  }
-
-  // Workers AI renvoie selon le modèle. Gemma 4 OpenAI-compat → choices[].
-  // Pattern repris de ghostwriter.js / living-layer.js (mêmes leçons mai 2026).
-  const rawText = aiResponse?.response
-    || aiResponse?.result?.response
-    || aiResponse?.choices?.[0]?.message?.content
-    || aiResponse?.output?.[0]?.content?.[0]?.text
-    || aiResponse?.message?.content
-    || aiResponse?.text
-    || aiResponse?.completion
-    || '';
-
-  // Compteur budget IA (best-effort). On COMPTE l'interstitiel mais on ne
-  // le BRIDE PAS : c'est client-facing (scans Bowling/Prométhée), peu
-  // coûteux et caché en D1 par QR — il doit toujours fonctionner.
-  await recordUsage(env, 'smart-qr', {
-    usage : aiResponse?.usage,
-    inText: systemPrompt + userPrompt,
-    outText: rawText,
-  });
-
-  let parsed = null;
-  try {
-    const cleaned = rawText
-      .replace(/^```(?:json)?\s*/im, '')
-      .replace(/\s*```\s*$/m, '')
-      .trim();
-    const jsonStart = cleaned.indexOf('{');
-    const jsonEnd   = cleaned.lastIndexOf('}');
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
-    }
-  } catch (e) { /* fallthrough vers fallback */ }
-
-  // Fallback si parse échoue : phrase générique safe (polish V1)
-  const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200)
-    || 'Votre destination est prête. Merci d\'avoir scanné.';
-  const title  = (parsed?.title  || '').toString().trim().slice(0, 50)
-    || 'Bienvenue';
-
-  // Cache result (skip si userContext personnalisé — sinon on polluerait le
-  // cache global avec une phrase ciblée pour un seul scanneur).
-  const content = { phrase, title, generated_at: new Date().toISOString() };
-  if (!userContext) {
-    try {
-      await env.DB
-        .prepare(`INSERT INTO qr_interstitial_cache (short_id, country, device_kind, content_json, generated_at)
-                  VALUES (?, ?, ?, ?, datetime('now'))
-                  ON CONFLICT(short_id, country, device_kind) DO UPDATE SET
-                    content_json = excluded.content_json,
-                    generated_at = excluded.generated_at`)
-        .bind(shortId, country, deviceKey, JSON.stringify(content))
-        .run();
-    } catch (e) {
-      console.warn('[smartqr] cache write failed:', e.message);
-    }
-  }
-
-  return json({ ...content, cached: false }, 200, origin);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1698,7 +1508,7 @@ export async function handleSmartQrLoyaltyStamp(request, env) {
   }, 200, origin);
 }
 
-// Template HTML interstitiel — déplacé V2 dans ./smart-templates/phrase-simple.js
+// Template HTML interstitiel — chaque layout vit dans ./smart-templates/.
 // Le dispatcher handleSmartQrInterstitial appelle template.renderHTML() depuis
 // le registry. Pour ajouter un nouveau layout (menu, tombola, etc.), créer un
 // nouveau template dans ./smart-templates/ — aucune modification de qr.js requise.

@@ -59,7 +59,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGenerate, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp } from './routes/qr.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -305,9 +305,6 @@ export default {
       // CRUD QR — tenant authentifié via X-Tenant-Id (à durcir si besoin)
       if (path === '/api/qr' && method === 'POST') return handleCreateQr(request, env);
       if (path === '/api/qr' && method === 'GET')  return handleListQr(request, env);
-      // SDQR Smart QR 2026-05-24 — endpoint public (pas d'auth, appelé
-      // depuis l'HTML interstitiel servi à n'importe quel scanneur).
-      if (path === '/api/smartqr/generate-interstitial' && method === 'POST') return handleSmartQrGenerate(request, env);
       // Smart QR V4.3 (2026-05-26) — endpoint authoritative jeux (machine
       // à sous + carte à gratter). Tire l'aléatoire serveur, anti-rejouage
       // par device_hash, gère le stock de lots_disponibles.

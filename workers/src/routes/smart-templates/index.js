@@ -19,59 +19,54 @@
 //     id              : string                              // unique
 //     label           : string                              // affiché studio
 //     tier_required   : 'starter'|'pro'|'max'               // gating
-//     ai_max_tokens   : number                              // budget Gemma 4
 //
 //     validate(template_data: object) : string[]            // erreurs vides = OK
 //
-//     buildAiPrompt(qrData, scanCtx) : {system, user}       // → Workers AI
-//       qrData = { metier_brief, name, qr_type, mode, template_id, template_data, ... }
-//       scanCtx = { country, device, os, ua, target_url, qr_type, encoded_payload }
-//
 //     renderHTML(qrData, scanCtx) : string                  // HTML interstitiel
 //       Renvoie une page HTML complète, mobile-first, Apple Premium.
-//       Le slot dynamique (phrase IA) est rempli en JS inline via fetch
-//       /api/smartqr/generate-interstitial.
+//       qrData = { smart_title, smart_message, name, qr_type, mode, template_id, template_data, ... }
+//       scanCtx = { country, device, os, ua, target_url, qr_type, encoded_payload }
+//       Le titre + message sont saisis par le propriétaire et rendus en
+//       statique côté serveur (plus d'IA depuis 2026-05-30).
 //
 //     fetchLiveData?(env, short_id) : Promise<object>       // optionnel (tombola etc.)
 //   }
 // ══════════════════════════════════════════════════════════════════
 
-import phraseSimple      from './phrase-simple.js';
 import storytellingBrand from './storytelling-brand.js';
 import countdownProduit  from './countdown-produit.js';
 import machineASous     from './machine-a-sous.js';
 import carteAGratter    from './carte-a-gratter.js';
 import carteFidelite   from './carte-fidelite.js';
-import quizOrientation from './quiz-orientation.js';
 import boiteCadeau     from './boite-cadeau.js';
-// V4 (en cours, brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
+// V4 (brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter) — vrais jeux
 // avec aléatoire authoritative serveur via /api/smartqr/game-play.
 // V4.4 livré 2026-05-26 (carte-fidelite) — état cumulatif cross-scan
 // via /api/smartqr/loyalty-stamp + table D1 smartqr_loyalty_stamps.
-// V4.2 livré 2026-05-26 (quiz-orientation + boite-cadeau) — interactivité
-// simple sans état serveur, le quiz utilise le body.context étendu de
-// /api/smartqr/generate-interstitial pour personnaliser la phrase IA.
+// V4.2 livré 2026-05-26 (boite-cadeau).
+// 2026-05-30 : IA retirée de tous les templates (titre + message saisis
+// en direct par le propriétaire) ; templates phrase-simple et
+// quiz-orientation supprimés.
 
 const TEMPLATES = {
-  [phraseSimple.id]:      phraseSimple,
   [storytellingBrand.id]: storytellingBrand,
   [countdownProduit.id]:  countdownProduit,
   [machineASous.id]:      machineASous,
   [carteAGratter.id]:     carteAGratter,
   [carteFidelite.id]:     carteFidelite,
-  [quizOrientation.id]:   quizOrientation,
   [boiteCadeau.id]:       boiteCadeau,
 };
 
 /**
- * Retourne le template correspondant à l'id, ou phrase-simple par
- * défaut (compat backward : les Smart QR créés avant V2 n'ont pas
- * de template_id, ils basculent automatiquement sur phrase-simple).
+ * Retourne le template correspondant à l'id, ou storytelling-brand par
+ * défaut (compat backward : les Smart QR créés avant V2 — ou ceux qui
+ * pointaient sur les templates supprimés phrase-simple/quiz-orientation —
+ * basculent automatiquement sur storytelling-brand).
  */
 export function getTemplate(id) {
-  return TEMPLATES[id] || TEMPLATES['phrase-simple'];
+  return TEMPLATES[id] || TEMPLATES['storytelling-brand'];
 }
 
 /**

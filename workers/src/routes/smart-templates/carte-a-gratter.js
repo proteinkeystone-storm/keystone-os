@@ -20,13 +20,12 @@
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "3. Carte à gratter"
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderAiFetchScript, renderWinPngScript } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot, renderWinPngScript } from './_shared.js';
 
 const TEMPLATE = {
   id:              'carte-a-gratter',
   label:           'Carte à gratter',
   tier_required:   'pro',
-  ai_max_tokens:   4096,
 
   validate(template_data) {
     const errors = [];
@@ -40,43 +39,6 @@ const TEMPLATE = {
       errors.push('Ajoute au moins un lot à gagner.');
     }
     return errors;
-  },
-
-  buildAiPrompt(qrData, scanCtx) {
-    const d        = qrData?.template_data || {};
-    const nom      = (d.nom_marque || '').toString().slice(0, 60);
-    const messageG = (d.message_gain || '').toString().slice(0, 200);
-    const now      = new Date();
-    const dayFr    = now.toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
-    const hourFr   = now.toLocaleString('fr-FR', { hour: '2-digit', timeZone: 'Europe/Paris' });
-
-    const system = [
-      'Tu es l\'assistant Smart QR de Keystone OS. Le scanneur vient de gratter',
-      'une carte à gratter marketing. Tu écris UNE phrase courte chaleureuse qui',
-      'accompagne le résultat (générique car tu ne sais pas si gagné ou perdu).',
-      '',
-      'Règles strictes :',
-      '- title : 3-5 mots chaleureux (ex: "Carte révélée", "À toi de voir")',
-      '- phrase : 1 seule phrase max 18 mots, ton intime et tactile',
-      '- Pas de CTA, pas d\'horaires inventés',
-      '- Réponse en JSON STRICT : {"phrase":"...","title":"..."}',
-    ].join('\n');
-
-    const user = [
-      `Marque : ${nom || '(sans nom)'}`,
-      `Message gain configuré : ${messageG}`,
-      qrData?.metier_brief ? `Brief métier : ${qrData.metier_brief.slice(0, 600)}` : null,
-      '',
-      'Contexte du scan :',
-      `- Jour : ${dayFr}`,
-      `- Heure (Paris) : ${hourFr}h`,
-      `- Pays : ${scanCtx?.country || '?'}`,
-      `- Device : ${scanCtx?.device || '?'}`,
-      '',
-      'Génère le JSON {"phrase","title"} maintenant.',
-    ].filter(Boolean).join('\n');
-
-    return { system, user };
   },
 
   renderHTML(qrData, scanCtx) {
@@ -344,24 +306,6 @@ const TEMPLATE = {
   .sq-confetti i:nth-child(7) { left: 88%; background: #f472b6;
     animation-duration: 5.3s; animation-delay: .9s; height: 14px; }
 
-  /* IA */
-  .sq-ia { margin-top: 12px; min-height: 50px; }
-  .sq-ia-title { font-size: 14px; font-weight: 600;
-    color: ${accent}; margin: 0 0 4px; letter-spacing: .02em; }
-  .sq-ia-phrase { color: var(--mut); font-size: 13px;
-    line-height: 1.5; margin: 0; font-style: italic; }
-  .sq-ia-skeleton {
-    height: 12px; width: 70%; margin: 4px auto;
-    border-radius: 4px;
-    background: linear-gradient(90deg,
-      ${accent}1a 0%, ${accent}33 50%, ${accent}1a 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s linear infinite;
-  }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   /* CTA */
   .sq-cta-wrap { margin-top: 16px;
@@ -425,17 +369,6 @@ const TEMPLATE = {
     </div>
     <button type="button" class="sq-download-btn" id="sq-download-btn">🎫 Télécharger mon bon (.png)</button>
     <button type="button" class="sq-copy-btn" id="sq-copy-btn">📋 Copier le code</button>
-  </div>
-
-  <!-- Slot IA conservé pour le contrat (test runner vérifie sa présence)
-       mais reste hidden : la phrase IA n'apporte rien dans le contexte
-       d'un gain marketing. Retiré 26/05. -->
-  <div class="sq-ia" id="sq-ia" hidden aria-hidden="true">
-    <div id="sq-ia-loading"></div>
-    <div id="sq-ia-ready" hidden>
-      <p class="sq-ia-title" id="sq-ia-title"></p>
-      <p class="sq-ia-phrase" id="sq-ia-phrase"></p>
-    </div>
   </div>
 
   <div class="sq-cta-wrap" id="sq-cta-wrap">
@@ -687,13 +620,8 @@ const TEMPLATE = {
   // Init après que le wrap a sa dimension réelle
   window.addEventListener('load', initCanvas);
   initCanvas();
-
-  // (Le slot IA reste hidden — la phrase IA est désactivée pour les
-  // templates jeux depuis le 26/05. Le scaffold est conservé pour
-  // satisfaire le contrat du test runner.)
 })();
 </script>
-${renderAiFetchScript(safeShort)}
 ${renderWinPngScript(nomMarque, logoUrl, accent, imgFond)}
 </body>
 </html>`;

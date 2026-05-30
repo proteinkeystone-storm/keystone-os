@@ -5,8 +5,7 @@
    Valide les templates V1 + V4 livrés sans toucher à la prod.
    Chaque template doit :
      - renderHTML() : retourne un HTML > 500 bytes, structure complète,
-       slot IA présent, CTA continuer présent
-     - buildAiPrompt() : retourne {system, user} non vides
+       CTA continuer présent (les 4 cartes "texte" rendent smart_title)
      - validate() : retourne array, capture les required manquants
      - fields[] (frontend only) : items typés correctement
 
@@ -37,12 +36,13 @@ function assert(cond, label) {
 
 // ── Mock data réaliste par template ───────────────────────────
 const MOCK_QR = {
-  short_id:     'MOCKABCD',
-  name:         'QR Test',
-  qr_type:      'url',
-  mode:         'smart',
-  metier_brief: 'Promoteur immo neuf à Toulon, spécialité VEFA.',
-  payload:      { url: 'https://example.com' },
+  short_id:      'MOCKABCD',
+  name:          'QR Test',
+  qr_type:       'url',
+  mode:          'smart',
+  smart_title:   'Bienvenue Test 12345',
+  smart_message: 'Merci de votre visite, on vous redirige.',
+  payload:       { url: 'https://example.com' },
 };
 const MOCK_SCAN = {
   country:    'FR',
@@ -52,7 +52,6 @@ const MOCK_SCAN = {
 };
 
 const MOCK_DATA = {
-  'phrase-simple': {},
   // V4.1 livré 2026-05-26
   'storytelling-brand': {
     nom_marque:   'Maison Lumière',
@@ -109,14 +108,6 @@ const MOCK_DATA = {
     accent_color:     '#c9a96e',
   },
   // V4.2 livré 2026-05-26
-  'quiz-orientation': {
-    nom_marque:   'Boutique Solène',
-    question:     'Vous cherchez pour ?',
-    // V4.5 (2026-05-26) : format emoji|libellé|URL — quiz routeur
-    reponses:     '👶|Bébé|https://example.com/bebe\n🧒|Enfant|https://example.com/enfant\n🧑|Ado|https://example.com/ado\n👴|Senior|https://example.com/senior',
-    logo_url:     'https://example.com/logo.png',
-    accent_color: '#7c8af9',
-  },
   'boite-cadeau': {
     nom_marque:    'Boutique Solène',
     occasion:      'Saint Valentin',
@@ -129,6 +120,12 @@ const MOCK_DATA = {
     accent_color:  '#e11d48',
   },
 };
+
+// Les 4 templates qui affichent le titre + message saisis par le propriétaire.
+// Les 2 cartes-jeux (machine-a-sous, carte-a-gratter) n'affichent pas de texte.
+const TEXT_TEMPLATES = new Set([
+  'storytelling-brand', 'countdown-produit', 'carte-fidelite', 'boite-cadeau',
+]);
 
 // ── Tests : Backend (Worker) ──────────────────────────────────
 async function testBackend() {
@@ -145,28 +142,22 @@ async function testBackend() {
     assert(typeof tpl.id === 'string' && tpl.id,                                     `${tpl.id} : id présent`);
     assert(typeof tpl.label === 'string' && tpl.label,                               `${tpl.id} : label présent`);
     assert(['starter','pro','max','admin'].includes(tpl.tier_required),              `${tpl.id} : tier_required valide`);
-    assert(typeof tpl.ai_max_tokens === 'number' && tpl.ai_max_tokens >= 1024,       `${tpl.id} : ai_max_tokens ≥ 1024`);
     assert(typeof tpl.validate === 'function',                                       `${tpl.id} : validate() existe`);
-    assert(typeof tpl.buildAiPrompt === 'function',                                  `${tpl.id} : buildAiPrompt() existe`);
     assert(typeof tpl.renderHTML === 'function',                                     `${tpl.id} : renderHTML() existe`);
 
-    // 2. buildAiPrompt
-    const prompt = tpl.buildAiPrompt(qr, MOCK_SCAN);
-    assert(prompt && typeof prompt === 'object',                                     `${tpl.id} : buildAiPrompt retourne objet`);
-    assert(typeof prompt?.system === 'string' && prompt.system.length > 100,          `${tpl.id} : system > 100 chars`);
-    assert(typeof prompt?.user === 'string' && prompt.user.length > 50,               `${tpl.id} : user > 50 chars`);
-    assert(prompt?.system?.includes('JSON STRICT'),                                   `${tpl.id} : system demande JSON strict`);
-
-    // 3. renderHTML
+    // 2. renderHTML
     const html = tpl.renderHTML(qr, MOCK_SCAN);
     assert(typeof html === 'string' && html.length > 500,                            `${tpl.id} : renderHTML > 500 bytes`);
     assert(html.includes('<!DOCTYPE html>'),                                         `${tpl.id} : HTML5 doctype`);
     assert(html.includes('</html>'),                                                  `${tpl.id} : HTML fermé`);
     assert(html.includes('viewport'),                                                 `${tpl.id} : viewport meta présent`);
     assert(html.includes('/r/MOCKABCD?direct=1'),                                    `${tpl.id} : CTA continuer (/r/SHORT?direct=1)`);
-    assert(html.includes('sq-ia') || html.includes('sq-phrase'),                     `${tpl.id} : slot IA présent`);
-    assert(html.includes('/api/smartqr/generate-interstitial'),                      `${tpl.id} : script fetch IA présent`);
+    assert(!html.includes('/api/smartqr/generate-interstitial'),                     `${tpl.id} : plus de fetch IA (endpoint supprimé)`);
     assert(html.includes('Keystone'),                                                 `${tpl.id} : branding Keystone`);
+    // Les 4 cartes "texte" rendent le titre + message saisis en direct.
+    if (TEXT_TEMPLATES.has(tpl.id)) {
+      assert(html.includes(MOCK_QR.smart_title),                                     `${tpl.id} : smart_title rendu statiquement`);
+    }
 
     // 4. validate (data vide → erreurs si required)
     const errsEmpty = tpl.validate({});
@@ -230,10 +221,13 @@ async function testFrontend() {
   }
 
   // 5. canUseTemplate (tier gating) + isKnownTemplate
-  assert(canUseTemplate('phrase-simple', 'starter') === true,                       `gating : starter peut utiliser phrase-simple`);
-  assert(canUseTemplate('phrase-simple', 'pro') === true,                           `gating : pro peut utiliser phrase-simple`);
-  assert(canUseTemplate('phrase-simple', 'max') === true,                           `gating : max peut utiliser phrase-simple`);
-  assert(isKnownTemplate('phrase-simple') === true,                                 `isKnownTemplate(phrase-simple) = true`);
+  // Tous les templates survivants sont tier 'pro' (starter exclu).
+  assert(canUseTemplate('storytelling-brand', 'starter') === false,                 `gating : starter ne peut PAS utiliser storytelling-brand (pro)`);
+  assert(canUseTemplate('storytelling-brand', 'pro') === true,                       `gating : pro peut utiliser storytelling-brand`);
+  assert(canUseTemplate('storytelling-brand', 'max') === true,                       `gating : max peut utiliser storytelling-brand`);
+  assert(isKnownTemplate('storytelling-brand') === true,                             `isKnownTemplate(storytelling-brand) = true`);
+  assert(isKnownTemplate('phrase-simple') === false,                                `isKnownTemplate(phrase-simple) = false (supprimé)`);
+  assert(isKnownTemplate('quiz-orientation') === false,                             `isKnownTemplate(quiz-orientation) = false (supprimé)`);
   assert(isKnownTemplate('inexistant-xyz') === false,                               `isKnownTemplate(inconnu) = false`);
 }
 
