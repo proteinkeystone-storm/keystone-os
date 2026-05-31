@@ -1320,8 +1320,10 @@ function _renderConciergeEditor(wrap) {
     ).join('');
     const cur = opts.find(o => o.val === active);
     return `
-    <div class="sdqr-cg-seg" role="tablist" aria-label="Source des données du concierge">${tabs}</div>
-    ${cur && cur.small ? `<p class="sdqr-cg-seg-hint">${_esc(cur.small)}</p>` : ''}`;
+    <div class="sdqr-cg-srcwrap">
+      <div class="sdqr-cg-seg" role="tablist" aria-label="Source des données du concierge">${tabs}</div>
+      ${cur && cur.small ? `<p class="sdqr-cg-seg-hint">${_esc(cur.small)}</p>` : ''}
+    </div>`;
   };
 
   let picker = '';
@@ -1786,8 +1788,8 @@ function _cgBindReimport(wrap) {
 function _cgImportPanelHtml() {
   return `
     <div class="sdqr-cg-import">
-      <p class="sdqr-cg-hint">Crée ta « Fiche établissement » en 1 clic : tu obtiens un lien prêt à envoyer à ton client (ou à remplir toi-même). Elle est déjà publiée, rien à configurer. Une fois remplie, elle apparaît ci-dessous et son contenu remplit le Concierge automatiquement.</p>
-      <button type="button" class="sdqr-cg-add" data-cg-create-fiche>+ Créer ma Fiche établissement (lien prêt à partager)</button>
+      <p class="sdqr-cg-hint">Crée une « Fiche établissement » en 1 clic : tu obtiens un lien prêt à envoyer à ton client (ou à remplir toi-même). Déjà publiée, rien à configurer. Une fois remplie, elle apparaît ci-dessous et son contenu remplit le Concierge automatiquement.</p>
+      <button type="button" class="sdqr-cg-add sdqr-cg-add--inline" data-cg-create-fiche>+ Créer ma Fiche établissement</button>
       <div class="sdqr-cg-fiche-link" data-cg-fiche-link hidden></div>
       <div class="sdqr-cg-import-list" data-cg-import-list>
         <p class="sdqr-cg-import-msg">Chargement de tes Fiches...</p>
