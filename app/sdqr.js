@@ -202,6 +202,9 @@ export function openSDQR(opts = {}) {
   // CG-13 — ouverture directe d'un QR existant (bibliothèque VEFA Studio).
   if (opts && opts.editId) { _openExistingQrById(panel, opts.editId); return; }
   _refreshList(panel);
+  // Deep-link : ouverture directe du formulaire de création sur Concierge
+  // (depuis le CTA VEFA Studio). 'immo' | 'general'.
+  if (opts && opts.createConcierge) { _openCreateForm(panel, { presetConcierge: opts.createConcierge }); return; }
   // Concierge VEFA (S7) — si VEFA Studio vient de relayer un programme frais.
   _maybeAutoOpenVefaConcierge(panel);
 }
@@ -607,6 +610,12 @@ function _openCreateForm(panel, opts = {}) {
     _creating.concierge_source  = 'vefa';
     _creating.concierge_payload = prog;
     if (prog.nom) _creating.name = prog.nom;
+  } else if (opts && opts.presetConcierge) {
+    // Deep-link depuis VEFA Studio (sans programme relayé) : ouverture directe
+    // du formulaire sur Smart + Concierge, à la bonne verticale.
+    _creating.mode             = 'smart';
+    _creating.template_id      = 'concierge';
+    _creating.concierge_source = opts.presetConcierge === 'general' ? 'keyform' : 'inline';
   }
 
   content.innerHTML = `

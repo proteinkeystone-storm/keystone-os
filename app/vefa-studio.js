@@ -1101,7 +1101,8 @@ function _addLotToConcierge() {
 // relaie le programme pour pré-remplir l'éditeur Concierge de Smart Dynamic QR.
 // Sinon, ouverture simple : l'éditeur complet est dans Smart Dynamic QR.
 async function _sendToConcierge() {
-  if (validateProgramLight(_program).length === 0) {
+  const hasProgram = validateProgramLight(_program).length === 0;
+  if (hasProgram) {
     try {
       localStorage.setItem(PROGRAM_STORAGE_KEY, JSON.stringify({ program: _program, ts: Date.now() }));
     } catch (_) {}
@@ -1110,7 +1111,11 @@ async function _sendToConcierge() {
   try {
     const m = await import('./sdqr.js');
     closeVefaStudio();
-    m.openSDQR?.();
+    // Avec programme repris : le relai ouvre le Concierge pré-rempli.
+    // Sans : on ouvre QUAND MÊME directement le formulaire Concierge (VEFA),
+    // jamais la simple liste (deep-link demandé par Stéphane).
+    if (hasProgram) m.openSDQR?.();
+    else            m.openSDQR?.({ createConcierge: 'immo' });
   } catch (err) {
     console.error('[VefaStudio] openSDQR', err);
     _toast('Ouvrez Smart Dynamic QR pour créer le QR Concierge.', true);
