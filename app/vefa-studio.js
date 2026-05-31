@@ -37,13 +37,14 @@ import {
   vefaDocToLot, vefaDocToProgramHeader, fillProgramHeaderIfEmpty, upsertLot,
   listConciergeQRs,
 }                                                from './lib/concierge-program.js';
-import { CF_API }                                from './pads-loader.js';
+import { CF_API, getOwnedIds, isAdminUser, getLifetimeIds } from './pads-loader.js';
 import { renderQrCustom }                        from './sdqr-render.js';
 
 // ── Identifiants ──────────────────────────────────────────────
 const APP_ID    = 'O-IMM-010';
 const DRAFT_KEY = 'ks_vefa_studio_draft_v1';
 const MAX_QUESTIONS = 6;
+const SDQR_PAD_ID = 'A-COM-001';   // Smart Dynamic QR — Pad qui héberge le Concierge
 
 // ══════════════════════════════════════════════════════════════
 // Définition des champs
@@ -619,6 +620,7 @@ function _onClick(e) {
   }
   if (act === 'vp-del-question') { _vpDelete('questions', +btn.dataset.idx, false); return; }
   if (act === 'send-concierge')  { _sendToConcierge(); return; }
+  if (act === 'goto-kstore')     { _gotoKStoreSDQR(); return; }
   // ── CG-13 — bibliothèque QR Concierge ──
   if (act === 'cg-lib-reload')   { _loadConciergeLibrary(); return; }
   if (act === 'cg-lib-open')     { _openVefaQrInSdqr(btn.dataset.qrId); return; }
@@ -738,12 +740,26 @@ function _prefillConciergeHeader() {
 
 const STATUT_LABELS = { disponible: 'Disponible', optionne: 'Optionné', vendu: 'Vendu' };
 
+// Possède-t-on le Pad Smart Dynamic QR ? (mêmes règles que ui-renderer :
+// ADMIN ou owned===null => tout ; sinon présence de l'ID dans owned/lifetime).
+// En cas de doute on n'empêche pas l'accès (renvoie true) — l'upsell K-Store
+// est réservé aux cas clairement « non possédé ».
+function _ownsSDQR() {
+  try {
+    if (isAdminUser()) return true;
+    const owned = getOwnedIds();
+    if (owned === null) return true;
+    if (Array.isArray(owned) && owned.includes(SDQR_PAD_ID)) return true;
+    return getLifetimeIds().includes(SDQR_PAD_ID);
+  } catch (_) { return true; }
+}
+
 function _renderConcierge(scrollToTop) {
   const main = _root && _root.querySelector('[data-slot="main"]');
   if (!main) return;
   const prevScroll = scrollToTop ? 0 : main.scrollTop;
-  const p     = _program;
-  const total = p.lots.length;
+  const owns    = _ownsSDQR();
+  const carried = _program.lots.filter((l) => String(l.reference).trim()).length;
 
   main.innerHTML = `
     <div class="ws-main-inner vefa-wrap">
@@ -758,85 +774,22 @@ function _renderConcierge(scrollToTop) {
           <div id="vefa-cg-library-slot">${_conciergeLibraryHTML()}</div>
         </div>
 
-        <div class="vefa-section">
+        <div class="vefa-section vefa-cg-gateway">
           <div class="vefa-section-header">
-            <div class="vefa-section-title">Programme</div>
-            <div class="vefa-section-subtitle">Identité du programme — en-tête du concierge</div>
+            <div class="vefa-section-title">Créer un QR Concierge</div>
+            <div class="vefa-section-subtitle">${owns
+              ? 'Le QR Concierge se crée et se gère dans Smart Dynamic QR (modèles, FAQ, couleurs, bannière).'
+              : 'Le QR Concierge fait partie de l\'outil Smart Dynamic QR.'}</div>
           </div>
-          ${_conciergePrefillNote
-            ? `<p class="vefa-prefill-note">${icon('sparkles', 13)}&nbsp;${_esc(_conciergePrefillNote)}</p>`
+          ${owns && carried
+            ? `<p class="vefa-prefill-note">${icon('sparkles', 13)}&nbsp;${carried} lot${carried > 1 ? 's' : ''} repris de vos documents (Notice / Contrat), prêt${carried > 1 ? 's' : ''} à reprendre dans Smart Dynamic QR.</p>`
             : ''}
-          <div class="vefa-fields">
-            ${_vpScalar('Nom du programme', 'nom', p.nom, { span: true, required: true, placeholder: 'ex : Les Terrasses d\'Ollioules' })}
-            ${_vpScalar('Promoteur', 'promoteur', p.promoteur, { placeholder: 'ex : Promoteur Horizon' })}
-            ${_vpScalar('Ville', 'ville', p.ville, { placeholder: 'ex : Ollioules' })}
-            ${_vpScalar('Livraison prévue', 'livraison_prevue', p.livraison_prevue, { span: true, placeholder: 'ex : T4 2026' })}
-          </div>
-        </div>
-
-        <div class="vefa-section">
-          <div class="vefa-section-header">
-            <div class="vefa-section-title">Lots / Modèles</div>
-            <div class="vefa-section-subtitle">Chaque lot devient une carte comparée dans le concierge</div>
-          </div>
-          ${p.lots.map((lot, i) => _vpLotRow(lot, i, total)).join('')}
-          <button type="button" class="vefa-vp-add" data-act="vp-add-lot">${icon('plus', 14)}&nbsp;Ajouter un lot</button>
-        </div>
-
-        <div class="vefa-section">
-          <div class="vefa-section-header">
-            <div class="vefa-section-title">FAQ validée</div>
-            <div class="vefa-section-subtitle">Réponses sûres, servies telles quelles (sans IA)</div>
-          </div>
-          ${p.faq.map((f, i) => _vpFaqRow(f, i)).join('') || '<p class="vefa-vp-empty">Aucune Q/R pour l\'instant.</p>'}
-          <button type="button" class="vefa-vp-add" data-act="vp-add-faq">${icon('plus', 14)}&nbsp;Ajouter une Q/R</button>
-        </div>
-
-        <div class="vefa-section">
-          <div class="vefa-section-header">
-            <div class="vefa-section-title">Questions suggérées</div>
-            <div class="vefa-section-subtitle">Puces cliquables au scan (max ${MAX_QUESTIONS})</div>
-          </div>
-          ${p.questions.map((q, i) => _vpQuestionRow(q, i)).join('') || '<p class="vefa-vp-empty">Aucune question suggérée.</p>'}
-          ${p.questions.length < MAX_QUESTIONS
-            ? `<button type="button" class="vefa-vp-add" data-act="vp-add-question">${icon('plus', 14)}&nbsp;Ajouter une question</button>`
-            : ''}
-        </div>
-
-        <div class="vefa-section">
-          <div class="vefa-section-header">
-            <div class="vefa-section-title">Contact &amp; mentions</div>
-            <div class="vefa-section-subtitle">Relais humain proposé + mentions légales</div>
-          </div>
-          <div class="vefa-fields">
-            ${_vpScalar('Contact — Nom', 'contact.nom', p.contact.nom, { placeholder: 'ex : Service commercial' })}
-            ${_vpScalar('Contact — Téléphone', 'contact.tel', p.contact.tel, { placeholder: 'ex : 04 94 00 00 00' })}
-            ${_vpScalar('Contact — Email', 'contact.email', p.contact.email, { span: true, placeholder: 'ex : contact@agence.fr' })}
-            ${_vpScalar('Disclaimer / mentions', 'disclaimer', p.disclaimer, { type: 'textarea', span: true, placeholder: 'ex : Informations non contractuelles, sous réserve de disponibilité.' })}
-          </div>
-        </div>
-
-        <div class="vefa-section">
-          <div class="vefa-section-header">
-            <div class="vefa-section-title">Agence (white-label)</div>
-            <div class="vefa-section-subtitle">Nom, logo et couleurs — habille le concierge à vos marques</div>
-          </div>
-          <div class="vefa-fields">
-            ${_vpScalar('Nom de l\'agence', 'agence.nom', p.agence.nom, { span: true, required: true, placeholder: 'ex : Agence Horizon' })}
-            ${_vpScalar('Logo (URL)', 'agence.logo_url', p.agence.logo_url, { span: true, placeholder: 'https://…/logo.png' })}
-            ${_vpScalar('Bannière (URL)', 'agence.banner_url', p.agence.banner_url, { span: true, placeholder: 'https://…/banniere.jpg — grand visuel en haut de page' })}
-            ${_vpColor('Couleur primaire', 'agence.couleur_primaire', p.agence.couleur_primaire)}
-            ${_vpColor('Couleur secondaire', 'agence.couleur_secondaire', p.agence.couleur_secondaire)}
-          </div>
-        </div>
-
-        <div class="vefa-actions">
-          <p class="vefa-actions-hint">
-            ${icon('qr-code', 13)}&nbsp;Le QR Concierge se crée et se gère dans Smart Dynamic QR.
-          </p>
-          <button class="vefa-btn-primary" data-act="send-concierge" type="button">
-            ${icon('arrow-right', 18)}&nbsp;Envoyer vers Smart Dynamic QR
+          <button class="vefa-btn-primary vefa-cg-gateway-cta" data-act="${owns ? 'send-concierge' : 'goto-kstore'}" type="button">
+            ${owns
+              ? `${icon('arrow-right', 18)}&nbsp;${carried ? 'Reprendre dans Smart Dynamic QR' : 'Ouvrir Smart Dynamic QR'}`
+              : `${icon('plus', 18)}&nbsp;Obtenir Smart Dynamic QR`}
           </button>
+          ${owns ? '' : `<p class="vefa-cg-gateway-hint">Smart Dynamic QR n'est pas encore dans vos outils — cliquez pour le découvrir dans le K-Store.</p>`}
         </div>
 
       </div>
@@ -1143,15 +1096,17 @@ function _addLotToConcierge() {
   _toast(`${head} dans le Concierge : ${lot.reference} (${count} au total).`);
 }
 
-// ── Envoi vers Smart Dynamic QR (relais localStorage, consommé en S7) ──
+// ── Ouverture de Smart Dynamic QR (le Concierge s'y crée et s'y gère) ──
+// Si des lots ont été repris des documents (Notice/Contrat via le pont), on
+// relaie le programme pour pré-remplir l'éditeur Concierge de Smart Dynamic QR.
+// Sinon, ouverture simple : l'éditeur complet est dans Smart Dynamic QR.
 async function _sendToConcierge() {
-  const errors = validateProgramLight(_program);
-  if (errors.length) { _toast(errors[0], true); return; }
-  try {
-    localStorage.setItem(PROGRAM_STORAGE_KEY, JSON.stringify({ program: _program, ts: Date.now() }));
-  } catch (_) {}
-  _saveDraft();
-  _toast('Programme prêt — ouverture de Smart Dynamic QR…');
+  if (validateProgramLight(_program).length === 0) {
+    try {
+      localStorage.setItem(PROGRAM_STORAGE_KEY, JSON.stringify({ program: _program, ts: Date.now() }));
+    } catch (_) {}
+    _saveDraft();
+  }
   try {
     const m = await import('./sdqr.js');
     closeVefaStudio();
@@ -1159,6 +1114,18 @@ async function _sendToConcierge() {
   } catch (err) {
     console.error('[VefaStudio] openSDQR', err);
     _toast('Ouvrez Smart Dynamic QR pour créer le QR Concierge.', true);
+  }
+}
+
+// ── Pas le Pad : on renvoie vers la fiche Smart Dynamic QR du K-Store ──
+async function _gotoKStoreSDQR() {
+  try {
+    const m = await import('./ui-renderer.js');
+    closeVefaStudio();
+    m.openKStoreAppDetail?.(SDQR_PAD_ID);
+  } catch (err) {
+    console.error('[VefaStudio] openKStoreAppDetail', err);
+    _toast('Ouvrez le K-Store pour obtenir Smart Dynamic QR.', true);
   }
 }
 
@@ -1634,6 +1601,9 @@ function _injectStyles() {
   font-weight: 700;
   text-decoration: underline;
 }
+/* Passerelle « Créer un QR Concierge » (remplace l'ancien formulaire) */
+.vefa-cg-gateway .vefa-cg-gateway-cta { margin-top: 4px; align-self: flex-start; }
+.vefa-cg-gateway-hint { margin: 10px 0 0; font-size: 12px; color: var(--ws-text-muted); line-height: 1.5; }
 .vefa-vp-check { justify-content: flex-end; }
 .vefa-vp-check .ws-label {
   flex-direction: row;
