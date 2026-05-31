@@ -8049,6 +8049,18 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+/* Archiver + Tester le scan regroupés dans la carte QR, sous Télécharger */
+.sdqr-detail-actions--incard {
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  flex-wrap: wrap;
+}
+.sdqr-detail-actions--incard .sdqr-btn {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+}
 
 /* ════════════════════════════════════════════════════════════════
    SDQR-4 — Dashboard Statistiques (KPI + line + bars)

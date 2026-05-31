@@ -295,6 +295,8 @@ const TEMPLATE = {
   .cg-cta svg { width: 16px; height: 16px; stroke: var(--on-acc); }
 
   .cg-keyfoot { margin-top: 18px; text-align: center; }
+  .cg-keyfoot .sq-foot { margin: 0; color: var(--mut); font-size: 10.5px; line-height: 1.45; opacity: .68; }
+  .cg-keyfoot .sq-foot a { color: var(--mut); text-decoration: none; font-weight: 600; }
 
   /* ── Chat live (Sprint 3) ────────────────────────────────── */
   .cg-thread { display: flex; flex-direction: column; gap: 12px; margin: 16px 0 2px; }
@@ -324,7 +326,7 @@ const TEMPLATE = {
     display: flex; justify-content: center; pointer-events: none;
     padding: 26px 16px calc(16px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(to top,
-      ${accent}40 0%, ${accent}24 34%, ${accent}0d 62%, ${accent}00 100%); }
+      ${accent}b3 0%, ${accent}80 20%, ${accent}40 44%, ${accent}1a 68%, ${accent}00 100%); }
   .cg-dock-inner { width: 100%; max-width: 560px; pointer-events: auto; }
 
   /* Barre de saisie — flashy : bord accent agence, halo colore, elevation */

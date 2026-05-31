@@ -2240,6 +2240,11 @@ async function _openQrDetail(panel, qr) {
             </div>
             <span class="sdqr-svg-hint" data-svg-hint hidden>SVG verrouillé — logo non vectoriel</span>
           </div>
+          <div class="sdqr-detail-actions sdqr-detail-actions--incard">
+            <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
+            ${isRedirected ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
+            ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
+          </div>
         </div>
       </div>
       <div class="sdqr-detail-right">
@@ -2317,12 +2322,6 @@ async function _openQrDetail(panel, qr) {
         `}
 
         ${_renderDesignPanel(qr)}
-
-        <div class="sdqr-detail-actions">
-          <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
-          ${isRedirected ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
-          ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
-        </div>
 
         <div class="sdqr-detail-msg" id="sdqr-detail-msg" hidden></div>
       </div>
