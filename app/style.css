@@ -6606,10 +6606,15 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 /* align-items:start évite le stretch grid → permet le sticky de la card */
 .sdqr-detail {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 1fr 360px;   /* réglages (gauche) · aperçu QR (droite) */
   gap: 32px;
   align-items: start;
 }
+/* Aperçu QR à DROITE, réglages à GAUCHE (desktop) — DOM inchangé, on inverse
+   l'ordre visuel. Plus ergonomique : on règle à gauche, le QR reste visible
+   (collant) à droite. Vaut pour TOUS les QR (dynamique + smart). */
+.sdqr-detail-left  { order: 2; }
+.sdqr-detail-right { order: 1; }
 /* Sidebar collante : la colonne aperçu reste épinglée pendant qu'on scrolle
    les réglages + la personnalisation (colonne droite). UN SEUL scroll
    (.sdqr-content) — plus de scroll interne ni de backdrop-filter. */
@@ -6715,6 +6720,9 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   .sdqr-sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid rgba(255,255,255,.07); }
   .sdqr-body { flex-direction: column; }
   .sdqr-detail { grid-template-columns: 1fr; }
+  /* Empilé : on remet l'aperçu QR au-dessus des réglages (ordre source). */
+  .sdqr-detail-left  { order: 0; }
+  .sdqr-detail-right { order: 0; }
   .sdqr-form-grid { grid-template-columns: 1fr; }
 }
 
