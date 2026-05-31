@@ -717,7 +717,8 @@ async function testConciergeSchema() {
   assert(kb.configurations[0].attributs.length === 2,        'keyformToBlock : 2 attributs remplis (3e vide droppé)');
   assert(kb.configurations[0].attributs[0].label === 'Durée' && kb.configurations[0].attributs[0].value === '1 h',
     'keyformToBlock : paire attribut label/value mappée');
-  assert(kb.configurations[0].prix_ttc === 49,              'keyformToBlock : item_prix → prix_ttc');
+  assert(kb.configurations[0].prix_label === '49' && kb.configurations[0].prix_ttc === undefined,
+    'keyformToBlock : item_prix → prix_label (texte libre, prix_ttc numérique non utilisé en generic)');
   assert(kb.questions_suggerees[0] === 'Que proposez-vous ?', 'keyformToBlock : question (ligne objet) → string');
   const kb2 = keyformToBlock({ ...submission, [F.questions]: ['Question brute ?'] });
   assert(kb2.questions_suggerees[0] === 'Question brute ?',  'keyformToBlock : questions tolère les lignes string');
@@ -960,18 +961,18 @@ async function testConciergeS7() {
   assert(rBad.error === 'Le nom du programme est obligatoire.',
     'glue : nom de programme manquant correctement signalé');
 
-  // ── D. Cap 32 KB = même garde-fou que template_data côté qr.js ──
-  assert(CONCIERGE_BLOCK_MAX_BYTES === 32 * 1024,
-    'CONCIERGE_BLOCK_MAX_BYTES : cap 32 KB figé (miroir du garde-fou qr.js)');
+  // ── D. Cap 64 KB = même garde-fou que template_data côté qr.js ──
+  assert(CONCIERGE_BLOCK_MAX_BYTES === 64 * 1024,
+    'CONCIERGE_BLOCK_MAX_BYTES : cap 64 KB figé (miroir du garde-fou qr.js)');
   const huge = {
     nom: 'Programme XL',
     lots: [{ reference: 'A1' }],
     agence: { nom: 'Ag' },
-    disclaimer: 'x'.repeat(40 * 1024),  // > 32 KB une fois sérialisé
+    disclaimer: 'x'.repeat(70 * 1024),  // > 64 KB une fois sérialisé
   };
   const rHuge = buildConciergeBlockFromVefa(huge);
-  assert(rHuge && rHuge.error === 'template_data trop volumineux (max 32 KB)' && !rHuge.block,
-    'glue : bloc > 32 KB → { error } trop volumineux');
+  assert(rHuge && rHuge.error === 'template_data trop volumineux (max 64 KB)' && !rHuge.block,
+    'glue : bloc > 64 KB → { error } trop volumineux');
   // Le cap se déclenche APRÈS la validation métier (valide mais trop gros).
   assert(validateBlock(vefaProgramToBlock(huge)).length === 0,
     'glue : le programme XL est métier-valide — seul le cap taille le rejette');
@@ -1035,11 +1036,11 @@ async function testConciergeKeyform() {
   // ── A. PARITÉ des ids (linchpin anti-dérive) ──
   // blankKeyform() expose EXACTEMENT les ids top-level que keyformToBlock lit.
   const F = KEYFORM_GABARIT_FIELDS;
-  const expectedTop = [F.nom_enseigne, F.titre_offre, F.ville, F.couleur_primaire,
+  const expectedTop = [F.nom_enseigne, F.titre_offre, F.ville, F.adresse, F.couleur_primaire,
     F.couleur_secondaire, F.logo, F.items, F.faq, F.questions, F.contact_nom,
     F.contact_tel, F.contact_email, F.disclaimer].sort();
   assert(JSON.stringify(Object.keys(blankKeyform()).sort()) === JSON.stringify(expectedTop),
-    'blankKeyform : 13 ids top-level == exactement ce que keyformToBlock lit');
+    'blankKeyform : 14 ids top-level == exactement ce que keyformToBlock lit');
   const expectedItem = [F.item_nom, ...F.item_attr_label, ...F.item_attr_value,
     F.item_prix, F.item_desc].sort();
   assert(JSON.stringify(Object.keys(blankKeyformItem()).sort()) === JSON.stringify(expectedItem),
@@ -1078,7 +1079,7 @@ async function testConciergeKeyform() {
     'glue keyform : { block } IDENTIQUE à keyformToBlock(submission)');
   const c0 = ok.block.configurations[0];
   assert(c0.reference === 'Forfait Pro',         'glue keyform : item_nom → reference');
-  assert(c0.prix_ttc === 120,                    'glue keyform : item_prix "120" → number 120');
+  assert(c0.prix_label === '120',                'glue keyform : item_prix "120" → prix_label "120" (texte libre)');
   assert(c0.attributs.length === 1 && c0.attributs[0].label === 'Seances' && c0.attributs[0].value === '3',
     'glue keyform : paire attribut label/value transmise');
 
@@ -1091,14 +1092,14 @@ async function testConciergeKeyform() {
   assert(rBad.error === 'Le nom de l\'enseigne (branding) est obligatoire.',
     'glue keyform : message enseigne manquante (vertical generic)');
 
-  // ── F. Cap 32 KB (même garde-fou que template_data côté qr.js) ──
+  // ── F. Cap 64 KB (même garde-fou que template_data côté qr.js) ──
   const subHuge = { cg_nom_enseigne: 'X', cg_items: [{ item_nom: 'A' }],
-                    cg_disclaimer: 'x'.repeat(40 * 1024) };
+                    cg_disclaimer: 'x'.repeat(70 * 1024) };
   const rHuge = buildConciergeBlockFromKeyform(subHuge);
-  assert(rHuge && rHuge.error === 'template_data trop volumineux (max 32 KB)' && !rHuge.block,
-    'glue keyform : bloc > 32 KB → { error } trop volumineux');
-  assert(CONCIERGE_BLOCK_MAX_BYTES === 32 * 1024,
-    'CONCIERGE_BLOCK_MAX_BYTES : cap partagé vefa/keyform (32 KB)');
+  assert(rHuge && rHuge.error === 'template_data trop volumineux (max 64 KB)' && !rHuge.block,
+    'glue keyform : bloc > 64 KB → { error } trop volumineux');
+  assert(CONCIERGE_BLOCK_MAX_BYTES === 64 * 1024,
+    'CONCIERGE_BLOCK_MAX_BYTES : cap partagé vefa/keyform (64 KB)');
 
   // ── G. coerceKeyform : forme sûre, idempotence, non destructif ──
   assert(JSON.stringify(coerceKeyform(null)) === JSON.stringify(blankKeyform()),
@@ -1180,11 +1181,11 @@ async function testConciergeS8() {
       { item_nom: 'Forfait Decouverte',
         item_attr1_label: 'Seances', item_attr1_value: '3',
         item_attr2_label: 'Duree',   item_attr2_value: '55 min',
-        item_prix: 75, item_desc: 'Ideal pour debuter en douceur.' },
+        item_prix: '75 €', item_desc: 'Ideal pour debuter en douceur.' },
       { item_nom: 'Forfait Premium',
         item_attr1_label: 'Seances',  item_attr1_value: 'Illimite',
         item_attr2_label: 'Coaching', item_attr2_value: 'Inclus',
-        item_prix: 190, item_desc: 'Acces libre et suivi personnalise.' },
+        item_prix: '190 € / mois', item_desc: 'Acces libre et suivi personnalise.' },
     ],
     cg_faq:       [{ faq_q: 'Puis-je resilier ?', faq_r: 'Oui, a tout moment.' }],
     cg_questions: [{ cg_question: 'Quelle formule pour debuter ?' }],

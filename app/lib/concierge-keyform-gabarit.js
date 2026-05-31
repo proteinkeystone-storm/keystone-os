@@ -62,6 +62,7 @@ export function buildConciergeFicheGabarit() {
     fixedField('cg_titre_offre', 'text-short', 'Accroche / phrase principale',
       { placeholder: 'Ex : Le spot loisirs de la baie' }),
     fixedField('cg_ville', 'text-short', 'Ville', { placeholder: 'Ex : Bandol' }),
+    fixedField('cg_adresse', 'text-short', 'Adresse', { placeholder: 'Ex : 12 avenue du Port, 83150 Bandol' }),
   );
   form.sections.push(sEtab);
 
@@ -183,6 +184,7 @@ export function gabaritResponseToSubmission(responseValues) {
     cg_nom_enseigne:  str(s.cg_nom_enseigne),
     cg_titre_offre:   str(s.cg_titre_offre),
     cg_ville:         str(s.cg_ville),
+    cg_adresse:       str(s.cg_adresse),
     cg_items:         items,
     cg_faq:           faq,
     cg_questions:     questions,

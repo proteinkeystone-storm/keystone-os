@@ -68,6 +68,7 @@ export function normalizeBlock(raw) {
       nom:              asString(prog.nom),
       promoteur:        asString(prog.promoteur),
       ville:            asString(prog.ville),
+      adresse:          asString(prog.adresse),
       livraison_prevue: asString(prog.livraison_prevue),
     },
     configurations: asArray(d.configurations).map(normalizeItem),
@@ -112,6 +113,10 @@ function normalizeItem(raw) {
     },
     exposition:    asString(c.exposition),
     prix_ttc:      numOrUndef(c.prix_ttc),
+    // Prix EN TEXTE LIBRE (generic) : « 6 € la partie », « à partir de 49 € »…
+    // (prix_ttc reste numérique pour l'immo). Le texte ne passe PAS par
+    // numOrUndef qui le perdrait ; il est affiché tel quel + tokenisé pour l'IA.
+    prix_label:    asString(c.prix_label),
     stationnement: asString(c.stationnement),
     prestations:   asArray(c.prestations).map(asString).filter(Boolean),
     // Champs génériques (option b : item = nom + 2-3 attributs libres)
@@ -236,8 +241,10 @@ export function vefaProgramToBlock(program) {
 // dérive le bloc canonique À LA SAUVEGARDE. Centralisé ici (avec
 // vefaProgramToBlock + validateBlock) pour rester pur et testable hors
 // réseau. Retourne { block } si valide, sinon { error } (1er message).
-// Cap 32 KB = même garde-fou anti-abus que template_data côté qr.js.
-export const CONCIERGE_BLOCK_MAX_BYTES = 32 * 1024;
+// Cap 64 KB = garde-fou anti-abus, aligné sur template_data côté qr.js.
+// Porté de 32 à 64 KB le 2026-05-31 : un logo + une bannière (data-URL
+// base64) pouvaient à eux seuls dépasser 32 KB et bloquer la sauvegarde.
+export const CONCIERGE_BLOCK_MAX_BYTES = 64 * 1024;
 export function buildConciergeBlockFromVefa(conciergePayload) {
   if (!conciergePayload || typeof conciergePayload !== 'object' || Array.isArray(conciergePayload)) {
     return { error: 'concierge_payload manquant pour la source VEFA.' };
@@ -246,7 +253,7 @@ export function buildConciergeBlockFromVefa(conciergePayload) {
   const errs  = validateBlock(block);
   if (errs.length) return { error: errs[0] };
   if (JSON.stringify(block).length > CONCIERGE_BLOCK_MAX_BYTES) {
-    return { error: 'template_data trop volumineux (max 32 KB)' };
+    return { error: 'template_data trop volumineux (max 64 KB)' };
   }
   return { block };
 }
@@ -258,6 +265,7 @@ export const KEYFORM_GABARIT_FIELDS = {
   nom_enseigne:       'cg_nom_enseigne',
   titre_offre:        'cg_titre_offre',
   ville:              'cg_ville',
+  adresse:            'cg_adresse',
   couleur_primaire:   'cg_couleur_primaire',
   couleur_secondaire: 'cg_couleur_secondaire',
   logo:               'cg_logo',
@@ -294,7 +302,7 @@ export function keyformToBlock(submission) {
     return {
       reference:   r[F.item_nom],
       attributs,
-      prix_ttc:    r[F.item_prix],
+      prix_label:  r[F.item_prix],   // texte libre (generic) : « 6 € la partie »
       description: r[F.item_desc],
     };
   });
@@ -311,7 +319,7 @@ export function keyformToBlock(submission) {
 
   return normalizeBlock({
     vertical:   'generic',
-    programme:  { nom: s[F.titre_offre], ville: s[F.ville] },
+    programme:  { nom: s[F.titre_offre], ville: s[F.ville], adresse: s[F.adresse] },
     configurations:      items,
     faq_validee:         faq,
     questions_suggerees: questions,
@@ -346,7 +354,7 @@ export function buildConciergeBlockFromKeyform(submission) {
   const errs  = validateBlock(block);
   if (errs.length) return { error: errs[0] };
   if (JSON.stringify(block).length > CONCIERGE_BLOCK_MAX_BYTES) {
-    return { error: 'template_data trop volumineux (max 32 KB)' };
+    return { error: 'template_data trop volumineux (max 64 KB)' };
   }
   return { block };
 }

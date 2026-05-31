@@ -1676,6 +1676,7 @@ function _cgKeyformEditorHtml() {
         ${_cgText('cg_nom_enseigne', "Nom de l'enseigne", 'Ex : Studio Pilates Bandol', s.cg_nom_enseigne, { req: true, maxlength: 80 })}
         ${_cgText('cg_titre_offre', "Titre de l'offre", 'Ex : Nos abonnements', s.cg_titre_offre, { maxlength: 120 })}
         ${_cgText('cg_ville', 'Ville', 'Ex : Bandol', s.cg_ville, { maxlength: 80 })}
+        ${_cgText('cg_adresse', 'Adresse', 'Ex : 12 avenue du Port, 83150 Bandol', s.cg_adresse, { maxlength: 160 })}
         ${_cgLogoWidget('cg_logo', "Logo de l'enseigne")}
         ${_cgLogoWidget('cg_banner', 'Bannière — grand visuel en haut de page (façon couverture)', { maxBytes: 40000, maxDim: 1000, wide: true })}
         ${_cgColor('cg_couleur_primaire', 'Couleur principale', s.cg_couleur_primaire, '#2563EB')}

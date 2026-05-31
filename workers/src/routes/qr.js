@@ -324,8 +324,8 @@ export async function handleCreateQr(request, env) {
       ? body.template_data : null;
     if (template_data_raw) {
       const json_str = JSON.stringify(template_data_raw);
-      if (json_str.length > 32 * 1024) {
-        return err('template_data trop volumineux (max 32 KB)', 400, origin);
+      if (json_str.length > 64 * 1024) {
+        return err('template_data trop volumineux (max 64 KB)', 400, origin);
       }
       template_data = template_data_raw;
     }
@@ -519,8 +519,8 @@ export async function handleUpdateQr(request, env, qrId) {
       entity.concierge_source = 'keyform';
     } else if (body.template_data !== undefined && typeof body.template_data === 'object') {
       const json_str = JSON.stringify(body.template_data);
-      if (json_str.length > 32 * 1024) {
-        return err('template_data trop volumineux (max 32 KB)', 400, origin);
+      if (json_str.length > 64 * 1024) {
+        return err('template_data trop volumineux (max 64 KB)', 400, origin);
       }
       entity.template_data    = body.template_data;
       entity.concierge_source = upd_source || entity.concierge_source || 'inline';

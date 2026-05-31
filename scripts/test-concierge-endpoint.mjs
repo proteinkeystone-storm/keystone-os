@@ -74,7 +74,9 @@ assert(prompt.includes('Réponds uniquement à partir des données fournies.'), 
 assert(prompt.includes('Compare les configurations'), 'règle: comparer/orienter');
 assert(prompt.includes('jamais de justification par une donnée absente'), 'règle: pas de justif par donnée absente');
 assert(prompt.includes('Ne propose jamais une configuration dont le statut = vendu.'), 'règle: jamais proposer un vendu');
-assert(prompt.includes('Je n\'ai pas cette information, contactez Camille Martin (04 94 00 00 00).'), 'règle: fallback "je ne sais pas" avec contact injecté');
+assert(prompt.includes('Je n\'ai pas cette information, contactez Camille Martin ({{Tel}}).'), 'règle: fallback "je ne sais pas" avec contact injecté (téléphone tokenisé {{Tel}})');
+assert(!prompt.includes('04 94 00 00 00'), 'tel: les chiffres du numéro ne sont JAMAIS donnés au modèle (anti perte-de-zeros) -> repère {{Tel}}');
+assert(prompt.includes('le repère {{Tel}}'), 'règle: consigne explicite sur le repère téléphone {{Tel}}');
 assert(prompt.includes('Ne jamais inventer.'), 'règle: ne jamais inventer');
 assert(prompt.includes('Recopie le repère EXACTEMENT tel quel'), 'règle: repères chiffrés recopiés tels quels (anti perte-de-zeros)');
 assert(prompt.includes('rappelle le disclaimer'), 'règle: question juridique -> disclaimer');
@@ -108,6 +110,27 @@ assert(prompt.includes('"reference": "Maison D"'), 'bloc: Maison D (vendue) pré
 // FAQ validée + disclaimer embarqués.
 assert(prompt.includes('frais de notaire'), 'bloc: FAQ validée embarquée');
 assert(prompt.includes('référez-vous à la notice descriptive'), 'bloc: disclaimer embarqué');
+
+// Prompt GENERIC (Sprint C-b fix 31/05) : lieu (ville/adresse), prix en texte
+// libre tokenisé, téléphone tokenisé. L'IA ne doit voir AUCUN chiffre brut.
+const genPrompt = buildConciergePrompt({
+  vertical: 'generic',
+  programme: { ville: 'Bandol', adresse: '12 avenue du Port' },
+  branding: { nom_agence: 'Bowling de Bandol' },
+  configurations: [{ reference: 'Partie de bowling', prix_label: '6 € la partie', description: 'Chaussures incluses.' }],
+  contact_humain: { nom: 'Camille', tel: '04 94 00 00 00' },
+});
+assert(genPrompt.includes('"ville": "Bandol"') && genPrompt.includes('"adresse": "12 avenue du Port"'),
+  'prompt generic: lieu (ville + adresse) fourni à l\'IA -> peut répondre « où ça ? »');
+assert(genPrompt.includes('où se situe'), 'prompt generic: règle explicite sur la localisation');
+assert(!genPrompt.includes('6 € la partie') && genPrompt.includes('{{Pa}}'),
+  'prompt generic: prix texte libre tokenisé {{Pa}} (jamais les chiffres bruts)');
+assert(!genPrompt.includes('04 94 00 00 00') && genPrompt.includes('{{Tel}}'),
+  'prompt generic: téléphone tokenisé {{Tel}} (jamais les chiffres bruts)');
+
+// La page (VAL) reçoit bien les valeurs exactes derrière les repères.
+const genTok = conciergeTokenMap([{ prix_label: '6 € la partie' }]);
+assert(genTok.map.Pa === '6 € la partie', 'tokenMap generic: prix_label -> {{Pa}} = « 6 € la partie » (VAL côté page)');
 
 // Robustesse : bloc vide ne casse pas + fallback contact générique.
 const emptyPrompt = buildConciergePrompt({});
