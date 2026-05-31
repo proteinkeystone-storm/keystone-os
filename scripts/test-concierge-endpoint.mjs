@@ -74,9 +74,9 @@ assert(prompt.includes('Réponds uniquement à partir des données fournies.'), 
 assert(prompt.includes('Compare les configurations'), 'règle: comparer/orienter');
 assert(prompt.includes('jamais de justification par une donnée absente'), 'règle: pas de justif par donnée absente');
 assert(prompt.includes('Ne propose jamais une configuration dont le statut = vendu.'), 'règle: jamais proposer un vendu');
-assert(prompt.includes('Je n\'ai pas cette information, contactez Camille Martin ({{Tel}}).'), 'règle: fallback "je ne sais pas" avec contact injecté (téléphone tokenisé {{Tel}})');
-assert(!prompt.includes('04 94 00 00 00'), 'tel: les chiffres du numéro ne sont JAMAIS donnés au modèle (anti perte-de-zeros) -> repère {{Tel}}');
-assert(prompt.includes('le repère {{Tel}}'), 'règle: consigne explicite sur le repère téléphone {{Tel}}');
+assert(prompt.includes('Je n\'ai pas cette information, contactez Camille Martin.'), 'règle: fallback "je ne sais pas" avec contact (nom seul, sans numéro)');
+assert(!prompt.includes('04 94 00 00 00') && !prompt.includes('{{Tel}}'), 'tel: AUCUN chiffre ni repère de téléphone donné au modèle (il mangle les deux)');
+assert(prompt.includes('Ne donne JAMAIS de numéro de téléphone toi-même') && prompt.includes('coordonnées sont affichées en bas'), 'règle: le modèle renvoie vers le footer pour le téléphone');
 assert(prompt.includes('Ne jamais inventer.'), 'règle: ne jamais inventer');
 assert(prompt.includes('Recopie le repère EXACTEMENT tel quel'), 'règle: repères chiffrés recopiés tels quels (anti perte-de-zeros)');
 assert(prompt.includes('rappelle le disclaimer'), 'règle: question juridique -> disclaimer');
@@ -125,8 +125,10 @@ assert(genPrompt.includes('"ville": "Bandol"') && genPrompt.includes('"adresse":
 assert(genPrompt.includes('où se situe'), 'prompt generic: règle explicite sur la localisation');
 assert(!genPrompt.includes('6 € la partie') && genPrompt.includes('{{Pa}}'),
   'prompt generic: prix texte libre tokenisé {{Pa}} (jamais les chiffres bruts)');
-assert(!genPrompt.includes('04 94 00 00 00') && genPrompt.includes('{{Tel}}'),
-  'prompt generic: téléphone tokenisé {{Tel}} (jamais les chiffres bruts)');
+assert(!genPrompt.includes('04 94 00 00 00') && !genPrompt.includes('{{Tel}}'),
+  'prompt generic: aucun chiffre ni repère de téléphone (le modèle renvoie au footer)');
+assert(genPrompt.includes('coordonnées sont affichées en bas'),
+  'prompt generic: règle "renvoie vers les coordonnées affichées" pour le téléphone');
 
 // La page (VAL) reçoit bien les valeurs exactes derrière les repères.
 const genTok = conciergeTokenMap([{ prix_label: '6 € la partie' }]);

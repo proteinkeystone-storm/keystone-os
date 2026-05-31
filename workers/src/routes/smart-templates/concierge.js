@@ -143,10 +143,6 @@ const TEMPLATE = {
     // Repères chiffrés -> valeurs exactes, injectés côté page : le chat
     // remplace les {{Pa}}/{{Sa}}/{{Ja}} produits par l'IA (cf. conciergeTokenMap).
     const tokenValues = conciergeTokenMap(configs).map;
-    // Téléphone du conseiller = repère {{Tel}} (l'IA ne voit jamais les
-    // chiffres du numéro -> elle ne les mange plus, ex « 04 94 00 00 00 »).
-    const telRaw = (contact.tel || '').toString().trim().slice(0, 40);
-    if (telRaw) tokenValues.Tel = telRaw;
 
     // Accueil DÉTERMINISTE — construit depuis le bloc, jamais généré par un LLM.
     // Immo = phrase HISTORIQUE inchangée ; generic = cadrage « offres ».
@@ -722,10 +718,11 @@ export function buildConciergePrompt(block) {
 
   const contactNom = String(contact.nom || '').trim() || 'votre conseiller';
   const contactTel = String(contact.tel || '').trim();
-  // Le numéro n'est JAMAIS donné en chiffres au modèle (il en perd/mange les
-  // zéros) : on lui présente le repère {{Tel}}, que la page remplace par le
-  // vrai numéro (cf. tokenValues.Tel dans renderHTML).
-  const contactRef = contactTel ? `${contactNom} ({{Tel}})` : contactNom;
+  // Le numéro de téléphone n'est JAMAIS confié au modèle — NI en chiffres (il
+  // perd les zéros) NI en repère {{Tel}} (Mistral mangle aussi le repère, vu
+  // en prod : « au .sgemm »). Le modèle renvoie vers les coordonnées affichées
+  // en bas de page (footer déterministe + lien tel:), toujours exactes.
+  const contactRef = contactNom;
 
   // Generic (S8) : cadrage « enseigne / offres » + DONNÉES qui incluent les
   // attributs libres et la description (le coeur du contenu generic, qu'il
@@ -769,7 +766,7 @@ export function buildConciergePrompt(block) {
       };
     }),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
-    contact_humain: { nom: contact.nom || '', tel: contact.tel ? '{{Tel}}' : '', email: contact.email || '' },
+    contact_humain: { nom: contact.nom || '', tel: contact.tel ? 'affiché en bas de page' : '', email: contact.email || '' },
     disclaimer:     d.disclaimer || '',
   };
 
@@ -788,7 +785,7 @@ export function buildConciergePrompt(block) {
     '- Ne propose jamais une configuration dont le statut = vendu.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
     '- Les montants et surfaces sont des REPÈRES entre doubles accolades (ex : {{Pa}} pour un prix, {{Sa}} pour une surface, {{Ja}} pour un jardin). Recopie le repère EXACTEMENT tel quel, sans rien changer, et n\'écris JAMAIS de chiffre à la place : il est converti automatiquement en valeur exacte. Utilise le repère du bon lot.',
-    '- Le numéro de téléphone du conseiller est le repère {{Tel}}. Quand tu donnes le téléphone, écris {{Tel}} tel quel et n\'écris JAMAIS de chiffres de téléphone toi-même (ils seraient faux).',
+    `- Ne donne JAMAIS de numéro de téléphone toi-même (tu inventerais un faux numéro). Pour appeler ou réserver par téléphone, réponds : « Contactez ${contactRef} — ses coordonnées sont affichées en bas de cette page. »`,
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'agence.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
@@ -816,7 +813,7 @@ function buildGenericPrompt(d, ctx) {
       description: c?.description || '',
     })),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
-    contact_humain: { nom: contact.nom || '', tel: contact.tel ? '{{Tel}}' : '', email: contact.email || '' },
+    contact_humain: { nom: contact.nom || '', tel: contact.tel ? 'affiché en bas de page' : '', email: contact.email || '' },
     disclaimer:     d.disclaimer || '',
   };
 
@@ -835,7 +832,7 @@ function buildGenericPrompt(d, ctx) {
     '- Si on demande où se situe l\'établissement / l\'adresse / la ville, réponds avec le champ « lieu » (ville et adresse) s\'il est renseigné.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
     '- Les prix sont des REPÈRES entre doubles accolades (ex : {{Pa}}). Recopie le repère EXACTEMENT tel quel, sans rien changer, et n\'écris JAMAIS de chiffre à la place : il est converti automatiquement en prix exact. Utilise le repère de la bonne offre.',
-    '- Le numéro de téléphone du conseiller est le repère {{Tel}}. Quand tu donnes le téléphone, écris {{Tel}} tel quel et n\'écris JAMAIS de chiffres de téléphone toi-même (ils seraient faux).',
+    `- Ne donne JAMAIS de numéro de téléphone toi-même (tu inventerais un faux numéro). Pour appeler ou réserver par téléphone, réponds : « Contactez ${contactRef} — ses coordonnées sont affichées en bas de cette page. »`,
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'enseigne.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
