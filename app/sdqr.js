@@ -1535,7 +1535,7 @@ function _cgKfItemRowHtml(it) {
       <input type="text" class="sdqr-input kf-i-a3v" maxlength="60" placeholder="Valeur" value="${v(it.item_attr3_value)}">
     </div>
     <div class="sdqr-cg-line">
-      <input type="number" class="sdqr-input kf-i-prix" min="0" step="1" placeholder="Prix (€) — vide = sur demande" value="${(it.item_prix === undefined || it.item_prix === null || it.item_prix === '') ? '' : v(it.item_prix)}">
+      <input type="text" class="sdqr-input kf-i-prix" maxlength="60" placeholder="Prix / tarif — texte libre (ex : 6 € la partie) — vide = sur demande" value="${v(it.item_prix)}">
     </div>
     <textarea class="sdqr-input sdqr-input--textarea kf-i-desc" rows="2" placeholder="Description courte (optionnel)">${v(it.item_desc)}</textarea>
   </div>`;
