@@ -1822,17 +1822,47 @@ async function _cgLoadGabaritForms(wrap) {
     listEl.innerHTML = gabarits.map(f => {
       const title = _esc((f.meta && f.meta.title) || 'Fiche établissement');
       const slug  = (f.meta && f.meta.slug) ? '/f/' + _esc(f.meta.slug) : 'publiée';
-      return `<button type="button" class="sdqr-cg-import-item" data-cg-pick-form="${_esc(f.id)}">
-        <strong>${title}</strong>
-        <small>${slug}</small>
-      </button>`;
+      return `<div class="sdqr-cg-import-row">
+        <button type="button" class="sdqr-cg-import-item" data-cg-pick-form="${_esc(f.id)}">
+          <strong>${title}</strong>
+          <small>${slug}</small>
+        </button>
+        <button type="button" class="sdqr-cg-import-del" data-cg-del-form="${_esc(f.id)}" title="Supprimer cette Fiche" aria-label="Supprimer cette Fiche">&times;</button>
+      </div>`;
     }).join('');
     listEl.querySelectorAll('[data-cg-pick-form]').forEach(btn => {
       const f = gabarits.find(g => g.id === btn.dataset.cgPickForm);
       btn.addEventListener('click', () => _cgImportFromForm(wrap, f));
     });
+    listEl.querySelectorAll('[data-cg-del-form]').forEach(btn => {
+      const f = gabarits.find(g => g.id === btn.dataset.cgDelForm);
+      btn.addEventListener('click', () => _cgDeleteFiche(wrap, f));
+    });
   } catch (e) {
     listEl.innerHTML = `<p class="sdqr-cg-import-msg">Impossible de charger tes formulaires (${_esc(e.message)}). Vérifie ta connexion et réessaie.</p>`;
+  }
+}
+
+// Supprime une Fiche (DELETE /api/pulsa/forms/:id, auth _headers) — sert à
+// repartir propre (effacer une vieille Fiche cassée/de test). Le lien public
+// cesse de fonctionner. Confirmation obligatoire.
+async function _cgDeleteFiche(wrap, form) {
+  if (!form) return;
+  const title = (form.meta && form.meta.title) || 'cette Fiche';
+  if (!confirm(`Supprimer « ${title} » ? Son lien public ne fonctionnera plus.`)) return;
+  try {
+    const r = await fetch(`${CF_API}/api/pulsa/forms/${encodeURIComponent(form.id)}`, {
+      method: 'DELETE', headers: _headers(),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+    // Efface la boîte « lien » (elle pointait peut-être sur la Fiche supprimée)
+    // et, si on avait importé depuis elle, on annule l'import en cours.
+    const box = wrap.querySelector('[data-cg-fiche-link]');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+    if (_creating.cg_import && _creating.cg_import.formId === form.id) _creating.cg_import = null;
+    _cgLoadGabaritForms(wrap);
+  } catch (e) {
+    alert('Suppression impossible : ' + e.message);
   }
 }
 

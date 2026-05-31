@@ -7779,6 +7779,16 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .sdqr-cg-import-item:hover { border-color: rgba(99,102,241,.7); background: rgba(99,102,241,.14); transform: translateY(-1px); }
 .sdqr-cg-import-item strong { font-size: 13px; font-weight: 700; }
 .sdqr-cg-import-item small  { font-size: 10.5px; opacity: .6; }
+/* Ligne Fiche = bouton « choisir » (flex) + bouton supprimer (x) */
+.sdqr-cg-import-row { display: flex; gap: 6px; align-items: stretch; }
+.sdqr-cg-import-row .sdqr-cg-import-item { flex: 1 1 auto; }
+.sdqr-cg-import-del {
+  flex: 0 0 auto; width: 40px; border-radius: 9px; cursor: pointer;
+  border: 1px solid rgba(248,113,113,.3); background: rgba(248,113,113,.07);
+  color: rgba(248,113,113,.85); font-size: 20px; line-height: 1; font-family: inherit;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.sdqr-cg-import-del:hover { border-color: rgba(248,113,113,.6); background: rgba(248,113,113,.16); color: #fca5a5; }
 .sdqr-cg-import-banner {
   font-size: 11.5px; color: rgba(199,203,255,.9); line-height: 1.5;
   background: rgba(99,102,241,.10); border: 1px solid rgba(99,102,241,.3);
