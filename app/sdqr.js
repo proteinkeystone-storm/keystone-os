@@ -36,7 +36,7 @@ import {
 // Sprint C-b — gabarit « Fiche établissement » + instanciation Key Form.
 // (openPulsa importé en dynamique dans _cgCreateFicheGabarit pour ne pas
 // charger pulsa.js au démarrage de SDQR ni risquer un cycle d'import.)
-import { buildConciergeFicheGabarit, isConciergeGabarit } from './lib/concierge-keyform-gabarit.js';
+import { buildConciergeFicheGabarit, isConciergeGabarit, gabaritResponseToSubmission } from './lib/concierge-keyform-gabarit.js';
 import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
@@ -1861,7 +1861,9 @@ async function _cgImportFromForm(wrap, form) {
     const latest = responses.reduce((a, b) => ((a && (a.created_at || '') >= (b.created_at || '')) ? a : b), responses[0]);
     let values = latest.responses;
     if (!values && typeof latest.response_json === 'string') { try { values = JSON.parse(latest.response_json); } catch { values = null; } }
-    _creating.concierge_payload = coerceKeyform(values || {});
+    // Réponse PLATE du gabarit (cg_offre1_nom...) -> submission keyform
+    // (cg_items[]...) -> forme éditeur. Assemblage déterministe, zéro mapping UI.
+    _creating.concierge_payload = coerceKeyform(gabaritResponseToSubmission(values || {}));
     _creating.cg_import = { formId: form.id, title: (form.meta && form.meta.title) || 'Fiche établissement' };
     // Confort : pré-remplit le nom interne du QR si vide.
     const nom = _creating.concierge_payload.cg_nom_enseigne;

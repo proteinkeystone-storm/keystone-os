@@ -723,50 +723,65 @@ async function testConciergeSchema() {
   assert(kb2.questions_suggerees[0] === 'Question brute ?',  'keyformToBlock : questions tolère les lignes string');
 
   // ── D4. Gabarit « Fiche établissement » (Key Form -> Concierge, Sprint C-b) ──
-  // Le gabarit porte des ids de champ == KEYFORM_GABARIT_FIELDS, donc une
-  // RÉPONSE au form EST DÉJÀ une submission keyform (zéro mapping à l'import).
-  const { buildConciergeFicheGabarit, isConciergeGabarit, CONCIERGE_GABARIT_PIVOT_ID } =
+  // QUE des champs PLATS (zéro répéteur, retiré 2026-05-31 = trop complexe pour
+  // un commerçant). gabaritResponseToSubmission assemble les champs remplis en
+  // submission keyform -> keyformToBlock -> bloc generic.
+  const { buildConciergeFicheGabarit, isConciergeGabarit, gabaritResponseToSubmission,
+          GABARIT_MAX, CONCIERGE_GABARIT_PIVOT_ID } =
     await import(join(ROOT, 'app/lib/concierge-keyform-gabarit.js'));
+  assert(GABARIT_MAX.offres === 4 && GABARIT_MAX.faq === 4 && GABARIT_MAX.suggestions === 3,
+    'gabarit Fiche : plafonds Compact 4/4/3');
   const gab = buildConciergeFicheGabarit();
-  // Linchpin anti-dérive : chaque id de champ du gabarit == une clé du contrat.
-  const gabIds = new Set();
-  gab.sections.forEach((s) => (s.fields || []).forEach((f) => {
-    if (!f) return;
-    gabIds.add(f.id);
-    if (f.type === 'repeater') (f.options.fields || []).forEach((sf) => sf && gabIds.add(sf.id));
-  }));
-  ['nom_enseigne', 'titre_offre', 'ville', 'items', 'faq', 'questions',
-   'contact_nom', 'contact_tel', 'contact_email', 'disclaimer'].forEach((slot) =>
-    assert(gabIds.has(F[slot]), `gabarit Fiche : champ du slot "${slot}" (${F[slot]}) présent`));
-  ['item_nom', 'item_prix', 'item_desc'].forEach((id) =>
-    assert(gabIds.has(id), `gabarit Fiche : sous-champ offre "${id}" présent`));
-  assert(gabIds.has(F.faq_q) && gabIds.has(F.faq_r), 'gabarit Fiche : sous-champs FAQ (q/r) présents');
-  assert(gabIds.has(F.question), 'gabarit Fiche : sous-champ question suggérée présent');
-  assert(CONCIERGE_GABARIT_PIVOT_ID === F.nom_enseigne && isConciergeGabarit(gab),
-    'gabarit Fiche : détecté comme gabarit Concierge (pivot == cg_nom_enseigne)');
+  const gabFields = gab.sections.flatMap((s) => s.fields || []);
+  assert(gabFields.every((f) => f && f.type !== 'repeater'),
+    'gabarit Fiche : AUCUN bloc répétable (que des champs simples)');
+  const gabIds = new Set(gabFields.map((f) => f && f.id));
+  // Champs plats attendus (pivot + 1re offre requise + au moins une paire FAQ).
+  ['cg_nom_enseigne', 'cg_titre_offre', 'cg_ville', 'cg_offre1_nom', 'cg_offre1_prix',
+   'cg_offre1_desc', 'cg_offre4_nom', 'cg_faq1_q', 'cg_faq1_r', 'cg_sugg1',
+   'cg_contact_nom', 'cg_contact_email', 'cg_disclaimer'].forEach((id) =>
+    assert(gabIds.has(id), `gabarit Fiche : champ plat "${id}" présent`));
+  assert(gabFields.find((f) => f.id === 'cg_nom_enseigne')?.required &&
+         gabFields.find((f) => f.id === 'cg_offre1_nom')?.required,
+    'gabarit Fiche : enseigne + 1re offre requises (garantit un bloc valide)');
+  assert(CONCIERGE_GABARIT_PIVOT_ID === 'cg_nom_enseigne' && isConciergeGabarit(gab),
+    'gabarit Fiche : détecté comme gabarit Concierge (pivot cg_nom_enseigne)');
   assert(!isConciergeGabarit({ sections: [{ fields: [{ id: 'fld_xx' }] }] }),
     'gabarit Fiche : un form Key Form quelconque n\'est PAS un gabarit Concierge');
 
-  // Round-trip : une réponse type au gabarit -> keyformToBlock -> bloc valide.
-  const gabResponse = {
-    [F.nom_enseigne]: 'Bowling de Bandol',
-    [F.titre_offre]:  'Le spot loisirs de la baie',
-    [F.ville]:        'Bandol',
-    [F.items]: [
-      { [F.item_nom]: 'Partie de bowling', [F.item_prix]: '6 € la partie', [F.item_desc]: 'Chaussures incluses.' },
-    ],
-    [F.faq]:       [{ [F.faq_q]: 'Vos horaires ?', [F.faq_r]: 'Ouvert 7j/7.' }],
-    [F.questions]: [{ [F.question]: 'Comment reserver ?' }],
-    [F.contact_nom]: 'Camille', [F.contact_tel]: '0494000000', [F.contact_email]: 'c@bowling.fr',
-    [F.disclaimer]: 'Informations non contractuelles.',
+  // Assemblage : réponse PLATE (2 offres remplies + 1 vide ignorée) -> submission.
+  const flat = {
+    cg_nom_enseigne: 'Bowling de Bandol', cg_titre_offre: 'Le spot loisirs', cg_ville: 'Bandol',
+    cg_offre1_nom: 'Partie de bowling', cg_offre1_prix: '6 € la partie', cg_offre1_desc: 'Chaussures incluses.',
+    cg_offre2_nom: 'Formule Apéro', cg_offre2_prix: '15 €', cg_offre2_desc: '1 partie + 1 cocktail.',
+    cg_offre3_nom: '', cg_offre3_prix: '', cg_offre3_desc: '',   // ligne vide -> ignorée
+    cg_faq1_q: 'Vos horaires ?', cg_faq1_r: 'Ouvert 7j/7.',
+    cg_faq2_q: '', cg_faq2_r: '',                                 // paire vide -> ignorée
+    cg_sugg1: 'Comment reserver ?', cg_sugg2: '', cg_sugg3: '',
+    cg_contact_nom: 'Camille', cg_contact_tel: '0494000000', cg_contact_email: 'c@bowling.fr',
+    cg_disclaimer: 'Informations non contractuelles.',
   };
-  const gb = keyformToBlock(gabResponse);
-  assert(gb.vertical === 'generic',                            'gabarit Fiche : réponse -> bloc generic');
-  assert(validateBlock(gb).length === 0,                       'gabarit Fiche : réponse -> bloc VALIDE (0 erreur)');
-  assert(gb.branding.nom_agence === 'Bowling de Bandol',       'gabarit Fiche : enseigne -> branding.nom_agence');
-  assert(gb.configurations[0].reference === 'Partie de bowling', 'gabarit Fiche : 1re offre -> reference');
-  assert(gb.faq_validee[0].q === 'Vos horaires ?',             'gabarit Fiche : FAQ mappée');
-  assert(gb.questions_suggerees[0] === 'Comment reserver ?',   'gabarit Fiche : question suggérée mappée');
+  const sub = gabaritResponseToSubmission(flat);
+  assert(sub.cg_items.length === 2,     'assemblage : 2 offres remplies (la vide ignorée)');
+  assert(sub.cg_items[0].item_nom === 'Partie de bowling' && sub.cg_items[0].item_prix === '6 € la partie',
+    'assemblage : offre 1 nom + prix');
+  assert(sub.cg_faq.length === 1 && sub.cg_faq[0].faq_q === 'Vos horaires ?', 'assemblage : 1 FAQ (paire vide ignorée)');
+  assert(sub.cg_questions.length === 1 && sub.cg_questions[0] === 'Comment reserver ?', 'assemblage : 1 suggestion');
+
+  // submission assemblée -> keyformToBlock -> bloc generic valide.
+  const gb = keyformToBlock(sub);
+  assert(gb.vertical === 'generic',                          'gabarit Fiche : réponse -> bloc generic');
+  assert(validateBlock(gb).length === 0,                     'gabarit Fiche : réponse -> bloc VALIDE (0 erreur)');
+  assert(gb.branding.nom_agence === 'Bowling de Bandol',     'gabarit Fiche : enseigne -> branding.nom_agence');
+  assert(gb.configurations.length === 2 && gb.configurations[0].reference === 'Partie de bowling',
+    'gabarit Fiche : 2 offres -> 2 configurations');
+  assert(gb.faq_validee[0].q === 'Vos horaires ?',           'gabarit Fiche : FAQ mappée');
+  assert(gb.questions_suggerees[0] === 'Comment reserver ?', 'gabarit Fiche : suggestion mappée');
+
+  // Rétro-compat : réponse contenant déjà des tableaux (ancien répéteur) -> conservée.
+  const subOld = gabaritResponseToSubmission({ cg_nom_enseigne: 'X', cg_items: [{ item_nom: 'Direct' }] });
+  assert(subOld.cg_items.length === 1 && subOld.cg_items[0].item_nom === 'Direct',
+    'assemblage : tableau cg_items préexistant conservé (rétro-compat)');
 }
 
 // ══════════════════════════════════════════════════════════════
