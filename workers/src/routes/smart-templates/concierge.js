@@ -107,6 +107,10 @@ const TEMPLATE = {
     const contactNomRaw = (contact.nom || '').toString().slice(0, 80);
     const jsInject = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
 
+    // Langue de la dictee vocale (Web Speech API) — BCP-47 depuis la persona.
+    const langDefault = (d.persona?.langue_par_defaut || 'fr').toString().toLowerCase();
+    const speechLang  = ({ fr: 'fr-FR', en: 'en-US', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-PT', nl: 'nl-NL' })[langDefault] || 'fr-FR';
+
     const configs     = Array.isArray(d.configurations) ? d.configurations : [];
     const suggestions = Array.isArray(d.questions_suggerees) ? d.questions_suggerees : [];
 
@@ -359,6 +363,21 @@ const TEMPLATE = {
   .cg-send:not(:disabled):active { transform: scale(.94); }
   .cg-send svg { width: 18px; height: 18px; stroke: var(--on-acc); }
 
+  /* Bouton micro — dictee vocale (Web Speech API), masque si non supporte */
+  .cg-mic { flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 12px;
+    cursor: pointer; background: transparent; color: var(--mut);
+    display: flex; align-items: center; justify-content: center;
+    transition: color .15s ease, background .15s ease, transform .12s ease; }
+  .cg-mic:hover { color: var(--acc); background: ${accent}14; }
+  .cg-mic:active { transform: scale(.94); }
+  .cg-mic svg { width: 20px; height: 20px; stroke: currentColor; }
+  .cg-mic.is-listening { color: #fff; background: #e5484d; }
+  .cg-mic.is-listening { animation: cg-miclisten 1.2s ease-in-out infinite; }
+  @keyframes cg-miclisten {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(229,72,77,.5); }
+    50%      { box-shadow: 0 0 0 7px rgba(229,72,77,0); }
+  }
+
   /* CTA chauffé sur intention (après 2 questions / sujet prix-dispo) */
   .cg-cta.cg-cta-hot { animation: cg-glow 1.7s ease-in-out infinite; }
   @keyframes cg-glow {
@@ -429,6 +448,9 @@ const TEMPLATE = {
     <div class="cg-inputbar">
       <input class="cg-input" id="cg-input" type="text" autocomplete="off" enterkeyhint="send"
              maxlength="500" placeholder="Posez votre question…" aria-label="Votre question">
+      <button class="cg-mic" id="cg-mic" type="button" aria-label="Dicter votre question" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+      </button>
       <button class="cg-send" id="cg-send" type="button" aria-label="Envoyer la question">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
@@ -441,6 +463,7 @@ const TEMPLATE = {
   var SHORT = ${jsInject(safeShort)};
   var CNAME = ${jsInject(contactNomRaw)};
   var CTEL  = ${jsInject(telHref)};
+  var LANG  = ${jsInject(speechLang)};
   var API   = '/api/smartqr/concierge';
   var AISVG = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>';
   var INTENT_RE = /(prix|tarif|budget|co[uû]te|cout|dispo|disponib|r[ée]serv|acheter|visite|rendez|financ|pr[êe]t)/i;
@@ -578,6 +601,40 @@ const TEMPLATE = {
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); ask(input.value); }
   });
+
+  // Dictee vocale (Web Speech API) — bouton micro optionnel. On ne le revele
+  // que si le navigateur sait reconnaitre la parole (sinon il reste masque).
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var micBtn = document.getElementById('cg-mic');
+  if (SR && micBtn) {
+    micBtn.hidden = false;
+    var rec = null, listening = false;
+    function stopMic() {
+      listening = false;
+      micBtn.classList.remove('is-listening');
+      input.placeholder = 'Posez votre question…';
+    }
+    micBtn.addEventListener('click', function () {
+      if (listening) { try { rec && rec.stop(); } catch (e) {} return; }
+      try {
+        rec = new SR();
+        rec.lang = LANG || 'fr-FR';
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.maxAlternatives = 1;
+        var base = (input.value || '').trim();
+        rec.onstart = function () { listening = true; micBtn.classList.add('is-listening'); input.placeholder = 'Parlez…'; };
+        rec.onresult = function (e) {
+          var txt = '';
+          for (var k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
+          input.value = (base ? base + ' ' : '') + txt;
+        };
+        rec.onerror = function () { stopMic(); };
+        rec.onend = function () { stopMic(); input.focus(); };
+        rec.start();
+      } catch (e) { stopMic(); }
+    });
+  }
 })();
 </script>
 </body>
