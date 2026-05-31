@@ -43,6 +43,14 @@ function frThousands(n) {
 function fmtPrix(n)    { const s = frThousands(n); return s ? s + ' €' : ''; }
 function fmtSurface(n) { const s = frThousands(n); return s ? s + ' m²' : ''; }
 
+// Variantes « a plat » réservées au PROMPT : chiffres SANS espace de milliers
+// interne. Mistral tronquait « 389 000 € » -> « 389 € » (il laisse tomber le
+// groupe « 000 »). Un token contigu « 389000 € » est recopié en entier.
+// L'affichage du chat regroupe ensuite en « 389 000 € » (groupNums, cote page).
+function frInt(n)         { const num = Number(n); return (Number.isFinite(num) && num > 0) ? String(Math.round(num)) : ''; }
+function fmtPrixFlat(n)    { const s = frInt(n); return s ? s + ' €' : ''; }
+function fmtSurfaceFlat(n) { const s = frInt(n); return s ? s + ' m²' : ''; }
+
 const STATUT_META = {
   disponible: { label: 'Disponible', cls: 'is-dispo' },
   optionne:   { label: 'Optionné',   cls: 'is-opt'   },
@@ -460,6 +468,15 @@ const TEMPLATE = {
     h = h.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
     h = h.replace(/__([^_]+)__/g, '<strong>$1</strong>');
     h = h.replace(/\\*\\*/g, '').replace(/__/g, '');
+    // Puces : tiret / asterisque en debut de ligne -> vraie puce (lisibilite).
+    h = h.replace(/(^|\\n)[ \\t]*[-*]\\s+/g, '$1• ');
+    // Milliers : Mistral renvoie un nombre contigu (389000 €). On le rend
+    // lisible cote affichage : 389000 € -> 389 000 €, 1180 m² -> 1 180 m².
+    h = h.replace(/(\\d[\\d ]*\\d)\\s*(€|m²|euros?)/g, function (mm, num, unit) {
+      var raw = num.replace(/\\s+/g, '');
+      var g = raw.length < 4 ? raw : raw.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+      return g + ' ' + unit;
+    });
     return h;
   }
   var dock = document.getElementById('cg-dock');
@@ -620,12 +637,13 @@ export function buildConciergePrompt(block) {
         type:          c?.type || '',
         nb_chambres:   c?.nb_chambres,
         statut:        c?.statut || '',
-        // Chiffres PRE-FORMATES en chaine exacte : le modele les recopie tels
-        // quels au lieu d'abreger un entier brut (389000 -> "389 €") ou de
-        // perdre un chiffre (105 -> "15"). Source de verite identique aux cartes.
-        surface:       fmtSurface(c?.surface_habitable_m2) || 'non communiquée',
-        prix:          fmtPrix(c?.prix_ttc) || 'non communiqué',
-        jardin:        fmtSurface(ann.jardin_m2) || 'aucun',
+        // Chiffres « a plat » (sans espace de milliers interne) : Mistral
+        // tronquait « 389 000 € » -> « 389 € » en jetant le groupe « 000 ».
+        // Token contigu « 389000 € » = recopie integrale ; le chat regroupe a
+        // l'affichage. Source de verite identique aux cartes (valeur, pas format).
+        surface:       fmtSurfaceFlat(c?.surface_habitable_m2) || 'non communiquée',
+        prix:          fmtPrixFlat(c?.prix_ttc) || 'non communiqué',
+        jardin:        fmtSurfaceFlat(ann.jardin_m2) || 'aucun',
         garage:        ann.garage === true ? 'oui' : (ann.garage === false ? 'non' : 'non précisé'),
         exposition:    c?.exposition || '',
         stationnement: c?.stationnement || '',
@@ -651,7 +669,7 @@ export function buildConciergePrompt(block) {
     '- Compare les configurations et oriente selon le besoin (taille de famille, budget, exposition…), mais UNIQUEMENT à partir des champs fournis — jamais de justification par une donnée absente.',
     '- Ne propose jamais une configuration dont le statut = vendu.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Les montants et surfaces sont DÉJÀ formatés exactement (ex : "68 m²", "389 000 €"). Recopie-les caractère pour caractère : n\'abrège jamais, n\'arrondis pas, ne retire pas les milliers, n\'invente aucun chiffre.',
+    '- Les montants et surfaces sont fournis EXACTS (ex : "68 m²", "389000 €"). Recopie le nombre ENTIER avec TOUS ses chiffres : n\'abrège jamais, n\'arrondis pas, ne retire aucun chiffre, n\'invente rien.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'agence.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
@@ -672,7 +690,7 @@ function buildGenericPrompt(d, ctx) {
       intitule:    c?.reference || '',
       attributs:   (Array.isArray(c?.attributs) ? c.attributs : [])
         .map((a) => ({ label: a?.label || '', value: a?.value || '' })),
-      prix:        fmtPrix(c?.prix_ttc) || 'non communiqué',
+      prix:        fmtPrixFlat(c?.prix_ttc) || 'non communiqué',
       description: c?.description || '',
     })),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
@@ -693,7 +711,7 @@ function buildGenericPrompt(d, ctx) {
     '- Réponds uniquement à partir des données fournies.',
     '- Compare les offres et oriente selon le besoin exprimé, mais UNIQUEMENT à partir des champs fournis (intitulé, attributs, prix, description) — jamais de justification par une donnée absente.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Les prix sont DÉJÀ formatés exactement (ex : "75 €"). Recopie-les caractère pour caractère : n\'abrège pas, n\'arrondis pas, n\'invente aucun chiffre.',
+    '- Les prix sont fournis EXACTS (ex : "75 €", "389000 €"). Recopie le nombre ENTIER avec TOUS ses chiffres : n\'abrège pas, n\'arrondis pas, n\'invente aucun chiffre.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'enseigne.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
