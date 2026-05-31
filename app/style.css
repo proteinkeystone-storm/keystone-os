@@ -6885,6 +6885,20 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   gap: 12px;
   margin-top: 8px;
 }
+/* Sprint B — 2 cartes phares Concierge (general puis VEFA) sur toute la
+   largeur, au-dessus de la grille des autres templates. */
+.sdqr-template-card--featured { grid-column: 1 / -1; }
+/* Lien « Changer de modele » affiche quand un modele est choisi (selecteur replie). */
+.sdqr-template-change {
+  grid-column: 1 / -1;
+  justify-self: start;
+  background: none; border: 0; padding: 2px 0; margin: 0 0 2px;
+  color: rgba(201,169,110,.85);
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  letter-spacing: -.01em; cursor: pointer;
+  transition: color .18s ease, transform .18s ease;
+}
+.sdqr-template-change:hover { color: var(--gold, #c9a96e); transform: translateX(-2px); }
 .sdqr-template-card {
   position: relative;
   display: flex; flex-direction: column; align-items: stretch; gap: 8px;

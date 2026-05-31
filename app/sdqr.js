@@ -598,6 +598,10 @@ function _openCreateForm(panel, opts = {}) {
     // Concierge VEFA (S7) — source du bloc (inline | vefa) + programme « à
     // plat » relayé par VEFA Studio (le Worker l'adapte au save).
     concierge_source: 'inline', concierge_payload: null,
+    // Sprint B (cartes phares) — false = sélecteur de modèles ouvert (toutes
+    // les cartes visibles) ; true = un modèle choisi (carte active seule +
+    // lien « Changer de modèle »). Remis à false à chaque ouverture du form.
+    _templatePicked: false,
   };
 
   // Concierge VEFA (S7) — auto-ouverture depuis le relai VEFA Studio :
@@ -610,12 +614,14 @@ function _openCreateForm(panel, opts = {}) {
     _creating.concierge_source  = 'vefa';
     _creating.concierge_payload = prog;
     if (prog.nom) _creating.name = prog.nom;
+    _creating._templatePicked   = true;   // arrive via CTA VEFA -> modèle déjà choisi
   } else if (opts && opts.presetConcierge) {
     // Deep-link depuis VEFA Studio (sans programme relayé) : ouverture directe
     // du formulaire sur Smart + Concierge, à la bonne verticale.
     _creating.mode             = 'smart';
     _creating.template_id      = 'concierge';
     _creating.concierge_source = opts.presetConcierge === 'general' ? 'keyform' : 'inline';
+    _creating._templatePicked  = true;    // deep-link -> modèle déjà choisi
   }
 
   content.innerHTML = `
@@ -819,38 +825,107 @@ function _toggleSmartBriefVisibility(root) {
 function _renderTemplateCards(root) {
   const wrap = root.querySelector('#sdqr-template-cards');
   if (!wrap) return;
-  const tpls = listTemplates();
 
   const tierLabels = { starter: 'Starter', pro: 'Pro', max: 'Max', admin: 'Admin' };
+  const cgIcon     = getTemplateIconSvg('concierge') || '🛎️';
+  const cgTier     = getTemplate('concierge').tier_required || 'pro';
 
-  wrap.innerHTML = tpls.map(t => {
-    const isActive = _creating.template_id === t.id;
-    const tier     = t.tier_required || 'starter';
-    const tierLbl  = tierLabels[tier] || 'Starter';
-    const preview  = isActive && typeof t.previewMini === 'function'
-      ? `<div class="sdqr-template-preview" aria-hidden="true">${t.previewMini()}</div>`
+  // Sprint B — 2 cartes phares Concierge SYNTHÉTIQUES (pleine largeur) en
+  // tête : « général » (verticale generic, source keyform) PUIS « VEFA »
+  // (verticale immo, source inline/vefa). Les deux partagent template_id
+  // 'concierge' ; on les distingue par data-cg-vertical + concierge_source.
+  // Suivent les autres templates (hors concierge) en grille normale.
+  const cgGeneralActive = _creating.template_id === 'concierge' && _creating.concierge_source === 'keyform';
+  const cgImmoActive    = _creating.template_id === 'concierge' && _creating.concierge_source !== 'keyform';
+
+  const descriptors = [
+    {
+      templateId: 'concierge', cgVertical: 'general', featured: true,
+      label: 'Concierge (général)',
+      description: 'Tous métiers — accueil, offres, FAQ et chat qui répond depuis vos infos validées. 1 QR = 1 mini-site de réponses.',
+      tier: cgTier, icon: cgIcon, isActive: cgGeneralActive, previewMini: null,
+    },
+    {
+      templateId: 'concierge', cgVertical: 'immo', featured: true,
+      label: 'Concierge immobilier (VEFA)',
+      description: 'Promotion immobilière — programme, lots et configurations, FAQ et chat qui répond depuis un bloc validé. 1 QR = 1 programme complet.',
+      tier: cgTier, icon: cgIcon, isActive: cgImmoActive, previewMini: null,
+    },
+    ...listTemplates().filter(t => t.id !== 'concierge').map(t => ({
+      templateId: t.id, cgVertical: null, featured: false,
+      label: t.label, description: t.description || '',
+      tier: t.tier_required || 'starter',
+      icon: getTemplateIconSvg(t.id) || t.icon || '✦',
+      isActive: _creating.template_id === t.id,
+      previewMini: typeof t.previewMini === 'function' ? t.previewMini : null,
+    })),
+  ];
+
+  const cardHtml = (d) => {
+    const tierLbl = tierLabels[d.tier] || 'Starter';
+    const preview = (d.isActive && d.previewMini)
+      ? `<div class="sdqr-template-preview" aria-hidden="true">${d.previewMini()}</div>`
       : '';
+    const featCls = d.featured ? ' sdqr-template-card--featured' : '';
+    const cgAttr  = d.cgVertical ? ` data-cg-vertical="${d.cgVertical}"` : '';
     return `
-      <button type="button" class="sdqr-template-card ${isActive ? 'is-active' : ''}" data-template-id="${_esc(t.id)}">
+      <button type="button" class="sdqr-template-card${featCls} ${d.isActive ? 'is-active' : ''}" data-template-id="${_esc(d.templateId)}"${cgAttr}>
         <div class="sdqr-template-card-head">
-          <span class="sdqr-template-ico">${getTemplateIconSvg(t.id) || t.icon || '✦'}</span>
-          <span class="sdqr-template-tier sdqr-template-tier--${tier}">${tierLbl}</span>
+          <span class="sdqr-template-ico">${d.icon}</span>
+          <span class="sdqr-template-tier sdqr-template-tier--${d.tier}">${tierLbl}</span>
         </div>
-        <span class="sdqr-template-label">${_esc(t.label)}</span>
-        <span class="sdqr-template-desc">${_esc(t.description || '')}</span>
+        <span class="sdqr-template-label">${_esc(d.label)}</span>
+        <span class="sdqr-template-desc">${_esc(d.description)}</span>
         ${preview}
       </button>
     `;
-  }).join('');
+  };
+
+  if (_creating._templatePicked) {
+    // Modèle choisi : on épure l'écran — carte active SEULE (forcée pleine
+    // largeur) + un lien « Changer de modèle » pour rouvrir le choix complet.
+    const active = descriptors.find(d => d.isActive) || descriptors[0];
+    wrap.innerHTML =
+      '<button type="button" class="sdqr-template-change" data-template-change="1">&larr; Changer de modèle</button>'
+      + cardHtml({ ...active, featured: true });
+  } else {
+    wrap.innerHTML = descriptors.map(cardHtml).join('');
+  }
+
   wrap.querySelectorAll('.sdqr-template-card').forEach(card => {
     card.addEventListener('click', () => {
       const newId = card.dataset.templateId;
       if (!isKnownTemplate(newId)) return;
-      _creating.template_id   = newId;
-      _creating.template_data = {}; // reset à chaque changement
+      const cgVertical = card.dataset.cgVertical || null;
+
+      // Source concierge cible : général -> keyform ; immo -> inline, sauf si
+      // on tient déjà un relai VEFA Studio (vefa) qu'on ne veut pas perdre.
+      let nextSource = _creating.concierge_source;
+      if (newId === 'concierge') {
+        if (cgVertical === 'general') nextSource = 'keyform';
+        else if (_creating.concierge_source === 'keyform') nextSource = 'inline';
+      }
+
+      // Carte déjà active (même template + même verticale) : on se contente de
+      // replier le sélecteur, SANS réinitialiser les données déjà saisies.
+      const sameTemplate = _creating.template_id === newId;
+      const sameVertical = newId !== 'concierge' || nextSource === _creating.concierge_source;
+      if (!(sameTemplate && sameVertical)) {
+        _creating.template_id      = newId;
+        _creating.template_data    = {};          // reset au vrai changement
+        _creating.concierge_source = nextSource;
+      }
+      _creating._templatePicked = true;
       _renderTemplateCards(root);
       _renderTemplateFields(root);
     });
+  });
+
+  const changeBtn = wrap.querySelector('[data-template-change]');
+  if (changeBtn) changeBtn.addEventListener('click', () => {
+    _creating._templatePicked = false;
+    _renderTemplateCards(root);
+    _renderTemplateFields(root);
   });
 }
 
@@ -861,6 +936,9 @@ function _renderTemplateCards(root) {
 function _renderTemplateFields(root) {
   const wrap = root.querySelector('#sdqr-smart-template-fields');
   if (!wrap) return;
+  // Sprint B — tant qu'aucun modèle n'est choisi (sélecteur ouvert), on
+  // n'affiche pas l'éditeur : l'écran de choix reste épuré.
+  if (!_creating._templatePicked) { wrap.innerHTML = ''; return; }
   // Concierge VEFA (Sprint 4) — bloc de connaissance NESTÉ (programme +
   // configurations répéteur + branding + faq…). Ne se mappe pas sur le
   // master-renderer plat : éditeur dédié. On court-circuite AVANT le
