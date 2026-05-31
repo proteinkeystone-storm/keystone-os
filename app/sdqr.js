@@ -33,6 +33,11 @@ import {
   PROGRAM_STORAGE_KEY, coerceProgram, validateProgramLight,
   blankKeyform, blankKeyformItem, coerceKeyform, validateKeyformLight,
 } from './lib/concierge-program.js';
+// Sprint C-b — gabarit « Fiche établissement » + instanciation Key Form.
+// (openPulsa importé en dynamique dans _cgCreateFicheGabarit pour ne pas
+// charger pulsa.js au démarrage de SDQR ni risquer un cycle d'import.)
+import { buildConciergeFicheGabarit, isConciergeGabarit } from './lib/concierge-keyform-gabarit.js';
+import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -598,6 +603,10 @@ function _openCreateForm(panel, opts = {}) {
     // Concierge VEFA (S7) — source du bloc (inline | vefa) + programme « à
     // plat » relayé par VEFA Studio (le Worker l'adapte au save).
     concierge_source: 'inline', concierge_payload: null,
+    // Sprint C-b — sous-mode de la verticale générale (concierge_source ===
+    // 'keyform') : 'direct' (je remplis le gabarit ici) | 'import' (depuis une
+    // Fiche Key Form publiée). cg_import = { formId, title } une fois importé.
+    cg_kf_mode: 'direct', cg_import: null,
     // Sprint B (cartes phares) — false = sélecteur de modèles ouvert (toutes
     // les cartes visibles) ; true = un modèle choisi (carte active seule +
     // lien « Changer de modèle »). Remis à false à chaque ouverture du form.
@@ -914,6 +923,8 @@ function _renderTemplateCards(root) {
         _creating.template_id      = newId;
         _creating.template_data    = {};          // reset au vrai changement
         _creating.concierge_source = nextSource;
+        _creating.cg_kf_mode       = 'direct';    // sous-mode général repart à neuf
+        _creating.cg_import        = null;
       }
       _creating._templatePicked = true;
       _renderTemplateCards(root);
@@ -1297,22 +1308,40 @@ function _renderConciergeEditor(wrap) {
   const src      = _creating.concierge_source;
   const source   = (src === 'vefa' || src === 'keyform') ? src : 'inline';
   const vertical = source === 'keyform' ? 'general' : 'immo';
-  const sources  = vertical === 'immo'
-    ? [
-        { id: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici' },
-        { id: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio" },
-      ]
-    : [
-        { id: 'keyform', strong: 'Saisie directe', small: 'Gabarit générique — offres, FAQ, contact' },
-      ];
-  const picker = sources.length < 2 ? '' : `
+
+  // Picker de source. CONTEXTUEL (Sprint C-a) : on ne montre que les sources
+  // de la verticale courante (fixée par la carte phare). Pour la verticale
+  // GÉNÉRALE (Sprint C-b), 2 sous-modes data-cg-kfmode (la source reste
+  // 'keyform' sur le fil) ; pour IMMO, les sources data-cg-source classiques.
+  let picker = '';
+  if (vertical === 'immo') {
+    const immo = [
+      { val: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici' },
+      { val: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio" },
+    ];
+    picker = `
     <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
-      ${sources.map(s => `
-      <button type="button" class="sdqr-cg-source-btn ${source === s.id ? 'is-active' : ''}" data-cg-source="${s.id}">
+      ${immo.map(s => `
+      <button type="button" class="sdqr-cg-source-btn ${source === s.val ? 'is-active' : ''}" data-cg-source="${s.val}">
         <strong>${s.strong}</strong>
         <small>${s.small}</small>
       </button>`).join('')}
     </div>`;
+  } else {
+    const kfMode = _creating.cg_kf_mode === 'import' ? 'import' : 'direct';
+    const gen = [
+      { val: 'direct', strong: 'Saisie directe',  small: 'Je remplis le gabarit générique ici' },
+      { val: 'import', strong: 'Key Form publié', small: "J'importe une Fiche établissement remplie" },
+    ];
+    picker = `
+    <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
+      ${gen.map(s => `
+      <button type="button" class="sdqr-cg-source-btn ${kfMode === s.val ? 'is-active' : ''}" data-cg-kfmode="${s.val}">
+        <strong>${s.strong}</strong>
+        <small>${s.small}</small>
+      </button>`).join('')}
+    </div>`;
+  }
 
   // Source « vefa » : aperçu en lecture seule du programme relayé. Le bloc
   // canonique est dérivé côté Worker (vefaProgramToBlock) à la publication ;
@@ -1323,14 +1352,27 @@ function _renderConciergeEditor(wrap) {
     return;
   }
 
-  // Source « keyform » (S7.5) : éditeur générique. La submission à plat
-  // (concierge_payload, keyée par KEYFORM_GABARIT_FIELDS) est dérivée en bloc
-  // canonique générique côté Worker (keyformToBlock) à la publication.
+  // Source « keyform » : verticale générale. Sous-mode « import » sans Fiche
+  // encore chargée -> panneau de sélection d'une Fiche Key Form publiée.
+  // Sinon (saisie directe, OU après import = pré-rempli) -> éditeur générique.
+  // La submission à plat (concierge_payload, keyée KEYFORM_GABARIT_FIELDS) est
+  // dérivée en bloc générique côté Worker (keyformToBlock) à la publication.
   if (source === 'keyform') {
+    const kfMode = _creating.cg_kf_mode === 'import' ? 'import' : 'direct';
+    if (kfMode === 'import' && !_creating.cg_import) {
+      wrap.innerHTML = picker + _cgImportPanelHtml();
+      _cgBindKfModePicker(wrap);
+      _cgBindImportPanel(wrap);
+      return;
+    }
     _cgEnsureKeyform();
-    wrap.innerHTML = picker + _cgKeyformEditorHtml();
-    _cgBindSourcePicker(wrap);
+    const banner = _creating.cg_import
+      ? `<div class="sdqr-cg-import-banner">Importé depuis « ${_esc(_creating.cg_import.title)} ». <button type="button" class="sdqr-cg-linklike" data-cg-reimport>Choisir un autre formulaire</button></div>`
+      : '';
+    wrap.innerHTML = picker + banner + _cgKeyformEditorHtml();
+    _cgBindKfModePicker(wrap);
     _cgBindKeyform(wrap);
+    _cgBindReimport(wrap);
     return;
   }
 
@@ -1708,6 +1750,151 @@ function _cgBindSourcePicker(wrap) {
       _renderConciergeEditor(wrap);
     });
   });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Sprint C-b — Import « Key Form publié » -> Concierge generic.
+// Le gabarit « Fiche établissement » (app/lib/concierge-keyform-gabarit.js)
+// porte des ids de champ == KEYFORM_GABARIT_FIELDS : une RÉPONSE au form EST
+// déjà une submission keyform. L'import récupère la dernière réponse d'une
+// Fiche PUBLIÉE et pré-remplit l'éditeur générique (concierge_source reste
+// 'keyform'). Lecture seule des endpoints pulsa -> aucun risque Biennale.
+// ══════════════════════════════════════════════════════════════════
+
+// Vrai si le form (objet brut de /api/pulsa/forms) est publié.
+function _cgFormIsPublished(f) {
+  return !!((f && f.output && f.output.status === 'published') || (f && f.published_at));
+}
+
+// Bouton du picker général -> bascule de sous-mode (direct | import).
+function _cgBindKfModePicker(wrap) {
+  wrap.querySelectorAll('[data-cg-kfmode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.cgKfmode === 'import' ? 'import' : 'direct';
+      if (mode === (_creating.cg_kf_mode || 'direct')) return;
+      _creating.cg_kf_mode = mode;
+      if (mode === 'direct') _cgEnsureKeyform();   // garde le payload courant
+      _renderConciergeEditor(wrap);
+    });
+  });
+}
+
+// Lien « Choisir un autre formulaire » du bandeau après import.
+function _cgBindReimport(wrap) {
+  wrap.querySelector('[data-cg-reimport]')?.addEventListener('click', () => {
+    _creating.cg_import = null;                    // repasse au panneau de sélection
+    _renderConciergeEditor(wrap);
+  });
+}
+
+function _cgImportPanelHtml() {
+  return `
+    <div class="sdqr-cg-import">
+      <p class="sdqr-cg-hint">Choisis une « Fiche établissement » que tu as <strong>publiée</strong> dans Key Form et qui a reçu au moins une réponse. Ses infos rempliront automatiquement le Concierge.</p>
+      <div class="sdqr-cg-import-list" data-cg-import-list>
+        <p class="sdqr-cg-import-msg">Chargement de tes formulaires...</p>
+      </div>
+      <button type="button" class="sdqr-cg-add" data-cg-create-fiche>+ Créer la Fiche établissement</button>
+    </div>`;
+}
+
+function _cgBindImportPanel(wrap) {
+  wrap.querySelector('[data-cg-create-fiche]')?.addEventListener('click', _cgCreateFicheGabarit);
+  _cgLoadGabaritForms(wrap);
+}
+
+// Charge les Fiches publiées (gabarits Concierge) de l'utilisateur et les rend
+// sélectionnables. Auth via le helper SDQR (_headers) déjà utilisé pour /api/qr.
+async function _cgLoadGabaritForms(wrap) {
+  const listEl = wrap.querySelector('[data-cg-import-list]');
+  if (!listEl) return;
+  try {
+    const r = await fetch(`${CF_API}/api/pulsa/forms`, { headers: _headers() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const body  = await r.json();
+    const forms = Array.isArray(body.forms) ? body.forms : [];
+    const gabarits = forms.filter(f => isConciergeGabarit(f) && _cgFormIsPublished(f));
+    if (!gabarits.length) {
+      listEl.innerHTML = `<p class="sdqr-cg-import-msg">Aucune Fiche établissement publiée pour l'instant. Crée-en une ci-dessous, publie-la dans Key Form, fais-la remplir, puis reviens ici.</p>`;
+      return;
+    }
+    listEl.innerHTML = gabarits.map(f => {
+      const title = _esc((f.meta && f.meta.title) || 'Fiche établissement');
+      const slug  = (f.meta && f.meta.slug) ? '/f/' + _esc(f.meta.slug) : 'publiée';
+      return `<button type="button" class="sdqr-cg-import-item" data-cg-pick-form="${_esc(f.id)}">
+        <strong>${title}</strong>
+        <small>${slug}</small>
+      </button>`;
+    }).join('');
+    listEl.querySelectorAll('[data-cg-pick-form]').forEach(btn => {
+      const f = gabarits.find(g => g.id === btn.dataset.cgPickForm);
+      btn.addEventListener('click', () => _cgImportFromForm(wrap, f));
+    });
+  } catch (e) {
+    listEl.innerHTML = `<p class="sdqr-cg-import-msg">Impossible de charger tes formulaires (${_esc(e.message)}). Vérifie ta connexion et réessaie.</p>`;
+  }
+}
+
+// Récupère la DERNIÈRE réponse d'une Fiche -> coerce en submission keyform ->
+// pré-remplit l'éditeur générique. La réponse est déjà keyée par cg_* (ids des
+// champs du gabarit), donc coerceKeyform suffit (zéro mapping).
+async function _cgImportFromForm(wrap, form) {
+  if (!form) return;
+  const listEl = wrap.querySelector('[data-cg-import-list]');
+  const back = () => {
+    if (!listEl) return;
+    listEl.querySelector('[data-cg-back]')?.addEventListener('click', () => _cgLoadGabaritForms(wrap));
+  };
+  if (listEl) listEl.innerHTML = `<p class="sdqr-cg-import-msg">Import en cours...</p>`;
+  try {
+    const r = await fetch(`${CF_API}/api/pulsa/responses?form_id=${encodeURIComponent(form.id)}`, { headers: _headers() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const body = await r.json();
+    const responses = Array.isArray(body.responses) ? body.responses : [];
+    if (!responses.length) {
+      if (listEl) {
+        listEl.innerHTML = `<p class="sdqr-cg-import-msg">Cette Fiche n'a pas encore de réponse. Partage son lien, fais-la remplir, puis reviens. <button type="button" class="sdqr-cg-linklike" data-cg-back>Retour à la liste</button></p>`;
+        back();
+      }
+      return;
+    }
+    const latest = responses.reduce((a, b) => ((a && (a.created_at || '') >= (b.created_at || '')) ? a : b), responses[0]);
+    let values = latest.responses;
+    if (!values && typeof latest.response_json === 'string') { try { values = JSON.parse(latest.response_json); } catch { values = null; } }
+    _creating.concierge_payload = coerceKeyform(values || {});
+    _creating.cg_import = { formId: form.id, title: (form.meta && form.meta.title) || 'Fiche établissement' };
+    // Confort : pré-remplit le nom interne du QR si vide.
+    const nom = _creating.concierge_payload.cg_nom_enseigne;
+    if (nom && !(_creating.name || '').trim()) {
+      _creating.name = nom;
+      const el = document.getElementById('sdqr-f-name');
+      if (el) el.value = nom;
+    }
+    _renderConciergeEditor(wrap);
+  } catch (e) {
+    if (listEl) {
+      listEl.innerHTML = `<p class="sdqr-cg-import-msg">Import impossible (${_esc(e.message)}). <button type="button" class="sdqr-cg-linklike" data-cg-back>Retour à la liste</button></p>`;
+      back();
+    }
+  }
+}
+
+// « Créer la Fiche établissement » : instancie le gabarit en LOCAL (library
+// Key Form) puis ouvre Key Form pour le publier (mirror app/codex.js
+// _shareCreatePulsa). openPulsa importé en dynamique (pas de cycle, pas de
+// chargement eager de pulsa.js).
+async function _cgCreateFicheGabarit() {
+  try {
+    const form   = buildConciergeFicheGabarit();
+    const stored = saveForm(form);
+    setCurrentFormId(stored.id);
+    const { openPulsa } = await import('./pulsa.js');
+    closeSDQR();
+    setTimeout(() => openPulsa(), 120);
+  } catch (e) {
+    console.error('[sdqr] create fiche gabarit', e);
+    alert('Création de la Fiche impossible : ' + e.message);
+  }
 }
 
 // Rend les champs du form en fonction du type sélectionné.
