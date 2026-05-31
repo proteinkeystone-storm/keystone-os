@@ -1288,24 +1288,30 @@ function _cgBindFaq(wrap) {
 }
 
 function _renderConciergeEditor(wrap) {
-  // Sélecteur de source : saisie directe immo (inline) · import VEFA Studio
-  // (vefa) · gabarit générique tous métiers (keyform, S7.5).
-  const src    = _creating.concierge_source;
-  const source = (src === 'vefa' || src === 'keyform') ? src : 'inline';
-  const picker = `
+  // Sélecteur de source CONTEXTUEL (Sprint C-a) : la verticale est fixée par
+  // la carte phare choisie au Sprint B (général -> keyform ; immo -> inline /
+  // vefa). On ne propose donc QUE les sources de la verticale courante, et on
+  // masque le picker s'il n'y a qu'une seule source (aucun choix utile).
+  //   - immo    : Saisie directe (inline) + Depuis VEFA Studio (vefa)
+  //   - général : Saisie directe générique (keyform) [+ Key Form publié au C-b]
+  const src      = _creating.concierge_source;
+  const source   = (src === 'vefa' || src === 'keyform') ? src : 'inline';
+  const vertical = source === 'keyform' ? 'general' : 'immo';
+  const sources  = vertical === 'immo'
+    ? [
+        { id: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici' },
+        { id: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio" },
+      ]
+    : [
+        { id: 'keyform', strong: 'Saisie directe', small: 'Gabarit générique — offres, FAQ, contact' },
+      ];
+  const picker = sources.length < 2 ? '' : `
     <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
-      <button type="button" class="sdqr-cg-source-btn ${source === 'inline' ? 'is-active' : ''}" data-cg-source="inline">
-        <strong>Saisie directe</strong>
-        <small>Programme immobilier, saisi ici</small>
-      </button>
-      <button type="button" class="sdqr-cg-source-btn ${source === 'vefa' ? 'is-active' : ''}" data-cg-source="vefa">
-        <strong>Depuis VEFA Studio</strong>
-        <small>J'importe le programme préparé dans VEFA Studio</small>
-      </button>
-      <button type="button" class="sdqr-cg-source-btn ${source === 'keyform' ? 'is-active' : ''}" data-cg-source="keyform">
-        <strong>Gabarit générique</strong>
-        <small>Tous métiers — offres, FAQ, contact</small>
-      </button>
+      ${sources.map(s => `
+      <button type="button" class="sdqr-cg-source-btn ${source === s.id ? 'is-active' : ''}" data-cg-source="${s.id}">
+        <strong>${s.strong}</strong>
+        <small>${s.small}</small>
+      </button>`).join('')}
     </div>`;
 
   // Source « vefa » : aperçu en lecture seule du programme relayé. Le bloc
