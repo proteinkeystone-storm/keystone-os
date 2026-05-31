@@ -195,7 +195,7 @@ const TEMPLATE = {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     letter-spacing: -0.02em; min-height: 100vh; -webkit-font-smoothing: antialiased; }
   body { display: flex; justify-content: center;
-    padding: 22px 16px calc(112px + env(safe-area-inset-bottom, 0px)); min-height: 100vh; }
+    padding: 22px 16px calc(124px + env(safe-area-inset-bottom, 0px)); min-height: 100vh; }
 
   .cg-shell { width: 100%; max-width: 560px; position: relative; }
 
@@ -322,8 +322,9 @@ const TEMPLATE = {
      sur la largeur de la fenetre, fond degrade pour la detacher du contenu. */
   .cg-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
     display: flex; justify-content: center; pointer-events: none;
-    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(to top, var(--bg) 56%, #f6f7f900); }
+    padding: 26px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top,
+      ${accent}40 0%, ${accent}24 34%, ${accent}0d 62%, ${accent}00 100%); }
   .cg-dock-inner { width: 100%; max-width: 560px; pointer-events: auto; }
 
   /* Barre de saisie — flashy : bord accent agence, halo colore, elevation */
@@ -596,18 +597,25 @@ export function buildConciergePrompt(block) {
       ville:            prog.ville || '',
       livraison_prevue: prog.livraison_prevue || '',
     },
-    configurations: (Array.isArray(d.configurations) ? d.configurations : []).map((c) => ({
-      reference:            c?.reference || '',
-      type:                 c?.type || '',
-      nb_chambres:          c?.nb_chambres,
-      statut:               c?.statut || '',
-      surface_habitable_m2: c?.surface_habitable_m2,
-      surfaces_annexes:     c?.surfaces_annexes || {},
-      exposition:           c?.exposition || '',
-      prix_ttc:             c?.prix_ttc,
-      stationnement:        c?.stationnement || '',
-      prestations:          Array.isArray(c?.prestations) ? c.prestations : [],
-    })),
+    configurations: (Array.isArray(d.configurations) ? d.configurations : []).map((c) => {
+      const ann = c?.surfaces_annexes || {};
+      return {
+        reference:     c?.reference || '',
+        type:          c?.type || '',
+        nb_chambres:   c?.nb_chambres,
+        statut:        c?.statut || '',
+        // Chiffres PRE-FORMATES en chaine exacte : le modele les recopie tels
+        // quels au lieu d'abreger un entier brut (389000 -> "389 €") ou de
+        // perdre un chiffre (105 -> "15"). Source de verite identique aux cartes.
+        surface:       fmtSurface(c?.surface_habitable_m2) || 'non communiquée',
+        prix:          fmtPrix(c?.prix_ttc) || 'non communiqué',
+        jardin:        fmtSurface(ann.jardin_m2) || 'aucun',
+        garage:        ann.garage === true ? 'oui' : (ann.garage === false ? 'non' : 'non précisé'),
+        exposition:    c?.exposition || '',
+        stationnement: c?.stationnement || '',
+        prestations:   Array.isArray(c?.prestations) ? c.prestations : [],
+      };
+    }),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
     contact_humain: { nom: contact.nom || '', tel: contact.tel || '', email: contact.email || '' },
     disclaimer:     d.disclaimer || '',
@@ -627,7 +635,7 @@ export function buildConciergePrompt(block) {
     '- Compare les configurations et oriente selon le besoin (taille de famille, budget, exposition…), mais UNIQUEMENT à partir des champs fournis — jamais de justification par une donnée absente.',
     '- Ne propose jamais une configuration dont le statut = vendu.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Ne recopie pas les chiffres de mémoire : ils te sont fournis exacts, cite-les tels quels.',
+    '- Les montants et surfaces sont DÉJÀ formatés exactement (ex : "68 m²", "389 000 €"). Recopie-les caractère pour caractère : n\'abrège jamais, n\'arrondis pas, ne retire pas les milliers, n\'invente aucun chiffre.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'agence.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
@@ -648,7 +656,7 @@ function buildGenericPrompt(d, ctx) {
       intitule:    c?.reference || '',
       attributs:   (Array.isArray(c?.attributs) ? c.attributs : [])
         .map((a) => ({ label: a?.label || '', value: a?.value || '' })),
-      prix:        c?.prix_ttc,
+      prix:        fmtPrix(c?.prix_ttc) || 'non communiqué',
       description: c?.description || '',
     })),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
@@ -669,7 +677,7 @@ function buildGenericPrompt(d, ctx) {
     '- Réponds uniquement à partir des données fournies.',
     '- Compare les offres et oriente selon le besoin exprimé, mais UNIQUEMENT à partir des champs fournis (intitulé, attributs, prix, description) — jamais de justification par une donnée absente.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Ne recopie pas les prix ou chiffres de mémoire : ils te sont fournis exacts, cite-les tels quels.',
+    '- Les prix sont DÉJÀ formatés exactement (ex : "75 €"). Recopie-les caractère pour caractère : n\'abrège pas, n\'arrondis pas, n\'invente aucun chiffre.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'enseigne.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');

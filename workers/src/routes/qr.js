@@ -1598,6 +1598,24 @@ const CONCIERGE_MAX_Q    = 500;
 const CONCIERGE_MAX_HIST = 8;
 const CONCIERGE_MAX_TOK  = 600;
 
+// Nettoie le bruit résiduel des modèles Workers AI en fin de génération.
+// Deux motifs observés : (1) tokens de contrôle / fins de séquence qui fuient ;
+// (2) « blob » alphanumérique parasite collé à la toute fin (ex : la réponse se
+// termine par « …me contacter.yu80evzxv2 »), artefact de file d'attente du
+// moteur. CONSERVATEUR : n'agit qu'en TOUTE fin, exige un mélange lettres+
+// chiffres et un séparateur devant — un mot français n'a pas de chiffre, donc
+// zéro risque de manger du texte utile (« 04 94 00 », « 2026 », « T3 » saufs).
+export function stripModelNoise(s) {
+  let t = String(s == null ? '' : s);
+  // Motif 1 — tokens de contrôle résiduels en fin.
+  t = t.replace(/\s*(?:<\/s>|<\|[^|>]*\|>|\[DONE\]|\[\/?[A-Za-z_]{2,}\])\s*$/g, '');
+  // Motif 2 — blob alphanumérique parasite final (>= 6 car., lettres ET
+  // chiffres mêlés), précédé d'un séparateur : on retire le blob et on garde
+  // le séparateur (la phrase « …me contacter. » reste intacte).
+  t = t.replace(/([\s.,;:!?…»")\]])(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z0-9]{6,}\s*$/i, '$1');
+  return t.trim();
+}
+
 export async function handleSmartQrConcierge(request, env) {
   const origin = '*'; // public, pas d'auth (visiteur anonyme)
 
@@ -1727,7 +1745,7 @@ export async function handleSmartQrConcierge(request, env) {
           }
         }
 
-        const clean = fullText.trim();
+        const clean = stripModelNoise(fullText);
         send({ type: 'done', full_text: clean });
 
         // Compteur budget IA (best-effort, 1 écriture).

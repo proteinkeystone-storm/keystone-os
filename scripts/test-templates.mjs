@@ -1147,7 +1147,7 @@ async function testConciergeS8() {
   assert(immoPrompt.includes('pour le programme'),         'S8 prompt immo : cadrage programme préservé');
   assert(immoPrompt.includes('configurations de maisons'), 'S8 prompt immo : phrase historique préservée');
   assert(immoPrompt.includes('statut = vendu'),            'S8 prompt immo : règle anti-vendu préservée');
-  assert(immoPrompt.includes('389000'),                    'S8 prompt immo : prix exact fourni (jamais retapé)');
+  assert(immoPrompt.includes('389 000 €'),                 'S8 prompt immo : prix formaté exact fourni (anti-abréviation)');
 
   const genPrompt = buildConciergePrompt(genBlock);
   assert(genPrompt.includes('Studio Pilates Lumiere'),     'S8 prompt generic : enseigne dans le cadrage');

@@ -10,7 +10,7 @@
 //   node scripts/test-concierge-endpoint.mjs
 // ══════════════════════════════════════════════════════════════════
 import { buildConciergePrompt } from '../workers/src/routes/smart-templates/concierge.js';
-import { handleSmartQrConcierge } from '../workers/src/routes/qr.js';
+import { handleSmartQrConcierge, stripModelNoise } from '../workers/src/routes/qr.js';
 
 let pass = 0, fail = 0;
 function assert(cond, label) {
@@ -76,16 +76,20 @@ assert(prompt.includes('jamais de justification par une donnée absente'), 'règ
 assert(prompt.includes('Ne propose jamais une configuration dont le statut = vendu.'), 'règle: jamais proposer un vendu');
 assert(prompt.includes('Je n\'ai pas cette information, contactez Camille Martin (04 94 00 00 00).'), 'règle: fallback "je ne sais pas" avec contact injecté');
 assert(prompt.includes('Ne jamais inventer.'), 'règle: ne jamais inventer');
-assert(prompt.includes('cite-les tels quels'), 'règle: citer les chiffres tels quels');
+assert(prompt.includes('Recopie-les caractère pour caractère'), 'règle: chiffres recopiés caractère pour caractère (anti-abréviation)');
 assert(prompt.includes('rappelle le disclaimer'), 'règle: question juridique -> disclaimer');
 assert(prompt.includes('Réponses courtes, ton professionnel et chaleureux, langue fr'), 'règle: réponses courtes + persona injecté');
 
-// Chiffres EXACTS embarqués dans le bloc DONNÉES (jamais retapés par le modèle).
-assert(prompt.includes('389000'), 'bloc: prix exact 389000 (Maison A)');
-assert(prompt.includes('459000'), 'bloc: prix exact 459000 (Maison B)');
-assert(prompt.includes('472000'), 'bloc: prix exact 472000 (Maison C)');
-assert(prompt.includes('"surface_habitable_m2": 68'), 'bloc: surface exacte 68 (Maison A)');
-assert(prompt.includes('"surface_habitable_m2": 92'), 'bloc: surface exacte 92 (Maison B)');
+// Chiffres PRE-FORMATES (chaine exacte) dans le bloc DONNÉES : le modèle les
+// recopie tels quels au lieu d'abréger un entier brut (389000 -> « 389 € »).
+assert(prompt.includes('389 000 €'), 'bloc: prix formaté exact 389 000 € (Maison A)');
+assert(prompt.includes('459 000 €'), 'bloc: prix formaté exact 459 000 € (Maison B)');
+assert(prompt.includes('472 000 €'), 'bloc: prix formaté exact 472 000 € (Maison C)');
+assert(prompt.includes('"surface": "68 m²"'), 'bloc: surface formatée exacte 68 m² (Maison A)');
+assert(prompt.includes('"surface": "92 m²"'), 'bloc: surface formatée exacte 92 m² (Maison B)');
+// Plus AUCUN entier brut de prix injecté (sinon le modèle ré-abrège en prose).
+assert(!prompt.includes('389000'), 'bloc: aucun entier prix brut résiduel (389000)');
+assert(!prompt.includes('"prix_ttc"'), 'bloc: clé prix_ttc brute remplacée par prix formaté');
 
 // Le statut "vendu" DOIT figurer dans les données (le modèle doit le voir
 // pour l'exclure ; la règle lui interdit de le proposer).
@@ -217,6 +221,34 @@ r = await handleSmartQrConcierge(
 assert(r.status === 200, 'AI throw: la réponse reste un stream 200');
 const sseErr = await r.text();
 assert(sseErr.includes('"type":"error"'), 'AI throw: event error émis dans le stream');
+
+// ─────────────────────────────────────────────────────────────
+// 6. Anti-bruit : stripModelNoise (unitaire) + nettoyage du full_text (E2E)
+// ─────────────────────────────────────────────────────────────
+assert(stripModelNoise('Bonjour, appelez Camille.zk39qp7w2x') === 'Bonjour, appelez Camille.',
+  'strip: blob alphanumérique parasite final retiré (séparateur conservé)');
+assert(stripModelNoise('Trois maisons disponibles : A, B et E.') === 'Trois maisons disponibles : A, B et E.',
+  'strip: texte propre laissé intact');
+assert(stripModelNoise('Contactez-le au 04 94 00 00 00') === 'Contactez-le au 04 94 00 00 00',
+  'strip: téléphone (chiffres purs) préservé');
+assert(stripModelNoise('Livraison au 4e trimestre 2026') === 'Livraison au 4e trimestre 2026',
+  'strip: année (chiffres purs) préservée');
+assert(stripModelNoise('Réponse finale.</s>') === 'Réponse finale.',
+  'strip: token de contrôle </s> retiré');
+assert(stripModelNoise('') === '' && stripModelNoise(null) === '',
+  'strip: vide/null -> chaine vide');
+
+// E2E : le full_text de l'event done est nettoyé du blob parasite.
+r = await handleSmartQrConcierge(
+  mockReq({ short_id: 'OLLI1234', question: 'Quels modèles ?' }),
+  mockEnv({ aiText: 'Voici nos maisons, appelez Camille.zk39qp7w2x' }),
+);
+const sseNoise = await r.text();
+const doneObj = sseNoise.split('\n').filter((l) => l.startsWith('data:'))
+  .map((l) => { try { return JSON.parse(l.slice(5).trim()); } catch { return null; } })
+  .find((o) => o && o.type === 'done');
+assert(doneObj && !/zk39qp7w2x/.test(doneObj.full_text), 'E2E anti-bruit: blob retiré du full_text (done)');
+assert(doneObj && /Camille\./.test(doneObj.full_text), 'E2E anti-bruit: texte utile préservé');
 
 // ─────────────────────────────────────────────────────────────
 console.log(`\n\x1b[1m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m`);
