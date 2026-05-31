@@ -824,6 +824,7 @@ function _renderConcierge(scrollToTop) {
           <div class="vefa-fields">
             ${_vpScalar('Nom de l\'agence', 'agence.nom', p.agence.nom, { span: true, required: true, placeholder: 'ex : Agence Horizon' })}
             ${_vpScalar('Logo (URL)', 'agence.logo_url', p.agence.logo_url, { span: true, placeholder: 'https://…/logo.png' })}
+            ${_vpScalar('Bannière (URL)', 'agence.banner_url', p.agence.banner_url, { span: true, placeholder: 'https://…/banniere.jpg — grand visuel en haut de page' })}
             ${_vpColor('Couleur primaire', 'agence.couleur_primaire', p.agence.couleur_primaire)}
             ${_vpColor('Couleur secondaire', 'agence.couleur_secondaire', p.agence.couleur_secondaire)}
           </div>

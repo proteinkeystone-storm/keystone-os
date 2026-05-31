@@ -91,6 +91,7 @@ const TEMPLATE = {
 
     const agence   = escHtml((b.nom_agence || '').toString().slice(0, 80));
     const logoUrl  = safeUrl(b.logo_url);
+    const bannerUrl = safeUrl(b.banner_url);
 
     const progNom   = escHtml((prog.nom || '').toString().slice(0, 120));
     const progVille = escHtml((prog.ville || '').toString().slice(0, 80));
@@ -231,6 +232,17 @@ const TEMPLATE = {
   .cg-prog { font-size: 18px; font-weight: 800; margin: 0; line-height: 1.2; }
   .cg-sub { font-size: 12.5px; color: var(--mut); margin: 10px 0 0; }
   .cg-sub b { color: var(--tx); font-weight: 600; }
+
+  /* Cover facon reseau social — visuel large en haut, logo en chevauchement */
+  .cg-cover { width: 100%; aspect-ratio: 16 / 6; max-height: 190px; overflow: hidden;
+    background: var(--surface-2); }
+  .cg-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cg-head--cover { padding-top: 12px; }
+  .cg-head--cover .cg-brandrow { align-items: flex-end; }
+  .cg-head--cover .cg-logo,
+  .cg-head--cover .cg-logo-fallback {
+    width: 64px; height: 64px; margin-top: -44px; border-radius: 15px;
+    border: 3px solid var(--surface); box-shadow: 0 6px 18px rgba(15,23,42,.22); }
 
   /* Zone de dialogue */
   .cg-dialog { padding: 18px 18px 8px; }
@@ -396,9 +408,11 @@ const TEMPLATE = {
 <body>
 <div class="cg-shell">
   <div class="cg-window">
-    <div class="cg-accentbar" aria-hidden="true"></div>
+    ${bannerUrl
+      ? `<div class="cg-cover"><img src="${bannerUrl}" alt="${agence}" loading="eager"></div>`
+      : '<div class="cg-accentbar" aria-hidden="true"></div>'}
 
-    <header class="cg-head">
+    <header class="cg-head${bannerUrl ? ' cg-head--cover' : ''}">
       <div class="cg-brandrow">
         ${logoUrl
           ? `<img class="cg-logo" src="${logoUrl}" alt="${agence}" loading="eager">`

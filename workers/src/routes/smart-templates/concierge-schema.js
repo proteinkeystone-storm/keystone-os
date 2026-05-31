@@ -88,6 +88,7 @@ export function normalizeBlock(raw) {
     branding: {
       nom_agence:         asString(b.nom_agence),
       logo_url:           asString(b.logo_url),
+      banner_url:         asString(b.banner_url),
       couleur_primaire:   asString(b.couleur_primaire),
       couleur_secondaire: asString(b.couleur_secondaire),
       fond:               asString(b.fond) || 'clair',
@@ -222,6 +223,7 @@ export function vefaProgramToBlock(program) {
     branding: {
       nom_agence:         ag.nom,
       logo_url:           ag.logo_url,
+      banner_url:         ag.banner_url,
       couleur_primaire:   ag.couleur_primaire,
       couleur_secondaire: ag.couleur_secondaire,
     },
@@ -259,6 +261,7 @@ export const KEYFORM_GABARIT_FIELDS = {
   couleur_primaire:   'cg_couleur_primaire',
   couleur_secondaire: 'cg_couleur_secondaire',
   logo:               'cg_logo',
+  banner:             'cg_banner',
   items:              'cg_items',                                             // repeater
   item_nom:           'item_nom',
   item_attr_label:    ['item_attr1_label', 'item_attr2_label', 'item_attr3_label'],
@@ -321,6 +324,7 @@ export function keyformToBlock(submission) {
     branding: {
       nom_agence:         s[F.nom_enseigne],
       logo_url:           s[F.logo],
+      banner_url:         s[F.banner],
       couleur_primaire:   s[F.couleur_primaire],
       couleur_secondaire: s[F.couleur_secondaire],
     },

@@ -1007,20 +1007,24 @@ function _cgColor(path, label, value, fallback) {
     </div>
   </div>`;
 }
-function _cgLogoWidget(key, label) {
+function _cgLogoWidget(key, label, opts) {
   key   = key   || 'logo_url';
   label = label || "Logo de l'agence";
+  opts  = opts  || {};
+  const maxBytes = opts.maxBytes || 12000;
+  const maxDim   = opts.maxDim   || 800;
+  const kb       = Math.round(maxBytes / 1024);
   return `<div class="sdqr-field sdqr-field--full">
     <span class="sdqr-field-lbl">${label}</span>
-    <div class="sdqr-image-widget">
+    <div class="sdqr-image-widget" data-maxbytes="${maxBytes}" data-maxdim="${maxDim}">
       <input type="hidden" data-payload-key="${key}" value="">
-      <div class="sdqr-image-preview"><span class="sdqr-image-placeholder">Aucune image</span></div>
+      <div class="sdqr-image-preview${opts.wide ? ' sdqr-image-preview--wide' : ''}"><span class="sdqr-image-placeholder">Aucune image</span></div>
       <div class="sdqr-image-actions">
         <label class="sdqr-image-btn"><input type="file" accept="image/*" hidden class="sdqr-image-file"><span class="sdqr-image-btn-lbl">Choisir une image…</span></label>
         <button type="button" class="sdqr-image-btn sdqr-image-btn--ghost sdqr-image-clear" hidden>Effacer</button>
       </div>
       <details class="sdqr-image-url-fallback"><summary>ou utiliser une URL externe</summary><input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value=""></details>
-      <p class="sdqr-image-help">Compressée auto à 12 Ko (PNG/JPEG redimensionnés à 800px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-help">Compressée auto à ${kb} Ko (PNG/JPEG redimensionnés à ${maxDim}px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
       <p class="sdqr-image-err" hidden></p>
     </div>
   </div>`;
@@ -1263,6 +1267,7 @@ function _renderConciergeEditor(wrap) {
         <h4 class="sdqr-cg-section-h">Agence <small>— c'est l'agence qui signe la page (logo + couleurs)</small></h4>
         ${_cgText('branding.nom_agence', "Nom de l'agence", 'Ex : Agence Horizon', b.nom_agence, { req: true, maxlength: 80 })}
         ${_cgLogoWidget()}
+        ${_cgLogoWidget('banner_url', 'Bannière — grand visuel en haut de page (façon couverture)', { maxBytes: 40000, maxDim: 1000, wide: true })}
         ${_cgColor('branding.couleur_primaire', 'Couleur principale', b.couleur_primaire, '#2563EB')}
         ${_cgColor('branding.couleur_secondaire', 'Couleur secondaire', b.couleur_secondaire, '#C9A96E')}
       </section>
@@ -1537,6 +1542,7 @@ function _cgKeyformEditorHtml() {
         ${_cgText('cg_titre_offre', "Titre de l'offre", 'Ex : Nos abonnements', s.cg_titre_offre, { maxlength: 120 })}
         ${_cgText('cg_ville', 'Ville', 'Ex : Bandol', s.cg_ville, { maxlength: 80 })}
         ${_cgLogoWidget('cg_logo', "Logo de l'enseigne")}
+        ${_cgLogoWidget('cg_banner', 'Bannière — grand visuel en haut de page (façon couverture)', { maxBytes: 40000, maxDim: 1000, wide: true })}
         ${_cgColor('cg_couleur_primaire', 'Couleur principale', s.cg_couleur_primaire, '#2563EB')}
         ${_cgColor('cg_couleur_secondaire', 'Couleur secondaire', s.cg_couleur_secondaire, '#C9A96E')}
       </section>
@@ -1649,20 +1655,21 @@ function _renderFormFields(root) {
 // la limite maxBytes. PNG/JPEG redimensionnés via canvas + qualité dégradée
 // itérativement. SVG/GIF/WebP retournés tels quels si déjà sous la limite.
 // Lance une exception explicite si impossible.
-async function _compressImageToDataUri(file, maxBytes = 12000) {
+async function _compressImageToDataUri(file, maxBytes = 12000, maxDimStart = 800) {
   const initial = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload  = () => resolve(r.result);
     r.onerror = () => reject(new Error('Lecture du fichier impossible.'));
     r.readAsDataURL(file);
   });
+  const limitKb = Math.round(maxBytes / 1024);
 
   // SVG, GIF, WebP : non recompressibles (perdrait l'anim / le vectoriel).
   // On accepte si déjà sous la limite, sinon on refuse explicitement.
   if (/^data:image\/(svg\+xml|gif|webp)/i.test(initial)) {
     if (initial.length <= maxBytes) return initial;
     const kb = Math.round(initial.length / 1024);
-    throw new Error(`Image trop lourde (${kb} Ko, max 12 Ko). Convertis-la en PNG/JPEG (compression auto) ou utilise une URL externe.`);
+    throw new Error(`Image trop lourde (${kb} Ko, max ${limitKb} Ko). Convertis-la en PNG/JPEG (compression auto) ou utilise une URL externe.`);
   }
 
   // PNG, JPEG : compression itérative via canvas
@@ -1673,7 +1680,7 @@ async function _compressImageToDataUri(file, maxBytes = 12000) {
     i.src = initial;
   });
 
-  let maxDim  = 800;
+  let maxDim  = maxDimStart;
   let quality = 0.88;
   for (let attempt = 0; attempt < 6; attempt++) {
     const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
@@ -1688,7 +1695,7 @@ async function _compressImageToDataUri(file, maxBytes = 12000) {
     maxDim  = Math.round(maxDim * 0.8);
     quality = Math.max(0.45, quality - 0.1);
   }
-  throw new Error('Image impossible à compresser sous 12 Ko. Essaie une image plus simple ou utilise une URL externe.');
+  throw new Error(`Image impossible à compresser sous ${limitKb} Ko. Essaie une image plus simple ou utilise une URL externe.`);
 }
 
 // V4.1 (2026-05-26) — Binde tous les widgets image présents dans `wrap`
@@ -1726,7 +1733,9 @@ function _bindImageWidgets(wrap, store) {
         if (!/^image\//.test(f.type)) {
           throw new Error('Le fichier sélectionné n\'est pas une image.');
         }
-        const compressed = await _compressImageToDataUri(f, 12000);
+        const maxB = parseInt(widget.dataset.maxbytes, 10) || 12000;
+        const maxD = parseInt(widget.dataset.maxdim, 10)   || 800;
+        const compressed = await _compressImageToDataUri(f, maxB, maxD);
         setValue(compressed);
         // Reset URL field pour ne pas garder une URL périmée
         if (urlIn) urlIn.value = '';
@@ -1753,6 +1762,13 @@ function _bindImageWidgets(wrap, store) {
       setError('');
       setValue(u);
     });
+
+    // Seed initial (edition d'un QR existant) : si le store porte deja une
+    // image, on l'affiche dans l'apercu ; on remplit l'URL si c'est un lien.
+    if (store[key] && !hidden.value) {
+      setValue(store[key]);
+      if (urlIn && /^https?:\/\//i.test(store[key])) urlIn.value = store[key];
+    }
   });
 }
 

@@ -64,6 +64,7 @@ export function blankProgram() {
     agence: {
       nom:                '',
       logo_url:           '',
+      banner_url:         '',
       couleur_primaire:   '#2563eb',
       couleur_secondaire: '#c9a96e',
     },
@@ -110,6 +111,7 @@ export function coerceProgram(raw) {
     agence: {
       nom:                str(a.nom),
       logo_url:           str(a.logo_url),
+      banner_url:         str(a.banner_url),
       couleur_primaire:   str(a.couleur_primaire)   || '#2563eb',
       couleur_secondaire: str(a.couleur_secondaire) || '#c9a96e',
     },

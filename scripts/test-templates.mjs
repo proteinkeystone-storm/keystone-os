@@ -409,6 +409,18 @@ async function testConcierge() {
   assert(html.includes('Optionné'),   'concierge render : statut Optionné affiché');
   assert(html.includes('Vendu'),      'concierge render : statut Vendu affiché (inventaire honnête)');
 
+  // Banniere (cover facon reseau social) : presente si branding.banner_url,
+  // sinon accentbar par defaut (zero regression sur les QR existants).
+  assert(!html.includes('class="cg-cover"'),         'concierge render : aucune cover sans banner_url');
+  assert(html.includes('<div class="cg-accentbar"'), 'concierge render : accentbar par défaut (sans banner)');
+  const htmlBan = tpl.renderHTML(
+    { ...qr, template_data: { ...block, branding: { ...(block.branding || {}), banner_url: 'https://cdn.test/cover.jpg' } } },
+    MOCK_SCAN);
+  assert(htmlBan.includes('class="cg-cover"'),            'concierge render : cover affichée si banner_url');
+  assert(htmlBan.includes('https://cdn.test/cover.jpg'),  'concierge render : image cover injectée');
+  assert(htmlBan.includes('cg-head--cover'),              'concierge render : header bascule en mode cover');
+  assert(!htmlBan.includes('<div class="cg-accentbar"'),  'concierge render : accentbar remplacée par la cover');
+
   // chips questions suggérées
   assert(html.includes('cg-chip'),                          'concierge render : chips présentes');
   assert(html.includes('Quels modèles sont disponibles'),   'concierge render : question suggérée rendue');
@@ -659,7 +671,7 @@ async function testConciergeSchema() {
     questions: ['Quels lots sont disponibles ?'],
     contact: { nom: 'Jean Dupont', tel: '0494000000', email: 'contact@agence.fr' },
     disclaimer: 'Référez-vous à la notice.',
-    agence: { nom: 'Agence Y', logo_url: '', couleur_primaire: '#2563eb', couleur_secondaire: '#c9a96e' },
+    agence: { nom: 'Agence Y', logo_url: '', banner_url: 'https://cdn.test/banniere.jpg', couleur_primaire: '#2563eb', couleur_secondaire: '#c9a96e' },
   };
   const vb = vefaProgramToBlock(program);
   assert(vb.vertical === 'immo',                                'vefaProgramToBlock : vertical immo');
@@ -669,6 +681,7 @@ async function testConciergeSchema() {
   assert(vb.configurations[0].surfaces_annexes.garage === true,  'vefaProgramToBlock : garage nesté dans surfaces_annexes');
   assert(vb.configurations[0].prix_ttc === 350000,             'vefaProgramToBlock : prix lot préservé');
   assert(vb.branding.nom_agence === 'Agence Y',                'vefaProgramToBlock : agence → branding');
+  assert(vb.branding.banner_url === 'https://cdn.test/banniere.jpg', 'vefaProgramToBlock : agence.banner_url → branding.banner_url (cover)');
 
   // ── D3. Adaptateur Keyform (Source 3, S7) : gabarit canonique → bloc generic ──
   const F = KEYFORM_GABARIT_FIELDS;
