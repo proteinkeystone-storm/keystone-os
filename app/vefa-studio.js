@@ -34,7 +34,11 @@ import { openGhostwriterInline }               from './lib/ghostwriter-inline.js
 import {
   blankProgram, blankLot, coerceProgram, validateProgramLight,
   LOT_STATUTS, PROGRAM_STORAGE_KEY,
+  vefaDocToLot, vefaDocToProgramHeader, fillProgramHeaderIfEmpty, upsertLot,
+  listConciergeQRs,
 }                                                from './lib/concierge-program.js';
+import { CF_API }                                from './pads-loader.js';
+import { renderQrCustom }                        from './sdqr-render.js';
 
 // ── Identifiants ──────────────────────────────────────────────
 const APP_ID    = 'O-IMM-010';
@@ -256,6 +260,10 @@ let _cleanupComputed = null;
 let _stylesInjected  = false;
 let _saveTimer       = null;
 let _toastTimer      = null;
+let _conciergePrefillNote = '';          // CG-12 — bandeau « pré-rempli » (entrée onglet Concierge)
+let _vefaQrs      = [];                   // CG-13 — bibliothèque : QR Concierge déjà publiés
+let _vefaQrsState = 'idle';              // 'idle' | 'loading' | 'ready' | 'error'
+let _vefaQrsError = '';
 
 // ══════════════════════════════════════════════════════════════
 // Persistance — Brouillon localStorage
@@ -430,9 +438,15 @@ function _renderMain(scrollToTop) {
               ? 'validation notariale impérative avant signature.'
               : 'compléter selon les spécificités du programme.'}
           </p>
-          <button class="vefa-btn-primary" data-act="generate" type="button">
-            ${icon('file-text', 18)}&nbsp;${_esc(mode.action_label)}
-          </button>
+          <div class="vefa-actions-btns">
+            <button class="vefa-btn-secondary" data-act="add-lot-to-concierge" type="button"
+                    title="Reprendre ce lot dans le QR Concierge — sans le ressaisir">
+              ${icon('sparkles', 16)}&nbsp;Ajouter ce lot au Concierge
+            </button>
+            <button class="vefa-btn-primary" data-act="generate" type="button">
+              ${icon('file-text', 18)}&nbsp;${_esc(mode.action_label)}
+            </button>
+          </div>
         </div>
 
       </form>
@@ -591,6 +605,7 @@ function _onClick(e) {
   }
   if (act === 'switch-mode') { _switchMode(btn.dataset.mode); return; }
   if (act === 'generate')    { _generate(); return; }
+  if (act === 'add-lot-to-concierge') { _addLotToConcierge(); return; }
   if (act === 'ghostwriter') { _handleGhostwriter(btn.dataset.fieldId); return; }
   // ── Mode Concierge (S6) : repeaters lots / FAQ / questions + envoi ──
   if (act === 'vp-add-lot')      { _program.lots.push(blankLot());     _scheduleSave(); _renderMain(); return; }
@@ -604,6 +619,9 @@ function _onClick(e) {
   }
   if (act === 'vp-del-question') { _vpDelete('questions', +btn.dataset.idx, false); return; }
   if (act === 'send-concierge')  { _sendToConcierge(); return; }
+  // ── CG-13 — bibliothèque QR Concierge ──
+  if (act === 'cg-lib-reload')   { _loadConciergeLibrary(); return; }
+  if (act === 'cg-lib-open')     { _openVefaQrInSdqr(btn.dataset.qrId); return; }
 }
 
 // ── Ghost Writer Pad-Aware (2026-05-24) ──────────────────────
@@ -687,7 +705,25 @@ function _switchMode(mode) {
   if (_currentMode !== 'concierge') _collectFormData();          // snapshot avant destroy
   if (_cleanupComputed) { _cleanupComputed(); _cleanupComputed = null; }
   _currentMode = mode;
+  if (mode === 'concierge') _prefillConciergeHeader();           // CG-12 — zéro re-saisie
   _renderMain(true);                                             // scroll to top
+}
+
+// CG-12 — À l'entrée de l'onglet Concierge, reprend l'identité du programme
+// déjà saisie en Notice/Contrat (non destructif : ne touche que les champs vides).
+function _prefillConciergeHeader() {
+  _conciergePrefillNote = '';
+  const header = vefaDocToProgramHeader(_formData);
+  const KEYS   = ['nom', 'promoteur', 'ville', 'livraison_prevue'];
+  const wasEmpty = {};
+  KEYS.forEach((k) => { wasEmpty[k] = !String(_program[k] || '').trim(); });
+  _program = fillProgramHeaderIfEmpty(_program, header);
+  const filled = KEYS.filter((k) => wasEmpty[k] && String(_program[k] || '').trim()).length;
+  if (filled) {
+    const s = filled > 1 ? 's' : '';
+    _conciergePrefillNote = `Identité reprise de la Notice / du Contrat — ${filled} champ${s} pré-rempli${s}, modifiable.`;
+    _scheduleSave();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -716,9 +752,20 @@ function _renderConcierge(scrollToTop) {
 
         <div class="vefa-section">
           <div class="vefa-section-header">
+            <div class="vefa-section-title">Mes QR Concierge</div>
+            <div class="vefa-section-subtitle">Vos programmes déjà publiés — ouvrez-en un pour l'éditer ou le re-télécharger</div>
+          </div>
+          <div id="vefa-cg-library-slot">${_conciergeLibraryHTML()}</div>
+        </div>
+
+        <div class="vefa-section">
+          <div class="vefa-section-header">
             <div class="vefa-section-title">Programme</div>
             <div class="vefa-section-subtitle">Identité du programme — en-tête du concierge</div>
           </div>
+          ${_conciergePrefillNote
+            ? `<p class="vefa-prefill-note">${icon('sparkles', 13)}&nbsp;${_esc(_conciergePrefillNote)}</p>`
+            : ''}
           <div class="vefa-fields">
             ${_vpScalar('Nom du programme', 'nom', p.nom, { span: true, required: true, placeholder: 'ex : Les Terrasses d\'Ollioules' })}
             ${_vpScalar('Promoteur', 'promoteur', p.promoteur, { placeholder: 'ex : Promoteur Horizon' })}
@@ -796,6 +843,121 @@ function _renderConcierge(scrollToTop) {
   `;
 
   main.scrollTop = prevScroll;
+
+  // CG-13 — bibliothèque : chargement paresseux au 1er affichage, puis
+  // (re-)rendu des vignettes QR à chaque re-render de l'onglet Concierge.
+  if (_vefaQrsState === 'idle')        _loadConciergeLibrary();
+  else if (_vefaQrsState === 'ready')  _renderConciergeThumbs();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CG-13 — Bibliothèque des QR Concierge déjà publiés
+// ──────────────────────────────────────────────────────────────
+// Lecture seule depuis GET /api/qr (filtrée template_id='concierge' par
+// listConciergeQRs). Chaque carte : vignette QR réelle + nom + « Ouvrir »
+// qui rebascule dans Smart Dynamic QR sur ce QR précis (édition / export).
+// ══════════════════════════════════════════════════════════════
+
+function _qrAuthHeaders() {
+  const h = { 'X-Tenant-Id': localStorage.getItem('ks_tenant_id') || 'default' };
+  const adminToken = localStorage.getItem('ks_admin_token');
+  const jwt        = localStorage.getItem('ks_jwt');
+  if (adminToken)  h['Authorization'] = 'Bearer ' + adminToken;
+  else if (jwt)    h['Authorization'] = 'Bearer ' + jwt;
+  return h;
+}
+
+async function _loadConciergeLibrary() {
+  if (_vefaQrsState === 'loading') return;
+  _vefaQrsState = 'loading';
+  _renderConciergeLibrary();
+  try {
+    const r = await fetch(`${CF_API}/api/qr`, { headers: _qrAuthHeaders() });
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    const body = await r.json();
+    _vefaQrs      = listConciergeQRs(body.qrs || []);
+    _vefaQrsState = 'ready';
+  } catch (e) {
+    _vefaQrsError = (e && e.message) || 'Chargement impossible';
+    _vefaQrsState = 'error';
+  }
+  _renderConciergeLibrary();
+  if (_vefaQrsState === 'ready') _renderConciergeThumbs();
+}
+
+// Met à jour le seul bloc bibliothèque (sans détruire le formulaire en cours).
+function _renderConciergeLibrary() {
+  const slot = _root && _root.querySelector('#vefa-cg-library-slot');
+  if (slot) slot.innerHTML = _conciergeLibraryHTML();
+}
+
+function _conciergeLibraryHTML() {
+  if (_vefaQrsState === 'loading') {
+    return `<p class="vefa-vp-empty">Chargement de vos QR Concierge…</p>`;
+  }
+  if (_vefaQrsState === 'error') {
+    return `<p class="vefa-cg-lib-msg vefa-cg-lib-msg--err">${_esc(_vefaQrsError)} — `
+      + `<button type="button" class="vefa-cg-lib-link" data-act="cg-lib-reload">Réessayer</button></p>`;
+  }
+  if (_vefaQrsState === 'ready' && _vefaQrs.length === 0) {
+    return `<p class="vefa-vp-empty">Aucun QR Concierge enregistré pour l'instant. `
+      + `Construisez votre programme ci-dessous puis « Envoyer vers Smart Dynamic QR ».</p>`;
+  }
+  if (_vefaQrsState !== 'ready') {
+    return `<p class="vefa-vp-empty">`
+      + `<button type="button" class="vefa-cg-lib-link" data-act="cg-lib-reload">Charger mes QR Concierge</button></p>`;
+  }
+  return `<div class="vefa-cg-lib">${_vefaQrs.map(_conciergeLibCardHTML).join('')}</div>`;
+}
+
+function _conciergeLibCardHTML(q) {
+  const id    = _esc(String(q.id || ''));
+  const name  = _esc(String(q.name || '').trim() || '(sans nom)');
+  const scans = Number(q.scans_total || 0);
+  const host  = CF_API.replace(/^https?:\/\//, '');
+  const link  = q.short_id ? _esc(`${host}/r/${q.short_id}`) : '';
+  const meta  = `${scans} scan${scans > 1 ? 's' : ''}${link ? ` · ${link}` : ''}`;
+  return `
+    <div class="vefa-cg-card">
+      <div class="vefa-cg-thumb" data-qr-thumb="${id}">${icon('qr-code', 22)}</div>
+      <div class="vefa-cg-card-body">
+        <div class="vefa-cg-card-name">${name}</div>
+        <div class="vefa-cg-card-meta">${meta}</div>
+      </div>
+      <button type="button" class="vefa-cg-card-open" data-act="cg-lib-open" data-qr-id="${id}"
+              title="Ouvrir ce QR dans Smart Dynamic QR pour l'éditer ou le re-télécharger">
+        ${icon('arrow-right', 16)}&nbsp;Ouvrir
+      </button>
+    </div>`;
+}
+
+async function _renderConciergeThumbs() {
+  for (const q of _vefaQrs) {
+    if (!q || !q.short_id || !q.id) continue;
+    const slot = _root && _root.querySelector(`[data-qr-thumb="${_cssEsc(String(q.id))}"]`);
+    if (!slot || slot.dataset.rendered === '1') continue;
+    try {
+      const svg = await renderQrCustom(`${CF_API}/r/${q.short_id}`, q.design, 88);
+      slot.innerHTML = svg;
+      slot.dataset.rendered = '1';
+    } catch (_) { /* on garde l'icône de repli */ }
+  }
+}
+
+function _cssEsc(s) {
+  return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\\]]/g, '\\$&');
+}
+
+async function _openVefaQrInSdqr(id) {
+  if (!id) return;
+  try {
+    const m = await import('./sdqr.js');
+    closeVefaStudio();
+    m.openSDQR?.({ editId: id });
+  } catch (err) {
+    console.error('[VefaStudio] openSDQR editId', err);
+    _toast('Ouvrez Smart Dynamic QR pour éditer ce QR.', true);
+  }
 }
 
 // ── Builders de lignes (repeaters) ────────────────────────────
@@ -960,6 +1122,24 @@ function _vpDelete(arrName, idx, keepMin) {
   if (keepMin && arr.length === 0) arr.push(blankLot());
   _scheduleSave();
   _renderMain();
+}
+
+// ── Pont document → Concierge : reprend le lot saisi en Notice/Contrat (CG-11) ──
+function _addLotToConcierge() {
+  _collectFormData();
+  const lot    = vefaDocToLot(_formData);
+  const header = vefaDocToProgramHeader(_formData);
+  if (!String(lot.reference).trim()) lot.reference = String(_formData.type_logement || '').trim();
+  if (!String(lot.reference).trim()) {
+    _toast('Renseigne d\'abord un numéro de lot (Contrat) ou un type (Programme).', true);
+    return;
+  }
+  const res = upsertLot(_program, lot);
+  _program  = fillProgramHeaderIfEmpty(res.program, header);
+  _saveDraft();
+  const count = _program.lots.filter((l) => String(l.reference).trim()).length;
+  const head  = res.action === 'updated' ? 'Lot mis à jour' : 'Lot ajouté';
+  _toast(`${head} dans le Concierge : ${lot.reference} (${count} au total).`);
 }
 
 // ── Envoi vers Smart Dynamic QR (relais localStorage, consommé en S7) ──
@@ -1228,6 +1408,37 @@ function _injectStyles() {
 }
 .vefa-btn-primary:active { transform: translateY(0); }
 
+.vefa-actions-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.vefa-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 11px 20px;
+  border-radius: var(--ws-radius-pill);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ws-accent);
+  border: 1.5px solid var(--ws-accent);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: -.015em;
+  transition: background 160ms ease, transform 120ms ease;
+}
+.vefa-btn-secondary:hover {
+  background: color-mix(in srgb, var(--ws-accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+.vefa-btn-secondary:active { transform: translateY(0); }
+
 /* ── Toast de feedback ── */
 .vefa-toast {
   position: fixed;
@@ -1330,6 +1541,98 @@ function _injectStyles() {
   font-style: italic;
   color: var(--ws-text-muted);
 }
+.vefa-prefill-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ws-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ws-accent) 28%, transparent);
+  color: var(--ws-accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.4;
+}
+
+/* ── CG-13 — Bibliothèque QR Concierge ── */
+.vefa-cg-lib {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.vefa-cg-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--ws-border);
+  border-radius: 14px;
+  background: var(--ws-surface, rgba(255, 255, 255, .02));
+}
+.vefa-cg-thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #fff;
+  color: #94a3b8;
+  overflow: hidden;
+}
+.vefa-cg-thumb svg { width: 100%; height: 100%; display: block; }
+.vefa-cg-card-body { flex: 1 1 auto; min-width: 0; }
+.vefa-cg-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--ws-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vefa-cg-card-meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--ws-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vefa-cg-card-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+  border-radius: var(--ws-radius-pill);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ws-accent);
+  border: 1.5px solid var(--ws-accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: -.01em;
+  transition: background 160ms ease;
+}
+.vefa-cg-card-open:hover { background: color-mix(in srgb, var(--ws-accent) 12%, transparent); }
+.vefa-cg-lib-msg { margin: 0 0 6px; font-size: 13px; color: var(--ws-text-muted); }
+.vefa-cg-lib-msg--err { color: var(--ws-danger, #f85149); }
+.vefa-cg-lib-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ws-accent);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
 .vefa-vp-check { justify-content: flex-end; }
 .vefa-vp-check .ws-label {
   flex-direction: row;
@@ -1373,7 +1676,9 @@ function _injectStyles() {
   .vefa-tab { padding: 7px 14px; font-size: 12.5px; }
   .vefa-actions { flex-direction: column; align-items: stretch; }
   .vefa-actions-hint { max-width: 100%; }
+  .vefa-actions-btns { width: 100%; flex-direction: column; align-items: stretch; }
   .vefa-btn-primary { justify-content: center; }
+  .vefa-btn-secondary { justify-content: center; }
   .vefa-section { padding: 18px 16px; }
   .vefa-vp-row { padding: 14px 14px 6px; }
   .vefa-vp-check { justify-content: flex-start; }

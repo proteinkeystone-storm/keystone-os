@@ -183,7 +183,7 @@ async function _renderQrSvg(text, sizePx = 220, design = null) {
 // Workspace fullscreen — shell + sidebar + central
 // ══════════════════════════════════════════════════════════════════
 
-export function openSDQR() {
+export function openSDQR(opts = {}) {
   let panel = document.getElementById('sdqr-fullscreen');
   if (!panel) {
     panel = document.createElement('div');
@@ -199,9 +199,28 @@ export function openSDQR() {
   bindRatingButton(panel, 'A-COM-001');
   bindHelpButton(panel, 'A-COM-001');
   bindBurger(panel);
+  // CG-13 — ouverture directe d'un QR existant (bibliothèque VEFA Studio).
+  if (opts && opts.editId) { _openExistingQrById(panel, opts.editId); return; }
   _refreshList(panel);
   // Concierge VEFA (S7) — si VEFA Studio vient de relayer un programme frais.
   _maybeAutoOpenVefaConcierge(panel);
+}
+
+// CG-13 — reproduit le clic sur une carte de la liste : recharge la flotte,
+// sélectionne le QR ciblé puis ouvre sa vue détail (édition / export).
+async function _openExistingQrById(panel, id) {
+  const listEl = panel.querySelector('#sdqr-list');
+  try {
+    _cachedQrs = await _apiList();
+  } catch (e) {
+    if (listEl) listEl.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur : ${_esc(e.message)}</div>`;
+    return;
+  }
+  _renderList(panel);
+  if (!_cachedQrs.find(q => q.id === id)) return;   // QR introuvable : on reste sur la liste
+  _selectedId = id;
+  _renderList(panel);
+  _renderCurrentView(panel);
 }
 
 // Concierge VEFA (S7) — auto-saut dans le formulaire concierge quand VEFA

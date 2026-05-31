@@ -1160,6 +1160,138 @@ async function testConciergeS8() {
   assert(!genPrompt.includes('configurations de maisons'), 'S8 prompt generic : pas de cadrage immo');
 }
 
+// ══════════════════════════════════════════════════════════════
+// CONCIERGE VEFA — Pont document → programme (CG-10)
+// ───────────────────────────────────────────────────────────────
+// Le pro saisit le programme et les lots dans Notice & Contrat. CG-10
+// reprojette ce _formData sur la forme Concierge SANS double saisie :
+//   · vefaDocToLot / vefaDocToProgramHeader = mapping pur déterministe
+//   · fillProgramHeaderIfEmpty = seed non destructif de l'en-tête
+//   · upsertLot = insert/maj dédupliqué par référence, fusion douce
+// On prouve le mapping champ à champ, la non-destruction, la dédup, et
+// le round-trip pont → vefaProgramToBlock → validateBlock (0 erreur).
+// ══════════════════════════════════════════════════════════════
+async function testConciergeBridge() {
+  console.log(`\n${C.bold}${C.cyan}━━━ CONCIERGE VEFA — Pont document → programme (CG-10) ━━━${C.reset}\n`);
+  const {
+    vefaDocToLot, vefaDocToProgramHeader, fillProgramHeaderIfEmpty, upsertLot,
+    blankLot, blankProgram, coerceProgram,
+  } = await import(join(ROOT, 'app/lib/concierge-program.js'));
+  const { vefaProgramToBlock, validateBlock } =
+    await import(join(ROOT, 'workers/src/routes/smart-templates/concierge-schema.js'));
+
+  // _formData type Contrat (toutes les clés sources présentes).
+  const contrat = {
+    nom_programme:  "Les Terrasses d'Ollioules",
+    type_logement:  'T4',
+    surface:        '92',
+    etage:          '2e etage',
+    orientation:    'Sud',
+    annexes:        'Garage + 1 place',
+    lot_numero:     'Maison A',
+    surface_carrez: '88.5',
+    prix_ttc:       '389000',
+    ville:          'Ollioules',
+    livraison:      'T4 2026',
+    vendeur_nom:    'SCCV Horizon',
+  };
+
+  // ── A. vefaDocToLot : mapping champ à champ ──
+  const lot = vefaDocToLot(contrat);
+  assert(lot.reference === 'Maison A',                'vefaDocToLot : lot_numero → reference');
+  assert(lot.type === 'T4',                           'vefaDocToLot : type_logement → type');
+  assert(lot.surface_habitable_m2 === '92',           'vefaDocToLot : surface habitable prioritaire → surface_habitable_m2');
+  assert(lot.exposition === 'Sud',                    'vefaDocToLot : orientation → exposition');
+  assert(lot.prix_ttc === '389000',                   'vefaDocToLot : prix_ttc → prix_ttc');
+  assert(lot.stationnement === 'Garage + 1 place',    'vefaDocToLot : annexes → stationnement');
+  assert(lot.statut === 'disponible',                 'vefaDocToLot : statut au défaut "disponible"');
+  assert(lot.nb_chambres === '' && lot.jardin_m2 === '' && lot.garage === false,
+    'vefaDocToLot : champs Concierge-only laissés aux défauts');
+  assert(JSON.stringify(Object.keys(lot).sort()) === JSON.stringify(Object.keys(blankLot()).sort()),
+    'vefaDocToLot : forme == lot canonique (11 clés)');
+  assert(vefaDocToLot({ surface_carrez: '70.2' }).surface_habitable_m2 === '70.2',
+    'vefaDocToLot : surface Carrez en repli si pas de surface habitable');
+  const nlot = vefaDocToLot({ nom_programme: 'X', type_logement: 'T3', surface: '64', orientation: 'Est', annexes: 'Cave' });
+  assert(nlot.reference === '' && nlot.prix_ttc === '',
+    'vefaDocToLot : Notice sans lot_numero/prix → reference/prix vides (jamais inventés)');
+  assert(nlot.type === 'T3' && nlot.surface_habitable_m2 === '64' && nlot.exposition === 'Est' && nlot.stationnement === 'Cave',
+    'vefaDocToLot : Notice → type/surface/exposition/stationnement mappés');
+  assert(JSON.stringify(vefaDocToLot(null)) === JSON.stringify(blankLot())
+      && JSON.stringify(vefaDocToLot(undefined)) === JSON.stringify(blankLot()),
+    'vefaDocToLot : entrée nulle → blankLot() (jamais throw)');
+
+  // ── B. vefaDocToProgramHeader ──
+  const hdr = vefaDocToProgramHeader(contrat);
+  assert(hdr.nom === "Les Terrasses d'Ollioules" && hdr.promoteur === 'SCCV Horizon'
+      && hdr.ville === 'Ollioules' && hdr.livraison_prevue === 'T4 2026',
+    'vefaDocToProgramHeader : nom/promoteur(vendeur)/ville/livraison mappés');
+  assert(JSON.stringify(vefaDocToProgramHeader(null)) === JSON.stringify({ nom: '', promoteur: '', ville: '', livraison_prevue: '' }),
+    'vefaDocToProgramHeader : entrée nulle → 4 scalaires vides');
+
+  // ── C. fillProgramHeaderIfEmpty : seed non destructif ──
+  const seeded = fillProgramHeaderIfEmpty(blankProgram(), hdr);
+  assert(seeded.nom === "Les Terrasses d'Ollioules" && seeded.ville === 'Ollioules'
+      && seeded.promoteur === 'SCCV Horizon' && seeded.livraison_prevue === 'T4 2026',
+    'fillProgramHeaderIfEmpty : en-tête vide rempli depuis le document');
+  const pNom = { ...blankProgram(), nom: 'Déjà saisi', ville: '' };
+  const keep = fillProgramHeaderIfEmpty(pNom, { nom: 'Ecrase ?', ville: 'Ollioules' });
+  assert(keep.nom === 'Déjà saisi',                   'fillProgramHeaderIfEmpty : valeur déjà saisie JAMAIS écrasée');
+  assert(keep.ville === 'Ollioules',                  'fillProgramHeaderIfEmpty : champ vide bien complété');
+  assert(fillProgramHeaderIfEmpty({ ...blankProgram(), nom: 'Z' }, { nom: '' }).nom === 'Z',
+    'fillProgramHeaderIfEmpty : header vide ne blanchit pas l\'existant');
+  assert(fillProgramHeaderIfEmpty(null, {}).lots.length === 1,
+    'fillProgramHeaderIfEmpty : retourne une forme coercée sûre');
+
+  // ── D. upsertLot : insert / maj dédupliquée, fusion douce ──
+  const r1 = upsertLot(blankProgram(), vefaDocToLot(contrat));
+  assert(r1.action === 'added' && r1.index === 0 && r1.program.lots.length === 1,
+    'upsertLot : 1er lot remplace le placeholder (pas d\'empilement)');
+  assert(r1.program.lots[0].reference === 'Maison A', 'upsertLot : lot inséré correctement');
+  const r2 = upsertLot(r1.program, vefaDocToLot({ ...contrat, lot_numero: 'Maison B', prix_ttc: '459000' }));
+  assert(r2.action === 'added' && r2.index === 1 && r2.program.lots.length === 2,
+    'upsertLot : 2e référence distincte → ajoutée en fin');
+  const r3 = upsertLot(r2.program, vefaDocToLot({ ...contrat, prix_ttc: '399000' }));
+  assert(r3.action === 'updated' && r3.index === 0 && r3.program.lots.length === 2,
+    'upsertLot : même référence → mise à jour (pas de doublon)');
+  assert(r3.program.lots[0].prix_ttc === '399000',    'upsertLot : champ document rafraîchi à la maj');
+  const r5 = upsertLot(r1.program, vefaDocToLot({ ...contrat, lot_numero: '  MAISON A  ' }));
+  assert(r5.action === 'updated' && r5.program.lots.length === 1,
+    'upsertLot : dédup insensible casse/espaces');
+
+  // Fusion douce : les champs Concierge saisis à la main survivent à la maj.
+  const manual = coerceProgram(r2.program);
+  manual.lots[0].nb_chambres  = '3';
+  manual.lots[0].prestations  = ['Cuisine équipée'];
+  manual.lots[0].garage       = true;
+  const r4 = upsertLot(manual, vefaDocToLot({ ...contrat, surface: '95' }));
+  assert(r4.action === 'updated',                     'upsertLot : maj du lot complété à la main');
+  assert(r4.program.lots[0].nb_chambres === '3' && r4.program.lots[0].garage === true
+      && r4.program.lots[0].prestations[0] === 'Cuisine équipée',
+    'upsertLot : champs Concierge saisis à la main PRÉSERVÉS à la maj');
+  assert(r4.program.lots[0].surface_habitable_m2 === '95',
+    'upsertLot : champ document écrasé par la nouvelle valeur (le doc fait foi)');
+
+  // Non-destructif sur l'entrée.
+  const src  = blankProgram(); src.nom = 'SRC';
+  const snap = JSON.stringify(src);
+  upsertLot(src, vefaDocToLot(contrat));
+  assert(JSON.stringify(src) === snap,                'upsertLot : programme d\'entrée non muté');
+
+  // ── E. Round-trip pont → moteur (preuve cross-module) ──
+  let prog = fillProgramHeaderIfEmpty(blankProgram(), hdr);
+  prog.agence.nom = 'Agence Horizon';
+  prog = upsertLot(prog, vefaDocToLot(contrat)).program;
+  prog = upsertLot(prog, vefaDocToLot({ ...contrat, lot_numero: 'Maison B', prix_ttc: '459000', surface: '105' })).program;
+  const vb = vefaProgramToBlock(prog);
+  assert(validateBlock(vb).length === 0,              'round-trip pont : bloc produit valide (0 erreur)');
+  assert(vb.configurations.length === 2,              'round-trip pont : 2 lots pontés → 2 configurations');
+  assert(vb.configurations[0].reference === 'Maison A' && vb.configurations[0].prix_ttc === 389000
+      && vb.configurations[0].surface_habitable_m2 === 92,
+    'round-trip pont : lot A nombres exacts (string DOM → number moteur)');
+  assert(vb.configurations[1].prix_ttc === 459000 && vb.configurations[1].surface_habitable_m2 === 105,
+    'round-trip pont : lot B nombres exacts');
+}
+
 // ── Main ──────────────────────────────────────────────────────
 (async () => {
   console.log(`${C.bold}${C.cyan}╔══════════════════════════════════════════════════════════╗${C.reset}`);
@@ -1177,6 +1309,7 @@ async function testConciergeS8() {
   await testConciergeS7();
   await testConciergeKeyform();
   await testConciergeS8();
+  await testConciergeBridge();
 
   console.log(`\n${C.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
   console.log(`  ${C.green}✓ ${passCount} PASS${C.reset}    ${failCount ? `${C.red}✗ ${failCount} FAIL${C.reset}` : `${C.dim}✗ 0 FAIL${C.reset}`}`);

@@ -133,6 +133,110 @@ export function validateProgramLight(program) {
   return errors;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Pont VEFA (CG-10) — document Notice/Contrat → forme Concierge
+// ───────────────────────────────────────────────────────────────────
+// Le pro saisit déjà le programme et les lots dans les onglets Notice /
+// Contrat. Ces helpers PURS reprojettent ce _formData (clés des champs
+// VEFA Studio : nom_programme, type_logement, surface, orientation,
+// annexes, lot_numero, surface_carrez, prix_ttc, ville, livraison,
+// vendeur_nom) sur la forme Concierge — SANS rien réinventer : on copie
+// les champs qui ont un équivalent franc, le reste reste aux défauts de
+// blankLot(). Le pro complète/corrige ensuite dans l'onglet Concierge.
+// Objectif : zéro double saisie (consommé par CG-11/CG-12, vefa-studio).
+//
+// Pur (aucun DOM/réseau) => testé dans le harnais Node (section CG-10).
+// ══════════════════════════════════════════════════════════════════
+
+// Clés d'un lot qui PROVIENNENT du document (le doc fait foi à la mise à
+// jour). Le reste (nb_chambres, jardin_m2, garage, statut, prestations)
+// est propre au Concierge et saisi à la main dans l'onglet.
+const LOT_DOC_KEYS = ['reference', 'type', 'surface_habitable_m2', 'exposition', 'prix_ttc', 'stationnement'];
+
+// _formData (Notice/Contrat) → un lot Concierge. Déterministe et total :
+// chaque clé absente retombe sur le défaut blankLot(). surface habitable
+// d'abord (SHARED), à défaut surface Carrez (Contrat).
+export function vefaDocToLot(formData) {
+  const f = (formData && typeof formData === 'object') ? formData : {};
+  const lot = blankLot();
+  lot.reference            = str(f.lot_numero);
+  lot.type                 = str(f.type_logement);
+  lot.surface_habitable_m2 = str(f.surface) || str(f.surface_carrez);
+  lot.exposition           = str(f.orientation);
+  lot.prix_ttc             = str(f.prix_ttc);
+  lot.stationnement        = str(f.annexes);
+  return lot;
+}
+
+// _formData (Notice/Contrat) → en-tête de programme (les 4 scalaires).
+// vendeur_nom (la SCCV du contrat) sert de promoteur par défaut.
+export function vefaDocToProgramHeader(formData) {
+  const f = (formData && typeof formData === 'object') ? formData : {};
+  return {
+    nom:              str(f.nom_programme),
+    promoteur:        str(f.vendeur_nom),
+    ville:            str(f.ville),
+    livraison_prevue: str(f.livraison),
+  };
+}
+
+// Remplit l'en-tête du programme UNIQUEMENT là où il est encore vide (le
+// programme fait foi une fois renseigné — on ne clobber jamais une saisie
+// existante, ni avec du vide). Retourne un programme coercé (forme sûre).
+export function fillProgramHeaderIfEmpty(program, header) {
+  const p = coerceProgram(program);
+  const h = (header && typeof header === 'object') ? header : {};
+  ['nom', 'promoteur', 'ville', 'livraison_prevue'].forEach((k) => {
+    if (!str(p[k]).trim() && str(h[k]).trim()) p[k] = str(h[k]);
+  });
+  return p;
+}
+
+// Fusion d'un lot entrant dans un lot existant : les champs DOCUMENT non
+// vides écrasent (le doc fait foi), les champs Concierge saisis à la main
+// (nb_chambres, jardin_m2, garage, statut, prestations) sont préservés.
+function mergeLot(existing, incoming) {
+  const e   = coerceLot(existing);
+  const inc = coerceLot(incoming);
+  const out = { ...e };
+  LOT_DOC_KEYS.forEach((k) => { if (str(inc[k]).trim()) out[k] = inc[k]; });
+  return out;
+}
+
+// Insère ou met à jour un lot dans le programme, dédupliqué par référence
+// (insensible casse/espaces). Non destructif :
+//   · référence déjà connue       → fusion douce (mergeLot), action 'updated'
+//   · 1er lot encore placeholder   → remplacé en place,        action 'added'
+//   · sinon                        → ajouté en fin,            action 'added'
+// Retourne { program, action, index } — program coercé (forme garantie).
+export function upsertLot(program, lot) {
+  const p   = coerceProgram(program);
+  const inc = coerceLot(lot);
+  const ref = inc.reference.trim().toLowerCase();
+
+  if (ref) {
+    const idx = p.lots.findIndex((l) => str(l.reference).trim().toLowerCase() === ref);
+    if (idx >= 0) {
+      p.lots[idx] = mergeLot(p.lots[idx], inc);
+      return { program: p, action: 'updated', index: idx };
+    }
+  }
+
+  const first = p.lots[0];
+  const onlyPlaceholder = p.lots.length === 1 && first
+    && !str(first.reference).trim()
+    && !str(first.type).trim()
+    && !str(first.prix_ttc).trim()
+    && !str(first.surface_habitable_m2).trim();
+  if (onlyPlaceholder) {
+    p.lots[0] = inc;
+    return { program: p, action: 'added', index: 0 };
+  }
+
+  p.lots.push(inc);
+  return { program: p, action: 'added', index: p.lots.length - 1 };
+}
+
 // Identifiant du template Concierge dans le registre SDQR (./sdqr-templates).
 // Gelé ici pour que le miroir ci-dessous et la liste SDQR s'accordent.
 export const CONCIERGE_TEMPLATE_ID = 'concierge';
