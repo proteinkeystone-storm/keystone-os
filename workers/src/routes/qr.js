@@ -20,7 +20,7 @@ import { requireJWT } from '../lib/jwt.js';
 // Smart QR V2 — registry de templates (cf. ./smart-templates/index.js)
 import { getTemplate, isKnownTemplate } from './smart-templates/index.js';
 // Concierge VEFA (Sprint 2) — prompt déterministe + moteur IA + garde-fou budget.
-import { buildConciergePrompt } from './smart-templates/concierge.js';
+import { buildConciergePrompt, conciergeTokenMap } from './smart-templates/concierge.js';
 // Concierge VEFA (Sprint 7) — adaptation source « vefa » -> bloc canonique au
 // save. Le front ne peut pas importer le contrat (module backend) ; l'adaptation
 // se fait donc ICI, à la création/édition du QR concierge.
@@ -1674,6 +1674,16 @@ export async function handleSmartQrConcierge(request, env) {
   const block        = qrData.template_data || {};
   const systemPrompt = buildConciergePrompt(block);
 
+  // Repères chiffrés -> valeurs exactes, CÔTÉ SERVEUR : le modèle perd les
+  // zeros des nombres, donc le prompt ne contient que des repères ({{Pa}}…).
+  // On les reconvertit ici avant d'envoyer au navigateur : aucune dépendance
+  // à la version de la page (une page ancienne affiche quand même les bons
+  // chiffres). Repère inconnu -> retiré (jamais d'accolades chez le visiteur).
+  const { map: tokenMap } = conciergeTokenMap(block.configurations);
+  const subTokens = (str) => String(str).replace(
+    /\{\{\s*([A-Za-z]{2,6})\s*\}\}/g,
+    (m, k) => (Object.prototype.hasOwnProperty.call(tokenMap, k) ? tokenMap[k] : ''));
+
   // Historique : ne garde que les tours bien formés, capé + tronqué.
   const history = histIn
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -1696,6 +1706,7 @@ export async function handleSmartQrConcierge(request, env) {
 
       send({ type: 'start' });
       let fullText = '';
+      let emitBuf  = '';   // tampon : retient un repère {{...}} en cours de formation
 
       try {
         let aiStream;
@@ -1739,13 +1750,27 @@ export async function handleSmartQrConcierge(request, env) {
                 '';
               if (chunk) {
                 fullText += chunk;
-                send({ type: 'chunk', text: chunk });
+                emitBuf  += chunk;
+                // Flush en remplaçant les repères, mais en RETENANT un repère
+                // potentiellement incomplet en fin de tampon ({, {{, {{Pa, {{Pa}).
+                const hold = (emitBuf.match(/\{\{?[A-Za-z]{0,6}\}?$/) || [''])[0].length;
+                if (emitBuf.length > hold) {
+                  const out = subTokens(emitBuf.slice(0, emitBuf.length - hold));
+                  emitBuf   = emitBuf.slice(emitBuf.length - hold);
+                  if (out) send({ type: 'chunk', text: out });
+                }
               }
             } catch (e) { /* ligne malformée ignorée */ }
           }
         }
 
-        const clean = stripModelNoise(fullText);
+        // Flush du reste du tampon (dernier repère éventuel) puis done.
+        if (emitBuf) {
+          const out = subTokens(emitBuf);
+          if (out) send({ type: 'chunk', text: out });
+          emitBuf = '';
+        }
+        const clean = subTokens(stripModelNoise(fullText));
         send({ type: 'done', full_text: clean });
 
         // Compteur budget IA (best-effort, 1 écriture).
