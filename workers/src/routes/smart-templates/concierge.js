@@ -43,13 +43,36 @@ function frThousands(n) {
 function fmtPrix(n)    { const s = frThousands(n); return s ? s + ' €' : ''; }
 function fmtSurface(n) { const s = frThousands(n); return s ? s + ' m²' : ''; }
 
-// Variantes « a plat » réservées au PROMPT : chiffres SANS espace de milliers
-// interne. Mistral tronquait « 389 000 € » -> « 389 € » (il laisse tomber le
-// groupe « 000 »). Un token contigu « 389000 € » est recopié en entier.
-// L'affichage du chat regroupe ensuite en « 389 000 € » (groupNums, cote page).
-function frInt(n)         { const num = Number(n); return (Number.isFinite(num) && num > 0) ? String(Math.round(num)) : ''; }
-function fmtPrixFlat(n)    { const s = frInt(n); return s ? s + ' €' : ''; }
-function fmtSurfaceFlat(n) { const s = frInt(n); return s ? s + ' m²' : ''; }
+// Repères (placeholders) pour les chiffres confiés à l'IA.
+// CONSTAT terrain : Mistral Small 3.1 perd les ZEROS des nombres qu'on lui
+// demande de recopier (595000 -> « 595 », 105 -> « 15 », 110 -> « 11 »).
+// Aucune consigne de prompt n'y change rien. On ne lui donne donc JAMAIS les
+// chiffres : chaque montant/surface devient un repère SANS chiffre {{Pa}} /
+// {{Sa}} / {{Ja}} (P=prix, S=surface, J=jardin ; suffixe = index config en
+// lettres). Le modèle recopie le repère tel quel ; la page (VAL) le remplace
+// par la valeur EXACTE formatée. Zéro chiffre ne transite par le modèle.
+function _tokSuffix(i) {
+  let s = '', n = i;
+  do { s = String.fromCharCode(97 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return s;
+}
+export function conciergeTokenMap(configs) {
+  const map = {};   // repère -> valeur exacte formatée (ex : { Pa: '389 000 €' })
+  const tok = [];   // par config : { prix?, surface?, jardin? } (repères)
+  (Array.isArray(configs) ? configs : []).forEach((c, i) => {
+    const suf = _tokSuffix(i);
+    const ann = (c && c.surfaces_annexes) || {};
+    const e   = {};
+    const px = fmtPrix(c && c.prix_ttc);
+    const sf = fmtSurface(c && c.surface_habitable_m2);
+    const jd = fmtSurface(ann.jardin_m2);
+    if (px) { e.prix    = '{{P' + suf + '}}'; map['P' + suf] = px; }
+    if (sf) { e.surface = '{{S' + suf + '}}'; map['S' + suf] = sf; }
+    if (jd) { e.jardin  = '{{J' + suf + '}}'; map['J' + suf] = jd; }
+    tok[i] = e;
+  });
+  return { map, tok };
+}
 
 const STATUT_META = {
   disponible: { label: 'Disponible', cls: 'is-dispo' },
@@ -114,6 +137,9 @@ const TEMPLATE = {
 
     const configs     = Array.isArray(d.configurations) ? d.configurations : [];
     const suggestions = Array.isArray(d.questions_suggerees) ? d.questions_suggerees : [];
+    // Repères chiffrés -> valeurs exactes, injectés côté page : le chat
+    // remplace les {{Pa}}/{{Sa}}/{{Ja}} produits par l'IA (cf. conciergeTokenMap).
+    const tokenValues = conciergeTokenMap(configs).map;
 
     // Accueil DÉTERMINISTE — construit depuis le bloc, jamais généré par un LLM.
     // Immo = phrase HISTORIQUE inchangée ; generic = cadrage « offres ».
@@ -478,6 +504,7 @@ const TEMPLATE = {
   var CNAME = ${jsInject(contactNomRaw)};
   var CTEL  = ${jsInject(telHref)};
   var LANG  = ${jsInject(speechLang)};
+  var VAL   = ${jsInject(tokenValues)};
   var API   = '/api/smartqr/concierge';
   var AISVG = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>';
   var INTENT_RE = /(prix|tarif|budget|co[uû]te|cout|dispo|disponib|r[ée]serv|acheter|visite|rendez|financ|pr[êe]t)/i;
@@ -502,6 +529,12 @@ const TEMPLATE = {
   }
   function md(s) {
     var h = esc(s);
+    // Repères chiffrés {{Pa}}/{{Sa}}/{{Ja}} -> valeur exacte (le modèle perd
+    // les zeros des nombres, donc il n'a jamais vu les chiffres). Repère
+    // inconnu -> retiré (jamais d'accolades affichées au visiteur).
+    h = h.replace(/\\{\\{\\s*([A-Za-z]{2,6})\\s*\\}\\}/g, function (mm, k) {
+      return Object.prototype.hasOwnProperty.call(VAL, k) ? esc(VAL[k]) : '';
+    });
     h = h.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
     h = h.replace(/__([^_]+)__/g, '<strong>$1</strong>');
     h = h.replace(/\\*\\*/g, '').replace(/__/g, '');
@@ -693,7 +726,10 @@ export function buildConciergePrompt(block) {
 
   // Bloc DONNÉES curé : uniquement ce qui sert à répondre/comparer.
   // On exclut branding (UI), questions_suggerees (UI), destination_url.
-  // Les chiffres (prix_ttc, surfaces) sont fournis EXACTS depuis le bloc.
+  // Chiffres : remplacés par des repères {{...}} (cf. conciergeTokenMap) car
+  // Mistral perd les zeros des nombres. Le modèle recopie le repère, la page
+  // le convertit en valeur exacte. ZERO chiffre ne transite par le modèle.
+  const { tok } = conciergeTokenMap(d.configurations);
   const donnees = {
     programme: {
       nom:              prog.nom || '',
@@ -701,20 +737,19 @@ export function buildConciergePrompt(block) {
       ville:            prog.ville || '',
       livraison_prevue: prog.livraison_prevue || '',
     },
-    configurations: (Array.isArray(d.configurations) ? d.configurations : []).map((c) => {
+    configurations: (Array.isArray(d.configurations) ? d.configurations : []).map((c, i) => {
       const ann = c?.surfaces_annexes || {};
+      const t   = tok[i] || {};
       return {
         reference:     c?.reference || '',
         type:          c?.type || '',
         nb_chambres:   c?.nb_chambres,
         statut:        c?.statut || '',
-        // Chiffres « a plat » (sans espace de milliers interne) : Mistral
-        // tronquait « 389 000 € » -> « 389 € » en jetant le groupe « 000 ».
-        // Token contigu « 389000 € » = recopie integrale ; le chat regroupe a
-        // l'affichage. Source de verite identique aux cartes (valeur, pas format).
-        surface:       fmtSurfaceFlat(c?.surface_habitable_m2) || 'non communiquée',
-        prix:          fmtPrixFlat(c?.prix_ttc) || 'non communiqué',
-        jardin:        fmtSurfaceFlat(ann.jardin_m2) || 'aucun',
+        // Repères sans chiffre — recopiés tels quels par le modèle, convertis
+        // à l'affichage (anti perte-de-zeros Mistral). Cf. conciergeTokenMap.
+        surface:       t.surface || 'non communiquée',
+        prix:          t.prix    || 'non communiqué',
+        jardin:        t.jardin  || 'aucun',
         garage:        ann.garage === true ? 'oui' : (ann.garage === false ? 'non' : 'non précisé'),
         exposition:    c?.exposition || '',
         stationnement: c?.stationnement || '',
@@ -740,7 +775,7 @@ export function buildConciergePrompt(block) {
     '- Compare les configurations et oriente selon le besoin (taille de famille, budget, exposition…), mais UNIQUEMENT à partir des champs fournis — jamais de justification par une donnée absente.',
     '- Ne propose jamais une configuration dont le statut = vendu.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Les montants et surfaces sont fournis EXACTS (ex : "68 m²", "389000 €"). Recopie le nombre ENTIER avec TOUS ses chiffres : n\'abrège jamais, n\'arrondis pas, ne retire aucun chiffre, n\'invente rien.',
+    '- Les montants et surfaces sont des REPÈRES entre doubles accolades (ex : {{Pa}} pour un prix, {{Sa}} pour une surface, {{Ja}} pour un jardin). Recopie le repère EXACTEMENT tel quel, sans rien changer, et n\'écris JAMAIS de chiffre à la place : il est converti automatiquement en valeur exacte. Utilise le repère du bon lot.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'agence.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');
@@ -755,13 +790,14 @@ function buildGenericPrompt(d, ctx) {
   const { agence, ton, langue, contactRef } = ctx;
   const contact = d.contact_humain || {};
 
+  const { tok } = conciergeTokenMap(d.configurations);
   const donnees = {
     enseigne: agence,
-    offres: (Array.isArray(d.configurations) ? d.configurations : []).map((c) => ({
+    offres: (Array.isArray(d.configurations) ? d.configurations : []).map((c, i) => ({
       intitule:    c?.reference || '',
       attributs:   (Array.isArray(c?.attributs) ? c.attributs : [])
         .map((a) => ({ label: a?.label || '', value: a?.value || '' })),
-      prix:        fmtPrixFlat(c?.prix_ttc) || 'non communiqué',
+      prix:        (tok[i] || {}).prix || 'non communiqué',
       description: c?.description || '',
     })),
     faq_validee:    Array.isArray(d.faq_validee) ? d.faq_validee : [],
@@ -782,7 +818,7 @@ function buildGenericPrompt(d, ctx) {
     '- Réponds uniquement à partir des données fournies.',
     '- Compare les offres et oriente selon le besoin exprimé, mais UNIQUEMENT à partir des champs fournis (intitulé, attributs, prix, description) — jamais de justification par une donnée absente.',
     `- Si l'information n'y figure pas : « Je n'ai pas cette information, contactez ${contactRef}. » Ne jamais inventer.`,
-    '- Les prix sont fournis EXACTS (ex : "75 €", "389000 €"). Recopie le nombre ENTIER avec TOUS ses chiffres : n\'abrège pas, n\'arrondis pas, n\'invente aucun chiffre.',
+    '- Les prix sont des REPÈRES entre doubles accolades (ex : {{Pa}}). Recopie le repère EXACTEMENT tel quel, sans rien changer, et n\'écris JAMAIS de chiffre à la place : il est converti automatiquement en prix exact. Utilise le repère de la bonne offre.',
     '- Question contractuelle/juridique : rappelle le disclaimer et renvoie vers l\'interlocuteur de l\'enseigne.',
     `- Réponses courtes, ton ${ton}, langue ${langue} (ou langue du visiteur si détectée).`,
   ].join('\n');

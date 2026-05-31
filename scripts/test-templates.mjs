@@ -403,6 +403,12 @@ async function testConcierge() {
   assert(html.includes('68 m²'),   'concierge render : surface Maison A déterministe (68 m²)');
   assert(html.includes('92 m²'),   'concierge render : surface Maison B déterministe (92 m²)');
 
+  // Le chat reconvertit les repères {{Pa}}... en valeurs exactes via VAL injecté
+  // (le modèle perd les zeros : il ne voit jamais les chiffres). Cartes = fmtPrix
+  // direct (toujours justes) ; chat = repères -> VAL.
+  assert(html.includes('var VAL'),          'concierge render : map VAL injectée (repères -> valeurs)');
+  assert(html.includes('"Pa":"389 000 €"'), 'concierge render : VAL porte le prix exact pour {{Pa}}');
+
   // statuts affichés honnêtement (inventaire) — le filtre "jamais vendu"
   // s'applique au PROMPT IA (Sprint 2), pas aux cartes factuelles.
   assert(html.includes('Disponible'), 'concierge render : statut Disponible affiché');
@@ -1160,7 +1166,8 @@ async function testConciergeS8() {
   assert(immoPrompt.includes('pour le programme'),         'S8 prompt immo : cadrage programme préservé');
   assert(immoPrompt.includes('configurations de maisons'), 'S8 prompt immo : phrase historique préservée');
   assert(immoPrompt.includes('statut = vendu'),            'S8 prompt immo : règle anti-vendu préservée');
-  assert(immoPrompt.includes('389000 €'),                  'S8 prompt immo : prix a plat fourni (token contigu, anti-troncature)');
+  assert(immoPrompt.includes('{{Pa}}'),                    'S8 prompt immo : prix en repère {{Pa}} (anti perte-de-zeros Mistral)');
+  assert(!immoPrompt.includes('389000') && !immoPrompt.includes('389 000'), 'S8 prompt immo : aucun chiffre de prix (tout en repères)');
 
   const genPrompt = buildConciergePrompt(genBlock);
   assert(genPrompt.includes('Studio Pilates Lumiere'),     'S8 prompt generic : enseigne dans le cadrage');
@@ -1168,7 +1175,7 @@ async function testConciergeS8() {
   assert(genPrompt.includes('Seances') && genPrompt.includes('Illimite'),
     'S8 prompt generic : attributs FOURNIS à l\'IA (le coeur du contenu generic)');
   assert(genPrompt.includes('Ideal pour debuter'),         'S8 prompt generic : description fournie à l\'IA');
-  assert(genPrompt.includes('190'),                        'S8 prompt generic : prix exact fourni');
+  assert(genPrompt.includes('{{Pa}}'),                     'S8 prompt generic : prix en repère {{Pa}} (jamais le chiffre brut)');
   assert(!genPrompt.includes('statut = vendu'),            'S8 prompt generic : pas de règle anti-vendu (pas d\'inventaire)');
   assert(!genPrompt.includes('configurations de maisons'), 'S8 prompt generic : pas de cadrage immo');
 }
