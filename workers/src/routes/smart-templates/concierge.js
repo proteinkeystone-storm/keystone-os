@@ -43,6 +43,19 @@ function frThousands(n) {
 function fmtPrix(n)    { const s = frThousands(n); return s ? s + ' €' : ''; }
 function fmtSurface(n) { const s = frThousands(n); return s ? s + ' m²' : ''; }
 
+// Logo « Puce » Keystone (fond clair) — avatar du concierge dans le chat.
+// Fills intrinsèques : or (#c9b48a) + bleu nuit (#0a2741). Conçu pour un fond
+// CLAIR -> l'avatar est un cercle blanc (cf. .cg-avatar). Remplace l'ancien
+// picto maison (2026-05-31, demande Stéphane).
+const PUCE_SVG = '<svg viewBox="0 0 260.85 246.17" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+  + '<path fill="#c9b48a" d="M21,143.31c0-46.13,28.69-85.68,69.17-101.75l-7.72-19.53C34.2,41.19,0,88.33,0,143.31c0,41.61,19.59,78.73,50.03,102.63l12.94-16.52c-25.54-20.05-41.97-51.19-41.97-86.1Z"/>'
+  + '<path fill="#c9b48a" d="M179.22,22.37l-7.86,19.47c40.11,16.24,68.48,55.6,68.48,101.47,0,35.02-16.54,66.25-42.22,86.29l12.9,16.56c30.61-23.89,50.32-61.11,50.32-102.85,0-54.67-33.82-101.58-81.63-120.94Z"/>'
+  + '<path fill="#0a2741" d="M229.14,143.31c0-41.38-25.59-76.89-61.78-91.54l-5.62,13.92c30.69,12.43,52.4,42.52,52.4,77.62,0,26.79-12.67,50.67-32.31,66l9.23,11.85c23.16-18.08,38.09-46.25,38.09-77.85Z"/>'
+  + '<path fill="#0a2741" d="M46.71,143.31c0-35.29,21.96-65.53,52.93-77.82l-5.53-13.97c-36.52,14.5-62.4,50.18-62.4,91.8,0,31.5,14.83,59.59,37.87,77.68l9.26-11.82c-19.54-15.34-32.13-39.15-32.13-65.86Z"/>'
+  + '<circle fill="#0a2741" cx="130.42" cy="143.31" r="24.46"/>'
+  + '<path fill="#c9b48a" d="M108.68,65.49h42.9l19.79-60.83c-27.22-6.17-54.28-6.24-81.19,0l18.51,60.83Z"/>'
+  + '</svg>';
+
 // Repères (placeholders) pour les chiffres confiés à l'IA.
 // CONSTAT terrain : Mistral Small 3.1 perd les ZEROS des nombres qu'on lui
 // demande de recopier (595000 -> « 595 », 105 -> « 15 », 110 -> « 11 »).
@@ -278,9 +291,10 @@ const TEMPLATE = {
   .cg-dialog { padding: 18px 18px 8px; }
   .cg-bubble { display: flex; gap: 10px; align-items: flex-start; }
   .cg-avatar { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
-    background: linear-gradient(135deg, var(--acc), var(--acc2));
+    background: #fff; border: 1px solid rgba(10,39,65,.12);
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
     display: flex; align-items: center; justify-content: center; }
-  .cg-avatar svg { width: 16px; height: 16px; stroke: var(--on-acc); }
+  .cg-avatar svg { width: 20px; height: 20px; display: block; }
   .cg-msg { background: var(--surface-2); border: 1px solid var(--bd-soft);
     border-radius: 4px 14px 14px 14px; padding: 12px 14px;
     font-size: 14.5px; line-height: 1.5; color: var(--tx); }
@@ -457,9 +471,7 @@ const TEMPLATE = {
 
     <section class="cg-dialog">
       <div class="cg-bubble">
-        <div class="cg-avatar" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
-        </div>
+        <div class="cg-avatar" aria-hidden="true">${PUCE_SVG}</div>
         <div class="cg-msg">${welcome}</div>
       </div>
 
@@ -510,7 +522,7 @@ const TEMPLATE = {
   var LANG  = ${jsInject(speechLang)};
   var VAL   = ${jsInject(tokenValues)};
   var API   = '/api/smartqr/concierge';
-  var AISVG = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>';
+  var AISVG = ${JSON.stringify(PUCE_SVG)};
   var INTENT_RE = /(prix|tarif|budget|co[uû]te|cout|dispo|disponib|r[ée]serv|acheter|visite|rendez|financ|pr[êe]t)/i;
 
   var thread = document.getElementById('cg-thread');

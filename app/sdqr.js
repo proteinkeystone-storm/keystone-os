@@ -1309,38 +1309,33 @@ function _renderConciergeEditor(wrap) {
   const source   = (src === 'vefa' || src === 'keyform') ? src : 'inline';
   const vertical = source === 'keyform' ? 'general' : 'immo';
 
-  // Picker de source. CONTEXTUEL (Sprint C-a) : on ne montre que les sources
-  // de la verticale courante (fixée par la carte phare). Pour la verticale
-  // GÉNÉRALE (Sprint C-b), 2 sous-modes data-cg-kfmode (la source reste
-  // 'keyform' sur le fil) ; pour IMMO, les sources data-cg-source classiques.
+  // Sélecteur de source COMPACT (polish 2026-05-31) : un toggle segmenté (et
+  // non 2 grosses cartes -> moins « effrayant ») + une ligne d'aide pour
+  // l'option active. Seul le contenu de l'option choisie s'affiche (dispatch
+  // plus bas). Les data-attrs (data-cg-source / data-cg-kfmode) sont inchangés
+  // -> binders existants (_cgBindSourcePicker / _cgBindKfModePicker) intacts.
+  const segPicker = (opts, active, attr) => {
+    const tabs = opts.map(o =>
+      `<button type="button" class="sdqr-cg-seg-btn ${o.val === active ? 'is-active' : ''}" ${attr}="${o.val}">${_esc(o.strong)}</button>`
+    ).join('');
+    const cur = opts.find(o => o.val === active);
+    return `
+    <div class="sdqr-cg-seg" role="tablist" aria-label="Source des données du concierge">${tabs}</div>
+    ${cur && cur.small ? `<p class="sdqr-cg-seg-hint">${_esc(cur.small)}</p>` : ''}`;
+  };
+
   let picker = '';
   if (vertical === 'immo') {
-    const immo = [
-      { val: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici' },
-      { val: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio" },
-    ];
-    picker = `
-    <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
-      ${immo.map(s => `
-      <button type="button" class="sdqr-cg-source-btn ${source === s.val ? 'is-active' : ''}" data-cg-source="${s.val}">
-        <strong>${s.strong}</strong>
-        <small>${s.small}</small>
-      </button>`).join('')}
-    </div>`;
+    picker = segPicker([
+      { val: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici.' },
+      { val: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio." },
+    ], source, 'data-cg-source');
   } else {
     const kfMode = _creating.cg_kf_mode === 'import' ? 'import' : 'direct';
-    const gen = [
-      { val: 'direct', strong: 'Saisie directe',  small: 'Je remplis le gabarit générique ici' },
-      { val: 'import', strong: 'Key Form publié', small: "J'importe une Fiche établissement remplie" },
-    ];
-    picker = `
-    <div class="sdqr-cg-source" role="group" aria-label="Source des données du concierge">
-      ${gen.map(s => `
-      <button type="button" class="sdqr-cg-source-btn ${kfMode === s.val ? 'is-active' : ''}" data-cg-kfmode="${s.val}">
-        <strong>${s.strong}</strong>
-        <small>${s.small}</small>
-      </button>`).join('')}
-    </div>`;
+    picker = segPicker([
+      { val: 'direct', strong: 'Saisie directe',  small: 'Je remplis le gabarit générique ici.' },
+      { val: 'import', strong: 'Key Form publié', small: "J'importe une Fiche établissement déjà remplie." },
+    ], kfMode, 'data-cg-kfmode');
   }
 
   // Source « vefa » : aperçu en lecture seule du programme relayé. Le bloc

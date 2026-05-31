@@ -853,10 +853,16 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
   .foot{margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:rgba(220,225,240,.45);text-align:center}
   .badge-ok{display:inline-block;padding:2px 8px;background:rgba(46,179,124,.12);color:#6ee7a7;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
   .badge-no{display:inline-block;padding:2px 8px;background:rgba(239,68,68,.10);color:#fca5a5;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .back-btn{display:inline-flex;align-items:center;gap:7px;margin-bottom:22px;background:rgba(184,148,90,.10);border:1px solid rgba(184,148,90,.32);color:#c9a84c;font:inherit;font-size:13px;font-weight:600;padding:8px 15px;border-radius:999px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+  .back-btn:hover{background:rgba(184,148,90,.18);border-color:rgba(184,148,90,.6);color:#d4b27a}
+  .back-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <button type="button" class="back-btn" onclick="if(history.length>1){history.back()}else{window.close()}" aria-label="Retour">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Retour
+  </button>
   <span class="pill">Dynamic QR · Transparence</span>
   <h1>Ce que ce QR collecte<br>et ce qu'il ne collecte pas</h1>
   <p class="lead">Vous venez de scanner un QR généré par Keystone OS. Voici, en clair, ce qui se passe.</p>
