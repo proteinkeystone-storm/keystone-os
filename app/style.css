@@ -7789,6 +7789,16 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   color: var(--gold, #c9a96e); cursor: pointer; text-decoration: underline;
 }
 .sdqr-cg-linklike:hover { color: #e6c98a; }
+/* Boite succes : lien public de la Fiche apres creation/publication 1 clic */
+.sdqr-cg-fiche-link {
+  border: 1px solid rgba(74,222,128,.35); background: rgba(74,222,128,.08);
+  border-radius: 9px; padding: 11px 13px; margin: 0 0 12px;
+}
+.sdqr-cg-fiche-link-head { font-size: 12px; font-weight: 700; color: #bbf7d0; margin-bottom: 8px; }
+.sdqr-cg-fiche-link-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.sdqr-cg-fiche-link-row .sdqr-input { flex: 1 1 220px; min-width: 0; }
+.sdqr-cg-fiche-link-row .sdqr-cg-add { width: auto; margin: 0; white-space: nowrap; padding: 9px 14px; text-decoration: none; display: inline-flex; align-items: center; }
+.sdqr-cg-fiche-open { color: #c7cbff; }
 
 /* Concierge VEFA (S7) — aperçu du programme relayé par VEFA Studio */
 .sdqr-cg-vefa-card {

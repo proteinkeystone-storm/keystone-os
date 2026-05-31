@@ -33,11 +33,11 @@ import {
   PROGRAM_STORAGE_KEY, coerceProgram, validateProgramLight,
   blankKeyform, blankKeyformItem, coerceKeyform, validateKeyformLight,
 } from './lib/concierge-program.js';
-// Sprint C-b — gabarit « Fiche établissement » + instanciation Key Form.
-// (openPulsa importé en dynamique dans _cgCreateFicheGabarit pour ne pas
-// charger pulsa.js au démarrage de SDQR ni risquer un cycle d'import.)
+// Sprint C-b — gabarit « Fiche établissement » : création + PUBLICATION
+// directe via l'API (sans ouvrir l'éditeur Key Form -> structure figée,
+// infalsifiable, lien prêt à partager en 1 clic).
 import { buildConciergeFicheGabarit, isConciergeGabarit, gabaritResponseToSubmission } from './lib/concierge-keyform-gabarit.js';
-import { saveForm, setCurrentFormId } from './lib/pulsa-library.js';
+import { saveForm } from './lib/pulsa-library.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -1790,16 +1790,17 @@ function _cgBindReimport(wrap) {
 function _cgImportPanelHtml() {
   return `
     <div class="sdqr-cg-import">
-      <p class="sdqr-cg-hint">Choisis une « Fiche établissement » que tu as <strong>publiée</strong> dans Key Form et qui a reçu au moins une réponse. Ses infos rempliront automatiquement le Concierge.</p>
+      <p class="sdqr-cg-hint">Crée ta « Fiche établissement » en 1 clic : tu obtiens un lien prêt à envoyer à ton client (ou à remplir toi-même). Elle est déjà publiée, rien à configurer. Une fois remplie, elle apparaît ci-dessous et son contenu remplit le Concierge automatiquement.</p>
+      <button type="button" class="sdqr-cg-add" data-cg-create-fiche>+ Créer ma Fiche établissement (lien prêt à partager)</button>
+      <div class="sdqr-cg-fiche-link" data-cg-fiche-link hidden></div>
       <div class="sdqr-cg-import-list" data-cg-import-list>
-        <p class="sdqr-cg-import-msg">Chargement de tes formulaires...</p>
+        <p class="sdqr-cg-import-msg">Chargement de tes Fiches...</p>
       </div>
-      <button type="button" class="sdqr-cg-add" data-cg-create-fiche>+ Créer la Fiche établissement</button>
     </div>`;
 }
 
 function _cgBindImportPanel(wrap) {
-  wrap.querySelector('[data-cg-create-fiche]')?.addEventListener('click', _cgCreateFicheGabarit);
+  wrap.querySelector('[data-cg-create-fiche]')?.addEventListener('click', () => _cgCreateFicheGabarit(wrap));
   _cgLoadGabaritForms(wrap);
 }
 
@@ -1815,7 +1816,7 @@ async function _cgLoadGabaritForms(wrap) {
     const forms = Array.isArray(body.forms) ? body.forms : [];
     const gabarits = forms.filter(f => isConciergeGabarit(f) && _cgFormIsPublished(f));
     if (!gabarits.length) {
-      listEl.innerHTML = `<p class="sdqr-cg-import-msg">Aucune Fiche établissement publiée pour l'instant. Crée-en une ci-dessous, publie-la dans Key Form, fais-la remplir, puis reviens ici.</p>`;
+      listEl.innerHTML = `<p class="sdqr-cg-import-msg">Pas encore de Fiche remplie. Clique « Créer ma Fiche établissement » ci-dessus, partage le lien obtenu, fais-la remplir, puis reviens ici.</p>`;
       return;
     }
     listEl.innerHTML = gabarits.map(f => {
@@ -1881,22 +1882,73 @@ async function _cgImportFromForm(wrap, form) {
   }
 }
 
-// « Créer la Fiche établissement » : instancie le gabarit en LOCAL (library
-// Key Form) puis ouvre Key Form pour le publier (mirror app/codex.js
-// _shareCreatePulsa). openPulsa importé en dynamique (pas de cycle, pas de
-// chargement eager de pulsa.js).
-async function _cgCreateFicheGabarit() {
+// « Créer ma Fiche établissement » : crée + PUBLIE directement le gabarit figé
+// via l'API (status='published', sans ouvrir l'éditeur Key Form -> la structure
+// ne peut pas être cassée) et rend un lien public prêt à partager. Réutilise
+// une Fiche déjà publiée si elle existe (évite les doublons). Auth = _headers.
+async function _cgCreateFicheGabarit(wrap) {
+  const btn  = wrap.querySelector('[data-cg-create-fiche]');
+  const prev = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Création...'; }
   try {
-    const form   = buildConciergeFicheGabarit();
-    const stored = saveForm(form);
-    setCurrentFormId(stored.id);
-    const { openPulsa } = await import('./pulsa.js');
-    closeSDQR();
-    setTimeout(() => openPulsa(), 120);
+    // 1) Réutilise une Fiche publiée existante (pas de doublon).
+    let slug = null, reused = false;
+    try {
+      const lr = await fetch(`${CF_API}/api/pulsa/forms`, { headers: _headers() });
+      if (lr.ok) {
+        const lb = await lr.json();
+        const ex = (Array.isArray(lb.forms) ? lb.forms : [])
+          .find(f => isConciergeGabarit(f) && _cgFormIsPublished(f) && f.meta && f.meta.slug);
+        if (ex) { slug = ex.meta.slug; reused = true; }
+      }
+    } catch { /* hors-ligne : on tentera la création */ }
+
+    // 2) Sinon : crée + publie un nouveau gabarit figé (slug unique).
+    if (!slug) {
+      const form = buildConciergeFicheGabarit();
+      form.meta.slug = 'fiche-etablissement-' + Math.random().toString(36).slice(2, 8);
+      form.output = { status: 'published', published_url: null, last_response_at: null };
+      const stored = saveForm(form);   // copie locale (visible dans Key Form)
+      const res = await fetch(`${CF_API}/api/pulsa/forms`, {
+        method: 'POST',
+        headers: _headers({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ form: { ...stored, output: { status: 'published' } } }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      slug = (data.form && data.form.slug) || form.meta.slug;
+    }
+
+    _cgShowFicheLink(wrap, `${location.origin}/f/${encodeURIComponent(slug)}`, reused);
+    _cgLoadGabaritForms(wrap);   // la Fiche apparaît dans la liste
   } catch (e) {
-    console.error('[sdqr] create fiche gabarit', e);
+    console.error('[sdqr] create fiche', e);
     alert('Création de la Fiche impossible : ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
   }
+}
+
+// Boîte succès : lien public de la Fiche + Copier + Ouvrir.
+function _cgShowFicheLink(wrap, url, reused) {
+  const box = wrap.querySelector('[data-cg-fiche-link]');
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="sdqr-cg-fiche-link-head">${reused ? 'Tu as déjà une Fiche publiée' : 'Fiche créée et publiée'} — partage ce lien :</div>
+    <div class="sdqr-cg-fiche-link-row">
+      <input type="text" class="sdqr-input" readonly value="${_esc(url)}" data-cg-fiche-url>
+      <button type="button" class="sdqr-cg-add" data-cg-copy-fiche>Copier</button>
+      <a class="sdqr-cg-add sdqr-cg-fiche-open" href="${_esc(url)}" target="_blank" rel="noopener">Ouvrir</a>
+    </div>
+    <div class="sdqr-cg-import-msg">Envoie ce lien a ton client (ou ouvre-le pour le remplir toi-meme). Une fois rempli, clique ta Fiche dans la liste ci-dessous pour importer ses infos.</div>`;
+  box.querySelector('[data-cg-copy-fiche]')?.addEventListener('click', () => {
+    const inp = box.querySelector('[data-cg-fiche-url]');
+    const txt = inp ? inp.value : url;
+    const done = () => { const b = box.querySelector('[data-cg-copy-fiche]'); if (b) { b.textContent = 'Copié !'; setTimeout(() => { b.textContent = 'Copier'; }, 1500); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => {});
+    else if (inp) { inp.select(); try { document.execCommand('copy'); done(); } catch {} }
+  });
 }
 
 // Rend les champs du form en fonction du type sélectionné.
