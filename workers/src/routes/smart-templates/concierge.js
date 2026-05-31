@@ -448,6 +448,20 @@ const TEMPLATE = {
   var nbAsked = 0;
 
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+  // Rendu Markdown minimal des reponses IA : **gras** -> <strong>, et on
+  // n'affiche JAMAIS les marqueurs ** / __ en clair. esc() AVANT toute
+  // injection HTML (le texte du modele est non fiable).
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function md(s) {
+    var h = esc(s);
+    h = h.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+    h = h.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    h = h.replace(/\\*\\*/g, '').replace(/__/g, '');
+    return h;
+  }
   var dock = document.getElementById('cg-dock');
   // Dock sticky en bas : on garde le dernier message AU-DESSUS du dock. Le fil
   // n'est pas le dernier element du body (CTA + footer sont dessous), donc on
@@ -511,9 +525,9 @@ const TEMPLATE = {
             var ev; try { ev = JSON.parse(data); } catch (e) { continue; }
             if (ev.type === 'chunk' && ev.text) {
               if (!started) { bubble.textContent = ''; started = true; }
-              full += ev.text; bubble.textContent = full; down();
+              full += ev.text; bubble.innerHTML = md(full); down();
             } else if (ev.type === 'done') {
-              if (ev.full_text) { full = ev.full_text; bubble.textContent = full; }
+              if (ev.full_text) { full = ev.full_text; bubble.innerHTML = md(full); }
             } else if (ev.type === 'error') {
               errored = true;
             }
