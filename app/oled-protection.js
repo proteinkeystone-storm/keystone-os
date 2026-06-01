@@ -35,8 +35,10 @@ const K_REDUCE = 'ks_reduce_motion';
 // Total ≈ 40 min. Centralisées ici pour réglage facile / futurs paramètres avancés.
 const PHASES_DEFAULT = [
   { name: 'wash',      ms: 5  * 60000 }, // Phase 1 — Pixel Wash
-  { name: 'static',    ms: 5000 },       // Phase 1b — Détune TV (neige RGB, court)
-  { name: 'noise',     ms: 10 * 60000 }, // Phase 2 — Bruit animé faible
+  { name: 'static',    ms: 6000 },       // Phase 2 — Détune TV : neige TV FORTE, plein écran
+  // 'noise' (Bruit Animé Faible, sombre) retiré 2026-06-01 : Stéphane voulait une
+  // vraie neige TV bien visible, pas un quasi-noir → la phase 'static' EST le bruit.
+  // Réactivable en 1 ligne (élément .oled-noise + son CSS conservés, dormants).
   { name: 'gradients', ms: 10 * 60000 }, // Phase 3 — Balayage des gradients
   { name: 'orbit',     ms: 15 * 60000 }, // Phase 4 — Orbite accélérée
 ];
@@ -187,9 +189,10 @@ function _startWash() {
 }
 function _stopWash() { clearTimeout(_washTimer); _washTimer = null; }
 
-// Phase « Détune TV » : neige re-tirée à ~15 fps sur un petit canvas étiré
-// plein écran (CSS pixelated). Luminosité MESURÉE (gris 0..200) + roll de
-// synchro en CSS. Court (~5 s) → le canvas par frame est négligeable ici.
+// Phase « Détune TV » : neige TV PLEIN CONTRASTE re-tirée à ~20 fps sur un petit
+// canvas étiré plein écran (CSS pixelated) — gris 0..255 + ~12 % de grésil coloré
+// (look analogique) + roll de synchro CSS. Court (~6 s), après les couleurs.
+// (Pas de flash plein champ → reste sûr : neige spatiale, pas un strobe.)
 function _startStatic() {
   const cv = _overlay?.querySelector('.oled-static');
   const ctx = cv?.getContext('2d');
@@ -199,12 +202,18 @@ function _startStatic() {
     const img = ctx.createImageData(W, H);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
-      const v = (Math.random() * 200) | 0;   // neige grise, luminosité mesurée
-      d[i] = d[i + 1] = d[i + 2] = v;
+      if (Math.random() < 0.12) {                 // ~12 % : grésil coloré
+        d[i]     = (Math.random() * 255) | 0;
+        d[i + 1] = (Math.random() * 255) | 0;
+        d[i + 2] = (Math.random() * 255) | 0;
+      } else {                                     // sinon neige grise plein contraste
+        const v = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
       d[i + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
-    _staticTimer = setTimeout(draw, 66);      // ~15 fps
+    _staticTimer = setTimeout(draw, 50);          // ~20 fps (neige vive)
   };
   draw();
 }
