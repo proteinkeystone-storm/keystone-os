@@ -4350,6 +4350,36 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
   100% { transform: translate3d(0,    0,    0); }
 }
 
+/* Phase « Détune TV » — neige RGB (canvas) + roll de synchro (~5 s) */
+.oled-static {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  image-rendering: pixelated;
+  transition: opacity .4s ease;
+}
+#ks-lockscreen[data-maint="static"] .oled-static { opacity: .85; }
+#ks-lockscreen[data-maint="static"] .ls-center  { opacity: 0; transition: opacity .6s ease; }
+.oled-static-roll {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 14vh;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,.18), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+#ks-lockscreen[data-maint="static"] .oled-static-roll {
+  opacity: 1;
+  animation: oled-static-roll 3s linear infinite;
+}
+@keyframes oled-static-roll {
+  0%   { transform: translateY(-15vh); }
+  100% { transform: translateY(100vh); }
+}
+
 /* Phase 3 — Balayage des gradients : on dynamise le mesh existant */
 #ks-lockscreen[data-maint="gradients"] .ls-mesh { animation: oled-hue 120s linear infinite; }
 #ks-lockscreen[data-maint="gradients"] .ls-blob { animation-duration: 6s !important; }

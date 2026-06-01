@@ -35,6 +35,7 @@ const K_REDUCE = 'ks_reduce_motion';
 // Total ≈ 40 min. Centralisées ici pour réglage facile / futurs paramètres avancés.
 const PHASES_DEFAULT = [
   { name: 'wash',      ms: 5  * 60000 }, // Phase 1 — Pixel Wash
+  { name: 'static',    ms: 5000 },       // Phase 1b — Détune TV (neige RGB, court)
   { name: 'noise',     ms: 10 * 60000 }, // Phase 2 — Bruit animé faible
   { name: 'gradients', ms: 10 * 60000 }, // Phase 3 — Balayage des gradients
   { name: 'orbit',     ms: 15 * 60000 }, // Phase 4 — Orbite accélérée
@@ -48,6 +49,7 @@ let _overlay     = null;
 let _maintActive = false;
 let _timers      = [];     // setTimeout des phases en cours
 let _washTimer   = null;
+let _staticTimer = null;   // Détune TV (neige)
 let _autoChecker = null;
 let _autoRanOn   = null;   // 'YYYY-MM-DD' du dernier lancement auto (anti-doublon)
 let _demoTimer   = null;   // aperçu « Voir l'effet »
@@ -142,7 +144,11 @@ function _buildMaintLayers() {
   if (!_overlay || _overlay.querySelector('.oled-maint-layer')) return;
   const layer = document.createElement('div');
   layer.className = 'oled-maint-layer';
-  layer.innerHTML = '<div class="oled-wash"></div><div class="oled-noise"></div>';
+  layer.innerHTML =
+    '<div class="oled-wash"></div>' +
+    '<div class="oled-noise"></div>' +
+    '<canvas class="oled-static" width="256" height="144"></canvas>' +
+    '<div class="oled-static-roll"></div>';
   _overlay.appendChild(layer);
 }
 
@@ -159,8 +165,14 @@ function _runPhase(phases, i) {
   _timers.push(t);
 }
 
-function _enterPhase(name) { if (name === 'wash') _startWash(); }
-function _exitPhase(name)  { if (name === 'wash') _stopWash();  }
+function _enterPhase(name) {
+  if (name === 'wash')   _startWash();
+  if (name === 'static') _startStatic();
+}
+function _exitPhase(name) {
+  if (name === 'wash')   _stopWash();
+  if (name === 'static') _stopStatic();
+}
 
 function _startWash() {
   const el = _overlay?.querySelector('.oled-wash');
@@ -175,9 +187,33 @@ function _startWash() {
 }
 function _stopWash() { clearTimeout(_washTimer); _washTimer = null; }
 
+// Phase « Détune TV » : neige re-tirée à ~15 fps sur un petit canvas étiré
+// plein écran (CSS pixelated). Luminosité MESURÉE (gris 0..200) + roll de
+// synchro en CSS. Court (~5 s) → le canvas par frame est négligeable ici.
+function _startStatic() {
+  const cv = _overlay?.querySelector('.oled-static');
+  const ctx = cv?.getContext('2d');
+  if (!ctx) return;
+  const W = cv.width, H = cv.height;
+  const draw = () => {
+    const img = ctx.createImageData(W, H);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = (Math.random() * 200) | 0;   // neige grise, luminosité mesurée
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    _staticTimer = setTimeout(draw, 66);      // ~15 fps
+  };
+  draw();
+}
+function _stopStatic() { clearTimeout(_staticTimer); _staticTimer = null; }
+
 function _finishMaintenance() {
   _maintActive = false;
   _stopWash();
+  _stopStatic();
   if (_overlay) {
     _overlay.removeAttribute('data-maint');
     _overlay.querySelector('.oled-maint-layer')?.remove();
@@ -189,6 +225,7 @@ function _abortMaintenance() {
   _timers.forEach(clearTimeout);
   _timers = [];
   _stopWash();
+  _stopStatic();
   if (_maintActive) _finishMaintenance();
   _maintActive = false;
 }

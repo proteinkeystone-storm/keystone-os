@@ -31,6 +31,9 @@ export function initLockScreen() {
     window.addEventListener('ks-oled-run-maintenance', runMaintenanceNow);
     // Bouton « Voir l'effet » — aperçu exagéré (depuis les Réglages)
     window.addEventListener('ks-oled-preview', previewOledNow);
+    // Plein écran : Échap le quitte → on déverrouille dans la foulée
+    document.addEventListener('fullscreenchange', _onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', _onFullscreenChange);
 
     // Esc — déverrouille en priorité absolue (capture phase = avant tout autre handler)
     document.addEventListener('keydown', e => {
@@ -63,6 +66,7 @@ export function unlock() {
     if (!_isLocked) return;
     _isLocked = false;
     OledProtection.stop(); // stoppe décalage + maintenance immédiatement
+    _exitFullscreen();     // quitte le plein écran si on y était
     _overlay.classList.add('ls-leaving');
 
     setTimeout(() => {
@@ -80,13 +84,52 @@ export function unlock() {
 /** Affiche l'écran de veille (si besoin) puis lance la séquence de maintenance. */
 export function runMaintenanceNow() {
     if (!_isLocked) lock();          // lock() est synchrone → _overlay prêt
+    _enterFullscreen();              // déclenché par un clic → plein écran autorisé
     OledProtection.runMaintenance({ manual: true, force: true });
 }
 
 /** Affiche l'écran de veille (si besoin) puis joue l'aperçu exagéré ~10 s. */
 export function previewOledNow() {
     if (!_isLocked) lock();
+    _enterFullscreen();
     OledProtection.previewEffect();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLEIN ÉCRAN (Fullscreen API)
+// ───────────────────────────────────────────────────────────────
+// Couvre AUSSI le chrome du navigateur (onglets, barre d'outils) que
+// l'overlay seul ne peut pas masquer. ⚠️ Le navigateur n'autorise le
+// plein écran QUE depuis un geste utilisateur → OK sur les déclenchements
+// manuels (cadenas / maintenance / aperçu), IMPOSSIBLE sur l'auto-veille.
+// ═══════════════════════════════════════════════════════════════
+function _enterFullscreen() {
+    try {
+        const el = _overlay || document.documentElement;
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!req) return;
+        const p = req.call(el);
+        if (p && p.catch) p.catch(() => {}); // refusé (pas de geste) → on ignore
+    } catch (_) { /* no-op */ }
+}
+
+function _exitFullscreen() {
+    try {
+        if (!(document.fullscreenElement || document.webkitFullscreenElement)) return;
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (!ex) return;
+        const p = ex.call(document);
+        if (p && p.catch) p.catch(() => {});
+    } catch (_) { /* no-op */ }
+}
+
+// Échap quitte d'abord le plein écran ; si on était verrouillé, on déverrouille
+// dans la foulée (sinon il faudrait un 2e Échap).
+function _onFullscreenChange() {
+    if (!(document.fullscreenElement || document.webkitFullscreenElement) && _isLocked) {
+        unlock();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -171,7 +214,8 @@ function _bindCadenas() {
     // Rendre le cadenas cliquable
     chip.style.cursor = 'pointer';
     chip.addEventListener('click', () => {
-        if (_isLocked) unlock(); else lock();
+        if (_isLocked) { unlock(); }
+        else { lock(); _enterFullscreen(); } // clic = geste → plein écran OK
     });
 
     // Mise à jour visuelle (cadenas ouvert / fermé)
