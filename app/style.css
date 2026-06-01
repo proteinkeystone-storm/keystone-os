@@ -4389,6 +4389,46 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 .sp-oled-btn:hover  { background: rgba(201,180,138,.16); border-color: rgba(201,180,138,.55); }
 .sp-oled-btn:active { transform: translateY(1px); }
 
+/* ── Aperçu « Voir l'effet » : démo exagérée et visible (~10 s) ──── */
+#ks-lockscreen[data-oled-demo="1"] .ls-center {
+  animation: oled-demo-orbit 4s ease-in-out infinite !important;
+}
+#ks-lockscreen[data-oled-demo="1"] {
+  animation: oled-demo-bright 2.4s ease-in-out infinite !important;
+}
+@keyframes oled-demo-orbit {
+  0%    { transform: translate3d(0,     0,    0); }
+  12.5% { transform: translate3d(32px, -32px, 0); }
+  25%   { transform: translate3d(45px,  0,    0); }
+  37.5% { transform: translate3d(32px,  32px, 0); }
+  50%   { transform: translate3d(0,     45px, 0); }
+  62.5% { transform: translate3d(-32px, 32px, 0); }
+  75%   { transform: translate3d(-45px, 0,    0); }
+  87.5% { transform: translate3d(-32px,-32px, 0); }
+  100%  { transform: translate3d(0,     0,    0); }
+}
+@keyframes oled-demo-bright {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(0.92); }
+}
+.oled-demo-caption {
+  position: absolute;
+  left: 50%; bottom: 9%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(201,180,138,.3);
+  color: rgba(255,255,255,.85);
+  font-size: 12px;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    SETTINGS — Section Veille : toggle · select · chips de style
    ══════════════════════════════════════════════════════════════════ */

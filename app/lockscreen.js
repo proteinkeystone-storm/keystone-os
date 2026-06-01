@@ -29,6 +29,8 @@ export function initLockScreen() {
     window.addEventListener('ks-lock-settings-changed', () => { if (_isLocked) OledProtection.applySettings(); });
     // Bouton « Lancer la maintenance maintenant » (depuis les Réglages)
     window.addEventListener('ks-oled-run-maintenance', runMaintenanceNow);
+    // Bouton « Voir l'effet » — aperçu exagéré (depuis les Réglages)
+    window.addEventListener('ks-oled-preview', previewOledNow);
 
     // Esc — déverrouille en priorité absolue (capture phase = avant tout autre handler)
     document.addEventListener('keydown', e => {
@@ -79,6 +81,12 @@ export function unlock() {
 export function runMaintenanceNow() {
     if (!_isLocked) lock();          // lock() est synchrone → _overlay prêt
     OledProtection.runMaintenance({ manual: true, force: true });
+}
+
+/** Affiche l'écran de veille (si besoin) puis joue l'aperçu exagéré ~10 s. */
+export function previewOledNow() {
+    if (!_isLocked) lock();
+    OledProtection.previewEffect();
 }
 
 // ═══════════════════════════════════════════════════════════════

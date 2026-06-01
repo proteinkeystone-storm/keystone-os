@@ -4115,6 +4115,9 @@ function _renderSettingsBody() {
                         <option value="reinforced" ${oledMode === 'reinforced' ? 'selected' : ''}>Renforcée</option>
                     </select>
                 </div>
+                <div class="sp-user-row">
+                    <button class="sp-oled-btn" id="oled-preview-run" type="button">Voir l'effet (aperçu)</button>
+                </div>
                 <div class="sp-user-row sp-row-toggle">
                     <label class="sp-user-label" for="oled-reduce-toggle">Réduire les animations</label>
                     <label class="sp-toggle-wrap">
@@ -4398,6 +4401,9 @@ function _renderSettingsBody() {
     });
     body.querySelector('#oled-maint-run')?.addEventListener('click', () => {
         window.dispatchEvent(new Event('ks-oled-run-maintenance'));
+    });
+    body.querySelector('#oled-preview-run')?.addEventListener('click', () => {
+        window.dispatchEvent(new Event('ks-oled-preview'));
     });
 
     // ── Living Layer toggle (2026-05-24, V2 2026-05-28) ──────────

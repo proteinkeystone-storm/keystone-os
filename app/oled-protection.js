@@ -50,6 +50,7 @@ let _timers      = [];     // setTimeout des phases en cours
 let _washTimer   = null;
 let _autoChecker = null;
 let _autoRanOn   = null;   // 'YYYY-MM-DD' du dernier lancement auto (anti-doublon)
+let _demoTimer   = null;   // aperçu « Voir l'effet »
 
 // ── Helpers ─────────────────────────────────────────────────────
 function _reduceMotion() {
@@ -74,6 +75,7 @@ export function start(overlay) {
 export function stop() {
   _abortMaintenance();
   _stopAutoChecker();
+  _endPreview();
   if (_overlay) {
     _overlay.removeAttribute('data-oled');
     _overlay.removeAttribute('data-oled-reduce');
@@ -107,6 +109,34 @@ export function runMaintenance(opts = {}) {
 }
 
 export function isMaintenanceActive() { return _maintActive; }
+
+// ── Aperçu « Voir l'effet » ─────────────────────────────────────
+// La vraie protection étant imperceptible (par conception), ce mode
+// joue une version VOLONTAIREMENT exagérée et rapide pendant ~10 s
+// (déplacement large + respiration lumineuse + légende), puis revient
+// au réglage réel. Sert à démontrer la fonction à soi / aux clients.
+export function previewEffect(opts = {}) {
+  if (!_overlay || _maintActive) return;
+  const ms = opts.ms || 10000;
+  let cap = _overlay.querySelector('.oled-demo-caption');
+  if (!cap) {
+    cap = document.createElement('div');
+    cap.className = 'oled-demo-caption';
+    _overlay.appendChild(cap);
+  }
+  cap.textContent = 'Aperçu accéléré (~×15) — en usage réel, le mouvement est imperceptible';
+  _overlay.dataset.oledDemo = '1';
+  clearTimeout(_demoTimer);
+  _demoTimer = setTimeout(_endPreview, ms);
+}
+
+function _endPreview() {
+  clearTimeout(_demoTimer);
+  _demoTimer = null;
+  if (!_overlay) return;
+  _overlay.removeAttribute('data-oled-demo');
+  _overlay.querySelector('.oled-demo-caption')?.remove();
+}
 
 function _buildMaintLayers() {
   if (!_overlay || _overlay.querySelector('.oled-maint-layer')) return;
@@ -195,5 +225,5 @@ async function _onPower() {
 
 // Objet pratique (utilisé par lockscreen.js).
 export const OledProtection = {
-  start, stop, applySettings, runMaintenance, isMaintenanceActive,
+  start, stop, applySettings, runMaintenance, isMaintenanceActive, previewEffect,
 };
