@@ -4015,6 +4015,9 @@ function _renderSettingsBody() {
     const lockEnabled     = localStorage.getItem('ks_lock_enabled') !== 'false';
     const lockDelay       = localStorage.getItem('ks_lock_delay')   || '300000';
     const lockStyle       = localStorage.getItem('ks_lock_style')   || 'abyss';
+    const oledMode        = localStorage.getItem('ks_oled_mode')       || 'standard';
+    const oledAuto        = localStorage.getItem('ks_oled_maint_auto') === '1';
+    const oledReduce      = localStorage.getItem('ks_reduce_motion')   === '1';
     // V2 : ON par défaut. Off uniquement si l'utilisateur l'a explicitement désactivé.
     const livingOn        = localStorage.getItem(LS_LIVING_ON) !== '0';
     const previewHTML     = savedPhoto
@@ -4104,6 +4107,32 @@ function _renderSettingsBody() {
                         </button>
                     </div>
                 </div>
+                <div class="sp-user-row">
+                    <label class="sp-user-label" for="oled-mode-select">Protection OLED (anti-marquage)</label>
+                    <select class="sp-user-input sp-select" id="oled-mode-select">
+                        <option value="off"        ${oledMode === 'off'        ? 'selected' : ''}>Désactivée</option>
+                        <option value="standard"   ${oledMode === 'standard'   ? 'selected' : ''}>Standard</option>
+                        <option value="reinforced" ${oledMode === 'reinforced' ? 'selected' : ''}>Renforcée</option>
+                    </select>
+                </div>
+                <div class="sp-user-row sp-row-toggle">
+                    <label class="sp-user-label" for="oled-reduce-toggle">Réduire les animations</label>
+                    <label class="sp-toggle-wrap">
+                        <input type="checkbox" id="oled-reduce-toggle" ${oledReduce ? 'checked' : ''}>
+                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                    </label>
+                </div>
+                <div class="sp-user-row sp-row-toggle">
+                    <label class="sp-user-label" for="oled-auto-toggle">Maintenance nocturne auto (sur secteur)</label>
+                    <label class="sp-toggle-wrap">
+                        <input type="checkbox" id="oled-auto-toggle" ${oledAuto ? 'checked' : ''}>
+                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                    </label>
+                </div>
+                <div class="sp-user-row">
+                    <button class="sp-oled-btn" id="oled-maint-run" type="button">Lancer la maintenance maintenant</button>
+                </div>
+                <div class="sp-user-hint">Protection OLED : déplace très lentement — et de façon imperceptible — l'heure, la date et le logo pour répartir l'usure des pixels (utile surtout sur écrans OLED en affichage prolongé). La maintenance joue une séquence préventive (~40 min) ; lancée à la main, elle s'arrête avec Échap. L'auto nocturne ne se déclenche que sur secteur.</div>
                 <div class="sp-user-hint">L'écran de veille se déclenche après une période d'inactivité. Cliquez ou appuyez sur Échap pour déverrouiller.</div>
             </div>`,
         },
@@ -4352,6 +4381,23 @@ function _renderSettingsBody() {
             localStorage.setItem('ks_lock_style', card.dataset.style);
             window.dispatchEvent(new Event('ks-lock-settings-changed'));
         });
+    });
+
+    // ── Protection OLED (anti burn-in) ───────────────────────────
+    body.querySelector('#oled-mode-select')?.addEventListener('change', e => {
+        localStorage.setItem('ks_oled_mode', e.target.value);
+        window.dispatchEvent(new Event('ks-lock-settings-changed'));
+    });
+    body.querySelector('#oled-reduce-toggle')?.addEventListener('change', e => {
+        localStorage.setItem('ks_reduce_motion', e.target.checked ? '1' : '0');
+        window.dispatchEvent(new Event('ks-lock-settings-changed'));
+    });
+    body.querySelector('#oled-auto-toggle')?.addEventListener('change', e => {
+        localStorage.setItem('ks_oled_maint_auto', e.target.checked ? '1' : '0');
+        window.dispatchEvent(new Event('ks-lock-settings-changed'));
+    });
+    body.querySelector('#oled-maint-run')?.addEventListener('click', () => {
+        window.dispatchEvent(new Event('ks-oled-run-maintenance'));
     });
 
     // ── Living Layer toggle (2026-05-24, V2 2026-05-28) ──────────

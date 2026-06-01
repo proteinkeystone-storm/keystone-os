@@ -3,6 +3,8 @@
    Mesh gradients animés · Horloge Apple · Auto-veille configurable
    ═══════════════════════════════════════════════════════════════ */
 
+import { OledProtection } from './oled-protection.js';
+
 const LS_LOCK_ENABLED = 'ks_lock_enabled';
 const LS_LOCK_DELAY   = 'ks_lock_delay';    // ms  (0 = jamais)
 const LS_LOCK_STYLE   = 'ks_lock_style';    // 'abyss' | 'golden-flow' | 'nebula' | 'obsidian'
@@ -23,6 +25,10 @@ export function initLockScreen() {
 
     // Rafraîchir les paramètres si Settings les modifie
     window.addEventListener('ks-lock-settings-changed', _applyAutoLockSettings);
+    // Appliquer à chaud les réglages OLED si l'écran de veille est affiché
+    window.addEventListener('ks-lock-settings-changed', () => { if (_isLocked) OledProtection.applySettings(); });
+    // Bouton « Lancer la maintenance maintenant » (depuis les Réglages)
+    window.addEventListener('ks-oled-run-maintenance', runMaintenanceNow);
 
     // Esc — déverrouille en priorité absolue (capture phase = avant tout autre handler)
     document.addEventListener('keydown', e => {
@@ -47,12 +53,14 @@ export function lock() {
     _overlay.classList.add('ls-visible');
     document.body.style.overflow = 'hidden';
     _startClock();
+    OledProtection.start(_overlay); // protection OLED (décalage + maintenance)
     _resetIdleTimer(); // réarme pendant l'écran actif pour info
 }
 
 export function unlock() {
     if (!_isLocked) return;
     _isLocked = false;
+    OledProtection.stop(); // stoppe décalage + maintenance immédiatement
     _overlay.classList.add('ls-leaving');
 
     setTimeout(() => {
@@ -62,6 +70,15 @@ export function unlock() {
 
     _stopClock();
     _resetIdleTimer(); // repart depuis zéro en mode actif
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAINTENANCE OLED — lancement manuel
+// ═══════════════════════════════════════════════════════════════
+/** Affiche l'écran de veille (si besoin) puis lance la séquence de maintenance. */
+export function runMaintenanceNow() {
+    if (!_isLocked) lock();          // lock() est synchrone → _overlay prêt
+    OledProtection.runMaintenance({ manual: true, force: true });
 }
 
 // ═══════════════════════════════════════════════════════════════

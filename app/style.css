@@ -4251,6 +4251,145 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   PROTECTION & MAINTENANCE OLED — v1.0 (2026-06-01)
+   Anti burn-in : décalage imperceptible du bloc central + maintenance.
+   100% transform / filter (GPU). Pilotage : app/oled-protection.js.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Décalage Standard : orbite ~20 min, amplitude ±3 px ──────────── */
+#ks-lockscreen[data-oled="standard"] .ls-center {
+  animation: oled-orbit-std 1200s ease-in-out infinite;
+}
+/* ── Décalage Renforcé : orbite ~25 min, ±6 px + luminosité ±2 % ──── */
+#ks-lockscreen[data-oled="reinforced"] .ls-center {
+  animation: oled-orbit-rein 1500s ease-in-out infinite;
+}
+#ks-lockscreen[data-oled="reinforced"] {
+  animation: oled-bright 240s ease-in-out infinite;
+}
+/* ── « Réduire les animations » : protection minimale (±1.5 px) ───── */
+#ks-lockscreen[data-oled-reduce="1"] .ls-center {
+  animation: oled-orbit-min 1800s linear infinite !important;
+}
+#ks-lockscreen[data-oled-reduce="1"] { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #ks-lockscreen[data-oled] .ls-center { animation: oled-orbit-min 1800s linear infinite; }
+  #ks-lockscreen[data-oled]            { animation: none; }
+}
+
+@keyframes oled-orbit-std {
+  0%    { transform: translate3d(0px,   0px,  0); }
+  12.5% { transform: translate3d(2px,  -2px,  0); }
+  25%   { transform: translate3d(3px,   1px,  0); }
+  37.5% { transform: translate3d(2px,   3px,  0); }
+  50%   { transform: translate3d(0px,   3px,  0); }
+  62.5% { transform: translate3d(-2px,  2px,  0); }
+  75%   { transform: translate3d(-3px, -1px,  0); }
+  87.5% { transform: translate3d(-2px, -3px,  0); }
+  100%  { transform: translate3d(0px,   0px,  0); }
+}
+@keyframes oled-orbit-rein {
+  0%    { transform: translate3d(0px,   0px,  0); }
+  12.5% { transform: translate3d(4px,  -4px,  0); }
+  25%   { transform: translate3d(6px,   2px,  0); }
+  37.5% { transform: translate3d(4px,   6px,  0); }
+  50%   { transform: translate3d(0px,   7px,  0); }
+  62.5% { transform: translate3d(-4px,  4px,  0); }
+  75%   { transform: translate3d(-6px, -2px,  0); }
+  87.5% { transform: translate3d(-4px, -6px,  0); }
+  100%  { transform: translate3d(0px,   0px,  0); }
+}
+@keyframes oled-orbit-min {
+  0%   { transform: translate3d(0px,    0px,  0); }
+  25%  { transform: translate3d(1.5px,  1px,  0); }
+  50%  { transform: translate3d(0px,    1.5px,0); }
+  75%  { transform: translate3d(-1.5px, 1px,  0); }
+  100% { transform: translate3d(0px,    0px,  0); }
+}
+@keyframes oled-bright {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(0.98); }
+}
+
+/* ── Maintenance : calques plein écran ────────────────────────────── */
+.oled-maint-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;            /* au-dessus du mesh (1) et du bloc central (2) */
+  pointer-events: none;
+}
+.oled-wash, .oled-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.5s ease, background-color 1.5s ease;
+}
+/* Phase 1 — Pixel Wash : aplats de couleur, fondus (couleur posée en JS) */
+#ks-lockscreen[data-maint="wash"]  .oled-wash { opacity: 1; }
+/* On masque l'horloge pendant les phases plein écran (1 et 2) */
+#ks-lockscreen[data-maint="wash"]  .ls-center,
+#ks-lockscreen[data-maint="noise"] .ls-center { opacity: 0; transition: opacity 1s ease; }
+
+/* Phase 2 — Bruit animé faible : turbulence SVG tuilée, sombre, dérivante */
+.oled-noise {
+  background-color: #02030a;       /* quasi noir : limite l'usure */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='o'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23o)' opacity='0.45'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+#ks-lockscreen[data-maint="noise"] .oled-noise {
+  opacity: 0.85;
+  animation: oled-noise-drift 7s steps(8, end) infinite;
+}
+@keyframes oled-noise-drift {
+  0%   { transform: translate3d(0,    0,    0); }
+  25%  { transform: translate3d(-40px, 20px, 0); }
+  50%  { transform: translate3d(30px, -30px, 0); }
+  75%  { transform: translate3d(-20px,-15px, 0); }
+  100% { transform: translate3d(0,    0,    0); }
+}
+
+/* Phase 3 — Balayage des gradients : on dynamise le mesh existant */
+#ks-lockscreen[data-maint="gradients"] .ls-mesh { animation: oled-hue 120s linear infinite; }
+#ks-lockscreen[data-maint="gradients"] .ls-blob { animation-duration: 6s !important; }
+@keyframes oled-hue {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50%      { filter: hue-rotate(25deg); }
+}
+
+/* Phase 4 — Orbite accélérée : déplacement large du bloc central (±20–40 px) */
+#ks-lockscreen[data-maint="orbit"] .ls-center {
+  animation: oled-orbit-maint 24s ease-in-out infinite !important;
+}
+@keyframes oled-orbit-maint {
+  0%   { transform: translate3d(0,     0,    0); }
+  20%  { transform: translate3d(30px, -20px, 0); }
+  40%  { transform: translate3d(40px,  25px, 0); }
+  60%  { transform: translate3d(-25px, 35px, 0); }
+  80%  { transform: translate3d(-35px,-25px, 0); }
+  100% { transform: translate3d(0,     0,    0); }
+}
+
+/* Bouton « Lancer la maintenance » dans les Réglages */
+.sp-oled-btn {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(201,180,138,.35);
+  background: rgba(201,180,138,.08);
+  color: var(--gold);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+.sp-oled-btn:hover  { background: rgba(201,180,138,.16); border-color: rgba(201,180,138,.55); }
+.sp-oled-btn:active { transform: translateY(1px); }
+
+/* ══════════════════════════════════════════════════════════════════
    SETTINGS — Section Veille : toggle · select · chips de style
    ══════════════════════════════════════════════════════════════════ */
 
