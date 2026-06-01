@@ -149,7 +149,7 @@ function _buildMaintLayers() {
   layer.innerHTML =
     '<div class="oled-wash"></div>' +
     '<div class="oled-noise"></div>' +
-    '<canvas class="oled-static" width="256" height="144"></canvas>' +
+    '<canvas class="oled-static" width="480" height="270"></canvas>' +
     '<div class="oled-static-roll"></div>';
   _overlay.appendChild(layer);
 }
@@ -189,10 +189,10 @@ function _startWash() {
 }
 function _stopWash() { clearTimeout(_washTimer); _washTimer = null; }
 
-// Phase « Détune TV » : neige TV PLEIN CONTRASTE re-tirée à ~20 fps sur un petit
-// canvas étiré plein écran (CSS pixelated) — gris 0..255 + ~12 % de grésil coloré
-// (look analogique) + roll de synchro CSS. Court (~6 s), après les couleurs.
-// (Pas de flash plein champ → reste sûr : neige spatiale, pas un strobe.)
+// Phase « Détune TV » : neige TV façon « neige sur TV HD » (réfs YouTube de Stéphane)
+// — surtout N&B, plein contraste 0..255 (+ ~4 % de rares grésils colorés), re-tirée à
+// ~30 fps pour l'effet « qui bout », canvas 480×270 étiré plein écran (CSS pixelated)
+// + roll de synchro CSS. Court (~6 s), après les couleurs. (Neige spatiale, pas de strobe.)
 function _startStatic() {
   const cv = _overlay?.querySelector('.oled-static');
   const ctx = cv?.getContext('2d');
@@ -202,18 +202,18 @@ function _startStatic() {
     const img = ctx.createImageData(W, H);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
-      if (Math.random() < 0.12) {                 // ~12 % : grésil coloré
+      const v = (Math.random() * 255) | 0;         // neige grise plein contraste (N&B)
+      if (Math.random() < 0.04) {                  // ~4 % : rare grésil coloré (analogique)
         d[i]     = (Math.random() * 255) | 0;
         d[i + 1] = (Math.random() * 255) | 0;
         d[i + 2] = (Math.random() * 255) | 0;
-      } else {                                     // sinon neige grise plein contraste
-        const v = (Math.random() * 255) | 0;
+      } else {
         d[i] = d[i + 1] = d[i + 2] = v;
       }
       d[i + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
-    _staticTimer = setTimeout(draw, 50);          // ~20 fps (neige vive)
+    _staticTimer = setTimeout(draw, 33);           // ~30 fps (neige qui « bout »)
   };
   draw();
 }
