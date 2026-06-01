@@ -4118,19 +4118,21 @@ function _renderSettingsBody() {
                 <div class="sp-user-row">
                     <button class="sp-oled-btn" id="oled-preview-run" type="button">Voir l'effet (aperçu)</button>
                 </div>
-                <div class="sp-user-row sp-row-toggle">
-                    <label class="sp-user-label" for="oled-reduce-toggle">Réduire les animations</label>
-                    <label class="sp-toggle-wrap">
-                        <input type="checkbox" id="oled-reduce-toggle" ${oledReduce ? 'checked' : ''}>
-                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
-                    </label>
-                </div>
-                <div class="sp-user-row sp-row-toggle">
-                    <label class="sp-user-label" for="oled-auto-toggle">Maintenance nocturne auto (sur secteur)</label>
-                    <label class="sp-toggle-wrap">
-                        <input type="checkbox" id="oled-auto-toggle" ${oledAuto ? 'checked' : ''}>
-                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
-                    </label>
+                <div class="sp-oled-card">
+                    <div class="sp-oled-card-row">
+                        <label class="sp-user-label" for="oled-reduce-toggle">Réduire les animations</label>
+                        <label class="sp-toggle-wrap">
+                            <input type="checkbox" id="oled-reduce-toggle" ${oledReduce ? 'checked' : ''}>
+                            <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                        </label>
+                    </div>
+                    <div class="sp-oled-card-row">
+                        <label class="sp-user-label" for="oled-auto-toggle">Maintenance nocturne auto (sur secteur)</label>
+                        <label class="sp-toggle-wrap">
+                            <input type="checkbox" id="oled-auto-toggle" ${oledAuto ? 'checked' : ''}>
+                            <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                        </label>
+                    </div>
                 </div>
                 <div class="sp-user-row">
                     <button class="sp-oled-btn" id="oled-maint-run" type="button">Lancer la maintenance maintenant</button>

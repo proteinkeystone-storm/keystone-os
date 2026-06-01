@@ -4402,6 +4402,23 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 .sp-oled-btn:hover  { background: rgba(201,180,138,.16); border-color: rgba(201,180,138,.55); }
 .sp-oled-btn:active { transform: translateY(1px); }
 
+/* Carte regroupant les toggles OLED (même style que .sp-oled-btn) — sobre + compact */
+.sp-oled-card {
+  border: 1px solid rgba(201,180,138,.35);
+  background: rgba(201,180,138,.08);
+  border-radius: 10px;
+  padding: 2px 14px;
+}
+.sp-oled-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 2px;
+}
+.sp-oled-card-row + .sp-oled-card-row { border-top: 1px solid rgba(255,255,255,.07); }
+.sp-oled-card-row .sp-user-label { margin: 0; }
+
 /* ── Aperçu « Voir l'effet » : démo exagérée et visible (~10 s) ──── */
 #ks-lockscreen[data-oled-demo="1"] .ls-center {
   animation: oled-demo-orbit 4s ease-in-out infinite !important;
