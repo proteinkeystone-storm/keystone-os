@@ -4362,23 +4362,6 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
 }
 #ks-lockscreen[data-maint="static"] .oled-static { opacity: 1; }
 #ks-lockscreen[data-maint="static"] .ls-center  { opacity: 0; transition: opacity .6s ease; }
-.oled-static-roll {
-  position: absolute;
-  left: 0; right: 0; top: 0;
-  height: 18vh;
-  background: linear-gradient(to bottom, transparent, rgba(255,255,255,.38), transparent);
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform;
-}
-#ks-lockscreen[data-maint="static"] .oled-static-roll {
-  opacity: 1;
-  animation: oled-static-roll 2.2s linear infinite;
-}
-@keyframes oled-static-roll {
-  0%   { transform: translateY(-15vh); }
-  100% { transform: translateY(100vh); }
-}
 
 /* Phase 3 — Balayage des gradients : on dynamise le mesh existant */
 #ks-lockscreen[data-maint="gradients"] .ls-mesh { animation: oled-hue 120s linear infinite; }

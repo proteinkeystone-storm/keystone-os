@@ -51,7 +51,7 @@ let _overlay     = null;
 let _maintActive = false;
 let _timers      = [];     // setTimeout des phases en cours
 let _washTimer   = null;
-let _staticTimer = null;   // Détune TV (neige)
+let _staticRAF   = null;   // Détune TV (neige, requestAnimationFrame)
 let _autoChecker = null;
 let _autoRanOn   = null;   // 'YYYY-MM-DD' du dernier lancement auto (anti-doublon)
 let _demoTimer   = null;   // aperçu « Voir l'effet »
@@ -149,8 +149,7 @@ function _buildMaintLayers() {
   layer.innerHTML =
     '<div class="oled-wash"></div>' +
     '<div class="oled-noise"></div>' +
-    '<canvas class="oled-static" width="480" height="270"></canvas>' +
-    '<div class="oled-static-roll"></div>';
+    '<canvas class="oled-static"></canvas>';
   _overlay.appendChild(layer);
 }
 
@@ -189,35 +188,35 @@ function _startWash() {
 }
 function _stopWash() { clearTimeout(_washTimer); _washTimer = null; }
 
-// Phase « Détune TV » : neige TV façon « neige sur TV HD » (réfs YouTube de Stéphane)
-// — surtout N&B, plein contraste 0..255 (+ ~4 % de rares grésils colorés), re-tirée à
-// ~30 fps pour l'effet « qui bout », canvas 480×270 étiré plein écran (CSS pixelated)
-// + roll de synchro CSS. Court (~6 s), après les couleurs. (Neige spatiale, pas de strobe.)
+// Phase « Détune TV » : neige TV façon « neige sur TV HD » (réfs YouTube de Stéphane).
+// Grain TRÈS FIN (canvas ~résolution écran, plafonné 1920 large) + TRÈS ACTIF
+// (requestAnimationFrame ~60 fps), N&B plein contraste. PRNG xorshift32 (rapide) pour
+// tenir la cadence même en grand. Court (~6 s), après les couleurs. Pas de strobe plein champ.
 function _startStatic() {
   const cv = _overlay?.querySelector('.oled-static');
   const ctx = cv?.getContext('2d');
   if (!ctx) return;
-  const W = cv.width, H = cv.height;
+  // Canvas ~ taille viewport → grain fin (plafonné à 1920 de large pour la perf).
+  const cw = _overlay.clientWidth  || 1280;
+  const ch = _overlay.clientHeight || 720;
+  const scale = Math.min(1, 1920 / cw);
+  cv.width  = Math.max(2, Math.round(cw * scale));
+  cv.height = Math.max(2, Math.round(ch * scale));
+  const img = ctx.createImageData(cv.width, cv.height);
+  const buf = new Uint32Array(img.data.buffer);   // 1 pixel = 1 entier 32 bits
+  let s = ((Math.random() * 0xffffffff) | 0) || 1; // graine xorshift (jamais 0)
   const draw = () => {
-    const img = ctx.createImageData(W, H);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = (Math.random() * 255) | 0;         // neige grise plein contraste (N&B)
-      if (Math.random() < 0.04) {                  // ~4 % : rare grésil coloré (analogique)
-        d[i]     = (Math.random() * 255) | 0;
-        d[i + 1] = (Math.random() * 255) | 0;
-        d[i + 2] = (Math.random() * 255) | 0;
-      } else {
-        d[i] = d[i + 1] = d[i + 2] = v;
-      }
-      d[i + 3] = 255;
+    for (let i = 0; i < buf.length; i++) {
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;            // xorshift32
+      const v = s & 0xff;                                   // niveau de gris (N&B)
+      buf[i] = (0xff << 24) | (v << 16) | (v << 8) | v;     // pixel opaque (R=G=B=v)
     }
     ctx.putImageData(img, 0, 0);
-    _staticTimer = setTimeout(draw, 33);           // ~30 fps (neige qui « bout »)
+    _staticRAF = requestAnimationFrame(draw);               // ~60 fps = très actif
   };
   draw();
 }
-function _stopStatic() { clearTimeout(_staticTimer); _staticTimer = null; }
+function _stopStatic() { if (_staticRAF) cancelAnimationFrame(_staticRAF); _staticRAF = null; }
 
 function _finishMaintenance() {
   _maintActive = false;
