@@ -1741,12 +1741,20 @@ async function renderCatalog(panel) {
         ? '<span style="color:#34d399;font-size:11px">● Complétée</span>'
         : '<span style="color:#f59e0b;font-size:11px">○ À compléter</span>';
 
+      // Outil retiré (fusionné/remplacé) : grisé + badge, pour ne pas éditer
+      // par erreur une fiche qui n'apparaîtra jamais dans le Key-Store.
+      const isRetired = !!item.replacedBy;
+      const replTitle = isRetired
+        ? (items.find(t => t.id === item.replacedBy)?.title || item.replacedBy)
+        : '';
+
       const tr = document.createElement('tr');
+      if (isRetired) { tr.style.opacity = '.5'; tr.style.background = 'rgba(245,158,11,.05)'; }
       tr.innerHTML = `
         <td><code style="font-size:11px;color:var(--gold)">${esc(item.id)}</code></td>
         <td><input data-idx="${idx}" data-field="title" type="text" class="form-input" value="${esc(item.title||'')}"
                    style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:200px"
-                   onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+                   onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'">${isRetired ? `<div style="font-size:10.5px;color:#f59e0b;margin-top:3px;white-space:nowrap">↳ retiré · remplacé par ${esc(replTitle)}</div>` : ''}</td>
         <td><select data-idx="${idx}" data-field="plan" class="form-select" style="padding:4px 8px;font-size:12px;width:auto">
           ${['STARTER','PRO','MAX'].map(p=>`<option ${item.plan===p?'selected':''}>${p}</option>`).join('')}
         </select></td>
@@ -1774,7 +1782,15 @@ async function renderCatalog(panel) {
       });
     });
     panel.querySelectorAll('.btn-ks-fiche').forEach(btn => {
-      btn.addEventListener('click', () => openKStoreFicheEditor(+btn.dataset.idx, panel));
+      btn.addEventListener('click', () => {
+        const idx = +btn.dataset.idx;
+        const it  = catalogData.tools[idx];
+        if (it?.replacedBy) {
+          const repl = catalogData.tools.find(t => t.id === it.replacedBy)?.title || it.replacedBy;
+          if (!confirm(`« ${it.title} » est un outil RETIRÉ (remplacé par « ${repl} »).\n\nIl n'apparaît pas dans le Key-Store, même si tu y ajoutes une image. Édite plutôt « ${repl} ».\n\nOuvrir quand même cette fiche retirée ?`)) return;
+        }
+        openKStoreFicheEditor(idx, panel);
+      });
     });
     panel.querySelector('#btn-new-app').addEventListener('click', () => createNewKStoreApp(panel));
     panel.querySelector('#btn-save-catalog').addEventListener('click', () => saveCatalog(panel));
