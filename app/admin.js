@@ -321,7 +321,9 @@ const TAB_RENDERERS = {
   tools:      renderTools,
   catalog:    renderCatalog,
   promos:     renderPromos,        // À la une — éditeur des bandeaux du hero Key-Store (2026-05-29)
-  messaging:  renderMessaging,
+  // messaging : onglet retiré le 2026-06-01 — éclipsé par le Living Layer (même
+  // ligne #hero-dst, masquée quand le V2 est ON, càd par défaut). renderMessaging
+  // conservé (non câblé) pour réversibilité ; backend /api/admin/messages intact.
   living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
   budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
   monitoring: renderMonitoring,
@@ -3747,8 +3749,10 @@ async function renderSettings(panel) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// TAB — MESSAGERIE
-// Push de messages dans la zone DST du dashboard client
+// TAB — MESSAGERIE  ⚠️ DÉSACTIVÉ 2026-06-01 (onglet retiré, fonction non câblée)
+// Push de messages dans la zone DST du dashboard client.
+// Éclipsé par le Living Layer V2 (même ligne sous "Bonjour, X" ; le DST est masqué
+// quand le V2 est ON, càd par défaut). Conservé pour réversibilité — backend intact.
 // ══════════════════════════════════════════════════════════════════
 async function renderMessaging(panel) {
   try {
