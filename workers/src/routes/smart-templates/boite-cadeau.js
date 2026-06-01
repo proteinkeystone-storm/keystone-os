@@ -2,8 +2,8 @@
 // KEYSTONE OS — Smart Template · boite-cadeau (V4.2)
 // ───────────────────────────────────────────────────────────────────
 // Boîte cadeau 3D : ruban + couvercle qui s'ouvre au tap, explosion de
-// paillettes, reveal du code promo + phrase IA contextualisée par
-// l'occasion (anniversaire, Noël, Saint-Valentin, etc.).
+// paillettes, reveal du code promo + titre/message personnalisés saisis
+// par le commerçant (l'occasion s'affiche en sous-titre).
 //
 // Pas d'état serveur (anonyme). Le code promo est figé côté commerçant
 // et identique pour tous les scanneurs (contrairement aux jeux V4.3 où
@@ -14,7 +14,7 @@
 //   user tap  vibrate + ruban s'évade + couvercle rotateX 3D
 //   T+1s     paillettes explosion
 //   T+1.4s   reveal code promo + valeur + validité
-//   T+2.5s   phrase IA arrive (contextualisée par l'occasion)
+//   T+2.5s   titre + message du commerçant arrivent en fondu
 //
 // Cf. BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md § "7. Boîte cadeau"
 // ══════════════════════════════════════════════════════════════════
@@ -156,6 +156,15 @@ const TEMPLATE = {
   @keyframes gift-idle {
     0%, 100% { transform: translateY(0)    rotate(-1deg); }
     50%      { transform: translateY(-6px) rotate(1deg); }
+  }
+
+  /* Animation Lottie auto-hébergée (V4.7) — affichée si le moteur charge.
+     Sinon la boîte CSS ci-dessous reste visible (filet de sécurité). */
+  .sq-lottie { display: none; width: 210px; height: 210px; margin: 6px auto 0; }
+  .sq-gift-stage.lottie-ready .sq-lottie { display: block; }
+  .sq-gift-stage.lottie-ready .sq-gift-fallback { display: none; }
+  body:not(.is-open) .sq-gift-stage.lottie-ready .sq-lottie {
+    animation: gift-idle 2.8s ease-in-out infinite;
   }
 
   /* Base de la boîte */
@@ -389,13 +398,16 @@ const TEMPLATE = {
   ${occasion ? `<p class="sq-occasion">${occasion}</p>` : ''}
 
   <div class="sq-gift-stage" id="sq-gift-stage" role="button" tabindex="0" aria-label="Ouvrir la boîte cadeau">
-    <div class="sq-sparkles" id="sq-sparkles" aria-hidden="true"></div>
-    <div class="sq-gift">
-      <div class="sq-gift-base"></div>
-      <div class="sq-gift-lid"></div>
-      <div class="sq-gift-ribbon-h"></div>
-      <div class="sq-gift-ribbon-v"></div>
-      <div class="sq-gift-knot"></div>
+    <div class="sq-lottie" id="sq-lottie" aria-hidden="true"></div>
+    <div class="sq-gift-fallback" id="sq-gift-fallback">
+      <div class="sq-sparkles" id="sq-sparkles" aria-hidden="true"></div>
+      <div class="sq-gift">
+        <div class="sq-gift-base"></div>
+        <div class="sq-gift-lid"></div>
+        <div class="sq-gift-ribbon-h"></div>
+        <div class="sq-gift-ribbon-v"></div>
+        <div class="sq-gift-knot"></div>
+      </div>
     </div>
   </div>
   <p class="sq-gift-hint">Tape pour ouvrir ↑</p>
@@ -426,6 +438,7 @@ const TEMPLATE = {
   ${renderKeystoneFoot()}
 </div>
 
+<script src="/sdqr-assets/lottie.min.js"></script>
 <script>
 (() => {
   const PROMO = ${JSON.stringify(codePromo)};
@@ -433,9 +446,28 @@ const TEMPLATE = {
   const stage = el('sq-gift-stage');
   const sparkles = el('sq-sparkles');
   const copyBtn = el('sq-copy-btn');
+  const mount = el('sq-lottie');
 
   function vibrate(p) {
     try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {}
+  }
+
+  // Lottie auto-hébergé (même origine). Si le moteur a chargé, on bascule
+  // sur l'animation vectorielle ; sinon la boîte CSS reste (filet de sécurité).
+  let anim = null;
+  if (window.lottie && mount) {
+    try {
+      anim = lottie.loadAnimation({
+        container: mount, renderer: 'svg', loop: false, autoplay: false,
+        path: '/sdqr-assets/gift-box.json',
+        rendererSettings: { progressiveLoad: false },
+      });
+      anim.addEventListener('DOMLoaded', () => {
+        stage.classList.add('lottie-ready');
+        try { anim.goToAndStop(0, true); } catch (e) {}
+      });
+      anim.addEventListener('data_failed', () => { anim = null; });
+    } catch (e) { anim = null; }
   }
 
   // Construit les paillettes : 18 particules avec --dx/--dy aléatoires
@@ -459,8 +491,11 @@ const TEMPLATE = {
   function openBox() {
     if (opened) return;
     opened = true;
-    document.body.classList.add('is-open');
     vibrate([60, 40, 90]);
+    if (anim && stage.classList.contains('lottie-ready')) {
+      try { anim.goToAndStop(0, true); anim.play(); } catch (e) {}
+    }
+    document.body.classList.add('is-open');
   }
   stage.addEventListener('click', openBox);
   stage.addEventListener('keydown', (e) => {

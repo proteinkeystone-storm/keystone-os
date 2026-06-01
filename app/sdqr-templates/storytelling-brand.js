@@ -9,7 +9,7 @@
 const TEMPLATE = {
   id:              'storytelling-brand',
   label:           'Storytelling Brand',
-  description:     'Séquence motion graphics 3 actes (logo, slogan, visuel) + climax IA. Idéal première rencontre avec une marque.',
+  description:     'Séquence motion graphics 3 actes (logo, slogan, visuel). Idéal première rencontre avec une marque.',
   icon:            '🎬',
   tier_required:   'pro',
 

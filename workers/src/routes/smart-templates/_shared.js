@@ -70,11 +70,11 @@ export function safeDate(d) {
 
 /**
  * Fragment HTML standard à insérer en fin de card : mention discrète
- * "Contenu généré contextuellement par Keystone" + lien vie privée.
+ * "Propulsé par Keystone Smart QR" + lien vie privée.
  * Tous les templates V4 doivent l'afficher (cohérence + Soleau).
  */
 export function renderKeystoneFoot() {
-  return `<p class="sq-foot">Contenu généré contextuellement par Keystone · <a href="/sdqr-privacy">Vie privée</a></p>`;
+  return `<p class="sq-foot">Propulsé par Keystone Smart QR · <a href="/sdqr-privacy">Vie privée</a></p>`;
 }
 
 /**

@@ -9,7 +9,7 @@
 const TEMPLATE = {
   id:              'boite-cadeau',
   label:           'Boîte cadeau',
-  description:     'Boîte 3D qui s\'ouvre au tap, paillettes, reveal du code promo + phrase IA selon l\'occasion.',
+  description:     'Boîte 3D qui s\'ouvre au tap, paillettes dorées, reveal du code promo + ton message personnalisé.',
   icon:            '🎁',
   tier_required:   'pro',
 
@@ -20,7 +20,7 @@ const TEMPLATE = {
     },
     {
       id: 'occasion', type: 'text',
-      label: 'Occasion (sert à briefer l\'IA — anniversaire, Noël, Saint-Valentin…)',
+      label: 'Occasion (affichée en sous-titre — anniversaire, Noël, Saint-Valentin…)',
       placeholder: 'Ex: Saint Valentin',
       span: 'full',
     },

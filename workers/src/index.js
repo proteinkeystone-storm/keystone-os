@@ -60,6 +60,7 @@ import {
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
+import { handleSdqrAsset } from './routes/sdqr-assets.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -289,6 +290,12 @@ export default {
       if (path.startsWith('/api/pulsa/responses/') && method === 'PATCH') {
         const rid = path.split('/').pop();
         return handlePulsaResponsePatch(request, env, rid);
+      }
+
+      // ── SDQR — Assets statiques auto-hébergés (moteur Lottie + animations)
+      // Servis même-origine que l'interstitiel, cache long immuable.
+      if (path.startsWith('/sdqr-assets/') && (method === 'GET' || method === 'HEAD')) {
+        return handleSdqrAsset(path);
       }
 
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
