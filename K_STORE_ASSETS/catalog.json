@@ -1,6 +1,6 @@
 {
-  "version": "1.3",
-  "updatedAt": "2026-05-22",
+  "version": "1.4",
+  "updatedAt": "2026-06-02",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -198,6 +198,30 @@
         "synthese",
         "reflexion",
         "strategie"
+      ]
+    },
+    {
+      "id": "A-COM-005",
+      "padKey": null,
+      "title": "Ghost Writer",
+      "subtitle": "Réécrire vos emails et textes · 3 variantes calibrées · Gemma 4",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Ghost Writer réécrit vos emails, messages et textes courts en trois variantes calibrées, prêtes à copier. Choisissez le contexte (email professionnel, message commercial, réponse client, post réseaux sociaux) et les critères de ton (concision, formalité, chaleur, persuasion, clarté) : le service produit trois versions distinctes que vous comparez d'un coup d'œil et collez en un clic. Disponible partout via un raccourci global et intégré nativement dans les ateliers compatibles. Moteur serveur quasi-gratuit par défaut, ou branchez votre propre clé (Claude, GPT, Mistral, Gemini, Grok…) pour les textes les plus exigeants.",
+      "icon": "ghostwriter",
+      "ai_optimized": "Gemma 4",
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "reecriture",
+        "copywriting",
+        "email",
+        "communication",
+        "ghostwriter",
+        "gemma"
       ]
     }
   ]
