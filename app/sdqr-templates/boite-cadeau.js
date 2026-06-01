@@ -73,14 +73,24 @@ const TEMPLATE = {
     return occ ? `Boîte cadeau « ${nom} » — ${occ}` : `Boîte cadeau « ${nom} »`;
   },
 
-  // Mini-preview animée : boîte cadeau qui shake doucement, ruban + noeud
+  // Mini-preview : boîte cadeau SVG aux couleurs de l'animation Lottie
+  // (corps violet, ruban + nœud vert) qui flotte doucement. Plafonnée via
+  // .sq-mini-gift (style.css) → ne s'étire plus quand la carte est sélectionnée.
   previewMini() {
-    return `<div class="sq-mini-gift">
-      <div class="sq-mini-gift-box"></div>
-      <div class="sq-mini-gift-ribbon-h"></div>
-      <div class="sq-mini-gift-ribbon-v"></div>
-      <div class="sq-mini-gift-knot"></div>
-    </div>`;
+    return `<div class="sq-mini-gift"><svg viewBox="0 0 120 122" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="gbx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b3f86"/><stop offset="1" stop-color="#352a63"/></linearGradient>
+        <linearGradient id="grb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#93d654"/><stop offset="1" stop-color="#5fa12f"/></linearGradient>
+      </defs>
+      <rect x="27" y="55" width="66" height="56" rx="5" fill="url(#gbx)"/>
+      <rect x="53" y="55" width="14" height="56" fill="url(#grb)"/>
+      <rect x="19" y="43" width="82" height="17" rx="4" fill="#574a96"/>
+      <rect x="53" y="43" width="14" height="17" fill="url(#grb)"/>
+      <path d="M60 41 C 60 30 52 22 44 25 C 38 27 39 36 47 39 C 52 41 56 41 60 41 Z" fill="url(#grb)"/>
+      <path d="M60 41 C 60 30 68 22 76 25 C 82 27 81 36 73 39 C 68 41 64 41 60 41 Z" fill="url(#grb)"/>
+      <path d="M55 40 L51 51 L60 47 L69 51 L65 40 Z" fill="#5fa12f"/>
+      <circle cx="60" cy="37" r="6" fill="#7cc23f"/>
+    </svg></div>`;
   },
 };
 
