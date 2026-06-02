@@ -229,7 +229,7 @@ function _buildShell() {
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
         <button class="ws-iconbtn" data-act="library" title="Bibliothèque (${_loadLibrary().length} entrées)" aria-label="Ouvrir la bibliothèque">
-          ${icon('bookmark', 18)}
+          ${icon('library', 18)}
         </button>
         <button class="ws-iconbtn" data-act="reset" title="Effacer tout et recommencer" aria-label="Réinitialiser">
           ${icon('refresh', 18)}
