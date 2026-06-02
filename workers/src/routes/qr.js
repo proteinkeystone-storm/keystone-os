@@ -27,7 +27,8 @@ import { buildConciergePrompt, conciergeTokenMap } from './smart-templates/conci
 import { buildConciergeBlockFromVefa, buildConciergeBlockFromKeyform } from './smart-templates/concierge-schema.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
-import { isEnforceEnabled, resolvePlanByHmac, consumeCredits } from '../lib/ai-credits.js';
+import { isEnforceEnabled, resolvePlanByHmac, consumeCredits, quotaForPlan } from '../lib/ai-credits.js';
+import { audit } from '../lib/audit.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -70,6 +71,62 @@ function parseUA(ua = '') {
 function isValidUrl(s) {
   try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
   catch { return false; }
+}
+
+// ── Conversion de mode (Sprint Concierge → Dynamic, 2026-06-03) ────
+// Décide PUREMENT si un QR existant peut basculer entre 'smart'
+// (interstitiel / Concierge IA) et 'dynamic' (redirection 302 simple), sur le
+// MÊME short_id → le support imprimé ne change pas, stats + historique +
+// template_data préservés. Aucune I/O → unit-testable (test-qr-convert.mjs).
+// handleUpdateQr résout les faits (validité d'URL, droit IA) et applique le
+// verdict en base.
+//
+//   smart → dynamic : allègement (coupe l'IA). Toujours permis au
+//     propriétaire. Une URL de destination joignable DOIT exister à l'arrivée
+//     (nouvelle fournie, ou l'existante du Concierge réutilisée — jamais de
+//     bascule vers une redirection cassée).
+//   dynamic → smart : rallumage IA. Gated via `smartAllowed` (admin ou licence
+//     active reconnue) ; le coût par question reste de toute façon enforced au
+//     scan par ai-credits (flag enforce_ai_credits_v1).
+//   'static' n'est jamais une cible (un QR à short_id perdrait sa redirection)
+//     et un mode cible inconnu est refusé.
+export function evaluateModeConversion({
+  currentMode, targetModeRaw, qrType, smartAllowed,
+  newTargetUrl, newTargetUrlValid,
+  existingTargetUrl, existingTargetUrlValid,
+  hasTemplate,
+}) {
+  const targetMode = String(targetModeRaw || '').toLowerCase();
+  if (targetMode !== 'smart' && targetMode !== 'dynamic') {
+    return { ok: false, status: 400, error: 'Conversion impossible : le mode cible doit être « dynamic » ou « smart ».' };
+  }
+  if (currentMode === 'static') {
+    return { ok: false, status: 400, error: "Un QR statique ne peut pas être converti (il n'a pas d'identifiant de redirection)." };
+  }
+  // Idempotent : déjà dans le mode cible → no-op (zéro écriture, zéro erreur).
+  if (currentMode === targetMode) {
+    return { ok: true, noop: true, newMode: currentMode, effectiveTargetUrl: null };
+  }
+  // Rallumage IA → gate licence (smartAllowed déjà résolu par le caller).
+  if (targetMode === 'smart' && !smartAllowed) {
+    return { ok: false, status: 403, error: 'Repasser en mode Concierge nécessite une licence active incluant ce mode.' };
+  }
+  // Cible joignable : URL fournie prioritaire, sinon réutilise l'existante.
+  let effectiveTargetUrl = null;
+  if (newTargetUrl != null) {
+    if (!newTargetUrlValid) {
+      return { ok: false, status: 400, error: 'URL de destination invalide (http/https requis).' };
+    }
+    effectiveTargetUrl = newTargetUrl;
+  } else if (targetMode === 'dynamic' && qrType === 'url') {
+    if (!existingTargetUrlValid) {
+      return { ok: false, status: 400, error: 'Aucune URL de destination valide : renseignez une URL pour la redirection.' };
+    }
+    effectiveTargetUrl = existingTargetUrl;
+  }
+  // Vers smart sans template préservé → fallback (cohérent avec le create).
+  const fallbackTemplate = targetMode === 'smart' && !hasTemplate;
+  return { ok: true, newMode: targetMode, effectiveTargetUrl, fallbackTemplate };
 }
 
 // Sprint Sécu-1 / C2 : auth obligatoire pour tous les CRUD QR.
@@ -530,6 +587,53 @@ export async function handleUpdateQr(request, env, qrId) {
   if (body.status !== undefined && ['active', 'archived'].includes(body.status)) {
     entity.status = body.status;
   }
+  // ── Conversion de mode (Concierge ↔ redirection) — additif. Si body.mode est
+  //    absent, comportement 100 % inchangé. Bascule sur le MÊME short_id : le
+  //    QR imprimé reste valable, stats/historique/template_data préservés.
+  let modeChanged         = false;
+  let modeFrom            = null;
+  let modeEffectiveTarget = null;
+  if (body.mode !== undefined) {
+    const targetMode = String(body.mode).toLowerCase();
+    // Droit de (ré)activer le mode smart : l'admin (tenant 'default') est
+    // toujours OK ; sinon il faut une licence active dont le plan inclut l'IA.
+    // Le coût par question reste enforced au scan (ai-credits).
+    let smartAllowed = true;
+    if (targetMode === 'smart' && entity.mode !== 'smart' && tenantId !== 'default') {
+      const lic = await env.DB
+        .prepare('SELECT plan, is_active FROM licences WHERE lookup_hmac = ? LIMIT 1')
+        .bind(tenantId).first().catch(() => null);
+      smartAllowed = !!(lic && lic.is_active !== 0 && quotaForPlan(lic.plan) !== 0);
+    }
+    // URL fournie dans le body (champ éditable pré-rempli côté studio).
+    const bodyUrl = (body.target_url !== undefined) ? String(body.target_url).trim() : null;
+    // Cible existante du Concierge — lue seulement si on bascule vers une
+    // redirection URL sans nouvelle URL fournie (on EXIGE une cible joignable).
+    let existingUrl = null;
+    if (targetMode === 'dynamic' && entity.qr_type === 'url' && bodyUrl == null) {
+      const rd = await env.DB
+        .prepare('SELECT target_url FROM qr_redirects WHERE short_id = ?')
+        .bind(entity.short_id).first().catch(() => null);
+      existingUrl = rd?.target_url || null;
+    }
+    const verdict = evaluateModeConversion({
+      currentMode: entity.mode, targetModeRaw: body.mode, qrType: entity.qr_type,
+      smartAllowed,
+      newTargetUrl: bodyUrl, newTargetUrlValid: bodyUrl != null ? isValidUrl(bodyUrl) : false,
+      existingTargetUrl: existingUrl, existingTargetUrlValid: existingUrl ? isValidUrl(existingUrl) : false,
+      hasTemplate: !!entity.template_id,
+    });
+    if (!verdict.ok) return err(verdict.error, verdict.status || 400, origin);
+    if (!verdict.noop) {
+      modeFrom = entity.mode;
+      if (verdict.fallbackTemplate) entity.template_id = 'storytelling-brand';
+      entity.mode = verdict.newMode;
+      modeChanged = true;
+      modeEffectiveTarget = verdict.effectiveTargetUrl;
+      // Si bodyUrl est fourni, le bloc target_url ci-dessous le persiste dans
+      // qr_redirects ; sinon l'existante (validée) reste en place, intacte.
+    }
+  }
   if (body.target_url !== undefined) {
     if (entity.mode === 'static') {
       return err('Impossible de modifier la cible d\'un QR statique (regénérez un nouveau QR).', 400, origin);
@@ -581,7 +685,24 @@ export async function handleUpdateQr(request, env, qrId) {
         .bind(entity.status, entity.short_id).run();
     }
 
-    return json({ qr: { ...entity, target_url: body.target_url || null } }, 200, origin);
+    // Trace la conversion : un QR imprimé ne se redéploie pas → on garde de
+    // quoi diagnostiquer/réparer si un client signale « mon QR a changé ».
+    if (modeChanged) {
+      await audit(env, {
+        action: 'qr_mode_convert',
+        actor:  tenantId === 'default' ? 'admin' : tenantId,
+        target: entity.short_id,
+        tenantId,
+        details: {
+          qr_id: qrId, from: modeFrom, to: entity.mode,
+          template_id: entity.template_id || null,
+          target_url: modeEffectiveTarget || null,
+        },
+        request,
+      });
+    }
+
+    return json({ qr: { ...entity, target_url: body.target_url || modeEffectiveTarget || null } }, 200, origin);
   } catch (e) {
     return err('Mise à jour échouée : ' + e.message, 500, origin);
   }

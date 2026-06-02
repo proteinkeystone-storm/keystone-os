@@ -7101,6 +7101,10 @@ html.light-mode .ksfs-detail-related-h { color: #0f172a; }
 }
 .sdqr-detail-notice strong { color: #c7d2fe; }
 .sdqr-detail-actions { display: flex; gap: 8px; }
+/* Conversion de mode QR (Concierge ↔ redirection) — Sprint 2026-06-03 */
+.sdqr-convert-row { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.sdqr-convert-hint { font-size: 11.5px; line-height: 1.5; color: rgba(220,225,240,.55); }
+html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-detail-msg {
   margin-top: 4px;
   padding: 8px 12px;

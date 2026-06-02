@@ -13,9 +13,10 @@
   },
   "main": "sw.js",
   "scripts": {
-    "test": "node scripts/test-templates.mjs && node scripts/test-concierge-endpoint.mjs",
+    "test": "node scripts/test-templates.mjs && node scripts/test-concierge-endpoint.mjs && node scripts/test-qr-convert.mjs",
     "test:templates": "node scripts/test-templates.mjs",
     "test:concierge": "node scripts/test-concierge-endpoint.mjs",
+    "test:qr-convert": "node scripts/test-qr-convert.mjs",
     "bump-sw": "node scripts/bump-sw-version.js"
   },
   "repository": {

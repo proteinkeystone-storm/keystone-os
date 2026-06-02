@@ -2699,6 +2699,15 @@ async function _openQrDetail(panel, qr) {
         <div class="sdqr-detail-notice">
           <strong>${isSmart ? 'Mode Smart ✦' : 'Édition dynamique'} :</strong> ${isSmart ? 'le QR affiche d\'abord une page d\'accueil personnalisée avant la redirection. Tu peux changer la cible à tout moment.' : 'tu peux changer la cible à tout moment. Le QR imprimé reste valable, la redirection bascule instantanément.'}
         </div>
+        <div class="sdqr-convert-row">
+          ${isSmart ? `
+            <button type="button" class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-convert-dynamic">Transformer en redirection simple</button>
+            <span class="sdqr-convert-hint">Coupe l'accueil${qr.template_id === 'concierge' ? ' du Concierge' : ' Smart'} : les visiteurs sont redirigés directement vers l'URL ci-dessus. Le QR imprimé reste valable — réversible à tout moment.</span>
+          ` : (qr.template_id ? `
+            <button type="button" class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-convert-smart">${qr.template_id === 'concierge' ? 'Repasser en Concierge' : `Réactiver l'accueil Smart`}</button>
+            <span class="sdqr-convert-hint">Réaffiche la page d'accueil avant la redirection. Nécessite une licence active incluant ce mode.</span>
+          ` : '')}
+        </div>
         ` : isDynamic ? `
         <!-- Sprint SDQR-2.5 — édition du payload pour dynamic non-URL -->
         <div class="sdqr-edit-payload" id="sdqr-edit-payload-wrap">
@@ -2805,6 +2814,54 @@ async function _openQrDetail(panel, qr) {
       await _apiUpdate(qr.id, patch);
       if (msg) { msg.hidden = false; msg.textContent = '✓ Cible mise à jour'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
       qr.target_url = newUrl;
+    } catch (e) {
+      if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
+  // Conversion Concierge/Smart → redirection simple (smart → dynamic).
+  // Garde-fou : on confirme EXPLICITEMENT la destination (champ pré-rempli,
+  // éditable) — jamais de réutilisation silencieuse d'une URL interne. Le QR
+  // imprimé ne change pas (même short_id) ; les stats sont préservées.
+  content.querySelector('#sdqr-convert-dynamic')?.addEventListener('click', async () => {
+    const msg  = content.querySelector('#sdqr-detail-msg');
+    const dest = (content.querySelector('#sdqr-edit-url')?.value || '').trim();
+    if (!/^https?:\/\//i.test(dest)) {
+      if (msg) { msg.hidden = false; msg.textContent = 'Renseigne d\'abord une URL de destination valide (http/https) dans le champ ci-dessus.'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+      return;
+    }
+    const accueil = qr.template_id === 'concierge' ? 'le Concierge' : 'l\'accueil Smart';
+    if (!confirm(`Transformer ce QR en redirection simple ?\n\n• Les visiteurs seront redirigés directement vers :\n  ${dest}\n• ${accueil[0].toUpperCase() + accueil.slice(1)} ne s'affichera plus.\n• Le QR imprimé reste valable — aucune réimpression.\n• Réversible à tout moment.`)) return;
+    try {
+      await _apiUpdate(qr.id, { mode: 'dynamic', target_url: dest });
+      await _refreshList(panel);
+      const fresh = _cachedQrs.find(q => q.id === qr.id) || { ...qr, mode: 'dynamic', target_url: dest };
+      _openQrDetail(panel, fresh);
+      setTimeout(() => {
+        const m = document.getElementById('sdqr-detail-msg');
+        if (m) { m.hidden = false; m.textContent = '✓ QR transformé en redirection simple — le support imprimé reste valable'; m.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+      }, 30);
+    } catch (e) {
+      if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
+  // Retour redirection → Concierge/Smart (dynamic → smart). Le droit est
+  // arbitré côté Worker (403 si la licence ne l'autorise pas) ; on relaie le
+  // message tel quel. Visible uniquement si un template est préservé.
+  content.querySelector('#sdqr-convert-smart')?.addEventListener('click', async () => {
+    const msg   = content.querySelector('#sdqr-detail-msg');
+    const label = qr.template_id === 'concierge' ? 'le Concierge' : 'l\'accueil Smart';
+    if (!confirm(`Réactiver ${label} sur ce QR ?\n\n• Les visiteurs reverront la page d'accueil avant la redirection.\n• Le QR imprimé reste valable.\n• Réversible à tout moment.`)) return;
+    try {
+      await _apiUpdate(qr.id, { mode: 'smart' });
+      await _refreshList(panel);
+      const fresh = _cachedQrs.find(q => q.id === qr.id) || { ...qr, mode: 'smart' };
+      _openQrDetail(panel, fresh);
+      setTimeout(() => {
+        const m = document.getElementById('sdqr-detail-msg');
+        if (m) { m.hidden = false; m.textContent = qr.template_id === 'concierge' ? '✓ Concierge réactivé' : '✓ Accueil Smart réactivé'; m.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+      }, 30);
     } catch (e) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
