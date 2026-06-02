@@ -1682,6 +1682,9 @@ html.light-mode .vefa-tabs {
   border-color: rgba(0,0,0,.1);
 }
 html.light-mode .vefa-tab { color: #475569; }
+/* La pill active a un fond accent → texte blanc (sinon la règle .vefa-tab ci-dessus,
+   plus spécifique que le base .vefa-tab.is-active, écrasait son #fff). */
+html.light-mode .vefa-tab.is-active { color: #fff; }
 html.light-mode .vefa-tab:not(.is-active):hover {
   background: rgba(0,0,0,.04);
   color: #0f172a;

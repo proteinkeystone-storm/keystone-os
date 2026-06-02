@@ -9751,3 +9751,11 @@ html.light-mode .sdqr-bar-track { background: rgba(0,0,0,.08); }
 html.light-mode .sdqr-bar-value { color: #475569; }
 html.light-mode .sdqr-stats-static-title { color: #0f172a; }
 html.light-mode .sdqr-stats-static-text { color: #475569; }
+
+/* ── Mode clair — CTA à fond accent : --gold devient indigo en clair, donc le
+   texte (sombre #1a1a1a / #111827 / #1a1407, prévu pour le doré du sombre) doit
+   passer en BLANC pour rester lisible. Additif : le mode sombre reste intact. ── */
+html.light-mode .sdqr-cta,
+html.light-mode .sdqr-btn--primary,
+html.light-mode .ts-period-toggle button.active,
+html.light-mode .btn-save-vault { color: #fff; }
