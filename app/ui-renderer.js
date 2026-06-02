@@ -758,6 +758,7 @@ const KS_PLANS = [
             { text: '3 Assistants Certifiés au choix' },
             { text: '3 postes / utilisateurs' },
             { text: 'Tous les moteurs IA inclus' },
+            { html: '<strong>200 crédits IA</strong> inclus / mois' },
             { text: 'Artefacts visuels complets' },
             { text: 'Export PDF A4 premium' },
             { text: 'Mode PWA — tablette & mobile' },
@@ -778,6 +779,7 @@ const KS_PLANS = [
             { text: '5 Assistants Certifiés au choix' },
             { text: 'Multi-postes / utilisateurs' },
             { text: 'Tous les moteurs IA inclus' },
+            { html: '<strong>1 000 crédits IA</strong> inclus / mois' },
             { text: 'Artefacts visuels complets' },
             { text: 'Export PDF A4 premium' },
             { text: 'Mode PWA — tablette & mobile' },
@@ -797,6 +799,7 @@ const KS_PLANS = [
             { html: '<strong>7 Assistants Certifiés au choix</strong>' },
             { text: 'Appareils illimités' },
             { text: 'Tous les moteurs IA inclus' },
+            { html: '<strong>5 000 crédits IA</strong> inclus / mois' },
             { text: 'Artefacts visuels complets' },
             { text: 'Export PDF A4 premium' },
             { text: 'Mode PWA — tablette & mobile' },
@@ -3975,6 +3978,55 @@ function _engineLogoHTML(p, size = 20) {
     return `<img src="${p.logo}" alt="${p.label}" class="engine-logo-img engine-logo-dark" style="width:${size}px;height:${size}px;object-fit:contain;">${lightImg}`;
 }
 
+// ── Crédits IA — jauge Settings (Chantier B · Sprint 4) ──────────
+// Lit GET /api/ai-credits/quota et remplit #ks-credits-gauge. Silencieux
+// si pas de JWT ou réseau down. Si la licence n'a pas l'enforcement actif
+// (flag dormant) ou est ADMIN → « usage illimité » (pas de plafond réel).
+async function _fillCreditsGauge(el) {
+    if (!el) return;
+    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; } })();
+    if (!jwt) {
+        el.innerHTML = '<span style="color:var(--text-muted)">Active ta licence pour suivre tes crédits IA.</span>';
+        return;
+    }
+    let q = null;
+    try {
+        const res = await fetch(`${CF_API}/api/ai-credits/quota`, { headers: { 'Authorization': `Bearer ${jwt}` } });
+        if (res.ok) q = await res.json();
+    } catch (_) { /* réseau : on garde le fallback ci-dessous */ }
+    if (!q) {
+        el.innerHTML = '<span style="color:var(--text-muted)">Crédits indisponibles pour le moment.</span>';
+        return;
+    }
+    // Illimité (ADMIN) OU enforcement non activé sur cette licence → pas de plafond réel.
+    if (q.unlimited || !q.enforced) {
+        el.innerHTML = '<div style="font-weight:700">Usage IA illimité</div>'
+            + `<div style="color:var(--text-muted);font-size:.8rem;margin-top:2px">Plan ${q.plan || '—'} — aucun plafond actif sur cette licence.</div>`;
+        return;
+    }
+    const used  = q.used || 0;
+    const quota = q.includedQuota || 0;
+    const pack  = q.packBalance || 0;
+    const remaining = (q.remaining != null) ? q.remaining : Math.max(0, quota - used) + pack;
+    const pct   = quota > 0 ? Math.min(100, Math.round(used / quota * 100)) : 0;
+    const near  = pct >= 80;
+    const barColor = near ? 'var(--danger, #e0533d)' : 'var(--gold, #c9b48a)';
+    const LABELS = { concierge: 'Concierge', ghostwriter: 'Ghost Writer', brainstorming: 'Brainstorming' };
+    const brk = q.breakdown || {};
+    const brkLines = Object.keys(brk).filter(k => brk[k] > 0)
+        .map(k => `${LABELS[k] || k} ${brk[k]}`).join(' · ');
+    el.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:.85rem;margin-bottom:6px">'
+        + `<span style="font-weight:800">${remaining} crédits restants</span>`
+        + `<span style="color:var(--text-muted)">${used} / ${quota} ce mois${pack > 0 ? ` · +${pack} packs` : ''}</span>`
+        + '</div>'
+        + '<div style="height:8px;border-radius:99px;background:var(--bg-secondary, rgba(127,127,127,.18));overflow:hidden">'
+        + `<div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .35s"></div>`
+        + '</div>'
+        + (brkLines ? `<div style="color:var(--text-muted);font-size:.75rem;margin-top:6px">dont ${brkLines}</div>` : '')
+        + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — pense à ajouter un pack de crédits.</div>' : '');
+}
+
 function _renderSettingsBody() {
     const body = document.getElementById('sp-body');
     if (!body) return;
@@ -4155,6 +4207,14 @@ function _renderSettingsBody() {
                     </label>
                 </div>
                 <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : 📊 statistiques certifiées, ✦ phrases IA contextuelles, et 📢 annonces. Rotation toutes les 10 secondes. Activé par défaut.</div>
+            </div>`,
+        },
+        {
+            id: 'acc-credits', icon: ACC_ICONS.licence, title: 'Crédits IA',
+            open: false,
+            content: `<div class="sp-user-form">
+                <div id="ks-credits-gauge" class="sp-user-hint">Chargement…</div>
+                <div class="sp-user-hint">Tes crédits IA alimentent Ghost Writer, le Brainstorming et le Concierge public. Ils se rechargent le 1er de chaque mois. Au-delà, tu peux ajouter un pack de crédits.</div>
             </div>`,
         },
         {
@@ -4409,6 +4469,9 @@ function _renderSettingsBody() {
     body.querySelector('#oled-preview-run')?.addEventListener('click', () => {
         window.dispatchEvent(new Event('ks-oled-preview'));
     });
+
+    // ── Crédits IA — remplit la jauge (Chantier B · Sprint 4) ────
+    _fillCreditsGauge(body.querySelector('#ks-credits-gauge'));
 
     // ── Living Layer toggle (2026-05-24, V2 2026-05-28) ──────────
     body.querySelector('#living-on-toggle')?.addEventListener('change', e => {

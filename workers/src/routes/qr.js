@@ -27,6 +27,7 @@ import { buildConciergePrompt, conciergeTokenMap } from './smart-templates/conci
 import { buildConciergeBlockFromVefa, buildConciergeBlockFromKeyform } from './smart-templates/concierge-schema.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
+import { isEnforceEnabled, resolvePlanByHmac, consumeCredits } from '../lib/ai-credits.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -1657,14 +1658,18 @@ export async function handleSmartQrConcierge(request, env) {
 
   // Charge l'entité QR (mode smart + template concierge obligatoires)
   let qrData = null;
+  // tenant_id du QR = lookup_hmac de la licence PROPRIÉTAIRE. Clé du
+  // portefeuille de crédits débité (le visiteur est anonyme). Chantier B.
+  let ownerKey = null;
   try {
     const entityRow = await env.DB
-      .prepare(`SELECT data FROM entities
+      .prepare(`SELECT data, tenant_id FROM entities
                 WHERE type = 'qr_codes' AND json_extract(data, '$.short_id') = ?
                 AND deleted_at IS NULL LIMIT 1`)
       .bind(shortId)
       .first();
-    if (entityRow?.data) qrData = JSON.parse(entityRow.data);
+    if (entityRow?.data)      qrData   = JSON.parse(entityRow.data);
+    if (entityRow?.tenant_id) ownerKey = entityRow.tenant_id;
   } catch (e) {
     return err('Lookup entity échoué : ' + e.message, 500, origin);
   }
@@ -1679,6 +1684,28 @@ export async function handleSmartQrConcierge(request, env) {
   // Garde-fou budget IA global (admin) — endpoint public = protège le wallet.
   const throttled = await budgetGuard(env, origin);
   if (throttled) return throttled;
+
+  // ── Crédits IA — débit du portefeuille du PROPRIÉTAIRE du QR ──────
+  // (Chantier B · Sprint 2). Le visiteur est anonyme : on débite la
+  // licence qui possède le QR (ownerKey = tenant_id), résolue serveur.
+  // DORMANT : ne s'active que si la licence propriétaire porte le flag
+  // enforce_ai_credits_v1 = 1. Sinon → comportement legacy (illimité),
+  // zéro régression. Une question Concierge = 1 crédit (COST.concierge).
+  if (ownerKey && await isEnforceEnabled(env, ownerKey)) {
+    const ownerPlan = await resolvePlanByHmac(env, ownerKey);
+    const credit = await consumeCredits(env, { bucketKey: ownerKey, plan: ownerPlan, tool: 'concierge' });
+    if (!credit.ok && credit.blocked) {
+      // Plafond mensuel atteint (inclus + packs épuisés). Message neutre
+      // côté visiteur ; l'alarme « acheter un pack » s'affichera dans le
+      // dashboard du PROPRIÉTAIRE (Sprint 4). Code stable pour le front.
+      return json({
+        error: 'Le concierge est momentanément indisponible. Merci de revenir un peu plus tard, ou de contacter directement le bureau de vente.',
+        code : 'AI_CREDITS_EXHAUSTED',
+      }, 429, origin);
+    }
+    // Débit best-effort : pas de revert si le stream échoue ensuite
+    // (1 crédit, endpoint public, anti-abus — cf lib/ai-credits.js).
+  }
 
   // System prompt déterministe (bloc + règles §3).
   const block        = qrData.template_data || {};

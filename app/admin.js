@@ -367,6 +367,7 @@ function _normalizeLicenceRow(l) {
     // S2.5 + S4 — flags whitelistés. Absent en legacy → defaultent à false.
     flag_enforce_devices_v2:         l?.flags?.enforce_devices_v2 === true,
     flag_enforce_vault_per_email_v2: l?.flags?.enforce_vault_per_email_v2 === true,
+    flag_enforce_ai_credits_v1:      l?.flags?.enforce_ai_credits_v1 === true,
     // Stats S5.3 — absent en legacy → defaultent à null (affichera '—')
     stats: l.stats || null,
   };
@@ -432,6 +433,10 @@ async function renderLicences(panel) {
               </label>
               <label class="toggle-switch" title="enforce_vault_per_email_v2 (S4)" style="display:inline-block">
                 <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_vault_per_email_v2" ${l.flag_enforce_vault_per_email_v2 ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+              <label class="toggle-switch" title="enforce_ai_credits_v1 (Crédits IA · Chantier B)" style="display:inline-block">
+                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_ai_credits_v1" ${l.flag_enforce_ai_credits_v1 ? 'checked' : ''}>
                 <span class="toggle-slider"></span>
               </label>
             </div>`

@@ -35,6 +35,7 @@ import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai-budget.js';
+import { isEnforceEnabled, consumeCredits } from '../lib/ai-credits.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -550,6 +551,19 @@ export async function handleBrainstormingSynthesize(request, env) {
     return err('history requis (au moins 2 tours)', 400, origin);
   }
 
+  // ── Crédits IA — débit (Chantier B · Sprint 3) : 1 crédit pour la
+  // synthèse finale. DORMANT (flag enforce_ai_credits_v1 par licence).
+  if (await isEnforceEnabled(env, claims.sub)) {
+    const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
+    if (!credit.ok && credit.blocked) {
+      return json({
+        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        code : 'AI_CREDITS_EXHAUSTED',
+        quota: credit.payload,
+      }, 429, origin);
+    }
+  }
+
   const todayIso = new Date().toISOString().slice(0, 10);
   // Sprint 7.9 — Routage BYOK Claude. Si engine='claude' + apiKey fourni,
   // on appelle Claude Sonnet via Anthropic API directe (synthèse premium).
@@ -842,6 +856,21 @@ export async function handleBrainstormingAgentRespond(request, env) {
   // plafond. On coupe net ici avant d'ouvrir le stream.
   const _throttled = await budgetGuard(env, origin);
   if (_throttled) return _throttled;
+
+  // ── Crédits IA — débit du portefeuille de la licence connectée ───
+  // (Chantier B · Sprint 3). 1 crédit par tour de table (cet appel,
+  // même en mode 'auto' multi-agents). DORMANT : ne s'active que si la
+  // licence porte enforce_ai_credits_v1=1 ; sinon legacy/illimité.
+  if (await isEnforceEnabled(env, claims.sub)) {
+    const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
+    if (!credit.ok && credit.blocked) {
+      return json({
+        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        code : 'AI_CREDITS_EXHAUSTED',
+        quota: credit.payload,
+      }, 429, origin);
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Stream custom multi-agent

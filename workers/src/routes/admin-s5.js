@@ -30,6 +30,7 @@ const EMAIL_RE_ADMIN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const TOGGLABLE_FLAGS = new Set([
   'enforce_devices_v2',           // S2.5
   'enforce_vault_per_email_v2',   // S4
+  'enforce_ai_credits_v1',        // Chantier B — crédits IA (Sprint 1-2)
 ]);
 
 // ── Auto-migration locale (hotfix 22/05) ─────────────────────────
@@ -48,6 +49,9 @@ async function _ensureSchemaForAdminS5(env) {
   } catch (_) { /* colonne déjà ajoutée, ok */ }
   try {
     await env.DB.prepare('ALTER TABLE licences ADD COLUMN enforce_vault_per_email_v2 INTEGER DEFAULT 0').run();
+  } catch (_) { /* colonne déjà ajoutée, ok */ }
+  try {
+    await env.DB.prepare('ALTER TABLE licences ADD COLUMN enforce_ai_credits_v1 INTEGER DEFAULT 0').run();
   } catch (_) { /* colonne déjà ajoutée, ok */ }
   _adminS5SchemaReady = true;
 }
@@ -88,7 +92,7 @@ export async function handleListLicencesEnriched(request, env) {
   let sql = `
     SELECT key, tenant_id, owner, plan, is_active, owned_assets, expires_at,
            created_at, updated_at, domain_locked, devices_max,
-           enforce_devices_v2, enforce_vault_per_email_v2
+           enforce_devices_v2, enforce_vault_per_email_v2, enforce_ai_credits_v1
       FROM licences
   `;
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
@@ -133,6 +137,7 @@ export async function handleListLicencesEnriched(request, env) {
       flags: {
         enforce_devices_v2:         lic.enforce_devices_v2 === 1,
         enforce_vault_per_email_v2: lic.enforce_vault_per_email_v2 === 1,
+        enforce_ai_credits_v1:      lic.enforce_ai_credits_v1 === 1,
       },
       stats: {
         devices_active:    devicesActive?.n || 0,

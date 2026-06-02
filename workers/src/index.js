@@ -39,6 +39,7 @@ import { handleListKeys, handleSaveKey, handleDeleteKey,
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
+import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize } from './routes/brainstorming.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
 // Budget IA — compteur neurones Workers AI + bridage (2026-05-29)
@@ -202,6 +203,16 @@ export default {
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.
       if (path === '/api/ghostwriter/quota' && method === 'GET') {
         return handleGhostwriterQuota(request, env);
+      }
+
+      // ── Crédits IA unifiés (Chantier B — Sprint 1) ────────────
+      // Lecture seule du portefeuille de la licence : quota mensuel
+      // inclus (par plan) + solde de packs + ventilation par outil.
+      // Aucun débit ici. L'enforcement réel (débit Concierge puis
+      // Brainstorming) arrive aux Sprints 2-3, derrière le flag
+      // dormant enforce_ai_credits_v1 (défaut 0 = legacy/illimité).
+      if (path === '/api/ai-credits/quota' && method === 'GET') {
+        return handleAiCreditsQuota(request, env);
       }
 
       // ── AI War Room (Brainstorming V2) — Sprint 1 ─────────────
