@@ -529,14 +529,22 @@ export function renderDashboard() {
     // setOwnedIds(null) qui retire la clé). Sans ce bypass, Pulsa/Kodex/Muse
     // disparaissent du dashboard ADMIN puisqu'ils sont dans ARTEFACTS et que
     // la condition originale exigeait ownedIds !== null.
-    const ownedArts  = (ownedIds !== null || _admin)
+    // Fix 2026-06-02 : owned_assets=null veut dire DEUX choses opposées
+    // (démo non-activée OU accès total type MAX/Stripe). On se fie donc à
+    // isDemoMode() (qui voit le JWT) au lieu de l'heuristique ownedIds===null.
+    // Sans ça, une licence payante (owned_assets=null) voyait TOUS ses
+    // artefacts disparaître du dashboard. Cf bug protein.std + clients Stripe.
+    const ownedArts  = (ownedIds !== null || _admin || !isDemoMode())
         ? ARTEFACTS.filter(a => _isOwned(a.id) && _isSelected(a.id))
         : [];
     const lockedArts = ARTEFACTS.filter(a => {
         const notOwned    = !_isOwned(a.id);
         const notSelected = !_isSelected(a.id);
-        // ADMIN n'est jamais en "demo mode" : ses artefacts sont owned, pas suggested
-        const inDemoMode  = ownedIds === null && !_admin;
+        // ADMIN n'est jamais en "demo mode" : ses artefacts sont owned, pas suggested.
+        // Idem : on se fie à isDemoMode() (voit le JWT) et pas à ownedIds===null,
+        // sinon une licence payante (owned_assets=null) voit ses artefacts possédés
+        // bannis dans « Débloquez » au lieu du dashboard. Cf fix ownedArts ci-dessus.
+        const inDemoMode  = isDemoMode();
         return (inDemoMode || notOwned || notSelected) && getCatalogEntry(a.id)?.published !== false;
     });
 
