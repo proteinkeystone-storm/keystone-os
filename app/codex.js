@@ -349,10 +349,10 @@ function _renderWelcomeModal() {
 
       <div class="ws-welcome-hero">
         <div class="ws-welcome-hero-ico">${icon('kodex', 36)}</div>
-        <span class="ws-welcome-eyebrow">${icon('sparkles', 12)} Bienvenue dans Kodex</span>
+        <span class="ws-welcome-eyebrow">${icon('sparkles', 12)} Bienvenue dans Brief Prod</span>
         <h1 id="ws-welcome-title" class="ws-welcome-h1">Le brief créatif infaillible pour votre graphiste</h1>
         <p class="ws-welcome-lead">
-          En 4 étapes guidées, Kodex transforme votre intention en cahier des charges technique
+          En 4 étapes guidées, Brief Prod transforme votre intention en cahier des charges technique
           prêt à transmettre — format exact, charte, fichiers, mentions légales.
         </p>
       </div>
@@ -369,7 +369,7 @@ function _renderWelcomeModal() {
         <div class="ws-welcome-killer-body">
           <div class="ws-welcome-killer-eyebrow">Killer feature</div>
           <div class="ws-welcome-killer-title">Calculateur d'échelle automatique</div>
-          <div class="ws-welcome-killer-sub">Pour les grands formats (bâches, 4×3, panneaux), Kodex verrouille le DPI et alerte si un visuel est sous-résolu — fini l'erreur d'impression à 800 €.</div>
+          <div class="ws-welcome-killer-sub">Pour les grands formats (bâches, 4×3, panneaux), Brief Prod verrouille le DPI et alerte si un visuel est sous-résolu — fini l'erreur d'impression à 800 €.</div>
         </div>
       </div>
 
@@ -647,7 +647,7 @@ function _toggleDemoMenu(triggerBtn) {
   menu.innerHTML = `
     <div class="ws-demo-menu-head">
       <span class="ws-demo-menu-eyebrow">${icon('sparkles', 11)} Charger un exemple</span>
-      <p class="ws-demo-menu-sub">Trois scénarios universels pour découvrir Kodex sans repartir d'une page blanche.</p>
+      <p class="ws-demo-menu-sub">Trois scénarios universels pour découvrir Brief Prod sans repartir d'une page blanche.</p>
     </div>
     <div class="ws-demo-menu-list">
       ${Object.entries(DEMO_SCENARIOS).map(([id, d]) => `
@@ -749,7 +749,7 @@ async function _openLibrary() {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <div>
             <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ws-text-muted);">Bibliothèque</div>
-            <h2 style="margin:4px 0 0 0;font-size:22px;font-weight:800;letter-spacing:-.022em;">Mes briefs Kodex</h2>
+            <h2 style="margin:4px 0 0 0;font-size:22px;font-weight:800;letter-spacing:-.022em;">Mes briefs</h2>
           </div>
           <button class="ws-iconbtn" data-act="lib-close" title="Fermer">${icon('x', 18)}</button>
         </div>
@@ -1133,7 +1133,7 @@ function _renderAside() {
     <div class="ws-aside-section">
       <div class="ws-aside-title">À quoi ça sert</div>
       <div class="ws-aside-card">
-        Kodex transforme votre intention en cahier des charges précis pour
+        Brief Prod transforme votre intention en cahier des charges précis pour
         votre graphiste&nbsp;: format exact, charte, fichiers, mentions à respecter.
         Vous repartez avec un brief PDF prêt à transmettre, que votre graphiste
         pourra suivre les yeux fermés — quel que soit le support (print, digital
@@ -1154,7 +1154,7 @@ function _renderAside() {
         <strong style="color: var(--ws-text); display:block; margin-bottom:6px;">
           ${icon('ruler', 14)} Calculateur d'échelle automatique
         </strong>
-        Pour les grands formats (bâches, panneaux 4×3), Kodex calcule la
+        Pour les grands formats (bâches, panneaux 4×3), Brief Prod calcule la
         bonne résolution selon la distance de vue. Pour les visuels digitaux,
         il pré-remplit les dimensions exactes du réseau social. Plus de
         spec incertaine à transmettre à votre graphiste.
@@ -1212,16 +1212,16 @@ function _viewDestination() {
   const cat = _state.destination.category;
   let lead;
   if (cat === 'digital') {
-    lead = `Choisissez le format de votre visuel. Kodex pré-remplit les
+    lead = `Choisissez le format de votre visuel. Brief Prod pré-remplit les
       dimensions exactes et le profil colorimétrique adaptés au réseau social ciblé —
       votre graphiste pourra travailler directement à la bonne taille.`;
   } else if (cat === 'press') {
     lead = `Choisissez le format de votre encart. Les dimensions exactes
-      seront fournies par la régie publicitaire — Kodex pré-remplit les standards
+      seront fournies par la régie publicitaire — Brief Prod pré-remplit les standards
       presse pour préparer le brief.`;
   } else {
     lead = `Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
-      Kodex adaptera fond perdu, marges et préparation aux exigences exactes
+      Brief Prod adaptera fond perdu, marges et préparation aux exigences exactes
       de votre imprimeur.`;
   }
   const shell = `
@@ -2010,7 +2010,7 @@ function _viewAssets() {
   const chartBlockHTML = showChartBlock ? `
     <h2 class="ws-h2">Votre charte graphique rapide</h2>
     <p style="font-size:12.5px;color:var(--ws-text-muted);margin:-6px 0 14px 0;">
-      Saisissez ce qui manque côté graphiste — Kodex masque automatiquement les champs déjà fournis ci-dessus.
+      Saisissez ce qui manque côté graphiste — Brief Prod masque automatiquement les champs déjà fournis ci-dessus.
     </p>
     <form data-slot="assets-form" id="kodex-assets-form" autocomplete="off">
       <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px;">
@@ -2083,7 +2083,7 @@ function _viewAssets() {
     <span class="ws-eyebrow">${icon('package', 12)} 3 sur 4 · Les visuels</span>
     <h1 class="ws-h1">Quels éléments visuels avons-nous&nbsp;?</h1>
     <p class="ws-lead">
-      Indiquez à Kodex ce que votre graphiste possède déjà&nbsp;: vous gagnerez du temps
+      Indiquez à Brief Prod ce que votre graphiste possède déjà&nbsp;: vous gagnerez du temps
       en évitant de re-saisir ce qu'il a déjà reçu.
     </p>
 
@@ -2360,12 +2360,12 @@ function _viewOutput() {
   // ── État : en cours d'appel ─────────────────────────────
   else if (o.status === 'calling' || o.status === 'building') {
     // Pattern fallback Kodex : on indique l'engine essayé + bascule + retry
-    let liveTitle = 'Kodex assemble votre brief…';
+    let liveTitle = 'Brief Prod assemble votre brief…';
     let liveSub   = 'Construction du prompt à partir de vos saisies.';
     if (o.status === 'calling' && o.attempt_engine) {
       if (o.attempt_is_fallback) {
         liveTitle = `${_esc(o.attempt_previous)} indisponible — bascule sur ${_esc(o.attempt_engine)}…`;
-        liveSub = 'Vos quotas étaient épuisés sur le premier moteur. Kodex tente automatiquement le suivant.';
+        liveSub = 'Vos quotas étaient épuisés sur le premier moteur. Brief Prod tente automatiquement le suivant.';
       } else if (o.attempt_retry) {
         liveTitle = `${_esc(o.attempt_engine)} sature — nouvelle tentative (${o.attempt_retry}/3)…`;
         liveSub = 'Le moteur a renvoyé une erreur transitoire. On réessaie avec un court délai.';
@@ -2560,8 +2560,8 @@ function _renderBriefIdleState({ validationError, activeEngine, hasApiKey, showM
           </h3>
           <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
             ${hasApiKey
-              ? `Kodex interroge ${_esc(activeEngine)} avec votre clé personnelle pour produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence. Le brief PDF inclura alors cette synthèse créative en page 2.`
-              : `Avec une clé API configurée, Kodex peut produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en bonus du brief technique.`
+              ? `Brief Prod interroge ${_esc(activeEngine)} avec votre clé personnelle pour produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence. Le brief PDF inclura alors cette synthèse créative en page 2.`
+              : `Avec une clé API configurée, Brief Prod peut produire 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en bonus du brief technique.`
             }
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -3055,7 +3055,7 @@ function _buildBriefSummaryText() {
   const lines = [];
   lines.push(`Bonjour,`);
   lines.push('');
-  lines.push(`Voici un brief créatif généré avec Kodex pour le projet « ${title} ».`);
+  lines.push(`Voici un brief créatif généré avec Brief Prod pour le projet « ${title} ».`);
   lines.push('');
   lines.push(`Support : ${sup}`);
   lines.push(`Format fini : ${fmt}`);
@@ -3123,13 +3123,13 @@ function _renderSharePulsaTeaserCard() {
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
-            Premium · avec Pulsa
+            Premium · avec Key Form
           </div>
           <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
             Transformez ce brief en page partageable
           </h3>
           <p style="margin:0 0 10px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
-            Avec Pulsa, le brief devient une URL hébergée que vous envoyez à votre graphiste : suivi des consultations, relances automatiques si pas d'ouverture, dashboard centralisé.
+            Avec Key Form, le brief devient une URL hébergée que vous envoyez à votre graphiste : suivi des consultations, relances automatiques si pas d'ouverture, dashboard centralisé.
           </p>
           <ul style="margin:0 0 12px 0;padding:0;list-style:none;font-size:12px;color:var(--ws-text);">
             <li style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -3143,7 +3143,7 @@ function _renderSharePulsaTeaserCard() {
             </li>
           </ul>
           <button class="ws-btn ws-btn--accent" data-act="share-unlock-pulsa" style="padding:8px 14px;font-size:12.5px;">
-            ${icon('unlock', 14)} Débloquer avec Pulsa
+            ${icon('unlock', 14)} Débloquer avec Key Form
           </button>
         </div>
       </div>
@@ -3169,16 +3169,16 @@ function _renderSharePulsaPremiumCard() {
           </div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-accent);margin-bottom:3px;">
-              Votre licence Pulsa est active
+              Votre licence Key Form est active
             </div>
             <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
-              Créer une page Pulsa à partir de ce brief
+              Créer une page Key Form à partir de ce brief
             </h3>
             <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
-              Kodex crée un brouillon Pulsa pré-rempli avec ce projet — il ne vous reste qu'à le compléter (champ « Email destinataire », confirmation de lecture…) et à publier l'URL.
+              Brief Prod crée un brouillon Key Form pré-rempli avec ce projet — il ne vous reste qu'à le compléter (champ « Email destinataire », confirmation de lecture…) et à publier l'URL.
             </p>
             <button class="ws-btn ws-btn--accent" data-act="share-create-pulsa" style="padding:8px 14px;font-size:12.5px;">
-              ${icon('share-2', 14)} Créer dans Pulsa
+              ${icon('share-2', 14)} Créer dans Key Form
             </button>
           </div>
         </div>
@@ -3187,7 +3187,7 @@ function _renderSharePulsaPremiumCard() {
   }
 
   const isPublished = linked.output?.status === 'published';
-  const formTitle = linked.meta?.title || 'Page Pulsa';
+  const formTitle = linked.meta?.title || 'Page Key Form';
 
   // État (b) — form brouillon : on incite à publier pour activer l'URL.
   if (!isPublished) {
@@ -3199,17 +3199,17 @@ function _renderSharePulsaPremiumCard() {
           </div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--warn);margin-bottom:3px;">
-              Page Pulsa créée · Brouillon
+              Page Key Form créée · Brouillon
             </div>
             <h3 style="margin:0 0 6px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
               ${_esc(formTitle)}
             </h3>
             <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-soft);line-height:1.55;">
-              Votre page Pulsa est créée mais pas encore publiée. Activez-la dans Pulsa (étape Publication) pour récupérer l'URL partageable et commencer à suivre les consultations.
+              Votre page Key Form est créée mais pas encore publiée. Activez-la dans Key Form (étape Publication) pour récupérer l'URL partageable et commencer à suivre les consultations.
             </p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="ws-btn ws-btn--accent" data-act="share-open-pulsa-form" style="padding:8px 14px;font-size:12.5px;">
-                ${icon('arrow-right', 14)} Ouvrir dans Pulsa
+                ${icon('arrow-right', 14)} Ouvrir dans Key Form
               </button>
               <button class="ws-btn ws-btn--ghost" data-act="share-recreate-pulsa" style="padding:8px 14px;font-size:12.5px;color:var(--ws-text-muted);">
                 ${icon('refresh', 13)} Recréer un nouveau form
@@ -3231,7 +3231,7 @@ function _renderSharePulsaPremiumCard() {
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-success);margin-bottom:3px;">
-            Page Pulsa active
+            Page Key Form active
           </div>
           <h3 style="margin:0 0 4px 0;font-size:14px;font-weight:700;letter-spacing:-.012em;color:var(--ws-text);">
             ${_esc(formTitle)}
@@ -3275,7 +3275,7 @@ function _getLinkedPulsaForm() {
 // Handler : ouvre Pulsa sur le form lié (mode builder, étape Publication).
 function _shareOpenPulsaForm() {
   const linked = _getLinkedPulsaForm();
-  if (!linked) { _toastSoon('Page Pulsa introuvable — recréez-la depuis le brouillon'); return; }
+  if (!linked) { _toastSoon('Page Key Form introuvable — recréez-la depuis le brouillon'); return; }
   setCurrentFormId(linked.id);
   closeKodex();
   setTimeout(() => openPulsa(), 120);
@@ -3285,7 +3285,7 @@ function _shareOpenPulsaForm() {
 // pour consulter les stats détaillées (qui a répondu, quand, export CSV).
 function _shareViewPulsaStats() {
   const linked = _getLinkedPulsaForm();
-  if (!linked) { _toastSoon('Page Pulsa introuvable'); return; }
+  if (!linked) { _toastSoon('Page Key Form introuvable'); return; }
   setCurrentFormId(linked.id);
   closeKodex();
   setTimeout(() => openPulsa({ viewResponses: true }), 120);
@@ -3295,7 +3295,7 @@ function _shareViewPulsaStats() {
 // Utile si le user veut un nouveau form (changement de destinataire, etc.)
 // ou si l'ancien a été supprimé manuellement dans Pulsa.
 function _shareRecreatePulsa() {
-  if (!confirm('Créer une nouvelle page Pulsa pour ce brief ? L\'ancien lien sera oublié (le form Pulsa précédent n\'est pas supprimé — il reste dans votre bibliothèque Pulsa).')) return;
+  if (!confirm('Créer une nouvelle page Key Form pour ce brief ? L\'ancien lien sera oublié (le form Key Form précédent n\'est pas supprimé — il reste dans votre bibliothèque Key Form).')) return;
   _state.linked_pulsa_form_id = null;
   _saveDraft();
   _shareCreatePulsa();
@@ -3446,12 +3446,12 @@ function _shareCreatePulsa() {
     // ensuite passer aux étapes Apparence → Livraison → Publication pour
     // activer l'URL — sinon le lien /f/SLUG retourne 404. Le toast pointe
     // explicitement vers cette dernière étape pour éviter la confusion.
-    _toastOk('Brouillon Pulsa créé — n\'oubliez pas l\'étape Publication pour activer l\'URL');
+    _toastOk('Brouillon Key Form créé — n\'oubliez pas l\'étape Publication pour activer l\'URL');
     closeKodex();
     setTimeout(() => openPulsa(), 120);
   } catch (e) {
     console.error('[kodex] share-create-pulsa', e);
-    _toastSoon('Création Pulsa impossible : ' + e.message);
+    _toastSoon('Création Key Form impossible : ' + e.message);
   }
 }
 
