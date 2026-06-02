@@ -829,7 +829,9 @@ async function _loadConciergeLibrary() {
     const r = await fetch(`${CF_API}/api/qr`, { headers: _qrAuthHeaders() });
     if (!r.ok) throw new Error('Erreur ' + r.status);
     const body = await r.json();
-    _vefaQrs      = listConciergeQRs(body.qrs || []);
+    // VEFA Studio = outil IMMO → on n'affiche que les concierges 'immo'
+    // (exclut les concierges 'generic' comme un bowling, qui se gèrent dans Smart Dynamic QR).
+    _vefaQrs      = listConciergeQRs(body.qrs || [], 'immo');
     _vefaQrsState = 'ready';
   } catch (e) {
     _vefaQrsError = (e && e.message) || 'Chargement impossible';

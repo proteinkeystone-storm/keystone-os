@@ -247,8 +247,15 @@ export const CONCIERGE_TEMPLATE_ID = 'concierge';
 // que les objets QR dont le template est le concierge. Source de vérité du
 // filtre, consommée par la liste SDQR (badge) ET la vue filtrée VEFA Studio.
 // Pure (aucun DOM/réseau) => testable dans le harnais Node.
-export function listConciergeQRs(qrs) {
-  return (Array.isArray(qrs) ? qrs : []).filter((q) => q && q.template_id === CONCIERGE_TEMPLATE_ID);
+export function listConciergeQRs(qrs, vertical) {
+  return (Array.isArray(qrs) ? qrs : []).filter((q) => {
+    if (!q || q.template_id !== CONCIERGE_TEMPLATE_ID) return false;
+    if (!vertical) return true;   // sans filtre → toute la flotte Concierge (badge SDQR)
+    // null/absent = 'immo' (même règle que concierge-schema : 'generic' sinon 'immo').
+    // Permet à VEFA Studio (outil immo) d'exclure les concierges 'generic' (ex : un bowling).
+    const v = (q.template_data && q.template_data.vertical) === 'generic' ? 'generic' : 'immo';
+    return v === vertical;
+  });
 }
 
 // ── Source GÉNÉRIQUE « gabarit » (S7.5) ───────────────────────────
