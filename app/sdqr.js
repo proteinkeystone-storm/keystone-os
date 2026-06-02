@@ -819,15 +819,11 @@ function _toggleSmartBriefVisibility(root) {
   if (templateWrap) templateWrap.hidden = !isSmart;
   if (fieldsWrap)   fieldsWrap.hidden   = !isSmart;
 
-  // Fix 2026-06-03 : en mode Smart (ex : Concierge), masquer AUSSI les cartes
-  // de TYPE statique (URL/Texte/vCard/Wi-Fi/Événement) + le formulaire statique
-  // associé. Elles n'ont aucun sens pour un interstitiel smart (sa destination
-  // EST le template), et leur affichage sous la config Concierge prêtait à
-  // confusion (« le CTA peut-il aller vers une vCard ? » → non).
-  const typeCards    = root.querySelector('#sdqr-type-cards');
-  const staticFields = root.querySelector('#sdqr-form-fields');
-  if (typeCards)    typeCards.hidden    = isSmart;
-  if (staticFields) staticFields.hidden = isSmart;
+  // NB (2026-06-03) : on NE masque PAS les cartes de type (#sdqr-type-cards)
+  // ni le formulaire statique (#sdqr-form-fields) en mode Smart : elles
+  // définissent la DESTINATION du QR Smart (target_url / encoded_payload),
+  // qui est REQUISE côté Worker (qr.js handleCreateQr). Les cacher casse la
+  // création de QR Smart. (Un masquage tenté puis reverté ce jour.)
 
   if (isSmart) {
     _renderTemplateCards(root);
