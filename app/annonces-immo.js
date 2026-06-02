@@ -1312,7 +1312,7 @@ html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
    outline check qui apparaît quand .is-on. Cohérence visuelle avec
    le reste de Keystone (plus de checkbox native moche). */
 .ai-chip {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0;
   padding: 6px 12px; border-radius: 100px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1321,9 +1321,9 @@ html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
   transition: all 0.15s ease;
 }
 .ai-chip-check {
-  width: 14px; height: 14px;
-  opacity: 0; transform: scale(0.6);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  width: 0; height: 14px;            /* largeur 0 quand OFF → ne décale plus le libellé (resté centré) */
+  opacity: 0; transform: scale(0.6); overflow: hidden;
+  transition: width 0.15s ease, margin 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
   color: rgba(120, 160, 255, 1);
   flex-shrink: 0;
 }
@@ -1332,7 +1332,7 @@ html.light-mode .ai-section-subtitle strong { color: rgba(90, 50, 160, 1); }
   border-color: rgba(120, 160, 255, 0.45);
   color: #fff;
 }
-.ai-chip.is-on .ai-chip-check { opacity: 1; transform: scale(1); }
+.ai-chip.is-on .ai-chip-check { width: 14px; margin-right: 6px; opacity: 1; transform: scale(1); }
 .ai-chip:hover:not(.is-on) { background: rgba(255, 255, 255, 0.07); }
 html.light-mode .ai-chip { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.08); color: rgba(30, 30, 50, 0.85); }
 html.light-mode .ai-chip.is-on { background: rgba(80, 110, 230, 0.14); border-color: rgba(80, 110, 230, 0.45); color: rgba(40, 60, 180, 1); }
