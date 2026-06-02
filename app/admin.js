@@ -1963,6 +1963,24 @@ async function renderPromos(panel) {
 
     const renderList = () => { listEl.innerHTML = promos.map((p, i) => cardHTML(p, i)).join(''); wire(); };
 
+    // Persiste les bandeaux en D1. Réutilisé par le bouton « Sauvegarder » ET
+    // par l'upload/suppression de photo → la photo « remonte » sans qu'on oublie
+    // de cliquer Sauvegarder (piège : le toast d'upload faisait croire que oui).
+    const _persistPromos = async () => {
+      catalogData.promos = promos.map(p => ({
+        id: p.id || _newPromoId(),
+        eyebrow:  (p.eyebrow  || '').trim(),
+        title:    (p.title    || '').trim(),
+        subtitle: (p.subtitle || '').trim(),
+        cta:      (p.cta      || '').trim(),
+        appId:    p.appId || '',
+        palette:  PROMO_PALETTES.includes(p.palette) ? p.palette : 'indigo',
+        imageId:  p.imageId || '',
+      }));
+      catalogData.updatedAt = new Date().toISOString().slice(0, 10);
+      await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+    };
+
     // Upload photo d'un bandeau (réutilise le pipeline screenshot du catalogue).
     const uploadPhoto = async (file, i) => {
       if (!/^image\/(jpe?g|png|webp|gif)$/i.test(file.type)) { toast('Format non supporté (JPG, PNG, WebP, GIF)', 'error'); return; }
@@ -1978,7 +1996,8 @@ async function renderPromos(panel) {
         if (promos[i].imageId) api(`/api/admin/screenshot/${encodeURIComponent(promos[i].imageId)}`, 'DELETE').catch(() => {});
         promos[i].imageId = res.id;
         renderList();
-        toast('Photo du bandeau uploadée ✓');
+        await _persistPromos();   // persiste tout de suite → la photo « remonte »
+        toast('Photo du bandeau enregistrée ✓');
       } catch (err) {
         if (slot) slot.style.opacity = '';
         toast(err.message || 'Erreur upload', 'error');
@@ -2000,7 +2019,9 @@ async function renderPromos(panel) {
           if (e.target.closest('.promo-photo-del')) {
             if (promos[i].imageId) api(`/api/admin/screenshot/${encodeURIComponent(promos[i].imageId)}`, 'DELETE').catch(() => {});
             promos[i].imageId = '';
-            renderList(); toast('Photo retirée'); return;
+            renderList();
+            _persistPromos().then(() => toast('Photo retirée')).catch(() => toast('Erreur enregistrement', 'error'));
+            return;
           }
           input.value = ''; input.click();
         });
@@ -2044,19 +2065,8 @@ async function renderPromos(panel) {
     panel.querySelector('#btn-save-promos').addEventListener('click', async () => {
       const btn = panel.querySelector('#btn-save-promos');
       btn.disabled = true; btn.textContent = '…';
-      catalogData.promos = promos.map(p => ({
-        id: p.id || _newPromoId(),
-        eyebrow:  (p.eyebrow  || '').trim(),
-        title:    (p.title    || '').trim(),
-        subtitle: (p.subtitle || '').trim(),
-        cta:      (p.cta      || '').trim(),
-        appId:    p.appId || '',
-        palette:  PROMO_PALETTES.includes(p.palette) ? p.palette : 'indigo',
-        imageId:  p.imageId || '',
-      }));
-      catalogData.updatedAt = new Date().toISOString().slice(0, 10);
       try {
-        await api('/api/admin/catalog', 'POST', { catalog: catalogData, tenantId: 'default' });
+        await _persistPromos();
         toast('Bandeaux « À la une » enregistrés ✓');
       } catch (err) {
         toast(err.message, 'error');
