@@ -1659,6 +1659,76 @@ function _injectStyles() {
   .vefa-vp-row { padding: 14px 14px 6px; }
   .vefa-vp-check { justify-content: flex-start; }
 }
+
+/* ───────────────────────────────────────────────────────────────
+   ── MODE CLAIR ──  (html.light-mode uniquement — n'altère JAMAIS le
+   mode sombre). Le workspace est déjà tokenisé en var(--ws-*) qui
+   basculent seuls ; ce bloc fiabilise le contraste sur fond clair :
+   cartes blanches franches, panneaux imbriqués distincts, séparateurs
+   visibles, textes secondaires lisibles, champs nets.
+   On ne touche ni .ws- ni .gw- (gérés ailleurs), ni les boutons à
+   accent vif (ils gardent leur fond coloré + texte blanc), ni le toast
+   (snackbar volontairement sombre, déjà lisible).
+   ─────────────────────────────────────────────────────────────── */
+
+/* Hero / eyebrow / sous-titres */
+html.light-mode .vefa-hero { border-bottom-color: rgba(0,0,0,.1); }
+html.light-mode .vefa-hero-eyebrow { color: #64748b; }
+html.light-mode .vefa-hero-subtitle { color: #475569; }
+
+/* Onglets pill — piste claire, bordure franche, hover sobre */
+html.light-mode .vefa-tabs {
+  background: #f1f5f9;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .vefa-tab { color: #475569; }
+html.light-mode .vefa-tab:not(.is-active):hover {
+  background: rgba(0,0,0,.04);
+  color: #0f172a;
+}
+
+/* Sections = cartes blanches franches sur la page claire */
+html.light-mode .vefa-section {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+  box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+html.light-mode .vefa-section-title { color: #0f172a; }
+html.light-mode .vefa-section-subtitle { color: #64748b; }
+
+/* Footer actions — séparateur + texte indicatif */
+html.light-mode .vefa-actions { border-top-color: rgba(0,0,0,.1); }
+html.light-mode .vefa-actions-hint { color: #64748b; }
+
+/* Bouton secondaire (outline accent) : fond blanc explicite */
+html.light-mode .vefa-btn-secondary { background: #fff; }
+
+/* Repeaters Concierge — panneau imbriqué distinct de la carte blanche */
+html.light-mode .vefa-vp-row {
+  background: #fafafb;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .vefa-vp-row-title { color: #64748b; }
+html.light-mode .vefa-vp-del {
+  border-color: rgba(0,0,0,.14);
+  color: #64748b;
+}
+html.light-mode .vefa-vp-add { border-color: rgba(0,0,0,.18); }
+html.light-mode .vefa-vp-empty { color: #64748b; }
+
+/* Bibliothèque QR Concierge — cartes blanches + textes lisibles */
+html.light-mode .vefa-cg-card {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .vefa-cg-card-name { color: #0f172a; }
+html.light-mode .vefa-cg-card-meta { color: #64748b; }
+html.light-mode .vefa-cg-lib-msg { color: #64748b; }
+html.light-mode .vefa-cg-gateway-hint,
+html.light-mode .vefa-cg-gateway .vefa-cg-gateway-hint { color: #64748b; }
+
+/* Widget couleur — pourtour visible du swatch sur fond blanc */
+html.light-mode .vefa-vp-swatch { border-color: rgba(0,0,0,.14); }
 `;
   document.head.appendChild(style);
 }

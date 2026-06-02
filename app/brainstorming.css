@@ -1385,3 +1385,96 @@
   /* Bottom sheet mobile : prend plus de hauteur (75vh) */
   .wr-signals { height: 75vh; max-height: none; }
 }
+
+/* ═════════════════════════════════════════════════════════════════
+   ── MODE CLAIR ──  (html.light-mode)
+   Toutes les règles ci-dessous sont préfixées html.light-mode et ne
+   font QU'AJOUTER : le mode sombre reste 100% intact.
+
+   Note : les surfaces/textes/bordures qui passent par var(--wr-text*),
+   var(--wr-bg*) (= --navy/--navy2/--navy3) et var(--wr-border) (= --bd)
+   basculent DÉJÀ automatiquement clair/sombre via le thème — on ne les
+   retouche pas. On ne corrige ici QUE les couleurs codées en dur :
+   • la variable --wr-border-strong (blanc opaque → invisible en clair)
+   • tous les fonds/bordures rgba(255,255,255,…) littéraux
+   • quelques contrastes d'accent (texte sur pastille, glow blanc)
+   • les voiles de modales (scrim quasi-noir → veil neutre clair)
+   ═════════════════════════════════════════════════════════════════ */
+
+/* Variable bordure forte : blanc 14% → noir 14% (sinon invisible) */
+html.light-mode .wr-fullscreen {
+  --wr-border-strong: rgba(15, 23, 42, 0.16);
+}
+
+/* ── Rail gauche (icônes historique / agents / synthèse) ───────────── */
+html.light-mode .wr-rail            { background: rgba(0, 0, 0, 0.02); }
+html.light-mode .wr-rail-btn:hover  { background: rgba(0, 0, 0, 0.05); }
+html.light-mode .wr-rail-btn.active { background: rgba(0, 0, 0, 0.07); }
+
+/* ── Sub-header (mode courant + consensus) ─────────────────────────── */
+html.light-mode .wr-subheader              { background: rgba(0, 0, 0, 0.015); }
+html.light-mode .wr-signals-toggle:hover   { background: rgba(0, 0, 0, 0.05); }
+
+/* ── Rangée des 9 agents : pastilles ───────────────────────────────── */
+html.light-mode .wr-agent-icon { background: rgba(0, 0, 0, 0.04); }
+
+/* ── Feed : avatars de bulles + picker de réactions ────────────────── */
+html.light-mode .wr-msg-avatar       { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .wr-reaction         { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .wr-reaction-user    { background: rgba(0, 0, 0, 0.06); }
+html.light-mode .wr-react-picker {
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16);
+}
+html.light-mode .wr-react-pick:hover { background: rgba(0, 0, 0, 0.07); }
+
+/* ── Barre de saisie + pills d'intention ───────────────────────────── */
+html.light-mode .wr-pill        { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .wr-pill:hover  { background: rgba(0, 0, 0, 0.07); }
+
+/* ── Panneau droit : signals ───────────────────────────────────────── */
+html.light-mode .wr-signals          { background: rgba(0, 0, 0, 0.012); }
+html.light-mode .wr-pacing-dot       { background: rgba(0, 0, 0, 0.12); }
+
+/* ── Drawer Synthèse : boutons secondaires + chips idéation ────────── */
+html.light-mode .wr-synthesis-btn-close:hover { background: rgba(0, 0, 0, 0.05); }
+/* Pastille de rang d'une proposition : texte blanc sur l'indigo (sinon
+   le near-black #1a1505 du mode sombre est illisible sur l'accent clair) */
+html.light-mode .wr-proposal-rank { color: #ffffff; }
+html.light-mode .wr-id-chip {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.10);
+}
+
+/* ── Bibliothèque sessions (modale) ────────────────────────────────── */
+html.light-mode .wr-library-close:hover { background: rgba(0, 0, 0, 0.05); }
+html.light-mode .wr-library-item:hover  { background: rgba(0, 0, 0, 0.04); }
+
+/* ── Modale modes cognitifs ────────────────────────────────────────── */
+html.light-mode .wr-modes-close:hover { background: rgba(0, 0, 0, 0.05); }
+html.light-mode .wr-mode-card         { background: rgba(0, 0, 0, 0.02); }
+html.light-mode .wr-mode-card:hover   { background: rgba(0, 0, 0, 0.05); }
+
+/* ── Modale personnalités des agents ───────────────────────────────── */
+html.light-mode .wr-agents-close:hover { background: rgba(0, 0, 0, 0.05); }
+html.light-mode .wr-agent-card         { background: rgba(0, 0, 0, 0.02); }
+html.light-mode .wr-agent-card:hover   { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .wr-agent-trait        { background: rgba(0, 0, 0, 0.05); }
+
+/* ── Voiles (scrims) des modales : quasi-noir → veil neutre clair ──── */
+html.light-mode .wr-library-modal,
+html.light-mode .wr-modes-modal,
+html.light-mode .wr-agents-modal { background: rgba(15, 23, 42, 0.32); }
+
+/* ── Bottom sheet mobile + glow agent actif (≤ 1024 / ≤ 720) ───────── */
+@media (max-width: 1024px) {
+  html.light-mode .wr-signals {
+    box-shadow: 0 -16px 48px rgba(15, 23, 42, 0.18);
+  }
+}
+@media (max-width: 720px) {
+  /* Anneau autour du dot agent actif : blanc 10% (invisible) → dark */
+  html.light-mode .wr-agent-cell.active .wr-agent-icon {
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12), 0 0 16px var(--agent-color);
+  }
+}

@@ -6385,6 +6385,189 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .ksfs-detail-meta-support:hover { color: #fff; text-decoration: underline; }
 
 /* ════════════════════════════════════════════════════════════════
+   KEY-STORE — MODE CLAIR
+   ─────────────────────────────────────────────────────────────────
+   Le Key-Store plein écran (.ksfs-*) a tout son CSS en couleurs
+   sombres codées en dur (#0f1421, #131826, #fff, rgba(255,255,255,…)).
+   En mode clair → texte clair sur fond blanc = illisible. On surcharge
+   ICI, uniquement sous html.light-mode, sans toucher le mode sombre.
+   RÈGLE : on NE TOUCHE PAS .ksfs-hero-slide ni ses enfants (titre /
+   sous-titre / eyebrow / cta / dots / flèches) — le grand bandeau est
+   coloré, son texte blanc reste lisible sur le dégradé vif.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Conteneur plein écran + zone principale */
+html.light-mode .ksfs { background: #f8fafc; color: #0f172a; }
+
+/* ── Sidebar gauche (Catégories / Boutique / Mon Compte) ── */
+html.light-mode .ksfs-sidebar {
+    background: #fafafb;
+    border-right-color: rgba(0,0,0,.08);
+}
+html.light-mode .ksfs-back-btn {
+    background: rgba(0,0,0,.03);
+    border-color: rgba(0,0,0,.1);
+    color: #475569;
+}
+html.light-mode .ksfs-back-btn:hover { background: rgba(0,0,0,.06); color: #0f172a; }
+
+html.light-mode .ksfs-search-icon { color: rgba(0,0,0,.4); }
+html.light-mode .ksfs-search-input {
+    background: #fff;
+    border-color: rgba(0,0,0,.14);
+    color: #0f172a;
+}
+html.light-mode .ksfs-search-input::placeholder { color: rgba(0,0,0,.4); }
+html.light-mode .ksfs-search-input:focus {
+    border-color: rgba(79,70,229,.6);
+    background: #fff;
+}
+
+html.light-mode .ksfs-nav-title { color: #4456c4; }
+html.light-mode .ksfs-nav-btn { color: #334155; }
+html.light-mode .ksfs-nav-btn:hover { background: rgba(0,0,0,.04); color: #0f172a; }
+html.light-mode .ksfs-nav-btn.active {
+    background: rgba(99,102,241,.12);
+    color: #4456c4;
+}
+html.light-mode .ksfs-nav-btn.active .ksfs-nav-chev { color: #4456c4; }
+html.light-mode .ksfs-nav-chev { color: rgba(0,0,0,.35); }
+html.light-mode .ksfs-nav-btn--sub { color: #475569; }
+html.light-mode .ksfs-nav-btn--sub.active {
+    background: rgba(99,102,241,.1);
+    color: #4456c4;
+}
+
+html.light-mode .ksfs-sidebar-user { border-top-color: rgba(0,0,0,.08); }
+html.light-mode .ksfs-user-name { color: #0f172a; }
+html.light-mode .ksfs-user-sub { color: #64748b; }
+
+/* ── Zone principale : bouton fermer / burger / backdrop ── */
+html.light-mode .ksfs-close {
+    background: rgba(0,0,0,.04);
+    border-color: rgba(0,0,0,.1);
+    color: #475569;
+}
+html.light-mode .ksfs-close:hover { background: rgba(0,0,0,.08); color: #0f172a; }
+html.light-mode .ksfs-burger {
+    background: rgba(0,0,0,.03);
+    border-color: rgba(0,0,0,.1);
+    color: #334155;
+}
+html.light-mode .ksfs-burger:hover { background: rgba(0,0,0,.06); }
+html.light-mode .ksfs-backdrop { background: rgba(15,23,42,.35); }
+
+/* ── Bandeau "À la une" : viewport (le slide reste coloré, on n'y touche pas) ── */
+html.light-mode .ksfs-hero-viewport {
+    border-color: rgba(0,0,0,.08);
+    box-shadow: 0 14px 36px -22px rgba(15,23,42,.35);
+}
+
+/* ── Sections + titres ── */
+html.light-mode .ksfs-section { border-top-color: rgba(0,0,0,.08); }
+html.light-mode .ksfs-section-h,
+html.light-mode .ksfs-section-title { color: #0f172a; }
+html.light-mode .ksfs-section-sub { color: #64748b; }
+html.light-mode .ksfs-plans-title { color: #0f172a; }
+html.light-mode .ksfs-plans-sub { color: #64748b; }
+html.light-mode .ksfs-empty { color: #64748b; }
+
+/* ── Cartes "produit" : carte CLAIRE + ombre douce, on GARDE le liseré
+   de couleur (border-bottom de .ksfs-app-cover = var --tool-c) ── */
+html.light-mode .ksfs-app-card {
+    background: #fff;
+    border-color: rgba(0,0,0,.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+}
+html.light-mode .ksfs-app-card:hover {
+    border-color: rgba(0,0,0,.14);
+    box-shadow: 0 12px 30px rgba(15,23,42,.14);
+}
+/* Cover sans photo : le lavé blanc-sur-blanc devient invisible → lavé neutre clair */
+html.light-mode .ksfs-app-cover { background-color: #f1f5f9; }
+html.light-mode .ksfs-app-name { color: #0f172a; }
+html.light-mode .ksfs-app-desc { color: #64748b; }
+/* (.ksfs-app-cat reste posée sur la photo de cover → garde son fond sombre lisible) */
+html.light-mode .ksfs-buy-btn {
+    background: rgba(99,102,241,.1);
+    color: #4456c4;
+    border-color: rgba(99,102,241,.28);
+}
+html.light-mode .ksfs-buy-btn:hover {
+    background: rgba(99,102,241,.18);
+    color: #3730a3;
+}
+html.light-mode .ksfs-buy-btn--owned {
+    background: rgba(22,163,74,.12);
+    color: #15803d;
+    border-color: rgba(22,163,74,.28);
+}
+
+/* ── Page Détail App ── */
+html.light-mode .ksfs-detail-back {
+    background: rgba(0,0,0,.03);
+    border-color: rgba(0,0,0,.1);
+    color: #475569;
+}
+html.light-mode .ksfs-detail-back:hover { background: rgba(0,0,0,.06); color: #0f172a; }
+html.light-mode .ksfs-detail-head { border-bottom-color: rgba(0,0,0,.08); }
+/* Icône détail sans visuel : fond palette doux + bordure visible sur blanc */
+html.light-mode .ksfs-detail-icon[data-palette] {
+    border-color: rgba(0,0,0,.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+}
+html.light-mode .ksfs-detail-title { color: #0f172a; }
+html.light-mode .ksfs-detail-subtitle { color: #64748b; }
+html.light-mode .ksfs-detail-buy {
+    background: rgba(99,102,241,.12);
+    color: #4456c4;
+    border-color: rgba(99,102,241,.3);
+}
+html.light-mode .ksfs-detail-buy:hover { background: rgba(99,102,241,.2); }
+html.light-mode .ksfs-detail-buy--owned {
+    background: rgba(22,163,74,.12);
+    color: #15803d;
+    border-color: rgba(22,163,74,.28);
+}
+html.light-mode .ksfs-detail-meta-lbl { color: #0f172a; }
+html.light-mode .ksfs-detail-meta-h { color: #64748b; }
+html.light-mode .ksfs-detail-meta-v { color: #334155; }
+html.light-mode .ksfs-detail-meta-support { color: #4456c4; }
+html.light-mode .ksfs-detail-meta-support:hover { color: #3730a3; }
+
+/* Screenshots : la diapo vide #fff reste sur fond clair → cadre + ombre douce */
+html.light-mode .ksfs-detail-shot { box-shadow: 0 2px 14px rgba(15,23,42,.1); }
+html.light-mode .ksfs-detail-shot--filled { background-color: #f1f5f9; }
+html.light-mode .ksfs-detail-shot-nav {
+    background: #fff;
+    border-color: rgba(0,0,0,.12);
+    color: #475569;
+    box-shadow: 0 2px 10px rgba(15,23,42,.12);
+}
+html.light-mode .ksfs-detail-shot-nav:hover { background: rgba(99,102,241,.5); color: #fff; }
+
+/* Badges moteurs IA */
+html.light-mode .ksfs-detail-engine-lbl { color: #64748b; }
+html.light-mode .ksfs-detail-engine-chip {
+    background: rgba(99,102,241,.1);
+    color: #4456c4;
+    border-color: rgba(99,102,241,.28);
+}
+html.light-mode .ksfs-detail-engine-chip--optim {
+    background: rgba(99,102,241,.16);
+    border-color: rgba(99,102,241,.38);
+}
+
+/* Blocs texte + RGPD + "Également pour vous" */
+html.light-mode .ksfs-detail-block {
+    border-top-color: rgba(0,0,0,.08);
+    color: #475569;
+}
+html.light-mode .ksfs-detail-block-h { color: #0f172a; }
+html.light-mode .ksfs-detail-related { border-top-color: rgba(0,0,0,.08); }
+html.light-mode .ksfs-detail-related-h { color: #0f172a; }
+
+/* ════════════════════════════════════════════════════════════════
    SDQR — Sovereign Dynamic QR (Sprint SDQR-1)
    Workspace fullscreen indépendant : topbar + sidebar + main.
    Cohérent avec la charte Keystone (navy / gold / glass).
@@ -8816,3 +8999,755 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
   border-color: rgba(46,179,124,.55);
   transform: translateY(-1px);
 }
+
+/* ════════════════════════════════════════════════════════════════
+   ── MODE CLAIR ── SDQR (Smart Dynamic QR Studio)
+   N'AJOUTE que des surcharges html.light-mode. Le CSS de base ci-dessus
+   (mode sombre) est inchangé. On corrige le texte clair codé en dur, les
+   fonds blanc-alpha/sombres-solides et les inputs pour rester lisibles
+   sur fond clair. Les color: var(--text*/--tx*) basculent déjà seuls.
+═══════════════════════════════════════════════════════════════ */
+
+/* — Shell / topbar / pills — */
+html.light-mode .sdqr-topbar { border-bottom-color: rgba(0,0,0,.08); }
+html.light-mode .sdqr-back-btn {
+  border-color: rgba(0,0,0,.14);
+  color: #475569;
+}
+html.light-mode .sdqr-back-btn:hover {
+  background: rgba(99,102,241,.08);
+  border-color: rgba(99,102,241,.4);
+  color: #0f172a;
+}
+html.light-mode .sdqr-eyebrow { color: rgba(79,70,229,.9); }
+html.light-mode .sdqr-title { color: #0f172a; }
+html.light-mode .sdqr-pill {
+  border-color: rgba(0,0,0,.14);
+  color: #475569;
+  background: rgba(0,0,0,.03);
+}
+html.light-mode .sdqr-pill--ok {
+  border-color: rgba(22,163,107,.4);
+  background: rgba(22,163,107,.1);
+  color: #15803d;
+}
+html.light-mode .sdqr-pill--link:hover {
+  background: rgba(22,163,107,.12);
+  border-color: rgba(22,163,107,.55);
+}
+
+/* — Sidebar — */
+html.light-mode .sdqr-sidebar {
+  border-right-color: rgba(0,0,0,.08);
+}
+html.light-mode .sdqr-sidebar-head { border-bottom-color: rgba(0,0,0,.07); }
+html.light-mode .sdqr-sidebar-title { color: #64748b; }
+html.light-mode .sdqr-new-btn {
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.45);
+  color: #4456c4;
+}
+html.light-mode .sdqr-new-btn:hover { background: rgba(99,102,241,.18); color: #0f172a; }
+
+html.light-mode .sdqr-li {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.1);
+  color: #334155;
+}
+html.light-mode .sdqr-li:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.3);
+}
+html.light-mode .sdqr-li.is-selected {
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.45);
+}
+html.light-mode .sdqr-li-name { color: #0f172a; }
+html.light-mode .sdqr-li-scans { color: #4456c4; }
+html.light-mode .sdqr-li-type { color: #64748b; }
+html.light-mode .sdqr-li-status {
+  background: rgba(217,119,6,.12);
+  color: #b45309;
+}
+html.light-mode .sdqr-li-tag {
+  background: rgba(99,102,241,.1);
+  color: #4456c4;
+}
+html.light-mode .sdqr-li-mode--dyn { background: rgba(99,102,241,.12); color: #4456c4; }
+html.light-mode .sdqr-li-mode--stat { background: rgba(99,102,241,.12); color: #b45309; }
+html.light-mode .sdqr-li-concierge { background: rgba(99,102,241,.14); color: #4456c4; }
+html.light-mode .sdqr-li-scans--stat { color: #94a3b8; }
+html.light-mode .sdqr-li-folder { color: #64748b; }
+html.light-mode .sdqr-empty-mini { color: #94a3b8; }
+
+/* Sidebar — recherche + filtres + dossiers */
+html.light-mode .sdqr-sidebar-filters { border-bottom-color: rgba(0,0,0,.07); }
+html.light-mode .sdqr-search-ico { color: rgba(0,0,0,.4); }
+html.light-mode .sdqr-search-input {
+  background: #fff;
+  border-color: rgba(0,0,0,.14);
+  color: #0f172a;
+}
+html.light-mode .sdqr-search-input::placeholder { color: rgba(0,0,0,.4); }
+html.light-mode .sdqr-search-input:focus {
+  border-color: rgba(99,102,241,.5);
+  background: #fff;
+}
+html.light-mode .sdqr-search-kbd {
+  background: rgba(0,0,0,.05);
+  border-color: rgba(0,0,0,.12);
+  color: #64748b;
+}
+html.light-mode .sdqr-filter-pills {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.08);
+}
+html.light-mode .sdqr-filter-pill { color: #64748b; }
+html.light-mode .sdqr-filter-pill:hover { color: #0f172a; }
+html.light-mode .sdqr-filter-pill.is-active {
+  background: rgba(99,102,241,.14);
+  color: #4456c4;
+}
+html.light-mode .sdqr-empty-reset {
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.4);
+  color: #4456c4;
+}
+html.light-mode .sdqr-empty-reset:hover { background: rgba(99,102,241,.18); color: #0f172a; }
+html.light-mode .sdqr-folder-bar-head { color: #64748b; }
+html.light-mode .sdqr-folder-chip { color: #334155; }
+html.light-mode .sdqr-folder-chip:hover { background: rgba(0,0,0,.04); }
+html.light-mode .sdqr-folder-chip.is-active {
+  background: rgba(99,102,241,.12);
+  border-color: rgba(99,102,241,.45);
+  color: #0f172a;
+}
+html.light-mode .sdqr-folder-chip-n {
+  color: #64748b;
+  background: rgba(0,0,0,.06);
+}
+html.light-mode .sdqr-folder-rename { color: #94a3b8; }
+html.light-mode .sdqr-folder-rename:hover { color: #0f172a; }
+
+/* — Tabs — */
+html.light-mode .sdqr-tabs { border-bottom-color: rgba(0,0,0,.08); }
+html.light-mode .sdqr-tab { color: #64748b; }
+html.light-mode .sdqr-tab:hover:not(:disabled) { color: #0f172a; }
+html.light-mode .sdqr-tab.active { color: #0f172a; }
+
+/* — Empty state (priorité : quasi invisible sur blanc) — */
+html.light-mode .sdqr-empty-ico { color: rgba(99,102,241,.6); }
+html.light-mode .sdqr-empty-title { color: #0f172a; }
+html.light-mode .sdqr-empty-text { color: #475569; }
+
+/* — Form (création QR) — */
+html.light-mode .sdqr-form-title { color: #0f172a; }
+html.light-mode .sdqr-form-sub { color: #475569; }
+html.light-mode .sdqr-field-lbl { color: #334155; }
+html.light-mode .sdqr-input {
+  background: #fff;
+  border-color: rgba(0,0,0,.14);
+  color: #0f172a;
+}
+html.light-mode .sdqr-input:focus {
+  border-color: rgba(99,102,241,.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.1);
+}
+html.light-mode .sdqr-input::placeholder { color: rgba(0,0,0,.4); }
+html.light-mode .sdqr-input[type="datetime-local"] { color-scheme: light; }
+html.light-mode .sdqr-input[type="color"]::-webkit-color-swatch { border-color: rgba(0,0,0,.18); }
+html.light-mode .sdqr-pw-toggle { color: #64748b; }
+html.light-mode .sdqr-pw-toggle:hover { background: rgba(0,0,0,.05); }
+html.light-mode .sdqr-checkbox-lbl {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.12);
+  color: #334155;
+}
+html.light-mode .sdqr-checkbox-lbl input[type="checkbox"] {
+  border-color: rgba(0,0,0,.28);
+}
+
+/* — Boutons (les boutons à dégradé/primary gardent leur fond) — */
+html.light-mode .sdqr-btn--ghost {
+  border-color: rgba(0,0,0,.14);
+  color: #475569;
+}
+html.light-mode .sdqr-btn--ghost:hover {
+  background: rgba(99,102,241,.08);
+  border-color: rgba(99,102,241,.4);
+  color: #0f172a;
+}
+html.light-mode .sdqr-btn.is-locked,
+html.light-mode .sdqr-btn[disabled].is-locked,
+html.light-mode .sdqr-btn.is-locked:hover {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.1);
+  color: #94a3b8;
+}
+html.light-mode .sdqr-btn.is-locked::after {
+  background: #fff;
+  border-color: rgba(0,0,0,.14);
+}
+html.light-mode .sdqr-svg-hint { color: #b45309; }
+
+/* — Mode toggle (statique / dynamique) — */
+html.light-mode .sdqr-mode-btn {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.12);
+  color: #334155;
+}
+html.light-mode .sdqr-mode-btn:hover:not(:disabled) {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.3);
+}
+html.light-mode .sdqr-mode-btn.is-active {
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.5);
+}
+html.light-mode .sdqr-mode-dot { border-color: rgba(0,0,0,.25); }
+html.light-mode .sdqr-mode-btn.is-active .sdqr-mode-dot { box-shadow: inset 0 0 0 2px #fff; }
+html.light-mode .sdqr-mode-txt strong { color: #0f172a; }
+html.light-mode .sdqr-mode-btn.is-active .sdqr-mode-txt strong { color: #4456c4; }
+html.light-mode .sdqr-mode-txt small { color: #64748b; }
+
+/* — Cartes de type (URL / Texte / vCard / Wi-Fi / iCal) — */
+html.light-mode .sdqr-type-card {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.12);
+  color: #334155;
+}
+html.light-mode .sdqr-type-card:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.3);
+}
+html.light-mode .sdqr-type-card.is-active {
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.5);
+}
+html.light-mode .sdqr-type-ico { color: #64748b; }
+html.light-mode .sdqr-type-card:hover .sdqr-type-ico { color: #4456c4; }
+html.light-mode .sdqr-type-label { color: #0f172a; }
+html.light-mode .sdqr-type-desc { color: #64748b; }
+html.light-mode .sdqr-type-badge {
+  background: rgba(217,119,6,.12);
+  color: #b45309;
+}
+
+/* — Cartes de templates Smart QR (teinte or-indigo) — */
+html.light-mode .sdqr-template-change { color: #9a7b3e; }
+html.light-mode .sdqr-template-change:hover { color: #8a6d2e; }
+html.light-mode .sdqr-template-card {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(160,130,70,.28);
+  color: #334155;
+}
+html.light-mode .sdqr-template-card:hover {
+  background: linear-gradient(135deg, rgba(201,169,110,.1), rgba(124,138,249,.08));
+  border-color: rgba(160,130,70,.5);
+  box-shadow: 0 12px 28px rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-template-card.is-active {
+  background: linear-gradient(135deg, rgba(201,169,110,.18), rgba(124,138,249,.16));
+  border-color: rgba(160,130,70,.65);
+  box-shadow: 0 14px 36px rgba(124,138,249,.14), 0 0 0 1px rgba(160,130,70,.3) inset;
+}
+html.light-mode .sdqr-template-ico { color: #9a7b3e; }
+html.light-mode .sdqr-template-tier--starter {
+  color: #475569; background: rgba(100,116,139,.1);
+  border-color: rgba(100,116,139,.28);
+}
+html.light-mode .sdqr-template-tier--pro {
+  color: #9a7b3e; background: rgba(201,169,110,.12);
+  border-color: rgba(160,130,70,.4);
+}
+html.light-mode .sdqr-template-tier--max {
+  color: #b45309; background: rgba(217,119,6,.1);
+  border-color: rgba(217,119,6,.36);
+}
+html.light-mode .sdqr-template-tier--admin {
+  color: #be185d; background: rgba(219,39,119,.1);
+  border-color: rgba(219,39,119,.32);
+}
+html.light-mode .sdqr-template-label { color: #0f172a; }
+html.light-mode .sdqr-template-card.is-active .sdqr-template-label { color: #9a7b3e; }
+html.light-mode .sdqr-template-desc { color: #64748b; }
+
+/* Mini-previews animées (le fond restitue le rendu réel au scan → on
+   garde une mini-scène contrastée mais sur fond clair sobre) */
+html.light-mode .sdqr-template-preview {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(160,130,70,.22);
+}
+html.light-mode .sq-mini-phrase {
+  background: rgba(124,138,249,.1);
+  border-color: rgba(124,138,249,.28);
+  color: #334155;
+}
+html.light-mode .sq-mini-story-slogan { color: #475569; }
+html.light-mode .sq-mini-cd-cell {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(160,130,70,.3);
+}
+html.light-mode .sq-mini-cd-num { color: #0f172a; }
+html.light-mode .sq-mini-cd-unit { color: #64748b; }
+html.light-mode .sq-mini-quiz-card {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(124,138,249,.35);
+}
+html.light-mode .sq-mini-loyalty-cell {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(160,130,70,.38);
+  color: rgba(0,0,0,.25);
+}
+html.light-mode .sq-mini-scratch {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(160,130,70,.38);
+}
+
+/* — Detail (QR sélectionné) — */
+html.light-mode .sdqr-detail-card {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-detail-shortid-lbl { color: #64748b; }
+html.light-mode .sdqr-detail-shortid-val {
+  background: rgba(0,0,0,.05);
+  color: #334155;
+}
+html.light-mode .sdqr-detail-name { color: #0f172a; }
+html.light-mode .sdqr-detail-pill {
+  background: rgba(22,163,107,.1);
+  color: #15803d;
+}
+html.light-mode .sdqr-detail-pill--off {
+  background: rgba(217,119,6,.1);
+  color: #b45309;
+}
+html.light-mode .sdqr-detail-pill--dyn { background: rgba(99,102,241,.1); color: #4456c4; }
+html.light-mode .sdqr-detail-pill--stat { background: rgba(99,102,241,.1); color: #b45309; }
+html.light-mode .sdqr-detail-pill--smart {
+  background: linear-gradient(135deg, rgba(201,169,110,.18), rgba(124,138,249,.18));
+  color: #9a7b3e;
+  border-color: rgba(160,130,70,.4);
+}
+html.light-mode .sdqr-detail-stat { color: #4456c4; }
+html.light-mode .sdqr-detail-notice {
+  background: rgba(99,102,241,.07);
+  border-left-color: rgba(99,102,241,.5);
+  color: #475569;
+}
+html.light-mode .sdqr-detail-notice strong { color: #4456c4; }
+html.light-mode .sdqr-detail-notice--stat {
+  background: rgba(99,102,241,.07);
+  color: #475569;
+}
+html.light-mode .sdqr-detail-notice--stat strong { color: #b45309; }
+html.light-mode .sdqr-detail-summary {
+  background: rgba(0,0,0,.02);
+  border-left-color: rgba(99,102,241,.45);
+  color: #334155;
+}
+
+/* — Messages form / detail — */
+html.light-mode .sdqr-form-msg--err,
+html.light-mode .sdqr-detail-msg--err {
+  background: rgba(239,68,68,.1);
+  border-color: rgba(239,68,68,.32);
+  color: #dc2626;
+}
+html.light-mode .sdqr-form-msg--ok,
+html.light-mode .sdqr-detail-msg--ok {
+  background: rgba(22,163,107,.1);
+  border-color: rgba(22,163,107,.32);
+  color: #15803d;
+}
+html.light-mode .sdqr-btn--danger { border-color: rgba(220,38,38,.35); color: #dc2626; }
+html.light-mode .sdqr-btn--danger:hover {
+  background: rgba(239,68,68,.1);
+  border-color: rgba(220,38,38,.55);
+  color: #b91c1c;
+}
+
+/* — Edit payload (QR dynamique non-URL) — */
+html.light-mode .sdqr-edit-payload {
+  background: rgba(99,102,241,.05);
+  border-color: rgba(99,102,241,.2);
+}
+html.light-mode .sdqr-edit-payload-head { border-bottom-color: rgba(0,0,0,.08); }
+
+/* — Verify block (vérif caisse) — */
+html.light-mode .sdqr-verify-block {
+  background: linear-gradient(135deg, rgba(22,163,107,.06), rgba(22,163,107,.1));
+  border-color: rgba(22,163,107,.32);
+}
+html.light-mode .sdqr-verify-block-head { color: #15803d; }
+html.light-mode .sdqr-verify-block-desc { color: #475569; }
+html.light-mode .sdqr-verify-url {
+  color: #334155;
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.1);
+}
+
+/* — Picker pictogrammes (bouton + modale) — */
+html.light-mode .sdqr-icon-picker-btn {
+  border-color: rgba(160,130,70,.4);
+  background: rgba(201,169,110,.1);
+  color: #9a7b3e;
+}
+html.light-mode .sdqr-icon-picker-btn:hover {
+  background: rgba(201,169,110,.18);
+  border-color: rgba(160,130,70,.65);
+}
+html.light-mode .sdqr-icon-backdrop { background: rgba(15,23,42,.4); }
+html.light-mode .sdqr-icon-panel {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+  box-shadow: 0 32px 72px rgba(0,0,0,.22), 0 0 0 1px rgba(160,130,70,.12) inset;
+}
+html.light-mode .sdqr-icon-head { border-bottom-color: rgba(0,0,0,.08); }
+html.light-mode .sdqr-icon-head h2 { color: #9a7b3e; }
+html.light-mode .sdqr-icon-close { color: #64748b; }
+html.light-mode .sdqr-icon-close:hover { background: rgba(0,0,0,.05); color: #0f172a; }
+html.light-mode .sdqr-icon-cats::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); }
+html.light-mode .sdqr-icon-cat { color: #64748b; }
+html.light-mode .sdqr-icon-cat:hover { background: rgba(0,0,0,.04); color: #0f172a; }
+html.light-mode .sdqr-icon-cat.is-active {
+  background: rgba(201,169,110,.18);
+  color: #9a7b3e;
+}
+html.light-mode .sdqr-icon-cell {
+  background: rgba(0,0,0,.03);
+}
+html.light-mode .sdqr-icon-cell:hover {
+  background: rgba(201,169,110,.14);
+  border-color: rgba(160,130,70,.4);
+}
+html.light-mode .sdqr-icon-hint { color: #94a3b8; border-top-color: rgba(0,0,0,.07); }
+
+/* — Widget upload image — */
+html.light-mode .sdqr-image-preview {
+  border-color: rgba(160,130,70,.3);
+  background: rgba(0,0,0,.02);
+}
+html.light-mode .sdqr-image-preview.has-image {
+  border-color: rgba(160,130,70,.45);
+  background: rgba(0,0,0,.03);
+}
+html.light-mode .sdqr-image-placeholder { color: #94a3b8; }
+html.light-mode .sdqr-image-btn {
+  background: rgba(124,138,249,.12);
+  border-color: rgba(124,138,249,.4);
+  color: #4456c4;
+}
+html.light-mode .sdqr-image-btn:hover {
+  background: rgba(124,138,249,.2);
+  border-color: rgba(124,138,249,.6);
+}
+html.light-mode .sdqr-image-btn--ghost {
+  border-color: rgba(0,0,0,.14);
+  color: #475569;
+}
+html.light-mode .sdqr-image-btn--ghost:hover {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.22);
+  color: #0f172a;
+}
+html.light-mode .sdqr-image-url-fallback { color: #475569; }
+html.light-mode .sdqr-image-url-fallback summary:hover,
+html.light-mode .sdqr-image-url-fallback summary::marker,
+html.light-mode .sdqr-image-url-fallback[open] summary { color: #9a7b3e; }
+html.light-mode .sdqr-image-help { color: #94a3b8; }
+html.light-mode .sdqr-image-err {
+  color: #dc2626;
+  background: rgba(248,113,113,.1);
+  border-color: rgba(248,113,113,.32);
+}
+
+/* — Widget couleur (swatch + hex) — */
+html.light-mode .sdqr-color-swatch {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.14);
+}
+html.light-mode .sdqr-color-swatch::-webkit-color-swatch { border-color: rgba(0,0,0,.18); }
+html.light-mode .sdqr-color-swatch::-moz-color-swatch { border-color: rgba(0,0,0,.18); }
+html.light-mode .sdqr-color-widget.is-invalid .sdqr-color-hex {
+  border-color: rgba(220,38,38,.65);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+
+/* — Répéteur de lots (carte à gratter multi-lots) — */
+html.light-mode .sdqr-lot-row {
+  border-color: rgba(0,0,0,.1);
+  background: rgba(0,0,0,.02);
+}
+html.light-mode .sdqr-lot-num > span { color: #64748b; }
+html.light-mode .sdqr-lot-del {
+  border-color: rgba(0,0,0,.14);
+  color: #64748b;
+}
+html.light-mode .sdqr-lot-del:hover { color: #dc2626; border-color: rgba(220,38,38,.5); }
+html.light-mode .sdqr-lots-add {
+  background: rgba(99,102,241,.12);
+  border-color: rgba(99,102,241,.4);
+  color: #4456c4;
+}
+html.light-mode .sdqr-lots-add:hover { background: rgba(99,102,241,.2); }
+html.light-mode .sdqr-lots-hint { color: #94a3b8; }
+html.light-mode .sdqr-lots-err { color: #dc2626; }
+
+/* — Éditeur Concierge VEFA — */
+html.light-mode .sdqr-cg-section {
+  border-color: rgba(0,0,0,.1);
+  background: rgba(0,0,0,.015);
+}
+html.light-mode .sdqr-cg-section-h { color: #334155; }
+html.light-mode .sdqr-cg-section-h small { color: #64748b; }
+html.light-mode .sdqr-cg-config {
+  border-color: rgba(0,0,0,.1);
+  background: rgba(0,0,0,.02);
+}
+html.light-mode .sdqr-cg-config-n { color: #64748b; }
+html.light-mode .sdqr-cg-del {
+  border-color: rgba(0,0,0,.14);
+  color: #64748b;
+}
+html.light-mode .sdqr-cg-del:hover { color: #dc2626; border-color: rgba(220,38,38,.5); }
+html.light-mode .sdqr-cg-faq {
+  border-color: rgba(0,0,0,.1);
+  background: rgba(0,0,0,.02);
+}
+html.light-mode .sdqr-cg-add {
+  background: rgba(99,102,241,.12);
+  border-color: rgba(99,102,241,.4);
+  color: #4456c4;
+}
+html.light-mode .sdqr-cg-add:hover { background: rgba(99,102,241,.2); }
+html.light-mode .sdqr-cg-hint,
+html.light-mode .sdqr-cg-seg-hint,
+html.light-mode .sdqr-cg-import-msg { color: #64748b; }
+html.light-mode .sdqr-cg-source-btn {
+  border-color: rgba(0,0,0,.14);
+  background: rgba(0,0,0,.02);
+  color: #475569;
+}
+html.light-mode .sdqr-cg-source-btn:hover {
+  border-color: rgba(99,102,241,.4);
+  color: #0f172a;
+}
+html.light-mode .sdqr-cg-source-btn.is-active {
+  border-color: rgba(99,102,241,.7);
+  background: rgba(99,102,241,.14);
+  color: #3730a3;
+}
+html.light-mode .sdqr-cg-seg {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-cg-seg-btn { color: #64748b; }
+html.light-mode .sdqr-cg-seg-btn:hover { color: #0f172a; }
+html.light-mode .sdqr-cg-seg-btn.is-active {
+  background: rgba(99,102,241,.9);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(99,102,241,.25);
+}
+html.light-mode .sdqr-cg-import-item {
+  border-color: rgba(99,102,241,.32);
+  background: rgba(99,102,241,.06);
+  color: #334155;
+}
+html.light-mode .sdqr-cg-import-item:hover {
+  border-color: rgba(99,102,241,.7);
+  background: rgba(99,102,241,.14);
+}
+html.light-mode .sdqr-cg-import-del {
+  border-color: rgba(248,113,113,.35);
+  background: rgba(248,113,113,.08);
+  color: #dc2626;
+}
+html.light-mode .sdqr-cg-import-del:hover {
+  border-color: rgba(220,38,38,.6);
+  background: rgba(248,113,113,.18);
+  color: #b91c1c;
+}
+html.light-mode .sdqr-cg-import-banner {
+  color: #3730a3;
+  background: rgba(99,102,241,.1);
+  border-color: rgba(99,102,241,.32);
+}
+html.light-mode .sdqr-cg-linklike { color: #9a7b3e; }
+html.light-mode .sdqr-cg-linklike:hover { color: #8a6d2e; }
+html.light-mode .sdqr-cg-fiche-link {
+  border-color: rgba(22,163,107,.35);
+  background: rgba(22,163,107,.08);
+}
+html.light-mode .sdqr-cg-fiche-link-head { color: #15803d; }
+html.light-mode .sdqr-cg-fiche-open { color: #4456c4; }
+html.light-mode .sdqr-cg-vefa-card {
+  border-color: rgba(99,102,241,.32);
+  background: rgba(99,102,241,.06);
+}
+html.light-mode .sdqr-cg-vefa-k { color: #64748b; }
+html.light-mode .sdqr-cg-vefa-v { color: #3730a3; }
+html.light-mode .sdqr-cg-vefa-chip {
+  background: rgba(0,0,0,.06);
+  color: #475569;
+}
+html.light-mode .sdqr-cg-vefa-ref {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.1);
+  color: #475569;
+}
+html.light-mode .sdqr-cg-vefa-note { color: #94a3b8; }
+html.light-mode .sdqr-cg-vefa-empty {
+  border-color: rgba(0,0,0,.16);
+  background: rgba(0,0,0,.015);
+}
+html.light-mode .sdqr-cg-vefa-empty-h { color: #334155; }
+html.light-mode .sdqr-cg-vefa-empty-p { color: #64748b; }
+
+/* ── Studio Design (panneau collapsible) ── */
+html.light-mode .sdqr-design-panel {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-design-summary { color: #334155; }
+html.light-mode .sdqr-design-summary:hover { background: rgba(99,102,241,.05); color: #0f172a; }
+html.light-mode .sdqr-design-body { border-top-color: rgba(0,0,0,.07); }
+html.light-mode .sdqr-design-section { border-bottom-color: rgba(0,0,0,.07); }
+html.light-mode .sdqr-design-section-title { color: #334155; }
+html.light-mode .sdqr-design-lbl,
+html.light-mode .sdqr-design-lbl-sm { color: #64748b; }
+html.light-mode .sdqr-surprise-btn {
+  background: linear-gradient(135deg, rgba(99,102,241,.14), rgba(99,102,241,.14));
+  border-color: rgba(99,102,241,.4);
+  color: #4456c4;
+}
+html.light-mode .sdqr-surprise-btn:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,.22), rgba(99,102,241,.22));
+  box-shadow: 0 4px 14px rgba(99,102,241,.14);
+}
+
+/* Pills de forme */
+html.light-mode .sdqr-shape-pill {
+  border-color: rgba(0,0,0,.12);
+  color: #475569;
+}
+html.light-mode .sdqr-shape-pill:hover {
+  border-color: rgba(99,102,241,.4);
+  color: #0f172a;
+}
+html.light-mode .sdqr-shape-pill.is-active {
+  background: rgba(99,102,241,.12);
+  border-color: rgba(99,102,241,.5);
+  color: #4456c4;
+}
+html.light-mode .sdqr-shape-pill--visual .sdqr-shape-pill-svg { color: #64748b; }
+html.light-mode .sdqr-shape-pill--visual:hover .sdqr-shape-pill-svg { color: #0f172a; }
+html.light-mode .sdqr-shape-pill--visual.is-active .sdqr-shape-pill-svg { color: #4456c4; }
+
+/* Champs couleur custom (color input + hex) */
+html.light-mode .sdqr-color-field input[type="color"] { border-color: rgba(0,0,0,.14); }
+html.light-mode .sdqr-hex {
+  background: #fff;
+  border-color: rgba(0,0,0,.14);
+  color: #0f172a;
+}
+html.light-mode .sdqr-hex:focus { border-color: rgba(99,102,241,.5); }
+
+/* Sliders */
+html.light-mode .sdqr-slider-wrap input[type="range"] { background: rgba(0,0,0,.12); }
+html.light-mode .sdqr-slider-wrap input[type="range"]::-webkit-slider-thumb { border-color: #fff; }
+html.light-mode .sdqr-slider-wrap input[type="range"]::-moz-range-thumb { border-color: #fff; }
+html.light-mode .sdqr-slider-val { color: #475569; }
+
+/* Thèmes / palette / logo zone */
+html.light-mode .sdqr-theme-card {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-theme-card:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.3);
+}
+html.light-mode .sdqr-theme-card.is-on {
+  border-color: rgba(99,102,241,.55);
+  background: rgba(99,102,241,.08);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.35);
+}
+html.light-mode .sdqr-theme-preview { border-color: rgba(0,0,0,.1); }
+html.light-mode .sdqr-theme-label { color: #334155; }
+html.light-mode .sdqr-theme-card.is-on .sdqr-theme-label { color: #0f172a; }
+html.light-mode .sdqr-pal-card {
+  background: rgba(0,0,0,.02);
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-pal-card:hover {
+  background: rgba(99,102,241,.06);
+  border-color: rgba(99,102,241,.3);
+}
+html.light-mode .sdqr-pal-card.is-on {
+  border-color: rgba(99,102,241,.55);
+  background: rgba(99,102,241,.08);
+  box-shadow: 0 0 0 1px rgba(99,102,241,.35);
+}
+html.light-mode .sdqr-pal-swatch { border-color: rgba(0,0,0,.1); }
+html.light-mode .sdqr-pal-name { color: #334155; }
+html.light-mode .sdqr-pal-card.is-on .sdqr-pal-name { color: #0f172a; }
+html.light-mode .sdqr-logo-zone {
+  border-color: rgba(0,0,0,.18);
+  background: rgba(0,0,0,.015);
+}
+html.light-mode .sdqr-logo-zone.is-dragging {
+  border-color: rgba(99,102,241,.5);
+  background: rgba(99,102,241,.06);
+}
+html.light-mode .sdqr-logo-zone.has-logo {
+  border-color: rgba(0,0,0,.1);
+  background: rgba(0,0,0,.03);
+}
+html.light-mode .sdqr-logo-zone-empty { color: #475569; }
+html.light-mode .sdqr-logo-zone-empty:hover { color: #0f172a; }
+html.light-mode .sdqr-logo-zone-empty strong { color: #0f172a; }
+html.light-mode .sdqr-logo-zone-empty small { color: #94a3b8; }
+html.light-mode .sdqr-logo-thumb { border-color: rgba(0,0,0,.14); }
+
+/* Footer panneau (contrast + export) */
+html.light-mode .sdqr-design-foot { border-top-color: rgba(0,0,0,.07); }
+html.light-mode .sdqr-export-row,
+html.light-mode .sdqr-detail-actions--incard { border-top-color: rgba(0,0,0,.07); }
+
+/* ── Statistiques (KPI + charts + bars) ── */
+html.light-mode .sdqr-stats-title { color: #0f172a; }
+html.light-mode .sdqr-stats-subtitle { color: #64748b; }
+html.light-mode .sdqr-period-pills {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.08);
+}
+html.light-mode .sdqr-period-pill { color: #64748b; }
+html.light-mode .sdqr-period-pill:hover { color: #0f172a; }
+html.light-mode .sdqr-period-pill.is-active {
+  background: rgba(99,102,241,.14);
+  color: #4456c4;
+}
+html.light-mode .sdqr-kpi-card {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-kpi-label { color: #64748b; }
+html.light-mode .sdqr-kpi-value { color: #0f172a; }
+html.light-mode .sdqr-kpi-hint { color: #94a3b8; }
+html.light-mode .sdqr-chart-card {
+  background: #fff;
+  border-color: rgba(0,0,0,.1);
+}
+html.light-mode .sdqr-chart-title { color: #64748b; }
+/* Line chart : gridlines + labels d'axe codés en dur dans le SVG (sdqr.js).
+   Les attributs de présentation SVG sont surchargés par ces règles CSS. */
+html.light-mode .sdqr-line-chart line { stroke: rgba(0,0,0,.1); }
+html.light-mode .sdqr-line-chart text { fill: #64748b; }
+html.light-mode .sdqr-bar-label { color: #334155; }
+html.light-mode .sdqr-bar-track { background: rgba(0,0,0,.08); }
+html.light-mode .sdqr-bar-value { color: #475569; }
+html.light-mode .sdqr-stats-static-title { color: #0f172a; }
+html.light-mode .sdqr-stats-static-text { color: #475569; }

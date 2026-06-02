@@ -1711,6 +1711,87 @@ html.light-mode .ai-multiselect { background: rgba(0, 0, 0, 0.02); border-color:
 html.light-mode .ai-prompt-preview-card { background: #fafafb; }
 html.light-mode .ai-prompt-body { background: rgba(0, 0, 0, 0.04); color: rgba(30, 30, 50, 0.92); }
 html.light-mode .ai-toast { background: #1a1a20; color: #fff; }
+
+/* ── MODE CLAIR (complément) ─────────────────────────────────────
+   Surcharges ajoutées pour les sélecteurs encore illisibles/invisibles
+   en clair : eyebrow, boutons secondaires, panneau résultat (loading,
+   close, error), bibliothèque (count, mini, danger), modal coller,
+   chip moteur, overlay aperçu prompt. Mode sombre 100% intact. */
+
+/* Hero eyebrow — texte gris clair illisible sur blanc */
+html.light-mode .ai-hero-eyebrow {
+  color: rgba(70, 90, 180, 0.95);
+  background: rgba(80, 110, 230, 0.07);
+  border-color: rgba(80, 110, 230, 0.22);
+}
+
+/* Astérisque "requis" — rouge encore lisible, on assombrit légèrement */
+html.light-mode .ai-req { color: rgba(210, 60, 60, 0.9); }
+
+/* Bouton secondaire — fond/bordure blancs invisibles sur blanc */
+html.light-mode .ai-btn-secondary {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(30, 30, 50, 0.9);
+}
+html.light-mode .ai-btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.18);
+}
+html.light-mode .ai-btn-link:hover { color: rgba(20, 20, 30, 0.95); }
+
+/* Panneau résultat — états loading / head / close / error */
+html.light-mode .ai-result-panel { border-color: rgba(80, 110, 230, 0.2); }
+html.light-mode .ai-result-loading { color: rgba(60, 70, 110, 0.9); }
+html.light-mode .ai-result-spinner {
+  border-color: rgba(80, 110, 230, 0.2);
+  border-top-color: rgba(80, 110, 230, 0.9);
+}
+html.light-mode .ai-result-body { border-color: rgba(0, 0, 0, 0.08); }
+html.light-mode .ai-result-close:hover { color: rgba(20, 20, 30, 0.95); background: rgba(0, 0, 0, 0.05); }
+html.light-mode .ai-result-error { border-color: rgba(210, 60, 60, 0.35); background: rgba(210, 60, 60, 0.05); }
+html.light-mode .ai-result-error-msg { background: rgba(0, 0, 0, 0.04); color: rgba(150, 40, 40, 0.95); }
+
+/* Bibliothèque — compteur, hover item, mini boutons, danger */
+html.light-mode .ai-lib-header { border-bottom-color: rgba(0, 0, 0, 0.06); }
+html.light-mode .ai-lib-count { background: rgba(0, 0, 0, 0.05); color: rgba(60, 60, 80, 0.85); }
+html.light-mode .ai-lib-item:hover { border-color: rgba(80, 110, 230, 0.3); }
+html.light-mode .ai-lib-mini:hover {
+  background: rgba(80, 110, 230, 0.12);
+  border-color: rgba(80, 110, 230, 0.35);
+  color: rgba(40, 60, 180, 1);
+}
+html.light-mode .ai-lib-mini--danger {
+  background: rgba(210, 60, 60, 0.06);
+  border-color: rgba(210, 60, 60, 0.2);
+  color: rgba(170, 40, 40, 0.9);
+}
+html.light-mode .ai-lib-mini--danger:hover {
+  background: rgba(210, 60, 60, 0.14);
+  border-color: rgba(210, 60, 60, 0.45);
+  color: rgba(150, 30, 30, 1);
+}
+
+/* Modal "Coller & sauvegarder" — close + focus inputs */
+html.light-mode .ai-paste-close:hover { color: rgba(20, 20, 30, 0.95); background: rgba(0, 0, 0, 0.05); }
+html.light-mode .ai-paste-title:focus, html.light-mode .ai-paste-text:focus {
+  border-color: rgba(80, 110, 230, 0.5);
+  background: rgba(0, 0, 0, 0.045);
+}
+
+/* Chip moteur recommandé / actif — fond invisible, accents à assombrir */
+html.light-mode .ai-engine-chip {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(60, 60, 80, 0.85);
+}
+html.light-mode .ai-engine-ok { color: rgba(30, 130, 80, 0.95); }
+html.light-mode .ai-engine-mismatch { color: rgba(170, 110, 20, 1); }
+html.light-mode .ai-engine-mismatch strong { color: rgba(20, 20, 30, 0.95); }
+
+/* Overlay aperçu prompt — close + corps */
+html.light-mode .ai-prompt-body { border-color: rgba(0, 0, 0, 0.08); }
+html.light-mode .ai-prompt-close:hover { color: rgba(20, 20, 30, 0.95); background: rgba(0, 0, 0, 0.05); }
   `;
   const style = document.createElement('style');
   style.id = 'ks-annonces-immo-styles';

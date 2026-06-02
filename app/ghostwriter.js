@@ -399,6 +399,69 @@ function _injectCSS() {
     display: inline-block;
 }
 @keyframes gw-spin { to { transform: rotate(360deg); } }
+
+/* ── MODE CLAIR ── */
+html.light-mode .gw-modal {
+    border-color: rgba(0,0,0,.1);
+    box-shadow: 0 24px 64px rgba(0,0,0,.22);
+}
+html.light-mode .gw-head { border-bottom-color: rgba(0,0,0,.08); }
+html.light-mode .gw-title { color: #0f172a; }
+html.light-mode .gw-subtitle { color: #64748b; }
+html.light-mode .gw-close { color: #64748b; }
+html.light-mode .gw-close:hover { color: #0f172a; background: rgba(0,0,0,.05); }
+html.light-mode .gw-left { border-right-color: rgba(0,0,0,.08); }
+html.light-mode .gw-label { color: #64748b; }
+html.light-mode .gw-source {
+    background: #fff; border-color: rgba(0,0,0,.14);
+    color: #0f172a;
+}
+html.light-mode .gw-source::placeholder { color: rgba(0,0,0,.4); }
+html.light-mode .gw-source:focus { border-color: rgba(68,86,196,.5); background: #fff; }
+html.light-mode .gw-option-btn {
+    background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
+    color: #475569;
+}
+html.light-mode .gw-option-btn.gw-on {
+    background: rgba(68,86,196,.12); border-color: rgba(68,86,196,.4);
+    color: #0f172a;
+}
+html.light-mode .gw-option-btn:hover:not(.gw-on) { background: rgba(0,0,0,.06); color: #0f172a; }
+html.light-mode .gw-status { color: #64748b; }
+html.light-mode .gw-meta { color: #64748b; }
+html.light-mode .gw-quota, html.light-mode .gw-mode-chip {
+    background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
+}
+html.light-mode .gw-mode-chip { background: rgba(68,86,196,.1); color: #4456c4; }
+html.light-mode .gw-slides {
+    background: rgba(0,0,0,.02); border-color: rgba(0,0,0,.1);
+}
+html.light-mode .gw-nav {
+    border-color: rgba(0,0,0,.1);
+    color: #475569;
+}
+html.light-mode .gw-nav:hover { background: rgba(68,86,196,.1); border-color: rgba(68,86,196,.35); color: #0f172a; }
+html.light-mode .gw-variant-label { color: #4456c4; }
+html.light-mode .gw-variant-text { color: #0f172a; }
+html.light-mode .gw-indicator {
+    background: rgba(0,0,0,.03);
+    border-color: rgba(0,0,0,.1);
+    color: #64748b;
+}
+html.light-mode .gw-indicator.is-active {
+    background: rgba(68,86,196,.12);
+    border-color: rgba(68,86,196,.45);
+    color: #0f172a;
+}
+html.light-mode .gw-indicator:hover:not(.is-active) { background: rgba(0,0,0,.06); color: #0f172a; }
+html.light-mode .gw-actions-row { color: #64748b; }
+html.light-mode .gw-mini-btn {
+    background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
+    color: #0f172a;
+}
+html.light-mode .gw-mini-btn:hover { background: rgba(68,86,196,.1); border-color: rgba(68,86,196,.35); color: #0f172a; }
+html.light-mode .gw-shortcut-hint { color: #64748b; }
+html.light-mode .gw-empty { color: #64748b; }
     `;
 
     const style = document.createElement('style');
