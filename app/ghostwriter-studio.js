@@ -34,7 +34,7 @@ import { icon }                                from './lib/ui-icons.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
   getGhostwriterPlan, refreshGhostwriterQuota,
-  friendlyGhostwriterError,
+  friendlyGhostwriterError, getGhostwriterQuotaMessage,
 } from './ghostwriter.js';
 
 const APP_ID       = 'A-COM-005';
@@ -535,8 +535,7 @@ async function _handleGenerate() {
   // remaining=0 → certain qu'on est à sec.
   const remaining = getGhostwriterQuotaRemaining();
   if (remaining === 0) {
-    const plan = getGhostwriterPlan() || 'cette licence';
-    _toast(`Quota journalier atteint (${getGhostwriterQuotaMax()}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`, true);
+    _toast(getGhostwriterQuotaMessage(), true);
     return;
   }
 

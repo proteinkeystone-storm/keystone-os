@@ -94,8 +94,21 @@ function _ingestQuota(q) {
         max       : q.max       ?? null,
         remaining : q.remaining ?? null,
         unlimited : !!q.unlimited,
+        period    : q.period    ?? 'day',   // 'month' = crédits IA · 'day' = quota/jour legacy
         fetchedAt : Date.now(),
     };
+}
+
+// Message unique d'épuisement, adapté au système de la licence (crédits
+// mensuels vs quota/jour legacy). Source de vérité pour le studio ET le
+// modal — évite de re-hardcoder "/jour…demain" partout.
+function _quotaExhaustedMessage() {
+    const plan = _quotaCache.plan || 'cette licence';
+    const max  = _quotaCache.max;
+    if (_quotaCache.period === 'month') {
+        return `Crédits IA épuisés ce mois (${max} sur le plan ${plan}). Ajoutez un pack de crédits dans les Réglages, ou patientez jusqu'au 1er du mois.`;
+    }
+    return `Quota journalier atteint (${max}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`;
 }
 
 // Décrémente le cache local (effet visuel immédiat). Le serveur reste
@@ -698,8 +711,7 @@ async function _handleGenerate(overlay) {
     // remaining=null = quota jamais fetched → on laisse passer, le
     // serveur tranchera. remaining=0 = certain qu'on est à sec.
     if (_quotaRemaining() === 0) {
-        const plan = _quotaPlan() || 'cette licence';
-        _setStatus(status, `Quota journalier atteint (${_quotaMax()}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`, 'error');
+        _setStatus(status, _quotaExhaustedMessage(), 'error');
         return;
     }
 
@@ -1007,6 +1019,8 @@ export function getGhostwriterQuotaRemaining() { return _quotaRemaining(); }
  * - null si jamais fetched
  */
 export function getGhostwriterQuotaMax() { return _quotaMax(); }
+// Message d'épuisement adapté (crédits mensuels vs quota/jour). Cf studio.
+export function getGhostwriterQuotaMessage() { return _quotaExhaustedMessage(); }
 
 /**
  * Plan courant ('DEMO' | 'STARTER' | 'PRO' | 'MAX' | 'ADMIN' | null).

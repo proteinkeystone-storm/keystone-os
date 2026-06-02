@@ -147,6 +147,7 @@ function _quotaPayload(plan, used) {
     max,                                          // null = illimité
     remaining : max === null ? null : Math.max(0, max - used),
     unlimited : max === null,
+    period    : 'day',     // quota/jour legacy → message "réessayez demain"
   };
 }
 
@@ -165,6 +166,7 @@ function _gwQuotaFromWallet(w) {
     max,
     remaining : w.unlimited ? null : w.remaining,
     unlimited : !!w.unlimited,
+    period    : 'month',   // crédits mensuels → le frontend adapte son message
   };
 }
 // Mistral Small 3.1 N'EST PAS un modèle raisonneur : il écrit directement
