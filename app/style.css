@@ -58,6 +58,14 @@
   --tx2:   rgba(248,250,252,.55);
   --tx3:   rgba(248,250,252,.3);
   --bd:    rgba(255,255,255,.07);
+  /* Alias consommés par les artefacts (Ghost Writer studio + modal, Annonces
+     Immo, Key-Store) qui référencent --text-primary/--text-muted/--bg-secondary
+     avec des fallbacks sombres. Non définis jusqu'ici → fallback toujours appliqué
+     → texte clair illisible en mode clair. On les fait suivre --text / --tx2
+     (qui basculent déjà) : adaptation automatique clair/sombre, zéro régression. */
+  --text-primary: var(--text);
+  --text-muted:   var(--tx2);
+  --bg-secondary: #16161a;
   --r:     10px;   /* petites cartes / chips (suggest-card, modales secondaires) */
   --r2:    20px;   /* grandes cartes (pad-card, restore-panel, art-card) — bump de 16 à 20px pour harmoniser le ressenti d'arrondi sur les grands Pads de la grille pleine largeur */
 }
@@ -83,6 +91,8 @@ html.light-mode {
   --tx2:   rgba(15,23,42,.6);
   --tx3:   rgba(15,23,42,.38);
   --bd:    rgba(15,23,42,.1);
+  /* surface claire pour les panneaux d'artefacts (cf. alias --bg-secondary) */
+  --bg-secondary: #f1f5f9;
 }
 
 html.light-mode body {

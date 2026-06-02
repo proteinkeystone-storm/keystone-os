@@ -810,6 +810,25 @@ function _injectStyles() {
 }
 .gw-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .gw-toast-error { background: rgba(60,20,20,.95); border-color: rgba(255,100,100,.3); color: #ffb0b0; }
+
+/* ── Mode clair — surfaces (le texte est déjà géré par les variables --text-*) ── */
+html.light-mode .gw-tab { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1); }
+html.light-mode .gw-tab:hover:not(.is-active) { background: rgba(0,0,0,.05); color: #334155; }
+html.light-mode .gw-tab.is-active { background: rgba(80,110,230,.12); border-color: rgba(80,110,230,.4); }
+html.light-mode .gw-source,
+html.light-mode .gw-select { background: #fff; border-color: rgba(0,0,0,.14); }
+html.light-mode .gw-source:focus { background: #fff; border-color: rgba(80,110,230,.5); }
+html.light-mode .gw-chip { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.08); }
+html.light-mode .gw-chip-engine { background: rgba(80,110,230,.1); border-color: rgba(80,110,230,.25); color: #4456c4; }
+html.light-mode .gw-variant { background: #fff; border-color: rgba(0,0,0,.09); }
+html.light-mode .gw-variant:hover { background: #fcfcfd; border-color: rgba(80,110,230,.3); }
+html.light-mode .gw-variant-label,
+html.light-mode .gw-lib-label { color: #4456c4; }
+html.light-mode .gw-mini-btn { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.1); }
+html.light-mode .gw-mini-btn:hover { background: rgba(80,110,230,.1); border-color: rgba(80,110,230,.3); color: #1e293b; }
+html.light-mode .gw-lib-panel { background: #ffffff; border-left-color: rgba(0,0,0,.1); }
+html.light-mode .gw-lib-item { background: rgba(0,0,0,.025); border-color: rgba(0,0,0,.07); }
+html.light-mode .gw-lib-header { border-bottom-color: rgba(0,0,0,.07); }
   `;
   const style = document.createElement('style');
   style.id = 'ks-gw-studio-styles';
