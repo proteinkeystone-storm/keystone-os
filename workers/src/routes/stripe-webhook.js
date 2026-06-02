@@ -19,6 +19,7 @@ import { verifyStripeWebhook }              from '../lib/stripe.js';
 import { generateLicenceKey }               from '../lib/keygen.js';
 import { blindIndex, hashKey }              from '../lib/kdf.js';
 import { sendEmail, tplWelcomeKey }         from '../lib/email-resend.js';
+import { addPackCredits }                   from '../lib/ai-credits.js';
 
 const PRICE_LOOKUP_TO_PLAN = {
   ks_starter: 'STARTER',
@@ -89,9 +90,72 @@ async function _resolvePlanFromSubscription(env, subscriptionId) {
 // Event handlers
 // ═══════════════════════════════════════════════════════════════
 
+// ── Packs de crédits IA (Chantier B · Sprint 5) ────────────────
+// Achat = paiement UNIQUE (mode 'payment'), pas un abonnement. On mappe
+// le produit acheté → un nombre de crédits, puis on recharge le solde
+// persistant de la licence du payeur (ai_credit_balance via addPackCredits).
+// À GARDER SYNCHRO avec les produits Stripe "Pack N crédits".
+//   9 € → 1000 crédits · 39 € → 5000 crédits.
+const PACK_LOOKUP_TO_CREDITS = { ks_pack_1000: 1000, ks_pack_5000: 5000 };
+const PACK_AMOUNT_TO_CREDITS = { 900: 1000, 3900: 5000 };
+
+async function _handlePackPurchase(env, session) {
+  const customerEmail = session.customer_details?.email || session.customer_email;
+  const customerId    = session.customer;
+
+  // 1) Combien de crédits ? lookup_key du line item (robuste), sinon montant.
+  let credits = 0;
+  try {
+    const li     = await _stripeGET(env, `/checkout/sessions/${session.id}/line_items?limit=1`);
+    const lookup = li?.data?.[0]?.price?.lookup_key;
+    if (lookup && PACK_LOOKUP_TO_CREDITS[lookup]) credits = PACK_LOOKUP_TO_CREDITS[lookup];
+  } catch (_) { /* fallback montant ci-dessous */ }
+  if (!credits) {
+    const amount = session.amount_total;
+    if (amount && PACK_AMOUNT_TO_CREDITS[amount]) credits = PACK_AMOUNT_TO_CREDITS[amount];
+  }
+  if (!credits) {
+    console.error('[Stripe pack] crédits non résolus (lookup_key + montant inconnus) session', session.id, 'amount=', session.amount_total);
+    return;
+  }
+
+  // 2) Retrouver la licence du payeur : client_reference_id (si la boutique
+  //    l'a passé), sinon stripe_customer_id, sinon customer_email.
+  let lic = null;
+  const ref = session.client_reference_id;
+  if (ref) {
+    lic = await env.DB
+      .prepare('SELECT lookup_hmac FROM licences WHERE lookup_hmac = ? OR key = ? LIMIT 1')
+      .bind(ref, ref).first();
+  }
+  if (!lic && customerId) {
+    lic = await env.DB
+      .prepare('SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? LIMIT 1')
+      .bind(customerId).first();
+  }
+  if (!lic && customerEmail) {
+    lic = await env.DB
+      .prepare('SELECT lookup_hmac FROM licences WHERE customer_email = ? LIMIT 1')
+      .bind(customerEmail).first();
+  }
+  if (!lic?.lookup_hmac) {
+    console.error('[Stripe pack] licence introuvable pour', customerEmail || customerId, '— crédits NON attribués (à réconcilier à la main)');
+    return;
+  }
+
+  // 3) Créditer. Idempotence assurée en amont par stripe_events (event id).
+  await addPackCredits(env, lic.lookup_hmac, credits);
+  console.log('[Stripe pack]', credits, 'crédits attribués à la licence', lic.lookup_hmac);
+}
+
 async function _handleCheckoutCompleted(env, event) {
   const session = event.data.object;
-  if (session.mode !== 'subscription') return; // on n'auto-active que les abos
+  // Chantier B Sprint 5 — pack de crédits = paiement UNIQUE (mode 'payment').
+  if (session.mode === 'payment') {
+    await _handlePackPurchase(env, session);
+    return;
+  }
+  if (session.mode !== 'subscription') return; // autres modes : ignorés
 
   const customerEmail = session.customer_details?.email || session.customer_email;
   const customerId    = session.customer;

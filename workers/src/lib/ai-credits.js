@@ -63,6 +63,7 @@ function quotaForPlan(plan) {
   if (p === 'STARTER') return 200;
   if (p === 'PRO')     return 1000;
   if (p === 'MAX')     return 5000;
+  if (p === 'BETA')    return 5000;   // beta-testeurs : aussi généreux que MAX (ne jamais les brider en test)
   if (p === 'ADMIN')   return null;   // illimité
   return 0;  // plan inconnu → 0 inclus (fail-mostly-closed ; les packs
              // éventuels restent honorés via le solde persistant).
@@ -296,8 +297,30 @@ async function consumeCredits(env, { bucketKey, plan, tool }) {
   const brk = await readMonthBreakdown(env, bucketKey);
   return {
     ok: true, cost,
+    packsDrawn: packsConsumed,   // pour un refund exact si l'appelant échoue après coup
     payload: creditsPayload(plan, usedAfter, Math.max(0, packBalance - packsConsumed), brk),
   };
+}
+
+// ── Refund d'une conso (réversion exacte de consumeCredits) ───────
+// Appelé quand l'action IA échoue APRÈS le débit (ex : Ghost Writer dont
+// l'appel Workers AI tombe). On décrémente le compteur mensuel de `cost`
+// ET on restitue les packs éventuellement entamés (packsDrawn, fourni par
+// le retour de consumeCredits). Best-effort, ne lève jamais.
+async function refundCredits(env, { bucketKey, tool, cost, packsDrawn }) {
+  await ensureAiCreditsSchema(env);
+  const t = String(tool || 'unknown').toLowerCase();
+  const c = Number.isInteger(cost) ? cost : costFor(tool);
+  if (c > 0) await _revert(env, bucketKey, t, c);
+  const p = parseInt(packsDrawn, 10) || 0;
+  if (p > 0) {
+    await env.DB.prepare(`
+      INSERT INTO ai_credit_balance (bucket_key, balance, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(bucket_key) DO UPDATE SET
+        balance = balance + ?, updated_at = datetime('now')
+    `).bind(bucketKey, p, p).run().catch(() => {});
+  }
 }
 
 // ── Recharge de packs (appelée par le webhook Stripe, Sprint 5) ───
@@ -329,6 +352,7 @@ export {
   isEnforceEnabled,
   resolvePlanByHmac,
   consumeCredits,
+  refundCredits,
   addPackCredits,
   creditsPayload,
 };

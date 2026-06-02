@@ -3978,6 +3978,12 @@ function _engineLogoHTML(p, size = 20) {
     return `<img src="${p.logo}" alt="${p.label}" class="engine-logo-img engine-logo-dark" style="width:${size}px;height:${size}px;object-fit:contain;">${lightImg}`;
 }
 
+// Liens Stripe des packs de crédits (paiement unique, Chantier B · Sprint 5).
+// PLACEHOLDERS — à remplacer par les vrais Payment Links créés par Stéphane
+// (produits Stripe « Pack 1 000 crédits » 9 € et « Pack 5 000 crédits » 39 €).
+const PACK_1000_URL = '#pack-todo-1000';   // 9 €  → 1 000 crédits
+const PACK_5000_URL = '#pack-todo-5000';   // 39 € → 5 000 crédits
+
 // ── Crédits IA — jauge Settings (Chantier B · Sprint 4) ──────────
 // Lit GET /api/ai-credits/quota et remplit #ks-credits-gauge. Silencieux
 // si pas de JWT ou réseau down. Si la licence n'a pas l'enforcement actif
@@ -4024,7 +4030,11 @@ async function _fillCreditsGauge(el) {
         + `<div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .35s"></div>`
         + '</div>'
         + (brkLines ? `<div style="color:var(--text-muted);font-size:.75rem;margin-top:6px">dont ${brkLines}</div>` : '')
-        + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — pense à ajouter un pack de crédits.</div>' : '');
+        + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — ajoute un pack de crédits ci-dessous.</div>' : '')
+        + '<div style="display:flex;gap:8px;margin-top:12px">'
+        + `<a href="${PACK_1000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 crédits · 9 €</a>`
+        + `<a href="${PACK_5000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 crédits · 39 €</a>`
+        + '</div>';
 }
 
 function _renderSettingsBody() {

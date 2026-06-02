@@ -48,6 +48,10 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
+import {
+  isEnforceEnabled, consumeCredits, refundCredits,
+  ensureAiCreditsSchema, readMonthUsed, readPackBalance, creditsPayload,
+} from '../lib/ai-credits.js';
 
 // Modèle par défaut Keystone : Mistral Small 3.1 24B (cf. lib/ai-model.js,
 // source de vérité unique). Remplace Gemma 4 depuis le 2026-05-29.
@@ -145,6 +149,24 @@ function _quotaPayload(plan, used) {
     unlimited : max === null,
   };
 }
+
+// Chantier B · Sprint 6 — quand l'enforcement « crédits IA » est actif sur
+// la licence, Ghost Writer débite le portefeuille mensuel unifié au lieu de
+// son compteur/jour. Ce mapper projette le payload du wallet vers la forme
+// que le frontend GW attend déjà ({plan, used, max, remaining, unlimited}),
+// pour que la pastille de quota du studio reste correcte sans rien changer
+// côté client. max = quota inclus + solde de packs.
+function _gwQuotaFromWallet(w) {
+  if (!w) return null;
+  const max = w.unlimited ? null : (w.includedQuota || 0) + (w.packBalance || 0);
+  return {
+    plan      : (w.plan || 'UNKNOWN').toUpperCase(),
+    used      : w.used || 0,
+    max,
+    remaining : w.unlimited ? null : w.remaining,
+    unlimited : !!w.unlimited,
+  };
+}
 // Mistral Small 3.1 N'EST PAS un modèle raisonneur : il écrit directement
 // le `content`, sans brûler de budget dans un champ `reasoning` (au
 // contraire de Gemma 4 qui exigeait 8192). 4096 suffit donc largement pour
@@ -195,24 +217,43 @@ export async function handleGhostwriterRewrite(request, env) {
   // Pre-bump pour atomicité face aux races multi-device (plan MAX
   // notamment). Si quota dépassé après bump → revert + 429.
   // ADMIN : on track quand même les stats mais on ne bloque jamais.
-  await ensureGhostwriterSchema(env);
-  const maxAllowed = _quotaForPlan(plan);
-  if (maxAllowed === 0) {
-    return err(
-      `Plan inconnu (${plan}). Ghost Writer indisponible pour cette licence.`,
-      403,
-      origin,
-    );
-  }
-  await _bumpUsage(env, lookupHmac);
-  const usedAfterBump = await _readUsage(env, lookupHmac);
-  if (maxAllowed !== null && usedAfterBump > maxAllowed) {
-    await _revertUsage(env, lookupHmac);
-    return json({
-      error: `Quota Ghost Writer atteint sur le plan ${plan} (${maxAllowed}/jour). `
-           + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
-      quota: _quotaPayload(plan, maxAllowed),  // reflète l'état clampé
-    }, 429, origin);
+  // Chantier B · Sprint 6 — aiguillage du quota selon le flag de la licence.
+  // enforce_ai_credits_v1 ON → portefeuille mensuel unifié (crédits IA).
+  // OFF → quota/jour legacy (inchangé). Cohabitation pilotée par licence.
+  const creditsEnforced = await isEnforceEnabled(env, lookupHmac);
+  let creditResult  = null;   // retour de consumeCredits (chemin enforced)
+  let usedAfterBump = 0;      // compteur/jour (chemin legacy)
+
+  if (creditsEnforced) {
+    creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'ghostwriter' });
+    if (!creditResult.ok && creditResult.blocked) {
+      return json({
+        error: `Crédits IA épuisés ce mois sur le plan ${plan}. `
+             + `Ajoutez un pack de crédits ou attendez le 1er du mois (reset).`,
+        code : 'AI_CREDITS_EXHAUSTED',
+        quota: _gwQuotaFromWallet(creditResult.payload),
+      }, 429, origin);
+    }
+  } else {
+    await ensureGhostwriterSchema(env);
+    const maxAllowed = _quotaForPlan(plan);
+    if (maxAllowed === 0) {
+      return err(
+        `Plan inconnu (${plan}). Ghost Writer indisponible pour cette licence.`,
+        403,
+        origin,
+      );
+    }
+    await _bumpUsage(env, lookupHmac);
+    usedAfterBump = await _readUsage(env, lookupHmac);
+    if (maxAllowed !== null && usedAfterBump > maxAllowed) {
+      await _revertUsage(env, lookupHmac);
+      return json({
+        error: `Quota Ghost Writer atteint sur le plan ${plan} (${maxAllowed}/jour). `
+             + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
+        quota: _quotaPayload(plan, maxAllowed),  // reflète l'état clampé
+      }, 429, origin);
+    }
   }
 
   // ── À partir d'ici le quota a été pre-bumpé. Le try/finally
@@ -470,12 +511,24 @@ export async function handleGhostwriterRewrite(request, env) {
     variants: parsed.variants,
     model   : MODEL_ID,
     usage   : aiResponse?.usage || null,
-    quota   : _quotaPayload(plan, usedAfterBump),
+    quota   : creditsEnforced ? _gwQuotaFromWallet(creditResult.payload) : _quotaPayload(plan, usedAfterBump),
   }, 200, origin);
 
   } finally {
+    // Chantier B · Sprint 6 — réversion si on n'a pas abouti (body invalide,
+    // AI down, JSON cassé…) : chemin enforced → refund exact du portefeuille
+    // (crédit + packs entamés) ; chemin legacy → revert du compteur/jour.
     if (!committed) {
-      await _revertUsage(env, lookupHmac).catch(() => {});
+      if (creditsEnforced) {
+        if (creditResult && creditResult.ok) {
+          await refundCredits(env, {
+            bucketKey: lookupHmac, tool: 'ghostwriter',
+            cost: creditResult.cost, packsDrawn: creditResult.packsDrawn,
+          }).catch(() => {});
+        }
+      } else {
+        await _revertUsage(env, lookupHmac).catch(() => {});
+      }
     }
   }
 }
@@ -503,6 +556,14 @@ export async function handleGhostwriterQuota(request, env) {
     return err('JWT incomplet (sub manquant) — re-login requis', 401, origin);
   }
 
+  // Sprint 6 — si l'enforcement crédits est actif sur la licence, renvoyer
+  // l'état du portefeuille mensuel (mappé au format GW) ; sinon quota/jour.
+  if (await isEnforceEnabled(env, lookupHmac)) {
+    await ensureAiCreditsSchema(env);
+    const usedM = await readMonthUsed(env, lookupHmac);
+    const bal   = await readPackBalance(env, lookupHmac);
+    return json(_gwQuotaFromWallet(creditsPayload(claims.plan, usedM, bal, {})), 200, origin);
+  }
   await ensureGhostwriterSchema(env);
   const used = await _readUsage(env, lookupHmac);
   return json(_quotaPayload(claims.plan, used), 200, origin);
