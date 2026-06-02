@@ -3987,10 +3987,29 @@ function _engineLogoHTML(p, size = 20) {
 }
 
 // Liens Stripe des packs de crédits (paiement unique, Chantier B · Sprint 5).
-// PLACEHOLDERS — à remplacer par les vrais Payment Links créés par Stéphane
-// (produits Stripe « Pack 1 000 crédits » 9 € et « Pack 5 000 crédits » 39 €).
-const PACK_1000_URL = '#pack-todo-1000';   // 9 €  → 1 000 crédits
-const PACK_5000_URL = '#pack-todo-5000';   // 39 € → 5 000 crédits
+// Payment Links LIVE créés par Stéphane le 2026-06-02 (produits « Pack 1 000
+// crédits » 9 € et « Pack 5 000 crédits » 39 €). Le bouton y ajoute
+// ?client_reference_id=<lookup_hmac> via _packUrl().
+const PACK_1000_URL = 'https://buy.stripe.com/00weVd1tfecU7Excxuf7i05';   // 9 €  → 1 000 crédits
+const PACK_5000_URL = 'https://buy.stripe.com/aFafZh4Fr1q81g9fJGf7i06';   // 39 € → 5 000 crédits
+
+// Ajoute l'identifiant de licence (JWT sub = lookup_hmac) en client_reference_id
+// au lien Stripe → le webhook (_handlePackPurchase) attribue les crédits à la
+// BONNE licence, même si l'acheteur paie avec un autre email. lookup_hmac est un
+// identifiant opaque (pas la clé de licence) → sûr dans une URL.
+function _packUrl(base) {
+    if (!base || base[0] === '#') return base;
+    try {
+        const jwt = localStorage.getItem('ks_jwt');
+        if (jwt) {
+            const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (payload && payload.sub) {
+                return base + (base.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(payload.sub);
+            }
+        }
+    } catch (_) { /* JWT illisible → lien nu ; le webhook retombera sur email/customer */ }
+    return base;
+}
 
 // ── Crédits IA — jauge Settings (Chantier B · Sprint 4) ──────────
 // Lit GET /api/ai-credits/quota et remplit #ks-credits-gauge. Silencieux
@@ -4044,8 +4063,8 @@ async function _fillCreditsGauge(el) {
         + (brkLines ? `<div style="color:var(--text-muted);font-size:.75rem;margin-top:6px">dont ${brkLines}</div>` : '')
         + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — ajoute un pack de crédits ci-dessous.</div>' : '')
         + '<div style="display:flex;gap:8px;margin-top:12px">'
-        + `<a href="${PACK_1000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 · 9 €</a>`
-        + `<a href="${PACK_5000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 · 39 €</a>`
+        + `<a href="${_packUrl(PACK_1000_URL)}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 · 9 €</a>`
+        + `<a href="${_packUrl(PACK_5000_URL)}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 · 39 €</a>`
         + '</div>';
 }
 
