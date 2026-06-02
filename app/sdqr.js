@@ -696,7 +696,11 @@ function _openCreateForm(panel, opts = {}) {
         <div class="sdqr-form-grid" id="sdqr-smart-template-fields"></div>
       </div>
 
-      <!-- Cartes de type -->
+      <!-- Cartes de type — titre clarificateur (texte selon le mode, posé par
+           _toggleSmartBriefVisibility). En smart, ces cartes = la destination
+           APRÈS l'interstitiel (confusion levée le 2026-06-03). -->
+      <div class="sdqr-type-heading" id="sdqr-type-heading"
+           style="font-size:13px;font-weight:600;color:var(--text-secondary,#9aa4b2);margin:8px 0 8px"></div>
       <div class="sdqr-type-cards" id="sdqr-type-cards"></div>
 
       <!-- Form contextuel selon le type -->
@@ -824,6 +828,16 @@ function _toggleSmartBriefVisibility(root) {
   // définissent la DESTINATION du QR Smart (target_url / encoded_payload),
   // qui est REQUISE côté Worker (qr.js handleCreateQr). Les cacher casse la
   // création de QR Smart. (Un masquage tenté puis reverté ce jour.)
+
+  // À la place : un titre clarificateur au-dessus des cartes, adapté au mode —
+  // lève l'ambiguïté « ces cartes servent à quoi ? » sans rien cacher.
+  const typeHeading = root.querySelector('#sdqr-type-heading');
+  if (typeHeading) {
+    typeHeading.textContent =
+        isSmart                      ? "Destination après l'interstitiel — où le visiteur est envoyé après l'écran d'attente"
+      : _creating.mode === 'dynamic' ? "Destination du QR — l'URL/le contenu vers lequel il pointe (modifiable)"
+      :                                "Type de QR — le contenu encodé directement dans les pixels";
+  }
 
   if (isSmart) {
     _renderTemplateCards(root);
