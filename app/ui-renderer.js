@@ -768,10 +768,11 @@ const KS_PLANS = [
     {
         id: 'PRO',
         name: 'Pro',
-        price: 79,
+        price: 99,                                  // 79 -> 99 (test pricing 2026-06-02)
         color: 'var(--gold)',
         recommended: true,
-        stripeUrl: 'https://buy.stripe.com/28E7sLgo9gl21g9eFCf7i01',
+        // Payment Link Stripe 99 €/mois (récurrent mensuel), créé 2026-06-02.
+        stripeUrl: 'https://buy.stripe.com/dRm5kD3BnfgY2kd1SQf7i03',
         desc: `Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.`,
         features: [
             { text: '5 Assistants Certifiés au choix' },
@@ -787,9 +788,10 @@ const KS_PLANS = [
     {
         id: 'MAX',
         name: 'Max',
-        price: 149,
+        price: 249,                                 // 149 -> 249 (test pricing 2026-06-02)
         color: '#c084fc',
-        stripeUrl: 'https://buy.stripe.com/9B6eVd0pb7Ow4sl7daf7i02',
+        // Payment Link Stripe 249 €/mois (récurrent mensuel), créé 2026-06-02.
+        stripeUrl: 'https://buy.stripe.com/28E7sL3BnecUaQJfJGf7i04',
         desc: `Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.`,
         features: [
             { html: '<strong>7 Assistants Certifiés au choix</strong>' },
