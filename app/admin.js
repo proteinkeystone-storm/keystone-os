@@ -405,11 +405,11 @@ async function renderLicences(panel) {
         <div class="stat-card"><div class="stat-label">Actives</div><div class="stat-value" style="color:#4caf80">${active}</div></div>
         <div class="stat-card"><div class="stat-label">Révoquées</div><div class="stat-value" style="color:#e05c5c">${total - active}</div></div>
       </div>
-      ${!usingEnriched ? '<div style="margin:8px 0 16px 0;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted)">⚠ Mode legacy : flags S2.5/S4 indisponibles, basculez vers /api/admin/licences pour la version enrichie.</div>' : ''}
+      ${!usingEnriched ? '<div style="margin:8px 0 16px 0;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted)">⚠ Mode legacy : les contrôles par licence sont indisponibles, basculez vers /api/admin/licences pour la version enrichie.</div>' : ''}
       ${total === 0
         ? '<div class="empty-state"><div class="icon">🗝</div><p>Aucune licence enregistrée</p></div>'
         : `<table class="data-table"><thead><tr>
-             <th>Clé</th><th>Propriétaire</th><th>Plan</th><th>Statut</th><th>Devices</th><th>Flags S2.5 / S4</th><th>Créée le</th><th>Actions</th>
+             <th>Clé</th><th>Propriétaire</th><th>Plan</th><th>Statut</th><th>Devices</th><th>Contrôles par licence</th><th>Créée le</th><th>Actions</th>
            </tr></thead><tbody id="licences-tbody"></tbody></table>`}`;
 
     panel.querySelector('#btn-new-licence').addEventListener('click', () => showCreateLicenceModal(panel));
@@ -425,20 +425,31 @@ async function renderLicences(panel) {
           ? `<span style="color:var(--text)">${l.stats.devices_active}</span><span style="color:var(--text-muted)">${l.devices_max != null ? ' / ' + l.devices_max : ''}</span>`
           : '<span style="color:var(--text-muted)">—</span>';
 
+        // Chaque interrupteur a un libellé visible (sinon 3 pastilles
+        // identiques = illisible) + une infobulle en français clair.
         const flagsCell = usingEnriched
-          ? `<div style="display:flex;gap:8px;align-items:center">
-              <label class="toggle-switch" title="enforce_devices_v2 (S2.5)" style="display:inline-block">
-                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_devices_v2" ${l.flag_enforce_devices_v2 ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-              </label>
-              <label class="toggle-switch" title="enforce_vault_per_email_v2 (S4)" style="display:inline-block">
-                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_vault_per_email_v2" ${l.flag_enforce_vault_per_email_v2 ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-              </label>
-              <label class="toggle-switch" title="enforce_ai_credits_v1 (Crédits IA · Chantier B)" style="display:inline-block">
-                <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_ai_credits_v1" ${l.flag_enforce_ai_credits_v1 ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-              </label>
+          ? `<div style="display:flex;gap:16px;align-items:flex-start">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <label class="toggle-switch" title="Limiter le nombre d'appareils autorisés par licence" style="display:inline-block">
+                  <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_devices_v2" ${l.flag_enforce_devices_v2 ? 'checked' : ''}>
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:10px;color:var(--text-muted);white-space:nowrap">Appareils</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <label class="toggle-switch" title="Isoler le coffre-fort de données par adresse e-mail" style="display:inline-block">
+                  <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_vault_per_email_v2" ${l.flag_enforce_vault_per_email_v2 ? 'checked' : ''}>
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:10px;color:var(--text-muted);white-space:nowrap">Coffre / e-mail</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <label class="toggle-switch" title="Activer le compteur de crédits IA (Concierge, Ghost Writer, Brainstorming)" style="display:inline-block">
+                  <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_ai_credits_v1" ${l.flag_enforce_ai_credits_v1 ? 'checked' : ''}>
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:10px;color:var(--gold);white-space:nowrap">Crédits IA</span>
+              </div>
             </div>`
           : '<span style="color:var(--text-muted)">—</span>';
 
