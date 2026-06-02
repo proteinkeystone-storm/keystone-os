@@ -2441,8 +2441,8 @@ function openKStoreFicheEditor(idx, panel) {
           <div>
             <label class="form-label">Titre du bloc</label>
             <input class="form-input" id="ksf-desc-title" type="text"
-                   value="${esc(item.descTitle || 'Bloc texte explicatif pour cette application')}"
-                   placeholder="Bloc texte explicatif pour cette application">
+                   value="${esc((item.descTitle && !/^Bloc texte explicatif/i.test(item.descTitle)) ? item.descTitle : '')}"
+                   placeholder="Laissez vide pour « À propos de l'application »">
           </div>
           <div>
             <label class="form-label">Texte (paragraphes séparés par une ligne vide)</label>
@@ -2463,7 +2463,8 @@ function openKStoreFicheEditor(idx, panel) {
           <div>
             <label class="form-label">Titre du bloc</label>
             <input class="form-input" id="ksf-rgpd-title" type="text"
-                   value="${esc(item.rgpdTitle || 'Bloc texte explicatif du respect des règles de confidentialité et du respect des normes RGPD EU')}">
+                   value="${esc((item.rgpdTitle && !/^Bloc texte explicatif/i.test(item.rgpdTitle)) ? item.rgpdTitle : '')}"
+                   placeholder="Laissez vide pour « Confidentialité & RGPD »">
           </div>
           <div>
             <label class="form-label">Texte (paragraphes séparés par une ligne vide)</label>

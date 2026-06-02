@@ -1665,9 +1665,13 @@ function _renderKStoreAppDetail(appId) {
     const DEFAULT_RGPD_TITLE = 'Confidentialité & RGPD';
     const DEFAULT_RGPD_TEXT  = 'Cette application respecte les règles de confidentialité et les normes RGPD en vigueur dans l\'Union Européenne. Aucune donnée saisie n\'est stockée sur des serveurs tiers : tout reste sur votre appareil ou transite uniquement vers le moteur d\'IA que vous avez explicitement configuré.';
 
-    const descTitle = app.descTitle || DEFAULT_DESC_TITLE;
+    // Les titres « Bloc texte explicatif… » sont des placeholders de dev (pré-remplis
+    // par l'admin puis sauvegardés par erreur sur les apps) → on les ignore et on
+    // retombe sur le bon défaut (« À propos de X » / « Confidentialité & RGPD »).
+    const _isPlaceholderTitle = (s) => !s || /^Bloc texte explicatif/i.test(String(s).trim());
+    const descTitle = _isPlaceholderTitle(app.descTitle) ? DEFAULT_DESC_TITLE : app.descTitle;
     const descText  = app.longDesc  || DEFAULT_DESC_TEXT;
-    const rgpdTitle = app.rgpdTitle || DEFAULT_RGPD_TITLE;
+    const rgpdTitle = _isPlaceholderTitle(app.rgpdTitle) ? DEFAULT_RGPD_TITLE : app.rgpdTitle;
     const rgpdText  = app.rgpdText  || DEFAULT_RGPD_TEXT;
 
     // Multi-paragraphe : on respecte les sauts de ligne saisis dans l'admin
