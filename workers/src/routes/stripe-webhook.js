@@ -55,18 +55,34 @@ async function _stripeGET(env, path) {
   return res.json();
 }
 
-// Récupère le lookup_key du price d'une subscription
+// Centimes → plan. Fallback quand le price n'a pas de lookup_key (cas des
+// Payment Links créés depuis le Dashboard Stripe, qui n'en posent pas).
+// À GARDER SYNCHRO avec la grille publique (index.html #plans + KS_PLANS).
+// 49 € → STARTER · 99 € → PRO · 249 € → MAX.
+const PRICE_AMOUNT_TO_PLAN = { 4900: 'STARTER', 9900: 'PRO', 24900: 'MAX' };
+
+// Récupère le plan d'une subscription : d'abord par lookup_key, sinon par montant.
 async function _resolvePlanFromSubscription(env, subscriptionId) {
   const sub = await _stripeGET(env, `/subscriptions/${subscriptionId}`);
   const item = sub?.items?.data?.[0];
   const price = item?.price;
   if (!price) return null;
 
-  // Soit le price.lookup_key est directement présent dans l'event,
-  // soit on doit interroger /prices/{id} avec ?expand[]=...
+  // 1) Voie normale : lookup_key du price (ks_starter / ks_pro / ks_max).
   const lookup = price.lookup_key
     || (await _stripeGET(env, `/prices/${price.id}`))?.lookup_key;
-  return PRICE_LOOKUP_TO_PLAN[lookup] || null;
+  if (lookup && PRICE_LOOKUP_TO_PLAN[lookup]) {
+    return PRICE_LOOKUP_TO_PLAN[lookup];
+  }
+
+  // 2) Fallback par MONTANT (les nouveaux liens 49/99/249 n'ont pas de lookup_key).
+  const amount = price.unit_amount;
+  if (amount && PRICE_AMOUNT_TO_PLAN[amount]) {
+    return PRICE_AMOUNT_TO_PLAN[amount];
+  }
+
+  console.error('[Stripe] plan non résolu (lookup_key + montant inconnus) sub', subscriptionId, 'amount=', amount);
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
