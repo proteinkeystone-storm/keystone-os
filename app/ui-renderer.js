@@ -4022,8 +4022,12 @@ async function _fillCreditsGauge(el) {
     const quota = q.includedQuota || 0;
     const pack  = q.packBalance || 0;
     const remaining = (q.remaining != null) ? q.remaining : Math.max(0, quota - used) + pack;
-    const pct   = quota > 0 ? Math.min(100, Math.round(used / quota * 100)) : 0;
-    const near  = pct >= 80;
+    // La barre mesure la conso sur la capacité TOTALE du mois (inclus + packs),
+    // pas seulement l'inclus — sinon elle reste rouge alors qu'un pack couvre.
+    const totalCap = used + remaining;
+    const pct   = totalCap > 0 ? Math.min(100, Math.round(used / totalCap * 100)) : 0;
+    // Alarme seulement quand il reste VRAIMENT peu (les packs repoussent le seuil).
+    const near  = remaining <= Math.max(1, Math.round(quota * 0.15));
     const barColor = near ? 'var(--danger, #e0533d)' : 'var(--gold, #c9b48a)';
     const LABELS = { concierge: 'Concierge', ghostwriter: 'Ghost Writer', brainstorming: 'Brainstorming' };
     const brk = q.breakdown || {};
@@ -4040,8 +4044,8 @@ async function _fillCreditsGauge(el) {
         + (brkLines ? `<div style="color:var(--text-muted);font-size:.75rem;margin-top:6px">dont ${brkLines}</div>` : '')
         + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — ajoute un pack de crédits ci-dessous.</div>' : '')
         + '<div style="display:flex;gap:8px;margin-top:12px">'
-        + `<a href="${PACK_1000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 crédits · 9 €</a>`
-        + `<a href="${PACK_5000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 crédits · 39 €</a>`
+        + `<a href="${PACK_1000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 · 9 €</a>`
+        + `<a href="${PACK_5000_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 · 39 €</a>`
         + '</div>';
 }
 
