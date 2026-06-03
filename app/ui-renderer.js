@@ -4264,6 +4264,15 @@ function _renderSettingsBody() {
             open: false,
             content: (() => {
                 const lic = getLicenceStatus();
+                // CTA résiliation : visible pour les vrais abonnés uniquement
+                // (actif, pas en démo, pas admin — eux n'ont rien à résilier).
+                // Ouvre un e-mail prérempli vers le support (la résiliation
+                // passe par Stripe côté Protein Studio, cf. FAQ landing).
+                const _isAdminLic  = /admin/i.test(lic.plan || '');
+                const _showCancel  = lic.active && !isDemoMode() && !_isAdminLic;
+                const _cancelSubj  = `Annulation d'abonnement Keystone — ${lic.owner || lic.key || ''}`;
+                const _cancelBody  = `Bonjour,\n\nJe souhaite résilier mon abonnement Keystone OS.\n\nTitulaire : ${lic.owner || '—'}\nClé de licence : ${lic.key || '—'}\nFormule : ${lic.plan || '—'}\n\nMerci de me confirmer la date d'effet (fin de la période en cours).\n\nCordialement,`;
+                const _cancelHref  = `mailto:protein.keystone@gmail.com?subject=${encodeURIComponent(_cancelSubj)}&body=${encodeURIComponent(_cancelBody)}`;
                 const statusBadge = lic.active
                     ? `<span class="sp-badge-green">Active · ${lic.plan}</span>`
                     : `<span class="sp-badge-warn">Non activée</span>`;
@@ -4334,6 +4343,16 @@ function _renderSettingsBody() {
                     <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
                         Vide cet appareil (cache, SW, préférences locales) et renvoie sur l'écran d'activation. La licence reste valide côté serveur.
                     </p>
+                    ${_showCancel ? `
+                    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
+                        <a id="licence-cancel-sub" href="${_cancelHref}"
+                           style="display:inline-block;font-size:12.5px;color:var(--tx2);text-decoration:underline;cursor:pointer">
+                            Résilier mon abonnement
+                        </a>
+                        <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
+                            Ouvre un e-mail prérempli vers notre support. La résiliation prend effet à la fin de la période en cours, sans frais.
+                        </p>
+                    </div>` : ''}
                 </div>`;
             })(),
         },
