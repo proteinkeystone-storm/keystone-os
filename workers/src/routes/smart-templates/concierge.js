@@ -69,9 +69,15 @@ function _tokSuffix(i) {
   do { s = String.fromCharCode(97 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
   return s;
 }
-export function conciergeTokenMap(configs) {
+export function conciergeTokenMap(configs, programme) {
   const map = {};   // repère -> valeur exacte formatée (ex : { Pa: '389 000 €' })
   const tok = [];   // par config : { prix?, surface?, jardin? } (repères)
+  // Repère programme-level : la livraison contient une année (ex 2027) que
+  // Mistral tronque (« 227 »). On la confie donc comme repère {{Liv}}, jamais
+  // en clair — recopié tel quel par le modèle, converti à l'affichage.
+  const prog = {};
+  const liv  = String((programme && programme.livraison_prevue) || '').trim();
+  if (liv) { prog.livraison = '{{Liv}}'; map['Liv'] = liv; }
   (Array.isArray(configs) ? configs : []).forEach((c, i) => {
     const suf = _tokSuffix(i);
     const ann = (c && c.surfaces_annexes) || {};
@@ -87,7 +93,7 @@ export function conciergeTokenMap(configs) {
     if (jd) { e.jardin  = '{{J' + suf + '}}'; map['J' + suf] = jd; }
     tok[i] = e;
   });
-  return { map, tok };
+  return { map, tok, prog };
 }
 
 const STATUT_META = {
@@ -155,7 +161,7 @@ const TEMPLATE = {
     const suggestions = Array.isArray(d.questions_suggerees) ? d.questions_suggerees : [];
     // Repères chiffrés -> valeurs exactes, injectés côté page : le chat
     // remplace les {{Pa}}/{{Sa}}/{{Ja}} produits par l'IA (cf. conciergeTokenMap).
-    const tokenValues = conciergeTokenMap(configs).map;
+    const tokenValues = conciergeTokenMap(configs, d.programme).map;
 
     // Accueil DÉTERMINISTE — construit depuis le bloc, jamais généré par un LLM.
     // Immo = phrase HISTORIQUE inchangée ; generic = cadrage « offres ».
@@ -749,14 +755,14 @@ export function buildConciergePrompt(block) {
   // Chiffres : remplacés par des repères {{...}} (cf. conciergeTokenMap) car
   // Mistral perd les zeros des nombres. Le modèle recopie le repère, la page
   // le convertit en valeur exacte. ZERO chiffre ne transite par le modèle.
-  const { tok } = conciergeTokenMap(d.configurations);
+  const { tok, prog: progTok } = conciergeTokenMap(d.configurations, prog);
   const donnees = {
     programme: {
       nom:              prog.nom || '',
       promoteur:        prog.promoteur || '',
       ville:            prog.ville || '',
       adresse:          prog.adresse || '',
-      livraison_prevue: prog.livraison_prevue || '',
+      livraison_prevue: progTok.livraison || prog.livraison_prevue || '',
     },
     configurations: (Array.isArray(d.configurations) ? d.configurations : []).map((c, i) => {
       const ann = c?.surfaces_annexes || {};

@@ -1745,6 +1745,10 @@ export function stripModelNoise(s) {
   // chiffres mêlés), précédé d'un séparateur : on retire le blob et on garde
   // le séparateur (la phrase « …me contacter. » reste intacte).
   t = t.replace(/([\s.,;:!?…»")\]])(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z0-9]{6,}\s*$/i, '$1');
+  // Motif 3 — blob COURT (>= 4 car., lettres ET chiffres) collé DIRECTEMENT à
+  // une ponctuation finale sans espace (« …page.30kup », « …Rotonde.022pz »).
+  // Le « collé sans espace » protège les termes précédés d'un espace (« RE2020 », « T3 »).
+  t = t.replace(/([.!?…])(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z0-9]{4,}\s*$/i, '$1');
   return t.trim();
 }
 
@@ -1837,7 +1841,7 @@ export async function handleSmartQrConcierge(request, env) {
   // On les reconvertit ici avant d'envoyer au navigateur : aucune dépendance
   // à la version de la page (une page ancienne affiche quand même les bons
   // chiffres). Repère inconnu -> retiré (jamais d'accolades chez le visiteur).
-  const { map: tokenMap } = conciergeTokenMap(block.configurations);
+  const { map: tokenMap } = conciergeTokenMap(block.configurations, block.programme);
   const subTokens = (str) => String(str).replace(
     /\{\{\s*([A-Za-z]{2,6})\s*\}\}/g,
     (m, k) => (Object.prototype.hasOwnProperty.call(tokenMap, k) ? tokenMap[k] : ''));
