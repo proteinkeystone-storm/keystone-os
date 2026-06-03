@@ -18,7 +18,7 @@ import { scheduleAutoSave } from './vault.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
-import { CF_API } from './pads-loader.js';
+import { CF_API, isAdminUser } from './pads-loader.js';
 import { deliverEntryHtml, wireDeliver } from './lib/asset-deliver.js';
 import {
   FIELD_TYPES,
@@ -136,6 +136,10 @@ export function openPulsa(opts = {}) {
   _buildShell();
   _renderMain();
   _renderRail();
+  // V1.5 — tire les Key Form livrés au client (réception transparente).
+  // Non-bloquant : la biblio locale s'affiche tout de suite, les formulaires
+  // serveur apparaissent dès que le pull répond.
+  _hydrateFromServer();
   // Si demandé, on déclenche le mode responses après le rendu initial.
   // _viewResponses re-rend le main → pas de flash visuel parce que les
   // 2 renders sont synchrones dans la même tâche.
@@ -681,6 +685,46 @@ function _authHeaders(extra = {}) {
   if (adminToken)  h['Authorization'] = 'Bearer ' + adminToken;
   else if (jwt)    h['Authorization'] = 'Bearer ' + jwt;
   return h;
+}
+
+// ── V1.5 — Réception transparente des Key Form livrés ───────────
+// La bibliothèque Pulsa est local-first. Un formulaire « livré » (sprint
+// Livrer V1) voit juste son owner_sub flippé côté serveur → sans ce pull,
+// il n'apparaîtrait pas dans le builder du client. On tire donc les
+// formulaires que le client possède sur le serveur et on fusionne dans
+// la bibliothèque locale ceux qui n'y sont PAS encore (local-first : on
+// n'écrase jamais une édition locale en cours).
+//
+// Admin EXCLU : son endpoint /api/pulsa/forms renvoie TOUS les forms (il
+// verrait ceux de tous les clients). Lui crée/livre depuis sa biblio locale.
+// Silencieux si non connecté / offline (best-effort).
+async function _hydrateFromServer() {
+  if (isAdminUser()) return;                          // admin = local-only
+  if (!localStorage.getItem('ks_jwt')) return;        // pas connecté → rien
+  let serverForms = [];
+  try {
+    const res = await fetch(CF_API + '/api/pulsa/forms', { headers: _authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    serverForms = Array.isArray(data?.forms) ? data.forms : [];
+  } catch (_) { return; }
+  if (!serverForms.length) return;
+
+  const localIds = new Set(listForms().map(f => f.id));
+  let added = 0;
+  for (const sf of serverForms) {
+    if (!sf?.id || localIds.has(sf.id)) continue;     // ne pas écraser le local
+    try {
+      // sf (issu de _rowToForm) porte déjà meta/sections/delivery/output ;
+      // on le pose sur newForm() pour garantir toutes les clés du builder.
+      saveForm({ ...newForm(), ...sf, id: sf.id });
+      added++;
+    } catch (_) { /* form malformé : on saute */ }
+  }
+  // Rafraîchir la bibliothèque si on y est (sinon visible au prochain retour).
+  if (added > 0 && _root && _state.view === 'library') {
+    _renderMain();
+  }
 }
 
 // ── Publication réelle via Worker (POST /api/pulsa/forms) ───────
@@ -1422,7 +1466,7 @@ function _renderResponses(main) {
       assetName: form.meta?.title || 'Formulaire',
       onExportResponses: () => _exportCsv(form.id),
       deliveredNote: slug
-        ? `Pour qu'il apparaisse dans le Key Form du client, demande-lui d'ouvrir Key Form → « Récupérer un formulaire publié » et de coller cette URL : ${location.host}/f/${slug}`
+        ? `Il apparaîtra tout seul dans le Key Form du client à sa prochaine ouverture (une fois connecté à son compte). URL publique du formulaire : ${location.host}/f/${slug}`
         : '',
       onDelivered: () => {
         // Retrait LOCAL uniquement (la ligne serveur appartient au client).
