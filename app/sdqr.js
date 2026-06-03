@@ -1049,7 +1049,9 @@ function _cgOnScalar(e) {
   const t = e.target;
   const path = t && t.dataset ? t.dataset.cgPath : '';
   if (!path) return;
-  const store = _creating.concierge_source === 'keyform'
+  // 'vefa' édite l'habillage (agence.*) directement sur le programme relayé :
+  // il écrit donc aussi dans concierge_payload (comme 'keyform').
+  const store = (_creating.concierge_source === 'keyform' || _creating.concierge_source === 'vefa')
     ? _creating.concierge_payload
     : _creating.template_data;
   if (!store) return;
@@ -1364,8 +1366,23 @@ function _renderConciergeEditor(wrap) {
   // canonique est dérivé côté Worker (vefaProgramToBlock) à la publication ;
   // pour modifier les chiffres, on repasse par VEFA Studio.
   if (source === 'vefa') {
+    // Garantit l'objet agence pour recevoir l'habillage édité.
+    const pay = _creating.concierge_payload;
+    if (pay && typeof pay === 'object' && !Array.isArray(pay)
+        && (!pay.agence || typeof pay.agence !== 'object')) {
+      pay.agence = {};
+    }
     wrap.innerHTML = picker + _cgVefaPreviewHtml();
     _cgBindSourcePicker(wrap);
+    // CG — habillage éditable directement sur le programme relayé : les lots
+    // restent figés, mais logo/bannière/couleurs/nom sont modifiables ici.
+    // Scalaires (nom + couleurs) → _cgOnScalar (concierge_payload) ; images →
+    // _bindImageWidgets sur concierge_payload.agence (store plat key→valeur).
+    if (pay && pay.agence) {
+      _cgBindScalarListener(wrap);
+      _bindColorWidgets(wrap);
+      _bindImageWidgets(wrap, pay.agence);
+    }
     return;
   }
 
@@ -1492,17 +1509,25 @@ function _cgVefaPreviewHtml() {
   const more = withRef.length > 6
     ? `<span class="sdqr-cg-vefa-ref sdqr-cg-vefa-ref--more">+${withRef.length - 6}</span>` : '';
   const row = (k, v) => `<div class="sdqr-cg-vefa-row"><span class="sdqr-cg-vefa-k">${k}</span><span class="sdqr-cg-vefa-v">${v}</span></div>`;
+  const ag = (prog.agence && typeof prog.agence === 'object') ? prog.agence : {};
   return `
     <div class="sdqr-cg-vefa-card">
       ${row('Programme', _esc(prog.nom || '—'))}
       ${prog.promoteur ? row('Promoteur', _esc(prog.promoteur)) : ''}
       ${prog.ville ? row('Ville', _esc(prog.ville)) : ''}
       ${prog.livraison_prevue ? row('Livraison', _esc(prog.livraison_prevue)) : ''}
-      ${row('Agence', _esc((prog.agence && prog.agence.nom) || '—'))}
       ${row('Lots', `${withRef.length} avec référence${statutChips ? ' · ' + statutChips : ''}`)}
       ${sampleRefs ? `<div class="sdqr-cg-vefa-refs">${sampleRefs}${more}</div>` : ''}
-      <p class="sdqr-cg-vefa-note">Données envoyées telles quelles et validées à la publication. Pour les modifier, repassez par VEFA Studio.</p>
-    </div>`;
+      <p class="sdqr-cg-vefa-note">Lots et chiffres figés (source de vérité — pour les modifier, repassez par VEFA Studio). L'habillage ci-dessous est éditable ici.</p>
+    </div>
+    <section class="sdqr-cg-section sdqr-cg-brand">
+      <h4 class="sdqr-cg-section-h">Habillage <small>— logo, bannière et couleurs (modifiable ici, sans repasser par VEFA Studio)</small></h4>
+      ${_cgText('agence.nom', "Nom de l'agence", 'Ex : Prométhée Promotion', ag.nom, { maxlength: 80 })}
+      ${_cgLogoWidget('logo_url', "Logo de l'agence")}
+      ${_cgLogoWidget('banner_url', 'Bannière — grand visuel en haut de page (Hero)', { maxBytes: 40000, maxDim: 1000, wide: true })}
+      ${_cgColor('agence.couleur_primaire', 'Couleur principale', ag.couleur_primaire, '#2563EB')}
+      ${_cgColor('agence.couleur_secondaire', 'Couleur secondaire', ag.couleur_secondaire, '#C9A96E')}
+    </section>`;
 }
 
 // ══════════════════════════════════════════════════════════════════
