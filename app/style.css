@@ -7105,6 +7105,69 @@ html.light-mode .ksfs-detail-related-h { color: #0f172a; }
 .sdqr-convert-row { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .sdqr-convert-hint { font-size: 11.5px; line-height: 1.5; color: rgba(220,225,240,.55); }
 html.light-mode .sdqr-convert-hint { color: #64748b; }
+
+/* ══ « Livrer à un client » — composant partagé (app/lib/asset-deliver.js) ══
+   Réassignation d'un asset vers le tenant d'une licence cliente. Admin only.
+   Variables flip light/dark. Pictos outline (ui-icons), zéro emoji. */
+.ks-deliver { margin-top: 16px; }
+.ks-deliver-trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: var(--r);
+  background: var(--gold3); color: var(--gold2);
+  border: 1px solid var(--gold); cursor: pointer;
+  font-size: 13px; font-weight: 600; letter-spacing: -.01em;
+  transition: background .15s, transform .1s;
+}
+.ks-deliver-trigger:hover { background: rgba(99,102,241,.20); }
+.ks-deliver-trigger:active { transform: translateY(1px); }
+.ks-deliver-trigger svg { width: 16px; height: 16px; }
+
+.ks-deliver-panel {
+  margin-top: 12px; padding: 16px;
+  background: var(--navy2); border: 1px solid var(--bd);
+  border-radius: var(--r2); display: flex; flex-direction: column; gap: 10px;
+}
+.ks-deliver-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; letter-spacing: -.02em; color: var(--text); }
+.ks-deliver-head svg { width: 16px; height: 16px; color: var(--gold2); }
+.ks-deliver-desc { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--tx2); }
+.ks-deliver-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tx2); }
+.ks-deliver-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.ks-deliver-input {
+  flex: 1 1 200px; min-width: 0; padding: 9px 12px;
+  background: var(--navy); border: 1px solid var(--bd); border-radius: var(--r);
+  color: var(--text); font-size: 14px;
+}
+.ks-deliver-input:focus { outline: none; border-color: var(--gold); }
+
+.ks-deliver-btn { padding: 9px 16px; border-radius: var(--r); border: 1px solid transparent; cursor: pointer; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.ks-deliver-btn:disabled { opacity: .55; cursor: default; }
+.ks-deliver-btn--primary { background: var(--gold); color: #fff; }
+.ks-deliver-btn--primary:hover:not(:disabled) { background: var(--gold2); }
+.ks-deliver-btn--danger { background: var(--danger); color: #fff; }
+.ks-deliver-btn--danger:hover:not(:disabled) { filter: brightness(1.08); }
+.ks-deliver-cancel { background: none; border: none; color: var(--tx2); cursor: pointer; font-size: 13px; padding: 9px 6px; }
+.ks-deliver-cancel:hover { color: var(--text); }
+
+.ks-deliver-recap { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--navy); border: 1px solid var(--bd); border-radius: var(--r); }
+.ks-deliver-recap-row { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.ks-deliver-recap-lbl { flex: 0 0 92px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tx2); }
+.ks-deliver-recap-val { color: var(--text); font-weight: 600; }
+.ks-deliver-pill { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--gold3); color: var(--gold2); font-size: 11px; font-weight: 700; }
+
+.ks-deliver-warn { padding: 10px 12px; border-radius: var(--r); background: var(--danger-soft); border: 1px solid var(--danger); color: var(--text); font-size: 12.5px; line-height: 1.55; }
+.ks-deliver-warn--block { background: var(--navy); border-color: var(--bd); color: var(--tx2); }
+.ks-deliver-export { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 12px; border-radius: var(--r); background: var(--navy2); border: 1px solid var(--bd); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; }
+.ks-deliver-export:hover { border-color: var(--gold); }
+.ks-deliver-export svg { width: 14px; height: 14px; }
+
+.ks-deliver-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.ks-deliver-msg { font-size: 12.5px; line-height: 1.5; padding: 8px 10px; border-radius: var(--r); }
+.ks-deliver-msg--err { background: var(--danger-soft); color: var(--danger); }
+.ks-deliver-msg--ok { background: var(--green-soft); color: var(--green); }
+.ks-deliver-panel--done { border-color: var(--green); }
+.ks-deliver-done-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; color: var(--green); }
+.ks-deliver-done-head svg { width: 16px; height: 16px; }
+.ks-deliver-note { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--tx2); }
 .sdqr-detail-msg {
   margin-top: 4px;
   padding: 8px 12px;

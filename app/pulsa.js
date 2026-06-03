@@ -19,6 +19,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { CF_API } from './pads-loader.js';
+import { deliverEntryHtml, wireDeliver } from './lib/asset-deliver.js';
 import {
   FIELD_TYPES,
   FIELD_GROUPS,
@@ -1387,6 +1388,8 @@ function _renderResponses(main) {
       </div>
     </div>
 
+    ${form.meta?.slug ? deliverEntryHtml() : ''}
+
     ${loading ? `
       <div class="pulsa-lib-empty"><p>Chargement des réponses…</p></div>
     ` : error ? `
@@ -1405,6 +1408,30 @@ function _renderResponses(main) {
       </div>
     `}
   `;
+
+  // « Livrer à un client » (admin only — absent sinon). Key Form est
+  // local-first : après le flip serveur (owner_sub), le client devra
+  // « Récupérer un formulaire publié » via l'URL pour le voir dans SON
+  // builder. On retire la copie locale de l'admin après livraison.
+  const _delRoot = main.querySelector('[data-deliver-root]');
+  if (_delRoot) {
+    const slug = form.meta?.slug || '';
+    wireDeliver(_delRoot, {
+      type: 'keyform',
+      assetId: form.id,
+      assetName: form.meta?.title || 'Formulaire',
+      onExportResponses: () => _exportCsv(form.id),
+      deliveredNote: slug
+        ? `Pour qu'il apparaisse dans le Key Form du client, demande-lui d'ouvrir Key Form → « Récupérer un formulaire publié » et de coller cette URL : ${location.host}/f/${slug}`
+        : '',
+      onDelivered: () => {
+        // Retrait LOCAL uniquement (la ligne serveur appartient au client).
+        try { deleteForm(form.id); } catch (_) {}
+        if (getCurrentFormId() === form.id) setCurrentFormId(null);
+        _state.form = null;   // évite un re-save au retour bibliothèque
+      },
+    });
+  }
 }
 
 function _renderResponseCard(form, response, ordinal) {

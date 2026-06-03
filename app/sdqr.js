@@ -18,6 +18,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
+import { deliverEntryHtml, wireDeliver } from './lib/asset-deliver.js';
 import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
@@ -2755,6 +2756,8 @@ async function _openQrDetail(panel, qr) {
 
         ${_renderDesignPanel(qr)}
 
+        ${deliverEntryHtml()}
+
         <div class="sdqr-detail-msg" id="sdqr-detail-msg" hidden></div>
       </div>
     </div>
@@ -2772,6 +2775,18 @@ async function _openQrDetail(panel, qr) {
 
   // Wire le panneau Design (Sprint SDQR-3 — collapsible, live preview)
   _wireDesignPanel(content, qr, encodedForQr);
+
+  // « Livrer à un client » (admin only — bouton totalement absent sinon).
+  // Le transfert réassigne le tenant ; après succès, le QR quitte la liste.
+  const _deliverRoot = content.querySelector('[data-deliver-root]');
+  if (_deliverRoot) {
+    wireDeliver(_deliverRoot, {
+      type: 'qr',
+      assetId: qr.id,
+      assetName: qr.name || qr.short_id || qr.id,
+      onDelivered: () => { _refreshList(panel); },
+    });
+  }
 
   // État initial du bouton « Export SVG » selon la nature du logo
   // (raster → désactivé). Sera ré-évalué à chaque _liveRerender.
