@@ -4310,17 +4310,7 @@ function _renderSettingsBody() {
                         Se déconnecter de cet appareil
                     </button>
                     <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
-                        Efface ta clé de ce navigateur. Ta licence et ton abonnement ne sont pas affectés — tu pourras te reconnecter avec ta clé.
-                    </p>` : ''}
-                    <!-- UX-6 — Raccourci vers l'onglet "Mes Outils" du K-Store.
-                         Donne une porte d'entrée évidente pour réinstaller un
-                         outil supprimé du dashboard par long-press. -->
-                    ${lic.active ? `
-                    <button class="api-key-save-btn" id="licence-manage-tools" style="margin-top:12px;width:100%;background:transparent;border:1px solid var(--bd);color:var(--tx)">
-                        Gérer mes outils →
-                    </button>
-                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
-                        Voir vos outils actifs et réinstaller ceux que vous avez retirés du dashboard.
+                        Efface ta clé et vide le cache de ce navigateur (utile si tu vois une ancienne version). Tes brouillons et préférences sont conservés. Ta licence et ton abonnement ne sont pas affectés.
                     </p>` : ''}
                     <!-- S5.6 — Bouton de push manuel vers le Cloud Vault.
                          Utile au 1er login sur un nouvel appareil, ou si l'admin
@@ -4333,15 +4323,6 @@ function _renderSettingsBody() {
                     </button>
                     <p class="sp-user-hint" id="lic-sync-feedback" style="margin-top:4px;font-size:11px;line-height:1.4;min-height:16px">
                         Pousse vos préférences (sélection d'outils, clés API, brouillons) vers le serveur. À utiliser au 1er login sur un nouvel appareil ou après /admin.
-                    </p>
-                    <!-- Reset local : vide localStorage + SW + caches + redirige sur la landing.
-                         Indispensable pour changer d'appareil ou reseter une session en erreur.
-                         Ne touche PAS à la licence côté serveur (pas de révocation). -->
-                    <button class="sp-danger-btn" id="licence-local-reset" style="margin-top:8px;background:transparent;border:1px solid var(--bd);color:var(--tx2)">
-                        Déconnexion complète (reset cet appareil)
-                    </button>
-                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
-                        Vide cet appareil (cache, SW, préférences locales) et renvoie sur l'écran d'activation. La licence reste valide côté serveur.
                     </p>
                     ${_showCancel ? `
                     <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
@@ -4606,18 +4587,25 @@ function _renderSettingsBody() {
         }
     });
 
-    body.querySelector('#licence-revoke')?.addEventListener('click', () => {
-        if (!confirm('Se déconnecter de cet appareil ? Ta clé sera effacée de ce navigateur. Ta licence et ton abonnement ne sont pas affectés — tu pourras te reconnecter avec ta clé.')) return;
-        revokeLicence();
-        // Fermer les settings et laisser le hot reload gérer l'UI
-        document.getElementById('settings-panel')?.classList.remove('open');
-    });
-
-    // UX-6 — Raccourci "Gérer mes outils" : ferme la Settings et ouvre le
-    // K-Store directement sur l'onglet "Mes Outils".
-    body.querySelector('#licence-manage-tools')?.addEventListener('click', () => {
-        document.getElementById('settings-panel')?.classList.remove('open');
-        _openKStorePanel('mine');
+    // « Se déconnecter de cet appareil » — fusion logout + nettoyage cache/SW.
+    // revokeLicence() enlève la licence (clé/plan/owner/démo) SANS toucher aux
+    // brouillons ni préférences. On vide ENSUITE le cache PWA + Service Worker
+    // (répare un blocage sur une vieille version), puis on recharge sur l'écran
+    // d'activation. Aucun effet serveur (licence/abonnement intacts).
+    body.querySelector('#licence-revoke')?.addEventListener('click', async () => {
+        if (!confirm('Se déconnecter de cet appareil ?\n\nTa clé est effacée et le cache de ce navigateur est vidé (utile si tu vois une ancienne version). Tes brouillons et préférences sont conservés.\n\nTa licence et ton abonnement ne sont pas affectés — tu pourras te reconnecter avec ta clé.')) return;
+        revokeLicence();   // clé/plan/owner/démo uniquement — pas les brouillons/prefs
+        try {
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister().catch(() => null)));
+            }
+            if ('caches' in window) {
+                const ks = await caches.keys();
+                await Promise.all(ks.map(k => caches.delete(k).catch(() => null)));
+            }
+        } catch (_) { /* best-effort */ }
+        location.replace('/?logout=1');
     });
 
     // S5.6 — Bouton « Forcer la synchronisation Cloud »
@@ -4651,10 +4639,6 @@ function _renderSettingsBody() {
         }
     });
 
-    // Bouton « Déconnexion complète (reset cet appareil) » — équivalent
-    // à taper /app?ks_reset=1 manuellement, mais accessible depuis l'UI.
-    // Utile pour : changer d'appareil, debug d'un état corrompu, perdre
-    // accès à une licence collée sur un device. Ne touche QUE le local.
     // UX-3.5 — Effacer mon profil cloud (RGPD droit à l'oubli)
     body.querySelector('#rgpd-vault-delete')?.addEventListener('click', async (e) => {
         if (!confirm('Effacer votre profil du Cloud ?\n\n' +
@@ -4690,31 +4674,6 @@ function _renderSettingsBody() {
             btn.disabled = false;
             btn.textContent = originalLabel;
         }
-    });
-
-    body.querySelector('#licence-local-reset')?.addEventListener('click', async () => {
-        if (!confirm('Déconnexion complète de cet appareil ?\n\n' +
-            'Va vider : préférences locales, cache PWA, brouillons Kodex et Pulsa, ' +
-            'photo, ordre des pads.\n\n' +
-            'La licence reste valide côté serveur — vous pourrez ré-activer immédiatement après.')) return;
-        try {
-            // 1. Vide toutes les clés ks_* du localStorage
-            Object.keys(localStorage)
-                .filter(k => k.startsWith('ks_'))
-                .forEach(k => localStorage.removeItem(k));
-            // 2. Unregister les Service Workers (PWA cache)
-            if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                await Promise.all(regs.map(r => r.unregister().catch(() => null)));
-            }
-            // 3. Vide les caches HTTP du SW
-            if ('caches' in window) {
-                const ks = await caches.keys();
-                await Promise.all(ks.map(k => caches.delete(k).catch(() => null)));
-            }
-        } catch (_) { /* best-effort, on continue même en cas d'erreur */ }
-        // 4. Redirection landing avec flag logout pour éviter la redirection auto
-        location.replace('/?logout=1');
     });
 
     // Auto-save global — déclenché par toute modification de préférence
