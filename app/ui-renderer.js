@@ -4296,7 +4296,13 @@ function _renderSettingsBody() {
                         </div>
                         <div class="sp-user-hint" id="lic-feedback" style="min-height:16px"></div>
                     </div>
-                    ${lic.active ? `<button class="sp-danger-btn" id="licence-revoke" style="margin-top:4px">Révoquer la licence</button>` : ''}
+                    ${lic.active ? `
+                    <button class="api-key-save-btn" id="licence-revoke" style="margin-top:4px;width:100%;background:transparent;border:1px solid var(--bd);color:var(--tx)">
+                        Se déconnecter de cet appareil
+                    </button>
+                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
+                        Efface ta clé de ce navigateur. Ta licence et ton abonnement ne sont pas affectés — tu pourras te reconnecter avec ta clé.
+                    </p>` : ''}
                     <!-- UX-6 — Raccourci vers l'onglet "Mes Outils" du K-Store.
                          Donne une porte d'entrée évidente pour réinstaller un
                          outil supprimé du dashboard par long-press. -->
@@ -4582,7 +4588,7 @@ function _renderSettingsBody() {
     });
 
     body.querySelector('#licence-revoke')?.addEventListener('click', () => {
-        if (!confirm('Révoquer la licence ? Les outils payants seront à nouveau verrouillés.')) return;
+        if (!confirm('Se déconnecter de cet appareil ? Ta clé sera effacée de ce navigateur. Ta licence et ton abonnement ne sont pas affectés — tu pourras te reconnecter avec ta clé.')) return;
         revokeLicence();
         // Fermer les settings et laisser le hot reload gérer l'UI
         document.getElementById('settings-panel')?.classList.remove('open');
