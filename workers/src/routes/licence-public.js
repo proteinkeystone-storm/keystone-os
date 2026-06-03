@@ -153,7 +153,14 @@ export async function handleActivateV2(request, env) {
   const planUp    = (licence.plan || '').toUpperCase();
   const isDemo    = planUp === 'DEMO';
   const isAdmin   = planUp === 'ADMIN';
-  const bypassBind = isDemo || isAdmin;
+  // MAX = appareils ILLIMITÉS (cf. _devicesMaxForPlan licence-v2 = null +
+  // description plan « appareils illimités »). Il ne doit JAMAIS être verrouillé
+  // sur un seul appareil par le binding legacy. Sans ce bypass, une licence MAX
+  // se faisait bloquer dès le 2ᵉ navigateur/appareil (« Cette clé est déjà
+  // activée sur un autre appareil ») tant qu'enforce_devices_v2 reste dormant —
+  // bug cross-device récurrent. DEMO/ADMIN étaient déjà bypass.
+  const isMax     = planUp === 'MAX';
+  const bypassBind = isDemo || isAdmin || isMax;
   let   deviceBound = false;
   let   enforcementResult = null;  // S2.5 — résultat de enforceDeviceLimit (debug)
 
