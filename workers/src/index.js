@@ -67,6 +67,7 @@ import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
          handleAdminIssueJWT }                                         from './routes/admin-s5.js';
 import { handleAssetTransfer }                                         from './routes/asset-transfer.js';
+import { handleConciergeAutoDowngrade, handleConciergeDowngradeRunNow } from './routes/concierge-downgrade.js';
 import { handleListPublic as handleMsgListPublic,
          handleCreate     as handleMsgCreate,
          handleListAdmin  as handleMsgListAdmin,
@@ -394,6 +395,9 @@ export default {
       if (path === '/api/admin/expiration-reminders/run-now' && method === 'POST') return handleExpirationRemindersRunNow(request, env);
       // S5.6 — Admin login unifié : émet un JWT user pour activer Cloud Vault sync
       if (path === '/api/admin/issue-jwt'                && method === 'POST') return handleAdminIssueJWT(request, env);
+      // Auto-dégradation Concierge à l'échéance — déclenche le job à la demande.
+      // ?dry=1 = prévisualisation. Dormant par défaut (kill-switch env).
+      if (path === '/api/admin/concierge-downgrade/run-now' && method === 'POST') return handleConciergeDowngradeRunNow(request, env);
       // « Livrer à un client » — réassigne un asset (QR / Key Form) vers le
       // tenant d'une licence cliente (par email). Gate admin flexible
       // (secret OU JWT isAdmin). dry_run=true → récap sans mutation.
@@ -516,6 +520,15 @@ export default {
       handleExpirationReminders(env)
         .then(r => console.log('[expiration-reminders]', JSON.stringify(r)))
         .catch(e => console.warn('[expiration-reminders] failed', e?.message || e))
+    );
+    // Auto-dégradation des Concierge des licences inactives/expirées en
+    // redirection simple (coupe l'IA, le QR imprimé reste valide). DORMANT
+    // par défaut : sans KS_CONCIERGE_AUTODOWNGRADE_ENABLED='true', dry-run
+    // (audit de ce qui SERAIT fait, zéro mutation).
+    ctx.waitUntil(
+      handleConciergeAutoDowngrade(env)
+        .then(r => console.log('[concierge-downgrade]', JSON.stringify(r)))
+        .catch(e => console.warn('[concierge-downgrade] failed', e?.message || e))
     );
   },
 };
