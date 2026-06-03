@@ -1749,6 +1749,11 @@ export function stripModelNoise(s) {
   // une ponctuation finale sans espace (« …page.30kup », « …Rotonde.022pz »).
   // Le « collé sans espace » protège les termes précédés d'un espace (« RE2020 », « T3 »).
   t = t.replace(/([.!?…])(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z0-9]{4,}\s*$/i, '$1');
+  // Motif 4 — blob de LETTRES minuscules pures (>= 8 car.) collé à une
+  // ponctuation finale (ex : « …en cours.kvxfbrteaepojmkyj »). Minuscules +
+  // collé sans espace : une vraie phrase suivante commence par une majuscule
+  // après un espace -> zéro risque de manger du texte légitime.
+  t = t.replace(/([.!?…])[a-z]{8,}\s*$/, '$1');
   return t.trim();
 }
 
