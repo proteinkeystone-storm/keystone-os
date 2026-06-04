@@ -68,6 +68,22 @@ async function _lookupLicence(normalizedKey) {
   }
 }
 
+// ── Rate-limit léger par IP (fail-open) ────────────────────────
+// 30 validations / 60 s par IP : coupe le brute-force / DoS sans
+// jamais gêner un usage légitime (on valide sa clé une seule fois).
+// En cas d'erreur KV → on laisse passer (jamais de blocage injuste).
+async function _rateLimited(req) {
+  try {
+    const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+    const k  = `rl:validate:${ip}`;
+    const n  = await kv.incr(k);
+    if (n === 1) await kv.expire(k, 60);
+    return n > 30;
+  } catch {
+    return false; // fail-open : ne jamais bloquer sur incident KV
+  }
+}
+
 // ── Handler principal ───────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
@@ -76,6 +92,12 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Méthode non autorisée' });
+
+  // Garde anti-abus (fail-open) — n'affecte jamais une validation unique légitime.
+  if (await _rateLimited(req)) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ valid: false, error: 'Trop de tentatives, réessayez dans une minute.' });
+  }
 
   const { key } = req.body || {};
 
