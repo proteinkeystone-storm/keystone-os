@@ -600,7 +600,7 @@ section,nav{position:relative;z-index:1}
 <section class="sec tools" id="outils">
   <div class="tools-head reveal">
     <span class="eyebrow">Le catalogue</span>
-    <h2 class="h2">Vos outils, par métier.</h2>
+    <h2 class="h2">Vos outils.</h2>
     <p class="lead" style="margin:14px auto 0">9 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
   </div>
   <div id="toolsGrid"></div>
@@ -822,12 +822,10 @@ if('IntersectionObserver' in window){
   const ag=document.getElementById('appgrid');
   if(ag) ag.innerHTML=TOOLS.slice(0,6).map(t=>'<div class="appchip" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><span>'+t.name+'</span></div>').join('');
   const grid=document.getElementById('toolsGrid');
-  if(grid){['Communication','Immobilier'].forEach(function(fam){
-    const items=TOOLS.filter(t=>t.fam===fam);
-    const b=document.createElement('div'); b.className='fam-block reveal'; b.style.setProperty('--fam',FAM_COLOR[fam]);
-    b.innerHTML='<div class="fam-title">'+fam+'</div><div class="tgrid">'+items.map(t=>'<div class="tcard" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p></div>').join('')+'</div>';
-    grid.appendChild(b);
-  });}
+  if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
+    grid.className='tgrid reveal';
+    grid.innerHTML=TOOLS.map(t=>'<div class="tcard" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p></div>').join('');
+  }
 })();
 
 /* ── Plans (section 6), data-driven — quotas réels Ghost Writer + exclusivités MAX ── */
