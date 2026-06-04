@@ -255,6 +255,20 @@ async function api(endpoint, method = 'GET', body = null) {
   return data;
 }
 
+// Upload multipart (fichier binaire). NE PAS poser Content-Type : le
+// navigateur calcule lui-même la frontière multipart/form-data.
+async function apiUpload(endpoint, formData) {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${adminToken}` },
+    body: formData,
+  });
+  if (res.status === 401) { logout(); throw new Error('Session expirée'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+  return data;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════════════════════════
@@ -994,6 +1008,10 @@ function renderIdentityTab(el, pad, rootContainer) {
         <textarea class="form-textarea" id="id-notice"
                   style="min-height:80px;font-family:inherit;font-size:13px;resize:vertical">${esc(pad.notice || '')}</textarea>
       </div>
+    </div>
+    <div class="form-group form-full" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border)">
+      <label class="form-label">Vidéo d'aide — notice « ? »</label>
+      <div id="help-video-zone"></div>
     </div>`;
 
   ['#id-title','#id-subtitle','#id-icon'].forEach(sel => {
@@ -1004,6 +1022,101 @@ function renderIdentityTab(el, pad, rootContainer) {
       el.querySelectorAll('.type-radio').forEach(l => l.classList.toggle('active', l.querySelector('input').checked));
       refreshPreview(rootContainer);
     });
+  });
+
+  renderHelpVideoZone(el.querySelector('#help-video-zone'), pad.id);
+}
+
+// ── Vidéo d'aide (notice « ? ») — upload R2 par outil ─────────────
+// Le binaire part sur R2 (Worker /api/admin/help/media), le mapping
+// app_id → clé vit en D1. Le bloc de specs n'est visible qu'ici (admin).
+const HELP_VIDEO_SPECS = `
+  <div style="padding:12px 14px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.22);border-radius:8px;font-size:12px;color:var(--text-muted);line-height:1.6">
+    <strong style="color:#c7d2fe">Format recommandé</strong> (admin) — pour un poids mini et une lecture fluide partout&nbsp;:<br>
+    <strong>MP4</strong> (H.264 + AAC) · <strong>1280×720</strong> (720p), ratio <strong>16:9</strong> ·
+    débit ~1,5–2 Mbps · durée <strong>30–90 s</strong> · poids cible <strong>&lt; 10 Mo</strong> ·
+    poster optionnel 1280×720 (JPEG/WebP). <em>La zone d'affichage ne dépasse pas ~560 px : le 1080p est inutile.</em>
+  </div>`;
+
+async function renderHelpVideoZone(zoneEl, appId) {
+  if (!zoneEl) return;
+
+  if (!appId) {
+    zoneEl.innerHTML = `
+      <p style="color:var(--text-muted);font-size:12.5px;margin:0 0 10px">
+        Renseigne et enregistre d'abord l'<strong>ID NOMEN-K</strong> de l'outil pour pouvoir y attacher une vidéo.
+      </p>${HELP_VIDEO_SPECS}`;
+    return;
+  }
+
+  zoneEl.innerHTML = `<p style="color:var(--text-muted);font-size:12.5px;margin:0">Chargement…</p>`;
+
+  let info = { video: null };
+  try {
+    const r = await fetch(`${API_BASE}/api/help/${encodeURIComponent(appId)}/media?_=${Date.now()}`);
+    if (r.ok) info = await r.json();
+  } catch { /* réseau indispo → état "aucune vidéo" */ }
+
+  const hasVideo = !!(info && info.video && info.video.url);
+  const bust     = (u) => u + (u.includes('?') ? '&' : '?') + '_=' + Date.now();
+
+  zoneEl.innerHTML = `
+    ${HELP_VIDEO_SPECS}
+    <div style="margin-top:12px">
+      ${hasVideo ? `
+        <video src="${esc(bust(info.video.url))}" controls preload="metadata"
+               style="width:100%;max-width:360px;border-radius:8px;background:#000;display:block"></video>
+        <p style="color:var(--text-muted);font-size:12px;margin:6px 0 0">
+          ✓ Vidéo en ligne${info.video.poster ? ' · poster OK' : ''}${info.updated_at ? ' · MAJ ' + esc(info.updated_at) : ''}
+        </p>` : `
+        <p style="color:var(--text-muted);font-size:12.5px;margin:0">
+          Aucune vidéo — la notice affiche « Démo vidéo bientôt disponible ».
+        </p>`}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center">
+      <input type="file" id="hv-file" accept="video/mp4,video/webm" hidden>
+      <button class="btn btn-secondary btn-sm" id="hv-pick">${hasVideo ? 'Remplacer la vidéo' : 'Choisir une vidéo (MP4 / WebM)'}</button>
+      <input type="file" id="hv-poster" accept="image/jpeg,image/png,image/webp" hidden>
+      <button class="btn btn-secondary btn-sm" id="hv-poster-pick">Poster (optionnel)</button>
+      ${hasVideo ? `<button class="btn btn-sm" id="hv-del" style="color:#ff6b6b;border-color:#ff6b6b44">Supprimer</button>` : ''}
+      <span id="hv-status" style="color:var(--text-muted);font-size:12px"></span>
+    </div>`;
+
+  const setStatus = (m) => { const s = zoneEl.querySelector('#hv-status'); if (s) s.textContent = m; };
+
+  const doUpload = async (file, kind) => {
+    if (!file) return;
+    if (kind === 'video' && file.size > 10 * 1024 * 1024) {
+      const mb = (file.size / 1048576).toFixed(1);
+      if (!confirm(`Ce fichier fait ${mb} Mo (recommandé < 10 Mo). L'envoyer quand même ?`)) return;
+    }
+    setStatus(kind === 'poster' ? 'Envoi du poster…' : 'Envoi de la vidéo…');
+    try {
+      const fd = new FormData();
+      fd.append('appId', appId);
+      fd.append('kind', kind);
+      fd.append('file', file);
+      await apiUpload('/api/admin/help/media', fd);
+      toast(kind === 'poster' ? 'Poster ajouté' : 'Vidéo en ligne', 'success');
+      renderHelpVideoZone(zoneEl, appId);
+    } catch (e) {
+      setStatus('❌ ' + e.message);
+      toast(e.message, 'error');
+    }
+  };
+
+  zoneEl.querySelector('#hv-pick')?.addEventListener('click', () => zoneEl.querySelector('#hv-file').click());
+  zoneEl.querySelector('#hv-file')?.addEventListener('change', (e) => doUpload(e.target.files[0], 'video'));
+  zoneEl.querySelector('#hv-poster-pick')?.addEventListener('click', () => zoneEl.querySelector('#hv-poster').click());
+  zoneEl.querySelector('#hv-poster')?.addEventListener('change', (e) => doUpload(e.target.files[0], 'poster'));
+  zoneEl.querySelector('#hv-del')?.addEventListener('click', async () => {
+    if (!confirm('Supprimer la vidéo d\'aide de cet outil ?')) return;
+    setStatus('Suppression…');
+    try {
+      await api(`/api/admin/help/media/${encodeURIComponent(appId)}`, 'DELETE');
+      toast('Vidéo supprimée', 'success');
+      renderHelpVideoZone(zoneEl, appId);
+    } catch (e) { setStatus('❌ ' + e.message); }
   });
 }
 

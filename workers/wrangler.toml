@@ -34,6 +34,14 @@ database_id  = "f5d21b1a-74a5-436f-849a-e971ab9d44ac"
 [ai]
 binding = "AI"
 
+# ── R2 — Médias des notices d'aide (Help-Overlay v2, Phase 2) ──
+# Stockage des vidéos de démo + posters uploadés depuis l'admin.
+# Egress gratuit, palier gratuit 10 Go (usage réel : ~quelques Mo).
+# Mapping app_id → clé R2 conservé en D1 (table help_videos).
+[[r2_buckets]]
+binding     = "HELP_MEDIA"
+bucket_name = "keystone-help-media"
+
 # ── Variables publiques (non-secrètes) ─────────────────────────
 # CSV multi-origin : production Vercel + previews + dev local.
 # Le Worker renvoie l'origin qui correspond à celle de la requête

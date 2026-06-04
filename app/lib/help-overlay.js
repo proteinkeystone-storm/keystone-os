@@ -95,22 +95,44 @@ function closeHelp() {
   setTimeout(() => toRemove.remove(), 250);
 }
 
-// ── Chargement du contenu JSON avec cache mémoire ─────────────
+// ── Base de l'API Worker (override dev via window.__KS_API_BASE__) ──
+function _apiBase() {
+  const m = window.__KS_API_BASE__;
+  if (typeof m === 'string' && m) return m;
+  return 'https://keystone-os-api.keystone-os.workers.dev';
+}
+
+// Extrait l'URL d'une vidéo (champ `video` = string OU { url, poster }).
+function _videoUrl(video) {
+  if (!video) return '';
+  if (typeof video === 'string') return video;
+  if (typeof video === 'object') return video.url || '';
+  return '';
+}
+
+// ── Chargement : JSON statique + vidéo dynamique (R2), en parallèle ──
+// Fusion : le champ `video` du JSON statique (Phase 1, collé à la main)
+// a priorité ; sinon on prend la vidéo uploadée depuis l'admin (Phase 2,
+// servie par le Worker depuis R2). Échec réseau → placeholder, jamais
+// d'erreur (le panneau reste fonctionnel hors-ligne).
 async function loadHelp(appId) {
   if (_cache.has(appId)) return _cache.get(appId);
-  try {
-    const res = await fetch(`${HELP_BASE}${appId}.json`, { cache: 'no-cache' });
-    if (!res.ok) {
-      _cache.set(appId, null);
-      return null;
-    }
-    const data = await res.json();
-    _cache.set(appId, data);
-    return data;
-  } catch {
-    _cache.set(appId, null);
-    return null;
+
+  const [staticData, mediaData] = await Promise.all([
+    fetch(`${HELP_BASE}${appId}.json`, { cache: 'no-cache' })
+      .then(r => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(`${_apiBase()}/api/help/${encodeURIComponent(appId)}/media`, { cache: 'no-cache' })
+      .then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]);
+
+  let data = staticData;
+  if (mediaData && mediaData.video && mediaData.video.url) {
+    if (!data) data = {};
+    if (!_videoUrl(data.video)) data.video = mediaData.video;
   }
+
+  _cache.set(appId, data);
+  return data;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -190,8 +212,7 @@ function _renderDesc(tldr) {
 // `video` accepte une string (URL) ou un objet { url, poster }.
 // Absent → placeholder. Phase 2 : url = fichier uploadé sur R2.
 function _renderVideo(video, title) {
-  const url = (video && typeof video === 'object') ? (video.url || '')
-            : (typeof video === 'string' ? video : '');
+  const url = _videoUrl(video);
   if (url) {
     const poster = (video && typeof video === 'object' && video.poster)
       ? ` poster="${_escape(video.poster)}"` : '';

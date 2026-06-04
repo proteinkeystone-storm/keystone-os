@@ -34,6 +34,8 @@ import { handleListPads, handleSavePad, handleDeletePad,
          handleGetCatalogPublic }                                      from './routes/pads.js';
 import { handleUploadScreenshot, handleGetScreenshot,
          handleDeleteScreenshot, handleListScreenshotsByApp }          from './routes/screenshots.js';
+import { handleHelpMediaUpload, handleHelpMediaInfo,
+         handleHelpMediaServe, handleHelpMediaDelete }                 from './routes/help-media.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleDataDispatch }                                           from './routes/data.js';
@@ -432,6 +434,25 @@ export default {
       if (path.startsWith('/api/admin/screenshot/') && method === 'DELETE') {
         const id = path.split('/').pop();
         return handleDeleteScreenshot(request, env, id);
+      }
+
+      // ── Help media (notices d'aide v2 — vidéos de démo sur R2) ──
+      // Upload admin + service public avec support Range (seek vidéo).
+      if (path === '/api/admin/help/media' && method === 'POST') {
+        return handleHelpMediaUpload(request, env);
+      }
+      const helpDelMatch = path.match(/^\/api\/admin\/help\/media\/([A-Za-z0-9_-]+)$/);
+      if (helpDelMatch && method === 'DELETE') {
+        return handleHelpMediaDelete(request, env, helpDelMatch[1]);
+      }
+      // Le plus spécifique d'abord : /media/(video|poster) avant /media
+      const helpServeMatch = path.match(/^\/api\/help\/([A-Za-z0-9_-]+)\/media\/(video|poster)$/);
+      if (helpServeMatch && (method === 'GET' || method === 'HEAD')) {
+        return handleHelpMediaServe(request, env, helpServeMatch[1], helpServeMatch[2]);
+      }
+      const helpInfoMatch = path.match(/^\/api\/help\/([A-Za-z0-9_-]+)\/media$/);
+      if (helpInfoMatch && method === 'GET') {
+        return handleHelpMediaInfo(request, env, helpInfoMatch[1]);
       }
 
       // ── Vault (clés API) ─────────────────────────────────────
