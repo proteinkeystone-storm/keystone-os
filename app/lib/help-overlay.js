@@ -1,9 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Help Overlay (composant partagé v1.0)
+   KEYSTONE OS — Help Overlay (composant partagé v2.0)
    ─────────────────────────────────────────────────────────────
-   Pattern slide-in à droite (Notion/Linear-like). Bouton "?" en
-   topbar qui ouvre un panneau d'aide overlay sans interrompre
-   le travail en cours. Réutilisable sur tous les artefacts.
+   Notice d'aide en modal centré (gabarit Modal Master : top 5vh,
+   hauteur 90 %). Bouton "?" en topbar qui ouvre un panneau en
+   4 zones. Réutilisable sur tous les artefacts.
+
+   Layout (desktop) :
+       ┌───────────────┬───────────────┐
+       │ Présentation  │ Vidéo de démo │   tldr           video
+       ├───────────────┼───────────────┤
+       │ Comment ça    │ Questions     │   key_points     faq
+       │ marche + ⌨    │ fréquentes    │   + shortcuts
+       └───────────────┴───────────────┘
+   Sur mobile, les 4 zones s'empilent dans cet ordre.
 
    Conventions :
      - Chaque artefact a son contenu d'aide en JSON dans
@@ -11,13 +20,22 @@
      - Schéma JSON :
          {
            "title":   "Nom de l'artefact",
-           "tldr":    "1-2 phrases",
+           "tldr":    "1-2 phrases (zone Présentation)",
+           "video":   { "url": "https://…/demo.mp4", "poster": "…" },
            "key_points": ["Étape 1 …", "Étape 2 …"],
            "faq":     [{ "q": "...", "a": "..." }],
+           "faq_coming_soon": false,   // optionnel — voir ci-dessous
            "shortcuts": [{ "keys": "Échap", "desc": "..." }],
            "updated_at": "2026-05-14"
          }
+     - video absent → placeholder « Démo vidéo bientôt disponible ».
+     - faq absent → placeholder « bientôt », SAUF si
+       faq_coming_soon === false : la zone FAQ est alors masquée et
+       « Comment ça marche » s'étale sur toute la largeur (pour les
+       outils qui n'ont structurellement pas de FAQ).
      - Le JSON est édité sans redéploiement (juste push Vercel).
+       Phase 2 : video.url pointera un fichier uploadé sur
+       Cloudflare R2 depuis l'admin.
 
    API :
      helpButtonHTML(appId)         → string HTML à injecter en topbar
@@ -119,6 +137,8 @@ function renderPanel(appId, content) {
       </aside>
     `;
   } else {
+    const hasFaq = Array.isArray(content.faq) && content.faq.length > 0;
+    const faqOmitted = !hasFaq && content.faq_coming_soon === false;
     panel.innerHTML = `
       <div class="ws-help-backdrop" data-act="help-close"></div>
       <aside class="ws-help-panel" role="dialog" aria-label="Aide ${_escape(content.title || appId)}">
@@ -130,10 +150,22 @@ function renderPanel(appId, content) {
           <button class="ws-iconbtn" data-act="help-close" title="Fermer (Échap)">${icon('x', 16)}</button>
         </header>
         <div class="ws-help-body">
-          ${content.tldr ? `<div class="ws-help-tldr">${_escape(content.tldr)}</div>` : ''}
-          ${_renderKeyPoints(content.key_points)}
-          ${_renderFaq(content.faq)}
-          ${_renderShortcuts(content.shortcuts)}
+          <div class="ws-help-grid${faqOmitted ? ' ws-help-grid--no-faq' : ''}">
+            <section class="ws-help-zone ws-help-zone--desc">
+              ${_renderDesc(content.tldr)}
+            </section>
+            <section class="ws-help-zone ws-help-zone--video">
+              ${_renderVideo(content.video, content.title || appId)}
+            </section>
+            <section class="ws-help-zone ws-help-zone--how">
+              ${_renderKeyPoints(content.key_points)}
+              ${_renderShortcuts(content.shortcuts)}
+            </section>
+            ${faqOmitted ? '' : `
+            <section class="ws-help-zone ws-help-zone--faq">
+              ${hasFaq ? _renderFaq(content.faq) : _renderComingSoon('help-circle', 'Questions fréquentes', 'bientôt disponibles')}
+            </section>`}
+          </div>
           ${content.updated_at ? `<footer class="ws-help-foot">Mis à jour le ${_escape(content.updated_at)}</footer>` : ''}
         </div>
       </aside>
@@ -146,6 +178,48 @@ function renderPanel(appId, content) {
   });
 
   return panel;
+}
+
+// ── Zone Présentation (tldr) ──────────────────────────────────
+function _renderDesc(tldr) {
+  if (!tldr) return _renderComingSoon('file-text', 'Présentation', 'bientôt disponible');
+  return `<div class="ws-help-tldr">${_escape(tldr)}</div>`;
+}
+
+// ── Zone Vidéo de démo ────────────────────────────────────────
+// `video` accepte une string (URL) ou un objet { url, poster }.
+// Absent → placeholder. Phase 2 : url = fichier uploadé sur R2.
+function _renderVideo(video, title) {
+  const url = (video && typeof video === 'object') ? (video.url || '')
+            : (typeof video === 'string' ? video : '');
+  if (url) {
+    const poster = (video && typeof video === 'object' && video.poster)
+      ? ` poster="${_escape(video.poster)}"` : '';
+    return `
+      <div class="ws-help-video">
+        <video controls preload="metadata"${poster}
+               aria-label="Vidéo de démonstration — ${_escape(title)}">
+          <source src="${_escape(url)}">
+          Votre navigateur ne peut pas lire cette vidéo.
+        </video>
+      </div>`;
+  }
+  return `
+    <div class="ws-help-video ws-help-video--empty">
+      ${icon('film', 30)}
+      <span class="ws-help-ph-label">Démo vidéo</span>
+      <span class="ws-help-ph-sub">bientôt disponible</span>
+    </div>`;
+}
+
+// ── Placeholder « bientôt » d'une zone vide ───────────────────
+function _renderComingSoon(iconName, label, sub) {
+  return `
+    <div class="ws-help-zone-ph">
+      ${icon(iconName, 26)}
+      <span class="ws-help-ph-label">${_escape(label)}</span>
+      <span class="ws-help-ph-sub">${_escape(sub)}</span>
+    </div>`;
 }
 
 function _renderKeyPoints(points) {

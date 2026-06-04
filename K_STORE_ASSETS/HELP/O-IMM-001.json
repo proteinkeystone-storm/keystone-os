@@ -8,6 +8,7 @@
     "Génération 100 % déterministe — clauses techniques canoniques en bibliothèque (admin), aucun LLM dans le rendu juridique."
   ],
   "faq": [],
+  "faq_coming_soon": false,
   "shortcuts": [
     {
       "keys": "Échap",

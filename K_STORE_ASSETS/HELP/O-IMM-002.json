@@ -8,6 +8,7 @@
     "Le résultat affiche un bloc par portail, prêt à copier-coller dans l'admin du site."
   ],
   "faq": [],
+  "faq_coming_soon": false,
   "shortcuts": [
     {
       "keys": "Échap",

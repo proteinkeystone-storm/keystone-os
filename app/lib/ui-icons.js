@@ -57,6 +57,9 @@ export const ICONS = {
 
   // Assets / éléments visuels
   'image'      : '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  // Help-Overlay v2 — zone vidéo de démo (lecteur + placeholder "bientôt").
+  'film'       : '<rect x="2.5" y="3" width="19" height="18" rx="2.5" ry="2.5"/><line x1="7.5" y1="3" x2="7.5" y2="21"/><line x1="16.5" y1="3" x2="16.5" y2="21"/><line x1="2.5" y1="12" x2="21.5" y2="12"/><line x1="2.5" y1="7.5" x2="7.5" y2="7.5"/><line x1="2.5" y1="16.5" x2="7.5" y2="16.5"/><line x1="16.5" y1="7.5" x2="21.5" y2="7.5"/><line x1="16.5" y1="16.5" x2="21.5" y2="16.5"/>',
+  'play'       : '<polygon points="6 4 20 12 6 20 6 4"/>',
   'palette'    : '<circle cx="12" cy="12" r="10"/><circle cx="6.5" cy="11.5" r="1.5" fill="currentColor"/><circle cx="9.5" cy="7.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="7.5" r="1.5" fill="currentColor"/><circle cx="17.5" cy="11.5" r="1.5" fill="currentColor"/><path d="M12 22a10 10 0 0 1 0-20c5 0 8 4 7 8a5 5 0 0 1-5 4h-2.5a1.5 1.5 0 0 0 0 3 1.5 1.5 0 0 1-1.5 5z"/>',
   'type'       : '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
   'upload-cloud': '<polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><polyline points="16 16 12 12 8 16"/>',
