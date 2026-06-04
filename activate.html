@@ -3,8 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Keystone OS — Domptez la puissance. Gardez le contrôle.</title>
-<meta name="description" content="Keystone OS unifie les meilleures IA du monde dans un environnement souverain. Claude, GPT-4o, Gemini — un seul OS, une seule clé.">
+<title>Keystone OS — Activer mon accès</title>
+<meta name="description" content="Activez votre accès Keystone OS : entrez votre e-mail et votre clé de licence, ou démarrez une démo gratuite de 7 jours.">
+<meta name="robots" content="noindex">
+<style>
+/* Page d'activation focalisée : on masque la vitrine de l'ancienne landing — le tunnel (activation + onboarding) reste 100% intact. */
+#hero, #engines, #kstore, #security, #plans { display: none !important; }
+#main-nav .nav-links { display: none !important; }
+#activate { padding-top: 110px !important; padding-bottom: 80px !important; }
+</style>
 <link rel="icon" href="LOGOS/Logo puce fond bleu.svg" type="image/svg+xml">
 
 <!-- ── AUTO-REDIRECT vers /app si licence deja active ────────────
@@ -1107,7 +1114,7 @@ footer {
 
 <!-- NAV -->
 <nav id="main-nav">
-  <a class="nav-logo" href="#">
+  <a class="nav-logo" href="/" aria-label="Retour à l'accueil Keystone">
     <img src="LOGOS/Logo KEYSTONE blanc.svg" alt="Keystone OS" style="height:22px">
   </a>
   <ul class="nav-links">
