@@ -214,6 +214,9 @@ function _buildShell() {
   _root.addEventListener('dragover', _onDragOver);
   _root.addEventListener('dragleave', _onDragLeave);
   _root.addEventListener('drop', _onDrop);
+  _root.addEventListener('focusin', (e) => {   // sélectionne le n° de page au focus → frappe directe
+    if (e.target && e.target.dataset && e.target.dataset.act === 'pdf-goto-input') { try { e.target.select(); } catch (_) {} }
+  });
   document.addEventListener('keydown', _handleKeyDown);
   bindHelpButton(_root, APP_ID);
   bindBurger(_root);
@@ -402,7 +405,7 @@ function _renderPdf() {
         <div class="pf-pdf-file" title="${_esc(_pdfName)}">${icon('file', 15)}<span>${_esc(_pdfName)}</span></div>
         <div class="pf-pdf-nav">
           <button class="pf-iconbtn" data-act="pdf-prev" ${_pdfPage <= 1 ? 'disabled' : ''} aria-label="Page précédente">${icon('chevron-left', 18)}</button>
-          <span class="pf-pdf-pageno">Page ${_pdfPage} / ${_pdfTotal}</span>
+          <span class="pf-pdf-pageno">Page <input class="pf-pageinput" type="text" inputmode="numeric" value="${_pdfPage}" data-act="pdf-goto-input" aria-label="Aller à la page" title="Tapez un numéro de page puis Entrée"> / ${_pdfTotal}</span>
           <button class="pf-iconbtn" data-act="pdf-next" ${_pdfPage >= _pdfTotal ? 'disabled' : ''} aria-label="Page suivante">${icon('chevron-right', 18)}</button>
         </div>
         <div class="pf-pdf-zoom" role="group" aria-label="Zoom">
@@ -486,6 +489,18 @@ function _pdfGoto(delta) {
   if (next < 1 || next > _pdfTotal) return;
   _pdfPage = next; _pageData = null; _closePopover();
   _renderMain();         // re-render toolbar (pageno) ; _paintPdfStage suit
+}
+
+// Saut direct à une page saisie (clampée dans [1, total]).
+function _pdfGotoPage(n) {
+  const t = Math.max(1, Math.min(_pdfTotal, parseInt(n, 10) || _pdfPage));
+  if (t === _pdfPage) {
+    const pi = _root && _root.querySelector('[data-act="pdf-goto-input"]');
+    if (pi) pi.value = _pdfPage;   // remet la valeur si saisie invalide / identique
+    return;
+  }
+  _pdfPage = t; _pageData = null; _closePopover();
+  _renderMain();
 }
 
 // Rend la page courante. Découplage (chantier 3) : l'ANALYSE (échelle 1 =
@@ -1019,6 +1034,7 @@ function _onChange(e) {
     const f = el.files && el.files[0];
     if (f) _loadPdfFile(f);
   }
+  if (el && el.dataset && el.dataset.act === 'pdf-goto-input') { _pdfGotoPage(el.value); }   // validation au blur
 }
 
 // ── Glisser-déposer du PDF (n'agit que sur l'écran d'import) ─────
@@ -1059,6 +1075,10 @@ function _onInput(e) {
 function _handleKeyDown(e) {
   if (!_root) return;
   const tag = document.activeElement && document.activeElement.tagName;
+  // Champ « aller à la page » : Entrée = saut.
+  if (e.key === 'Enter' && e.target && e.target.dataset && e.target.dataset.act === 'pdf-goto-input') {
+    e.preventDefault(); _pdfGotoPage(e.target.value); return;
+  }
   if (e.key === 'Escape') {
     if (_root.querySelector('[data-slot="pf-pop"]')) { _closePopover(); return; }
     closeGhostwriterProof(); return;
@@ -1567,6 +1587,11 @@ html.light-mode .pf-drop.is-dragover { background:rgba(80,110,230,.1); border-co
 .pf-pdf-file span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pf-pdf-nav { display:flex; align-items:center; gap:8px; }
 .pf-pdf-pageno { font-size:12.5px; color:var(--text-muted,#aaa); min-width:96px; text-align:center; }
+.pf-pageinput { width:2.6em; text-align:center; padding:2px 4px; margin:0 1px; border-radius:6px;
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); color:var(--text-primary,#fff);
+  font-size:12.5px; font-family:inherit; -moz-appearance:textfield; }
+.pf-pageinput:focus { outline:0; border-color:rgba(120,160,255,.55); background:rgba(255,255,255,.12); }
+html.light-mode .pf-pageinput { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.18); color:#1e293b; }
 .pf-pdf-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .pf-iconbtn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px;
   border-radius:9px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
