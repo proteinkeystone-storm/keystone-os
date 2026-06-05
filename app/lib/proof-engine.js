@@ -158,12 +158,38 @@ export function isNoiseSpelling(word, filters) {
 }
 const _RE_LETTER_G = /[A-Za-zÀ-ÖØ-öø-ÿ]/g;
 
-// Applique les filtres à une liste d'issues : ne touche QUE l'orthographe.
-// Une issue d'ortho sans `word` est conservée (on ne masque pas à l'aveugle).
+// Règles de grammaire DÉSACTIVÉES (denylist par préfixe d'identifiant). Sur un
+// audit réel (livre MICE + L'Épaulette, 2026-06-06), ces règles génèrent
+// l'essentiel des faux positifs RÉSIDUELS : ce sont des règles « au conditionnel »
+// (Grammalecte dit lui-même « s'il s'agit… », « si X est le sujet… ») ou trop
+// zélées. La grammaire FIABLE (accords sûrs, accents À/a, traits d'union,
+// confusions nettes, « quelque »…) reste 100 % active.
+const _GRAMMAR_DENYLIST = [
+  'gv1__imp_verbe_groupe3',          // « S'il s'agit d'un impératif, ajoutez un s »
+  'gv1__imp_verbe_groupe2_groupe3',  // idem (autre groupe)
+  'gv1__conj_nous2',                 // « conjugaison probablement erronée si nous… »
+  'gv2__conj_det_nom_sing_virgule',  // « Si X est le sujet de… »
+  'g2__conf_ça_çà_sa',               // « sa » (possessif) pris pour « ça »
+  'g0__virg_virgules_manquantes',    // virgule hésitante « si car/mais est conjonction »
+];
+function _isDenylistedGrammar(it) {
+  if (!it || it.type !== 'grammar') return false;
+  const r = it.ruleId || '';
+  for (let i = 0; i < _GRAMMAR_DENYLIST.length; i++) if (r.indexOf(_GRAMMAR_DENYLIST[i]) === 0) return true;
+  return false;
+}
+
+// Applique les filtres : bruit d'ORTHOGRAPHE (dico perso, sigles…) + règles de
+// GRAMMAIRE désactivées (denylist). Une issue d'ortho sans `word` est conservée
+// (on ne masque pas à l'aveugle).
 export function filterIssues(issues, filters) {
   if (!Array.isArray(issues)) return [];
   const f = filters || _filters;
-  return issues.filter((it) => it && (it.type !== 'spelling' || !it.word || !isNoiseSpelling(it.word, f)));
+  return issues.filter((it) => {
+    if (!it) return false;
+    if (it.type === 'grammar') return !_isDenylistedGrammar(it);
+    return it.type !== 'spelling' || !it.word || !isNoiseSpelling(it.word, f);
+  });
 }
 
 // ── Options de règles Grammalecte (familles TYPOGRAPHIQUES) ──────
