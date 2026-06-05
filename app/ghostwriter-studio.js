@@ -337,11 +337,21 @@ function _renderHero(mode) {
 
   return `
     <div class="gw-hero">
+      <div class="gw-family-switch" role="tablist" aria-label="Ghost Writer — Réécriture ou Correction">
+        <button class="gw-fam is-active" type="button" role="tab" aria-selected="true">
+          ${icon('edit', 15)}<span>Réécriture</span>
+        </button>
+        <button class="gw-fam" type="button" role="tab" aria-selected="false" data-act="open-corrector"
+                title="Correcteur orthographe & grammaire (texte + PDF), 100 % local">
+          ${icon('check-circle', 15)}<span>Correction</span>
+        </button>
+      </div>
       <div class="gw-hero-eyebrow">
-        ${icon('ghostwriter', 13)}&nbsp;A-COM-005 — Réécrivez selon le contexte
+        ${icon('ghostwriter', 13)}&nbsp;Réécrivez selon le contexte
       </div>
       <nav class="gw-tabs" aria-label="Contexte d'écriture" role="tablist">
         ${tabs}
+        <span class="gw-tabs-line" aria-hidden="true"></span>
       </nav>
       <p class="gw-hero-subtitle">${_esc(mode.subtitle)}</p>
     </div>
@@ -361,24 +371,35 @@ function _renderSelect(fieldId, label, options, currentVal) {
   `;
 }
 
+// Toujours 3 fenêtres (une par proposition), alignées sur la zone de
+// gauche : la 1re cale sur la zone de saisie, les 3 s'empilent à droite.
 function _renderVariants() {
-  if (_generating) {
-    return `<div class="gw-empty"><span class="gw-spinner gw-spinner-lg"></span><br>Mistral rédige…</div>`;
-  }
-  if (!_variants || _variants.length === 0) {
-    return `<div class="gw-empty">Cliquez sur <strong>« Réécrire »</strong> pour obtenir 3 variantes calibrées selon le contexte et vos critères.</div>`;
-  }
+  return [0, 1, 2].map(i => _renderVariantSlot(i)).join('');
+}
 
-  return _variants.map((v, i) => `
-    <div class="gw-variant" data-idx="${i}">
-      <div class="gw-variant-label">${_esc(v.label || `Variante ${i + 1}`)}</div>
-      <div class="gw-variant-text">${_esc(v.text)}</div>
-      <div class="gw-variant-actions">
-        <button class="gw-mini-btn" data-act="copy-variant" data-idx="${i}">Copier</button>
-        <button class="gw-mini-btn" data-act="library-add" data-idx="${i}">Enregistrer</button>
-      </div>
-    </div>
-  `).join('');
+function _renderVariantSlot(i) {
+  const v = (_variants && _variants[i]) || null;
+  if (v) {
+    return `
+      <div class="gw-variant" data-idx="${i}">
+        <div class="gw-variant-label" title="${_esc(v.label || `Variante ${i + 1}`)}">${i + 1}</div>
+        <div class="gw-variant-text">${_esc(v.text)}</div>
+        <div class="gw-variant-actions">
+          <button class="gw-mini-btn" data-act="copy-variant" data-idx="${i}">Copier</button>
+          <button class="gw-mini-btn" data-act="library-add" data-idx="${i}">Enregistrer</button>
+        </div>
+      </div>`;
+  }
+  // Slot vide (avant génération) ou en cours de génération.
+  return `
+    <div class="gw-variant gw-variant-empty">
+      <div class="gw-variant-label gw-variant-ghost">${i + 1}</div>
+      ${_generating
+        ? `<div class="gw-slot-hint"><span class="gw-spinner"></span>${i === 0 ? '<span>Mistral rédige…</span>' : ''}</div>`
+        : (i === 0
+            ? `<div class="gw-slot-hint">${icon('sparkles', 24)}<span>Cliquez sur <strong>« Réécrire »</strong> pour générer 3 variantes.</span></div>`
+            : '')}
+    </div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -447,6 +468,7 @@ function _onClick(e) {
 
   switch (act) {
     case 'close':       closeGhostwriterStudio(); return;
+    case 'open-corrector': _openCorrector(); return;
     case 'switch-mode': _switchMode(btn.dataset.mode); return;
     case 'generate':    _handleGenerate(); return;
     case 'reset':       _handleReset(); return;
@@ -506,6 +528,19 @@ function _switchMode(mode) {
   _currentMode = mode;
   _saveDraft();
   _renderMain(true);
+}
+
+// Ghost Writer V2 — ouvre le Correcteur (orthographe + PDF). Module
+// chargé en lazy (moteur Grammalecte ~9 Mo) pour ne pas alourdir le
+// dashboard. Le studio reste ouvert dessous (overlay empilé).
+async function _openCorrector() {
+  try {
+    const m = await import('./ghostwriter-proof.js');
+    closeGhostwriterStudio();        // swap propre : on ferme la moitié Réécriture…
+    m.openGhostwriterProof();        // …et on ouvre la moitié Correction (même bascule en haut)
+  } catch (e) {
+    _toast('Impossible d\'ouvrir le correcteur', true);
+  }
 }
 
 function _handleReset() {
@@ -674,9 +709,11 @@ function _injectStyles() {
   window[STYLES_INJECTED_FLAG] = true;
   const css = `
 .gw-wrap { padding: 28px clamp(20px, 4vw, 48px); max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
-.gw-hero { display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; }
-.gw-hero-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted, #888); display: flex; align-items: center; }
-.gw-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.gw-hero { display: flex; flex-direction: column; gap: 15px; margin-bottom: 26px; }
+.gw-hero-eyebrow { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.11em; font-weight: 600; color: #9b8cff; display: flex; align-items: center; }
+.gw-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gw-tabs-line { flex: 1; min-width: 40px; height: 1px; background: rgba(255,255,255,.09); margin-left: 12px; border-radius: 1px; }
+html.light-mode .gw-tabs-line { background: rgba(0,0,0,.1); }
 .gw-tab {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px; border-radius: 100px;
@@ -692,20 +729,33 @@ function _injectStyles() {
 .gw-tab-icon { display: inline-flex; align-items: center; line-height: 1; opacity: .85; }
 .gw-tab.is-active .gw-tab-icon { opacity: 1; }
 .gw-hero-subtitle { color: var(--text-muted, #888); font-size: 13px; margin: 0; }
+/* Bascule principale Ghost Writer : Réécriture | Correction (co-égales) */
+.gw-family-switch { display: inline-flex; gap: 4px; padding: 4px; border-radius: 100px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); align-self: flex-start; }
+.gw-fam { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 100px;
+  background: transparent; border: 0; color: var(--text-muted, #9aa); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .15s ease; font-family: inherit; }
+.gw-fam:hover:not(.is-active) { color: #ddd; background: rgba(255,255,255,.05); }
+.gw-fam.is-active { background: linear-gradient(135deg, rgba(120,160,255,.9), rgba(128,96,255,.9)); color: #fff; box-shadow: 0 2px 10px rgba(120,120,255,.25); cursor: default; }
+html.light-mode .gw-family-switch { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.08); }
+html.light-mode .gw-fam:hover:not(.is-active) { color: #334155; background: rgba(0,0,0,.04); }
 
-.gw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.gw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
 @media (max-width: 1000px) { .gw-grid { grid-template-columns: 1fr; } }
 
 .gw-pane { display: flex; flex-direction: column; gap: 12px; }
-.gw-pane-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted, #888); font-weight: 600; }
+.gw-pane-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted, #888); font-weight: 600; }
 .gw-source {
-  width: 100%; box-sizing: border-box; min-height: 240px; resize: vertical;
-  padding: 16px; border-radius: 12px;
+  width: 100%; box-sizing: border-box; height: 340px; resize: none;
+  padding: 16px; border-radius: 14px;
   background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
   color: var(--text-primary, #fff); font-size: 14px; line-height: 1.55;
   font-family: inherit;
+  box-shadow: 0 2px 10px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.04);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.gw-source:focus { outline: 0; border-color: rgba(120,160,255,.4); background: rgba(255,255,255,.06); }
+.gw-source:focus { outline: 0; border-color: rgba(120,160,255,.45); background: rgba(255,255,255,.06);
+  box-shadow: 0 0 0 3px rgba(120,160,255,.14), inset 0 1px 0 rgba(255,255,255,.04); }
 .gw-source-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted, #888); }
 
 .gw-criteria { margin-top: 18px; }
@@ -736,16 +786,28 @@ function _injectStyles() {
 .gw-chip { padding: 5px 11px; border-radius: 100px; font-size: 11px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06); color: var(--text-muted, #888); }
 .gw-chip-engine { background: rgba(120,160,255,.12); color: #8aaeff; border-color: rgba(120,160,255,.2); }
 
-.gw-pane-variants { min-height: 300px; }
+.gw-pane-variants { display: flex; flex-direction: column; gap: 12px; }
 .gw-variant {
-  padding: 16px 18px; border-radius: 12px; margin-bottom: 12px;
+  padding: 16px 18px; border-radius: 14px; height: 340px;
+  display: flex; flex-direction: column;
   background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 2px 10px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.03);
   transition: all .15s ease;
 }
-.gw-variant:hover { border-color: rgba(120,160,255,.3); background: rgba(255,255,255,.05); }
-.gw-variant-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8aaeff; margin-bottom: 10px; font-weight: 600; }
-.gw-variant-text { color: var(--text-primary, #f0f0f0); font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-wrap: break-word; }
-.gw-variant-actions { margin-top: 12px; display: flex; gap: 6px; }
+.gw-variant:hover { border-color: rgba(120,160,255,.3); background: rgba(255,255,255,.05); transform: translateY(-1px); }
+/* 3 fenêtres : slot vide / fantôme avant génération */
+.gw-variant-empty { border-style: dashed; border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.015); box-shadow: none; }
+.gw-variant-empty:hover { transform: none; border-color: rgba(255,255,255,.14); }
+.gw-variant-ghost { color: var(--text-muted, #888); opacity: .55; }
+.gw-slot-hint { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: auto; padding: 8px; text-align: center; color: var(--text-muted, #888); font-size: 13px; line-height: 1.5; }
+.gw-slot-hint svg { opacity: .28; }
+.gw-slot-hint strong { color: var(--text-primary, #ccc); font-weight: 600; }
+html.light-mode .gw-variant-empty { background: rgba(0,0,0,.015); border-color: rgba(0,0,0,.12); }
+.gw-variant-label { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: rgba(120,160,255,.15); color: #8aaeff; font-size: 12.5px; font-weight: 700; margin-bottom: 12px; flex-shrink: 0; }
+.gw-variant-text { flex: 1 1 auto; min-height: 0; overflow-y: auto; color: var(--text-primary, #f0f0f0); font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-wrap: break-word; }
+.gw-variant-text::-webkit-scrollbar { width: 7px; }
+.gw-variant-text::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+.gw-variant-actions { margin-top: auto; padding-top: 14px; display: flex; gap: 6px; }
 .gw-mini-btn {
   padding: 6px 14px; border-radius: 7px; font-size: 11px; font-weight: 500; cursor: pointer;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
@@ -753,7 +815,8 @@ function _injectStyles() {
 }
 .gw-mini-btn:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
 .gw-mini-btn--danger:hover { background: rgba(255,90,90,.14); border-color: rgba(255,90,90,.4); color: #ff8080; }
-.gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 60px 20px; line-height: 1.6; }
+.gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 64px 24px; line-height: 1.65; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.gw-empty svg { opacity: .22; margin-bottom: 14px; }
 
 .gw-spinner {
   width: 14px; height: 14px;
@@ -823,6 +886,7 @@ html.light-mode .gw-variant { background: #fff; border-color: rgba(0,0,0,.09); }
 html.light-mode .gw-variant:hover { background: #fcfcfd; border-color: rgba(80,110,230,.3); }
 html.light-mode .gw-variant-label,
 html.light-mode .gw-lib-label { color: #4456c4; }
+html.light-mode .gw-variant-label { background: rgba(80,110,230,.12); }
 html.light-mode .gw-mini-btn { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.1); }
 html.light-mode .gw-mini-btn:hover { background: rgba(80,110,230,.1); border-color: rgba(80,110,230,.3); color: #1e293b; }
 html.light-mode .gw-lib-panel { background: #ffffff; border-left-color: rgba(0,0,0,.1); }

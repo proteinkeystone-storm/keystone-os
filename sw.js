@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.20.47-settings-declutter';
+const VERSION       = 'ks-os-v5.22.0-ghostwriter-v2';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
@@ -122,6 +122,16 @@ self.addEventListener('fetch', event => {
   // ── API Worker (cross-origin) ───────────────────────────────
   if (API_HOSTS.has(url.hostname) || url.pathname.startsWith('/api/')) {
     event.respondWith(_networkFirst(req, API_CACHE));
+    return;
+  }
+
+  // ── Assets vendor (Grammalecte, PDF.js) : cache-first ───────
+  // Gros dictionnaires .json + workers chargés par XHR/import. On les
+  // fige par version de SW (l'activate purge les anciens caches) →
+  // hors-ligne OK + pas de re-téléchargement du dico ~9 Mo à chaque
+  // session. Pense à bump le SW si on met à jour un fichier vendor.
+  if (url.pathname.startsWith('/app/vendor/')) {
+    event.respondWith(_cacheFirst(req, STATIC_CACHE));
     return;
   }
 

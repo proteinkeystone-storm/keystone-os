@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════════════════
+   KEYSTONE OS — proof-pdf.js
+   Cœur PDF du correcteur (Ghost Writer V2 · Phase 2-3).
+
+   PDF.js (auto-hébergé, worker-src 'self') : charge un PDF, rend les
+   pages en canvas, extrait le texte AVEC ses coordonnées, mappe les
+   offsets de fautes ↔ boîtes à l'écran, et fournit de quoi surligner
+   + popover. Les exports (PDF annoté pdf-lib + rapport) sont en Phase 3.
+
+   ⚠️ Le PDF ne quitte JAMAIS le navigateur (tout est local).
+
+   Fiabilité (brief §7) :
+     • Césure fin de ligne  exem-\nple → dé-césuré avant analyse, remappé.
+     • Ordre de lecture / colonnes → items triés par ligne (y) puis x.
+     • Faute à cheval sur plusieurs fragments → plusieurs rectangles.
+     • Offsets stables : on NFC-normalise + retire U+00AD À LA CONSTRUCTION
+       du texte → la canonisation de proof-engine devient idempotente,
+       donc les offsets restent alignés sur les boîtes par caractère.
+     • PDF scanné (pas de couche texte) → détecté → « non supporté ».
+
+   Réutilisable : ce module ne connaît pas Ghost Writer. Il expose
+   loadPdf / analyzePage / renderPageCanvas + helpers d'export (P3).
+   ═══════════════════════════════════════════════════════════════ */
+
+import * as pdfjsLib from '/app/vendor/pdfjs/pdf.min.mjs';
+import { analyze } from './proof-engine.js';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/app/vendor/pdfjs/pdf.worker.min.mjs';
+
+export const PDFJS_VERSION = pdfjsLib.version;
+
+// ── Chargement ──────────────────────────────────────────────────
+export async function loadPdf(arrayBuffer) {
+  const task = pdfjsLib.getDocument({
+    data: arrayBuffer,
+    isEvalSupported: false,            // CSP : pas de 'unsafe-eval'
+    disableAutoFetch: true,
+    disableStream: false,
+  });
+  return task.promise;                 // → PDFDocumentProxy
+}
+
+// ── Construction texte page + boîtes par caractère ──────────────
+// Renvoie { raw, boxes } où boxes[k] = {x,y,w,h} (px écran à l'échelle
+// du viewport) pour raw[k], ou null pour un séparateur inséré.
+function _buildPageText(textContent, viewport) {
+  const scale = viewport.scale || 1;
+  const items = [];
+  for (const it of textContent.items) {
+    if (typeof it.str !== 'string' || it.str.length === 0) {
+      // un item peut être un simple saut de ligne (hasEOL sans texte)
+      if (it.hasEOL) items.push({ eolOnly: true });
+      continue;
+    }
+    const tx = pdfjsLib.Util.transform(viewport.transform, it.transform);
+    const fontH = Math.hypot(tx[2], tx[3]) || Math.abs(tx[3]) || 10;
+    const x = tx[4];
+    const top = tx[5] - fontH;                 // tx[5] = baseline (y bas-origine déjà retournée)
+    const wPx = (it.width || 0) * scale;
+    // canonisation à la source → offsets stables vs proof-engine
+    const str = it.str.normalize('NFC').replace(/­/g, '');
+    if (!str) { if (it.hasEOL) items.push({ eolOnly: true }); continue; }
+    items.push({ str, x, top, fontH, wPx, hasEOL: !!it.hasEOL });
+  }
+
+  // Ordre de lecture : ligne (y) puis x. PDF.js est souvent déjà trié,
+  // mais on sécurise les colonnes / ordres exotiques.
+  const real = items.filter(i => !i.eolOnly);
+  real.sort((a, b) => {
+    const tol = Math.min(a.fontH, b.fontH) * 0.5;
+    if (Math.abs(a.top - b.top) > tol) return a.top - b.top;
+    return a.x - b.x;
+  });
+
+  let raw = '';
+  const boxes = [];
+  let prev = null;
+  for (const e of real) {
+    if (prev) {
+      const sameLine = Math.abs(e.top - prev.top) <= Math.min(e.fontH, prev.fontH) * 0.5;
+      if (!sameLine) {
+        raw += '\n'; boxes.push(null);
+      } else {
+        const gap = e.x - (prev.x + prev.wPx);
+        if (gap > prev.fontH * 0.25 && !/\s$/.test(raw) && !/^\s/.test(e.str)) {
+          raw += ' '; boxes.push(null);
+        }
+      }
+    }
+    const n = e.str.length;
+    const cw = n > 0 ? e.wPx / n : 0;
+    for (let i = 0; i < n; i++) {
+      raw += e.str[i];
+      boxes.push({ x: e.x + i * cw, y: e.top, w: cw, h: e.fontH });
+    }
+    prev = e;
+  }
+  return { raw, boxes };
+}
+
+// ── Dé-césure : "exem-\nple" → "exemple" + map analysis→raw ─────
+function _dehyphenate(raw) {
+  let analysis = '';
+  const a2r = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '-' && raw[i + 1] === '\n'
+        && /[A-Za-zÀ-ÿ]/.test(raw[i - 1] || '')
+        && /[a-zà-ÿ]/.test(raw[i + 2] || '')) {
+      i += 1;          // saute '-' (i) et '\n' (i+1 ; le for fait ++)
+      continue;
+    }
+    analysis += raw[i];
+    a2r.push(i);
+  }
+  return { analysis, a2r };
+}
+
+// ── Rectangles d'une faute (fusion des boîtes contiguës par ligne) ─
+function _issueRects(issue, boxes, a2r) {
+  const aEnd = issue.offset + issue.len;
+  if (issue.len <= 0 || issue.offset >= a2r.length) return [];
+  const rStart = a2r[issue.offset];
+  const lastIdx = Math.min(aEnd - 1, a2r.length - 1);
+  const rEnd = (a2r[lastIdx] != null ? a2r[lastIdx] : rStart) + 1;
+  const rects = [];
+  let cur = null;
+  for (let k = rStart; k < rEnd && k < boxes.length; k++) {
+    const b = boxes[k];
+    if (!b) { if (cur) { rects.push(cur); cur = null; } continue; }
+    if (!cur) cur = { x: b.x, y: b.y, w: b.w, h: b.h };
+    else if (Math.abs(b.y - cur.y) <= cur.h * 0.6) {
+      cur.w = (b.x + b.w) - cur.x; cur.h = Math.max(cur.h, b.h);
+    } else { rects.push(cur); cur = { x: b.x, y: b.y, w: b.w, h: b.h }; }
+  }
+  if (cur) rects.push(cur);
+  return rects;
+}
+
+// ── Analyse d'une page : texte + fautes + rectangles ────────────
+// Renvoie { page, viewport, issues, overlays:[{idx,issue,rects}],
+//           isScanned, textLength }. `pageText` (dé-césuré) sert au
+//           rapport (P3). Les offsets des issues sont relatifs à pageText.
+export async function analyzePage(pdf, pageNum, scale) {
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale: scale || 1.4 });
+  const textContent = await page.getTextContent();
+  const { raw, boxes } = _buildPageText(textContent, viewport);
+  const { analysis, a2r } = _dehyphenate(raw);
+
+  const textLength = analysis.replace(/\s/g, '').length;
+  const isScanned = textLength < 2;       // page sans couche texte exploitable
+
+  let issues = [];
+  if (!isScanned) {
+    const res = await analyze(analysis);
+    // Sécurité offsets : la canonisation doit être idempotente ici
+    // (on a NFC + retiré U+00AD à la construction). Si la longueur a
+    // bougé malgré tout, on garde quand même (rare ; léger décalage).
+    issues = res.issues || [];
+  }
+  const overlays = issues.map((issue, idx) => ({ idx, issue, rects: _issueRects(issue, boxes, a2r) }));
+
+  return { page, viewport, issues, overlays, isScanned, textLength, pageText: analysis };
+}
+
+// ── Rendu canvas d'une page ─────────────────────────────────────
+export async function renderPageCanvas(page, viewport, canvas) {
+  const cv = canvas || document.createElement('canvas');
+  cv.width = Math.ceil(viewport.width);
+  cv.height = Math.ceil(viewport.height);
+  const ctx = cv.getContext('2d', { alpha: false });
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return cv;
+}
+
+// ── Échelle d'affichage en fonction de la largeur dispo ─────────
+export async function fitScale(pdf, pageNum, containerWidth, max) {
+  const page = await pdf.getPage(pageNum);
+  const base = page.getViewport({ scale: 1 });
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  const target = Math.min((containerWidth / base.width) * dpr, (max || 2.2) * dpr);
+  return Math.max(0.5, target);
+}

@@ -1,0 +1,43 @@
+{
+  "title": "Ghost Writer",
+  "tldr": "Deux outils en un. Réécriture : transformez un texte en 3 variantes calibrées (email, comm interne, marketing, texte long). Correcteur : orthographe, grammaire, accords et conjugaison vérifiés en local — sur du texte collé ou directement sur un PDF, sans rien envoyer en ligne.",
+  "key_points": [
+    "Réécriture : choisissez un contexte (Email pro / Comm interne / Marketing / Texte long), ajustez les critères, puis « Réécrire en 3 variantes ».",
+    "Correcteur (bouton « Correcteur orthographe & PDF ») → mode Texte : collez votre texte et cliquez « Corriger ». Les fautes sont surlignées ; cliquez-en une pour voir la correction et l'appliquer.",
+    "Correcteur → mode PDF : chargez un PDF « texte ». Les fautes sont surlignées directement sur les pages ; cliquez une faute pour la correction.",
+    "Exports PDF : « Rapport » (liste page + faute + suggestion) et « PDF annoté » (fautes surlignées sur le document + page récapitulative).",
+    "✦ Passe IA approfondie : une fois l'orthographe corrigée, demandez à l'IA d'améliorer le style et les tournures (consomme votre quota Ghost Writer)."
+  ],
+  "faq": [
+    {
+      "q": "Mon texte ou mon PDF sont-ils envoyés sur Internet ?",
+      "a": "Non. La détection des fautes tourne à 100 % dans votre navigateur (moteur Grammalecte, hors-ligne). Votre PDF ne quitte jamais votre machine. Seule la « Passe IA approfondie » optionnelle envoie le texte à l'IA, et uniquement quand vous cliquez dessus."
+    },
+    {
+      "q": "Quel moteur corrige l'orthographe et la grammaire ?",
+      "a": "Grammalecte, un correcteur grammatical français open source (licence GPL v3), exécuté localement. Keystone l'utilise tel quel, sans le modifier. Crédit et lien vers la source sont affichés en bas du correcteur (grammalecte.net)."
+    },
+    {
+      "q": "Les PDF scannés (photos) sont-ils gérés ?",
+      "a": "Pas encore. Le correcteur a besoin d'une couche texte (PDF « texte », sélectionnable). Une page scannée (image) est détectée et signalée comme non supportée. La reconnaissance de texte (OCR) viendra plus tard."
+    },
+    {
+      "q": "Pourquoi le correcteur est-il gratuit mais pas la passe IA ?",
+      "a": "La détection Grammalecte est locale et gratuite, sans limite. Seule la « Passe IA approfondie » (style, reformulation) consomme votre quota Ghost Writer, car elle fait appel à un modèle IA."
+    },
+    {
+      "q": "Le « PDF annoté » modifie-t-il mon document d'origine ?",
+      "a": "Non. Il crée une copie : vos fautes sont surlignées par-dessus sans toucher la mise en page, et une page récapitulative est ajoutée à la fin. Le texte du PDF n'est jamais réécrit à votre place."
+    },
+    {
+      "q": "Le premier lancement du correcteur est un peu long, normal ?",
+      "a": "Oui : le dictionnaire français (~9 Mo) se charge au premier usage, puis il est gardé en cache pour les fois suivantes (y compris hors-ligne). Les analyses suivantes sont quasi instantanées."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer le workspace, un popover de correction ou ce panneau d'aide" },
+    { "keys": "Cmd/Ctrl + Entrée", "desc": "Lancer la réécriture (dans la zone de texte) ou « Corriger » (correcteur)" },
+    { "keys": "1 – 4", "desc": "Basculer entre les contextes de réécriture" }
+  ],
+  "updated_at": "2026-06-05"
+}
