@@ -63,6 +63,44 @@ let _fieldTypeMenu = null; // { sectionId } quand ouvert
 let _lastSavedAt = null;
 let _saveIndicatorTimer = null;
 
+// ── Aperçu live (iframe form.html?preview=1) ──────────────────
+// L'aperçu = la vraie page publique form.html en mode ?preview=1, alimentée
+// par postMessage. Fidélité 100 %, isolée du builder. Le formulaire en cours
+// est poussé (anti-rebond 150 ms) à chaque rendu et à chaque frappe.
+let _previewReady   = false;  // l'iframe a confirmé que son écouteur est prêt
+let _previewPending = null;   // dernier form bufferisé tant que l'iframe n'est pas prête
+let _previewTimer   = null;   // timer d'anti-rebond
+
+function _postToPreview(form) {
+  const f = _root?.querySelector('[data-slot="preview-frame"]');
+  f?.contentWindow?.postMessage({ type: 'pulsa:preview', form }, location.origin);
+}
+
+function _previewVisibleForStep() {
+  return _state.view === 'builder' &&
+         (_currentStepId === 'structure' || _currentStepId === 'appearance');
+}
+
+function _pushPreview() {
+  if (!_previewVisibleForStep() || !_state.form) return;
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(() => {
+    const snapshot = _state.form;
+    if (!_previewReady) { _previewPending = snapshot; return; }
+    _postToPreview(snapshot);
+  }, 150);
+}
+
+// Écouteur unique (handshake iframe → builder), posé une seule fois au chargement
+// du module : pas d'accumulation à chaque open/close du workspace.
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;
+  if (e.data?.type === 'pulsa:preview-ready') {
+    _previewReady = true;
+    if (_previewPending) { _postToPreview(_previewPending); _previewPending = null; }
+  }
+});
+
 function _initState() {
   return {
     // Mode d'affichage : 'library' | 'builder' | 'responses'
@@ -134,6 +172,9 @@ export function openPulsa(opts = {}) {
   if (_root) return;
   _initFromStorage();
   _buildShell();
+  // Petit écran : on démarre l'aperçu replié pour laisser la place à l'éditeur
+  // (le bouton « œil » de la barre du haut le rouvre en surcouche).
+  if (window.innerWidth <= 1280) _root.classList.add('pulsa-preview-collapsed');
   _renderMain();
   _renderRail();
   // V1.5 — tire les Key Form livrés au client (réception transparente).
@@ -151,6 +192,9 @@ export function openPulsa(opts = {}) {
 export function closePulsa() {
   if (!_root) return;
   if (_state.view === 'builder') _saveDraft();
+  clearTimeout(_previewTimer);
+  _previewReady = false;     // la nouvelle iframe re-fera le handshake à la réouverture
+  _previewPending = null;
   _root.remove();
   _root = null;
   _fieldTypeMenu = null;
@@ -215,6 +259,10 @@ function _buildShell() {
         </span>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
+        <button class="ws-iconbtn pulsa-preview-toggle" data-act="toggle-preview"
+                title="Afficher / masquer l'aperçu en direct" aria-label="Afficher ou masquer l'aperçu">
+          ${icon('eye', 18)}
+        </button>
         <button class="ws-iconbtn" data-slot="save-btn" data-act="save" title="Sauvegarder le brouillon">
           ${icon('save', 18)}
         </button>
@@ -224,6 +272,18 @@ function _buildShell() {
     <div class="ws-body">
       <nav class="ws-rail" data-slot="rail"></nav>
       <main class="ws-main" data-slot="main"></main>
+      <section class="pulsa-preview-col" data-slot="preview">
+        <header class="pulsa-preview-head">
+          <span class="pulsa-preview-title">${icon('eye', 14)} Aperçu en direct</span>
+          <button class="ws-iconbtn pulsa-preview-collapse" data-act="toggle-preview"
+                  title="Masquer l'aperçu" aria-label="Masquer l'aperçu">${icon('chevron-right', 16)}</button>
+        </header>
+        <div class="pulsa-preview-stage">
+          <iframe class="pulsa-preview-frame" data-slot="preview-frame"
+                  src="/form.html?preview=1" title="Aperçu en direct du formulaire"
+                  sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </section>
       <aside class="ws-aside pulsa-aside" data-slot="aside"></aside>
     </div>
 
@@ -254,6 +314,9 @@ function _onClick(e) {
   if (act === 'prev-step')         return _navigateRelative(-1);
   if (act === 'publish-form')      return _publishForm();
   if (act === 'save')              { _saveDraft({ explicit: true }); return; }
+
+  // Aperçu live — masquer/afficher la colonne (bouton barre du haut + chevron en-tête)
+  if (act === 'toggle-preview') { _root.classList.toggle('pulsa-preview-collapsed'); return; }
 
   // Vue Bibliothèque
   if (act === 'new-form')          return _newForm();
@@ -325,6 +388,7 @@ function _onInput(e) {
     _applyBinding(t);
   }
   _saveDraft();
+  _pushPreview();        // maj de l'aperçu pendant la frappe (anti-rebond interne)
 }
 
 function _onKeydown(e) {
@@ -1217,6 +1281,10 @@ function _renderMain() {
   const main = _root?.querySelector('[data-slot="main"]');
   if (!main) return;
 
+  // Pilote l'affichage de la colonne aperçu (CSS) : visible en builder sur les
+  // étapes Structure/Apparence ; chaîne vide en library/responses → masquée.
+  _root.dataset.step = _state.view === 'builder' ? _currentStepId : '';
+
   // Vue Bibliothèque : on rend la liste et on stop là (rail + aside masqués via CSS)
   if (_state.view === 'library') {
     _root.classList.add('is-library');
@@ -1241,6 +1309,7 @@ function _renderMain() {
     case 'publish':    _renderPublish(main); break;
   }
   main.insertAdjacentHTML('beforeend', _renderStepFooter());
+  _pushPreview();
 }
 
 function _renderStepFooter() {

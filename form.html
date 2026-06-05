@@ -2061,6 +2061,7 @@
     // Soumission (placeholder P3.2 — vraie soumission = P3.3)
     // ═══════════════════════════════════════════════════════════════
     async function submitForm() {
+      if (_preview) { showToast('Aperçu — la soumission est désactivée'); return; }
       if (_submitting) return;
       if (!validate()) return;
       _submitting = true;
@@ -2128,8 +2129,15 @@
     // ═══════════════════════════════════════════════════════════════
     let _slug = null;
     let _accessCode = ''; // Mémorisé entre les tentatives, pour la soumission
+    let _preview = false; // Mode aperçu builder (form.html?preview=1) — alimenté par postMessage
 
     async function load() {
+      // Mode aperçu builder Key Form : pas de fetch serveur, on attend le
+      // formulaire en cours d'édition via postMessage (voir initPreviewMode).
+      if (new URLSearchParams(location.search).get('preview') === '1') {
+        initPreviewMode();
+        return;
+      }
       _slug = getSlug();
       if (!_slug) {
         renderError('Adresse incorrecte', 'L\'URL ne contient pas d\'identifiant de formulaire valide.', 'NO_SLUG');
@@ -2259,13 +2267,18 @@
       bindEvents(document.getElementById('pf-app'));
       initSignatureCanvases();
       renumberAllRepeaters();
-      prefillFromUrl();
-      restoreDraft();          // reprise éventuelle d'un brouillon local
-      applyPrefilledToDom();
+      if (!_preview) {
+        prefillFromUrl();
+        restoreDraft();          // reprise éventuelle d'un brouillon local
+        applyPrefilledToDom();
+      }
       refreshVisibility();
       recomputeAll();
       refreshRequiredIndicators();
       refreshProgress();
+
+      // Aperçu builder : pas de brouillon, pas de timer, pas de beforeunload.
+      if (_preview) return;
 
       // Sauvegarde du brouillon : à intervalle, quand l'onglet passe en
       // arrière-plan, et avant fermeture/rechargement de la page.
@@ -2274,6 +2287,35 @@
         if (document.visibilityState === 'hidden') saveDraft();
       });
       window.addEventListener('beforeunload', saveDraft);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Mode Aperçu (builder Key Form) — alimenté par postMessage
+    // ═══════════════════════════════════════════════════════════════
+    function renderPreview() {
+      applyBrand(_form.meta || {});
+      const prevY = window.scrollY;          // évite le saut au re-render
+      renderForm();                          // _preview=true → pas de fetch/brouillon/timer
+      window.scrollTo(0, prevY);
+    }
+
+    function initPreviewMode() {
+      _preview = true;
+      document.documentElement.classList.add('pf-preview');
+      window.addEventListener('message', (e) => {
+        if (e.origin !== location.origin) return;
+        const d = e.data;
+        if (!d || d.type !== 'pulsa:preview') return;
+        _form = d.form;
+        if (!_form || !Array.isArray(_form.sections) || _form.sections.length === 0) {
+          const app = document.getElementById('pf-app');
+          if (app) app.innerHTML = '<div class="pf-loading" style="margin-top:64px;color:var(--pf-muted);font-size:14px;">Ajoutez une section pour voir l\'aperçu prendre forme…</div>';
+          return;
+        }
+        renderPreview();
+      });
+      // Handshake : prévient le builder que l'écouteur est prêt.
+      (window.parent || window.top)?.postMessage({ type: 'pulsa:preview-ready' }, location.origin);
     }
 
     load();

@@ -30,6 +30,88 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════
+   APERÇU LIVE — 3ᵉ colonne (iframe form.html?preview=1)
+   Visible en builder, étapes Structure & Apparence uniquement.
+   ═══════════════════════════════════════════════════════ */
+.pulsa-preview-col {
+  width: var(--ws-preview-w, 400px);
+  flex-shrink: 0;
+  display: none;                       /* affichée seulement sur Structure/Apparence */
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ws-surface-soft, rgba(127, 127, 127, .06));
+  border-left: 1px solid var(--ws-border, rgba(127, 127, 127, .18));
+}
+.pulsa-app[data-step="structure"]  .pulsa-preview-col,
+.pulsa-app[data-step="appearance"] .pulsa-preview-col { display: flex; }
+.pulsa-app.pulsa-preview-collapsed .pulsa-preview-col { display: none; }
+
+/* Bouton barre du haut : visible seulement quand l'aperçu a du sens */
+.pulsa-preview-toggle { display: none; }
+.pulsa-app[data-step="structure"]  .pulsa-preview-toggle,
+.pulsa-app[data-step="appearance"] .pulsa-preview-toggle { display: inline-flex; }
+.pulsa-app:not(.pulsa-preview-collapsed)[data-step="structure"]  .pulsa-preview-toggle,
+.pulsa-app:not(.pulsa-preview-collapsed)[data-step="appearance"] .pulsa-preview-toggle {
+  background: var(--ws-accent-soft, rgba(99, 102, 241, .12));
+  color: var(--ws-accent, inherit);
+}
+
+.pulsa-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--ws-border, rgba(127, 127, 127, .18));
+}
+.pulsa-preview-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ws-text-muted, var(--text-muted, #888));
+}
+.pulsa-preview-title svg { opacity: .65; }
+
+.pulsa-preview-stage {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+/* Cadre « papier » blanc : représente la vraie page du formulaire (toujours
+   claire), même quand le builder est en thème sombre — voulu. */
+.pulsa-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--ws-shadow-2, 0 10px 34px rgba(0, 0, 0, .14));
+  display: block;
+}
+
+/* ── Responsive : sous 1280px, l'aperçu passe en surcouche à droite ──
+   (l'aside disparaît déjà sous 1100px — workspace.css). Le bouton « œil »
+   de la barre du haut reste le moyen de l'ouvrir/fermer. */
+@media (max-width: 1280px) {
+  .pulsa-app[data-step="structure"]  .pulsa-preview-col,
+  .pulsa-app[data-step="appearance"] .pulsa-preview-col {
+    position: fixed;
+    top: var(--ws-topbar-h, 56px);
+    right: 0;
+    bottom: 0;
+    width: min(440px, 92vw);
+    z-index: 60;
+    box-shadow: -12px 0 44px rgba(0, 0, 0, .30);
+  }
+}
+
 /* ── Écran d'accueil (library vide) ────────────────────── */
 .pulsa-lib-empty {
   max-width: 520px;
