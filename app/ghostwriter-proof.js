@@ -682,7 +682,10 @@ function _setPdfBusy(b) {
 // ══════════════════════════════════════════════════════════════════
 
 // Analyse TOUTES les pages à l'échelle 1 (→ coordonnées = points PDF,
-// origine haut-gauche). Sert au rapport et à l'annotation.
+// origine haut-gauche). Sert au rapport et à l'annotation. WYSIWYG : applique
+// le même filtre d'affichage que l'écran (« Grammaire & accords seulement »
+// masque l'orthographe). Le dico perso + pré-filtres sont déjà appliqués par
+// analyze() ; la typographie est coupée selon les familles actives.
 async function _analyzeAllPages(onProgress) {
   const mod = await _ensurePdfMod();
   if (!mod || !_pdf) return [];
@@ -690,8 +693,13 @@ async function _analyzeAllPages(onProgress) {
   for (let n = 1; n <= _pdfTotal; n++) {
     if (onProgress) onProgress(n, _pdfTotal);
     const data = await mod.analyzePage(_pdf, n, 1);     // scale 1 → points
+    let issues = data.issues, overlays = data.overlays;
+    if (_grammarOnly) {                                  // export = ce qu'on voit à l'écran
+      issues = issues.filter(it => it.type !== 'spelling');
+      overlays = overlays.filter(o => o.issue.type !== 'spelling');
+    }
     pages.push({
-      n, issues: data.issues, overlays: data.overlays, isScanned: data.isScanned,
+      n, issues, overlays, isScanned: data.isScanned,
       width: data.viewport.width, height: data.viewport.height, pageText: data.pageText,
     });
   }
