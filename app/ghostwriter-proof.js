@@ -392,8 +392,6 @@ function _renderPdf() {
         </div>
         <div class="pf-pdf-tools">
           <span class="pf-stats">${stats}</span>
-          <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-report" ${_pdfBusy ? 'disabled' : ''}>${icon('file-text', 14)} Exporter la liste</button>
-          <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-export" ${_pdfBusy ? 'disabled' : ''}>${icon('download', 14)} PDF annoté</button>
           <button class="pf-iconbtn" data-act="pdf-close-file" title="Fermer le PDF">${icon('x', 16)}</button>
         </div>
       </div>
@@ -569,10 +567,19 @@ function _refreshPdfStats() {
 function _renderPdfPanel() {
   const panel = _root && _root.querySelector('[data-slot="pdf-panel"]');
   if (!panel) return;
+  // Pied du panneau : exports rangés ici (chantier 5) plutôt qu'en barre d'outils.
+  const foot = `
+    <div class="pf-panel-foot">
+      <span class="pf-panel-foot-label">Exporter tout le document</span>
+      <div class="pf-panel-foot-btns">
+        <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-report" ${_pdfBusy ? 'disabled' : ''}>${icon('file-text', 14)} Liste (HTML)</button>
+        <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-export" ${_pdfBusy ? 'disabled' : ''}>${icon('download', 14)} PDF annoté</button>
+      </div>
+    </div>`;
   if (!_pageData || _pageData.isScanned) {
-    panel.innerHTML = `<div class="pf-panel-head">Corrections</div>
-      <div class="pf-panel-empty">${icon(_pageData && _pageData.isScanned ? 'eye-off' : 'file', 22)}
-      <span>${_pageData && _pageData.isScanned ? 'Page sans couche texte.' : 'Chargement…'}</span></div>`;
+    panel.innerHTML = `<div class="pf-panel-head">Corrections · page ${_pdfPage}</div>
+      <div class="pf-panel-list"><div class="pf-panel-empty">${icon(_pageData && _pageData.isScanned ? 'eye-off' : 'file', 22)}
+      <span>${_pageData && _pageData.isScanned ? 'Page sans couche texte (image).' : 'Chargement…'}</span></div></div>${foot}`;
     return;
   }
   const text = _pageData.pageText || '';
@@ -597,7 +604,8 @@ function _renderPdfPanel() {
   const count = rows.length;
   panel.innerHTML = `
     <div class="pf-panel-head">${count} correction${count > 1 ? 's' : ''}${_grammarOnly ? ' (grammaire)' : ''} · page ${_pdfPage}</div>
-    <div class="pf-panel-list" data-slot="panel-list">${count ? rows.join('') : `<div class="pf-panel-empty">${icon('check-circle', 24)}<span>Aucune correction ${_grammarOnly ? 'de grammaire ' : ''}sur cette page 👌</span></div>`}</div>`;
+    <div class="pf-panel-list" data-slot="panel-list">${count ? rows.join('') : `<div class="pf-panel-empty">${icon('check-circle', 24)}<span>Aucune correction ${_grammarOnly ? 'de grammaire ' : ''}sur cette page 👌</span></div>`}</div>
+    ${foot}`;
 }
 
 // Sélection synchronisée : ligne ↔ surlignage(s).
@@ -1504,6 +1512,13 @@ html.light-mode .pf-ai-btn { color:#6d4fc4; background:rgba(120,90,230,.08); bor
 .pf-row-ignoreword { margin-top:8px; display:inline-flex; align-items:center; gap:5px; background:transparent; border:0;
   color:var(--text-muted,#8a8a94); font-size:11px; cursor:pointer; padding:0; text-decoration:underline; font-family:inherit; }
 .pf-row-ignoreword:hover { color:#ddd; }
+.pf-panel-foot { position:sticky; bottom:0; z-index:1; padding:10px 12px; background:rgba(20,20,26,.92);
+  backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,.08); }
+.pf-panel-foot-label { display:block; font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--text-muted,#8a8a94); margin-bottom:7px; }
+.pf-panel-foot-btns { display:flex; gap:7px; flex-wrap:wrap; }
+.pf-panel-foot .pf-btn-sm { flex:1 1 auto; justify-content:center; }
+html.light-mode .pf-panel-foot { background:rgba(245,245,248,.95); border-color:rgba(0,0,0,.07); }
 @media (max-width: 920px) {
   .pf-pdf-body { flex-direction:column; }
   .pf-pdf-panel { flex:none; max-width:none; width:100%; max-height:320px; }
