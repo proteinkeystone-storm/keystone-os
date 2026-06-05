@@ -1841,3 +1841,87 @@ textarea.pulsa-input {
   opacity: .6;
   line-height: 1.4;
 }
+
+/* ═══════════════════════════════════════════════════════
+   GALERIE DE MODÈLES (modale)
+   ═══════════════════════════════════════════════════════ */
+.pulsa-modal-card.pulsa-modal-card-lg { max-width: 920px; }
+.pulsa-modal-head-text { display: flex; flex-direction: column; gap: 4px; }
+.pulsa-modal-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ws-text, var(--text));
+  opacity: .55;
+}
+
+.pulsa-tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .pulsa-tpl-grid { grid-template-columns: 1fr; }
+}
+
+.pulsa-tpl-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 13px;
+  background: rgba(255, 255, 255, .025);
+  border: 1px solid var(--ws-border, var(--bd));
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ws-text, var(--text));
+  transition: all .15s;
+}
+.pulsa-tpl-card:hover {
+  background: rgba(99, 102, 241, .08);
+  border-color: var(--ws-accent, var(--gold));
+  transform: translateY(-1px);
+}
+.pulsa-tpl-card-ico {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(99, 102, 241, .12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-accent, var(--gold));
+}
+.pulsa-tpl-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pulsa-tpl-card-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.pulsa-tpl-card-desc {
+  font-size: 12px;
+  opacity: .6;
+  line-height: 1.45;
+}
+.pulsa-tpl-card-cta {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--ws-accent-soft, rgba(99, 102, 241, .14));
+  color: var(--ws-accent, var(--gold));
+}

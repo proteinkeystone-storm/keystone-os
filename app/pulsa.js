@@ -39,7 +39,7 @@ import {
   getCurrentFormId,
   setCurrentFormId,
 } from './lib/pulsa-library.js';
-import { DEMO_VEFA_FORM } from './lib/pulsa-demo.js';
+import { KEYFORM_TEMPLATES, TEMPLATE_CATEGORIES, instantiateTemplate } from './lib/pulsa-templates.js';
 
 // ── Métadonnées de l'artefact ─────────────────────────────────
 const WORKSPACE_META = {
@@ -320,7 +320,8 @@ function _onClick(e) {
 
   // Vue Bibliothèque
   if (act === 'new-form')          return _newForm();
-  if (act === 'load-demo-vefa')    return _loadDemoVefa();
+  if (act === 'open-templates')    return _openTemplatesGallery();
+  if (act === 'use-template')      return _useTemplate(t.dataset.id);
   if (act === 'recover-published') return _recoverPublishedForm();
   if (act === 'open-form')         return _openForm(t.dataset.id);
   if (act === 'duplicate-form')    return _duplicateForm(t.dataset.id);
@@ -509,25 +510,66 @@ function _newForm() {
   _renderRail();
 }
 
-/**
- * Charge le formulaire de démonstration VEFA Les Jardins du Mourillon.
- * Utilise les 16 types de champs + toutes les features (visible_if,
- * required_if, compute_from, code d'accès, etc.). Sert de test
- * end-to-end et de modèle réutilisable.
- */
-function _loadDemoVefa() {
-  // Clone profond pour ne pas muter la constante exportée
-  const cloned = JSON.parse(JSON.stringify(DEMO_VEFA_FORM));
-  // Ajoute un suffixe de date au slug pour éviter les collisions
-  // (si l'utilisateur recharge l'exemple plusieurs fois)
-  const stamp = new Date().toISOString().slice(0, 10);
-  cloned.meta.slug = `${cloned.meta.slug}-${stamp}`;
-  const form = saveForm({ ...cloned, id: newFormId() });
+// ═══════════════════════════════════════════════════════════════
+// Galerie de Modèles (remplace l'ancien exemple VEFA / immobilier)
+// ═══════════════════════════════════════════════════════════════
+function _openTemplatesGallery() {
+  _renderTemplatesGallery();
+}
+
+function _renderTemplatesGallery() {
+  const m = _root?.querySelector('[data-slot="modal"]');
+  if (!m) return;
+  const groups = TEMPLATE_CATEGORIES.map(cat => {
+    const items = KEYFORM_TEMPLATES.filter(t => t.category === cat.id);
+    if (!items.length) return '';
+    return `
+      <div class="pulsa-type-group">
+        <h3 class="pulsa-type-group-title">${cat.label}</h3>
+        <div class="pulsa-tpl-grid">
+          ${items.map(t => `
+            <button class="pulsa-tpl-card" data-act="use-template" data-id="${t.id}" title="Utiliser ce modèle">
+              <span class="pulsa-tpl-card-ico">${icon(t.ico, 20)}</span>
+              <span class="pulsa-tpl-card-body">
+                <span class="pulsa-tpl-card-name">${_escape(t.name)}</span>
+                <span class="pulsa-tpl-card-desc">${_escape(t.description)}</span>
+              </span>
+              <span class="pulsa-tpl-card-cta">${icon('plus', 13)}<span>Utiliser</span></span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  m.innerHTML = `
+    <div class="pulsa-modal-backdrop" data-act="close-modal"></div>
+    <div class="pulsa-modal-card pulsa-modal-card-lg">
+      <header class="pulsa-modal-head">
+        <div class="pulsa-modal-head-text">
+          <h2>Modèles</h2>
+          <p class="pulsa-modal-sub">Un formulaire complet en 1 clic — puis 100 % modulable (champs, textes, branding).</p>
+        </div>
+        <button class="pulsa-icon-btn" data-act="close-modal" title="Fermer">${icon('x', 16)}</button>
+      </header>
+      <div class="pulsa-modal-body">
+        ${groups}
+      </div>
+    </div>
+  `;
+  m.hidden = false;
+}
+
+function _useTemplate(templateId) {
+  const structure = instantiateTemplate(templateId);
+  if (!structure) return _closeModal();
+  const form = saveForm({ ...structure, id: newFormId() });
   setCurrentFormId(form.id);
   _state.view = 'builder';
   _state.form = form;
   _state.ui.selected_field = null;
   _currentStepId = 'structure';
+  _closeModal();
   _refreshTopbar();
   _renderMain();
   _renderRail();
@@ -1357,8 +1399,8 @@ function _renderLibrary(main) {
           <button class="pulsa-btn pulsa-btn-primary pulsa-btn-publish" data-act="new-form">
             ${icon('plus', 16)}<span>Créer mon premier formulaire</span>
           </button>
-          <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
-            ${icon('building', 14)}<span>Charger l'exemple immobilier</span>
+          <button class="pulsa-btn pulsa-btn-ghost" data-act="open-templates" title="Partir d'un modèle prêt à l'emploi">
+            ${icon('package', 14)}<span>Partir d'un modèle</span>
           </button>
           <button class="pulsa-btn pulsa-btn-ghost" data-act="recover-published" title="Re-télécharger un formulaire déjà publié depuis son URL">
             ${icon('refresh', 14)}<span>Récupérer un formulaire publié</span>
@@ -1379,8 +1421,8 @@ function _renderLibrary(main) {
         <button class="pulsa-btn pulsa-btn-ghost" data-act="recover-published" title="Re-télécharger un formulaire déjà publié depuis son URL">
           ${icon('refresh', 14)}<span>Récupérer un publié</span>
         </button>
-        <button class="pulsa-btn pulsa-btn-ghost" data-act="load-demo-vefa" title="Formulaire d'exemple complet utilisant toutes les fonctions Pulsa">
-          ${icon('building', 14)}<span>Exemple immobilier</span>
+        <button class="pulsa-btn pulsa-btn-ghost" data-act="open-templates" title="Partir d'un modèle prêt à l'emploi">
+          ${icon('package', 14)}<span>Modèles</span>
         </button>
         <button class="pulsa-btn pulsa-btn-primary" data-act="new-form">
           ${icon('plus', 16)}<span>Nouveau formulaire</span>
