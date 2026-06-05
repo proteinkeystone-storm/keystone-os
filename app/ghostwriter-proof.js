@@ -718,7 +718,7 @@ async function _backToRewrite() {
 
 function _handleReset() {
   if (!confirm('Effacer le texte et la relecture ?')) return;
-  _text = ''; _result = null; _closePopover();
+  _text = ''; _result = null; _aiResult = null; _aiBusy = false; _closePopover();
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   _renderMain(true);
 }
