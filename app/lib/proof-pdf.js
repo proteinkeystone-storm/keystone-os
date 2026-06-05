@@ -82,7 +82,15 @@ function _buildPageText(textContent, viewport) {
         raw += '\n'; boxes.push(null);
       } else {
         const gap = e.x - (prev.x + prev.wPx);
-        if (gap > prev.fontH * 0.25 && !/\s$/.test(raw) && !/^\s/.test(e.str)) {
+        const minFH = Math.min(e.fontH, prev.fontH) || prev.fontH || 10;
+        if (gap > minFH * 2.5) {
+          // Grand vide horizontal = saut de colonne / bloc (mesuré ~36× la
+          // police sur des A3 multi-colonnes ; un vrai espace ≈ 0,6×). On COUPE
+          // la phrase au lieu de coller : sinon des fragments de colonnes
+          // différentes se soudent (« de le cadre », « deux anniversaire ») et
+          // génèrent de faux positifs de grammaire. cf. BRIEF V2.1 §7 (colonnes).
+          raw += '\n'; boxes.push(null);
+        } else if (gap > prev.fontH * 0.25 && !/\s$/.test(raw) && !/^\s/.test(e.str)) {
           raw += ' '; boxes.push(null);
         }
       }
