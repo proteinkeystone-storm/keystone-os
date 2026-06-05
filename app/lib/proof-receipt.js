@@ -87,6 +87,7 @@ export function downloadProofReceipt(form, response) {
 
   const proofRows = [
     ['Formulaire', esc(meta.title || '—') + (meta.slug ? ` <span class="muted">/f/${esc(meta.slug)}</span>` : '')],
+    ['Niveau de certification', 'Signature électronique <strong>simple</strong> horodatée — eIDAS, niveau « simple » (non qualifiée)'],
     ['Identifiant de la réponse', `<code>${esc(response.id || '—')}</code>`],
     ['Horodatage serveur (réception)', esc(fmtDate(response.created_at))],
     ['Empreinte d\'intégrité (SHA-256)', hash ? `<code class="hash">${esc(hash)}</code>` : '<em class="muted">non disponible (réponse antérieure à cette fonction)</em>'],

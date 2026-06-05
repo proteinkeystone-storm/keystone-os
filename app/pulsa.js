@@ -2820,6 +2820,10 @@ function _editorSignature(sid, field) {
                value="${_escape(field.options?.hint || '')}">
       </label>
       <p class="pulsa-editor-hint">La signature est capturée au doigt (mobile/tablette) ou à la souris (desktop) et stockée en SVG inline — pas de fichier serveur.</p>
+      <div class="pulsa-editor-hint" style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--ws-accent-soft, rgba(99,102,241,.08));border-radius:8px;font-size:12px;line-height:1.5;margin-top:12px;">
+        ${icon('file-text', 14)}
+        <span><strong>Niveau de certification :</strong> signature électronique <strong>simple</strong>, horodatée, avec empreinte d'intégrité (règlement eIDAS — niveau « simple », non qualifiée). Recevable comme preuve pour la plupart des usages courants. Pour une signature <strong>qualifiée</strong> (équivalent légal du manuscrit), un service certifié dédié serait nécessaire.</span>
+      </div>
     </section>
   `;
 }
