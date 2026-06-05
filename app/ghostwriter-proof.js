@@ -42,6 +42,10 @@ const TYPO_FAMILIES = [
   { key: 'typo', label: 'Tirets & guillemets', opts: ['typo'],              ex: '– — « » ( )' },
   { key: 'esp',  label: 'Espaces',             opts: ['esp', 'nbsp', 'tab'],ex: 'doubles, insécables' },
   { key: 'num',  label: 'Nombres',             opts: ['num'],               ex: '20 000, O/0' },
+  // « Exposant » n'est pas une option Grammalecte : c'est notre détecteur dans
+  // proof-pdf (géométrie). L'option transite par le même circuit ; le worker
+  // l'ignore (clé inconnue), proof-pdf la lit. Signale les ordinaux écrits à plat.
+  { key: 'exposant', label: 'Exposants (1ᵉʳ, 2ᵉ…)', opts: ['exposant'],     ex: 'ordinaux à plat' },
 ];
 
 // ── État ────────────────────────────────────────────────────────
@@ -592,7 +596,7 @@ function _renderPdfPanel() {
       <div class="pf-panel-row pf-row-${it.type}" data-ovidx="${i}" role="button" tabindex="0"
            title="Cliquer pour situer sur la page">
         <div class="pf-row-top">
-          <span class="pf-row-badge pf-${it.type}">${it.type === 'spelling' ? 'Ortho' : 'Gramm.'}</span>
+          <span class="pf-row-badge pf-${it.ruleId === 'keystone_exposant' ? 'expo' : it.type}">${it.ruleId === 'keystone_exposant' ? 'Expo' : (it.type === 'spelling' ? 'Ortho' : 'Gramm.')}</span>
           <span class="pf-row-word">${_esc(word) || '—'}</span>
           <button class="pf-row-x" data-act="panel-ignore" data-i="${i}" title="Ignorer cette fois" aria-label="Ignorer cette fois">${icon('x', 13)}</button>
         </div>
@@ -1499,6 +1503,7 @@ html.light-mode .pf-ai-btn { color:#6d4fc4; background:rgba(120,90,230,.08); bor
   padding:2px 7px; border-radius:100px; }
 .pf-row-badge.pf-spelling { background:rgba(255,90,90,.16); color:#ff9a9a; }
 .pf-row-badge.pf-grammar  { background:rgba(255,180,70,.16); color:#ffd08a; }
+.pf-row-badge.pf-expo     { background:rgba(150,120,255,.2); color:#c9b6ff; }
 .pf-row-word { flex:1 1 auto; min-width:0; font-size:13px; font-weight:600; color:var(--text-primary,#e6e6ea);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pf-row-x { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;

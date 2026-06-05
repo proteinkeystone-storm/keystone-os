@@ -173,7 +173,7 @@ export function filterIssues(issues, filters) {
 // mis en page. cf. BRIEF_GHOST_WRITER_V2.1 §1 (item 4). Défaut = tout coupé.
 // Le consommateur (UI) passe le détail via setProofOptions ; envoyé au worker
 // à chaque analyse (setOptions ne change que les clés fournies).
-let _options = { apos:false, maj:false, minis:false, typo:false, esp:false, nbsp:false, tab:false, num:false };
+let _options = { apos:false, maj:false, minis:false, typo:false, esp:false, nbsp:false, tab:false, num:false, exposant:false };
 export function setProofOptions(obj) {
   _options = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
 }

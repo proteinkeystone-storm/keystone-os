@@ -23,7 +23,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import * as pdfjsLib from '/app/vendor/pdfjs/pdf.min.mjs';
-import { analyze } from './proof-engine.js';
+import { analyze, getProofOptions } from './proof-engine.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/app/vendor/pdfjs/pdf.worker.min.mjs';
 
@@ -136,6 +136,52 @@ function _issueRects(issue, boxes, a2r) {
   return rects;
 }
 
+// ── Détecteur d'exposants (chantier 4, opt-in) ──────────────────
+// Signale les ordinaux écrits À PLAT (« 1er ») alors qu'ils devraient être en
+// exposant (« 1ᵉʳ »). VÉRIFIÉ sur L'Épaulette (34 p.) : 0 faux positif — les
+// ordinaux déjà en exposant ne sont JAMAIS signalés.
+// PIÈGE GÉOMÉTRIE (corrigé) : box.y = HAUT (= ligne de base − hauteur). Un
+// exposant ayant une hauteur PLUS PETITE, son HAUT descend même quand sa LIGNE
+// DE BASE remonte → comparer les tops est FAUX. On compare les LIGNES DE BASE
+// (y+h) : exposant correct = hauteur réduite ET ligne de base surélevée.
+const _SUP_MAP = { a:'ᵃ', b:'ᵇ', d:'ᵈ', e:'ᵉ', i:'ⁱ', l:'ˡ', m:'ᵐ', n:'ⁿ', o:'ᵒ', r:'ʳ', s:'ˢ', t:'ᵗ' };
+function _toSuperscript(s) {
+  return String(s).split('').map(c => _SUP_MAP[c.toLowerCase()] || c).join('');
+}
+function _exposantsEnabled() {
+  try { return !!getProofOptions().exposant; } catch (_) { return false; }
+}
+function _findExposantIssues(analysis, boxes, a2r) {
+  const out = [];
+  const re = /\b(\d{1,4})(ers|er|res|re|ndes|nds|nde|nd|èmes|ème|es|e)\b/g;
+  let m;
+  while ((m = re.exec(analysis)) !== null) {
+    const base = m[1], suf = m[2];
+    const start = m.index, sufStart = m.index + base.length, end = m.index + m[0].length;
+    const baseBox = boxes[a2r[sufStart - 1]];
+    if (!baseBox || !baseBox.h) continue;
+    const baseBaseline = baseBox.y + baseBox.h;
+    let measured = 0, supChars = 0;
+    for (let k = sufStart; k < end; k++) {
+      const b = boxes[a2r[k]];
+      if (!b || !b.h) continue;
+      measured++;
+      const smaller = b.h < baseBox.h * 0.82;
+      const raised  = (b.y + b.h) < baseBaseline - baseBox.h * 0.12;
+      if (smaller && raised) supChars++;
+    }
+    if (!measured || supChars === measured) continue;   // déjà en exposant → on ne signale rien
+    out.push({
+      offset: start, len: end - start,
+      type: 'grammar', severity: 'warning',
+      message: 'Exposant : « ' + base + suf + ' » devrait s\'écrire « ' + base + _toSuperscript(suf) + ' » (suffixe en exposant).',
+      suggestions: [base + _toSuperscript(suf)],
+      ruleId: 'keystone_exposant', source: 'keystone',
+    });
+  }
+  return out;
+}
+
 // ── Analyse d'une page : texte + fautes + rectangles ────────────
 // Renvoie { page, viewport, issues, overlays:[{idx,issue,rects}],
 //           isScanned, textLength }. `pageText` (dé-césuré) sert au
@@ -157,6 +203,10 @@ export async function analyzePage(pdf, pageNum, scale) {
     // (on a NFC + retiré U+00AD à la construction). Si la longueur a
     // bougé malgré tout, on garde quand même (rare ; léger décalage).
     issues = res.issues || [];
+    if (_exposantsEnabled()) {
+      const exp = _findExposantIssues(analysis, boxes, a2r);
+      if (exp.length) issues = issues.concat(exp).sort((a, b) => (a.offset - b.offset) || (a.len - b.len));
+    }
   }
   const overlays = issues.map((issue, idx) => ({ idx, issue, rects: _issueRects(issue, boxes, a2r) }));
 
