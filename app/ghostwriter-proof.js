@@ -307,6 +307,18 @@ function _syncFilterBarActive() {
     : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement';
 }
 
+// Re-rend la barre de filtres EN PLACE (compteurs « N mots ignorés », « N/6 »)
+// sans reconstruire toute la vue ni perdre le défilement.
+function _refreshFilterBar() {
+  if (!_root) return;
+  const bar = _root.querySelector('.pf-filterbar');
+  if (!bar) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _renderFilterBar();
+  const fresh = tmp.firstElementChild;
+  if (fresh) bar.replaceWith(fresh); else bar.remove();
+}
+
 // ── Mode TEXTE ──────────────────────────────────────────────────
 function _renderTexte() {
   const hasResult = !!_result;
@@ -566,7 +578,11 @@ function _repaintOverlays() {
 
 function _refreshPdfStats() {
   const host = _root && _root.querySelector('.pf-pdf-tools .pf-stats');
-  if (host && _pageData && !_pageData.isScanned) host.innerHTML = _statsBadgesFiltered(_pageData.issues);
+  if (host && _pageData && !_pageData.isScanned) {
+    // exclut les fautes masquées « cette fois » / mots ignorés (cohérence avec le panneau)
+    const shown = _pageData.issues.filter(it => !_pageHidden.has(_issueKey(it)));
+    host.innerHTML = _statsBadgesFiltered(shown);
+  }
 }
 
 // ── Panneau de corrections type Acrobat (chantier 3) ────────────
@@ -1241,7 +1257,21 @@ async function _ignoreWordAlways(word) {
   _closePopover();
   _toast('« ' + w + ' » ne sera plus signalé');
   if (_mode === 'texte') { if (_result) await _handleAnalyze(); else _renderMain(); }
-  else if (_pdf) { _pageData = null; _renderMain(); }   // invalide le cache → ré-analyse + réaffiche barre/chip
+  else if (_pdf) {
+    // PDF : masque INSTANTANÉMENT toutes les occurrences du mot sur la page
+    // courante — pas de ré-analyse, pas de _renderMain → ni flash ni saut en
+    // haut. Les autres pages héritent du dico perso à leur prochaine analyse.
+    if (_pageData && Array.isArray(_pageData.issues)) {
+      const wl = w.toLowerCase();
+      for (const it of _pageData.issues) {
+        if (it.type === 'spelling' && String(it.word || '').trim().toLowerCase() === wl) _pageHidden.add(_issueKey(it));
+      }
+    }
+    _refreshFilterBar();   // met à jour le compteur « N mots ignorés »
+    _renderPdfPanel();
+    _repaintOverlays();
+    _refreshPdfStats();
+  }
 }
 
 // Ré-analyse après un changement de config (dico perso OU familles typo).
@@ -1250,7 +1280,12 @@ async function _ignoreWordAlways(word) {
 function _reanalyzeAfterConfigChange() {
   _pushFilters();
   if (_mode === 'texte') { if (_result) _handleAnalyze(); else _renderMain(); }
-  else { _pageData = null; _renderMain(); }   // PDF : invalide le cache → ré-analyse de la page
+  else {
+    // PDF : ré-analyse nécessaire (les options/dico changent le résultat) mais
+    // SANS _renderMain → _paintPdfStage garde l'affichage courant jusqu'à ce que
+    // la nouvelle page soit prête (pas de flash, pas de saut en haut).
+    _pageData = null; _refreshFilterBar(); _paintPdfStage();
+  }
 }
 
 // Gestionnaire du dico perso : liste des mots ignorés, retrait unitaire,
