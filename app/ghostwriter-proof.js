@@ -289,7 +289,7 @@ function _renderFilterBar() {
       ${n ? `<button class="pf-ignored-chip" type="button" data-act="ignore-manage"
               title="Voir et gérer les mots que vous avez choisi d'ignorer">${icon('eye-off', 13)}<span>${n} mot${n > 1 ? 's' : ''} ignoré${n > 1 ? 's' : ''}</span></button>` : ''}
       <span class="pf-filter-hint">${_grammarOnly
-        ? 'Orthographe masquée — accents, conjugaison et accords uniquement'
+        ? 'Orthographe et typographie masquées — accords, conjugaison, confusions'
         : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement'}</span>
     </div>`;
 }
@@ -303,7 +303,7 @@ function _syncFilterBarActive() {
   if (gram) { gram.classList.toggle('is-on', _grammarOnly);  gram.setAttribute('aria-pressed', String(_grammarOnly)); }
   const hint = _root.querySelector('.pf-filter-hint');
   if (hint) hint.textContent = _grammarOnly
-    ? 'Orthographe masquée — accents, conjugaison et accords uniquement'
+    ? 'Orthographe et typographie masquées — accords, conjugaison, confusions'
     : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement';
 }
 
@@ -536,9 +536,21 @@ async function _paintPdfStage() {
 
 // Clé d'une faute (pour le masquage « cette fois » sur la page).
 function _issueKey(it) { return it.offset + ':' + it.len; }
-// Faute visible ? (toggle grammaire-seulement + masquage par ligne)
+
+// Une alerte est-elle de la TYPOGRAPHIE (≠ grammaire/accords) ? On se base sur
+// la famille d'option Grammalecte (group), avec un filet de secours par ruleId.
+const _TYPO_GROUPS = new Set(['apos', 'maj', 'minis', 'typo', 'esp', 'nbsp', 'tab', 'num', 'eepi']);
+function _isTypoIssue(it) {
+  if (!it) return false;
+  if (it.ruleId === 'keystone_exposant') return true;
+  if (it.group && _TYPO_GROUPS.has(it.group)) return true;
+  return /apostrophe|majuscule|^typo_|^num_|^g2__typo|^g2__maj|guillemet|tiret|insécable|ordinau/i.test(it.ruleId || '');
+}
+
+// Faute visible ? « Grammaire & accords seulement » masque l'orthographe ET la
+// typographie → ne reste que la vraie grammaire. (+ masquage par ligne.)
 function _visibleIssue(it) {
-  if (_grammarOnly && it.type === 'spelling') return false;
+  if (_grammarOnly && (it.type === 'spelling' || _isTypoIssue(it))) return false;
   if (_pageHidden.has(_issueKey(it))) return false;
   return true;
 }
@@ -694,9 +706,9 @@ async function _analyzeAllPages(onProgress) {
     if (onProgress) onProgress(n, _pdfTotal);
     const data = await mod.analyzePage(_pdf, n, 1);     // scale 1 → points
     let issues = data.issues, overlays = data.overlays;
-    if (_grammarOnly) {                                  // export = ce qu'on voit à l'écran
-      issues = issues.filter(it => it.type !== 'spelling');
-      overlays = overlays.filter(o => o.issue.type !== 'spelling');
+    if (_grammarOnly) {                                  // export = ce qu'on voit à l'écran (ortho + typo masquées)
+      issues = issues.filter(it => it.type !== 'spelling' && !_isTypoIssue(it));
+      overlays = overlays.filter(o => o.issue.type !== 'spelling' && !_isTypoIssue(o.issue));
     }
     pages.push({
       n, issues, overlays, isScanned: data.isScanned,
@@ -883,7 +895,7 @@ function _buildMarkedHTML(text, issues) {
   let cursor = 0;
   for (let i = 0; i < issues.length; i++) {
     const it = issues[i];
-    if (_grammarOnly && it.type === 'spelling') continue;   // affichage : ortho masquée (texte laissé brut)
+    if (_grammarOnly && (it.type === 'spelling' || _isTypoIssue(it))) continue;   // ortho + typo masquées
     const start = it.offset;
     const end = it.offset + it.len;
     if (start < cursor || it.len <= 0) continue;       // chevauchement / vide → skip
@@ -923,13 +935,19 @@ function _statsBadges(s) {
 // on affiche le compte grammaire + un badge discret « N ortho masquées »
 // (transparence : on ne cache pas qu'il reste de l'orthographe non vérifiée).
 function _statsBadgesFiltered(issues) {
-  const s = _statsOf(issues);
-  if (!_grammarOnly) return _statsBadges(s);
+  if (!_grammarOnly) return _statsBadges(_statsOf(issues));
+  // mode « Grammaire & accords » : compte la VRAIE grammaire (hors typo) +
+  // un badge discret pour ce qui est masqué (orthographe + typographie).
+  let gram = 0, masked = 0;
+  for (const it of issues) {
+    if (it.type === 'spelling' || _isTypoIssue(it)) masked++;
+    else gram++;
+  }
   const parts = [];
-  parts.push(s.gram
-    ? `<span class="pf-badge pf-badge-gram">${s.gram} grammaire</span>`
+  parts.push(gram
+    ? `<span class="pf-badge pf-badge-gram">${gram} grammaire</span>`
     : `<span class="pf-badge pf-badge-ok">0 grammaire</span>`);
-  if (s.spell) parts.push(`<span class="pf-badge pf-badge-muted">${s.spell} ortho masquée${s.spell > 1 ? 's' : ''}</span>`);
+  if (masked) parts.push(`<span class="pf-badge pf-badge-muted">${masked} masquée${masked > 1 ? 's' : ''}</span>`);
   return parts.join('');
 }
 

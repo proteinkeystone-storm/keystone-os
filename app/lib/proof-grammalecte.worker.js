@@ -141,6 +141,7 @@ function _analyze(text, options) {
           message: e.sMessage || '',
           suggestions: Array.isArray(e.aSuggestions) ? e.aSuggestions.filter(Boolean) : [],
           ruleId: e.sRuleId || e.sType || '',
+          group: e.sType || '',        // famille d'option Grammalecte (apos, maj, typo, gn, conf…)
           url: e.URL || '',
           source: 'grammalecte',
         });
