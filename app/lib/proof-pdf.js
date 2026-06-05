@@ -99,9 +99,10 @@ function _buildPageText(textContent, viewport) {
       } else {
         const gap = e.x - (prev.x + prev.wPx);
         const minFH = Math.min(e.fontH, prev.fontH) || prev.fontH || 10;
-        if (gap > minFH * 2.5) {
-          // Grand vide horizontal = saut de colonne / bloc (mesuré ~36× la
-          // police sur des A3 multi-colonnes ; un vrai espace ≈ 0,6×). On COUPE
+        if (gap > minFH * 1.8) {
+          // Grand vide horizontal = saut de colonne / bloc. Seuil 1,8× la police :
+          // un vrai espace ≈ 0,6× (max ~1,5× en justifié), une gouttière de
+          // colonne ≥ ~2,3× (livres 2-col) jusqu'à ~36× (A3 mot-à-mot). On COUPE
           // la phrase au lieu de coller : sinon des fragments de colonnes
           // différentes se soudent (« de le cadre », « deux anniversaire ») et
           // génèrent de faux positifs de grammaire. cf. BRIEF V2.1 §7 (colonnes).
