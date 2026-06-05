@@ -40,6 +40,22 @@ export async function loadPdf(arrayBuffer) {
   return task.promise;                 // → PDFDocumentProxy
 }
 
+// Longueur de texte (hors espaces) d'une page, plafonnée — pour repérer vite
+// les pages image/vides (couverture…) SANS lancer l'analyse complète.
+export async function pageTextLength(pdf, pageNum, cap) {
+  cap = cap || 64;
+  try {
+    const page = await pdf.getPage(pageNum);
+    const tc = await page.getTextContent();
+    let len = 0;
+    for (const it of tc.items) {
+      if (it.str) len += it.str.replace(/\s/g, '').length;
+      if (len >= cap) return len;
+    }
+    return len;
+  } catch (_) { return 0; }
+}
+
 // ── Construction texte page + boîtes par caractère ──────────────
 // Renvoie { raw, boxes } où boxes[k] = {x,y,w,h} (px écran à l'échelle
 // du viewport) pour raw[k], ou null pour un séparateur inséré.

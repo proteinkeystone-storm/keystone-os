@@ -432,6 +432,22 @@ async function _ensurePdfMod() {
   return _pdfMod;
 }
 
+// Repère la 1re page contenant du vrai texte (saute couvertures / pages image
+// du début) pour ne pas ouvrir sur « Page sans couche texte ». Vérif légère
+// (longueur de texte), plafonnée aux 25 premières pages.
+async function _firstUsefulPage(mod) {
+  if (!mod || !_pdf || !mod.pageTextLength) return 1;
+  const cap = Math.min(_pdfTotal, 25);
+  let firstNonEmpty = 0;
+  for (let n = 1; n <= cap; n++) {
+    let len = 0;
+    try { len = await mod.pageTextLength(_pdf, n); } catch (_) {}
+    if (len >= 16) return n;                       // vraie page de texte
+    if (len >= 2 && !firstNonEmpty) firstNonEmpty = n;
+  }
+  return firstNonEmpty || 1;
+}
+
 // Ouvre un fichier PDF choisi par l'utilisateur.
 async function _loadPdfFile(file) {
   if (!file) return;
@@ -444,7 +460,8 @@ async function _loadPdfFile(file) {
     _pdf = await mod.loadPdf(buf.slice(0));
     _pdfName = file.name || 'document.pdf';
     _pdfTotal = _pdf.numPages;
-    _pdfPage = 1;
+    _pdfPage = await _firstUsefulPage(mod);   // saute les pages image du début (couverture…)
+    if (_pdfPage > 1) _toast(`Pages 1-${_pdfPage - 1} sans texte (images) — démarrage page ${_pdfPage}`);
     _pageData = null;
     _pageHidden = new Set();
     _pdfZoom = 1;
@@ -497,10 +514,13 @@ async function _paintPdfStage() {
     _refreshPdfStats();
 
     if (data.isScanned) {
+      const nextBtn = _pdfPage < _pdfTotal
+        ? `<button class="pf-btn-ghost pf-btn-sm" data-act="pdf-next" style="margin-top:14px">Page suivante ${icon('chevron-right', 14)}</button>` : '';
       stage.innerHTML = `<div class="pf-empty pf-scanned">${icon('eye-off', 28)}
-        <div style="margin-top:10px;font-weight:600">Page sans couche texte</div>
-        <p style="max-width:420px">Cette page semble être une image scannée — non supportée pour l'instant
-        (la reconnaissance de texte / OCR arrivera plus tard).</p></div>`;
+        <div style="margin-top:10px;font-weight:600">Page image (rien à corriger)</div>
+        <p style="max-width:440px">Cette page est une image (couverture, illustration…) : il n'y a pas de
+        couche texte à analyser. La reconnaissance d'image (OCR) viendra plus tard.</p>
+        ${nextBtn}</div>`;
       return;
     }
 
