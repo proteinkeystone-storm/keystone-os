@@ -69,9 +69,11 @@ let _pdfBuf    = null;           // ArrayBuffer (conservé pour l'export P3)
 let _pdfTotal  = 0;
 let _pdfPage   = 1;
 let _pdfBusy   = false;
-let _pageData  = null;           // { overlays, issues, isScanned, ... } page courante
+let _pageData  = null;           // { overlays, issues, isScanned, _page, ... } page courante (analyse @échelle 1, en cache)
 let _pdfIssuesAll = null;        // agrégat toutes pages (rapport P3) — { [page]: issues }
 let _analyzeToken = 0;           // anti-course : annule l'analyse d'une page quittée
+let _pdfZoom   = 1;              // facteur de zoom (1 = ajusté à la largeur du panneau)
+let _pageHidden = new Set();     // fautes masquées « cette fois » sur la page courante (clé offset:len)
 
 // ══════════════════════════════════════════════════════════════════
 // API publique
@@ -383,15 +385,23 @@ function _renderPdf() {
           <span class="pf-pdf-pageno">Page ${_pdfPage} / ${_pdfTotal}</span>
           <button class="pf-iconbtn" data-act="pdf-next" ${_pdfPage >= _pdfTotal ? 'disabled' : ''} aria-label="Page suivante">${icon('chevron-right', 18)}</button>
         </div>
+        <div class="pf-pdf-zoom" role="group" aria-label="Zoom">
+          <button class="pf-iconbtn" data-act="pdf-zoom-out" title="Dézoomer" aria-label="Dézoomer">${icon('minus', 16)}</button>
+          <button class="pf-zoom-fit" data-act="pdf-zoom-fit" title="Ajuster la double page à la largeur">Ajuster</button>
+          <button class="pf-iconbtn" data-act="pdf-zoom-in" title="Zoomer" aria-label="Zoomer">${icon('plus', 16)}</button>
+        </div>
         <div class="pf-pdf-tools">
           <span class="pf-stats">${stats}</span>
-          <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-report" ${_pdfBusy ? 'disabled' : ''}>${icon('file-text', 14)} Rapport</button>
+          <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-report" ${_pdfBusy ? 'disabled' : ''}>${icon('file-text', 14)} Exporter la liste</button>
           <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-export" ${_pdfBusy ? 'disabled' : ''}>${icon('download', 14)} PDF annoté</button>
           <button class="pf-iconbtn" data-act="pdf-close-file" title="Fermer le PDF">${icon('x', 16)}</button>
         </div>
       </div>
-      <div class="pf-pdf-stage" data-slot="pdf-stage">
-        <div class="pf-empty"><span class="pf-spinner"></span>&nbsp; Rendu de la page…</div>
+      <div class="pf-pdf-body">
+        <div class="pf-pdf-stage" data-slot="pdf-stage">
+          <div class="pf-empty"><span class="pf-spinner"></span>&nbsp; Rendu de la page…</div>
+        </div>
+        <aside class="pf-pdf-panel" data-slot="pdf-panel" aria-label="Liste des corrections de la page"></aside>
       </div>
     </div>`;
 }
@@ -418,6 +428,8 @@ async function _loadPdfFile(file) {
     _pdfTotal = _pdf.numPages;
     _pdfPage = 1;
     _pageData = null;
+    _pageHidden = new Set();
+    _pdfZoom = 1;
     _pdfIssuesAll = {};
   } catch (e) {
     _pdf = null;
@@ -430,7 +442,7 @@ async function _loadPdfFile(file) {
 
 function _closePdf() {
   _pdf = null; _pdfBuf = null; _pdfName = ''; _pdfTotal = 0; _pdfPage = 1;
-  _pageData = null; _pdfIssuesAll = null; _closePopover();
+  _pageData = null; _pageHidden = new Set(); _pdfZoom = 1; _pdfIssuesAll = null; _closePopover();
   _renderMain(true);
 }
 
@@ -441,74 +453,196 @@ function _pdfGoto(delta) {
   _renderMain();         // re-render toolbar (pageno) ; _paintPdfStage suit
 }
 
-// Rend la page courante + surlignages (anti-course via _analyzeToken).
+// Rend la page courante. Découplage (chantier 3) : l'ANALYSE (échelle 1 =
+// points PDF) est mise en cache par page et alimente le PANNEAU + les
+// surlignages IMMÉDIATEMENT ; le rendu bitmap du canvas (lourd sur A3) suit,
+// l'UI restant interactive entre-temps. Anti-course via _analyzeToken.
 async function _paintPdfStage() {
   const stage = _root && _root.querySelector('[data-slot="pdf-stage"]');
   if (!stage || !_pdf) return;
   const mod = await _ensurePdfMod(); if (!mod) return;
   const token = ++_analyzeToken;
-  const dpr = window.devicePixelRatio || 1;
   try {
-    const cssW = Math.min((stage.clientWidth || 820) - 8, 1100);
-    const page0 = await _pdf.getPage(_pdfPage);
-    const base = page0.getViewport({ scale: 1 });
-    const cssScale = Math.min(cssW / base.width, 1.7);
-    const renderScale = cssScale * dpr;
-    const data = await mod.analyzePage(_pdf, _pdfPage, renderScale);
-    if (token !== _analyzeToken) return;                 // page quittée → abandon
-    _pageData = data;
-    if (_pdfIssuesAll) _pdfIssuesAll[_pdfPage] = data.issues;
+    // 1. Analyse (échelle 1 → coordonnées en points), en cache par page.
+    if (!_pageData || _pageData._page !== _pdfPage) {
+      const data = await mod.analyzePage(_pdf, _pdfPage, 1);
+      if (token !== _analyzeToken) return;               // page quittée → abandon
+      data._page = _pdfPage;
+      _pageData = data;
+      _pageHidden = new Set();
+      if (_pdfIssuesAll) _pdfIssuesAll[_pdfPage] = data.issues;
+    }
+    const data = _pageData;
+
+    // 2. Panneau + stats : tout de suite (rapide), avant le rendu bitmap.
+    _renderPdfPanel();
+    _refreshPdfStats();
 
     if (data.isScanned) {
       stage.innerHTML = `<div class="pf-empty pf-scanned">${icon('eye-off', 28)}
         <div style="margin-top:10px;font-weight:600">Page sans couche texte</div>
         <p style="max-width:420px">Cette page semble être une image scannée — non supportée pour l'instant
         (la reconnaissance de texte / OCR arrivera plus tard).</p></div>`;
-      _refreshPdfStats();
       return;
     }
 
-    const canvas = await mod.renderPageCanvas(data.page, data.viewport);
-    if (token !== _analyzeToken) return;
-    canvas.className = 'pf-canvas';
-    canvas.style.width = (data.viewport.width / dpr) + 'px';
-    canvas.style.height = (data.viewport.height / dpr) + 'px';
+    // 3. Géométrie : ajuste la (double) page à la largeur du stage × zoom.
+    const dpr = window.devicePixelRatio || 1;
+    const avail = Math.max(280, (stage.clientWidth || 800) - 40);  // - padding (18×2) - marge
+    const fit = avail / data.viewport.width;             // viewport @1 → largeur en points
+    const cssScale = Math.max(0.2, Math.min(fit * _pdfZoom, 6));
 
+    // 4. Conteneur + canvas (vide) + surlignages positionnés → interactif direct.
     const wrap = document.createElement('div');
     wrap.className = 'pf-canvas-wrap';
-    wrap.style.width = (data.viewport.width / dpr) + 'px';
-    wrap.style.height = (data.viewport.height / dpr) + 'px';
+    wrap.dataset.css = String(cssScale);
+    wrap.style.width = Math.round(data.viewport.width * cssScale) + 'px';
+    wrap.style.height = Math.round(data.viewport.height * cssScale) + 'px';
+    const canvas = document.createElement('canvas');
+    canvas.className = 'pf-canvas';
+    canvas.style.width = '100%'; canvas.style.height = '100%';
     wrap.appendChild(canvas);
-
-    const layer = document.createElement('div');
-    layer.className = 'pf-ov-layer';
-    for (const ov of data.overlays) {
-      if (_grammarOnly && ov.issue.type === 'spelling') continue;   // affichage : ortho masquée
-      for (const r of ov.rects) {
-        const d = document.createElement('div');
-        d.className = 'pf-ov pf-' + ov.issue.type;
-        d.style.left = (r.x / dpr) + 'px';
-        d.style.top = (r.y / dpr) + 'px';
-        d.style.width = Math.max(3, r.w / dpr) + 'px';
-        d.style.height = (r.h / dpr) + 'px';
-        d.dataset.ovidx = ov.idx;
-        d.title = (ov.issue.type === 'spelling' ? 'Orthographe' : 'Grammaire') + ' — cliquez';
-        layer.appendChild(d);
-      }
-    }
-    wrap.appendChild(layer);
+    wrap.appendChild(_buildOverlayLayer(cssScale));
     stage.innerHTML = '';
     stage.appendChild(wrap);
-    _refreshPdfStats();
+
+    // 5. Rendu bitmap (lent sur A3) — le panneau et les clics marchent déjà.
+    const viewport = data.page.getViewport({ scale: cssScale * dpr });
+    await mod.renderPageCanvas(data.page, viewport, canvas);
+    if (token !== _analyzeToken) return;
   } catch (e) {
     if (token !== _analyzeToken) return;
     stage.innerHTML = `<div class="pf-empty">Erreur de rendu : ${_esc((e && e.message) || String(e))}</div>`;
   }
 }
 
+// Clé d'une faute (pour le masquage « cette fois » sur la page).
+function _issueKey(it) { return it.offset + ':' + it.len; }
+// Faute visible ? (toggle grammaire-seulement + masquage par ligne)
+function _visibleIssue(it) {
+  if (_grammarOnly && it.type === 'spelling') return false;
+  if (_pageHidden.has(_issueKey(it))) return false;
+  return true;
+}
+
+// Construit la couche de surlignages (rects en points × cssScale → px CSS).
+function _buildOverlayLayer(cssScale) {
+  const layer = document.createElement('div');
+  layer.className = 'pf-ov-layer';
+  if (!_pageData || _pageData.isScanned) return layer;
+  for (const ov of _pageData.overlays) {
+    if (!_visibleIssue(ov.issue)) continue;
+    for (const r of ov.rects) {
+      const d = document.createElement('div');
+      d.className = 'pf-ov pf-' + ov.issue.type;
+      d.style.left = (r.x * cssScale) + 'px';
+      d.style.top = (r.y * cssScale) + 'px';
+      d.style.width = Math.max(3, r.w * cssScale) + 'px';
+      d.style.height = (r.h * cssScale) + 'px';
+      d.dataset.ovidx = ov.idx;
+      d.title = (ov.issue.type === 'spelling' ? 'Orthographe' : 'Grammaire') + ' — cliquez pour voir dans le panneau';
+      layer.appendChild(d);
+    }
+  }
+  return layer;
+}
+
+// Re-dessine UNIQUEMENT les surlignages (toggle d'affichage / ignore par ligne)
+// — pas de ré-analyse ni de re-rendu du canvas (instantané, pas de flash).
+function _repaintOverlays() {
+  const wrap = _root && _root.querySelector('.pf-canvas-wrap');
+  if (!wrap) return;
+  const cssScale = parseFloat(wrap.dataset.css || '1') || 1;
+  const old = wrap.querySelector('.pf-ov-layer');
+  const layer = _buildOverlayLayer(cssScale);
+  if (old) wrap.replaceChild(layer, old); else wrap.appendChild(layer);
+}
+
 function _refreshPdfStats() {
   const host = _root && _root.querySelector('.pf-pdf-tools .pf-stats');
   if (host && _pageData && !_pageData.isScanned) host.innerHTML = _statsBadgesFiltered(_pageData.issues);
+}
+
+// ── Panneau de corrections type Acrobat (chantier 3) ────────────
+// Liste les fautes de la page courante (filtrées), synchronisée avec les
+// surlignages. L'index de ligne == idx de l'overlay (analyzePage les aligne).
+function _renderPdfPanel() {
+  const panel = _root && _root.querySelector('[data-slot="pdf-panel"]');
+  if (!panel) return;
+  if (!_pageData || _pageData.isScanned) {
+    panel.innerHTML = `<div class="pf-panel-head">Corrections</div>
+      <div class="pf-panel-empty">${icon(_pageData && _pageData.isScanned ? 'eye-off' : 'file', 22)}
+      <span>${_pageData && _pageData.isScanned ? 'Page sans couche texte.' : 'Chargement…'}</span></div>`;
+    return;
+  }
+  const text = _pageData.pageText || '';
+  const rows = [];
+  _pageData.issues.forEach((it, i) => {
+    if (!_visibleIssue(it)) return;
+    const word = (it.word || text.substr(it.offset, it.len) || '').replace(/\s+/g, ' ').trim();
+    const suggs = (it.suggestions || []).slice(0, 4);
+    rows.push(`
+      <div class="pf-panel-row pf-row-${it.type}" data-ovidx="${i}" role="button" tabindex="0"
+           title="Cliquer pour situer sur la page">
+        <div class="pf-row-top">
+          <span class="pf-row-badge pf-${it.type}">${it.type === 'spelling' ? 'Ortho' : 'Gramm.'}</span>
+          <span class="pf-row-word">${_esc(word) || '—'}</span>
+          <button class="pf-row-x" data-act="panel-ignore" data-i="${i}" title="Ignorer cette fois" aria-label="Ignorer cette fois">${icon('x', 13)}</button>
+        </div>
+        ${it.type === 'grammar' && it.message ? `<div class="pf-row-msg">${_esc(it.message)}</div>` : ''}
+        ${suggs.length ? `<div class="pf-row-suggs">${suggs.map(s => `<button class="pf-row-sugg" data-act="panel-copy" data-s="${_esc(s)}" title="Copier « ${_esc(s)} »">${_esc(s)}</button>`).join('')}</div>` : ''}
+        ${it.type === 'spelling' ? `<button class="pf-row-ignoreword" data-act="panel-ignore-word" data-w="${_esc(word)}">${icon('eye-off', 11)} Toujours ignorer ce mot</button>` : ''}
+      </div>`);
+  });
+  const count = rows.length;
+  panel.innerHTML = `
+    <div class="pf-panel-head">${count} correction${count > 1 ? 's' : ''}${_grammarOnly ? ' (grammaire)' : ''} · page ${_pdfPage}</div>
+    <div class="pf-panel-list" data-slot="panel-list">${count ? rows.join('') : `<div class="pf-panel-empty">${icon('check-circle', 24)}<span>Aucune correction ${_grammarOnly ? 'de grammaire ' : ''}sur cette page 👌</span></div>`}</div>`;
+}
+
+// Sélection synchronisée : ligne ↔ surlignage(s).
+function _selectIssue(idx, from) {
+  if (idx == null || isNaN(idx) || !_root) return;
+  const ovs = _root.querySelectorAll('.pf-ov[data-ovidx="' + idx + '"]');
+  const row = _root.querySelector('.pf-panel-row[data-ovidx="' + idx + '"]');
+  _root.querySelectorAll('.pf-panel-row.is-active').forEach(r => r.classList.remove('is-active'));
+  if (row) row.classList.add('is-active');
+  if (from === 'row') {
+    if (ovs[0]) ovs[0].scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    ovs.forEach(_flashEl);
+  } else { // depuis un surlignage de la page
+    if (row) { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); _flashEl(row); }
+    ovs.forEach(_flashEl);
+  }
+}
+function _flashEl(el) {
+  if (!el) return;
+  el.classList.remove('pf-flash'); void el.offsetWidth; el.classList.add('pf-flash');
+  setTimeout(() => el && el.classList.remove('pf-flash'), 1200);
+}
+
+// Ignorer une faute « cette fois » (page courante) : panneau + surlignages.
+function _panelIgnoreOnce(i) {
+  const it = _pageData && _pageData.issues[i];
+  if (!it) return;
+  _pageHidden.add(_issueKey(it));
+  _renderPdfPanel();
+  _repaintOverlays();
+}
+
+// Zoom (re-rendu du canvas à la nouvelle échelle ; pas de ré-analyse).
+function _pdfZoomBy(factor) {
+  _pdfZoom = Math.max(0.4, Math.min(_pdfZoom * factor, 5));
+  _paintPdfStage();
+}
+function _pdfZoomFit() { _pdfZoom = 1; _paintPdfStage(); }
+
+// Active/désactive les boutons d'export sans tout re-rendre (évite un
+// re-rendu inutile du canvas lourd pendant l'analyse de toutes les pages).
+function _setPdfBusy(b) {
+  _pdfBusy = b;
+  if (!_root) return;
+  _root.querySelectorAll('[data-act="pdf-report"],[data-act="pdf-export"]').forEach(el => { el.disabled = b; });
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -545,7 +679,7 @@ function _baseName() { return (_pdfName || 'document').replace(/\.pdf$/i, ''); }
 
 async function _handlePdfReport() {
   if (!_pdf || _pdfBusy) return;
-  _pdfBusy = true; _renderMain();
+  _setPdfBusy(true);
   try {
     _toast('Analyse de toutes les pages…');
     const pages = await _analyzeAllPages((n, t) => _setProgress(`Analyse ${n}/${t}…`));
@@ -567,7 +701,7 @@ async function _handlePdfReport() {
     _toast(`Rapport : ${total} correction${total > 1 ? 's' : ''}`);
   } catch (e) {
     _toast('Échec du rapport : ' + ((e && e.message) || e), true);
-  } finally { _pdfBusy = false; _renderMain(); }
+  } finally { _setPdfBusy(false); }
 }
 
 function _buildReportHTML(rows, total) {
@@ -605,7 +739,7 @@ function _buildReportHTML(rows, total) {
 
 async function _handlePdfExport() {
   if (!_pdfBuf || _pdfBusy) return;
-  _pdfBusy = true; _renderMain();
+  _setPdfBusy(true);
   try {
     _toast('Chargement de l\'outil d\'annotation…');
     let PDFLib;
@@ -640,7 +774,7 @@ async function _handlePdfExport() {
     _toast(`PDF annoté : ${total} faute${total > 1 ? 's' : ''} surlignée${total > 1 ? 's' : ''}`);
   } catch (e) {
     _toast('Échec de l\'export : ' + ((e && e.message) || e), true);
-  } finally { _pdfBusy = false; _renderMain(); }
+  } finally { _setPdfBusy(false); }
 }
 
 // Pages "Corrections" ajoutées à la fin (n'altère pas l'original).
@@ -765,8 +899,12 @@ function _statsBadgesFiltered(issues) {
 function _onClick(e) {
   const mark = e.target.closest('.pf-mark');
   if (mark) { _openTextPopover(mark); return; }
+  // PDF : un surlignage → situer la ligne dans le panneau (plus de popover).
   const ov = e.target.closest('.pf-ov');
-  if (ov) { _openPdfPopover(ov); return; }
+  if (ov) { _selectIssue(parseInt(ov.dataset.ovidx, 10), 'overlay'); return; }
+  // PDF : clic sur une ligne du panneau (hors bouton) → situer sur la page.
+  const row = e.target.closest('.pf-panel-row');
+  if (row && !e.target.closest('[data-act^="panel-"]')) { _selectIssue(parseInt(row.dataset.ovidx, 10), 'row'); return; }
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   switch (btn.dataset.act) {
@@ -785,9 +923,15 @@ function _onClick(e) {
     case 'ai-dismiss':     _aiResult = null; _renderMain(); return;
     case 'pdf-prev':       _pdfGoto(-1); return;
     case 'pdf-next':       _pdfGoto(1); return;
+    case 'pdf-zoom-in':    _pdfZoomBy(1.25); return;
+    case 'pdf-zoom-out':   _pdfZoomBy(0.8); return;
+    case 'pdf-zoom-fit':   _pdfZoomFit(); return;
     case 'pdf-close-file': _closePdf(); return;
     case 'pdf-report':     _handlePdfReport(); return;
     case 'pdf-export':     _handlePdfExport(); return;
+    case 'panel-copy':     { try { navigator.clipboard.writeText(btn.dataset.s); } catch (_) {} _toast('Copié : ' + btn.dataset.s); return; }
+    case 'panel-ignore':   _panelIgnoreOnce(parseInt(btn.dataset.i, 10)); return;
+    case 'panel-ignore-word': _ignoreWordAlways(btn.dataset.w); return;
   }
 }
 
@@ -965,20 +1109,6 @@ function _openTextPopover(markEl) {
   });
 }
 
-// PDF : on ne réécrit pas le PDF (hors scope) → la suggestion se copie.
-function _openPdfPopover(ovEl) {
-  const idx = parseInt(ovEl.dataset.ovidx, 10);
-  const o = _pageData && _pageData.overlays[idx];
-  if (!o) return;
-  const word = o.issue.word || (_pageData.pageText || '').substr(o.issue.offset, o.issue.len);
-  _openPopover(ovEl, {
-    type: o.issue.type, word, message: o.issue.message, suggestions: o.issue.suggestions,
-    onPick: (s) => { try { navigator.clipboard.writeText(s); } catch (_) {} _toast('Copié : ' + s); },
-    pickHint: 'Cliquez une suggestion pour la copier (le PDF n\'est pas modifié).',
-    onIgnoreWord: o.issue.type === 'spelling' ? () => _ignoreWordAlways(word) : null,
-  });
-}
-
 function _positionPopover(pop, markEl) {
   const r = markEl.getBoundingClientRect();
   const pw = Math.min(320, window.innerWidth - 24);
@@ -1047,7 +1177,10 @@ function _afterFilterToggle() {
     if (review && _result) review.innerHTML = _renderReview(_result);
     _refreshTextStats();
   } else if (_pdf) {
-    _paintPdfStage();   // re-dessine la page courante avec le filtre
+    // PDF : surlignages + panneau seulement (le canvas ne change pas → pas de re-rendu lourd).
+    _repaintOverlays();
+    _renderPdfPanel();
+    _refreshPdfStats();
   }
 }
 
@@ -1067,7 +1200,7 @@ async function _ignoreWordAlways(word) {
   _closePopover();
   _toast('« ' + w + ' » ne sera plus signalé');
   if (_mode === 'texte') { if (_result) await _handleAnalyze(); else _renderMain(); }
-  else if (_pdf) { _renderMain(); }   // re-render (réaffiche la barre + chip) puis re-paint
+  else if (_pdf) { _pageData = null; _renderMain(); }   // invalide le cache → ré-analyse + réaffiche barre/chip
 }
 
 // Ré-analyse après un changement de config (dico perso OU familles typo).
@@ -1076,7 +1209,7 @@ async function _ignoreWordAlways(word) {
 function _reanalyzeAfterConfigChange() {
   _pushFilters();
   if (_mode === 'texte') { if (_result) _handleAnalyze(); else _renderMain(); }
-  else { _renderMain(); }
+  else { _pageData = null; _renderMain(); }   // PDF : invalide le cache → ré-analyse de la page
 }
 
 // Gestionnaire du dico perso : liste des mots ignorés, retrait unitaire,
@@ -1315,15 +1448,75 @@ html.light-mode .pf-ai-btn { color:#6d4fc4; background:rgba(120,90,230,.08); bor
 .pf-iconbtn:disabled { opacity:.35; cursor:not-allowed; }
 .pf-btn-sm { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; font-size:12px; }
 
-/* Scène : canvas + surlignages */
-.pf-pdf-stage { display:flex; justify-content:center; min-height:300px; }
-.pf-canvas-wrap { position:relative; box-shadow:0 8px 40px rgba(0,0,0,.45); border-radius:4px; overflow:hidden; background:#fff; }
-.pf-canvas { display:block; }
+/* Scène + panneau Acrobat (chantier 3) */
+.pf-pdf-body { display:flex; gap:16px; align-items:flex-start; }
+.pf-pdf-stage { flex:1 1 auto; min-width:0; overflow:auto; max-height:calc(100vh - 220px); min-height:440px;
+  padding:18px; border-radius:14px; background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.06); }
+.pf-canvas-wrap { position:relative; box-shadow:0 8px 40px rgba(0,0,0,.45); border-radius:4px; overflow:hidden;
+  background:#fff; margin:0 auto; }
+.pf-canvas { display:block; width:100%; height:100%; }
 .pf-ov-layer { position:absolute; inset:0; pointer-events:none; }
 .pf-ov { position:absolute; pointer-events:auto; cursor:pointer; border-radius:2px; transition:background .12s ease; }
 .pf-ov.pf-spelling { background:rgba(255,60,60,.20); box-shadow:inset 0 -2px 0 0 rgba(220,40,40,.95); }
 .pf-ov.pf-grammar  { background:rgba(255,170,40,.20); box-shadow:inset 0 -2px 0 0 rgba(210,130,10,.95); }
-.pf-ov:hover { background:rgba(120,160,255,.35); }
+.pf-ov:hover { background:rgba(120,160,255,.45); }
+.pf-ov.pf-flash { outline:3px solid rgba(120,160,255,0); outline-offset:1px; animation:pf-flash-ov 1.1s ease; z-index:5; }
+@keyframes pf-flash-ov { 30% { outline-color:rgba(120,160,255,.95); } }
+
+/* Zoom */
+.pf-pdf-zoom { display:inline-flex; align-items:center; gap:4px; }
+.pf-zoom-fit { padding:0 12px; height:34px; border-radius:9px; background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1); color:var(--text-primary,#ddd); font-size:12px; font-weight:600;
+  cursor:pointer; font-family:inherit; transition:all .12s ease; }
+.pf-zoom-fit:hover { background:rgba(120,160,255,.16); border-color:rgba(120,160,255,.35); }
+
+/* Panneau de corrections (liste synchronisée) */
+.pf-pdf-panel { flex:0 0 340px; max-width:340px; max-height:calc(100vh - 220px); overflow-y:auto;
+  border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); }
+.pf-panel-head { position:sticky; top:0; z-index:1; padding:13px 16px; font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.07em; color:var(--text-muted,#9a9aa4);
+  background:rgba(20,20,26,.92); backdrop-filter:blur(8px); border-bottom:1px solid rgba(255,255,255,.07); }
+.pf-panel-list { padding:8px; display:flex; flex-direction:column; gap:7px; }
+.pf-panel-empty { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+  padding:48px 18px; color:#86e8b6; font-size:13px; }
+.pf-panel-empty svg { opacity:.55; }
+.pf-panel-row { padding:10px 11px; border-radius:11px; background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07); cursor:pointer; transition:background .12s ease,border-color .12s ease; }
+.pf-panel-row:hover { background:rgba(120,160,255,.1); border-color:rgba(120,160,255,.25); }
+.pf-panel-row.is-active { background:rgba(120,160,255,.16); border-color:rgba(120,160,255,.5); }
+.pf-panel-row.pf-flash { animation:pf-flash-row 1.1s ease; }
+@keyframes pf-flash-row { 30% { background:rgba(120,160,255,.3); } }
+.pf-row-top { display:flex; align-items:center; gap:8px; }
+.pf-row-badge { flex:0 0 auto; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+  padding:2px 7px; border-radius:100px; }
+.pf-row-badge.pf-spelling { background:rgba(255,90,90,.16); color:#ff9a9a; }
+.pf-row-badge.pf-grammar  { background:rgba(255,180,70,.16); color:#ffd08a; }
+.pf-row-word { flex:1 1 auto; min-width:0; font-size:13px; font-weight:600; color:var(--text-primary,#e6e6ea);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pf-row-x { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+  border-radius:6px; background:transparent; border:0; color:var(--text-muted,#888); cursor:pointer; padding:0; transition:all .12s ease; }
+.pf-row-x:hover { background:rgba(255,255,255,.1); color:#ddd; }
+.pf-row-msg { margin-top:6px; font-size:11.5px; line-height:1.45; color:var(--text-muted,#b7b7c0); }
+.pf-row-suggs { margin-top:8px; display:flex; flex-wrap:wrap; gap:5px; }
+.pf-row-sugg { padding:4px 9px; border-radius:7px; background:rgba(120,160,255,.14); border:1px solid rgba(120,160,255,.3);
+  color:#cfe0ff; font-size:12px; font-weight:600; cursor:pointer; transition:all .12s ease; font-family:inherit; }
+.pf-row-sugg:hover { background:rgba(120,160,255,.3); color:#fff; }
+.pf-row-ignoreword { margin-top:8px; display:inline-flex; align-items:center; gap:5px; background:transparent; border:0;
+  color:var(--text-muted,#8a8a94); font-size:11px; cursor:pointer; padding:0; text-decoration:underline; font-family:inherit; }
+.pf-row-ignoreword:hover { color:#ddd; }
+@media (max-width: 920px) {
+  .pf-pdf-body { flex-direction:column; }
+  .pf-pdf-panel { flex:none; max-width:none; width:100%; max-height:320px; }
+  .pf-pdf-stage { max-height:62vh; width:100%; }
+}
+html.light-mode .pf-pdf-stage { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.07); }
+html.light-mode .pf-pdf-panel { background:#fff; border-color:rgba(0,0,0,.09); }
+html.light-mode .pf-panel-head { background:rgba(245,245,248,.95); color:#64748b; border-color:rgba(0,0,0,.07); }
+html.light-mode .pf-panel-row { background:rgba(0,0,0,.025); border-color:rgba(0,0,0,.08); }
+html.light-mode .pf-panel-row:hover { background:rgba(80,110,230,.08); }
+html.light-mode .pf-row-word { color:#1e293b; }
+html.light-mode .pf-row-msg { color:#475569; }
+html.light-mode .pf-zoom-fit { background:rgba(0,0,0,.04); border-color:rgba(0,0,0,.1); color:#334155; }
 
 .pf-credit { margin-top:22px; font-size:11px; line-height:1.6; font-weight:400; color:var(--text-muted,#8a8a8a); }
 .pf-credit a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
