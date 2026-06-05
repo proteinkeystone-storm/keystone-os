@@ -211,6 +211,9 @@ function _buildShell() {
   _root.addEventListener('click', _onClick);
   _root.addEventListener('input', _onInput);
   _root.addEventListener('change', _onChange);
+  _root.addEventListener('dragover', _onDragOver);
+  _root.addEventListener('dragleave', _onDragLeave);
+  _root.addEventListener('drop', _onDrop);
   document.addEventListener('keydown', _handleKeyDown);
   bindHelpButton(_root, APP_ID);
   bindBurger(_root);
@@ -375,6 +378,7 @@ function _renderPdf() {
         <p class="pf-drop-sub">PDF « texte » (avec couche texte sélectionnable). Les fautes seront
         surlignées directement sur les pages. Le fichier reste <strong>100 % dans votre navigateur</strong>.</p>
         <span class="pf-drop-btn">Choisir un fichier…</span>
+        <span class="pf-drop-hint">ou glissez-déposez votre PDF ici</span>
         <input id="pf-file" class="pf-file-input" type="file" accept="application/pdf,.pdf" data-act="pdf-file">
       </label>
     </div>`;
@@ -955,6 +959,31 @@ function _onChange(e) {
   }
 }
 
+// ── Glisser-déposer du PDF (n'agit que sur l'écran d'import) ─────
+// La zone .pf-drop n'existe que tant qu'aucun PDF n'est chargé. Quand elle est
+// là, on accepte le drop n'importe où dans la fenêtre (tolérant) et on empêche
+// le navigateur d'ouvrir le fichier ; sinon on ne touche à rien.
+function _dropZone() { return _root && _root.querySelector('.pf-drop'); }
+function _onDragOver(e) {
+  const zone = _dropZone(); if (!zone) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  zone.classList.add('is-dragover');
+}
+function _onDragLeave(e) {
+  const zone = _dropZone(); if (!zone) return;
+  if (!e.relatedTarget || !_root.contains(e.relatedTarget)) zone.classList.remove('is-dragover');
+}
+function _onDrop(e) {
+  const zone = _dropZone(); if (!zone) return;
+  e.preventDefault();
+  zone.classList.remove('is-dragover');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')) _loadPdfFile(f);
+  else _toast('Glissez un fichier PDF (.pdf)', true);
+}
+
 function _onInput(e) {
   const el = e.target;
   if (el.dataset && el.dataset.field === 'text') {
@@ -1436,6 +1465,11 @@ html.light-mode .pf-ai-btn { color:#6d4fc4; background:rgba(120,90,230,.08); bor
   padding:64px 28px; border-radius:16px; border:1.5px dashed rgba(255,255,255,.18);
   background:rgba(255,255,255,.025); cursor:pointer; transition:all .15s ease; color:var(--text-muted,#999); }
 .pf-drop:hover { border-color:rgba(120,160,255,.5); background:rgba(120,160,255,.06); }
+.pf-drop.is-dragover { border-color:rgba(120,160,255,.9); border-style:solid;
+  background:rgba(120,160,255,.14); box-shadow:0 0 0 3px rgba(120,160,255,.18) inset; }
+.pf-drop.is-dragover .pf-drop-hint { color:#cfe0ff; }
+.pf-drop-hint { font-size:12px; color:var(--text-muted,#8a8a94); }
+html.light-mode .pf-drop.is-dragover { background:rgba(80,110,230,.1); border-color:rgba(80,110,230,.7); }
 .pf-drop-title { font-size:17px; font-weight:700; color:var(--text-primary,#fff); letter-spacing:-.01em; }
 .pf-drop-sub { font-size:12.5px; max-width:440px; line-height:1.55; margin:2px 0 8px; }
 .pf-drop-sub strong { color:var(--text-primary,#ddd); }
