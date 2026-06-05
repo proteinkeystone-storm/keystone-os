@@ -40,6 +40,7 @@ import {
   setCurrentFormId,
 } from './lib/pulsa-library.js';
 import { KEYFORM_TEMPLATES, TEMPLATE_CATEGORIES, instantiateTemplate } from './lib/pulsa-templates.js';
+import { downloadProofReceipt } from './lib/proof-receipt.js';
 
 // ── Métadonnées de l'artefact ─────────────────────────────────
 const WORKSPACE_META = {
@@ -331,6 +332,7 @@ function _onClick(e) {
   // Vue Responses
   if (act === 'view-responses')    return _viewResponses(t.dataset.id);
   if (act === 'export-csv')        return _exportCsv(t.dataset.id);
+  if (act === 'download-proof')    return _downloadProof(t.dataset.id);
 
   // Structure — sections
   if (act === 'add-section')     return _addSection();
@@ -764,6 +766,16 @@ async function _exportCsv(formId) {
   } catch (e) {
     alert('Erreur réseau : ' + (e.message || e));
   }
+}
+
+// Télécharge le « Certificat de preuve » d'une réponse (horodatage serveur,
+// empreinte SHA-256, IP/navigateur si non anonyme) → impression PDF.
+function _downloadProof(responseId) {
+  const resp = (_state.responses.list || []).find(r => r.id === responseId);
+  if (!resp) return;
+  const form = getForm(_state.responses.form_id) || _state.form;
+  if (!form) { alert('Formulaire introuvable.'); return; }
+  downloadProofReceipt(form, resp);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1610,6 +1622,11 @@ function _renderResponseCard(form, response, ordinal) {
       <header class="pulsa-resp-card-head">
         <span class="pulsa-resp-card-num">#${ordinal}</span>
         <span class="pulsa-resp-card-date">${_escape(created)}</span>
+        <button class="pulsa-icon-btn" data-act="download-proof" data-id="${_escape(response.id)}"
+                title="Télécharger le certificat de preuve (PDF)"
+                style="margin-left:auto;width:auto;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;font-size:11.5px;font-weight:600">
+          ${icon('file-text', 13)}<span>Certificat de preuve</span>
+        </button>
       </header>
       <div class="pulsa-resp-card-body">
         ${previews.length === 0 ? `

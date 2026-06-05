@@ -12,9 +12,10 @@
         (best-effort : si Resend échoue, la réponse reste stockée)
      5. Retour { ok: true, response_id } au client
 
-   Stratégie économe : pas de stockage de PII répondant (IP, UA,
-   cookies). La donnée serveur est purgée automatiquement au bout
-   de form.ttl_days via le cron quotidien.
+   Preuve : empreinte SHA-256 + horodatage serveur sur CHAQUE réponse.
+   IP + user-agent capturés UNIQUEMENT pour les formulaires NON anonymes
+   (preuve de signature) — jamais pour les formulaires anonymes (Biennale).
+   Tout est purgé au bout de form.ttl_days via le cron quotidien.
 
    Route :
      POST /api/pulsa/responses/:slug
@@ -60,6 +61,13 @@ async function _assertOwnsForm(env, formId, owner) {
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
+// Empreinte SHA-256 (hex) d'une chaîne — Web Crypto natif Workers.
+async function _sha256Hex(str) {
+  const data = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 let _schemaReady = false;
 async function _ensureSchema(env) {
   if (_schemaReady) return;
@@ -79,6 +87,10 @@ async function _ensureSchema(env) {
   await env.DB.prepare(
     'CREATE INDEX IF NOT EXISTS idx_pulsa_responses_expires ON pulsa_responses(expires_at)'
   ).run().catch(() => {});
+  // Colonnes preuve (ajout idempotent : ALTER échoue en silence si déjà présent).
+  await env.DB.prepare('ALTER TABLE pulsa_responses ADD COLUMN response_hash TEXT').run().catch(() => {});
+  await env.DB.prepare('ALTER TABLE pulsa_responses ADD COLUMN submitter_ip TEXT').run().catch(() => {});
+  await env.DB.prepare('ALTER TABLE pulsa_responses ADD COLUMN user_agent TEXT').run().catch(() => {});
   _schemaReady = true;
 }
 
@@ -123,14 +135,31 @@ export async function handlePulsaSubmit(request, env, slug) {
     return err('Champ "responses" requis (objet fieldId → valeur)', 400, origin);
   }
 
-  // 3. INSERT D1 (le response_json est l'objet brut, le rendu humain
-  // est fait par le mail template — pas besoin de doubler le stockage)
+  // 3. INSERT D1 — CŒUR INCHANGÉ (garanti même si les colonnes preuve
+  // n'existent pas encore) : ne jamais casser la collecte (Biennale).
   const responseId = generateId();
   const expiresAt = _isoDaysFromNow(ttlDays);
+  const responseStr = JSON.stringify(responses);
   await env.DB.prepare(`
     INSERT INTO pulsa_responses (id, form_id, slug, response_json, expires_at)
     VALUES (?, ?, ?, ?, ?)
-  `).bind(responseId, formRow.id, slug, JSON.stringify(responses), expiresAt).run();
+  `).bind(responseId, formRow.id, slug, responseStr, expiresAt).run();
+
+  // 3b. Preuve — DÉCOUPLÉE et best-effort (try/catch) : empreinte SHA-256
+  // pour CHAQUE réponse ; IP + user-agent seulement si le formulaire n'est
+  // PAS anonyme (preuve de signature) — jamais pour les anonymes (Biennale).
+  let responseHash = null;
+  try {
+    responseHash = await _sha256Hex(responseStr);
+    const isAnonymous = config.meta?.anonymous !== false;
+    const submitterIp = isAnonymous ? null : (request.headers.get('CF-Connecting-IP') || null);
+    const userAgent   = isAnonymous ? null : ((request.headers.get('user-agent') || '').slice(0, 512) || null);
+    await env.DB.prepare(
+      'UPDATE pulsa_responses SET response_hash = ?, submitter_ip = ?, user_agent = ? WHERE id = ?'
+    ).bind(responseHash, submitterIp, userAgent, responseId).run();
+  } catch (e) {
+    console.warn('[pulsa-responses] proof metadata skipped', e?.message || e);
+  }
 
   // 4. Envoi mail (best-effort)
   let mailStatus = 'skipped';
@@ -142,6 +171,7 @@ export async function handlePulsaSubmit(request, env, slug) {
         responses,
         responseId,
         receivedAt: new Date(),
+        proofHash: responseHash,
       });
       await sendEmail(env, { to: recipients, subject, html });
       mailStatus = 'sent';
@@ -156,6 +186,7 @@ export async function handlePulsaSubmit(request, env, slug) {
     response_id: responseId,
     mail: mailStatus,
     expires_at: expiresAt,
+    response_hash: responseHash,
   }, 200, origin);
 }
 
@@ -176,7 +207,7 @@ export async function handlePulsaResponsesList(request, env, url) {
   if (!ownership.ok) return err(ownership.msg, ownership.status, origin);
 
   const { results = [] } = await env.DB.prepare(`
-    SELECT id, form_id, slug, response_json, created_at, expires_at
+    SELECT id, form_id, slug, response_json, created_at, expires_at, response_hash, submitter_ip, user_agent
     FROM pulsa_responses
     WHERE form_id = ?
     ORDER BY created_at DESC
@@ -190,6 +221,9 @@ export async function handlePulsaResponsesList(request, env, url) {
     responses: _safeJson(r.response_json),
     created_at: r.created_at,
     expires_at: r.expires_at,
+    response_hash: r.response_hash || null,
+    submitter_ip: r.submitter_ip || null,
+    user_agent: r.user_agent || null,
   }));
 
   return json({ ok: true, responses, count: responses.length }, 200, origin);
@@ -707,7 +741,7 @@ function _formatValue(field, raw) {
  * Template HTML du mail de notification.
  * Charte sobre dark/navy/or, lisible sur Outlook, Apple Mail, Gmail.
  */
-function _renderResponseEmail({ form, responses, responseId, receivedAt }) {
+function _renderResponseEmail({ form, responses, responseId, receivedAt, proofHash }) {
   const meta = form.meta || {};
   const sections = form.sections || [];
   const totalAnswered = Object.keys(responses).length;
@@ -769,6 +803,7 @@ function _renderResponseEmail({ form, responses, responseId, receivedAt }) {
             <div style="background:#0a0e14;border:1px solid #1f2a37;border-radius:8px;padding:16px 18px;font-size:12px;color:#64748b;line-height:1.6">
               <strong style="color:#94a3b8">Conservation</strong> &nbsp; Cette réponse est stockée pendant ${form.ttl_days || 90} jours, puis supprimée automatiquement (RGPD Art. 5).
               <br><strong style="color:#94a3b8">Identifiant</strong> &nbsp; <code style="color:#c9a96e">${_escapeHtml(responseId)}</code>
+              ${proofHash ? `<br><strong style="color:#94a3b8">Empreinte SHA-256</strong> &nbsp; <code style="color:#c9a96e;word-break:break-all">${_escapeHtml(proofHash)}</code>` : ''}
               <br><strong style="color:#94a3b8">URL du formulaire</strong> &nbsp; <code style="color:#c9a96e">/form?s=${_escapeHtml(form.slug || '')}</code>
             </div>
           </td></tr>
