@@ -110,8 +110,15 @@ function _suggest(word, cap) {
 // Analyse un texte CANONIQUE (déjà normalisé côté main : \n, NFC, sans U+00AD).
 // On découpe par '\n' nous-mêmes en suivant l'offset de base de chaque
 // paragraphe → offsets renvoyés relatifs au texte canonique complet.
-function _analyze(text) {
+function _analyze(text, options) {
   _init();
+  // Familles de règles activables/désactivables (typographie : apostrophes,
+  // majuscules, tirets/guillemets, espaces, nombres). setOptions ne touche que
+  // les clés fournies → les règles d'accords/conjugaison gardent leurs défauts.
+  if (options && typeof options === 'object') {
+    // eslint-disable-next-line no-undef
+    try { gc_engine.setOptions(new Map(Object.entries(options))); } catch (_) {}
+  }
   // eslint-disable-next-line no-undef
   const sc = gc_engine.getSpellChecker();
   const issues = [];
@@ -172,7 +179,7 @@ onmessage = function (e) {
       _init();
       postMessage({ id: id, ok: true, ready: true });
     } else if (cmd === 'analyze') {
-      const issues = _analyze(data.text || '');
+      const issues = _analyze(data.text || '', data.options);
       postMessage({ id: id, ok: true, issues: issues });
     } else if (cmd === 'suggest') {
       _init();

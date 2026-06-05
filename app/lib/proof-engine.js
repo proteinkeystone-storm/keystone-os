@@ -91,6 +91,94 @@ export function canonicalizeText(text) {
   return s;
 }
 
+// ── Filtres anti-bruit (faux positifs) — ORTHOGRAPHE uniquement ──
+// Sur les documents bourrés de jargon (sigles, noms propres, références),
+// l'essentiel des alertes d'ORTHOGRAPHE sont des mots inconnus légitimes,
+// pas des fautes. On filtre ces tokens AVANT de les remonter à l'UI. La
+// grammaire, les accords et la conjugaison (la vraie valeur) ne sont
+// JAMAIS filtrés. cf. BRIEF_GHOST_WRITER_V2.1 §1. Réglable via setProofFilters().
+const _filters = {
+  ignore: new Set(),     // dico perso (mots en minuscules) — « toujours ignorer »
+  skipAllCaps: true,     // sigles TOUT-EN-CAPITALES : MINARM, IHEDN, GMHM…
+  skipWithDigits: true,  // tokens contenant un chiffre : A400M, COVID19, page42…
+  skipUrlEmail: true,    // fragments d'URL / email
+  minLetters: 3,         // mots de moins de 3 lettres (bruit d'extraction PDF)
+};
+
+// Configure les filtres d'orthographe. Appelé par le consommateur (ex. l'UI
+// qui détient le dico perso persistant en localStorage). Fusionne : les clés
+// non fournies sont conservées. Ce module est un singleton ES → proof-pdf et
+// l'UI partagent la même config.
+export function setProofFilters(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  if (cfg.ignoreWords != null) {
+    const list = Array.isArray(cfg.ignoreWords) ? cfg.ignoreWords : Array.from(cfg.ignoreWords);
+    _filters.ignore = new Set(list.map((w) => String(w).toLowerCase()));
+  }
+  for (const k of ['skipAllCaps', 'skipWithDigits', 'skipUrlEmail']) {
+    if (typeof cfg[k] === 'boolean') _filters[k] = cfg[k];
+  }
+  if (Number.isFinite(cfg.minLetters)) _filters.minLetters = cfg.minLetters;
+}
+
+export function getProofFilters() {
+  return {
+    ignoreWords: Array.from(_filters.ignore),
+    skipAllCaps: _filters.skipAllCaps,
+    skipWithDigits: _filters.skipWithDigits,
+    skipUrlEmail: _filters.skipUrlEmail,
+    minLetters: _filters.minLetters,
+  };
+}
+
+const _RE_DIGIT  = /[0-9]/;
+const _RE_URLISH = /[@/]|^www\.|\.[a-zà-ÿ]{2,}$|https?:/i;
+const _RE_LETTER = /[A-Za-zÀ-ÖØ-öø-ÿ]/;
+function _inIgnore(set, wl) {
+  if (!set) return false;
+  if (typeof set.has === 'function') return set.has(wl);
+  if (Array.isArray(set)) return set.indexOf(wl) >= 0;
+  return false;
+}
+
+// Prédicat PUR (testable hors navigateur) : ce mot d'orthographe est-il du
+// BRUIT à masquer ? true = bruit (dico perso / trop court / chiffres / URL /
+// sigle TOUT-CAPS). N'évalue JAMAIS la grammaire.
+export function isNoiseSpelling(word, filters) {
+  const f = filters || _filters;
+  const w = String(word == null ? '' : word).trim();
+  if (!w) return false;                                   // pas de mot → ne pas masquer à l'aveugle
+  if (_inIgnore(f.ignore, w.toLowerCase())) return true;
+  const letters = (w.match(_RE_LETTER_G) || []).length;
+  if ((f.minLetters || 0) > 0 && letters < f.minLetters) return true;
+  if (f.skipWithDigits && _RE_DIGIT.test(w)) return true;
+  if (f.skipUrlEmail && _RE_URLISH.test(w)) return true;
+  if (f.skipAllCaps && _RE_LETTER.test(w) && w === w.toUpperCase() && w !== w.toLowerCase()) return true;
+  return false;
+}
+const _RE_LETTER_G = /[A-Za-zÀ-ÖØ-öø-ÿ]/g;
+
+// Applique les filtres à une liste d'issues : ne touche QUE l'orthographe.
+// Une issue d'ortho sans `word` est conservée (on ne masque pas à l'aveugle).
+export function filterIssues(issues, filters) {
+  if (!Array.isArray(issues)) return [];
+  const f = filters || _filters;
+  return issues.filter((it) => it && (it.type !== 'spelling' || !it.word || !isNoiseSpelling(it.word, f)));
+}
+
+// ── Options de règles Grammalecte (familles TYPOGRAPHIQUES) ──────
+// La grammaire/les accords/la conjugaison de fond restent TOUJOURS actifs.
+// Ces options ne pilotent QUE la typographie (apostrophes, majuscules,
+// tirets/guillemets, espaces, nombres) — massivement du bruit sur un PDF déjà
+// mis en page. cf. BRIEF_GHOST_WRITER_V2.1 §1 (item 4). Défaut = tout coupé.
+// Le consommateur (UI) passe le détail via setProofOptions ; envoyé au worker
+// à chaque analyse (setOptions ne change que les clés fournies).
+let _options = { apos:false, maj:false, minis:false, typo:false, esp:false, nbsp:false, tab:false, num:false };
+export function setProofOptions(obj) {
+  _options = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
+}
+export function getProofOptions() { return Object.assign({}, _options); }
+
 // ── Pré-chauffe (optionnel) : démarre le worker + init dicos ────
 // À appeler quand l'utilisateur entre dans le correcteur, pour que la
 // 1re analyse soit instantanée (sinon ~1 s de chargement dico au 1er run).
@@ -106,8 +194,12 @@ export async function analyze(text, opts = {}) {
   if (!canonical.trim()) return { text: canonical, issues: [] };
   _ensureWorker();
   await _readyP;
-  const issues = await _call('analyze', { text: canonical });
-  return { text: canonical, issues: Array.isArray(issues) ? issues : [] };
+  let issues = await _call('analyze', { text: canonical, options: opts.options || _options });
+  if (!Array.isArray(issues)) issues = [];
+  // Filtrage anti-bruit (faux positifs d'orthographe). opts.noFilter → brut,
+  // opts.filters → config ad hoc (sinon config module via setProofFilters).
+  if (opts.noFilter !== true) issues = filterIssues(issues, opts.filters);
+  return { text: canonical, issues };
 }
 
 // Suggestions orthographiques à la demande (pour un mot précis).

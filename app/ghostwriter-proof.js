@@ -27,7 +27,22 @@ import {
 
 const APP_ID    = 'A-COM-005';
 const DRAFT_KEY = 'ks_gw_proof_draft';
+const IGNORE_KEY       = 'ks_proof_ignore_words';   // dico perso persistant (chantier 1)
+const GRAMMAR_ONLY_KEY = 'ks_proof_grammar_only';   // préférence d'affichage persistante
+const TYPO_KEY         = 'ks_proof_typo_families';  // familles typographiques activées (défaut : aucune)
 const GRAMMALECTE_SRC = 'https://grammalecte.net/';
+
+// Familles de règles TYPOGRAPHIQUES activables par case à cocher. Chacune
+// pilote un ou plusieurs groupes d'options Grammalecte. Défaut : tout coupé
+// (sur un PDF maquetté c'est du bruit ; cf. chantier 1). Les accords, la
+// conjugaison et l'orthographe ne sont JAMAIS concernés.
+const TYPO_FAMILIES = [
+  { key: 'apos', label: 'Apostrophes',         opts: ['apos'],              ex: '’ contre \'' },
+  { key: 'maj',  label: 'Majuscules',          opts: ['maj', 'minis'],      ex: 'début de phrase, accents' },
+  { key: 'typo', label: 'Tirets & guillemets', opts: ['typo'],              ex: '– — « » ( )' },
+  { key: 'esp',  label: 'Espaces',             opts: ['esp', 'nbsp', 'tab'],ex: 'doubles, insécables' },
+  { key: 'num',  label: 'Nombres',             opts: ['num'],               ex: '20 000, O/0' },
+];
 
 // ── État ────────────────────────────────────────────────────────
 let _root      = null;
@@ -38,6 +53,13 @@ let _analyzing = false;
 let _engine    = null;           // module proof-engine chargé en lazy
 let _aiBusy    = false;          // passe IA en cours
 let _aiResult  = null;           // { text } proposé par la passe IA
+
+// — Chantier 1 : faux positifs —
+let _grammarOnly = false;        // affichage : masquer l'orthographe (sigles, noms propres)
+let _ignoreWords = new Set();    // dico perso persistant (ks_proof_ignore_words)
+let _typoFamilies = new Set();   // familles typographiques activées (défaut : aucune = tout coupé)
+let _configDirty = false;        // dico perso / familles typo modifiés → ré-analyser à la fermeture
+let _onPopoverClose = null;      // callback one-shot exécuté à la fermeture d'un popover
 
 // — État PDF —
 let _pdfMod    = null;           // module proof-pdf chargé en lazy
@@ -58,6 +80,7 @@ export function openGhostwriterProof(initialMode) {
   if (_root) return;
   _injectStyles();
   _loadDraft();
+  _loadPrefs();
   // un mode explicite l'emporte sur le mode mémorisé dans le brouillon
   if (initialMode === 'pdf' || initialMode === 'texte') _mode = initialMode;
   _buildShell();
@@ -95,14 +118,54 @@ function _loadDraft() {
   } catch (_) {}
 }
 
+// Préférences chantier 1 : dico perso (mots ignorés) + toggle d'affichage.
+function _loadPrefs() {
+  try {
+    const raw = localStorage.getItem(IGNORE_KEY);
+    if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) _ignoreWords = new Set(a.map(String)); }
+  } catch (_) {}
+  try { _grammarOnly = localStorage.getItem(GRAMMAR_ONLY_KEY) === '1'; } catch (_) {}
+  try {
+    const raw = localStorage.getItem(TYPO_KEY);
+    if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) _typoFamilies = new Set(a.filter(k => TYPO_FAMILIES.some(f => f.key === k))); }
+  } catch (_) {}
+}
+function _saveIgnore() {
+  try { localStorage.setItem(IGNORE_KEY, JSON.stringify(Array.from(_ignoreWords))); } catch (_) {}
+}
+function _saveGrammarOnly() {
+  try { localStorage.setItem(GRAMMAR_ONLY_KEY, _grammarOnly ? '1' : '0'); } catch (_) {}
+}
+function _saveTypo() {
+  try { localStorage.setItem(TYPO_KEY, JSON.stringify(Array.from(_typoFamilies))); } catch (_) {}
+}
+
+// Construit la map d'options Grammalecte depuis les familles cochées.
+// Famille active → ses options à true ; inactive → false (coupée).
+function _typoOptionMap() {
+  const m = {};
+  for (const f of TYPO_FAMILIES) { const on = _typoFamilies.has(f.key); for (const o of f.opts) m[o] = on; }
+  return m;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Chargement paresseux du moteur
 // ══════════════════════════════════════════════════════════════════
 async function _ensureEngine() {
   if (_engine) return _engine;
-  try { _engine = await import('./lib/proof-engine.js'); }
+  try { _engine = await import('./lib/proof-engine.js'); _pushFilters(); }
   catch (e) { _engine = null; _toast('Impossible de charger le moteur de correction', true); }
   return _engine;
+}
+
+// Pousse la config vers le moteur (singleton ES partagé avec proof-pdf, donc
+// texte ET PDF en bénéficient) : dico perso (filtre ortho) + familles
+// typographiques (options Grammalecte). Les pré-filtres anti-bruit (sigles,
+// chiffres, URL, < 3 lettres) sont des défauts du moteur, toujours actifs.
+function _pushFilters() {
+  if (!_engine) return;
+  if (_engine.setProofFilters) _engine.setProofFilters({ ignoreWords: Array.from(_ignoreWords) });
+  if (_engine.setProofOptions) _engine.setProofOptions(_typoOptionMap());
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -157,6 +220,7 @@ function _renderMain(scrollTop) {
   main.innerHTML = `
     <div class="ws-main-inner pf-wrap">
       ${_renderHero()}
+      ${_renderFilterBar()}
       ${_mode === 'texte' ? _renderTexte() : _renderPdf()}
       ${_renderCredit()}
     </div>
@@ -194,10 +258,49 @@ function _renderHero() {
     </div>`;
 }
 
+// ── Barre de filtres (chantier 1) — n'apparaît qu'avec du contenu ──
+// Segment « Tout / Grammaire & accords » (masque l'orthographe = l'essentiel
+// des faux positifs sur les docs à jargon) + accès au dico perso.
+function _renderFilterBar() {
+  const relevant = (_mode === 'texte' && _result) || (_mode === 'pdf' && _pdf);
+  if (!relevant) return '';
+  const n = _ignoreWords.size;
+  const nTypo = _typoFamilies.size;
+  return `
+    <div class="pf-filterbar">
+      <div class="pf-seg" role="group" aria-label="Filtrer les corrections affichées">
+        <button class="pf-seg-btn${!_grammarOnly ? ' is-on' : ''}" type="button"
+                data-act="filter-all" aria-pressed="${!_grammarOnly}">${icon('eye', 13)}<span>Tout</span></button>
+        <button class="pf-seg-btn${_grammarOnly ? ' is-on' : ''}" type="button"
+                data-act="filter-gram" aria-pressed="${_grammarOnly}"
+                title="Masquer l'orthographe (sigles, noms propres) et ne garder que grammaire, accords et conjugaison">${icon('check-circle', 13)}<span>Grammaire &amp; accords</span></button>
+      </div>
+      <button class="pf-typo-chip${nTypo ? ' is-active' : ''}" type="button" data-act="typo-manage"
+              title="Choisir les familles de typographie à vérifier (apostrophes, majuscules, tirets, espaces, nombres). Par défaut coupées — du bruit sur un PDF déjà mis en page.">${icon('sliders', 13)}<span>Typographie · ${nTypo ? nTypo + '/' + TYPO_FAMILIES.length : 'off'}</span></button>
+      ${n ? `<button class="pf-ignored-chip" type="button" data-act="ignore-manage"
+              title="Voir et gérer les mots que vous avez choisi d'ignorer">${icon('eye-off', 13)}<span>${n} mot${n > 1 ? 's' : ''} ignoré${n > 1 ? 's' : ''}</span></button>` : ''}
+      <span class="pf-filter-hint">${_grammarOnly
+        ? 'Orthographe masquée — accents, conjugaison et accords uniquement'
+        : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement'}</span>
+    </div>`;
+}
+
+// Met à jour l'état actif des segments sans tout re-rendre (toggle instantané).
+function _syncFilterBarActive() {
+  if (!_root) return;
+  const all  = _root.querySelector('[data-act="filter-all"]');
+  const gram = _root.querySelector('[data-act="filter-gram"]');
+  if (all)  { all.classList.toggle('is-on', !_grammarOnly);  all.setAttribute('aria-pressed', String(!_grammarOnly)); }
+  if (gram) { gram.classList.toggle('is-on', _grammarOnly);  gram.setAttribute('aria-pressed', String(_grammarOnly)); }
+  const hint = _root.querySelector('.pf-filter-hint');
+  if (hint) hint.textContent = _grammarOnly
+    ? 'Orthographe masquée — accents, conjugaison et accords uniquement'
+    : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement';
+}
+
 // ── Mode TEXTE ──────────────────────────────────────────────────
 function _renderTexte() {
   const hasResult = !!_result;
-  const stats = hasResult ? _statsOf(_result.issues) : null;
   return `
     <div class="pf-grid">
       <section class="pf-pane">
@@ -209,7 +312,7 @@ function _renderTexte() {
       <section class="pf-pane">
         <div class="pf-pane-label">
           Relecture
-          <span class="pf-stats">${stats ? _statsBadges(stats) : ''}</span>
+          <span class="pf-stats">${hasResult ? _statsBadgesFiltered(_result.issues) : ''}</span>
         </div>
         <div class="pf-review" data-slot="review">
           ${hasResult ? _renderReview(_result) : `<div class="pf-empty">${icon('check-circle', 30)}<span>Cliquez sur <strong>« Corriger »</strong></span><span>les fautes apparaîtront ici, surlignées et cliquables.</span></div>`}
@@ -270,7 +373,7 @@ function _renderPdf() {
       </label>
     </div>`;
   }
-  const stats = (_pageData && !_pageData.isScanned) ? _statsOf(_pageData.issues) : null;
+  const stats = (_pageData && !_pageData.isScanned) ? _statsBadgesFiltered(_pageData.issues) : '';
   return `
     <div class="pf-pdf-shell pf-pdf-loaded">
       <div class="pf-pdf-toolbar">
@@ -281,7 +384,7 @@ function _renderPdf() {
           <button class="pf-iconbtn" data-act="pdf-next" ${_pdfPage >= _pdfTotal ? 'disabled' : ''} aria-label="Page suivante">${icon('chevron-right', 18)}</button>
         </div>
         <div class="pf-pdf-tools">
-          <span class="pf-stats">${stats ? _statsBadges(stats) : ''}</span>
+          <span class="pf-stats">${stats}</span>
           <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-report" ${_pdfBusy ? 'disabled' : ''}>${icon('file-text', 14)} Rapport</button>
           <button class="pf-btn-ghost pf-btn-sm" data-act="pdf-export" ${_pdfBusy ? 'disabled' : ''}>${icon('download', 14)} PDF annoté</button>
           <button class="pf-iconbtn" data-act="pdf-close-file" title="Fermer le PDF">${icon('x', 16)}</button>
@@ -380,6 +483,7 @@ async function _paintPdfStage() {
     const layer = document.createElement('div');
     layer.className = 'pf-ov-layer';
     for (const ov of data.overlays) {
+      if (_grammarOnly && ov.issue.type === 'spelling') continue;   // affichage : ortho masquée
       for (const r of ov.rects) {
         const d = document.createElement('div');
         d.className = 'pf-ov pf-' + ov.issue.type;
@@ -404,8 +508,7 @@ async function _paintPdfStage() {
 
 function _refreshPdfStats() {
   const host = _root && _root.querySelector('.pf-pdf-tools .pf-stats');
-  const stats = (_pageData && !_pageData.isScanned) ? _statsOf(_pageData.issues) : null;
-  if (host && stats) host.innerHTML = _statsBadges(stats);
+  if (host && _pageData && !_pageData.isScanned) host.innerHTML = _statsBadgesFiltered(_pageData.issues);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -606,6 +709,7 @@ function _buildMarkedHTML(text, issues) {
   let cursor = 0;
   for (let i = 0; i < issues.length; i++) {
     const it = issues[i];
+    if (_grammarOnly && it.type === 'spelling') continue;   // affichage : ortho masquée (texte laissé brut)
     const start = it.offset;
     const end = it.offset + it.len;
     if (start < cursor || it.len <= 0) continue;       // chevauchement / vide → skip
@@ -641,6 +745,19 @@ function _statsBadges(s) {
   if (s.gram)  parts.push(`<span class="pf-badge pf-badge-gram">${s.gram} grammaire</span>`);
   return parts.join('');
 }
+// Badges tenant compte du toggle « Grammaire & accords » : en mode grammaire,
+// on affiche le compte grammaire + un badge discret « N ortho masquées »
+// (transparence : on ne cache pas qu'il reste de l'orthographe non vérifiée).
+function _statsBadgesFiltered(issues) {
+  const s = _statsOf(issues);
+  if (!_grammarOnly) return _statsBadges(s);
+  const parts = [];
+  parts.push(s.gram
+    ? `<span class="pf-badge pf-badge-gram">${s.gram} grammaire</span>`
+    : `<span class="pf-badge pf-badge-ok">0 grammaire</span>`);
+  if (s.spell) parts.push(`<span class="pf-badge pf-badge-muted">${s.spell} ortho masquée${s.spell > 1 ? 's' : ''}</span>`);
+  return parts.join('');
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Événements
@@ -656,6 +773,10 @@ function _onClick(e) {
     case 'close':          closeGhostwriterProof(); return;
     case 'back-to-rewrite':_backToRewrite(); return;
     case 'switch-mode':    _switchMode(btn.dataset.mode); return;
+    case 'filter-all':     if (_grammarOnly)  { _grammarOnly = false; _saveGrammarOnly(); _afterFilterToggle(); } return;
+    case 'filter-gram':    if (!_grammarOnly) { _grammarOnly = true;  _saveGrammarOnly(); _afterFilterToggle(); } return;
+    case 'ignore-manage':  _openIgnoreManager(btn); return;
+    case 'typo-manage':    _openTypoManager(btn); return;
     case 'analyze':        _handleAnalyze(); return;
     case 'reset':          _handleReset(); return;
     case 'ai-pass':        _handleAiPass(); return;
@@ -813,13 +934,17 @@ function _openPopover(anchorEl, cfg) {
         : '<span class="pf-pop-nosugg">Pas de suggestion automatique.</span>'}
     </div>
     ${(cfg.pickHint && suggs.length) ? `<div class="pf-pop-hint">${_esc(cfg.pickHint)}</div>` : ''}
-    ${cfg.onIgnore ? `<div class="pf-pop-foot"><button class="pf-pop-ignore" data-pop="ignore">Ignorer cette faute</button></div>` : ''}
+    ${(cfg.onIgnoreWord || cfg.onIgnore) ? `<div class="pf-pop-foot">
+      ${cfg.onIgnoreWord ? `<button class="pf-pop-ignore pf-pop-ignore-word" data-pop="ignoreword">${icon('eye-off', 12)} Toujours ignorer « ${_esc(cfg.word || '')} »</button>` : ''}
+      ${cfg.onIgnore ? `<button class="pf-pop-ignore" data-pop="ignore">Ignorer cette fois</button>` : ''}
+    </div>` : ''}
   `;
   pop.addEventListener('click', (e) => {
     const b = e.target.closest('[data-pop]'); if (!b) return;
-    if (b.dataset.pop === 'close')  { _closePopover(); return; }
-    if (b.dataset.pop === 'pick')   { cfg.onPick && cfg.onPick(b.dataset.s); _closePopover(); return; }
-    if (b.dataset.pop === 'ignore') { cfg.onIgnore && cfg.onIgnore(); _closePopover(); return; }
+    if (b.dataset.pop === 'close')     { _closePopover(); return; }
+    if (b.dataset.pop === 'pick')      { cfg.onPick && cfg.onPick(b.dataset.s); _closePopover(); return; }
+    if (b.dataset.pop === 'ignore')    { cfg.onIgnore && cfg.onIgnore(); _closePopover(); return; }
+    if (b.dataset.pop === 'ignoreword'){ cfg.onIgnoreWord && cfg.onIgnoreWord(); return; }
   });
   _root.appendChild(pop);
   _positionPopover(pop, anchorEl);
@@ -831,10 +956,12 @@ function _openTextPopover(markEl) {
   const idx = parseInt(markEl.dataset.i, 10);
   const it = _result && _result.issues[idx];
   if (!it) return;
+  const word = it.word || _text.substr(it.offset, it.len);
   _openPopover(markEl, {
-    type: it.type, message: it.message, suggestions: it.suggestions,
+    type: it.type, word, message: it.message, suggestions: it.suggestions,
     onPick: (s) => _applySuggestion(idx, s),
     onIgnore: () => _ignoreIssue(idx),
+    onIgnoreWord: it.type === 'spelling' ? () => _ignoreWordAlways(word) : null,
   });
 }
 
@@ -843,10 +970,12 @@ function _openPdfPopover(ovEl) {
   const idx = parseInt(ovEl.dataset.ovidx, 10);
   const o = _pageData && _pageData.overlays[idx];
   if (!o) return;
+  const word = o.issue.word || (_pageData.pageText || '').substr(o.issue.offset, o.issue.len);
   _openPopover(ovEl, {
-    type: o.issue.type, message: o.issue.message, suggestions: o.issue.suggestions,
+    type: o.issue.type, word, message: o.issue.message, suggestions: o.issue.suggestions,
     onPick: (s) => { try { navigator.clipboard.writeText(s); } catch (_) {} _toast('Copié : ' + s); },
     pickHint: 'Cliquez une suggestion pour la copier (le PDF n\'est pas modifié).',
+    onIgnoreWord: o.issue.type === 'spelling' ? () => _ignoreWordAlways(word) : null,
   });
 }
 
@@ -877,6 +1006,8 @@ function _closePopover() {
   document.removeEventListener('click', _handleDocClickForPopover, true);
   const p = _root && _root.querySelector('[data-slot="pf-pop"]');
   if (p) p.remove();
+  const cb = _onPopoverClose; _onPopoverClose = null;
+  if (cb) { try { cb(); } catch (_) {} }
 }
 
 // ── Appliquer une suggestion : patch le texte canonique + ré-analyse ──
@@ -899,8 +1030,142 @@ function _ignoreIssue(idx) {
   // re-render review uniquement
   const review = _root.querySelector('[data-slot="review"]');
   if (review) review.innerHTML = _renderReview(_result);
-  const statsHost = _root.querySelector('.pf-stats');
-  if (statsHost) statsHost.innerHTML = _statsBadges(_statsOf(_result.issues));
+  _refreshTextStats();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Filtres faux positifs (chantier 1) : toggle d'affichage + dico perso
+// ══════════════════════════════════════════════════════════════════
+
+// Bascule « Tout / Grammaire & accords » : purement de l'AFFICHAGE, aucune
+// ré-analyse. Texte = re-render de la relecture en place ; PDF = re-dessin
+// des surlignages (le canvas reste affiché, pas de flash).
+function _afterFilterToggle() {
+  _syncFilterBarActive();
+  if (_mode === 'texte') {
+    const review = _root && _root.querySelector('[data-slot="review"]');
+    if (review && _result) review.innerHTML = _renderReview(_result);
+    _refreshTextStats();
+  } else if (_pdf) {
+    _paintPdfStage();   // re-dessine la page courante avec le filtre
+  }
+}
+
+function _refreshTextStats() {
+  const host = _root && _root.querySelector('.pf-pane-label .pf-stats');
+  if (host && _result) host.innerHTML = _statsBadgesFiltered(_result.issues);
+}
+
+// « Toujours ignorer ce mot » : ajoute au dico perso persistant, met à jour le
+// moteur, et fait disparaître TOUTES les occurrences (ré-analyse texte / re-paint PDF).
+async function _ignoreWordAlways(word) {
+  const w = String(word || '').trim();
+  if (!w) { _closePopover(); return; }
+  _ignoreWords.add(w);
+  _saveIgnore();
+  _pushFilters();
+  _closePopover();
+  _toast('« ' + w + ' » ne sera plus signalé');
+  if (_mode === 'texte') { if (_result) await _handleAnalyze(); else _renderMain(); }
+  else if (_pdf) { _renderMain(); }   // re-render (réaffiche la barre + chip) puis re-paint
+}
+
+// Ré-analyse après un changement de config (dico perso OU familles typo).
+// Pousse la nouvelle config au moteur puis relance l'analyse texte / re-rend
+// le PDF (la page se ré-analyse avec les nouvelles options).
+function _reanalyzeAfterConfigChange() {
+  _pushFilters();
+  if (_mode === 'texte') { if (_result) _handleAnalyze(); else _renderMain(); }
+  else { _renderMain(); }
+}
+
+// Gestionnaire du dico perso : liste des mots ignorés, retrait unitaire,
+// réinitialisation. La ré-analyse n'a lieu qu'UNE fois, à la fermeture.
+function _openIgnoreManager(anchorEl) {
+  _closePopover();
+  _configDirty = false;
+  const pop = document.createElement('div');
+  pop.className = 'pf-pop pf-pop-ignore-mgr';
+  pop.dataset.slot = 'pf-pop';
+  pop.innerHTML = _ignoreMgrInner();
+  pop.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pop]'); if (!b) return;
+    if (b.dataset.pop === 'close') { _closePopover(); return; }
+    if (b.dataset.pop === 'unignore') {
+      _ignoreWords.delete(b.dataset.w); _saveIgnore(); _configDirty = true;
+      pop.innerHTML = _ignoreMgrInner(); _positionPopover(pop, anchorEl); return;
+    }
+    if (b.dataset.pop === 'unignore-all') {
+      _ignoreWords.clear(); _saveIgnore(); _configDirty = true;
+      pop.innerHTML = _ignoreMgrInner(); _positionPopover(pop, anchorEl); return;
+    }
+  });
+  _onPopoverClose = () => { if (_configDirty) { _configDirty = false; _reanalyzeAfterConfigChange(); } };
+  _root.appendChild(pop);
+  _positionPopover(pop, anchorEl);
+  setTimeout(() => document.addEventListener('click', _handleDocClickForPopover, true), 0);
+}
+
+// Gestionnaire des familles typographiques (cases à cocher). Coché = vérifié,
+// décoché = coupé. La ré-analyse n'a lieu qu'UNE fois, à la fermeture.
+function _openTypoManager(anchorEl) {
+  _closePopover();
+  _configDirty = false;
+  const pop = document.createElement('div');
+  pop.className = 'pf-pop pf-pop-typo-mgr';
+  pop.dataset.slot = 'pf-pop';
+  pop.innerHTML = _typoMgrInner();
+  pop.addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-typo]'); if (!cb) return;
+    if (cb.checked) _typoFamilies.add(cb.dataset.typo); else _typoFamilies.delete(cb.dataset.typo);
+    _saveTypo(); _configDirty = true;
+    const head = pop.querySelector('.pf-typo-count'); if (head) head.textContent = _typoFamilies.size + '/' + TYPO_FAMILIES.length;
+  });
+  pop.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pop]'); if (!b) return;
+    if (b.dataset.pop === 'close') { _closePopover(); return; }
+    if (b.dataset.pop === 'typo-none') {
+      _typoFamilies.clear(); _saveTypo(); _configDirty = true;
+      pop.innerHTML = _typoMgrInner(); _positionPopover(pop, anchorEl); return;
+    }
+  });
+  _onPopoverClose = () => { if (_configDirty) { _configDirty = false; _reanalyzeAfterConfigChange(); } };
+  _root.appendChild(pop);
+  _positionPopover(pop, anchorEl);
+  setTimeout(() => document.addEventListener('click', _handleDocClickForPopover, true), 0);
+}
+
+function _typoMgrInner() {
+  return `
+    <div class="pf-pop-head">
+      <span class="pf-pop-type pf-grammar">${icon('sliders', 12)} Typographie · <span class="pf-typo-count">${_typoFamilies.size}/${TYPO_FAMILIES.length}</span></span>
+      <button class="pf-pop-x" data-pop="close" aria-label="Fermer">${icon('x', 14)}</button>
+    </div>
+    <div class="pf-pop-msg">Sur un PDF déjà mis en page, ces familles sont surtout du bruit. Coche celles que tu veux vérifier — les accords, la conjugaison et l'orthographe restent toujours actifs.</div>
+    <div class="pf-typo-list">
+      ${TYPO_FAMILIES.map(f => `
+        <label class="pf-typo-row">
+          <input type="checkbox" data-typo="${f.key}" ${_typoFamilies.has(f.key) ? 'checked' : ''}>
+          <span class="pf-typo-name">${f.label}</span>
+          <span class="pf-typo-ex">${_esc(f.ex)}</span>
+        </label>`).join('')}
+    </div>
+    ${_typoFamilies.size ? `<div class="pf-pop-foot"><button class="pf-pop-ignore" data-pop="typo-none">Tout couper</button></div>` : ''}`;
+}
+
+function _ignoreMgrInner() {
+  const words = Array.from(_ignoreWords).sort((a, b) => a.localeCompare(b, 'fr'));
+  return `
+    <div class="pf-pop-head">
+      <span class="pf-pop-type pf-spelling">${icon('eye-off', 12)} Mots ignorés (${words.length})</span>
+      <button class="pf-pop-x" data-pop="close" aria-label="Fermer">${icon('x', 14)}</button>
+    </div>
+    <div class="pf-ignore-list">
+      ${words.length
+        ? words.map(w => `<span class="pf-ignore-tag">${_esc(w)}<button data-pop="unignore" data-w="${_esc(w)}" aria-label="Ne plus ignorer « ${_esc(w)} »">${icon('x', 11)}</button></span>`).join('')
+        : '<span class="pf-pop-nosugg">Aucun mot ignoré pour l\'instant. Cliquez « Toujours ignorer » sur une alerte d\'orthographe.</span>'}
+    </div>
+    ${words.length ? `<div class="pf-pop-foot"><button class="pf-pop-ignore" data-pop="unignore-all">Tout réinitialiser</button></div>` : ''}`;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1107,6 +1372,65 @@ html.light-mode .pf-mark.pf-spelling { color:#d83a3a; text-decoration-color:#d83
 html.light-mode .pf-mark.pf-grammar  { color:#c47a10; text-decoration-color:#c47a10; }
 html.light-mode .pf-pop { background:#fff; border-color:rgba(0,0,0,.12); }
 html.light-mode .pf-pop-msg { color:#1e293b; }
+
+/* ── Barre de filtres faux positifs (chantier 1) ── */
+.pf-filterbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 18px; }
+.pf-seg { display:inline-flex; gap:3px; padding:3px; border-radius:100px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); }
+.pf-seg-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:100px;
+  background:transparent; border:0; color:var(--text-muted,#9aa); font-size:12.5px; font-weight:600;
+  cursor:pointer; transition:all .14s ease; font-family:inherit; }
+.pf-seg-btn svg { opacity:.8; }
+.pf-seg-btn:hover:not(.is-on) { color:#ddd; background:rgba(255,255,255,.05); }
+.pf-seg-btn.is-on { background:rgba(120,160,255,.18); color:var(--text-primary,#fff);
+  box-shadow:inset 0 0 0 1px rgba(120,160,255,.45); cursor:default; }
+.pf-ignored-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:100px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); color:var(--text-muted,#aaa);
+  font-size:12px; font-weight:600; cursor:pointer; transition:all .14s ease; font-family:inherit; }
+.pf-ignored-chip:hover { background:rgba(255,255,255,.08); color:#ddd; }
+.pf-ignored-chip svg { opacity:.8; }
+.pf-filter-hint { font-size:11.5px; color:var(--text-muted,#7e7e88); }
+.pf-badge-muted { background:rgba(255,255,255,.07); color:var(--text-muted,#9a9aa4); }
+
+/* Dico perso (gestionnaire) */
+.pf-ignore-list { display:flex; flex-wrap:wrap; gap:7px; max-height:220px; overflow-y:auto; padding:2px; }
+.pf-ignore-tag { display:inline-flex; align-items:center; gap:5px; padding:5px 6px 5px 11px; border-radius:100px;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--text-primary,#ddd);
+  font-size:12.5px; font-weight:600; }
+.pf-ignore-tag button { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+  border-radius:50%; background:rgba(255,255,255,.08); border:0; color:var(--text-muted,#aaa); cursor:pointer;
+  transition:all .12s ease; padding:0; }
+.pf-ignore-tag button:hover { background:rgba(255,90,90,.25); color:#ffb0b0; }
+.pf-pop-foot { gap:10px; flex-wrap:wrap; justify-content:space-between; }
+.pf-pop-ignore-word { display:inline-flex; align-items:center; gap:5px; color:#cfe0ff; text-decoration:none;
+  background:rgba(120,160,255,.12); border:1px solid rgba(120,160,255,.28); border-radius:8px; padding:6px 10px; }
+.pf-pop-ignore-word:hover { background:rgba(120,160,255,.22); color:#fff; }
+
+html.light-mode .pf-seg { background:rgba(0,0,0,.04); border-color:rgba(0,0,0,.08); }
+html.light-mode .pf-seg-btn:hover:not(.is-on) { color:#334155; background:rgba(0,0,0,.04); }
+html.light-mode .pf-seg-btn.is-on { background:rgba(80,110,230,.12); color:#1e293b; box-shadow:inset 0 0 0 1px rgba(80,110,230,.4); }
+html.light-mode .pf-ignored-chip { background:rgba(0,0,0,.03); border-color:rgba(0,0,0,.1); color:#475569; }
+html.light-mode .pf-ignore-tag { background:rgba(0,0,0,.04); border-color:rgba(0,0,0,.1); color:#1e293b; }
+html.light-mode .pf-badge-muted { background:rgba(0,0,0,.06); color:#64748b; }
+
+/* Familles typographiques */
+.pf-typo-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:100px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); color:var(--text-muted,#aaa);
+  font-size:12px; font-weight:600; cursor:pointer; transition:all .14s ease; font-family:inherit; }
+.pf-typo-chip:hover { background:rgba(255,255,255,.08); color:#ddd; }
+.pf-typo-chip svg { opacity:.8; }
+.pf-typo-chip.is-active { background:rgba(255,180,70,.14); border-color:rgba(255,180,70,.4); color:#ffd08a; }
+.pf-typo-list { display:flex; flex-direction:column; gap:2px; }
+.pf-typo-row { display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:9px; cursor:pointer;
+  transition:background .12s ease; }
+.pf-typo-row:hover { background:rgba(255,255,255,.05); }
+.pf-typo-row input { width:16px; height:16px; accent-color:#7da0ff; cursor:pointer; flex:0 0 auto; }
+.pf-typo-name { font-size:13px; font-weight:600; color:var(--text-primary,#e6e6ea); }
+.pf-typo-ex { margin-left:auto; font-size:11.5px; color:var(--text-muted,#8a8a94); font-style:italic; }
+html.light-mode .pf-typo-chip { background:rgba(0,0,0,.03); border-color:rgba(0,0,0,.1); color:#475569; }
+html.light-mode .pf-typo-chip.is-active { background:rgba(201,138,20,.12); border-color:rgba(201,138,20,.4); color:#9a6a10; }
+html.light-mode .pf-typo-row:hover { background:rgba(0,0,0,.04); }
+html.light-mode .pf-typo-name { color:#1e293b; }
   `;
   const st = document.createElement('style');
   st.id = 'ks-gw-proof-styles';
