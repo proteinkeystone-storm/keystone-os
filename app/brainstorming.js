@@ -1778,58 +1778,55 @@ function _renderAgentsSelector(panel, modal) {
   if (selectorOn) _wireRosterControls(modal, panel, () => _renderAgentsSelector(panel, modal));
 }
 
-// ── Nuage d'amorces (Phase 2) — angles de départ par mode ────────
-// Bulles cliquables, organiques (flottantes + respirantes), groupées en
-// grappes. Un clic nourrit le brief. Le contenu s'adapte au mode cognitif.
+// ── Amorces par mode (Phase 2) — phrases à compléter ─────────────
+// Sélecteur de grappe (segmented) + cartes cliquables. Un clic injecte
+// le stem (+ espace, curseur en fin) dans le brief : prêt à compléter en
+// quelques mots. Le contenu s'adapte au mode cognitif.
 const SEED_ANGLES_BY_MODE = {
   exploration: [
-    { label: 'Défricher', pills: ['Et si on partait d\'une page blanche ?', 'Les usages qu\'on n\'avait pas prévus', 'Ce que personne n\'ose faire dans le secteur'] },
-    { label: 'Provoquer', pills: ['L\'idée qu\'on n\'ose pas dire tout haut', 'Inverser la logique du marché', 'Le scénario le plus ambitieux'] },
+    { label: 'Défricher', pills: ['Et si on repartait d\'une page blanche pour…', 'Ce que personne n\'ose faire dans le secteur, c\'est…', 'L\'usage qu\'on n\'avait pas vu venir, ce serait…'] },
+    { label: 'Provoquer', pills: ['L\'idée qu\'on n\'ose pas dire tout haut, c\'est…', 'Et si on inversait la logique de…', 'Notre scénario le plus ambitieux, ce serait…'] },
   ],
   launch: [
-    { label: 'Faire du bruit', pills: ['Le lancement qui marque dès J+1', 'L\'accroche qui arrête le scroll', 'Le coup d\'éclat à petit budget'] },
-    { label: 'Canaux', pills: ['Le canal qu\'on n\'a jamais testé', 'Ce qu\'on peut sortir en 2 semaines', 'Le bon moment pour lancer'] },
+    { label: 'Faire du bruit', pills: ['Le lancement qui marque dès J+1, ce serait…', 'L\'accroche qui arrête le scroll, c\'est…', 'Notre coup d\'éclat à petit budget, ce serait…'] },
+    { label: 'Canaux', pills: ['Le canal qu\'on n\'a jamais testé, c\'est…', 'Ce qu\'on peut sortir en deux semaines, c\'est…', 'Le meilleur moment pour lancer, ce serait…'] },
   ],
   branding: [
-    { label: 'Identité', pills: ['Notre archétype de marque', 'La promesse en 3 mots', 'Ce qu\'on défend vraiment'] },
-    { label: 'Voix', pills: ['Le ton qu\'on n\'ose pas encore', 'Ce qui nous rend reconnaissables', 'La signature qu\'on n\'oublie pas'] },
+    { label: 'Identité', pills: ['Ce que notre marque défend vraiment, c\'est…', 'Notre promesse, en trois mots, c\'est…', 'Notre archétype de marque, c\'est…'] },
+    { label: 'Voix', pills: ['Le ton qu\'on n\'ose pas encore, c\'est…', 'Ce qui nous rend reconnaissables, c\'est…', 'Notre signature, celle qu\'on n\'oublie pas, c\'est…'] },
   ],
   growth: [
-    { label: 'Acquisition', pills: ['Le levier d\'acquisition sous-exploité', 'Transformer un client en ambassadeur', 'Le moment d\'activation clé'] },
-    { label: 'Rétention', pills: ['Réduire le churn de moitié', 'La métrique qui compte vraiment', 'Donner envie de revenir'] },
+    { label: 'Acquisition', pills: ['Notre levier d\'acquisition sous-exploité, c\'est…', 'Ce qui transformerait un client en ambassadeur, c\'est…', 'Le moment d\'activation qui change tout, c\'est…'] },
+    { label: 'Rétention', pills: ['Pour diviser notre churn par deux, il faudrait…', 'La seule métrique qui compte vraiment, c\'est…', 'Ce qui leur donnerait envie de revenir, c\'est…'] },
   ],
   crisis: [
-    { label: 'Réagir', pills: ['Reprendre la parole en 24h', 'Le message qui rassure', 'Qui doit parler, et comment'] },
-    { label: 'Limiter', pills: ['Ce qu\'on arrête tout de suite', 'Limiter la casse côté image', 'La ligne à ne pas franchir'] },
+    { label: 'Réagir', pills: ['Pour reprendre la parole en 24 h, il faudrait…', 'Le message qui rassure, c\'est…', 'La personne qui doit parler, c\'est…'] },
+    { label: 'Limiter', pills: ['Ce qu\'on arrête tout de suite, c\'est…', 'Pour limiter la casse côté image, il faudrait…', 'La ligne à ne jamais franchir, c\'est…'] },
   ],
   positioning: [
-    { label: 'Différencier', pills: ['Notre angle que les autres n\'ont pas', 'La case qu\'on veut occuper', 'Ce qu\'on n\'est PAS'] },
-    { label: 'Cibler', pills: ['À qui on s\'adresse vraiment', 'La phrase qui nous résume', 'Le besoin qu\'on est seuls à couvrir'] },
+    { label: 'Différencier', pills: ['Notre angle que les autres n\'ont pas, c\'est…', 'La case qu\'on veut être seuls à occuper, c\'est…', 'Ce qu\'on n\'est surtout PAS, c\'est…'] },
+    { label: 'Cibler', pills: ['La personne à qui on s\'adresse vraiment, c\'est…', 'La phrase qui nous résume, ce serait…', 'Le besoin qu\'on est seuls à couvrir, c\'est…'] },
   ],
   repositioning: [
-    { label: 'Pivoter', pills: ['Ce qu\'on garde, ce qu\'on jette', 'Le cap d\'après', 'Le pivot le plus audacieux'] },
-    { label: 'Renaître', pills: ['Notre nouvelle raison d\'être', 'Le marché qu\'on n\'a pas encore osé', 'Se réinventer sans se trahir'] },
+    { label: 'Pivoter', pills: ['Ce qu\'on garde absolument, c\'est…', 'Notre cap d\'après, c\'est…', 'Le pivot le plus audacieux, ce serait…'] },
+    { label: 'Renaître', pills: ['Notre nouvelle raison d\'être, c\'est…', 'Le marché qu\'on n\'a pas encore osé, c\'est…', 'Se réinventer sans se trahir, ça voudrait dire…'] },
   ],
 };
 
-function _seedCloudHTML(modeId) {
+function _seedPickerHTML(modeId) {
   const groups = SEED_ANGLES_BY_MODE[modeId] || SEED_ANGLES_BY_MODE.exploration;
-  let n = 0;
-  return groups.map(g => `
-    <div class="wr-cloud-group">
-      <span class="wr-cloud-group-label">${_esc(g.label)}</span>
-      <div class="wr-cloud-group-pills">
-        ${g.pills.map(p => {
-          // décalage organique : chaque bulle flotte à son propre rythme
-          const delay = ((n % 5) * 0.5).toFixed(2);
-          const dur   = (5.2 + (n % 4) * 0.7).toFixed(2);
-          n++;
-          return `<span class="wr-cloud-pill-wrap" style="animation-delay:${delay}s;animation-duration:${dur}s;">
-            <button type="button" class="wr-cloud-pill" data-seed="${_esc(p)}">${_esc(p)}</button>
-          </span>`;
-        }).join('')}
-      </div>
+  // Sélecteur de grappe (segmented) : on n'affiche que les 3 amorces de la
+  // grappe active. Les deux grappes sont rendues, on bascule via .active.
+  const seg = groups.map((g, i) =>
+    `<button type="button" class="wr-seg-btn${i === 0 ? ' active' : ''}" data-grp="${i}">${_esc(g.label)}</button>`
+  ).join('');
+  const stacks = groups.map((g, i) => `
+    <div class="wr-seed-group${i === 0 ? ' active' : ''}" data-grp="${i}">
+      ${g.pills.map(p =>
+        `<button type="button" class="wr-seed-card" data-seed="${_esc(p)}"><span class="wr-seed-card-txt">${_esc(p)}</span><span class="wr-seed-ret">↵</span></button>`
+      ).join('')}
     </div>`).join('');
+  return `<div class="wr-seg" role="tablist">${seg}</div>${stacks}`;
 }
 
 // ── Config centrale : écran de préparation (avant le 1er brief) ──
@@ -1866,7 +1863,7 @@ function _renderCenterConfig(panel) {
     </div>
     <div class="wr-setup-step">
       <div class="wr-setup-step-label"><span class="wr-setup-step-num">✦</span> Une amorce pour démarrer <span class="wr-setup-step-opt">optionnel</span></div>
-      <div class="wr-cloud">${_seedCloudHTML(curMode)}</div>
+      <div class="wr-seed">${_seedPickerHTML(curMode)}</div>
     </div>
   `;
 
@@ -1879,14 +1876,23 @@ function _renderCenterConfig(panel) {
   });
   // Étape 2 — comité (barre Auto/Manuel + toggles en manuel)
   if (selectorOn) _wireRosterControls(root, panel, () => _renderCenterConfig(panel));
-  // Nuage d'amorces — un clic nourrit le brief
-  root.querySelectorAll('.wr-cloud-pill').forEach(btn => {
+  // Amorces — bascule de grappe (segmented)
+  root.querySelectorAll('.wr-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const seed  = btn.dataset.seed || btn.textContent.trim();
+      const gi = btn.dataset.grp;
+      root.querySelectorAll('.wr-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+      root.querySelectorAll('.wr-seed-group').forEach(g => g.classList.toggle('active', g.dataset.grp === gi));
+    });
+  });
+  // Amorces — un clic injecte le stem dans le brief, prêt à compléter
+  root.querySelectorAll('.wr-seed-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw   = btn.dataset.seed || btn.textContent.trim();
+      const seed  = raw.replace(/…$/, '… ');   // garde l'« … » + une espace : curseur prêt à compléter
       const input = panel.querySelector('#wr-input');
       if (!input) return;
       const cur = input.value.trim();
-      input.value = cur ? `${cur} — ${seed}` : seed;
+      input.value = cur ? `${cur} ${seed}` : seed;
       input.focus();
       try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
       btn.classList.add('picked');

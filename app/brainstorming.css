@@ -1464,68 +1464,69 @@
   border: 1px solid var(--wr-border); border-radius: 999px;
   padding: 1px 7px; margin-left: 4px;
 }
-.wr-cloud {
-  display: flex; flex-wrap: wrap; gap: 16px 26px;
-  justify-content: center;
+/* Amorces — sélecteur de grappe (segmented) + cartes à compléter.
+   Remplace l'ancien nuage flottant (Sprint 7.13). */
+.wr-seed {
+  display: flex; flex-direction: column; gap: 12px;
   padding: 4px 0 2px;
 }
-.wr-cloud-group {
-  position: relative;
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 16px 18px 15px;
-  border-radius: 28px;
-  background: radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--wr-mode-accent) 10%, transparent), transparent 72%);
-}
-.wr-cloud-group:nth-child(even) { margin-top: 16px; }   /* décalage organique des grappes */
-.wr-cloud-group-label {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--wr-mode-accent) 70%, var(--wr-text-muted));
-  text-align: center;
-}
-.wr-cloud-group-pills {
-  display: flex; flex-wrap: wrap; gap: 9px 10px;
-  justify-content: center;
-  max-width: 320px;
-}
-.wr-cloud-pill-wrap {
-  display: inline-flex;
-  animation-name: wrPillFloat;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  will-change: transform;
-}
-.wr-cloud-pill {
-  cursor: pointer;
-  padding: 8px 14px;
-  border-radius: 999px;
+.wr-seg {
+  display: flex; gap: 3px;
+  padding: 3px; border-radius: 12px;
+  background: color-mix(in srgb, var(--wr-text) 5%, transparent);
   border: 1px solid var(--wr-border);
-  background: rgba(255,255,255,0.035);
+}
+.wr-seg-btn {
+  flex: 1; cursor: pointer; border: 0; background: transparent;
   color: var(--wr-text-muted);
-  font-size: 12.5px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.2;
-  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-  transition: transform .16s ease, background .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease;
+  font: inherit; font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em;
+  padding: 7px 0; border-radius: 9px;
+  transition: color .16s ease, background .16s ease, box-shadow .16s ease;
 }
-.wr-cloud-pill:hover {
-  transform: scale(1.05);
+.wr-seg-btn:hover { color: var(--wr-text); }
+.wr-seg-btn.active {
   color: var(--wr-text);
-  border-color: color-mix(in srgb, var(--wr-mode-accent) 60%, transparent);
-  background: color-mix(in srgb, var(--wr-mode-accent) 14%, transparent);
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--wr-mode-accent) 22%, transparent);
+  background: var(--wr-bg-elevated);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
 }
-.wr-cloud-pill.picked {
+.wr-seed-group { display: none; flex-direction: column; gap: 8px; }
+.wr-seed-group.active { display: flex; animation: wrSeedIn .22s ease both; }
+.wr-seed-card {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  cursor: pointer; width: 100%;
+  padding: 13px 15px; border-radius: 13px;
+  border: 1px solid var(--wr-border);
+  background: var(--wr-bg-elevated);
+  color: var(--wr-text);
+  font: inherit; font-size: 13px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3;
+  transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.wr-seed-card-txt { flex: 1; }
+.wr-seed-ret {
+  flex: none; font-size: 12px; color: var(--wr-mode-accent);
+  opacity: 0; transform: translateX(-3px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.wr-seed-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--wr-mode-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--wr-mode-accent) 12%, transparent);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--wr-mode-accent) 18%, transparent);
+}
+.wr-seed-card:hover .wr-seed-ret { opacity: 1; transform: translateX(0); }
+.wr-seed-card.picked {
   animation: wrPickPop 0.45s cubic-bezier(.2,.8,.2,1.5);
-  color: var(--wr-text);
   border-color: var(--wr-mode-accent);
   background: color-mix(in srgb, var(--wr-mode-accent) 20%, transparent);
 }
-@keyframes wrPillFloat {
-  0%   { transform: translateY(0)    scale(1)     rotate(-0.7deg); }
-  50%  { transform: translateY(-7px) scale(1.025) rotate(0.7deg); }
-  100% { transform: translateY(0)    scale(1)     rotate(-0.7deg); }
+@keyframes wrSeedIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-/* Accessibilité — on coupe le flottement si l'utilisateur préfère moins d'animation */
+/* Accessibilité — coupe les transitions d'apparition si demandé */
 @media (prefers-reduced-motion: reduce) {
-  .wr-cloud-pill-wrap { animation: none !important; }
+  .wr-seed-group.active { animation: none; }
+  .wr-seed-card.picked  { animation: none; }
 }
 
 /* ═════════════════════════════════════════════════════════════════
