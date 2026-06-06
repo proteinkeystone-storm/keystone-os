@@ -306,14 +306,16 @@ function _renderShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
+        <button class="ws-iconbtn" id="wr-library-btn" data-act="library"
+                title="Bibliothèque (${_loadLibrary().length} sessions)"
+                aria-label="Ouvrir la bibliothèque">
+          ${icon('book-open', 18)}
+        </button>
       </div>
     </header>
 
-    <!-- Left rail (3 icônes — historique / personnalités agents / modes) -->
+    <!-- Left rail (2 icônes — personnalités agents / modes ; Bibliothèque déplacée en haut à droite) -->
     <aside class="wr-rail">
-      <button class="wr-rail-btn" title="Historique des sessions" aria-label="Sessions">
-        ${_iconSvg('history')}
-      </button>
       <button class="wr-rail-btn" title="Personnalités des agents" aria-label="Agents">
         ${_iconSvg('users')}
       </button>
@@ -429,18 +431,12 @@ function _wireShell(panel) {
   // Close button (rail bottom)
   panel.querySelector('#wr-close-btn')?.addEventListener('click', closeBrainstorming);
 
-  // Rail buttons : Sessions (0), Agents (1), Modes (2)
-  // Sprint 5 — Sessions ; Sprint 7 — Modes ; Sprint 7.5 — Agents
+  // Rail buttons : Agents (0), Modes (1). Bibliothèque déplacée en haut à droite (Sprint 7.12).
   const railBtns = panel.querySelectorAll('.wr-rail-btn');
-  if (railBtns[0]) {
-    railBtns[0].addEventListener('click', () => _openLibraryModal(panel));
-  }
-  if (railBtns[1]) {
-    railBtns[1].addEventListener('click', () => _openAgentsModal(panel));
-  }
-  if (railBtns[2]) {
-    railBtns[2].addEventListener('click', () => _openModesModal(panel));
-  }
+  if (railBtns[0]) railBtns[0].addEventListener('click', () => _openAgentsModal(panel));
+  if (railBtns[1]) railBtns[1].addEventListener('click', () => _openModesModal(panel));
+  // Bibliothèque des sessions — bouton top-right (cohérence cross-outils, picto book-open)
+  panel.querySelector('#wr-library-btn')?.addEventListener('click', () => _openLibraryModal(panel));
 
   // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
   const signalsToggle = panel.querySelector('#wr-signals-toggle');
@@ -1867,7 +1863,7 @@ function _renderLibraryModal(panel, modal) {
   modal.innerHTML = `
     <div class="wr-library-inner">
       <div class="wr-library-head">
-        <div class="wr-library-title">Bibliothèque de sessions</div>
+        <div class="wr-library-title">Bibliothèque</div>
         <button type="button" class="wr-library-close" aria-label="Fermer">${_iconSvg('x')}</button>
       </div>
       ${all.length === 0
