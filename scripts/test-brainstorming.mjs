@@ -24,6 +24,9 @@ import { execSync } from 'node:child_process';
 import { readFile, access }   from 'node:fs/promises';
 import { fileURLToPath }      from 'node:url';
 import { dirname, join }      from 'node:path';
+// Source de vérité du modèle IA (cf. lib/ai-model.js) — on teste le
+// CÂBLAGE des MODEL_ID sur KS_AI_MODEL plutôt qu'une chaîne figée.
+import { KS_AI_MODEL }        from '../workers/src/lib/ai-model.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT      = join(__dirname, '..');
@@ -76,7 +79,6 @@ const expectedFiles = [
   'workers/src/lib/brainstorming-orchestrator.js',
   'K_STORE_ASSETS/PADS/A-COM-003.json',
   'K_STORE_ASSETS/HELP/A-COM-003.json',
-  'app/_legacy/muse-v1/muse.js',   // archive Muse v1
 ];
 for (const f of expectedFiles) {
   if (await fileExists(f)) ok(`existe : ${f}`);
@@ -632,46 +634,53 @@ try {
   else
     ko('Sprint 7.3 : cultural pas assez précis sur référent', '');
 
-  // ─── Sprint 7.4 — hybride Llama (streaming) + Gemma (synth/insights) ─
-  // 5.32 — MODEL_ID_HEAVY = Gemma 4 26B
-  if (workerRoute.match(/MODEL_ID_HEAVY\s*=\s*['"]@cf\/google\/gemma-4-26b-a4b-it['"]/))
-    ok('Sprint 7.4 : MODEL_ID_HEAVY = Gemma 4 26B (synthesizer + insights)');
+  // ─── Sprint 7.4 → consolidation moteur unique (2026-05-29) ────────
+  // L'ancien mix Llama 3.1 8B (streaming) + Gemma 4 26B (heavy) a été
+  // remplacé par un MOTEUR UNIQUE défini dans lib/ai-model.js
+  // (KS_AI_MODEL). Les deux RÔLES restent distincts via deux constantes
+  // (MODEL_ID = streaming multi-agent ; MODEL_ID_HEAVY = one-shot
+  // synth/insights), toutes deux câblées sur KS_AI_MODEL. On teste le
+  // CÂBLAGE sur la source de vérité, pas une chaîne figée → reste vert
+  // à chaque future migration de modèle.
+  // 5.32 — MODEL_ID_HEAVY (one-shot synth/insights) câblé sur KS_AI_MODEL
+  if (workerRoute.match(/MODEL_ID_HEAVY\s*=\s*KS_AI_MODEL/))
+    ok(`Sprint 7.4 : MODEL_ID_HEAVY câblé sur KS_AI_MODEL (${KS_AI_MODEL})`);
   else
-    ko('Sprint 7.4 : MODEL_ID_HEAVY manquant ou pas Gemma 4', '');
+    ko('Sprint 7.4 : MODEL_ID_HEAVY non câblé sur KS_AI_MODEL (lib/ai-model.js)', '');
 
-  // 5.33 — MODEL_ID streaming reste Llama 3.1 8B
-  if (workerRoute.match(/MODEL_ID\s*=\s*['"]@cf\/meta\/llama-3\.1-8b-instruct['"]/))
-    ok('Sprint 7.4 : MODEL_ID streaming reste Llama 3.1 8B (dictée vocale)');
+  // 5.33 — MODEL_ID (streaming multi-agent) câblé sur KS_AI_MODEL
+  if (workerRoute.match(/MODEL_ID\s*=\s*KS_AI_MODEL/))
+    ok(`Sprint 7.4 : MODEL_ID streaming câblé sur KS_AI_MODEL (${KS_AI_MODEL})`);
   else
-    ko('Sprint 7.4 : MODEL_ID streaming a bougé !', '');
+    ko('Sprint 7.4 : MODEL_ID streaming non câblé sur KS_AI_MODEL (lib/ai-model.js)', '');
 
-  // 5.34 — _generateSynthesis (Gemma) appelle MODEL_ID_HEAVY
-  // On cible précisément la fonction Gemma (paramètre env), pas Claude
+  // 5.34 — _generateSynthesis appelle MODEL_ID_HEAVY
+  // On cible précisément la fonction synth (paramètre env), pas Claude
   const synthBlock = workerRoute.split(/async function _generateSynthesis\(env/)[1]?.split('async function')[0] || '';
   if (synthBlock.includes('MODEL_ID_HEAVY'))
-    ok('Sprint 7.4 : _generateSynthesis utilise MODEL_ID_HEAVY (Gemma 4)');
+    ok('Sprint 7.4 : _generateSynthesis utilise MODEL_ID_HEAVY (rôle heavy)');
   else
-    ko('Sprint 7.4 : _generateSynthesis encore sur Llama', '');
+    ko('Sprint 7.4 : _generateSynthesis n\'utilise pas MODEL_ID_HEAVY', '');
 
   // 5.35 — _extractInsights appelle MODEL_ID_HEAVY
   const insightsBlock = workerRoute.split('_extractInsights')[1]?.split('async function')[0] || '';
   if (insightsBlock.includes('MODEL_ID_HEAVY'))
-    ok('Sprint 7.4 : _extractInsights utilise MODEL_ID_HEAVY (Gemma 4)');
+    ok('Sprint 7.4 : _extractInsights utilise MODEL_ID_HEAVY (rôle heavy)');
   else
-    ko('Sprint 7.4 : _extractInsights encore sur Llama', '');
+    ko('Sprint 7.4 : _extractInsights n\'utilise pas MODEL_ID_HEAVY', '');
 
-  // 5.36 — Streaming agents reste sur MODEL_ID (Llama)
+  // 5.36 — Streaming agents reste sur MODEL_ID (rôle streaming, pas heavy)
   // Cherche le bloc où on a aiStream = await env.AI.run(... — il doit
-  // utiliser MODEL_ID (Llama), pas MODEL_ID_HEAVY
+  // utiliser MODEL_ID, pas MODEL_ID_HEAVY
   const streamMatch = workerRoute.match(/aiStream\s*=\s*await\s+env\.AI\.run\((MODEL_ID(?:_HEAVY)?)/);
   if (streamMatch && streamMatch[1] === 'MODEL_ID')
-    ok('Sprint 7.4 : streaming agents reste sur MODEL_ID (Llama, pour la dictée vocale)');
+    ok('Sprint 7.4 : streaming agents reste sur MODEL_ID (rôle streaming, dictée vocale)');
   else
-    ko('Sprint 7.4 : streaming agents bascule sur HEAVY (KO Gemma raisonneur !)', streamMatch?.[1] || 'introuvable');
+    ko('Sprint 7.4 : streaming agents bascule sur HEAVY (KO !)', streamMatch?.[1] || 'introuvable');
 
-  // 5.37 — Détection finish_reason=length pour Gemma (pattern Ghost Writer)
+  // 5.37 — Détection finish_reason=length (pattern Ghost Writer, cap raisonneur)
   if (workerRoute.includes('finish_reason') && workerRoute.includes('length'))
-    ok('Sprint 7.4 : détection finish_reason="length" présente (cap Gemma raisonneur)');
+    ok('Sprint 7.4 : détection finish_reason="length" présente (cap raisonneur)');
   else
     ko('Sprint 7.4 : pas de détection finish_reason=length', '');
 
@@ -733,11 +742,12 @@ try {
   else
     ko('Devil-Haiku : pas de fallback Llama (if (!streamed))', '');
 
-  // 5.47 — MODEL_ID reste Llama pour les 8 autres agents (non régressé)
-  if (workerRoute.match(/MODEL_ID\s*=\s*['"]@cf\/meta\/llama-3\.1-8b-instruct['"]/))
-    ok('Devil-Haiku : les 8 autres agents restent sur Llama (MODEL_ID intact)');
+  // 5.47 — Les 8 autres agents restent sur le moteur Keystone standard
+  // (MODEL_ID = KS_AI_MODEL) ; seul devil bascule en BYOK Claude Haiku.
+  if (workerRoute.match(/MODEL_ID\s*=\s*KS_AI_MODEL/))
+    ok(`Devil-Haiku : les 8 autres agents restent sur le moteur standard (MODEL_ID = KS_AI_MODEL = ${KS_AI_MODEL})`);
   else
-    ko('Devil-Haiku : MODEL_ID a bougé !', '');
+    ko('Devil-Haiku : MODEL_ID non câblé sur KS_AI_MODEL (lib/ai-model.js)', '');
 } catch (e) { ko('Worker route : read KO', e.message); }
 
 // ─────────────────────────────────────────────────────────────────
