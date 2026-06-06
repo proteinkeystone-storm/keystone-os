@@ -4248,7 +4248,7 @@ function _renderSettingsBody() {
                         <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
                     </label>
                 </div>
-                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : 📊 statistiques certifiées, ✦ phrases IA contextuelles, et 📢 annonces. Rotation toutes les 10 secondes. Activé par défaut.</div>
+                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : 📊 statistiques certifiées, ✦ phrases IA contextuelles, et 📢 annonces. Rotation toutes les 7 secondes (la phrase s'écrit en direct). Activé par défaut.</div>
             </div>`,
         },
         {
@@ -5053,7 +5053,7 @@ let _livingUrgentLock        = false; // true si un Pilotable URGENT (≥80) mon
 // le même sujet. Le Pilotable n'apparaît que s'il y en a un actif côté
 // serveur (sinon fallback Calculateur).
 const LIVING_CYCLE     = ['calculator', 'ai', 'pilotable'];
-const LIVING_ROTATE_MS = 10000;  // 10s entre chaque rotation
+const LIVING_ROTATE_MS = 7000;   // 7s entre chaque rotation (frappe ~1,5-2s + lecture)
 
 function _escapeLivingText(s) {
     return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
@@ -5148,6 +5148,46 @@ function _setHeroDstVisible(visible) {
     if (dst) dst.style.display = visible ? '' : 'none';
 }
 
+// ── Effet machine à écrire (motion graphic) pour la phrase ────────
+// Rythme aligné sur le typewriter Brainstorming (~22 chars/sec + pauses
+// de ponctuation), version autonome pour une phrase courte déjà connue.
+const LIVING_TYPE_TICK_MS    = 45;   // base ~22 chars/sec
+const LIVING_TYPE_PAUSE_END  = 260;  // pause supplémentaire après . ! ?
+const LIVING_TYPE_PAUSE_SOFT = 110;  // pause supplémentaire après , ; :
+let _livingTypeTimer = null;
+
+const _livingReducedMotion = () =>
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+
+// Écrit `text` caractère par caractère dans textEl. Annule toute frappe en
+// cours. Respecte prefers-reduced-motion (affichage direct, sans animation).
+function _typeLivingText(container, textEl, text) {
+    if (_livingTypeTimer) { clearTimeout(_livingTypeTimer); _livingTypeTimer = null; }
+    const full = String(text);
+    if (_livingReducedMotion()) {
+        textEl.textContent = full;
+        container.classList.remove('is-typing');
+        return;
+    }
+    textEl.textContent = '';
+    container.classList.add('is-typing');
+    let i = 0;
+    const step = () => {
+        if (i >= full.length) {
+            _livingTypeTimer = null;
+            container.classList.remove('is-typing');
+            return;
+        }
+        const ch = full[i++];
+        textEl.textContent += ch;
+        let delay = LIVING_TYPE_TICK_MS;
+        if (/[.!?]/.test(ch))      delay += LIVING_TYPE_PAUSE_END;
+        else if (/[,;:]/.test(ch)) delay += LIVING_TYPE_PAUSE_SOFT;
+        _livingTypeTimer = setTimeout(step, delay);
+    };
+    step();
+}
+
 function _paintLivingState(el, data) {
     // URGENT lock : un Pilotable priorité ≥ 80 monopolise l'affichage
     // (pas de rotation) tant qu'il est actif côté serveur.
@@ -5161,33 +5201,33 @@ function _paintLivingState(el, data) {
 
     const iconName = data.icon || 'bar-chart';
     const iconHtml = uiIcon(iconName, 14);
-    const newHtml  = `<span class="ks-living-icon" data-mode="${_escapeLivingText(data.mode || 'calculator')}">${iconHtml}</span><span class="ks-living-text">${_escapeLivingText(data.text)}</span>`;
+    const mode     = _escapeLivingText(data.mode || 'calculator');
+    const text     = String(data.text || '');
 
     // Living V2 affiche quelque chose → on masque la ligne DST d'ambiance
     _setHeroDstVisible(false);
 
-    // Si contenu identique, juste s'assurer que c'est visible (pas de re-fade inutile)
-    if (el.innerHTML === newHtml) {
-        el.hidden = false;
-        return;
-    }
+    // Phrase déjà affichée en entier ET visible → ne pas la re-taper.
+    if (el.dataset.livingText === text && !el.hidden) return;
 
-    // Premier paint ou ré-affichage après hidden → fade-in direct
-    if (!el.innerHTML || el.hidden) {
-        el.innerHTML = newHtml;
+    // Pose l'icône + un conteneur texte VIDE, puis tape le texte dedans.
+    // (Le texte passe par textContent → zéro risque d'injection HTML.)
+    const paint = () => {
+        el.innerHTML = `<span class="ks-living-icon" data-mode="${mode}">${iconHtml}</span><span class="ks-living-text"></span>`;
+        el.dataset.livingText = text;
         el.classList.remove('fade-out');
         el.classList.add('fade-in');
         el.hidden = false;
-        return;
-    }
+        const textEl = el.querySelector('.ks-living-text');
+        if (textEl) _typeLivingText(el, textEl, text);
+    };
 
-    // Crossfade 300ms : fade-out → swap contenu → fade-in
+    // Premier paint ou ré-affichage après hidden → frappe directe.
+    if (!el.innerHTML || el.hidden) { paint(); return; }
+
+    // Sinon : fade-out de l'ancienne phrase (280ms) puis frappe de la nouvelle.
     el.classList.add('fade-out');
-    setTimeout(() => {
-        el.innerHTML = newHtml;
-        el.classList.remove('fade-out');
-        el.classList.add('fade-in');
-    }, 280);
+    setTimeout(paint, 280);
 }
 
 async function _renderLivingLayer(preferMode = null) {
@@ -5198,6 +5238,7 @@ async function _renderLivingLayer(preferMode = null) {
     if (localStorage.getItem(LS_LIVING_ON) === '0') {
         el.hidden = true;
         el.innerHTML = '';
+        if (_livingTypeTimer) { clearTimeout(_livingTypeTimer); _livingTypeTimer = null; }
         if (_livingRotationInterval) {
             clearInterval(_livingRotationInterval);
             _livingRotationInterval = null;

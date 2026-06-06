@@ -672,6 +672,25 @@ html.light-mode .engine-logo-light { display: block !important; }
   .ks-living { max-width: 100%; }
 }
 
+/* Curseur de frappe (effet machine à écrire) — visible pendant la dictée.
+   Le texte passe par textContent ; ce caret ::after suit le dernier char. */
+.ks-living.is-typing .ks-living-text::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--gold);
+  border-radius: 1px;
+  opacity: .85;
+  animation: ks-living-caret .9s steps(1) infinite;
+}
+@keyframes ks-living-caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ks-living.is-typing .ks-living-text::after { display: none; animation: none; }
+}
+
 /* Dual logo dark/light */
 #ks-logo-light { display: none; }
 html.light-mode #ks-logo-dark  { display: none; }

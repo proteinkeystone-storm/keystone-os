@@ -494,17 +494,20 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
   const weekday = new Date().toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
 
   const systemPrompt = [
-    'Tu es Living Layer, l\'ordinateur de bord de Keystone OS.',
-    'Tu écris UNE phrase courte (max 16 mots) affichée sous "Bonjour, ' + firstName + '" du dashboard.',
+    'Tu es l\'analyseur de télémétrie du Living Layer, l\'ordinateur de bord de Keystone OS.',
+    'Tu restitues UN insight factuel, affiché sous "Bonjour, ' + firstName + '" du dashboard.',
+    'Tu ne fais que REFORMULER les signaux fournis — tu ne calcules ni n\'estimes jamais un chiffre toi-même.',
     '',
-    'Règles strictes :',
-    '- Une seule phrase, max 16 mots, point final',
-    '- Ton naturel, opérationnel, jamais corporate ni décoratif',
-    '- DOIS exploiter UN signal concret de la liste fournie (chiffre ou état)',
-    '- Ne JAMAIS inventer ni déformer un chiffre, ni ajouter d\'interprétation hasardeuse',
-    '- Pas de "Bonjour" / "Salut" (déjà dit au-dessus)',
-    '- Pas d\'emoji, pas de question vide, pas de CTA fictif',
-    '- Réponse JSON STRICT : {"phrase":"..."}',
+    'CONTRAINTES DE STYLE ABSOLUES :',
+    '- Une seule phrase, 15 mots maximum, terminée par un point.',
+    '- Ton neutre, sec, précis, analytique — style relevé d\'instrument, jamais "coach de vie".',
+    '- Interdiction formelle des points d\'exclamation et des emojis.',
+    '- Interdiction de féliciter (pas de "Bravo", "Super", "Génial", "Champion", "Bien joué").',
+    '- Interdiction des conseils moralisateurs ou pseudo-philosophiques (ni "pense à faire une pause", ni "prends soin de toi").',
+    '- DOIS s\'appuyer sur UN signal concret de la liste (chiffre ou état réel).',
+    '- Ne JAMAIS inventer, arrondir ni déformer un chiffre.',
+    '- Pas de "Bonjour" / "Salut" (déjà affiché au-dessus).',
+    '- Réponse en JSON STRICT : {"phrase":"..."}',
   ].join('\n');
 
   const userPrompt = [
@@ -517,6 +520,37 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
   ].join('\n');
 
   return { systemPrompt, userPrompt, topic };
+}
+
+// ── Garde-fous de sortie (§5, 2026-06-06) ─────────────────────────
+// Le mode IA est le SEUL non-déterministe du board. On intercepte toute
+// phrase qui enfreint le cahier des charges de style (exclamation, emoji,
+// félicitation, ton "coach de vie", sur-longueur) AVANT affichage. Phrase
+// rejetée → null → le caller bascule sur le Calculateur (relevé certifié,
+// zéro risque qualité). Volontairement CONSERVATEUR : on ne bloque que des
+// violations NETTES, pour ne pas vider le mode IA de sa substance.
+const _LIVING_BANNED = [
+  /[!¡]/,                                                                              // exclamations
+  /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u, // emojis / pictos / flèches
+  /\bbravo\b/i, /\bf[ée]licitations?\b/i, /\bchampions?\b/i,
+  /\bg[ée]nial\b/i, /\bsuper\s+(?:travail|boulot|job)\b/i, /\bbien\s+jou[ée]\b/i,
+  /\bchapeau\b/i, /\bfi[èe]r[e]?\s+de\s+(?:toi|vous)\b/i, /\bcontinue[zr]?\s+comme\s+[çc]a\b/i,
+  /\bprene?z?\s+une\s+pause\b/i, /\bnuit\s+à\s+(?:ta|votre)\s+sant[ée]\b/i,
+  /\bpense[zr]?\s+à\s+(?:vous|toi)\b/i, /\bprend(?:re|s)?\s+soin\b/i, /\bd[ée]tende[zr]?-?vous\b/i,
+  /\breste[zr]?\s+concentr[ée]/i, /\bne\s+(?:vous|te)\s+laisse[zr]?\s+pas\s+distraire/i,
+  /\brespire[zr]?\b/i,
+];
+
+// Retourne la phrase si elle passe tous les garde-fous, sinon null.
+function _validateLivingPhrase(phrase) {
+  const p = (phrase || '').toString().trim();
+  if (p.length < 8) return null;                                   // vide / trop court
+  const words = p.split(/\s+/).filter(Boolean).length;
+  if (words > 18 || p.length > 140) return null;                   // sur-longueur nette
+  for (const rx of _LIVING_BANNED) {
+    if (rx.test(p)) return null;                                   // style interdit → fallback
+  }
+  return p;
 }
 
 // Parsing commun : extrait {"phrase":"..."} d'une sortie LLM (tolérant
@@ -535,7 +569,7 @@ function _parseAiPhrase(rawText) {
     }
   } catch (e) { /* fallthrough */ }
   const phrase = (parsed?.phrase || '').toString().trim().slice(0, 200);
-  return phrase.length >= 8 ? phrase : null;
+  return _validateLivingPhrase(phrase);
 }
 
 // Mode IA via Claude Haiku 4.5 (Anthropic API directe, BYOK). Retourne
