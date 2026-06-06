@@ -683,11 +683,11 @@ try {
   else
     ko('Sprint 7.8 : userReactions non pondéré', '');
 
-  // 5.39 — Sprint 7.11/7.12 : formule progression linéaire, scalée au comité actif (rosterN → N)
-  if (consensusBlock.includes('distinctAgents') && consensusBlock.match(/0\.9\s*\/\s*N/))
-    ok('Sprint 7.11/7.12 : formule Avancement = (agents distincts / N comité) × 90%');
+  // 5.39 — Sprint 7.12 : un tour de table complet = 100% (plus de réserve 90%).
+  if (consensusBlock.includes('Math.min(distinctAgents.size, N) / N') && /progressScore\s*>=\s*1/.test(consensusBlock))
+    ok('Sprint 7.12 : Avancement = 100% au tour de table complet (distinctAgents/N + court-circuit ≥1)');
   else
-    ko('Sprint 7.11 : formule progression absente', '');
+    ko('Sprint 7.12 : formule Avancement (100% au tour complet) absente', '');
 
   // ─── Sprint 7.9 — BYOK Claude pour Synthesizer ──────────────────
   // 5.40 — _generateSynthesisClaude fait fetch vers Anthropic API

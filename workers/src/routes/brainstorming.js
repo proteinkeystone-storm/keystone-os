@@ -242,13 +242,11 @@ const REACTIONS_NEGATIVE = new Set(['🤔', '👀']);
 function _computeConsensus(history, rosterN = 8) {
   if (!Array.isArray(history) || history.length === 0) return 0;
   const distinctAgents = new Set();
-  let synthSpoke = false;
   let reactionsScore = 0;
   for (const turn of history) {
     if (!turn || !turn.agent_id) continue;
     if (turn.agent_id === 'user') continue;
-    if (turn.agent_id === 'synth') synthSpoke = true;
-    else distinctAgents.add(turn.agent_id);
+    if (turn.agent_id !== 'synth') distinctAgents.add(turn.agent_id);
     // Sprint 7.8 — pondération userReactions
     if (Array.isArray(turn.userReactions) && turn.userReactions.length > 0) {
       let delta = 0;
@@ -260,14 +258,16 @@ function _computeConsensus(history, rosterN = 8) {
       reactionsScore += Math.max(-0.08, Math.min(0.08, delta));
     }
   }
-  // Tour de table complet du comité = 90% (on réserve 10% pour synth + réactions).
+  // Sprint 7.12 — un tour de table COMPLET = 100% (rester bloqué à 90% prêtait
+  // à confusion). progressScore atteint 1.0 quand tous les agents du comité ont
+  // parlé. Les réactions ne sont qu'une nuance PENDANT la montée : une fois le
+  // tour bouclé, on affiche 100% net.
   // rosterN = nb d'agents de débat du comité actif (8 par défaut / legacy).
   const N = Math.max(1, rosterN || 8);
-  const progressScore = Math.min(distinctAgents.size, N) * (0.9 / N);
-  const synthBonus = synthSpoke ? 0.1 : 0;
-  // Cap réactions ±10% sur le score global
+  const progressScore = Math.min(distinctAgents.size, N) / N;
+  if (progressScore >= 1) return 1;
   const reactionsAdjusted = Math.max(-0.1, Math.min(0.1, reactionsScore));
-  return Math.max(0, Math.min(1, progressScore + synthBonus + reactionsAdjusted));
+  return Math.max(0, Math.min(1, progressScore + reactionsAdjusted));
 }
 
 function _computeTension(history) {

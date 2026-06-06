@@ -1778,6 +1778,60 @@ function _renderAgentsSelector(panel, modal) {
   if (selectorOn) _wireRosterControls(modal, panel, () => _renderAgentsSelector(panel, modal));
 }
 
+// ── Nuage d'amorces (Phase 2) — angles de départ par mode ────────
+// Bulles cliquables, organiques (flottantes + respirantes), groupées en
+// grappes. Un clic nourrit le brief. Le contenu s'adapte au mode cognitif.
+const SEED_ANGLES_BY_MODE = {
+  exploration: [
+    { label: 'Défricher', pills: ['Et si on partait d\'une page blanche ?', 'Les usages qu\'on n\'avait pas prévus', 'Ce que personne n\'ose faire dans le secteur'] },
+    { label: 'Provoquer', pills: ['L\'idée qu\'on n\'ose pas dire tout haut', 'Inverser la logique du marché', 'Le scénario le plus ambitieux'] },
+  ],
+  launch: [
+    { label: 'Faire du bruit', pills: ['Le lancement qui marque dès J+1', 'L\'accroche qui arrête le scroll', 'Le coup d\'éclat à petit budget'] },
+    { label: 'Canaux', pills: ['Le canal qu\'on n\'a jamais testé', 'Ce qu\'on peut sortir en 2 semaines', 'Le bon moment pour lancer'] },
+  ],
+  branding: [
+    { label: 'Identité', pills: ['Notre archétype de marque', 'La promesse en 3 mots', 'Ce qu\'on défend vraiment'] },
+    { label: 'Voix', pills: ['Le ton qu\'on n\'ose pas encore', 'Ce qui nous rend reconnaissables', 'La signature qu\'on n\'oublie pas'] },
+  ],
+  growth: [
+    { label: 'Acquisition', pills: ['Le levier d\'acquisition sous-exploité', 'Transformer un client en ambassadeur', 'Le moment d\'activation clé'] },
+    { label: 'Rétention', pills: ['Réduire le churn de moitié', 'La métrique qui compte vraiment', 'Donner envie de revenir'] },
+  ],
+  crisis: [
+    { label: 'Réagir', pills: ['Reprendre la parole en 24h', 'Le message qui rassure', 'Qui doit parler, et comment'] },
+    { label: 'Limiter', pills: ['Ce qu\'on arrête tout de suite', 'Limiter la casse côté image', 'La ligne à ne pas franchir'] },
+  ],
+  positioning: [
+    { label: 'Différencier', pills: ['Notre angle que les autres n\'ont pas', 'La case qu\'on veut occuper', 'Ce qu\'on n\'est PAS'] },
+    { label: 'Cibler', pills: ['À qui on s\'adresse vraiment', 'La phrase qui nous résume', 'Le besoin qu\'on est seuls à couvrir'] },
+  ],
+  repositioning: [
+    { label: 'Pivoter', pills: ['Ce qu\'on garde, ce qu\'on jette', 'Le cap d\'après', 'Le pivot le plus audacieux'] },
+    { label: 'Renaître', pills: ['Notre nouvelle raison d\'être', 'Le marché qu\'on n\'a pas encore osé', 'Se réinventer sans se trahir'] },
+  ],
+};
+
+function _seedCloudHTML(modeId) {
+  const groups = SEED_ANGLES_BY_MODE[modeId] || SEED_ANGLES_BY_MODE.exploration;
+  let n = 0;
+  return groups.map(g => `
+    <div class="wr-cloud-group">
+      <span class="wr-cloud-group-label">${_esc(g.label)}</span>
+      <div class="wr-cloud-group-pills">
+        ${g.pills.map(p => {
+          // décalage organique : chaque bulle flotte à son propre rythme
+          const delay = ((n % 5) * 0.5).toFixed(2);
+          const dur   = (5.2 + (n % 4) * 0.7).toFixed(2);
+          n++;
+          return `<span class="wr-cloud-pill-wrap" style="animation-delay:${delay}s;animation-duration:${dur}s;">
+            <button type="button" class="wr-cloud-pill" data-seed="${_esc(p)}">${_esc(p)}</button>
+          </span>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
 // ── Config centrale : écran de préparation (avant le 1er brief) ──
 function _renderCenterConfig(panel) {
   const root = panel.querySelector('#wr-setup');
@@ -1797,10 +1851,10 @@ function _renderCenterConfig(panel) {
   root.innerHTML = `
     <div class="wr-setup-head">
       <div class="wr-setup-title">Préparez la séance</div>
-      <div class="wr-setup-sub">Choisissez l'angle et le comité, puis posez votre brief ci-dessous pour lancer le débat.</div>
+      <div class="wr-setup-sub">Réglez l'angle et le comité, piochez une amorce si besoin, puis posez votre brief ci-dessous.</div>
     </div>
     <div class="wr-setup-step">
-      <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Angle de réflexion</div>
+      <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Mode de réflexion</div>
       <div class="wr-setup-modes">${modeChips}</div>
       <div class="wr-setup-mode-desc">${_esc(mode.description)}</div>
     </div>
@@ -1809,6 +1863,10 @@ function _renderCenterConfig(panel) {
       ${selectorOn ? _rosterModeBarHTML(rosterMode, mode.label) : '<div class="wr-roster-disabled">Comité complet.</div>'}
       <div class="wr-agents-grid wr-setup-grid${rosterMode === 'manual' ? '' : ' is-auto'}">${_rosterAgentCardsHTML()}</div>
       <div class="wr-roster-foot">${_rosterFootHTML()}</div>
+    </div>
+    <div class="wr-setup-step">
+      <div class="wr-setup-step-label"><span class="wr-setup-step-num">✦</span> Une amorce pour démarrer <span class="wr-setup-step-opt">optionnel</span></div>
+      <div class="wr-cloud">${_seedCloudHTML(curMode)}</div>
     </div>
   `;
 
@@ -1821,6 +1879,20 @@ function _renderCenterConfig(panel) {
   });
   // Étape 2 — comité (barre Auto/Manuel + toggles en manuel)
   if (selectorOn) _wireRosterControls(root, panel, () => _renderCenterConfig(panel));
+  // Nuage d'amorces — un clic nourrit le brief
+  root.querySelectorAll('.wr-cloud-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const seed  = btn.dataset.seed || btn.textContent.trim();
+      const input = panel.querySelector('#wr-input');
+      if (!input) return;
+      const cur = input.value.trim();
+      input.value = cur ? `${cur} — ${seed}` : seed;
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+      btn.classList.add('picked');
+      setTimeout(() => btn.classList.remove('picked'), 650);
+    });
+  });
 }
 
 // Sprint 7.5 — Suppression d'une session de la bibliothèque
