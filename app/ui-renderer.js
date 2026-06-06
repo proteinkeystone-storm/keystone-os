@@ -5399,13 +5399,17 @@ function _renderLivingReadout(metrics) {
     let focusMin = 0;
     try { focusMin = _focusSnapshot().focusMin || 0; } catch (e) { /* no-op */ }
     const segs = [];
-    if (+m.scans24h   > 0) segs.push(['Scans',    String(+m.scans24h)]);
-    if (+m.keyform24h > 0) segs.push(['Key Form', String(+m.keyform24h)]);
-    if (focusMin     >= 5) segs.push(['Focus',    focusMin + ' min']);
-    if (+m.ghostUsed  > 0 && m.ghostQuota != null) segs.push(['Ghost', (+m.ghostUsed) + '/' + (+m.ghostQuota)]);
+    if (+m.scans24h > 0) {
+        // Tendance ↑ vs hier (delta calculé serveur, présent seulement si connecté).
+        const trend = (+m.scansDelta > 0) ? ` <span class="up">↑${(+m.scansDelta)}</span>` : '';
+        segs.push({ k: 'Scans', vHtml: _escapeLivingText(String(+m.scans24h)) + trend });
+    }
+    if (+m.keyform24h > 0) segs.push({ k: 'Key Form', vHtml: _escapeLivingText(String(+m.keyform24h)) });
+    if (focusMin     >= 5) segs.push({ k: 'Focus',    vHtml: _escapeLivingText(focusMin + ' min') });
+    if (+m.ghostUsed  > 0 && m.ghostQuota != null) segs.push({ k: 'Ghost', vHtml: _escapeLivingText((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
     if (!segs.length) { host.hidden = true; host.innerHTML = ''; return; }
-    host.innerHTML = segs.map(([k, v]) =>
-        `<span class="seg"><span class="k">${_escapeLivingText(k)}</span><span class="v">${_escapeLivingText(v)}</span></span>`
+    host.innerHTML = segs.map(s =>
+        `<span class="seg"><span class="k">${_escapeLivingText(s.k)}</span><span class="v">${s.vHtml}</span></span>`
     ).join('');
     host.hidden = false;
 }

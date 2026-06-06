@@ -695,7 +695,7 @@ html.light-mode .engine-logo-light { display: block !important; }
    Scans · Key Form · Focus · Ghost. Mono, séparateurs fins, se masque seule. */
 .ks-living-readout {
   display: flex; align-items: center; flex-wrap: wrap;
-  margin: 0 0 6px;
+  margin: 7px 0 6px;   /* décroché de la phrase pour la laisser respirer */
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
   font-size: 11px; letter-spacing: .02em; color: var(--tx2);
 }
@@ -713,6 +713,9 @@ html.light-mode .engine-logo-light { display: block !important; }
 }
 .ks-living-readout .v {
   color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ks-living-readout .up {
+  color: var(--green); font-weight: 600; margin-left: 3px;
 }
 @media (max-width: 640px) {
   .ks-living-readout { font-size: 10px; }

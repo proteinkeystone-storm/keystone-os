@@ -168,9 +168,10 @@ async function _readSnapshotNear(env, tenantId, targetDay) {
 // Compare les cumuls d'aujourd'hui avec hier (J-1) et la semaine passée (J-7).
 // Retourne des phrases factuelles à fort intérêt (deltas réels, zéro invention).
 async function _computeTrendCandidates(env, tenantId, current) {
-  if (!tenantId) return [];
+  if (!tenantId) return { candidates: [], scansDelta: 0 };
   await ensureMetricsSchema(env);
   const candidates = [];
+  let scansDelta = 0;
   const dayMs = 86400000;
   const fmtDay = (d) => new Date(d).toISOString().slice(0, 10);
   const yesterday = fmtDay(Date.now() - dayMs);
@@ -185,6 +186,7 @@ async function _computeTrendCandidates(env, tenantId, current) {
   if (snapY?.metrics && Number.isFinite(snapY.metrics.scansTotal)) {
     const delta = (current.scansTotal || 0) - snapY.metrics.scansTotal;
     if (delta > 0) {
+      scansDelta = delta;
       candidates.push({
         text:  `${delta} nouveau${delta > 1 ? 'x' : ''} scan${delta > 1 ? 's' : ''} Smart QR depuis hier.`,
         score: 82, topic: 'smartqr',
@@ -211,7 +213,7 @@ async function _computeTrendCandidates(env, tenantId, current) {
       });
     }
   }
-  return candidates;
+  return { candidates, scansDelta };
 }
 
 // ── Helpers sensor (côté serveur) ─────────────────────────────────
@@ -542,6 +544,7 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
     '- DOIS s\'appuyer sur UN signal concret de la liste (chiffre ou état réel).',
     '- Ne JAMAIS inventer, arrondir ni déformer un chiffre.',
     '- Pas de "Bonjour" / "Salut" (déjà affiché au-dessus).',
+    '- Ne commence pas par le prénom ni par une virgule ; entre directement dans le constat.',
     '- Réponse en JSON STRICT : {"phrase":"..."}',
   ].join('\n');
 
@@ -785,7 +788,8 @@ export async function handleLivingBoard(request, env) {
       _computeTrendCandidates(env, lookupHmac, cumuls),
       _readFeedback(env, lookupHmac),
     ]);
-    trendCandidates = trends || [];
+    trendCandidates = (trends && trends.candidates) || [];
+    if (trends && trends.scansDelta > 0) metrics.scansDelta = trends.scansDelta;
     feedback = fb || {};
   }
 
