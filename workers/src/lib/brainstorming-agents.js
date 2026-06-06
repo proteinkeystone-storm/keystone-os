@@ -237,9 +237,28 @@ export function getAgent(id) {
   return AGENTS.find(a => a.id === id) || null;
 }
 
-export function getAgentNamesForPrompt(excludeId) {
+export function getAgentNamesForPrompt(excludeId, roster) {
+  // roster (optionnel, Sprint 7.12) — comité réduit actif : on ne liste à
+  // l'agent que ses collègues présents (sinon il citerait des absents).
+  const allow = Array.isArray(roster) && roster.length ? new Set(roster) : null;
   return AGENTS
-    .filter(a => a.id !== excludeId)
+    .filter(a => a.id !== excludeId && (!allow || allow.has(a.id)))
     .map(a => `- ${a.name} (${a.role.toLowerCase()})`)
     .join('\n');
+}
+
+// Sprint 7.12 — Normalise un comité de débat reçu du frontend (active_agents) :
+// ids valides uniquement, sans synth/auto, strategic forcé (ouvre/coordonne),
+// dédupliqué (ordre préservé). Retourne toujours au moins ['strategic'].
+export function normalizeDebateRoster(ids) {
+  const valid = new Set(AGENTS.map(a => a.id));
+  const out = [];
+  const seen = new Set();
+  for (const id of (Array.isArray(ids) ? ids : [])) {
+    if (!valid.has(id) || id === 'synth' || id === 'auto' || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  if (!seen.has('strategic')) out.unshift('strategic');
+  return out;
 }

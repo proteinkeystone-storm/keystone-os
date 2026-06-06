@@ -480,7 +480,77 @@ try {
     ok(`Sprint 7.2 : Strategic ne reprend pas spontanément (next = ${nextNoStrat})`);
   else
     ko('Sprint 7.2 : Strategic reprend à tort', '');
+
+  // ─── Sprint 7.12 — comité réduit (sélecteur d'agents) ────────────
+  const agentsLib = await import(`file://${join(ROOT, 'workers/src/lib/brainstorming-agents.js')}`);
+  const { normalizeDebateRoster } = agentsLib;
+
+  // 5.25 — Un agent hors-comité ne parle JAMAIS, même si le débat regorge
+  // de ses triggers (growth exclu malgré "acquisition/viralité/funnel").
+  const rosterNoGrowth = ['strategic', 'creative', 'data', 'devil'];
+  const simRoster = [{ agent_id: 'strategic', content: 'Cadrage : parlons acquisition, viralité, canal, funnel, conversion.' }];
+  let growthSpoke = false;
+  for (let i = 0; i < 8; i++) {
+    const aid = pickNextAgent(simRoster, 'launch', rosterNoGrowth);
+    if (aid === 'growth') growthSpoke = true;
+    simRoster.push({ agent_id: aid, content: 'acquisition viralité canal funnel conversion levier' });
+  }
+  const allInRoster = simRoster.slice(1).every(t => rosterNoGrowth.includes(t.agent_id));
+  if (!growthSpoke && allInRoster)
+    ok('Sprint 7.12 : un agent hors-comité ne parle jamais (growth exclu malgré ses triggers)');
+  else
+    ko('Sprint 7.12 : agent hors-comité a parlé', `growthSpoke=${growthSpoke}, agents=${simRoster.slice(1).map(t => t.agent_id).join(',')}`);
+
+  // 5.26 — Petit comité (4 = 'crisis') : tour de table complet, tous parlent, sans doublon.
+  const roster4 = ['strategic', 'devil', 'data', 'brand'];
+  const sim4 = [{ agent_id: 'strategic', content: 'Crise : bad buzz, churn, concurrent agressif.' }];
+  const spoke4 = new Set(['strategic']);
+  for (let i = 0; i < 3; i++) {
+    const aid = pickNextAgent(sim4, 'crisis', roster4);
+    spoke4.add(aid);
+    sim4.push({ agent_id: aid, content: 'risque danger chiffre marché identité marque premium' });
+  }
+  if (roster4.every(id => spoke4.has(id)) && spoke4.size === 4)
+    ok('Sprint 7.12 : petit comité (4) — tour de table complet sans doublon');
+  else
+    ko('Sprint 7.12 : petit comité incomplet/doublon', `parlés : ${[...spoke4].join(',')}`);
+
+  // 5.27 — roster null ⇒ comité complet (legacy, zéro régression)
+  const legacyNext = pickNextAgent([{ agent_id: 'strategic', content: 'Idée audacieuse, concept de rupture.' }], 'exploration', null);
+  if (typeof legacyNext === 'string' && legacyNext !== 'strategic' && legacyNext !== 'user')
+    ok(`Sprint 7.12 : roster null ⇒ comité complet (next = ${legacyNext})`);
+  else
+    ko('Sprint 7.12 : fallback comité complet KO', `reçu ${legacyNext}`);
+
+  // 5.28 — normalizeDebateRoster : strategic forcé, synth/auto/invalides retirés, dédup.
+  const norm = normalizeDebateRoster(['data', 'synth', 'auto', 'data', 'xxx', 'devil']);
+  const normOk = norm.includes('strategic') && !norm.includes('synth') && !norm.includes('auto')
+    && !norm.includes('xxx') && norm.filter(x => x === 'data').length === 1;
+  if (normOk)
+    ok(`Sprint 7.12 : normalizeDebateRoster (strategic forcé, synth/auto/invalides exclus, dédup) → [${norm.join(',')}]`);
+  else
+    ko('Sprint 7.12 : normalizeDebateRoster incorrect', JSON.stringify(norm));
 } catch (e) { ko('Worker orchestrator : import KO', e.message); }
+
+// ─── Sprint 7.12 — comités recommandés par mode (lib frontend) ────
+try {
+  const fLib = await import(`file://${join(ROOT, 'app/lib/brainstorming-agents.js')}`);
+  const { RECOMMENDED_ROSTER_BY_MODE, getRecommendedRoster, OPPOSITION_AGENTS, MIN_DEBATE_AGENTS } = fLib;
+  let allGood = true;
+  const details = [];
+  for (const mid of EXPECTED_MODES) {
+    const r = getRecommendedRoster(mid);
+    const hasStrat  = r.includes('strategic');
+    const hasOppo   = OPPOSITION_AGENTS.some(o => r.includes(o));
+    const noSynth   = !r.includes('synth');
+    const bigEnough = r.length >= MIN_DEBATE_AGENTS;
+    if (!(hasStrat && hasOppo && noSynth && bigEnough)) { allGood = false; details.push(`${mid}:[${r.join(',')}]`); }
+  }
+  if (allGood && Object.keys(RECOMMENDED_ROSTER_BY_MODE).length === 7)
+    ok('Sprint 7.12 : 7 comités recommandés (strategic + ≥1 opposition + ≥ plancher, sans synth)');
+  else
+    ko('Sprint 7.12 : comités recommandés invalides', details.join(' | '));
+} catch (e) { ko('Sprint 7.12 : lib frontend comités — import KO', e.message); }
 
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis
 try {
@@ -613,9 +683,9 @@ try {
   else
     ko('Sprint 7.8 : userReactions non pondéré', '');
 
-  // 5.39 — Sprint 7.11 : formule progression linéaire (distinctAgents.size)
-  if (consensusBlock.includes('distinctAgents') && consensusBlock.match(/0\.9\s*\/\s*8/))
-    ok('Sprint 7.11 : formule Avancement = (agents distincts / 8) × 90%');
+  // 5.39 — Sprint 7.11/7.12 : formule progression linéaire, scalée au comité actif (rosterN → N)
+  if (consensusBlock.includes('distinctAgents') && consensusBlock.match(/0\.9\s*\/\s*N/))
+    ok('Sprint 7.11/7.12 : formule Avancement = (agents distincts / N comité) × 90%');
   else
     ko('Sprint 7.11 : formule progression absente', '');
 

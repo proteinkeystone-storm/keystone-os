@@ -360,9 +360,13 @@ export function getAgentList() {
   return AGENTS.map(a => a.id);
 }
 
-export function getAgentNamesForPrompt(excludeId) {
+export function getAgentNamesForPrompt(excludeId, roster) {
+  // roster (optionnel, Sprint 7.12) — quand un comité réduit est actif, on ne
+  // liste à l'agent que ses collègues réellement présents (sinon il citerait
+  // des agents absents du débat).
+  const allow = Array.isArray(roster) && roster.length ? new Set(roster) : null;
   return AGENTS
-    .filter(a => a.id !== excludeId)
+    .filter(a => a.id !== excludeId && (!allow || allow.has(a.id)))
     .map(a => `- ${a.name} (${a.role.toLowerCase()})`)
     .join('\n');
 }
@@ -466,6 +470,51 @@ export const COGNITIVE_MODES = [
     invite: 'Décrivez le contexte du repositionnement (perte de pertinence, érosion, pivot envisagé…).',
   },
 ];
+
+// ── Comités recommandés par mode (Sprint 7.12 — sélecteur d'agents) ──
+// "Auto" compose le comité de DÉBAT selon le mode choisi : strategic est
+// toujours inclus (ouvre + coordonne) ; synth est hors-débat (conclut, summon
+// séparé via le bouton synthèse). Chaque comité embarque au moins une voix
+// d'opposition (devil ou data) pour garantir la friction.
+// exploration = comité COMPLET (8) → l'écran par défaut reste inchangé.
+export const RECOMMENDED_ROSTER_BY_MODE = {
+  exploration:   ['strategic', 'creative', 'devil', 'consumer', 'cultural', 'growth', 'brand', 'data'],
+  launch:        ['strategic', 'growth', 'creative', 'data', 'devil'],
+  branding:      ['strategic', 'brand', 'consumer', 'creative', 'cultural', 'devil'],
+  growth:        ['strategic', 'growth', 'data', 'consumer', 'devil'],
+  crisis:        ['strategic', 'devil', 'data', 'brand'],
+  positioning:   ['strategic', 'consumer', 'cultural', 'brand', 'data'],
+  repositioning: ['strategic', 'devil', 'cultural', 'creative', 'brand'],
+};
+
+// Agent obligatoire dans le comité de débat (ouvre + coordonne, non décochable).
+export const MANDATORY_DEBATE_AGENTS = ['strategic'];
+// Agent toujours présent hors-débat (synthèse finale, summon séparé).
+export const ALWAYS_PRESENT_AGENT = 'synth';
+// Voix d'opposition — garde-fou : un comité sans l'une d'elles manque de friction.
+export const OPPOSITION_AGENTS = ['devil', 'data'];
+// Plancher : en dessous, ce n'est plus un débat (monologues côte à côte).
+export const MIN_DEBATE_AGENTS = 3;
+
+// Comité de débat recommandé pour un mode (copie défensive).
+export function getRecommendedRoster(modeId) {
+  return (RECOMMENDED_ROSTER_BY_MODE[modeId] || RECOMMENDED_ROSTER_BY_MODE.exploration).slice();
+}
+
+// Normalise un comité de débat : ids valides, sans synth/auto, strategic forcé,
+// dédupliqué (ordre préservé). Retourne toujours au moins ['strategic'].
+export function normalizeDebateRoster(ids) {
+  const valid = new Set(AGENTS.map(a => a.id));
+  const out = [];
+  const seen = new Set();
+  for (const id of (Array.isArray(ids) ? ids : [])) {
+    if (!valid.has(id) || id === 'synth' || id === 'auto' || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  if (!seen.has('strategic')) out.unshift('strategic');
+  return out;
+}
 
 export function getCognitiveMode(id) {
   return COGNITIVE_MODES.find(m => m.id === id) || COGNITIVE_MODES[0];

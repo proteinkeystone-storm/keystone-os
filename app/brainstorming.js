@@ -25,6 +25,12 @@ import {
   getAgentNamesForPrompt,
   COGNITIVE_MODES,
   getCognitiveMode,
+  getRecommendedRoster,
+  normalizeDebateRoster,
+  ALWAYS_PRESENT_AGENT,
+  MANDATORY_DEBATE_AGENTS,
+  OPPOSITION_AGENTS,
+  MIN_DEBATE_AGENTS,
 } from './lib/brainstorming-agents.js';
 
 const APP_ID = 'A-COM-003';
@@ -33,6 +39,7 @@ const APP_ID = 'A-COM-003';
 const DEFAULT_MODE         = 'exploration';      // hardcodé Sprint 1, sélecteur Sprint 7
 const BOOT_DELAY_PER_AGENT = 280;                // ms entre chaque allumage
 const SESSION_KEY          = 'ks_brainstorming_session_draft';
+const ROSTER_KEY           = 'ks_brainstorming_roster';   // Sprint 7.12 — préf comité (auto/manuel)
 // Sprint 7.1 — Tour de table complet : 8 agents non-Synthesizer parlent
 // dans un cycle avant auto-pause. Le worker dédupplique pour qu'aucun
 // agent ne parle deux fois dans le même cycle, et le frontend déclenche
@@ -229,6 +236,7 @@ export function openBrainstorming() {
   document.body.style.overflow = 'hidden';
 
   // État de session minimal
+  const _rosterPref = _rosterEnabled() ? _loadRosterPref() : null;
   _currentSession = {
     id: `wr-${Date.now()}`,
     brief: '',
@@ -238,7 +246,12 @@ export function openBrainstorming() {
     startedAt: Date.now(),
     synthesis: null,
     synthesizedAt: null,
+    // Sprint 7.12 — comité d'agents (sélecteur). 'auto' = comité du mode courant.
+    rosterMode:   _rosterPref?.mode || 'auto',
+    manualRoster: Array.isArray(_rosterPref?.manualRoster) ? _rosterPref.manualRoster : null,
+    roster:       [],   // résolu juste après (dépend de mode + rosterMode)
   };
+  _currentSession.roster = _resolveRoster();
 
   _wireShell(panel);
   bindHelpButton(panel, APP_ID);
@@ -336,7 +349,7 @@ function _renderShell() {
         <div class="wr-feed-empty-title">Brainstorming créatif</div>
         <div class="wr-feed-empty-text">
           Posez votre sujet de réflexion (lancement, repositionnement, idéation…).
-          Strategic Lead ouvrira la discussion, les 8 autres personnalités enrichiront le dialogue.
+          Strategic Lead ouvrira la discussion, le comité enrichira le dialogue.
         </div>
       </div>
     </main>
@@ -394,6 +407,7 @@ function _iconSvg(name) {
   const inlineFallback = {
     users:    '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'arrow-up': '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    check:    '<polyline points="20 6 9 17 4 12"/>',
     'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
   };
   const fallback = inlineFallback[name];
@@ -491,6 +505,8 @@ function _bootAgents(panel) {
       }
     }, 200 + i * BOOT_DELAY_PER_AGENT);
   });
+  // Sprint 7.12 — grise les pictos hors comité (synth + strategic restent allumés)
+  _applyRosterToCells(panel);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -595,6 +611,14 @@ function _applyMode(panel, modeId) {
       card.classList.toggle('active', card.dataset.modeId === mode.id);
     });
   }
+  // Sprint 7.12 — en mode AUTO, le comité de débat suit le mode cognitif.
+  if (_currentSession.rosterMode !== 'manual') {
+    _currentSession.roster = getRecommendedRoster(mode.id);
+  }
+  _applyRosterToCells(panel);
+  // Rafraîchir le sélecteur de comité s'il est ouvert (le hint "comité du mode X" change).
+  const agentsModal = panel.querySelector('#wr-agents-modal');
+  if (agentsModal) _renderAgentsSelector(panel, agentsModal);
 }
 
 // (Living Layer phrase d'ouverture — texte créatif, pas militaire)
@@ -633,6 +657,13 @@ async function _callOrchestration(panel) {
     history       : _currentSession.history,
     max_turns     : ORCHESTRATION_MAX_TURNS,
   };
+  // Sprint 7.12 — comité réduit : on transmet le comité de débat actif au
+  // worker. Le tour de table = la taille du comité (sinon le serveur vise 8).
+  const _roster = Array.isArray(_currentSession.roster) ? _currentSession.roster : [];
+  if (_rosterEnabled() && _roster.length) {
+    payload.active_agents = _roster;
+    payload.max_turns     = _roster.length;
+  }
   // BYOK Claude Haiku (2026-05-28) — si une clé Anthropic est posée dans le
   // Vault, le Devil's Advocate (agent premium) parlera via Claude Haiku au
   // lieu de Llama (caractère affûté). Le serveur ignore la clé pour les 8
@@ -1510,44 +1541,197 @@ function _openModesModal(panel) {
   });
 }
 
-// Sprint 7.5 — Modale Personnalités des agents (lecture seule)
-// Permet à l'utilisateur de comprendre QUI parle dans le débat et quel
-// est le rôle de chaque agent. Branchée sur le bouton "Agents" du rail.
+// ════════════════════════════════════════════════════════════════
+// SÉLECTEUR DE COMITÉ (roster) — Sprint 7.12
+// ════════════════════════════════════════════════════════════════
+// Permet de choisir QUI débat. Deux modes :
+//   • Auto   → le comité suit le mode cognitif (ex. Crise = strategic+devil+data+brand)
+//   • Manuel → l'utilisateur coche/décoche (Strategic + Synthesizer verrouillés)
+// Strategic Lead ouvre/coordonne, Synthesizer conclut : toujours présents.
+
+// Kill-switch / hook de gating. Ouvert à tous par défaut ; passe la clé
+// localStorage 'ks_brainstorm_roster' à 'off' pour revenir au comité complet
+// figé (ou brancher ici un gate plan MAX plus tard).
+function _rosterEnabled() {
+  try { return localStorage.getItem('ks_brainstorm_roster') !== 'off'; }
+  catch (e) { return true; }
+}
+
+function _loadRosterPref() {
+  try {
+    const raw = localStorage.getItem(ROSTER_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (!p || (p.mode !== 'auto' && p.mode !== 'manual')) return null;
+    return p;
+  } catch (e) { return null; }
+}
+
+function _saveRosterPref() {
+  if (!_currentSession) return;
+  try {
+    localStorage.setItem(ROSTER_KEY, JSON.stringify({
+      mode: _currentSession.rosterMode,
+      manualRoster: Array.isArray(_currentSession.manualRoster) ? _currentSession.manualRoster : null,
+    }));
+  } catch (e) { /* quota */ }
+}
+
+// Résout le comité courant selon (mode roster + mode cognitif).
+function _resolveRoster() {
+  if (!_currentSession) return [];
+  if (_currentSession.rosterMode === 'manual'
+      && Array.isArray(_currentSession.manualRoster)
+      && _currentSession.manualRoster.length) {
+    return normalizeDebateRoster(_currentSession.manualRoster);
+  }
+  return getRecommendedRoster(_currentSession.mode);
+}
+
+// Grise les pictos hors comité dans la rangée d'agents. synth (conclusion) et
+// strategic (obligatoire) restent toujours allumés.
+function _applyRosterToCells(panel) {
+  if (!panel || !_currentSession) return;
+  const roster = new Set(_currentSession.roster || []);
+  panel.querySelectorAll('.wr-agent-cell').forEach(cell => {
+    const id = cell.dataset.agentId;
+    const present = id === ALWAYS_PRESENT_AGENT || roster.has(id);
+    cell.classList.toggle('wr-agent-cell--off', !present);
+  });
+}
+
+function _flashRosterWarn(modal, msg) {
+  const foot = modal.querySelector('.wr-roster-foot');
+  if (!foot) return;
+  let w = foot.querySelector('.wr-roster-warn');
+  if (!w) { w = document.createElement('span'); w.className = 'wr-roster-warn'; foot.appendChild(w); }
+  w.textContent = msg;
+  w.classList.remove('flash'); void w.offsetWidth; w.classList.add('flash');
+}
+
+// Ouvre/ferme le sélecteur (toggle sur le bouton "Agents" du rail).
 function _openAgentsModal(panel) {
   let modal = panel.querySelector('#wr-agents-modal');
   if (modal) { modal.remove(); return; }
   modal = document.createElement('div');
   modal.id = 'wr-agents-modal';
   modal.className = 'wr-agents-modal';
-  const cards = AGENTS.map(a => `
-    <div class="wr-agent-card" style="--agent-color: ${a.color}; --agent-glow: ${a.color}40;">
-      <div class="wr-agent-card-head">
-        <div class="wr-agent-card-icon">${_iconSvg(a.icon)}</div>
-        <div class="wr-agent-card-name">${_esc(a.name)}</div>
-      </div>
-      <div class="wr-agent-card-role">${_esc(a.role)}</div>
-      <div class="wr-agent-card-fn">${_esc(a.function || '')}</div>
-      <div class="wr-agent-card-traits">
-        ${(a.personality || []).map(t => `<span class="wr-agent-trait">${_esc(t)}</span>`).join('')}
-      </div>
-    </div>
-  `).join('');
+  _renderAgentsSelector(panel, modal);
+  panel.appendChild(modal);
+}
+
+// Rendu + wiring du sélecteur (réutilisé après chaque changement pour refresh).
+function _renderAgentsSelector(panel, modal) {
+  const selectorOn = _rosterEnabled();
+  const roster     = new Set(_currentSession?.roster || []);
+  const rosterMode = _currentSession?.rosterMode || 'auto';
+  const modeLabel  = getCognitiveMode(_currentSession?.mode || DEFAULT_MODE).label;
+
+  const cards = AGENTS.map(a => {
+    const isSynth     = a.id === ALWAYS_PRESENT_AGENT;
+    const isMandatory = MANDATORY_DEBATE_AGENTS.includes(a.id);
+    const locked      = isSynth || isMandatory;
+    const active      = isSynth || roster.has(a.id);
+    const badge = isSynth ? 'Conclut'
+      : isMandatory ? 'Obligatoire'
+      : OPPOSITION_AGENTS.includes(a.id) ? 'Opposition' : '';
+    return `
+      <button type="button"
+              class="wr-agent-pick${active ? ' active' : ''}${locked ? ' locked' : ''}"
+              data-agent-id="${a.id}"
+              ${locked ? 'aria-disabled="true"' : ''}
+              style="--agent-color: ${a.color}; --agent-glow: ${a.color}40;"
+              title="${_esc(a.role)}">
+        <span class="wr-agent-pick-icon">${_iconSvg(a.icon)}</span>
+        <span class="wr-agent-pick-body">
+          <span class="wr-agent-pick-name">${_esc(a.name)}</span>
+          <span class="wr-agent-pick-role">${_esc(a.role)}</span>
+        </span>
+        <span class="wr-agent-pick-state">${active ? _iconSvg('check') : ''}</span>
+        ${badge ? `<span class="wr-agent-pick-badge">${badge}</span>` : ''}
+      </button>`;
+  }).join('');
+
+  // Garde-fous (mode manuel uniquement)
+  const debateCount = roster.size;   // strategic inclus, synth exclu
+  const hasOppo     = OPPOSITION_AGENTS.some(o => roster.has(o));
+  let warn = '';
+  if (selectorOn && rosterMode === 'manual') {
+    if (debateCount < MIN_DEBATE_AGENTS) warn = `Comité trop réduit — au moins ${MIN_DEBATE_AGENTS} agents pour un vrai débat.`;
+    else if (!hasOppo)                   warn = "Aucune voix d'opposition (Devil / Data) — le débat risque d'être consensuel.";
+  }
+
   modal.innerHTML = `
     <div class="wr-agents-inner">
       <div class="wr-agents-head">
-        <div class="wr-agents-title">Personnalités du boardroom</div>
-        <div class="wr-agents-sub">9 expertises distinctes qui dialoguent en direct. Chacune intervient quand le débat appelle son angle.</div>
+        <div class="wr-agents-title">Comité du boardroom</div>
+        <div class="wr-agents-sub"><strong>Strategic Lead</strong> ouvre, <strong>Synthesizer</strong> conclut — toujours présents. Choisis qui débat entre les deux.</div>
         <button type="button" class="wr-agents-close" aria-label="Fermer">${_iconSvg('x')}</button>
       </div>
+      ${selectorOn ? `
+      <div class="wr-roster-mode" role="tablist">
+        <button type="button" class="wr-roster-mode-btn${rosterMode === 'auto' ? ' active' : ''}" data-roster-mode="auto">
+          Auto<span class="wr-roster-mode-hint">comité du mode ${_esc(modeLabel)}</span>
+        </button>
+        <button type="button" class="wr-roster-mode-btn${rosterMode === 'manual' ? ' active' : ''}" data-roster-mode="manual">
+          Manuel<span class="wr-roster-mode-hint">je compose</span>
+        </button>
+      </div>` : `
+      <div class="wr-roster-disabled">Comité complet — sélecteur désactivé.</div>`}
       <div class="wr-agents-grid">${cards}</div>
+      <div class="wr-roster-foot">
+        <span class="wr-roster-count">${debateCount} agent${debateCount > 1 ? 's' : ''} au débat + synthèse</span>
+        ${warn ? `<span class="wr-roster-warn">${_esc(warn)}</span>` : ''}
+      </div>
     </div>
   `;
-  panel.appendChild(modal);
-  modal.querySelector('.wr-agents-close').addEventListener('click', (e) => {
-    e.stopPropagation();
-    modal.remove();
-  });
+
+  modal.querySelector('.wr-agents-close').addEventListener('click', (e) => { e.stopPropagation(); modal.remove(); });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  if (!selectorOn) return;
+
+  // Bascule Auto / Manuel
+  modal.querySelectorAll('.wr-roster-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.rosterMode;
+      if (!m || m === _currentSession.rosterMode) return;
+      _currentSession.rosterMode = m;
+      if (m === 'auto') {
+        _currentSession.roster = getRecommendedRoster(_currentSession.mode);
+      } else {
+        // Manuel : on part du comité courant comme base éditable
+        _currentSession.manualRoster = _currentSession.roster.slice();
+      }
+      _saveRosterPref();
+      _applyRosterToCells(panel);
+      _renderAgentsSelector(panel, modal);
+    });
+  });
+
+  // Toggle d'un agent (verrouillés ignorés ; tout clic bascule en Manuel)
+  modal.querySelectorAll('.wr-agent-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.agentId;
+      if (!id || id === ALWAYS_PRESENT_AGENT || MANDATORY_DEBATE_AGENTS.includes(id)) return;
+      if (_currentSession.rosterMode !== 'manual') {
+        _currentSession.rosterMode = 'manual';
+        _currentSession.manualRoster = _currentSession.roster.slice();
+      }
+      const set = new Set(_currentSession.manualRoster);
+      if (set.has(id)) {
+        if (set.size <= MIN_DEBATE_AGENTS) { _flashRosterWarn(modal, `Plancher de ${MIN_DEBATE_AGENTS} agents atteint.`); return; }
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      _currentSession.manualRoster = normalizeDebateRoster([...set]);
+      _currentSession.roster       = _currentSession.manualRoster.slice();
+      _saveRosterPref();
+      _applyRosterToCells(panel);
+      _renderAgentsSelector(panel, modal);
+    });
+  });
 }
 
 // Sprint 7.5 — Suppression d'une session de la bibliothèque

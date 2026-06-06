@@ -31,7 +31,7 @@
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
-import { getAgent, getAgentNamesForPrompt } from '../lib/brainstorming-agents.js';
+import { getAgent, getAgentNamesForPrompt, normalizeDebateRoster } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai-budget.js';
@@ -239,7 +239,7 @@ const REACTIONS_NEGATIVE = new Set(['🤔', '👀']);
 //
 // Devil's Advocate compte comme contribution positive — son challenge
 // fait avancer le débat, il n'est plus une pénalité.
-function _computeConsensus(history) {
+function _computeConsensus(history, rosterN = 8) {
   if (!Array.isArray(history) || history.length === 0) return 0;
   const distinctAgents = new Set();
   let synthSpoke = false;
@@ -260,8 +260,10 @@ function _computeConsensus(history) {
       reactionsScore += Math.max(-0.08, Math.min(0.08, delta));
     }
   }
-  // 8 agents distincts × 12.5% = 90% (réservons 10% pour les réactions positives)
-  const progressScore = Math.min(distinctAgents.size, 8) * (0.9 / 8);
+  // Tour de table complet du comité = 90% (on réserve 10% pour synth + réactions).
+  // rosterN = nb d'agents de débat du comité actif (8 par défaut / legacy).
+  const N = Math.max(1, rosterN || 8);
+  const progressScore = Math.min(distinctAgents.size, N) * (0.9 / N);
   const synthBonus = synthSpoke ? 0.1 : 0;
   // Cap réactions ±10% sur le score global
   const reactionsAdjusted = Math.max(-0.1, Math.min(0.1, reactionsScore));
@@ -827,6 +829,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
     cognitive_mode = 'exploration',
     history        = [],
     max_turns      = DEFAULT_MAX_TURNS,
+    active_agents,                   // Sprint 7.12 — comité de débat choisi (sélecteur d'agents)
     apiKey,                          // BYOK Claude (optionnel) — agent premium Devil's Advocate
   } = body;
   const claudeKey = (typeof apiKey === 'string' && apiKey.length > 10) ? apiKey : null;
@@ -846,6 +849,17 @@ export async function handleBrainstormingAgentRespond(request, env) {
   }
   // Sprint 7.1 — cap relevé à 10 pour permettre un tour de table complet (8) + marge
   const turnsCap = Math.max(1, Math.min(10, Number(max_turns) || DEFAULT_MAX_TURNS));
+
+  // Sprint 7.12 — comité réduit (sélecteur d'agents). active_agents = ids du
+  // comité de débat choisi côté frontend. On normalise (strategic forcé, synth
+  // exclu, ids invalides filtrés). null ⇒ comité complet (legacy, zéro régression).
+  // tableCap ne dépasse jamais la taille du comité, sinon la boucle re-pioche
+  // strategic en boucle une fois le tour de table épuisé.
+  const debateRoster = Array.isArray(active_agents) && active_agents.length
+    ? normalizeDebateRoster(active_agents)
+    : null;
+  const rosterN  = debateRoster ? debateRoster.length : 8;
+  const tableCap = debateRoster ? Math.min(turnsCap, rosterN) : turnsCap;
 
   if (!env.AI || typeof env.AI.run !== 'function') {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
@@ -904,7 +918,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
           // Déterminer l'agent qui va parler maintenant
           let currentAgentId;
           if (isAuto) {
-            currentAgentId = pickNextAgent(localHistory, cognitive_mode);
+            currentAgentId = pickNextAgent(localHistory, cognitive_mode, debateRoster);
           } else {
             // Mode "1 agent unique" — on s'arrête après ce tour
             currentAgentId = agent_id;
@@ -937,7 +951,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
           // Annonce le début du message de l'agent
           send({ type: 'agent_start', agent_id: currentAgentId });
 
-          const agentList    = getAgentNamesForPrompt(currentAgentId);
+          const agentList    = getAgentNamesForPrompt(currentAgentId, debateRoster);
           const systemPrompt = agent.systemPrompt(cognitive_mode, brief, agentList, previousTurn, previousAgent);
 
           const messages = [{ role: 'system', content: systemPrompt }];
@@ -1116,10 +1130,10 @@ POSTURE
           // Sprint 4 — Update des signaux (consensus + tension)
           send({
             type: 'signals_update',
-            consensus: _computeConsensus(localHistory),
+            consensus: _computeConsensus(localHistory, rosterN),
             tension:   _computeTension(localHistory),
             turns_done: turnsDone,
-            turns_total: turnsCap,
+            turns_total: tableCap,
           });
 
           // Conditions d'arrêt
@@ -1127,11 +1141,11 @@ POSTURE
             completeReason = 'single';
             break;
           }
-          if (turnsDone >= turnsCap) {
+          if (turnsDone >= tableCap) {
             completeReason = 'max_turns';
             break;
           }
-          if (shouldAutoPause(localHistory, { maxAgentTurns: turnsCap })) {
+          if (shouldAutoPause(localHistory, { maxAgentTurns: tableCap })) {
             completeReason = 'auto_pause';
             break;
           }

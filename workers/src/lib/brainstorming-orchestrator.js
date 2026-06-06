@@ -9,7 +9,7 @@
    apprises, pacing rhythm system).
 
    API exposée :
-     pickNextAgent(history, mode)      → string (agent_id)
+     pickNextAgent(history, mode, roster?) → string (agent_id)
      shouldAutoPause(history, opts)    → boolean (true si on s'arrête)
      detectMentionInText(text)         → string | null
 
@@ -298,8 +298,21 @@ export function scoreAgentRelevance(agentId, text) {
 //      dédup, ce qui garantit que les agents restants (Devil inclus)
 //      passent avant la fin du cycle.
 // ─────────────────────────────────────────────────────────────────
-export function pickNextAgent(history, mode = 'exploration') {
+export function pickNextAgent(history, mode = 'exploration', roster = null) {
   if (!Array.isArray(history) || history.length === 0) return 'strategic';
+
+  // Sprint 7.12 — comité réduit : roster = liste d'ids d'agents de débat
+  // autorisés. null/vide ⇒ comité complet (comportement historique, zéro
+  // régression). strategic est toujours autorisé (obligatoire, ouvre/coordonne).
+  const rosterSet = Array.isArray(roster) && roster.length ? new Set(roster) : null;
+  const inRoster  = (id) => !rosterSet || id === 'strategic' || rosterSet.has(id);
+  // Nombre d'agents de débat (hors synth) → pilote le seuil scoring→arc :
+  // pour un petit comité, on bascule plus tôt sur l'arc pour garantir que
+  // les derniers agents passent quand même.
+  const debateCount = rosterSet ? [...rosterSet].filter(id => id !== 'synth').length : 8;
+  const cutoff = rosterSet
+    ? Math.min(SCORING_CUTOFF_SPOKEN, Math.max(1, debateCount - 2))
+    : SCORING_CUTOFF_SPOKEN;
 
   const last = history[history.length - 1];
 
@@ -317,7 +330,7 @@ export function pickNextAgent(history, mode = 'exploration') {
   // Sprint 7.1.1 — Mention par Strategic Lead (filet de sécurité)
   if (last.agent_id === 'strategic') {
     const mentioned = detectMentionInText(last.content);
-    if (mentioned && mentioned !== 'strategic' && !spokenSinceReset.has(mentioned)) {
+    if (mentioned && mentioned !== 'strategic' && inRoster(mentioned) && !spokenSinceReset.has(mentioned)) {
       return mentioned;
     }
   }
@@ -325,9 +338,10 @@ export function pickNextAgent(history, mode = 'exploration') {
   // Sprint 7.2 — Scoring sémantique pour la phase d'exploration (5 premiers)
   // À partir de SCORING_CUTOFF_SPOKEN agents parlés, on garantit le tour
   // de table en suivant l'arc (Devil inclus).
-  if (spokenSinceReset.size < SCORING_CUTOFF_SPOKEN) {
+  if (spokenSinceReset.size < cutoff) {
     const candidates = [];
     for (const agentId of Object.keys(AGENT_TRIGGERS)) {
+      if (!inRoster(agentId)) continue;            // hors comité → ignoré
       if (spokenSinceReset.has(agentId)) continue;
       if (agentId === last.agent_id) continue;
       if (agentId === 'strategic') continue; // Strategic ne reprend pas spontanément
@@ -346,11 +360,13 @@ export function pickNextAgent(history, mode = 'exploration') {
     }
   }
 
-  // Fallback arc — dédup, garantit que tous les agents passent (Devil inclus)
+  // Fallback arc — dédup + filtre comité : garantit que tous les agents DU
+  // COMITÉ passent (Devil inclus), en sautant ceux hors-roster. Borne à 10
+  // pour traverser le cycle complet (8 entrées) même avec des sauts.
   const arc = getArcForMode(mode);
   let candidate = arc[last.agent_id] || 'strategic';
-  for (let i = 0; i < 9; i++) {
-    if (!spokenSinceReset.has(candidate)) return candidate;
+  for (let i = 0; i < 10; i++) {
+    if (inRoster(candidate) && !spokenSinceReset.has(candidate)) return candidate;
     candidate = arc[candidate] || 'strategic';
   }
   return 'strategic';

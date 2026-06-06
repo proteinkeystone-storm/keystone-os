@@ -269,6 +269,13 @@
 }
 .wr-agent-cell.active .wr-agent-label { color: var(--wr-text-muted); }
 
+/* Sprint 7.12 — agent hors comité actif : picto grisé. Double classe pour
+   battre `.wr-agent-cell.lit` (même spécificité 0,2,0, gagne par ordre source).
+   synth + strategic ne reçoivent jamais cette classe. */
+.wr-agent-cell.wr-agent-cell--off { opacity: 0.3; filter: grayscale(0.85); }
+.wr-agent-cell--off .wr-agent-icon { box-shadow: none !important; border-style: dashed; }
+.wr-agent-cell--off .wr-agent-label { color: var(--wr-text-dim); }
+
 /* ═════════════════════════════════════════════════════════════════
    FEED — discussion live
    ═════════════════════════════════════════════════════════════════ */
@@ -1228,6 +1235,121 @@
   color: var(--wr-text-muted);
   letter-spacing: 0.01em;
 }
+
+/* ═════════════════════════════════════════════════════════════════
+   SÉLECTEUR DE COMITÉ — Sprint 7.12 (réutilise la coque .wr-agents-modal)
+   ═════════════════════════════════════════════════════════════════ */
+.wr-agents-modal .wr-agents-grid { flex: 1; min-height: 0; }
+
+/* Segmented control Auto / Manuel */
+.wr-roster-mode {
+  display: flex; gap: 6px;
+  padding: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--wr-border);
+  border-radius: 11px;
+  margin-bottom: 14px;
+}
+.wr-roster-mode-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--wr-text-muted);
+  font-size: 13px; font-weight: 700; letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.wr-roster-mode-btn:hover { color: var(--wr-text); background: rgba(255,255,255,0.04); }
+.wr-roster-mode-btn.active {
+  background: color-mix(in srgb, var(--wr-mode-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--wr-mode-accent) 45%, transparent);
+  color: var(--wr-text);
+}
+.wr-roster-mode-hint {
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--wr-text-dim);
+  text-transform: none;
+}
+.wr-roster-disabled {
+  font-size: 12px; color: var(--wr-text-dim);
+  padding: 8px 0 14px;
+}
+
+/* Carte agent cliquable (toggle on/off) */
+.wr-agent-pick {
+  --agent-color: #6366f1;
+  position: relative;
+  text-align: left;
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--wr-border);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, opacity 0.16s ease;
+}
+.wr-agent-pick:hover { background: rgba(255,255,255,0.045); border-color: var(--agent-color); transform: translateY(-1px); }
+.wr-agent-pick:not(.active) { opacity: 0.5; }
+.wr-agent-pick.active {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--agent-color) 55%, transparent);
+  background: color-mix(in srgb, var(--agent-color) 9%, transparent);
+}
+.wr-agent-pick.locked { cursor: default; }
+.wr-agent-pick.locked:hover { transform: none; }
+.wr-agent-pick-icon {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--agent-color);
+  background: color-mix(in srgb, var(--agent-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--agent-color) 30%, transparent);
+}
+.wr-agent-pick-icon svg { width: 17px; height: 17px; }
+.wr-agent-pick-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.wr-agent-pick-name {
+  font-size: 13px; font-weight: 700; letter-spacing: -0.005em;
+  color: var(--agent-color);
+}
+.wr-agent-pick-role {
+  font-size: 10.5px; color: var(--wr-text-dim);
+  letter-spacing: 0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wr-agent-pick-state {
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--agent-color);
+}
+.wr-agent-pick-state svg { width: 16px; height: 16px; }
+.wr-agent-pick-badge {
+  position: absolute; top: -7px; right: 10px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--wr-bg-subtle);
+  border: 1px solid var(--wr-border-strong);
+  color: var(--wr-text-muted);
+}
+.wr-agent-pick.locked .wr-agent-pick-badge {
+  border-color: color-mix(in srgb, var(--agent-color) 45%, transparent);
+  color: var(--agent-color);
+}
+
+/* Pied : compteur + garde-fou */
+.wr-roster-foot {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 13px;
+  border-top: 1px solid var(--wr-border);
+}
+.wr-roster-count { font-size: 12px; font-weight: 700; color: var(--wr-text); letter-spacing: -0.005em; }
+.wr-roster-warn { font-size: 11.5px; color: #f59e0b; letter-spacing: -0.005em; }
+.wr-roster-warn.flash { animation: wrWarnFlash 0.5s ease; }
+@keyframes wrWarnFlash { 0%, 100% { opacity: 1; } 30% { opacity: 0.25; } }
 
 /* ═════════════════════════════════════════════════════════════════
    RESPONSIVE — tablette < 1024, mobile < 720 (Sprint 6 polish)
