@@ -4243,11 +4243,11 @@ function _renderSettingsBody() {
             </div>`,
         },
         {
-            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦ (Ordinateur de bord)',
+            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦',
             open: false,
             content: `<div class="sp-user-form">
                 <div class="sp-user-row sp-row-toggle">
-                    <label class="sp-user-label" for="living-on-toggle">Activer l'ordinateur de bord</label>
+                    <label class="sp-user-label" for="living-on-toggle">Activer Living Layer</label>
                     <label class="sp-toggle-wrap">
                         <input type="checkbox" id="living-on-toggle" ${livingOn ? 'checked' : ''}>
                         <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
