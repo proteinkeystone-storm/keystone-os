@@ -4542,7 +4542,7 @@ function _renderSettingsBody() {
             if (el) { el.hidden = true; el.innerHTML = ''; }
             if (_livingTypeTimer) { clearTimeout(_livingTypeTimer); _livingTypeTimer = null; }
             _renderLivingReadout(null);   // masque aussi la ligne de jauges (fix 06/06)
-            _setHeroDstVisible(true);
+            document.documentElement.classList.add('ks-living-off');  // greeting propre : masque aussi le DST
         } else {
             // ON — reset cycle + fetch immédiatement
             _livingCycleStep  = 0;
@@ -5424,6 +5424,9 @@ function _renderLivingReadout(metrics) {
 async function _renderLivingLayer(preferMode = null, preferTopic = null) {
     const el = document.getElementById('ks-living');
     if (!el) return;
+
+    // Living OFF → greeting propre : la classe masque aussi le DST via CSS.
+    document.documentElement.classList.toggle('ks-living-off', localStorage.getItem(LS_LIVING_ON) === '0');
 
     // V2 : ON par défaut. Off uniquement si l'utilisateur l'a explicitement désactivé via Settings.
     if (localStorage.getItem(LS_LIVING_ON) === '0') {

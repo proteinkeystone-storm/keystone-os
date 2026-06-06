@@ -717,6 +717,9 @@ html.light-mode .engine-logo-light { display: block !important; }
 .ks-living-readout .up {
   color: var(--green); font-weight: 600; margin-left: 3px;
 }
+/* Living Layer coupé → greeting PROPRE : on masque aussi l'ancien sous-titre
+   DST. !important pour gagner contre le style inline posé par dst.js. */
+html.ks-living-off #hero-dst { display: none !important; }
 @media (max-width: 640px) {
   .ks-living-readout { font-size: 10px; }
   .ks-living-readout .seg { padding: 0 8px; }
