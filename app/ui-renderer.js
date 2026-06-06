@@ -5390,26 +5390,31 @@ let _livingMetrics = null;
 function _renderLivingReadout(metrics) {
     const host = document.getElementById('ks-living-readout');
     if (!host) return;
-    if (metrics && typeof metrics === 'object') _livingMetrics = metrics;
-    const livingEl = document.getElementById('ks-living');
-    if (localStorage.getItem(LS_LIVING_ON) === '0' || (livingEl && livingEl.hidden)) {
+    // null = masquage explicite (Living off / erreur de chargement).
+    if (metrics === null || localStorage.getItem(LS_LIVING_ON) === '0') {
         host.hidden = true; host.innerHTML = ''; return;
     }
+    if (metrics && typeof metrics === 'object') _livingMetrics = metrics;
     const m = _livingMetrics || {};
-    let focusMin = 0;
-    try { focusMin = _focusSnapshot().focusMin || 0; } catch (e) { /* no-op */ }
-    const segs = [];
+    let focusMin = 0, sessionMin = 0;
+    try { const s = _focusSnapshot(); focusMin = +s.focusMin || 0; sessionMin = +s.sessionMin || 0; } catch (e) { /* no-op */ }
+    const E = _escapeLivingText;
+    // Jauges TOUJOURS visibles : repli sur les cumuls si aucune activité du jour,
+    // + "Session" en ancre garantie. Cap à 4 segments pour rester sobre.
+    const all = [];
     if (+m.scans24h > 0) {
-        // Tendance ↑ vs hier (delta calculé serveur, présent seulement si connecté).
         const trend = (+m.scansDelta > 0) ? ` <span class="up">↑${(+m.scansDelta)}</span>` : '';
-        segs.push({ k: 'Scans', vHtml: _escapeLivingText(String(+m.scans24h)) + trend });
+        all.push({ k: 'Scans', vHtml: E(String(+m.scans24h)) + trend });
+    } else if (+m.scansTotal > 0) {
+        all.push({ k: 'Scans', vHtml: E(String(+m.scansTotal)) });
     }
-    if (+m.keyform24h > 0) segs.push({ k: 'Key Form', vHtml: _escapeLivingText(String(+m.keyform24h)) });
-    if (focusMin     >= 5) segs.push({ k: 'Focus',    vHtml: _escapeLivingText(focusMin + ' min') });
-    if (+m.ghostUsed  > 0 && m.ghostQuota != null) segs.push({ k: 'Ghost', vHtml: _escapeLivingText((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
-    if (!segs.length) { host.hidden = true; host.innerHTML = ''; return; }
-    host.innerHTML = segs.map(s =>
-        `<span class="seg"><span class="k">${_escapeLivingText(s.k)}</span><span class="v">${s.vHtml}</span></span>`
+    if (+m.keyform24h > 0)          all.push({ k: 'Key Form', vHtml: E(String(+m.keyform24h)) });
+    else if (+m.formsPublished > 0) all.push({ k: 'Key Form', vHtml: E(String(+m.formsPublished)) });
+    if (focusMin >= 1)             all.push({ k: 'Focus', vHtml: E(focusMin + ' min') });
+    if (+m.ghostUsed > 0 && m.ghostQuota != null) all.push({ k: 'Ghost', vHtml: E((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
+    all.push({ k: 'Session', vHtml: E(sessionMin >= 1 ? sessionMin + ' min' : '< 1 min') });  // ancre
+    host.innerHTML = all.slice(0, 4).map(s =>
+        `<span class="seg"><span class="k">${E(s.k)}</span><span class="v">${s.vHtml}</span></span>`
     ).join('');
     host.hidden = false;
 }

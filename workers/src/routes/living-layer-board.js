@@ -765,10 +765,12 @@ export async function handleLivingBoard(request, env) {
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
   const metrics = {
-    scans24h:   smartqr.scans24h      || 0,
-    keyform24h: pulsa.responses24h    || 0,
-    ghostUsed:  ghostwriter.usedToday || 0,
-    ghostQuota: (ghostwriter.quotaToday ?? null),
+    scans24h:       smartqr.scans24h      || 0,
+    scansTotal:     smartqr.scansTotal    || 0,
+    keyform24h:     pulsa.responses24h    || 0,
+    formsPublished: pulsa.publishedForms  || 0,
+    ghostUsed:      ghostwriter.usedToday || 0,
+    ghostQuota:     (ghostwriter.quotaToday ?? null),
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
