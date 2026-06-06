@@ -759,6 +759,15 @@ export async function handleLivingBoard(request, env) {
 
   const sensors = { smartqr, pulsa, ghostwriter, kodex, clientSensors };
 
+  // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
+  // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
+  const metrics = {
+    scans24h:   smartqr.scans24h      || 0,
+    keyform24h: pulsa.responses24h    || 0,
+    ghostUsed:  ghostwriter.usedToday || 0,
+    ghostQuota: (ghostwriter.quotaToday ?? null),
+  };
+
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
   // Cumuls du jour pour l'historique + calcul des tendances (deltas).
   // tenantId requis (pas d'historique en mode démo anonyme).
@@ -783,7 +792,7 @@ export async function handleLivingBoard(request, env) {
   // Helper réponse Calculateur (factorisé — renvoie aussi le topic appris)
   const calcResponse = () => {
     const c = _buildCalculatorPhrase(sensors, variantIndex, trendCandidates, feedback, preferTopic);
-    return json({ mode: 'calculator', text: c.text, topic: c.topic, icon: 'bar-chart', ttl: 90 }, 200, origin);
+    return json({ mode: 'calculator', text: c.text, topic: c.topic, icon: 'bar-chart', ttl: 90, metrics }, 200, origin);
   };
 
   // ── Sélection du mode ───────────────────────────────────────────
@@ -797,6 +806,7 @@ export async function handleLivingBoard(request, env) {
       messageId: pilotable.id,
       priority: pilotable.priority,
       expiresAt: pilotable.end_at,
+      metrics,
     }, 200, origin);
   }
 
@@ -804,7 +814,7 @@ export async function handleLivingBoard(request, env) {
   if (preferMode === 'ai') {
     const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
     if (ai) {
-      return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120 }, 200, origin);
+      return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
     }
     // sinon fallback Calculateur
     return calcResponse();
@@ -822,6 +832,7 @@ export async function handleLivingBoard(request, env) {
         messageId: pilotable.id,
         priority: pilotable.priority,
         expiresAt: pilotable.end_at,
+      metrics,
       }, 200, origin);
     }
     // Pas de Pilotable actif → fallback Calculateur (variété + économie LLM)
@@ -846,6 +857,7 @@ export async function handleLivingBoard(request, env) {
       messageId: pilotable.id,
       priority: pilotable.priority,
       expiresAt: pilotable.end_at,
+      metrics,
     }, 200, origin);
   }
 

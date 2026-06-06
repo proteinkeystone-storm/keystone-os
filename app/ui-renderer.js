@@ -5355,6 +5355,8 @@ function _paintLivingState(el, data) {
 
     // Living V2 affiche quelque chose → on masque la ligne DST d'ambiance
     _setHeroDstVisible(false);
+    // Ligne de jauges (Niveau 2, #6) — relevés certifiés sous la phrase.
+    _renderLivingReadout(data.metrics);
 
     // Phrase déjà affichée en entier ET visible → ne pas la re-taper.
     if (el.dataset.livingText === text && !el.hidden) return;
@@ -5379,6 +5381,35 @@ function _paintLivingState(el, data) {
     setTimeout(paint, 280);
 }
 
+// ── Ligne de jauges (Niveau 2, V3 #6) ─────────────────────────────
+// Relevés certifiés sous la phrase : Scans · Key Form · Focus · Ghost.
+// Chiffres serveur (scans/keyform/ghost) mis en cache + focus local (vivant).
+// Se masque seule si Living off/masqué ou si aucun relevé exploitable.
+let _livingMetrics = null;
+
+function _renderLivingReadout(metrics) {
+    const host = document.getElementById('ks-living-readout');
+    if (!host) return;
+    if (metrics && typeof metrics === 'object') _livingMetrics = metrics;
+    const livingEl = document.getElementById('ks-living');
+    if (localStorage.getItem(LS_LIVING_ON) === '0' || (livingEl && livingEl.hidden)) {
+        host.hidden = true; host.innerHTML = ''; return;
+    }
+    const m = _livingMetrics || {};
+    let focusMin = 0;
+    try { focusMin = _focusSnapshot().focusMin || 0; } catch (e) { /* no-op */ }
+    const segs = [];
+    if (+m.scans24h   > 0) segs.push(['Scans',    String(+m.scans24h)]);
+    if (+m.keyform24h > 0) segs.push(['Key Form', String(+m.keyform24h)]);
+    if (focusMin     >= 5) segs.push(['Focus',    focusMin + ' min']);
+    if (+m.ghostUsed  > 0 && m.ghostQuota != null) segs.push(['Ghost', (+m.ghostUsed) + '/' + (+m.ghostQuota)]);
+    if (!segs.length) { host.hidden = true; host.innerHTML = ''; return; }
+    host.innerHTML = segs.map(([k, v]) =>
+        `<span class="seg"><span class="k">${_escapeLivingText(k)}</span><span class="v">${_escapeLivingText(v)}</span></span>`
+    ).join('');
+    host.hidden = false;
+}
+
 async function _renderLivingLayer(preferMode = null, preferTopic = null) {
     const el = document.getElementById('ks-living');
     if (!el) return;
@@ -5388,6 +5419,7 @@ async function _renderLivingLayer(preferMode = null, preferTopic = null) {
         el.hidden = true;
         el.innerHTML = '';
         if (_livingTypeTimer) { clearTimeout(_livingTypeTimer); _livingTypeTimer = null; }
+        _renderLivingReadout(null);
         if (_livingRotationInterval) {
             clearInterval(_livingRotationInterval);
             _livingRotationInterval = null;
@@ -5452,6 +5484,7 @@ async function _renderLivingLayer(preferMode = null, preferTopic = null) {
         // Échec total (API down + pas de cache) : on cache la zone Living
         // et on rend la ligne DST d'ambiance comme filet de sécurité.
         el.hidden = true;
+        _renderLivingReadout(null);
         _setHeroDstVisible(true);
     }
 }

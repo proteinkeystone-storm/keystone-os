@@ -691,6 +691,34 @@ html.light-mode .engine-logo-light { display: block !important; }
   .ks-living.is-typing .ks-living-text::after { display: none; animation: none; }
 }
 
+/* ── Ligne de jauges (Niveau 2, V3 #6) — relevés certifiés sous la phrase.
+   Scans · Key Form · Focus · Ghost. Mono, séparateurs fins, se masque seule. */
+.ks-living-readout {
+  display: flex; align-items: center; flex-wrap: wrap;
+  margin: 0 0 6px;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 11px; letter-spacing: .02em; color: var(--tx2);
+}
+.ks-living-readout .seg {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px; position: relative;
+}
+.ks-living-readout .seg:first-child { padding-left: 0; }
+.ks-living-readout .seg + .seg::before {
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 1px; height: 10px; transform: translateY(-50%); background: var(--bd);
+}
+.ks-living-readout .k {
+  color: var(--tx3); text-transform: uppercase; letter-spacing: .06em; font-size: 10px;
+}
+.ks-living-readout .v {
+  color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .ks-living-readout { font-size: 10px; }
+  .ks-living-readout .seg { padding: 0 8px; }
+}
+
 /* Dual logo dark/light */
 #ks-logo-light { display: none; }
 html.light-mode #ks-logo-dark  { display: none; }
