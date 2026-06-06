@@ -365,8 +365,9 @@ async function _fetchActivePilotable(env, audience) {
 // Toujours une phrase utile. Pas de LLM, zéro risque qualité.
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
-function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}) {
+function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
+  const focus = (clientSensors && clientSensors.focus) || {};
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -425,6 +426,28 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
     });
   }
 
+  // ── Capteur Focus (#3) : focus continu / dispersion / session ─────
+  const _flbl = focus.focusToolLabel
+    ? String(focus.focusToolLabel).replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : '';
+  if (Number.isFinite(+focus.focusMin) && +focus.focusMin >= 5) {
+    candidates.push({
+      text:  `${+focus.focusMin} min de focus continu${_flbl ? ' sur ' + _flbl : ''}.`,
+      score: 80, topic: 'focus',
+    });
+  }
+  if (Number.isFinite(+focus.dispersionCount) && +focus.dispersionCount >= 6) {
+    candidates.push({
+      text:  `${+focus.dispersionCount} ateliers ouverts en quelques minutes.`,
+      score: 60, topic: 'focus',
+    });
+  }
+  if (Number.isFinite(+focus.sessionMin) && +focus.sessionMin >= 15) {
+    candidates.push({
+      text:  `Session en cours : ${+focus.sessionMin} min sur Keystone.`,
+      score: 44, topic: 'focus',
+    });
+  }
+
   // ── Candidats d'ambiance (toujours présents → garantit la VARIÉTÉ
   //    même quand un seul signal fort domine, ex: que des scans QR) ──
   const toolsCount = Number.isFinite(+clientSensors.toolsCount) && +clientSensors.toolsCount > 0
@@ -454,6 +477,11 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
 
   // Tri par pertinence (apprise) décroissante puis ROTATION sur l'index.
   candidates.sort((a, b) => b.score - a.score);
+  // preferTopic (déclencheur ciblé, ex: focus) → on force ce sujet s'il existe.
+  if (preferTopic) {
+    const pref = candidates.find(c => (c.topic || 'ambiance') === preferTopic);
+    if (pref) return { text: pref.text, topic: pref.topic || 'ambiance' };
+  }
   const idx = ((variantIndex % candidates.length) + candidates.length) % candidates.length;
   const chosen = candidates[idx];
   return { text: chosen.text, topic: chosen.topic || 'ambiance' };
@@ -468,7 +496,14 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
   const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
+  const focus = (clientSensors && clientSensors.focus) || {};
+  const _flbl = focus.focusToolLabel
+    ? String(focus.focusToolLabel).replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : '';
   let signals = [
+    (Number.isFinite(+focus.focusMin) && +focus.focusMin >= 5)
+      ? { t: `Focus : ${+focus.focusMin} min de travail continu${_flbl ? ' sur ' + _flbl : ''}`, topic: 'focus' } : null,
+    (Number.isFinite(+focus.dispersionCount) && +focus.dispersionCount >= 6)
+      ? { t: `Dispersion : ${+focus.dispersionCount} ateliers ouverts en quelques minutes`, topic: 'focus' } : null,
     smartqr.scans24h        > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h`, topic: 'smartqr' }           : null,
     pulsa.responses24h      > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' }         : null,
     ghostwriter.usedToday   > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
@@ -510,14 +545,25 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
     '- Réponse en JSON STRICT : {"phrase":"..."}',
   ].join('\n');
 
+  // Mémoire glissante (#4) : 3 derniers moments de la session → continuité.
+  const _recent = Array.isArray(focus.recentEvents) ? focus.recentEvents.slice(-3) : [];
+  const _recentStr = _recent.length
+    ? _recent.map(e => {
+        const lbl = e && e.label ? String(e.label).replace(/[\r\n]+/g, ' ').slice(0, 30) : '';
+        const ago = e && Number.isFinite(+e.agoMin) ? +e.agoMin : '?';
+        return `${e && e.kind ? e.kind : '?'}${lbl ? ' ' + lbl : ''} (il y a ${ago} min)`;
+      }).join(', ')
+    : '';
+
   const userPrompt = [
     `Contexte : ${moment} de ${weekday}, prénom ${firstName}.`,
+    _recentStr ? `Derniers moments de la session : ${_recentStr}.` : null,
     'Signaux disponibles (par ordre de priorité) :',
     ...signals.map((s, i) => `${i + 1}. ${s.t}`),
     '',
-    'Formule une phrase courte basée EN PRIORITÉ sur le signal n°1, qui fait gagner du temps à l\'utilisateur (rappel utile, observation factuelle, ou nudge léger). Pas d\'invention de chiffre.',
+    'Formule une phrase courte basée EN PRIORITÉ sur le signal n°1, factuelle, qui fait gagner du temps (rappel utile, observation, ou nudge léger). Tu peux refléter une continuité avec les derniers moments. Pas d\'invention de chiffre.',
     'Génère le JSON {"phrase"} maintenant.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   return { systemPrompt, userPrompt, topic };
 }
@@ -679,6 +725,8 @@ export async function handleLivingBoard(request, env) {
   const firstName     = (body.firstName || '').toString().trim().slice(0, 40) || 'toi';
   const clientSensors = (body.clientSensors && typeof body.clientSensors === 'object') ? body.clientSensors : {};
   const preferMode    = ['pilotable', 'calculator', 'ai'].includes(body.preferMode) ? body.preferMode : null;
+  // preferTopic (déclencheur ciblé, ex: 'focus') → force ce sujet dans le Calculateur.
+  const preferTopic   = (typeof body.preferTopic === 'string' && body.preferTopic) ? body.preferTopic.slice(0, 20) : null;
   // variantIndex : compteur de rotation côté client → fait varier le
   // candidat Calculateur ET le focus du mode IA (évite de répéter le
   // même sujet, ex: ne parler que des scans QR).
@@ -734,7 +782,7 @@ export async function handleLivingBoard(request, env) {
 
   // Helper réponse Calculateur (factorisé — renvoie aussi le topic appris)
   const calcResponse = () => {
-    const c = _buildCalculatorPhrase(sensors, variantIndex, trendCandidates, feedback);
+    const c = _buildCalculatorPhrase(sensors, variantIndex, trendCandidates, feedback, preferTopic);
     return json({ mode: 'calculator', text: c.text, topic: c.topic, icon: 'bar-chart', ttl: 90 }, 200, origin);
   };
 
@@ -809,7 +857,7 @@ export async function handleLivingBoard(request, env) {
 // Enregistre une impression (phrase affichée) ou un engagement (outil
 // ouvert après la phrase). Requiert JWT (tenant). Sans JWT → no-op.
 // Body : { topic, type: 'impression' | 'engagement' }
-const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance'];
+const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus'];
 
 export async function handleLivingFeedback(request, env) {
   const origin = getAllowedOrigin(env, request);

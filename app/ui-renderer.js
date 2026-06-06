@@ -2068,6 +2068,11 @@ export function openTool(padId, opts = {}) {
     // Living Layer feedback : si cet outil correspond au dernier topic
     // affiché récemment, c'est un signal d'intérêt (engagement).
     _livingTrackToolOpen(padId);
+    // Capteur Focus (#3) : journalise l'ouverture (focus/dispersion).
+    try {
+        const _focusLbl = (getUserLabel?.(padId)) || (getPad?.(padId)?.title) || padId;
+        _focusNoteToolOpen(padId, _focusLbl);
+    } catch (e) { _focusNoteToolOpen(padId, padId); }
 
     // ── Garde B2B — outil verrouillé ? ───────────────────────────
     // S6 — Bypass ADMIN appliqué ici aussi : un user avec plan ADMIN
@@ -4766,6 +4771,14 @@ export function initSettings() {
 
     // Synchroniser le hero avec les données utilisateur sauvegardées
     _updateIdentityZone();
+    // Capteur Focus (Living Layer V3 · #3-#5) — démarre la mesure + câble les
+    // déclencheurs (jalon focus / dispersion / retour onglet → rafraîchit).
+    _focusTrackerStart();
+    _focusOnTrigger((reason) => {
+        if (localStorage.getItem(LS_LIVING_ON) === '0') return;
+        if (reason === 'return') _renderLivingLayer();         // simple rafraîchissement
+        else _renderLivingLayer('calculator', 'focus');        // relevé sec focus garanti
+    });
     // Living Layer — phrase IA contextuelle sous "Bonjour, X" (off par défaut)
     _renderLivingLayer();
 }
@@ -5077,7 +5090,7 @@ const LIVING_ENGAGE_WINDOW_MS = 3 * 60 * 1000;   // 3 min après affichage
 const LIVING_IMP_THROTTLE_MS  = 5 * 60 * 1000;   // 1 impression/topic/5min
 
 function _sendLivingFeedback(topic, type) {
-    if (!topic || topic === 'ambiance') return;  // l'ambiance n'a pas d'outil à ouvrir
+    if (!topic || topic === 'ambiance' || topic === 'focus') return;  // pas d'outil à ouvrir pour ces topics
     const jwt = localStorage.getItem('ks_jwt') || '';
     if (!jwt) return;  // feedback nominatif uniquement (tenant requis)
     try {
@@ -5091,7 +5104,7 @@ function _sendLivingFeedback(topic, type) {
 }
 
 function _maybeSendImpression(topic) {
-    if (!topic || topic === 'ambiance') return;
+    if (!topic || topic === 'ambiance' || topic === 'focus') return;
     try {
         const k    = 'ks_living_imp_' + topic;
         const last = +(localStorage.getItem(k) || 0);
@@ -5110,6 +5123,140 @@ function _livingTrackToolOpen(padId) {
     if (Date.now() - _livingLastShown.ts > LIVING_ENGAGE_WINDOW_MS) return;
     _sendLivingFeedback(topic, 'engagement');
     _livingLastShown = null;  // évite le double comptage
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CAPTEUR FOCUS (Living Layer V3 · #3-#5) — le « C » de A+C.
+// ──────────────────────────────────────────────────────────────────
+// Mesure DANS le navigateur, et UNIQUEMENT pour Keystone :
+//   • focus continu : temps où l'onglet est visible ET l'utilisateur actif
+//   • dispersion    : nb d'ouvertures d'outils dans une fenêtre courte
+//   • session       : durée depuis l'arrivée sur le dashboard
+//   • 3 derniers événements (mémoire glissante, §4)
+// Page Visibility uniquement → on ne voit JAMAIS hors de l'onglet (pas
+// d'apps natives, pas d'écran système). Tout est éphémère (RAM), rien
+// n'est persisté ; seuls des chiffres agrégés partent vers /board.
+// Déclencheurs (§5) : jalon de focus, dispersion, retour sur l'onglet →
+// on rafraîchit la phrase (debounce 8s).
+// ══════════════════════════════════════════════════════════════════
+const FOCUS_TICK_MS          = 5000;     // heartbeat
+const FOCUS_IDLE_MS          = 60000;    // 60s sans interaction → inactif
+const FOCUS_BREAK_MS         = 120000;   // désengagé > 2 min → la streak repart de 0
+const FOCUS_MILESTONES_MIN   = [20, 45, 90];
+const FOCUS_DISPERSION_WIN   = 180000;   // fenêtre dispersion : 3 min
+const FOCUS_DISPERSION_N     = 6;        // ≥ 6 ouvertures dans la fenêtre = dispersion
+const FOCUS_TRIGGER_DEBOUNCE = 8000;
+
+const _focus = {
+    started: false, sessionStart: 0, streakMs: 0, lastTick: 0,
+    lastActivity: 0, disengagedSince: 0,
+    toolOpens: [],          // [{ ts, padId, label }]
+    currentLabel: null,
+    events: [],             // [{ kind, label, ts }] — max 3 (mémoire glissante)
+    milestones: new Set(),
+    lastTrigger: 0, lastDispersionFire: 0, triggerCb: null,
+};
+
+function _focusEngaged() {
+    return document.visibilityState === 'visible'
+        && (Date.now() - _focus.lastActivity) < FOCUS_IDLE_MS;
+}
+
+function _focusPushEvent(kind, label) {
+    _focus.events.push({ kind, label: label || null, ts: Date.now() });
+    while (_focus.events.length > 3) _focus.events.shift();
+}
+
+function _focusFireTrigger(reason) {
+    const t = Date.now();
+    if (t - _focus.lastTrigger < FOCUS_TRIGGER_DEBOUNCE) return;   // debounce
+    _focus.lastTrigger = t;
+    if (typeof _focus.triggerCb === 'function') {
+        try { _focus.triggerCb(reason); } catch (e) { /* no-op */ }
+    }
+}
+
+// Heartbeat : cumule le temps engagé, gère les coupures, déclenche les jalons.
+function _focusTick() {
+    const now = Date.now();
+    const dt  = now - (_focus.lastTick || now);
+    _focus.lastTick = now;
+    if (_focusEngaged()) {
+        // Reprise après une VRAIE coupure (> 2 min) → on repart de zéro.
+        if (_focus.disengagedSince && (now - _focus.disengagedSince) > FOCUS_BREAK_MS) {
+            _focus.streakMs = 0;
+            _focus.milestones.clear();
+            _focusPushEvent('reprise', _focus.currentLabel);
+            _focusFireTrigger('return');
+        }
+        _focus.disengagedSince = 0;
+        _focus.streakMs += Math.min(dt, FOCUS_TICK_MS * 2);   // cap anti-veille
+        const min = Math.floor(_focus.streakMs / 60000);
+        for (const m of FOCUS_MILESTONES_MIN) {
+            if (min >= m && !_focus.milestones.has(m)) {
+                _focus.milestones.add(m);
+                _focusPushEvent('focus', m + ' min');
+                _focusFireTrigger('milestone');
+                break;
+            }
+        }
+    } else if (!_focus.disengagedSince) {
+        _focus.disengagedSince = now;
+    }
+}
+
+function _focusNoteActivity() { _focus.lastActivity = Date.now(); }
+
+// Appelé par openTool : journalise l'ouverture (dispersion) + outil courant.
+function _focusNoteToolOpen(padId, label) {
+    const now = Date.now();
+    _focus.toolOpens.push({ ts: now, padId, label: label || null });
+    _focus.toolOpens = _focus.toolOpens.filter(o => now - o.ts <= FOCUS_DISPERSION_WIN);
+    if (label) _focus.currentLabel = label;
+    _focus.lastActivity = now;
+    _focusPushEvent('outil', label || padId);
+    if (_focus.toolOpens.length >= FOCUS_DISPERSION_N
+        && now - _focus.lastDispersionFire > FOCUS_DISPERSION_WIN) {
+        _focus.lastDispersionFire = now;
+        _focusPushEvent('dispersion', _focus.toolOpens.length + ' outils');
+        _focusFireTrigger('dispersion');
+    }
+}
+
+// Snapshot agrégé poussé vers /board (chiffres déterministes uniquement).
+function _focusSnapshot() {
+    const now = Date.now();
+    const dispersion = _focus.toolOpens.filter(o => now - o.ts <= FOCUS_DISPERSION_WIN).length;
+    return {
+        focusMin:        Math.round(_focus.streakMs / 60000),
+        focusToolLabel:  _focus.currentLabel || null,
+        dispersionCount: dispersion,
+        sessionMin:      _focus.sessionStart ? Math.round((now - _focus.sessionStart) / 60000) : 0,
+        recentEvents:    _focus.events.map(e => ({
+            kind: e.kind, label: e.label,
+            agoMin: Math.round((now - e.ts) / 60000),
+        })),
+    };
+}
+
+function _focusOnTrigger(cb) { _focus.triggerCb = cb; }
+
+function _focusTrackerStart() {
+    if (_focus.started) return;
+    _focus.started      = true;
+    const now           = Date.now();
+    _focus.sessionStart = now;
+    _focus.lastTick     = now;
+    _focus.lastActivity = now;
+    ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev =>
+        window.addEventListener(ev, _focusNoteActivity, { passive: true }));
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            _focus.lastActivity = Date.now();
+            _focusFireTrigger('return');
+        }
+    });
+    setInterval(_focusTick, FOCUS_TICK_MS);
 }
 
 function _collectClientSensors() {
@@ -5137,6 +5284,8 @@ function _collectClientSensors() {
         const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');
         if (Array.isArray(sel) && sel.length > 0) sensors.toolsCount = sel.length;
     } catch (e) { /* no-op */ }
+    // Capteur Focus (#3) — chiffres déterministes mesurés côté client.
+    try { sensors.focus = _focusSnapshot(); } catch (e) { /* no-op */ }
     return sensors;
 }
 
@@ -5230,7 +5379,7 @@ function _paintLivingState(el, data) {
     setTimeout(paint, 280);
 }
 
-async function _renderLivingLayer(preferMode = null) {
+async function _renderLivingLayer(preferMode = null, preferTopic = null) {
     const el = document.getElementById('ks-living');
     if (!el) return;
 
@@ -5265,6 +5414,7 @@ async function _renderLivingLayer(preferMode = null) {
     if (jwt) headers['Authorization'] = 'Bearer ' + jwt;
 
     const payload = { firstName, clientSensors, preferMode, variantIndex: _livingVariant };
+    if (preferTopic) payload.preferTopic = preferTopic;
     if (anthropicKey.length > 10) payload.apiKey = anthropicKey;
 
     try {
