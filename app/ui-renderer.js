@@ -4540,6 +4540,8 @@ function _renderSettingsBody() {
             }
             const el = document.getElementById('ks-living');
             if (el) { el.hidden = true; el.innerHTML = ''; }
+            if (_livingTypeTimer) { clearTimeout(_livingTypeTimer); _livingTypeTimer = null; }
+            _renderLivingReadout(null);   // masque aussi la ligne de jauges (fix 06/06)
             _setHeroDstVisible(true);
         } else {
             // ON — reset cycle + fetch immédiatement
