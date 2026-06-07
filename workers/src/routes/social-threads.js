@@ -149,3 +149,30 @@ export async function handleThreadsCallback(request, env) {
     return htmlPage(`❌ Échec de connexion Threads : ${e.message}`);
   }
 }
+
+// ── Callbacks exigés par Meta pour activer l'OAuth (sinon le form refuse) ──
+// GET/POST /api/social/threads/deauthorize — ping quand un user retire l'app.
+export async function handleThreadsDeauthorize() {
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// GET/POST /api/social/threads/data-deletion — demande de suppression de données.
+// POST (Meta) → renvoie { url, confirmation_code } (format imposé).
+// GET ?code=… → page de statut consultable par l'utilisateur.
+export async function handleThreadsDataDeletion(request) {
+  const url  = new URL(request.url);
+  const code = url.searchParams.get('code');
+  if (request.method === 'GET' && code) {
+    return new Response(
+      `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui"><h2>Suppression de données — Keystone Social</h2><p>Demande enregistrée. Code de confirmation : <b>${code}</b></p></body>`,
+      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+    );
+  }
+  const confirmation = crypto.randomUUID();
+  return new Response(JSON.stringify({
+    url: `${url.origin}/api/social/threads/data-deletion?code=${confirmation}`,
+    confirmation_code: confirmation,
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
