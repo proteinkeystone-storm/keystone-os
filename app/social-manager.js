@@ -22,8 +22,8 @@ const DRAFT_KEY = 'ks_social_manager_draft_v1';
 
 // Réseaux connus + libellé/emoji pour l'aperçu (pilotés in fine par le
 // registre côté Worker ; ici juste l'habillage UI).
-const NET_LABEL = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
-const NET_GLYPH = { facebook: 'f', instagram: '◎', linkedin: 'in' };
+const NET_LABEL = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads' };
+const NET_GLYPH = { facebook: 'f', instagram: '◎', linkedin: 'in', threads: '@' };
 
 // ── État module ────────────────────────────────────────────────
 let _root     = null;

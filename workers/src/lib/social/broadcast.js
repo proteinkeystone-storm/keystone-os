@@ -15,6 +15,7 @@ import { decrypt } from '../crypto.js';
 import { adapter as linkedinAdapter } from './adapters/linkedin.js';
 import { adapter as facebookAdapter } from './adapters/facebook.js';
 import { adapter as instagramAdapter } from './adapters/instagram.js';
+import { adapter as threadsAdapter } from './adapters/threads.js';
 
 /**
  * LE CONTRAT que chaque adapter de réseau doit respecter.
@@ -39,6 +40,7 @@ const ADAPTERS = {
   linkedin: linkedinAdapter,
   facebook: facebookAdapter,
   instagram: instagramAdapter,
+  threads: threadsAdapter,
 };
 
 /** Renvoie l'adapter d'une plateforme, ou null. */

@@ -128,6 +128,51 @@ export async function provisionInstagram(env, { pageId = '1191029397423869', ten
 }
 
 /**
+ * Range le compte Threads dans social_accounts (token chiffré).
+ * Lit le token longue durée généré côté app Meta (env.KS_THREADS_TOKEN,
+ * via le « Générateur de token » du cas d'usage Threads) et en dérive
+ * l'id + username via /me. Threads n'a PAS de token système comme FB/IG ;
+ * pour le self-service multi-tenant, voir le flux OAuth dans social-threads.js.
+ * @returns {Promise<{platform,userId,displayName}>}
+ */
+export async function provisionThreads(env, { tenantId = 'default' } = {}) {
+  const token = env.KS_THREADS_TOKEN;
+  if (!token)                 throw new Error('KS_THREADS_TOKEN non configuré');
+  if (!env.KS_ENCRYPTION_KEY) throw new Error('KS_ENCRYPTION_KEY non configurée');
+
+  const res  = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(token)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.id) {
+    throw new Error(`Threads /me KO : ${JSON.stringify(data).slice(0, 200)}`);
+  }
+
+  const userId      = String(data.id);
+  const displayName = data.username ? `@${data.username}` : 'Threads';
+  const scopes      = 'threads_basic,threads_content_publish';
+  const acc         = await encrypt(token, env.KS_ENCRYPTION_KEY);
+
+  const existing = await env.DB
+    .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
+    .bind(tenantId, 'threads', userId).first();
+
+  if (existing) {
+    await env.DB.prepare(`
+      UPDATE social_accounts
+      SET access_ciphertext=?, access_iv=?, display_name=?, scopes=?, status='connected', updated_at=datetime('now')
+      WHERE id=?
+    `).bind(acc.ciphertext, acc.iv, displayName, scopes, existing.id).run();
+  } else {
+    await env.DB.prepare(`
+      INSERT INTO social_accounts
+        (id, tenant_id, platform, target_type, external_id, display_name, access_ciphertext, access_iv, scopes, status)
+      VALUES (?, ?, 'threads', 'profile', ?, ?, ?, ?, ?, 'connected')
+    `).bind(generateId(), tenantId, userId, displayName, acc.ciphertext, acc.iv, scopes).run();
+  }
+
+  return { platform: 'threads', userId, displayName };
+}
+
+/**
  * Diffuse un post via le moteur : charge les comptes connectés depuis
  * social_accounts, appelle broadcast(), persiste dans social_posts.
  * @returns {Promise<{postId,status,results}>}
@@ -198,6 +243,20 @@ export async function handleSocialProvisionInstagram(request, env) {
   const body = await parseBody(request);
   try {
     const r = await provisionInstagram(env, { pageId: body.pageId, tenantId: body.tenantId });
+    return json({ success: true, ...r }, 200, origin);
+  } catch (e) {
+    return err(e.message, 502, origin);
+  }
+}
+
+// POST /api/social/provision/threads  Body : { tenantId? }
+export async function handleSocialProvisionThreads(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  try {
+    const r = await provisionThreads(env, { tenantId: body.tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);

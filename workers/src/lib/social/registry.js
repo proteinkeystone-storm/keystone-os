@@ -144,6 +144,42 @@ export const PLATFORMS = {
     access: { business: 'dev-mode-self' },
   },
 
+  // ── Threads (compte Threads, lié au compte Instagram/Meta) ──
+  // Sprint Social-4. API Threads (graph.threads.net) : container → publish.
+  // ⚠ Token PROPRE (OAuth Threads, longue durée 60 j refreshable) — PAS le
+  //   token système FB/IG. Provision via flux connect/callback (one-time).
+  threads: {
+    id: 'threads',
+    label: 'Threads',
+    enabled: true,
+    targets: ['profile'],
+    text: { maxLength: 500, supportsHashtags: true, supportsMentions: true },
+    media: {
+      image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
+      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },
+      carousel: true,
+      required: false,            // Threads accepte le TEXTE SEUL (retour aux sources 😉)
+      hostedUrlRequired: true,    // image servie sur URL publique (→ R2), comme IG
+    },
+    link: { supported: true, preview: true },
+    firstComment: false,
+    auth: {
+      type: 'oauth2',
+      authUrl:  'https://threads.net/oauth/authorize',
+      tokenUrl: 'https://graph.threads.net/oauth/access_token',
+      scopes: { profile: ['threads_basic', 'threads_content_publish'] },
+      tokenTtlDays: 60,
+      refreshable: true,
+    },
+    api: {
+      base: 'https://graph.threads.net/v1.0',
+      publishPath: '/{threads-user-id}/threads',
+      versionHeader: null,
+      version: 'v1.0',
+    },
+    access: { profile: 'oauth-self' },
+  },
+
 };
 
 // ── Helpers de lecture ────────────────────────────────────────

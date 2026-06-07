@@ -97,8 +97,9 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialPublish, handleSocialAccountsList } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialPublish, handleSocialAccountsList } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
+import { handleThreadsConnect, handleThreadsCallback } from './routes/social-threads.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -125,6 +126,9 @@ export default {
       // ── Social Broadcast (production — Sprint Social-1) ──────
       if (path === '/api/social/provision/facebook'  && method === 'POST') return handleSocialProvisionFacebook(request, env);
       if (path === '/api/social/provision/instagram' && method === 'POST') return handleSocialProvisionInstagram(request, env);
+      if (path === '/api/social/connect/threads'     && method === 'GET')  return handleThreadsConnect(request, env);
+      if (path === '/api/social/callback/threads'    && method === 'GET')  return handleThreadsCallback(request, env);
+      if (path === '/api/social/provision/threads'   && method === 'POST') return handleSocialProvisionThreads(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
       if (path === '/api/social/media'              && method === 'POST') return handleSocialMediaUpload(request, env);
