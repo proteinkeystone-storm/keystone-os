@@ -89,7 +89,7 @@ function _buildShell() {
         </button>
       </div>
       <div class="ws-topbar-title">
-        <span class="ws-topbar-app-picto">${icon('multiportails', 24)}</span>
+        <span class="ws-topbar-app-picto">${icon('user', 24)}</span>
         <span class="name">Social Manager</span>
       </div>
       ${burgerHTML()}
@@ -125,7 +125,6 @@ function _renderMain() {
   main.innerHTML = `
     <div class="sm-wrap">
       <div class="sm-hero">
-        <div class="sm-eyebrow">${icon('multiportails', 13)}&nbsp;O-SOC-001 — Diffusion réseaux sociaux</div>
         <h1 class="sm-title">Social Manager</h1>
         <p class="sm-subtitle">Composez une publication et diffusez-la sur vos réseaux connectés, en un clic.</p>
       </div>
@@ -392,8 +391,7 @@ function _injectStyles() {
   const css = `
   .sm-wrap { max-width: 1180px; margin: 0 auto; padding: 28px 28px 60px; }
   .sm-hero { margin-bottom: 22px; }
-  .sm-eyebrow { display:inline-flex; align-items:center; font-size:12px; font-weight:700; letter-spacing:.02em; color: var(--gold2); background: var(--gold3); padding:6px 11px; border-radius: var(--r); }
-  .sm-title { font-size: 30px; font-weight: 900; letter-spacing: -.02em; margin: 12px 0 6px; color: var(--text); }
+  .sm-title { font-size: 30px; font-weight: 900; letter-spacing: -.02em; margin: 0 0 6px; color: var(--text); }
   .sm-subtitle { color: var(--tx2); font-size: 14px; max-width: 640px; }
   .sm-banner { display:flex; align-items:center; gap:6px; padding:11px 14px; border-radius: var(--r); font-size:13px; margin-bottom:18px; border:1px solid var(--bd); }
   .sm-banner-warn { background: rgba(251,191,36,.10); color:#fcd34d; border-color: rgba(251,191,36,.25); }
