@@ -10,7 +10,8 @@
    et Instagram vont CHERCHER l'image à son URL pour la publier.
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, requireAdmin, generateId, getAllowedOrigin } from '../lib/auth.js';
+import { json, err, generateId, getAllowedOrigin } from '../lib/auth.js';
+import { requireAdminFlexible } from './social.js';
 
 const EXT_BY_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 const MAX_BYTES   = 8 * 1024 * 1024;   // 8 Mo
@@ -19,7 +20,7 @@ const MAX_BYTES   = 8 * 1024 * 1024;   // 8 Mo
 // Body = binaire de l'image. Header Content-Type = type MIME.
 export async function handleSocialMediaUpload(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   if (!env.HELP_MEDIA)             return err('Bucket R2 (HELP_MEDIA) indisponible', 500, origin);
 
   const mime = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();

@@ -1,24 +1,33 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes Social Broadcast (PRODUCTION) v1.1
+   KEYSTONE OS — Routes Social Broadcast (PRODUCTION) v1.2
    (Sprint Social-1 — câblage du moteur de diffusion)
 
    POST /api/social/provision/facebook  Admin — range le compte FB en base
    POST /api/social/publish             Admin — diffuse un post via le moteur
    GET  /api/social/accounts            Admin — liste les comptes connectés
 
-   La logique métier est extraite en fonctions réutilisables
-   (provisionFacebook, publishCanonical) — utilisables aussi par le CRON
-   et le futur Pad Social Manager. Les tokens sont chiffrés AES-256-GCM
-   (lib/crypto.js) ; le moteur (lib/social/broadcast.js) déchiffre au
-   moment de publier.
+   Auth : gate FLEXIBLE — secret KS_ADMIN_SECRET (/admin) OU JWT isAdmin
+   (/app, où l'admin n'a que ks_jwt). Même pattern que asset-transfer.js.
+
+   Logique métier extraite en fonctions réutilisables (provisionFacebook,
+   publishCanonical) — utilisables aussi par le CRON et le futur Pad.
+   Tokens chiffrés AES-256-GCM (lib/crypto.js).
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
-import { encrypt }              from '../lib/crypto.js';
-import { ensureSocialSchema }   from '../lib/social/schema.js';
-import { broadcast }            from '../lib/social/broadcast.js';
-import { createCanonicalPost }  from '../lib/social/canonical.js';
-import { getPlatform }          from '../lib/social/registry.js';
+import { requireJWT }          from '../lib/jwt.js';
+import { encrypt }             from '../lib/crypto.js';
+import { ensureSocialSchema }  from '../lib/social/schema.js';
+import { broadcast }           from '../lib/social/broadcast.js';
+import { createCanonicalPost } from '../lib/social/canonical.js';
+import { getPlatform }         from '../lib/social/registry.js';
+
+// ── Gate admin flexible : secret (/admin) OU JWT isAdmin/plan ADMIN (/app) ──
+export async function requireAdminFlexible(request, env) {
+  if (requireAdmin(request, env)) return true;
+  const claims = await requireJWT(request, env);
+  return claims?.isAdmin === true || claims?.plan === 'ADMIN';
+}
 
 // ═══ Logique métier réutilisable (HTTP, CRON, automatisation) ═══
 
@@ -114,12 +123,12 @@ function computeStatus(results, dryRun) {
   return 'failed';
 }
 
-// ═══ Handlers HTTP (admin) ═════════════════════════════════════
+// ═══ Handlers HTTP (admin flexible) ════════════════════════════
 
 // POST /api/social/provision/facebook  Body : { pageId?, tenantId? }
 export async function handleSocialProvisionFacebook(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
   try {
@@ -133,7 +142,7 @@ export async function handleSocialProvisionFacebook(request, env) {
 // POST /api/social/publish  Body : { targets:[...], text?, media?, link?, hashtags?, legal?, source?, dryRun? }
 export async function handleSocialPublish(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
   try {
@@ -147,7 +156,7 @@ export async function handleSocialPublish(request, env) {
 // GET /api/social/accounts  (ne renvoie jamais les tokens)
 export async function handleSocialAccountsList(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const url      = new URL(request.url);
   const tenantId = url.searchParams.get('tenantId') || 'default';

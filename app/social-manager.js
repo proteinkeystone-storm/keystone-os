@@ -32,7 +32,7 @@ let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
 
-const _adminToken = () => { try { return localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
+const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
 // ══════════════════════════════════════════════════════════════
