@@ -77,6 +77,57 @@ export async function provisionFacebook(env, { pageId = '1191029397423869', tena
 }
 
 /**
+ * Range le compte Instagram dans social_accounts (token chiffré).
+ * Une seule requête Graph dérive, depuis la Page : le Page token (qui porte
+ * les permissions IG) ET l'IG user-id du compte Business lié à la Page.
+ * @returns {Promise<{platform,igUserId,displayName}>}
+ */
+export async function provisionInstagram(env, { pageId = '1191029397423869', tenantId = 'default' } = {}) {
+  const sysToken = env.KS_FB_PAGE_TOKEN;
+  if (!sysToken)              throw new Error('KS_FB_PAGE_TOKEN non configuré');
+  if (!env.KS_ENCRYPTION_KEY) throw new Error('KS_ENCRYPTION_KEY non configurée');
+
+  const cfg  = getPlatform('instagram');
+  const res  = await fetch(`${cfg.api.base}/${pageId}?fields=access_token,instagram_business_account{id,username,name}&access_token=${encodeURIComponent(sysToken)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) {
+    throw new Error(`Récupération du Page token KO : ${JSON.stringify(data).slice(0, 200)}`);
+  }
+  const ig = data.instagram_business_account;
+  if (!ig || !ig.id) {
+    throw new Error("Aucun compte Instagram Business lié à cette Page. Passe ton compte IG en Business/Creator et lie-le à la Page dans Meta Business Suite, puis réessaie.");
+  }
+
+  const igUserId    = ig.id;
+  const displayName = ig.username ? `@${ig.username}` : (ig.name || 'Instagram');
+  const scopes = 'instagram_basic,instagram_content_publish,pages_show_list';
+  const acc = await encrypt(data.access_token, env.KS_ENCRYPTION_KEY);  // access = Page token (porte les perms IG)
+  const ref = await encrypt(sysToken,          env.KS_ENCRYPTION_KEY);  // refresh = token système
+
+  const existing = await env.DB
+    .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
+    .bind(tenantId, 'instagram', igUserId).first();
+
+  if (existing) {
+    await env.DB.prepare(`
+      UPDATE social_accounts
+      SET access_ciphertext=?, access_iv=?, refresh_ciphertext=?, refresh_iv=?,
+          display_name=?, scopes=?, status='connected', updated_at=datetime('now')
+      WHERE id=?
+    `).bind(acc.ciphertext, acc.iv, ref.ciphertext, ref.iv, displayName, scopes, existing.id).run();
+  } else {
+    await env.DB.prepare(`
+      INSERT INTO social_accounts
+        (id, tenant_id, platform, target_type, external_id, display_name,
+         access_ciphertext, access_iv, refresh_ciphertext, refresh_iv, scopes, status)
+      VALUES (?, ?, 'instagram', 'business', ?, ?, ?, ?, ?, ?, ?, 'connected')
+    `).bind(generateId(), tenantId, igUserId, displayName, acc.ciphertext, acc.iv, ref.ciphertext, ref.iv, scopes).run();
+  }
+
+  return { platform: 'instagram', igUserId, displayName };
+}
+
+/**
  * Diffuse un post via le moteur : charge les comptes connectés depuis
  * social_accounts, appelle broadcast(), persiste dans social_posts.
  * @returns {Promise<{postId,status,results}>}
@@ -133,6 +184,20 @@ export async function handleSocialProvisionFacebook(request, env) {
   const body = await parseBody(request);
   try {
     const r = await provisionFacebook(env, { pageId: body.pageId, tenantId: body.tenantId });
+    return json({ success: true, ...r }, 200, origin);
+  } catch (e) {
+    return err(e.message, 502, origin);
+  }
+}
+
+// POST /api/social/provision/instagram  Body : { pageId?, tenantId? }
+export async function handleSocialProvisionInstagram(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  try {
+    const r = await provisionInstagram(env, { pageId: body.pageId, tenantId: body.tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);

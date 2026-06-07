@@ -114,7 +114,7 @@ export const PLATFORMS = {
   instagram: {
     id: 'instagram',
     label: 'Instagram',
-    enabled: false,
+    enabled: true,
     targets: ['business'],
     text: { maxLength: 2200, supportsHashtags: true, maxHashtags: 30, supportsMentions: true },
     media: {

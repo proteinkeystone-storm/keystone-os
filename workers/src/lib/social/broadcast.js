@@ -14,6 +14,7 @@ import { validateCanonical } from './canonical.js';
 import { decrypt } from '../crypto.js';
 import { adapter as linkedinAdapter } from './adapters/linkedin.js';
 import { adapter as facebookAdapter } from './adapters/facebook.js';
+import { adapter as instagramAdapter } from './adapters/instagram.js';
 
 /**
  * LE CONTRAT que chaque adapter de réseau doit respecter.
@@ -37,6 +38,7 @@ import { adapter as facebookAdapter } from './adapters/facebook.js';
 const ADAPTERS = {
   linkedin: linkedinAdapter,
   facebook: facebookAdapter,
+  instagram: instagramAdapter,
 };
 
 /** Renvoie l'adapter d'une plateforme, ou null. */

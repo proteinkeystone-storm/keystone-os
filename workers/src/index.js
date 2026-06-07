@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialPublish, handleSocialAccountsList } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialPublish, handleSocialAccountsList } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 
 // ── Router ────────────────────────────────────────────────────
@@ -123,7 +123,8 @@ export default {
 
     try {
       // ── Social Broadcast (production — Sprint Social-1) ──────
-      if (path === '/api/social/provision/facebook' && method === 'POST') return handleSocialProvisionFacebook(request, env);
+      if (path === '/api/social/provision/facebook'  && method === 'POST') return handleSocialProvisionFacebook(request, env);
+      if (path === '/api/social/provision/instagram' && method === 'POST') return handleSocialProvisionInstagram(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
       if (path === '/api/social/media'              && method === 'POST') return handleSocialMediaUpload(request, env);

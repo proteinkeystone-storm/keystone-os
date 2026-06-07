@@ -286,6 +286,7 @@ async function _publish() {
   const text = _form.text.trim();
   if (!text && !_form.imageUrl) { _toast('Écris un message ou ajoute une photo', 'warn'); return; }
   if (!_form.targets.length)    { _toast('Sélectionne au moins un réseau', 'warn'); return; }
+  if (_form.targets.includes('instagram') && !_form.imageUrl) { _toast('Instagram nécessite une photo', 'warn'); return; }
 
   _busy = true;
   _setResult(`<div class="sm-result-pending">${icon('zap', 16)}&nbsp;Publication en cours…</div>`);
