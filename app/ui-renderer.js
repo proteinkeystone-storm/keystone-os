@@ -94,6 +94,8 @@ const ICONS = {
     // ghostwriter : 3 lignes de texte graduées (suggère 3 variantes de longueurs)
     // + étincelle (sparkle) haut-droite évoquant la transformation IA.
     'ghostwriter':    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="17" y2="9"/><line x1="3" y1="13" x2="20" y2="13"/><line x1="3" y1="17" x2="13" y2="17"/><line x1="19" y1="3" x2="19" y2="7"/><line x1="17" y1="5" x2="21" y2="5"/></svg>`,
+    // user : silhouette humaine minimaliste (tête + épaules) — picto du Social Manager (O-SOC-001).
+    'user':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/></svg>`,
 };
 
 // ── Palette par PLAN (et par type) ────────────────────────────
