@@ -589,6 +589,7 @@ function _onClick(e) {
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
   if (act === 'pick-telegram') { e.preventDefault(); if (_connect) { _connect.view = 'wizard'; _connect.step = 0; _renderConnect(); } return; }
+  if (act === 'connect-facebook') { e.preventDefault(); _connectFacebook(); return; }
   if (act === 'wiz-next')      { e.preventDefault(); _wizNext(); return; }
   if (act === 'wiz-back')      { e.preventDefault(); _wizBack(); return; }
   if (act === 'wiz-connect')   { e.preventDefault(); _connectTelegram(); return; }
@@ -686,7 +687,12 @@ function _renderConnect() {
           <div class="sm-conn-meta"><div class="sm-conn-name">Telegram</div><div class="sm-conn-sub">Publie sur ton canal — aucune inscription</div></div>
           <span class="sm-conn-cta">Connecter →</span>
         </button>
-        ${soon('facebook')}${soon('instagram')}${soon('threads')}
+        <button type="button" class="sm-conn-row is-active" data-act="connect-facebook">
+          <span class="sm-conn-glyph" style="--brand:#0866FF">${icon('facebook', 18)}</span>
+          <div class="sm-conn-meta"><div class="sm-conn-name">Facebook + Instagram</div><div class="sm-conn-sub">Connecte ta Page et ton Insta lié</div></div>
+          <span class="sm-conn-cta">Connecter →</span>
+        </button>
+        ${soon('threads')}
       </div>`;
     return;
   }
@@ -759,6 +765,29 @@ async function _connectTelegram() {
   } catch (e) {
     _connect.busy = false;
     if (res) res.innerHTML = `<span class="sm-conn-err">${_esc(e?.message || 'Échec de la connexion')}</span>`;
+  }
+}
+
+// Connexion Facebook (+ Instagram lié) via OAuth Meta. On ouvre l'onglet
+// d'autorisation TOUT DE SUITE (dans le geste de clic) pour éviter le blocage
+// popup, puis on y charge l'URL OAuth signée (state = tenant) renvoyée par le Worker.
+// Au retour, le callback range les comptes ; l'utilisateur recharge le pad.
+async function _connectFacebook() {
+  const token = _adminToken();
+  if (!token) { _toast('Connecte-toi d\'abord pour connecter Facebook.', 'warn'); return; }
+  const popup = window.open('', '_blank');                       // synchrone = autorisé
+  try { if (popup) popup.document.write('<p style="font-family:system-ui;padding:24px;color:#333">Ouverture de Facebook…</p>'); } catch (_) {}
+  try {
+    const r = await fetch(`${CF_API}/api/social/connect/facebook`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.authUrl) throw new Error(data.error || `Erreur ${r.status}`);
+    if (popup) popup.location.href = data.authUrl;
+    else       window.location.href = data.authUrl;             // fallback si popup bloqué
+  } catch (e) {
+    if (popup) { try { popup.close(); } catch (_) {} }
+    _toast(e?.message || 'Connexion Facebook indisponible', 'warn');
   }
 }
 
