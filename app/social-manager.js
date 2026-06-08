@@ -554,7 +554,7 @@ async function _publish() {
       </div>
       <ul class="sm-result-list">${rows}</ul>
     `);
-    if (ok || data.status === 'partial') _toast('Publication envoyée 🚀', 'ok');
+    if (ok || data.status === 'partial') _toast('Publication envoyée', 'ok');
   } catch (e) {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
@@ -695,7 +695,7 @@ function _renderConnect() {
   if (_connect.done) {
     box.innerHTML = head('Telegram connecté') + `
       <div class="sm-wiz">
-        <div class="sm-wiz-emoji">🎉</div>
+        <div class="sm-wiz-icon">${icon('check-circle', 30)}</div>
         <div class="sm-wiz-title">C'est connecté !</div>
         <div class="sm-wiz-text"><strong>${_esc(_connect.channel)}</strong> est prêt. Tu peux publier dessus depuis le composer.</div>
         <button type="button" class="sm-btn-primary sm-wiz-primary" data-act="close-connect">Terminer</button>
@@ -706,13 +706,13 @@ function _renderConnect() {
   let body = '';
   if (_connect.step === 0) {
     body = `
-      <div class="sm-wiz-emoji">📣</div>
+      <div class="sm-wiz-icon">${icon('megaphone', 30)}</div>
       <div class="sm-wiz-title">Connecter ton canal Telegram</div>
       <div class="sm-wiz-text">3 petites étapes, 2 minutes promis. On relie ton canal pour que tu puisses y publier en un clic.</div>
       <button type="button" class="sm-btn-primary sm-wiz-primary" data-act="wiz-next">C'est parti →</button>`;
   } else if (_connect.step === 1) {
     body = `
-      <div class="sm-wiz-emoji">🤖</div>
+      <div class="sm-wiz-icon">${icon('robot', 30)}</div>
       <div class="sm-wiz-title">Ajoute notre assistant à ton canal</div>
       <div class="sm-wiz-text">Un seul clic : Telegram s'ouvre, tu choisis ton canal, tu confirmes. Ça autorise le robot à publier pour toi.</div>
       <a class="sm-magic-btn" href="https://t.me/${TG_BOT}?startchannel&admin=post_messages" target="_blank" rel="noopener">${icon('telegram', 16)}&nbsp;Ajouter à mon canal</a>
@@ -722,7 +722,7 @@ function _renderConnect() {
       </div>`;
   } else {
     body = `
-      <div class="sm-wiz-emoji">🔗</div>
+      <div class="sm-wiz-icon">${icon('link', 30)}</div>
       <div class="sm-wiz-title">Quel est ton canal ?</div>
       <div class="sm-wiz-text">Colle son lien public — ex : <strong>@mon_canal</strong> ou t.me/mon_canal.</div>
       <input type="text" class="sm-wiz-input" data-field="tg-channel" placeholder="@mon_canal" autocomplete="off" spellcheck="false" value="${_esc(_connect.channel)}">
@@ -754,7 +754,7 @@ async function _connectTelegram() {
     if (!r.ok || data.success === false) throw new Error(data.error || `Erreur ${r.status}`);
     _connect.busy = false; _connect.done = true; _connect.channel = data.displayName || ch;
     _renderConnect();
-    _toast('Canal Telegram connecté 🚀', 'ok');
+    _toast('Canal Telegram connecté', 'ok');
     await _loadAccounts();
   } catch (e) {
     _connect.busy = false;
@@ -895,7 +895,11 @@ function _injectStyles() {
   .sm-wiz-dots { display:flex; gap:6px; margin-bottom:18px; }
   .sm-wiz-dots span { width:7px; height:7px; border-radius:50%; background: var(--bd); transition: all .2s; }
   .sm-wiz-dots span.on { background: var(--gold); width:20px; border-radius:4px; }
-  .sm-wiz-emoji { font-size:42px; line-height:1; margin-bottom:10px; }
+  /* Hero du wizard : pictogramme outline monochrome (charte Keystone) dans un
+     chip accent lavé — plus d'emoji 3D. Couleur = accent du DS (--gold = indigo). */
+  .sm-wiz-icon { width:60px; height:60px; display:inline-flex; align-items:center; justify-content:center;
+                 margin-bottom:14px; border-radius:16px; color:var(--gold);
+                 background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.22); }
   .sm-wiz-title { font-weight:900; font-size:18px; letter-spacing:-.01em; color: var(--text); margin-bottom:8px; }
   .sm-wiz-text { font-size:14px; line-height:1.55; color: var(--tx2); max-width:340px; margin-bottom:18px; }
   .sm-wiz-text strong { color: var(--text); }
