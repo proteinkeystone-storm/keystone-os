@@ -238,6 +238,11 @@ const LS_LIFETIME = 'ks_lifetime_purchases';
  * [...]  → liste des IDs sous abonnement
  */
 export function getOwnedIds() {
+    // Plan MAX et ADMIN = accès TOTAL à toutes les apps du catalogue (comme la
+    // clé admin, mais SANS les privilèges back-office). On renvoie la sentinelle
+    // null (« tout possédé »), déjà gérée partout — les admins l'exercent déjà,
+    // donc le chemin null est sûr pour tous les consommateurs de getOwnedIds().
+    if (isAdminUser() || isMaxPlan()) return null;
     const raw = localStorage.getItem(LS_OWNED);
     if (raw === null) return null;
     try { return JSON.parse(raw); } catch { return null; }
@@ -270,6 +275,22 @@ export function isAdminUser() {
         if (parts.length !== 3) return false;
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         return payload.isAdmin === true || (payload.plan || '').toUpperCase() === 'ADMIN';
+    } catch (_) { return false; }
+}
+
+// Plan MAX = palier « tout inclus » : accès à TOUTES les apps du catalogue, au
+// même titre que l'admin (mais SANS les écrans d'administration). Lecture du
+// plan en localStorage PUIS fallback sur le claim JWT (source de vérité serveur).
+export function isMaxPlan() {
+    const plan = (localStorage.getItem('ks_licence_plan') || '').toUpperCase();
+    if (plan === 'MAX') return true;
+    try {
+        const jwt = localStorage.getItem('ks_jwt');
+        if (!jwt) return false;
+        const parts = jwt.split('.');
+        if (parts.length !== 3) return false;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return (payload.plan || '').toUpperCase() === 'MAX';
     } catch (_) { return false; }
 }
 

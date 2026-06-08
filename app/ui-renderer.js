@@ -481,6 +481,28 @@ function _closeTimeSaveModal() {
     document.body.style.overflow = '';
 }
 
+// ── Présence réelle dans la grille du Dashboard ────────────────
+// ks_user_selection = sous-ensemble choisi à l'onboarding (absent/null = tout).
+// La désactivation et le masquage sont des clés SÉPARÉES (ks_deactivated_ /
+// ks_hidden_), pas la sélection. Un outil POSSÉDÉ peut donc être absent de la
+// grille pour 3 raisons : désactivé, masqué, ou jamais ajouté à la sélection
+// (ex. acquis APRÈS l'onboarding, comme Social Manager). Dans ce cas le K-Store
+// doit offrir un bouton « Ajouter au Dashboard » et non le span mort « ✓ Actif ».
+function _getUserSelection() {
+    const raw = localStorage.getItem('ks_user_selection');
+    if (!raw) return null;
+    try { const p = JSON.parse(raw); return (Array.isArray(p) && p.length > 0) ? p : null; }
+    catch { return null; }
+}
+function _isSelectedForGrid(id) {
+    if (isAdminUser()) return true;
+    const sel = _getUserSelection();
+    return sel === null || sel.includes(id);
+}
+function _isOnDashboard(id) {
+    return _isSelectedForGrid(id) && !isPadDeactivated(id) && !isPadHidden(id);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
@@ -1405,18 +1427,21 @@ function _renderAppCardSmall(app) {
     const ownedIds = getOwnedIds();
     // Sprint S6 — ADMIN voit toujours "✓ Actif" dans le K-Store
     const isOwned  = isAdminUser() || (ownedIds === null) || ownedIds.includes(app.id);
-    // Outil possédé mais retiré du Dashboard → réinstallable
-    const isDeactivated = isOwned && app.real && isPadDeactivated(app.id);
+    // Possédé MAIS absent de la grille (désactivé, masqué, ou jamais ajouté à la
+    // sélection — ex. acquis après l'onboarding). Sans bouton ici, l'outil est
+    // piégé : « Actif » au K-Store mais introuvable au Dashboard. Cf. _isOnDashboard.
+    const isOwnedOffGrid = isOwned && app.real && !_isOnDashboard(app.id);
 
     // Refonte 2026-05-29 — Logique abonnement : on n'affiche plus de prix par
     // app (le bouton n'encaisse rien, il reflète la licence). États possibles :
-    // Bientôt (coquille) · Réinstaller (possédé, retiré du dashboard) ·
-    // ✓ Actif (possédé, span non cliquable) · Obtenir (non possédé).
+    // Bientôt (coquille) · Ajouter/Réinstaller (possédé, hors grille) ·
+    // ✓ Actif (possédé ET sur le Dashboard, span non cliquable) · Obtenir (non possédé).
     let cta;
     if (!app.real) {
         cta = `<button class="ksfs-buy-btn ksfs-buy-btn--soon" data-action="soon" aria-disabled="true">Bientôt</button>`;
-    } else if (isDeactivated) {
-        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Réinstaller</button>`;
+    } else if (isOwnedOffGrid) {
+        const label = isPadDeactivated(app.id) ? 'Réinstaller' : '+ Ajouter';
+        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">${label}</button>`;
     } else if (isOwned) {
         cta = `<span class="ksfs-buy-btn ksfs-buy-btn--owned">✓ Actif</span>`;
     } else {
@@ -1636,9 +1661,11 @@ function _renderKStoreAppDetail(appId) {
         if (!app.real) {
             return `<button class="ksfs-detail-buy ksfs-detail-buy--soon" disabled>Bientôt</button>`;
         }
-        // Outil possédé mais retiré du Dashboard → bouton de réinstallation
-        if (isOwned && isPadDeactivated(appId)) {
-            return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">Réinstaller</button>`;
+        // Possédé mais absent de la grille (désactivé/masqué/hors sélection) →
+        // bouton actionnable plutôt que le span mort « ✓ Actif ». Cf. _isOnDashboard.
+        if (isOwned && !_isOnDashboard(appId)) {
+            const label = isPadDeactivated(appId) ? 'Réinstaller' : '+ Ajouter au Dashboard';
+            return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">${label}</button>`;
         }
         if (isOwned) {
             return `<span class="ksfs-detail-buy ksfs-detail-buy--owned">✓ Actif</span>`;

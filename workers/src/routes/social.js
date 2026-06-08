@@ -59,15 +59,23 @@ export async function socialEntitled(request, env) {
   if (requireAdmin(request, env)) return true;
   const claims = await requireJWT(request, env);
   if (!claims) return false;
-  if (claims.isAdmin === true || claims.plan === 'ADMIN') return true;
+  // Plan MAX = palier « tout inclus » → social accordé par le plan, comme ADMIN
+  // (cohérent avec le front : MAX = accès total à toutes les apps).
+  if (claims.isAdmin === true || claims.plan === 'ADMIN' || claims.plan === 'MAX') return true;
   if (!claims.sub) return false;
   const lic = await env.DB
     .prepare('SELECT owned_assets FROM licences WHERE lookup_hmac = ? LIMIT 1')
     .bind(claims.sub).first();
   if (!lic) return false;
-  let assets = [];
-  try { assets = lic.owned_assets ? JSON.parse(lic.owned_assets) : []; } catch (_) { assets = []; }
-  return Array.isArray(assets) && assets.includes(SOCIAL_ASSET);
+  // owned_assets NULL/vide = accès total (convention de toute l'app : « vide =
+  // TOUS les outils », cf. front getOwnedIds()===null) → inclut le Social Manager.
+  // Une licence avec une liste EXPLICITE doit, elle, contenir O-SOC-001 ; une
+  // liste explicitement vide ([]) = aucun outil accordé → pas d'accès social.
+  if (lic.owned_assets == null || lic.owned_assets === '') return true;
+  let assets;
+  try { assets = JSON.parse(lic.owned_assets); } catch (_) { return false; }
+  if (!Array.isArray(assets)) return false;
+  return assets.includes(SOCIAL_ASSET);
 }
 
 // ═══ Logique métier réutilisable (HTTP, CRON, automatisation) ═══
