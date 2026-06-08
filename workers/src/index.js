@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialPublish, handleSocialAccountsList } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 
@@ -133,6 +133,7 @@ export default {
       if (path === '/api/social/provision/threads'   && method === 'POST') return handleSocialProvisionThreads(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
+      if (path === '/api/social/registry'           && method === 'GET')  return handleSocialRegistry(request, env);
       if (path === '/api/social/media'              && method === 'POST') return handleSocialMediaUpload(request, env);
       const socialMediaMatch = path.match(/^\/api\/social\/media\/([A-Za-z0-9._-]+)$/);
       if (socialMediaMatch && (method === 'GET' || method === 'HEAD')) {

@@ -47,6 +47,7 @@ export const PLATFORMS = {
     targets: ['profile', 'organization'],
     text: { maxLength: 3000, supportsHashtags: true, supportsMentions: true },
     media: {
+      enabled: false,             // ⚠ publication média PAS encore implémentée (adapter) → texte seul. Garde-fou registre ↔ UI ↔ moteur.
       image: { max: 9, mimes: ['image/jpeg', 'image/png', 'image/gif'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 600 },
       carousel: true,
@@ -84,6 +85,7 @@ export const PLATFORMS = {
     targets: ['page'],
     text: { maxLength: 63206, supportsHashtags: true, supportsMentions: false },
     media: {
+      enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 7200 },
       carousel: true,
@@ -118,6 +120,7 @@ export const PLATFORMS = {
     targets: ['business'],
     text: { maxLength: 2200, supportsHashtags: true, maxHashtags: 30, supportsMentions: true },
     media: {
+      enabled: true,
       image: { max: 10, mimes: ['image/jpeg'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels
       carousel: true,
@@ -155,6 +158,7 @@ export const PLATFORMS = {
     targets: ['profile'],
     text: { maxLength: 500, supportsHashtags: true, supportsMentions: true },
     media: {
+      enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },
       carousel: true,
@@ -204,6 +208,35 @@ export function enabledPlatformIds() {
 }
 
 /**
+ * Projection UI-safe du registre pour le front (pad Social Manager).
+ * Expose UNIQUEMENT les capacités utiles au composer — jamais `auth`/`api`
+ * (URLs, scopes, versions). Le front lit ceci au lieu de coder un réseau en dur.
+ * @returns {Array<Object>}
+ */
+export function listPlatformsPublic() {
+  return listPlatforms().map(p => ({
+    id: p.id,
+    label: p.label,
+    enabled: p.enabled,
+    targets: p.targets || [],
+    text: {
+      maxLength: p.text?.maxLength ?? null,
+      supportsHashtags: !!p.text?.supportsHashtags,
+      maxHashtags: p.text?.maxHashtags ?? null,
+    },
+    media: {
+      enabled: p.media?.enabled !== false,   // défaut: supporté (seul LinkedIn = false aujourd'hui)
+      required: !!p.media?.required,
+      imageMax: p.media?.image?.max ?? 0,
+      carousel: !!p.media?.carousel,
+      hostedUrlRequired: !!p.media?.hostedUrlRequired,
+    },
+    link: { supported: !!p.link?.supported },
+    firstComment: !!p.firstComment,
+  }));
+}
+
+/**
  * Valide un post canonique CONTRE les capacités d'une plateforme.
  * Ne publie rien — sert au composer (preview live) et au moteur (garde-fou).
  * @returns {{ ok: boolean, errors: string[], warnings: string[] }}
@@ -223,6 +256,9 @@ export function validateForPlatform(canonical, platformId) {
   }
   if (p.media?.required && media.length === 0) {
     errors.push(`${p.label} exige au moins un média.`);
+  }
+  if (media.length > 0 && p.media && p.media.enabled === false) {
+    errors.push(`${p.label} n'accepte pas encore les photos (publication texte seul pour l'instant).`);
   }
   const images = media.filter(m => m.type === 'image');
   if (p.media?.image?.max && images.length > p.media.image.max) {

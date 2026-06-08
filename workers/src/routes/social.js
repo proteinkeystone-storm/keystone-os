@@ -20,7 +20,7 @@ import { encrypt }             from '../lib/crypto.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { broadcast }           from '../lib/social/broadcast.js';
 import { createCanonicalPost } from '../lib/social/canonical.js';
-import { getPlatform }         from '../lib/social/registry.js';
+import { getPlatform, listPlatformsPublic } from '../lib/social/registry.js';
 
 // ── Gate admin flexible : secret (/admin) OU JWT isAdmin/plan ADMIN (/app) ──
 export async function requireAdminFlexible(request, env) {
@@ -275,6 +275,14 @@ export async function handleSocialPublish(request, env) {
   } catch (e) {
     return err(e.message, 400, origin);
   }
+}
+
+// GET /api/social/registry  (capacités déclaratives par réseau — public, aucun secret)
+// Le composer lit ceci pour ses garde-fous (longueur, médias, hashtags…) au
+// lieu de coder un réseau en dur. Pas d'auth : ce sont des specs d'API publiques.
+export function handleSocialRegistry(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  return json({ platforms: listPlatformsPublic() }, 200, origin);
 }
 
 // GET /api/social/accounts  (ne renvoie jamais les tokens)

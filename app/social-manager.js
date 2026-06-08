@@ -1,13 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Social Manager (O-SOC-001) v1.0 — Workspace fullscreen
-   Sprint Social-2 / Pad « Social Manager »
+   KEYSTONE OS — Social Manager (O-SOC-001) v2.0 — Workspace fullscreen
+   Sprint Social-5 / Pad « Social Manager » — composer REGISTRE-DRIVEN
    ─────────────────────────────────────────────────────────────
-   Façade UI du moteur de diffusion sociale. V1 minimale :
-   - Gauche (saisie)   : message + réseaux connectés + photo (option) + Publier
-   - Droite (résultat) : aperçu live du post + résultat de publication
-   Auth : localStorage['ks_admin_token'] → Authorization: Bearer.
-   Routes Worker : GET /api/social/accounts · POST /api/social/publish
-                   · POST /api/social/media (upload image → URL R2).
+   Façade UI du moteur de diffusion sociale.
+   - Gauche (saisie)   : message + compteur + réseaux + photo + garde-fous
+   - Droite (résultat) : aperçu live (identité réelle) + résultat de publication
+
+   ⚡ Le composer NE CODE AUCUN RÉSEAU EN DUR : il lit les capacités via
+   GET /api/social/registry (longueurs, médias supportés, hashtags…) et en
+   dérive le compteur, les avertissements par réseau et l'état du bouton
+   Publier — même source de vérité que le moteur (registry.validateForPlatform).
+
+   Auth : localStorage['ks_jwt'|'ks_admin_token'] → Authorization: Bearer.
+   Routes Worker : GET /api/social/registry · GET /api/social/accounts
+                   · POST /api/social/publish · POST /api/social/media.
    Pattern .ws-app / .ws-topbar / .ws-body (cf. annonces-immo.js).
    ═══════════════════════════════════════════════════════════════ */
 
@@ -20,20 +26,43 @@ import { CF_API }                            from './pads-loader.js';
 const APP_ID    = 'O-SOC-001';
 const DRAFT_KEY = 'ks_social_manager_draft_v1';
 
-// Réseaux connus + libellé/emoji pour l'aperçu (pilotés in fine par le
-// registre côté Worker ; ici juste l'habillage UI).
-const NET_LABEL = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads' };
-const NET_GLYPH = { facebook: 'f', instagram: '◎', linkedin: 'in', threads: '@' };
+// Icône de marque par réseau (le set ui-icons fournit facebook/instagram/
+// linkedin/threads). Le LIBELLÉ, lui, vient du registre (jamais codé ici).
+const NET_ICON = { facebook: 'facebook', instagram: 'instagram', linkedin: 'linkedin', threads: 'threads' };
+const NET_LABEL_FALLBACK = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads' };
+
+// Teinte de marque par réseau (glyphe + état sélectionné). Threads est
+// monochrome (#000) → traité en CSS via --text/--navy pour rester visible
+// quel que soit le thème (blanc sur sombre / noir sur clair).
+const NET_BRAND = { facebook: '#0866FF', instagram: '#E1306C', linkedin: '#0A66C2' };
+const _hexToRgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+
+// Capacités de repli SI le registre worker est injoignable (offline / worker
+// down). La source de vérité reste /api/social/registry ; ceci évite juste une
+// UI muette. À garder cohérent avec registry.js.
+const FALLBACK_CAPS = {
+  facebook:  { id:'facebook',  label:'Facebook',  text:{ maxLength:63206, maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10 } },
+  instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10 } },
+  linkedin:  { id:'linkedin',  label:'LinkedIn',  text:{ maxLength:3000,  maxHashtags:null }, media:{ enabled:false, required:false, imageMax:9  } },
+  threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10 } },
+};
 
 // ── État module ────────────────────────────────────────────────
 let _root     = null;
 let _styles   = false;
 let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
+let _caps     = null;          // null = pas chargé ; map platformId → capacités
 let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+const _capOf   = (p) => (_caps && _caps[p]) || FALLBACK_CAPS[p] || null;
+const _labelOf = (p) => _capOf(p)?.label || NET_LABEL_FALLBACK[p] || p;
 
 // ══════════════════════════════════════════════════════════════
 // API publique
@@ -46,6 +75,7 @@ export function openSocialManager() {
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
+  _loadCaps();
   _loadAccounts();
 }
 
@@ -135,27 +165,25 @@ function _renderMain() {
         <!-- ── Saisie (gauche, 60%) ───────────────────────── -->
         <section class="sm-left">
           <div class="sm-field">
-            <label class="sm-label">Message</label>
-            <textarea class="sm-textarea" data-field="text" rows="7"
+            <label class="sm-label" for="sm-text">Message</label>
+            <textarea id="sm-text" class="sm-textarea" data-field="text" rows="7"
               placeholder="Rédigez votre publication…">${_esc(_form.text)}</textarea>
+            <div class="sm-counter" data-slot="counter" aria-live="polite"></div>
           </div>
 
           <div class="sm-field">
             <label class="sm-label">Réseaux cibles</label>
-            <div class="sm-nets" data-slot="nets">
+            <div class="sm-nets" data-slot="nets" role="group" aria-label="Réseaux cibles">
               <div class="sm-nets-loading">Chargement des comptes connectés…</div>
             </div>
           </div>
 
           <div class="sm-field">
             <label class="sm-label">Photo <span class="sm-opt">(optionnel)</span></label>
-            <div class="sm-media" data-slot="media">
-              <label class="sm-upload">
-                <input type="file" accept="image/*" data-field="image" hidden>
-                ${icon('image', 16)}&nbsp;<span data-slot="media-label">Choisir une image…</span>
-              </label>
-            </div>
+            <div class="sm-media" data-slot="media"></div>
           </div>
+
+          <div class="sm-issues" data-slot="issues" aria-live="polite"></div>
 
           <div class="sm-actions">
             <button class="sm-btn-primary" data-act="publish" ${noAdmin ? 'disabled' : ''}>
@@ -174,10 +202,12 @@ function _renderMain() {
     </div>
   `;
   _renderNets();
+  _renderMedia();
   _renderPreview();
+  _renderValidation();
 }
 
-// ── Liste des réseaux (cases) depuis _accounts ─────────────────
+// ── Liste des réseaux (boutons toggle a11y) depuis _accounts ───
 function _renderNets() {
   const box = _root && _root.querySelector('[data-slot="nets"]');
   if (!box) return;
@@ -188,32 +218,76 @@ function _renderNets() {
     return;
   }
   box.innerHTML = _accounts.map(a => {
-    const p = a.platform;
-    const checked = _form.targets.includes(p) ? 'checked' : '';
+    const p  = a.platform;
+    const on = _form.targets.includes(p);
+    const brand = NET_BRAND[p];
+    const brandStyle = brand ? ` style="--brand:${brand};--brand-soft:${_hexToRgba(brand, 0.14)}"` : '';
     return `
-      <label class="sm-net ${checked ? 'is-on' : ''}">
-        <input type="checkbox" data-net="${_esc(p)}" ${checked} hidden>
-        <span class="sm-net-glyph">${_esc(NET_GLYPH[p] || '●')}</span>
-        <span class="sm-net-name">${_esc(NET_LABEL[p] || p)}</span>
-        <span class="sm-net-handle">${_esc(a.display_name || '')}</span>
-      </label>`;
+      <button type="button" class="sm-net ${on ? 'is-on' : ''}" data-net="${_esc(p)}" aria-pressed="${on}"${brandStyle}>
+        <span class="sm-net-glyph">${icon(NET_ICON[p] || 'globe', 18)}</span>
+        <span class="sm-net-txt">
+          <span class="sm-net-name">${_esc(_labelOf(p))}</span>
+          <span class="sm-net-handle">${_esc(a.display_name || '')}</span>
+        </span>
+      </button>`;
   }).join('');
+
+  _equalizeNetWidths(box);
 }
 
-// ── Aperçu live du post ────────────────────────────────────────
+// Largeur homogène : toutes les chips réseaux calées sur la plus large
+// (mesure de la largeur naturelle, puis application du max à toutes).
+function _equalizeNetWidths(box) {
+  const chips = [...box.querySelectorAll('.sm-net')];
+  if (chips.length < 2) return;
+  chips.forEach(c => { c.style.width = 'auto'; });
+  let max = 0;
+  for (const c of chips) max = Math.max(max, Math.ceil(c.getBoundingClientRect().width));
+  chips.forEach(c => { c.style.width = `${max}px`; });
+}
+
+// ── Zone média : bouton d'upload OU vignette avec retrait ──────
+function _renderMedia() {
+  const box = _root && _root.querySelector('[data-slot="media"]');
+  if (!box) return;
+  if (_form.imageUrl) {
+    box.innerHTML = `
+      <div class="sm-media-chip">
+        ${icon('image', 15)}
+        <span class="sm-media-name" title="${_esc(_form.imageName || 'image')}">${_esc(_form.imageName || 'image')}</span>
+        <button type="button" class="sm-media-x" data-act="remove-image" aria-label="Retirer la photo" title="Retirer la photo">${icon('x', 15)}</button>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <label class="sm-upload">
+        <input type="file" accept="image/*" data-field="image" hidden>
+        ${icon('image', 16)}&nbsp;<span data-slot="media-label">Choisir une image…</span>
+      </label>`;
+  }
+}
+
+// ── Aperçu live du post (identité réelle du compte) ────────────
 function _renderPreview() {
   const box = _root && _root.querySelector('[data-slot="preview"]');
   if (!box) return;
-  const txt = _form.text.trim();
-  const nets = _form.targets.map(p => NET_LABEL[p] || p);
+  const txt      = _form.text.trim();
+  const identity = _previewIdentity();
+  const initial  = (identity.trim()[0] || 'P').toUpperCase();
+  const glyphs   = _form.targets.length
+    ? _form.targets.map(p => {
+        const brand = NET_BRAND[p];
+        const st = brand ? ` style="color:${brand}"` : '';   // Threads → couleur héritée (monochrome via CSS)
+        return `<span class="sm-card-net-ic" data-net="${_esc(p)}"${st} title="${_esc(_labelOf(p))}">${icon(NET_ICON[p] || 'globe', 14)}</span>`;
+      }).join('')
+    : '<span class="sm-muted">aucun réseau sélectionné</span>';
 
   box.innerHTML = `
     <div class="sm-card">
       <div class="sm-card-head">
-        <div class="sm-card-avatar">P</div>
+        <div class="sm-card-avatar">${_esc(initial)}</div>
         <div class="sm-card-meta">
-          <div class="sm-card-name">Protein Keystone Studio</div>
-          <div class="sm-card-net">${nets.length ? _esc(nets.join(' · ')) : '<span class="sm-muted">aucun réseau sélectionné</span>'}</div>
+          <div class="sm-card-name">${_esc(identity)}</div>
+          <div class="sm-card-nets">${glyphs}</div>
         </div>
       </div>
       <div class="sm-card-text">${txt ? _esc(txt).replace(/\n/g, '<br>') : '<span class="sm-muted">Votre message apparaîtra ici…</span>'}</div>
@@ -222,24 +296,157 @@ function _renderPreview() {
   `;
 }
 
+// Identité affichée dans l'aperçu : display_name du 1er réseau sélectionné
+// (sinon 1er compte connecté, sinon repli neutre). Plus de marque codée en dur.
+function _previewIdentity() {
+  const accs = _accounts || [];
+  for (const p of _form.targets) {
+    const a = accs.find(x => x.platform === p && x.display_name);
+    if (a) return a.display_name;
+  }
+  const any = accs.find(x => x.display_name);
+  return any ? any.display_name : 'Votre page';
+}
+
 // ══════════════════════════════════════════════════════════════
-// Données : comptes connectés
+// Garde-fous registre-driven (compteur + issues + bouton)
 // ══════════════════════════════════════════════════════════════
+
+// Compte les #hashtags présents dans le texte (les hashtags sont inline ici).
+function _countHashtags(text) {
+  const m = text.match(/#[\p{L}0-9_]+/gu);
+  return m ? m.length : 0;
+}
+
+// Limite de caractères affichée = la PLUS contraignante parmi les réseaux
+// sélectionnés (ex. Threads 500 l'emporte sur Facebook 63206).
+function _counterInfo() {
+  let best = null;
+  for (const p of _form.targets) {
+    const c = _capOf(p);
+    const max = c?.text?.maxLength;
+    if (max && (!best || max < best.limit)) best = { limit: max, label: c.label || _labelOf(p) };
+  }
+  if (!best) return null;
+  return { used: _form.text.trim().length, limit: best.limit, label: best.label };
+}
+
+// Calcule les problèmes par réseau À PARTIR DU REGISTRE (pas de règle en dur).
+function _validate() {
+  const text   = _form.text.trim();
+  const hasImg = !!_form.imageUrl;
+  const tags   = _countHashtags(text);
+  const global = [];
+  const perNet = {};
+  const reasons = [];   // messages plats lisibles (pour le toast)
+
+  if (!text && !hasImg) global.push('Écris un message ou ajoute une photo.');
+  if (!_form.targets.length) global.push('Sélectionne au moins un réseau.');
+
+  for (const p of _form.targets) {
+    const c = _capOf(p);
+    const errors = [], warnings = [];
+    if (c) {
+      if (c.text?.maxLength && text.length > c.text.maxLength) {
+        errors.push(`texte trop long (${text.length}/${c.text.maxLength}).`);
+      }
+      if (c.media?.required && !hasImg) {
+        errors.push('exige une photo.');
+      }
+      if (hasImg && c.media && c.media.enabled === false) {
+        errors.push('n\'accepte pas encore les photos — retire-la ou décoche ce réseau.');
+      }
+      if (c.text?.maxHashtags && tags > c.text.maxHashtags) {
+        warnings.push(`${tags} hashtags (max conseillé ${c.text.maxHashtags}).`);
+      }
+    }
+    perNet[p] = { errors, warnings };
+    for (const e of errors) reasons.push(`${_labelOf(p)} — ${e}`);
+  }
+
+  reasons.unshift(...global);
+  const blocking = global.length > 0 || Object.values(perNet).some(x => x.errors.length > 0);
+  return { global, perNet, reasons, canPublish: !blocking };
+}
+
+// Met à jour compteur, panneau d'issues, surlignage réseaux et bouton.
+function _renderValidation() {
+  if (!_root) return null;
+  const v = _validate();
+
+  // Compteur de caractères
+  const cEl = _root.querySelector('[data-slot="counter"]');
+  if (cEl) {
+    const ci = _counterInfo();
+    if (ci) {
+      const over = ci.used > ci.limit;
+      cEl.innerHTML = `<span class="sm-counter-num ${over ? 'over' : ''}">${ci.used} / ${ci.limit}</span> <span class="sm-counter-net">${_esc(ci.label)}</span>`;
+    } else { cEl.innerHTML = ''; }
+  }
+
+  // Panneau d'issues PAR RÉSEAU (le cœur du garde-fou)
+  const iEl = _root.querySelector('[data-slot="issues"]');
+  if (iEl) {
+    const rows = [];
+    for (const p of _form.targets) {
+      const it = v.perNet[p]; if (!it) continue;
+      for (const e of it.errors)   rows.push(`<li class="sm-issue err">${icon('alert-triangle', 13)}<span><strong>${_esc(_labelOf(p))}</strong> ${_esc(e)}</span></li>`);
+      for (const w of it.warnings) rows.push(`<li class="sm-issue warn">${icon('alert-triangle', 13)}<span><strong>${_esc(_labelOf(p))}</strong> ${_esc(w)}</span></li>`);
+    }
+    iEl.innerHTML = rows.length ? `<ul class="sm-issues-list">${rows.join('')}</ul>` : '';
+  }
+
+  // Surlignage des réseaux en erreur
+  _root.querySelectorAll('.sm-net[data-net]').forEach(el => {
+    const it = v.perNet[el.dataset.net];
+    el.classList.toggle('has-err', !!(it && it.errors.length));
+  });
+
+  // Bouton Publier
+  const btn = _root.querySelector('[data-act="publish"]');
+  if (btn) {
+    btn.disabled = _busy || !_adminToken() || !v.canPublish;
+    btn.title = v.canPublish ? '' : (v.reasons[0] || 'Vérifie les contraintes par réseau.');
+  }
+  return v;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Données : registre des capacités (garde-fous) + comptes
+// ══════════════════════════════════════════════════════════════
+async function _loadCaps() {
+  try {
+    const res  = await fetch(`${CF_API}/api/social/registry`);
+    const data = await res.json().catch(() => ({}));
+    const arr  = Array.isArray(data.platforms) ? data.platforms : [];
+    if (arr.length) { _caps = {}; for (const c of arr) _caps[c.id] = c; }
+    else            { _caps = { ...FALLBACK_CAPS }; }
+  } catch (_) {
+    _caps = { ...FALLBACK_CAPS };
+  }
+  // Les libellés/garde-fous dépendent des caps → re-render des zones concernées.
+  _renderNets();
+  _renderPreview();
+  _renderValidation();
+}
+
 async function _loadAccounts() {
   const token = _adminToken();
-  if (!token) { _accounts = []; _renderNets(); return; }
+  if (!token) { _accounts = []; _renderNets(); _renderValidation(); return; }
   try {
     const res = await fetch(`${CF_API}/api/social/accounts`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (res.status === 401) { _accounts = []; _renderNets(); _toast('Session admin expirée', 'warn'); return; }
+    if (res.status === 401) { _accounts = []; _renderNets(); _renderValidation(); _toast('Session admin expirée', 'warn'); return; }
     const data = await res.json().catch(() => ({}));
     _accounts = Array.isArray(data.accounts) ? data.accounts.filter(a => a.status === 'connected') : [];
     // Pré-sélection : tout ce qui est connecté (sauf si un brouillon de cibles existe)
     if (!_form.targets.length) _form.targets = _accounts.map(a => a.platform);
     _renderNets();
     _renderPreview();
+    _renderValidation();
   } catch (e) {
     _accounts = [];
     _renderNets();
+    _renderValidation();
     _toast('Comptes non chargés : ' + (e?.message || 'erreur'), 'warn');
   }
 }
@@ -261,18 +468,26 @@ async function _uploadImage(file) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.url) throw new Error(data.error || `Erreur ${res.status}`);
-    _form.imageUrl = data.url;
+    _form.imageUrl  = data.url;
     _form.imageName = file.name;
-    _setMediaLabel(`✓ ${file.name}`);
+    _renderMedia();
     _renderPreview();
+    _renderValidation();
   } catch (e) {
-    _setMediaLabel('Choisir une image…');
+    _renderMedia();
     _toast('Upload échoué : ' + (e?.message || 'erreur'), 'warn');
   }
 }
 function _setMediaLabel(t) {
   const el = _root && _root.querySelector('[data-slot="media-label"]');
   if (el) el.textContent = t;
+}
+function _removeImage() {
+  _form.imageUrl  = null;
+  _form.imageName = null;
+  _renderMedia();
+  _renderPreview();
+  _renderValidation();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -283,11 +498,11 @@ async function _publish() {
   const token = _adminToken();
   if (!token) { _toast('Connexion admin requise pour publier', 'warn'); return; }
 
-  const text = _form.text.trim();
-  if (!text && !_form.imageUrl) { _toast('Écris un message ou ajoute une photo', 'warn'); return; }
-  if (!_form.targets.length)    { _toast('Sélectionne au moins un réseau', 'warn'); return; }
-  if (_form.targets.includes('instagram') && !_form.imageUrl) { _toast('Instagram nécessite une photo', 'warn'); return; }
+  // Garde-fou registre-driven (même contraintes que le moteur côté Worker).
+  const v = _renderValidation();
+  if (!v.canPublish) { _toast(v.reasons[0] || 'Vérifie les contraintes par réseau.', 'warn'); return; }
 
+  const text = _form.text.trim();
   _busy = true;
   _setResult(`<div class="sm-result-pending">${icon('zap', 16)}&nbsp;Publication en cours…</div>`);
   const btn = _root.querySelector('[data-act="publish"]'); if (btn) btn.disabled = true;
@@ -311,7 +526,7 @@ async function _publish() {
 
     const rows = (data.results || []).map(r => {
       const ok = r.status === 'published';
-      const label = NET_LABEL[r.platform] || r.platform;
+      const label = _labelOf(r.platform);
       return `<li class="${ok ? 'ok' : 'ko'}">
         <span class="sm-res-net">${_esc(label)}</span>
         ${ok
@@ -332,7 +547,7 @@ async function _publish() {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
     _busy = false;
-    const b = _root && _root.querySelector('[data-act="publish"]'); if (b) b.disabled = false;
+    _renderValidation();
   }
 }
 function _setResult(html) {
@@ -345,22 +560,32 @@ function _setResult(html) {
 // ══════════════════════════════════════════════════════════════
 function _onClick(e) {
   const act = e.target.closest('[data-act]')?.dataset.act;
-  if (act === 'close')   { e.preventDefault(); closeSocialManager(); return; }
-  if (act === 'publish') { e.preventDefault(); _publish(); return; }
+  if (act === 'close')        { e.preventDefault(); closeSocialManager(); return; }
+  if (act === 'publish')      { e.preventDefault(); _publish(); return; }
+  if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
 
-  // Toggle réseau
+  // Toggle réseau (bouton a11y : aria-pressed)
   const net = e.target.closest('[data-net]');
   if (net) {
     const p = net.dataset.net;
     const i = _form.targets.indexOf(p);
     if (i >= 0) _form.targets.splice(i, 1); else _form.targets.push(p);
-    net.closest('.sm-net')?.classList.toggle('is-on');
+    const on = _form.targets.includes(p);
+    net.classList.toggle('is-on', on);
+    net.setAttribute('aria-pressed', String(on));
     _renderPreview();
+    _renderValidation();
+    _scheduleSave();
   }
 }
 
 function _onInput(e) {
-  if (e.target.dataset.field === 'text') { _form.text = e.target.value; _renderPreview(); _scheduleSave(); }
+  if (e.target.dataset.field === 'text') {
+    _form.text = e.target.value;
+    _renderPreview();
+    _renderValidation();
+    _scheduleSave();
+  }
 }
 
 function _onChange(e) {
@@ -390,12 +615,16 @@ function _toast(msg, kind = 'ok') {
 function _injectStyles() {
   if (_styles) return; _styles = true;
   const css = `
+  /* Token d'avertissement LOCAL au pad : le --warn global est cassé en dark
+     (auto-référence dans style.css). On thémise nous-mêmes l'ambre clair/foncé. */
+  :root { --sm-warn: #fbbf24; }
+  html.light-mode { --sm-warn: #d97706; }
   .sm-wrap { max-width: 1180px; margin: 0 auto; padding: 28px 28px 60px; }
   .sm-hero { margin-bottom: 22px; }
   .sm-title { font-size: 30px; font-weight: 900; letter-spacing: -.02em; margin: 0 0 6px; color: var(--text); }
   .sm-subtitle { color: var(--tx2); font-size: 14px; max-width: 640px; }
   .sm-banner { display:flex; align-items:center; gap:6px; padding:11px 14px; border-radius: var(--r); font-size:13px; margin-bottom:18px; border:1px solid var(--bd); }
-  .sm-banner-warn { background: rgba(251,191,36,.10); color:#fcd34d; border-color: rgba(251,191,36,.25); }
+  .sm-banner-warn { background: var(--warn-soft); color: var(--sm-warn); border-color: color-mix(in srgb, var(--sm-warn) 32%, transparent); }
 
   .sm-split { display:flex; gap:0; align-items:stretch; background: var(--navy2); border:1px solid var(--bd); border-radius: var(--r2); overflow:hidden; }
   .sm-left  { width:60%; padding:24px; border-right:1px solid var(--bd); }
@@ -406,19 +635,42 @@ function _injectStyles() {
   .sm-opt   { font-weight:500; text-transform:none; color: var(--tx3); }
   .sm-textarea { width:100%; resize:vertical; min-height:140px; background: var(--navy3); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:12px 14px; font:inherit; font-size:14px; line-height:1.5; }
   .sm-textarea:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
+  .sm-counter { margin-top:6px; font-size:12px; color: var(--tx3); text-align:right; min-height:16px; }
+  .sm-counter-num.over { color: var(--danger); font-weight:800; }
+  .sm-counter-net { color: var(--tx3); }
 
-  .sm-nets { display:flex; flex-wrap:wrap; gap:10px; }
-  .sm-nets-loading, .sm-nets-empty { color: var(--tx3); font-size:13px; padding:8px 0; }
-  .sm-net { display:inline-flex; align-items:center; gap:9px; padding:9px 13px; border:1px solid var(--bd); border-radius: var(--r); cursor:pointer; background: var(--navy3); transition: all .15s; user-select:none; }
-  .sm-net:hover { border-color: var(--gold2); }
-  .sm-net.is-on { border-color: var(--gold); background: var(--gold3); }
-  .sm-net-glyph { width:24px; height:24px; display:grid; place-items:center; border-radius:7px; background: var(--navy); color: var(--gold2); font-weight:800; font-size:12px; }
-  .sm-net.is-on .sm-net-glyph { background: var(--gold); color:#fff; }
-  .sm-net-name { font-size:13px; font-weight:700; color: var(--text); }
-  .sm-net-handle { font-size:11px; color: var(--tx3); }
+  /* Grille 3/ligne, colonnes 1fr → largeurs ÉGALES occupant toute la largeur
+     du champ Message au-dessus. */
+  .sm-nets { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; }
+  .sm-nets-loading, .sm-nets-empty { grid-column: 1 / -1; color: var(--tx3); font-size:13px; padding:8px 0; }
+  /* Padding UNIFORME (10px) + glyphe = élément le plus haut → écart bordure↔glyphe
+     identique en haut, bas et gauche (règle demandée). */
+  .sm-net { --brand: var(--gold); --brand-soft: var(--gold3); box-sizing:border-box; display:flex; align-items:center; gap:10px; min-width:0; padding:10px; border:1px solid var(--bd); border-radius: var(--r); cursor:pointer; background: var(--navy3); transition: border-color .15s, background-color .15s, box-shadow .15s; user-select:none; appearance:none; font:inherit; color:inherit; text-align:left; }
+  .sm-net[data-net="threads"] { --brand: var(--text); --brand-soft: rgba(136,136,136,.16); }
+  .sm-net:hover { border-color: var(--brand); }
+  .sm-net.is-on { border-color: var(--brand); background: var(--brand-soft); }
+  .sm-net.has-err { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: var(--danger-soft); }
+  .sm-net:focus-visible { outline:none; border-color: var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+  .sm-net-glyph { flex:0 0 auto; width:32px; height:32px; display:grid; place-items:center; border-radius:9px; background: var(--brand); color:#fff; }
+  .sm-net[data-net="threads"] .sm-net-glyph { color: var(--navy); }
+  .sm-net-txt { min-width:0; display:flex; flex-direction:column; gap:1px; line-height:1.15; }
+  .sm-net-name { font-size:13px; font-weight:700; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sm-net-handle { font-size:11px; color: var(--tx3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   .sm-upload { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border:1px dashed var(--bd); border-radius: var(--r); cursor:pointer; color: var(--tx2); font-size:13px; transition: all .15s; }
   .sm-upload:hover { border-color: var(--gold2); color: var(--text); }
+  .sm-media-chip { display:inline-flex; align-items:center; gap:8px; padding:8px 8px 8px 12px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy3); font-size:13px; color: var(--text); }
+  .sm-media-name { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sm-media-x { display:inline-grid; place-items:center; width:26px; height:26px; border:none; background:transparent; color: var(--tx3); cursor:pointer; border-radius:7px; transition: all .15s; }
+  .sm-media-x:hover { color: var(--danger); background: var(--danger-soft); }
+
+  .sm-issues { margin: -4px 0 14px; }
+  .sm-issues-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .sm-issue { display:flex; align-items:flex-start; gap:7px; font-size:12.5px; line-height:1.4; padding:7px 11px; border-radius: var(--r); border:1px solid transparent; }
+  .sm-issue .ws-icon { flex:0 0 auto; margin-top:1px; }
+  .sm-issue.err  { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 28%, transparent); }
+  .sm-issue.warn { color: var(--sm-warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--sm-warn) 30%, transparent); }
+  .sm-issue strong { font-weight:800; }
 
   .sm-actions { margin-top:6px; }
   .sm-btn-primary { display:inline-flex; align-items:center; padding:12px 22px; border:none; border-radius: var(--r); background: var(--gold); color:#fff; font-weight:800; font-size:14px; cursor:pointer; transition: all .15s; }
@@ -426,31 +678,31 @@ function _injectStyles() {
   .sm-btn-primary:disabled { opacity:.45; cursor:not-allowed; }
 
   .sm-right-lbl { font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color: var(--tx3); }
-  .sm-preview { }
   .sm-card { background: var(--navy2); border:1px solid var(--bd); border-radius: var(--r2); padding:16px; }
   .sm-card-head { display:flex; align-items:center; gap:11px; margin-bottom:11px; }
   .sm-card-avatar { width:40px; height:40px; border-radius:50%; background: var(--gold); color:#fff; display:grid; place-items:center; font-weight:900; }
   .sm-card-name { font-weight:800; font-size:14px; color: var(--text); }
-  .sm-card-net { font-size:12px; color: var(--gold2); }
+  .sm-card-nets { display:flex; align-items:center; gap:7px; margin-top:3px; min-height:16px; }
+  .sm-card-net-ic { color: var(--gold2); display:inline-flex; }
+  .sm-card-net-ic[data-net="threads"] { color: var(--text); }
   .sm-card-text { font-size:14px; line-height:1.55; color: var(--text); white-space:normal; word-break:break-word; }
   .sm-card-img { margin-top:12px; border-radius: var(--r); overflow:hidden; border:1px solid var(--bd); }
   .sm-card-img img { width:100%; display:block; }
-  .sm-muted { color: var(--tx3); font-style:italic; }
+  .sm-muted { color: var(--tx3); font-style:italic; font-size:12px; }
 
-  .sm-result { }
   .sm-result-pending { display:flex; align-items:center; color: var(--gold2); font-size:13px; }
   .sm-result-head { font-weight:800; font-size:14px; margin-bottom:8px; }
-  .sm-result-head.ok { color:#34d399; } .sm-result-head.warn { color:#fcd34d; } .sm-result-head.ko { color:#f87171; }
-  .sm-result-ko { color:#f87171; font-size:13px; }
+  .sm-result-head.ok { color: var(--green); } .sm-result-head.warn { color: var(--sm-warn); } .sm-result-head.ko { color: var(--danger); }
+  .sm-result-ko { color: var(--danger); font-size:13px; }
   .sm-result-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; }
   .sm-result-list li { display:flex; align-items:center; gap:10px; font-size:13px; }
   .sm-res-net { font-weight:700; color: var(--text); min-width:78px; }
-  .sm-result-list li.ok a { color:#34d399; text-decoration:none; }
-  .sm-res-err { color:#f87171; }
+  .sm-result-list li.ok a { color: var(--green); text-decoration:none; }
+  .sm-res-err { color: var(--danger); }
 
   .sm-toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background: var(--navy3); color: var(--text); border:1px solid var(--bd); padding:11px 18px; border-radius: var(--r); font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition: all .25s; z-index:9999; }
   .sm-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-  .sm-toast-ok { border-color: rgba(52,211,153,.4); } .sm-toast-warn { border-color: rgba(251,191,36,.4); }
+  .sm-toast-ok { border-color: color-mix(in srgb, var(--green) 45%, transparent); } .sm-toast-warn { border-color: color-mix(in srgb, var(--sm-warn) 45%, transparent); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
   `;
