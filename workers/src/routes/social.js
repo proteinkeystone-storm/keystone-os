@@ -40,12 +40,30 @@ export async function requireAdminFlexible(request, env) {
 // ⚠ Ouverture aux clients (gate non-admin) = APRÈS le Sprint OAuth : le
 //   provisioning actuel utilise les TOKENS SYSTÈME de l'owner — l'ouvrir
 //   maintenant laisserait un client provisionner les comptes de l'owner.
+// Crée le tenant à la volée s'il n'existe pas. Les tables social_* ont une
+// contrainte FOREIGN KEY (tenant_id) REFERENCES tenants(id) ; or un client
+// non-admin a pour tenant son `sub` JWT, JAMAIS semé en base avant sa 1re
+// action sociale → sinon « FOREIGN KEY constraint failed » à l'insertion (le
+// trou multi-tenant que le 1er test client OAuth a exposé). INSERT OR IGNORE =
+// idempotent. 'default' est déjà semé par schema.sql, donc on le saute.
+async function _ensureTenant(env, id, name, plan) {
+  if (!id || id === 'default') return;
+  try {
+    await env.DB
+      .prepare("INSERT OR IGNORE INTO tenants (id, name, plan) VALUES (?, ?, ?)")
+      .bind(id, name || 'Client Keystone', plan || 'STARTER')
+      .run();
+  } catch (_) { /* non bloquant : ne casse pas le flux social si l'écriture échoue */ }
+}
+
 export async function socialTenantOf(request, env) {
   if (requireAdmin(request, env)) return 'default';
   const claims = await requireJWT(request, env);
   if (!claims) return null;
   if (claims.isAdmin === true || claims.plan === 'ADMIN') return 'default';
-  return claims.sub || null;
+  if (!claims.sub) return null;
+  await _ensureTenant(env, claims.sub, claims.owner || claims.email, claims.plan);
+  return claims.sub;
 }
 
 // ── Entitlement Social Manager (Sprint Multi-tenant-2) ────────
