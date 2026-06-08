@@ -1804,7 +1804,8 @@ async function activateLicence() {
    ONBOARDING
 ═══════════════════════════════════════════ */
 // UX-2 : Admin = quota illimité (Infinity n'est jamais atteint dans toggleTool)
-const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': 7, 'Admin': Infinity };
+// MAX = palier « tout inclus » (comme ADMIN) : accès à TOUTES les apps, aucun cap.
+const TOOL_QUOTA = { 'Demo': 1, 'Start': 3, 'Pro': 5, 'Max': Infinity, 'Admin': Infinity };
 
 // Hiérarchie cumulative des plans : un plan voit son tag + ceux du dessous.
 // Demo a accès à tout le catalogue (l'utilisateur n'en choisira qu'un).
@@ -1897,16 +1898,18 @@ function buildToolsGrid() {
   const label = document.getElementById('ob-quota-label');
   const tools = _toolsForPlan();
   label.style.color = '';
-  if (_activePlan === 'Admin') {
+  // MAX et ADMIN = accès complet : tous les outils inclus, aucun cap.
+  const _fullAccess = (_activePlan === 'Admin' || _activePlan === 'Max');
+  if (_fullAccess) {
     // UX-2 : libellé dédié + tous les outils pré-cochés (accès complet)
-    label.textContent = `Plan ADMIN — accès complet. Tous les outils sont pré-sélectionnés ; vous pouvez en retirer si vous le souhaitez.`;
+    label.textContent = `Plan ${_activePlan.toUpperCase()} — accès complet. Tous les outils sont pré-sélectionnés ; vous pouvez en retirer si vous le souhaitez.`;
   } else if (_activePlan === 'Demo') {
     label.textContent = `Mode Démo : sélectionnez 1 outil parmi nos Assistants Certifiés. Souscrivez à un plan ensuite pour en débloquer davantage.`;
   } else {
     label.textContent = `Sélectionnez vos ${quota} Assistants Certifiés inclus dans votre plan ${_activePlan}. Vous pourrez en changer à tout moment.`;
   }
-  // UX-2 : pour ADMIN, on pré-coche TOUS les outils (quota illimité)
-  if (_activePlan === 'Admin') {
+  // UX-2 : pour MAX/ADMIN, on pré-coche TOUS les outils (quota illimité)
+  if (_fullAccess) {
     _selectedTools = new Set(tools.map(t => t.id));
   }
   grid.innerHTML = tools.map(tool => {
