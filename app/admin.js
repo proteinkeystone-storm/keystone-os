@@ -366,13 +366,36 @@ function switchTab(tab) {
 // Helper de normalisation : convertit les rows de /api/admin/licences
 // (enrichi S5.3) OU /api/licence/list (legacy) vers un format uniforme.
 // Permet le fallback gracieux si l'endpoint enrichi throw.
+// owned_assets nous arrive sous DEUX clés selon l'endpoint réellement servi
+// (l'admin tente l'enrichi puis tombe en fallback gracieux) :
+//   • enrichi  /api/admin/licences → `owned_assets` (snake) = array (safeJSON)
+//   • fallback /api/licence/list   → `ownedAssets`  (camel) = array (JSON.parse)
+// + d'anciennes lignes peuvent encore arriver en STRING brute (JSON ou CSV).
+// On normalise TOUJOURS vers un array (ou null) — sinon le pré-remplissage du
+// champ « Outils autorisés » repart vide → DANGER : l'upsert efface les outils.
+function _parseOwnedAssets(raw) {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) return raw.length ? raw : null;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.length ? parsed : null;
+    } catch { /* pas du JSON → on tente le CSV ci-dessous */ }
+    const csv = s.split(',').map(x => x.trim()).filter(Boolean);
+    return csv.length ? csv : null;
+  }
+  return null;
+}
+
 function _normalizeLicenceRow(l) {
   if (!l) return null;
   return {
     key:           l.key,
     owner:         l.owner || '',
     plan:          l.plan || '',
-    owned_assets:  Array.isArray(l.owned_assets) ? l.owned_assets : null,
+    owned_assets:  _parseOwnedAssets(l.owned_assets ?? l.ownedAssets),
     active:        l.is_active === true || l.active === true,
     createdAt:     l.created_at || l.createdAt || null,
     expiresAt:     l.expires_at || l.expiresAt || null,
