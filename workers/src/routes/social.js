@@ -29,6 +29,25 @@ export async function requireAdminFlexible(request, env) {
   return claims?.isAdmin === true || claims?.plan === 'ADMIN';
 }
 
+// ── Résolution du TENANT (Sprint Multi-tenant-1) ──────────────
+// Source de vérité du tenant = l'IDENTITÉ AUTHENTIFIÉE, JAMAIS un paramètre
+// client (sinon n'importe qui lirait/écrirait les données d'autrui via
+// ?tenantId=). Même règle que le reste de Keystone (cf. routes/data.js → sub).
+//   - Admin (secret /admin OU JWT isAdmin/plan ADMIN) → 'default' : tenant
+//     légataire de l'owner (comptes sociaux historiques) → ZÉRO migration.
+//   - Client payant (JWT non-admin) → son propre tenant = claims.sub.
+//   - Pas d'auth → null (le handler renvoie 401).
+// ⚠ Ouverture aux clients (gate non-admin) = APRÈS le Sprint OAuth : le
+//   provisioning actuel utilise les TOKENS SYSTÈME de l'owner — l'ouvrir
+//   maintenant laisserait un client provisionner les comptes de l'owner.
+export async function socialTenantOf(request, env) {
+  if (requireAdmin(request, env)) return 'default';
+  const claims = await requireJWT(request, env);
+  if (!claims) return null;
+  if (claims.isAdmin === true || claims.plan === 'ADMIN') return 'default';
+  return claims.sub || null;
+}
+
 // ═══ Logique métier réutilisable (HTTP, CRON, automatisation) ═══
 
 /**
@@ -280,8 +299,10 @@ export async function handleSocialProvisionFacebook(request, env) {
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   try {
-    const r = await provisionFacebook(env, { pageId: body.pageId, tenantId: body.tenantId });
+    const r = await provisionFacebook(env, { pageId: body.pageId, tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);
@@ -294,8 +315,10 @@ export async function handleSocialProvisionInstagram(request, env) {
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   try {
-    const r = await provisionInstagram(env, { pageId: body.pageId, tenantId: body.tenantId });
+    const r = await provisionInstagram(env, { pageId: body.pageId, tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);
@@ -308,8 +331,10 @@ export async function handleSocialProvisionThreads(request, env) {
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   try {
-    const r = await provisionThreads(env, { tenantId: body.tenantId });
+    const r = await provisionThreads(env, { tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);
@@ -322,8 +347,10 @@ export async function handleSocialProvisionTelegram(request, env) {
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   try {
-    const r = await provisionTelegram(env, { chatId: body.chatId, tenantId: body.tenantId });
+    const r = await provisionTelegram(env, { chatId: body.chatId, tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);
@@ -336,8 +363,10 @@ export async function handleSocialPublish(request, env) {
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   try {
-    const r = await publishCanonical(env, body);
+    const r = await publishCanonical(env, { ...body, tenantId });
     return json({ success: r.status !== 'failed', ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 400, origin);
@@ -357,8 +386,8 @@ export async function handleSocialAccountsList(request, env) {
   const origin = getAllowedOrigin(env, request);
   if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
   await ensureSocialSchema(env);
-  const url      = new URL(request.url);
-  const tenantId = url.searchParams.get('tenantId') || 'default';
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
   const { results } = await env.DB.prepare(`
     SELECT id, platform, target_type, external_id, display_name, scopes, status, created_at, updated_at
     FROM social_accounts WHERE tenant_id = ? ORDER BY platform
