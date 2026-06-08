@@ -1,0 +1,15 @@
+{
+  "id": "O-SOC-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "Social Manager",
+  "subtitle": "Composez et publiez sur vos réseaux — Facebook · Instagram · Threads · Telegram",
+  "category": "COM",
+  "icon": "user",
+  "ai_optimized": "Claude",
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nLa logique métier (composer registre-driven, garde-fous par réseau, moteur de diffusion multi-plateforme) vit dans app/social-manager.js, workers/src/routes/social.js et workers/src/lib/social/.\nPour modifier le comportement utilisateur : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Composez une publication et diffusez-la sur tous vos réseaux connectés en un clic — Facebook, Instagram, Threads, Telegram (LinkedIn à venir). Composer piloté par registre : compteur de caractères par réseau, garde-fous (longueur, médias requis, hashtags, légendes), couleurs de marque par plateforme. Connectez vos propres comptes, publiez en direct avec aperçu live et retours par réseau. Idéal pour diffuser une annonce, un événement ou une campagne sur tous vos canaux sans copier-coller."
+}

@@ -1,6 +1,6 @@
 {
-  "version": "1.4",
-  "updatedAt": "2026-06-02",
+  "version": "1.5",
+  "updatedAt": "2026-06-08",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -48,6 +48,32 @@
         "diffusion",
         "portails",
         "copywriting"
+      ]
+    },
+    {
+      "id": "O-SOC-001",
+      "padKey": null,
+      "title": "Social Manager",
+      "subtitle": "Composez et publiez sur vos réseaux — Facebook · Instagram · Threads · Telegram",
+      "category": "COM",
+      "plan": "PRO",
+      "price": 49,
+      "longDesc": "Composez une publication et diffusez-la sur tous vos réseaux connectés en un clic — Facebook, Instagram, Threads, Telegram (LinkedIn à venir). Composer piloté par registre : compteur de caractères par réseau, garde-fous (longueur, médias, hashtags, légendes), couleurs de marque. Connectez vos propres comptes, publication directe et aperçu live.",
+      "icon": "user",
+      "ai_optimized": "Claude",
+      "isNew": true,
+      "published": true,
+      "lifetimePrice": 199,
+      "tags": [
+        "social",
+        "reseaux",
+        "facebook",
+        "instagram",
+        "threads",
+        "telegram",
+        "diffusion",
+        "publication",
+        "community"
       ]
     },
     {

@@ -48,6 +48,28 @@ export async function socialTenantOf(request, env) {
   return claims.sub || null;
 }
 
+// ── Entitlement Social Manager (Sprint Multi-tenant-2) ────────
+// QUI a le droit d'utiliser l'outil social ? Même modèle que le front : l'asset
+// O-SOC-001 figure dans licences.owned_assets (lookup par sub = lookup_hmac).
+// Admin = accès total. Le TENANT reste résolu séparément par socialTenantOf().
+// Sépare bien les 2 concerns : « as-tu le droit ? » (entitlement) vs « quel
+// tenant ? » (isolation). Routes client : accounts + publish + provision/telegram.
+const SOCIAL_ASSET = 'O-SOC-001';
+export async function socialEntitled(request, env) {
+  if (requireAdmin(request, env)) return true;
+  const claims = await requireJWT(request, env);
+  if (!claims) return false;
+  if (claims.isAdmin === true || claims.plan === 'ADMIN') return true;
+  if (!claims.sub) return false;
+  const lic = await env.DB
+    .prepare('SELECT owned_assets FROM licences WHERE lookup_hmac = ? LIMIT 1')
+    .bind(claims.sub).first();
+  if (!lic) return false;
+  let assets = [];
+  try { assets = lic.owned_assets ? JSON.parse(lic.owned_assets) : []; } catch (_) { assets = []; }
+  return Array.isArray(assets) && assets.includes(SOCIAL_ASSET);
+}
+
 // ═══ Logique métier réutilisable (HTTP, CRON, automatisation) ═══
 
 /**
@@ -344,7 +366,9 @@ export async function handleSocialProvisionThreads(request, env) {
 // POST /api/social/provision/telegram  Body : { chatId, tenantId? }
 export async function handleSocialProvisionTelegram(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  // Telegram = self-serve client : pas d'OAuth/review (le bot Keystone partagé
+  // est admin du canal du client). Ouvert aux clients entitled, scopé au tenant.
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
   const tenantId = await socialTenantOf(request, env);
@@ -360,7 +384,7 @@ export async function handleSocialProvisionTelegram(request, env) {
 // POST /api/social/publish  Body : { targets:[...], text?, media?, link?, hashtags?, legal?, source?, dryRun? }
 export async function handleSocialPublish(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
   await ensureSocialSchema(env);
   const body = await parseBody(request);
   const tenantId = await socialTenantOf(request, env);
@@ -384,7 +408,7 @@ export function handleSocialRegistry(request, env) {
 // GET /api/social/accounts  (ne renvoie jamais les tokens)
 export async function handleSocialAccountsList(request, env) {
   const origin = getAllowedOrigin(env, request);
-  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
   await ensureSocialSchema(env);
   const tenantId = await socialTenantOf(request, env);
   if (!tenantId) return err('Authentification requise', 401, origin);

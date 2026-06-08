@@ -58,6 +58,7 @@ let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
 let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
+let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -180,6 +181,7 @@ function _renderMain() {
             <div class="sm-nets" data-slot="nets" role="group" aria-label="Réseaux cibles">
               <div class="sm-nets-loading">Chargement des comptes connectés…</div>
             </div>
+            <button type="button" class="sm-connect-trigger" data-act="open-connect">${icon('plus', 15)}&nbsp;Connecter un réseau social</button>
           </div>
 
           <div class="sm-field">
@@ -584,6 +586,12 @@ function _onClick(e) {
   if (act === 'reset')        { e.preventDefault(); if (confirm('Effacer toutes les saisies ? Cette action est définitive.')) _reset(); return; }
   if (act === 'publish')      { e.preventDefault(); _publish(); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
+  if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
+  if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
+  if (act === 'pick-telegram') { e.preventDefault(); if (_connect) { _connect.view = 'wizard'; _connect.step = 0; _renderConnect(); } return; }
+  if (act === 'wiz-next')      { e.preventDefault(); _wizNext(); return; }
+  if (act === 'wiz-back')      { e.preventDefault(); _wizBack(); return; }
+  if (act === 'wiz-connect')   { e.preventDefault(); _connectTelegram(); return; }
 
   // Toggle réseau (bouton a11y : aria-pressed)
   const net = e.target.closest('[data-net]');
@@ -628,6 +636,130 @@ function _toast(msg, kind = 'ok') {
   t.textContent = msg;
   clearTimeout(_toastT);
   _toastT = setTimeout(() => { t.classList.remove('show'); }, 3200);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Connexion d'un réseau — WIZARD pas-à-pas (divulgation progressive)
+// Telegram = self-serve via « bouton magique » (lien-bot, ajoute le bot au
+// canal en 1 clic). FB/IG/Threads = « bientôt » (OAuth, Sprint 3).
+// Structuré en étapes → prêt à généraliser : 1 wizard, N réseaux, méthode de
+// connexion déclarée par réseau (deeplink Telegram | redirect OAuth).
+// ══════════════════════════════════════════════════════════════
+const TG_BOT = 'protein_keystone_bot';   // bot Keystone partagé (secret KS_TELEGRAM_BOT_TOKEN)
+
+function _openConnect() {
+  if (!_root || _connect) return;
+  _connect = { view: 'picker', step: 0, channel: '', busy: false, done: false };
+  const ov = document.createElement('div');
+  ov.className = 'sm-connect-overlay';
+  ov.innerHTML = `<div class="sm-connect" role="dialog" aria-label="Connecter un réseau social" data-slot="connect-box"></div>`;
+  _root.appendChild(ov);
+  _renderConnect();
+}
+function _closeConnect() { _connect = null; const ov = _root && _root.querySelector('.sm-connect-overlay'); if (ov) ov.remove(); }
+
+function _wizNext() { if (_connect) { _connect.step = Math.min(2, _connect.step + 1); _renderConnect(); } }
+function _wizBack() {
+  if (!_connect) return;
+  if (_connect.step === 2) { const i = _root.querySelector('[data-field="tg-channel"]'); if (i) _connect.channel = i.value; }
+  if (_connect.step === 0) _connect.view = 'picker'; else _connect.step -= 1;
+  _renderConnect();
+}
+
+function _renderConnect() {
+  const box = _root && _root.querySelector('[data-slot="connect-box"]');
+  if (!box || !_connect) return;
+  const head = (t) => `<div class="sm-connect-head"><span>${t}</span><button type="button" class="sm-connect-x" data-act="close-connect" aria-label="Fermer">${icon('x', 18)}</button></div>`;
+
+  // ── Vue 1 : choix du réseau ──
+  if (_connect.view === 'picker') {
+    const soon = (p) => `
+      <div class="sm-conn-row is-soon">
+        <span class="sm-conn-glyph" style="--brand:${NET_BRAND[p] || 'var(--gold)'}">${icon(NET_ICON[p] || 'globe', 18)}</span>
+        <div class="sm-conn-meta"><div class="sm-conn-name">${_esc(_labelOf(p))}</div><div class="sm-conn-sub">Connexion en 1 clic — bientôt</div></div>
+        <span class="sm-conn-soon">Bientôt</span>
+      </div>`;
+    box.innerHTML = head('Connecter un réseau social') + `
+      <div class="sm-connect-body">
+        <button type="button" class="sm-conn-row is-active" data-act="pick-telegram">
+          <span class="sm-conn-glyph" style="--brand:#2AABEE">${icon('telegram', 18)}</span>
+          <div class="sm-conn-meta"><div class="sm-conn-name">Telegram</div><div class="sm-conn-sub">Publie sur ton canal — aucune inscription</div></div>
+          <span class="sm-conn-cta">Connecter →</span>
+        </button>
+        ${soon('facebook')}${soon('instagram')}${soon('threads')}
+      </div>`;
+    return;
+  }
+
+  // ── Vue 2 : wizard Telegram (1 carte à la fois) ──
+  if (_connect.done) {
+    box.innerHTML = head('Telegram connecté') + `
+      <div class="sm-wiz">
+        <div class="sm-wiz-emoji">🎉</div>
+        <div class="sm-wiz-title">C'est connecté !</div>
+        <div class="sm-wiz-text"><strong>${_esc(_connect.channel)}</strong> est prêt. Tu peux publier dessus depuis le composer.</div>
+        <button type="button" class="sm-btn-primary sm-wiz-primary" data-act="close-connect">Terminer</button>
+      </div>`;
+    return;
+  }
+  const dots = `<div class="sm-wiz-dots">${[0, 1, 2].map(i => `<span class="${i === _connect.step ? 'on' : ''}"></span>`).join('')}</div>`;
+  let body = '';
+  if (_connect.step === 0) {
+    body = `
+      <div class="sm-wiz-emoji">📣</div>
+      <div class="sm-wiz-title">Connecter ton canal Telegram</div>
+      <div class="sm-wiz-text">3 petites étapes, 2 minutes promis. On relie ton canal pour que tu puisses y publier en un clic.</div>
+      <button type="button" class="sm-btn-primary sm-wiz-primary" data-act="wiz-next">C'est parti →</button>`;
+  } else if (_connect.step === 1) {
+    body = `
+      <div class="sm-wiz-emoji">🤖</div>
+      <div class="sm-wiz-title">Ajoute notre assistant à ton canal</div>
+      <div class="sm-wiz-text">Un seul clic : Telegram s'ouvre, tu choisis ton canal, tu confirmes. Ça autorise le robot à publier pour toi.</div>
+      <a class="sm-magic-btn" href="https://t.me/${TG_BOT}?startchannel&admin=post_messages" target="_blank" rel="noopener">${icon('telegram', 16)}&nbsp;Ajouter à mon canal</a>
+      <div class="sm-wiz-nav">
+        <button type="button" class="sm-wiz-back" data-act="wiz-back">← Retour</button>
+        <button type="button" class="sm-btn-primary" data-act="wiz-next">C'est fait →</button>
+      </div>`;
+  } else {
+    body = `
+      <div class="sm-wiz-emoji">🔗</div>
+      <div class="sm-wiz-title">Quel est ton canal ?</div>
+      <div class="sm-wiz-text">Colle son lien public — ex : <strong>@mon_canal</strong> ou t.me/mon_canal.</div>
+      <input type="text" class="sm-wiz-input" data-field="tg-channel" placeholder="@mon_canal" autocomplete="off" spellcheck="false" value="${_esc(_connect.channel)}">
+      <div class="sm-conn-result" data-slot="tg-result"></div>
+      <div class="sm-wiz-nav">
+        <button type="button" class="sm-wiz-back" data-act="wiz-back">← Retour</button>
+        <button type="button" class="sm-btn-primary" data-act="wiz-connect" ${_connect.busy ? 'disabled' : ''}>${icon('zap', 16)}&nbsp;Connecter</button>
+      </div>`;
+  }
+  box.innerHTML = head('Connecter Telegram') + `<div class="sm-wiz">${dots}${body}</div>`;
+}
+
+async function _connectTelegram() {
+  if (!_connect || _connect.busy) return;
+  const input = _root && _root.querySelector('[data-field="tg-channel"]');
+  const res   = _root && _root.querySelector('[data-slot="tg-result"]');
+  let ch = (input?.value || '').trim().replace(/^https?:\/\/t\.me\//i, '').replace(/^\/+/, '');
+  if (!ch) { if (res) res.innerHTML = `<span class="sm-conn-err">Entre l'identifiant de ton canal (ex : @mon_canal).</span>`; return; }
+  if (!ch.startsWith('@')) ch = '@' + ch;
+  _connect.channel = ch; _connect.busy = true;
+  if (res) res.innerHTML = `<span class="sm-conn-pending">${icon('zap', 14)}&nbsp;Connexion…</span>`;
+  try {
+    const r = await fetch(`${CF_API}/api/social/provision/telegram`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_adminToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: ch }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.success === false) throw new Error(data.error || `Erreur ${r.status}`);
+    _connect.busy = false; _connect.done = true; _connect.channel = data.displayName || ch;
+    _renderConnect();
+    _toast('Canal Telegram connecté 🚀', 'ok');
+    await _loadAccounts();
+  } catch (e) {
+    _connect.busy = false;
+    if (res) res.innerHTML = `<span class="sm-conn-err">${_esc(e?.message || 'Échec de la connexion')}</span>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -724,6 +856,58 @@ function _injectStyles() {
   .sm-toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background: var(--navy3); color: var(--text); border:1px solid var(--bd); padding:11px 18px; border-radius: var(--r); font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition: all .25s; z-index:9999; }
   .sm-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
   .sm-toast-ok { border-color: color-mix(in srgb, var(--green) 45%, transparent); } .sm-toast-warn { border-color: color-mix(in srgb, var(--sm-warn) 45%, transparent); }
+
+  .sm-connect-trigger { margin-top:10px; display:inline-flex; align-items:center; padding:9px 14px; border:1px dashed var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition: all .15s; }
+  .sm-connect-trigger:hover { border-color: var(--gold2); color: var(--text); }
+
+  .sm-connect-overlay { position:fixed; inset:0; z-index:10000; display:grid; place-items:center; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); padding:20px; }
+  .sm-connect { width:100%; max-width:480px; background: var(--navy2); border:1px solid var(--bd); border-radius: var(--r2); overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+  .sm-connect-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--bd); font-weight:800; font-size:15px; color: var(--text); }
+  .sm-connect-x { display:grid; place-items:center; width:30px; height:30px; border:none; background:transparent; color: var(--tx3); cursor:pointer; border-radius:8px; }
+  .sm-connect-x:hover { color: var(--text); background: var(--navy3); }
+  .sm-connect-body { padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .sm-conn-row { display:flex; align-items:center; gap:12px; padding:12px; border-radius: var(--r); border:1px solid var(--bd); }
+  .sm-conn-row.is-active { background: var(--navy3); }
+  .sm-conn-row.is-soon { opacity:.5; }
+  .sm-conn-glyph { flex:0 0 auto; width:34px; height:34px; display:grid; place-items:center; border-radius:9px; background: var(--brand, var(--gold)); color:#fff; }
+  .sm-conn-meta { flex:1; min-width:0; }
+  .sm-conn-name { font-weight:800; font-size:14px; color: var(--text); }
+  .sm-conn-sub { font-size:12px; color: var(--tx3); }
+  .sm-conn-btn { flex:0 0 auto; padding:8px 16px; border:none; border-radius: var(--r); background: var(--gold); color:#fff; font-weight:800; font-size:13px; cursor:pointer; transition: background .15s; }
+  .sm-conn-btn:hover { background: var(--gold2); }
+  .sm-conn-soon { flex:0 0 auto; font-size:11px; font-weight:700; color: var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
+  .sm-conn-form { padding:4px 12px 12px; }
+  .sm-conn-steps { margin:0 0 12px; padding-left:20px; color: var(--tx2); font-size:13px; line-height:1.5; display:flex; flex-direction:column; gap:6px; }
+  .sm-conn-steps strong { color: var(--text); }
+  .sm-conn-input { display:flex; gap:8px; }
+  .sm-conn-input input { flex:1; min-width:0; background: var(--navy3); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:10px 12px; font:inherit; font-size:14px; }
+  .sm-conn-input input:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
+  .sm-conn-result { margin-top:10px; font-size:13px; min-height:18px; }
+  .sm-conn-pending { color: var(--gold2); display:inline-flex; align-items:center; }
+  .sm-conn-ok  { color: var(--green); font-weight:700; }
+  .sm-conn-err { color: var(--danger); }
+  /* Ligne picker cliquable (bouton) */
+  .sm-conn-row.is-active { width:100%; box-sizing:border-box; appearance:none; font:inherit; color:inherit; text-align:left; cursor:pointer; transition: border-color .15s; }
+  .sm-conn-row.is-active:hover { border-color: var(--gold2); }
+  .sm-conn-cta { flex:0 0 auto; font-size:13px; font-weight:800; color: var(--gold2); }
+  /* Wizard pas-à-pas */
+  .sm-wiz { padding:24px 22px 22px; text-align:center; display:flex; flex-direction:column; align-items:center; }
+  .sm-wiz-dots { display:flex; gap:6px; margin-bottom:18px; }
+  .sm-wiz-dots span { width:7px; height:7px; border-radius:50%; background: var(--bd); transition: all .2s; }
+  .sm-wiz-dots span.on { background: var(--gold); width:20px; border-radius:4px; }
+  .sm-wiz-emoji { font-size:42px; line-height:1; margin-bottom:10px; }
+  .sm-wiz-title { font-weight:900; font-size:18px; letter-spacing:-.01em; color: var(--text); margin-bottom:8px; }
+  .sm-wiz-text { font-size:14px; line-height:1.55; color: var(--tx2); max-width:340px; margin-bottom:18px; }
+  .sm-wiz-text strong { color: var(--text); }
+  .sm-wiz-primary { width:100%; justify-content:center; }
+  .sm-magic-btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; width:100%; box-sizing:border-box; padding:14px 18px; border-radius: var(--r); background:#2AABEE; color:#fff; font-weight:800; font-size:15px; text-decoration:none; margin-bottom:6px; transition: filter .15s; }
+  .sm-magic-btn:hover { filter: brightness(1.08); }
+  .sm-wiz-input { width:100%; box-sizing:border-box; background: var(--navy3); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:12px 14px; font:inherit; font-size:15px; text-align:center; }
+  .sm-wiz-input:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
+  .sm-wiz-nav { display:flex; gap:10px; width:100%; margin-top:16px; }
+  .sm-wiz-nav .sm-btn-primary { flex:1; justify-content:center; }
+  .sm-wiz-back { flex:0 0 auto; padding:12px 16px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font:inherit; font-size:14px; font-weight:600; cursor:pointer; transition: all .15s; }
+  .sm-wiz-back:hover { color: var(--text); border-color: var(--gold2); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
   `;
