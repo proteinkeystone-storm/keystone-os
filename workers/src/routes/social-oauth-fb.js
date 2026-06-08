@@ -173,6 +173,7 @@ export async function handleFacebookCallback(request, env) {
     //    administrées ; un sélecteur de Page sera un raffinement ultérieur.
     const scopes = oauthScopes();
     const labels = [];
+    let igFound = false;
     for (const p of pages) {
       await storeAccount(env, {
         tenant, platform: 'facebook', targetType: 'page',
@@ -186,10 +187,26 @@ export async function handleFacebookCallback(request, env) {
           token: p.pageToken, scopes,   // l'IG publie via le Page token lié
         });
         labels.push(p.ig.username ? '@' + p.ig.username : 'Instagram');
+        igFound = true;
       }
     }
 
-    return htmlPage(`✅ <strong>Facebook connecté</strong> : ${esc(labels.join(', '))}<br><br>Ferme cet onglet et recharge le <strong>Social Manager</strong>.`);
+    // Diagnostic Instagram : si aucun IG capté, distinguer « permission non
+    // accordée » (réglage app Meta) de « pas d'IG pro lié à la Page ».
+    let igNote = '';
+    if (!igFound) {
+      let igPermOk = false;
+      try {
+        const permRes = await fetch(`${getPlatform('facebook').api.base}/me/permissions?access_token=${encodeURIComponent(userToken)}`);
+        const perm = await permRes.json().catch(() => ({}));
+        igPermOk = (perm.data || []).some(x => x.permission === 'instagram_basic' && x.status === 'granted');
+      } catch (_) { /* non bloquant */ }
+      igNote = igPermOk
+        ? `<br><br><span style="opacity:.85;font-size:14px">ℹ️ Instagram non connecté : aucun compte Instagram <em>professionnel</em> n'est relié à cette Page (lie-le côté Facebook, puis reconnecte). Facebook marche quand même.</span>`
+        : `<br><br><span style="opacity:.85;font-size:14px">ℹ️ Instagram non connecté : la <strong>permission Instagram</strong> n'a pas été accordée à l'autorisation (réglage de l'app Meta). Facebook marche quand même.</span>`;
+    }
+
+    return htmlPage(`✅ <strong>Facebook connecté</strong> : ${esc(labels.join(', '))}${igNote}<br><br>Ferme cet onglet et recharge le <strong>Social Manager</strong>.`);
   } catch (e) {
     return htmlPage(`❌ Échec de connexion Facebook : ${esc(e.message)}`);
   }

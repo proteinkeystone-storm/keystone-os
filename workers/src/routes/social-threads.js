@@ -18,10 +18,12 @@
    passera au self-service, lier le `state` au JWT/tenant du user.
    ═══════════════════════════════════════════════════════════════ */
 
-import { generateId }          from '../lib/auth.js';
+import { generateId, json, err, getAllowedOrigin } from '../lib/auth.js';
 import { encrypt }             from '../lib/crypto.js';
+import { signJWT, verifyJWT }  from '../lib/jwt.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { getPlatform }         from '../lib/social/registry.js';
+import { socialEntitled, socialTenantOf } from './social.js';
 
 const REDIRECT_PATH = '/api/social/callback/threads';
 
@@ -42,27 +44,25 @@ function htmlPage(msg) {
 
 // ── GET /api/social/connect/threads ───────────────────────────
 export async function handleThreadsConnect(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
   const clientId = env.KS_THREADS_APP_ID;
-  if (!clientId) return htmlPage('❌ KS_THREADS_APP_ID non configuré sur le Worker.');
+  if (!clientId) return err('OAuth Threads non configuré (KS_THREADS_APP_ID manquant)', 500, origin);
 
-  const cfg    = getPlatform('threads');
-  const state  = generateId();                       // anti-CSRF (cookie court)
-  const scopes = cfg.auth.scopes.profile.join(',');
+  // Tenant scellé dans un state signé (comme Facebook). Plus de cookie : le
+  // callback Threads arrive sur le domaine Worker, pas celui du front.
+  const tenant = await socialTenantOf(request, env);
+  const state  = await signJWT({ purpose: 'th_oauth', tenant }, env, 600);
 
-  const u = new URL(cfg.auth.authUrl);               // https://threads.net/oauth/authorize
+  const cfg = getPlatform('threads');
+  const u   = new URL(cfg.auth.authUrl);             // https://threads.net/oauth/authorize
   u.searchParams.set('client_id', clientId);
   u.searchParams.set('redirect_uri', redirectUri(request));
-  u.searchParams.set('scope', scopes);               // threads_basic,threads_content_publish
+  u.searchParams.set('scope', cfg.auth.scopes.profile.join(',')); // threads_basic,threads_content_publish
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('state', state);
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      'Location': u.toString(),
-      'Set-Cookie': `ks_th_state=${state}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`,
-    },
-  });
+  return json({ authUrl: u.toString() }, 200, origin);
 }
 
 // ── GET /api/social/callback/threads?code=…&state=… ───────────
@@ -72,12 +72,17 @@ export async function handleThreadsCallback(request, env) {
   const state = url.searchParams.get('state');
   const oauthErr = url.searchParams.get('error_description') || url.searchParams.get('error');
   if (oauthErr) return htmlPage(`❌ Autorisation refusée : ${oauthErr}`);
-  if (!code)    return htmlPage('❌ Code d\'autorisation manquant.');
+  if (!code || !state) return htmlPage('❌ Paramètres manquants (code/state).');
 
-  // Vérif state (cookie posé par /connect)
-  const cookie = request.headers.get('Cookie') || '';
-  const m = cookie.match(/ks_th_state=([^;]+)/);
-  if (!m || m[1] !== state) return htmlPage('❌ Sécurité : "state" invalide. Relance la connexion depuis /connect/threads.');
+  // Vérif du state signé → tenant (comme Facebook). Un JWT de session est rejeté.
+  let tenantId;
+  try {
+    const claims = await verifyJWT(state, env);
+    if (claims.purpose !== 'th_oauth' || !claims.tenant) throw new Error('purpose/tenant');
+    tenantId = claims.tenant;
+  } catch (_) {
+    return htmlPage('❌ Sécurité : lien de connexion invalide ou expiré. Relance depuis le Social Manager.');
+  }
 
   const clientId     = env.KS_THREADS_APP_ID;
   const clientSecret = env.KS_THREADS_APP_SECRET;
@@ -122,7 +127,6 @@ export async function handleThreadsCallback(request, env) {
     if (!userId) throw new Error('user_id Threads introuvable.');
 
     const displayName = username ? `@${username}` : 'Threads';
-    const tenantId    = 'default';
     const scopes      = 'threads_basic,threads_content_publish';
     const acc         = await encrypt(accessToken, env.KS_ENCRYPTION_KEY);
 
