@@ -184,6 +184,41 @@ export const PLATFORMS = {
     access: { profile: 'oauth-self' },
   },
 
+  // ── Telegram (Bot API → canal) ──────────────────────────────
+  // Bot @BotFather admin du canal. Dans un CANAL, le message apparaît au nom
+  // DU CANAL (le bot reste invisible). PAS d'OAuth/review : token bot rangé en
+  // secret (KS_TELEGRAM_BOT_TOKEN). La photo est servie via URL publique (R2).
+  telegram: {
+    id: 'telegram',
+    label: 'Telegram',
+    enabled: true,
+    targets: ['channel'],
+    text: { maxLength: 4096, supportsHashtags: true, supportsMentions: true },
+    media: {
+      enabled: true,
+      image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
+      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 3600 },
+      carousel: true,            // sendMediaGroup (album) — v1 = 1 image
+      required: false,           // Telegram accepte le texte seul
+      hostedUrlRequired: true,   // photo passée par URL publique (R2), pas d'upload binaire
+      captionMaxLength: 1024,    // ⚠ avec photo, la légende est limitée à 1024 (vs 4096 en texte seul)
+    },
+    link: { supported: true, preview: true },
+    firstComment: false,
+    auth: {
+      type: 'bot-token',         // PAS d'OAuth : token @BotFather en secret KS_TELEGRAM_BOT_TOKEN
+      tokenTtlDays: null,        // un token bot n'expire pas
+      refreshable: false,
+    },
+    api: {
+      base: 'https://api.telegram.org',
+      publishPath: '/bot{token}/sendMessage',
+      versionHeader: null,
+      version: 'bot',
+    },
+    access: { channel: 'bot-admin' },   // le bot doit être admin du canal (droit de publication)
+  },
+
 };
 
 // ── Helpers de lecture ────────────────────────────────────────
@@ -230,6 +265,7 @@ export function listPlatformsPublic() {
       imageMax: p.media?.image?.max ?? 0,
       carousel: !!p.media?.carousel,
       hostedUrlRequired: !!p.media?.hostedUrlRequired,
+      captionMaxLength: p.media?.captionMaxLength ?? null,
     },
     link: { supported: !!p.link?.supported },
     firstComment: !!p.firstComment,
@@ -251,8 +287,12 @@ export function validateForPlatform(canonical, platformId) {
   const text  = (canonical?.text || '').trim();
   const media = Array.isArray(canonical?.media) ? canonical.media : [];
 
-  if (p.text?.maxLength && text.length > p.text.maxLength) {
-    errors.push(`Texte trop long pour ${p.label} : ${text.length}/${p.text.maxLength} caractères.`);
+  // Limite effective : avec un média, certains réseaux imposent une légende plus
+  // courte (ex. Telegram 1024 vs 4096 en texte seul) → on retient captionMaxLength.
+  const effMax = (media.length > 0 && p.media?.captionMaxLength) ? p.media.captionMaxLength : p.text?.maxLength;
+  if (effMax && text.length > effMax) {
+    const suffix = (media.length > 0 && p.media?.captionMaxLength) ? ' (légende avec média)' : '';
+    errors.push(`Texte trop long pour ${p.label} : ${text.length}/${effMax} caractères${suffix}.`);
   }
   if (p.media?.required && media.length === 0) {
     errors.push(`${p.label} exige au moins un média.`);

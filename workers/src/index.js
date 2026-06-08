@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 
@@ -131,6 +131,7 @@ export default {
       if (path === '/api/social/threads/deauthorize'  && (method === 'GET' || method === 'POST')) return handleThreadsDeauthorize(request, env);
       if (path === '/api/social/threads/data-deletion' && (method === 'GET' || method === 'POST')) return handleThreadsDataDeletion(request, env);
       if (path === '/api/social/provision/threads'   && method === 'POST') return handleSocialProvisionThreads(request, env);
+      if (path === '/api/social/provision/telegram'  && method === 'POST') return handleSocialProvisionTelegram(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
       if (path === '/api/social/registry'           && method === 'GET')  return handleSocialRegistry(request, env);

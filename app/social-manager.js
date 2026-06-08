@@ -28,13 +28,13 @@ const DRAFT_KEY = 'ks_social_manager_draft_v1';
 
 // Icône de marque par réseau (le set ui-icons fournit facebook/instagram/
 // linkedin/threads). Le LIBELLÉ, lui, vient du registre (jamais codé ici).
-const NET_ICON = { facebook: 'facebook', instagram: 'instagram', linkedin: 'linkedin', threads: 'threads' };
-const NET_LABEL_FALLBACK = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads' };
+const NET_ICON = { facebook: 'facebook', instagram: 'instagram', linkedin: 'linkedin', threads: 'threads', telegram: 'telegram' };
+const NET_LABEL_FALLBACK = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads', telegram: 'Telegram' };
 
 // Teinte de marque par réseau (glyphe + état sélectionné). Threads est
 // monochrome (#000) → traité en CSS via --text/--navy pour rester visible
 // quel que soit le thème (blanc sur sombre / noir sur clair).
-const NET_BRAND = { facebook: '#0866FF', instagram: '#E1306C', linkedin: '#0A66C2' };
+const NET_BRAND = { facebook: '#0866FF', instagram: '#E1306C', linkedin: '#0A66C2', telegram: '#2AABEE' };
 const _hexToRgba = (hex, a) => {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
@@ -48,6 +48,7 @@ const FALLBACK_CAPS = {
   instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10 } },
   linkedin:  { id:'linkedin',  label:'LinkedIn',  text:{ maxLength:3000,  maxHashtags:null }, media:{ enabled:false, required:false, imageMax:9  } },
   threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10 } },
+  telegram:  { id:'telegram',  label:'Telegram',  text:{ maxLength:4096,  maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, captionMaxLength:1024 } },
 };
 
 // ── État module ────────────────────────────────────────────────
@@ -318,13 +319,18 @@ function _countHashtags(text) {
   return m ? m.length : 0;
 }
 
+// Limite de texte EFFECTIVE pour un réseau : avec une photo, certains imposent
+// une légende plus courte (Telegram 1024 vs 4096 en texte seul) → captionMaxLength prime.
+const _textLimit = (c, hasImg) => (hasImg && c?.media?.captionMaxLength) ? c.media.captionMaxLength : (c?.text?.maxLength ?? null);
+
 // Limite de caractères affichée = la PLUS contraignante parmi les réseaux
-// sélectionnés (ex. Threads 500 l'emporte sur Facebook 63206).
+// sélectionnés (ex. Threads 500 l'emporte sur Facebook 63206 ; Telegram+photo → 1024).
 function _counterInfo() {
+  const hasImg = !!_form.imageUrl;
   let best = null;
   for (const p of _form.targets) {
     const c = _capOf(p);
-    const max = c?.text?.maxLength;
+    const max = _textLimit(c, hasImg);
     if (max && (!best || max < best.limit)) best = { limit: max, label: c.label || _labelOf(p) };
   }
   if (!best) return null;
@@ -347,8 +353,9 @@ function _validate() {
     const c = _capOf(p);
     const errors = [], warnings = [];
     if (c) {
-      if (c.text?.maxLength && text.length > c.text.maxLength) {
-        errors.push(`texte trop long (${text.length}/${c.text.maxLength}).`);
+      const max = _textLimit(c, hasImg);
+      if (max && text.length > max) {
+        errors.push(`texte trop long (${text.length}/${max}${hasImg && c.media?.captionMaxLength ? ', légende' : ''}).`);
       }
       if (c.media?.required && !hasImg) {
         errors.push('exige une photo.');

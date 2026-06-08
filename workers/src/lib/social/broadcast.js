@@ -16,6 +16,7 @@ import { adapter as linkedinAdapter } from './adapters/linkedin.js';
 import { adapter as facebookAdapter } from './adapters/facebook.js';
 import { adapter as instagramAdapter } from './adapters/instagram.js';
 import { adapter as threadsAdapter } from './adapters/threads.js';
+import { adapter as telegramAdapter } from './adapters/telegram.js';
 
 /**
  * LE CONTRAT que chaque adapter de réseau doit respecter.
@@ -41,6 +42,7 @@ const ADAPTERS = {
   facebook: facebookAdapter,
   instagram: instagramAdapter,
   threads: threadsAdapter,
+  telegram: telegramAdapter,
 };
 
 /** Renvoie l'adapter d'une plateforme, ou null. */

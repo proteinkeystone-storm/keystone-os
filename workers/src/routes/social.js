@@ -173,6 +173,59 @@ export async function provisionThreads(env, { tenantId = 'default' } = {}) {
 }
 
 /**
+ * Range le compte Telegram (canal) dans social_accounts.
+ * Lit le token bot (env.KS_TELEGRAM_BOT_TOKEN, créé via @BotFather), vérifie le
+ * bot (/getMe) et le canal (/getChat — le bot doit y être admin), puis stocke le
+ * token chiffré + le chat (external_id = @username public, sinon id numérique).
+ * @returns {Promise<{platform,chatId,displayName,bot}>}
+ */
+export async function provisionTelegram(env, { chatId, tenantId = 'default' } = {}) {
+  const token = env.KS_TELEGRAM_BOT_TOKEN;
+  if (!token)                 throw new Error('KS_TELEGRAM_BOT_TOKEN non configuré');
+  if (!env.KS_ENCRYPTION_KEY) throw new Error('KS_ENCRYPTION_KEY non configurée');
+  if (!chatId)                throw new Error('Champ "chatId" requis (ex : "@mon_canal")');
+
+  const base = 'https://api.telegram.org';
+
+  // 1) Le bot répond ?
+  const meRes = await fetch(`${base}/bot${token}/getMe`);
+  const me    = await meRes.json().catch(() => ({}));
+  if (!meRes.ok || !me.ok) throw new Error(`Telegram getMe KO : ${me?.description || 'token bot invalide ?'}`);
+
+  // 2) Le canal existe et le bot y a accès (admin) ?
+  const chatRes = await fetch(`${base}/bot${token}/getChat?chat_id=${encodeURIComponent(chatId)}`);
+  const chat    = await chatRes.json().catch(() => ({}));
+  if (!chatRes.ok || !chat.ok) {
+    throw new Error(`Telegram getChat KO : ${chat?.description || "le bot est-il admin du canal et le chatId correct ?"}`);
+  }
+
+  const c           = chat.result || {};
+  const externalId  = c.username ? `@${c.username}` : String(c.id);
+  const displayName = c.title || (c.username ? `@${c.username}` : 'Telegram');
+  const acc         = await encrypt(token, env.KS_ENCRYPTION_KEY);
+
+  const existing = await env.DB
+    .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
+    .bind(tenantId, 'telegram', externalId).first();
+
+  if (existing) {
+    await env.DB.prepare(`
+      UPDATE social_accounts
+      SET access_ciphertext=?, access_iv=?, display_name=?, scopes=?, status='connected', updated_at=datetime('now')
+      WHERE id=?
+    `).bind(acc.ciphertext, acc.iv, displayName, 'channel_post', existing.id).run();
+  } else {
+    await env.DB.prepare(`
+      INSERT INTO social_accounts
+        (id, tenant_id, platform, target_type, external_id, display_name, access_ciphertext, access_iv, scopes, status)
+      VALUES (?, ?, 'telegram', 'channel', ?, ?, ?, ?, ?, 'connected')
+    `).bind(generateId(), tenantId, externalId, displayName, acc.ciphertext, acc.iv, 'channel_post').run();
+  }
+
+  return { platform: 'telegram', chatId: externalId, displayName, bot: me.result?.username ? `@${me.result.username}` : null };
+}
+
+/**
  * Diffuse un post via le moteur : charge les comptes connectés depuis
  * social_accounts, appelle broadcast(), persiste dans social_posts.
  * @returns {Promise<{postId,status,results}>}
@@ -257,6 +310,20 @@ export async function handleSocialProvisionThreads(request, env) {
   const body = await parseBody(request);
   try {
     const r = await provisionThreads(env, { tenantId: body.tenantId });
+    return json({ success: true, ...r }, 200, origin);
+  } catch (e) {
+    return err(e.message, 502, origin);
+  }
+}
+
+// POST /api/social/provision/telegram  Body : { chatId, tenantId? }
+export async function handleSocialProvisionTelegram(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  try {
+    const r = await provisionTelegram(env, { chatId: body.chatId, tenantId: body.tenantId });
     return json({ success: true, ...r }, 200, origin);
   } catch (e) {
     return err(e.message, 502, origin);
