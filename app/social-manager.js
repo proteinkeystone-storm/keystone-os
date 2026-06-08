@@ -127,6 +127,9 @@ function _buildShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
+        <button class="ws-iconbtn" data-act="reset" title="Effacer et recommencer" aria-label="Réinitialiser">
+          ${icon('refresh', 18)}
+        </button>
       </div>
     </header>
     <div class="ws-body">
@@ -562,12 +565,23 @@ function _setResult(html) {
   if (el) el.innerHTML = html;
 }
 
+// Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
+function _reset() {
+  _form = { text: '', targets: [], imageUrl: null, imageName: null };
+  try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+  // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
+  if (Array.isArray(_accounts)) _form.targets = _accounts.map(a => a.platform);
+  _renderMain();   // reconstruit message + réseaux + média + aperçu + garde-fous + résultat (vide)
+  _toast('Composer réinitialisé');
+}
+
 // ══════════════════════════════════════════════════════════════
 // Événements
 // ══════════════════════════════════════════════════════════════
 function _onClick(e) {
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'close')        { e.preventDefault(); closeSocialManager(); return; }
+  if (act === 'reset')        { e.preventDefault(); if (confirm('Effacer toutes les saisies ? Cette action est définitive.')) _reset(); return; }
   if (act === 'publish')      { e.preventDefault(); _publish(); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
 
