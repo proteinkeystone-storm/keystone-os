@@ -372,6 +372,7 @@ function _normalizeLicenceRow(l) {
     key:           l.key,
     owner:         l.owner || '',
     plan:          l.plan || '',
+    owned_assets:  Array.isArray(l.owned_assets) ? l.owned_assets : null,
     active:        l.is_active === true || l.active === true,
     createdAt:     l.created_at || l.createdAt || null,
     expiresAt:     l.expires_at || l.expiresAt || null,
@@ -477,7 +478,7 @@ async function renderLicences(panel) {
           <td style="color:var(--text-muted);font-size:12px">${date}</td>
           <td style="display:flex;gap:8px;align-items:center">
             ${l.active ? `<button class="btn btn-danger btn-sm" data-key="${esc(l.key)}" data-action="revoke">Révoquer</button>` : ''}
-            <button class="btn btn-secondary btn-sm" data-key="${esc(l.key)}" data-owner="${esc(l.owner||'')}" data-plan="${esc(l.plan||'')}" data-action="edit">Éditer</button>
+            <button class="btn btn-secondary btn-sm" data-key="${esc(l.key)}" data-owner="${esc(l.owner||'')}" data-plan="${esc(l.plan||'')}" data-assets="${esc((l.owned_assets || []).join(','))}" data-action="edit">Éditer</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -487,7 +488,7 @@ async function renderLicences(panel) {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
         if (btn.dataset.action === 'revoke') confirmRevoke(btn.dataset.key, panel);
-        if (btn.dataset.action === 'edit')   showEditLicenceModal(btn.dataset.key, btn.dataset.owner, btn.dataset.plan, panel);
+        if (btn.dataset.action === 'edit')   showEditLicenceModal(btn.dataset.key, btn.dataset.owner, btn.dataset.plan, btn.dataset.assets, panel);
       });
 
       // S5.4 — toggle flags via POST /api/admin/licences/:key/flag
@@ -607,7 +608,7 @@ async function submitCreateLicence(panel) {
   }
 }
 
-function showEditLicenceModal(key, owner, plan, panel) {
+function showEditLicenceModal(key, owner, plan, assets, panel) {
   openModal('Éditer la licence', `
     <div class="form-grid">
       <div class="form-group form-full">
@@ -624,20 +625,28 @@ function showEditLicenceModal(key, owner, plan, panel) {
           ${['STARTER','PRO','MAX'].map(p => `<option ${plan===p?'selected':''}>${p}</option>`).join('')}
         </select>
       </div>
+      <div class="form-group form-full">
+        <label class="form-label">Outils autorisés <span style="font-weight:400;text-transform:none">(IDs séparés par des virgules — vide = TOUS les outils)</span></label>
+        <input type="text" class="form-input" id="e-assets" value="${esc(assets || '')}" placeholder="O-IMM-002, A-COM-001, O-SOC-001, …">
+      </div>
     </div>
     <p class="form-error" id="e-error"></p>`,
   `<button class="btn btn-secondary" id="e-cancel">Annuler</button>
    <button class="btn btn-primary"   id="e-confirm">Mettre à jour</button>`);
   document.getElementById('e-cancel').addEventListener('click', closeModal);
   document.getElementById('e-confirm').addEventListener('click', async () => {
-    const newOwner = document.getElementById('e-owner').value.trim();
-    const newPlan  = document.getElementById('e-plan').value;
-    const errEl    = document.getElementById('e-error');
-    const btn      = document.getElementById('e-confirm');
+    const newOwner  = document.getElementById('e-owner').value.trim();
+    const newPlan   = document.getElementById('e-plan').value;
+    const rawAssets = document.getElementById('e-assets').value.trim();
+    const errEl     = document.getElementById('e-error');
+    const btn       = document.getElementById('e-confirm');
     if (!newOwner) { errEl.textContent = 'Propriétaire requis.'; return; }
+    // On renvoie TOUJOURS la liste (pré-remplie) → corrige le bug d'effacement
+    // de l'upsert. Champ vidé volontairement = null = tous les outils.
+    const ownedAssets = rawAssets ? rawAssets.split(',').map(s => s.trim()).filter(Boolean) : null;
     btn.disabled = true; btn.textContent = '…';
     try {
-      await api('/api/licence/activate', 'POST', { key, plan: newPlan, owner: newOwner });
+      await api('/api/licence/activate', 'POST', { key, plan: newPlan, owner: newOwner, ownedAssets });
       closeModal(); toast('Licence mise à jour ✓'); renderLicences(panel);
     } catch (err) {
       errEl.textContent = err.message; btn.disabled = false; btn.textContent = 'Mettre à jour';
