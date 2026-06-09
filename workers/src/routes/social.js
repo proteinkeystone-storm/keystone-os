@@ -652,22 +652,37 @@ export async function handleSocialAccountDisconnect(request, env) {
 // le cron QUOTIDIEN (index.js). Rafraîchit les tokens qui expirent dans < 7 j ; si
 // le refresh échoue ET que le token est DÉJÀ mort → 'expired' (le front montre un
 // badge « reconnecter »). Fail-safe : ne casse jamais le cron.
-export async function refreshSocialTokens(env, { dryRun = false } = {}) {
+//
+// Options :
+//   dryRun  — déchiffre & compte, sans appeler l'API (test à blanc).
+//   force   — IGNORE la fenêtre < 7 j : balaie TOUS les Threads connectés. Sert au
+//             déclencheur admin « tester le renouvellement maintenant » (preuve que
+//             th_refresh_token marche sans attendre l'expiration). ⚠ ré-écrit de
+//             vrais tokens (prolonge de +60 j ; sans dommage). Un token sain dont le
+//             refresh échoue reste 'connected' (jamais marqué 'expired' à tort).
+//   report  — renvoie le détail PAR COMPTE (outcome + before/after) en plus du
+//             résumé, pour lecture humaine côté admin.
+export async function refreshSocialTokens(env, { dryRun = false, force = false, report = false } = {}) {
   await ensureSocialSchema(env);
   if (!env.KS_ENCRYPTION_KEY) return { skipped: 'no-key' };
+  // Cron : seulement les tokens proches de l'échéance. force : tous les connectés.
+  const windowClause = force
+    ? ''
+    : ` AND expires_at IS NOT NULL AND datetime(expires_at) <= datetime('now','+7 days')`;
   const { results: accts } = await env.DB.prepare(
-    `SELECT id, access_ciphertext, access_iv, expires_at FROM social_accounts
-       WHERE platform = 'threads' AND status = 'connected'
-         AND expires_at IS NOT NULL AND datetime(expires_at) <= datetime('now','+7 days')
+    `SELECT id, display_name, access_ciphertext, access_iv, expires_at FROM social_accounts
+       WHERE platform = 'threads' AND status = 'connected'${windowClause}
        LIMIT 50`
   ).all();
 
   let refreshed = 0, expired = 0, failed = 0;
+  const details = [];
   for (const a of accts) {
+    const rec = { id: a.id, account: a.display_name || a.id, before: a.expires_at };
     let token;
     try { token = await decrypt(a.access_ciphertext, a.access_iv, env.KS_ENCRYPTION_KEY); }
-    catch (_) { failed++; continue; }
-    if (dryRun) { refreshed++; continue; }
+    catch (_) { failed++; rec.outcome = 'failed'; rec.error = 'déchiffrement impossible'; details.push(rec); continue; }
+    if (dryRun) { refreshed++; rec.outcome = 'dry-run'; details.push(rec); continue; }
     try {
       // Threads : refresh d'un token longue durée (≥ 24 h, non expiré) → +60 j. Pas
       // de client_secret (≠ l'échange initial th_exchange_token).
@@ -682,17 +697,32 @@ export async function refreshSocialTokens(env, { dryRun = false } = {}) {
         `UPDATE social_accounts SET access_ciphertext=?, access_iv=?, expires_at=?, status='connected', updated_at=datetime('now') WHERE id=?`
       ).bind(enc.ciphertext, enc.iv, newExp, a.id).run();
       refreshed++;
+      rec.outcome = 'refreshed'; rec.after = newExp;
     } catch (e) {
       // Token déjà mort → 'expired' (badge reconnecter). Sinon on retentera demain
       // (évite un faux « expiré » sur un raté réseau passager / endpoint à valider).
       if (a.expires_at && new Date(a.expires_at).getTime() <= Date.now()) {
         await env.DB.prepare(`UPDATE social_accounts SET status='expired', updated_at=datetime('now') WHERE id=?`).bind(a.id).run();
-        expired++;
-      } else { failed++; }
+        expired++; rec.outcome = 'expired';
+      } else { failed++; rec.outcome = 'failed'; }
+      rec.error = e?.message || String(e);
       console.warn('[social-token-refresh] threads', a.id, e?.message || e);
     }
+    details.push(rec);
   }
-  return { checked: accts.length, refreshed, expired, failed };
+  const summary = { checked: accts.length, refreshed, expired, failed };
+  return report ? { ...summary, forced: force, details } : summary;
+}
+
+// POST /api/social/tokens/refresh-now — déclencheur ADMIN de validation du refresh.
+// Force le renouvellement Threads HORS fenêtre < 7 j (≠ cron) et renvoie le détail par
+// compte → on prouve que th_refresh_token fonctionne sans attendre l'échéance réelle.
+// ⚠ Portée globale (tous tenants) : c'est un outil de maintenance owner, pas client.
+export async function handleSocialTokenRefreshNow(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await requireAdminFlexible(request, env))) return err('Non autorisé', 401, origin);
+  const out = await refreshSocialTokens(env, { force: true, report: true });
+  return json(out, 200, origin);
 }
 
 // GET /api/social/posts?status=…  (file de publication — scopé tenant, sans tokens)

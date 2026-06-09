@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens, handleSocialTokenRefreshNow } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
@@ -141,6 +141,7 @@ export default {
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
       if (path === '/api/social/accounts/disconnect' && method === 'POST') return handleSocialAccountDisconnect(request, env);
+      if (path === '/api/social/tokens/refresh-now'  && method === 'POST') return handleSocialTokenRefreshNow(request, env);
       if (path === '/api/social/posts'              && method === 'GET')  return handleSocialPostsList(request, env);
       if (path === '/api/social/posts/cancel'       && method === 'POST') return handleSocialPostCancel(request, env);
       if (path === '/api/social/posts/delete'       && method === 'POST') return handleSocialPostsDelete(request, env);
