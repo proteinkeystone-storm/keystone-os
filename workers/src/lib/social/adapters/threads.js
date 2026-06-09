@@ -17,6 +17,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPlatform } from '../registry.js';
+import { fetchGraphInsights } from '../insights.js';
 
 const PLATFORM = 'threads';
 
@@ -103,4 +104,10 @@ export async function publish({ account, accessToken, payload }) {
 }
 
 // ── Objet adapter conforme au contrat SocialAdapter ───────────
-export const adapter = { platform: PLATFORM, formatPost, publish };
+// fetchInsights — perf du thread · scope threads_manage_insights requis côté Meta.
+export async function fetchInsights({ accessToken, externalId }) {
+  const cfg = getPlatform(PLATFORM);
+  return fetchGraphInsights({ base: cfg.api.base, objectId: externalId, platform: PLATFORM, accessToken, label: 'Threads' });
+}
+
+export const adapter = { platform: PLATFORM, formatPost, publish, fetchInsights };

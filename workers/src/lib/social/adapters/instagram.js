@@ -18,6 +18,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPlatform } from '../registry.js';
+import { fetchGraphInsights } from '../insights.js';
 
 const PLATFORM = 'instagram';
 
@@ -107,4 +108,10 @@ export async function publish({ account, accessToken, payload }) {
 // ── Objet adapter conforme au contrat SocialAdapter ───────────
 // Pas de uploadMedia : l'image est déjà servie sur une URL publique (R2),
 // IG va la chercher lui-même — comme Facebook.
-export const adapter = { platform: PLATFORM, formatPost, publish };
+// fetchInsights — perf du média · scope instagram_manage_insights requis côté Meta.
+export async function fetchInsights({ accessToken, externalId }) {
+  const cfg = getPlatform(PLATFORM);
+  return fetchGraphInsights({ base: cfg.api.base, objectId: externalId, platform: PLATFORM, accessToken, label: 'Instagram' });
+}
+
+export const adapter = { platform: PLATFORM, formatPost, publish, fetchInsights };

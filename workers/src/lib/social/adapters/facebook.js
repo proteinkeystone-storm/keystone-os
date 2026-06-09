@@ -13,6 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPlatform } from '../registry.js';
+import { fetchGraphInsights } from '../insights.js';
 
 const PLATFORM = 'facebook';
 
@@ -120,5 +121,12 @@ export async function listPages({ userToken }) {
   return (data.data || []).map(p => ({ id: p.id, name: p.name, pageToken: p.access_token }));
 }
 
+// ── Contrat (optionnel) : fetchInsights — perf du post publié ─
+// GET /{post-id}/insights · scope read_insights requis côté Meta.
+export async function fetchInsights({ accessToken, externalId }) {
+  const cfg = getPlatform(PLATFORM);
+  return fetchGraphInsights({ base: cfg.api.base, objectId: externalId, platform: PLATFORM, accessToken, label: 'Facebook' });
+}
+
 // ── Objet adapter conforme au contrat SocialAdapter ───────────
-export const adapter = { platform: PLATFORM, formatPost, publish };
+export const adapter = { platform: PLATFORM, formatPost, publish, fetchInsights };

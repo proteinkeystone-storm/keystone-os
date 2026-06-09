@@ -114,3 +114,22 @@ async function publishOne(platformId, canonical, account, env, dryRun) {
     return { platform: platformId, status: 'failed', error: e?.message || String(e) };
   }
 }
+
+/**
+ * Récupère les insights d'UN post déjà publié sur UNE plateforme. Symétrique de
+ * publishOne : résout l'adapter, déchiffre le token, délègue à adapter.fetchInsights.
+ * Ne throw JAMAIS → { platform, metrics } | { platform, unsupported } | { platform, error }.
+ */
+export async function fetchPostInsights({ platform, externalId, account, env }) {
+  const adapter = getAdapter(platform);
+  if (!adapter || typeof adapter.fetchInsights !== 'function') return { platform, unsupported: true };
+  if (!externalId) return { platform, error: 'identifiant de post manquant' };
+  if (!account)    return { platform, error: 'compte non connecté' };
+  try {
+    const accessToken = await decrypt(account.access_ciphertext, account.access_iv, env.KS_ENCRYPTION_KEY);
+    const { metrics } = await adapter.fetchInsights({ account, accessToken, externalId, env });
+    return { platform, metrics: metrics || [] };
+  } catch (e) {
+    return { platform, error: e?.message || String(e) };
+  }
+}
