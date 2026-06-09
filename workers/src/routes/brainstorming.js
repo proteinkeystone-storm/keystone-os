@@ -522,6 +522,41 @@ async function _generateSynthesis(env, brief, history, todayIso) {
   }
 }
 
+// Mode « Idées de Posts » — synthèse du débat en 5 idées de posts (angle +
+// accroche) pour le réseau cible. Réutilise POST_IDEAS_PROMPT + parsePostIdeas
+// (définis plus bas), avec le DÉBAT comme contexte au lieu d'un simple sujet.
+async function _generatePostIdeasSynthesis(env, brief, history, network) {
+  if (!env.AI || typeof env.AI.run !== 'function') return { error: 'Workers AI non disponible' };
+  if (await isThrottled(env)) return { error: 'Bridage IA actif — synthèse en pause.' };
+  const dialogue = history
+    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
+    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .join('\n\n');
+  if (!dialogue || dialogue.length < 50) return { error: 'Débat trop court pour en tirer des idées (au moins 2 tours).' };
+  const netDesc = POST_IDEAS_NETWORKS[network] || network || 'le réseau social visé';
+  try {
+    const res = await env.AI.run(MODEL_ID_HEAVY, {
+      messages: [
+        { role: 'system', content: POST_IDEAS_PROMPT },
+        { role: 'user',   content: `RÉSEAU : ${netDesc}\n\nBRIEF : ${brief}\n\nDÉBAT DE L'ÉQUIPE :\n${dialogue}\n\nSynthétise ce débat en 5 idées de posts au format JSON strict.` },
+      ],
+      max_tokens: MAX_TOKENS_HEAVY_SYNTH,
+      stream:     false,
+    });
+    const raw = (res?.response
+      || res?.result?.response
+      || res?.choices?.[0]?.message?.content
+      || res?.output?.[0]?.content?.[0]?.text
+      || '').trim();
+    await recordUsage(env, 'brainstorming', { usage: res?.usage, inText: POST_IDEAS_PROMPT + brief + dialogue, outText: raw });
+    const ideas = parsePostIdeas(raw);
+    if (!ideas.length) return { error: 'Aucune idée exploitable — relance la synthèse.', raw: raw.slice(0, 200) };
+    return { ideas };
+  } catch (e) {
+    return { error: `Erreur génération : ${e?.message || e}` };
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────
 // POST /api/brainstorming/synthesize
 // ─────────────────────────────────────────────────────────────────
@@ -545,7 +580,7 @@ export async function handleBrainstormingSynthesize(request, env) {
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
 
-  const { brief, history = [], engine, apiKey } = body;
+  const { brief, history = [], engine, apiKey, mode = 'exploration', target_network = null } = body;
   if (typeof brief !== 'string' || brief.trim().length < MIN_BRIEF) {
     return err(`brief requis (${MIN_BRIEF} caractères min)`, 400, origin);
   }
@@ -564,6 +599,14 @@ export async function handleBrainstormingSynthesize(request, env) {
         quota: credit.payload,
       }, 429, origin);
     }
+  }
+
+  // Mode « Idées de Posts » : la synthèse n'est pas un plan d'actions mais
+  // 5 idées de posts (angle + accroche) TIRÉES du débat, pour le réseau cible.
+  if (mode === 'post-ideas') {
+    const out = await _generatePostIdeasSynthesis(env, brief, history, target_network);
+    if (out.error) return json({ error: out.error, raw: out.raw }, 422, origin);
+    return json({ ideas: out.ideas, network: target_network, generated_at: new Date().toISOString() }, 200, origin);
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -932,6 +975,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
     max_turns      = DEFAULT_MAX_TURNS,
     active_agents,                   // Sprint 7.12 — comité de débat choisi (sélecteur d'agents)
     apiKey,                          // BYOK Claude (optionnel) — agent premium Devil's Advocate
+    target_network = null,           // Mode « Idées de Posts » — réseau social cible
   } = body;
   const claudeKey = (typeof apiKey === 'string' && apiKey.length > 10) ? apiKey : null;
 
@@ -961,6 +1005,14 @@ export async function handleBrainstormingAgentRespond(request, env) {
     : null;
   const rosterN  = debateRoster ? debateRoster.length : 8;
   const tableCap = debateRoster ? Math.min(turnsCap, rosterN) : turnsCap;
+
+  // Mode « Idées de Posts » : on injecte le RÉSEAU CIBLE dans le brief vu par les
+  // agents (sans toucher le brief affiché/historisé côté front). null sinon.
+  const POST_NET_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads', telegram: 'Telegram' };
+  const _netCible = (cognitive_mode === 'post-ideas' && POST_NET_LABELS[target_network]) ? POST_NET_LABELS[target_network] : null;
+  const effectiveBrief = _netCible
+    ? `${brief}\n\n[RÉSEAU CIBLE : ${_netCible} — toutes les idées de posts doivent être pensées pour ce réseau.]`
+    : brief;
 
   if (!env.AI || typeof env.AI.run !== 'function') {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
@@ -1053,7 +1105,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
           send({ type: 'agent_start', agent_id: currentAgentId });
 
           const agentList    = getAgentNamesForPrompt(currentAgentId, debateRoster);
-          const systemPrompt = agent.systemPrompt(cognitive_mode, brief, agentList, previousTurn, previousAgent);
+          const systemPrompt = agent.systemPrompt(cognitive_mode, effectiveBrief, agentList, previousTurn, previousAgent);
 
           const messages = [{ role: 'system', content: systemPrompt }];
           // On donne au LLM uniquement les 3 derniers tours (sinon il

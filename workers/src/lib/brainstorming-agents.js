@@ -82,6 +82,8 @@ function _modeDescription(mode) {
     positioning: `Mode Positionnement. Différenciation marché + audience cible précise. Tu raisonnes PAR CONTRASTE (vs concurrents, vs catégories voisines) et PAR AUDIENCE (jobs-to-be-done, segments). INTERDIT : généralités du type "il faut se démarquer", positionnement flou sans angle distinctif explicite.`,
 
     repositioning: `Mode Repositionnement. Challenge du statu quo, exploration de pivots. Tu interroges ce qui NE MARCHE PLUS, tu cherches le PROCHAIN positionnement (pas une réparation à la marge). Tu acceptes l'inconfort du pivot. INTERDIT : conservatisme déguisé ("ajustons un peu"), nostalgie du passé, demi-mesures.`,
+
+    'post-ideas': `Mode Idées de Posts. Tu cherches des IDÉES DE POSTS pour le réseau social indiqué dans le brief (RÉSEAU CIBLE). Chaque intervention = UN ANGLE de post concret + son accroche (la première phrase qui arrête le scroll), adapté aux codes du réseau cible. Tu restes au stade de l'IDÉE : tu ne rédiges JAMAIS le post complet (un autre outil s'en charge). INTERDIT : posts entiers rédigés, idées génériques non adaptées au réseau, conseils théoriques sur "comment faire un bon post".`,
   };
   return modes[mode] || modes.exploration;
 }
