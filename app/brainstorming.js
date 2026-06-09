@@ -1868,6 +1868,10 @@ function _renderAgentsSelector(panel, modal) {
 // le stem (+ espace, curseur en fin) dans le brief : prêt à compléter en
 // quelques mots. Le contenu s'adapte au mode cognitif.
 const SEED_ANGLES_BY_MODE = {
+  'post-ideas': [
+    { label: 'Accrocher', pills: ['Le post qui ferait réagir mon audience, ce serait…', 'L\'angle qu\'aucun concurrent n\'ose poster, c\'est…', 'La question qui ferait commenter sous le post, c\'est…'] },
+    { label: 'Convertir', pills: ['Le post qui donnerait envie de cliquer, ce serait…', 'La preuve qui rassurerait un prospect hésitant, c\'est…', 'L\'offre à mettre en avant cette semaine, c\'est…'] },
+  ],
   exploration: [
     { label: 'Défricher', pills: ['Et si on repartait d\'une page blanche pour…', 'Ce que personne n\'ose faire dans le secteur, c\'est…', 'L\'usage qu\'on n\'avait pas vu venir, ce serait…'] },
     { label: 'Provoquer', pills: ['L\'idée qu\'on n\'ose pas dire tout haut, c\'est…', 'Et si on inversait la logique de…', 'Notre scénario le plus ambitieux, ce serait…'] },

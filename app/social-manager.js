@@ -211,8 +211,11 @@ function _renderMain() {
   main.innerHTML = `
     <div class="sm-wrap">
       <div class="sm-hero">
-        <h1 class="sm-title">Social Manager</h1>
-        <p class="sm-subtitle">Composez une publication et diffusez-la sur vos réseaux connectés, en un clic.</p>
+        <div class="sm-hero-txt">
+          <h1 class="sm-title">Social Manager</h1>
+          <p class="sm-subtitle">Composez une publication et diffusez-la sur vos réseaux connectés, en un clic.</p>
+        </div>
+        <button type="button" class="sm-ideas-link" data-act="brainstorm" title="Trouver des idées de posts dans Brainstorming">${icon('sparkles', 15)}&nbsp;Trouver des idées</button>
       </div>
 
       ${noAdmin ? `<div class="sm-banner sm-banner-warn">${icon('lock', 15)}&nbsp;Connecte-toi en <strong>admin</strong> pour charger tes comptes et publier.</div>` : ''}
@@ -222,10 +225,7 @@ function _renderMain() {
         <!-- ── Saisie (gauche, 60%) ───────────────────────── -->
         <section class="sm-left">
           <div class="sm-field">
-            <div class="sm-field-head">
-              <label class="sm-label" for="sm-text">Message</label>
-              <button type="button" class="sm-ideas-link" data-act="brainstorm" title="Trouver des idées de posts dans Brainstorming">${icon('sparkles', 14)}&nbsp;Trouver des idées</button>
-            </div>
+            <label class="sm-label" for="sm-text">Message</label>
             <textarea id="sm-text" class="sm-textarea" data-field="text" rows="7"
               placeholder="Rédigez votre publication…">${_esc(_form.text)}</textarea>
             <div class="sm-counter" data-slot="counter" aria-live="polite"></div>
@@ -1311,7 +1311,8 @@ function _injectStyles() {
   :root { --sm-warn: #fbbf24; }
   html.light-mode { --sm-warn: #d97706; }
   .sm-wrap { max-width: 1180px; margin: 0 auto; padding: 28px 28px 60px; }
-  .sm-hero { margin-bottom: 22px; }
+  .sm-hero { margin-bottom: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .sm-hero-txt { min-width: 0; }
   .sm-title { font-size: 30px; font-weight: 900; letter-spacing: -.02em; margin: 0 0 6px; color: var(--text); }
   .sm-subtitle { color: var(--tx2); font-size: 14px; max-width: 640px; }
   .sm-banner { display:flex; align-items:center; gap:6px; padding:11px 14px; border-radius: var(--r); font-size:13px; margin-bottom:18px; border:1px solid var(--bd); }
@@ -1512,9 +1513,8 @@ function _injectStyles() {
   .sm-q-act:hover { color: var(--text); background: var(--navy3); }
   .sm-q-act.danger:hover { color: var(--danger); background: var(--danger-soft); }
   .sm-q-act.is-on { color: var(--text); background: var(--navy3); }
-  .sm-field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .sm-ideas-link { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; color: var(--tx3); background: transparent; border: 1px solid var(--bd); transition: all .15s; }
-  .sm-ideas-link:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 30%, transparent); background: var(--navy3); }
+  .sm-ideas-link { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--tx2); background: var(--navy2); border: 1px solid var(--bd); transition: all .15s; }
+  .sm-ideas-link:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 35%, transparent); background: var(--navy3); }
   .sm-q-insights { grid-column: 1 / -1; margin-top:-2px; padding:11px 13px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy); display:flex; flex-direction:column; gap:9px; }
   .sm-ins-net { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
   .sm-ins-netname { flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; min-width:104px; font-size:12px; font-weight:700; color: var(--text); }
