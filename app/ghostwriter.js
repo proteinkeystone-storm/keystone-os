@@ -34,6 +34,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
+import { renderChainRail, bindChainRail, getChain, setChain, clearChain } from './lib/content-chain.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
@@ -503,13 +504,18 @@ function _buildModalHTML(initialText, presetOpts) {
         ? `<span class="gw-mode-chip" title="Mode pré-réglé depuis le champ source">${_escapeHtml(presetOpts.context)}</span>`
         : '';
 
+    // Rail de chaîne (étape ② Rédaction) si on est arrivé via le parcours
+    // (le relais Brainstorming a posé l'état porté). Hors chaîne → '' →
+    // l'en-tête montre le titre classique « Ghost Writer ».
+    const railHTML = renderChainRail('write');
+
     return `
         <div class="gw-modal" role="dialog" aria-label="Ghost Writer">
             <div class="gw-head">
-                <div>
+                ${railHTML || `<div>
                     <h2 class="gw-title">Ghost Writer</h2>
                     <div class="gw-subtitle">Réécrivez votre texte — 3 variantes générées</div>
-                </div>
+                </div>`}
                 <button class="gw-close" id="gw-close-btn" aria-label="Fermer (Esc)">✕</button>
             </div>
             <div class="gw-body">
@@ -670,6 +676,11 @@ function _bindModalEvents(overlay) {
             _handleGenerate(overlay);
         }
     });
+
+    // Rail de chaîne — « ‹ » = fermer le modal. Le débat Brainstorming reste
+    // ouvert dessous (le modal s'ouvre par-dessus) → fermer = revenir à
+    // l'étape ① sans rien perdre.
+    bindChainRail(overlay, { onBack: _closeModal });
 }
 
 async function _handleGenerate(overlay) {
@@ -788,10 +799,17 @@ function _setStatus(el, text, kind) {
 // pré-remplie via composeInSocialManager. La publication reste gated côté worker.
 async function _sendToSocialManager(text) {
     if (!text || !text.trim()) return;
+    // Réseau porté par la chaîne (choisi en ① Brainstorming) → pré-coche la
+    // cible en ③ Social Manager. Hors chaîne (modal standalone) network=null
+    // → comportement legacy (texte seul, l'utilisateur choisit ses réseaux).
+    const chain   = getChain();
+    const network = chain?.network || null;
+    if (chain) setChain({ step: 'publish' });   // avance l'étape, garde le réseau
+    const payload = network ? { text, targets: [network] } : { text };
     try {
         const m = await import('./social-manager.js');
         _closeModal();
-        m.composeInSocialManager?.({ text });
+        m.composeInSocialManager?.(payload);
     } catch (err) {
         console.error('[Ghostwriter] sendToSocialManager', err);
     }
@@ -1004,6 +1022,20 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
         return;
     }
     _openModal(initialText, presetOpts);
+}
+
+/**
+ * Entrée « pad possédé » (tuile K-Store A-COM-005) — ouvre le modal SANS
+ * le garde-fou de flag : posséder le pad EST le droit d'accès, et le vrai
+ * plafond reste le quota serveur (juge ultime). C'est l'entité « Ghost
+ * Writer » unique côté utilisateur (le Studio A-COM-005 est parké).
+ *
+ * Efface toute chaîne en cours : ouvrir depuis la grille = action standalone
+ * (one-shot), pas une continuation de parcours → aucun rail fantôme.
+ */
+export function openGhostwriterPad(initialText = '') {
+    clearChain();
+    _openModal(initialText);
 }
 
 /**
