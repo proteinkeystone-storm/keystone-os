@@ -72,5 +72,22 @@ export async function ensureSocialSchema(env) {
     ON social_posts(status, scheduled_at)
   `).run();
 
+  // ── Migration additive : réessais automatiques (Sprint Social-4.2) ──
+  // CREATE IF NOT EXISTS n'ajoute PAS de colonne à une table déjà créée en prod
+  // → ALTER idempotent (on saute si la colonne existe déjà). attempts = nb d'essais,
+  // next_attempt_at = quand le cron doit reprendre les réseaux ratés.
+  const info = await env.DB.prepare(`PRAGMA table_info(social_posts)`).all();
+  const have = new Set((info.results || []).map(c => c.name));
+  if (!have.has('attempts')) {
+    await env.DB.prepare(`ALTER TABLE social_posts ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`).run();
+  }
+  if (!have.has('next_attempt_at')) {
+    await env.DB.prepare(`ALTER TABLE social_posts ADD COLUMN next_attempt_at TEXT`).run();
+  }
+  await env.DB.prepare(`
+    CREATE INDEX IF NOT EXISTS idx_social_posts_retry
+    ON social_posts(status, next_attempt_at)
+  `).run();
+
   _ready = true;
 }

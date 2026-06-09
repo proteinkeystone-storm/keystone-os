@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, sweepDuePosts } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, sweepDuePosts } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
@@ -143,6 +143,7 @@ export default {
       if (path === '/api/social/posts'              && method === 'GET')  return handleSocialPostsList(request, env);
       if (path === '/api/social/posts/cancel'       && method === 'POST') return handleSocialPostCancel(request, env);
       if (path === '/api/social/posts/delete'       && method === 'POST') return handleSocialPostsDelete(request, env);
+      if (path === '/api/social/posts/retry'        && method === 'POST') return handleSocialPostRetry(request, env);
       if (path === '/api/social/registry'           && method === 'GET')  return handleSocialRegistry(request, env);
       if (path === '/api/social/media'              && method === 'POST') return handleSocialMediaUpload(request, env);
       const socialMediaMatch = path.match(/^\/api\/social\/media\/([A-Za-z0-9._-]+)$/);

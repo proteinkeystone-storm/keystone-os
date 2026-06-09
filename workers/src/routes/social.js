@@ -332,15 +332,20 @@ export async function publishCanonical(env, opts = {}) {
   if (!targets.length) throw new Error('Champ "targets" requis (ex : ["facebook"])');
 
   const canonical = _canonicalFromOpts(opts);
-  const { results, status } = await _runBroadcast(env, { canonical, targets, tenantId, dryRun });
+  const { results } = await _runBroadcast(env, { canonical, targets, tenantId, dryRun });
+
+  // 1er essai. Si un réseau a échoué (hors dry-run) → 'retrying' : le cron
+  // reprendra automatiquement les réseaux ratés (backoff borné).
+  const attempts = 1;
+  const { status, nextAttemptAt } = dryRun ? { status: 'draft', nextAttemptAt: null } : _retryDecision(results, attempts);
 
   const id = generateId();
   await env.DB.prepare(`
-    INSERT INTO social_posts (id, tenant_id, source, canonical, targets, status, results)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO social_posts (id, tenant_id, source, canonical, targets, status, results, attempts, next_attempt_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, tenantId, opts.source || 'manual',
-    JSON.stringify(canonical), JSON.stringify(targets), status, JSON.stringify(results),
+    JSON.stringify(canonical), JSON.stringify(targets), status, JSON.stringify(results), attempts, nextAttemptAt,
   ).run();
 
   return { postId: id, status, results };
@@ -353,6 +358,34 @@ function computeStatus(results, dryRun) {
   if (published && failed) return 'partial';
   if (published)           return 'published';
   return 'failed';
+}
+
+// ═══ Durabilité : réessais automatiques (Sprint Social-4.2) ════
+// Un envoi qui échoue (réseau down 2 s, 429, timeout…) ne doit pas rester mort.
+// On retente — UNIQUEMENT les réseaux ratés, jamais ceux déjà publiés (sinon
+// double-post) — via le cron */5 déjà en place, avec un backoff borné. L'état
+// vit en base (attempts, next_attempt_at) → durable sans Queues ni Workflows.
+const MAX_ATTEMPTS = 4;                              // 1 envoi initial + 3 réessais
+const RETRY_DELAY_MIN = { 1: 5, 2: 15, 3: 60 };      // après l'essai n°k → attendre N min
+
+// Décide de la suite après un essai : terminé, ou à reprogrammer ('retrying').
+function _retryDecision(results, attempts) {
+  const failed    = results.filter(r => r.status === 'failed').length;
+  const published = results.filter(r => r.status === 'published').length;
+  if (!failed) return { status: published ? 'published' : 'failed', nextAttemptAt: null };
+  if (attempts < MAX_ATTEMPTS && RETRY_DELAY_MIN[attempts]) {
+    return { status: 'retrying', nextAttemptAt: new Date(Date.now() + RETRY_DELAY_MIN[attempts] * 60_000).toISOString() };
+  }
+  return { status: published ? 'partial' : 'failed', nextAttemptAt: null };   // réessais épuisés → terminal
+}
+
+// Fusionne les résultats : garde les réseaux DÉJÀ publiés, remplace le reste par
+// le nouvel essai. Garantit une entrée par cible.
+function _mergeResults(allTargets, prev, fresh) {
+  const byPlat = {};
+  for (const r of (prev  || [])) if (r && r.platform) byPlat[r.platform] = r;
+  for (const r of (fresh || [])) if (r && r.platform) byPlat[r.platform] = r;
+  return allTargets.map(p => byPlat[p] || { platform: p, status: 'failed', error: 'non tenté' });
 }
 
 // ═══ Programmation (Sprint Social-4.1) ═════════════════════════
@@ -410,20 +443,31 @@ export async function schedulePost(env, opts = {}) {
  * @returns {Promise<{postId,status,results}>}
  */
 async function publishScheduledRow(env, row, { dryRun = false } = {}) {
-  let canonical, targets;
+  let canonical, allTargets, prev;
   try {
-    canonical = JSON.parse(row.canonical);
-    targets   = JSON.parse(row.targets);
+    canonical  = JSON.parse(row.canonical);
+    allTargets = JSON.parse(row.targets);
+    prev       = row.results ? JSON.parse(row.results) : [];
   } catch (e) {
     const results = [{ platform: '*', status: 'failed', error: `Post illisible : ${e.message}` }];
-    await env.DB.prepare(`UPDATE social_posts SET status='failed', results=?, updated_at=datetime('now') WHERE id=?`)
+    await env.DB.prepare(`UPDATE social_posts SET status='failed', results=?, next_attempt_at=NULL, updated_at=datetime('now') WHERE id=?`)
       .bind(JSON.stringify(results), row.id).run();
     return { postId: row.id, status: 'failed', results };
   }
-  const { results, status } = await _runBroadcast(env, { canonical, targets, tenantId: row.tenant_id, dryRun });
-  await env.DB.prepare(`UPDATE social_posts SET status=?, results=?, updated_at=datetime('now') WHERE id=?`)
-    .bind(status, JSON.stringify(results), row.id).run();
-  return { postId: row.id, status, results };
+
+  // On ne (re)tente QUE les réseaux pas encore publiés → jamais de double-post.
+  const publishedSet = new Set((prev || []).filter(r => r.status === 'published').map(r => r.platform));
+  const toTry = allTargets.filter(p => !publishedSet.has(p));
+
+  const { results: fresh } = await _runBroadcast(env, { canonical, targets: toTry, tenantId: row.tenant_id, dryRun });
+  const merged   = _mergeResults(allTargets, prev, fresh);
+  const attempts = (row.attempts || 0) + 1;
+  const { status, nextAttemptAt } = dryRun ? { status: 'draft', nextAttemptAt: null } : _retryDecision(merged, attempts);
+
+  await env.DB.prepare(`
+    UPDATE social_posts SET status=?, results=?, attempts=?, next_attempt_at=?, updated_at=datetime('now') WHERE id=?
+  `).bind(status, JSON.stringify(merged), attempts, nextAttemptAt, row.id).run();
+  return { postId: row.id, status, results: merged };
 }
 
 /**
@@ -440,32 +484,37 @@ async function publishScheduledRow(env, row, { dryRun = false } = {}) {
  */
 export async function sweepDuePosts(env, { dryRun = false, limit = 10 } = {}) {
   await ensureSocialSchema(env);
+  // Dus = programmés à l'heure, OU réessais arrivés à échéance, OU publications
+  // « coincées » (worker mort en plein envoi → 'publishing' figé > 10 min = filet).
   const { results: due } = await env.DB.prepare(
-    `SELECT id FROM social_posts
-       WHERE status = 'scheduled' AND scheduled_at IS NOT NULL
-         AND datetime(scheduled_at) <= datetime('now')
-       ORDER BY scheduled_at ASC LIMIT ?`
-  ).bind(limit + 1).all();   // +1 : détecte un débordement au-delà du cap
+    `SELECT id, status FROM social_posts
+       WHERE (status = 'scheduled'  AND scheduled_at    IS NOT NULL AND datetime(scheduled_at)    <= datetime('now'))
+          OR (status = 'retrying'   AND next_attempt_at IS NOT NULL AND datetime(next_attempt_at) <= datetime('now') AND attempts < ?)
+          OR (status = 'publishing' AND datetime(updated_at) <= datetime('now','-10 minutes'))
+       ORDER BY COALESCE(scheduled_at, next_attempt_at, updated_at) ASC LIMIT ?`
+  ).bind(MAX_ATTEMPTS, limit + 1).all();   // +1 : détecte un débordement au-delà du cap
 
   const overflow = due.length > limit;
   const batch = due.slice(0, limit);
-  let published = 0, partial = 0, failed = 0, skipped = 0;
+  let published = 0, partial = 0, failed = 0, retrying = 0, skipped = 0;
 
-  for (const { id } of batch) {
+  for (const { id, status: from } of batch) {
+    // Réclamation atomique sur le statut ATTENDU → 'publishing'. Si un autre tick
+    // l'a déjà pris (changes=0), on saute → jamais de double-envoi.
     const claim = await env.DB.prepare(
-      `UPDATE social_posts SET status='publishing', updated_at=datetime('now')
-         WHERE id = ? AND status = 'scheduled'`
-    ).bind(id).run();
-    if ((claim.meta?.changes || 0) !== 1) { skipped++; continue; }   // déjà réclamé par un autre tick
+      `UPDATE social_posts SET status='publishing', updated_at=datetime('now') WHERE id = ? AND status = ?`
+    ).bind(id, from).run();
+    if ((claim.meta?.changes || 0) !== 1) { skipped++; continue; }
 
     const row = await env.DB.prepare(`SELECT * FROM social_posts WHERE id = ?`).bind(id).first();
     const r = await publishScheduledRow(env, row, { dryRun });
-    if (r.status === 'published')    published++;
-    else if (r.status === 'partial') partial++;
-    else                             failed++;
+    if      (r.status === 'published') published++;
+    else if (r.status === 'partial')  partial++;
+    else if (r.status === 'retrying') retrying++;
+    else                              failed++;
   }
 
-  const summary = { swept: batch.length, published, partial, failed, skipped, overflow };
+  const summary = { swept: batch.length, published, partial, failed, retrying, skipped, overflow };
   if (overflow) console.warn('[social-sweep] cap atteint, posts dus restants pour le prochain tick', summary);
   return summary;
 }
@@ -649,7 +698,7 @@ export async function handleSocialPostsDelete(request, env) {
   const tenantId = await socialTenantOf(request, env);
   if (!tenantId) return err('Authentification requise', 401, origin);
 
-  const KEEP = "status NOT IN ('scheduled','publishing')";   // jamais les posts en attente
+  const KEEP = "status NOT IN ('scheduled','publishing','retrying')";   // jamais un post en attente / en cours / en réessai
   let r;
   if (body.all === true) {
     r = await env.DB.prepare(`DELETE FROM social_posts WHERE tenant_id = ? AND ${KEEP}`).bind(tenantId).run();
@@ -659,4 +708,31 @@ export async function handleSocialPostsDelete(request, env) {
     return err('Champ "id" ou "all" requis', 400, origin);
   }
   return json({ success: true, deleted: r.meta?.changes || 0 }, 200, origin);
+}
+
+// POST /api/social/posts/retry  Body : { id }
+// Renvoie MAINTENANT les réseaux ratés d'un post (échec/partiel/en réessai), sans
+// attendre le prochain passage du cron. Scopé tenant. Réutilise publishScheduledRow
+// (ne renvoie QUE les réseaux non publiés → jamais de double-post).
+export async function handleSocialPostRetry(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+  if (!body.id) return err('Champ "id" requis', 400, origin);
+
+  // Réclamation atomique : seul un post terminé en échec/partiel ou en attente de
+  // réessai est renvoyable (et pas un déjà réclamé par le cron) → anti-double-envoi.
+  const claim = await env.DB.prepare(
+    `UPDATE social_posts SET status='publishing', updated_at=datetime('now')
+       WHERE id = ? AND tenant_id = ? AND status IN ('failed','partial','retrying')`
+  ).bind(body.id, tenantId).run();
+  if ((claim.meta?.changes || 0) !== 1) {
+    return err('Rien à renvoyer (post introuvable, déjà publié, ou déjà en cours).', 409, origin);
+  }
+  const row = await env.DB.prepare(`SELECT * FROM social_posts WHERE id = ?`).bind(body.id).first();
+  const r = await publishScheduledRow(env, row, { dryRun: false });
+  return json({ success: r.status !== 'failed', ...r }, 200, origin);
 }

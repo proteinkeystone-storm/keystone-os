@@ -564,18 +564,22 @@ async function _publish() {
     }).join('');
 
     const ok = data.status === 'published';
+    const retrying = data.status === 'retrying';
+    const headCls = ok ? 'ok' : (data.status === 'partial' || retrying ? 'warn' : 'ko');
+    const headTxt = ok ? '✓ Publié'
+      : retrying ? '◷ Envoi en cours — les réseaux qui ont coincé sont repris automatiquement'
+      : data.status === 'partial' ? '◐ Partiel' : '✕ Échec';
     _setResult(`
-      <div class="sm-result-head ${ok ? 'ok' : (data.status === 'partial' ? 'warn' : 'ko')}">
-        ${ok ? '✓ Publié' : data.status === 'partial' ? '◐ Partiel' : '✕ Échec'}
-      </div>
+      <div class="sm-result-head ${headCls}">${headTxt}</div>
       <ul class="sm-result-list">${rows}</ul>
     `);
-    if (ok || data.status === 'partial') _toast('Publication envoyée', 'ok');
+    if (ok || data.status === 'partial' || retrying) _toast(retrying ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
   } catch (e) {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
     _busy = false;
     _renderValidation();
+    _loadQueue();
   }
 }
 function _setResult(html) {
@@ -618,7 +622,7 @@ function _fmtWhen(iso) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-const _Q_LABEL = { scheduled: 'Programmé', publishing: 'En cours', published: 'Publié', partial: 'Partiel', failed: 'Échec', canceled: 'Annulé', draft: 'Brouillon' };
+const _Q_LABEL = { scheduled: 'Programmé', publishing: 'En cours', retrying: 'On retente', published: 'Publié', partial: 'Partiel', failed: 'Échec', canceled: 'Annulé', draft: 'Brouillon' };
 const _qNetGlyphs = (targets) => (targets || []).map(p => `<span title="${_esc(_labelOf(p))}">${icon(NET_ICON[p] || 'globe', 13)}</span>`).join('');
 
 // Panneau de programmation (déplié sous les actions). Convertit l'heure locale
@@ -756,7 +760,7 @@ function _stopQueuePolling() {
 }
 function _pollQueue() {
   if (!_root || document.hidden || _busy) return;
-  const pending = Array.isArray(_queue) && _queue.some(p => p.status === 'scheduled' || p.status === 'publishing');
+  const pending = Array.isArray(_queue) && _queue.some(p => p.status === 'scheduled' || p.status === 'publishing' || p.status === 'retrying');
   if (pending) _loadQueue();
 }
 function _onVisible() { if (!document.hidden) _pollQueue(); }
@@ -789,13 +793,16 @@ function _renderQueue() {
     </div>`;
   const recentRow = (p) => {
     const url = _postUrl(p);
+    const isRetrying = p.status === 'retrying';
+    const canResend  = isRetrying || p.status === 'failed' || p.status === 'partial';
     return `
     <div class="sm-q-row">
       <span class="sm-q-badge ${_esc(p.status)}">${_esc(_Q_LABEL[p.status] || p.status)}</span>
       <span class="sm-q-excerpt">${exc(p)}</span>
       <span class="sm-q-nets">${_qNetGlyphs(p.targets)}</span>
       ${url ? `<a class="sm-q-act" href="${_esc(url)}" target="_blank" rel="noopener" title="Voir le post" aria-label="Voir le post">${icon('external-link', 14)}</a>` : ''}
-      <button type="button" class="sm-q-act danger" data-act="delete-post" data-id="${_esc(p.id)}" title="Supprimer de l'historique" aria-label="Supprimer de l'historique">${icon('trash-2', 14)}</button>
+      ${canResend ? `<button type="button" class="sm-q-act" data-act="retry-post" data-id="${_esc(p.id)}" title="Renvoyer les réseaux ratés" aria-label="Renvoyer">${icon('refresh', 14)}</button>` : ''}
+      ${isRetrying ? '' : `<button type="button" class="sm-q-act danger" data-act="delete-post" data-id="${_esc(p.id)}" title="Supprimer de l'historique" aria-label="Supprimer de l'historique">${icon('trash-2', 14)}</button>`}
     </div>`;
   };
 
@@ -852,6 +859,28 @@ async function _postDelete(body) {
   }
 }
 
+// Renvoyer MAINTENANT les réseaux ratés d'un post (échec/partiel/en réessai).
+async function _retryPost(id) {
+  if (!id) return;
+  if (!_adminToken()) { _toast('Connexion requise', 'warn'); return; }
+  _toast('Renvoi en cours…', 'ok');
+  try {
+    const res  = await fetch(`${CF_API}/api/social/posts/retry`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_adminToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.error || `Erreur ${res.status}`);
+    _toast(data.status === 'published' ? 'Renvoyé — tout est publié'
+         : data.status === 'retrying' ? 'Renvoyé — un réseau coince encore, réessai auto'
+         : 'Renvoi traité', 'ok');
+    await _loadQueue();
+  } catch (e) {
+    _toast(e?.message || 'Renvoi échoué', 'warn');
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // Événements
 // ══════════════════════════════════════════════════════════════
@@ -864,6 +893,7 @@ function _onClick(e) {
   if (act === 'do-schedule')  { e.preventDefault(); _doSchedule(); return; }
   if (act === 'cancel-post')  { e.preventDefault(); _cancelPost(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'delete-post')  { e.preventDefault(); _deletePost(e.target.closest('[data-id]')?.dataset.id); return; }
+  if (act === 'retry-post')   { e.preventDefault(); _retryPost(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'clear-history'){ e.preventDefault(); _clearHistory(); return; }
   if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
@@ -1277,6 +1307,7 @@ function _injectStyles() {
   .sm-q-badge.published { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
   .sm-q-badge.partial { color: var(--sm-warn); background: var(--warn-soft); }
   .sm-q-badge.failed { color: var(--danger); background: var(--danger-soft); }
+  .sm-q-badge.retrying { color: var(--sm-warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--sm-warn) 30%, transparent); }
   .sm-q-badge.canceled, .sm-q-badge.publishing, .sm-q-badge.draft { color: var(--tx3); background: var(--navy3); }
   .sm-q-excerpt { flex:1 1 auto; min-width:0; font-size:13px; color: var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sm-q-nets { flex:0 0 auto; display:inline-flex; gap:5px; color: var(--tx3); }
