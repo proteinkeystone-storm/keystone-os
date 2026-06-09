@@ -2130,7 +2130,7 @@ export function openTool(padId, opts = {}) {
     // (form → output) et nécessitent une fenêtre custom multi-écrans.
     // Routing par id : on intercepte AVANT la résolution PADS_DATA.
     if (padId === 'O-IMM-002') { openAnnoncesImmo(); return; }
-    if (padId === 'O-SOC-001') { openSocialManager(); return; }
+    if (padId === 'O-SOC-001') { openSocialManager(opts); return; }   // opts.compose = handoff (Ghost Writer → composer)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
