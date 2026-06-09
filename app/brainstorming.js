@@ -222,7 +222,7 @@ function _getClaudeBYOKKey() {
 // ════════════════════════════════════════════════════════════════
 // PUBLIC API
 // ════════════════════════════════════════════════════════════════
-export function openBrainstorming() {
+export function openBrainstorming(opts = {}) {
   let panel = document.getElementById('wr-fullscreen');
   if (!panel) {
     panel = document.createElement('div');
@@ -241,7 +241,8 @@ export function openBrainstorming() {
   _currentSession = {
     id: `wr-${Date.now()}`,
     brief: '',
-    mode: DEFAULT_MODE,
+    mode: (opts && typeof opts.mode === 'string' && getCognitiveMode(opts.mode)) ? opts.mode : DEFAULT_MODE,
+    target_network: null,        // Mode « Idées de Posts » — réseau cible (null sinon)
     history: [],     // [{agent_id, content, timestamp}]
     started: false,
     startedAt: Date.now(),
@@ -260,11 +261,17 @@ export function openBrainstorming() {
   bindHelpButton(panel, APP_ID);
   bindRatingButton(panel, APP_ID);
   bindBurger(panel);
-  // Sprint 7 — Appliquer le mode par défaut (fixe --wr-mode-accent + invite)
-  _applyMode(panel, DEFAULT_MODE);
+  // Sprint 7 — Applique le mode courant (par défaut, ou imposé par un relais entrant)
+  _applyMode(panel, _currentSession.mode);
   _bootAgents(panel);
   // Sprint 7.12 — écran de préparation au centre (mode + comité)
   _renderCenterConfig(panel);
+
+  // Relais entrant (ex. Social Manager → Brainstorming) : pré-remplit le sujet.
+  if (opts && typeof opts.brief === 'string' && opts.brief.trim()) {
+    const input = panel.querySelector('#wr-input');
+    if (input) { input.value = opts.brief.trim(); input.focus(); }
+  }
 }
 
 export function closeBrainstorming() {
@@ -306,10 +313,6 @@ function _renderShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
-        <button class="ws-iconbtn" id="wr-ideas-btn"
-                title="Idées de posts par réseau" aria-label="Idées de posts par réseau">
-          ${icon('sparkles', 18)}
-        </button>
         <button class="ws-iconbtn" id="wr-library-btn" data-act="library"
                 title="Bibliothèque (${_loadLibrary().length} sessions)"
                 aria-label="Ouvrir la bibliothèque">
@@ -441,8 +444,6 @@ function _wireShell(panel) {
   if (railBtns[1]) railBtns[1].addEventListener('click', () => _openModesModal(panel));
   // Bibliothèque des sessions — bouton top-right (cohérence cross-outils, picto book-open)
   panel.querySelector('#wr-library-btn')?.addEventListener('click', () => _openLibraryModal(panel));
-  // Chaîne de contenu — mode « Idées de posts par réseau » (brique B)
-  panel.querySelector('#wr-ideas-btn')?.addEventListener('click', () => _openPostIdeas(panel));
 
   // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
   const signalsToggle = panel.querySelector('#wr-signals-toggle');
@@ -669,6 +670,7 @@ async function _callOrchestration(panel) {
     agent_id      : 'auto',                     // → orchestrateur Sprint 2
     brief         : _currentSession.brief,
     cognitive_mode: _currentSession.mode,
+    target_network: _currentSession.target_network || null,
     history       : _currentSession.history,
     max_turns     : ORCHESTRATION_MAX_TURNS,
   };
@@ -850,92 +852,14 @@ async function _relayToGhostwriter(text) {
   }
 }
 
-// ── Mode « Idées de posts par réseau » (chaîne de contenu, brique B) ──
-// Overlay one-shot : réseau + sujet → POST /post-ideas → 5 angles, chacun
-// relayable vers Ghost Writer (« Rédiger ») → qui rédige → Social Manager publie.
+// ── Mode « Idées de Posts réseau » — réseaux cibles (chaîne de contenu) ──
+// Liste des réseaux : alimente le sélecteur de l'écran de démarrage ET les
+// cartes d'idées de la synthèse. La génération vit dans le mode-débat (worker).
 const _IDEAS_NETS = [
   { id: 'facebook', label: 'Facebook' }, { id: 'instagram', label: 'Instagram' },
   { id: 'linkedin', label: 'LinkedIn' }, { id: 'threads', label: 'Threads' },
   { id: 'telegram', label: 'Telegram' },
 ];
-
-function _openPostIdeas(panel) {
-  if (panel.querySelector('#wr-ideas-overlay')) return;
-  const ov = document.createElement('div');
-  ov.id = 'wr-ideas-overlay';
-  ov.className = 'wr-ideas-overlay';
-  ov.innerHTML = `
-    <div class="wr-ideas-modal" role="dialog" aria-label="Idées de posts par réseau">
-      <div class="wr-ideas-head">
-        <span class="wr-ideas-title">${icon('sparkles', 17)}&nbsp;Idées de posts</span>
-        <button type="button" class="wr-ideas-x" data-act="ideas-close" aria-label="Fermer">${icon('x', 18)}</button>
-      </div>
-      <div class="wr-ideas-label">Réseau</div>
-      <div class="wr-ideas-nets" role="group" aria-label="Réseau cible">
-        ${_IDEAS_NETS.map((n, i) => `<button type="button" class="wr-ideas-net${i === 0 ? ' is-on' : ''}" data-net="${n.id}">${n.label}</button>`).join('')}
-      </div>
-      <label class="wr-ideas-label" for="wr-ideas-topic">Sujet</label>
-      <input id="wr-ideas-topic" class="wr-ideas-topic" type="text" autocomplete="off"
-             placeholder="Ex : lancer mon coaching de printemps" />
-      <button type="button" class="wr-ideas-gen" data-act="ideas-gen">${icon('sparkles', 16)}&nbsp;Générer 5 idées</button>
-      <div class="wr-ideas-result" data-slot="ideas-result"></div>
-    </div>
-  `;
-  panel.appendChild(ov);
-  ov._net = _IDEAS_NETS[0].id;
-  ov.querySelector('#wr-ideas-topic')?.focus();
-
-  ov.addEventListener('click', (e) => {
-    const net = e.target.closest('[data-net]');
-    if (net) {
-      ov._net = net.dataset.net;
-      ov.querySelectorAll('.wr-ideas-net').forEach(b => b.classList.toggle('is-on', b === net));
-      return;
-    }
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'ideas-close' || e.target === ov) { ov.remove(); return; }
-    if (act === 'ideas-gen') { _generateIdeas(ov); return; }
-    if (act === 'idea-relay') {
-      const card = e.target.closest('[data-idea]');
-      if (card) _relayToGhostwriter(card.dataset.idea || '');
-    }
-  });
-  ov.querySelector('#wr-ideas-topic')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); _generateIdeas(ov); }
-  });
-}
-
-async function _generateIdeas(ov) {
-  const topic = (ov.querySelector('#wr-ideas-topic')?.value || '').trim();
-  const slot  = ov.querySelector('[data-slot="ideas-result"]');
-  if (!slot) return;
-  if (topic.length < 5) { slot.innerHTML = `<div class="wr-ideas-msg">Donne un sujet (5 caractères minimum).</div>`; return; }
-  slot.innerHTML = `<div class="wr-ideas-msg">${icon('sparkles', 13)}&nbsp;Génération en cours…</div>`;
-  try {
-    const res  = await fetch(`${_apiBase()}/api/brainstorming/post-ideas`, {
-      method:  'POST',
-      headers: _authHeaders(),
-      body:    JSON.stringify({ topic, network: ov._net }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
-    const ideas = Array.isArray(data.ideas) ? data.ideas : [];
-    if (!ideas.length) { slot.innerHTML = `<div class="wr-ideas-msg">Aucune idée générée — réessaie.</div>`; return; }
-    slot.innerHTML = ideas.map(it => {
-      const full = [it.angle, it.hook].filter(Boolean).join(' — ');
-      return `
-        <div class="wr-idea-card">
-          <div class="wr-idea-texts">
-            <div class="wr-idea-angle">${_esc(it.angle || '')}</div>
-            ${it.hook ? `<div class="wr-idea-hook">${_esc(it.hook)}</div>` : ''}
-          </div>
-          <button type="button" class="wr-idea-relay" data-act="idea-relay" data-idea="${_esc(full)}" title="Rédiger dans Ghost Writer">${icon('edit', 13)}&nbsp;Rédiger</button>
-        </div>`;
-    }).join('');
-  } catch (e) {
-    slot.innerHTML = `<div class="wr-ideas-msg">${_esc(e?.message || 'Échec de génération')}</div>`;
-  }
-}
 
 function _appendMessage(panel, agentId, text, opts = {}) {
   const feed = panel.querySelector('#wr-feed');
@@ -1274,6 +1198,8 @@ async function _callSynthesize(panel) {
     const bodyPayload = {
       brief:   _currentSession.brief,
       history: _currentSession.history,
+      mode:    _currentSession.mode,
+      target_network: _currentSession.target_network || null,
     };
     if (claudeKey) {
       bodyPayload.engine = 'claude';
@@ -1291,14 +1217,18 @@ async function _callSynthesize(panel) {
       throw new Error(`HTTP ${res.status}${detail ? ' — ' + detail : ''}`);
     }
     const payload = await res.json();
-    if (!payload.synthesis) throw new Error('Synthèse manquante dans la réponse');
+    // Mode « Idées de Posts » : la réponse porte { ideas } au lieu de { synthesis }.
+    const synthData = Array.isArray(payload.ideas)
+      ? { ideas: payload.ideas, network: payload.network }
+      : payload.synthesis;
+    if (!synthData) throw new Error('Synthèse manquante dans la réponse');
 
-    _currentSession.synthesis = payload.synthesis;
+    _currentSession.synthesis = synthData;
     _currentSession.synthesizedAt = payload.generated_at;
     _currentSession.synthesisEngine = payload.engine || 'mistral';
     _saveSessionToLibrary(_currentSession);
 
-    _openSynthesisDrawer(panel, payload.synthesis);
+    _openSynthesisDrawer(panel, synthData);
   } catch (e) {
     _appendErrorMessage(panel, `Synthèse impossible : ${e?.message || e}`);
   } finally {
@@ -1315,6 +1245,46 @@ function _openSynthesisDrawer(panel, synthesis) {
     drawer.className = 'wr-synthesis-drawer';
     panel.appendChild(drawer);
   }
+
+  // Mode « Idées de Posts » : le drawer affiche 5 idées de posts (angle + accroche),
+  // chacune relayable vers Ghost Writer via « Rédiger ».
+  if (Array.isArray(synthesis.ideas)) {
+    const net = synthesis.network ? _esc(synthesis.network) : '';
+    const cards = synthesis.ideas.map(it => {
+      const full = [it.angle, it.hook].filter(Boolean).join(' — ');
+      return `
+        <div class="wr-idea-card">
+          <div class="wr-idea-texts">
+            <div class="wr-idea-angle">${_esc(it.angle || '')}</div>
+            ${it.hook ? `<div class="wr-idea-hook">${_esc(it.hook)}</div>` : ''}
+          </div>
+          <button type="button" class="wr-idea-relay" data-act="idea-relay" data-idea="${_esc(full)}" title="Rédiger dans Ghost Writer">${icon('edit', 13)}&nbsp;Rédiger</button>
+        </div>`;
+    }).join('');
+    drawer.innerHTML = `
+      <div class="wr-synthesis-inner">
+        <header class="wr-synthesis-head">
+          <div class="wr-synthesis-meta">
+            <div class="wr-synthesis-eyebrow">Idées de posts${net ? ` · ${net}` : ''}</div>
+            <h2 class="wr-synthesis-brief">${_esc(_currentSession?.brief || '')}</h2>
+          </div>
+          <div class="wr-synthesis-actions">
+            <button type="button" class="wr-synthesis-btn-secondary" data-act="reprendre">Reprendre la discussion</button>
+            <button type="button" class="wr-synthesis-btn-close" data-act="close" aria-label="Fermer">${_iconSvg('x')}</button>
+          </div>
+        </header>
+        <div class="wr-ideas-result">${cards}</div>
+      </div>
+    `;
+    requestAnimationFrame(() => drawer.classList.add('open'));
+    drawer.querySelector('[data-act="close"]')?.addEventListener('click', () => _closeSynthesisDrawer(panel));
+    drawer.querySelector('[data-act="reprendre"]')?.addEventListener('click', () => _closeSynthesisDrawer(panel));
+    drawer.querySelectorAll('.wr-idea-relay').forEach(b => b.addEventListener('click', () => _relayToGhostwriter(b.dataset.idea || '')));
+    const onKeyIdeas = (e) => { if (e.key === 'Escape') { _closeSynthesisDrawer(panel); document.removeEventListener('keydown', onKeyIdeas); } };
+    document.addEventListener('keydown', onKeyIdeas);
+    return;
+  }
+
   const brief = _currentSession?.brief || '';
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -1969,6 +1939,13 @@ function _renderCenterConfig(panel) {
       <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Mode de réflexion</div>
       <div class="wr-setup-modes">${modeChips}</div>
       <div class="wr-setup-mode-desc">${_esc(mode.description)}</div>
+      ${curMode === 'post-ideas' ? `
+      <div class="wr-setup-netrow">
+        <div class="wr-setup-net-label">Réseau cible</div>
+        <div class="wr-setup-nets">
+          ${_IDEAS_NETS.map(n => `<button type="button" class="wr-setup-net${_currentSession.target_network === n.id ? ' active' : ''}" data-network="${n.id}">${_esc(n.label)}</button>`).join('')}
+        </div>
+      </div>` : ''}
     </div>
     <div class="wr-setup-step">
       <div class="wr-setup-step-label"><span class="wr-setup-step-num">2</span> Comité d'agents</div>
@@ -1987,6 +1964,13 @@ function _renderCenterConfig(panel) {
     btn.addEventListener('click', () => {
       const mid = btn.dataset.modeId;
       if (mid && mid !== _currentSession.mode) _applyMode(panel, mid);
+    });
+  });
+  // Étape 1bis — sélecteur réseau (mode « Idées de Posts » uniquement)
+  root.querySelectorAll('.wr-setup-net').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _currentSession.target_network = btn.dataset.network;
+      root.querySelectorAll('.wr-setup-net').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
   // Étape 2 — comité (barre Auto/Manuel + toggles en manuel)

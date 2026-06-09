@@ -393,6 +393,17 @@ export function getAgentNamesForPrompt(excludeId, roster) {
 //   4. La phrase d'invite affichée dans le feed empty state
 export const COGNITIVE_MODES = [
   {
+    id: 'post-ideas',
+    label: 'Idées de Posts',
+    enabled: true,
+    color: '#ec4899',
+    colorVar: '--ks-mode-post-ideas',
+    icon: 'send',
+    short: 'Contenu social ciblé',
+    description: 'Fait débattre l\'équipe pour produire des idées de posts adaptées à un réseau. La synthèse donne 5 angles prêts à rédiger.',
+    invite: 'Décrivez le sujet à transformer en posts (annonce, offre, événement, actualité…).',
+  },
+  {
     id: 'exploration',
     label: 'Exploration',
     enabled: true,
@@ -478,6 +489,7 @@ export const COGNITIVE_MODES = [
 // d'opposition (devil ou data) pour garantir la friction.
 // exploration = comité COMPLET (8) → l'écran par défaut reste inchangé.
 export const RECOMMENDED_ROSTER_BY_MODE = {
+  'post-ideas':  ['strategic', 'creative', 'growth', 'cultural'],
   exploration:   ['strategic', 'creative', 'devil', 'consumer', 'cultural', 'growth', 'brand', 'data'],
   launch:        ['strategic', 'growth', 'creative', 'data', 'devil'],
   branding:      ['strategic', 'brand', 'consumer', 'creative', 'cultural', 'devil'],
