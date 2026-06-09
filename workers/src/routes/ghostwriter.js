@@ -381,127 +381,88 @@ export async function handleGhostwriterRewrite(request, env) {
     '}',
   ].filter(Boolean).join('\n');
 
-  // ── Appel Gemma 4 via Workers AI ─────────────────────────────
-  let aiResponse;
-  try {
-    aiResponse = await env.AI.run(MODEL_ID, {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: `Texte source à réécrire :\n\n${text}` },
-      ],
-      max_tokens: cappedMaxTokens,
-    });
-  } catch (e) {
-    // Cas spécifique : budget Workers AI gratuit épuisé (Cloudflare code
-    // 4006). Ce n'est PAS le quota Ghost Writer de la licence (ADMIN =
-    // illimité) — c'est l'allocation gratuite quotidienne du COMPTE
-    // Cloudflare (10 000 neurones/jour), partagée par TOUS les outils IA
-    // (Ghost Writer, Brainstorming, Living Layer, Smart QR). Vu en prod le
-    // 2026-05-29 : Brainstorming (9 agents streaming) avait vidé le pot.
-    // On renvoie un code stable que le frontend traduit en message clair,
-    // au lieu d'exposer l'erreur anglaise brute « 4006: ... neurons ».
-    const m = String(e?.message || e || '');
-    if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
-      return json({
-        error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).',
-        code : 'AI_BUDGET_EXHAUSTED',
-      }, 429, origin);
-    }
-    return err(`Workers AI erreur : ${e.message || 'inconnue'}`, 502, origin);
-  }
+  // ── Appel Mistral via Workers AI, avec réessai si le JSON est cassé ──
+  // Les LLM produisent parfois du JSON invalide (clé omise, virgule en trop,
+  // préface…). Un seul appel suffisait à faire échouer toute la réécriture.
+  // On réessaie UNE fois : le modèle réussit quasi toujours au 2e essai. Le
+  // quota a déjà été bumpé UNE seule fois (try/finally en amont) → 1 réécriture
+  // = 1 crédit, même si le modèle a fallu 2 tentatives.
+  const MAX_AI_ATTEMPTS = 2;
+  let aiResponse = null;
+  let parsed     = null;
+  let lastRawText = '';
+  let lastIssue   = '';
 
-  // Log brut pour wrangler tail (utile en cas de bug de format de réponse)
-  try { console.log('[ghostwriter] aiResponse keys:', Object.keys(aiResponse || {})); } catch (_) {}
-
-  // ── Détection du cas "tronqué par max_tokens" ────────────────
-  // Spécifique aux modèles raisonneurs (Gemma 4 sur Workers AI) qui
-  // consomment leur budget dans `reasoning` avant `content`. Vu en
-  // prod le 2026-05-23 avec max_tokens=2048 → finish_reason="length"
-  // et content=null. Solution : DEFAULT_MAX_TOKENS bumpé à 4096.
-  const choice0 = aiResponse?.choices?.[0];
-  if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
-    return err(
-      `Gemma 4 a épuisé son budget tokens (max=${cappedMaxTokens}) en mode raisonnement `
-      + `avant d'écrire la réponse. Réessaie ou augmente maxOutputTokens dans le body.`,
-      502,
-      origin,
-    );
-  }
-
-  // ── Extraction de la réponse ─────────────────────────────────
-  // Workers AI renvoie selon le modèle :
-  //   - { response: "..." } pour les modèles génératifs
-  //   - { result: { response: "..." } } pour certains wrapper variants
-  //   - { choices: [...] } pour les modèles OpenAI-compatibles (Gemma 4)
-  //   - { output: [{ content: [{ text: "..." }] }] } pour certains modèles Llama récents
-  const rawText = aiResponse?.response
-    || aiResponse?.result?.response
-    || aiResponse?.choices?.[0]?.message?.content
-    || aiResponse?.output?.[0]?.content?.[0]?.text
-    || aiResponse?.message?.content
-    || aiResponse?.text
-    || aiResponse?.completion
-    || '';
-
-  if (!rawText) {
-    // Diagnostic enrichi pour identifier la forme exacte de la réponse.
-    let diag = '';
+  for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt++) {
     try {
-      const sample = JSON.stringify(aiResponse).slice(0, 400);
-      const keys = aiResponse && typeof aiResponse === 'object'
-        ? Object.keys(aiResponse).join(',')
-        : 'n/a';
-      diag = ` (type=${typeof aiResponse}, keys=[${keys}], sample=${sample})`;
-    } catch (_) { diag = ' (aiResponse non-sérialisable)'; }
-    return err(`Réponse Workers AI vide${diag}`, 502, origin);
+      aiResponse = await env.AI.run(MODEL_ID, {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: `Texte source à réécrire :\n\n${text}` },
+        ],
+        max_tokens: cappedMaxTokens,
+      });
+    } catch (e) {
+      // Budget Workers AI gratuit épuisé (Cloudflare 4006). PAS le quota GW de
+      // la licence (ADMIN = illimité) — c'est l'allocation gratuite du COMPTE
+      // (10 000 neurones/jour), partagée par tous les outils IA. Un réessai
+      // n'aide pas → on sort tout de suite avec un code stable pour le front.
+      const m = String(e?.message || e || '');
+      if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
+        return json({
+          error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).',
+          code : 'AI_BUDGET_EXHAUSTED',
+        }, 429, origin);
+      }
+      // Erreur AI transitoire (« Load failed » côté front vient souvent de là) :
+      // on retente si possible, sinon on remonte l'erreur.
+      lastIssue = `Workers AI erreur : ${e.message || 'inconnue'}`;
+      if (attempt >= MAX_AI_ATTEMPTS) return err(lastIssue, 502, origin);
+      continue;
+    }
+
+    try { console.log(`[ghostwriter] aiResponse keys (essai ${attempt}):`, Object.keys(aiResponse || {})); } catch (_) {}
+
+    // Cas "tronqué par max_tokens" : le modèle a vidé son budget avant d'écrire
+    // (finish_reason=length, content vide). Retentable.
+    const choice0 = aiResponse?.choices?.[0];
+    if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
+      lastIssue = `budget tokens épuisé (max=${cappedMaxTokens})`;
+      continue;
+    }
+
+    // Extraction de la réponse (formes variables selon le modèle Workers AI).
+    const rawText = aiResponse?.response
+      || aiResponse?.result?.response
+      || aiResponse?.choices?.[0]?.message?.content
+      || aiResponse?.output?.[0]?.content?.[0]?.text
+      || aiResponse?.message?.content
+      || aiResponse?.text
+      || aiResponse?.completion
+      || '';
+    lastRawText = rawText;
+    if (!rawText) { lastIssue = 'réponse vide'; continue; }
+
+    // Parse TOLÉRANT (préface/fences enlevés, 1 à 3 variantes acceptées,
+    // labels manquants complétés). null → on retente.
+    const candidate = _parseVariants(rawText);
+    if (candidate) { parsed = candidate; break; }
+    lastIssue = `JSON inexploitable (raw: ${rawText.slice(0, 160)})`;
   }
 
-  // Strip code fences si Gemma a entouré le JSON (pratique fréquente
-  // malgré l'instruction "pas de ```").
-  const cleaned = rawText
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/m, '')
-    .trim();
-
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (e) {
+  if (!parsed) {
     return err(
-      `Réponse Gemma 4 mal formée (JSON invalide) : ${e.message}. Raw: ${cleaned.slice(0, 200)}`,
+      `Le modèle (Mistral) n'a pas renvoyé de variantes exploitables après ${MAX_AI_ATTEMPTS} essais. ${lastIssue}`,
       502,
       origin,
     );
-  }
-
-  // Validation structure
-  if (!parsed || !Array.isArray(parsed.variants)) {
-    return err('Réponse Gemma 4 ne contient pas le champ "variants" (array)', 502, origin);
-  }
-  if (parsed.variants.length !== 3) {
-    return err(
-      `Réponse Gemma 4 contient ${parsed.variants.length} variants au lieu de 3`,
-      502,
-      origin,
-    );
-  }
-
-  // Sanity check sur chaque variant
-  for (let i = 0; i < parsed.variants.length; i++) {
-    const v = parsed.variants[i];
-    if (!v || typeof v.text !== 'string' || !v.text.trim()) {
-      return err(`Variant #${i + 1} mal formé (text manquant ou vide)`, 502, origin);
-    }
-    if (typeof v.label !== 'string' || !v.label.trim()) {
-      v.label = `Variante ${i + 1}`;  // fallback silencieux
-    }
   }
 
   // ── Compteur budget IA (best-effort, ne casse jamais la réponse) ──
   await recordUsage(env, 'ghostwriter', {
     usage : aiResponse?.usage,
     inText: systemPrompt + text,
-    outText: rawText,
+    outText: lastRawText,
   });
 
   // ── Réponse normalisée ───────────────────────────────────────
@@ -533,6 +494,32 @@ export async function handleGhostwriterRewrite(request, env) {
       }
     }
   }
+}
+
+// Parse TOLÉRANT de la réponse du modèle pour la réécriture. Retourne
+// { variants:[{label,text}] } (1 à 3) ou null si rien d'exploitable. Tolère :
+// blocs de code, préface/suffixe autour du JSON, labels manquants. Ne DEVINE
+// PAS un `text` absent (le réessai côté handler s'en charge).
+function _parseVariants(rawText) {
+  let s = String(rawText || '')
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```\s*$/m, '')
+    .trim();
+  // Isole le 1er objet { … } si le modèle a ajouté du texte autour.
+  const a = s.indexOf('{');
+  const b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) s = s.slice(a, b + 1);
+  let obj;
+  try { obj = JSON.parse(s); } catch (_) { return null; }
+  if (!obj || !Array.isArray(obj.variants)) return null;
+  const variants = obj.variants
+    .filter(v => v && typeof v.text === 'string' && v.text.trim())
+    .slice(0, 3)
+    .map((v, i) => ({
+      label: (typeof v.label === 'string' && v.label.trim()) ? v.label.trim() : `Variante ${i + 1}`,
+      text : v.text.trim(),
+    }));
+  return variants.length >= 1 ? { variants } : null;
 }
 
 // ═══════════════════════════════════════════════════════════════
