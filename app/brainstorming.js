@@ -830,12 +830,27 @@ async function _callOrchestration(panel) {
 // ════════════════════════════════════════════════════════════════
 // FEED HELPERS
 // ════════════════════════════════════════════════════════════════
+// Relais Brainstorming → Ghost Writer (bout amont de la chaîne de contenu, cf.
+// content-chain-vision) : envoie une idée du débat dans le rédacteur. Le modal
+// Ghost Writer (z-index 99999) s'ouvre PAR-DESSUS le débat — on y revient en le
+// fermant. Récepteur = openGhostwriter(initialText), déjà prêt.
+async function _relayToGhostwriter(text) {
+  if (!text || !text.trim()) return;
+  try {
+    const m = await import('./ghostwriter.js');
+    m.openGhostwriter?.(text.trim());
+  } catch (err) {
+    console.error('[Brainstorming] openGhostwriter', err);
+  }
+}
+
 function _appendMessage(panel, agentId, text, opts = {}) {
   const feed = panel.querySelector('#wr-feed');
   if (!feed) return { textEl: null, msgEl: null };
 
   const agent = getAgent(agentId);
   const time  = _formatTime(Date.now());
+  const isAgentBubble = agentId !== 'user' && agentId !== '__note__';
 
   const msgEl = document.createElement('div');
   msgEl.className = 'wr-msg';
@@ -849,6 +864,7 @@ function _appendMessage(panel, agentId, text, opts = {}) {
         <div class="wr-msg-time">${time}</div>
       </div>
       <div class="wr-msg-text${opts.streaming ? ' streaming' : ''}"></div>
+      ${isAgentBubble ? `<div class="wr-msg-actions"><button type="button" class="wr-msg-relay" title="Ouvrir ce point dans Ghost Writer pour le rédiger">${icon('edit', 13)}&nbsp;Rédiger</button></div>` : ''}
     </div>
   `;
   const textEl = msgEl.querySelector('.wr-msg-text');
@@ -857,6 +873,12 @@ function _appendMessage(panel, agentId, text, opts = {}) {
   feed.appendChild(msgEl);
   // Sprint 3 — Bind tap-react (clic sur la bulle ouvre picker emoji)
   _bindTapReact(panel, msgEl, agentId);
+  // Relais → Ghost Writer : stopPropagation pour ne pas ouvrir le picker de réactions.
+  const relayBtn = msgEl.querySelector('.wr-msg-relay');
+  relayBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _relayToGhostwriter(textEl?.textContent || '');
+  });
   _scrollToBottom(panel);
   return { textEl, msgEl };
 }
