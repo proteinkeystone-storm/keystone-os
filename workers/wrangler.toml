@@ -63,10 +63,14 @@ SDQR_SCAN_RETENTION_DAYS = "90"
 SDQR_DPO_EMAIL = "protein.keystone@gmail.com"
 
 # ── Triggers — Cron Workers (Sprint SDQR-5) ──────────────────
-# Auto-purge des logs qr_scans > SDQR_SCAN_RETENTION_DAYS chaque jour
-# à 3h UTC (heure creuse). Cloudflare gère le retry si le run rate.
+# "0 3 * * *"   (quotidien 3h UTC) — purges & maintenance (SDQR qr_scans, Pulsa,
+#               rappels d'expiration licence, auto-downgrade concierge).
+# "*/5 * * * *" (toutes les 5 min) — Sprint Social-4.1 : balayage des posts
+#               programmés arrivés à échéance (sweepDuePosts).
+# ⚠ scheduled() (src/index.js) DISPATCHE selon event.cron : chaque expression
+#   déclenche son SEUL traitement. Cloudflare gère le retry si le run rate.
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["0 3 * * *", "*/5 * * * *"]
 
 # ── Secrets à définir via `wrangler secret put` ───────────────
 # KS_ADMIN_SECRET   — même valeur que dans Vercel

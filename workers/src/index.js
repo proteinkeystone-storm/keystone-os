@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, sweepDuePosts } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
@@ -140,6 +140,8 @@ export default {
       if (path === '/api/social/provision/telegram'  && method === 'POST') return handleSocialProvisionTelegram(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
+      if (path === '/api/social/posts'              && method === 'GET')  return handleSocialPostsList(request, env);
+      if (path === '/api/social/posts/cancel'       && method === 'POST') return handleSocialPostCancel(request, env);
       if (path === '/api/social/registry'           && method === 'GET')  return handleSocialRegistry(request, env);
       if (path === '/api/social/media'              && method === 'POST') return handleSocialMediaUpload(request, env);
       const socialMediaMatch = path.match(/^\/api\/social\/media\/([A-Za-z0-9._-]+)$/);
@@ -554,6 +556,20 @@ export default {
   //   [triggers]
   //   crons = ["0 3 * * *"]   # tous les jours à 3h UTC
   async scheduled(event, env, ctx) {
+    // Plusieurs crons configurés (wrangler.toml) → DISPATCH selon l'expression
+    // déclenchée. Le balayage social tourne toutes les 5 min ; les purges & la
+    // maintenance restent quotidiennes — NE PAS les lancer au rythme du sweep.
+    if (event.cron === '*/5 * * * *') {
+      // Sprint Social-4.1 — publie les posts programmés arrivés à échéance.
+      ctx.waitUntil(
+        sweepDuePosts(env)
+          .then(r => console.log('[social-sweep]', JSON.stringify(r)))
+          .catch(e => console.warn('[social-sweep] failed', e?.message || e))
+      );
+      return;
+    }
+
+    // Cron quotidien (0 3 * * *) — purges & maintenance.
     ctx.waitUntil(handleScheduledPurge(env));
     // Purge des réponses Pulsa expirées (TTL configurable par formulaire,
     // 90j par défaut). Indépendant de la purge SDQR.

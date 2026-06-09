@@ -54,7 +54,7 @@ export async function ensureSocialSchema(env) {
       source        TEXT,                                  -- 'manual' | 'pad:O-IMM-002' | 'rule:<id>'
       canonical     TEXT NOT NULL,                         -- JSON du post canonique
       targets       TEXT NOT NULL,                         -- JSON : ['linkedin','facebook',…]
-      status        TEXT NOT NULL DEFAULT 'draft',         -- draft|ready|scheduled|publishing|published|partial|failed
+      status        TEXT NOT NULL DEFAULT 'draft',         -- draft|ready|scheduled|publishing|published|partial|failed|canceled
       scheduled_at  TEXT,                                  -- ISO : publication programmée (NULL = immédiat)
       results       TEXT,                                  -- JSON : [{platform,status,externalId,url,error}]
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),

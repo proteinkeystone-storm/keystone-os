@@ -19,7 +19,7 @@ import { requireJWT }          from '../lib/jwt.js';
 import { encrypt }             from '../lib/crypto.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { broadcast }           from '../lib/social/broadcast.js';
-import { createCanonicalPost } from '../lib/social/canonical.js';
+import { createCanonicalPost, validateCanonical } from '../lib/social/canonical.js';
 import { getPlatform, listPlatformsPublic } from '../lib/social/registry.js';
 
 // ── Gate admin flexible : secret (/admin) OU JWT isAdmin/plan ADMIN (/app) ──
@@ -293,8 +293,36 @@ export async function provisionTelegram(env, { chatId, tenantId = 'default' } = 
 }
 
 /**
- * Diffuse un post via le moteur : charge les comptes connectés depuis
- * social_accounts, appelle broadcast(), persiste dans social_posts.
+ * Noyau de diffusion RÉUTILISABLE (sans persistance) : charge les comptes
+ * connectés du tenant, appelle broadcast(), calcule le statut. Les appelants
+ * décident d'INSÉRER (publication immédiate) ou d'UPDATER (post programmé).
+ * @returns {Promise<{results:Array, status:string}>}
+ */
+async function _runBroadcast(env, { canonical, targets, tenantId, dryRun = false }) {
+  const tgts = Array.isArray(targets) ? targets.filter(Boolean) : [];
+  const accounts = {};
+  if (tgts.length) {
+    const placeholders = tgts.map(() => '?').join(',');
+    const { results: rows } = await env.DB
+      .prepare(`SELECT * FROM social_accounts WHERE tenant_id = ? AND status = 'connected' AND platform IN (${placeholders})`)
+      .bind(tenantId, ...tgts).all();
+    for (const r of rows) accounts[r.platform] = r;   // broadcast() déchiffre lui-même
+  }
+  const results = await broadcast({ canonical, targets: tgts, accounts, env, dryRun });
+  return { results, status: computeStatus(results, dryRun) };
+}
+
+/** Construit le post canonique à partir des options libres (publish ou schedule). */
+function _canonicalFromOpts(opts) {
+  return createCanonicalPost({
+    text: opts.text, media: opts.media, link: opts.link,
+    hashtags: opts.hashtags, firstComment: opts.firstComment, legal: opts.legal, meta: opts.meta,
+  });
+}
+
+/**
+ * Diffuse un post IMMÉDIATEMENT : noyau de diffusion + INSERT dans social_posts.
+ * Comportement historique inchangé (publication synchrone).
  * @returns {Promise<{postId,status,results}>}
  */
 export async function publishCanonical(env, opts = {}) {
@@ -303,20 +331,8 @@ export async function publishCanonical(env, opts = {}) {
   const targets  = Array.isArray(opts.targets) ? opts.targets.filter(Boolean) : [];
   if (!targets.length) throw new Error('Champ "targets" requis (ex : ["facebook"])');
 
-  const canonical = createCanonicalPost({
-    text: opts.text, media: opts.media, link: opts.link,
-    hashtags: opts.hashtags, firstComment: opts.firstComment, legal: opts.legal, meta: opts.meta,
-  });
-
-  const placeholders = targets.map(() => '?').join(',');
-  const { results: rows } = await env.DB
-    .prepare(`SELECT * FROM social_accounts WHERE tenant_id = ? AND status = 'connected' AND platform IN (${placeholders})`)
-    .bind(tenantId, ...targets).all();
-  const accounts = {};
-  for (const r of rows) accounts[r.platform] = r;   // broadcast() déchiffre lui-même
-
-  const results = await broadcast({ canonical, targets, accounts, env, dryRun });
-  const status  = computeStatus(results, dryRun);
+  const canonical = _canonicalFromOpts(opts);
+  const { results, status } = await _runBroadcast(env, { canonical, targets, tenantId, dryRun });
 
   const id = generateId();
   await env.DB.prepare(`
@@ -337,6 +353,121 @@ function computeStatus(results, dryRun) {
   if (published && failed) return 'partial';
   if (published)           return 'published';
   return 'failed';
+}
+
+// ═══ Programmation (Sprint Social-4.1) ═════════════════════════
+// Un post programmé est RANGÉ (status='scheduled', scheduled_at=ISO) SANS
+// diffusion. Le cron de balayage (sweepDuePosts, appelé par scheduled() dans
+// index.js au rythme */5) le réclame à l'échéance et le publie via le MÊME
+// noyau _runBroadcast. Découplage strict saisie ↔ envoi.
+
+/** Parse un scheduledAt en Date, ou null si absent/invalide. */
+function _parseScheduledAt(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Range un post à publier plus tard. Valide le contenu À LA SAISIE (un post
+ * vide programmé échouerait silencieusement à l'échéance) et exige une date
+ * FUTURE. N'effectue AUCUN appel réseau.
+ * @returns {Promise<{postId,status:'scheduled',scheduledAt:string}>}
+ */
+export async function schedulePost(env, opts = {}) {
+  const tenantId = opts.tenantId || 'default';
+  const targets  = Array.isArray(opts.targets) ? opts.targets.filter(Boolean) : [];
+  if (!targets.length) throw new Error('Champ "targets" requis (ex : ["facebook"])');
+
+  const when = _parseScheduledAt(opts.scheduledAt);
+  if (!when) throw new Error('Champ "scheduledAt" invalide (date ISO attendue, ex : 2026-06-10T09:00:00Z).');
+  // Marge de 30 s : tolère l'aller-retour réseau, refuse une date déjà passée
+  // (souvent le symptôme d'un bug de fuseau côté front).
+  if (when.getTime() <= Date.now() + 30_000) {
+    throw new Error('La date de programmation doit être dans le futur.');
+  }
+
+  const canonical = _canonicalFromOpts(opts);
+  const check = validateCanonical(canonical);
+  if (!check.ok) throw new Error(check.errors.join(' '));
+
+  const id = generateId();
+  const scheduledIso = when.toISOString();
+  await env.DB.prepare(`
+    INSERT INTO social_posts (id, tenant_id, source, canonical, targets, status, scheduled_at)
+    VALUES (?, ?, ?, ?, ?, 'scheduled', ?)
+  `).bind(
+    id, tenantId, opts.source || 'manual',
+    JSON.stringify(canonical), JSON.stringify(targets), scheduledIso,
+  ).run();
+
+  return { postId: id, status: 'scheduled', scheduledAt: scheduledIso };
+}
+
+/**
+ * Publie un post DÉJÀ rangé (ligne social_posts) : diffuse via _runBroadcast
+ * puis UPDATE le statut + results. Utilisé par le balayage du cron.
+ * @returns {Promise<{postId,status,results}>}
+ */
+async function publishScheduledRow(env, row, { dryRun = false } = {}) {
+  let canonical, targets;
+  try {
+    canonical = JSON.parse(row.canonical);
+    targets   = JSON.parse(row.targets);
+  } catch (e) {
+    const results = [{ platform: '*', status: 'failed', error: `Post illisible : ${e.message}` }];
+    await env.DB.prepare(`UPDATE social_posts SET status='failed', results=?, updated_at=datetime('now') WHERE id=?`)
+      .bind(JSON.stringify(results), row.id).run();
+    return { postId: row.id, status: 'failed', results };
+  }
+  const { results, status } = await _runBroadcast(env, { canonical, targets, tenantId: row.tenant_id, dryRun });
+  await env.DB.prepare(`UPDATE social_posts SET status=?, results=?, updated_at=datetime('now') WHERE id=?`)
+    .bind(status, JSON.stringify(results), row.id).run();
+  return { postId: row.id, status, results };
+}
+
+/**
+ * Balaye les posts programmés arrivés à échéance et les publie. Idempotent :
+ * chaque ligne est RÉCLAMÉE atomiquement (status 'scheduled'→'publishing' via
+ * UPDATE conditionnel, on vérifie meta.changes) AVANT tout envoi → deux ticks
+ * qui se chevauchent ne publient jamais 2×. Cap par tick (anti-débordement
+ * CPU/sous-requêtes), surplus loggé (jamais de troncature silencieuse).
+ *
+ * ⚠ Dates : scheduled_at est de l'ISO (…T..Z), datetime('now') rend
+ * 'YYYY-MM-DD HH:MM:SS' → on normalise les DEUX via datetime() sinon la
+ * comparaison de chaînes brute est fausse.
+ * @returns {Promise<{swept,published,partial,failed,skipped,overflow}>}
+ */
+export async function sweepDuePosts(env, { dryRun = false, limit = 10 } = {}) {
+  await ensureSocialSchema(env);
+  const { results: due } = await env.DB.prepare(
+    `SELECT id FROM social_posts
+       WHERE status = 'scheduled' AND scheduled_at IS NOT NULL
+         AND datetime(scheduled_at) <= datetime('now')
+       ORDER BY scheduled_at ASC LIMIT ?`
+  ).bind(limit + 1).all();   // +1 : détecte un débordement au-delà du cap
+
+  const overflow = due.length > limit;
+  const batch = due.slice(0, limit);
+  let published = 0, partial = 0, failed = 0, skipped = 0;
+
+  for (const { id } of batch) {
+    const claim = await env.DB.prepare(
+      `UPDATE social_posts SET status='publishing', updated_at=datetime('now')
+         WHERE id = ? AND status = 'scheduled'`
+    ).bind(id).run();
+    if ((claim.meta?.changes || 0) !== 1) { skipped++; continue; }   // déjà réclamé par un autre tick
+
+    const row = await env.DB.prepare(`SELECT * FROM social_posts WHERE id = ?`).bind(id).first();
+    const r = await publishScheduledRow(env, row, { dryRun });
+    if (r.status === 'published')    published++;
+    else if (r.status === 'partial') partial++;
+    else                             failed++;
+  }
+
+  const summary = { swept: batch.length, published, partial, failed, skipped, overflow };
+  if (overflow) console.warn('[social-sweep] cap atteint, posts dus restants pour le prochain tick', summary);
+  return summary;
 }
 
 // ═══ Handlers HTTP (admin flexible) ════════════════════════════
@@ -407,7 +538,8 @@ export async function handleSocialProvisionTelegram(request, env) {
   }
 }
 
-// POST /api/social/publish  Body : { targets:[...], text?, media?, link?, hashtags?, legal?, source?, dryRun? }
+// POST /api/social/publish  Body : { targets:[...], text?, media?, link?, hashtags?, legal?, source?, scheduledAt?, dryRun? }
+// scheduledAt (ISO) présent → on PROGRAMME (status 'scheduled', le cron publiera) ; absent → publication immédiate.
 export async function handleSocialPublish(request, env) {
   const origin = getAllowedOrigin(env, request);
   if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
@@ -416,6 +548,10 @@ export async function handleSocialPublish(request, env) {
   const tenantId = await socialTenantOf(request, env);
   if (!tenantId) return err('Authentification requise', 401, origin);
   try {
+    if (body.scheduledAt) {
+      const r = await schedulePost(env, { ...body, tenantId });
+      return json({ success: true, ...r }, 200, origin);
+    }
     const r = await publishCanonical(env, { ...body, tenantId });
     return json({ success: r.status !== 'failed', ...r }, 200, origin);
   } catch (e) {
@@ -443,4 +579,60 @@ export async function handleSocialAccountsList(request, env) {
     FROM social_accounts WHERE tenant_id = ? ORDER BY platform
   `).bind(tenantId).all();
   return json({ accounts: results }, 200, origin);
+}
+
+// GET /api/social/posts?status=…  (file de publication — scopé tenant, sans tokens)
+// Renvoie un EXTRAIT du contenu (pas le canonique brut entier) + statut, date de
+// programmation et résultats par réseau. Alimente la liste/historique du composer
+// (programmés / publiés / échoués / annulés).
+export async function handleSocialPostsList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+
+  const statusFilter = new URL(request.url).searchParams.get('status');
+  let sql = `SELECT id, source, canonical, targets, status, scheduled_at, results, created_at, updated_at
+             FROM social_posts WHERE tenant_id = ?`;
+  const binds = [tenantId];
+  if (statusFilter) { sql += ` AND status = ?`; binds.push(statusFilter); }
+  sql += ` ORDER BY COALESCE(scheduled_at, created_at) DESC LIMIT 100`;
+
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
+  const posts = results.map(r => {
+    let excerpt = '', mediaCount = 0, targets = [], res = null;
+    try { const c = JSON.parse(r.canonical); excerpt = (c.text || '').slice(0, 180); mediaCount = (c.media || []).length; } catch (_) {}
+    try { targets = JSON.parse(r.targets); } catch (_) {}
+    try { res = r.results ? JSON.parse(r.results) : null; } catch (_) {}
+    return {
+      id: r.id, source: r.source, status: r.status,
+      scheduledAt: r.scheduled_at, createdAt: r.created_at, updatedAt: r.updated_at,
+      targets, excerpt, mediaCount, results: res,
+    };
+  });
+  return json({ posts }, 200, origin);
+}
+
+// POST /api/social/posts/cancel  Body : { id }
+// Annule un post ENCORE programmé (status 'scheduled'→'canceled'). Scopé tenant
+// (jamais le post d'autrui) ; le garde WHERE status='scheduled' empêche d'annuler
+// un post déjà réclamé par le cron (en cours/publié) → anti-course.
+export async function handleSocialPostCancel(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+  if (!body.id) return err('Champ "id" requis', 400, origin);
+
+  const r = await env.DB.prepare(
+    `UPDATE social_posts SET status='canceled', updated_at=datetime('now')
+       WHERE id = ? AND tenant_id = ? AND status = 'scheduled'`
+  ).bind(body.id, tenantId).run();
+  if ((r.meta?.changes || 0) !== 1) {
+    return err('Post introuvable, déjà publié ou en cours — annulation impossible.', 409, origin);
+  }
+  return json({ success: true, id: body.id, status: 'canceled' }, 200, origin);
 }

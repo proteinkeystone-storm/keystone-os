@@ -59,6 +59,8 @@ let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
 let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
+let _schedOpen = false;        // panneau de programmation déplié ?
+let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -79,6 +81,7 @@ export function openSocialManager() {
   document.body.style.overflow = 'hidden';
   _loadCaps();
   _loadAccounts();
+  _loadQueue();
 }
 
 export function closeSocialManager() {
@@ -195,7 +198,11 @@ function _renderMain() {
             <button class="sm-btn-primary" data-act="publish" ${noAdmin ? 'disabled' : ''}>
               ${icon('zap', 18)}&nbsp;Publier
             </button>
+            <button class="sm-btn-ghost" data-act="toggle-schedule" ${noAdmin ? 'disabled' : ''}>
+              ${icon('calendar', 17)}&nbsp;Programmer…
+            </button>
           </div>
+          <div class="sm-sched" data-slot="sched" hidden></div>
         </section>
 
         <!-- ── Aperçu / résultat (droite, 40%) ─────────────── -->
@@ -205,12 +212,16 @@ function _renderMain() {
           <div class="sm-result" data-slot="result"></div>
         </aside>
       </div>
+
+      <section class="sm-queue" data-slot="queue"></section>
     </div>
   `;
   _renderNets();
   _renderMedia();
   _renderPreview();
   _renderValidation();
+  _renderSchedule();
+  _renderQueue();
 }
 
 // ── Liste des réseaux (boutons toggle a11y) depuis _accounts ───
@@ -570,11 +581,170 @@ function _setResult(html) {
 // Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
 function _reset() {
   _form = { text: '', targets: [], imageUrl: null, imageName: null };
+  _schedOpen = false;
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
   if (Array.isArray(_accounts)) _form.targets = _accounts.map(a => a.platform);
   _renderMain();   // reconstruit message + réseaux + média + aperçu + garde-fous + résultat (vide)
   _toast('Composer réinitialisé');
+}
+
+// ══════════════════════════════════════════════════════════════
+// Programmation & file de publication (Sprint Social-4.1)
+// ══════════════════════════════════════════════════════════════
+
+// datetime-local attend une heure LOCALE « YYYY-MM-DDTHH:MM » (sans fuseau).
+function _toLocalInput(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+// Affichage humain d'une échéance ISO, en heure locale FR.
+function _fmtWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+const _Q_LABEL = { scheduled: 'Programmé', publishing: 'En cours', published: 'Publié', partial: 'Partiel', failed: 'Échec', canceled: 'Annulé', draft: 'Brouillon' };
+const _qNetGlyphs = (targets) => (targets || []).map(p => `<span title="${_esc(_labelOf(p))}">${icon(NET_ICON[p] || 'globe', 13)}</span>`).join('');
+
+// Panneau de programmation (déplié sous les actions). Convertit l'heure locale
+// saisie → ISO UTC à l'envoi (new Date(local).toISOString()) → règle le décalage
+// Paris→UTC attendu côté cron.
+function _renderSchedule() {
+  const box = _root && _root.querySelector('[data-slot="sched"]');
+  if (!box) return;
+  if (!_schedOpen) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  const min = _toLocalInput(new Date(Date.now() + 5 * 60_000));    // ≥ 5 min dans le futur
+  const def = _toLocalInput(new Date(Date.now() + 60 * 60_000));   // défaut : +1 h
+  box.innerHTML = `
+    <div class="sm-sched-inner">
+      <label class="sm-sched-lbl" for="sm-sched-at">${icon('clock', 14)}&nbsp;Date et heure de publication</label>
+      <input id="sm-sched-at" type="datetime-local" class="sm-sched-input" data-field="sched-at" min="${min}" value="${def}">
+      <div class="sm-sched-hint">Heure locale. Le post part automatiquement à cette heure (précision ~5 min).</div>
+      <div class="sm-sched-nav">
+        <button type="button" class="sm-wiz-back" data-act="toggle-schedule">Annuler</button>
+        <button type="button" class="sm-btn-primary" data-act="do-schedule">${icon('calendar', 16)}&nbsp;Programmer la publication</button>
+      </div>
+    </div>`;
+}
+
+// Programme la publication : mêmes garde-fous que Publier + date future, puis
+// POST /publish avec scheduledAt (le Worker range status='scheduled').
+async function _doSchedule() {
+  if (_busy) return;
+  const token = _adminToken();
+  if (!token) { _toast('Connexion requise pour programmer', 'warn'); return; }
+  const input = _root && _root.querySelector('[data-field="sched-at"]');
+  const local = input?.value;
+  if (!local) { _toast('Choisis une date et une heure.', 'warn'); return; }
+  const when = new Date(local);                            // local → Date
+  if (isNaN(when.getTime())) { _toast('Date invalide.', 'warn'); return; }
+  if (when.getTime() <= Date.now() + 60_000) { _toast('Choisis une date dans le futur.', 'warn'); return; }
+
+  const v = _renderValidation();
+  if (!v.canPublish) { _toast(v.reasons[0] || 'Vérifie les contraintes par réseau.', 'warn'); return; }
+
+  const body = {
+    targets: _form.targets,
+    text: _form.text.trim(),
+    source: 'social-manager',
+    scheduledAt: when.toISOString(),
+    ...(_form.imageUrl ? { media: [{ type: 'image', url: _form.imageUrl }] } : {}),
+  };
+
+  _busy = true; _renderValidation();
+  try {
+    const res  = await fetch(`${CF_API}/api/social/publish`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { _toast('Session expirée — reconnecte-toi.', 'warn'); return; }
+    if (!res.ok || data.success === false) throw new Error(data.error || `Erreur ${res.status}`);
+    _schedOpen = false; _renderSchedule();
+    _toast(`Publication programmée — ${_fmtWhen(data.scheduledAt)}`, 'ok');
+    await _loadQueue();
+  } catch (e) {
+    _toast(e?.message || 'Programmation échouée', 'warn');
+  } finally {
+    _busy = false; _renderValidation();
+  }
+}
+
+// File de publication (GET /posts) : programmés (annulables) + récents.
+async function _loadQueue() {
+  const token = _adminToken();
+  if (!token) { _queue = []; _renderQueue(); return; }
+  try {
+    const res = await fetch(`${CF_API}/api/social/posts`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) { _queue = []; _renderQueue(); return; }
+    const data = await res.json().catch(() => ({}));
+    _queue = Array.isArray(data.posts) ? data.posts : [];
+  } catch (_) { _queue = []; }
+  _renderQueue();
+}
+
+function _renderQueue() {
+  const box = _root && _root.querySelector('[data-slot="queue"]');
+  if (!box) return;
+  if (!_adminToken()) { box.innerHTML = ''; return; }
+  const head = `<div class="sm-queue-head">${icon('calendar', 16)}&nbsp;File de publication</div>`;
+  if (_queue === null) { box.innerHTML = head + `<div class="sm-queue-empty">Chargement…</div>`; return; }
+
+  const scheduled = _queue.filter(p => p.status === 'scheduled')
+    .sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')));
+  const recent = _queue.filter(p => p.status !== 'scheduled').slice(0, 6);
+
+  if (!scheduled.length && !recent.length) {
+    box.innerHTML = head + `<div class="sm-queue-empty">Aucune publication pour l'instant. Programmes-en une avec le bouton « Programmer… ».</div>`;
+    return;
+  }
+
+  const excerpt = (p) => _esc(p.excerpt) || '<span class="sm-muted">(sans texte)</span>';
+  const schedRows = scheduled.map(p => `
+    <div class="sm-q-row">
+      <span class="sm-q-badge scheduled">${icon('clock', 12)}&nbsp;${_esc(_fmtWhen(p.scheduledAt))}</span>
+      <div class="sm-q-main">
+        <div class="sm-q-excerpt">${excerpt(p)}</div>
+        <div class="sm-q-nets">${_qNetGlyphs(p.targets)}</div>
+      </div>
+      <button type="button" class="sm-q-cancel" data-act="cancel-post" data-id="${_esc(p.id)}">${icon('x', 13)}&nbsp;Annuler</button>
+    </div>`).join('');
+
+  const recentRows = recent.map(p => `
+    <div class="sm-q-row">
+      <span class="sm-q-badge ${_esc(p.status)}">${_esc(_Q_LABEL[p.status] || p.status)}</span>
+      <div class="sm-q-main">
+        <div class="sm-q-excerpt">${excerpt(p)}</div>
+        <div class="sm-q-nets">${_qNetGlyphs(p.targets)}</div>
+      </div>
+    </div>`).join('');
+
+  box.innerHTML = head
+    + (scheduled.length ? `<div class="sm-queue-sub">Programmés (${scheduled.length})</div>${schedRows}` : '')
+    + (recent.length ? `<div class="sm-queue-sub">Récents</div>${recentRows}` : '');
+}
+
+async function _cancelPost(id) {
+  if (!id) return;
+  const token = _adminToken();
+  if (!token) { _toast('Connexion requise', 'warn'); return; }
+  if (!confirm('Annuler cette publication programmée ?')) return;
+  try {
+    const res  = await fetch(`${CF_API}/api/social/posts/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.error || `Erreur ${res.status}`);
+    _toast('Publication annulée', 'ok');
+    await _loadQueue();
+  } catch (e) {
+    _toast(e?.message || 'Annulation échouée', 'warn');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -585,6 +755,9 @@ function _onClick(e) {
   if (act === 'close')        { e.preventDefault(); closeSocialManager(); return; }
   if (act === 'reset')        { e.preventDefault(); if (confirm('Effacer toutes les saisies ? Cette action est définitive.')) _reset(); return; }
   if (act === 'publish')      { e.preventDefault(); _publish(); return; }
+  if (act === 'toggle-schedule') { e.preventDefault(); _schedOpen = !_schedOpen; _renderSchedule(); return; }
+  if (act === 'do-schedule')  { e.preventDefault(); _doSchedule(); return; }
+  if (act === 'cancel-post')  { e.preventDefault(); _cancelPost(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
@@ -859,7 +1032,7 @@ function _injectStyles() {
   .sm-issue.warn { color: var(--sm-warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--sm-warn) 30%, transparent); }
   .sm-issue strong { font-weight:800; }
 
-  .sm-actions { margin-top:6px; }
+  .sm-actions { margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .sm-btn-primary { display:inline-flex; align-items:center; padding:12px 22px; border:none; border-radius: var(--r); background: var(--gold); color:#fff; font-weight:800; font-size:14px; cursor:pointer; transition: all .15s; }
   .sm-btn-primary:hover:not(:disabled) { background: var(--gold2); transform: translateY(-1px); }
   .sm-btn-primary:disabled { opacity:.45; cursor:not-allowed; }
@@ -946,6 +1119,37 @@ function _injectStyles() {
   .sm-wiz-nav .sm-btn-primary { flex:1; justify-content:center; }
   .sm-wiz-back { flex:0 0 auto; padding:12px 16px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font:inherit; font-size:14px; font-weight:600; cursor:pointer; transition: all .15s; }
   .sm-wiz-back:hover { color: var(--text); border-color: var(--gold2); }
+
+  /* ── Programmation & file de publication (Sprint Social-4.1) ── */
+  .sm-btn-ghost { display:inline-flex; align-items:center; padding:12px 18px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font-weight:700; font-size:14px; cursor:pointer; transition: all .15s; }
+  .sm-btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--gold2); }
+  .sm-btn-ghost:disabled { opacity:.45; cursor:not-allowed; }
+  .sm-sched { margin-top:12px; }
+  .sm-sched-inner { border:1px solid var(--bd); border-radius: var(--r2); background: var(--navy3); padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .sm-sched-lbl { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.01em; color: var(--tx2); }
+  .sm-sched-input { background: var(--navy2); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:11px 13px; font:inherit; font-size:14px; color-scheme: dark; }
+  html.light-mode .sm-sched-input { color-scheme: light; }
+  .sm-sched-input:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
+  .sm-sched-hint { font-size:12px; color: var(--tx3); }
+  .sm-sched-nav { display:flex; gap:10px; margin-top:4px; }
+  .sm-sched-nav .sm-btn-primary { flex:1; justify-content:center; }
+
+  .sm-queue { margin-top:24px; }
+  .sm-queue-head { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:800; color: var(--text); margin-bottom:12px; }
+  .sm-queue-sub { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color: var(--tx3); margin:16px 0 8px; }
+  .sm-queue-empty { color: var(--tx3); font-size:13px; padding:6px 0; }
+  .sm-q-row { display:flex; align-items:center; gap:12px; padding:11px 13px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy2); margin-bottom:8px; }
+  .sm-q-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:999px; border:1px solid transparent; white-space:nowrap; }
+  .sm-q-badge.scheduled { color: var(--gold2); background: var(--gold3); border-color: color-mix(in srgb, var(--gold2) 30%, transparent); }
+  .sm-q-badge.published { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+  .sm-q-badge.partial { color: var(--sm-warn); background: var(--warn-soft); }
+  .sm-q-badge.failed { color: var(--danger); background: var(--danger-soft); }
+  .sm-q-badge.canceled, .sm-q-badge.publishing, .sm-q-badge.draft { color: var(--tx3); background: var(--navy3); }
+  .sm-q-main { flex:1; min-width:0; }
+  .sm-q-excerpt { font-size:13px; color: var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sm-q-nets { display:flex; gap:6px; margin-top:5px; color: var(--tx3); }
+  .sm-q-cancel { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; transition: all .15s; }
+  .sm-q-cancel:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
   `;
