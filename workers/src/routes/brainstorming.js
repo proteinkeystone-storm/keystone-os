@@ -594,6 +594,107 @@ export async function handleBrainstormingSynthesize(request, env) {
   return json({ synthesis, generated_at: new Date().toISOString(), engine: engineUsed }, 200, origin);
 }
 
+// ═══ Idées de posts par réseau (one-shot — chaîne de contenu) ═══════
+// Génère 5 ANGLES de posts adaptés à un réseau, à partir d'un sujet. Reste au
+// stade de l'IDÉE (angle + accroche) : la rédaction finale est le rôle de Ghost
+// Writer (séparation des rôles). 1 appel LLM (Mistral one-shot), 1 crédit IA
+// (tool 'brainstorming', portefeuille unifié ; flag enforce dormant).
+const POST_IDEAS_NETWORKS = {
+  facebook:  'Facebook (posts conversationnels, communauté, ton accessible)',
+  instagram: 'Instagram (visuel, accroche forte, hashtags, ton inspirant)',
+  linkedin:  'LinkedIn (professionnel, expertise, preuve, ton posé)',
+  threads:   'Threads (court, spontané, conversationnel, ≤ 500 caractères)',
+  telegram:  'Telegram (canal, annonces directes, ton informatif)',
+};
+const POST_IDEAS_PROMPT =
+  "Tu es un stratège de contenu social. À partir d'un SUJET et d'un RÉSEAU, propose 5 idées de posts DISTINCTES, adaptées aux codes du réseau. " +
+  "Chaque idée = un ANGLE court (3 à 8 mots) + une ACCROCHE d'une phrase (l'amorce, PAS le post complet). " +
+  "Reste au stade de l'IDÉE : ne rédige jamais le post final (un autre outil s'en charge). " +
+  'Réponds UNIQUEMENT en JSON strict, sans aucun texte autour : {"ideas":[{"angle":"...","hook":"..."}]} — exactement 5 entrées, en français.';
+
+// Parse défensif d'une réponse LLM → liste d'idées { angle, hook }. Tolère le
+// texte autour du JSON ; fallback ligne-à-ligne si le JSON est cassé.
+export function parsePostIdeas(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  try {
+    const m = raw.match(/\{[\s\S]*"ideas"[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (Array.isArray(parsed.ideas)) {
+        const out = parsed.ideas
+          .map(it => ({ angle: clean(it?.angle), hook: clean(it?.hook) }))
+          .filter(it => it.angle || it.hook)
+          .slice(0, 5);
+        if (out.length) return out;
+      }
+    }
+  } catch (_) { /* fallback ci-dessous */ }
+  const lines = raw.split(/\n+/)
+    .map(s => s.replace(/^[\s\d.\-•*"']+|["'\s]+$/g, '').trim())
+    .filter(s => s.length > 6 && s.length < 200);
+  return lines.slice(0, 5).map(s => ({ angle: clean(s), hook: '' }));
+}
+
+async function _generatePostIdeas(env, topic, network) {
+  if (!env.AI || typeof env.AI.run !== 'function') return { error: 'Moteur IA indisponible' };
+  const netDesc = POST_IDEAS_NETWORKS[network] || network;
+  try {
+    const res = await env.AI.run(MODEL_ID_HEAVY, {
+      messages: [
+        { role: 'system', content: POST_IDEAS_PROMPT },
+        { role: 'user',   content: `SUJET : ${topic}\nRÉSEAU : ${netDesc}\n\nDonne 5 idées au format JSON strict.` },
+      ],
+      max_tokens: MAX_TOKENS_HEAVY_SYNTH,
+      stream:     false,
+    });
+    const raw = (res?.response
+      || res?.result?.response
+      || res?.choices?.[0]?.message?.content
+      || res?.output?.[0]?.content?.[0]?.text
+      || '').trim();
+    await recordUsage(env, 'brainstorming', { usage: res?.usage, inText: POST_IDEAS_PROMPT + topic + netDesc, outText: raw });
+    const ideas = parsePostIdeas(raw);
+    if (!ideas.length) return { error: 'Aucune idée exploitable générée', raw: raw.slice(0, 200) };
+    return { ideas };
+  } catch (e) {
+    return { error: e?.message || 'Échec de génération' };
+  }
+}
+
+// POST /api/brainstorming/post-ideas — body { topic, network }. Auth JWT + 1 crédit.
+export async function handleBrainstormingPostIdeas(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: {
+      'Access-Control-Allow-Origin':  origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
+  }
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('Authentification requise', 401, origin);
+
+  const body = await parseBody(request);
+  if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
+  const topic   = typeof body.topic   === 'string' ? body.topic.trim()   : '';
+  const network = typeof body.network === 'string' ? body.network.trim() : '';
+  if (topic.length < MIN_BRIEF) return err(`topic requis (${MIN_BRIEF} caractères min)`, 400, origin);
+  if (!POST_IDEAS_NETWORKS[network]) return err('network invalide', 400, origin);
+
+  // Crédit IA (dormant tant que enforce_ai_credits_v1=0). Réutilise 'brainstorming'.
+  if (await isEnforceEnabled(env, claims.sub)) {
+    const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
+    if (!credit.ok && credit.blocked) {
+      return json({ error: 'Crédits IA épuisés ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
+    }
+  }
+
+  const result = await _generatePostIdeas(env, topic.slice(0, MAX_BRIEF), network);
+  if (result.error) return json({ error: result.error, raw: result.raw }, 422, origin);
+  return json({ ideas: result.ideas, network, generated_at: new Date().toISOString() }, 200, origin);
+}
+
 // Sprint 7.12 — Parse défensif d'une réponse LLM en JSON insights
 function _parseInsightsFromText(raw) {
   if (!raw) return [];
