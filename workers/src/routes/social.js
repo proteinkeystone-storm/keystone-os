@@ -18,7 +18,7 @@ import { json, err, requireAdmin, parseBody, generateId, getAllowedOrigin } from
 import { requireJWT }          from '../lib/jwt.js';
 import { encrypt, decrypt }    from '../lib/crypto.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
-import { broadcast }           from '../lib/social/broadcast.js';
+import { broadcast, fetchPostInsights } from '../lib/social/broadcast.js';
 import { createCanonicalPost, validateCanonical } from '../lib/social/canonical.js';
 import { getPlatform, listPlatformsPublic } from '../lib/social/registry.js';
 
@@ -756,6 +756,44 @@ export async function handleSocialPostsList(request, env) {
     };
   });
   return json({ posts }, 200, origin);
+}
+
+// GET /api/social/posts/insights?id=… — perf d'un post publié (analytique, pull à
+// la demande). Pour chaque réseau PUBLIÉ (externalId connu), interroge l'API insights
+// via le token du compte. Telegram = aveugle → { unsupported } ; scope insights manquant
+// côté Meta → { error } (l'UI affiche « indisponible », jamais de crash). Scopé tenant.
+export async function handleSocialPostInsights(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+  const id = new URL(request.url).searchParams.get('id');
+  if (!id) return err('Paramètre "id" requis', 400, origin);
+
+  const { results: rows } = await env.DB.prepare(
+    `SELECT id, results FROM social_posts WHERE id = ? AND tenant_id = ? LIMIT 1`
+  ).bind(id, tenantId).all();
+  const row = rows && rows[0];
+  if (!row) return err('Post introuvable.', 404, origin);
+
+  let results = [];
+  try { results = JSON.parse(row.results) || []; } catch (_) {}
+  const published = results.filter(r => r && r.status === 'published');
+  if (!published.length) return json({ id, insights: [] }, 200, origin);
+
+  // Comptes du tenant (platform → row) pour le token chiffré.
+  const { results: accts } = await env.DB.prepare(
+    `SELECT platform, external_id, access_ciphertext, access_iv FROM social_accounts WHERE tenant_id = ?`
+  ).bind(tenantId).all();
+  const byPlat = {};
+  for (const a of (accts || [])) byPlat[a.platform] = a;
+
+  const insights = [];
+  for (const r of published) {
+    insights.push(await fetchPostInsights({ platform: r.platform, externalId: r.externalId, account: byPlat[r.platform], env }));
+  }
+  return json({ id, insights }, 200, origin);
 }
 
 // POST /api/social/posts/cancel  Body : { id }
