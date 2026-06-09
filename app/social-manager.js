@@ -222,7 +222,10 @@ function _renderMain() {
         <!-- ── Saisie (gauche, 60%) ───────────────────────── -->
         <section class="sm-left">
           <div class="sm-field">
-            <label class="sm-label" for="sm-text">Message</label>
+            <div class="sm-field-head">
+              <label class="sm-label" for="sm-text">Message</label>
+              <button type="button" class="sm-ideas-link" data-act="brainstorm" title="Trouver des idées de posts dans Brainstorming">${icon('sparkles', 14)}&nbsp;Trouver des idées</button>
+            </div>
             <textarea id="sm-text" class="sm-textarea" data-field="text" rows="7"
               placeholder="Rédigez votre publication…">${_esc(_form.text)}</textarea>
             <div class="sm-counter" data-slot="counter" aria-live="polite"></div>
@@ -690,6 +693,20 @@ function _reset() {
   _toast('Composer réinitialisé');
 }
 
+// Relais Social Manager → Brainstorming (chaîne de contenu, sens amont). En panne
+// d'idées dans le composer, on va brainstormer : ouvre Brainstorming en mode
+// « Idées de Posts », pré-rempli avec le texte du composer comme sujet de départ.
+async function _sendToBrainstorming() {
+  try {
+    const brief = (_form.text || '').trim();
+    const m = await import('./brainstorming.js');
+    closeSocialManager();
+    m.openBrainstorming?.({ mode: 'post-ideas', brief });
+  } catch (err) {
+    console.error('[SocialManager] openBrainstorming', err);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // Programmation & file de publication (Sprint Social-4.1)
 // ══════════════════════════════════════════════════════════════
@@ -1038,6 +1055,7 @@ function _onClick(e) {
   if (act === 'close')        { e.preventDefault(); closeSocialManager(); return; }
   if (act === 'reset')        { e.preventDefault(); if (confirm('Effacer toutes les saisies ? Cette action est définitive.')) _reset(); return; }
   if (act === 'publish')      { e.preventDefault(); _publish(); return; }
+  if (act === 'brainstorm')   { e.preventDefault(); _sendToBrainstorming(); return; }
   if (act === 'toggle-schedule') { e.preventDefault(); _schedOpen = !_schedOpen; _renderSchedule(); return; }
   if (act === 'do-schedule')  { e.preventDefault(); _doSchedule(); return; }
   if (act === 'cancel-post')  { e.preventDefault(); _cancelPost(e.target.closest('[data-id]')?.dataset.id); return; }
@@ -1494,6 +1512,9 @@ function _injectStyles() {
   .sm-q-act:hover { color: var(--text); background: var(--navy3); }
   .sm-q-act.danger:hover { color: var(--danger); background: var(--danger-soft); }
   .sm-q-act.is-on { color: var(--text); background: var(--navy3); }
+  .sm-field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sm-ideas-link { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; color: var(--tx3); background: transparent; border: 1px solid var(--bd); transition: all .15s; }
+  .sm-ideas-link:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 30%, transparent); background: var(--navy3); }
   .sm-q-insights { grid-column: 1 / -1; margin-top:-2px; padding:11px 13px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy); display:flex; flex-direction:column; gap:9px; }
   .sm-ins-net { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
   .sm-ins-netname { flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; min-width:104px; font-size:12px; font-weight:700; color: var(--text); }
