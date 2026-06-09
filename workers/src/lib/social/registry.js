@@ -50,7 +50,7 @@ export const PLATFORMS = {
       enabled: false,             // ⚠ publication média PAS encore implémentée (adapter) → texte seul. Garde-fou registre ↔ UI ↔ moteur.
       image: { max: 9, mimes: ['image/jpeg', 'image/png', 'image/gif'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 600 },
-      carousel: true,
+      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand le multi-image natif sera codé.
       required: false,            // un post texte seul est valide
       hostedUrlRequired: false,   // upload binaire natif (register upload)
     },
@@ -88,7 +88,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 7200 },
-      carousel: true,
+      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand attached_media sera codé.
       required: false,
       hostedUrlRequired: false,
     },
@@ -123,7 +123,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels
-      carousel: true,
+      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand les conteneurs carrousel seront codés.
       required: true,             // ⚠ IG n'accepte PAS de post texte seul
       hostedUrlRequired: true,    // ⚠ le média DOIT être servi sur une URL publique (→ R2)
     },
@@ -161,7 +161,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },
-      carousel: true,
+      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand le carrousel Threads sera codé.
       required: false,            // Threads accepte le TEXTE SEUL (retour aux sources 😉)
       hostedUrlRequired: true,    // image servie sur URL publique (→ R2), comme IG
     },
@@ -198,7 +198,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 3600 },
-      carousel: true,            // sendMediaGroup (album) — v1 = 1 image
+      carousel: false,           // ⚠ multi-image PAS câblé (adapter throw >1) → garde-fou registre. Repasser true quand sendMediaGroup (album) sera codé.
       required: false,           // Telegram accepte le texte seul
       hostedUrlRequired: true,   // photo passée par URL publique (R2), pas d'upload binaire
       captionMaxLength: 1024,    // ⚠ avec photo, la légende est limitée à 1024 (vs 4096 en texte seul)
@@ -301,6 +301,12 @@ export function validateForPlatform(canonical, platformId) {
     errors.push(`${p.label} n'accepte pas encore les photos (publication texte seul pour l'instant).`);
   }
   const images = media.filter(m => m.type === 'image');
+  // Garde-fou multi-image : le carrousel n'est pas câblé (les adapters throw dès la 2ᵉ image).
+  // On refuse ICI (aperçu rouge, front ET moteur via broadcast.js) au lieu de laisser planter
+  // à l'envoi (aperçu vert → crash). Repasser registry media.carousel à true le lèvera.
+  if (images.length > 1 && p.media && p.media.carousel === false) {
+    errors.push(`${p.label} ne gère qu'une seule image pour l'instant (carrousel multi-images à venir).`);
+  }
   if (p.media?.image?.max && images.length > p.media.image.max) {
     errors.push(`Trop d'images pour ${p.label} : ${images.length}/${p.media.image.max}.`);
   }
