@@ -22,6 +22,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { icon }                              from './lib/ui-icons.js';
 import { CF_API }                            from './pads-loader.js';
+import { normalizeComposePayload }           from './lib/social-handoff.js';
 
 const APP_ID    = 'O-SOC-001';
 const DRAFT_KEY = 'ks_social_manager_draft_v1';
@@ -73,10 +74,18 @@ const _labelOf = (p) => _capOf(p)?.label || NET_LABEL_FALLBACK[p] || p;
 // API publique
 // ══════════════════════════════════════════════════════════════
 
-export function openSocialManager() {
-  if (_root) return;
+export function openSocialManager(opts = {}) {
+  if (_root) {
+    // Déjà ouvert : un relais entrant (Ghost Writer → Social Manager) alimente le
+    // composer à chaud, au lieu d'être ignoré par le court-circuit de ré-ouverture.
+    if (opts && opts.compose) _applyCompose(opts.compose);
+    return;
+  }
   _injectStyles();
   _loadDraft();
+  // Handoff : prime sur le brouillon, appliqué AVANT le 1er rendu (silent → c'est
+  // _renderMain() juste en dessous qui affichera l'état pré-rempli).
+  if (opts && opts.compose) _applyCompose(opts.compose, { silent: true });
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
@@ -96,6 +105,39 @@ export function closeSocialManager() {
   _root.remove();
   _root = null;
   document.body.style.overflow = '';
+}
+
+// ══════════════════════════════════════════════════════════════
+// Handoff / relais — pré-remplir le composer depuis un autre pad
+// (ex. Ghost Writer, cf. chaîne de contenu). Aligné sur le routeur :
+// openTool('O-SOC-001', { compose }) → openSocialManager({ compose }).
+// ══════════════════════════════════════════════════════════════
+
+// Voie directe (sans passer par openTool) : ouvre le pad pré-rempli, ou l'alimente
+// à chaud s'il est déjà ouvert. Sucre sur openSocialManager.
+// payload = { text, imageUrl, imageName, targets, append }.
+export function composeInSocialManager(payload) {
+  openSocialManager({ compose: payload });
+}
+
+// Applique un handoff sur l'état du composer. silent=true → pas de re-render (le
+// flux d'ouverture rendra) ; sinon (pad déjà monté) → re-render complet + focus.
+function _applyCompose(payload, { silent = false } = {}) {
+  const d = normalizeComposePayload(payload, { knownNetworks: Object.keys(NET_LABEL_FALLBACK) });
+  if (!d) return false;
+  if (typeof d.text === 'string') {
+    _form.text = (d.append && _form.text) ? `${_form.text}\n\n${d.text}` : d.text;
+  }
+  if (d.imageUrl) { _form.imageUrl = d.imageUrl; _form.imageName = d.imageName; }
+  if (d.targets)  { _form.targets  = d.targets.slice(); }
+  if (!silent) {
+    _renderMain();
+    _saveDraft();
+    const ta = _root && _root.querySelector('[data-field="text"]');
+    if (ta) { ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_) {} }
+    _toast('Contenu importé dans le composer');
+  }
+  return true;
 }
 
 // ══════════════════════════════════════════════════════════════
