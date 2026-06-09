@@ -402,6 +402,8 @@ function _injectCSS() {
     color: var(--text-primary, #ddd); transition: all .15s ease;
 }
 .gw-mini-btn:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
+.gw-mini-btn.gw-action-send { background: rgba(120,160,255,.18); border-color: rgba(120,160,255,.42); color: #cdddff; }
+.gw-mini-btn.gw-action-send:hover { background: rgba(120,160,255,.30); border-color: rgba(120,160,255,.6); color: #fff; }
 .gw-shortcut-hint { font-size: 11px; color: var(--text-muted, #888); margin-left: auto; }
 .gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 40px 0; line-height: 1.6; }
 .gw-spinner {
@@ -780,6 +782,21 @@ function _setStatus(el, text, kind) {
     el.className = 'gw-status' + (kind ? ` gw-${kind}` : '');
 }
 
+// Relais vers Social Manager : envoie la variante active dans le composer (bout aval
+// de la chaîne de contenu, cf. [[content-chain-vision]]). Pattern maison de relais
+// inter-pads (cf. vefa _sendToConcierge) : import du module cible + close + ouverture
+// pré-remplie via composeInSocialManager. La publication reste gated côté worker.
+async function _sendToSocialManager(text) {
+    if (!text || !text.trim()) return;
+    try {
+        const m = await import('./social-manager.js');
+        _closeModal();
+        m.composeInSocialManager?.({ text });
+    } catch (err) {
+        console.error('[Ghostwriter] sendToSocialManager', err);
+    }
+}
+
 function _renderVariants(container, variants) {
     if (!container) return;
     if (!variants || variants.length === 0) {
@@ -814,6 +831,7 @@ function _renderVariants(container, variants) {
         <div class="gw-actions-row">
             <button class="gw-mini-btn gw-action-copy">Copier</button>
             <button class="gw-mini-btn gw-action-replace">Remplacer</button>
+            <button class="gw-mini-btn gw-action-send" title="Ouvrir Social Manager avec cette variante">Envoyer vers Social Manager</button>
             <span class="gw-shortcut-hint">Naviguez avec ←/→ ou 1/2/3</span>
         </div>
     `;
@@ -823,6 +841,7 @@ function _renderVariants(container, variants) {
     const indicators = container.querySelectorAll('.gw-indicator');
     const copyBtn   = container.querySelector('.gw-action-copy');
     const replaceBtn = container.querySelector('.gw-action-replace');
+    const sendBtn   = container.querySelector('.gw-action-send');
 
     function goTo(idx) {
         const n = variants.length;
@@ -856,6 +875,7 @@ function _renderVariants(container, variants) {
     replaceBtn.addEventListener('click', () => {
         _replaceSelection(variants[activeIdx()]?.text || '', replaceBtn);
     });
+    sendBtn?.addEventListener('click', () => _sendToSocialManager(variants[activeIdx()]?.text || ''));
 
     // Raccourcis clavier 1/2/3 + flèches. Attaché au document mais
     // namespaced pour éviter de polluer entre 2 modals. Cleanup au
