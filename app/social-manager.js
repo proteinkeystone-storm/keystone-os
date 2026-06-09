@@ -173,6 +173,7 @@ function _renderMain() {
       </div>
 
       ${noAdmin ? `<div class="sm-banner sm-banner-warn">${icon('lock', 15)}&nbsp;Connecte-toi en <strong>admin</strong> pour charger tes comptes et publier.</div>` : ''}
+      <div data-slot="acct-alert"></div>
 
       <div class="sm-split">
         <!-- ── Saisie (gauche, 60%) ───────────────────────── -->
@@ -227,6 +228,7 @@ function _renderMain() {
   _renderValidation();
   _renderSchedule();
   _renderQueue();
+  _renderAcctAlert();
 }
 
 // ── Liste des réseaux (boutons toggle a11y) depuis _accounts ───
@@ -235,11 +237,12 @@ function _renderNets() {
   if (!box) return;
 
   if (_accounts === null) { box.innerHTML = `<div class="sm-nets-loading">Chargement des comptes connectés…</div>`; return; }
-  if (_accounts.length === 0) {
-    box.innerHTML = `<div class="sm-nets-empty">Aucun compte connecté. Provisionne un réseau côté Worker pour le voir ici.</div>`;
+  const conn = _accounts.filter(a => a.status === 'connected');
+  if (conn.length === 0) {
+    box.innerHTML = `<div class="sm-nets-empty">Aucun réseau connecté. Clique « Connecter un réseau social » ci-dessous.</div>`;
     return;
   }
-  box.innerHTML = _accounts.map(a => {
+  box.innerHTML = conn.map(a => {
     const p  = a.platform;
     const on = _form.targets.includes(p);
     const brand = NET_BRAND[p];
@@ -465,17 +468,63 @@ async function _loadAccounts() {
     const res = await fetch(`${CF_API}/api/social/accounts`, { headers: { 'Authorization': `Bearer ${token}` } });
     if (res.status === 401) { _accounts = []; _renderNets(); _renderValidation(); _toast('Session admin expirée', 'warn'); return; }
     const data = await res.json().catch(() => ({}));
-    _accounts = Array.isArray(data.accounts) ? data.accounts.filter(a => a.status === 'connected') : [];
-    // Pré-sélection : tout ce qui est connecté (sauf si un brouillon de cibles existe)
-    if (!_form.targets.length) _form.targets = _accounts.map(a => a.platform);
+    // On garde TOUS les comptes (connectés + expirés) pour la santé/gestion ; le
+    // ciblage, lui, ne propose que les connectés.
+    _accounts = Array.isArray(data.accounts) ? data.accounts : [];
+    if (!_form.targets.length) _form.targets = _accounts.filter(a => a.status === 'connected').map(a => a.platform);
     _renderNets();
     _renderPreview();
     _renderValidation();
+    _renderAcctAlert();
   } catch (e) {
     _accounts = [];
     _renderNets();
     _renderValidation();
     _toast('Comptes non chargés : ' + (e?.message || 'erreur'), 'warn');
+  }
+}
+
+// ── Santé des connexions (Sprint Social-4.3) ───────────────────
+function _accountHealth(a) {
+  if (a.status === 'expired') return { level: 'danger', label: 'Expiré — reconnecte' };
+  if (!a.expires_at) return { level: 'ok', label: 'Connecté' };
+  const days = Math.floor((new Date(a.expires_at).getTime() - Date.now()) / 86400_000);
+  if (days <= 0) return { level: 'danger', label: 'Expiré — reconnecte' };
+  if (days <= 7) return { level: 'warn', label: `Expire dans ${days} j` };
+  return { level: 'ok', label: 'Connecté' };
+}
+// Réseau expiré → bouton de (re)connexion à réutiliser (mêmes actions que le picker).
+function _reconnectAct(platform) {
+  if (platform === 'telegram') return 'pick-telegram';
+  if (platform === 'threads')  return 'connect-threads';
+  return 'connect-facebook';   // facebook + instagram (1 OAuth)
+}
+// Bandeau au-dessus du composer si un réseau a expiré.
+function _renderAcctAlert() {
+  const box = _root && _root.querySelector('[data-slot="acct-alert"]');
+  if (!box) return;
+  const bad = (_accounts || []).filter(a => _accountHealth(a).level === 'danger');
+  if (!bad.length) { box.innerHTML = ''; return; }
+  const names = bad.map(a => _esc(_labelOf(a.platform))).join(', ');
+  box.innerHTML = `<div class="sm-banner sm-banner-warn">${icon('alert-triangle', 15)}&nbsp;Connexion expirée : <strong>${names}</strong> — <button type="button" class="sm-banner-link" data-act="open-connect">reconnecter</button>.</div>`;
+}
+async function _disconnectAccount(id) {
+  if (!id) return;
+  if (!_adminToken()) { _toast('Connexion requise', 'warn'); return; }
+  if (!confirm('Déconnecter ce réseau ? Tu pourras le reconnecter ensuite.')) return;
+  try {
+    const res  = await fetch(`${CF_API}/api/social/accounts/disconnect`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_adminToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.error || `Erreur ${res.status}`);
+    _toast('Réseau déconnecté', 'ok');
+    await _loadAccounts();
+    if (_connect) _renderConnect();
+  } catch (e) {
+    _toast(e?.message || 'Déconnexion échouée', 'warn');
   }
 }
 
@@ -898,6 +947,7 @@ function _onClick(e) {
   if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
+  if (act === 'disconnect-acct') { e.preventDefault(); _disconnectAccount(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
   if (act === 'pick-telegram') { e.preventDefault(); if (_connect) { _connect.view = 'wizard'; _connect.step = 0; _renderConnect(); } return; }
   if (act === 'connect-facebook') { e.preventDefault(); _connectOAuth('facebook', 'Facebook'); return; }
@@ -1000,8 +1050,24 @@ function _renderConnect() {
         <div class="sm-conn-meta"><div class="sm-conn-name">${_esc(_labelOf(p))}</div><div class="sm-conn-sub">Connexion en 1 clic — bientôt</div></div>
         <span class="sm-conn-soon">Bientôt</span>
       </div>`;
+    const managed = _accounts || [];
+    const mgmt = managed.length
+      ? `<div class="sm-conn-section">Tes réseaux connectés</div>` + managed.map(a => {
+          const h = _accountHealth(a);
+          return `<div class="sm-conn-acct">
+            <span class="sm-conn-glyph" style="--brand:${NET_BRAND[a.platform] || 'var(--gold)'}">${icon(NET_ICON[a.platform] || 'globe', 16)}</span>
+            <div class="sm-conn-meta">
+              <div class="sm-conn-name">${_esc(_labelOf(a.platform))}</div>
+              <div class="sm-conn-health ${h.level}">${a.display_name ? _esc(a.display_name) + ' · ' : ''}${_esc(h.label)}</div>
+            </div>
+            ${h.level === 'danger' ? `<button type="button" class="sm-conn-cta" data-act="${_reconnectAct(a.platform)}">Reconnecter</button>` : ''}
+            <button type="button" class="sm-acct-x" data-act="disconnect-acct" data-id="${_esc(a.id)}" title="Déconnecter" aria-label="Déconnecter">${icon('x', 16)}</button>
+          </div>`;
+        }).join('') + `<div class="sm-conn-section">Ajouter un réseau</div>`
+      : '';
     box.innerHTML = head('Connecter un réseau social') + `
       <div class="sm-connect-body">
+        ${mgmt}
         <button type="button" class="sm-conn-row is-active" data-act="pick-telegram">
           <span class="sm-conn-glyph" style="--brand:#2AABEE">${icon('telegram', 18)}</span>
           <div class="sm-conn-meta"><div class="sm-conn-name">Telegram</div><div class="sm-conn-sub">Publie sur ton canal — aucune inscription</div></div>
@@ -1243,6 +1309,18 @@ function _injectStyles() {
   .sm-conn-row.is-active { width:100%; box-sizing:border-box; appearance:none; font:inherit; color:inherit; text-align:left; cursor:pointer; transition: border-color .15s; }
   .sm-conn-row.is-active:hover { border-color: var(--gold2); }
   .sm-conn-cta { flex:0 0 auto; font-size:13px; font-weight:800; color: var(--gold2); }
+  button.sm-conn-cta { background:none; border:none; cursor:pointer; font:inherit; font-weight:800; padding:6px 8px; border-radius:8px; }
+  button.sm-conn-cta:hover { background: var(--gold3); }
+  /* Gestion des comptes connectés (santé / déconnexion) */
+  .sm-conn-section { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color: var(--tx3); padding:10px 4px 4px; }
+  .sm-conn-acct { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--bd); border-radius: var(--r); margin-bottom:6px; }
+  .sm-conn-health { font-size:12px; color: var(--tx3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sm-conn-health.ok { color: var(--green); }
+  .sm-conn-health.warn { color: var(--sm-warn); }
+  .sm-conn-health.danger { color: var(--danger); font-weight:700; }
+  .sm-acct-x { flex:0 0 auto; display:inline-grid; place-items:center; width:30px; height:30px; border:none; background:transparent; color: var(--tx3); cursor:pointer; border-radius:8px; transition: all .15s; }
+  .sm-acct-x:hover { color: var(--danger); background: var(--danger-soft); }
+  .sm-banner-link { background:none; border:none; color: var(--sm-warn); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; padding:0; }
   /* Wizard pas-à-pas */
   .sm-wiz { padding:24px 22px 22px; text-align:center; display:flex; flex-direction:column; align-items:center; }
   .sm-wiz-dots { display:flex; gap:6px; margin-bottom:18px; }

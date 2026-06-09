@@ -97,7 +97,7 @@ import {
   handleConsumeMagicLink,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, sweepDuePosts } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
@@ -140,6 +140,7 @@ export default {
       if (path === '/api/social/provision/telegram'  && method === 'POST') return handleSocialProvisionTelegram(request, env);
       if (path === '/api/social/publish'            && method === 'POST') return handleSocialPublish(request, env);
       if (path === '/api/social/accounts'           && method === 'GET')  return handleSocialAccountsList(request, env);
+      if (path === '/api/social/accounts/disconnect' && method === 'POST') return handleSocialAccountDisconnect(request, env);
       if (path === '/api/social/posts'              && method === 'GET')  return handleSocialPostsList(request, env);
       if (path === '/api/social/posts/cancel'       && method === 'POST') return handleSocialPostCancel(request, env);
       if (path === '/api/social/posts/delete'       && method === 'POST') return handleSocialPostsDelete(request, env);
@@ -573,6 +574,12 @@ export default {
 
     // Cron quotidien (0 3 * * *) — purges & maintenance.
     ctx.waitUntil(handleScheduledPurge(env));
+    // Sprint Social-4.3 — refresh des tokens sociaux proches expiration (Threads ~60j).
+    ctx.waitUntil(
+      refreshSocialTokens(env)
+        .then(r => console.log('[social-token-refresh]', JSON.stringify(r)))
+        .catch(e => console.warn('[social-token-refresh] failed', e?.message || e))
+    );
     // Purge des réponses Pulsa expirées (TTL configurable par formulaire,
     // 90j par défaut). Indépendant de la purge SDQR.
     ctx.waitUntil(

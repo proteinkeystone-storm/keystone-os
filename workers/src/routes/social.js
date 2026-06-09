@@ -16,7 +16,7 @@
 
 import { json, err, requireAdmin, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT }          from '../lib/jwt.js';
-import { encrypt }             from '../lib/crypto.js';
+import { encrypt, decrypt }    from '../lib/crypto.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { broadcast }           from '../lib/social/broadcast.js';
 import { createCanonicalPost, validateCanonical } from '../lib/social/canonical.js';
@@ -624,10 +624,75 @@ export async function handleSocialAccountsList(request, env) {
   const tenantId = await socialTenantOf(request, env);
   if (!tenantId) return err('Authentification requise', 401, origin);
   const { results } = await env.DB.prepare(`
-    SELECT id, platform, target_type, external_id, display_name, scopes, status, created_at, updated_at
+    SELECT id, platform, target_type, external_id, display_name, scopes, status, expires_at, created_at, updated_at
     FROM social_accounts WHERE tenant_id = ? ORDER BY platform
   `).bind(tenantId).all();
   return json({ accounts: results }, 200, origin);
+}
+
+// POST /api/social/accounts/disconnect  Body : { id }
+// Retire un compte connecté (DELETE), scopé tenant. L'utilisateur pourra le
+// reconnecter via le wizard (OAuth FB/Threads, deep-link Telegram).
+export async function handleSocialAccountDisconnect(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+  if (!body.id) return err('Champ "id" requis', 400, origin);
+  const r = await env.DB.prepare(`DELETE FROM social_accounts WHERE id = ? AND tenant_id = ?`).bind(body.id, tenantId).run();
+  if ((r.meta?.changes || 0) !== 1) return err('Compte introuvable.', 404, origin);
+  return json({ success: true, id: body.id }, 200, origin);
+}
+
+// ═══ Santé des connexions : refresh des tokens (Sprint Social-4.3) ══
+// Seul Threads a un token à durée limitée (~60 j) avec refresh self-service (FB =
+// Page token longue durée non suivi ; Telegram/IG = token système/bot). Lancé par
+// le cron QUOTIDIEN (index.js). Rafraîchit les tokens qui expirent dans < 7 j ; si
+// le refresh échoue ET que le token est DÉJÀ mort → 'expired' (le front montre un
+// badge « reconnecter »). Fail-safe : ne casse jamais le cron.
+export async function refreshSocialTokens(env, { dryRun = false } = {}) {
+  await ensureSocialSchema(env);
+  if (!env.KS_ENCRYPTION_KEY) return { skipped: 'no-key' };
+  const { results: accts } = await env.DB.prepare(
+    `SELECT id, access_ciphertext, access_iv, expires_at FROM social_accounts
+       WHERE platform = 'threads' AND status = 'connected'
+         AND expires_at IS NOT NULL AND datetime(expires_at) <= datetime('now','+7 days')
+       LIMIT 50`
+  ).all();
+
+  let refreshed = 0, expired = 0, failed = 0;
+  for (const a of accts) {
+    let token;
+    try { token = await decrypt(a.access_ciphertext, a.access_iv, env.KS_ENCRYPTION_KEY); }
+    catch (_) { failed++; continue; }
+    if (dryRun) { refreshed++; continue; }
+    try {
+      // Threads : refresh d'un token longue durée (≥ 24 h, non expiré) → +60 j. Pas
+      // de client_secret (≠ l'échange initial th_exchange_token).
+      const res = await fetch('https://graph.threads.net/refresh_access_token?' + new URLSearchParams({
+        grant_type: 'th_refresh_token', access_token: token,
+      }));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.access_token) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+      const enc    = await encrypt(data.access_token, env.KS_ENCRYPTION_KEY);
+      const newExp = data.expires_in ? new Date(Date.now() + Number(data.expires_in) * 1000).toISOString() : null;
+      await env.DB.prepare(
+        `UPDATE social_accounts SET access_ciphertext=?, access_iv=?, expires_at=?, status='connected', updated_at=datetime('now') WHERE id=?`
+      ).bind(enc.ciphertext, enc.iv, newExp, a.id).run();
+      refreshed++;
+    } catch (e) {
+      // Token déjà mort → 'expired' (badge reconnecter). Sinon on retentera demain
+      // (évite un faux « expiré » sur un raté réseau passager / endpoint à valider).
+      if (a.expires_at && new Date(a.expires_at).getTime() <= Date.now()) {
+        await env.DB.prepare(`UPDATE social_accounts SET status='expired', updated_at=datetime('now') WHERE id=?`).bind(a.id).run();
+        expired++;
+      } else { failed++; }
+      console.warn('[social-token-refresh] threads', a.id, e?.message || e);
+    }
+  }
+  return { checked: accts.length, refreshed, expired, failed };
 }
 
 // GET /api/social/posts?status=…  (file de publication — scopé tenant, sans tokens)
