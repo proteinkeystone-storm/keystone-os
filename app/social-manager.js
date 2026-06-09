@@ -23,6 +23,7 @@ import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { icon }                              from './lib/ui-icons.js';
 import { CF_API }                            from './pads-loader.js';
 import { normalizeComposePayload }           from './lib/social-handoff.js';
+import { renderChainRail, setChain, clearChain } from './lib/content-chain.js';
 
 const APP_ID    = 'O-SOC-001';
 const DRAFT_KEY = 'ks_social_manager_draft_v1';
@@ -210,13 +211,7 @@ function _renderMain() {
 
   main.innerHTML = `
     <div class="sm-wrap">
-      <div class="sm-hero">
-        <div class="sm-hero-txt">
-          <h1 class="sm-title">Social Manager</h1>
-          <p class="sm-subtitle">Composez une publication et diffusez-la sur vos réseaux connectés, en un clic.</p>
-        </div>
-        <button type="button" class="sm-ideas-link" data-act="brainstorm" title="Trouver des idées de posts dans Brainstorming">${icon('sparkles', 15)}&nbsp;Trouver des idées</button>
-      </div>
+      <div class="sm-hero" data-slot="hero"></div>
 
       ${noAdmin ? `<div class="sm-banner sm-banner-warn">${icon('lock', 15)}&nbsp;Connecte-toi en <strong>admin</strong> pour charger tes comptes et publier.</div>` : ''}
       <div data-slot="acct-alert"></div>
@@ -268,6 +263,7 @@ function _renderMain() {
       <section class="sm-queue" data-slot="queue"></section>
     </div>
   `;
+  _renderHero();
   _renderNets();
   _renderMedia();
   _renderPreview();
@@ -275,6 +271,22 @@ function _renderMain() {
   _renderSchedule();
   _renderQueue();
   _renderAcctAlert();
+}
+
+// Hero : rail de chaîne (étape ③) si on est arrivé via le parcours (Ghost
+// Writer a posé l'état porté), sinon le titre « Social Manager ». La pill
+// « Trouver des idées » (passerelle vers ① Brainstorming) reste dans les 2 cas.
+function _renderHero() {
+  const hero = _root && _root.querySelector('[data-slot="hero"]');
+  if (!hero) return;
+  const railHTML = renderChainRail('publish');
+  hero.innerHTML = `
+    ${railHTML || `<div class="sm-hero-txt">
+          <h1 class="sm-title">Social Manager</h1>
+          <p class="sm-subtitle">Composez une publication et diffusez-la sur vos réseaux connectés, en un clic.</p>
+        </div>`}
+    <button type="button" class="sm-ideas-link" data-act="brainstorm" title="Trouver des idées de posts dans Brainstorming">${icon('sparkles', 15)}&nbsp;Trouver des idées</button>
+  `;
 }
 
 // ── Liste des réseaux (boutons toggle a11y) depuis _accounts ───
@@ -669,6 +681,9 @@ async function _publish() {
       <ul class="sm-result-list">${rows}</ul>
     `);
     if (ok || data.status === 'partial' || retrying) _toast(retrying ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
+    // Parcours bouclé : la publication est partie → on referme la chaîne (le rail
+    // quitte le hero), sans toucher au panneau résultat « ✓ Publié » à droite.
+    if (ok || data.status === 'partial' || retrying) { clearChain(); _renderHero(); }
   } catch (e) {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
@@ -705,6 +720,19 @@ async function _sendToBrainstorming() {
   } catch (err) {
     console.error('[SocialManager] openBrainstorming', err);
   }
+}
+
+// Rail de chaîne — retour à l'étape ② Rédaction : rouvre Ghost Writer avec le
+// texte du composer (le réseau porté est préservé via la chaîne). On ferme
+// Social Manager d'abord → révèle le contexte sous-jacent (le débat
+// Brainstorming resté monté), puis le modal GW s'ouvre par-dessus.
+function _backToRedaction() {
+  const text = (_form.text || '').trim();
+  setChain({ step: 'write' });
+  closeSocialManager();
+  import('./ghostwriter.js')
+    .then(m => m.openGhostwriter?.(text))
+    .catch(err => console.error('[SocialManager] backToRedaction', err));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1052,6 +1080,7 @@ function _renderInsightsBox(p) {
 // ══════════════════════════════════════════════════════════════
 function _onClick(e) {
   const act = e.target.closest('[data-act]')?.dataset.act;
+  if (e.target.closest('[data-chain-back]')) { e.preventDefault(); _backToRedaction(); return; }
   if (act === 'close')        { e.preventDefault(); closeSocialManager(); return; }
   if (act === 'reset')        { e.preventDefault(); if (confirm('Effacer toutes les saisies ? Cette action est définitive.')) _reset(); return; }
   if (act === 'publish')      { e.preventDefault(); _publish(); return; }
