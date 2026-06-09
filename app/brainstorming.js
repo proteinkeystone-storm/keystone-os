@@ -306,6 +306,10 @@ function _renderShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
+        <button class="ws-iconbtn" id="wr-ideas-btn"
+                title="Idées de posts par réseau" aria-label="Idées de posts par réseau">
+          ${icon('sparkles', 18)}
+        </button>
         <button class="ws-iconbtn" id="wr-library-btn" data-act="library"
                 title="Bibliothèque (${_loadLibrary().length} sessions)"
                 aria-label="Ouvrir la bibliothèque">
@@ -437,6 +441,8 @@ function _wireShell(panel) {
   if (railBtns[1]) railBtns[1].addEventListener('click', () => _openModesModal(panel));
   // Bibliothèque des sessions — bouton top-right (cohérence cross-outils, picto book-open)
   panel.querySelector('#wr-library-btn')?.addEventListener('click', () => _openLibraryModal(panel));
+  // Chaîne de contenu — mode « Idées de posts par réseau » (brique B)
+  panel.querySelector('#wr-ideas-btn')?.addEventListener('click', () => _openPostIdeas(panel));
 
   // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
   const signalsToggle = panel.querySelector('#wr-signals-toggle');
@@ -841,6 +847,93 @@ async function _relayToGhostwriter(text) {
     m.openGhostwriter?.(text.trim());
   } catch (err) {
     console.error('[Brainstorming] openGhostwriter', err);
+  }
+}
+
+// ── Mode « Idées de posts par réseau » (chaîne de contenu, brique B) ──
+// Overlay one-shot : réseau + sujet → POST /post-ideas → 5 angles, chacun
+// relayable vers Ghost Writer (« Rédiger ») → qui rédige → Social Manager publie.
+const _IDEAS_NETS = [
+  { id: 'facebook', label: 'Facebook' }, { id: 'instagram', label: 'Instagram' },
+  { id: 'linkedin', label: 'LinkedIn' }, { id: 'threads', label: 'Threads' },
+  { id: 'telegram', label: 'Telegram' },
+];
+
+function _openPostIdeas(panel) {
+  if (panel.querySelector('#wr-ideas-overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'wr-ideas-overlay';
+  ov.className = 'wr-ideas-overlay';
+  ov.innerHTML = `
+    <div class="wr-ideas-modal" role="dialog" aria-label="Idées de posts par réseau">
+      <div class="wr-ideas-head">
+        <span class="wr-ideas-title">${icon('sparkles', 17)}&nbsp;Idées de posts</span>
+        <button type="button" class="wr-ideas-x" data-act="ideas-close" aria-label="Fermer">${icon('x', 18)}</button>
+      </div>
+      <div class="wr-ideas-label">Réseau</div>
+      <div class="wr-ideas-nets" role="group" aria-label="Réseau cible">
+        ${_IDEAS_NETS.map((n, i) => `<button type="button" class="wr-ideas-net${i === 0 ? ' is-on' : ''}" data-net="${n.id}">${n.label}</button>`).join('')}
+      </div>
+      <label class="wr-ideas-label" for="wr-ideas-topic">Sujet</label>
+      <input id="wr-ideas-topic" class="wr-ideas-topic" type="text" autocomplete="off"
+             placeholder="Ex : lancer mon coaching de printemps" />
+      <button type="button" class="wr-ideas-gen" data-act="ideas-gen">${icon('sparkles', 16)}&nbsp;Générer 5 idées</button>
+      <div class="wr-ideas-result" data-slot="ideas-result"></div>
+    </div>
+  `;
+  panel.appendChild(ov);
+  ov._net = _IDEAS_NETS[0].id;
+  ov.querySelector('#wr-ideas-topic')?.focus();
+
+  ov.addEventListener('click', (e) => {
+    const net = e.target.closest('[data-net]');
+    if (net) {
+      ov._net = net.dataset.net;
+      ov.querySelectorAll('.wr-ideas-net').forEach(b => b.classList.toggle('is-on', b === net));
+      return;
+    }
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'ideas-close' || e.target === ov) { ov.remove(); return; }
+    if (act === 'ideas-gen') { _generateIdeas(ov); return; }
+    if (act === 'idea-relay') {
+      const card = e.target.closest('[data-idea]');
+      if (card) _relayToGhostwriter(card.dataset.idea || '');
+    }
+  });
+  ov.querySelector('#wr-ideas-topic')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _generateIdeas(ov); }
+  });
+}
+
+async function _generateIdeas(ov) {
+  const topic = (ov.querySelector('#wr-ideas-topic')?.value || '').trim();
+  const slot  = ov.querySelector('[data-slot="ideas-result"]');
+  if (!slot) return;
+  if (topic.length < 5) { slot.innerHTML = `<div class="wr-ideas-msg">Donne un sujet (5 caractères minimum).</div>`; return; }
+  slot.innerHTML = `<div class="wr-ideas-msg">${icon('sparkles', 13)}&nbsp;Génération en cours…</div>`;
+  try {
+    const res  = await fetch(`${_apiBase()}/api/brainstorming/post-ideas`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ topic, network: ov._net }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    const ideas = Array.isArray(data.ideas) ? data.ideas : [];
+    if (!ideas.length) { slot.innerHTML = `<div class="wr-ideas-msg">Aucune idée générée — réessaie.</div>`; return; }
+    slot.innerHTML = ideas.map(it => {
+      const full = [it.angle, it.hook].filter(Boolean).join(' — ');
+      return `
+        <div class="wr-idea-card">
+          <div class="wr-idea-texts">
+            <div class="wr-idea-angle">${_esc(it.angle || '')}</div>
+            ${it.hook ? `<div class="wr-idea-hook">${_esc(it.hook)}</div>` : ''}
+          </div>
+          <button type="button" class="wr-idea-relay" data-act="idea-relay" data-idea="${_esc(full)}" title="Rédiger dans Ghost Writer">${icon('edit', 13)}&nbsp;Rédiger</button>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    slot.innerHTML = `<div class="wr-ideas-msg">${_esc(e?.message || 'Échec de génération')}</div>`;
   }
 }
 
