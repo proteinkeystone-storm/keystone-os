@@ -164,6 +164,10 @@
   text-overflow: ellipsis;
   flex: 1; min-width: 0;
 }
+/* Chaîne de contenu — slot du rail (étape ① Idées) dans le subheader.
+   Vide (hors mode « Idées de Posts ») → masqué, ne prend pas le gap flex. */
+.wr-chain-slot { display: flex; align-items: center; min-width: 0; }
+.wr-chain-slot:empty { display: none; }
 
 /* Sprint 6 — Bouton toggle signals (caché en desktop, visible < 1024) */
 .wr-signals-toggle {

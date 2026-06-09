@@ -16,6 +16,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { icon } from './lib/ui-icons.js';
+import { renderChainRail, getChain, setChain, clearChain } from './lib/content-chain.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { burgerHTML, bindBurger } from './lib/topbar-burger.js';
@@ -334,6 +335,7 @@ function _renderShell() {
 
     <!-- Sub-header : mode courant + consensus arc + (mobile) bouton signals -->
     <div class="wr-subheader">
+      <div class="wr-chain-slot" id="wr-chain-slot"></div>
       <div class="wr-subheader-mode" id="wr-subtitle"><span class="wr-subheader-dot"></span><span class="wr-subheader-label">Mode ${mode.label} · Posez votre brief pour ouvrir la discussion</span></div>
       <div class="wr-consensus" id="wr-consensus" style="visibility:hidden">
         <div class="wr-consensus-arc">
@@ -633,8 +635,20 @@ function _applyMode(panel, modeId) {
   // Rafraîchir le sélecteur de comité s'il est ouvert (le hint "comité du mode X" change).
   const agentsModal = panel.querySelector('#wr-agents-modal');
   if (agentsModal) _renderAgentsSelector(panel, agentsModal);
-  // Rafraîchir l'écran de préparation central (chips de mode + comité en auto).
+  // Chaîne de contenu : seul le mode « Idées de Posts » alimente le parcours
+  // (étape ① Idées). On ne réécrase PAS un réseau déjà porté (ex. arrivée
+  // depuis Social Manager) par null. Les autres modes sortent de la chaîne.
+  if (mode.id === 'post-ideas') {
+    const carried = _currentSession.target_network || getChain()?.network || null;
+    if (carried && !_currentSession.target_network) _currentSession.target_network = carried;
+    setChain({ step: 'ideas', origin: 'brainstorming', network: carried });
+  } else {
+    clearChain();
+  }
+  // Rafraîchir l'écran de préparation central (chips de mode + comité ; lit
+  // target_network pour pré-activer le sélecteur réseau).
   if (panel.querySelector('#wr-setup')) _renderCenterConfig(panel);
+  _renderChainRail(panel);
 }
 
 // (Living Layer phrase d'ouverture — texte créatif, pas militaire)
@@ -837,6 +851,18 @@ async function _callOrchestration(panel) {
 
 // ════════════════════════════════════════════════════════════════
 // FEED HELPERS
+// Rail de chaîne dans le subheader (étape ① Idées). Vide hors mode « Idées de
+// Posts » (renderChainRail rend '' sans chaîne active → le slot :empty se masque).
+// Quand le rail est là, on masque le label de mode (redondant avec « Idées »).
+function _renderChainRail(panel) {
+  const slot = panel?.querySelector('#wr-chain-slot');
+  if (!slot) return;
+  const html = renderChainRail('ideas');
+  slot.innerHTML = html;
+  const subtitle = panel.querySelector('#wr-subtitle');
+  if (subtitle) subtitle.style.display = html ? 'none' : '';
+}
+
 // ════════════════════════════════════════════════════════════════
 // Relais Brainstorming → Ghost Writer (bout amont de la chaîne de contenu, cf.
 // content-chain-vision) : envoie une idée du débat dans le rédacteur. Le modal
@@ -844,6 +870,15 @@ async function _callOrchestration(panel) {
 // fermant. Récepteur = openGhostwriter(initialText), déjà prêt.
 async function _relayToGhostwriter(text) {
   if (!text || !text.trim()) return;
+  // Chaîne de contenu : en mode « Idées de Posts », on porte le réseau choisi
+  // jusqu'à la rédaction (étape ②) puis la publication — c'est le réseau qui
+  // était perdu avant ce relais. Les autres modes ouvrent Ghost Writer en
+  // one-shot (pas de rail → on efface toute chaîne résiduelle).
+  if (_currentSession?.mode === 'post-ideas') {
+    setChain({ step: 'write', origin: 'brainstorming', network: _currentSession.target_network || null });
+  } else {
+    clearChain();
+  }
   try {
     const m = await import('./ghostwriter.js');
     m.openGhostwriter?.(text.trim());
@@ -1975,6 +2010,9 @@ function _renderCenterConfig(panel) {
     btn.addEventListener('click', () => {
       _currentSession.target_network = btn.dataset.network;
       root.querySelectorAll('.wr-setup-net').forEach(b => b.classList.toggle('active', b === btn));
+      // Porte le réseau dans la chaîne + rafraîchit le badge du rail (« Pour … »).
+      setChain({ network: btn.dataset.network });
+      _renderChainRail(panel);
     });
   });
   // Étape 2 — comité (barre Auto/Manuel + toggles en manuel)
