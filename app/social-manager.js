@@ -63,6 +63,7 @@ let _connect  = null;          // état du wizard « Connecter un réseau social
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
 let _queueTimer = null;        // timer de rafraîchissement auto de la file
+let _insights   = {};          // postId → { open, loading, data, error } : encart stats (analytique)
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -886,15 +887,18 @@ function _renderQueue() {
     const url = _postUrl(p);
     const isRetrying = p.status === 'retrying';
     const canResend  = isRetrying || p.status === 'failed' || p.status === 'partial';
+    const canStats   = p.status === 'published' || p.status === 'partial';
+    const open       = !!(_insights[p.id] && _insights[p.id].open);
     return `
     <div class="sm-q-row">
       <span class="sm-q-badge ${_esc(p.status)}">${_esc(_Q_LABEL[p.status] || p.status)}</span>
       <span class="sm-q-excerpt">${exc(p)}</span>
       <span class="sm-q-nets">${_qNetGlyphs(p.targets)}</span>
+      ${canStats ? `<button type="button" class="sm-q-act${open ? ' is-on' : ''}" data-act="insights" data-id="${_esc(p.id)}" title="Voir les statistiques" aria-label="Voir les statistiques" aria-expanded="${open}">${icon('bar-chart', 14)}</button>` : ''}
       ${url ? `<a class="sm-q-act" href="${_esc(url)}" target="_blank" rel="noopener" title="Voir le post" aria-label="Voir le post">${icon('external-link', 14)}</a>` : ''}
       ${canResend ? `<button type="button" class="sm-q-act" data-act="retry-post" data-id="${_esc(p.id)}" title="Renvoyer les réseaux ratés" aria-label="Renvoyer">${icon('refresh', 14)}</button>` : ''}
       ${isRetrying ? '' : `<button type="button" class="sm-q-act danger" data-act="delete-post" data-id="${_esc(p.id)}" title="Supprimer de l'historique" aria-label="Supprimer de l'historique">${icon('trash-2', 14)}</button>`}
-    </div>`;
+    </div>${open ? _renderInsightsBox(p) : ''}`;
   };
 
   box.innerHTML = head
@@ -973,6 +977,60 @@ async function _retryPost(id) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// Analytique — perf d'un post publié (pull à la demande)
+// ══════════════════════════════════════════════════════════════
+const _fmtNum = (n) => { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString('fr-FR') : '—'; };
+
+// Ouvre/ferme l'encart stats d'un post. À l'ouverture, charge à la demande.
+function _toggleInsights(id) {
+  if (!id) return;
+  if (_insights[id] && _insights[id].open) { delete _insights[id]; _renderQueue(); return; }
+  _insights[id] = { open: true, loading: true };
+  _renderQueue();
+  _loadInsights(id);
+}
+
+async function _loadInsights(id) {
+  const token = _adminToken();
+  if (!token) { _insights[id] = { open: true, error: 'Connexion requise.' }; _renderQueue(); return; }
+  try {
+    const res  = await fetch(`${CF_API}/api/social/posts/insights?id=${encodeURIComponent(id)}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    _insights[id] = { open: true, data: Array.isArray(data.insights) ? data.insights : [] };
+  } catch (e) {
+    _insights[id] = { open: true, error: e?.message || 'Statistiques indisponibles.' };
+  }
+  _renderQueue();
+}
+
+// Encart stats sous une ligne de la file (pleine largeur). Un statut par réseau :
+// métriques chiffrées ; « non disponibles » (Telegram, aveugle) ; « indisponibles »
+// (scope insights manquant côté Meta). Jamais d'échec dur.
+function _renderInsightsBox(p) {
+  const st = _insights[p.id] || {};
+  let inner;
+  if (st.loading) {
+    inner = `<div class="sm-ins-msg">${icon('refresh', 13)}&nbsp;Chargement des statistiques…</div>`;
+  } else if (st.error) {
+    inner = `<div class="sm-ins-msg">${icon('alert-triangle', 13)}&nbsp;${_esc(st.error)}</div>`;
+  } else {
+    const rows = (st.data || []).map(r => {
+      const name = `<span class="sm-ins-netname">${icon(NET_ICON[r.platform] || 'globe', 13)}&nbsp;${_esc(_labelOf(r.platform))}</span>`;
+      if (r.unsupported) return `<div class="sm-ins-net">${name}<span class="sm-ins-na">statistiques non disponibles</span></div>`;
+      if (r.error)       return `<div class="sm-ins-net">${name}<span class="sm-ins-na">indisponibles (à activer)</span></div>`;
+      const metrics = (r.metrics || []).map(m =>
+        `<span class="sm-ins-metric"><b>${m.value == null ? '—' : _fmtNum(m.value)}</b>${_esc(m.label)}</span>`).join('');
+      return `<div class="sm-ins-net">${name}<span class="sm-ins-metrics">${metrics || '<span class="sm-ins-na">aucune donnée</span>'}</span></div>`;
+    }).join('');
+    inner = rows || `<div class="sm-ins-msg">Aucun réseau publié à mesurer.</div>`;
+  }
+  return `<div class="sm-q-insights">${inner}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
 // Événements
 // ══════════════════════════════════════════════════════════════
 function _onClick(e) {
@@ -985,6 +1043,7 @@ function _onClick(e) {
   if (act === 'cancel-post')  { e.preventDefault(); _cancelPost(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'delete-post')  { e.preventDefault(); _deletePost(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'retry-post')   { e.preventDefault(); _retryPost(e.target.closest('[data-id]')?.dataset.id); return; }
+  if (act === 'insights')     { e.preventDefault(); _toggleInsights(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'clear-history'){ e.preventDefault(); _clearHistory(); return; }
   if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
@@ -1434,6 +1493,15 @@ function _injectStyles() {
   .sm-q-act { flex:0 0 auto; display:inline-grid; place-items:center; width:28px; height:28px; border:1px solid transparent; border-radius:8px; background:transparent; color: var(--tx3); cursor:pointer; transition: all .15s; text-decoration:none; }
   .sm-q-act:hover { color: var(--text); background: var(--navy3); }
   .sm-q-act.danger:hover { color: var(--danger); background: var(--danger-soft); }
+  .sm-q-act.is-on { color: var(--text); background: var(--navy3); }
+  .sm-q-insights { grid-column: 1 / -1; margin-top:-2px; padding:11px 13px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy); display:flex; flex-direction:column; gap:9px; }
+  .sm-ins-net { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .sm-ins-netname { flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; min-width:104px; font-size:12px; font-weight:700; color: var(--text); }
+  .sm-ins-metrics { display:flex; flex-wrap:wrap; gap:5px 16px; }
+  .sm-ins-metric { display:inline-flex; align-items:baseline; gap:5px; font-size:12px; color: var(--tx3); }
+  .sm-ins-metric b { font-size:13px; font-weight:800; color: var(--text); font-variant-numeric: tabular-nums; }
+  .sm-ins-na { font-size:12px; font-style:italic; color: var(--tx3); }
+  .sm-ins-msg { display:inline-flex; align-items:center; font-size:12px; color: var(--tx3); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
   `;
