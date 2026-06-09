@@ -881,7 +881,9 @@ async function _relayToGhostwriter(text) {
   }
   try {
     const m = await import('./ghostwriter.js');
-    m.openGhostwriter?.(text.trim());
+    // Ouverture « chaîne » INCONDITIONNELLE (pas le garde-fou de flag du modal
+    // ambiant) : le réseau porté est préservé, le quota serveur reste le plafond.
+    m.openGhostwriterChained?.(text.trim());
   } catch (err) {
     console.error('[Brainstorming] openGhostwriter', err);
   }
