@@ -1034,7 +1034,18 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
  * (one-shot), pas une continuation de parcours → aucun rail fantôme.
  */
 export function openGhostwriterPad(initialText = '') {
-    clearChain();
+    clearChain();              // entrée standalone (tuile grille) : départ frais
+    openGhostwriterChained(initialText);
+}
+
+/**
+ * Entrée « chaîne de contenu » — relais « Rédiger » du Brainstorming et retour
+ * ← depuis Social Manager. Ouvre le modal SANS le garde-fou de flag (être DANS
+ * la chaîne = entitled ; le quota serveur reste le vrai plafond) et SANS toucher
+ * l'état porté (le réseau a déjà été posé par l'appelant). Sans ça, le relais
+ * était silencieux quand `ks_ghostwriter` n'était pas activé dans la session.
+ */
+export function openGhostwriterChained(initialText = '') {
     _openModal(initialText);
 }
 
