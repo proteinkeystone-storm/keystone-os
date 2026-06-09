@@ -636,3 +636,27 @@ export async function handleSocialPostCancel(request, env) {
   }
   return json({ success: true, id: body.id, status: 'canceled' }, 200, origin);
 }
+
+// POST /api/social/posts/delete  Body : { id } | { all:true }
+// Supprime DÉFINITIVEMENT de l'historique (DELETE). Scopé tenant. Ne touche
+// JAMAIS un post en attente d'envoi (scheduled/publishing) — pour ceux-là c'est
+// « Annuler ». { all:true } = vide tout l'historique terminé du tenant.
+export async function handleSocialPostsDelete(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  await ensureSocialSchema(env);
+  const body = await parseBody(request);
+  const tenantId = await socialTenantOf(request, env);
+  if (!tenantId) return err('Authentification requise', 401, origin);
+
+  const KEEP = "status NOT IN ('scheduled','publishing')";   // jamais les posts en attente
+  let r;
+  if (body.all === true) {
+    r = await env.DB.prepare(`DELETE FROM social_posts WHERE tenant_id = ? AND ${KEEP}`).bind(tenantId).run();
+  } else if (body.id) {
+    r = await env.DB.prepare(`DELETE FROM social_posts WHERE id = ? AND tenant_id = ? AND ${KEEP}`).bind(body.id, tenantId).run();
+  } else {
+    return err('Champ "id" ou "all" requis', 400, origin);
+  }
+  return json({ success: true, deleted: r.meta?.changes || 0 }, 200, origin);
+}

@@ -61,6 +61,7 @@ let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
+let _queueTimer = null;        // timer de rafraîchissement auto de la file
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -82,12 +83,16 @@ export function openSocialManager() {
   _loadCaps();
   _loadAccounts();
   _loadQueue();
+  _startQueuePolling();
+  document.addEventListener('visibilitychange', _onVisible);
 }
 
 export function closeSocialManager() {
   if (!_root) return;
   _saveDraft();
+  _stopQueuePolling();
   document.removeEventListener('keydown', _onKey);
+  document.removeEventListener('visibilitychange', _onVisible);
   _root.remove();
   _root = null;
   document.body.style.overflow = '';
@@ -593,11 +598,20 @@ function _reset() {
 // Programmation & file de publication (Sprint Social-4.1)
 // ══════════════════════════════════════════════════════════════
 
-// datetime-local attend une heure LOCALE « YYYY-MM-DDTHH:MM » (sans fuseau).
-function _toLocalInput(d) {
+// Date locale « YYYY-MM-DD » pour <input type="date">.
+function _toDateInput(d) {
   const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+// Index sélectionné d'une molette = position de scroll / hauteur d'un cran.
+function _wheelIndex(kind) {
+  const w = _root && _root.querySelector(`.sm-wheel[data-wheel="${kind}"]`);
+  const it = w && w.querySelector('.sm-wheel-item');
+  if (!w || !it) return 0;
+  return Math.max(0, Math.round(w.scrollTop / it.offsetHeight));
+}
+// 1re URL de post réelle dans les résultats (pour le lien « voir le post »).
+function _postUrl(p) { return (p.results || []).find(r => r && r.url)?.url || null; }
 // Affichage humain d'une échéance ISO, en heure locale FR.
 function _fmtWhen(iso) {
   if (!iso) return '';
@@ -615,18 +629,60 @@ function _renderSchedule() {
   if (!box) return;
   if (!_schedOpen) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
-  const min = _toLocalInput(new Date(Date.now() + 5 * 60_000));    // ≥ 5 min dans le futur
-  const def = _toLocalInput(new Date(Date.now() + 60 * 60_000));   // défaut : +1 h
+
+  const base  = new Date(Date.now() + 60 * 60_000);               // défaut : +1 h
+  const defH  = base.getHours();
+  const defMi = (Math.round(base.getMinutes() / 5) % 12) * 5;     // minute arrondie au pas de 5
+  const today = _toDateInput(new Date());
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const mins  = Array.from({ length: 12 }, (_, i) => i * 5);
+  const col = (kind, vals) => `
+    <div class="sm-wheel" data-wheel="${kind}">
+      <div class="sm-wheel-pad"></div>
+      ${vals.map((v, i) => `<div class="sm-wheel-item" data-wheel="${kind}" data-idx="${i}">${String(v).padStart(2, '0')}</div>`).join('')}
+      <div class="sm-wheel-pad"></div>
+    </div>`;
+
   box.innerHTML = `
     <div class="sm-sched-inner">
-      <label class="sm-sched-lbl" for="sm-sched-at">${icon('clock', 14)}&nbsp;Date et heure de publication</label>
-      <input id="sm-sched-at" type="datetime-local" class="sm-sched-input" data-field="sched-at" min="${min}" value="${def}">
+      <label class="sm-sched-lbl">${icon('clock', 14)}&nbsp;Date et heure de publication</label>
+      <div class="sm-sched-days">
+        <button type="button" class="sm-day-chip" data-act="sched-day" data-days="0">Aujourd'hui</button>
+        <button type="button" class="sm-day-chip" data-act="sched-day" data-days="1">Demain</button>
+        <button type="button" class="sm-day-chip" data-act="sched-day" data-days="2">Après-demain</button>
+      </div>
+      <div class="sm-sched-row">
+        <input type="date" class="sm-sched-date" data-field="sched-date" min="${today}" value="${_toDateInput(base)}">
+        <div class="sm-wheel-wrap" aria-label="Heure de publication">
+          ${col('h', hours)}
+          <div class="sm-wheel-sep">:</div>
+          ${col('m', mins)}
+          <div class="sm-wheel-band" aria-hidden="true"></div>
+        </div>
+      </div>
       <div class="sm-sched-hint">Heure locale. Le post part automatiquement à cette heure (précision ~5 min).</div>
       <div class="sm-sched-nav">
         <button type="button" class="sm-wiz-back" data-act="toggle-schedule">Annuler</button>
         <button type="button" class="sm-btn-primary" data-act="do-schedule">${icon('calendar', 16)}&nbsp;Programmer la publication</button>
       </div>
     </div>`;
+
+  // Cale les molettes sur l'heure par défaut (après peinture : offsetHeight dispo).
+  requestAnimationFrame(() => {
+    const place = (kind, idx) => {
+      const w = box.querySelector(`.sm-wheel[data-wheel="${kind}"]`);
+      const it = w && w.querySelector('.sm-wheel-item');
+      if (w && it) w.scrollTop = idx * it.offsetHeight;
+    };
+    place('h', defH);
+    place('m', defMi / 5);
+  });
+}
+
+// Chips Aujourd'hui / Demain / Après-demain → fixe la date.
+function _setSchedDay(days) {
+  const el = _root && _root.querySelector('[data-field="sched-date"]');
+  if (el) el.value = _toDateInput(new Date(Date.now() + days * 86400_000));
 }
 
 // Programme la publication : mêmes garde-fous que Publier + date future, puis
@@ -635,12 +691,13 @@ async function _doSchedule() {
   if (_busy) return;
   const token = _adminToken();
   if (!token) { _toast('Connexion requise pour programmer', 'warn'); return; }
-  const input = _root && _root.querySelector('[data-field="sched-at"]');
-  const local = input?.value;
-  if (!local) { _toast('Choisis une date et une heure.', 'warn'); return; }
-  const when = new Date(local);                            // local → Date
+  const dateStr = (_root && _root.querySelector('[data-field="sched-date"]'))?.value;
+  if (!dateStr) { _toast('Choisis une date.', 'warn'); return; }
+  const hh = String(Math.min(23, _wheelIndex('h'))).padStart(2, '0');
+  const mm = String(Math.min(55, _wheelIndex('m') * 5)).padStart(2, '0');
+  const when = new Date(`${dateStr}T${hh}:${mm}`);         // date + molettes (heure locale) → Date
   if (isNaN(when.getTime())) { _toast('Date invalide.', 'warn'); return; }
-  if (when.getTime() <= Date.now() + 60_000) { _toast('Choisis une date dans le futur.', 'warn'); return; }
+  if (when.getTime() <= Date.now() + 60_000) { _toast('Choisis une heure dans le futur.', 'warn'); return; }
 
   const v = _renderValidation();
   if (!v.canPublish) { _toast(v.reasons[0] || 'Vérifie les contraintes par réseau.', 'warn'); return; }
@@ -686,45 +743,65 @@ async function _loadQueue() {
   _renderQueue();
 }
 
+// Rafraîchissement auto : quand le cron publie un post programmé en arrière-plan,
+// l'écran doit le refléter sans rechargement manuel. On sonde /posts toutes les
+// 30 s TANT QU'un post est en attente (scheduled/publishing), et dès que l'onglet
+// reprend le focus. Inactif si rien n'est en attente (zéro requête inutile).
+function _startQueuePolling() {
+  _stopQueuePolling();
+  _queueTimer = setInterval(_pollQueue, 30_000);
+}
+function _stopQueuePolling() {
+  if (_queueTimer) { clearInterval(_queueTimer); _queueTimer = null; }
+}
+function _pollQueue() {
+  if (!_root || document.hidden || _busy) return;
+  const pending = Array.isArray(_queue) && _queue.some(p => p.status === 'scheduled' || p.status === 'publishing');
+  if (pending) _loadQueue();
+}
+function _onVisible() { if (!document.hidden) _pollQueue(); }
+
 function _renderQueue() {
   const box = _root && _root.querySelector('[data-slot="queue"]');
   if (!box) return;
   if (!_adminToken()) { box.innerHTML = ''; return; }
-  const head = `<div class="sm-queue-head">${icon('calendar', 16)}&nbsp;File de publication</div>`;
+  const hasHistory = Array.isArray(_queue) && _queue.some(p => p.status !== 'scheduled' && p.status !== 'publishing');
+  const clearBtn = hasHistory ? `<button type="button" class="sm-queue-clear" data-act="clear-history">${icon('trash-2', 13)}&nbsp;Tout effacer</button>` : '';
+  const head = `<div class="sm-queue-head"><span>${icon('calendar', 16)}&nbsp;File de publication</span>${clearBtn}</div>`;
   if (_queue === null) { box.innerHTML = head + `<div class="sm-queue-empty">Chargement…</div>`; return; }
 
   const scheduled = _queue.filter(p => p.status === 'scheduled')
     .sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')));
-  const recent = _queue.filter(p => p.status !== 'scheduled').slice(0, 6);
+  const recent = _queue.filter(p => p.status !== 'scheduled').slice(0, 24);
 
   if (!scheduled.length && !recent.length) {
     box.innerHTML = head + `<div class="sm-queue-empty">Aucune publication pour l'instant. Programmes-en une avec le bouton « Programmer… ».</div>`;
     return;
   }
 
-  const excerpt = (p) => _esc(p.excerpt) || '<span class="sm-muted">(sans texte)</span>';
-  const schedRows = scheduled.map(p => `
+  const exc = (p) => _esc(p.excerpt) || '<span class="sm-muted">(sans texte)</span>';
+  const schedRow = (p) => `
     <div class="sm-q-row">
       <span class="sm-q-badge scheduled">${icon('clock', 12)}&nbsp;${_esc(_fmtWhen(p.scheduledAt))}</span>
-      <div class="sm-q-main">
-        <div class="sm-q-excerpt">${excerpt(p)}</div>
-        <div class="sm-q-nets">${_qNetGlyphs(p.targets)}</div>
-      </div>
-      <button type="button" class="sm-q-cancel" data-act="cancel-post" data-id="${_esc(p.id)}">${icon('x', 13)}&nbsp;Annuler</button>
-    </div>`).join('');
-
-  const recentRows = recent.map(p => `
+      <span class="sm-q-excerpt">${exc(p)}</span>
+      <span class="sm-q-nets">${_qNetGlyphs(p.targets)}</span>
+      <button type="button" class="sm-q-act danger" data-act="cancel-post" data-id="${_esc(p.id)}" title="Annuler" aria-label="Annuler la programmation">${icon('x', 14)}</button>
+    </div>`;
+  const recentRow = (p) => {
+    const url = _postUrl(p);
+    return `
     <div class="sm-q-row">
       <span class="sm-q-badge ${_esc(p.status)}">${_esc(_Q_LABEL[p.status] || p.status)}</span>
-      <div class="sm-q-main">
-        <div class="sm-q-excerpt">${excerpt(p)}</div>
-        <div class="sm-q-nets">${_qNetGlyphs(p.targets)}</div>
-      </div>
-    </div>`).join('');
+      <span class="sm-q-excerpt">${exc(p)}</span>
+      <span class="sm-q-nets">${_qNetGlyphs(p.targets)}</span>
+      ${url ? `<a class="sm-q-act" href="${_esc(url)}" target="_blank" rel="noopener" title="Voir le post" aria-label="Voir le post">${icon('external-link', 14)}</a>` : ''}
+      <button type="button" class="sm-q-act danger" data-act="delete-post" data-id="${_esc(p.id)}" title="Supprimer de l'historique" aria-label="Supprimer de l'historique">${icon('trash-2', 14)}</button>
+    </div>`;
+  };
 
   box.innerHTML = head
-    + (scheduled.length ? `<div class="sm-queue-sub">Programmés (${scheduled.length})</div>${schedRows}` : '')
-    + (recent.length ? `<div class="sm-queue-sub">Récents</div>${recentRows}` : '');
+    + (scheduled.length ? `<div class="sm-queue-sub">Programmés (${scheduled.length})</div><div class="sm-queue-grid">${scheduled.map(schedRow).join('')}</div>` : '')
+    + (recent.length ? `<div class="sm-queue-sub">Récents</div><div class="sm-queue-grid">${recent.map(recentRow).join('')}</div>` : '');
 }
 
 async function _cancelPost(id) {
@@ -747,6 +824,34 @@ async function _cancelPost(id) {
   }
 }
 
+// Suppression DÉFINITIVE de l'historique (1 post ou tout). Jamais les programmés.
+async function _deletePost(id) {
+  if (!id) return;
+  if (!_adminToken()) { _toast('Connexion requise', 'warn'); return; }
+  if (!confirm('Supprimer définitivement ce post de l\'historique ?')) return;
+  await _postDelete({ id });
+}
+async function _clearHistory() {
+  if (!_adminToken()) { _toast('Connexion requise', 'warn'); return; }
+  if (!confirm('Effacer TOUT l\'historique (publiés, échoués, annulés) ? Les programmés sont conservés. Action définitive.')) return;
+  await _postDelete({ all: true });
+}
+async function _postDelete(body) {
+  try {
+    const res  = await fetch(`${CF_API}/api/social/posts/delete`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_adminToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.error || `Erreur ${res.status}`);
+    _toast(body.all ? `Historique effacé (${data.deleted || 0})` : 'Post supprimé', 'ok');
+    await _loadQueue();
+  } catch (e) {
+    _toast(e?.message || 'Suppression échouée', 'warn');
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // Événements
 // ══════════════════════════════════════════════════════════════
@@ -758,6 +863,9 @@ function _onClick(e) {
   if (act === 'toggle-schedule') { e.preventDefault(); _schedOpen = !_schedOpen; _renderSchedule(); return; }
   if (act === 'do-schedule')  { e.preventDefault(); _doSchedule(); return; }
   if (act === 'cancel-post')  { e.preventDefault(); _cancelPost(e.target.closest('[data-id]')?.dataset.id); return; }
+  if (act === 'delete-post')  { e.preventDefault(); _deletePost(e.target.closest('[data-id]')?.dataset.id); return; }
+  if (act === 'clear-history'){ e.preventDefault(); _clearHistory(); return; }
+  if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
@@ -767,6 +875,14 @@ function _onClick(e) {
   if (act === 'wiz-next')      { e.preventDefault(); _wizNext(); return; }
   if (act === 'wiz-back')      { e.preventDefault(); _wizBack(); return; }
   if (act === 'wiz-connect')   { e.preventDefault(); _connectTelegram(); return; }
+
+  // Molette heure/minute : clic sur un cran → on le centre.
+  const wItem = e.target.closest('.sm-wheel-item');
+  if (wItem) {
+    const w = wItem.closest('.sm-wheel');
+    if (w) w.scrollTo({ top: (Number(wItem.dataset.idx) || 0) * wItem.offsetHeight, behavior: 'smooth' });
+    return;
+  }
 
   // Toggle réseau (bouton a11y : aria-pressed)
   const net = e.target.closest('[data-net]');
@@ -1127,29 +1243,46 @@ function _injectStyles() {
   .sm-sched { margin-top:12px; }
   .sm-sched-inner { border:1px solid var(--bd); border-radius: var(--r2); background: var(--navy3); padding:16px; display:flex; flex-direction:column; gap:10px; }
   .sm-sched-lbl { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.01em; color: var(--tx2); }
-  .sm-sched-input { background: var(--navy2); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:11px 13px; font:inherit; font-size:14px; color-scheme: dark; }
-  html.light-mode .sm-sched-input { color-scheme: light; }
-  .sm-sched-input:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
+  .sm-sched-days { display:flex; gap:7px; flex-wrap:wrap; }
+  .sm-day-chip { padding:6px 12px; border:1px solid var(--bd); border-radius:999px; background: var(--navy2); color: var(--tx2); font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; transition: all .15s; }
+  .sm-day-chip:hover { color: var(--text); border-color: var(--gold2); }
+  .sm-sched-row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .sm-sched-date { background: var(--navy2); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:11px 13px; font:inherit; font-size:14px; color-scheme: dark; }
+  html.light-mode .sm-sched-date { color-scheme: light; }
+  .sm-sched-date:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
   .sm-sched-hint { font-size:12px; color: var(--tx3); }
   .sm-sched-nav { display:flex; gap:10px; margin-top:4px; }
   .sm-sched-nav .sm-btn-primary { flex:1; justify-content:center; }
+  /* Molettes heure/minute (scroll-snap, fondu haut/bas, bande de sélection) */
+  .sm-wheel-wrap { position:relative; display:flex; align-items:stretch; gap:2px; padding:0 8px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy2); }
+  .sm-wheel { position:relative; height:120px; width:56px; overflow-y:scroll; scroll-snap-type:y mandatory; scrollbar-width:none; -ms-overflow-style:none; -webkit-mask-image:linear-gradient(to bottom, transparent, #000 33%, #000 67%, transparent); mask-image:linear-gradient(to bottom, transparent, #000 33%, #000 67%, transparent); }
+  .sm-wheel::-webkit-scrollbar { display:none; }
+  .sm-wheel-pad { height:40px; }
+  .sm-wheel-item { height:40px; display:flex; align-items:center; justify-content:center; scroll-snap-align:center; font-size:19px; font-weight:700; color: var(--tx2); font-variant-numeric:tabular-nums; cursor:pointer; transition: color .15s; }
+  .sm-wheel-item:hover { color: var(--text); }
+  .sm-wheel-sep { display:flex; align-items:center; font-size:19px; font-weight:800; color: var(--tx3); }
+  .sm-wheel-band { position:absolute; left:6px; right:6px; top:50%; transform:translateY(-50%); height:40px; border-radius:9px; background: var(--gold3); border:1px solid color-mix(in srgb, var(--gold2) 35%, transparent); pointer-events:none; }
 
   .sm-queue { margin-top:24px; }
-  .sm-queue-head { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:800; color: var(--text); margin-bottom:12px; }
+  .sm-queue-head { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:14px; font-weight:800; color: var(--text); margin-bottom:12px; }
+  .sm-queue-head > span { display:inline-flex; align-items:center; gap:7px; }
+  .sm-queue-clear { display:inline-flex; align-items:center; gap:5px; padding:6px 11px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx3); font:inherit; font-size:12px; font-weight:600; cursor:pointer; transition: all .15s; }
+  .sm-queue-clear:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
   .sm-queue-sub { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color: var(--tx3); margin:16px 0 8px; }
   .sm-queue-empty { color: var(--tx3); font-size:13px; padding:6px 0; }
-  .sm-q-row { display:flex; align-items:center; gap:12px; padding:11px 13px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy2); margin-bottom:8px; }
-  .sm-q-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:999px; border:1px solid transparent; white-space:nowrap; }
+  .sm-queue-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap:8px; }
+  .sm-q-row { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy2); min-width:0; }
+  .sm-q-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; border:1px solid transparent; white-space:nowrap; }
   .sm-q-badge.scheduled { color: var(--gold2); background: var(--gold3); border-color: color-mix(in srgb, var(--gold2) 30%, transparent); }
   .sm-q-badge.published { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
   .sm-q-badge.partial { color: var(--sm-warn); background: var(--warn-soft); }
   .sm-q-badge.failed { color: var(--danger); background: var(--danger-soft); }
   .sm-q-badge.canceled, .sm-q-badge.publishing, .sm-q-badge.draft { color: var(--tx3); background: var(--navy3); }
-  .sm-q-main { flex:1; min-width:0; }
-  .sm-q-excerpt { font-size:13px; color: var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .sm-q-nets { display:flex; gap:6px; margin-top:5px; color: var(--tx3); }
-  .sm-q-cancel { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border:1px solid var(--bd); border-radius: var(--r); background:transparent; color: var(--tx2); font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; transition: all .15s; }
-  .sm-q-cancel:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
+  .sm-q-excerpt { flex:1 1 auto; min-width:0; font-size:13px; color: var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sm-q-nets { flex:0 0 auto; display:inline-flex; gap:5px; color: var(--tx3); }
+  .sm-q-act { flex:0 0 auto; display:inline-grid; place-items:center; width:28px; height:28px; border:1px solid transparent; border-radius:8px; background:transparent; color: var(--tx3); cursor:pointer; transition: all .15s; text-decoration:none; }
+  .sm-q-act:hover { color: var(--text); background: var(--navy3); }
+  .sm-q-act.danger:hover { color: var(--danger); background: var(--danger-soft); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
   `;
