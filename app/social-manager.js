@@ -731,7 +731,7 @@ function _backToRedaction() {
   setChain({ step: 'write' });
   closeSocialManager();
   import('./ghostwriter.js')
-    .then(m => m.openGhostwriter?.(text))
+    .then(m => m.openGhostwriterChained?.(text))   // inconditionnel (chaîne), réseau préservé
     .catch(err => console.error('[SocialManager] backToRedaction', err));
 }
 
