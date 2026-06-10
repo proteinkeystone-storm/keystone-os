@@ -21,8 +21,7 @@ import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
 import { openAnnoncesImmo }                      from './annonces-immo.js';
 import { openSocialManager } from './social-manager.js';
-import { openGhostwriter, openGhostwriterPad, isGhostwriterEnabled } from './ghostwriter.js';
-import { clearChain }                            from './lib/content-chain.js';
+import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
@@ -507,64 +506,6 @@ function _isOnDashboard(id) {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-// ── Porte d'entrée « Créer un post » (chaîne de contenu) ─────────
-// CTA discret au-dessus de la grille : rend la chaîne Brainstorming →
-// Ghost Writer → Social Manager visible depuis l'accueil (irritant
-// « chaîne invisible »). Démarre à l'étape ① (Brainstorming post-ideas).
-let _frontDoorCssInjected = false;
-function _injectFrontDoorCss() {
-    if (_frontDoorCssInjected || typeof document === 'undefined') return;
-    const style = document.createElement('style');
-    style.id = 'ks-frontdoor-css';
-    style.textContent = `
-.ks-frontdoor { display:flex; align-items:center; gap:16px; width:100%; margin:0 0 20px; padding:15px 20px;
-  background:linear-gradient(135deg, var(--gold3, rgba(99,102,241,.12)), rgba(99,102,241,.03));
-  border:1px solid var(--bd, rgba(255,255,255,.08)); border-radius:var(--r2,20px);
-  cursor:pointer; text-align:left; font-family:inherit;
-  transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
-.ks-frontdoor:hover { border-color:var(--gold2,#818cf8); transform:translateY(-1px); box-shadow:0 8px 24px rgba(99,102,241,.14); }
-.ks-frontdoor-ico { display:inline-flex; color:var(--gold2,#818cf8); flex-shrink:0; }
-.ks-frontdoor-body { display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
-.ks-frontdoor-title { font-size:16px; font-weight:800; letter-spacing:-.02em; color:var(--text,#fff); }
-.ks-frontdoor-steps { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; color:var(--tx2,rgba(255,255,255,.55)); }
-.ks-frontdoor-arr { display:inline-flex; opacity:.5; }
-.ks-frontdoor-cta { display:inline-flex; align-items:center; gap:6px; flex-shrink:0; padding:9px 16px; border-radius:100px;
-  background:var(--gold,#6366f1); color:#fff; font-size:13px; font-weight:600; }
-`;
-    document.head.appendChild(style);
-    _frontDoorCssInjected = true;
-}
-
-function _startContentChain() {
-    clearChain();                                // départ frais (aucun réseau hérité)
-    openBrainstorming({ mode: 'post-ideas' });   // étape ① — _applyMode pose la chaîne
-}
-
-// Idempotent. show=false retire la porte (utilisateur sans la chaîne).
-function _renderContentChainFrontDoor(show) {
-    if (typeof document === 'undefined') return;
-    const existing = document.getElementById('ks-chain-frontdoor');
-    if (!show) { existing?.remove(); return; }
-    if (existing) return;
-    _injectFrontDoorCss();
-    const padsSection = document.querySelector('.pads-section');
-    if (!padsSection) return;
-    const btn = document.createElement('button');
-    btn.id = 'ks-chain-frontdoor';
-    btn.className = 'ks-frontdoor';
-    btn.type = 'button';
-    btn.innerHTML = `
-        <span class="ks-frontdoor-ico">${uiIcon('sparkles', 22)}</span>
-        <span class="ks-frontdoor-body">
-            <span class="ks-frontdoor-title">Créer un post</span>
-            <span class="ks-frontdoor-steps">Idées <span class="ks-frontdoor-arr">${uiIcon('arrow-right', 12)}</span> Rédaction <span class="ks-frontdoor-arr">${uiIcon('arrow-right', 12)}</span> Publication</span>
-        </span>
-        <span class="ks-frontdoor-cta">Commencer ${uiIcon('arrow-right', 16)}</span>
-    `;
-    btn.addEventListener('click', _startContentChain);
-    padsSection.before(btn);
-}
-
 export function renderDashboard() {
     // ── Classification owned / locked (B2B + Lifetime) ────────
     const ownedIds    = getOwnedIds();
@@ -654,10 +595,6 @@ export function renderDashboard() {
     } else {
         _existingBanner?.remove();
     }
-
-    // Porte d'entrée « Créer un post » (chaîne de contenu), gardée aux
-    // possesseurs de l'entrée Brainstorming (A-COM-003).
-    _renderContentChainFrontDoor(_isOwned('A-COM-003'));
 
     const padsEl = document.getElementById('pads-container');
     const artsEl = document.getElementById('arts-container');
@@ -2199,7 +2136,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'A-COM-002') { openKodex(); return; }
     if (padId === 'A-COM-003') { openBrainstorming();  return; }
     if (padId === 'A-COM-004') { openPulsa(); return; }
-    if (padId === 'A-COM-005') { openGhostwriterPad(); return; }   // chaîne de contenu : la tuile ouvre le Ghost Writer unique (modal). Studio parké (cf. import).
+    if (padId === 'A-COM-005') { openGhostwriterStudio(); return; }
 
     // Résoudre NOMEN-K (O-IMM-001) ou padKey (A1) → pad via pads-loader
     const tool = TOOLS.find(t => t.id === padId);
