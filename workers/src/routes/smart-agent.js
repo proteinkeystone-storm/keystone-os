@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.2';
+const SA_ENGINE_VERSION = 'SA-4.2.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -943,6 +943,21 @@ QUESTION : ${message}`;
   return [{ role: 'system', content: system }, ...cleanHistory, { role: 'user', content: userTurn }];
 }
 
+// Contextualise la requête de récupération (SA-4.2.1). En conversation
+// proactive, l'utilisateur répond souvent « oui » à la question de relance
+// de l'agent : le message brut ne contient alors RIEN à récupérer. On
+// préfixe la dernière question posée par l'agent (le sujet que « oui »
+// confirme) → la recherche retrouve les bonnes fiches. On ne prend QUE la
+// question (pas la réponse de l'agent) pour ne pas re-récupérer les mêmes
+// fiches et provoquer une répétition. Pur → testé.
+export function contextualQuery(message, history = []) {
+  const lastAgent = [...(history || [])].reverse().find(m => m.role === 'assistant');
+  if (!lastAgent) return message;
+  const qs = String(lastAgent.content || '').replace(/\[\d{1,2}\]/g, '').match(/[^.!?]*\?/g);
+  const lastQ = qs && qs.length ? qs[qs.length - 1].trim() : '';
+  return lastQ ? `${lastQ} ${message}` : message;
+}
+
 // Génère le message d'accueil d'un agent (il « parle en premier »).
 // Gratuit (mise en place côté propriétaire). N'invente AUCUN fait précis —
 // juste un accueil chaleureux qui se termine par une question ouverte.
@@ -1239,7 +1254,12 @@ export async function handleAgentChat(request, env, agentId) {
   };
 
   // ── Récupération hybride sur les collections de l'agent ──
-  const { semantic, hits } = await _retrieve(env, gate.tenant, message, {
+  // Contextualisée (SA-4.2.1) : quand l'utilisateur répond « oui » à la
+  // question de relance de l'agent, le message brut n'a aucun contenu à
+  // récupérer. On préfixe la dernière question posée par l'agent → la
+  // recherche retrouve le bon sujet (le « oui » répond à QUOI).
+  const retrievalQuery = contextualQuery(message, history);
+  const { semantic, hits } = await _retrieve(env, gate.tenant, retrievalQuery, {
     topk: CHAT_TOPK,
     collectionIds: agent.config?.knowledge?.collection_ids?.length
       ? agent.config.knowledge.collection_ids : null,

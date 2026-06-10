@@ -899,11 +899,12 @@ function _openChat(agent) {
     _chat.sessionId = null;
     _chat.busy = false;
     // L'agent parle en premier (SA-4.2) : on amorce avec son accueil.
+    // Repli (SA-4.2.1) : les agents créés avant SA-4.2 n'ont pas d'accueil
+    // stocké → on accueille quand même (un agent doit TOUJOURS accueillir).
     // Message d'affichage uniquement (non persisté, hors contexte modèle).
-    const opening = agent.config?.identity?.opening;
-    _chat.messages = opening
-        ? [{ role: 'agent', content: opening, citations: [], opening: true }]
-        : [];
+    const opening = agent.config?.identity?.opening
+        || `Bonjour ! Je suis « ${agent.name} ». Comment puis-je vous aider ?`;
+    _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
     _ag.mode = 'chat';
     _renderMain();
 }

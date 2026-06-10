@@ -7,7 +7,7 @@
 
 import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
-  buildChatMessages, stripCitations }
+  buildChatMessages, stripCitations, contextualQuery }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -149,6 +149,24 @@ console.log('── buildChatMessages — posture (SA-4.2) ──');
     sysOf('zzz') === sysOf('equilibre') && sysOf(undefined) === sysOf('equilibre'));
   check('toute posture garde l\'ancrage (faits issus des fiches)',
     ['informatif', 'equilibre', 'proactif'].every(p => /UNIQUEMENT à la DERNIÈRE question/.test(sysOf(p))));
+}
+
+console.log('── contextualQuery (suivi « oui » — bug capture Stéphane) ──');
+{
+  const hist = [
+    { role: 'user', content: 'horaires ?' },
+    { role: 'assistant', content: 'Ouvert de 10h à 18h [1]. Souhaitez-vous connaître les tarifs ?' },
+  ];
+  check('préfixe la question de l\'agent au « oui » de l\'utilisateur',
+    contextualQuery('oui pour 4 personnes', hist) === 'Souhaitez-vous connaître les tarifs ? oui pour 4 personnes');
+  check('cite [n] ignorée dans l\'extraction de la question',
+    !contextualQuery('oui', hist).includes('[1]'));
+  check('sans historique → message brut',
+    contextualQuery('bonjour', []) === 'bonjour');
+  check('dernier tour agent sans question → message brut',
+    contextualQuery('oui', [{ role: 'assistant', content: 'Voici les tarifs.' }]) === 'oui');
+  check('prend la DERNIÈRE question si plusieurs',
+    contextualQuery('oui', [{ role: 'assistant', content: 'Quoi ? Plutôt les activités ?' }]) === 'Plutôt les activités ? oui');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
