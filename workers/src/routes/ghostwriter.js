@@ -308,6 +308,51 @@ export async function handleGhostwriterRewrite(request, env) {
     MAX_MAX_TOKENS,
   );
 
+  // ── Mode « composer un post » (chaîne de contenu → Social Manager) ──
+  // UN SEUL post développé (économie de crédits), ton calé sur le RÉSEAU porté,
+  // écriture humaine. Distinct du rewrite (3 variantes tonales). Même machinerie
+  // quota (1 crédit). Sortie TEXTE BRUT (pas de JSON → rien à casser : la réponse
+  // EST le post). N'EXISTE que pour la chaîne ; le Studio garde le rewrite.
+  if (body.composePost === true) {
+    const sysCompose = _composePostPrompt(typeof body.network === 'string' ? body.network : '');
+    let aiResp = null, postText = '', issue = '';
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        aiResp = await env.AI.run(MODEL_ID, {
+          messages: [
+            { role: 'system', content: sysCompose },
+            { role: 'user',   content: `Angle / idée à développer en post :\n\n${text}` },
+          ],
+          max_tokens: cappedMaxTokens,
+        });
+      } catch (e) {
+        const m = String(e?.message || e || '');
+        if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
+          return json({ error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).', code: 'AI_BUDGET_EXHAUSTED' }, 429, origin);
+        }
+        issue = `Workers AI erreur : ${e.message || 'inconnue'}`;
+        if (attempt >= 2) return err(issue, 502, origin);
+        continue;
+      }
+      const c0 = aiResp?.choices?.[0];
+      if (c0?.finish_reason === 'length' && !c0?.message?.content) { issue = `budget tokens épuisé (max=${cappedMaxTokens})`; continue; }
+      postText = _cleanPost(_aiText(aiResp));
+      if (postText) break;
+      issue = 'réponse vide';
+    }
+    if (!postText) return err(`Le modèle n'a pas pu composer le post. ${issue}`, 502, origin);
+
+    await recordUsage(env, 'ghostwriter', { usage: aiResp?.usage, inText: sysCompose + text, outText: postText });
+    committed = true;
+    return json({
+      variants: [{ label: _composeLabel(body.network), text: postText }],
+      model   : MODEL_ID,
+      usage   : aiResp?.usage || null,
+      quota   : creditsEnforced ? _gwQuotaFromWallet(creditResult.payload) : _quotaPayload(plan, usedAfterBump),
+      composed: true,
+    }, 200, origin);
+  }
+
   // ── Construction du prompt système ───────────────────────────
   const formalAddress = vouvoie === true
     ? 'vouvoiement strict'
@@ -488,6 +533,55 @@ export async function handleGhostwriterRewrite(request, env) {
       }
     }
   }
+}
+
+// Guides de ton/longueur par réseau pour le mode « composer un post ».
+const _NET_GUIDE = {
+  linkedin : 'Réseau : LinkedIn. Ton professionnel mais incarné (leadership d\'opinion). Longueur DÉVELOPPÉE (800-1300 caractères). Accroche forte sur 1-2 lignes, corps qui développe une idée avec du concret, chute ou ouverture. Aère avec des sauts de ligne.',
+  facebook : 'Réseau : Facebook. Ton chaleureux et accessible, conversationnel. Longueur moyenne (400-700 caractères). Accroche qui crée la curiosité, corps clair, invitation implicite à réagir.',
+  instagram: 'Réseau : Instagram. Ton inspirant et proche. Longueur moyenne. Accroche qui arrête le scroll, corps rythmé ; éventuellement 2-3 hashtags pertinents tout à la fin.',
+  threads  : 'Réseau : Threads. Ton spontané et direct. COURT (max 480 caractères). Une idée forte, punchy, qui donne envie de répondre.',
+  telegram : 'Réseau : Telegram (canal). Ton informatif, clair et direct. Longueur moyenne. Va à l\'essentiel, structure lisible.',
+};
+
+// Prompt système du mode « composer un post » : UN post développé, ton calé sur
+// le réseau, écriture humaine (anti-tics d'IA). Sortie = texte brut prêt à publier.
+function _composePostPrompt(network) {
+  const guide = _NET_GUIDE[String(network || '').toLowerCase()]
+    || 'Post social engageant, ton naturel, longueur moyenne à développée selon le sujet.';
+  return [
+    'Tu es un excellent rédacteur de contenu pour les réseaux sociaux, en français.',
+    'À partir de l\'ANGLE/IDÉE fourni, écris UN SEUL post complet, original et intéressant —',
+    'un vrai contenu publiable qui APPORTE de la valeur, PAS une reformulation de l\'angle.',
+    '',
+    guide,
+    '',
+    'Écriture (important) :',
+    '- Développe avec du concret : un exemple, un bénéfice clair, un point de vue assumé.',
+    '- Écris comme un HUMAIN : phrases de longueurs variées, rythme naturel, zéro remplissage.',
+    '- ÉVITE les tics d\'IA : « dans un monde où », « il est important de », « plongeons »,',
+    '  « en somme », « n\'hésitez pas à », superlatifs creux, tirets cadratins à répétition,',
+    '  listes à puces génériques, conclusions moralisatrices.',
+    '- Pas de méta-commentaire, pas de titre « Post : », pas de guillemets autour, pas de markdown.',
+    '',
+    'Sortie : UNIQUEMENT le texte du post, prêt à publier. Rien d\'autre.',
+  ].join('\n');
+}
+
+// Nettoie le post : enlève fences/guillemets enveloppants/préfixe « Post : ».
+function _cleanPost(s) {
+  let t = String(s || '').trim();
+  t = t.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+  t = t.replace(/^["'«»“”]\s*/, '').replace(/\s*["'«»“”]$/, '').trim();
+  t = t.replace(/^(post|texte)\s*:\s*/i, '').trim();
+  return t;
+}
+
+// Libellé de la variante composée (1 seule), selon le réseau.
+function _composeLabel(network) {
+  const L = { linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram', threads: 'Threads', telegram: 'Telegram' };
+  const l = L[String(network || '').toLowerCase()];
+  return l ? `Post ${l}` : 'Post';
 }
 
 // Extrait la 1re STRING non vide parmi les formes de réponse Workers AI connues.
