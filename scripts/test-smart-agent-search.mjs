@@ -5,7 +5,8 @@
    validateUnit (contrat des gabarits), parseProposals (parse IA tolérant).
    ═══════════════════════════════════════════════════════════════ */
 
-import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals }
+import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
+  normQuestion, extractCitations, validateAgentPayload }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -67,6 +68,31 @@ console.log('── parseProposals ──');
   check('JSON cassé → []', parseProposals('pas du json [').length === 0);
   check('texte autour du tableau toléré',
     parseProposals('Voici : [{"type":"fact","title":"T","body":{"statement":"S"}}] Fin.').length === 1);
+}
+
+console.log('── normQuestion (dédoublonnage des trous) ──');
+check('même question, ponctuation/casse/accents différents → même clé',
+  normQuestion('Quels sont les HORAIRES ?') === normQuestion('quels sont les horaires'));
+check('accents pliés', normQuestion('horaires d\'été') === 'horaires d ete');
+check('vide → ""', normQuestion('  !? ') === '');
+
+console.log('── extractCitations ──');
+check('numéros uniques dans l\'ordre, bornés',
+  JSON.stringify(extractCitations('D\'après [1] et [3], voir aussi [1].', 5)) === JSON.stringify([1, 3]));
+check('hors borne écarté', JSON.stringify(extractCitations('voir [9]', 3)) === '[]');
+check('aucune citation → []', JSON.stringify(extractCitations('texte sans source', 4)) === '[]');
+
+console.log('── validateAgentPayload ──');
+{
+  const ok = validateAgentPayload({ name: 'Guide du musée',
+    config: { identity: { mission: 'Renseigner les visiteurs' }, knowledge: { collection_ids: ['c1', 'c2'] } } });
+  check('agent valide : mission + collections', ok.ok && ok.config.knowledge.collection_ids.length === 2);
+  check('fallback par défaut injecté', ok.ok && ok.config.scope.fallback_text.length > 0);
+  check('nom vide refusé', validateAgentPayload({ name: '  ', config: {} }).ok === false);
+  check('mission requise (création) refusée si absente', validateAgentPayload({ name: 'X', config: {} }).ok === false);
+  check('partiel : mission non exigée', validateAgentPayload({ config: {} }, { partial: true }).ok === true);
+  check('collection_ids non-array → []',
+    validateAgentPayload({ name: 'X', config: { identity: { mission: 'm' }, knowledge: { collection_ids: 'oops' } } }).config.knowledge.collection_ids.length === 0);
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

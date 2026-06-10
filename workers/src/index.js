@@ -107,7 +107,9 @@ import { handleSmartAgentHealth,
          handleKortexUnitUpdate, handleKortexUnitDelete,
          handleKortexCollectionsList, handleKortexCollectionCreate,
          handleKortexCollectionUpdate, handleKortexCollectionDelete,
-         handleKortexExtract, handleKortexSearch, handleKortexReindex } from './routes/smart-agent.js';
+         handleKortexExtract, handleKortexSearch, handleKortexReindex,
+         handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
+         handleAgentChat } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -140,6 +142,13 @@ export default {
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
       if (path === '/api/smart-agent/kortex/search'      && method === 'GET')  return handleKortexSearch(request, env);
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
+      if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
+      if (path === '/api/smart-agent/agents'             && method === 'POST') return handleAgentCreate(request, env);
+      const saChatMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/chat$/);
+      if (saChatMatch && method === 'POST') return handleAgentChat(request, env, saChatMatch[1]);
+      const saAgentMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)$/);
+      if (saAgentMatch && method === 'PATCH')  return handleAgentUpdate(request, env, saAgentMatch[1]);
+      if (saAgentMatch && method === 'DELETE') return handleAgentDelete(request, env, saAgentMatch[1]);
       const saUnitMatch = path.match(/^\/api\/smart-agent\/kortex\/units\/([A-Za-z0-9-]+)$/);
       if (saUnitMatch && method === 'PATCH')  return handleKortexUnitUpdate(request, env, saUnitMatch[1]);
       if (saUnitMatch && method === 'DELETE') return handleKortexUnitDelete(request, env, saUnitMatch[1]);
