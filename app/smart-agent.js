@@ -102,7 +102,6 @@ const ENGINE_STEPS = [
 // État du module
 // ═══════════════════════════════════════════════════════════════
 let _root = null;
-let _view = 'agents';          // 'agents' | 'kortex'
 
 const _kx = {
     loaded: false, loading: false, error: null,
@@ -116,12 +115,14 @@ const _kx = {
 const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error: null, adding: false };
 // Recherche hybride (SA-2) — results null = pas de recherche active.
 const _kxs = { q: '', busy: false, mode: null, results: null };
-// Agents (SA-3) — mode : 'list' | 'wizard' | 'chat' | 'gaps'
+// Agents (SA-3) — mode : 'list' | 'form' (création/édition d'agent)
 const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'list', editing: null,
-    // Wizard (SA-4) : étape 1-4 + données en cours + id une fois persisté
-    wizStep: 1, wizData: null, wizAgentId: null, wizBusy: false, wizError: null,
-    // File des trous (SA-4)
-    gaps: [], gapsLoaded: false, gapsCount: 0 };
+    // Formulaire agent (SA-4.3, ex-wizard) : données en cours
+    form: null, formBusy: false, formError: null, suggestBusy: false,
+    // File des trous (SA-4) — scopée par agent (SA-4.3)
+    gaps: [], gapsCount: 0 };
+// SA-4.3 — SILO : agent courant + onglet actif. _cur.id null = liste d'agents.
+const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | trous | reglages
 // Conversation en cours avec un agent (SA-3) — sert aussi de bac à sable (SA-4)
 const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
 // Golden set (SA-4) — jeu de questions étalon de l'agent en cours de test
@@ -158,9 +159,11 @@ async function _api(path, opts = {}) {
 export function openSmartAgent(opts = {}) {
     if (_root) return;
     _buildShell();
-    _setView('agents');
+    _cur.id = null; _ag.mode = 'list';
+    _renderRail();
+    if (!_ag.loaded) _agLoad(); else _renderMain();
+    _renderAside();
     document.body.style.overflow = 'hidden';
-    _pingHealth();
 }
 
 export function closeSmartAgent() {
@@ -224,33 +227,30 @@ function _onClick(e) {
     const act = actEl.dataset.act;
 
     if (act === 'close')        { closeSmartAgent(); return; }
-    if (act === 'nav')          { _setView(actEl.dataset.view); return; }
-    // ── Agents : liste / wizard / chat / trous ──
-    if (act === 'ag-new')       { _openWizard(null); return; }
-    if (act === 'ag-edit')      { _openWizard(_ag.agents.find(a => a.id === actEl.dataset.id) || null); return; }
-    if (act === 'ag-chat')      { _openChat(_ag.agents.find(a => a.id === actEl.dataset.id) || null); return; }
+    // ── Liste d'agents (silo SA-4.3) ──
+    if (act === 'ag-new')       { _openForm(null); return; }
+    if (act === 'ag-open')      { _enterAgent(actEl.dataset.id); return; }
     if (act === 'ag-delete')    { _deleteAgent(actEl.dataset.id); return; }
-    if (act === 'ag-back')      { _ag.mode = 'list'; _renderMain(); return; }
-    if (act === 'chat-back')    { _ag.mode = 'list'; _renderMain(); return; }
+    if (act === 'ag-exit')      { _exitAgent(); return; }
+    if (act === 'tab')          { _setTab(actEl.dataset.tab); return; }
+    // ── Formulaire agent (création/édition) ──
+    if (act === 'form-save')    { _saveAgentForm(); return; }
+    if (act === 'form-cancel')  { _cancelForm(); return; }
+    if (act === 'form-posture') { _readAgentForm(); _ag.form.posture = actEl.dataset.v; _renderMain(); return; }
+    if (act === 'form-suggest') { _suggestOpening(); return; }
+    if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
+    // ── Chat / bac à sable ──
     if (act === 'chat-send')    { _sendChat(); return; }
     if (act === 'chat-cite')    { _openUnitFromChat(actEl.dataset.uid); return; }
-    // ── Wizard (SA-4) ──
-    if (act === 'wiz-prev')     { _wizGo(_ag.wizStep - 1); return; }
-    if (act === 'wiz-next')     { _wizNext(); return; }
-    if (act === 'wiz-finish')   { _ag.mode = 'list'; _agReload(); return; }
-    if (act === 'wiz-posture')  { _wizReadStep(); _ag.wizData.posture = actEl.dataset.v; _renderMain(); return; }
-    if (act === 'wiz-suggest')  { _suggestOpening(); return; }
-    // ── Trous (SA-4) ──
-    if (act === 'ag-gaps')      { _openGaps(); return; }
-    if (act === 'gaps-back')    { _ag.mode = 'list'; _renderMain(); return; }
+    // ── Trous (scopés agent) ──
     if (act === 'gap-answer')   { _answerGap(_ag.gaps.find(g => g.id === actEl.dataset.id)); return; }
     if (act === 'gap-dismiss')  { _dismissGap(actEl.dataset.id); return; }
-    // ── Golden set (SA-4) ──
+    // ── Golden set ──
     if (act === 'gold-add')     { _goldAdd(); return; }
     if (act === 'gold-del')     { _goldDel(actEl.dataset.id); return; }
     if (act === 'gold-expect')  { _gold.addExpect = actEl.dataset.v; _renderMain(); return; }
     if (act === 'gold-replay')  { _goldReplay(); return; }
-    // ── Coffre : liste ──
+    // ── Coffre (onglet Savoir) : liste ──
     if (act === 'kx-new')       { _openEditor(null); return; }
     if (act === 'kx-extract')   { _openExtract(); return; }
     if (act === 'kx-ftype')     { _kx.filterType = actEl.dataset.v;   _kxReload(); return; }
@@ -258,7 +258,6 @@ function _onClick(e) {
     if (act === 'kx-search')       { _runSearch(); return; }
     if (act === 'kx-search-clear') { _clearSearch(); return; }
     if (act === 'kx-edit') {
-        // La fiche peut venir de la liste OU des résultats de recherche.
         const id = actEl.dataset.id;
         const u  = _kx.units.find(x => x.id === id)
             || _kxs.results?.find(r => r.unit.id === id)?.unit;
@@ -267,7 +266,7 @@ function _onClick(e) {
     }
     if (act === 'kx-validate')  { _quickStatus(actEl.dataset.id, 'validated'); return; }
     if (act === 'kx-delete')    { _deleteUnit(actEl.dataset.id); return; }
-    // ── Coffre : éditeur ──
+    // ── Coffre : éditeur de fiche ──
     if (act === 'ed-back')      { _kx.mode = 'list'; _kx.editing = null; _kx.prefill = null; _kx.resolveGapId = null; _renderMain(); return; }
     if (act === 'ed-type')      { _kx.editType = actEl.dataset.v; _renderMain(); return; }
     if (act === 'ed-save')      { _saveEditor(actEl.dataset.status || null); return; }
@@ -281,56 +280,94 @@ function _onClick(e) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Rail gauche
+// Rail gauche — agent-centré (SA-4.3)
 // ═══════════════════════════════════════════════════════════════
+const _TABS = [
+    { id: 'savoir',   ico: 'kortex',      label: 'Savoir' },
+    { id: 'tester',   ico: 'smart-agent', label: 'Tester' },
+    { id: 'trous',    ico: 'help-circle', label: 'Trous' },
+    { id: 'reglages', ico: 'settings',    label: 'Réglages' },
+];
 function _renderRail() {
     const rail = _root.querySelector('[data-slot="rail"]');
-    const item = (view, ico, label) => `
-    <button class="ws-step ${_view === view ? 'is-active' : ''}" data-act="nav" data-view="${view}">
-      <span class="ws-step-num" aria-hidden="true" style="visibility:hidden;"></span>
-      <span class="ws-step-icon" style="width:18px;height:18px;">${icon(ico, 18)}</span>
-      <span class="ws-step-label">${label}</span>
-    </button>
-  `;
+    if (!_cur.id) {
+        rail.innerHTML = `
+      <div class="ws-rail-section">Moteur</div>
+      <button class="ws-step is-active">
+        <span class="ws-step-num" aria-hidden="true" style="visibility:hidden;"></span>
+        <span class="ws-step-icon" style="width:18px;height:18px;">${icon('smart-agent', 18)}</span>
+        <span class="ws-step-label">Mes agents</span>
+      </button>`;
+        return;
+    }
+    const tab = t => {
+        const badge = (t.id === 'trous' && _ag.gapsCount) ? ` <em class="sa-rail-badge">${_ag.gapsCount}</em>` : '';
+        return `
+      <button class="ws-step ${_cur.tab === t.id ? 'is-active' : ''}" data-act="tab" data-tab="${t.id}">
+        <span class="ws-step-num" aria-hidden="true" style="visibility:hidden;"></span>
+        <span class="ws-step-icon" style="width:18px;height:18px;">${icon(t.ico, 18)}</span>
+        <span class="ws-step-label">${t.label}${badge}</span>
+      </button>`;
+    };
     rail.innerHTML = `
-    <div class="ws-rail-section">Moteur</div>
-    ${item('agents', 'smart-agent', 'Mes agents')}
-    ${item('kortex', 'kortex', 'Coffre Kortex')}
+    <button class="ws-step" data-act="ag-exit">
+      <span class="ws-step-num" aria-hidden="true" style="visibility:hidden;"></span>
+      <span class="ws-step-icon" style="width:18px;height:18px;">${icon('chevron-left', 18)}</span>
+      <span class="ws-step-label">Mes agents</span>
+    </button>
+    <div class="ws-rail-section">${_esc(_cur.name)}</div>
+    ${_TABS.map(tab).join('')}
   `;
 }
 
-function _setView(view) {
-    _view = view === 'kortex' ? 'kortex' : 'agents';
-    // Le rail ramène TOUJOURS à l'accueil de la zone (prévisible) : on
-    // réinitialise le sous-écran en cours (chat, trous, wizard, éditeur).
-    if (_view === 'agents') { _ag.mode = 'list'; }
-    if (_view === 'kortex' && _kx.mode === 'editor') {
-        _kx.mode = 'list'; _kx.editing = null; _kx.prefill = null; _kx.resolveGapId = null;
-    }
-    if (_view === 'kortex' && !_kx.loaded && !_kx.loading) _kxLoad();
-    if (_view === 'agents' && !_ag.loaded && !_ag.loading) _agLoad();
-    _renderRail();
-    _renderMain();
+// ── Entrer / sortir d'un agent, changer d'onglet ───────────────
+function _enterAgent(id) {
+    const a = _ag.agents.find(x => x.id === id);
+    if (!a) return;
+    _cur.id = a.id; _cur.name = a.name; _cur.agent = a; _cur.tab = 'savoir';
+    // reset des sous-états scopés
+    _kx.loaded = false; _kx.mode = 'list'; _kx.editing = null;
+    _kx.filterType = 'all'; _kx.filterStatus = 'all'; _kx.prefill = null; _kx.resolveGapId = null;
+    _kxs.results = null; _kxs.q = '';
+    _gold.loaded = false; _gold.replay = null; _gold.items = [];
+    // bac à sable : amorce l'accueil de cet agent
+    const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} ». Comment puis-je vous aider ?`;
+    _chat.agentId = a.id; _chat.agentName = a.name; _chat.sessionId = null; _chat.busy = false;
+    _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
+    _ag.gaps = []; _ag.gapsCount = 0;
+    _renderRail(); _renderAside();
+    _setTab('savoir');
+    _loadGaps();   // pour le badge Trous
+}
+function _exitAgent() {
+    _cur.id = null; _cur.agent = null; _ag.mode = 'list';
+    if (!_ag.loaded) _agLoad();
+    _renderRail(); _renderMain(); _renderAside();
+}
+function _setTab(tab) {
+    _cur.tab = ['savoir', 'tester', 'trous', 'reglages'].includes(tab) ? tab : 'savoir';
+    if (_cur.tab === 'savoir' && !_kx.loaded && !_kx.loading) _kxLoad();
+    if (_cur.tab === 'tester' && !_gold.loaded) _goldLoad();
+    if (_cur.tab === 'trous') _loadGaps();
+    if (_cur.tab === 'reglages') _openForm(_cur.agent);
+    _renderRail(); _renderMain();
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Chargement du coffre
+// Chargement du coffre (scopé à l'agent courant — silo)
 // ═══════════════════════════════════════════════════════════════
 async function _kxLoad() {
+    if (!_cur.id) return;
     _kx.loading = true; _kx.error = null;
     _renderMain();
     try {
-        const qs = [];
+        const qs = [`agent=${encodeURIComponent(_cur.id)}`];
         if (_kx.filterType !== 'all')   qs.push(`type=${_kx.filterType}`);
         if (_kx.filterStatus !== 'all') qs.push(`status=${_kx.filterStatus}`);
-        const [unitsRes, collRes] = await Promise.all([
-            _api(`/kortex/units${qs.length ? '?' + qs.join('&') : ''}`),
-            _api('/kortex/collections'),
-        ]);
-        _kx.units       = unitsRes.units || [];
-        _kx.counts      = unitsRes.counts || _kx.counts;
-        _kx.collections = collRes.collections || [];
-        _kx.loaded      = true;
+        const unitsRes = await _api(`/kortex/units?${qs.join('&')}`);
+        _kx.units  = unitsRes.units || [];
+        _kx.counts = unitsRes.counts || _kx.counts;
+        _kx.loaded = true;
     } catch (e) {
         _kx.error = (e.status === 403)
             ? 'Smart Agent est réservé au plan MAX pendant la beta.'
@@ -339,27 +376,33 @@ async function _kxLoad() {
                 : `Coffre injoignable : ${e.message}`;
     }
     _kx.loading = false;
-    _renderMain();
+    if (_cur.tab === 'savoir') _renderMain();
     _renderAside();
 }
 function _kxReload() { _kx.loaded = false; _kxLoad(); }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue principale
+// Vue principale — agent-centrée
 // ═══════════════════════════════════════════════════════════════
 function _renderMain() {
     const main = _root.querySelector('[data-slot="main"]');
-    if (_view === 'agents') {
-        if (_ag.mode === 'wizard')    { main.innerHTML = _wizardHTML();  if (_ag.wizStep === 4) _bindChatInput(main); }
-        else if (_ag.mode === 'chat') { main.innerHTML = _chatHTML();    _bindChatInput(main); }
-        else if (_ag.mode === 'gaps') { main.innerHTML = _gapsHTML(); }
-        else                          { main.innerHTML = _agentsListHTML(); }
+    if (!_cur.id) {
+        main.innerHTML = (_ag.mode === 'form') ? _agentFormHTML() : _agentsListHTML();
+        main.scrollTop = 0;
+        return;
     }
-    else if (_kx.mode === 'editor') { main.innerHTML = _editorHTML(); _bindEditorInputs(); }
-    else { main.innerHTML = _kortexViewHTML(); _bindKortexInputs(main); }
-    // Coller le scroll du flux de chat en bas (chat plein écran OU bac à sable du wizard).
-    const inSandbox = _view === 'agents' && (_ag.mode === 'chat' || (_ag.mode === 'wizard' && _ag.wizStep === 4));
-    if (inSandbox) _scrollChatBottom();
+    // À l'intérieur d'un agent : onglets
+    if (_cur.tab === 'savoir') {
+        if (_kx.mode === 'editor') { main.innerHTML = _editorHTML(); _bindEditorInputs(); }
+        else { main.innerHTML = _kortexViewHTML(); _bindKortexInputs(main); }
+    } else if (_cur.tab === 'tester') {
+        main.innerHTML = _testerHTML(); _bindChatInput(main);
+    } else if (_cur.tab === 'trous') {
+        main.innerHTML = _gapsHTML();
+    } else { // reglages
+        main.innerHTML = _agentFormHTML();
+    }
+    if (_cur.tab === 'tester') _scrollChatBottom();
     else main.scrollTop = 0;
 }
 
@@ -370,17 +413,9 @@ async function _agLoad() {
     _ag.loading = true; _ag.error = null;
     _renderMain();
     try {
-        const [agRes, collRes, gapsRes] = await Promise.all([
-            _api('/agents'),
-            _api('/kortex/collections'),
-            _api('/gaps').catch(() => ({ count: 0, gaps: [] })),   // non bloquant
-        ]);
-        _ag.agents      = agRes.agents || [];
-        _kx.collections = collRes.collections || [];   // partagé avec l'éditeur de fiche
-        _ag.gaps        = gapsRes.gaps || [];
-        _ag.gapsCount   = gapsRes.count || 0;
-        _ag.gapsLoaded  = true;
-        _ag.loaded      = true;
+        const agRes = await _api('/agents');
+        _ag.agents = agRes.agents || [];
+        _ag.loaded = true;
     } catch (e) {
         _ag.error = (e.status === 403)
             ? 'Smart Agent est réservé au plan MAX pendant la beta.'
@@ -394,7 +429,7 @@ async function _agLoad() {
 }
 function _agReload() { _ag.loaded = false; _agLoad(); }
 
-// ── Vue AGENTS — liste (ou état vide pédagogique) ──────────────
+// ── Vue AGENTS — liste (chaque agent = une unité autonome, silo SA-4.3) ──
 function _agentsListHTML() {
     if (_ag.loading) return `<div class="sa-loading">${icon('refresh', 18)} Chargement de vos agents…</div>`;
     if (_ag.error) {
@@ -406,80 +441,49 @@ function _agentsListHTML() {
       </section>`;
     }
 
-    // État vide : pédagogie + feuille de route + CTA
     if (!_ag.agents.length) {
-        const chip = s => s.status === 'live'
-            ? '<span class="sa-chip is-live">Disponible</span>'
-            : s.status === 'next'
-                ? '<span class="sa-chip is-next">En chantier</span>'
-                : '<span class="sa-chip">À venir</span>';
-        const stepHTML = (s, i) => `
-      <div class="sa-step ${s.status === 'live' ? 'is-live' : ''}">
-        <span class="sa-step-ico">${icon(s.icon, 20)}</span>
-        <div class="sa-step-txt"><strong>${i + 1}. ${s.label}</strong><span>${s.desc}</span></div>
-        ${chip(s)}
-      </div>`;
         return `
       <section class="sa-hero">
         <div class="sa-hero-ico">${icon('smart-agent', 40)}</div>
         <h1 class="sa-hero-title">Vos jumeaux numériques de savoir-faire</h1>
         <p class="sa-hero-lead">
-          Un Smart Agent ne sait que ce que <strong>vous</strong> lui confiez. Il répond à partir
-          de votre coffre Kortex — fiches validées par vos soins — en citant ses sources.
-          Et quand il ne sait pas, il le dit.
+          Chaque agent est une <strong>unité autonome</strong> : son propre savoir, son propre
+          test, ses propres questions sans réponse. Il répond uniquement depuis SON coffre, en
+          citant ses sources — et quand il ne sait pas, il le dit.
         </p>
         <div class="sa-cta-row">
           <button class="sa-btn is-primary" data-act="ag-new">${icon('plus', 16)} Créer mon premier agent</button>
-          <button class="sa-btn" data-act="nav" data-view="kortex">${icon('kortex', 16)} Remplir le coffre d'abord</button>
         </div>
-        <div class="sa-roadmap">${ENGINE_STEPS.map(stepHTML).join('')}</div>
       </section>`;
     }
 
     const card = a => {
-        const colls = a.config?.knowledge?.collection_ids || [];
-        const scope = colls.length
-            ? `${colls.length} collection${colls.length > 1 ? 's' : ''}`
-            : 'Tout le coffre';
         const paused = a.status === 'paused';
         return `
-      <article class="sa-agent-card">
+      <article class="sa-agent-card" data-act="ag-open" data-id="${a.id}" role="button" tabindex="0">
         <span class="sa-agent-ico">${icon('smart-agent', 22)}</span>
         <div class="sa-agent-txt">
           <strong class="sa-agent-name">${_esc(a.name)}${paused ? ' <span class="sa-badge is-quarantine">En pause</span>' : ''}</strong>
           <span class="sa-agent-mission">${_esc(a.config?.identity?.mission || 'Sans mission définie')}</span>
-          <span class="sa-agent-meta">${icon('kortex', 11)} ${scope}</span>
         </div>
         <div class="sa-agent-acts">
-          <button class="sa-btn is-primary" data-act="ag-chat" data-id="${a.id}">${icon('smart-agent', 15)} Parler</button>
-          <button class="sa-iconbtn" data-act="ag-edit" data-id="${a.id}" title="Modifier">${icon('edit', 15)}</button>
-          <button class="sa-iconbtn is-danger" data-act="ag-delete" data-id="${a.id}" title="Supprimer">${icon('trash-2', 15)}</button>
+          <button class="sa-btn is-primary" data-act="ag-open" data-id="${a.id}">${icon('chevron-right', 15)} Ouvrir</button>
+          <button class="sa-iconbtn is-danger" data-act="ag-delete" data-id="${a.id}" title="Supprimer l'agent et tout son savoir">${icon('trash-2', 15)}</button>
         </div>
       </article>`;
     };
-
-    const gapsBanner = _ag.gapsCount ? `
-      <button class="sa-gaps-banner" data-act="ag-gaps">
-        <span class="sa-gaps-banner-ico">${icon('help-circle', 18)}</span>
-        <span class="sa-gaps-banner-txt">
-          <strong>${_ag.gapsCount} question${_ag.gapsCount > 1 ? 's' : ''} sans réponse</strong>
-          <span>Votre file de travail — comblez ces trous pour faire grandir vos agents.</span>
-        </span>
-        <span class="sa-gaps-banner-go">${icon('chevron-right', 18)}</span>
-      </button>` : '';
 
     return `
     <section class="sa-kx">
       <div class="sa-kx-head">
         <div>
           <h2 class="sa-kx-title">Mes agents</h2>
-          <p class="sa-kx-sub">${_ag.agents.length} agent${_ag.agents.length > 1 ? 's' : ''} · chacun puise dans votre coffre Kortex</p>
+          <p class="sa-kx-sub">${_ag.agents.length} agent${_ag.agents.length > 1 ? 's' : ''} · chacun a son propre coffre de savoir</p>
         </div>
         <div class="sa-kx-acts">
           <button class="sa-btn is-primary" data-act="ag-new">${icon('plus', 16)} Nouvel agent</button>
         </div>
       </div>
-      ${gapsBanner}
       <div class="sa-agents">${_ag.agents.map(card).join('')}</div>
     </section>`;
 }
@@ -489,68 +493,82 @@ function _agentsListHTML() {
 // → Garde-fous → Test (bac à sable + golden set). L'étape 3→4
 // persiste l'agent (le bac à sable a besoin d'un agent réel).
 // ═══════════════════════════════════════════════════════════════
-function _openWizard(agent) {
-    _ag.editing    = agent || null;
-    _ag.wizAgentId = agent?.id || null;
-    _ag.wizStep    = 1;
-    _ag.wizError   = null;
-    _ag.wizBusy    = false;
-    _ag.wizData = {
-        name:           agent?.name || '',
-        mission:        agent?.config?.identity?.mission || '',
-        tone:           agent?.config?.identity?.tone || 'professionnel et chaleureux',
-        posture:        agent?.config?.identity?.posture || 'equilibre',
-        opening:        agent?.config?.identity?.opening || '',
-        collection_ids: (agent?.config?.knowledge?.collection_ids || []).slice(),
-        fallback:       agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
+// ── Formulaire agent (SA-4.3 : remplace le wizard ; Savoir & Test sont
+//    désormais des onglets de l'agent). Sert à la création ET à l'onglet
+//    Réglages. _ag.form = données en cours.
+function _openForm(agent) {
+    _ag.editing = agent || null;
+    _ag.form = {
+        id:       agent?.id || null,
+        name:     agent?.name || '',
+        mission:  agent?.config?.identity?.mission || '',
+        tone:     agent?.config?.identity?.tone || 'professionnel et chaleureux',
+        posture:  agent?.config?.identity?.posture || 'equilibre',
+        opening:  agent?.config?.identity?.opening || '',
+        fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
     };
-    _ag.wizSuggestBusy = false;
-    _gold.items = []; _gold.loaded = false; _gold.replay = null; _gold.addExpect = 'answer';
-    _ag.mode = 'wizard';
-    _renderMain();
+    _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false;
+    // Création (hors agent) → bascule en mode formulaire plein écran.
+    // Onglet Réglages (dans un agent) → _setTab gère le rendu.
+    if (!_cur.id) { _ag.mode = 'form'; _renderMain(); }
 }
 
-const _WIZ_LABELS = ['Identité', 'Savoir', 'Garde-fous', 'Test'];
-
-function _wizardHTML() {
-    const isNew = !_ag.editing;
-    const stepper = `<div class="sa-stepper">${_WIZ_LABELS.map((l, i) => {
-        const n = i + 1;
-        const cls = n === _ag.wizStep ? 'is-active' : (n < _ag.wizStep ? 'is-done' : '');
-        return `<div class="sa-wstep ${cls}">
-          <span class="sa-wstep-num">${n < _ag.wizStep ? icon('check', 12) : n}</span>
-          <span class="sa-wstep-lbl">${l}</span>
-        </div>`;
-    }).join('<span class="sa-wstep-sep"></span>')}</div>`;
-
-    const body = _ag.wizStep === 1 ? _wizStep1()
-        : _ag.wizStep === 2 ? _wizStep2()
-            : _ag.wizStep === 3 ? _wizStep3()
-                : _wizStep4();
-
-    const err = _ag.wizError ? `<p class="sa-ed-error">${_esc(_ag.wizError)}</p>` : '';
-
-    const nav = _ag.wizStep === 4 ? `
-      <div class="sa-ed-actions">
-        <button class="sa-btn" data-act="wiz-prev">${icon('chevron-left', 15)} Réglages</button>
-        <button class="sa-btn is-primary" data-act="wiz-finish">${icon('check', 15)} Terminer</button>
-      </div>`
-        : `
-      <div class="sa-ed-actions">
-        ${_ag.wizStep > 1 ? `<button class="sa-btn" data-act="wiz-prev">${icon('chevron-left', 15)} Précédent</button>` : ''}
-        <button class="sa-btn is-primary" data-act="wiz-next" ${_ag.wizBusy ? 'disabled' : ''}>
-          ${_ag.wizStep === 3 ? (_ag.wizBusy ? 'Enregistrement…' : 'Enregistrer et tester') : 'Suivant'} ${icon('chevron-right', 15)}
-        </button>
-      </div>`;
-
+function _agentFormHTML() {
+    const d = _ag.form || {};
+    const isNew = !d.id;
+    const postureChips = _POSTURES.map(p => `
+      <button class="sa-posture ${d.posture === p.id ? 'is-on' : ''}" data-act="form-posture" data-v="${p.id}" title="${p.desc}">
+        <strong>${p.label}</strong><span>${p.desc}</span>
+      </button>`).join('');
+    const err = _ag.formError ? `<p class="sa-ed-error">${_esc(_ag.formError)}</p>` : '';
     return `
     <section class="sa-kx sa-ed">
-      <button class="sa-back" data-act="ag-back">${icon('chevron-left', 16)} Mes agents</button>
-      <div class="sa-kx-head"><div><h2 class="sa-kx-title">${isNew ? 'Nouvel agent' : 'Modifier l\'agent'}</h2></div></div>
-      ${stepper}
-      <div class="sa-wbody">${body}</div>
+      ${isNew ? `<button class="sa-back" data-act="form-cancel">${icon('chevron-left', 16)} Mes agents</button>` : ''}
+      <div class="sa-kx-head"><div><h2 class="sa-kx-title">${isNew ? 'Nouvel agent' : 'Réglages'}</h2></div></div>
+      <p class="sa-wstep-intro">Qui est cet agent, et que fait-il ? C'est ce qui guide son ton, sa posture et son accueil.</p>
+
+      <label class="sa-field"><span class="sa-field-label">Nom de l'agent *</span>
+        <input class="sa-input" data-field="name" value="${_escAttr(d.name)}" placeholder="Ex. : Guide du musée, Conseiller boutique, Assistant SAV"></label>
+      <label class="sa-field"><span class="sa-field-label">Mission * — que fait-il, pour qui ?</span>
+        <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
+      <label class="sa-field"><span class="sa-field-label">Ton</span>
+        <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
+
+      <label class="sa-field"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
+      <div class="sa-posture-grid">${postureChips}</div>
+
+      <label class="sa-field" style="margin-top:14px;">
+        <span class="sa-field-label">Accueil — l'agent parle en premier (terminé par une question)</span>
+        <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
+      </label>
+      <button class="sa-btn sa-suggest-btn" data-act="form-suggest" ${_ag.suggestBusy ? 'disabled' : ''}>
+        ${icon('sparkles', 14)} ${_ag.suggestBusy ? 'Génération…' : 'Proposer un accueil avec l\'IA'}
+      </button>
+      <p class="sa-field-hint">Laissé vide, l'accueil est généré automatiquement à la création.</p>
+
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Phrase de repli — quand la réponse n'est pas dans son savoir</span>
+        <input class="sa-input" data-field="fallback" value="${_escAttr(d.fallback)}" placeholder="Je ne dispose pas de cette information."></label>
+      <div class="sa-guard-note">${icon('shield-check', 16)} <span>Chaque réponse cite ses fiches sources. Hors de son savoir, l'agent se tait — et la question rejoint ses « Trous » à combler.</span></div>
+
       ${err}
-      ${nav}
+      <div class="sa-ed-actions">
+        <button class="sa-btn is-primary" data-act="form-save" ${_ag.formBusy ? 'disabled' : ''}>${icon('save', 15)} ${_ag.formBusy ? 'Enregistrement…' : (isNew ? 'Créer l\'agent' : 'Enregistrer')}</button>
+        ${isNew
+            ? `<button class="sa-btn" data-act="form-cancel">Annuler</button>`
+            : `<button class="sa-btn is-danger" data-act="form-delete">${icon('trash-2', 15)} Supprimer l'agent</button>`}
+      </div>
+    </section>`;
+}
+
+function _testerHTML() {
+    return `
+    <section class="sa-kx">
+      <div class="sa-kx-head"><div>
+        <h2 class="sa-kx-title">Tester</h2>
+        <p class="sa-kx-sub">Comme le verront vos visiteurs — réponses ancrées sur le savoir de cet agent.</p>
+      </div></div>
+      ${_sandboxHTML()}
+      ${_goldenHTML()}
     </section>`;
 }
 
@@ -560,165 +578,82 @@ const _POSTURES = [
     { id: 'proactif',   label: 'Proactif',   desc: 'Qualifie, propose la suite' },
 ];
 
-function _wizStep1() {
-    const d = _ag.wizData;
-    const postureChips = _POSTURES.map(p => `
-      <button class="sa-posture ${d.posture === p.id ? 'is-on' : ''}" data-act="wiz-posture" data-v="${p.id}" title="${p.desc}">
-        <strong>${p.label}</strong><span>${p.desc}</span>
-      </button>`).join('');
-    return `
-    <p class="sa-wstep-intro">Qui est cet agent, et que fait-il ? C'est ce qui guide son ton, sa posture et son accueil.</p>
-    <label class="sa-field"><span class="sa-field-label">Nom de l'agent *</span>
-      <input class="sa-input" data-field="name" value="${_escAttr(d.name)}" placeholder="Ex. : Guide du musée, Conseiller boutique, Assistant SAV"></label>
-    <label class="sa-field"><span class="sa-field-label">Mission * — que fait-il, pour qui ?</span>
-      <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
-    <label class="sa-field"><span class="sa-field-label">Ton</span>
-      <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
-
-    <label class="sa-field"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
-    <div class="sa-posture-grid">${postureChips}</div>
-
-    <label class="sa-field" style="margin-top:14px;">
-      <span class="sa-field-label">Accueil — l'agent parle en premier (terminé par une question)</span>
-      <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
-    </label>
-    <button class="sa-btn sa-suggest-btn" data-act="wiz-suggest" ${_ag.wizSuggestBusy ? 'disabled' : ''}>
-      ${icon('sparkles', 14)} ${_ag.wizSuggestBusy ? 'Génération…' : 'Proposer un accueil avec l\'IA'}
-    </button>
-    <p class="sa-field-hint">Laissé vide, l'accueil est généré automatiquement à la création.</p>`;
-}
-
-function _wizStep2() {
-    const sel = new Set(_ag.wizData.collection_ids);
-    const block = _kx.collections.length ? `
-      <div class="sa-coll-grid">
-        ${_kx.collections.map(c => `
-          <label class="sa-coll-opt ${sel.has(c.id) ? 'is-on' : ''}">
-            <input type="checkbox" data-coll="${c.id}" ${sel.has(c.id) ? 'checked' : ''}>
-            <span>${_esc(c.name)}</span><em>${c.unit_count || 0}</em>
-          </label>`).join('')}
-      </div>
-      <p class="sa-field-hint">Rien de coché = l'agent puise dans <strong>tout le coffre</strong>.</p>`
-        : `<p class="sa-field-hint">Pas encore de collection — l'agent puisera dans tout le coffre. Créez des collections dans le Kortex pour cloisonner son savoir par thème.</p>`;
-    return `<p class="sa-wstep-intro">À quelle partie de votre coffre Kortex cet agent a-t-il accès ? Il ne répondra qu'avec ce savoir-là.</p>${block}`;
-}
-
-function _wizStep3() {
-    const d = _ag.wizData;
-    return `
-    <p class="sa-wstep-intro">Le garde-fou anti-invention : quand la réponse n'est pas dans son savoir, l'agent dit ceci — plutôt que d'inventer.</p>
-    <label class="sa-field"><span class="sa-field-label">Phrase de repli</span>
-      <input class="sa-input" data-field="fallback" value="${_escAttr(d.fallback)}" placeholder="Je ne dispose pas de cette information."></label>
-    <div class="sa-guard-note">${icon('shield-check', 16)} <span>Chaque réponse cite ses fiches sources. Hors de son savoir, l'agent se tait — et la question rejoint vos « questions sans réponse » à combler.</span></div>`;
-}
-
-function _wizStep4() {
-    return `
-    <p class="sa-wstep-intro">${icon('sparkles', 14)} Votre agent est prêt. Testez-le comme le feront vos clients — ce que vous voyez ici est exactement ce qu'ils verront.</p>
-    ${_sandboxHTML()}
-    ${_goldenHTML()}`;
-}
-
-// Lit les champs de l'étape courante dans _ag.wizData (avant navigation).
-function _wizReadStep() {
+// Lit le formulaire agent (DOM → _ag.form).
+function _readAgentForm() {
     const main = _root.querySelector('[data-slot="main"]');
-    if (!main) return;
+    if (!main || !_ag.form) return;
     const get = s => main.querySelector(s);
-    const d = _ag.wizData;
-    if (_ag.wizStep === 1) {
-        d.name    = get('[data-field="name"]')?.value.trim() ?? d.name;
-        d.mission = get('[data-field="mission"]')?.value.trim() ?? d.mission;
-        d.tone    = get('[data-field="tone"]')?.value.trim() ?? d.tone;
-        const op  = get('[data-field="opening"]');
-        if (op) d.opening = op.value.trim();
-        // posture : pilotée par les chips (déjà dans d.posture)
-    } else if (_ag.wizStep === 2) {
-        const boxes = [...main.querySelectorAll('[data-coll]')];
-        if (boxes.length) d.collection_ids = boxes.filter(b => b.checked).map(b => b.dataset.coll);
-    } else if (_ag.wizStep === 3) {
-        d.fallback = get('[data-field="fallback"]')?.value.trim() ?? d.fallback;
-    }
+    const d = _ag.form;
+    d.name    = get('[data-field="name"]')?.value.trim() ?? d.name;
+    d.mission = get('[data-field="mission"]')?.value.trim() ?? d.mission;
+    d.tone    = get('[data-field="tone"]')?.value.trim() ?? d.tone;
+    const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
+    const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
+    // posture : pilotée par les chips (déjà dans d.posture)
 }
 
-function _wizPayload() {
-    const d = _ag.wizData;
-    return {
-        name: d.name,
-        config: {
-            identity:  { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
-            scope:     { fallback_text: d.fallback },
-            knowledge: { collection_ids: d.collection_ids },
-        },
-    };
-}
+function _formError(msg) { _ag.formError = msg || null; _renderMain(); }
 
 // « Proposer un accueil avec l'IA » : génère depuis nom/mission/posture
 // courants (endpoint sans état), puis remplit le champ Accueil.
 async function _suggestOpening() {
-    _wizReadStep();
-    if (!_ag.wizData.mission) { _ag.wizError = 'Renseignez d\'abord la mission.'; _renderMain(); return; }
-    _ag.wizSuggestBusy = true; _ag.wizError = null; _renderMain();
+    _readAgentForm();
+    if (!_ag.form.mission) { _formError('Renseignez d\'abord la mission.'); return; }
+    _ag.suggestBusy = true; _ag.formError = null; _renderMain();
     try {
         const r = await _api('/suggest-opening', {
             method: 'POST',
-            body: { name: _ag.wizData.name, mission: _ag.wizData.mission, posture: _ag.wizData.posture },
+            body: { name: _ag.form.name, mission: _ag.form.mission, posture: _ag.form.posture },
         });
-        if (r.opening) _ag.wizData.opening = r.opening;
+        if (r.opening) _ag.form.opening = r.opening;
     } catch (e) { _toast(e.message, 'error'); }
-    _ag.wizSuggestBusy = false; _renderMain();
+    _ag.suggestBusy = false; _renderMain();
 }
 
-function _wizGo(step) {
-    if (step < 1) return;
-    _wizReadStep();
-    if (step >= 4 && !_ag.wizAgentId) { _wizNext(); return; }  // doit passer par la persistance
-    _ag.wizStep = Math.min(step, 4);
-    _ag.wizError = null;
-    _renderMain();
+function _agentPayload() {
+    const d = _ag.form;
+    return {
+        name: d.name,
+        config: {
+            identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
+            scope:    { fallback_text: d.fallback },
+            knowledge:{ collection_ids: [] },
+        },
+    };
 }
 
-async function _wizNext() {
-    _wizReadStep();
-    if (_ag.wizStep === 1) {
-        if (!_ag.wizData.name)    { _ag.wizError = 'Donnez un nom à votre agent.'; _renderMain(); return; }
-        if (!_ag.wizData.mission) { _ag.wizError = 'Décrivez la mission de l\'agent.'; _renderMain(); return; }
-    }
-    _ag.wizError = null;
-    if (_ag.wizStep < 3) { _ag.wizStep++; _renderMain(); return; }
-    await _persistWizard();
-}
-
-async function _persistWizard() {
-    _ag.wizBusy = true; _ag.wizError = null; _renderMain();
+async function _saveAgentForm() {
+    _readAgentForm();
+    const d = _ag.form;
+    if (!d.name)    { _formError('Donnez un nom à votre agent.'); return; }
+    if (!d.mission) { _formError('Décrivez la mission de l\'agent.'); return; }
+    _ag.formError = null; _ag.formBusy = true; _renderMain();
     try {
-        const payload = _wizPayload();
-        let saved = null;
-        if (_ag.wizAgentId) {
-            const r = await _api(`/agents/${_ag.wizAgentId}`, { method: 'PATCH', body: payload });
-            saved = r.agent;
+        if (d.id) {
+            // Édition (onglet Réglages) — on reste dans l'agent.
+            const r = await _api(`/agents/${d.id}`, { method: 'PATCH', body: _agentPayload() });
+            if (r.agent) {
+                _cur.agent = r.agent; _cur.name = r.agent.name;
+                const i = _ag.agents.findIndex(a => a.id === d.id);
+                if (i >= 0) _ag.agents[i] = r.agent;
+            }
+            _ag.formBusy = false;
+            _toast('Agent enregistré.');
+            _renderRail(); _renderMain();
         } else {
-            const r = await _api('/agents', { method: 'POST', body: payload });
-            _ag.wizAgentId = r.agent?.id;
-            saved = r.agent;
+            // Création — puis on entre dans l'agent (onglet Savoir).
+            const r = await _api('/agents', { method: 'POST', body: _agentPayload() });
+            _ag.formBusy = false; _ag.mode = 'list'; _ag.loaded = false;
+            _toast('Agent créé — remplissez son savoir.');
+            await _agLoad();
+            if (r.agent?.id) _enterAgent(r.agent.id);
         }
-        // L'accueil a pu être généré côté serveur (si laissé vide) → on
-        // récupère la version persistée pour le wizard ET le bac à sable.
-        if (saved?.config?.identity?.opening) _ag.wizData.opening = saved.config.identity.opening;
-        // Prépare le bac à sable sur l'agent fraîchement persisté, en
-        // amorçant le message d'accueil (l'agent parle en premier).
-        _chat.agentId = _ag.wizAgentId; _chat.agentName = _ag.wizData.name;
-        _chat.sessionId = null; _chat.busy = false;
-        _chat.messages = _ag.wizData.opening
-            ? [{ role: 'agent', content: _ag.wizData.opening, citations: [], opening: true }]
-            : [];
-        _gold.replay = null; _gold.loaded = false;
-        _ag.loaded = false;                 // la liste devra se recharger en sortie
-        _ag.wizBusy = false; _ag.wizStep = 4;
-        _renderMain();
-        _goldLoad();
-    } catch (e) {
-        _ag.wizBusy = false; _ag.wizError = e.message; _renderMain();
-    }
+    } catch (e) { _ag.formBusy = false; _formError(e.message); }
+}
+
+function _cancelForm() {
+    if (_cur.id) { _openForm(_cur.agent); _renderMain(); }   // Réglages : annule les modifs
+    else { _ag.mode = 'list'; _renderMain(); }                // Création : retour liste
 }
 
 // ── Bac à sable (réutilise l'état _chat + le rendu des messages) ──
@@ -776,11 +711,11 @@ function _goldenHTML() {
 }
 
 async function _goldLoad() {
-    if (!_ag.wizAgentId) return;
+    if (!_cur.id) return;
     try {
-        const r = await _api(`/agents/${_ag.wizAgentId}/golden`);
+        const r = await _api(`/agents/${_cur.id}/golden`);
         _gold.items = r.golden || []; _gold.loaded = true;
-        if (_ag.mode === 'wizard' && _ag.wizStep === 4) _renderMain();
+        if (_cur.tab === 'tester') _renderMain();
     } catch (_) { /* non bloquant */ }
 }
 async function _goldAdd() {
@@ -789,7 +724,7 @@ async function _goldAdd() {
     const q = (inp?.value || '').trim();
     if (q.length < 2) { _toast('Question trop courte.', 'error'); return; }
     try {
-        const r = await _api(`/agents/${_ag.wizAgentId}/golden`, { method: 'POST', body: { question: q, expect: _gold.addExpect } });
+        const r = await _api(`/agents/${_cur.id}/golden`, { method: 'POST', body: { question: q, expect: _gold.addExpect } });
         _gold.items.unshift(r.golden); _gold.replay = null;
         _renderMain();
     } catch (e) { _toast(e.message, 'error'); }
@@ -805,32 +740,30 @@ async function _goldReplay() {
     if (!_gold.items.length) return;
     _gold.busy = true; _renderMain();
     try {
-        _gold.replay = await _api(`/agents/${_ag.wizAgentId}/golden/replay`, { method: 'POST' });
+        _gold.replay = await _api(`/agents/${_cur.id}/golden/replay`, { method: 'POST' });
     } catch (e) { _toast(e.message, 'error'); }
     _gold.busy = false; _renderMain();
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Vue des trous (SA-4) — la file de travail gap-driven
+// Onglet TROUS (SA-4.3) — file de travail gap-driven, scopée à l'agent
 // ═══════════════════════════════════════════════════════════════
-async function _openGaps() {
-    _ag.mode = 'gaps';
-    _renderMain();
+async function _loadGaps() {
+    if (!_cur.id) return;
     try {
-        const r = await _api('/gaps');
-        _ag.gaps = r.gaps || []; _ag.gapsCount = r.count || 0; _ag.gapsLoaded = true;
-    } catch (e) { _toast(e.message, 'error'); }
-    if (_ag.mode === 'gaps') _renderMain();
+        const r = await _api(`/gaps?agent=${encodeURIComponent(_cur.id)}`);
+        _ag.gaps = r.gaps || []; _ag.gapsCount = r.count || 0;
+    } catch (e) { /* badge non bloquant */ }
+    _renderRail();
+    if (_cur.tab === 'trous') _renderMain();
 }
 
 function _gapsHTML() {
-    const back = `<button class="sa-back" data-act="gaps-back">${icon('chevron-left', 16)} Mes agents</button>`;
     if (!_ag.gaps.length) {
         return `
       <section class="sa-kx">
-        ${back}
         <div class="sa-kx-head"><div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">Rien à combler pour l'instant</p></div></div>
-        <div class="sa-empty-filter">Aucun trou de savoir.<br><small>Quand un agent ne sait pas répondre, la question atterrit ici — votre liste de travail pour faire grandir le coffre.</small></div>
+        <div class="sa-empty-filter">Aucun trou de savoir.<br><small>Quand cet agent ne sait pas répondre, la question atterrit ici — sa liste de travail pour faire grandir son coffre.</small></div>
       </section>`;
     }
     const row = g => `
@@ -844,25 +777,22 @@ function _gapsHTML() {
     </article>`;
     return `
     <section class="sa-kx">
-      ${back}
       <div class="sa-kx-head"><div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''} · la plus fréquente en tête</p></div></div>
-      <p class="sa-field-hint" style="margin-bottom:14px;">« Répondre » ouvre une fiche Q/R pré-remplie dans le coffre. Validez-la, et l'agent saura répondre la prochaine fois.</p>
+      <p class="sa-field-hint" style="margin-bottom:14px;">« Répondre » ouvre une fiche Q/R pré-remplie dans le Savoir de cet agent. Validez-la, et il saura répondre la prochaine fois.</p>
       <div class="sa-gaps-list">${_ag.gaps.map(row).join('')}</div>
     </section>`;
 }
 
-// « Répondre » : ouvre l'éditeur Kortex en création, fiche Q/R pré-remplie
-// avec la question du trou. La sauvegarde résout le trou (resolve_gap_id).
+// « Répondre » : bascule sur l'onglet Savoir, éditeur en création, fiche
+// Q/R pré-remplie. La sauvegarde résout le trou (resolve_gap_id).
 function _answerGap(gap) {
     if (!gap) return;
-    _view = 'kortex';
+    _cur.tab = 'savoir';
     _kx.mode = 'editor'; _kx.editing = null; _kx.editType = 'qa';
-    // Titre pré-rempli depuis la question (le tronquer si besoin) : zéro
-    // friction — l'expert n'a plus qu'à écrire la réponse.
     const title = gap.question.length > 80 ? gap.question.slice(0, 77) + '…' : gap.question;
     _kx.prefill = { title, body: { question: gap.question, answer: '' } };
     _kx.resolveGapId = gap.id;
-    _ag.gapsLoaded = false; _ag.loaded = false;   // file + bannière se rafraîchiront au retour
+    _kx.loaded = false;   // le coffre se rechargera (la fiche s'y ajoutera)
     _renderRail();
     _renderMain();
     _toast('Rédigez la réponse, puis validez la fiche pour combler ce trou.');
@@ -873,76 +803,21 @@ async function _dismissGap(id) {
         await _api(`/gaps/${id}/dismiss`, { method: 'POST' });
         _ag.gaps = _ag.gaps.filter(g => g.id !== id);
         _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
-        _renderMain();
+        _renderRail(); _renderMain();
     } catch (e) { _toast(e.message, 'error'); }
 }
 
 async function _deleteAgent(id) {
     if (!id) return;
-    const a = _ag.agents.find(x => x.id === id) || _ag.editing;
-    if (!confirm(`Supprimer l'agent « ${a?.name || ''} » ?\nSon savoir Kortex est conservé — seul l'agent et ses conversations sont supprimés.`)) return;
+    const a = _ag.agents.find(x => x.id === id) || _cur.agent;
+    if (!confirm(`Supprimer l'agent « ${a?.name || ''} » ?\nTOUT son savoir (fiches, trous, tests) sera supprimé avec lui. Cette action est irréversible.`)) return;
     try {
         await _api(`/agents/${id}`, { method: 'DELETE' });
         _toast('Agent supprimé.');
-        _ag.mode = 'list'; _ag.editing = null;
-        _agReload();
+        _cur.id = null; _cur.agent = null; _ag.mode = 'list'; _ag.loaded = false;
+        await _agLoad();
+        _renderRail();
     } catch (e) { _toast(e.message, 'error'); }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Chat ancré (SA-3) — le jumeau prend la parole
-// ═══════════════════════════════════════════════════════════════
-function _openChat(agent) {
-    if (!agent) return;
-    _chat.agentId = agent.id;
-    _chat.agentName = agent.name;
-    _chat.sessionId = null;
-    _chat.busy = false;
-    // L'agent parle en premier (SA-4.2) : on amorce avec son accueil.
-    // Repli (SA-4.2.1) : les agents créés avant SA-4.2 n'ont pas d'accueil
-    // stocké → on accueille quand même (un agent doit TOUJOURS accueillir).
-    // Message d'affichage uniquement (non persisté, hors contexte modèle).
-    const opening = agent.config?.identity?.opening
-        || `Bonjour ! Je suis « ${agent.name} ». Comment puis-je vous aider ?`;
-    _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
-    _ag.mode = 'chat';
-    _renderMain();
-}
-
-function _chatHTML() {
-    const a = _ag.agents.find(x => x.id === _chat.agentId);
-    const mission = a?.config?.identity?.mission || '';
-    const intro = !_chat.messages.length ? `
-      <div class="sa-chat-intro">
-        <div class="sa-hero-ico">${icon('smart-agent', 32)}</div>
-        <strong>${_esc(_chat.agentName)}</strong>
-        ${mission ? `<p>${_esc(mission)}</p>` : ''}
-        <p class="sa-chat-intro-note">Posez une question. ${_chat.agentName} répond uniquement depuis votre coffre Kortex
-        et cite ses sources — testez ce qu'il sait, repérez ce qui manque.</p>
-      </div>` : '';
-
-    return `
-    <section class="sa-chat">
-      <div class="sa-chat-head">
-        <button class="sa-back" data-act="chat-back">${icon('chevron-left', 16)} Mes agents</button>
-        <div class="sa-chat-title">
-          <span class="sa-agent-ico">${icon('smart-agent', 18)}</span>
-          <strong>${_esc(_chat.agentName)}</strong>
-        </div>
-      </div>
-
-      <div class="sa-chat-stream" data-slot="chat-stream">
-        ${intro}
-        ${_chat.messages.map(_msgHTML).join('')}
-        ${_chat.busy ? `<div class="sa-msg is-agent"><div class="sa-bubble sa-bubble-typing">${icon('smart-agent', 14)} <span class="sa-dots"><i></i><i></i><i></i></span></div></div>` : ''}
-      </div>
-
-      <div class="sa-chat-input">
-        <textarea class="sa-textarea" data-slot="chat-text" rows="1" maxlength="1000"
-                  placeholder="Posez votre question à ${_escAttr(_chat.agentName)}…" ${_chat.busy ? 'disabled' : ''}></textarea>
-        <button class="sa-btn is-primary" data-act="chat-send" ${_chat.busy ? 'disabled' : ''}>${icon('send', 16)}</button>
-      </div>
-    </section>`;
 }
 
 function _msgHTML(m) {
@@ -1029,12 +904,11 @@ async function _sendChat() {
     _renderMain();
 }
 
-// Clic sur une citation → ouvre la fiche source dans le coffre.
-// On garde _ag.mode='chat' : revenir via « Mes agents » ré-affiche la
-// conversation (gardée en mémoire).
+// Clic sur une citation (depuis le bac à sable) → bascule sur l'onglet
+// Savoir et ouvre la fiche source de cet agent.
 async function _openUnitFromChat(uid) {
     if (!uid) return;
-    _view = 'kortex';
+    _cur.tab = 'savoir';
     _kx.filterType = 'all'; _kx.filterStatus = 'all'; _kx.loaded = false;
     _kxs.results = null; _kxs.q = '';
     _renderRail();
@@ -1094,8 +968,8 @@ function _kortexViewHTML() {
     <section class="sa-kx">
       <div class="sa-kx-head">
         <div>
-          <h2 class="sa-kx-title">Coffre Kortex</h2>
-          <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''}</p>
+          <h2 class="sa-kx-title">Savoir</h2>
+          <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''} · propre à cet agent</p>
         </div>
         <div class="sa-kx-acts">
           <button class="sa-btn" data-act="kx-extract" title="Analyser un texte et en extraire des fiches (1 crédit IA)">
@@ -1192,7 +1066,7 @@ async function _runSearch() {
     _kxs.q = q; _kxs.busy = true;
     _renderMain();
     try {
-        const res = await _api(`/kortex/search?q=${encodeURIComponent(q)}`);
+        const res = await _api(`/kortex/search?q=${encodeURIComponent(q)}&agent=${encodeURIComponent(_cur.id)}`);
         _kxs.results = res.results || [];
         _kxs.mode = res.mode || null;
     } catch (e) {
@@ -1212,14 +1086,13 @@ function _unitRowHTML(u) {
     const t = KORTEX_TYPES.find(x => x.id === u.type) || KORTEX_TYPES[0];
     const st = STATUS_META[u.status] || STATUS_META.draft;
     const snippet = _esc(_snippet(u));
-    const coll = _kx.collections.find(col => col.id === u.collection_id);
     return `
     <article class="sa-unit" data-act="kx-edit" data-id="${u.id}" role="button" tabindex="0">
       <span class="sa-unit-ico" title="${t.label}">${icon(t.icon, 18)}</span>
       <div class="sa-unit-txt">
         <strong class="sa-unit-title">${_esc(u.title)}</strong>
         ${snippet ? `<span class="sa-unit-snip">${snippet}</span>` : ''}
-        <span class="sa-unit-meta">${t.label}${coll ? ` · ${_esc(coll.name)}` : ''}${u.source_ref ? ` · ${_esc(u.source_ref)}` : ''}</span>
+        <span class="sa-unit-meta">${t.label}${u.source_ref ? ` · ${_esc(u.source_ref)}` : ''}</span>
       </div>
       <span class="sa-badge ${st.cls}">${st.label}</span>
       <div class="sa-unit-acts">
@@ -1284,15 +1157,10 @@ function _editorHTML() {
       </label>`;
     }).join('');
 
-    const collOptions = ['<option value="">Sans collection</option>']
-        .concat(_kx.collections.map(col =>
-            `<option value="${col.id}" ${u.collection_id === col.id ? 'selected' : ''}>${_esc(col.name)}</option>`))
-        .join('');
-
     const st = STATUS_META[u.status]?.label;
     return `
     <section class="sa-kx sa-ed">
-      <button class="sa-back" data-act="ed-back">${icon('chevron-left', 16)} Coffre Kortex</button>
+      <button class="sa-back" data-act="ed-back">${icon('chevron-left', 16)} Savoir</button>
       <div class="sa-kx-head">
         <div>
           <h2 class="sa-kx-title">${isNew ? 'Nouvelle fiche' : 'Modifier la fiche'}</h2>
@@ -1312,10 +1180,6 @@ function _editorHTML() {
       ${fields}
 
       <div class="sa-ed-meta">
-        <label class="sa-field">
-          <span class="sa-field-label">Collection</span>
-          <select class="sa-input sa-select" data-field="__collection">${collOptions}</select>
-        </label>
         <label class="sa-field">
           <span class="sa-field-label">Source (optionnel)</span>
           <input class="sa-input" data-field="__source" value="${_escAttr(u.source_ref || '')}" placeholder="D'où vient ce savoir ? (doc, personne, terrain…)">
@@ -1362,7 +1226,6 @@ function _readEditorForm() {
         type,
         title: get('[data-field="__title"]')?.value.trim() || '',
         body,
-        collection_id: get('[data-field="__collection"]')?.value || null,
         source_ref: get('[data-field="__source"]')?.value.trim() || null,
         review_at: get('[data-field="__review"]')?.value || null,
     };
@@ -1387,14 +1250,15 @@ async function _saveEditor(status) {
 
     try {
         if (_kx.editing) {
-            const payload = { title: form.title, body: form.body, collection_id: form.collection_id,
+            const payload = { title: form.title, body: form.body,
                 source_ref: form.source_ref, review_at: form.review_at };
             if (status) payload.status = status;
             await _api(`/kortex/units/${_kx.editing.id}`, { method: 'PATCH', body: payload });
             _toast(status === 'validated' ? 'Fiche validée — elle peut désormais être servie.' : 'Fiche enregistrée.');
         } else {
-            // Création — boucle gap-driven : resolve_gap_id résout le trou côté worker.
-            const payload = { ...form, status: status || 'draft' };
+            // Création — silo : la fiche appartient à l'agent courant.
+            // Boucle gap-driven : resolve_gap_id résout le trou côté worker.
+            const payload = { ...form, status: status || 'draft', agent_id: _cur.id };
             if (_kx.resolveGapId) payload.resolve_gap_id = _kx.resolveGapId;
             await _api('/kortex/units', { method: 'POST', body: payload });
             _toast(_kx.resolveGapId
@@ -1529,7 +1393,7 @@ async function _addProposals() {
         try {
             await _api('/kortex/units', {
                 method: 'POST',
-                body: { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'paste' },
+                body: { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'paste', agent_id: _cur.id },
             });
             added++;
         } catch (_) { failed++; }
@@ -1549,6 +1413,20 @@ async function _addProposals() {
 function _renderAside() {
     const aside = _root.querySelector('[data-slot="aside"]');
     const c = _kx.counts;
+    // Dans un agent → stats de SON coffre ; sinon → nombre d'agents.
+    const statsCard = _cur.id ? `
+    <div class="sa-aside-card">
+      <div class="sa-aside-head">Cet agent</div>
+      <div class="sa-aside-row"><span>Fiches de savoir</span><strong>${c.total}</strong></div>
+      ${c.total ? `<div class="sa-aside-row"><span>· validées</span><strong>${c.validated}</strong></div>` : ''}
+      ${c.draft ? `<div class="sa-aside-row"><span>· brouillons</span><strong>${c.draft}</strong></div>` : ''}
+      ${c.quarantine ? `<div class="sa-aside-row"><span>· quarantaine</span><strong>${c.quarantine}</strong></div>` : ''}
+      <div class="sa-aside-row"><span>Trous ouverts</span><strong>${_ag.gapsCount || 0}</strong></div>
+    </div>` : `
+    <div class="sa-aside-card">
+      <div class="sa-aside-head">Vos agents</div>
+      <div class="sa-aside-row"><span>Agents</span><strong>${_ag.agents.length}</strong></div>
+    </div>`;
     aside.innerHTML = `
     <div class="sa-aside-card">
       <div class="sa-aside-head">État du moteur</div>
@@ -1556,17 +1434,13 @@ function _renderAside() {
         <span class="sa-health-dot" data-slot="health-dot"></span>
         <span data-slot="health-text">Connexion au moteur…</span>
       </div>
-      <div class="sa-aside-row"><span>Agents</span><strong>${_ag.agents.length}</strong></div>
-      <div class="sa-aside-row"><span>Fiches Kortex</span><strong>${c.total}</strong></div>
-      ${c.total ? `<div class="sa-aside-row"><span>· validées</span><strong>${c.validated}</strong></div>` : ''}
-      ${c.draft ? `<div class="sa-aside-row"><span>· brouillons</span><strong>${c.draft}</strong></div>` : ''}
-      ${c.quarantine ? `<div class="sa-aside-row"><span>· quarantaine</span><strong>${c.quarantine}</strong></div>` : ''}
     </div>
+    ${statsCard}
     <div class="sa-aside-card">
       <div class="sa-aside-head">Le principe</div>
       <p class="sa-aside-note">
-        La connaissance est le produit — l'agent n'est que l'opérateur autorisé à l'exploiter.
-        Réponses ancrées sur vos fiches, sources citées, « je ne sais pas » plutôt qu'inventer.
+        Chaque agent est cloisonné : il ne répond QUE depuis son propre savoir, sources citées,
+        « je ne sais pas » plutôt qu'inventer.
       </p>
     </div>
   `;

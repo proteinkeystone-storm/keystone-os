@@ -1115,6 +1115,22 @@
   .sa-posture-grid { grid-template-columns: 1fr; }
 }
 
+/* ═══ Sprint SA-4.3 — agents cloisonnés (badge de rail) ════════ */
+.sa-rail-badge {
+  font-style: normal;
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: var(--warn, #eab308);
+}
+
 /* ── Toast ────────────────────────────────────────────────────── */
 .sa-toast {
   position: fixed;

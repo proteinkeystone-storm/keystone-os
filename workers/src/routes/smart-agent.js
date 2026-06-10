@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.2.1';
+const SA_ENGINE_VERSION = 'SA-4.3';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -108,16 +108,20 @@ async function _embed(env, texts) {
 // Upsert / suppression BEST-EFFORT dans Vectorize : l'index sémantique ne
 // doit JAMAIS bloquer le CRUD du coffre. En cas d'échec, la recherche
 // dégrade en lexical et POST /kortex/reindex rattrape le retard.
-async function _vectorUpsert(env, tenant, unit) {
+// SA-4.3 — namespace Vectorize par AGENT (silo) : tenant::agent.
+function _ns(tenant, agentId) { return `${tenant}::${agentId || '_'}`; }
+
+async function _vectorUpsert(env, tenant, agentId, unit) {
   if (!_vectorReady(env)) return false;
   try {
     const [values] = await _embed(env, [unit.body_text]);
     await env.KORTEX_INDEX.upsert([{
-      id: unit.id, values, namespace: tenant, metadata: { type: unit.type },
+      id: unit.id, values, namespace: _ns(tenant, agentId), metadata: { type: unit.type },
     }]);
     return true;
   } catch (_) { return false; }
 }
+// deleteByIds est indépendant du namespace (les ids sont uniques).
 async function _vectorDelete(env, ids) {
   if (!_vectorReady(env) || !ids.length) return;
   try { await env.KORTEX_INDEX.deleteByIds(ids); } catch (_) {}
@@ -201,6 +205,10 @@ async function ensureSmartAgentSchema(env) {
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_type    ON kortex_units(tenant_id, type)');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_coll    ON kortex_units(collection_id)');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_review  ON kortex_units(review_at)');
+  // SA-4.3 — silo : chaque fiche appartient à UN agent (1 coffre par agent).
+  // ALTER idempotent (SQLite n'a pas ADD COLUMN IF NOT EXISTS).
+  await safe('ALTER TABLE kortex_units ADD COLUMN agent_id TEXT');
+  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_agent ON kortex_units(tenant_id, agent_id, status)');
   await safe(`
     CREATE VIRTUAL TABLE IF NOT EXISTS kortex_units_fts USING fts5(
       unit_id UNINDEXED,
@@ -407,21 +415,21 @@ export async function handleKortexUnitsList(request, env) {
   const url    = new URL(request.url);
   const type   = url.searchParams.get('type');
   const status = url.searchParams.get('status');
-  const coll   = url.searchParams.get('collection');
+  const agent  = url.searchParams.get('agent');   // SA-4.3 — coffre scopé par agent (silo)
+  if (!agent) return err('Paramètre agent requis', 400, origin);
 
-  let sql = 'SELECT * FROM kortex_units WHERE tenant_id = ?';
-  const binds = [gate.tenant];
-  if (type && UNIT_TEMPLATES[type])          { sql += ' AND type = ?';          binds.push(type); }
-  if (status && UNIT_STATUSES.includes(status)) { sql += ' AND status = ?';     binds.push(status); }
-  if (coll)                                  { sql += ' AND collection_id = ?'; binds.push(coll); }
+  let sql = 'SELECT * FROM kortex_units WHERE tenant_id = ? AND agent_id = ?';
+  const binds = [gate.tenant, agent];
+  if (type && UNIT_TEMPLATES[type])             { sql += ' AND type = ?';   binds.push(type); }
+  if (status && UNIT_STATUSES.includes(status)) { sql += ' AND status = ?'; binds.push(status); }
   sql += ` ORDER BY updated_at DESC LIMIT ${MAX_UNITS_LIST}`;
 
   const { results } = await env.DB.prepare(sql).bind(...binds).all();
 
-  // Compteurs globaux du tenant (pour les chips de filtre + l'aside).
+  // Compteurs de CET agent (chips de filtre + aside).
   const { results: cRows } = await env.DB
-    .prepare('SELECT status, COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? GROUP BY status')
-    .bind(gate.tenant)
+    .prepare('SELECT status, COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND agent_id = ? GROUP BY status')
+    .bind(gate.tenant, agent)
     .all();
   const counts = { draft: 0, validated: 0, quarantine: 0, expired: 0, total: 0 };
   for (const r of cRows) { counts[r.status] = r.n; counts.total += r.n; }
@@ -441,6 +449,10 @@ export async function handleKortexUnitCreate(request, env) {
   const b = await parseBody(request);
   if (!b) return err('Body JSON requis', 400, origin);
 
+  // SA-4.3 — silo : toute fiche appartient à un agent.
+  const agentId = (typeof b.agent_id === 'string' && b.agent_id) ? b.agent_id : null;
+  if (!agentId) return err('agent_id requis (une fiche appartient à un agent)', 400, origin);
+
   const v = validateUnit(b.type, b.title, b.body);
   if (!v.ok) return err(v.msg, 400, origin);
 
@@ -457,7 +469,7 @@ export async function handleKortexUnitCreate(request, env) {
   const unit = {
     id: generateId(),
     tenant_id: gate.tenant,
-    collection_id: (typeof b.collection_id === 'string' && b.collection_id) ? b.collection_id : null,
+    agent_id: agentId,
     type: b.type,
     title: b.title.trim(),
     body: JSON.stringify(v.body),
@@ -470,15 +482,15 @@ export async function handleKortexUnitCreate(request, env) {
 
   await env.DB.prepare(`
     INSERT INTO kortex_units
-      (id, tenant_id, collection_id, type, title, body, body_text, status, source_kind, source_ref, review_at)
+      (id, tenant_id, agent_id, type, title, body, body_text, status, source_kind, source_ref, review_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    unit.id, unit.tenant_id, unit.collection_id, unit.type, unit.title,
+    unit.id, unit.tenant_id, unit.agent_id, unit.type, unit.title,
     unit.body, unit.body_text, unit.status, unit.source_kind, unit.source_ref, unit.review_at,
   ).run();
 
   await _ftsSync(env, unit);
-  if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, unit);
+  if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, agentId, unit);
 
   // Boucle gap-driven : si la fiche répond à un trou, on le marque résolu
   // (il quitte la file « questions sans réponse ») et on le relie à la fiche.
@@ -529,8 +541,6 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
   }
 
   const nextStatus = UNIT_STATUSES.includes(b.status) ? b.status : cur.status;
-  const nextColl   = (b.collection_id === null) ? null
-    : (typeof b.collection_id === 'string' && b.collection_id) ? b.collection_id : cur.collection_id;
   const nextReview = (b.review_at === null) ? null
     : (typeof b.review_at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(b.review_at)) ? b.review_at : cur.review_at;
   const nextSource = (b.source_ref === null) ? null
@@ -538,17 +548,17 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
 
   await env.DB.prepare(`
     UPDATE kortex_units
-       SET title = ?, body = ?, body_text = ?, status = ?, collection_id = ?,
+       SET title = ?, body = ?, body_text = ?, status = ?,
            review_at = ?, source_ref = ?, updated_at = datetime('now')
      WHERE id = ? AND tenant_id = ?
   `).bind(
-    nextTitle.trim(), nextBodyJson, nextBodyText, nextStatus, nextColl,
+    nextTitle.trim(), nextBodyJson, nextBodyText, nextStatus,
     nextReview, nextSource, unitId, gate.tenant,
   ).run();
 
   await _ftsSync(env, { id: unitId, status: nextStatus, title: nextTitle.trim(), body_text: nextBodyText });
   if (nextStatus === 'validated') {
-    await _vectorUpsert(env, gate.tenant, { id: unitId, type: cur.type, body_text: nextBodyText });
+    await _vectorUpsert(env, gate.tenant, cur.agent_id, { id: unitId, type: cur.type, body_text: nextBodyText });
   } else {
     await _vectorDelete(env, [unitId]);
   }
@@ -748,11 +758,12 @@ export async function handleKortexExtract(request, env) {
 // Sans Vectorize (binding absent / index pas créé) : mode 'lexical'.
 // ═══════════════════════════════════════════════════════════════
 // ── Récupération hybride PARTAGÉE (recherche du coffre + chat de
-//    l'agent, SA-3). collectionIds = couche « liaison savoir » d'un
-//    agent (vide/null = tout le coffre). Retourne des LIGNES brutes
-//    (rows D1) + la provenance ; les handlers façonnent la sortie.
-async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, collectionIds = null } = {}) {
-  // ── Liste lexicale (FTS5 — ne contient que des fiches validées)
+//    l'agent). agentId = silo : on ne récupère QUE les fiches de cet
+//    agent (SA-4.3). Retourne des LIGNES brutes (rows D1) + la
+//    provenance ; les handlers façonnent la sortie.
+async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, agentId = null } = {}) {
+  // ── Liste lexicale (FTS5 — index global ; le cloisonnement par agent
+  //    est appliqué à la jointure D1 ci-dessous via agent_id).
   let lexIds = [];
   const match = ftsMatchQuery(q);
   if (match) {
@@ -768,32 +779,29 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, collectionIds = n
     } catch (_) { /* requête FTS rejetée → liste lexicale vide */ }
   }
 
-  // ── Liste sémantique (Vectorize, namespace = tenant)
+  // ── Liste sémantique (Vectorize, namespace = tenant::agent → silo)
   const vecIds = [];
   const vecScores = new Map();
   let semantic = false;
   if (_vectorReady(env)) {
     try {
       const [qv] = await _embed(env, [q]);
-      const res = await env.KORTEX_INDEX.query(qv, { topK: FETCH_TOPK, namespace: tenant });
+      const res = await env.KORTEX_INDEX.query(qv, { topK: FETCH_TOPK, namespace: _ns(tenant, agentId) });
       for (const m of (res?.matches || [])) { vecIds.push(m.id); vecScores.set(m.id, m.score); }
       semantic = true;
     } catch (_) { semantic = false; }
   }
 
-  // ── Fusion RRF + jointure D1 (revérifie tenant + statut validé ;
-  //    le filtre collections s'applique ici → on fuse plus large)
-  const hasCollFilter = Array.isArray(collectionIds) && collectionIds.length > 0;
-  const fused = rrfFuse([lexIds, vecIds], hasCollFilter ? topk * 2 : topk);
+  // ── Fusion RRF + jointure D1 (revérifie tenant + AGENT + statut validé).
+  //    On fuse plus large car le filtre agent_id écarte ensuite les fiches
+  //    d'autres agents remontées par l'index lexical global.
+  const fused = rrfFuse([lexIds, vecIds], agentId ? topk * 2 : topk);
   let hits = [];
   if (fused.length) {
     const ph = fused.map(() => '?').join(',');
     let sql = `SELECT * FROM kortex_units WHERE id IN (${ph}) AND tenant_id = ? AND status = 'validated'`;
     const binds = [...fused.map(f => f.id), tenant];
-    if (hasCollFilter) {
-      sql += ` AND collection_id IN (${collectionIds.map(() => '?').join(',')})`;
-      binds.push(...collectionIds);
-    }
+    if (agentId) { sql += ' AND agent_id = ?'; binds.push(agentId); }
     const { results } = await env.DB.prepare(sql).bind(...binds).all();
     const byId = new Map(results.map(r => [r.id, r]));
     hits = fused
@@ -818,11 +826,13 @@ export async function handleKortexSearch(request, env) {
 
   const url  = new URL(request.url);
   const q    = (url.searchParams.get('q') || '').trim();
+  const agent = url.searchParams.get('agent');   // SA-4.3 — recherche scopée par agent
   const topk = Math.min(Math.max(parseInt(url.searchParams.get('topk'), 10) || SEARCH_TOPK, 1), 20);
+  if (!agent)         return err('Paramètre agent requis', 400, origin);
   if (q.length < 2)   return err('Question trop courte', 400, origin);
   if (q.length > 500) return err('Question trop longue (500 caractères max)', 400, origin);
 
-  const { semantic, hits } = await _retrieve(env, gate.tenant, q, { topk });
+  const { semantic, hits } = await _retrieve(env, gate.tenant, q, { topk, agentId: agent });
   const out = hits.map(h => ({
     unit: _rowToUnit(h.row),
     score: h.score, lexRank: h.lexRank, vecRank: h.vecRank, vecScore: h.vecScore,
@@ -847,9 +857,14 @@ export async function handleKortexReindex(request, env) {
     return err('Index sémantique indisponible (binding Vectorize absent)', 503, origin);
   }
 
-  const { results } = await env.DB.prepare(
-    "SELECT id, type, body_text FROM kortex_units WHERE tenant_id = ? AND status = 'validated'"
-  ).bind(gate.tenant).all();
+  // Réindexe par agent (namespace tenant::agent). Optionnellement filtré
+  // à un agent via ?agent=ID, sinon réindexe tous les agents du tenant.
+  const url = new URL(request.url);
+  const onlyAgent = url.searchParams.get('agent');
+  let sql = "SELECT id, type, body_text, agent_id FROM kortex_units WHERE tenant_id = ? AND status = 'validated'";
+  const binds = [gate.tenant];
+  if (onlyAgent) { sql += ' AND agent_id = ?'; binds.push(onlyAgent); }
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
 
   let indexed = 0, failed = 0;
   const BATCH = 50;
@@ -858,7 +873,7 @@ export async function handleKortexReindex(request, env) {
     try {
       const vectors = await _embed(env, chunk.map(r => r.body_text));
       await env.KORTEX_INDEX.upsert(chunk.map((r, j) => ({
-        id: r.id, values: vectors[j], namespace: gate.tenant, metadata: { type: r.type },
+        id: r.id, values: vectors[j], namespace: _ns(gate.tenant, r.agent_id), metadata: { type: r.type },
       })));
       indexed += chunk.length;
     } catch (_) { failed += chunk.length; }
@@ -1118,8 +1133,22 @@ export async function handleAgentDelete(request, env, agentId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
-  // Le savoir Kortex SURVIT toujours à ses agents ; on ne purge que le
-  // dialogue (sessions/messages) — données de conversation, pas du savoir.
+  // SA-4.3 — SILO : un agent EST son coffre. Le supprimer emporte tout
+  // ce qui lui appartient — savoir, trous, golden, dialogue. (Le client
+  // est prévenu côté front avant confirmation.)
+  // Vecteurs d'abord (par id, avant de perdre la liste des fiches).
+  try {
+    const { results: uIds } = await env.DB
+      .prepare('SELECT id FROM kortex_units WHERE agent_id = ? AND tenant_id = ?')
+      .bind(agentId, gate.tenant).all();
+    if (uIds.length) await _vectorDelete(env, uIds.map(r => r.id));
+    for (const r of uIds) {
+      await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(r.id).run();
+    }
+  } catch (_) { /* best-effort */ }
+  await env.DB.prepare('DELETE FROM kortex_units WHERE agent_id = ? AND tenant_id = ?').bind(agentId, gate.tenant).run();
+  await env.DB.prepare('DELETE FROM sa_gaps   WHERE agent_id = ? AND tenant_id = ?').bind(agentId, gate.tenant).run();
+  await env.DB.prepare('DELETE FROM sa_golden WHERE agent_id = ? AND tenant_id = ?').bind(agentId, gate.tenant).run();
   await env.DB.prepare('DELETE FROM sa_messages WHERE session_id IN (SELECT id FROM sa_sessions WHERE agent_id = ? AND tenant_id = ?)')
     .bind(agentId, gate.tenant).run();
   await env.DB.prepare('DELETE FROM sa_sessions WHERE agent_id = ? AND tenant_id = ?')
@@ -1162,9 +1191,11 @@ async function _logGap(env, tenant, agentId, question) {
   const norm = normQuestion(question);
   if (!norm) return;
   try {
+    // Dédoublonnage par AGENT (silo SA-4.3) : la même question pour deux
+    // agents = deux trous distincts, chacun rattaché à son agent.
     const { results } = await env.DB.prepare(
-      "SELECT id FROM sa_gaps WHERE tenant_id = ? AND question_norm = ? AND status = 'open' LIMIT 1"
-    ).bind(tenant, norm).all();
+      "SELECT id FROM sa_gaps WHERE tenant_id = ? AND agent_id = ? AND question_norm = ? AND status = 'open' LIMIT 1"
+    ).bind(tenant, agentId, norm).all();
     if (results.length) {
       await env.DB.prepare(
         "UPDATE sa_gaps SET hits = hits + 1, last_asked_at = datetime('now') WHERE id = ?"
@@ -1253,7 +1284,7 @@ export async function handleAgentChat(request, env, agentId) {
     }
   };
 
-  // ── Récupération hybride sur les collections de l'agent ──
+  // ── Récupération hybride dans le coffre de CET agent (silo SA-4.3) ──
   // Contextualisée (SA-4.2.1) : quand l'utilisateur répond « oui » à la
   // question de relance de l'agent, le message brut n'a aucun contenu à
   // récupérer. On préfixe la dernière question posée par l'agent → la
@@ -1261,8 +1292,7 @@ export async function handleAgentChat(request, env, agentId) {
   const retrievalQuery = contextualQuery(message, history);
   const { semantic, hits } = await _retrieve(env, gate.tenant, retrievalQuery, {
     topk: CHAT_TOPK,
-    collectionIds: agent.config?.knowledge?.collection_ids?.length
-      ? agent.config.knowledge.collection_ids : null,
+    agentId,
   });
 
   // ── Seuil d'ancrage : accroche lexicale OU similarité suffisante ──
@@ -1352,13 +1382,17 @@ export async function handleGapsList(request, env) {
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
 
+  // SA-4.3 — silo : la file des trous est celle de CET agent.
+  const agent = new URL(request.url).searchParams.get('agent');
+  if (!agent) return err('Paramètre agent requis', 400, origin);
+
   const { results } = await env.DB.prepare(`
     SELECT id, question, hits, agent_id, first_asked_at, last_asked_at
       FROM sa_gaps
-     WHERE tenant_id = ? AND status = 'open'
+     WHERE tenant_id = ? AND agent_id = ? AND status = 'open'
      ORDER BY hits DESC, last_asked_at DESC
      LIMIT 200
-  `).bind(gate.tenant).all();
+  `).bind(gate.tenant, agent).all();
 
   return json({ gaps: results, count: results.length }, 200, origin);
 }
@@ -1449,13 +1483,10 @@ export async function handleGoldenReplay(request, env, agentId) {
   ).bind(gate.tenant, agentId).all();
   if (!golden.length) return json({ total: 0, passed: 0, score: null, results: [] }, 200, origin);
 
-  const collectionIds = agent.config?.knowledge?.collection_ids?.length
-    ? agent.config.knowledge.collection_ids : null;
-
   const out = [];
   let passed = 0;
   for (const g of golden) {
-    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, collectionIds });
+    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, agentId });
     const { grounded, grounding } = isGrounded(ret);
     const predicted = grounded ? 'answer' : 'fallback';
     const ok = predicted === g.expect;
