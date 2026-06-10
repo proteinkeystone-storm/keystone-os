@@ -71,6 +71,13 @@ const ROUNDTABLE_FULL_TURNS = 8;
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
 
+// Cheminement de l'écran de préparation : une SEULE étape de config visible à
+// la fois (0 = mode de réflexion, 1 = comité d'agents, 2 = amorce optionnelle).
+// Persiste à travers les re-renders (_applyMode, bascule Auto/Manuel du comité,
+// toggles d'agents) ; remis à 0 à l'ouverture d'une nouvelle séance.
+let _setupStep = 0;
+const SETUP_STEPS_COUNT = 3;
+
 // Typewriter state (réinitialisé à chaque ouverture du workspace)
 const _typewriter = {
   buffers: new Map(),   // agent_id → { pending, textEl, ended, delayUntil, panel }
@@ -257,6 +264,7 @@ export function openBrainstorming(opts = {}) {
     roster:       [],   // résolu juste après (dépend de mode + rosterMode)
   };
   _currentSession.roster = _resolveRoster();
+  _setupStep = 0;   // cheminement de préparation : démarre sur l'étape 1 (mode)
 
   _wireShell(panel);
   bindHelpButton(panel, APP_ID);
@@ -1976,27 +1984,34 @@ function _renderCenterConfig(panel) {
       <div class="wr-setup-title">Préparez la séance</div>
       <div class="wr-setup-sub">Réglez l'angle et le comité, piochez une amorce si besoin, puis posez votre brief ci-dessous.</div>
     </div>
-    <div class="wr-setup-step">
-      <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Mode de réflexion</div>
-      <div class="wr-setup-modes">${modeChips}</div>
-      <div class="wr-setup-mode-desc">${_esc(mode.description)}</div>
-      ${curMode === 'post-ideas' ? `
-      <div class="wr-setup-netrow">
-        <div class="wr-setup-net-label">Réseau cible</div>
-        <div class="wr-setup-nets">
-          ${_IDEAS_NETS.map(n => `<button type="button" class="wr-setup-net${_currentSession.target_network === n.id ? ' active' : ''}" data-network="${n.id}">${_esc(n.label)}</button>`).join('')}
-        </div>
-      </div>` : ''}
+    <div class="wr-setup-steps" data-active="${_setupStep}">
+      <div class="wr-setup-step" data-step="0">
+        <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Mode de réflexion</div>
+        <div class="wr-setup-modes">${modeChips}</div>
+        <div class="wr-setup-mode-desc">${_esc(mode.description)}</div>
+        ${curMode === 'post-ideas' ? `
+        <div class="wr-setup-netrow">
+          <div class="wr-setup-net-label">Réseau cible</div>
+          <div class="wr-setup-nets">
+            ${_IDEAS_NETS.map(n => `<button type="button" class="wr-setup-net${_currentSession.target_network === n.id ? ' active' : ''}" data-network="${n.id}">${_esc(n.label)}</button>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+      <div class="wr-setup-step" data-step="1">
+        <div class="wr-setup-step-label"><span class="wr-setup-step-num">2</span> Comité d'agents</div>
+        ${selectorOn ? _rosterModeBarHTML(rosterMode, mode.label) : '<div class="wr-roster-disabled">Comité complet.</div>'}
+        <div class="wr-agents-grid wr-setup-grid${rosterMode === 'manual' ? '' : ' is-auto'}">${_rosterAgentCardsHTML()}</div>
+        <div class="wr-roster-foot">${_rosterFootHTML()}</div>
+      </div>
+      <div class="wr-setup-step" data-step="2">
+        <div class="wr-setup-step-label"><span class="wr-setup-step-num">3</span> Une amorce pour démarrer <span class="wr-setup-step-opt">optionnel</span></div>
+        <div class="wr-seed">${_seedPickerHTML(curMode)}</div>
+      </div>
     </div>
-    <div class="wr-setup-step">
-      <div class="wr-setup-step-label"><span class="wr-setup-step-num">2</span> Comité d'agents</div>
-      ${selectorOn ? _rosterModeBarHTML(rosterMode, mode.label) : '<div class="wr-roster-disabled">Comité complet.</div>'}
-      <div class="wr-agents-grid wr-setup-grid${rosterMode === 'manual' ? '' : ' is-auto'}">${_rosterAgentCardsHTML()}</div>
-      <div class="wr-roster-foot">${_rosterFootHTML()}</div>
-    </div>
-    <div class="wr-setup-step">
-      <div class="wr-setup-step-label"><span class="wr-setup-step-num">✦</span> Une amorce pour démarrer <span class="wr-setup-step-opt">optionnel</span></div>
-      <div class="wr-seed">${_seedPickerHTML(curMode)}</div>
+    <div class="wr-setup-nav">
+      <button type="button" class="wr-setup-nav-btn wr-setup-prev">${icon('chevron-left', 15)}<span>Précédent</span></button>
+      <span class="wr-setup-nav-count"></span>
+      <button type="button" class="wr-setup-nav-btn wr-setup-next"><span>Suivant</span>${icon('chevron-right', 15)}</button>
     </div>
   `;
 
@@ -2042,6 +2057,27 @@ function _renderCenterConfig(panel) {
       setTimeout(() => btn.classList.remove('picked'), 650);
     });
   });
+
+  // ── Cheminement : une seule étape de config visible à la fois ──────
+  // Navigation Précédent / Suivant. Le brief reste saisissable en bas à tout
+  // moment — le cheminement n'est qu'une aide au réglage, pas un verrou.
+  const _stepsWrap = root.querySelector('.wr-setup-steps');
+  const _prevBtn   = root.querySelector('.wr-setup-prev');
+  const _nextBtn   = root.querySelector('.wr-setup-next');
+  const _countEl   = root.querySelector('.wr-setup-nav-count');
+  const _syncSetupNav = () => {
+    if (_stepsWrap) _stepsWrap.dataset.active = String(_setupStep);
+    if (_countEl)   _countEl.textContent = `Étape ${_setupStep + 1} sur ${SETUP_STEPS_COUNT}`;
+    _prevBtn?.classList.toggle('is-hidden', _setupStep <= 0);
+    _nextBtn?.classList.toggle('is-hidden', _setupStep >= SETUP_STEPS_COUNT - 1);
+  };
+  const _goSetupStep = (n) => {
+    _setupStep = Math.max(0, Math.min(SETUP_STEPS_COUNT - 1, n));
+    _syncSetupNav();
+  };
+  _prevBtn?.addEventListener('click', () => _goSetupStep(_setupStep - 1));
+  _nextBtn?.addEventListener('click', () => _goSetupStep(_setupStep + 1));
+  _syncSetupNav();
 }
 
 // Sprint 7.5 — Suppression d'une session de la bibliothèque

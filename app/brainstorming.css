@@ -1426,6 +1426,44 @@
   background: var(--wr-mode-accent, var(--ks-mode-exploration));
   color: #fff; flex-shrink: 0;
 }
+/* Cheminement de préparation — une seule étape visible à la fois (wizard).
+   Le brief en bas reste accessible : ce cheminement n'est qu'une aide au réglage. */
+.wr-setup-steps { display: flex; flex-direction: column; }
+.wr-setup-steps > .wr-setup-step { display: none; }
+.wr-setup-steps[data-active="0"] > .wr-setup-step[data-step="0"],
+.wr-setup-steps[data-active="1"] > .wr-setup-step[data-step="1"],
+.wr-setup-steps[data-active="2"] > .wr-setup-step[data-step="2"] {
+  display: flex;
+  animation: wrFadeIn 0.22s ease both;
+}
+.wr-setup-nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.wr-setup-nav-count {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--wr-text-dim);
+}
+.wr-setup-nav-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 15px; border-radius: 999px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--wr-border);
+  color: var(--wr-text-muted);
+  font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease;
+}
+.wr-setup-nav-btn:hover {
+  color: var(--wr-text);
+  border-color: var(--wr-mode-accent, var(--ks-mode-exploration));
+  transform: translateY(-1px);
+}
+.wr-setup-next {
+  background: color-mix(in srgb, var(--wr-mode-accent, var(--ks-mode-exploration)) 16%, transparent);
+  border-color: color-mix(in srgb, var(--wr-mode-accent, var(--ks-mode-exploration)) 50%, transparent);
+  color: var(--wr-text);
+}
+.wr-setup-nav-btn.is-hidden { visibility: hidden; pointer-events: none; }
 .wr-setup-modes { display: flex; flex-wrap: wrap; gap: 7px; }
 .wr-setup-mode {
   --mode-color: var(--ks-mode-exploration);
