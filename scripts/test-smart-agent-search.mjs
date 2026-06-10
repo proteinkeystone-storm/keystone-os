@@ -139,5 +139,17 @@ console.log('── buildChatMessages (anti-répétition du bug SA-3) ──');
     sys.content.includes('« Je ne sais pas. »'));
 }
 
+console.log('── buildChatMessages — posture (SA-4.2) ──');
+{
+  const base = { agentName: 'A', mission: 'm', tone: 't', fallbackText: 'X', fiches: '[1] f', message: 'q', history: [] };
+  const sysOf = p => buildChatMessages({ ...base, posture: p })[0].content;
+  check('proactif → relance TOUJOURS', /TOUJOURS une question/.test(sysOf('proactif')));
+  check('informatif → sobre, question seulement si indispensable', /indispensable pour lever une ambig/.test(sysOf('informatif')));
+  check('equilibre par défaut (posture inconnue ou absente)',
+    sysOf('zzz') === sysOf('equilibre') && sysOf(undefined) === sysOf('equilibre'));
+  check('toute posture garde l\'ancrage (faits issus des fiches)',
+    ['informatif', 'equilibre', 'proactif'].every(p => /UNIQUEMENT à la DERNIÈRE question/.test(sysOf(p))));
+}
+
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
 process.exit(failed ? 1 : 0);

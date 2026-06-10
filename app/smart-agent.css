@@ -1080,6 +1080,41 @@
 .sa-gold-add .sa-input { flex: 1 1 200px; }
 .sa-gold-expect { display: flex; gap: 5px; }
 
+/* ═══ Sprint SA-4.2 — agent conversationnel (posture + accueil) ═══ */
+.sa-posture-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.sa-posture {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--tx2);
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+  transition: border-color .15s, background .15s;
+}
+.sa-posture:hover { border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.sa-posture.is-on {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
+}
+.sa-posture strong { font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em; }
+.sa-posture span { font-size: 10.5px; color: var(--tx3); line-height: 1.3; }
+.sa-posture.is-on span { color: var(--tx2); }
+
+.sa-suggest-btn { margin-top: 2px; }
+
+@media (max-width: 520px) {
+  .sa-posture-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Toast ────────────────────────────────────────────────────── */
 .sa-toast {
   position: fixed;

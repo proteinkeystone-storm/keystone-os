@@ -110,7 +110,8 @@ import { handleSmartAgentHealth,
          handleKortexExtract, handleKortexSearch, handleKortexReindex,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
          handleAgentChat, handleGapsList, handleGapDismiss,
-         handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay } from './routes/smart-agent.js';
+         handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
+         handleSuggestOpening } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -145,6 +146,7 @@ export default {
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'POST') return handleAgentCreate(request, env);
+      if (path === '/api/smart-agent/suggest-opening'    && method === 'POST') return handleSuggestOpening(request, env);
       if (path === '/api/smart-agent/gaps'               && method === 'GET')  return handleGapsList(request, env);
       const saGapMatch = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/dismiss$/);
       if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);

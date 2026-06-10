@@ -238,6 +238,8 @@ function _onClick(e) {
     if (act === 'wiz-prev')     { _wizGo(_ag.wizStep - 1); return; }
     if (act === 'wiz-next')     { _wizNext(); return; }
     if (act === 'wiz-finish')   { _ag.mode = 'list'; _agReload(); return; }
+    if (act === 'wiz-posture')  { _wizReadStep(); _ag.wizData.posture = actEl.dataset.v; _renderMain(); return; }
+    if (act === 'wiz-suggest')  { _suggestOpening(); return; }
     // ── Trous (SA-4) ──
     if (act === 'ag-gaps')      { _openGaps(); return; }
     if (act === 'gaps-back')    { _ag.mode = 'list'; _renderMain(); return; }
@@ -497,9 +499,12 @@ function _openWizard(agent) {
         name:           agent?.name || '',
         mission:        agent?.config?.identity?.mission || '',
         tone:           agent?.config?.identity?.tone || 'professionnel et chaleureux',
+        posture:        agent?.config?.identity?.posture || 'equilibre',
+        opening:        agent?.config?.identity?.opening || '',
         collection_ids: (agent?.config?.knowledge?.collection_ids || []).slice(),
         fallback:       agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
     };
+    _ag.wizSuggestBusy = false;
     _gold.items = []; _gold.loaded = false; _gold.replay = null; _gold.addExpect = 'answer';
     _ag.mode = 'wizard';
     _renderMain();
@@ -549,16 +554,38 @@ function _wizardHTML() {
     </section>`;
 }
 
+const _POSTURES = [
+    { id: 'informatif', label: 'Informatif', desc: 'Répond, relance rarement' },
+    { id: 'equilibre',  label: 'Équilibré',  desc: 'Répond + 1 question utile' },
+    { id: 'proactif',   label: 'Proactif',   desc: 'Qualifie, propose la suite' },
+];
+
 function _wizStep1() {
     const d = _ag.wizData;
+    const postureChips = _POSTURES.map(p => `
+      <button class="sa-posture ${d.posture === p.id ? 'is-on' : ''}" data-act="wiz-posture" data-v="${p.id}" title="${p.desc}">
+        <strong>${p.label}</strong><span>${p.desc}</span>
+      </button>`).join('');
     return `
-    <p class="sa-wstep-intro">Qui est cet agent, et que fait-il ? C'est ce qui guide son ton et sa façon de répondre.</p>
+    <p class="sa-wstep-intro">Qui est cet agent, et que fait-il ? C'est ce qui guide son ton, sa posture et son accueil.</p>
     <label class="sa-field"><span class="sa-field-label">Nom de l'agent *</span>
       <input class="sa-input" data-field="name" value="${_escAttr(d.name)}" placeholder="Ex. : Guide du musée, Conseiller boutique, Assistant SAV"></label>
     <label class="sa-field"><span class="sa-field-label">Mission * — que fait-il, pour qui ?</span>
       <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
     <label class="sa-field"><span class="sa-field-label">Ton</span>
-      <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>`;
+      <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
+
+    <label class="sa-field"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
+    <div class="sa-posture-grid">${postureChips}</div>
+
+    <label class="sa-field" style="margin-top:14px;">
+      <span class="sa-field-label">Accueil — l'agent parle en premier (terminé par une question)</span>
+      <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
+    </label>
+    <button class="sa-btn sa-suggest-btn" data-act="wiz-suggest" ${_ag.wizSuggestBusy ? 'disabled' : ''}>
+      ${icon('sparkles', 14)} ${_ag.wizSuggestBusy ? 'Génération…' : 'Proposer un accueil avec l\'IA'}
+    </button>
+    <p class="sa-field-hint">Laissé vide, l'accueil est généré automatiquement à la création.</p>`;
 }
 
 function _wizStep2() {
@@ -602,6 +629,9 @@ function _wizReadStep() {
         d.name    = get('[data-field="name"]')?.value.trim() ?? d.name;
         d.mission = get('[data-field="mission"]')?.value.trim() ?? d.mission;
         d.tone    = get('[data-field="tone"]')?.value.trim() ?? d.tone;
+        const op  = get('[data-field="opening"]');
+        if (op) d.opening = op.value.trim();
+        // posture : pilotée par les chips (déjà dans d.posture)
     } else if (_ag.wizStep === 2) {
         const boxes = [...main.querySelectorAll('[data-coll]')];
         if (boxes.length) d.collection_ids = boxes.filter(b => b.checked).map(b => b.dataset.coll);
@@ -615,11 +645,27 @@ function _wizPayload() {
     return {
         name: d.name,
         config: {
-            identity:  { mission: d.mission, tone: d.tone },
+            identity:  { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
             scope:     { fallback_text: d.fallback },
             knowledge: { collection_ids: d.collection_ids },
         },
     };
+}
+
+// « Proposer un accueil avec l'IA » : génère depuis nom/mission/posture
+// courants (endpoint sans état), puis remplit le champ Accueil.
+async function _suggestOpening() {
+    _wizReadStep();
+    if (!_ag.wizData.mission) { _ag.wizError = 'Renseignez d\'abord la mission.'; _renderMain(); return; }
+    _ag.wizSuggestBusy = true; _ag.wizError = null; _renderMain();
+    try {
+        const r = await _api('/suggest-opening', {
+            method: 'POST',
+            body: { name: _ag.wizData.name, mission: _ag.wizData.mission, posture: _ag.wizData.posture },
+        });
+        if (r.opening) _ag.wizData.opening = r.opening;
+    } catch (e) { _toast(e.message, 'error'); }
+    _ag.wizSuggestBusy = false; _renderMain();
 }
 
 function _wizGo(step) {
@@ -646,15 +692,25 @@ async function _persistWizard() {
     _ag.wizBusy = true; _ag.wizError = null; _renderMain();
     try {
         const payload = _wizPayload();
+        let saved = null;
         if (_ag.wizAgentId) {
-            await _api(`/agents/${_ag.wizAgentId}`, { method: 'PATCH', body: payload });
+            const r = await _api(`/agents/${_ag.wizAgentId}`, { method: 'PATCH', body: payload });
+            saved = r.agent;
         } else {
             const r = await _api('/agents', { method: 'POST', body: payload });
             _ag.wizAgentId = r.agent?.id;
+            saved = r.agent;
         }
-        // Prépare le bac à sample sur l'agent fraîchement persisté.
+        // L'accueil a pu être généré côté serveur (si laissé vide) → on
+        // récupère la version persistée pour le wizard ET le bac à sable.
+        if (saved?.config?.identity?.opening) _ag.wizData.opening = saved.config.identity.opening;
+        // Prépare le bac à sable sur l'agent fraîchement persisté, en
+        // amorçant le message d'accueil (l'agent parle en premier).
         _chat.agentId = _ag.wizAgentId; _chat.agentName = _ag.wizData.name;
-        _chat.sessionId = null; _chat.messages = []; _chat.busy = false;
+        _chat.sessionId = null; _chat.busy = false;
+        _chat.messages = _ag.wizData.opening
+            ? [{ role: 'agent', content: _ag.wizData.opening, citations: [], opening: true }]
+            : [];
         _gold.replay = null; _gold.loaded = false;
         _ag.loaded = false;                 // la liste devra se recharger en sortie
         _ag.wizBusy = false; _ag.wizStep = 4;
@@ -841,8 +897,13 @@ function _openChat(agent) {
     _chat.agentId = agent.id;
     _chat.agentName = agent.name;
     _chat.sessionId = null;
-    _chat.messages = [];
     _chat.busy = false;
+    // L'agent parle en premier (SA-4.2) : on amorce avec son accueil.
+    // Message d'affichage uniquement (non persisté, hors contexte modèle).
+    const opening = agent.config?.identity?.opening;
+    _chat.messages = opening
+        ? [{ role: 'agent', content: opening, citations: [], opening: true }]
+        : [];
     _ag.mode = 'chat';
     _renderMain();
 }
