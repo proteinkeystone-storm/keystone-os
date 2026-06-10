@@ -371,14 +371,21 @@ export async function handleGhostwriterRewrite(request, env) {
     '- Pas de commentaire, pas de préface, pas d\'explication',
     '- Aucun markdown (pas de **, *, _, #, etc.)',
     '',
-    'Sortie : JSON strict avec exactement cette structure (rien d\'autre, pas de bloc ```) :',
-    '{',
-    '  "variants": [',
-    '    { "label": "Description courte du ton (3-4 mots)", "text": "Texte réécrit ici" },',
-    '    { "label": "Description courte du ton (3-4 mots)", "text": "Texte réécrit ici" },',
-    '    { "label": "Description courte du ton (3-4 mots)", "text": "Texte réécrit ici" }',
-    '  ]',
-    '}',
+    'FORMAT DE SORTIE — réponds en TEXTE BRUT, PAS en JSON :',
+    '- Donne EXACTEMENT 3 variantes.',
+    '- Sépare chaque variante par une ligne contenant UNIQUEMENT trois tirets : ---',
+    '- Pour chaque variante : la 1re ligne donne le ton en 3-4 mots, les lignes suivantes donnent le texte réécrit.',
+    '- N\'écris RIEN d\'autre (pas de JSON, pas d\'accolades, pas de guillemets autour, pas de numéro, pas de markdown).',
+    '',
+    'Exemple EXACT de structure attendue :',
+    'Ton formel et professionnel',
+    'Le texte réécrit de la première variante.',
+    '---',
+    'Ton chaleureux et empathique',
+    'Le texte réécrit de la deuxième variante.',
+    '---',
+    'Ton concis et direct',
+    'Le texte réécrit de la troisième variante.',
   ].filter(Boolean).join('\n');
 
   // ── Appel Mistral via Workers AI : extraction string-safe + réessai ──
@@ -504,16 +511,49 @@ function _aiText(aiResponse) {
   return '';
 }
 
-// Parse TOLÉRANT de la réponse du modèle pour la réécriture. Retourne
-// { variants:[{label,text}] } (1 à 3) ou null si rien d'exploitable. Tolère :
-// blocs de code, préface/suffixe autour du JSON, labels manquants. Ne DEVINE
-// PAS un `text` absent (le réessai côté handler s'en charge).
+// Parse la réponse du modèle → { variants:[{label,text}] } (1 à 3) ou null.
+// FORMAT PRINCIPAL = texte délimité (variantes séparées par « --- ») : robuste,
+// le modèle ne peut pas « oublier une clé » puisqu'il n'y en a pas (c'était LE
+// bug Mistral). Repli JSON (rétro-compat / si le modèle insiste).
 function _parseVariants(rawText) {
-  let s = String(rawText || '')
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/m, '')
-    .trim();
-  // Isole le 1er objet { … } si le modèle a ajouté du texte autour.
+  const s = String(rawText || '').trim();
+  if (!s) return null;
+  const looksJson = s.startsWith('{') || /^```/.test(s);
+  if (looksJson) {
+    return _parseJsonVariants(s) || (_hasDelim(s) ? _parseDelimited(s) : null);
+  }
+  return (_hasDelim(s) ? _parseDelimited(s) : null) || _parseJsonVariants(s);
+}
+
+function _hasDelim(s) {
+  return /(^|\n)\s*-{3,}\s*(\n|$)/.test(String(s || ''));
+}
+
+// Variantes séparées par une ligne « --- ». 1re ligne du bloc = ton (label),
+// reste = texte. Tolérant : enlève guillemets / préfixes « Ton: » parasites.
+function _parseDelimited(s) {
+  const blocks = String(s || '').split(/(?:^|\n)\s*-{3,}\s*(?:\n|$)/).map(b => b.trim()).filter(Boolean);
+  const variants = [];
+  for (const block of blocks) {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    let label = '', text = '';
+    if (lines.length >= 2 && lines[0].length <= 70) {
+      label = lines[0].replace(/^(ton|variante)\b\s*[:\-–—]?\s*/i, '').replace(/^["'«»\s]+|["'«»:\-–—\s]+$/g, '').trim();
+      text  = lines.slice(1).join('\n').trim();
+    } else {
+      text = lines.join('\n').trim();
+    }
+    text = text.replace(/^["'«»]+|["'«»]+$/g, '').trim();
+    if (text) variants.push({ label: label || `Variante ${variants.length + 1}`, text });
+    if (variants.length >= 3) break;
+  }
+  return variants.length >= 1 ? { variants } : null;
+}
+
+// Repli JSON tolérant (fences/préface enlevés, 1-3 variantes, labels complétés).
+function _parseJsonVariants(rawText) {
+  let s = String(rawText || '').replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/m, '').trim();
   const a = s.indexOf('{');
   const b = s.lastIndexOf('}');
   if (a >= 0 && b > a) s = s.slice(a, b + 1);
