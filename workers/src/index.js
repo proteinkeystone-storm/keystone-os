@@ -111,7 +111,8 @@ import { handleSmartAgentHealth,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
          handleAgentChat, handleGapsList, handleGapDismiss,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
-         handleSuggestOpening } from './routes/smart-agent.js';
+         handleSuggestOpening,
+         handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -147,6 +148,12 @@ export default {
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'POST') return handleAgentCreate(request, env);
       if (path === '/api/smart-agent/suggest-opening'    && method === 'POST') return handleSuggestOpening(request, env);
+      // SA-4.4.1 — dossiers d'agents (regroupement)
+      if (path === '/api/smart-agent/folders'            && method === 'GET')  return handleFoldersList(request, env);
+      if (path === '/api/smart-agent/folders'            && method === 'POST') return handleFolderCreate(request, env);
+      const saFolderMatch = path.match(/^\/api\/smart-agent\/folders\/([A-Za-z0-9-]+)$/);
+      if (saFolderMatch && method === 'PATCH')  return handleFolderUpdate(request, env, saFolderMatch[1]);
+      if (saFolderMatch && method === 'DELETE') return handleFolderDelete(request, env, saFolderMatch[1]);
       if (path === '/api/smart-agent/gaps'               && method === 'GET')  return handleGapsList(request, env);
       const saGapMatch = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/dismiss$/);
       if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);

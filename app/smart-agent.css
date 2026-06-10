@@ -717,6 +717,38 @@
 }
 .sa-agent-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: 0 0 auto; }
 
+/* ── Dossiers d'agents (SA-4.4.1) — regroupement de la liste ─────── */
+.sa-folder { margin-bottom: 20px; }
+.sa-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid var(--bd);
+  margin-bottom: 12px;
+}
+.sa-folder-ico { flex: none; display: flex; color: var(--gold); }
+.sa-folder-name { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
+.sa-folder-count {
+  font-size: 11px;
+  color: var(--tx3);
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.sa-folder-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.sa-folder.is-loose .sa-folder-name { color: var(--tx2); font-weight: 700; }
+.sa-folder-empty { font-size: 12px; color: var(--tx3); font-style: italic; padding: 2px 2px 6px; margin: 0; }
+/* Select « Dossier » du formulaire agent — hérite de .sa-input + chevron custom. */
+.sa-select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a93a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
 /* ── Sélecteur de collections (builder) ───────────────────────── */
 .sa-coll-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .sa-coll-opt {

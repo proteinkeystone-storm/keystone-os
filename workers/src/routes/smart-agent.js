@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.4.0';
+const SA_ENGINE_VERSION = 'SA-4.4.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1275,6 +1275,7 @@ function _rowToAgent(r) {
   let config = {};
   try { config = JSON.parse(r.config); } catch (_) {}
   return { id: r.id, name: r.name, status: r.status, config, version: r.version,
+           folder_id: r.folder_id ?? null,
            created_at: r.created_at, updated_at: r.updated_at };
 }
 
@@ -1309,12 +1310,20 @@ export async function handleAgentCreate(request, env) {
     });
   }
 
+  // SA-4.4.1 — dossier optionnel à la création (validé tenant ; sinon ignoré).
+  let folderId = null;
+  if (typeof b.folder_id === 'string' && b.folder_id) {
+    const { results: fr } = await env.DB
+      .prepare('SELECT id FROM sa_folders WHERE id = ? AND tenant_id = ?')
+      .bind(b.folder_id, gate.tenant).all();
+    if (fr.length) folderId = b.folder_id;
+  }
   await _ensureTenant(env, gate.tenant, gate.claims?.plan);
   const id = generateId();
   await env.DB.prepare(`
-    INSERT INTO sa_agents (id, tenant_id, name, status, config)
-    VALUES (?, ?, ?, 'published', ?)
-  `).bind(id, gate.tenant, v.name, JSON.stringify(v.config)).run();
+    INSERT INTO sa_agents (id, tenant_id, name, status, config, folder_id)
+    VALUES (?, ?, ?, 'published', ?, ?)
+  `).bind(id, gate.tenant, v.name, JSON.stringify(v.config), folderId).run();
 
   // SA-4.4 — chaque agent naît avec son coffre privé (sinon il échapperait au
   // backfill, gardé par sentinelle, et n'aurait pas de coffre où écrire).
@@ -1342,11 +1351,25 @@ export async function handleAgentUpdate(request, env, agentId) {
   if (!v.ok) return err(v.msg, 400, origin);
   const status = ['published', 'paused', 'draft'].includes(b.status) ? b.status : cur.status;
 
+  // SA-4.4.1 — rangement dans un dossier (id valide du tenant, ou null = hors dossier).
+  let nextFolderId = cur.folder_id;
+  if (b.folder_id !== undefined) {
+    if (!b.folder_id) {
+      nextFolderId = null;
+    } else {
+      const { results: fr } = await env.DB
+        .prepare('SELECT id FROM sa_folders WHERE id = ? AND tenant_id = ?')
+        .bind(b.folder_id, gate.tenant).all();
+      if (!fr.length) return err('Dossier introuvable', 404, origin);
+      nextFolderId = b.folder_id;
+    }
+  }
+
   await env.DB.prepare(`
-    UPDATE sa_agents SET name = ?, config = ?, status = ?, version = version + 1,
+    UPDATE sa_agents SET name = ?, config = ?, status = ?, folder_id = ?, version = version + 1,
            updated_at = datetime('now')
      WHERE id = ? AND tenant_id = ?
-  `).bind(v.name, JSON.stringify(v.config), status, agentId, gate.tenant).run();
+  `).bind(v.name, JSON.stringify(v.config), status, nextFolderId, agentId, gate.tenant).run();
 
   const { results: after } = await env.DB.prepare('SELECT * FROM sa_agents WHERE id = ?').bind(agentId).all();
   return json({ agent: _rowToAgent(after[0]) }, 200, origin);
@@ -1380,6 +1403,94 @@ export async function handleAgentDelete(request, env, agentId) {
   const res = await env.DB.prepare('DELETE FROM sa_agents WHERE id = ? AND tenant_id = ?')
     .bind(agentId, gate.tenant).run();
   if (!res.meta?.changes) return err('Agent introuvable', 404, origin);
+  return json({ ok: true }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-4.4.1 — DOSSIERS D'AGENTS (regroupement ; portent un coffre
+// partagé optionnel en SA-4.4.2). Un agent a au plus UN dossier.
+// ═══════════════════════════════════════════════════════════════
+// validateFolderName (pur, exporté/testé) : nom propre et borné.
+export function validateFolderName(name) {
+  const n = (typeof name === 'string') ? name.trim() : '';
+  if (!n) return { ok: false, msg: 'Nom de dossier requis' };
+  if (n.length > 80) return { ok: false, msg: 'Nom trop long (80 caractères max)' };
+  return { ok: true, name: n.slice(0, 80) };
+}
+
+export async function handleFoldersList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const { results } = await env.DB.prepare(`
+    SELECT f.id, f.name, f.created_at,
+           (SELECT COUNT(*) FROM sa_agents a WHERE a.folder_id = f.id AND a.tenant_id = f.tenant_id) AS agent_count
+      FROM sa_folders f
+     WHERE f.tenant_id = ?
+     ORDER BY f.name COLLATE NOCASE
+  `).bind(gate.tenant).all();
+  return json({ folders: results }, 200, origin);
+}
+
+export async function handleFolderCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const b = await parseBody(request);
+  const v = validateFolderName(b?.name);
+  if (!v.ok) return err(v.msg, 400, origin);
+  await _ensureTenant(env, gate.tenant, gate.claims?.plan);
+  const id = generateId();
+  await env.DB.prepare('INSERT INTO sa_folders (id, tenant_id, name) VALUES (?, ?, ?)')
+    .bind(id, gate.tenant, v.name).run();
+  return json({ folder: { id, name: v.name, agent_count: 0 } }, 201, origin);
+}
+
+export async function handleFolderUpdate(request, env, folderId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const b = await parseBody(request);
+  const v = validateFolderName(b?.name);
+  if (!v.ok) return err(v.msg, 400, origin);
+  const res = await env.DB.prepare(
+    "UPDATE sa_folders SET name = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?"
+  ).bind(v.name, folderId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Dossier introuvable', 404, origin);
+  return json({ folder: { id: folderId, name: v.name } }, 200, origin);
+}
+
+export async function handleFolderDelete(request, env, folderId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  // Garde-fou (actif dès SA-4.4.2) : refuser si un coffre partagé du dossier
+  // contient encore des fiches — sinon on perdrait du savoir partagé.
+  const { results: shared } = await env.DB.prepare(
+    "SELECT id FROM kortex_vaults WHERE tenant_id = ? AND folder_id = ? AND kind = 'shared'"
+  ).bind(gate.tenant, folderId).all();
+  for (const v of shared) {
+    const { results: cnt } = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND vault_id = ?'
+    ).bind(gate.tenant, v.id).all();
+    if ((cnt[0]?.n || 0) > 0) {
+      return err('Ce dossier contient un coffre partagé non vide — videz-le d\'abord.', 409, origin);
+    }
+  }
+  // Détache les agents (ils redeviennent « sans dossier » ; leur coffre privé est intact).
+  await env.DB.prepare('UPDATE sa_agents SET folder_id = NULL WHERE folder_id = ? AND tenant_id = ?')
+    .bind(folderId, gate.tenant).run();
+  // Supprime les coffres partagés VIDES du dossier.
+  for (const v of shared) {
+    await env.DB.prepare('DELETE FROM kortex_vaults WHERE id = ? AND tenant_id = ?').bind(v.id, gate.tenant).run();
+  }
+  const res = await env.DB.prepare('DELETE FROM sa_folders WHERE id = ? AND tenant_id = ?')
+    .bind(folderId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Dossier introuvable', 404, origin);
   return json({ ok: true }, 200, origin);
 }
 

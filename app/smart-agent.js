@@ -117,6 +117,8 @@ const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error
 const _kxs = { q: '', busy: false, mode: null, results: null };
 // Agents (SA-3) — mode : 'list' | 'form' (création/édition d'agent)
 const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'list', editing: null,
+    // SA-4.4.1 — dossiers d'agents (regroupement)
+    folders: [],
     // Formulaire agent (SA-4.3, ex-wizard) : données en cours
     form: null, formBusy: false, formError: null, suggestBusy: false,
     // File des trous (SA-4) — scopée par agent (SA-4.3)
@@ -232,6 +234,10 @@ function _onClick(e) {
     if (act === 'ag-open')      { _enterAgent(actEl.dataset.id); return; }
     if (act === 'ag-delete')    { _deleteAgent(actEl.dataset.id); return; }
     if (act === 'ag-exit')      { _exitAgent(); return; }
+    // ── Dossiers d'agents (SA-4.4.1) ──
+    if (act === 'fold-new')     { _createFolder(); return; }
+    if (act === 'fold-rename')  { _renameFolder(actEl.dataset.id); return; }
+    if (act === 'fold-delete')  { _deleteFolder(actEl.dataset.id); return; }
     if (act === 'tab')          { _setTab(actEl.dataset.tab); return; }
     // ── Formulaire agent (création/édition) ──
     if (act === 'form-save')    { _saveAgentForm(); return; }
@@ -413,8 +419,14 @@ async function _agLoad() {
     _ag.loading = true; _ag.error = null;
     _renderMain();
     try {
-        const agRes = await _api('/agents');
+        // SA-4.4.1 — agents + dossiers (dossiers best-effort : si l'endpoint
+        // n'est pas encore déployé, on dégrade simplement sans dossier).
+        const [agRes, foldRes] = await Promise.all([
+            _api('/agents'),
+            _api('/folders').catch(() => ({ folders: [] })),
+        ]);
         _ag.agents = agRes.agents || [];
+        _ag.folders = foldRes.folders || [];
         _ag.loaded = true;
     } catch (e) {
         _ag.error = (e.status === 403)
@@ -429,6 +441,43 @@ async function _agLoad() {
 }
 function _agReload() { _ag.loaded = false; _agLoad(); }
 
+// ── Dossiers d'agents (SA-4.4.1) — gestion légère (prompt/confirm, cohérent
+//    avec la suppression d'agent). Le rangement d'un agent passe par ses Réglages.
+async function _createFolder() {
+    const name = (prompt('Nom du nouveau dossier ?') || '').trim();
+    if (!name) return;
+    try {
+        const r = await _api('/folders', { method: 'POST', body: { name } });
+        if (r.folder) _ag.folders.push(r.folder);
+        _ag.folders.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+        _toast('Dossier créé.');
+        _renderMain();
+    } catch (e) { _toast(e.message, 'error'); }
+}
+async function _renameFolder(id) {
+    const f = _ag.folders.find(x => x.id === id);
+    const name = (prompt('Renommer le dossier', f?.name || '') || '').trim();
+    if (!name || name === f?.name) return;
+    try {
+        await _api(`/folders/${id}`, { method: 'PATCH', body: { name } });
+        if (f) f.name = name;
+        _ag.folders.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+        _toast('Dossier renommé.');
+        _renderMain();
+    } catch (e) { _toast(e.message, 'error'); }
+}
+async function _deleteFolder(id) {
+    const f = _ag.folders.find(x => x.id === id);
+    if (!confirm(`Supprimer le dossier « ${f?.name || ''} » ?\nLes agents qu'il contient ne sont PAS supprimés : ils redeviennent « sans dossier ».`)) return;
+    try {
+        await _api(`/folders/${id}`, { method: 'DELETE' });
+        _ag.folders = _ag.folders.filter(x => x.id !== id);
+        _ag.agents.forEach(a => { if (a.folder_id === id) a.folder_id = null; });
+        _toast('Dossier supprimé.');
+        _renderMain();
+    } catch (e) { _toast(e.message, 'error'); }
+}
+
 // ── Vue AGENTS — liste (chaque agent = une unité autonome, silo SA-4.3) ──
 function _agentsListHTML() {
     if (_ag.loading) return `<div class="sa-loading">${icon('refresh', 18)} Chargement de vos agents…</div>`;
@@ -441,7 +490,7 @@ function _agentsListHTML() {
       </section>`;
     }
 
-    if (!_ag.agents.length) {
+    if (!_ag.agents.length && !_ag.folders.length) {
         return `
       <section class="sa-hero">
         <div class="sa-hero-ico">${icon('smart-agent', 40)}</div>
@@ -473,18 +522,56 @@ function _agentsListHTML() {
       </article>`;
     };
 
+    // SA-4.4.1 — regroupement par dossier
+    const byFolder = new Map();
+    const loose = [];
+    for (const a of _ag.agents) {
+        if (a.folder_id) {
+            if (!byFolder.has(a.folder_id)) byFolder.set(a.folder_id, []);
+            byFolder.get(a.folder_id).push(a);
+        } else loose.push(a);
+    }
+    const folderBlock = f => {
+        const items = byFolder.get(f.id) || [];
+        return `
+      <div class="sa-folder">
+        <div class="sa-folder-head">
+          <span class="sa-folder-ico">${icon('folder', 17)}</span>
+          <strong class="sa-folder-name">${_esc(f.name)}</strong>
+          <span class="sa-folder-count">${items.length} agent${items.length > 1 ? 's' : ''}</span>
+          <span class="sa-folder-acts">
+            <button class="sa-iconbtn" data-act="fold-rename" data-id="${f.id}" title="Renommer le dossier">${icon('edit', 14)}</button>
+            <button class="sa-iconbtn is-danger" data-act="fold-delete" data-id="${f.id}" title="Supprimer le dossier">${icon('trash-2', 14)}</button>
+          </span>
+        </div>
+        ${items.length
+            ? `<div class="sa-agents">${items.map(card).join('')}</div>`
+            : `<p class="sa-folder-empty">Vide — rangez-y un agent depuis ses Réglages.</p>`}
+      </div>`;
+    };
+    const looseBlock = loose.length ? `
+      <div class="sa-folder is-loose">
+        <div class="sa-folder-head">
+          <strong class="sa-folder-name">Sans dossier</strong>
+          <span class="sa-folder-count">${loose.length} agent${loose.length > 1 ? 's' : ''}</span>
+        </div>
+        <div class="sa-agents">${loose.map(card).join('')}</div>
+      </div>` : '';
+
     return `
     <section class="sa-kx">
       <div class="sa-kx-head">
         <div>
           <h2 class="sa-kx-title">Mes agents</h2>
-          <p class="sa-kx-sub">${_ag.agents.length} agent${_ag.agents.length > 1 ? 's' : ''} · chacun a son propre coffre de savoir</p>
+          <p class="sa-kx-sub">${_ag.agents.length} agent${_ag.agents.length > 1 ? 's' : ''}${_ag.folders.length ? ` · ${_ag.folders.length} dossier${_ag.folders.length > 1 ? 's' : ''}` : ''} · chacun a son propre coffre</p>
         </div>
         <div class="sa-kx-acts">
+          <button class="sa-btn" data-act="fold-new">${icon('folder', 16)} Nouveau dossier</button>
           <button class="sa-btn is-primary" data-act="ag-new">${icon('plus', 16)} Nouvel agent</button>
         </div>
       </div>
-      <div class="sa-agents">${_ag.agents.map(card).join('')}</div>
+      ${_ag.folders.map(folderBlock).join('')}
+      ${looseBlock}
     </section>`;
 }
 
@@ -506,6 +593,7 @@ function _openForm(agent) {
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
+        folderId: agent?.folder_id ?? null,
     };
     _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false;
     // Création (hors agent) → bascule en mode formulaire plein écran.
@@ -533,6 +621,12 @@ function _agentFormHTML() {
         <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
       <label class="sa-field"><span class="sa-field-label">Ton</span>
         <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
+
+      <label class="sa-field"><span class="sa-field-label">Dossier (optionnel) — pour regrouper vos agents</span>
+        <select class="sa-input sa-select" data-field="folder">
+          <option value="">— Sans dossier —</option>
+          ${_ag.folders.map(f => `<option value="${f.id}"${d.folderId === f.id ? ' selected' : ''}>${_esc(f.name)}</option>`).join('')}
+        </select></label>
 
       <label class="sa-field"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
       <div class="sa-posture-grid">${postureChips}</div>
@@ -587,6 +681,7 @@ function _readAgentForm() {
     d.name    = get('[data-field="name"]')?.value.trim() ?? d.name;
     d.mission = get('[data-field="mission"]')?.value.trim() ?? d.mission;
     d.tone    = get('[data-field="tone"]')?.value.trim() ?? d.tone;
+    const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
     // posture : pilotée par les chips (déjà dans d.posture)
@@ -614,6 +709,7 @@ function _agentPayload() {
     const d = _ag.form;
     return {
         name: d.name,
+        folder_id: d.folderId ?? null,
         config: {
             identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
             scope:    { fallback_text: d.fallback },

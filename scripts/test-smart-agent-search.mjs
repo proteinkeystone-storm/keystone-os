@@ -9,7 +9,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
-  lastAgentQuestion, isAffirmation }
+  lastAgentQuestion, isAffirmation, validateFolderName }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -226,6 +226,16 @@ console.log('── lastAgentQuestion + isAffirmation (fix « oui » répété) 
   check('phrase longue → PAS une affirmation',
     isAffirmation('peux-tu me donner les tarifs réduits stp') === false);
   check('vide → PAS une affirmation', isAffirmation('   ') === false);
+}
+
+console.log('── validateFolderName (SA-4.4.1 — dossiers d\'agents) ──');
+{
+  const ok = validateFolderName('  Musée de Lille  ');
+  check('nom valide trimmé', ok.ok && ok.name === 'Musée de Lille');
+  check('nom vide refusé', validateFolderName('   ').ok === false);
+  check('non-string refusé', validateFolderName(null).ok === false);
+  check('nom trop long (81) refusé', validateFolderName('x'.repeat(81)).ok === false);
+  check('80 caractères acceptés', validateFolderName('x'.repeat(80)).ok === true);
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
