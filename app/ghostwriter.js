@@ -429,8 +429,8 @@ function _injectCSS() {
     color: var(--text-primary, #ddd); transition: all .15s ease;
 }
 .gw-mini-btn:hover { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.35); color: #fff; }
-.gw-mini-btn.gw-action-send { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.42); color: #c7d2fe; }
-.gw-mini-btn.gw-action-send:hover { background: rgba(99,102,241,.30); border-color: rgba(99,102,241,.6); color: #fff; }
+.gw-mini-btn.gw-action-send { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.42); color: var(--text-primary, #fff); }
+.gw-mini-btn.gw-action-send:hover { background: var(--gold, #6366f1); border-color: var(--gold, #6366f1); color: #fff; }
 .gw-shortcut-hint { font-size: 11px; color: var(--text-muted, #888); margin-left: auto; }
 .gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 40px 0; line-height: 1.6; }
 /* ── Mode compose (chaîne) : 1 grand post + archive ── */
@@ -458,8 +458,8 @@ function _injectCSS() {
     color: var(--text-muted, #ccc); transition: all .14s ease;
 }
 .gw-archive-btn:hover { color: var(--text-primary, #fff); background: rgba(127,127,127,.2); }
-.gw-arch-send { background: rgba(99,102,241,.16); border-color: rgba(99,102,241,.35); color: #c7d2fe; }
-.gw-arch-send:hover { background: rgba(99,102,241,.28); color: #fff; }
+.gw-arch-send { background: rgba(99,102,241,.16); border-color: rgba(99,102,241,.35); color: var(--text-primary, #fff); }
+.gw-arch-send:hover { background: var(--gold, #6366f1); border-color: var(--gold, #6366f1); color: #fff; }
 .gw-spinner {
     width: 14px; height: 14px;
     border: 2px solid rgba(255,255,255,.3);
@@ -529,6 +529,11 @@ html.light-mode .gw-mini-btn {
     color: #0f172a;
 }
 html.light-mode .gw-mini-btn:hover { background: rgba(79,70,229,.1); border-color: rgba(79,70,229,.35); color: #0f172a; }
+/* « Envoyer vers Social Manager » : garde l'accent indigo en mode clair (la règle
+   .gw-mini-btn ci-dessus le neutraliserait), cohérent avec « Renvoyer » et avec son
+   rendu en mode sombre. Texte foncé hérité, lisible sur le tint. */
+html.light-mode .gw-mini-btn.gw-action-send { background: rgba(99,102,241,.16); border-color: rgba(99,102,241,.35); }
+html.light-mode .gw-mini-btn.gw-action-send:hover { background: var(--gold, #4f46e5); border-color: var(--gold, #4f46e5); color: #fff; }
 html.light-mode .gw-shortcut-hint { color: #64748b; }
 html.light-mode .gw-empty { color: #64748b; }
     `;
