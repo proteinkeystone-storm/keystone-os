@@ -1150,7 +1150,17 @@ QUESTION : ${message}`;
   return [{ role: 'system', content: system }, ...cleanHistory, { role: 'user', content: userTurn }];
 }
 
-// Contextualise la requête de récupération (SA-4.2.1). En conversation
+// lastAgentQuestion : la dernière question (segment finissant par « ? »)
+// posée par l'agent dans l'historique. C'est ce à quoi une réponse de suivi
+// (« oui ») se réfère. On retire les citations [n] d'abord. Pur → testé.
+export function lastAgentQuestion(history = []) {
+  const lastAgent = [...(history || [])].reverse().find(m => m.role === 'assistant');
+  if (!lastAgent) return '';
+  const qs = String(lastAgent.content || '').replace(/\[\d{1,2}\]/g, '').match(/[^.!?]*\?/g);
+  return qs && qs.length ? qs[qs.length - 1].trim() : '';
+}
+
+// Contextualise la requête de RÉCUPÉRATION (SA-4.2.1). En conversation
 // proactive, l'utilisateur répond souvent « oui » à la question de relance
 // de l'agent : le message brut ne contient alors RIEN à récupérer. On
 // préfixe la dernière question posée par l'agent (le sujet que « oui »
@@ -1158,11 +1168,29 @@ QUESTION : ${message}`;
 // question (pas la réponse de l'agent) pour ne pas re-récupérer les mêmes
 // fiches et provoquer une répétition. Pur → testé.
 export function contextualQuery(message, history = []) {
-  const lastAgent = [...(history || [])].reverse().find(m => m.role === 'assistant');
-  if (!lastAgent) return message;
-  const qs = String(lastAgent.content || '').replace(/\[\d{1,2}\]/g, '').match(/[^.!?]*\?/g);
-  const lastQ = qs && qs.length ? qs[qs.length - 1].trim() : '';
+  const lastQ = lastAgentQuestion(history);
   return lastQ ? `${lastQ} ${message}` : message;
+}
+
+// isAffirmation : le message est-il une simple CONFIRMATION (« oui »,
+// « d'accord », « volontiers »…) ? Pris seul il n'apporte aucun contenu :
+// le modèle, faute de direction, répétait alors sa réponse précédente
+// (bug « oui » signalé en prod). On s'en sert pour rattacher la
+// confirmation à la dernière question de l'agent côté GÉNÉRATION. Pur → testé.
+const AFFIRMATIONS = [
+  'oui', 'ouais', 'ouep', 'si', 'ok', 'okay', 'oki', 'd accord', 'daccord', 'dac',
+  'volontiers', 'avec plaisir', 'je veux bien', 'bien sur', 'carrement',
+  'pourquoi pas', 'vas y', 'allez y', 'allez', 'yes', 'yep', 'parfait',
+  'tout a fait', 'exactement', 'ca marche', 'go',
+];
+export function isAffirmation(message) {
+  const t = String(message || '')
+    .toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return false;
+  if (AFFIRMATIONS.includes(t)) return true;          // « oui », « d'accord »…
+  if (t.split(' ').length > 4) return false;          // une vraie phrase ≠ confirmation
+  return AFFIRMATIONS.some(a => t.startsWith(a + ' ')); // « oui merci », « ok pour 4 »
 }
 
 // Génère le message d'accueil d'un agent (il « parle en premier »).
@@ -1486,6 +1514,15 @@ export async function handleAgentChat(request, env, agentId) {
   // récupérer. On préfixe la dernière question posée par l'agent → la
   // recherche retrouve le bon sujet (le « oui » répond à QUOI).
   const retrievalQuery = contextualQuery(message, history);
+  // Bug « oui » (signalé prod) : une confirmation courte, prise seule, ne dit
+  // au modèle RIEN à répondre → il répétait sa réponse précédente au lieu de
+  // traiter la relance. On rattache la confirmation à la dernière question de
+  // l'agent UNIQUEMENT pour le modèle. La récupération utilise déjà
+  // retrievalQuery ; le message PERSISTÉ reste le « oui » brut (cf. _persist).
+  const followupQ = lastAgentQuestion(history);
+  const llmMessage = (followupQ && isAffirmation(message))
+    ? `${message} — (je réponds « ${message} » à ta proposition précédente : « ${followupQ} ». Traite cela comme ma demande et réponds-y à partir des fiches, sans répéter ta réponse précédente.)`
+    : message;
   const vaultIds = await _vaultsForAgent(env, gate.tenant, agentId);
   const { semantic, hits } = await _retrieve(env, gate.tenant, retrievalQuery, {
     topk: CHAT_TOPK,
@@ -1532,7 +1569,8 @@ export async function handleAgentChat(request, env, agentId) {
     mission:   agent.config?.identity?.mission,
     tone:      agent.config?.identity?.tone,
     posture:   agent.config?.identity?.posture,
-    fallbackText, fiches, history, message,
+    fallbackText, fiches, history,
+    message: llmMessage,
   });
 
   try {

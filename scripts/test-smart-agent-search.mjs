@@ -8,7 +8,8 @@
 import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
   buildChatMessages, stripCitations, contextualQuery,
-  resolveVaultIds, mergeVectorMatches }
+  resolveVaultIds, mergeVectorMatches,
+  lastAgentQuestion, isAffirmation }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -201,6 +202,30 @@ console.log('── mergeVectorMatches (SA-4.4 — fusion multi-coffres par scor
   check('listes vides → aucun id', mergeVectorMatches([[], []]).ids.length === 0);
   check('entrées sans id ignorées',
     mergeVectorMatches([[{ score: 0.5 }, { id: 'q', score: 0.3 }]]).ids.join() === 'q');
+}
+
+console.log('── lastAgentQuestion + isAffirmation (fix « oui » répété) ──');
+{
+  const hist = [
+    { role: 'user',      content: 'horaires ?' },
+    { role: 'assistant', content: 'Ouvert de 10h à 18h [1]. Souhaitez-vous connaître les tarifs d\'entrée ?' },
+  ];
+  check('extrait la dernière question de l\'agent (sans [n])',
+    lastAgentQuestion(hist) === 'Souhaitez-vous connaître les tarifs d\'entrée ?');
+  check('agent sans question → ""',
+    lastAgentQuestion([{ role: 'assistant', content: 'Voici les tarifs.' }]) === '');
+  check('historique vide → ""', lastAgentQuestion([]) === '');
+
+  check('« oui » → affirmation', isAffirmation('oui') === true);
+  check('« Oui ! » (casse + ponctuation) → affirmation', isAffirmation('Oui !') === true);
+  check('« d\'accord » → affirmation', isAffirmation('d\'accord') === true);
+  check('« oui merci » → affirmation', isAffirmation('oui merci') === true);
+  check('« oui, pour 4 personnes » → affirmation (confirme + précise)',
+    isAffirmation('oui, pour 4 personnes') === true);
+  check('vraie question courte → PAS une affirmation', isAffirmation('quels horaires ?') === false);
+  check('phrase longue → PAS une affirmation',
+    isAffirmation('peux-tu me donner les tarifs réduits stp') === false);
+  check('vide → PAS une affirmation', isAffirmation('   ') === false);
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
