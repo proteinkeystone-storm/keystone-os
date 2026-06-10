@@ -34,7 +34,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
-import { renderChainRail, bindChainRail, getChain, setChain, clearChain } from './lib/content-chain.js';
+import { renderChainRail, bindChainRail, getChain, setChain } from './lib/content-chain.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
@@ -208,7 +208,7 @@ async function _callReal(text, opts) {
         throw new Error('Aucun JWT en session — connectez-vous (Ghost Writer nécessite une licence active).');
     }
 
-    const res = await fetch(`${CF_API}/api/ghostwriter/rewrite`, {
+    const reqInit = {
         method: 'POST',
         headers: {
             'Content-Type'  : 'application/json',
@@ -224,7 +224,30 @@ async function _callReal(text, opts) {
             action      : opts?.action       || null,
             lengthTarget: opts?.lengthTarget || null,
         }),
-    });
+    };
+
+    // Re-tentative sur ÉCHEC RÉSEAU (« Load failed »/timeout : le fetch throw,
+    // aucune réponse n'arrive) — 2 essais, le 2e après un court délai. On NE
+    // retente PAS une réponse HTTP (4xx/5xx = le serveur a répondu, traitée
+    // plus bas). Bénéficie au modal, au Studio ET aux pads inline (tous passent
+    // par _callReal).
+    let res;
+    let netErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            res = await fetch(`${CF_API}/api/ghostwriter/rewrite`, reqInit);
+            netErr = null;
+            break;
+        } catch (e) {
+            netErr = e;
+            if (attempt < 2) await new Promise(r => setTimeout(r, 900));
+        }
+    }
+    if (netErr || !res) {
+        const e = new Error('Le service de réécriture n\'a pas répondu (réseau ou délai dépassé). Réessaie dans un instant.');
+        e.status = 0;
+        throw e;
+    }
 
     if (!res.ok) {
         let msg = `HTTP ${res.status}`;
@@ -1022,20 +1045,6 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
         return;
     }
     _openModal(initialText, presetOpts);
-}
-
-/**
- * Entrée « pad possédé » (tuile K-Store A-COM-005) — ouvre le modal SANS
- * le garde-fou de flag : posséder le pad EST le droit d'accès, et le vrai
- * plafond reste le quota serveur (juge ultime). C'est l'entité « Ghost
- * Writer » unique côté utilisateur (le Studio A-COM-005 est parké).
- *
- * Efface toute chaîne en cours : ouvrir depuis la grille = action standalone
- * (one-shot), pas une continuation de parcours → aucun rail fantôme.
- */
-export function openGhostwriterPad(initialText = '') {
-    clearChain();              // entrée standalone (tuile grille) : départ frais
-    openGhostwriterChained(initialText);
 }
 
 /**
