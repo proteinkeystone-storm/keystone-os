@@ -437,7 +437,7 @@ function _injectCSS() {
 .gw-compose-wrap { display: flex; flex-direction: column; gap: 14px; }
 .gw-compose-post {
     background: rgba(127,127,127,.06); border: 1px solid var(--bd, rgba(255,255,255,.08));
-    border-radius: 12px; padding: 18px 20px; max-height: 48vh; overflow-y: auto;
+    border-radius: 12px; padding: 18px 20px; max-height: 72vh; overflow-y: auto;
 }
 .gw-compose-post .gw-variant-text { font-size: 14px; line-height: 1.7; }
 .gw-archive { border-top: 1px solid var(--bd, rgba(255,255,255,.08)); padding-top: 14px; }
@@ -568,6 +568,10 @@ function _buildModalHTML(initialText, presetOpts) {
     const srcLabel  = chainMode ? 'Angle à développer' : 'Texte source';
     const srcPlace  = chainMode ? 'Décrivez l\'angle ou l\'idée à transformer en post…' : 'Collez ou tapez votre texte ici…';
     const goLabel   = chainMode ? 'Composer le post' : 'Réécrire en 3 variantes';
+    // Mode CHAÎNE : l'archive « Posts composés » vit dans le panneau GAUCHE
+    // (sous la méta) → plus de place quand elle grossit ; la droite ne garde
+    // que le post courant + ses actions. Hors chaîne : pas d'archive.
+    const archiveSlot = chainMode ? '<div class="gw-archive" id="gw-archive"></div>' : '';
     const tonesHTML = chainMode ? '' : `
                     <div class="gw-label">Ton souhaité</div>
                     <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
@@ -601,6 +605,7 @@ function _buildModalHTML(initialText, presetOpts) {
                         <span class="gw-mode-chip">Mistral</span>
                         ${contextChip}
                     </div>
+                    ${archiveSlot}
                 </div>
                 <div class="gw-right">
                     <div class="gw-label">Variantes proposées</div>
@@ -743,6 +748,13 @@ function _bindModalEvents(overlay) {
     // ouvert dessous (le modal s'ouvre par-dessus) → fermer = revenir à
     // l'étape ① sans rien perdre.
     bindChainRail(overlay, { onBack: _closeModal });
+
+    // Mode CHAÎNE : rend l'archive « Posts composés » dans le panneau GAUCHE
+    // dès l'ouverture → on voit les posts déjà composés avant même de composer
+    // (l'archive reste à gauche, le post courant s'affichera à droite).
+    if (overlay.querySelector('.gw-modal')?.dataset.chain === '1') {
+        _renderComposeArchive(overlay.querySelector('#gw-archive'));
+    }
 }
 
 async function _handleGenerate(overlay) {
@@ -1019,7 +1031,6 @@ function _renderComposeResult(container, variant) {
                 <button class="gw-mini-btn gw-action-replace">Remplacer</button>
                 <button class="gw-mini-btn gw-action-send" title="Ouvrir Social Manager avec ce post">Envoyer vers Social Manager</button>
             </div>
-            <div class="gw-archive" id="gw-archive"></div>
         </div>
     `;
     const copyBtn = container.querySelector('.gw-action-copy');
@@ -1028,14 +1039,21 @@ function _renderComposeResult(container, variant) {
     });
     container.querySelector('.gw-action-replace')?.addEventListener('click', (e) => _replaceSelection(post, e.currentTarget));
     container.querySelector('.gw-action-send')?.addEventListener('click', () => _sendToSocialManager(post));
-    _renderComposeArchive(container.querySelector('#gw-archive'));
+    // Archive rendue dans le panneau GAUCHE (.gw-left > #gw-archive), pas ici —
+    // la droite ne garde que le post courant. On la rafraîchit pour inclure le
+    // post fraîchement composé (déjà ajouté à l'archive avant ce rendu).
+    _renderComposeArchive(container.closest('.gw-modal')?.querySelector('#gw-archive'));
 }
 
 // Liste des posts composés (archive locale) : renvoyer vers Social Manager / supprimer.
 function _renderComposeArchive(el) {
     if (!el) return;
     const arr = _loadComposeArchive();
-    if (!arr.length) { el.innerHTML = ''; return; }
+    // Archive vide → masquer le conteneur : dans le panneau gauche, le
+    // border-top/padding du .gw-archive laisserait sinon une ligne flottante
+    // sous la méta avant tout compose. Réaffiché dès qu'il y a un post.
+    if (!arr.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
     el.innerHTML = `
         <div class="gw-archive-head">Posts composés <span class="gw-archive-count">${arr.length}</span></div>
         <div class="gw-archive-list">
