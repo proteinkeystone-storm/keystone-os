@@ -7,7 +7,8 @@
 
 import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
-  buildChatMessages, stripCitations, contextualQuery }
+  buildChatMessages, stripCitations, contextualQuery,
+  resolveVaultIds, mergeVectorMatches }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -167,6 +168,39 @@ console.log('── contextualQuery (suivi « oui » — bug capture Stéphane) 
     contextualQuery('oui', [{ role: 'assistant', content: 'Voici les tarifs.' }]) === 'oui');
   check('prend la DERNIÈRE question si plusieurs',
     contextualQuery('oui', [{ role: 'assistant', content: 'Quoi ? Plutôt les activités ?' }]) === 'Plutôt les activités ? oui');
+}
+
+console.log('── resolveVaultIds (SA-4.4 — coffres lus par un agent) ──');
+{
+  check('agent sans coffre privé → []',
+    JSON.stringify(resolveVaultIds({}, [])) === '[]');
+  check('coffre privé seul (pas de dossier) → [privé]',
+    JSON.stringify(resolveVaultIds({ private_vault_id: 'v1' }, [])) === JSON.stringify(['v1']));
+  check('privé + 2 partagés → 3 ids dans l\'ordre',
+    JSON.stringify(resolveVaultIds({ private_vault_id: 'v1' }, [{ id: 'v2' }, { id: 'v3' }])) === JSON.stringify(['v1', 'v2', 'v3']));
+  check('partagés en ids bruts (string) tolérés',
+    JSON.stringify(resolveVaultIds({ private_vault_id: 'v1' }, ['v2'])) === JSON.stringify(['v1', 'v2']));
+  check('doublon privé ≡ partagé dédupliqué',
+    JSON.stringify(resolveVaultIds({ private_vault_id: 'v1' }, [{ id: 'v1' }, { id: 'v2' }])) === JSON.stringify(['v1', 'v2']));
+  check('NULL / vides écartés',
+    JSON.stringify(resolveVaultIds({ private_vault_id: 'v1' }, [{ id: null }, {}, 'v2'])) === JSON.stringify(['v1', 'v2']));
+  check('plafond respecté (cap=2)',
+    resolveVaultIds({ private_vault_id: 'v1' }, [{ id: 'v2' }, { id: 'v3' }], 2).length === 2);
+}
+
+console.log('── mergeVectorMatches (SA-4.4 — fusion multi-coffres par score global) ──');
+{
+  const a = [{ id: 'x', score: 0.9 }, { id: 'y', score: 0.4 }];
+  const b = [{ id: 'z', score: 0.7 }, { id: 'x', score: 0.5 }];
+  const m = mergeVectorMatches([a, b], 10);
+  check('ordonné par score cosinus global décroissant',
+    JSON.stringify(m.ids) === JSON.stringify(['x', 'z', 'y']));
+  check('meilleur score conservé si id dans 2 coffres (0.9 > 0.5)',
+    m.scores.get('x') === 0.9);
+  check('topk respecté', mergeVectorMatches([a, b], 2).ids.length === 2);
+  check('listes vides → aucun id', mergeVectorMatches([[], []]).ids.length === 0);
+  check('entrées sans id ignorées',
+    mergeVectorMatches([[{ score: 0.5 }, { id: 'q', score: 0.3 }]]).ids.join() === 'q');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

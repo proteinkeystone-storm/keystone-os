@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.3';
+const SA_ENGINE_VERSION = 'SA-4.4.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -89,6 +89,7 @@ const EMBED_MODEL = '@cf/baai/bge-m3';
 const RRF_K       = 60;   // constante classique de Reciprocal Rank Fusion
 const SEARCH_TOPK = 8;    // résultats renvoyés par défaut
 const FETCH_TOPK  = 20;   // profondeur de chaque liste avant fusion
+const MAX_VAULTS  = 8;    // SA-4.4 — coffres lus par un agent (1 privé + ≤7 partagés)
 
 function _vectorReady(env) {
   return !!(env.KORTEX_INDEX && env.AI && typeof env.AI.run === 'function');
@@ -108,15 +109,18 @@ async function _embed(env, texts) {
 // Upsert / suppression BEST-EFFORT dans Vectorize : l'index sémantique ne
 // doit JAMAIS bloquer le CRUD du coffre. En cas d'échec, la recherche
 // dégrade en lexical et POST /kortex/reindex rattrape le retard.
-// SA-4.3 — namespace Vectorize par AGENT (silo) : tenant::agent.
-function _ns(tenant, agentId) { return `${tenant}::${agentId || '_'}`; }
+// SA-4.4 — namespace Vectorize par COFFRE (vault) : tenant::vault.
+// Le coffre est découplé de l'agent : un agent lit son coffre privé + les
+// coffres partagés de son dossier (cf. _vaultsForAgent). En SA-4.3 le 2e
+// argument était l'agent ; il est désormais l'id du coffre.
+function _ns(tenant, vaultId) { return `${tenant}::${vaultId || '_'}`; }
 
-async function _vectorUpsert(env, tenant, agentId, unit) {
+async function _vectorUpsert(env, tenant, vaultId, unit) {
   if (!_vectorReady(env)) return false;
   try {
     const [values] = await _embed(env, [unit.body_text]);
     await env.KORTEX_INDEX.upsert([{
-      id: unit.id, values, namespace: _ns(tenant, agentId), metadata: { type: unit.type },
+      id: unit.id, values, namespace: _ns(tenant, vaultId), metadata: { type: unit.type },
     }]);
     return true;
   } catch (_) { return false; }
@@ -157,6 +161,38 @@ export function rrfFuse(lists, topk = SEARCH_TOPK, k = RRF_K) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, topk)
     .map(([id, s]) => ({ id, score: s }));
+}
+
+// resolveVaultIds (SA-4.4, pure) : coffres qu'un agent peut LIRE — son
+// coffre privé + les coffres partagés de son dossier. Dédupliqué, NULL
+// écartés, plafonné (MAX_VAULTS). sharedVaults = lignes {id} ou ids bruts.
+// Pur → testé par scripts/test-smart-agent-search.mjs (sans D1).
+export function resolveVaultIds(agent, sharedVaults = [], cap = MAX_VAULTS) {
+  const ids = [];
+  if (agent && agent.private_vault_id) ids.push(agent.private_vault_id);
+  for (const v of (sharedVaults || [])) {
+    const id = (typeof v === 'string') ? v : (v && v.id);
+    if (id) ids.push(id);
+  }
+  return [...new Set(ids.filter(Boolean))].slice(0, cap);
+}
+
+// mergeVectorMatches (SA-4.4, pure) : fusionne les matches de N coffres
+// (Vectorize ne query qu'UN namespace à la fois) en UNE liste ordonnée par
+// score cosinus GLOBAL — comparable entre coffres (même index/métrique) —
+// en gardant le meilleur score par id. On passe ENSUITE 2 listes à rrfFuse
+// (lexical + ce vec global) : le scoring hybride SA-3 reste inchangé. Testé.
+export function mergeVectorMatches(lists, topk = FETCH_TOPK) {
+  const best = new Map();
+  for (const list of (lists || [])) {
+    for (const m of (list || [])) {
+      if (!m || m.id == null) continue;
+      const prev = best.get(m.id);
+      if (prev === undefined || m.score > prev) best.set(m.id, m.score);
+    }
+  }
+  const sorted = [...best.entries()].sort((a, b) => b[1] - a[1]).slice(0, topk);
+  return { ids: sorted.map(([id]) => id), scores: new Map(sorted) };
 }
 
 // ── Auto-migration idempotente (pattern Keystone, cf ai-credits.js).
@@ -291,7 +327,138 @@ async function ensureSmartAgentSchema(env) {
     )
   `);
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_golden_agent ON sa_golden(agent_id)');
+
+  // ── SA-4.4 — COFFRES DÉCOUPLÉS (vault) + DOSSIERS D'AGENTS ──────
+  // Le coffre devient une entité de 1er rang : un agent possède UN coffre
+  // privé et peut LIRE les coffres partagés de son dossier. Migration
+  // additive, 100 % réversible (agent_id conservé toute la transition).
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_meta (
+      key        TEXT PRIMARY KEY,
+      value      TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_folders (
+      id          TEXT PRIMARY KEY,
+      tenant_id   TEXT NOT NULL DEFAULT 'default',
+      name        TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_folders_tenant ON sa_folders(tenant_id)');
+  await safe(`
+    CREATE TABLE IF NOT EXISTS kortex_vaults (
+      id          TEXT PRIMARY KEY,
+      tenant_id   TEXT NOT NULL DEFAULT 'default',
+      folder_id   TEXT,
+      name        TEXT NOT NULL DEFAULT 'Coffre',
+      kind        TEXT NOT NULL DEFAULT 'private' CHECK (kind IN ('private','shared')),
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_vaults_tenant ON kortex_vaults(tenant_id)');
+  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_vaults_folder ON kortex_vaults(tenant_id, folder_id, kind)');
+  // ALTER idempotents (SQLite n'a pas ADD COLUMN IF NOT EXISTS → safe() avale).
+  await safe('ALTER TABLE sa_agents   ADD COLUMN folder_id        TEXT');
+  await safe('ALTER TABLE sa_agents   ADD COLUMN private_vault_id TEXT');
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_agents_folder ON sa_agents(tenant_id, folder_id)');
+  await safe('ALTER TABLE kortex_units ADD COLUMN vault_id TEXT');
+  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_vault ON kortex_units(tenant_id, vault_id, status)');
+  // Index composé manquant : _logGap dédoublonne par (tenant, agent, norm).
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_gaps_agentnorm ON sa_gaps(tenant_id, agent_id, question_norm, status)');
+
+  // Backfill UNIQUE, gardé par une sentinelle DURABLE en D1 (le flag mémoire
+  // _schemaReady retombe à false à chaque cold start → insuffisant seul).
+  // Idempotent : re-tourner sans dégât si le Worker meurt en plein vol.
+  try {
+    const { results: meta } = await env.DB
+      .prepare("SELECT value FROM sa_meta WHERE key = 'backfill_sa440'").all();
+    if (!meta.length) {
+      await _backfillVaults(env);
+      await env.DB
+        .prepare("INSERT OR REPLACE INTO sa_meta (key, value) VALUES ('backfill_sa440', 'done')")
+        .run();
+    }
+  } catch (_) { /* le backfill ne doit JAMAIS bloquer le schéma ni les requêtes */ }
+
   _schemaReady = true;
+}
+
+// ── SA-4.4 — Backfill des coffres (migration agent → coffre privé) ──
+// Pour chaque agent sans coffre privé : en créer un et y rattacher ses
+// fiches (celles encore sans vault_id). Multi-tenant (le coffre hérite du
+// tenant de l'agent), idempotent (filtres IS NULL), reprise-safe.
+async function _backfillVaults(env) {
+  const { results: agents } = await env.DB
+    .prepare('SELECT id, tenant_id, private_vault_id FROM sa_agents').all();
+  for (const a of agents) {
+    let vid = a.private_vault_id;
+    if (!vid) {
+      vid = generateId();
+      await env.DB.prepare(
+        "INSERT INTO kortex_vaults (id, tenant_id, folder_id, name, kind) VALUES (?, ?, NULL, 'Coffre privé', 'private')"
+      ).bind(vid, a.tenant_id).run();
+      const up = await env.DB.prepare(
+        'UPDATE sa_agents SET private_vault_id = ? WHERE id = ? AND private_vault_id IS NULL'
+      ).bind(vid, a.id).run();
+      // Course perdue (un autre isolate a déjà posé le coffre) → relire l'effectif.
+      if (!up.meta?.changes) {
+        const { results } = await env.DB
+          .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ?').bind(a.id).all();
+        vid = results[0]?.private_vault_id || vid;
+      }
+    }
+    await env.DB.prepare(
+      'UPDATE kortex_units SET vault_id = ? WHERE tenant_id = ? AND agent_id = ? AND vault_id IS NULL'
+    ).bind(vid, a.tenant_id, a.id).run();
+  }
+}
+
+// _privateVaultOf : id du coffre privé d'un agent ; le crée à la volée s'il
+// n'existe pas encore (agent né après le backfill, ou course). Idempotent.
+async function _privateVaultOf(env, tenant, agentId) {
+  const { results } = await env.DB
+    .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ? AND tenant_id = ?')
+    .bind(agentId, tenant).all();
+  if (results.length && results[0].private_vault_id) return results[0].private_vault_id;
+  const vid = generateId();
+  await env.DB.prepare(
+    "INSERT INTO kortex_vaults (id, tenant_id, folder_id, name, kind) VALUES (?, ?, NULL, 'Coffre privé', 'private')"
+  ).bind(vid, tenant).run();
+  const up = await env.DB.prepare(
+    'UPDATE sa_agents SET private_vault_id = ? WHERE id = ? AND tenant_id = ? AND private_vault_id IS NULL'
+  ).bind(vid, agentId, tenant).run();
+  if (!up.meta?.changes) {
+    const { results: r2 } = await env.DB
+      .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ?').bind(agentId).all();
+    return r2[0]?.private_vault_id || vid;
+  }
+  return vid;
+}
+
+// _vaultsForAgent : coffres qu'un agent LIT (privé ∪ partagés de son dossier).
+// En SA-4.4.0 aucun agent n'a de dossier → renvoie juste [coffre privé].
+async function _vaultsForAgent(env, tenant, agentId) {
+  const { results } = await env.DB
+    .prepare('SELECT id, folder_id, private_vault_id FROM sa_agents WHERE id = ? AND tenant_id = ?')
+    .bind(agentId, tenant).all();
+  if (!results.length) return [];
+  const agent = results[0];
+  const privateId = agent.private_vault_id || await _privateVaultOf(env, tenant, agentId);
+  let shared = [];
+  if (agent.folder_id) {
+    const { results: sv } = await env.DB
+      .prepare("SELECT id FROM kortex_vaults WHERE tenant_id = ? AND folder_id = ? AND kind = 'shared'")
+      .bind(tenant, agent.folder_id).all();
+    shared = sv;
+  }
+  return resolveVaultIds({ private_vault_id: privateId }, shared);
 }
 
 // ── Auth, entitlement & tenant ──────────────────────────────────
@@ -415,21 +582,26 @@ export async function handleKortexUnitsList(request, env) {
   const url    = new URL(request.url);
   const type   = url.searchParams.get('type');
   const status = url.searchParams.get('status');
-  const agent  = url.searchParams.get('agent');   // SA-4.3 — coffre scopé par agent (silo)
+  const agent  = url.searchParams.get('agent');   // SA-4.4 — ?agent= conservé (rétro-compat front)
   if (!agent) return err('Paramètre agent requis', 400, origin);
 
-  let sql = 'SELECT * FROM kortex_units WHERE tenant_id = ? AND agent_id = ?';
-  const binds = [gate.tenant, agent];
+  // SA-4.4 — le coffre d'un agent = son coffre privé. On lit par vault_id ;
+  // fallback agent_id défensif pour les fiches pas encore migrées (transition).
+  const vaultId = await _privateVaultOf(env, gate.tenant, agent);
+  const scope = '(vault_id = ? OR (vault_id IS NULL AND agent_id = ?))';
+
+  let sql = `SELECT * FROM kortex_units WHERE tenant_id = ? AND ${scope}`;
+  const binds = [gate.tenant, vaultId, agent];
   if (type && UNIT_TEMPLATES[type])             { sql += ' AND type = ?';   binds.push(type); }
   if (status && UNIT_STATUSES.includes(status)) { sql += ' AND status = ?'; binds.push(status); }
   sql += ` ORDER BY updated_at DESC LIMIT ${MAX_UNITS_LIST}`;
 
   const { results } = await env.DB.prepare(sql).bind(...binds).all();
 
-  // Compteurs de CET agent (chips de filtre + aside).
+  // Compteurs de CE coffre (chips de filtre + aside).
   const { results: cRows } = await env.DB
-    .prepare('SELECT status, COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND agent_id = ? GROUP BY status')
-    .bind(gate.tenant, agent)
+    .prepare(`SELECT status, COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND ${scope} GROUP BY status`)
+    .bind(gate.tenant, vaultId, agent)
     .all();
   const counts = { draft: 0, validated: 0, quarantine: 0, expired: 0, total: 0 };
   for (const r of cRows) { counts[r.status] = r.n; counts.total += r.n; }
@@ -466,10 +638,14 @@ export async function handleKortexUnitCreate(request, env) {
 
   await _ensureTenant(env, gate.tenant, gate.claims?.plan);
 
+  // SA-4.4 — destination par défaut : le coffre privé de l'agent.
+  const vaultId = await _privateVaultOf(env, gate.tenant, agentId);
+
   const unit = {
     id: generateId(),
     tenant_id: gate.tenant,
     agent_id: agentId,
+    vault_id: vaultId,
     type: b.type,
     title: b.title.trim(),
     body: JSON.stringify(v.body),
@@ -482,15 +658,15 @@ export async function handleKortexUnitCreate(request, env) {
 
   await env.DB.prepare(`
     INSERT INTO kortex_units
-      (id, tenant_id, agent_id, type, title, body, body_text, status, source_kind, source_ref, review_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, tenant_id, agent_id, vault_id, type, title, body, body_text, status, source_kind, source_ref, review_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    unit.id, unit.tenant_id, unit.agent_id, unit.type, unit.title,
+    unit.id, unit.tenant_id, unit.agent_id, unit.vault_id, unit.type, unit.title,
     unit.body, unit.body_text, unit.status, unit.source_kind, unit.source_ref, unit.review_at,
   ).run();
 
   await _ftsSync(env, unit);
-  if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, agentId, unit);
+  if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, vaultId, unit);
 
   // Boucle gap-driven : si la fiche répond à un trou, on le marque résolu
   // (il quitte la file « questions sans réponse ») et on le relie à la fiche.
@@ -558,7 +734,9 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
 
   await _ftsSync(env, { id: unitId, status: nextStatus, title: nextTitle.trim(), body_text: nextBodyText });
   if (nextStatus === 'validated') {
-    await _vectorUpsert(env, gate.tenant, cur.agent_id, { id: unitId, type: cur.type, body_text: nextBodyText });
+    // SA-4.4 — indexer dans le coffre de la fiche (fallback : privé de l'agent).
+    const vid = cur.vault_id || await _privateVaultOf(env, gate.tenant, cur.agent_id);
+    await _vectorUpsert(env, gate.tenant, vid, { id: unitId, type: cur.type, body_text: nextBodyText });
   } else {
     await _vectorDelete(env, [unitId]);
   }
@@ -758,12 +936,12 @@ export async function handleKortexExtract(request, env) {
 // Sans Vectorize (binding absent / index pas créé) : mode 'lexical'.
 // ═══════════════════════════════════════════════════════════════
 // ── Récupération hybride PARTAGÉE (recherche du coffre + chat de
-//    l'agent). agentId = silo : on ne récupère QUE les fiches de cet
-//    agent (SA-4.3). Retourne des LIGNES brutes (rows D1) + la
-//    provenance ; les handlers façonnent la sortie.
-async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, agentId = null } = {}) {
-  // ── Liste lexicale (FTS5 — index global ; le cloisonnement par agent
-  //    est appliqué à la jointure D1 ci-dessous via agent_id).
+//    l'agent). vaultIds = coffres LUS (privé ∪ partagés du dossier,
+//    SA-4.4). Retourne des LIGNES brutes (rows D1) + la provenance ;
+//    les handlers façonnent la sortie.
+async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [] } = {}) {
+  // ── Liste lexicale (FTS5 — index global ; le cloisonnement par coffre
+  //    est appliqué à la jointure D1 ci-dessous via vault_id).
   let lexIds = [];
   const match = ftsMatchQuery(q);
   if (match) {
@@ -779,29 +957,41 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, agentId = null } 
     } catch (_) { /* requête FTS rejetée → liste lexicale vide */ }
   }
 
-  // ── Liste sémantique (Vectorize, namespace = tenant::agent → silo)
+  // ── Liste sémantique (Vectorize). Un coffre = un namespace (tenant::vault) ;
+  //    Vectorize ne query qu'UN namespace par appel → on interroge chaque
+  //    coffre EN PARALLÈLE (q embeddé une seule fois) puis on fusionne les
+  //    matches par score cosinus GLOBAL (mergeVectorMatches). On garde
+  //    ENSUITE 2 listes pour la RRF (lexical + vec global) : scoring inchangé.
   const vecIds = [];
   const vecScores = new Map();
   let semantic = false;
-  if (_vectorReady(env)) {
+  if (_vectorReady(env) && vaultIds.length) {
     try {
       const [qv] = await _embed(env, [q]);
-      const res = await env.KORTEX_INDEX.query(qv, { topK: FETCH_TOPK, namespace: _ns(tenant, agentId) });
-      for (const m of (res?.matches || [])) { vecIds.push(m.id); vecScores.set(m.id, m.score); }
+      const lists = await Promise.all(vaultIds.map(vid =>
+        env.KORTEX_INDEX.query(qv, { topK: FETCH_TOPK, namespace: _ns(tenant, vid) })
+          .then(res => res?.matches || [])
+          .catch(() => [])
+      ));
+      const merged = mergeVectorMatches(lists, FETCH_TOPK);
+      for (const id of merged.ids) { vecIds.push(id); vecScores.set(id, merged.scores.get(id)); }
       semantic = true;
     } catch (_) { semantic = false; }
   }
 
-  // ── Fusion RRF + jointure D1 (revérifie tenant + AGENT + statut validé).
-  //    On fuse plus large car le filtre agent_id écarte ensuite les fiches
-  //    d'autres agents remontées par l'index lexical global.
-  const fused = rrfFuse([lexIds, vecIds], agentId ? topk * 2 : topk);
+  // ── Fusion RRF + jointure D1 (revérifie tenant + COFFRES + statut validé).
+  //    On fuse plus large car le filtre vault_id écarte ensuite les fiches
+  //    d'autres coffres remontées par l'index lexical global.
+  const fused = rrfFuse([lexIds, vecIds], vaultIds.length ? topk * 2 : topk);
   let hits = [];
   if (fused.length) {
     const ph = fused.map(() => '?').join(',');
     let sql = `SELECT * FROM kortex_units WHERE id IN (${ph}) AND tenant_id = ? AND status = 'validated'`;
     const binds = [...fused.map(f => f.id), tenant];
-    if (agentId) { sql += ' AND agent_id = ?'; binds.push(agentId); }
+    if (vaultIds.length) {
+      sql += ` AND vault_id IN (${vaultIds.map(() => '?').join(',')})`;
+      binds.push(...vaultIds);
+    }
     const { results } = await env.DB.prepare(sql).bind(...binds).all();
     const byId = new Map(results.map(r => [r.id, r]));
     hits = fused
@@ -832,7 +1022,8 @@ export async function handleKortexSearch(request, env) {
   if (q.length < 2)   return err('Question trop courte', 400, origin);
   if (q.length > 500) return err('Question trop longue (500 caractères max)', 400, origin);
 
-  const { semantic, hits } = await _retrieve(env, gate.tenant, q, { topk, agentId: agent });
+  const vaultIds = await _vaultsForAgent(env, gate.tenant, agent);
+  const { semantic, hits } = await _retrieve(env, gate.tenant, q, { topk, vaultIds });
   const out = hits.map(h => ({
     unit: _rowToUnit(h.row),
     score: h.score, lexRank: h.lexRank, vecRank: h.vecRank, vecScore: h.vecScore,
@@ -857,11 +1048,12 @@ export async function handleKortexReindex(request, env) {
     return err('Index sémantique indisponible (binding Vectorize absent)', 503, origin);
   }
 
-  // Réindexe par agent (namespace tenant::agent). Optionnellement filtré
-  // à un agent via ?agent=ID, sinon réindexe tous les agents du tenant.
+  // SA-4.4 — réindexe par COFFRE (namespace tenant::vault). Peuple le
+  // nouveau namespace après la migration. Optionnellement filtré à un
+  // agent via ?agent=ID (rétro-compat), sinon tout le tenant.
   const url = new URL(request.url);
   const onlyAgent = url.searchParams.get('agent');
-  let sql = "SELECT id, type, body_text, agent_id FROM kortex_units WHERE tenant_id = ? AND status = 'validated'";
+  let sql = "SELECT id, type, body_text, vault_id, agent_id FROM kortex_units WHERE tenant_id = ? AND status = 'validated'";
   const binds = [gate.tenant];
   if (onlyAgent) { sql += ' AND agent_id = ?'; binds.push(onlyAgent); }
   const { results } = await env.DB.prepare(sql).bind(...binds).all();
@@ -873,7 +1065,7 @@ export async function handleKortexReindex(request, env) {
     try {
       const vectors = await _embed(env, chunk.map(r => r.body_text));
       await env.KORTEX_INDEX.upsert(chunk.map((r, j) => ({
-        id: r.id, values: vectors[j], namespace: _ns(gate.tenant, r.agent_id), metadata: { type: r.type },
+        id: r.id, values: vectors[j], namespace: _ns(gate.tenant, r.vault_id), metadata: { type: r.type },
       })));
       indexed += chunk.length;
     } catch (_) { failed += chunk.length; }
@@ -1096,6 +1288,10 @@ export async function handleAgentCreate(request, env) {
     VALUES (?, ?, ?, 'published', ?)
   `).bind(id, gate.tenant, v.name, JSON.stringify(v.config)).run();
 
+  // SA-4.4 — chaque agent naît avec son coffre privé (sinon il échapperait au
+  // backfill, gardé par sentinelle, et n'aurait pas de coffre où écrire).
+  await _privateVaultOf(env, gate.tenant, id);
+
   const { results } = await env.DB.prepare('SELECT * FROM sa_agents WHERE id = ?').bind(id).all();
   return json({ agent: _rowToAgent(results[0]) }, 201, origin);
 }
@@ -1290,9 +1486,10 @@ export async function handleAgentChat(request, env, agentId) {
   // récupérer. On préfixe la dernière question posée par l'agent → la
   // recherche retrouve le bon sujet (le « oui » répond à QUOI).
   const retrievalQuery = contextualQuery(message, history);
+  const vaultIds = await _vaultsForAgent(env, gate.tenant, agentId);
   const { semantic, hits } = await _retrieve(env, gate.tenant, retrievalQuery, {
     topk: CHAT_TOPK,
-    agentId,
+    vaultIds,
   });
 
   // ── Seuil d'ancrage : accroche lexicale OU similarité suffisante ──
@@ -1485,8 +1682,10 @@ export async function handleGoldenReplay(request, env, agentId) {
 
   const out = [];
   let passed = 0;
+  // SA-4.4 — coffres de l'agent résolus une fois (ils ne changent pas entre questions).
+  const vaultIds = await _vaultsForAgent(env, gate.tenant, agentId);
   for (const g of golden) {
-    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, agentId });
+    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, vaultIds });
     const { grounded, grounding } = isGrounded(ret);
     const predicted = grounded ? 'answer' : 'fallback';
     const ok = predicted === g.expect;
