@@ -299,7 +299,10 @@ function _injectCSS() {
 .gw-overlay.gw-on { opacity: 1; }
 .gw-modal {
     width: min(1100px, 92vw); height: 90vh;
-    background: var(--bg-secondary, #16161a);
+    /* Teinte surface de l'app (navy) en sombre, comme les cartes/pads du
+       dashboard — au lieu du gris neutre #16161a. Le mode clair est figé à sa
+       valeur d'origine via l'override html.light-mode plus bas. */
+    background: var(--navy2, #1c2234);
     border-radius: 16px; border: 1px solid rgba(255,255,255,.1);
     box-shadow: 0 24px 64px rgba(0,0,0,.55);
     display: grid; grid-template-rows: auto 1fr;
@@ -471,6 +474,7 @@ function _injectCSS() {
 
 /* ── MODE CLAIR ── */
 html.light-mode .gw-modal {
+    background: var(--bg-secondary, #f1f5f9);   /* clair inchangé (la base passe au navy sombre) */
     border-color: rgba(0,0,0,.1);
     box-shadow: 0 24px 64px rgba(0,0,0,.22);
 }
