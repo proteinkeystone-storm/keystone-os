@@ -6,7 +6,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
-  normQuestion, extractCitations, validateAgentPayload, isGrounded }
+  normQuestion, extractCitations, validateAgentPayload, isGrounded,
+  buildChatMessages, stripCitations }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -108,6 +109,35 @@ check('mode lexical seul (pas de sémantique) → ancré dès qu\'il y a une fic
   isGrounded({ semantic: false, hits: [{ lexRank: 1 }] }).grounded === true);
 check('grounding chiffré renvoyé',
   isGrounded({ semantic: true, hits: [{ vecScore: 0.73 }] }).grounding === 0.73);
+
+console.log('── stripCitations ──');
+check('retire les [n] et compacte', stripCitations('Oui [1] et aussi [12].') === 'Oui et aussi.');
+check('texte sans citation inchangé', stripCitations('Bonjour.') === 'Bonjour.');
+
+console.log('── buildChatMessages (anti-répétition du bug SA-3) ──');
+{
+  const history = [
+    { role: 'user',      content: 'À quelle heure fermez-vous ?' },
+    { role: 'assistant', content: 'Nous fermons à 18h [1].' },
+  ];
+  const msgs = buildChatMessages({
+    agentName: 'Guide', mission: 'Renseigner', tone: 'chaleureux',
+    fallbackText: 'Je ne sais pas.',
+    fiches: '[1] (fact) Tarifs\nÉtudiant : 8 €',
+    history, message: 'Et le tarif étudiant ?',
+  });
+  const sys = msgs[0];
+  check('system STABLE : aucun CONTENU de fiche (les fiches ne sont pas dans le system)',
+    sys.role === 'system' && !sys.content.includes('FICHES DE SAVOIR') && !sys.content.includes('Tarifs') && !sys.content.includes('8 €'));
+  check('historique nettoyé de ses [n] périmés',
+    msgs[1].content === 'À quelle heure fermez-vous ?' && msgs[2].content === 'Nous fermons à 18h.');
+  check('fiches + question UNIQUEMENT dans le dernier message',
+    msgs[3].role === 'user' && msgs[3].content.includes('[1] (fact) Tarifs') && msgs[3].content.includes('QUESTION : Et le tarif étudiant ?'));
+  check('AUCUN message d\'historique ne contient un bloc fiches',
+    msgs.slice(0, 3).every(m => !m.content.includes('FICHES DE SAVOIR')));
+  check('le repli exact est injecté dans les règles',
+    sys.content.includes('« Je ne sais pas. »'));
+}
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
 process.exit(failed ? 1 : 0);
