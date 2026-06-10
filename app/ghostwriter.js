@@ -331,7 +331,7 @@ function _injectCSS() {
     color: var(--text-primary, #fff); font-size: 14px; line-height: 1.55;
     font-family: inherit; box-sizing: border-box;
 }
-.gw-source:focus { outline: 0; border-color: rgba(120,160,255,.4); background: rgba(255,255,255,.06); }
+.gw-source:focus { outline: 0; border-color: rgba(99,102,241,.4); background: rgba(255,255,255,.06); }
 .gw-options { display: flex; gap: 8px; flex-wrap: wrap; }
 .gw-option-btn {
     padding: 7px 14px; border-radius: 100px;
@@ -340,13 +340,13 @@ function _injectCSS() {
     cursor: pointer; transition: all .14s ease;
 }
 .gw-option-btn.gw-on {
-    background: rgba(120,160,255,.18); border-color: rgba(120,160,255,.45);
+    background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.45);
     color: var(--text-primary, #fff);
 }
 .gw-option-btn:hover:not(.gw-on) { background: rgba(255,255,255,.07); color: #ddd; }
 .gw-go {
     width: 100%; padding: 12px 20px;
-    background: linear-gradient(135deg, #6496ff, #8060ff);
+    background: linear-gradient(135deg, var(--gold, #6366f1), var(--gold2, #818cf8));
     border: 0; border-radius: 10px; color: white;
     font-size: 14px; font-weight: 600; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -358,7 +358,7 @@ function _injectCSS() {
 .gw-status.gw-error { color: #e05c5c; }
 .gw-meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-muted, #888); flex-wrap: wrap; margin-top: 4px; }
 .gw-quota, .gw-mode-chip { padding: 3px 10px; border-radius: 100px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06); }
-.gw-mode-chip { background: rgba(120,160,255,.12); color: #8aaeff; }
+.gw-mode-chip { background: rgba(99,102,241,.12); color: #818cf8; }
 .gw-variants { display: flex; flex-direction: column; gap: 14px; }
 /* Carousel (Phase 3) — 3 slides superposées, seule l'active visible.
    Hauteur fixe pour éviter le saut UI au changement de slide. */
@@ -401,8 +401,8 @@ function _injectCSS() {
     transition: all .15s ease;
     align-self: stretch;
 }
-.gw-nav:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
-.gw-variant-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8aaeff; margin-bottom: 9px; font-weight: 600; }
+.gw-nav:hover { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.35); color: #fff; }
+.gw-variant-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #818cf8; margin-bottom: 9px; font-weight: 600; }
 .gw-variant-text { color: var(--text-primary, #f0f0f0); font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-wrap: break-word; }
 .gw-indicators { display: flex; justify-content: center; gap: 6px; margin-top: 4px; }
 .gw-indicator {
@@ -415,8 +415,8 @@ function _injectCSS() {
     transition: all .14s ease;
 }
 .gw-indicator.is-active {
-    background: rgba(120,160,255,.18);
-    border-color: rgba(120,160,255,.5);
+    background: rgba(99,102,241,.18);
+    border-color: rgba(99,102,241,.5);
     color: #fff;
 }
 .gw-indicator:hover:not(.is-active) { background: rgba(255,255,255,.07); color: #ddd; }
@@ -428,9 +428,9 @@ function _injectCSS() {
     background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
     color: var(--text-primary, #ddd); transition: all .15s ease;
 }
-.gw-mini-btn:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.35); color: #fff; }
-.gw-mini-btn.gw-action-send { background: rgba(120,160,255,.18); border-color: rgba(120,160,255,.42); color: #cdddff; }
-.gw-mini-btn.gw-action-send:hover { background: rgba(120,160,255,.30); border-color: rgba(120,160,255,.6); color: #fff; }
+.gw-mini-btn:hover { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.35); color: #fff; }
+.gw-mini-btn.gw-action-send { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.42); color: #c7d2fe; }
+.gw-mini-btn.gw-action-send:hover { background: rgba(99,102,241,.30); border-color: rgba(99,102,241,.6); color: #fff; }
 .gw-shortcut-hint { font-size: 11px; color: var(--text-muted, #888); margin-left: auto; }
 .gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 40px 0; line-height: 1.6; }
 /* ── Mode compose (chaîne) : 1 grand post + archive ── */
@@ -449,7 +449,7 @@ function _injectCSS() {
 .gw-archive-count { background: var(--gold3, rgba(99,102,241,.14)); color: var(--gold2, #818cf8); border-radius: 100px; padding: 1px 8px; font-size: 10px; }
 .gw-archive-list { display: flex; flex-direction: column; gap: 8px; }
 .gw-archive-item { background: rgba(127,127,127,.06); border: 1px solid var(--bd, rgba(255,255,255,.07)); border-radius: 10px; padding: 10px 12px; }
-.gw-archive-net { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--gold2, #8aaeff); margin-bottom: 4px; text-transform: uppercase; }
+.gw-archive-net { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--gold2, #818cf8); margin-bottom: 4px; text-transform: uppercase; }
 .gw-archive-text { font-size: 12.5px; color: var(--text-muted, #aaa); line-height: 1.5; }
 .gw-archive-acts { display: flex; gap: 6px; margin-top: 9px; }
 .gw-archive-btn {
@@ -458,8 +458,8 @@ function _injectCSS() {
     color: var(--text-muted, #ccc); transition: all .14s ease;
 }
 .gw-archive-btn:hover { color: var(--text-primary, #fff); background: rgba(127,127,127,.2); }
-.gw-arch-send { background: rgba(120,160,255,.16); border-color: rgba(120,160,255,.35); color: #9fc0ff; }
-.gw-arch-send:hover { background: rgba(120,160,255,.28); color: #fff; }
+.gw-arch-send { background: rgba(99,102,241,.16); border-color: rgba(99,102,241,.35); color: #c7d2fe; }
+.gw-arch-send:hover { background: rgba(99,102,241,.28); color: #fff; }
 .gw-spinner {
     width: 14px; height: 14px;
     border: 2px solid rgba(255,255,255,.3);
@@ -486,13 +486,13 @@ html.light-mode .gw-source {
     color: #0f172a;
 }
 html.light-mode .gw-source::placeholder { color: rgba(0,0,0,.4); }
-html.light-mode .gw-source:focus { border-color: rgba(68,86,196,.5); background: #fff; }
+html.light-mode .gw-source:focus { border-color: rgba(79,70,229,.5); background: #fff; }
 html.light-mode .gw-option-btn {
     background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
     color: #475569;
 }
 html.light-mode .gw-option-btn.gw-on {
-    background: rgba(68,86,196,.12); border-color: rgba(68,86,196,.4);
+    background: rgba(79,70,229,.12); border-color: rgba(79,70,229,.4);
     color: #0f172a;
 }
 html.light-mode .gw-option-btn:hover:not(.gw-on) { background: rgba(0,0,0,.06); color: #0f172a; }
@@ -501,7 +501,7 @@ html.light-mode .gw-meta { color: #64748b; }
 html.light-mode .gw-quota, html.light-mode .gw-mode-chip {
     background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
 }
-html.light-mode .gw-mode-chip { background: rgba(68,86,196,.1); color: #4456c4; }
+html.light-mode .gw-mode-chip { background: rgba(79,70,229,.1); color: #4f46e5; }
 html.light-mode .gw-slides {
     background: rgba(0,0,0,.02); border-color: rgba(0,0,0,.1);
 }
@@ -509,8 +509,8 @@ html.light-mode .gw-nav {
     border-color: rgba(0,0,0,.1);
     color: #475569;
 }
-html.light-mode .gw-nav:hover { background: rgba(68,86,196,.1); border-color: rgba(68,86,196,.35); color: #0f172a; }
-html.light-mode .gw-variant-label { color: #4456c4; }
+html.light-mode .gw-nav:hover { background: rgba(79,70,229,.1); border-color: rgba(79,70,229,.35); color: #0f172a; }
+html.light-mode .gw-variant-label { color: #4f46e5; }
 html.light-mode .gw-variant-text { color: #0f172a; }
 html.light-mode .gw-indicator {
     background: rgba(0,0,0,.03);
@@ -518,8 +518,8 @@ html.light-mode .gw-indicator {
     color: #64748b;
 }
 html.light-mode .gw-indicator.is-active {
-    background: rgba(68,86,196,.12);
-    border-color: rgba(68,86,196,.45);
+    background: rgba(79,70,229,.12);
+    border-color: rgba(79,70,229,.45);
     color: #0f172a;
 }
 html.light-mode .gw-indicator:hover:not(.is-active) { background: rgba(0,0,0,.06); color: #0f172a; }
@@ -528,7 +528,7 @@ html.light-mode .gw-mini-btn {
     background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1);
     color: #0f172a;
 }
-html.light-mode .gw-mini-btn:hover { background: rgba(68,86,196,.1); border-color: rgba(68,86,196,.35); color: #0f172a; }
+html.light-mode .gw-mini-btn:hover { background: rgba(79,70,229,.1); border-color: rgba(79,70,229,.35); color: #0f172a; }
 html.light-mode .gw-shortcut-hint { color: #64748b; }
 html.light-mode .gw-empty { color: #64748b; }
     `;
