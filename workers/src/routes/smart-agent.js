@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes Smart Agent / Kortex (Sprint SA-1) v1.0
+   KEYSTONE OS — Routes Smart Agent / Kortex (Sprint SA-2) v2.0
 
    Le pad O-AGT-001 fabrique des « jumeaux numériques de savoir-faire » :
    des agents qui répondent UNIQUEMENT depuis le coffre de savoir Kortex
@@ -17,6 +17,10 @@
    DELETE /api/smart-agent/kortex/collections/:id    Supprimer (fiches → sans collection)
    POST   /api/smart-agent/kortex/extract            Coller-texte → fiches proposées
                                                      (KS_AI_MODEL, 1 crédit DORMANT)
+   GET    /api/smart-agent/kortex/search             Recherche hybride : FTS5 + Vectorize,
+                                                     fusion RRF (dégrade en lexical seul)
+   POST   /api/smart-agent/kortex/reindex            Réindexation sémantique des fiches
+                                                     validées du tenant (post-création index)
 
    Auth : JWT obligatoire (sauf health). Accès réservé MAX/ADMIN/BETA
    pendant la beta (décision Stéphane 2026-06-10). Tenant = identité
@@ -35,7 +39,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-1';
+const SA_ENGINE_VERSION = 'SA-2';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -55,6 +59,82 @@ const UNIT_STATUSES = ['draft', 'validated', 'quarantine', 'expired'];
 const MAX_FIELD_LEN = 4000;     // par champ — un coffre = des fiches, pas des romans
 const MAX_TITLE_LEN = 200;
 const MAX_UNITS_LIST = 500;     // garde-fou de liste (pagination au besoin, plus tard)
+
+// ── Sémantique (SA-2) : embeddings + index Vectorize ───────────
+// bge-m3 : multilingue (français natif), 1024 dims — DOIT correspondre à
+// l'index `keystone-kortex` (cosine, cf. wrangler.toml). Isolation
+// multi-tenant par NAMESPACE Vectorize (+ revérification D1 à la jointure).
+// L'embedding à la validation est un coût interne (neurones Workers AI),
+// PAS un crédit client — valider son propre savoir ne se facture pas.
+const EMBED_MODEL = '@cf/baai/bge-m3';
+const RRF_K       = 60;   // constante classique de Reciprocal Rank Fusion
+const SEARCH_TOPK = 8;    // résultats renvoyés par défaut
+const FETCH_TOPK  = 20;   // profondeur de chaque liste avant fusion
+
+function _vectorReady(env) {
+  return !!(env.KORTEX_INDEX && env.AI && typeof env.AI.run === 'function');
+}
+
+// Embeddings batch — retourne un tableau de vecteurs (1 par texte).
+async function _embed(env, texts) {
+  if (!texts.length) return [];
+  const res = await env.AI.run(EMBED_MODEL, { text: texts });
+  const data = res?.data;
+  if (!Array.isArray(data) || data.length !== texts.length) {
+    throw new Error('Réponse embeddings inattendue');
+  }
+  return data;
+}
+
+// Upsert / suppression BEST-EFFORT dans Vectorize : l'index sémantique ne
+// doit JAMAIS bloquer le CRUD du coffre. En cas d'échec, la recherche
+// dégrade en lexical et POST /kortex/reindex rattrape le retard.
+async function _vectorUpsert(env, tenant, unit) {
+  if (!_vectorReady(env)) return false;
+  try {
+    const [values] = await _embed(env, [unit.body_text]);
+    await env.KORTEX_INDEX.upsert([{
+      id: unit.id, values, namespace: tenant, metadata: { type: unit.type },
+    }]);
+    return true;
+  } catch (_) { return false; }
+}
+async function _vectorDelete(env, ids) {
+  if (!_vectorReady(env) || !ids.length) return;
+  try { await env.KORTEX_INDEX.deleteByIds(ids); } catch (_) {}
+}
+
+// ── Recherche : requête FTS5 sûre + fusion RRF ──────────────────
+// Exportées (pures) : testées par scripts/test-smart-agent-search.mjs.
+// ftsMatchQuery : tokens nettoyés (accents pliés — le tokenizer unicode61
+// de FTS5 plie aussi les siens), quotés, joints par OR. null si vide.
+export function ftsMatchQuery(q) {
+  const tokens = String(q || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')              // plie l'accent SANS couper le mot (é → e+◌́ → e)
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')   // neutralise opérateurs FTS et ponctuation
+    .split(/\s+/)
+    .filter(t => t.length >= 2)
+    .slice(0, 8);
+  if (!tokens.length) return null;
+  return tokens.map(t => `"${t}"`).join(' OR ');
+}
+
+// rrfFuse : lists = tableaux d'ids classés par pertinence décroissante.
+// score(id) = Σ 1/(K + rang) — robuste sans normaliser bm25 vs cosine.
+export function rrfFuse(lists, topk = SEARCH_TOPK, k = RRF_K) {
+  const score = new Map();
+  for (const list of lists) {
+    list.forEach((id, i) => {
+      score.set(id, (score.get(id) || 0) + 1 / (k + i + 1));
+    });
+  }
+  return [...score.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topk)
+    .map(([id, s]) => ({ id, score: s }));
+}
 
 // ── Auto-migration idempotente (pattern Keystone, cf ai-credits.js).
 //    Miroir exécutable de db/migration_smart_agent.sql. ────────────
@@ -361,6 +441,7 @@ export async function handleKortexUnitCreate(request, env) {
   ).run();
 
   await _ftsSync(env, unit);
+  if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, unit);
 
   const { results } = await env.DB
     .prepare('SELECT * FROM kortex_units WHERE id = ?').bind(unit.id).all();
@@ -419,6 +500,11 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
   ).run();
 
   await _ftsSync(env, { id: unitId, status: nextStatus, title: nextTitle.trim(), body_text: nextBodyText });
+  if (nextStatus === 'validated') {
+    await _vectorUpsert(env, gate.tenant, { id: unitId, type: cur.type, body_text: nextBodyText });
+  } else {
+    await _vectorDelete(env, [unitId]);
+  }
 
   const { results: after } = await env.DB
     .prepare('SELECT * FROM kortex_units WHERE id = ?').bind(unitId).all();
@@ -439,6 +525,7 @@ export async function handleKortexUnitDelete(request, env, unitId) {
     .bind(unitId, gate.tenant)
     .run();
   await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(unitId).run();
+  await _vectorDelete(env, [unitId]);
 
   if (!res.meta?.changes) return err('Fiche introuvable', 404, origin);
   return json({ ok: true }, 200, origin);
@@ -606,6 +693,112 @@ export async function handleKortexExtract(request, env) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// GET /api/smart-agent/kortex/search — recherche hybride
+// FTS5 (mots exacts : noms propres, références) + Vectorize (sens) →
+// fusion RRF → jointure D1 qui REVÉRIFIE tenant + statut validé
+// (jamais de fiche servie sur la seule foi d'un index).
+// Sans Vectorize (binding absent / index pas créé) : mode 'lexical'.
+// ═══════════════════════════════════════════════════════════════
+export async function handleKortexSearch(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const url  = new URL(request.url);
+  const q    = (url.searchParams.get('q') || '').trim();
+  const topk = Math.min(Math.max(parseInt(url.searchParams.get('topk'), 10) || SEARCH_TOPK, 1), 20);
+  if (q.length < 2)   return err('Question trop courte', 400, origin);
+  if (q.length > 500) return err('Question trop longue (500 caractères max)', 400, origin);
+
+  // ── Liste lexicale (FTS5 — ne contient que des fiches validées)
+  let lexIds = [];
+  const match = ftsMatchQuery(q);
+  if (match) {
+    try {
+      const { results } = await env.DB.prepare(`
+        SELECT unit_id, bm25(kortex_units_fts) AS rank
+          FROM kortex_units_fts
+         WHERE kortex_units_fts MATCH ?
+         ORDER BY rank
+         LIMIT ${FETCH_TOPK}
+      `).bind(match).all();
+      lexIds = results.map(r => r.unit_id);
+    } catch (_) { /* requête FTS rejetée → liste lexicale vide */ }
+  }
+
+  // ── Liste sémantique (Vectorize, namespace = tenant)
+  const vecIds = [];
+  const vecScores = new Map();
+  let semantic = false;
+  if (_vectorReady(env)) {
+    try {
+      const [qv] = await _embed(env, [q]);
+      const res = await env.KORTEX_INDEX.query(qv, { topK: FETCH_TOPK, namespace: gate.tenant });
+      for (const m of (res?.matches || [])) { vecIds.push(m.id); vecScores.set(m.id, m.score); }
+      semantic = true;
+    } catch (_) { semantic = false; }
+  }
+
+  // ── Fusion RRF + jointure D1
+  const fused = rrfFuse([lexIds, vecIds], topk);
+  let out = [];
+  if (fused.length) {
+    const ph = fused.map(() => '?').join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM kortex_units WHERE id IN (${ph}) AND tenant_id = ? AND status = 'validated'`
+    ).bind(...fused.map(f => f.id), gate.tenant).all();
+    const byId = new Map(results.map(r => [r.id, r]));
+    out = fused
+      .filter(f => byId.has(f.id))
+      .map(f => ({
+        unit: _rowToUnit(byId.get(f.id)),
+        score: Math.round(f.score * 1000) / 1000,
+        lexRank: lexIds.indexOf(f.id) + 1 || null,
+        vecRank: vecIds.indexOf(f.id) + 1 || null,
+        vecScore: vecScores.has(f.id) ? Math.round(vecScores.get(f.id) * 100) / 100 : null,
+      }));
+  }
+
+  return json({ q, mode: semantic ? 'hybrid' : 'lexical', results: out }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/smart-agent/kortex/reindex — réindexation sémantique
+// À appeler après la création de l'index Vectorize (fiches validées
+// AVANT le déploiement SA-2) ou après une panne d'upsert prolongée.
+// Idempotent (upsert par id). Batch de 50 (limite bge-m3 ~100 textes).
+// ═══════════════════════════════════════════════════════════════
+export async function handleKortexReindex(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  if (!_vectorReady(env)) {
+    return err('Index sémantique indisponible (binding Vectorize absent)', 503, origin);
+  }
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, type, body_text FROM kortex_units WHERE tenant_id = ? AND status = 'validated'"
+  ).bind(gate.tenant).all();
+
+  let indexed = 0, failed = 0;
+  const BATCH = 50;
+  for (let i = 0; i < results.length; i += BATCH) {
+    const chunk = results.slice(i, i + BATCH);
+    try {
+      const vectors = await _embed(env, chunk.map(r => r.body_text));
+      await env.KORTEX_INDEX.upsert(chunk.map((r, j) => ({
+        id: r.id, values: vectors[j], namespace: gate.tenant, metadata: { type: r.type },
+      })));
+      indexed += chunk.length;
+    } catch (_) { failed += chunk.length; }
+  }
+  return json({ ok: true, indexed, failed, total: results.length }, 200, origin);
+}
+
 // Parse tolérant : retire les fences ```json, isole le tableau, valide
 // chaque proposition via validateUnit (les invalides sont écartées).
 function _parseProposals(raw) {
@@ -627,3 +820,8 @@ function _parseProposals(raw) {
   }
   return out;
 }
+
+// ── Exports de test (scripts/test-smart-agent-search.mjs) ───────
+// validateUnit et le parseur d'extraction sont le CONTRAT du coffre :
+// on les teste en node, sans Worker ni D1.
+export { validateUnit, _parseProposals as parseProposals };

@@ -42,6 +42,19 @@ binding = "AI"
 binding     = "HELP_MEDIA"
 bucket_name = "keystone-help-media"
 
+# ── Vectorize — index sémantique du coffre Kortex (Smart Agent, SA-2) ──
+# Embeddings @cf/baai/bge-m3 (multilingue/français, 1024 dims, cosine).
+# Isolation multi-tenant par NAMESPACE (= tenant_id) à l'insert ET au query.
+# ⚠ CRÉER L'INDEX AVANT LE PREMIER DEPLOY (sinon wrangler deploy échoue) :
+#   npx wrangler vectorize create keystone-kortex --dimensions=1024 --metric=cosine
+# Puis réindexer les fiches validées préexistantes :
+#   POST /api/smart-agent/kortex/reindex (JWT MAX/admin)
+# Le code dégrade proprement en recherche lexicale seule si le binding
+# est absent (dev local / index pas encore créé).
+[[vectorize]]
+binding    = "KORTEX_INDEX"
+index_name = "keystone-kortex"
+
 # ── Variables publiques (non-secrètes) ─────────────────────────
 # CSV multi-origin : production Vercel + previews + dev local.
 # Le Worker renvoie l'origin qui correspond à celle de la requête

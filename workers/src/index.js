@@ -107,7 +107,7 @@ import { handleSmartAgentHealth,
          handleKortexUnitUpdate, handleKortexUnitDelete,
          handleKortexCollectionsList, handleKortexCollectionCreate,
          handleKortexCollectionUpdate, handleKortexCollectionDelete,
-         handleKortexExtract } from './routes/smart-agent.js';
+         handleKortexExtract, handleKortexSearch, handleKortexReindex } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -138,6 +138,8 @@ export default {
       if (path === '/api/smart-agent/kortex/collections' && method === 'GET')  return handleKortexCollectionsList(request, env);
       if (path === '/api/smart-agent/kortex/collections' && method === 'POST') return handleKortexCollectionCreate(request, env);
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
+      if (path === '/api/smart-agent/kortex/search'      && method === 'GET')  return handleKortexSearch(request, env);
+      if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
       const saUnitMatch = path.match(/^\/api\/smart-agent\/kortex\/units\/([A-Za-z0-9-]+)$/);
       if (saUnitMatch && method === 'PATCH')  return handleKortexUnitUpdate(request, env, saUnitMatch[1]);
       if (saUnitMatch && method === 'DELETE') return handleKortexUnitDelete(request, env, saUnitMatch[1]);

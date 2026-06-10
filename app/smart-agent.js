@@ -92,10 +92,10 @@ const STATUS_META = {
 
 // ── Feuille de route (vue Agents) — états honnêtes par sprint ──
 const ENGINE_STEPS = [
-    { icon: 'kortex',      label: 'Le coffre Kortex',   desc: 'Créez et validez vos fiches de savoir typées.',              status: 'live' },
-    { icon: 'eye',         label: 'La recherche',       desc: 'Retrouvez la bonne fiche en posant une question naturelle.', status: 'next' },
-    { icon: 'smart-agent', label: 'Le dialogue ancré',  desc: 'Votre agent répond depuis vos fiches, sources citées.',      status: 'soon' },
-    { icon: 'sparkles',    label: 'La création guidée', desc: 'Identité, périmètre, garde-fous : votre jumeau pas à pas.',  status: 'soon' },
+    { icon: 'kortex',      label: 'Le coffre Kortex',   desc: 'Créez et validez vos fiches de savoir typées.',                  status: 'live' },
+    { icon: 'search',      label: 'La recherche',       desc: 'Posez une question, retrouvez la bonne fiche — testez au coffre.', status: 'live' },
+    { icon: 'smart-agent', label: 'Le dialogue ancré',  desc: 'Votre agent répond depuis vos fiches, sources citées.',          status: 'next' },
+    { icon: 'sparkles',    label: 'La création guidée', desc: 'Identité, périmètre, garde-fous : votre jumeau pas à pas.',      status: 'soon' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -114,6 +114,8 @@ const _kx = {
     editType: 'qa',            // type sélectionné en création
 };
 const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error: null, adding: false };
+// Recherche hybride (SA-2) — results null = pas de recherche active.
+const _kxs = { q: '', busy: false, mode: null, results: null };
 
 // ═══════════════════════════════════════════════════════════════
 // API
@@ -218,7 +220,16 @@ function _onClick(e) {
     if (act === 'kx-extract')   { _openExtract(); return; }
     if (act === 'kx-ftype')     { _kx.filterType = actEl.dataset.v;   _kxReload(); return; }
     if (act === 'kx-fstatus')   { _kx.filterStatus = actEl.dataset.v; _kxReload(); return; }
-    if (act === 'kx-edit')      { _openEditor(_kx.units.find(u => u.id === actEl.dataset.id) || null); return; }
+    if (act === 'kx-search')       { _runSearch(); return; }
+    if (act === 'kx-search-clear') { _clearSearch(); return; }
+    if (act === 'kx-edit') {
+        // La fiche peut venir de la liste OU des résultats de recherche.
+        const id = actEl.dataset.id;
+        const u  = _kx.units.find(x => x.id === id)
+            || _kxs.results?.find(r => r.unit.id === id)?.unit;
+        if (u) _openEditor(u);
+        return;
+    }
     if (act === 'kx-validate')  { _quickStatus(actEl.dataset.id, 'validated'); return; }
     if (act === 'kx-delete')    { _deleteUnit(actEl.dataset.id); return; }
     // ── Coffre : éditeur ──
@@ -298,7 +309,7 @@ function _renderMain() {
     const main = _root.querySelector('[data-slot="main"]');
     if (_view === 'agents') { main.innerHTML = _agentsViewHTML(); }
     else if (_kx.mode === 'editor') { main.innerHTML = _editorHTML(); _bindEditorInputs(); }
-    else { main.innerHTML = _kortexViewHTML(); }
+    else { main.innerHTML = _kortexViewHTML(); _bindKortexInputs(main); }
     main.scrollTop = 0;
 }
 
@@ -397,6 +408,10 @@ function _kortexViewHTML() {
         </div>
       </div>
 
+      ${_searchBarHTML()}
+
+      ${_kxs.busy ? `
+      <div class="sa-loading">${icon('search', 16)} Recherche dans le coffre…</div>` : _kxs.results !== null ? _searchResultsHTML() : `
       <div class="sa-chips">
         ${fStatus('all', 'Toutes', c.total)}
         ${fStatus('draft', 'Brouillons', c.draft)}
@@ -413,9 +428,87 @@ function _kortexViewHTML() {
       <div class="sa-units">
         ${_kx.units.map(_unitRowHTML).join('')}
       </div>` : `
-      <div class="sa-empty-filter">Aucune fiche ne correspond à ce filtre.</div>`}
+      <div class="sa-empty-filter">Aucune fiche ne correspond à ce filtre.</div>`}`}
     </section>
   `;
+}
+
+// ── Recherche hybride (SA-2) : l'étape 2 du moteur, testable au coffre.
+// C'est EXACTEMENT la récupération que l'agent utilisera au SA-3 — la
+// tester ici, c'est auditer ce que l'agent saura retrouver.
+function _searchBarHTML() {
+    return `
+    <div class="sa-search">
+      <span class="sa-search-ico">${icon('search', 16)}</span>
+      <input class="sa-input sa-search-input" data-slot="kx-q" maxlength="500"
+             placeholder="Testez votre coffre : posez une question naturelle…"
+             value="${_escAttr(_kxs.q)}">
+      <button class="sa-btn is-primary" data-act="kx-search">Chercher</button>
+      ${_kxs.results !== null ? `<button class="sa-btn" data-act="kx-search-clear" title="Revenir aux fiches">${icon('x', 14)}</button>` : ''}
+    </div>`;
+}
+
+function _searchResultsHTML() {
+    const n = _kxs.results.length;
+    const modeNote = _kxs.mode === 'hybrid'
+        ? 'Recherche hybride — mots exacts + sens (sémantique)'
+        : 'Recherche lexicale (mots exacts) — la couche sémantique s\'activera au déploiement de l\'index';
+    if (!n) {
+        return `
+      <p class="sa-search-note">${modeNote}</p>
+      <div class="sa-empty-filter">
+        Aucune fiche validée ne répond à cette question.<br>
+        <small>C'est un trou de savoir — à l'étape « Dialogue ancré », ces questions alimenteront
+        automatiquement votre liste de travail.</small>
+      </div>`;
+    }
+    const row = r => {
+        const t = KORTEX_TYPES.find(x => x.id === r.unit.type) || KORTEX_TYPES[0];
+        return `
+      <article class="sa-unit" data-act="kx-edit" data-id="${r.unit.id}" role="button" tabindex="0">
+        <span class="sa-unit-ico" title="${t.label}">${icon(t.icon, 18)}</span>
+        <div class="sa-unit-txt">
+          <strong class="sa-unit-title">${_esc(r.unit.title)}</strong>
+          <span class="sa-unit-snip">${_esc(_snippet(r.unit))}</span>
+          <span class="sa-unit-meta">${t.label}</span>
+        </div>
+        <div class="sa-srcs">
+          ${r.lexRank ? `<span class="sa-src" title="Trouvée par les mots exacts (rang ${r.lexRank})">${icon('search', 11)} Mots №${r.lexRank}</span>` : ''}
+          ${r.vecRank ? `<span class="sa-src is-vec" title="Trouvée par le sens${r.vecScore != null ? ` (similarité ${Math.round(r.vecScore * 100)}%)` : ''}">${icon('sparkles', 11)} Sens${r.vecScore != null ? ` ${Math.round(r.vecScore * 100)}%` : ''}</span>` : ''}
+        </div>
+      </article>`;
+    };
+    return `
+    <p class="sa-search-note">${modeNote} · ${n} résultat${n > 1 ? 's' : ''}, du plus pertinent au moins pertinent</p>
+    <div class="sa-units">${_kxs.results.map(row).join('')}</div>`;
+}
+
+function _bindKortexInputs(main) {
+    const q = main.querySelector('[data-slot="kx-q"]');
+    if (q) q.addEventListener('keydown', e => { if (e.key === 'Enter') _runSearch(); });
+}
+
+async function _runSearch() {
+    const main = _root.querySelector('[data-slot="main"]');
+    const q = (main.querySelector('[data-slot="kx-q"]')?.value || '').trim();
+    if (q.length < 2) { _toast('Posez une vraie question (2 caractères minimum).', 'error'); return; }
+    _kxs.q = q; _kxs.busy = true;
+    _renderMain();
+    try {
+        const res = await _api(`/kortex/search?q=${encodeURIComponent(q)}`);
+        _kxs.results = res.results || [];
+        _kxs.mode = res.mode || null;
+    } catch (e) {
+        _kxs.results = null; _kxs.mode = null;
+        _toast(e.message, 'error');
+    }
+    _kxs.busy = false;
+    _renderMain();
+}
+
+function _clearSearch() {
+    _kxs.q = ''; _kxs.results = null; _kxs.mode = null; _kxs.busy = false;
+    _renderMain();
 }
 
 function _unitRowHTML(u) {

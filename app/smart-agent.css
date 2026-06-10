@@ -616,6 +616,56 @@
 .sa-prop-txt strong { font-size: 12.5px; color: var(--text); letter-spacing: -0.01em; }
 .sa-prop-txt span   { font-size: 11.5px; color: var(--tx3); line-height: 1.45; }
 
+/* ── Recherche hybride (SA-2) ─────────────────────────────────── */
+.sa-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+}
+.sa-search:focus-within {
+  border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+}
+.sa-search-ico { flex: none; color: var(--tx3); display: flex; }
+.sa-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 6px 2px;
+}
+.sa-search-input:focus { border: none; }
+
+.sa-search-note {
+  font-size: 11.5px;
+  color: var(--tx3);
+  margin: 0 0 12px;
+}
+.sa-empty-filter small { display: block; margin-top: 8px; color: var(--tx3); line-height: 1.5; }
+
+.sa-srcs { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.sa-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--tx2);
+  border: 1px solid var(--bd);
+  white-space: nowrap;
+}
+.sa-src.is-vec {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+}
+
 /* ── Toast ────────────────────────────────────────────────────── */
 .sa-toast {
   position: fixed;
