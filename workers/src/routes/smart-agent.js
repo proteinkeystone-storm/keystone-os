@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes Smart Agent / Kortex (Sprint SA-3) v3.0
+   KEYSTONE OS — Routes Smart Agent / Kortex (Sprint SA-4) v4.0
 
    Le pad O-AGT-001 fabrique des « jumeaux numériques de savoir-faire » :
    des agents qui répondent UNIQUEMENT depuis le coffre de savoir Kortex
@@ -28,6 +28,18 @@
    POST   /api/smart-agent/agents/:id/chat           Dialogue ancré : récupération hybride →
                                                      génération citée [n] → repli honnête →
                                                      trou loggé dans sa_gaps (1 crédit DORMANT)
+   GET    /api/smart-agent/gaps                       File des « questions sans réponse » (SA-4)
+   POST   /api/smart-agent/gaps/:id/dismiss          Ignorer un trou
+   GET    /api/smart-agent/agents/:id/golden          Jeu de questions étalon de l'agent
+   POST   /api/smart-agent/agents/:id/golden          Épingler une question étalon (depuis le bac à sable)
+   DELETE /api/smart-agent/golden/:id                Retirer une question étalon
+   POST   /api/smart-agent/agents/:id/golden/replay   Rejouer le jeu étalon → score de santé
+                                                     (récupération seule, sans génération = gratuit)
+
+   Boucle gap-driven (SA-4) : POST /kortex/units accepte resolve_gap_id —
+   créer une fiche depuis un trou le marque « répondu » et le retire de
+   la file. C'est le moteur d'acquisition : le savoir grandit là où la
+   demande (les questions réelles) existe.
 
    Auth : JWT obligatoire (sauf health). Accès réservé MAX/ADMIN/BETA
    pendant la beta (décision Stéphane 2026-06-10). Tenant = identité
@@ -46,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-3';
+const SA_ENGINE_VERSION = 'SA-4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -255,6 +267,22 @@ async function ensureSmartAgentSchema(env) {
   `);
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_gaps_tenant ON sa_gaps(tenant_id, status)');
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_gaps_norm   ON sa_gaps(tenant_id, question_norm)');
+  // ── Jeu de questions étalon par agent (golden set, SA-4) ──────
+  // expect : 'answer' (l'agent DOIT savoir répondre) | 'fallback'
+  // (l'agent DOIT dire « je ne sais pas » — question piège hors périmètre).
+  // Le replay compare le comportement réel à cette attente → score de santé.
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_golden (
+      id          TEXT PRIMARY KEY,
+      tenant_id   TEXT NOT NULL DEFAULT 'default',
+      agent_id    TEXT NOT NULL,
+      question    TEXT NOT NULL,
+      expect      TEXT NOT NULL DEFAULT 'answer' CHECK (expect IN ('answer','fallback')),
+      created_at  TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_golden_agent ON sa_golden(agent_id)');
   _schemaReady = true;
 }
 
@@ -417,8 +445,10 @@ export async function handleKortexUnitCreate(request, env) {
   if (!v.ok) return err(v.msg, 400, origin);
 
   const status = (b.status === 'validated') ? 'validated' : 'draft';
+  // Fiche issue d'un trou (boucle gap-driven) → source 'gap' implicite.
+  const resolveGapId = (typeof b.resolve_gap_id === 'string' && b.resolve_gap_id) ? b.resolve_gap_id : null;
   const sourceKind = ['manual', 'paste', 'interview', 'gap', 'import'].includes(b.source_kind)
-    ? b.source_kind : 'manual';
+    ? b.source_kind : (resolveGapId ? 'gap' : 'manual');
   const reviewAt = (typeof b.review_at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(b.review_at))
     ? b.review_at : null;
 
@@ -449,6 +479,16 @@ export async function handleKortexUnitCreate(request, env) {
 
   await _ftsSync(env, unit);
   if (unit.status === 'validated') await _vectorUpsert(env, gate.tenant, unit);
+
+  // Boucle gap-driven : si la fiche répond à un trou, on le marque résolu
+  // (il quitte la file « questions sans réponse ») et on le relie à la fiche.
+  if (resolveGapId) {
+    try {
+      await env.DB.prepare(
+        "UPDATE sa_gaps SET status = 'answered', unit_id = ? WHERE id = ? AND tenant_id = ?"
+      ).bind(unit.id, resolveGapId, gate.tenant).run();
+    } catch (_) { /* best-effort : la fiche est créée même si le lien échoue */ }
+  }
 
   const { results } = await env.DB
     .prepare('SELECT * FROM kortex_units WHERE id = ?').bind(unit.id).all();
@@ -842,6 +882,18 @@ const CHAT_TOPK        = 6;     // fiches injectées dans le contexte de génér
 const CHAT_HISTORY_N   = 6;     // derniers messages de la session repassés au modèle
 const CHAT_MAX_LEN     = 1000;  // longueur max d'une question
 
+// Décision d'ancrage PARTAGÉE (chat SA-3 + replay golden SA-4) : la
+// récupération apporte-t-elle de quoi répondre ? Pure → exportée/testée.
+// grounded = au moins une fiche ET (accroche lexicale exacte OU pas de
+// couche sémantique OU similarité cosinus ≥ seuil).
+export function isGrounded({ semantic, hits }, minVec = GROUND_MIN_VEC) {
+  const topVec = (hits || []).reduce((m, h) => Math.max(m, h.vecScore || 0), 0);
+  const anyLex = (hits || []).some(h => h.lexRank);
+  const grounded = (hits || []).length > 0 && (anyLex || !semantic || topVec >= minVec);
+  const grounding = Math.round(Math.max(topVec, anyLex ? 0.5 : 0) * 100) / 100;
+  return { grounded, grounding, topVec, anyLex };
+}
+
 function validateAgentPayload(b, { partial = false } = {}) {
   const out = {};
   if (!partial || b.name !== undefined) {
@@ -1090,10 +1142,7 @@ export async function handleAgentChat(request, env, agentId) {
   });
 
   // ── Seuil d'ancrage : accroche lexicale OU similarité suffisante ──
-  const topVec   = hits.reduce((m, h) => Math.max(m, h.vecScore || 0), 0);
-  const anyLex   = hits.some(h => h.lexRank);
-  const grounded = hits.length > 0 && (anyLex || !semantic || topVec >= GROUND_MIN_VEC);
-  const grounding = Math.round(Math.max(topVec, anyLex ? 0.5 : 0) * 100) / 100;
+  const { grounded, grounding } = isGrounded({ semantic, hits });
   const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
 
   const _persist = async (reply, citations, gapped) => {
@@ -1176,6 +1225,131 @@ ${fiches}`;
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SA-4 — LA BOUCLE DES TROUS (acquisition gap-driven)
+// ═══════════════════════════════════════════════════════════════
+// GET /gaps — file des questions restées sans réponse, la plus
+// fréquente en tête (hits) : c'est la liste de travail de l'expert.
+export async function handleGapsList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const { results } = await env.DB.prepare(`
+    SELECT id, question, hits, agent_id, first_asked_at, last_asked_at
+      FROM sa_gaps
+     WHERE tenant_id = ? AND status = 'open'
+     ORDER BY hits DESC, last_asked_at DESC
+     LIMIT 200
+  `).bind(gate.tenant).all();
+
+  return json({ gaps: results, count: results.length }, 200, origin);
+}
+
+// POST /gaps/:id/dismiss — ignorer un trou (hors périmètre, hors sujet…).
+export async function handleGapDismiss(request, env, gapId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const res = await env.DB.prepare(
+    "UPDATE sa_gaps SET status = 'dismissed' WHERE id = ? AND tenant_id = ? AND status = 'open'"
+  ).bind(gapId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Trou introuvable', 404, origin);
+  return json({ ok: true }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-4 — GOLDEN SET (jeu de questions étalon + replay = score santé)
+// ═══════════════════════════════════════════════════════════════
+async function _agentOr404(env, tenant, agentId, origin) {
+  const { results } = await env.DB
+    .prepare('SELECT * FROM sa_agents WHERE id = ? AND tenant_id = ?')
+    .bind(agentId, tenant).all();
+  return results.length ? _rowToAgent(results[0]) : null;
+}
+
+export async function handleGoldenList(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const { results } = await env.DB.prepare(
+    'SELECT id, question, expect, created_at FROM sa_golden WHERE tenant_id = ? AND agent_id = ? ORDER BY created_at DESC'
+  ).bind(gate.tenant, agentId).all();
+  return json({ golden: results }, 200, origin);
+}
+
+export async function handleGoldenAdd(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const agent = await _agentOr404(env, gate.tenant, agentId, origin);
+  if (!agent) return err('Agent introuvable', 404, origin);
+
+  const b = await parseBody(request);
+  const question = (typeof b?.question === 'string') ? b.question.trim() : '';
+  if (!question) return err('Question requise', 400, origin);
+  if (question.length > 500) return err('Question trop longue (500 max)', 400, origin);
+  const expect = (b.expect === 'fallback') ? 'fallback' : 'answer';
+
+  await _ensureTenant(env, gate.tenant, gate.claims?.plan);
+  const id = generateId();
+  await env.DB.prepare(
+    'INSERT INTO sa_golden (id, tenant_id, agent_id, question, expect) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, gate.tenant, agentId, question.slice(0, 500), expect).run();
+  return json({ golden: { id, question, expect } }, 201, origin);
+}
+
+export async function handleGoldenDelete(request, env, goldenId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const res = await env.DB.prepare('DELETE FROM sa_golden WHERE id = ? AND tenant_id = ?')
+    .bind(goldenId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Question étalon introuvable', 404, origin);
+  return json({ ok: true }, 200, origin);
+}
+
+// POST /agents/:id/golden/replay — rejoue le jeu étalon.
+// GRATUIT : on n'appelle PAS le LLM, seulement la récupération + la
+// décision d'ancrage (isGrounded) — le signal qui prédit répondre vs
+// repli. On compare au comportement attendu → score de santé.
+export async function handleGoldenReplay(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const agent = await _agentOr404(env, gate.tenant, agentId, origin);
+  if (!agent) return err('Agent introuvable', 404, origin);
+
+  const { results: golden } = await env.DB.prepare(
+    'SELECT id, question, expect FROM sa_golden WHERE tenant_id = ? AND agent_id = ?'
+  ).bind(gate.tenant, agentId).all();
+  if (!golden.length) return json({ total: 0, passed: 0, score: null, results: [] }, 200, origin);
+
+  const collectionIds = agent.config?.knowledge?.collection_ids?.length
+    ? agent.config.knowledge.collection_ids : null;
+
+  const out = [];
+  let passed = 0;
+  for (const g of golden) {
+    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, collectionIds });
+    const { grounded, grounding } = isGrounded(ret);
+    const predicted = grounded ? 'answer' : 'fallback';
+    const ok = predicted === g.expect;
+    if (ok) passed++;
+    out.push({ id: g.id, question: g.question, expect: g.expect, predicted, grounding, ok });
+  }
+  const score = Math.round((passed / golden.length) * 100);
+  return json({ total: golden.length, passed, score, results: out }, 200, origin);
+}
+
 // Parse tolérant : retire les fences ```json, isole le tableau, valide
 // chaque proposition via validateUnit (les invalides sont écartées).
 function _parseProposals(raw) {
@@ -1202,3 +1376,4 @@ function _parseProposals(raw) {
 // validateUnit et le parseur d'extraction sont le CONTRAT du coffre :
 // on les teste en node, sans Worker ni D1.
 export { validateUnit, _parseProposals as parseProposals, validateAgentPayload };
+// isGrounded est déjà exporté inline (utilisé par chat + replay golden).

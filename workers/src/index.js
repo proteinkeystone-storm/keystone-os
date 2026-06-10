@@ -109,7 +109,8 @@ import { handleSmartAgentHealth,
          handleKortexCollectionUpdate, handleKortexCollectionDelete,
          handleKortexExtract, handleKortexSearch, handleKortexReindex,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
-         handleAgentChat } from './routes/smart-agent.js';
+         handleAgentChat, handleGapsList, handleGapDismiss,
+         handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -144,8 +145,19 @@ export default {
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'POST') return handleAgentCreate(request, env);
+      if (path === '/api/smart-agent/gaps'               && method === 'GET')  return handleGapsList(request, env);
+      const saGapMatch = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/dismiss$/);
+      if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);
       const saChatMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/chat$/);
       if (saChatMatch && method === 'POST') return handleAgentChat(request, env, saChatMatch[1]);
+      // Golden set — /golden/replay AVANT /golden (sous-chemin plus spécifique)
+      const saGoldReplay = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/golden\/replay$/);
+      if (saGoldReplay && method === 'POST') return handleGoldenReplay(request, env, saGoldReplay[1]);
+      const saGoldMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/golden$/);
+      if (saGoldMatch && method === 'GET')  return handleGoldenList(request, env, saGoldMatch[1]);
+      if (saGoldMatch && method === 'POST') return handleGoldenAdd(request, env, saGoldMatch[1]);
+      const saGoldDel = path.match(/^\/api\/smart-agent\/golden\/([A-Za-z0-9-]+)$/);
+      if (saGoldDel && method === 'DELETE') return handleGoldenDelete(request, env, saGoldDel[1]);
       const saAgentMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)$/);
       if (saAgentMatch && method === 'PATCH')  return handleAgentUpdate(request, env, saAgentMatch[1]);
       if (saAgentMatch && method === 'DELETE') return handleAgentDelete(request, env, saAgentMatch[1]);

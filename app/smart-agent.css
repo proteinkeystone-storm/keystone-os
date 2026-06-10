@@ -888,6 +888,198 @@
   justify-content: center;
 }
 
+/* ═══ Sprint SA-4 — wizard, trous, golden set ══════════════════ */
+
+/* ── Bannière « questions sans réponse » (liste d'agents) ─────── */
+.sa-gaps-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 14px;
+  padding: 13px 15px;
+  border-radius: 13px;
+  cursor: pointer;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warn, #eab308) 9%, var(--navy2));
+  border: 1px solid color-mix(in srgb, var(--warn, #eab308) 40%, transparent);
+  transition: filter .15s;
+}
+.sa-gaps-banner:hover { filter: brightness(1.08); }
+.sa-gaps-banner-ico { flex: none; color: var(--warn, #eab308); display: flex; }
+.sa-gaps-banner-txt { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.sa-gaps-banner-txt strong { font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; }
+.sa-gaps-banner-txt span { font-size: 11.5px; color: var(--tx3); }
+.sa-gaps-banner-go { flex: none; color: var(--tx3); display: flex; }
+
+/* ── File des trous ───────────────────────────────────────────── */
+.sa-gaps-list { display: flex; flex-direction: column; gap: 8px; }
+.sa-gap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+  flex-wrap: wrap;
+}
+.sa-gap-hits {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 11%, transparent);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.sa-gap-q { flex: 1 1 200px; min-width: 0; font-size: 13.5px; color: var(--text); }
+.sa-gap-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+/* ── Wizard : stepper ─────────────────────────────────────────── */
+.sa-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.sa-wstep { display: flex; align-items: center; gap: 8px; opacity: .5; }
+.sa-wstep.is-active, .sa-wstep.is-done { opacity: 1; }
+.sa-wstep-num {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--tx2);
+  background: var(--navy3, var(--navy2));
+  border: 1px solid var(--bd);
+}
+.sa-wstep.is-active .sa-wstep-num { color: #fff; background: var(--gold); border-color: transparent; }
+.sa-wstep.is-done   .sa-wstep-num { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.sa-wstep-lbl { font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
+.sa-wstep-sep { flex: 1 1 12px; height: 1px; min-width: 8px; background: var(--bd); }
+
+.sa-wbody { min-height: 120px; }
+.sa-wstep-intro {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--tx2);
+  margin: 0 0 18px;
+}
+.sa-wstep-intro .ws-icon { color: var(--gold); vertical-align: -2px; }
+
+.sa-guard-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tx2);
+  background: color-mix(in srgb, var(--green) 6%, var(--navy2));
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+}
+.sa-guard-note .ws-icon { flex: none; color: var(--green); }
+.sa-fromgap {
+  background: color-mix(in srgb, var(--warn, #eab308) 8%, var(--navy2));
+  border-color: color-mix(in srgb, var(--warn, #eab308) 35%, transparent);
+}
+.sa-fromgap .ws-icon { color: var(--warn, #eab308); }
+
+/* ── Bac à sable (sandbox dans le wizard) ─────────────────────── */
+.sa-sandbox {
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--navy);
+}
+.sa-sandbox-stream {
+  max-height: 360px;
+  min-height: 160px;
+  padding: 16px;
+}
+.sa-sandbox .sa-chat-input { padding: 12px; border-top: 1px solid var(--bd); }
+.sa-sandbox-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--tx3);
+  font-size: 12.5px;
+}
+.sa-sandbox-empty .ws-icon { color: var(--gold); opacity: .7; }
+
+/* ── Golden set ───────────────────────────────────────────────── */
+.sa-gold {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+}
+.sa-gold-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.sa-gold-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.sa-gold-head strong .ws-icon { color: var(--gold); }
+.sa-gold-head .sa-btn { margin-left: auto; }
+.sa-gold-score {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+}
+.sa-gold-score.is-good { color: var(--green);  border-color: color-mix(in srgb, var(--green) 45%, transparent);  background: color-mix(in srgb, var(--green) 10%, transparent); }
+.sa-gold-score.is-mid  { color: var(--warn, #eab308); border-color: color-mix(in srgb, var(--warn, #eab308) 45%, transparent); background: color-mix(in srgb, var(--warn, #eab308) 10%, transparent); }
+.sa-gold-score.is-bad  { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+.sa-gold-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.sa-gold-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 1px solid var(--bd);
+}
+.sa-gold-v { flex: none; display: inline-flex; }
+.sa-gold-v.is-ok { color: var(--green); }
+.sa-gold-v.is-ko { color: var(--danger); }
+.sa-gold-q { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-gold-exp {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tx3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+}
+.sa-gold-exp.is-fb { color: var(--warn, #eab308); border-color: color-mix(in srgb, var(--warn, #eab308) 40%, transparent); }
+
+.sa-gold-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.sa-gold-add .sa-input { flex: 1 1 200px; }
+.sa-gold-expect { display: flex; gap: 5px; }
+
 /* ── Toast ────────────────────────────────────────────────────── */
 .sa-toast {
   position: fixed;

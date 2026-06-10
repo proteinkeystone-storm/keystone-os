@@ -6,7 +6,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
-  normQuestion, extractCitations, validateAgentPayload }
+  normQuestion, extractCitations, validateAgentPayload, isGrounded }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -94,6 +94,20 @@ console.log('── validateAgentPayload ──');
   check('collection_ids non-array → []',
     validateAgentPayload({ name: 'X', config: { identity: { mission: 'm' }, knowledge: { collection_ids: 'oops' } } }).config.knowledge.collection_ids.length === 0);
 }
+
+console.log('── isGrounded (décision chat + replay golden) ──');
+check('aucune fiche → non ancré (repli)',
+  isGrounded({ semantic: true, hits: [] }).grounded === false);
+check('accroche lexicale → ancré même sans vecteur',
+  isGrounded({ semantic: true, hits: [{ lexRank: 1, vecScore: 0 }] }).grounded === true);
+check('similarité ≥ seuil → ancré',
+  isGrounded({ semantic: true, hits: [{ vecScore: 0.55 }] }).grounded === true);
+check('similarité faible sans lexical → non ancré',
+  isGrounded({ semantic: true, hits: [{ vecScore: 0.20 }] }).grounded === false);
+check('mode lexical seul (pas de sémantique) → ancré dès qu\'il y a une fiche',
+  isGrounded({ semantic: false, hits: [{ lexRank: 1 }] }).grounded === true);
+check('grounding chiffré renvoyé',
+  isGrounded({ semantic: true, hits: [{ vecScore: 0.73 }] }).grounding === 0.73);
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
 process.exit(failed ? 1 : 0);
