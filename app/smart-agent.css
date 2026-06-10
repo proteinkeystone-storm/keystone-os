@@ -1,0 +1,205 @@
+/* ═══════════════════════════════════════════════════════════════
+   KEYSTONE OS — Smart Agent (O-AGT-001) · styles propres sa-*
+   Sprint SA-0 — le shell réutilise workspace.css (ws-*) ; ici
+   uniquement les vues du moteur (hero, roadmap, types Kortex, aside).
+   Toute couleur via tokens (var(--…) / color-mix) → suit le thème.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Hero (état vide des vues Agents / Kortex) ─────────────────── */
+.sa-hero {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.sa-hero-ico {
+  width: 84px;
+  height: 84px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent);
+  margin-bottom: 22px;
+}
+
+.sa-hero-title {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+.sa-hero-lead {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--tx2);
+  margin: 0 0 30px;
+}
+.sa-hero-lead strong { color: var(--text); }
+
+.sa-hero-note {
+  margin-top: 26px;
+  font-size: 12px;
+  color: var(--tx3);
+}
+
+/* ── Feuille de route du moteur (vue Agents) ───────────────────── */
+.sa-roadmap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.sa-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+}
+.sa-step.is-next {
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 6%, var(--navy2));
+}
+
+.sa-step-ico {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tx2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.sa-step.is-next .sa-step-ico { color: var(--gold); }
+
+.sa-step-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sa-step-txt strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.sa-step-txt span {
+  font-size: 12px;
+  color: var(--tx3);
+  line-height: 1.45;
+}
+
+.sa-chip {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--tx3);
+  border: 1px solid var(--bd);
+}
+.sa-chip.is-next {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+
+/* ── Grille des 7 types de fiches (vue Kortex) ─────────────────── */
+.sa-types-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  text-align: left;
+}
+
+.sa-type-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+}
+
+.sa-type-ico { color: var(--gold); }
+
+.sa-type-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.sa-type-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--tx3);
+}
+
+/* ── Aside — état du moteur ────────────────────────────────────── */
+.sa-aside-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+}
+.sa-aside-card + .sa-aside-card { margin-top: 12px; }
+
+.sa-aside-head {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--tx3);
+  margin-bottom: 12px;
+}
+
+.sa-aside-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--tx2);
+  padding: 5px 0;
+}
+.sa-aside-row > span:first-of-type { flex: 1; }
+.sa-aside-row strong { color: var(--text); font-weight: 700; }
+
+.sa-aside-note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--tx3);
+  margin: 0;
+}
+
+/* Pastille santé du moteur (ping /api/smart-agent/health) */
+.sa-health-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tx3);
+}
+.sa-health-dot.is-ok  { background: var(--green); box-shadow: 0 0 6px color-mix(in srgb, var(--green) 60%, transparent); }
+.sa-health-dot.is-off { background: var(--danger); }

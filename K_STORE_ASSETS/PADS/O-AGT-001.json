@@ -1,0 +1,15 @@
+{
+  "id": "O-AGT-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "Smart Agent",
+  "subtitle": "Jumeau numérique de savoir-faire — votre expertise devient un expert interrogeable",
+  "category": "COM",
+  "icon": "smart-agent",
+  "ai_optimized": "Mistral",
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nDoctrine contenant/contenu : le moteur (app/smart-agent.js, workers/src/routes/smart-agent.js) est 100% générique — capture, indexation, restitution ancrée. AUCUNE logique métier dans le code : un vendeur, un gardien de musée ou un formateur sortent du même moteur, seul le contenu du coffre Kortex (fiches typées, par tenant) diffère.\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Smart Agent transforme votre savoir-faire en un expert numérique interrogeable. Remplissez votre coffre de savoir Kortex avec des fiches typées (faits, procédures, questions/réponses, cas vécus, règles, objections, définitions), puis votre agent répond uniquement à partir de votre connaissance validée — chaque réponse cite ses sources, et l'agent préfère « Je ne dispose pas de cette information » à une invention. Les questions sans réponse deviennent votre liste de travail : votre savoir grandit exactement là où la demande existe."
+}

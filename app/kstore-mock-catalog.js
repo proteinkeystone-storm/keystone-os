@@ -130,6 +130,20 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    // ── Sprint SA-0 — Smart Agent (jumeau numérique de savoir-faire, plan MAX)
+    {
+        id: 'O-AGT-001',
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Smart Agent',
+        punchline: 'Votre savoir-faire devient un expert numérique',
+        shortDesc: 'Coffre de savoir Kortex · réponses ancrées avec sources · « je ne sais pas » plutôt qu\'inventer',
+        price: 49,
+        icon: 'smart-agent',
+        ai_optimized: 'Mistral',
+        ai_compatible: ['Mistral', 'Claude'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 ];
 
 // ── "À la une pour vous" — apps mises en avant (rail du haut) ──

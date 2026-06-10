@@ -101,6 +101,8 @@ import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSo
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
+// ── Smart Agent / Kortex — jumeaux numériques de savoir-faire (Sprint SA-0) ──
+import { handleSmartAgentHealth } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -124,6 +126,9 @@ export default {
     const method = request.method;
 
     try {
+      // ── Smart Agent / Kortex (Sprint SA-0 — santé du moteur) ──
+      if (path === '/api/smart-agent/health' && method === 'GET') return handleSmartAgentHealth(request, env);
+
       // ── Social Broadcast (production — Sprint Social-1) ──────
       if (path === '/api/social/provision/facebook'  && method === 'POST') return handleSocialProvisionFacebook(request, env);
       if (path === '/api/social/provision/instagram' && method === 'POST') return handleSocialProvisionInstagram(request, env);
