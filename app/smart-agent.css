@@ -183,7 +183,9 @@
   color: var(--tx2);
   padding: 5px 0;
 }
-.sa-aside-row > span:first-of-type { flex: 1; }
+/* flex:1 sur le label (pour pousser la valeur à droite) — SAUF le voyant
+   de statut, qui doit rester un cercle (sinon il s'étire en ovale). */
+.sa-aside-row > span:first-of-type:not(.sa-health-dot) { flex: 1; }
 .sa-aside-row strong { color: var(--text); font-weight: 700; }
 
 .sa-aside-note {
@@ -756,6 +758,7 @@
 }
 
 /* ── Coffre partagé : sélecteur privé/partagé (SA-4.4.2) ──────────── */
+.sa-vaulttoggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .sa-vaulttoggle {
   display: inline-flex;
   gap: 4px;
@@ -763,7 +766,6 @@
   background: var(--navy2);
   border: 1px solid var(--bd);
   border-radius: 12px;
-  margin-bottom: 16px;
 }
 .sa-vtab {
   display: inline-flex;

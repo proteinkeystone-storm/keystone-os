@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.4.2';
+const SA_ENGINE_VERSION = 'SA-4.4.3';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1403,9 +1403,9 @@ export async function handleAgentDelete(request, env, agentId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
-  // SA-4.3 — SILO : un agent EST son coffre. Le supprimer emporte tout
-  // ce qui lui appartient — savoir, trous, golden, dialogue. (Le client
-  // est prévenu côté front avant confirmation.)
+  // SA-4.4.3 — supprime l'agent et son coffre PRIVÉ (savoir, trous, golden,
+  // dialogue). Les coffres PARTAGÉS du dossier sont CONSERVÉS (leurs fiches
+  // ont agent_id NULL, jamais purgées ci-dessous). Confirmation côté front.
   // Vecteurs d'abord (par id, avant de perdre la liste des fiches).
   try {
     const { results: uIds } = await env.DB
@@ -1423,6 +1423,11 @@ export async function handleAgentDelete(request, env, agentId) {
     .bind(agentId, gate.tenant).run();
   await env.DB.prepare('DELETE FROM sa_sessions WHERE agent_id = ? AND tenant_id = ?')
     .bind(agentId, gate.tenant).run();
+  // Coffre PRIVÉ de l'agent (lu AVANT de supprimer l'agent). On ne touche
+  // qu'un coffre kind='private' → les coffres partagés du dossier survivent.
+  await env.DB.prepare(
+    "DELETE FROM kortex_vaults WHERE tenant_id = ? AND kind = 'private' AND id = (SELECT private_vault_id FROM sa_agents WHERE id = ? AND tenant_id = ?)"
+  ).bind(gate.tenant, agentId, gate.tenant).run();
   const res = await env.DB.prepare('DELETE FROM sa_agents WHERE id = ? AND tenant_id = ?')
     .bind(agentId, gate.tenant).run();
   if (!res.meta?.changes) return err('Agent introuvable', 404, origin);

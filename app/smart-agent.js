@@ -266,6 +266,7 @@ function _onClick(e) {
     // ── Coffre partagé (SA-4.4.2) ──
     if (act === 'kx-scope')         { _setKxScope(actEl.dataset.v); return; }
     if (act === 'kx-create-shared') { _createSharedVault(); return; }
+    if (act === 'kx-del-shared')    { _deleteSharedVault(); return; }
     if (act === 'kx-ftype')     { _kx.filterType = actEl.dataset.v;   _kxReload(); return; }
     if (act === 'kx-fstatus')   { _kx.filterStatus = actEl.dataset.v; _kxReload(); return; }
     if (act === 'kx-search')       { _runSearch(); return; }
@@ -426,6 +427,19 @@ async function _createSharedVault() {
         const r = await _api('/vaults', { method: 'POST', body: { folder_id: fid } });
         if (r.vault) { _kx.sharedVault = r.vault; _kx.scope = 'shared'; }
         _toast('Coffre partagé créé — commun à tous les agents du dossier.');
+        _kxReload();
+    } catch (e) { _toast(e.message, 'error'); }
+}
+// SA-4.4.3 — supprime le coffre partagé du dossier (ses fiches partent ;
+// les coffres privés des agents ne sont pas touchés).
+async function _deleteSharedVault() {
+    const sv = _kx.sharedVault;
+    if (!sv) return;
+    if (!confirm(`Supprimer le coffre partagé « ${sv.name || 'Coffre partagé'} » ?\nSes fiches seront définitivement supprimées. Les coffres privés des agents ne sont pas touchés.`)) return;
+    try {
+        await _api(`/vaults/${sv.id}`, { method: 'DELETE' });
+        _kx.sharedVault = null; _kx.scope = 'private';
+        _toast('Coffre partagé supprimé.');
         _kxReload();
     } catch (e) { _toast(e.message, 'error'); }
 }
@@ -982,7 +996,7 @@ async function _dismissGap(id) {
 async function _deleteAgent(id) {
     if (!id) return;
     const a = _ag.agents.find(x => x.id === id) || _cur.agent;
-    if (!confirm(`Supprimer l'agent « ${a?.name || ''} » ?\nTOUT son savoir (fiches, trous, tests) sera supprimé avec lui. Cette action est irréversible.`)) return;
+    if (!confirm(`Supprimer l'agent « ${a?.name || ''} » ?\nSon savoir PRIVÉ (fiches, trous, tests) sera supprimé. Le coffre PARTAGÉ de son dossier est conservé. Cette action est irréversible.`)) return;
     try {
         await _api(`/agents/${id}`, { method: 'DELETE' });
         _toast('Agent supprimé.');
@@ -1105,9 +1119,12 @@ function _kxScopeBarHTML() {
       </div>`;
     }
     return `
-      <div class="sa-vaulttoggle" role="tablist">
-        <button class="sa-vtab ${_kx.scope === 'private' ? 'is-on' : ''}" data-act="kx-scope" data-v="private">${icon('lock', 14)} Coffre privé</button>
-        <button class="sa-vtab ${_kx.scope === 'shared' ? 'is-on' : ''}" data-act="kx-scope" data-v="shared">${icon('share-2', 14)} Partagé · ${_esc(folderName)}</button>
+      <div class="sa-vaulttoggle-row">
+        <div class="sa-vaulttoggle" role="tablist">
+          <button class="sa-vtab ${_kx.scope === 'private' ? 'is-on' : ''}" data-act="kx-scope" data-v="private">${icon('lock', 14)} Coffre privé</button>
+          <button class="sa-vtab ${_kx.scope === 'shared' ? 'is-on' : ''}" data-act="kx-scope" data-v="shared">${icon('share-2', 14)} Partagé · ${_esc(folderName)}</button>
+        </div>
+        ${_kx.scope === 'shared' ? `<button class="sa-iconbtn is-danger" data-act="kx-del-shared" title="Supprimer le coffre partagé du dossier">${icon('trash-2', 15)}</button>` : ''}
       </div>`;
 }
 
