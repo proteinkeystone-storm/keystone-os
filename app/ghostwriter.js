@@ -34,7 +34,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
-import { renderChainRail, bindChainRail, getChain, setChain } from './lib/content-chain.js';
+import { renderChainRail, bindChainRail, getChain, setChain, networkLabel } from './lib/content-chain.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
@@ -433,6 +433,33 @@ function _injectCSS() {
 .gw-mini-btn.gw-action-send:hover { background: rgba(120,160,255,.30); border-color: rgba(120,160,255,.6); color: #fff; }
 .gw-shortcut-hint { font-size: 11px; color: var(--text-muted, #888); margin-left: auto; }
 .gw-empty { color: var(--text-muted, #888); font-size: 13px; text-align: center; padding: 40px 0; line-height: 1.6; }
+/* ── Mode compose (chaîne) : 1 grand post + archive ── */
+.gw-compose-wrap { display: flex; flex-direction: column; gap: 14px; }
+.gw-compose-post {
+    background: rgba(127,127,127,.06); border: 1px solid var(--bd, rgba(255,255,255,.08));
+    border-radius: 12px; padding: 18px 20px; max-height: 48vh; overflow-y: auto;
+}
+.gw-compose-post .gw-variant-text { font-size: 14px; line-height: 1.7; }
+.gw-archive { border-top: 1px solid var(--bd, rgba(255,255,255,.08)); padding-top: 14px; }
+.gw-archive-head {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text-muted, #888); font-weight: 600; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+}
+.gw-archive-count { background: var(--gold3, rgba(99,102,241,.14)); color: var(--gold2, #818cf8); border-radius: 100px; padding: 1px 8px; font-size: 10px; }
+.gw-archive-list { display: flex; flex-direction: column; gap: 8px; }
+.gw-archive-item { background: rgba(127,127,127,.06); border: 1px solid var(--bd, rgba(255,255,255,.07)); border-radius: 10px; padding: 10px 12px; }
+.gw-archive-net { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--gold2, #8aaeff); margin-bottom: 4px; text-transform: uppercase; }
+.gw-archive-text { font-size: 12.5px; color: var(--text-muted, #aaa); line-height: 1.5; }
+.gw-archive-acts { display: flex; gap: 6px; margin-top: 9px; }
+.gw-archive-btn {
+    padding: 5px 11px; border-radius: 7px; font-size: 11px; font-weight: 600; cursor: pointer;
+    background: rgba(127,127,127,.12); border: 1px solid var(--bd, rgba(255,255,255,.1));
+    color: var(--text-muted, #ccc); transition: all .14s ease;
+}
+.gw-archive-btn:hover { color: var(--text-primary, #fff); background: rgba(127,127,127,.2); }
+.gw-arch-send { background: rgba(120,160,255,.16); border-color: rgba(120,160,255,.35); color: #9fc0ff; }
+.gw-arch-send:hover { background: rgba(120,160,255,.28); color: #fff; }
 .gw-spinner {
     width: 14px; height: 14px;
     border: 2px solid rgba(255,255,255,.3);
@@ -770,6 +797,10 @@ async function _handleGenerate(overlay) {
 
     try {
         const result = await _callReal(text, callOpts);
+        // Archive le post composé (chaîne) AVANT le rendu → l'archive l'inclut.
+        if (chainMode && result.variants?.[0]?.text) {
+            _addToComposeArchive({ text: result.variants[0].text, network: getChain()?.network || null });
+        }
         _renderVariants(variants, result.variants);
         _setStatus(status, chainMode ? `✓ Post composé (modèle: ${result.model})` : `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
         _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
@@ -827,13 +858,13 @@ function _setStatus(el, text, kind) {
 // de la chaîne de contenu, cf. [[content-chain-vision]]). Pattern maison de relais
 // inter-pads (cf. vefa _sendToConcierge) : import du module cible + close + ouverture
 // pré-remplie via composeInSocialManager. La publication reste gated côté worker.
-async function _sendToSocialManager(text) {
+async function _sendToSocialManager(text, networkOverride) {
     if (!text || !text.trim()) return;
     // Réseau porté par la chaîne (choisi en ① Brainstorming) → pré-coche la
-    // cible en ③ Social Manager. Hors chaîne (modal standalone) network=null
-    // → comportement legacy (texte seul, l'utilisateur choisit ses réseaux).
+    // cible en ③ Social Manager. networkOverride = renvoi depuis l'archive
+    // (réseau du post archivé). Hors chaîne network=null → comportement legacy.
     const chain   = getChain();
-    const network = chain?.network || null;
+    const network = networkOverride || chain?.network || null;
     if (chain) setChain({ step: 'publish' });   // avance l'étape, garde le réseau
     const payload = network ? { text, targets: [network] } : { text };
     try {
@@ -849,6 +880,14 @@ function _renderVariants(container, variants) {
     if (!container) return;
     if (!variants || variants.length === 0) {
         container.innerHTML = '<div class="gw-empty">Aucune variante générée</div>';
+        return;
+    }
+
+    // Mode CHAÎNE (compose) = 1 post développé → vue dédiée (grande zone de lecture
+    // + scroll, pas de carrousel/flèches/indicateur) + archive en dessous. Sinon
+    // carrousel rewrite classique (inchangé).
+    if (container.closest('.gw-modal')?.dataset.chain === '1') {
+        _renderComposeResult(container, variants[0]);
         return;
     }
 
@@ -944,6 +983,82 @@ function _renderVariants(container, variants) {
         }
     };
     document.addEventListener('keydown', keyHandler);
+}
+
+// ── Mode compose (chaîne) : 1 post + archive locale ──────────────
+const COMPOSE_ARCHIVE_KEY = 'ks_gw_compose_archive';
+const COMPOSE_ARCHIVE_MAX = 30;
+
+function _loadComposeArchive() {
+    try { const a = JSON.parse(localStorage.getItem(COMPOSE_ARCHIVE_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+    catch (_) { return []; }
+}
+function _saveComposeArchive(arr) {
+    try { localStorage.setItem(COMPOSE_ARCHIVE_KEY, JSON.stringify(arr.slice(0, COMPOSE_ARCHIVE_MAX))); } catch (_) {}
+}
+function _addToComposeArchive({ text, network }) {
+    const t = (text || '').trim();
+    if (!t) return;
+    const arr = _loadComposeArchive();
+    if (arr[0] && arr[0].text === t) return;   // dédup : déjà en tête
+    arr.unshift({ id: `c${Date.now()}`, text: t, network: network || null, ts: Date.now() });
+    _saveComposeArchive(arr);
+}
+function _removeFromComposeArchive(id) {
+    _saveComposeArchive(_loadComposeArchive().filter(x => x.id !== id));
+}
+
+// Rendu du résultat compose : 1 grand post (scroll) + actions + archive en dessous.
+function _renderComposeResult(container, variant) {
+    const post = variant?.text || '';
+    container.innerHTML = `
+        <div class="gw-compose-wrap">
+            <article class="gw-compose-post"><div class="gw-variant-text">${_escapeHtml(post)}</div></article>
+            <div class="gw-actions-row">
+                <button class="gw-mini-btn gw-action-copy">Copier</button>
+                <button class="gw-mini-btn gw-action-replace">Remplacer</button>
+                <button class="gw-mini-btn gw-action-send" title="Ouvrir Social Manager avec ce post">Envoyer vers Social Manager</button>
+            </div>
+            <div class="gw-archive" id="gw-archive"></div>
+        </div>
+    `;
+    const copyBtn = container.querySelector('.gw-action-copy');
+    copyBtn?.addEventListener('click', () => {
+        navigator.clipboard?.writeText(post)?.then(() => { const o = copyBtn.textContent; copyBtn.textContent = '✓ Copié'; setTimeout(() => { copyBtn.textContent = o; }, 1500); });
+    });
+    container.querySelector('.gw-action-replace')?.addEventListener('click', (e) => _replaceSelection(post, e.currentTarget));
+    container.querySelector('.gw-action-send')?.addEventListener('click', () => _sendToSocialManager(post));
+    _renderComposeArchive(container.querySelector('#gw-archive'));
+}
+
+// Liste des posts composés (archive locale) : renvoyer vers Social Manager / supprimer.
+function _renderComposeArchive(el) {
+    if (!el) return;
+    const arr = _loadComposeArchive();
+    if (!arr.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+        <div class="gw-archive-head">Posts composés <span class="gw-archive-count">${arr.length}</span></div>
+        <div class="gw-archive-list">
+            ${arr.map(item => `
+                <div class="gw-archive-item" data-id="${item.id}">
+                    ${item.network && networkLabel(item.network) ? `<span class="gw-archive-net">${_escapeHtml(networkLabel(item.network))}</span>` : ''}
+                    <div class="gw-archive-text">${_escapeHtml(item.text.slice(0, 160))}${item.text.length > 160 ? '…' : ''}</div>
+                    <div class="gw-archive-acts">
+                        <button class="gw-archive-btn gw-arch-send" data-id="${item.id}">Renvoyer</button>
+                        <button class="gw-archive-btn gw-arch-del" data-id="${item.id}">Supprimer</button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    el.querySelectorAll('.gw-arch-send').forEach(b => b.addEventListener('click', () => {
+        const item = _loadComposeArchive().find(x => x.id === b.dataset.id);
+        if (item) _sendToSocialManager(item.text, item.network);
+    }));
+    el.querySelectorAll('.gw-arch-del').forEach(b => b.addEventListener('click', () => {
+        _removeFromComposeArchive(b.dataset.id);
+        _renderComposeArchive(el);
+    }));
 }
 
 function _replaceSelection(newText, btn) {
