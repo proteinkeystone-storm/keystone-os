@@ -223,6 +223,9 @@ async function _callReal(text, opts) {
             audience    : opts?.audience     || null,
             action      : opts?.action       || null,
             lengthTarget: opts?.lengthTarget || null,
+            // Mode « composer un post » (chaîne) : 1 post développé, ton réseau.
+            composePost : opts?.composePost === true || undefined,
+            network     : opts?.network || undefined,
         }),
     };
 
@@ -531,9 +534,25 @@ function _buildModalHTML(initialText, presetOpts) {
     // (le relais Brainstorming a posé l'état porté). Hors chaîne → '' →
     // l'en-tête montre le titre classique « Ghost Writer ».
     const railHTML = renderChainRail('write');
+    // Mode CHAÎNE (arrivé via le parcours, réseau porté) = composer UN post
+    // développé, ton calé sur le réseau → PAS de pills de ton, bouton « Composer
+    // le post ». Hors chaîne = rewrite classique (3 variantes + pills de ton).
+    const chainMode = !!railHTML;
+    const srcLabel  = chainMode ? 'Angle à développer' : 'Texte source';
+    const srcPlace  = chainMode ? 'Décrivez l\'angle ou l\'idée à transformer en post…' : 'Collez ou tapez votre texte ici…';
+    const goLabel   = chainMode ? 'Composer le post' : 'Réécrire en 3 variantes';
+    const tonesHTML = chainMode ? '' : `
+                    <div class="gw-label">Ton souhaité</div>
+                    <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
+                        <button class="gw-option-btn ${autoOn}" data-tone="">Auto</button>
+                        <button class="gw-option-btn ${isOn('formel professionnel')}" data-tone="formel professionnel">Formel</button>
+                        <button class="gw-option-btn ${isOn('chaleureux empathique')}" data-tone="chaleureux empathique">Chaleureux</button>
+                        <button class="gw-option-btn ${isOn('concis direct')}" data-tone="concis direct">Concis</button>
+                        <button class="gw-option-btn ${isOn('persuasif vendeur')}" data-tone="persuasif vendeur">Persuasif</button>
+                    </div>`;
 
     return `
-        <div class="gw-modal" role="dialog" aria-label="Ghost Writer">
+        <div class="gw-modal" role="dialog" aria-label="Ghost Writer" data-chain="${chainMode ? '1' : '0'}">
             <div class="gw-head">
                 ${railHTML || `<div>
                     <h2 class="gw-title">Ghost Writer</h2>
@@ -543,18 +562,11 @@ function _buildModalHTML(initialText, presetOpts) {
             </div>
             <div class="gw-body">
                 <div class="gw-left">
-                    <div class="gw-label">Texte source</div>
-                    <textarea id="gw-source" class="gw-source" placeholder="Collez ou tapez votre texte ici…">${_escapeHtml(initialText)}</textarea>
-                    <div class="gw-label">Ton souhaité</div>
-                    <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
-                        <button class="gw-option-btn ${autoOn}" data-tone="">Auto</button>
-                        <button class="gw-option-btn ${isOn('formel professionnel')}" data-tone="formel professionnel">Formel</button>
-                        <button class="gw-option-btn ${isOn('chaleureux empathique')}" data-tone="chaleureux empathique">Chaleureux</button>
-                        <button class="gw-option-btn ${isOn('concis direct')}" data-tone="concis direct">Concis</button>
-                        <button class="gw-option-btn ${isOn('persuasif vendeur')}" data-tone="persuasif vendeur">Persuasif</button>
-                    </div>
+                    <div class="gw-label">${srcLabel}</div>
+                    <textarea id="gw-source" class="gw-source" placeholder="${srcPlace}">${_escapeHtml(initialText)}</textarea>
+                    ${tonesHTML}
                     <button id="gw-go" class="gw-go">
-                        <span>Réécrire en 3 variantes</span>
+                        <span>${goLabel}</span>
                     </button>
                     <div id="gw-status" class="gw-status"></div>
                     <div class="gw-meta">
@@ -711,27 +723,22 @@ async function _handleGenerate(overlay) {
     const status   = overlay.querySelector('#gw-status');
     const variants = overlay.querySelector('#gw-variants');
     const goBtn    = overlay.querySelector('#gw-go');
-    const tone     = overlay.querySelector('#gw-tones').dataset.selected || '';
+    const chainMode = overlay.querySelector('.gw-modal')?.dataset.chain === '1';
+    const tone     = overlay.querySelector('#gw-tones')?.dataset.selected || '';
 
-    // Fusion preset + UI : les opts pré-réglés (mode, audience, action,
-    // intent, lengthTarget, vouvoie) viennent du pad qui a ouvert le
-    // modal. L'utilisateur peut surcharger le `tone` via les boutons
-    // (data-selected). Si le tone UI vaut '' (Auto), on retombe sur le
-    // tone preset s'il existe.
-    // context / targetEl / replaceMode / formContext / include_fields /
-    // label sont des contrôles UI / orchestration côté frontend, ils
-    // ne doivent JAMAIS partir dans le body fetch — on les destructure
-    // pour les retirer avant le spread.
+    // Mode CHAÎNE : on COMPOSE un post développé, ton calé sur le réseau porté.
+    // Hors chaîne : rewrite classique (preset du pad + ton choisi via les pills).
+    // context / targetEl / replaceMode / formContext / include_fields / label
+    // sont des contrôles UI, jamais envoyés au body — destructurés avant le spread.
     const {
         context: _ctx, targetEl: _t, replaceMode: _rm,
         formContext: _fc, include_fields: _if, label: _l,
         tone: presetTone,
         ...presetRest
     } = _presetOpts || {};
-    const callOpts = {
-        ...presetRest,
-        tone: tone || presetTone || null,
-    };
+    const callOpts = chainMode
+        ? { composePost: true, network: getChain()?.network || null }
+        : { ...presetRest, tone: tone || presetTone || null };
 
     const text = (source?.value || '').trim();
     if (text.length < MIN_TEXT_LENGTH) {
@@ -764,7 +771,7 @@ async function _handleGenerate(overlay) {
     try {
         const result = await _callReal(text, callOpts);
         _renderVariants(variants, result.variants);
-        _setStatus(status, `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
+        _setStatus(status, chainMode ? `✓ Post composé (modèle: ${result.model})` : `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
         _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
     } catch (e) {
         _setStatus(status, `✗ ${_friendlyError(e)}`, 'error');
@@ -781,7 +788,7 @@ async function _handleGenerate(overlay) {
         }
     } finally {
         goBtn.disabled = false;
-        goBtn.innerHTML = '<span>Réécrire en 3 variantes</span>';
+        goBtn.innerHTML = chainMode ? '<span>Composer le post</span>' : '<span>Réécrire en 3 variantes</span>';
     }
 }
 
