@@ -2012,6 +2012,7 @@ function _renderCenterConfig(panel) {
       <button type="button" class="wr-setup-nav-btn wr-setup-prev">${icon('chevron-left', 15)}<span>Précédent</span></button>
       <span class="wr-setup-nav-count"></span>
       <button type="button" class="wr-setup-nav-btn wr-setup-next"><span>Suivant</span>${icon('chevron-right', 15)}</button>
+      <button type="button" class="wr-setup-nav-btn wr-setup-skip" title="Passer l'amorce et écrire votre brief directement"><span>Passer</span>${icon('arrow-right', 15)}</button>
     </div>
   `;
 
@@ -2064,12 +2065,18 @@ function _renderCenterConfig(panel) {
   const _stepsWrap = root.querySelector('.wr-setup-steps');
   const _prevBtn   = root.querySelector('.wr-setup-prev');
   const _nextBtn   = root.querySelector('.wr-setup-next');
+  const _skipBtn   = root.querySelector('.wr-setup-skip');
   const _countEl   = root.querySelector('.wr-setup-nav-count');
+  const _isLastStep = () => _setupStep >= SETUP_STEPS_COUNT - 1;
   const _syncSetupNav = () => {
     if (_stepsWrap) _stepsWrap.dataset.active = String(_setupStep);
     if (_countEl)   _countEl.textContent = `Étape ${_setupStep + 1} sur ${SETUP_STEPS_COUNT}`;
     _prevBtn?.classList.toggle('is-hidden', _setupStep <= 0);
-    _nextBtn?.classList.toggle('is-hidden', _setupStep >= SETUP_STEPS_COUNT - 1);
+    // Dernière étape (amorce, optionnelle) : « Suivant » cède la place à
+    // « Passer », qui amène directement à la saisie du brief — l'amorce
+    // n'est jamais un passage obligé.
+    _nextBtn?.classList.toggle('is-gone', _isLastStep());
+    _skipBtn?.classList.toggle('is-gone', !_isLastStep());
   };
   const _goSetupStep = (n) => {
     _setupStep = Math.max(0, Math.min(SETUP_STEPS_COUNT - 1, n));
@@ -2077,6 +2084,14 @@ function _renderCenterConfig(panel) {
   };
   _prevBtn?.addEventListener('click', () => _goSetupStep(_setupStep - 1));
   _nextBtn?.addEventListener('click', () => _goSetupStep(_setupStep + 1));
+  // « Passer » : place le curseur dans le champ de brief (toujours en bas),
+  // prêt à taper son texte de départ sans piocher d'amorce.
+  _skipBtn?.addEventListener('click', () => {
+    const input = panel.querySelector('#wr-input');
+    if (!input) return;
+    input.focus();
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+  });
   _syncSetupNav();
 }
 

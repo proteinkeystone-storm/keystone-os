@@ -1458,12 +1458,16 @@
   border-color: var(--wr-mode-accent, var(--ks-mode-exploration));
   transform: translateY(-1px);
 }
-.wr-setup-next {
+.wr-setup-next,
+.wr-setup-skip {
   background: color-mix(in srgb, var(--wr-mode-accent, var(--ks-mode-exploration)) 16%, transparent);
   border-color: color-mix(in srgb, var(--wr-mode-accent, var(--ks-mode-exploration)) 50%, transparent);
   color: var(--wr-text);
 }
+/* is-hidden : garde la place (compteur centré) ; is-gone : retire du flux
+   (échange Suivant ↔ Passer sur la dernière étape sans casser l'alignement). */
 .wr-setup-nav-btn.is-hidden { visibility: hidden; pointer-events: none; }
+.wr-setup-nav-btn.is-gone { display: none; }
 .wr-setup-modes { display: flex; flex-wrap: wrap; gap: 7px; }
 .wr-setup-mode {
   --mode-color: var(--ks-mode-exploration);
