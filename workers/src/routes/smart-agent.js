@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.4.1';
+const SA_ENGINE_VERSION = 'SA-4.4.2';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -582,16 +582,26 @@ export async function handleKortexUnitsList(request, env) {
   const url    = new URL(request.url);
   const type   = url.searchParams.get('type');
   const status = url.searchParams.get('status');
-  const agent  = url.searchParams.get('agent');   // SA-4.4 — ?agent= conservé (rétro-compat front)
-  if (!agent) return err('Paramètre agent requis', 400, origin);
+  const agent  = url.searchParams.get('agent');   // SA-4.4 — coffre privé de l'agent
+  const vault  = url.searchParams.get('vault');   // SA-4.4.2 — coffre explicite (partagé)
 
-  // SA-4.4 — le coffre d'un agent = son coffre privé. On lit par vault_id ;
-  // fallback agent_id défensif pour les fiches pas encore migrées (transition).
-  const vaultId = await _privateVaultOf(env, gate.tenant, agent);
-  const scope = '(vault_id = ? OR (vault_id IS NULL AND agent_id = ?))';
+  // SA-4.4.2 — soit un coffre explicite (?vault=, ex. partagé d'un dossier),
+  // soit le coffre privé de l'agent (?agent=). On lit par vault_id ; fallback
+  // agent_id défensif pour les fiches pas encore migrées (transition 4.4.0).
+  let scope, scopeBinds;
+  if (vault) {
+    scope = 'vault_id = ?';
+    scopeBinds = [vault];
+  } else if (agent) {
+    const vaultId = await _privateVaultOf(env, gate.tenant, agent);
+    scope = '(vault_id = ? OR (vault_id IS NULL AND agent_id = ?))';
+    scopeBinds = [vaultId, agent];
+  } else {
+    return err('Paramètre agent ou vault requis', 400, origin);
+  }
 
   let sql = `SELECT * FROM kortex_units WHERE tenant_id = ? AND ${scope}`;
-  const binds = [gate.tenant, vaultId, agent];
+  const binds = [gate.tenant, ...scopeBinds];
   if (type && UNIT_TEMPLATES[type])             { sql += ' AND type = ?';   binds.push(type); }
   if (status && UNIT_STATUSES.includes(status)) { sql += ' AND status = ?'; binds.push(status); }
   sql += ` ORDER BY updated_at DESC LIMIT ${MAX_UNITS_LIST}`;
@@ -601,7 +611,7 @@ export async function handleKortexUnitsList(request, env) {
   // Compteurs de CE coffre (chips de filtre + aside).
   const { results: cRows } = await env.DB
     .prepare(`SELECT status, COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND ${scope} GROUP BY status`)
-    .bind(gate.tenant, vaultId, agent)
+    .bind(gate.tenant, ...scopeBinds)
     .all();
   const counts = { draft: 0, validated: 0, quarantine: 0, expired: 0, total: 0 };
   for (const r of cRows) { counts[r.status] = r.n; counts.total += r.n; }
@@ -621,9 +631,11 @@ export async function handleKortexUnitCreate(request, env) {
   const b = await parseBody(request);
   if (!b) return err('Body JSON requis', 400, origin);
 
-  // SA-4.3 — silo : toute fiche appartient à un agent.
+  // SA-4.4.2 — une fiche va soit dans le coffre PRIVÉ d'un agent (agent_id),
+  // soit dans un coffre PARTAGÉ explicite (vault_id ; agent_id NULL).
   const agentId = (typeof b.agent_id === 'string' && b.agent_id) ? b.agent_id : null;
-  if (!agentId) return err('agent_id requis (une fiche appartient à un agent)', 400, origin);
+  const explicitVault = (typeof b.vault_id === 'string' && b.vault_id) ? b.vault_id : null;
+  if (!agentId && !explicitVault) return err('agent_id ou vault_id requis', 400, origin);
 
   const v = validateUnit(b.type, b.title, b.body);
   if (!v.ok) return err(v.msg, 400, origin);
@@ -638,13 +650,24 @@ export async function handleKortexUnitCreate(request, env) {
 
   await _ensureTenant(env, gate.tenant, gate.claims?.plan);
 
-  // SA-4.4 — destination par défaut : le coffre privé de l'agent.
-  const vaultId = await _privateVaultOf(env, gate.tenant, agentId);
+  // SA-4.4.2 — destination : coffre partagé explicite (validé tenant) ou
+  // coffre privé de l'agent. Une fiche partagée n'a PAS d'agent propriétaire.
+  let vaultId, ownerAgentId;
+  if (explicitVault) {
+    const { results: vr } = await env.DB
+      .prepare('SELECT id FROM kortex_vaults WHERE id = ? AND tenant_id = ?')
+      .bind(explicitVault, gate.tenant).all();
+    if (!vr.length) return err('Coffre introuvable', 404, origin);
+    vaultId = explicitVault; ownerAgentId = null;
+  } else {
+    vaultId = await _privateVaultOf(env, gate.tenant, agentId);
+    ownerAgentId = agentId;
+  }
 
   const unit = {
     id: generateId(),
     tenant_id: gate.tenant,
-    agent_id: agentId,
+    agent_id: ownerAgentId,
     vault_id: vaultId,
     type: b.type,
     title: b.title.trim(),
@@ -1491,6 +1514,98 @@ export async function handleFolderDelete(request, env, folderId) {
   const res = await env.DB.prepare('DELETE FROM sa_folders WHERE id = ? AND tenant_id = ?')
     .bind(folderId, gate.tenant).run();
   if (!res.meta?.changes) return err('Dossier introuvable', 404, origin);
+  return json({ ok: true }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-4.4.2 — COFFRES PARTAGÉS (kind='shared', portés par un dossier).
+// Les agents du dossier les LISENT en plus de leur coffre privé
+// (cf. _vaultsForAgent, déjà en place depuis 4.4.0). Ici : la gestion.
+// ═══════════════════════════════════════════════════════════════
+// validateVaultName (pur/testé) : nom optionnel (défaut « Coffre partagé »), borné.
+export function validateVaultName(name) {
+  const n = (typeof name === 'string') ? name.trim() : '';
+  if (!n) return { ok: true, name: 'Coffre partagé' };
+  if (n.length > 80) return { ok: false, msg: 'Nom trop long (80 caractères max)' };
+  return { ok: true, name: n.slice(0, 80) };
+}
+
+export async function handleKortexVaultsList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const folder = new URL(request.url).searchParams.get('folder');
+  if (!folder) return err('Paramètre folder requis', 400, origin);
+  const { results } = await env.DB.prepare(`
+    SELECT v.id, v.name, v.folder_id, v.created_at,
+           (SELECT COUNT(*) FROM kortex_units u WHERE u.vault_id = v.id AND u.tenant_id = v.tenant_id) AS unit_count
+      FROM kortex_vaults v
+     WHERE v.tenant_id = ? AND v.folder_id = ? AND v.kind = 'shared'
+     ORDER BY v.created_at
+  `).bind(gate.tenant, folder).all();
+  return json({ vaults: results }, 200, origin);
+}
+
+export async function handleKortexVaultCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const b = await parseBody(request);
+  const folderId = (typeof b?.folder_id === 'string' && b.folder_id) ? b.folder_id : null;
+  if (!folderId) return err('folder_id requis (un coffre partagé appartient à un dossier)', 400, origin);
+  const { results: fr } = await env.DB
+    .prepare('SELECT id FROM sa_folders WHERE id = ? AND tenant_id = ?')
+    .bind(folderId, gate.tenant).all();
+  if (!fr.length) return err('Dossier introuvable', 404, origin);
+  const v = validateVaultName(b?.name);
+  if (!v.ok) return err(v.msg, 400, origin);
+  await _ensureTenant(env, gate.tenant, gate.claims?.plan);
+  const id = generateId();
+  await env.DB.prepare(
+    "INSERT INTO kortex_vaults (id, tenant_id, folder_id, name, kind) VALUES (?, ?, ?, ?, 'shared')"
+  ).bind(id, gate.tenant, folderId, v.name).run();
+  return json({ vault: { id, name: v.name, folder_id: folderId, unit_count: 0 } }, 201, origin);
+}
+
+export async function handleKortexVaultUpdate(request, env, vaultId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const b = await parseBody(request);
+  if (typeof b?.name !== 'string' || !b.name.trim()) return err('Nom requis', 400, origin);
+  const v = validateVaultName(b.name);
+  if (!v.ok) return err(v.msg, 400, origin);
+  const res = await env.DB.prepare(
+    "UPDATE kortex_vaults SET name = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ? AND kind = 'shared'"
+  ).bind(v.name, vaultId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Coffre partagé introuvable', 404, origin);
+  return json({ vault: { id: vaultId, name: v.name } }, 200, origin);
+}
+
+export async function handleKortexVaultDelete(request, env, vaultId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  // Un coffre PRIVÉ ne se supprime pas ici (il part avec son agent).
+  const { results: vr } = await env.DB
+    .prepare('SELECT kind FROM kortex_vaults WHERE id = ? AND tenant_id = ?')
+    .bind(vaultId, gate.tenant).all();
+  if (!vr.length) return err('Coffre introuvable', 404, origin);
+  if (vr[0].kind !== 'shared') return err('Seul un coffre partagé peut être supprimé ici.', 400, origin);
+  // Purge les fiches du coffre + leur index (FTS + vecteurs).
+  const { results: uIds } = await env.DB
+    .prepare('SELECT id FROM kortex_units WHERE vault_id = ? AND tenant_id = ?')
+    .bind(vaultId, gate.tenant).all();
+  if (uIds.length) await _vectorDelete(env, uIds.map(r => r.id));
+  for (const r of uIds) {
+    await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(r.id).run();
+  }
+  await env.DB.prepare('DELETE FROM kortex_units WHERE vault_id = ? AND tenant_id = ?').bind(vaultId, gate.tenant).run();
+  await env.DB.prepare('DELETE FROM kortex_vaults WHERE id = ? AND tenant_id = ?').bind(vaultId, gate.tenant).run();
   return json({ ok: true }, 200, origin);
 }
 

@@ -112,7 +112,8 @@ import { handleSmartAgentHealth,
          handleAgentChat, handleGapsList, handleGapDismiss,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
          handleSuggestOpening,
-         handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete } from './routes/smart-agent.js';
+         handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
+         handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -154,6 +155,12 @@ export default {
       const saFolderMatch = path.match(/^\/api\/smart-agent\/folders\/([A-Za-z0-9-]+)$/);
       if (saFolderMatch && method === 'PATCH')  return handleFolderUpdate(request, env, saFolderMatch[1]);
       if (saFolderMatch && method === 'DELETE') return handleFolderDelete(request, env, saFolderMatch[1]);
+      // SA-4.4.2 — coffres partagés (portés par un dossier)
+      if (path === '/api/smart-agent/vaults'             && method === 'GET')  return handleKortexVaultsList(request, env);
+      if (path === '/api/smart-agent/vaults'             && method === 'POST') return handleKortexVaultCreate(request, env);
+      const saVaultMatch = path.match(/^\/api\/smart-agent\/vaults\/([A-Za-z0-9-]+)$/);
+      if (saVaultMatch && method === 'PATCH')  return handleKortexVaultUpdate(request, env, saVaultMatch[1]);
+      if (saVaultMatch && method === 'DELETE') return handleKortexVaultDelete(request, env, saVaultMatch[1]);
       if (path === '/api/smart-agent/gaps'               && method === 'GET')  return handleGapsList(request, env);
       const saGapMatch = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/dismiss$/);
       if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);

@@ -9,7 +9,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
-  lastAgentQuestion, isAffirmation, validateFolderName }
+  lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -236,6 +236,15 @@ console.log('── validateFolderName (SA-4.4.1 — dossiers d\'agents) ──'
   check('non-string refusé', validateFolderName(null).ok === false);
   check('nom trop long (81) refusé', validateFolderName('x'.repeat(81)).ok === false);
   check('80 caractères acceptés', validateFolderName('x'.repeat(80)).ok === true);
+}
+
+console.log('── validateVaultName (SA-4.4.2 — coffre partagé) ──');
+{
+  check('nom vide → défaut « Coffre partagé »',
+    validateVaultName('').ok && validateVaultName('').name === 'Coffre partagé');
+  check('non-string → défaut', validateVaultName(null).name === 'Coffre partagé');
+  check('nom fourni trimmé', validateVaultName('  Infos pratiques  ').name === 'Infos pratiques');
+  check('nom trop long (81) refusé', validateVaultName('x'.repeat(81)).ok === false);
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

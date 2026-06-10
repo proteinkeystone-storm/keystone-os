@@ -108,6 +108,8 @@ const _kx = {
     units: [], counts: { draft: 0, validated: 0, quarantine: 0, expired: 0, total: 0 },
     collections: [],
     filterType: 'all', filterStatus: 'all',
+    // SA-4.4.2 — coffre affiché : 'private' (de l'agent) | 'shared' (du dossier)
+    scope: 'private', sharedVault: null,
     mode: 'list',              // 'list' | 'editor'
     editing: null,             // unit en édition (null = création)
     editType: 'qa',            // type sélectionné en création
@@ -117,8 +119,8 @@ const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error
 const _kxs = { q: '', busy: false, mode: null, results: null };
 // Agents (SA-3) — mode : 'list' | 'form' (création/édition d'agent)
 const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'list', editing: null,
-    // SA-4.4.1 — dossiers d'agents (regroupement)
-    folders: [],
+    // SA-4.4.1 — dossiers d'agents (regroupement) ; SA-4.4.2 — édition inline
+    folders: [], folderEdit: null,
     // Formulaire agent (SA-4.3, ex-wizard) : données en cours
     form: null, formBusy: false, formError: null, suggestBusy: false,
     // File des trous (SA-4) — scopée par agent (SA-4.3)
@@ -238,6 +240,8 @@ function _onClick(e) {
     if (act === 'fold-new')     { _createFolder(); return; }
     if (act === 'fold-rename')  { _renameFolder(actEl.dataset.id); return; }
     if (act === 'fold-delete')  { _deleteFolder(actEl.dataset.id); return; }
+    if (act === 'fold-save')    { _saveFolderEdit(); return; }
+    if (act === 'fold-cancel')  { _ag.folderEdit = null; _renderMain(); return; }
     if (act === 'tab')          { _setTab(actEl.dataset.tab); return; }
     // ── Formulaire agent (création/édition) ──
     if (act === 'form-save')    { _saveAgentForm(); return; }
@@ -259,6 +263,9 @@ function _onClick(e) {
     // ── Coffre (onglet Savoir) : liste ──
     if (act === 'kx-new')       { _openEditor(null); return; }
     if (act === 'kx-extract')   { _openExtract(); return; }
+    // ── Coffre partagé (SA-4.4.2) ──
+    if (act === 'kx-scope')         { _setKxScope(actEl.dataset.v); return; }
+    if (act === 'kx-create-shared') { _createSharedVault(); return; }
     if (act === 'kx-ftype')     { _kx.filterType = actEl.dataset.v;   _kxReload(); return; }
     if (act === 'kx-fstatus')   { _kx.filterStatus = actEl.dataset.v; _kxReload(); return; }
     if (act === 'kx-search')       { _runSearch(); return; }
@@ -335,6 +342,7 @@ function _enterAgent(id) {
     _kx.loaded = false; _kx.mode = 'list'; _kx.editing = null;
     _kx.filterType = 'all'; _kx.filterStatus = 'all'; _kx.prefill = null; _kx.resolveGapId = null;
     _kxs.results = null; _kxs.q = '';
+    _kx.scope = 'private'; _kx.sharedVault = null;   // SA-4.4.2
     _gold.loaded = false; _gold.replay = null; _gold.items = [];
     // bac à sable : amorce l'accueil de cet agent
     const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} ». Comment puis-je vous aider ?`;
@@ -343,7 +351,8 @@ function _enterAgent(id) {
     _ag.gaps = []; _ag.gapsCount = 0;
     _renderRail(); _renderAside();
     _setTab('savoir');
-    _loadGaps();   // pour le badge Trous
+    _loadGaps();          // pour le badge Trous
+    _loadSharedVault();   // SA-4.4.2 — coffre partagé du dossier (si l'agent en a un)
 }
 function _exitAgent() {
     _cur.id = null; _cur.agent = null; _ag.mode = 'list';
@@ -367,7 +376,11 @@ async function _kxLoad() {
     _kx.loading = true; _kx.error = null;
     _renderMain();
     try {
-        const qs = [`agent=${encodeURIComponent(_cur.id)}`];
+        // SA-4.4.2 — coffre courant : privé de l'agent OU partagé du dossier.
+        const scopeQ = (_kx.scope === 'shared' && _kx.sharedVault)
+            ? `vault=${encodeURIComponent(_kx.sharedVault.id)}`
+            : `agent=${encodeURIComponent(_cur.id)}`;
+        const qs = [scopeQ];
         if (_kx.filterType !== 'all')   qs.push(`type=${_kx.filterType}`);
         if (_kx.filterStatus !== 'all') qs.push(`status=${_kx.filterStatus}`);
         const unitsRes = await _api(`/kortex/units?${qs.join('&')}`);
@@ -387,6 +400,36 @@ async function _kxLoad() {
 }
 function _kxReload() { _kx.loaded = false; _kxLoad(); }
 
+// SA-4.4.2 — charge le coffre partagé du dossier de l'agent (1 par dossier en V1).
+async function _loadSharedVault() {
+    _kx.sharedVault = null;
+    const fid = _cur.agent?.folder_id;
+    if (!fid) return;
+    try {
+        const r = await _api(`/vaults?folder=${encodeURIComponent(fid)}`);
+        _kx.sharedVault = (r.vaults && r.vaults[0]) || null;
+    } catch (_) { /* best-effort : pas de coffre partagé affiché */ }
+    if (_cur.tab === 'savoir') _renderMain();
+}
+function _setKxScope(scope) {
+    const next = (scope === 'shared' && _kx.sharedVault) ? 'shared' : 'private';
+    if (_kx.scope === next) return;
+    _kx.scope = next;
+    _kx.filterType = 'all'; _kx.filterStatus = 'all';
+    _kxs.results = null; _kxs.q = '';
+    _kxReload();
+}
+async function _createSharedVault() {
+    const fid = _cur.agent?.folder_id;
+    if (!fid) { _toast('Rangez d\'abord cet agent dans un dossier (Réglages).', 'error'); return; }
+    try {
+        const r = await _api('/vaults', { method: 'POST', body: { folder_id: fid } });
+        if (r.vault) { _kx.sharedVault = r.vault; _kx.scope = 'shared'; }
+        _toast('Coffre partagé créé — commun à tous les agents du dossier.');
+        _kxReload();
+    } catch (e) { _toast(e.message, 'error'); }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Vue principale — agent-centrée
 // ═══════════════════════════════════════════════════════════════
@@ -395,6 +438,7 @@ function _renderMain() {
     if (!_cur.id) {
         main.innerHTML = (_ag.mode === 'form') ? _agentFormHTML() : _agentsListHTML();
         main.scrollTop = 0;
+        if (_ag.mode !== 'form' && _ag.folderEdit) _bindFolderEdit(main);
         return;
     }
     // À l'intérieur d'un agent : onglets
@@ -443,28 +487,47 @@ function _agReload() { _ag.loaded = false; _agLoad(); }
 
 // ── Dossiers d'agents (SA-4.4.1) — gestion légère (prompt/confirm, cohérent
 //    avec la suppression d'agent). Le rangement d'un agent passe par ses Réglages.
-async function _createFolder() {
-    const name = (prompt('Nom du nouveau dossier ?') || '').trim();
-    if (!name) return;
-    try {
-        const r = await _api('/folders', { method: 'POST', body: { name } });
-        if (r.folder) _ag.folders.push(r.folder);
-        _ag.folders.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
-        _toast('Dossier créé.');
-        _renderMain();
-    } catch (e) { _toast(e.message, 'error'); }
-}
-async function _renameFolder(id) {
+// SA-4.4.2 — création/renommage via champ INLINE (charte premium + fiable en
+// PWA : les prompt() natifs sont bloqués en mode app installée sur certains
+// navigateurs). _ag.folderEdit = { mode: 'new' | folderId, value, error }.
+function _createFolder() { _ag.folderEdit = { mode: 'new', value: '', error: null }; _renderMain(); }
+function _renameFolder(id) {
     const f = _ag.folders.find(x => x.id === id);
-    const name = (prompt('Renommer le dossier', f?.name || '') || '').trim();
-    if (!name || name === f?.name) return;
+    _ag.folderEdit = { mode: id, value: f?.name || '', error: null };
+    _renderMain();
+}
+async function _saveFolderEdit() {
+    const e = _ag.folderEdit;
+    if (!e) return;
+    const main = _root.querySelector('[data-slot="main"]');
+    const name = (main?.querySelector('[data-field="folder-name"]')?.value || '').trim();
+    if (!name) { e.error = 'Donnez un nom au dossier.'; _renderMain(); return; }
     try {
-        await _api(`/folders/${id}`, { method: 'PATCH', body: { name } });
-        if (f) f.name = name;
+        if (e.mode === 'new') {
+            const r = await _api('/folders', { method: 'POST', body: { name } });
+            if (r.folder) _ag.folders.push(r.folder);
+        } else {
+            await _api(`/folders/${e.mode}`, { method: 'PATCH', body: { name } });
+            const f = _ag.folders.find(x => x.id === e.mode);
+            if (f) f.name = name;
+        }
         _ag.folders.sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
-        _toast('Dossier renommé.');
+        const created = e.mode === 'new';
+        _ag.folderEdit = null;
+        _toast(created ? 'Dossier créé.' : 'Dossier renommé.');
         _renderMain();
-    } catch (e) { _toast(e.message, 'error'); }
+    } catch (err) { e.error = err.message; _renderMain(); }
+}
+// Focus + raccourcis clavier sur le champ inline (Entrée = valider, Échap = annuler).
+function _bindFolderEdit(main) {
+    const inp = main.querySelector('[data-field="folder-name"]');
+    if (!inp) return;
+    inp.focus();
+    const v = inp.value; inp.value = ''; inp.value = v;   // curseur en fin de texte
+    inp.onkeydown = (ev) => {
+        if (ev.key === 'Enter')  { ev.preventDefault(); _saveFolderEdit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); _ag.folderEdit = null; _renderMain(); }
+    };
 }
 async function _deleteFolder(id) {
     const f = _ag.folders.find(x => x.id === id);
@@ -531,10 +594,17 @@ function _agentsListHTML() {
             byFolder.get(a.folder_id).push(a);
         } else loose.push(a);
     }
+    const editing = _ag.folderEdit;
+    const folderEditRow = (saveTitle) => `
+      <div class="sa-foldedit">
+        <input class="sa-input sa-foldedit-input" data-field="folder-name" value="${_escAttr(editing.value || '')}" placeholder="Nom du dossier" maxlength="80">
+        <button class="sa-iconbtn is-ok" data-act="fold-save" title="${saveTitle}">${icon('check', 15)}</button>
+        <button class="sa-iconbtn" data-act="fold-cancel" title="Annuler">${icon('x', 15)}</button>
+      </div>
+      ${editing.error ? `<p class="sa-foldedit-err">${_esc(editing.error)}</p>` : ''}`;
     const folderBlock = f => {
         const items = byFolder.get(f.id) || [];
-        return `
-      <div class="sa-folder">
+        const head = (editing?.mode === f.id) ? folderEditRow('Renommer') : `
         <div class="sa-folder-head">
           <span class="sa-folder-ico">${icon('folder', 17)}</span>
           <strong class="sa-folder-name">${_esc(f.name)}</strong>
@@ -543,7 +613,10 @@ function _agentsListHTML() {
             <button class="sa-iconbtn" data-act="fold-rename" data-id="${f.id}" title="Renommer le dossier">${icon('edit', 14)}</button>
             <button class="sa-iconbtn is-danger" data-act="fold-delete" data-id="${f.id}" title="Supprimer le dossier">${icon('trash-2', 14)}</button>
           </span>
-        </div>
+        </div>`;
+        return `
+      <div class="sa-folder">
+        ${head}
         ${items.length
             ? `<div class="sa-agents">${items.map(card).join('')}</div>`
             : `<p class="sa-folder-empty">Vide — rangez-y un agent depuis ses Réglages.</p>`}
@@ -570,6 +643,7 @@ function _agentsListHTML() {
           <button class="sa-btn is-primary" data-act="ag-new">${icon('plus', 16)} Nouvel agent</button>
         </div>
       </div>
+      ${editing?.mode === 'new' ? `<div class="sa-folder">${folderEditRow('Créer')}</div>` : ''}
       ${_ag.folders.map(folderBlock).join('')}
       ${looseBlock}
     </section>`;
@@ -734,6 +808,8 @@ async function _saveAgentForm() {
                 if (i >= 0) _ag.agents[i] = r.agent;
             }
             _ag.formBusy = false;
+            _kx.scope = 'private';
+            _loadSharedVault();   // SA-4.4.2 — le dossier a pu changer → recharge le coffre partagé
             _toast('Agent enregistré.');
             _renderRail(); _renderMain();
         } else {
@@ -1015,6 +1091,26 @@ async function _openUnitFromChat(uid) {
 }
 
 // ── Vue KORTEX — le coffre ─────────────────────────────────────
+// SA-4.4.2 — sélecteur de coffre (privé de l'agent / partagé du dossier).
+// N'apparaît que si l'agent appartient à un dossier.
+function _kxScopeBarHTML() {
+    const a = _cur.agent;
+    if (!a?.folder_id) return '';
+    const folderName = _ag.folders.find(f => f.id === a.folder_id)?.name || 'dossier';
+    if (!_kx.sharedVault) {
+        return `
+      <div class="sa-vaultbar">
+        <span class="sa-vaultbar-txt">${icon('share-2', 15)} Le dossier « ${_esc(folderName)} » peut avoir un coffre commun à tous ses agents.</span>
+        <button class="sa-btn is-sm" data-act="kx-create-shared">${icon('plus', 14)} Créer le coffre partagé</button>
+      </div>`;
+    }
+    return `
+      <div class="sa-vaulttoggle" role="tablist">
+        <button class="sa-vtab ${_kx.scope === 'private' ? 'is-on' : ''}" data-act="kx-scope" data-v="private">${icon('lock', 14)} Coffre privé</button>
+        <button class="sa-vtab ${_kx.scope === 'shared' ? 'is-on' : ''}" data-act="kx-scope" data-v="shared">${icon('share-2', 14)} Partagé · ${_esc(folderName)}</button>
+      </div>`;
+}
+
 function _kortexViewHTML() {
     if (_kx.loading) {
         return `<div class="sa-loading">${icon('refresh', 18)} Chargement du coffre…</div>`;
@@ -1027,27 +1123,35 @@ function _kortexViewHTML() {
         <p class="sa-hero-lead">${_esc(_kx.error)}</p>
       </section>`;
     }
-    // Coffre entièrement vide (aucune fiche, aucun filtre) → pédagogie + CTA
+    const scopeBar = _kxScopeBarHTML();
+    const isShared = _kx.scope === 'shared' && !!_kx.sharedVault;
+
+    // Coffre courant vide → pédagogie + CTA (le sélecteur reste accessible).
     if (!_kx.counts.total) {
         return `
-      <section class="sa-hero">
-        <div class="sa-hero-ico">${icon('kortex', 40)}</div>
-        <h1 class="sa-hero-title">Le coffre Kortex</h1>
-        <p class="sa-hero-lead">
-          Votre savoir-faire, structuré en fiches typées — la matière première de vos agents.
-          Chaque fiche est validée par vous avant d'être servie : c'est votre actif, pas celui de l'IA.
-        </p>
-        <div class="sa-cta-row">
-          <button class="sa-btn is-primary" data-act="kx-new">${icon('plus', 16)} Créer ma première fiche</button>
-          <button class="sa-btn" data-act="kx-extract">${icon('sparkles', 16)} Coller du texte</button>
-        </div>
-        <div class="sa-types-grid">
-          ${KORTEX_TYPES.map(t => `
-            <div class="sa-type-card">
-              <span class="sa-type-ico">${icon(t.icon, 18)}</span>
-              <strong class="sa-type-name">${t.label}</strong>
-              <span class="sa-type-desc">${t.desc}</span>
-            </div>`).join('')}
+      <section class="sa-kx">
+        ${scopeBar}
+        <div class="sa-hero sa-hero-incoffre">
+          <div class="sa-hero-ico">${icon('kortex', 40)}</div>
+          <h1 class="sa-hero-title">${isShared ? 'Coffre partagé du dossier' : 'Le coffre Kortex'}</h1>
+          <p class="sa-hero-lead">
+            ${isShared
+                ? 'Les fiches ajoutées ici sont <strong>communes à tous les agents</strong> de ce dossier — idéal pour un savoir mutualisé (infos pratiques, règles maison…).'
+                : 'Votre savoir-faire, structuré en fiches typées — la matière première de vos agents. Chaque fiche est validée par vous avant d\'être servie : c\'est votre actif, pas celui de l\'IA.'}
+          </p>
+          <div class="sa-cta-row">
+            <button class="sa-btn is-primary" data-act="kx-new">${icon('plus', 16)} Créer ma première fiche</button>
+            <button class="sa-btn" data-act="kx-extract">${icon('sparkles', 16)} Coller du texte</button>
+          </div>
+          ${isShared ? '' : `
+          <div class="sa-types-grid">
+            ${KORTEX_TYPES.map(t => `
+              <div class="sa-type-card">
+                <span class="sa-type-ico">${icon(t.icon, 18)}</span>
+                <strong class="sa-type-name">${t.label}</strong>
+                <span class="sa-type-desc">${t.desc}</span>
+              </div>`).join('')}
+          </div>`}
         </div>
       </section>`;
     }
@@ -1062,10 +1166,11 @@ function _kortexViewHTML() {
 
     return `
     <section class="sa-kx">
+      ${scopeBar}
       <div class="sa-kx-head">
         <div>
-          <h2 class="sa-kx-title">Savoir</h2>
-          <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''} · propre à cet agent</p>
+          <h2 class="sa-kx-title">${isShared ? 'Savoir partagé' : 'Savoir'}</h2>
+          <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''} · ${isShared ? 'commun au dossier' : 'propre à cet agent'}</p>
         </div>
         <div class="sa-kx-acts">
           <button class="sa-btn" data-act="kx-extract" title="Analyser un texte et en extraire des fiches (1 crédit IA)">
@@ -1354,8 +1459,14 @@ async function _saveEditor(status) {
         } else {
             // Création — silo : la fiche appartient à l'agent courant.
             // Boucle gap-driven : resolve_gap_id résout le trou côté worker.
-            const payload = { ...form, status: status || 'draft', agent_id: _cur.id };
-            if (_kx.resolveGapId) payload.resolve_gap_id = _kx.resolveGapId;
+            // SA-4.4.2 — cible le coffre courant (privé de l'agent ou partagé du dossier).
+            const payload = { ...form, status: status || 'draft' };
+            if (_kx.scope === 'shared' && _kx.sharedVault) {
+                payload.vault_id = _kx.sharedVault.id;
+            } else {
+                payload.agent_id = _cur.id;
+                if (_kx.resolveGapId) payload.resolve_gap_id = _kx.resolveGapId;
+            }
             await _api('/kortex/units', { method: 'POST', body: payload });
             _toast(_kx.resolveGapId
                 ? (status === 'validated' ? 'Trou comblé — l\'agent saura répondre.' : 'Réponse enregistrée en brouillon — validez-la pour combler le trou.')
@@ -1489,7 +1600,8 @@ async function _addProposals() {
         try {
             await _api('/kortex/units', {
                 method: 'POST',
-                body: { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'paste', agent_id: _cur.id },
+                body: { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'paste',
+                    ...((_kx.scope === 'shared' && _kx.sharedVault) ? { vault_id: _kx.sharedVault.id } : { agent_id: _cur.id }) },
             });
             added++;
         } catch (_) { failed++; }
