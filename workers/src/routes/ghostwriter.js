@@ -381,68 +381,66 @@ export async function handleGhostwriterRewrite(request, env) {
     '}',
   ].filter(Boolean).join('\n');
 
-  // ── Appel Mistral via Workers AI (un seul appel, rapide) ─────
-  let aiResponse;
-  try {
-    aiResponse = await env.AI.run(MODEL_ID, {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: `Texte source à réécrire :\n\n${text}` },
-      ],
-      max_tokens: cappedMaxTokens,
-    });
-  } catch (e) {
-    // Budget Workers AI gratuit épuisé (Cloudflare 4006). PAS le quota GW de la
-    // licence (ADMIN = illimité) — c'est l'allocation gratuite du COMPTE
-    // (10 000 neurones/jour), partagée par tous les outils IA. Code stable.
-    const m = String(e?.message || e || '');
-    if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
-      return json({
-        error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).',
-        code : 'AI_BUDGET_EXHAUSTED',
-      }, 429, origin);
-    }
-    return err(`Workers AI erreur : ${e.message || 'inconnue'}`, 502, origin);
-  }
+  // ── Appel Mistral via Workers AI : extraction string-safe + réessai ──
+  // ⚠️ BUG RACINE (depuis le switch Gemma→Mistral du 2026-05-29) : Mistral
+  // (format OpenAI) met le texte dans choices[0].message.content, mais expose
+  // AUSSI un champ `response` qui n'est PAS une string → l'ancien extracteur
+  // (hérité de Gemma) le prenait en 1er → rawText = OBJET → `.slice`/`.replace`
+  // throw → exception worker → « Load failed » côté front, sur CHAQUE réécriture.
+  // `_aiText` ne renvoie QUE des strings. + réessai 1× si le JSON du modèle est
+  // cassé (le quota a été bumpé 1 seule fois → 1 réécriture = 1 crédit).
+  const MAX_AI_ATTEMPTS = 2;
+  let aiResponse  = null;
+  let parsed      = null;
+  let lastRawText = '';
+  let lastIssue   = '';
 
-  try { console.log('[ghostwriter] aiResponse keys:', Object.keys(aiResponse || {})); } catch (_) {}
-
-  // Cas "tronqué par max_tokens" : le modèle a vidé son budget avant d'écrire.
-  const choice0 = aiResponse?.choices?.[0];
-  if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
-    return err(
-      `Mistral a épuisé son budget tokens (max=${cappedMaxTokens}) avant d'écrire la réponse. `
-      + `Réessaie ou augmente maxOutputTokens.`,
-      502, origin,
-    );
-  }
-
-  // Extraction de la réponse (formes variables selon le modèle Workers AI).
-  const rawText = aiResponse?.response
-    || aiResponse?.result?.response
-    || aiResponse?.choices?.[0]?.message?.content
-    || aiResponse?.output?.[0]?.content?.[0]?.text
-    || aiResponse?.message?.content
-    || aiResponse?.text
-    || aiResponse?.completion
-    || '';
-  if (!rawText) {
-    let diag = '';
+  for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS; attempt++) {
     try {
-      const sample = JSON.stringify(aiResponse).slice(0, 400);
-      const keys = aiResponse && typeof aiResponse === 'object' ? Object.keys(aiResponse).join(',') : 'n/a';
-      diag = ` (type=${typeof aiResponse}, keys=[${keys}], sample=${sample})`;
-    } catch (_) { diag = ' (aiResponse non-sérialisable)'; }
-    return err(`Réponse Workers AI vide${diag}`, 502, origin);
+      aiResponse = await env.AI.run(MODEL_ID, {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: `Texte source à réécrire :\n\n${text}` },
+        ],
+        max_tokens: cappedMaxTokens,
+      });
+    } catch (e) {
+      // Budget Workers AI gratuit épuisé (Cloudflare 4006). PAS le quota GW de la
+      // licence (ADMIN illimité) — allocation gratuite du COMPTE, partagée par
+      // tous les outils IA. Un réessai n'aide pas → sortie immédiate, code stable.
+      const m = String(e?.message || e || '');
+      if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
+        return json({
+          error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC (~2h du matin).',
+          code : 'AI_BUDGET_EXHAUSTED',
+        }, 429, origin);
+      }
+      lastIssue = `Workers AI erreur : ${e.message || 'inconnue'}`;
+      if (attempt >= MAX_AI_ATTEMPTS) return err(lastIssue, 502, origin);
+      continue;
+    }
+
+    try { console.log(`[ghostwriter] aiResponse keys (essai ${attempt}):`, Object.keys(aiResponse || {})); } catch (_) {}
+
+    // Tronqué par max_tokens (modèle qui vide son budget avant d'écrire).
+    const choice0 = aiResponse?.choices?.[0];
+    if (choice0?.finish_reason === 'length' && !choice0?.message?.content) {
+      lastIssue = `budget tokens épuisé (max=${cappedMaxTokens})`;
+      continue;
+    }
+
+    const rawText = _aiText(aiResponse);   // 1re STRING parmi les champs connus
+    lastRawText = rawText;
+    if (!rawText) { lastIssue = 'réponse vide ou non-textuelle'; continue; }
+
+    const candidate = _parseVariants(rawText);   // tolérant (fences/préface, 1-3, labels)
+    if (candidate) { parsed = candidate; break; }
+    lastIssue = `JSON inexploitable (raw: ${String(rawText).slice(0, 160)})`;
   }
 
-  // Parse TOLÉRANT (préface/fences enlevés, 1 à 3 variantes acceptées, labels
-  // manquants complétés). Plus indulgent que JSON.parse strict, sans réessai
-  // (donc rapide : un seul appel modèle, pas de risque de timeout cumulé).
-  const parsed = _parseVariants(rawText);
   if (!parsed) {
     return err(
-      `Réponse Mistral mal formée (JSON invalide). Raw: ${rawText.slice(0, 200)}`,
+      `Le modèle (Mistral) n'a pas renvoyé de variantes exploitables après ${MAX_AI_ATTEMPTS} essais. ${lastIssue}`,
       502, origin,
     );
   }
@@ -451,7 +449,7 @@ export async function handleGhostwriterRewrite(request, env) {
   await recordUsage(env, 'ghostwriter', {
     usage : aiResponse?.usage,
     inText: systemPrompt + text,
-    outText: rawText,
+    outText: lastRawText,
   });
 
   // ── Réponse normalisée ───────────────────────────────────────
@@ -483,6 +481,27 @@ export async function handleGhostwriterRewrite(request, env) {
       }
     }
   }
+}
+
+// Extrait la 1re STRING non vide parmi les formes de réponse Workers AI connues.
+// Mistral (OpenAI-compat) met le texte dans choices[0].message.content ; son
+// champ `response` peut être un OBJET → on FILTRE sur le type pour ne JAMAIS
+// renvoyer autre chose qu'une string (sinon .slice/.replace en aval throw →
+// exception worker → « Load failed »). Priorité au champ canonique OpenAI.
+function _aiText(aiResponse) {
+  const candidates = [
+    aiResponse?.choices?.[0]?.message?.content,
+    aiResponse?.response,
+    aiResponse?.result?.response,
+    aiResponse?.output?.[0]?.content?.[0]?.text,
+    aiResponse?.message?.content,
+    aiResponse?.text,
+    aiResponse?.completion,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  return '';
 }
 
 // Parse TOLÉRANT de la réponse du modèle pour la réécriture. Retourne
