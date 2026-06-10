@@ -82,6 +82,8 @@ const COST = {
   brainstorming: 1,
   concierge:     1,
   livinglayer:   0,
+  smartagent:    1,   // Sprint SA-1 : 1 extraction coller-texte = 1 crédit
+                      // (le chat ancré du SA-3 réutilisera le même outil).
 };
 function costFor(tool) {
   const c = COST[String(tool || '').toLowerCase()];
