@@ -49,9 +49,9 @@
   --green-soft:  rgba(34,197,94,.12);
   --danger:      #e05c5c;
   --danger-soft: rgba(224,92,92,.12);
-  --warn:        var(--warn);
+  --warn:        #fbbf24;
   --warn-soft:   rgba(251,191,36,.12);
-  --info:        var(--info);
+  --info:        #6496ff;
   --info-soft:   rgba(100,150,255,.12);
   /* Typographie */
   --text:  #f8fafc;
