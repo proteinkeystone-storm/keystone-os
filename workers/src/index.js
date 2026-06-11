@@ -111,7 +111,9 @@ import { handleSmartAgentHealth,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
          handleSuggestOpening,
          handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
-         handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete } from './routes/smart-agent.js';
+         handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete,
+         handlePublicAgentMeta, handlePublicAgentChat,
+         handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -137,6 +139,11 @@ export default {
     try {
       // ── Smart Agent / Kortex (SA-0 santé · SA-1 coffre) ──────
       if (path === '/api/smart-agent/health' && method === 'GET') return handleSmartAgentHealth(request, env);
+      // SA-5 — exposition publique anonyme (lien/QR, SANS JWT : le handler résout le tenant du propriétaire)
+      const saPubChat = path.match(/^\/api\/smart-agent\/p\/([A-Za-z0-9]+)\/chat$/);
+      if (saPubChat && method === 'POST') return handlePublicAgentChat(request, env, saPubChat[1]);
+      const saPubMeta = path.match(/^\/api\/smart-agent\/p\/([A-Za-z0-9]+)$/);
+      if (saPubMeta && method === 'GET') return handlePublicAgentMeta(request, env, saPubMeta[1]);
       if (path === '/api/smart-agent/kortex/units'       && method === 'GET')  return handleKortexUnitsList(request, env);
       if (path === '/api/smart-agent/kortex/units'       && method === 'POST') return handleKortexUnitCreate(request, env);
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
@@ -162,6 +169,13 @@ export default {
       if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);
       const saChatMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/chat$/);
       if (saChatMatch && method === 'POST') return handleAgentChat(request, env, saChatMatch[1]);
+      // SA-5 — publication d'un agent (pad, protégé par _gate dans le handler)
+      const saPublishMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/publish$/);
+      if (saPublishMatch && method === 'POST') return handleAgentPublish(request, env, saPublishMatch[1]);
+      const saLinksMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/links$/);
+      if (saLinksMatch && method === 'GET') return handleAgentLinksList(request, env, saLinksMatch[1]);
+      const saLinkRevoke = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)\/revoke$/);
+      if (saLinkRevoke && method === 'POST') return handlePublicLinkRevoke(request, env, saLinkRevoke[1]);
       // Golden set — /golden/replay AVANT /golden (sous-chemin plus spécifique)
       const saGoldReplay = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/golden\/replay$/);
       if (saGoldReplay && method === 'POST') return handleGoldenReplay(request, env, saGoldReplay[1]);

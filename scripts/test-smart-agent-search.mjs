@@ -9,7 +9,8 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   normQuestion, extractCitations, validateAgentPayload, isGrounded,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
-  lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName }
+  lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
+  validatePublicSlug, publicAgentMeta }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -243,6 +244,33 @@ console.log('── validateVaultName (SA-4.4.2 — coffre partagé) ──');
   check('non-string → défaut', validateVaultName(null).name === 'Coffre partagé');
   check('nom fourni trimmé', validateVaultName('  Infos pratiques  ').name === 'Infos pratiques');
   check('nom trop long (81) refusé', validateVaultName('x'.repeat(81)).ok === false);
+}
+
+console.log('── validatePublicSlug (SA-5 — lien public) ──');
+{
+  check('slug 8 alphanum accepté', validatePublicSlug('Ab3xK9mP') === 'Ab3xK9mP');
+  check('trim avant validation', validatePublicSlug('  Ab3xK9mP  ') === 'Ab3xK9mP');
+  check('trop court refusé', validatePublicSlug('Ab3') === null);
+  check('trop long refusé', validatePublicSlug('Ab3xK9mPq') === null);
+  check('caractère non-alphanum refusé (anti-injection)', validatePublicSlug('Ab3-K9mP') === null);
+  check('vide / non-string → null', validatePublicSlug('') === null && validatePublicSlug(null) === null);
+}
+
+console.log('── publicAgentMeta (SA-5 — config publique strippée) ──');
+{
+  const meta = publicAgentMeta({
+    name: 'Guide du Musée', tenant_id: 'SECRET_HMAC',
+    config: { identity: { mission: 'INTERNE — ne pas exposer', opening: '  Bonjour !  ', tone: 'chaleureux' },
+              knowledge: {} },
+  });
+  check('expose name', meta.name === 'Guide du Musée');
+  check('expose opening (trimmé)', meta.opening === 'Bonjour !');
+  check('expose tone', meta.tone === 'chaleureux');
+  check('n\'expose NI tenant NI mission NI coffre',
+    meta.tenant_id === undefined && meta.mission === undefined &&
+    meta.config === undefined && Object.keys(meta).length === 3);
+  check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
+  check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

@@ -55,10 +55,11 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
-import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
+import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
+import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.4.4';
+const SA_ENGINE_VERSION = 'SA-5.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -360,6 +361,38 @@ async function ensureSmartAgentSchema(env) {
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_vault ON kortex_units(tenant_id, vault_id, status)');
   // Index composé manquant : _logGap dédoublonne par (tenant, agent, norm).
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_gaps_agentnorm ON sa_gaps(tenant_id, agent_id, question_norm, status)');
+
+  // ── SA-5 — EXPOSITION PUBLIQUE (lien/QR anonyme) ──────────────
+  // Un lien découple l'accès public de l'agent (révocation + quota par
+  // lien sans toucher l'agent ; l'id interne de l'agent n'est jamais exposé).
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_public_links (
+      id          TEXT PRIMARY KEY,
+      tenant_id   TEXT NOT NULL DEFAULT 'default',
+      agent_id    TEXT NOT NULL,
+      slug        TEXT NOT NULL UNIQUE,
+      status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+      max_per_day INTEGER NOT NULL DEFAULT 500,
+      created_at  TEXT DEFAULT (datetime('now')),
+      revoked_at  TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+      FOREIGN KEY (agent_id)  REFERENCES sa_agents(id)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_public_links_agent ON sa_public_links(tenant_id, agent_id)');
+  // Compteur anti-abus : (slug, jour, appareil) → nb de questions. L'agrégat
+  // sur (slug, day) sert le plafond/jour du lien ; la ligne sert le cap/appareil.
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_public_usage (
+      slug        TEXT NOT NULL,
+      day         TEXT NOT NULL,
+      device_hash TEXT NOT NULL,
+      count       INTEGER NOT NULL DEFAULT 0,
+      updated_at  TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (slug, day, device_hash)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_public_usage_day ON sa_public_usage(slug, day)');
 
   // Backfill UNIQUE, gardé par une sentinelle DURABLE en D1 (le flag mémoire
   // _schemaReady retombe à false à chaque cold start → insuffisant seul).
@@ -1025,6 +1058,46 @@ const GROUND_MIN_VEC   = 0.42;  // cosinus bge-m3 minimal sans accroche lexicale
 const CHAT_TOPK        = 6;     // fiches injectées dans le contexte de génération
 const CHAT_HISTORY_N   = 6;     // derniers messages de la session repassés au modèle
 const CHAT_MAX_LEN     = 1000;  // longueur max d'une question
+
+// ── SA-5 — exposition publique anonyme (lien/QR) ─────────────────
+const PUBLIC_SLUG_RE        = /^[0-9A-Za-z]{8}$/;  // 8 chars (alphabet shortId)
+const PUBLIC_MAX_LEN        = 500;                 // question publique (plus courte qu'en interne)
+const PUBLIC_CAP_DEVICE     = 50;                  // questions/jour/appareil (anti-abus, valeur Stéphane)
+const PUBLIC_DEFAULT_MAX_DAY = 500;                // plafond/jour/lien par défaut (protège le portefeuille)
+
+// nanoid 8 chars URL-safe — réplique qr.js shortId (pas de couplage inter-routes).
+function publicSlug(len = 8) {
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZabcdefghijkmnopqrstuvwxyz';
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
+// Empreinte appareil anonyme = SHA-256(UA|IP) tronqué — réplique qr.js _deviceHash.
+async function publicDeviceHash(request) {
+  const ua = request.headers.get('User-Agent') || '?';
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '?';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ua + '|' + ip));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+// Pur (testé) : valide un slug public entrant (anti-injection : exactement 8 alphanum).
+export function validatePublicSlug(slug) {
+  const s = String(slug || '').trim();
+  return PUBLIC_SLUG_RE.test(s) ? s : null;
+}
+
+// Pur (testé) : config STRIPPÉE servie au visiteur anonyme. JAMAIS le tenant,
+// la mission interne, les collections ni le coffre — juste de quoi accueillir.
+export function publicAgentMeta(agent) {
+  const idn = (agent && agent.config && agent.config.identity) ? agent.config.identity : {};
+  return {
+    name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
+    opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
+    tone:    (typeof idn.tone === 'string') ? idn.tone : '',
+  };
+}
 
 // Décision d'ancrage PARTAGÉE (chat SA-3 + replay golden SA-4) : la
 // récupération apporte-t-elle de quoi répondre ? Pure → exportée/testée.
@@ -1744,6 +1817,304 @@ export async function handleAgentChat(request, env, agentId) {
     await _refund();
     return err(`Dialogue impossible : ${e.message || 'erreur IA'}`, 502, origin);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-5 — EXPOSITION PUBLIQUE D'UN AGENT (lien / QR anonyme)
+// Un visiteur SANS JWT interroge un agent publié. Le tenant du
+// PROPRIÉTAIRE est résolu côté serveur depuis le lien (JAMAIS le
+// client) ; l'IA est débitée sur SON portefeuille. Garde-fous :
+// budgetGuard global + rate-limit par appareil + plafond/jour/lien.
+// Le coffre n'est JAMAIS exposé (réponse ancrée, [n] retirés).
+// ═══════════════════════════════════════════════════════════════
+
+// Génère un slug 8 chars unique (boucle anti-collision, patron qr.js).
+async function _genPublicSlug(env) {
+  for (let i = 0; i < 5; i++) {
+    const s = publicSlug(8);
+    const { results } = await env.DB
+      .prepare('SELECT 1 FROM sa_public_links WHERE slug = ? LIMIT 1').bind(s).all();
+    if (!results.length) return s;
+  }
+  return publicSlug(8) + publicSlug(2); // collision quasi impossible → rallonge
+}
+
+// Résout un lien public ACTIF → { slug, link, agent, tenant } sans JWT.
+// Renvoie null (→ 404 silencieux côté handler) si slug invalide, lien
+// révoqué, agent absent ou non publié : on ne révèle jamais l'existence.
+async function _gatePublicLink(env, slug) {
+  const s = validatePublicSlug(slug);
+  if (!s) return null;
+  const { results } = await env.DB.prepare(`
+    SELECT l.id AS link_id, l.tenant_id, l.agent_id, l.max_per_day,
+           a.name, a.status AS agent_status, a.config
+      FROM sa_public_links l
+      JOIN sa_agents a ON a.id = l.agent_id AND a.tenant_id = l.tenant_id
+     WHERE l.slug = ? AND l.status = 'active' LIMIT 1
+  `).bind(s).all();
+  if (!results.length) return null;
+  const r = results[0];
+  if (r.agent_status !== 'published') return null;   // accès public = agent publié
+  const agent = _rowToAgent({
+    id: r.agent_id, tenant_id: r.tenant_id, name: r.name,
+    status: r.agent_status, config: r.config, version: 1,
+  });
+  return {
+    slug: s,
+    link: { id: r.link_id, tenant_id: r.tenant_id, agent_id: r.agent_id, max_per_day: r.max_per_day },
+    agent,
+    tenant: r.tenant_id,
+  };
+}
+
+// Rate-limit : lit les compteurs du jour (UTC) et décide si la question
+// est autorisée. { ok:true } | { ok:false, reason:'device'|'link' }.
+async function _publicRateCheck(env, slug, deviceHash, maxPerDay) {
+  const day = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD UTC
+  const dev = await env.DB
+    .prepare('SELECT count FROM sa_public_usage WHERE slug = ? AND day = ? AND device_hash = ?')
+    .bind(slug, day, deviceHash).first();
+  if ((dev?.count ?? 0) >= PUBLIC_CAP_DEVICE) return { ok: false, reason: 'device' };
+  const tot = await env.DB
+    .prepare('SELECT COALESCE(SUM(count), 0) AS n FROM sa_public_usage WHERE slug = ? AND day = ?')
+    .bind(slug, day).first();
+  const cap = (Number.isInteger(maxPerDay) && maxPerDay > 0) ? maxPerDay : PUBLIC_DEFAULT_MAX_DAY;
+  if ((tot?.n ?? 0) >= cap) return { ok: false, reason: 'link' };
+  return { ok: true };
+}
+
+// Incrémente (slug, jour, appareil) — appelé quand la question est ADMISE,
+// avant la génération : un repli « je ne sais pas » compte aussi (anti-abus).
+async function _publicRateBump(env, slug, deviceHash) {
+  const day = new Date().toISOString().slice(0, 10);
+  await env.DB.prepare(`
+    INSERT INTO sa_public_usage (slug, day, device_hash, count, updated_at)
+    VALUES (?, ?, ?, 1, datetime('now'))
+    ON CONFLICT(slug, day, device_hash) DO UPDATE SET
+      count = count + 1, updated_at = datetime('now')
+  `).bind(slug, day, deviceHash).run().catch(() => {});
+}
+
+// ── GET /api/smart-agent/p/:slug — accueil public (config strippée) ──
+export async function handlePublicAgentMeta(request, env, slug) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureSmartAgentSchema(env);
+  const gp = await _gatePublicLink(env, slug);
+  if (!gp) return err('Agent introuvable', 404, origin);
+  return json({ agent: publicAgentMeta(gp.agent) }, 200, origin);
+}
+
+// ── POST /api/smart-agent/p/:slug/chat — dialogue public anonyme ──
+// Même moteur ancré que le chat interne, mais : tenant = PROPRIÉTAIRE
+// (résolu du lien), crédits débités sur SON portefeuille, garde-fous
+// publics (budget + rate-limit), coffre jamais exposé ([n] retirés).
+export async function handlePublicAgentChat(request, env, slug) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureSmartAgentSchema(env);
+
+  // Bridage IA global (admin) — à l'entrée, comme le Concierge public.
+  const braked = await budgetGuard(env, origin);
+  if (braked) return braked;
+
+  const gp = await _gatePublicLink(env, slug);
+  if (!gp) return err('Agent introuvable', 404, origin);
+  const { agent, tenant, link } = gp;
+
+  const b = await parseBody(request);
+  const message = (typeof b?.message === 'string') ? b.message.trim() : '';
+  if (!message) return err('Message requis', 400, origin);
+  if (message.length > PUBLIC_MAX_LEN) return err(`Message trop long (${PUBLIC_MAX_LEN} caractères max)`, 400, origin);
+  if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+
+  // Rate-limit anonyme : cap/appareil + plafond/jour du lien. Message neutre
+  // si dépassé (ne révèle pas la cause exacte). Compte AVANT la génération.
+  const device = await publicDeviceHash(request);
+  const rate = await _publicRateCheck(env, gp.slug, device, link.max_per_day);
+  if (!rate.ok) {
+    return json({ error: 'Limite de questions atteinte pour aujourd’hui. Revenez demain.', code: 'PUBLIC_RATE_LIMITED' }, 429, origin);
+  }
+  await _publicRateBump(env, gp.slug, device);
+
+  // Session publique (channel='public', isolée des sessions internes).
+  let sessionId = (typeof b.session_id === 'string' && b.session_id) ? b.session_id : null;
+  if (sessionId) {
+    const { results } = await env.DB
+      .prepare("SELECT id FROM sa_sessions WHERE id = ? AND tenant_id = ? AND agent_id = ? AND channel = 'public'")
+      .bind(sessionId, tenant, link.agent_id).all();
+    if (!results.length) sessionId = null;
+  }
+  if (!sessionId) {
+    sessionId = generateId();
+    await env.DB.prepare(
+      "INSERT INTO sa_sessions (id, tenant_id, agent_id, channel) VALUES (?, ?, ?, 'public')"
+    ).bind(sessionId, tenant, link.agent_id).run();
+  }
+
+  // Historique serveur (source de vérité).
+  const { results: histRows } = await env.DB.prepare(`
+    SELECT role, content FROM sa_messages
+     WHERE session_id = ? ORDER BY created_at DESC LIMIT ${CHAT_HISTORY_N}
+  `).bind(sessionId).all();
+  const history = histRows.reverse().map(m => ({
+    role: m.role === 'agent' ? 'assistant' : 'user',
+    content: m.content,
+  }));
+
+  // Crédits débités sur le PROPRIÉTAIRE (lookup_hmac = tenant du lien), pas le
+  // visiteur. Flag dormant : aucun blocage tant que enforce non activé.
+  let credit = null;
+  const ownerKey = tenant;
+  if (await isEnforceEnabled(env, ownerKey)) {
+    const ownerPlan = await resolvePlanByHmac(env, ownerKey);
+    credit = await consumeCredits(env, { bucketKey: ownerKey, plan: ownerPlan, tool: 'smartagent' });
+    if (!credit.ok && credit.blocked) {
+      return json({ error: 'Cet assistant est momentanément indisponible. Réessayez plus tard.', code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+    }
+  }
+  const _refund = async () => {
+    if (credit?.ok && credit.cost > 0) {
+      await refundCredits(env, { bucketKey: ownerKey, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
+    }
+  };
+
+  // Récupération ancrée (contextualisée + suivi « oui ») — identique au chat
+  // interne, scopée sur les coffres de l'agent (tenant propriétaire).
+  const retrievalQuery = contextualQuery(message, history);
+  const followupQ = lastAgentQuestion(history);
+  const llmMessage = (followupQ && isAffirmation(message))
+    ? `${message} — (je réponds « ${message} » à ta proposition précédente : « ${followupQ} ». Traite cela comme ma demande et réponds-y à partir des fiches, sans répéter ta réponse précédente.)`
+    : message;
+  const vaultIds = await _vaultsForAgent(env, tenant, link.agent_id);
+  const { semantic, hits } = await _retrieve(env, tenant, retrievalQuery, { topk: CHAT_TOPK, vaultIds });
+
+  const { grounded, grounding } = isGrounded({ semantic, hits });
+  const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
+
+  const _persist = async (reply, gapped) => {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content) VALUES (?, ?, ?, 'user', ?)"
+      ).bind(generateId(), sessionId, tenant, message).run();
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content, grounding) VALUES (?, ?, ?, 'agent', ?, ?)"
+      ).bind(generateId(), sessionId, tenant, reply, gapped ? 0 : grounding).run();
+    } catch (_) { /* best-effort */ }
+  };
+
+  // Pas assez de savoir → repli honnête, trou loggé (nourrit la file du
+  // propriétaire), crédit rendu (aucune génération facturée).
+  if (!grounded) {
+    await _refund();
+    await _logGap(env, tenant, link.agent_id, message);
+    await _persist(fallbackText, true);
+    return json({ session_id: sessionId, reply: fallbackText, gapped: true }, 200, origin);
+  }
+
+  const fiches = hits.map((h, i) => {
+    const body = String(h.row.body_text || '').slice(0, 600);
+    return `[${i + 1}] (${h.row.type}) ${h.row.title}\n${body}`;
+  }).join('\n\n');
+
+  const messages = buildChatMessages({
+    agentName: agent.name,
+    mission:   agent.config?.identity?.mission,
+    tone:      agent.config?.identity?.tone,
+    posture:   agent.config?.identity?.posture,
+    fallbackText, fiches, history,
+    message: llmMessage,
+  });
+
+  try {
+    const res = await env.AI.run(KS_AI_MODEL, { messages, max_tokens: 900, stream: false });
+    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    if (!raw) { await _refund(); return err('Réponse indisponible — réessayez.', 502, origin); }
+
+    // Le modèle a choisi le repli malgré la récupération → c'est un trou.
+    const gapped = raw.includes(fallbackText) && extractCitations(raw, hits.length).length === 0;
+    if (gapped) await _logGap(env, tenant, link.agent_id, message);
+
+    // Le coffre n'est JAMAIS exposé au public : on retire les [n] du rendu.
+    const publicReply = stripCitations(raw);
+    await _persist(publicReply, gapped);
+    return json({ session_id: sessionId, reply: publicReply, gapped }, 200, origin);
+  } catch (e) {
+    await _refund();
+    return err('Dialogue impossible — réessayez.', 502, origin);
+  }
+}
+
+// URL publique partageable : base front (1ʳᵉ origine autorisée) + /a/<slug>
+// (rewrite Vercel → page agent.html). Réglable via KS_ALLOWED_ORIGIN.
+function publicAgentUrl(env, slug) {
+  const base = String(env.KS_ALLOWED_ORIGIN || 'https://protein-keystone.com')
+    .split(',')[0].trim().replace(/\/$/, '');
+  return `${base}/a/${slug}`;
+}
+
+// ── POST /api/smart-agent/agents/:id/publish — publier (pad, protégé) ──
+// Crée (ou réutilise) un lien public ACTIF et passe l'agent 'published'.
+// Renvoie le slug + l'URL partageable.
+export async function handleAgentPublish(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const { results: agRows } = await env.DB
+    .prepare('SELECT id, status FROM sa_agents WHERE id = ? AND tenant_id = ?')
+    .bind(agentId, gate.tenant).all();
+  if (!agRows.length) return err('Agent introuvable', 404, origin);
+
+  // Réutilise un lien actif (publier 2× ne multiplie pas les liens).
+  let slug;
+  const { results: existing } = await env.DB
+    .prepare("SELECT slug FROM sa_public_links WHERE agent_id = ? AND tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
+    .bind(agentId, gate.tenant).all();
+  if (existing.length) {
+    slug = existing[0].slug;
+  } else {
+    slug = await _genPublicSlug(env);
+    await _ensureTenant(env, gate.tenant, gate.claims?.plan);
+    await env.DB.prepare(
+      "INSERT INTO sa_public_links (id, tenant_id, agent_id, slug, status, max_per_day) VALUES (?, ?, ?, ?, 'active', ?)"
+    ).bind(generateId(), gate.tenant, agentId, slug, PUBLIC_DEFAULT_MAX_DAY).run();
+  }
+
+  if (agRows[0].status !== 'published') {
+    await env.DB.prepare("UPDATE sa_agents SET status = 'published', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+      .bind(agentId, gate.tenant).run();
+  }
+
+  return json({ slug, url: publicAgentUrl(env, slug), status: 'published' }, 200, origin);
+}
+
+// ── GET /api/smart-agent/agents/:id/links — liens du pad (protégé) ──
+export async function handleAgentLinksList(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const { results } = await env.DB.prepare(
+    "SELECT id, slug, status, max_per_day, created_at, revoked_at FROM sa_public_links WHERE agent_id = ? AND tenant_id = ? ORDER BY created_at DESC"
+  ).bind(agentId, gate.tenant).all();
+  const links = results.map(r => ({
+    id: r.id, slug: r.slug, status: r.status, max_per_day: r.max_per_day,
+    created_at: r.created_at, revoked_at: r.revoked_at, url: publicAgentUrl(env, r.slug),
+  }));
+  return json({ links }, 200, origin);
+}
+
+// ── POST /api/smart-agent/links/:id/revoke — révoquer un lien (protégé) ──
+export async function handlePublicLinkRevoke(request, env, linkId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const res = await env.DB.prepare(
+    "UPDATE sa_public_links SET status = 'revoked', revoked_at = datetime('now') WHERE id = ? AND tenant_id = ? AND status = 'active'"
+  ).bind(linkId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Lien introuvable', 404, origin);
+  return json({ ok: true }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════
