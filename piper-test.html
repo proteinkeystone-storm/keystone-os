@@ -61,7 +61,7 @@
 <body>
   <div class="wrap">
     <h1>Test voix Piper</h1>
-    <p class="sub">Synthèse vocale neuronale <b>open source</b>, 100&nbsp;% dans le navigateur — aucun serveur, aucun coût.</p>
+    <p class="sub">Synthèse vocale neuronale <b>open source</b> (Piper), 100&nbsp;% dans le navigateur — moteur maison, aucun serveur.</p>
 
     <div class="card">
       <div class="row">
@@ -84,116 +84,149 @@
       <div class="bar" id="bar"><i></i></div>
       <div class="status" id="status"></div>
       <audio id="audio" controls></audio>
-      <div class="note" id="diag" style="margin-top:12px"></div>
     </div>
 
-    <p class="note">Au <b>premier</b> usage d'une voix, son modèle (~20–60&nbsp;Mo selon la qualité) se télécharge puis reste en cache. Les voix « moyenne » sonnent mieux mais sont plus lourdes ; les « rapide » se chargent vite.</p>
+    <p class="note">Au <b>premier</b> usage d'une voix, son modèle (~20–60&nbsp;Mo selon la qualité) + le moteur se téléchargent, puis restent en cache (instantané ensuite). Le moteur tourne en mono-thread — comptez 1 à 3&nbsp;s de génération par phrase.</p>
   </div>
 
   <script type="module">
-    // Forcer le MONO-THREAD : la lib fixe le nb de threads ONNX sur
-    // navigator.hardwareConcurrency. En multi-thread, ORT exige SharedArrayBuffer
-    // (→ isolation cross-origin COOP/COEP, absente ici) → « no backend ». En
-    // forçant 1, ORT crée une mémoire NON partagée → pas de SAB requis → ça tourne.
-    try { Object.defineProperty(navigator, 'hardwareConcurrency', { value: 1, configurable: true }); } catch (_) {}
-
-    // Runtime ONNX redirigé vers jsdelivr 1.19.2 (le CDN par défaut de la lib,
-    // cdnjs 1.18.0, ne sert plus le loader .mjs → « no backend »).
-    const WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-    const LIB = 'https://esm.sh/@mintplex-labs/piper-tts-web';
+    /* ═══════════════════════════════════════════════════════════════
+       Moteur Piper MAISON (sans la lib @mintplex-labs, cassée via esm.sh).
+       On pilote directement : ONNX Runtime Web (officiel jsdelivr) +
+       piper_phonemize (espeak-ng, UMD chargé en <script>). Tout est en
+       fichiers statiques → auto-hébergeable plus tard en same-origin.
+       ═══════════════════════════════════════════════════════════════ */
+    const ORT_BASE  = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+    const PHON_BASE = 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/';
+    const HF_BASE   = 'https://huggingface.co/diffusionstudio/piper-voices/resolve/main';
+    const VOICES = {
+      'fr_FR-siwis-medium': 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx',
+      'fr_FR-tom-medium':   'fr/fr_FR/tom/medium/fr_FR-tom-medium.onnx',
+      'fr_FR-upmc-medium':  'fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx',
+      'fr_FR-mls-medium':   'fr/fr_FR/mls/medium/fr_FR-mls-medium.onnx',
+      'fr_FR-siwis-low':    'fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx',
+      'fr_FR-gilles-low':   'fr/fr_FR/gilles/low/fr_FR-gilles-low.onnx',
+      'fr_FR-mls_1840-low': 'fr/fr_FR/mls_1840/low/fr_FR-mls_1840-low.onnx',
+    };
 
     const $ = (id) => document.getElementById(id);
     const status = $('status'), bar = $('bar'), barFill = bar.firstElementChild, audio = $('audio');
-    let _piper = null;          // module
-    let _session = null, _sessionVoice = null;
-    let _step = 'init';
+    let _ort = null, _phonLoaded = false;
+    const _sessions = {}, _configs = {};
 
-    function setStatus(msg, kind) { status.textContent = msg; status.className = 'status' + (kind ? ' ' + kind : ''); }
-    function setProgress(p) {
-      if (p == null) { bar.style.display = 'none'; return; }
-      bar.style.display = 'block';
-      barFill.style.width = Math.max(0, Math.min(100, p)) + '%';
+    const setStatus = (m, k) => { status.textContent = m; status.className = 'status' + (k ? ' ' + k : ''); };
+    const setProgress = (p) => { if (p == null) { bar.style.display = 'none'; return; } bar.style.display = 'block'; barFill.style.width = Math.max(0, Math.min(100, p)) + '%'; };
+
+    async function ensureOrt() {
+      if (_ort) return _ort;
+      setStatus('Chargement du moteur ONNX…');
+      const m = await import(ORT_BASE + 'ort.min.mjs');
+      m.env.wasm.numThreads = 1;            // mono-thread → pas besoin de SharedArrayBuffer
+      m.env.wasm.wasmPaths = ORT_BASE;
+      _ort = m; return m;
     }
-
-    async function ensureSession(voiceId) {
-      if (_session && _sessionVoice === voiceId) return _session;
-      if (!_piper) { _step = 'import lib (esm.sh)'; setStatus('Chargement du moteur…'); _piper = await import(LIB); }
-      _step = 'init runtime (jsdelivr) + voix (HuggingFace)';
-      setStatus('Préparation de la voix « ' + voiceId + ' »…');
-      setProgress(0);
-      _session = await _piper.TtsSession.create({
-        voiceId,
-        wasmPaths: WASM_PATHS,
-        progress: (e) => {
-          // Format défensif : {loaded,total} ou un ratio.
-          let pct = null;
-          if (e && typeof e === 'object' && e.total) pct = (e.loaded / e.total) * 100;
-          else if (typeof e === 'number') pct = e <= 1 ? e * 100 : e;
-          if (pct != null) setProgress(pct);
-        },
+    async function ensurePhonemizer() {
+      if (_phonLoaded && window.createPiperPhonemize) return;
+      setStatus('Chargement du phonémiseur…');
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = PHON_BASE + 'piper_phonemize.js';
+        s.onload = res; s.onerror = () => rej(new Error('échec chargement phonémiseur'));
+        document.head.appendChild(s);
       });
-      _sessionVoice = voiceId;
+      _phonLoaded = true;
+    }
+    async function getConfig(voiceId) {
+      if (_configs[voiceId]) return _configs[voiceId];
+      const c = await (await fetch(HF_BASE + '/' + VOICES[voiceId] + '.json')).json();
+      _configs[voiceId] = c; return c;
+    }
+    // Télécharge le modèle avec progression puis crée la session.
+    async function getSession(voiceId) {
+      if (_sessions[voiceId]) return _sessions[voiceId];
+      const ort = await ensureOrt();
+      setStatus('Téléchargement de la voix…'); setProgress(0);
+      const r = await fetch(HF_BASE + '/' + VOICES[voiceId]);
+      const total = +r.headers.get('content-length') || 0;
+      const reader = r.body.getReader();
+      const chunks = []; let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); loaded += value.length;
+        if (total) setProgress(loaded / total * 100);
+      }
+      const bytes = new Uint8Array(loaded); let off = 0;
+      for (const c of chunks) { bytes.set(c, off); off += c.length; }
       setProgress(null);
-      return _session;
+      setStatus('Initialisation de la voix…');
+      const s = await ort.InferenceSession.create(bytes);
+      _sessions[voiceId] = s; return s;
+    }
+    async function phonemize(text, voice) {
+      await ensurePhonemizer();
+      let ids = null;
+      const mod = await window.createPiperPhonemize({
+        print: (w) => { try { ids = JSON.parse(w).phoneme_ids; } catch (_) {} },
+        printErr: () => {},
+        locateFile: (w) => w.endsWith('.wasm') ? PHON_BASE + 'piper_phonemize.wasm'
+                         : w.endsWith('.data') ? PHON_BASE + 'piper_phonemize.data' : w,
+      });
+      mod.callMain(['-l', voice || 'fr', '--input', JSON.stringify([{ text: (text || '').trim() }]), '--espeak_data', '/espeak-ng-data']);
+      return ids;
+    }
+    async function synth(voiceId, text) {
+      const cfg = await getConfig(voiceId);
+      const ort = await ensureOrt();
+      const session = await getSession(voiceId);
+      setStatus('Génération de l’audio…');
+      const ids = await phonemize(text, (cfg.espeak && cfg.espeak.voice) || 'fr');
+      if (!ids || !ids.length) throw new Error('phonémisation vide');
+      const inf = cfg.inference || {};
+      const input = new ort.Tensor('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]);
+      const input_lengths = new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]);
+      const scales = new ort.Tensor('float32', Float32Array.from([
+        inf.noise_scale != null ? inf.noise_scale : 0.667,
+        inf.length_scale != null ? inf.length_scale : 1,
+        inf.noise_w != null ? inf.noise_w : 0.8,
+      ]), [3]);
+      const out = await session.run({ input, input_lengths, scales });
+      return { pcm: out.output.data, sr: (cfg.audio && cfg.audio.sample_rate) || 22050 };
+    }
+    function pcmToWav(f32, sr) {
+      const len = f32.length, buf = new ArrayBuffer(44 + len * 2), dv = new DataView(buf);
+      let p = 0;
+      const S = (s) => { for (let i = 0; i < s.length; i++) dv.setUint8(p++, s.charCodeAt(i)); };
+      const U32 = (v) => { dv.setUint32(p, v, true); p += 4; };
+      const U16 = (v) => { dv.setUint16(p, v, true); p += 2; };
+      S('RIFF'); U32(36 + len * 2); S('WAVE'); S('fmt '); U32(16); U16(1); U16(1);
+      U32(sr); U32(sr * 2); U16(2); U16(16); S('data'); U32(len * 2);
+      for (let i = 0; i < len; i++) { let s = Math.max(-1, Math.min(1, f32[i])); dv.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true); p += 2; }
+      return new Blob([buf], { type: 'audio/wav' });
     }
 
     async function run() {
       const voiceId = $('voice').value;
       const text = ($('text').value || '').trim();
       if (!text) { setStatus('Saisis un texte.', 'err'); return; }
-      $('go').disabled = true;
-      audio.style.display = 'none';
+      $('go').disabled = true; audio.style.display = 'none';
       try {
         const t0 = performance.now();
-        const session = await ensureSession(voiceId);
-        _step = 'génération (predict)';
-        setStatus('Génération de l’audio…');
-        const blob = await session.predict(text);
-        const secs = ((performance.now() - t0) / 1000).toFixed(1);
-        audio.src = URL.createObjectURL(blob);
+        const { pcm, sr } = await synth(voiceId, text);
+        const wav = pcmToWav(pcm, sr);
+        audio.src = URL.createObjectURL(wav);
         audio.style.display = 'block';
         await audio.play().catch(() => {});
-        setStatus('Prêt — ' + Math.round(blob.size / 1024) + ' Ko, en ' + secs + ' s. Réécoute avec le lecteur.', 'ok');
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        setStatus('Prêt — ' + (pcm.length / sr).toFixed(1) + ' s d’audio, généré en ' + secs + ' s. Réécoute avec le lecteur.', 'ok');
       } catch (e) {
         setProgress(null);
-        setStatus('Échec à l’étape « ' + _step + ' » : ' + (e && e.message ? e.message : String(e)), 'err');
+        setStatus('Échec : ' + (e && e.message ? e.message : String(e)), 'err');
       } finally {
         $('go').disabled = false;
       }
     }
-
     $('go').addEventListener('click', run);
-
-    // ── Diagnostic complet : localise précisément la brique qui coince ──
-    async function swVersion(){
-      const c = navigator.serviceWorker && navigator.serviceWorker.controller;
-      if (!c) return 'aucun';
-      return await new Promise(res => {
-        const ch = new MessageChannel();
-        ch.port1.onmessage = e => res(e.data);
-        try { c.postMessage('GET_VERSION', [ch.port2]); } catch(_) { res('?'); }
-        setTimeout(() => res('(pas de réponse)'), 1500);
-      });
-    }
-    async function probe(label, url){
-      try {
-        const r = await fetch(url, { cache: 'no-store' });
-        return label + ' : <b>' + r.status + (r.redirected ? ' (redirigé)' : '') + (r.ok ? ' ✓' : ' ✗') + '</b>';
-      } catch(e){ return label + ' : <b style="color:#f06d6d">ÉCHEC</b> (' + (e.name || '') + ' — ' + (e.message || e) + ')'; }
-    }
-    async function runDiag(){
-      $('diag').innerHTML = 'Diagnostic en cours…';
-      const lines = [];
-      lines.push('Service Worker : <b>' + (await swVersion()) + '</b>');
-      lines.push(await probe('① Runtime ONNX (jsdelivr)', 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort-wasm-simd-threaded.jsep.mjs'));
-      lines.push(await probe('② Phonémiseur (jsdelivr)', 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm'));
-      lines.push(await probe('③ Modèle Siwis (HuggingFace)', 'https://huggingface.co/diffusionstudio/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json'));
-      lines.push('④ SharedArrayBuffer : <b>' + (typeof SharedArrayBuffer !== 'undefined' ? 'disponible' : 'INDISPONIBLE → mono-thread requis') + '</b>');
-      lines.push('⑤ crossOriginIsolated : <b>' + (self.crossOriginIsolated ? 'oui' : 'non') + '</b>');
-      lines.push('⑥ Threads ONNX (hardwareConcurrency) : <b>' + navigator.hardwareConcurrency + '</b> (doit être 1)');
-      $('diag').innerHTML = '<b>Diagnostic —</b><br>' + lines.join('<br>');
-    }
-    runDiag();
   </script>
 </body>
 </html>
