@@ -58,7 +58,7 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-4.4.3';
+const SA_ENGINE_VERSION = 'SA-4.4.4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -203,18 +203,6 @@ async function ensureSmartAgentSchema(env) {
   const safe = async (sql) => {
     try { await env.DB.prepare(sql).run(); } catch (_) { /* déjà créé : OK */ }
   };
-  await safe(`
-    CREATE TABLE IF NOT EXISTS kortex_collections (
-      id          TEXT PRIMARY KEY,
-      tenant_id   TEXT NOT NULL DEFAULT 'default',
-      name        TEXT NOT NULL,
-      description TEXT,
-      created_at  TEXT DEFAULT (datetime('now')),
-      updated_at  TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-    )
-  `);
-  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_coll_tenant ON kortex_collections(tenant_id)');
   await safe(`
     CREATE TABLE IF NOT EXISTS kortex_units (
       id            TEXT PRIMARY KEY,
@@ -555,7 +543,7 @@ function _rowToUnit(r) {
   try { body = JSON.parse(r.body); } catch (_) {}
   return {
     id: r.id, type: r.type, title: r.title, body,
-    status: r.status, collection_id: r.collection_id,
+    status: r.status,
     source_kind: r.source_kind, source_ref: r.source_ref,
     lang: r.lang, review_at: r.review_at,
     created_at: r.created_at, updated_at: r.updated_at,
@@ -786,79 +774,6 @@ export async function handleKortexUnitDelete(request, env, unitId) {
   await _vectorDelete(env, [unitId]);
 
   if (!res.meta?.changes) return err('Fiche introuvable', 404, origin);
-  return json({ ok: true }, 200, origin);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Collections — CRUD minimal
-// ═══════════════════════════════════════════════════════════════
-export async function handleKortexCollectionsList(request, env) {
-  const origin = getAllowedOrigin(env, request);
-  const gate = await _gate(request, env, origin);
-  if (gate.error) return gate.error;
-  await ensureSmartAgentSchema(env);
-
-  const { results } = await env.DB.prepare(`
-    SELECT c.*, (SELECT COUNT(*) FROM kortex_units u WHERE u.collection_id = c.id) AS unit_count
-      FROM kortex_collections c
-     WHERE c.tenant_id = ?
-     ORDER BY c.name COLLATE NOCASE
-  `).bind(gate.tenant).all();
-
-  return json({ collections: results }, 200, origin);
-}
-
-export async function handleKortexCollectionCreate(request, env) {
-  const origin = getAllowedOrigin(env, request);
-  const gate = await _gate(request, env, origin);
-  if (gate.error) return gate.error;
-  await ensureSmartAgentSchema(env);
-
-  const b = await parseBody(request);
-  const name = (typeof b?.name === 'string') ? b.name.trim().slice(0, 120) : '';
-  if (!name) return err('Nom de collection requis', 400, origin);
-
-  await _ensureTenant(env, gate.tenant, gate.claims?.plan);
-  const id = generateId();
-  await env.DB.prepare(`
-    INSERT INTO kortex_collections (id, tenant_id, name, description)
-    VALUES (?, ?, ?, ?)
-  `).bind(id, gate.tenant, name, (typeof b?.description === 'string') ? b.description.trim().slice(0, 500) : null).run();
-
-  return json({ collection: { id, name } }, 201, origin);
-}
-
-export async function handleKortexCollectionUpdate(request, env, collId) {
-  const origin = getAllowedOrigin(env, request);
-  const gate = await _gate(request, env, origin);
-  if (gate.error) return gate.error;
-  await ensureSmartAgentSchema(env);
-
-  const b = await parseBody(request);
-  const name = (typeof b?.name === 'string') ? b.name.trim().slice(0, 120) : '';
-  if (!name) return err('Nom de collection requis', 400, origin);
-
-  const res = await env.DB.prepare(`
-    UPDATE kortex_collections SET name = ?, updated_at = datetime('now')
-     WHERE id = ? AND tenant_id = ?
-  `).bind(name, collId, gate.tenant).run();
-  if (!res.meta?.changes) return err('Collection introuvable', 404, origin);
-  return json({ ok: true }, 200, origin);
-}
-
-export async function handleKortexCollectionDelete(request, env, collId) {
-  const origin = getAllowedOrigin(env, request);
-  const gate = await _gate(request, env, origin);
-  if (gate.error) return gate.error;
-  await ensureSmartAgentSchema(env);
-
-  // Les fiches survivent à leur collection (jamais de suppression en cascade
-  // du savoir) : elles repassent simplement « sans collection ».
-  await env.DB.prepare('UPDATE kortex_units SET collection_id = NULL WHERE collection_id = ? AND tenant_id = ?')
-    .bind(collId, gate.tenant).run();
-  const res = await env.DB.prepare('DELETE FROM kortex_collections WHERE id = ? AND tenant_id = ?')
-    .bind(collId, gate.tenant).run();
-  if (!res.meta?.changes) return err('Collection introuvable', 404, origin);
   return json({ ok: true }, 200, origin);
 }
 
@@ -1102,7 +1017,6 @@ export async function handleKortexReindex(request, env) {
 // Config d'un agent (colonne sa_agents.config, JSON) — couches :
 //   identity  { mission, tone }          → appartient au client
 //   scope     { fallback_text }          → formulation du repli
-//   knowledge { collection_ids: [] }     → liaison savoir ([] = tout le coffre)
 //   runtime   (seuils, modèle)           → PLATEFORME : constantes ci-dessous,
 //                                          jamais exposées au client (beta).
 const FALLBACK_DEFAULT = 'Je ne dispose pas de cette information.';
@@ -1269,7 +1183,6 @@ function validateAgentPayload(b, { partial = false } = {}) {
   const cfg = (b.config && typeof b.config === 'object' && !Array.isArray(b.config)) ? b.config : {};
   const idn = (cfg.identity && typeof cfg.identity === 'object') ? cfg.identity : {};
   const scp = (cfg.scope && typeof cfg.scope === 'object') ? cfg.scope : {};
-  const knw = (cfg.knowledge && typeof cfg.knowledge === 'object') ? cfg.knowledge : {};
   out.config = {
     identity: {
       mission: (typeof idn.mission === 'string') ? idn.mission.trim().slice(0, 600) : '',
@@ -1282,10 +1195,6 @@ function validateAgentPayload(b, { partial = false } = {}) {
     scope: {
       fallback_text: (typeof scp.fallback_text === 'string' && scp.fallback_text.trim())
         ? scp.fallback_text.trim().slice(0, 200) : FALLBACK_DEFAULT,
-    },
-    knowledge: {
-      collection_ids: Array.isArray(knw.collection_ids)
-        ? knw.collection_ids.filter(x => typeof x === 'string').slice(0, 20) : [],
     },
   };
   if (!partial && !out.config.identity.mission) {

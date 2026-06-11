@@ -14,20 +14,11 @@
 --   CREATE ... IF NOT EXISTS partout (ré-exécutable sans danger).
 -- ═══════════════════════════════════════════════════════════════
 
--- ── Kortex : collections (étagères du coffre) ─────────────────
--- Groupement libre de fiches ; un agent se lie à 1..N collections
--- (couche « liaison savoir » de sa config). Supprimer une collection
--- ne supprime pas les fiches (collection_id remis à NULL côté code).
-CREATE TABLE IF NOT EXISTS kortex_collections (
-  id          TEXT PRIMARY KEY,
-  tenant_id   TEXT NOT NULL DEFAULT 'default',
-  name        TEXT NOT NULL,
-  description TEXT,
-  created_at  TEXT DEFAULT (datetime('now')),
-  updated_at  TEXT DEFAULT (datetime('now')),
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-);
-CREATE INDEX IF NOT EXISTS idx_kortex_coll_tenant ON kortex_collections(tenant_id);
+-- ── Kortex : collections — RETIRÉ (SA-4.4.4) ──────────────────
+-- L'étage « collections » (kortex_collections + config.knowledge.collection_ids)
+-- a été remplacé par les COFFRES découplés (vault_id, SA-4.4). Le CRUD et la
+-- création de table ont été retirés du code applicatif. Une table physique
+-- éventuellement déjà créée en base est laissée inerte (aucun DROP destructif).
 
 -- ── Kortex : unités de savoir typées — L'ACTIF ────────────────
 -- body      : JSON structuré selon le gabarit du type :

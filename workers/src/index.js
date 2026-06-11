@@ -105,8 +105,6 @@ import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthoriz
 import { handleSmartAgentHealth,
          handleKortexUnitsList, handleKortexUnitCreate,
          handleKortexUnitUpdate, handleKortexUnitDelete,
-         handleKortexCollectionsList, handleKortexCollectionCreate,
-         handleKortexCollectionUpdate, handleKortexCollectionDelete,
          handleKortexExtract, handleKortexSearch, handleKortexReindex,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
          handleAgentChat, handleGapsList, handleGapDismiss,
@@ -141,8 +139,6 @@ export default {
       if (path === '/api/smart-agent/health' && method === 'GET') return handleSmartAgentHealth(request, env);
       if (path === '/api/smart-agent/kortex/units'       && method === 'GET')  return handleKortexUnitsList(request, env);
       if (path === '/api/smart-agent/kortex/units'       && method === 'POST') return handleKortexUnitCreate(request, env);
-      if (path === '/api/smart-agent/kortex/collections' && method === 'GET')  return handleKortexCollectionsList(request, env);
-      if (path === '/api/smart-agent/kortex/collections' && method === 'POST') return handleKortexCollectionCreate(request, env);
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
       if (path === '/api/smart-agent/kortex/search'      && method === 'GET')  return handleKortexSearch(request, env);
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
@@ -180,9 +176,6 @@ export default {
       const saUnitMatch = path.match(/^\/api\/smart-agent\/kortex\/units\/([A-Za-z0-9-]+)$/);
       if (saUnitMatch && method === 'PATCH')  return handleKortexUnitUpdate(request, env, saUnitMatch[1]);
       if (saUnitMatch && method === 'DELETE') return handleKortexUnitDelete(request, env, saUnitMatch[1]);
-      const saCollMatch = path.match(/^\/api\/smart-agent\/kortex\/collections\/([A-Za-z0-9-]+)$/);
-      if (saCollMatch && method === 'PATCH')  return handleKortexCollectionUpdate(request, env, saCollMatch[1]);
-      if (saCollMatch && method === 'DELETE') return handleKortexCollectionDelete(request, env, saCollMatch[1]);
 
       // ── Social Broadcast (production — Sprint Social-1) ──────
       if (path === '/api/social/provision/facebook'  && method === 'POST') return handleSocialProvisionFacebook(request, env);

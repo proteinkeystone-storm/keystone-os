@@ -88,14 +88,12 @@ check('aucune citation → []', JSON.stringify(extractCitations('texte sans sour
 console.log('── validateAgentPayload ──');
 {
   const ok = validateAgentPayload({ name: 'Guide du musée',
-    config: { identity: { mission: 'Renseigner les visiteurs' }, knowledge: { collection_ids: ['c1', 'c2'] } } });
-  check('agent valide : mission + collections', ok.ok && ok.config.knowledge.collection_ids.length === 2);
+    config: { identity: { mission: 'Renseigner les visiteurs' } } });
+  check('agent valide : mission', ok.ok && ok.config.identity.mission === 'Renseigner les visiteurs');
   check('fallback par défaut injecté', ok.ok && ok.config.scope.fallback_text.length > 0);
   check('nom vide refusé', validateAgentPayload({ name: '  ', config: {} }).ok === false);
   check('mission requise (création) refusée si absente', validateAgentPayload({ name: 'X', config: {} }).ok === false);
   check('partiel : mission non exigée', validateAgentPayload({ config: {} }, { partial: true }).ok === true);
-  check('collection_ids non-array → []',
-    validateAgentPayload({ name: 'X', config: { identity: { mission: 'm' }, knowledge: { collection_ids: 'oops' } } }).config.knowledge.collection_ids.length === 0);
 }
 
 console.log('── isGrounded (décision chat + replay golden) ──');

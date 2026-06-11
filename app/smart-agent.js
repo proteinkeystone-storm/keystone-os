@@ -106,7 +106,6 @@ let _root = null;
 const _kx = {
     loaded: false, loading: false, error: null,
     units: [], counts: { draft: 0, validated: 0, quarantine: 0, expired: 0, total: 0 },
-    collections: [],
     filterType: 'all', filterStatus: 'all',
     // SA-4.4.2 — coffre affiché : 'private' (de l'agent) | 'shared' (du dossier)
     scope: 'private', sharedVault: null,
@@ -801,7 +800,6 @@ function _agentPayload() {
         config: {
             identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
             scope:    { fallback_text: d.fallback },
-            knowledge:{ collection_ids: [] },
         },
     };
 }
