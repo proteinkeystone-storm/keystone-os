@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-8.1';
+const SA_ENGINE_VERSION = 'SA-8.2';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -130,6 +130,26 @@ async function _vectorUpsert(env, tenant, vaultId, unit) {
 async function _vectorDelete(env, ids) {
   if (!_vectorReady(env) || !ids.length) return;
   try { await env.KORTEX_INDEX.deleteByIds(ids); } catch (_) {}
+}
+
+// ── SA-8.2 — dédup SÉMANTIQUE des trous ─────────────────────────
+// « Quels sont vos horaires ? » et « Vous ouvrez à quelle heure ? »
+// ne doivent pas faire deux trous : la question populaire cumule ses
+// variantes (le top du digest devient fiable). Les questions gappées
+// vivent dans un namespace Vectorize dédié par agent (jamais mélangées
+// aux fiches), avec un id préfixé `gap:` (deleteByIds des fiches ne
+// peut pas les toucher, et réciproquement).
+const GAP_MERGE_MIN = 0.85;   // cosinus bge-m3 « même question » (plus strict que l'ancrage 0.42)
+function _gapNs(tenant, agentId) { return `gaps::${tenant}::${agentId}`; }
+
+// Pur (testé) : choisit le trou à incrémenter parmi les voisins Vectorize.
+// Renvoie l'id D1 (préfixe `gap:` retiré) du meilleur match ≥ seuil, sinon null.
+export function gapMergeTarget(matches, minScore = GAP_MERGE_MIN) {
+  const best = (matches || [])
+    .filter(m => m && typeof m.id === 'string' && typeof m.score === 'number')
+    .sort((a, b) => b.score - a.score)[0];
+  if (!best || best.score < minScore) return null;
+  return best.id.replace(/^gap:/, '');
 }
 
 // ── Recherche : requête FTS5 sûre + fusion RRF ──────────────────
@@ -718,6 +738,7 @@ export async function handleKortexUnitCreate(request, env) {
       await env.DB.prepare(
         "UPDATE sa_gaps SET status = 'answered', unit_id = ? WHERE id = ? AND tenant_id = ?"
       ).bind(unit.id, resolveGapId, gate.tenant).run();
+      await _vectorDelete(env, [`gap:${resolveGapId}`]);   // SA-8.2 — sort des fusions
     } catch (_) { /* best-effort : la fiche est créée même si le lien échoue */ }
   }
 
@@ -1628,6 +1649,17 @@ function _rowToAgent(r) {
 }
 
 // ── CRUD agents ─────────────────────────────────────────────────
+// SA-8.2 — digest de la boucle d'amélioration : chaque agent remonte ses
+// compteurs de trous OUVERTS (total + actifs sur 7 jours) pour que la liste
+// montre d'un coup d'œil qui a besoin d'une interview. Pur → testé.
+export function attachGapCounts(agents, gapRows) {
+  const by = new Map((gapRows || []).map(r => [r.agent_id, r]));
+  return (agents || []).map(a => {
+    const g = by.get(a.id);
+    return { ...a, gaps_open: g ? (g.open_n || 0) : 0, gaps_week: g ? (g.week_n || 0) : 0 };
+  });
+}
+
 export async function handleAgentsList(request, env) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin);
@@ -1636,7 +1668,17 @@ export async function handleAgentsList(request, env) {
   const { results } = await env.DB
     .prepare('SELECT * FROM sa_agents WHERE tenant_id = ? ORDER BY created_at DESC')
     .bind(gate.tenant).all();
-  return json({ agents: results.map(_rowToAgent) }, 200, origin);
+  // SA-8.2 — compteurs de trous par agent (1 requête GROUP BY, best-effort).
+  let gapRows = [];
+  try {
+    const { results: gr } = await env.DB.prepare(`
+      SELECT agent_id, COUNT(*) AS open_n,
+             SUM(CASE WHEN last_asked_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS week_n
+        FROM sa_gaps WHERE tenant_id = ? AND status = 'open' GROUP BY agent_id
+    `).bind(gate.tenant).all();
+    gapRows = gr;
+  } catch (_) { /* la liste vit sans ses compteurs */ }
+  return json({ agents: attachGapCounts(results.map(_rowToAgent), gapRows) }, 200, origin);
 }
 
 export async function handleAgentCreate(request, env) {
@@ -1749,6 +1791,11 @@ export async function handleAgentDelete(request, env, agentId) {
     for (const r of uIds) {
       await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(r.id).run();
     }
+    // SA-8.2 — vecteurs des trous de l'agent (namespace gaps::), ids préfixés.
+    const { results: gIds } = await env.DB
+      .prepare('SELECT id FROM sa_gaps WHERE agent_id = ? AND tenant_id = ?')
+      .bind(agentId, gate.tenant).all();
+    if (gIds.length) await _vectorDelete(env, gIds.map(r => `gap:${r.id}`));
   } catch (_) { /* best-effort */ }
   await env.DB.prepare('DELETE FROM kortex_units WHERE agent_id = ? AND tenant_id = ?').bind(agentId, gate.tenant).run();
   await env.DB.prepare('DELETE FROM sa_gaps   WHERE agent_id = ? AND tenant_id = ?').bind(agentId, gate.tenant).run();
@@ -1974,14 +2021,20 @@ export function extractCitations(text, maxN) {
   return out;
 }
 
-// Journalise un trou de savoir (dédoublonné par question_norm ouverte) —
-// LA matière première de l'acquisition gap-driven (file de travail SA-4).
+// Journalise un trou de savoir — LA matière première de l'acquisition
+// gap-driven (file de travail SA-4). Dédoublonnage en 3 temps :
+//   1. exact (question_norm, gratuit) — comportement historique ;
+//   2. SA-8.2 sémantique (Vectorize, namespace gaps::tenant::agent) : la
+//      même question autrement formulée GROSSIT le trou existant au lieu
+//      d'en créer un 2e — le « posée N× » du digest devient fiable ;
+//   3. sinon nouveau trou + son vecteur (pour les fusions futures).
+// Chaque couche est best-effort : un échec ne casse jamais le dialogue,
+// au pire on retombe sur le comportement exact d'avant.
 async function _logGap(env, tenant, agentId, question) {
   const norm = normQuestion(question);
   if (!norm) return;
   try {
-    // Dédoublonnage par AGENT (silo SA-4.3) : la même question pour deux
-    // agents = deux trous distincts, chacun rattaché à son agent.
+    // 1) Dédoublonnage exact par AGENT (silo SA-4.3).
     const { results } = await env.DB.prepare(
       "SELECT id FROM sa_gaps WHERE tenant_id = ? AND agent_id = ? AND question_norm = ? AND status = 'open' LIMIT 1"
     ).bind(tenant, agentId, norm).all();
@@ -1989,11 +2042,38 @@ async function _logGap(env, tenant, agentId, question) {
       await env.DB.prepare(
         "UPDATE sa_gaps SET hits = hits + 1, last_asked_at = datetime('now') WHERE id = ?"
       ).bind(results[0].id).run();
-    } else {
-      await env.DB.prepare(`
-        INSERT INTO sa_gaps (id, tenant_id, agent_id, question, question_norm)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(generateId(), tenant, agentId, question.slice(0, 500), norm).run();
+      return;
+    }
+
+    // 2) Dédoublonnage sémantique (SA-8.2). On garde le vecteur calculé
+    //    pour l'étape 3 (un seul embedding par question).
+    let vec = null;
+    if (_vectorReady(env)) {
+      try {
+        [vec] = await _embed(env, [question.slice(0, 500)]);
+        const res = await env.KORTEX_INDEX.query(vec, { topK: 3, namespace: _gapNs(tenant, agentId) });
+        const targetId = gapMergeTarget(res?.matches);
+        if (targetId) {
+          // Revérifie en D1 que le trou est encore OUVERT (le vecteur d'un
+          // trou résolu peut survivre brièvement — nettoyage best-effort).
+          const upd = await env.DB.prepare(
+            "UPDATE sa_gaps SET hits = hits + 1, last_asked_at = datetime('now') WHERE id = ? AND tenant_id = ? AND status = 'open'"
+          ).bind(targetId, tenant).run();
+          if (upd?.meta?.changes) return;   // fusionné — pas de nouveau trou
+        }
+      } catch (_) { vec = null; /* la couche sémantique ne bloque jamais le log */ }
+    }
+
+    // 3) Nouveau trou (+ vecteur préfixé gap: pour les dédups futures).
+    const id = generateId();
+    await env.DB.prepare(`
+      INSERT INTO sa_gaps (id, tenant_id, agent_id, question, question_norm)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(id, tenant, agentId, question.slice(0, 500), norm).run();
+    if (vec) {
+      try {
+        await env.KORTEX_INDEX.upsert([{ id: `gap:${id}`, values: vec, namespace: _gapNs(tenant, agentId) }]);
+      } catch (_) { /* sans vecteur, ce trou ne participera juste pas aux fusions */ }
     }
   } catch (_) { /* best-effort : un échec de log ne casse pas le dialogue */ }
 }
@@ -2562,6 +2642,7 @@ export async function handleGapDismiss(request, env, gapId) {
     "UPDATE sa_gaps SET status = 'dismissed' WHERE id = ? AND tenant_id = ? AND status = 'open'"
   ).bind(gapId, gate.tenant).run();
   if (!res.meta?.changes) return err('Trou introuvable', 404, origin);
+  await _vectorDelete(env, [`gap:${gapId}`]);   // SA-8.2 — sort des fusions
   return json({ ok: true }, 200, origin);
 }
 

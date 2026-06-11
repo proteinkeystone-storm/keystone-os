@@ -12,7 +12,8 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback,
-  validateImportUrl, htmlToText, clampExtractText, importFileKindOf }
+  validateImportUrl, htmlToText, clampExtractText, importFileKindOf,
+  gapMergeTarget, attachGapCounts }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -280,6 +281,29 @@ check('docx/xlsx/csv → binaire', ['a.docx', 'b.xlsx', 'c.csv'].every(n => impo
 check('txt/md → texte', importFileKindOf('notes.txt').kind === 'text' && importFileKindOf('doc.md').kind === 'text');
 check('image refusée (coût IA récurrent)', importFileKindOf('photo.jpeg').ok === false && importFileKindOf('logo.png').ok === false);
 check('extension inconnue / absente refusée', importFileKindOf('app.exe').ok === false && importFileKindOf('sansext').ok === false);
+
+console.log('── SA-8.2 — gapMergeTarget (dédup sémantique des trous) ──');
+check('meilleur match ≥ seuil → id D1 (préfixe gap: retiré)',
+  gapMergeTarget([{ id: 'gap:abc', score: 0.91 }, { id: 'gap:def', score: 0.86 }]) === 'abc');
+check('meilleur match sous le seuil → null (nouveau trou)',
+  gapMergeTarget([{ id: 'gap:abc', score: 0.84 }]) === null);
+check('seuil par défaut 0.85 inclus', gapMergeTarget([{ id: 'gap:x', score: 0.85 }]) === 'x');
+check('tri par score (pas l\'ordre du tableau)',
+  gapMergeTarget([{ id: 'gap:bas', score: 0.86 }, { id: 'gap:haut', score: 0.97 }]) === 'haut');
+check('matches vides / malformés → null',
+  gapMergeTarget([]) === null && gapMergeTarget(null) === null
+  && gapMergeTarget([{ id: 7, score: 0.99 }, { id: 'gap:y' }]) === null);
+
+console.log('── SA-8.2 — attachGapCounts (digest de la liste d\'agents) ──');
+{
+  const agents = [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }];
+  const rows = [{ agent_id: 'a1', open_n: 5, week_n: 2 }];
+  const out = attachGapCounts(agents, rows);
+  check('compteurs rattachés au bon agent', out[0].gaps_open === 5 && out[0].gaps_week === 2);
+  check('agent sans trou → 0/0', out[1].gaps_open === 0 && out[1].gaps_week === 0);
+  check('champs d\'origine préservés', out[0].name === 'A' && out[1].id === 'a2');
+  check('rows null → tous à zéro', attachGapCounts(agents, null).every(a => a.gaps_open === 0));
+}
 
 console.log('── contextualQuery (suivi « oui » — bug capture Stéphane) ──');
 {

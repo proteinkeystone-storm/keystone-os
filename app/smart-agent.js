@@ -247,6 +247,8 @@ function _onClick(e) {
     // ── Liste d'agents (silo SA-4.3) ──
     if (act === 'ag-new')       { _openForm(null); return; }
     if (act === 'ag-open')      { _enterAgent(actEl.dataset.id); return; }
+    // SA-8.2 — le badge « à combler » de la carte ouvre direct l'onglet Trous
+    if (act === 'ag-open-gaps') { _enterAgent(actEl.dataset.id, 'trous'); return; }
     if (act === 'ag-delete')    { _deleteAgent(actEl.dataset.id); return; }
     if (act === 'ag-exit')      { _exitAgent(); return; }
     // ── Dossiers d'agents (SA-4.4.1) ──
@@ -374,10 +376,10 @@ function _renderRail() {
 }
 
 // ── Entrer / sortir d'un agent, changer d'onglet ───────────────
-function _enterAgent(id) {
+function _enterAgent(id, tab = 'savoir') {
     const a = _ag.agents.find(x => x.id === id);
     if (!a) return;
-    _cur.id = a.id; _cur.name = a.name; _cur.agent = a; _cur.tab = 'savoir';
+    _cur.id = a.id; _cur.name = a.name; _cur.agent = a; _cur.tab = tab;
     // reset des sous-états scopés
     _kx.loaded = false; _kx.mode = 'list'; _kx.editing = null;
     _kx.filterType = 'all'; _kx.filterStatus = 'all'; _kx.prefill = null; _kx.resolveGapId = null;
@@ -390,7 +392,7 @@ function _enterAgent(id) {
     _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
     _ag.gaps = []; _ag.gapsCount = 0;
     _renderRail(); _renderAside();
-    _setTab('savoir');
+    _setTab(tab);         // SA-8.2 — le badge « à combler » entre direct sur Trous
     _loadGaps();          // pour le badge Trous
     _loadSharedVault();   // SA-4.4.2 — coffre partagé du dossier (si l'agent en a un)
 }
@@ -625,12 +627,20 @@ function _agentsListHTML() {
 
     const card = a => {
         const paused = a.status === 'paused';
+        // SA-8.2 — la boucle d'amélioration VISIBLE : questions restées sans
+        // réponse (dont récentes), cliquables → onglet Trous de l'agent.
+        const gapsBadge = a.gaps_open
+            ? `<button class="sa-agent-gaps" data-act="ag-open-gaps" data-id="${a.id}" title="Questions posées à cet agent restées sans réponse — cliquez pour les combler">
+                 ${icon('help-circle', 12)} ${a.gaps_open} question${a.gaps_open > 1 ? 's' : ''} à combler${a.gaps_week ? ` · ${a.gaps_week} cette semaine` : ''}
+               </button>`
+            : '';
         return `
       <article class="sa-agent-card" data-act="ag-open" data-id="${a.id}" role="button" tabindex="0">
         <span class="sa-agent-ico">${icon('smart-agent', 22)}</span>
         <div class="sa-agent-txt">
           <strong class="sa-agent-name">${_esc(a.name)}${paused ? ' <span class="sa-badge is-quarantine">En pause</span>' : ''}${a.status === 'published' ? ' <span class="sa-badge is-live">En ligne</span>' : ''}</strong>
           <span class="sa-agent-mission">${_esc(a.config?.identity?.mission || 'Sans mission définie')}</span>
+          ${gapsBadge}
         </div>
         <div class="sa-agent-acts">
           <button class="sa-btn is-primary" data-act="ag-open" data-id="${a.id}">${icon('chevron-right', 15)} Ouvrir</button>
@@ -1221,9 +1231,16 @@ function _gapsHTML() {
         <div class="sa-empty-filter">Aucun trou de savoir.<br><small>Quand cet agent ne sait pas répondre, la question atterrit ici — sa liste de travail pour faire grandir son coffre.</small></div>
       </section>`;
     }
+    // SA-8.2 — un trou est « récent » si la question a été posée ces 7
+    // derniers jours (dates SQLite UTC 'YYYY-MM-DD HH:MM:SS').
+    const isRecent = g => {
+        const d = Date.parse(String(g.last_asked_at || '').replace(' ', 'T') + 'Z');
+        return Number.isFinite(d) && (Date.now() - d) < 7 * 24 * 3600 * 1000;
+    };
+    const weekN = _ag.gaps.filter(isRecent).length;
     const row = g => `
     <article class="sa-gap">
-      <span class="sa-gap-hits" title="Posée ${g.hits} fois">${g.hits}×</span>
+      <span class="sa-gap-hits" title="Posée ${g.hits} fois${isRecent(g) ? ' — encore demandée ces 7 derniers jours' : ''}">${g.hits}×${isRecent(g) ? '<i class="sa-gap-dot" title="Demandée cette semaine"></i>' : ''}</span>
       <span class="sa-gap-q">${_esc(g.question)}</span>
       <div class="sa-gap-acts">
         <button class="sa-btn is-primary" data-act="gap-answer" data-id="${g.id}">${icon('plus', 14)} Répondre</button>
@@ -1233,10 +1250,10 @@ function _gapsHTML() {
     return `
     <section class="sa-kx">
       <div class="sa-kx-head">
-        <div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''} · la plus fréquente en tête</p></div>
+        <div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''}${weekN ? ` · <strong>${weekN} demandée${weekN > 1 ? 's' : ''} ces 7 derniers jours</strong>` : ''} · la plus fréquente en tête</p></div>
         <button class="sa-btn is-primary" data-act="iv-start">${icon('smart-agent', 15)} Démarrer l'interview</button>
       </div>
-      <p class="sa-field-hint" style="margin-bottom:14px;">« Répondre » ouvre une fiche Q/R pré-remplie. Ou lancez l'<strong>interview</strong> : répondez en langage naturel, l'IA structure et comble les trous un par un.</p>
+      <p class="sa-field-hint" style="margin-bottom:14px;">Vos visiteurs nourrissent cette liste : chaque question sans réponse atterrit ici (les reformulations d'une même question se cumulent). « Répondre » ouvre une fiche Q/R pré-remplie — ou lancez l'<strong>interview</strong> : l'IA structure vos réponses et comble les trous un par un, en commençant par les plus demandés.</p>
       <div class="sa-gaps-list">${_ag.gaps.map(row).join('')}</div>
     </section>`;
 }

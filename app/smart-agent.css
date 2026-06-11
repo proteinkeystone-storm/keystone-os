@@ -123,6 +123,39 @@
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
+/* ── SA-8.2 — boucle d'amélioration visible ───────────────────── */
+/* Badge « N questions à combler » sur la carte agent (cliquable → Trous). */
+.sa-agent-gaps {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.sa-agent-gaps:hover {
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+/* Point « demandée cette semaine » accolé au compteur de hits d'un trou. */
+.sa-gap-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  vertical-align: 1px;
+}
+
 /* ── SA-8.1 — modal « Nourrir le coffre » : modes + bouton fichier ── */
 .sa-ex-modes {
   display: flex;
