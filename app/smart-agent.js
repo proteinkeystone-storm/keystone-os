@@ -152,14 +152,28 @@ function _jwt() {
     return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || '';
 }
 async function _api(path, opts = {}) {
-    const res = await fetch(`${API_BASE}/api/smart-agent${path}`, {
-        method: opts.method || 'GET',
-        headers: {
-            'Authorization': `Bearer ${_jwt()}`,
-            ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-        },
-        body: opts.body ? JSON.stringify(opts.body) : undefined,
-    });
+    // SA-8.4 — timeout : un worker muet ne laisse plus l'écran sur
+    // « Chargement… » pour toujours (45 s = marge des générations longues).
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    let res;
+    try {
+        res = await fetch(`${API_BASE}/api/smart-agent${path}`, {
+            method: opts.method || 'GET',
+            headers: {
+                'Authorization': `Bearer ${_jwt()}`,
+                ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+            },
+            body: opts.body ? JSON.stringify(opts.body) : undefined,
+            signal: ctrl.signal,
+        });
+    } catch (e) {
+        clearTimeout(timer);
+        throw (e && e.name === 'AbortError')
+            ? new Error('Le serveur met trop de temps à répondre — réessayez.')
+            : e;
+    }
+    clearTimeout(timer);
     let data = {};
     try { data = await res.json(); } catch (_) {}
     if (!res.ok) {
@@ -279,6 +293,8 @@ function _onClick(e) {
     if (act === 'chat-mic')     { _startDictation('[data-slot="chat-text"]'); return; }
     if (act === 'chat-voice')   { _toggleVoice(); return; }
     if (act === 'chat-cite')    { _openUnitFromChat(actEl.dataset.uid); return; }
+    // SA-8.4 — toucher une bulle de l'agent = l'écouter (même lecture OFF)
+    if (act === 'chat-say')     { _speakTap(actEl.textContent || ''); return; }
     // ── Trous (scopés agent) ──
     if (act === 'gap-answer')   { _answerGap(_ag.gaps.find(g => g.id === actEl.dataset.id)); return; }
     if (act === 'gap-dismiss')  { _dismissGap(actEl.dataset.id); return; }
@@ -1479,11 +1495,12 @@ function _msgHTML(m) {
     if (m.role === 'user') {
         return `<div class="sa-msg is-user"><div class="sa-bubble">${_esc(m.content)}</div></div>`;
     }
-    // Agent : repli honnête mis en évidence, sinon réponse + citations
+    // Agent : repli honnête mis en évidence, sinon réponse + citations.
+    // SA-8.4 — toute bulle de l'agent se LIT AU TOUCHER (accueil compris).
     if (m.gapped) {
         return `
       <div class="sa-msg is-agent">
-        <div class="sa-bubble sa-bubble-gap">${icon('eye-off', 14)} ${_esc(m.content)}</div>
+        <div class="sa-bubble sa-bubble-gap" data-act="chat-say" title="Toucher pour écouter">${icon('eye-off', 14)} ${_esc(m.content)}</div>
         <span class="sa-msg-note">Hors de son savoir actuel — question notée comme « trou » à combler.</span>
       </div>`;
     }
@@ -1494,7 +1511,7 @@ function _msgHTML(m) {
       </div>` : '';
     return `
     <div class="sa-msg is-agent">
-      <div class="sa-bubble">${_renderReply(m.content, m.citations || [])}</div>
+      <div class="sa-bubble" data-act="chat-say" title="Toucher pour écouter">${_renderReply(m.content, m.citations || [])}</div>
       ${sources}
     </div>`;
 }
@@ -1525,7 +1542,11 @@ function _bindChatInput(main) {
 
 function _scrollChatBottom() {
     const stream = _root.querySelector('[data-slot="chat-stream"]');
-    if (stream) stream.scrollTop = stream.scrollHeight;
+    if (!stream) return;
+    // SA-8.4 — ne recolle en bas que si l'utilisateur y était déjà (à 140 px
+    // près) : remonté relire un ancien message, il n'est plus interrompu.
+    const nearBottom = (stream.scrollHeight - stream.scrollTop - stream.clientHeight) < 140;
+    if (nearBottom) stream.scrollTop = stream.scrollHeight;
 }
 
 // ── Vocal : dictée (SpeechRecognition) + lecture à voix haute (speechSynthesis).
@@ -1559,18 +1580,64 @@ function _startDictation(slotSel) {
         rec.start();
     } catch (_) { _voice.listening = false; }
 }
+// Débloque l'élément audio partagé DANS le geste utilisateur (iOS refuse
+// les play() asynchrones d'un élément jamais « béni » par un geste). WAV
+// silencieux fabriqué ici : la CSP media-src n'autorise pas data:, et un
+// import dynamique du module romprait la chaîne du geste.
+function _primeTtsAudio() {
+    try {
+        if (!window.__ksTtsAudio) window.__ksTtsAudio = new Audio();
+        const a = window.__ksTtsAudio;
+        if (a.__primed) return;
+        const b = new ArrayBuffer(44), d = new DataView(b);
+        const S = (o, s) => { for (let i = 0; i < s.length; i++) d.setUint8(o + i, s.charCodeAt(i)); };
+        S(0, 'RIFF'); d.setUint32(4, 36, true); S(8, 'WAVEfmt '); d.setUint32(16, 16, true);
+        d.setUint16(20, 1, true); d.setUint16(22, 1, true); d.setUint32(24, 22050, true);
+        d.setUint32(28, 44100, true); d.setUint16(32, 2, true); d.setUint16(34, 16, true);
+        S(36, 'data'); d.setUint32(40, 0, true);
+        a.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+        a.play().then(() => { a.__primed = true; }).catch(() => {});
+    } catch (_) {}
+}
+
 function _toggleVoice() {
     _voice.on = !_voice.on;
     try { localStorage.setItem('sa_voice_on', _voice.on ? '1' : '0'); } catch (_) {}
-    if (!_voice.on) {
+    if (_voice.on) {
+        _primeTtsAudio();   // geste → audio débloqué pour les lectures à venir
+        _piperWarmUp();     // le modèle se télécharge PENDANT que l'utilisateur tape
+    } else {
+        if (_piper.mod) { try { _piper.mod.stopSpeaking(); } catch (_) {} }
         if (_ttsSupported()) window.speechSynthesis.cancel();
         if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
     }
     _renderMain();
 }
+// SA-8.4 — préchauffe le moteur dès l'activation (voyant pendant le 1er
+// téléchargement) : la 1re réponse n'attend plus les ~60 Mo du modèle.
+async function _piperWarmUp() {
+    try {
+        if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
+        if (!_piper.mod.isSupported() || _piper.mod.isVoiceReady()) return;
+        const setLoad = (on) => {
+            const b = _root && _root.querySelector('[data-act="chat-voice"]');
+            if (b) b.classList.toggle('is-loading', on);
+        };
+        setLoad(true);
+        await _piper.mod.warmUp();
+        setLoad(false);
+    } catch (_) {}
+}
 function _speak(text) {
     if (!_voice.on || !text) return;
     _piperSpeak(text);    // voix neuronale Siwis — seule voix proposée
+}
+// SA-8.4 — lecture À LA DEMANDE d'une bulle (toucher) : indépendante de
+// l'interrupteur global — toucher une réponse, c'est demander à l'entendre.
+function _speakTap(text) {
+    if (!text) return;
+    _primeTtsAudio();
+    _piperSpeak(text);
 }
 // Lecture via le moteur Piper maison (import paresseux + génération + audio).
 // Voyant « is-loading » sur le bouton haut-parleur pendant le travail (1er
@@ -1579,23 +1646,21 @@ async function _piperSpeak(text) {
     const clean = String(text).replace(/\[\d{1,2}\]/g, '').trim();
     if (!clean) return;
     try { if (_ttsSupported()) window.speechSynthesis.cancel(); } catch (_) {}
-    if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
-    if (_piper.busy) return;            // pas de générations concurrentes
-    _piper.busy = true;
-    const btn = _root && _root.querySelector('[data-act="chat-voice"]');
-    if (btn) btn.classList.add('is-loading');
     try {
         if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
-        const wav = await _piper.mod.synthToWav(clean);
-        if (!_voice.on) return;         // l'utilisateur a coupé entre-temps
-        if (!_piper.audio) _piper.audio = new Audio();
-        _piper.audio.src = URL.createObjectURL(wav);
-        _piper.audio.play().catch(() => {});
+        // SA-8.4 — lecture « phrase par phrase » : le 1er son part dès que la
+        // 1re phrase est prête, la suite se génère pendant la lecture. Toute
+        // nouvelle lecture interrompt la précédente (géré par le module).
+        await _piper.mod.speakText(clean, {
+            onState: (st) => {
+                const b = _root && _root.querySelector('[data-act="chat-voice"]');
+                if (b) b.classList.toggle('is-loading', st === 'loading');
+            },
+        });
     } catch (_) {
         // silencieux : si le moteur échoue, on ne lit rien (pas de bruit parasite)
-    } finally {
-        _piper.busy = false;
-        if (btn) btn.classList.remove('is-loading');
+        const b = _root && _root.querySelector('[data-act="chat-voice"]');
+        if (b) b.classList.remove('is-loading');
     }
 }
 

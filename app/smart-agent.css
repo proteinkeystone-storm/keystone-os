@@ -123,6 +123,9 @@
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
+/* ── SA-8.4 — bulles de l'agent lisibles au toucher ───────────── */
+.sa-msg.is-agent .sa-bubble[data-act="chat-say"] { cursor: pointer; }
+
 /* ── SA-8.2 — boucle d'amélioration visible ───────────────────── */
 /* Badge « N questions à combler » sur la carte agent (cliquable → Trous). */
 .sa-agent-gaps {

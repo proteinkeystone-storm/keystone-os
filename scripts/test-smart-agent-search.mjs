@@ -234,6 +234,18 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
 }
 
+console.log('── SA-8.4 — splitSentences (lecture phrase par phrase) ──');
+{
+  const { splitSentences } = await import('../app/lib/piper-tts.js');
+  const s = splitSentences('Bonjour et bienvenue au Musée Copte du Caire. Le musée ouvre à 9h00 du lundi au samedi ! Souhaitez-vous connaître les tarifs ?');
+  check('découpe en phrases', s.length === 3 && s[0].endsWith('Caire.') && s[2].endsWith('?'));
+  check('fragments courts regroupés (pas de diction hachée)',
+    splitSentences('Oui. Bien sûr. Le musée est ouvert le dimanche de 10h à 18h sans interruption.').length === 1);
+  check('texte sans ponctuation → 1 phrase', splitSentences('bonjour tout le monde').length === 1);
+  check('vide → []', splitSentences('').length === 0 && splitSentences(null).length === 0);
+  check('guillemets fermants conservés', splitSentences('Il a dit « bonjour ». Puis il est parti vers la sortie du musée.')[0].includes('»'));
+}
+
 console.log('── SA-8.0 — publicAgentMeta expose le rôle ──');
 check('role exposé au visiteur', publicAgentMeta({ name: 'L', config: { identity: { role: ' guide ' } } }).role === 'guide');
 check('role absent → \'\'', publicAgentMeta({ name: 'L', config: { identity: {} } }).role === '');

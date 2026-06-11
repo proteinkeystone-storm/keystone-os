@@ -130,3 +130,119 @@ export async function synthToWav(text, voiceId = DEFAULT_VOICE, onProgress) {
 export function isVoiceReady(voiceId = DEFAULT_VOICE) {
   return !!_sessions[voiceId];
 }
+
+/* ═══ SA-8.4 — LECTURE PILOTÉE : file « phrase par phrase » ═══════════
+   Avant : tout le texte était synthétisé d'un bloc → 5-15 s de silence
+   avant le premier son. Ici : la 1re phrase part dès qu'elle est prête,
+   la suivante se génère PENDANT la lecture (pipeline). Un SEUL élément
+   <audio> est réutilisé : « béni » par un geste utilisateur (primeAudio),
+   il garde le droit de jouer les play() asynchrones sur iOS.            */
+
+let _current = null;   // lecture en cours { cancelled } — une seule à la fois
+
+// L'élément audio partagé. window.__ksTtsAudio permet aux surfaces de le
+// « bénir » dans un handler de geste AVANT même que ce module soit importé
+// (un import dynamique romprait la chaîne du geste sur iOS).
+function _getAudio() {
+  try {
+    if (!window.__ksTtsAudio) window.__ksTtsAudio = new Audio();
+    return window.__ksTtsAudio;
+  } catch (_) { return null; }
+}
+
+// WAV silencieux minimal (44 octets d'en-tête, 0 échantillon) en Blob —
+// la CSP media-src n'autorise pas data:, on fabrique le blob nous-mêmes.
+export function silentWavBlob() {
+  return pcmToWav(new Float32Array(0), 22050);
+}
+
+// À appeler DANS un handler de geste (clic haut-parleur, envoi, tap bulle) :
+// jouer un silence débloque l'élément pour toutes les lectures suivantes.
+export function primeAudio() {
+  try {
+    const a = _getAudio();
+    if (!a || a.__primed || _current) return;   // jamais pendant/apres une lecture (écraserait src)
+    a.src = URL.createObjectURL(silentWavBlob());
+    a.play().then(() => { a.__primed = true; }).catch(() => {});
+  } catch (_) {}
+}
+
+// Découpe un texte en phrases « lisibles » : coupe après . ! ? …, regroupe
+// les fragments trop courts (sigles, « Oui. ») pour éviter une diction hachée.
+export function splitSentences(text) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!s) return [];
+  const parts = (s.match(/[^.!?…]+[.!?…]+["»)\]]?\s*|[^.!?…]+$/g) || [s])
+    .map(x => x.trim()).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    if (out.length && (out[out.length - 1].length < 25 || p.length < 12)) {
+      out[out.length - 1] += ' ' + p;
+    } else {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+// Précharge tout le moteur (ORT + phonémiseur + modèle) SANS rien lire —
+// à lancer dès que l'utilisateur active la lecture : le téléchargement se
+// fait pendant qu'il tape sa question, plus pendant qu'il attend la voix.
+export async function warmUp(voiceId = DEFAULT_VOICE, onProgress) {
+  try {
+    await ensureOrt();
+    await ensurePhonemizer();
+    await getConfig(voiceId);
+    await getSession(voiceId, onProgress);
+    return true;
+  } catch (_) { return false; }
+}
+
+export function stopSpeaking() {
+  if (_current) _current.cancelled = true;
+  _current = null;
+  const a = _getAudio();
+  if (a) { try { a.pause(); } catch (_) {} }
+}
+
+function _playBlob(wav, me) {
+  return new Promise((resolve) => {
+    const a = _getAudio();
+    if (!a) { resolve(); return; }
+    const url = URL.createObjectURL(wav);
+    const done = () => { URL.revokeObjectURL(url); a.onended = a.onerror = a.onpause = null; resolve(); };
+    a.onended = done;
+    a.onerror = done;
+    a.onpause = () => { if (me.cancelled) done(); };   // stopSpeaking() → pause
+    a.src = url;
+    a.play().catch(done);
+  });
+}
+
+// Lit `text` phrase par phrase. onState('loading'|'speaking'|'idle') pilote
+// le voyant des surfaces ; onProgress(0..1) suit le 1er téléchargement du
+// modèle. Toute nouvelle lecture interrompt la précédente. Propage l'erreur
+// du moteur (la surface choisit son repli — ex. voix système).
+export async function speakText(text, { voiceId = DEFAULT_VOICE, onProgress, onState } = {}) {
+  stopSpeaking();
+  const sentences = splitSentences(String(text || '').replace(/\[\d{1,2}\]/g, ''));
+  if (!sentences.length) return;
+  const me = { cancelled: false };
+  _current = me;
+  onState && onState('loading');
+  let next = null;
+  try {
+    next = synthToWav(sentences[0], voiceId, onProgress);
+    let spoke = false;
+    for (let i = 0; i < sentences.length && !me.cancelled; i++) {
+      const wav = await next;
+      next = (i + 1 < sentences.length) ? synthToWav(sentences[i + 1], voiceId) : null;
+      if (me.cancelled) break;
+      if (!spoke) { spoke = true; onState && onState('speaking'); }
+      await _playBlob(wav, me);
+    }
+  } finally {
+    if (next) next.catch(() => {});   // génération pipeline abandonnée : pas d'unhandled rejection
+    if (_current === me) { _current = null; onState && onState('idle'); }
+  }
+}

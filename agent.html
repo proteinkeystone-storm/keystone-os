@@ -123,6 +123,21 @@
       border: 1px dashed var(--sa-border);
       font-style: italic;
     }
+    /* SA-8.4 — les bulles de l'assistant se lisent au toucher */
+    .sa-msg.agent .sa-msg-bubble { cursor: pointer; }
+    .sa-retry {
+      margin-left: 6px;
+      padding: 4px 12px;
+      border: 1px solid var(--sa-border);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--sa-brand);
+      font: inherit; font-size: 13px; font-weight: 700;
+      cursor: pointer;
+    }
+    /* SA-8.4 — préparation de la voix (téléchargement du modèle, une fois) */
+    .sa-head-voice.is-loading { animation: sa-voice-pulse 1s ease-in-out infinite; }
+    @keyframes sa-voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
     /* ── Indicateur de frappe ──────────────────────────────── */
     .sa-typing { display: flex; gap: 4px; padding: 14px 16px; }
@@ -266,10 +281,73 @@
        Les contrôles ne s'affichent que si le navigateur sait faire. La préférence
        de lecture est mémorisée (localStorage), comme un interrupteur global. ── */
     const SR_CLASS = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const HAS_SR  = !!SR_CLASS;
-    const HAS_TTS = ('speechSynthesis' in window);
+    const HAS_SR   = !!SR_CLASS;
+    const HAS_TTS  = ('speechSynthesis' in window);
+    const HAS_WASM = (typeof WebAssembly !== 'undefined');
     let _voiceOn = false;
     try { _voiceOn = localStorage.getItem('sa_voice_on') === '1'; } catch (_) {}
+    // SA-8.4 — la lecture utilise la voix neuronale Siwis (moteur Piper
+    // maison, /app/lib/piper-tts.js) : les voix système (Thomas/Amélie iOS)
+    // sonnaient « robot » quel que soit le réglage. Le natif reste en REPLI.
+    let _piperMod = null;
+
+    // Débloque l'élément audio partagé DANS le geste (iOS refuse les play()
+    // asynchrones d'un élément jamais « béni »). WAV silencieux fabriqué ici :
+    // la CSP media-src n'autorise pas data:, et un import dynamique du module
+    // romprait la chaîne du geste.
+    function _primeTtsAudio() {
+      try {
+        if (!window.__ksTtsAudio) window.__ksTtsAudio = new Audio();
+        const a = window.__ksTtsAudio;
+        if (a.__primed) return;
+        const b = new ArrayBuffer(44), d = new DataView(b);
+        const S = (o, s) => { for (let i = 0; i < s.length; i++) d.setUint8(o + i, s.charCodeAt(i)); };
+        S(0, 'RIFF'); d.setUint32(4, 36, true); S(8, 'WAVEfmt '); d.setUint32(16, 16, true);
+        d.setUint16(20, 1, true); d.setUint16(22, 1, true); d.setUint32(24, 22050, true);
+        d.setUint32(28, 44100, true); d.setUint16(32, 2, true); d.setUint16(34, 16, true);
+        S(36, 'data'); d.setUint32(40, 0, true);
+        a.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+        a.play().then(() => { a.__primed = true; }).catch(() => {});
+      } catch (_) {}
+    }
+    function setVoiceLoading(on) {
+      const btn = document.getElementById('sa-voice');
+      if (!btn) return;
+      btn.classList.toggle('is-loading', on);
+      btn.title = on ? 'Préparation de la voix (une seule fois)…'
+                     : (_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute');
+    }
+    // Précharge le moteur dès l'activation : le modèle (~60 Mo, une fois,
+    // puis cache navigateur) se télécharge PENDANT que le visiteur écrit.
+    async function _warmPiper() {
+      try {
+        if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
+        if (!_piperMod.isSupported()) { _piperMod = { unsupported: true }; return; }
+        if (_piperMod.isVoiceReady()) return;
+        setVoiceLoading(true);
+        await _piperMod.warmUp();
+      } catch (_) {} finally { setVoiceLoading(false); }
+    }
+    // Lecture « intelligente » : Siwis phrase par phrase, voix système en repli.
+    async function _speakSmart(text) {
+      const clean = String(text).replace(/\[\d{1,2}\]/g, '').trim();
+      if (!clean) return;
+      try {
+        if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
+        if (_piperMod.unsupported || !_piperMod.isSupported()) throw new Error('wasm');
+        if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+        await _piperMod.speakText(clean, { onState: (st) => setVoiceLoading(st === 'loading') });
+      } catch (_) {
+        setVoiceLoading(false);
+        _speakRaw(clean);   // repli : voix système — mieux que le silence
+      }
+    }
+    // Toucher une bulle = demander à l'entendre (même lecture coupée).
+    function speakTap(text) {
+      if (!text) return;
+      _primeTtsAudio();
+      _speakSmart(text);
+    }
     let _rec = null, _listening = false;
     let _voices = [], _voicesReady = false, _lastUtter = null;
 
@@ -326,10 +404,6 @@
         ? fr.map(v => `<option value="${escape(v.name)}"${v.name === cur ? ' selected' : ''}>${escape(v.name)}</option>`).join('')
         : '<option value="">Voix par défaut…</option>';
     }
-    function setVoiceName(name) {
-      try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
-      _speakRaw('Bonjour, voici ma voix.');   // échantillon par le chemin robuste
-    }
 
     const SVG_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
     function svgVol(on) {
@@ -363,13 +437,19 @@
     }
     function speak(text) {
       if (!_voiceOn || !text) return;
-      _speakRaw(String(text).replace(/\[\d{1,2}\]/g, ''));
+      _speakSmart(text);
     }
     function toggleVoice() {
       _voiceOn = !_voiceOn;
       try { localStorage.setItem('sa_voice_on', _voiceOn ? '1' : '0'); } catch (_) {}
-      if (_voiceOn) ensureVoices();
-      else if (HAS_TTS) window.speechSynthesis.cancel();
+      if (_voiceOn) {
+        _primeTtsAudio();   // geste → audio débloqué pour les lectures à venir
+        _warmPiper();       // le modèle se télécharge pendant que le visiteur écrit
+        ensureVoices();     // prépare aussi le repli natif
+      } else {
+        if (_piperMod && _piperMod.stopSpeaking) { try { _piperMod.stopSpeaking(); } catch (_) {} }
+        if (HAS_TTS) window.speechSynthesis.cancel();
+      }
       const btn = document.getElementById('sa-voice');
       if (btn) {
         btn.classList.toggle('is-on', _voiceOn);
@@ -377,8 +457,6 @@
         btn.title = _voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute';
         btn.setAttribute('aria-pressed', _voiceOn ? 'true' : 'false');
       }
-      const pick = document.getElementById('sa-voice-pick');
-      if (pick) { pick.hidden = !_voiceOn; if (_voiceOn) fillVoicePicker(); }
     }
     function startDictation() {
       if (!SR_CLASS) return;
@@ -439,8 +517,7 @@
             <div class="sa-head-tag">${escape(meta.role || 'Assistant')}</div>
             <div class="sa-head-name">${escape(meta.name || 'Assistant')}</div>
           </div>
-          ${HAS_TTS ? `<div class="sa-head-voice-wrap">
-            <select class="sa-head-voice-pick" id="sa-voice-pick"${_voiceOn ? '' : ' hidden'} title="Choisir la voix"></select>
+          ${(HAS_WASM || HAS_TTS) ? `<div class="sa-head-voice-wrap">
             <button class="sa-head-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${svgVol(_voiceOn)}</button>
           </div>` : ''}
         </header>
@@ -479,9 +556,8 @@
       const micBtn = document.getElementById('sa-mic');
       if (micBtn) micBtn.addEventListener('click', startDictation);
 
-      ensureVoices();
-      const pick = document.getElementById('sa-voice-pick');
-      if (pick) { pick.addEventListener('change', () => setVoiceName(pick.value)); fillVoicePicker(); }
+      // SA-8.4 — lecture déjà active (visite précédente) : préchauffe direct.
+      if (_voiceOn && HAS_WASM) _warmPiper();
 
       if (meta.opening) addBubble('agent', meta.opening);
       input.focus();
@@ -492,9 +568,30 @@
       const div = document.createElement('div');
       div.className = `sa-msg ${role}${isFallback ? ' is-fallback' : ''}`;
       div.innerHTML = `<div class="sa-msg-bubble">${escape(text)}</div>`;
+      // SA-8.4 — toute bulle de l'assistant se lit AU TOUCHER (accueil compris).
+      if (role === 'agent') {
+        const b = div.querySelector('.sa-msg-bubble');
+        b.title = 'Toucher pour écouter';
+        b.addEventListener('click', () => speakTap(text));
+      }
       inner.appendChild(div);
-      scrollDown();
+      scrollDown(role === 'user');   // son propre message : toujours visible
       return div;
+    }
+
+    // Erreur réseau : bulle avec bouton « Réessayer » (renvoie le même message).
+    function addRetryBubble(message) {
+      const inner = document.getElementById('sa-thread-inner');
+      const div = document.createElement('div');
+      div.className = 'sa-msg agent is-fallback';
+      const b = document.createElement('div');
+      b.className = 'sa-msg-bubble';
+      b.textContent = 'Connexion impossible. ';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'sa-retry'; btn.textContent = 'Réessayer';
+      btn.addEventListener('click', () => { div.remove(); sendMessage(message); });
+      b.appendChild(btn); div.appendChild(b); inner.appendChild(div);
+      scrollDown(true);
     }
 
     function showTyping() {
@@ -507,9 +604,13 @@
     }
     function hideTyping() { document.getElementById('sa-typing-row')?.remove(); }
 
-    function scrollDown() {
+    function scrollDown(force) {
       const t = document.getElementById('sa-thread');
-      if (t) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; });
+      if (!t) return;
+      // SA-8.4 — ne recolle en bas que si le visiteur y était déjà (à 140 px
+      // près) : remonté relire un message, il n'est plus interrompu.
+      if (!force && (t.scrollHeight - t.scrollTop - t.clientHeight) >= 140) return;
+      requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; });
     }
 
     async function submit() {
@@ -526,17 +627,26 @@
         document.getElementById('sa-mic')?.classList.remove('is-listening');
       }
 
-      _busy = true;
-      document.getElementById('sa-send').disabled = true;
       input.value = ''; input.style.height = 'auto';
       addBubble('user', message);
+      await sendMessage(message);
+    }
+
+    // Envoi proprement dit — séparé de submit() pour le bouton « Réessayer ».
+    async function sendMessage(message) {
+      if (_busy) return;
+      _busy = true;
+      document.getElementById('sa-send').disabled = true;
       showTyping();
 
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 45000);
       try {
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, session_id: _sessionId }),
+          signal: ctrl.signal,
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -552,8 +662,9 @@
           speak(data.reply || '');
         }
       } catch (_) {
-        addBubble('agent', 'Connexion impossible. Vérifiez votre réseau et réessayez.', true);
+        addRetryBubble(message);   // réseau coupé ou délai dépassé → réessai en un geste
       } finally {
+        clearTimeout(timer);
         hideTyping();
         _busy = false;
         document.getElementById('sa-send').disabled = false;
