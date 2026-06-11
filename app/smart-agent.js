@@ -273,6 +273,7 @@ function _onClick(e) {
     if (act === 'iv-back')      { _iv.phase = 'ask'; _renderMain(); return; }
     if (act === 'iv-commit')    { _ivCommit(); return; }
     if (act === 'iv-quit')      { _ivQuit(); return; }
+    if (act === 'iv-explore')   { _ivExplore(); return; }
     // ── Golden set ──
     if (act === 'gold-add')     { _goldAdd(); return; }
     if (act === 'gold-del')     { _goldDel(actEl.dataset.id); return; }
@@ -1155,8 +1156,11 @@ function _interviewHTML() {
         <div class="sa-iv-done">
           ${icon('check-circle', 40)}
           <h2>Interview terminée</h2>
-          <p>Vous avez parcouru toutes les questions. Les fiches ajoutées sont en brouillon dans « Savoir » — validez-les quand vous voulez.</p>
-          <button class="sa-btn is-primary" data-act="iv-quit">${icon('chevron-left', 15)} Retour aux questions</button>
+          <p>Les fiches ajoutées sont en brouillon dans « Savoir » — validez-les quand vous voulez. Vous pouvez aussi laisser l'IA suggérer des questions pour aller plus loin.</p>
+          <div class="sa-iv-doneacts">
+            <button class="sa-btn is-primary" data-act="iv-explore" ${_iv.busy ? 'disabled' : ''}>${_iv.busy ? 'Génération…' : `${icon('sparkles', 15)} Explorer d'autres questions`} <em class="sa-credit-note">1 crédit IA</em></button>
+            <button class="sa-btn" data-act="iv-quit">${icon('chevron-left', 15)} Retour aux questions</button>
+          </div>
         </div>
       </section>`;
     }
@@ -1190,17 +1194,20 @@ function _interviewHTML() {
         </div>
       </section>`;
     }
+    const ivIntro = g.virtual ? 'Pour enrichir ton agent :' : 'Un visiteur a demandé :';
+    const ivTag = g.virtual ? `${icon('sparkles', 12)} Suggestion IA` : `${g.hits}× demandée`;
     return `
       <section class="sa-kx sa-iv">
         ${head}
         <div class="sa-iv-card">
-          <span class="sa-iv-hits" title="Posée ${g.hits} fois">${g.hits}× demandée</span>
+          <span class="sa-iv-hits">${ivTag}</span>
+          <p class="sa-iv-intro">${ivIntro}</p>
           <p class="sa-iv-q">${_esc(g.question)}</p>
         </div>
-        <textarea class="sa-textarea sa-iv-answer" data-slot="iv-answer" rows="5" placeholder="Répondez comme à un collègue, en langage naturel…">${_esc(_iv.answer)}</textarea>
+        <textarea class="sa-textarea sa-iv-answer" data-slot="iv-answer" rows="5" placeholder="Réponds comme tu l'expliquerais à l'oral, en langage naturel…">${_esc(_iv.answer)}</textarea>
         ${_iv.error ? `<p class="sa-ed-error">${_esc(_iv.error)}</p>` : ''}
         <div class="sa-ed-actions">
-          <button class="sa-iconbtn" data-act="iv-dismiss" title="Ignorer définitivement cette question">${icon('x', 15)}</button>
+          <button class="sa-iconbtn" data-act="iv-dismiss" title="${g.virtual ? 'Passer cette suggestion' : 'Ignorer définitivement cette question'}">${icon('x', 15)}</button>
           <button class="sa-btn" data-act="iv-skip">Passer</button>
           <button class="sa-btn is-primary" data-act="iv-structure" ${_iv.busy ? 'disabled' : ''}>${_iv.busy ? 'Analyse…' : `${icon('sparkles', 15)} Structurer en fiche`} <em class="sa-credit-note">1 crédit IA</em></button>
         </div>
@@ -1222,7 +1229,9 @@ async function _ivStructure() {
     _iv.answer = answer; _iv.busy = true; _iv.error = null; _renderMain();
     const g = _iv.gaps[_iv.idx];
     try {
-        const res = await _api(`/gaps/${g.id}/structure`, { method: 'POST', body: { answer } });
+        const res = g.virtual
+            ? await _api(`/agents/${_cur.id}/structure`, { method: 'POST', body: { question: g.question, answer } })
+            : await _api(`/gaps/${g.id}/structure`, { method: 'POST', body: { answer } });
         _iv.proposals = res.proposals || [];
         _iv.checked = new Set(_iv.proposals.map((_, i) => i));
         if (!_iv.proposals.length) { _iv.error = 'Aucune fiche exploitable — précisez ou reformulez votre réponse.'; }
@@ -1246,30 +1255,30 @@ async function _ivCommit() {
     let added = 0;
     for (const i of _iv.checked) {
         const p = _iv.proposals[i];
-        try {
-            await _api('/kortex/units', { method: 'POST', body: {
-                type: p.type, title: p.title, body: p.body, status: 'draft',
-                source_kind: 'interview', resolve_gap_id: g.id, agent_id: _cur.id,
-            }});
-            added++;
-        } catch (_) { /* on continue, bilan via toast */ }
+        const body = { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'interview', agent_id: _cur.id };
+        if (!g.virtual) body.resolve_gap_id = g.id;
+        try { await _api('/kortex/units', { method: 'POST', body }); added++; } catch (_) { /* on continue, bilan via toast */ }
     }
-    _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
-    _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
+    if (!g.virtual) {
+        _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
+        _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
+        _renderRail();
+    }
     _iv.busy = false;
-    _toast(added ? `Trou comblé — ${added} fiche${added > 1 ? 's' : ''} en brouillon (à valider dans Savoir).` : 'Aucune fiche ajoutée.', added ? 'ok' : 'error');
-    _renderRail();
+    _toast(added ? `${g.virtual ? 'Savoir ajouté' : 'Trou comblé'} — ${added} fiche${added > 1 ? 's' : ''} en brouillon (à valider dans Savoir).` : 'Aucune fiche ajoutée.', added ? 'ok' : 'error');
     _ivNext();
 }
 
 async function _ivDismiss() {
     const g = _iv.gaps[_iv.idx];
-    try {
-        await _api(`/gaps/${g.id}/dismiss`, { method: 'POST' });
-        _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
-        _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
-        _renderRail();
-    } catch (e) { _toast(e.message, 'error'); }
+    if (!g.virtual) {
+        try {
+            await _api(`/gaps/${g.id}/dismiss`, { method: 'POST' });
+            _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
+            _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
+            _renderRail();
+        } catch (e) { _toast(e.message, 'error'); }
+    }
     _ivNext();
 }
 
@@ -1284,6 +1293,23 @@ function _ivQuit() {
     _iv.active = false;
     _loadGaps();   // recharge la file (trous comblés / ignorés retirés)
     _renderMain();
+}
+
+// SA-6.1 — Interview LIBRE : l'IA génère des questions au-delà des trous.
+async function _ivExplore() {
+    if (_iv.busy) return;
+    _iv.busy = true; _renderMain();
+    try {
+        const res = await _api(`/agents/${_cur.id}/explore`, { method: 'POST' });
+        const qs = (res.questions || []).map(q => ({ id: null, virtual: true, question: q, hits: 0 }));
+        if (!qs.length) { _toast('Aucune nouvelle question proposée pour l\'instant.', 'error'); }
+        else {
+            _iv.gaps = qs; _iv.idx = 0; _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null;
+        }
+    } catch (e) {
+        _toast((e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Crédits IA épuisés ce mois.' : e.message, 'error');
+    }
+    _iv.busy = false; _renderMain();
 }
 
 async function _deleteAgent(id) {

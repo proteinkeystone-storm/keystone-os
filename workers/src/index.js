@@ -113,7 +113,8 @@ import { handleSmartAgentHealth,
          handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
          handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete,
          handlePublicAgentMeta, handlePublicAgentChat,
-         handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke, handlePublicLinkUpdate } from './routes/smart-agent.js';
+         handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke, handlePublicLinkUpdate,
+         handleSmartAgentLifecycle, handleExploreQuestions, handleAgentStructure } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -176,6 +177,10 @@ export default {
       if (saPublishMatch && method === 'POST') return handleAgentPublish(request, env, saPublishMatch[1]);
       const saLinksMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/links$/);
       if (saLinksMatch && method === 'GET') return handleAgentLinksList(request, env, saLinksMatch[1]);
+      const saExplore = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/explore$/);
+      if (saExplore && method === 'POST') return handleExploreQuestions(request, env, saExplore[1]);
+      const saAgStructure = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/structure$/);
+      if (saAgStructure && method === 'POST') return handleAgentStructure(request, env, saAgStructure[1]);
       const saLinkRevoke = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)\/revoke$/);
       if (saLinkRevoke && method === 'POST') return handlePublicLinkRevoke(request, env, saLinkRevoke[1]);
       const saLinkMatch = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)$/);
@@ -680,6 +685,12 @@ export default {
       handleConciergeAutoDowngrade(env)
         .then(r => console.log('[concierge-downgrade]', JSON.stringify(r)))
         .catch(e => console.warn('[concierge-downgrade] failed', e?.message || e))
+    );
+    // SA-6.1 — péremption des fiches (review_at échu → quarantine) + purge RGPD publique.
+    ctx.waitUntil(
+      handleSmartAgentLifecycle(env)
+        .then(r => console.log('[smart-agent-lifecycle]', JSON.stringify(r)))
+        .catch(e => console.warn('[smart-agent-lifecycle] failed', e?.message || e))
     );
   },
 };

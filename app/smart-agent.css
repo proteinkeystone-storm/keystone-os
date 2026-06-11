@@ -1300,3 +1300,6 @@
 .sa-iv-done svg { color: var(--green); margin-bottom: 12px; }
 .sa-iv-done h2 { font-size: 22px; font-weight: 900; letter-spacing: -.02em; color: var(--text); margin: 0 0 10px; }
 .sa-iv-done p { font-size: 14px; line-height: 1.6; max-width: 420px; margin: 0 auto 22px; }
+.sa-iv-doneacts { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+/* SA-6.1 — reformulation conversationnelle (enrobage de la question) */
+.sa-iv-intro { font-size: 12.5px; font-weight: 600; color: var(--tx2); margin: 0 0 4px; }

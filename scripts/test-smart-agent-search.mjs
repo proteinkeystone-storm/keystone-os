@@ -10,7 +10,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
-  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict }
+  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -297,6 +297,18 @@ console.log('── goldenVerdict (SA-5.3 — replay fidèle des « doit ignorer
   check('fallback ancré + pas d\'IA (cap) → ko prudent', goldenVerdict('fallback', true, null).ok === false);
   check('predicted cohérent (fallback repli)', goldenVerdict('fallback', true, 0).predicted === 'fallback');
   check('predicted cohérent (fallback débordement)', goldenVerdict('fallback', true, 3).predicted === 'answer');
+}
+
+console.log('── parseQuestions (SA-6.1 — interview libre) ──');
+{
+  check('tableau JSON de questions', JSON.stringify(parseQuestions('["Quels horaires ?", "Quels tarifs ?"]')) === JSON.stringify(['Quels horaires ?', 'Quels tarifs ?']));
+  check('fences ```json tolérées', parseQuestions('```json\n["Une question valide ?"]\n```').length === 1);
+  check('texte autour toléré', parseQuestions('Voici : ["Question assez longue ?"] merci').length === 1);
+  check('questions trop courtes écartées', parseQuestions('["ok", "Question valable ici ?"]').length === 1);
+  check('non-string écarté', parseQuestions('["Bonne question ?", 42, null]').length === 1);
+  check('plafonné à 8', parseQuestions(JSON.stringify(Array.from({ length: 12 }, (_, i) => `Question numéro ${i} ?`))).length === 8);
+  check('JSON cassé → []', JSON.stringify(parseQuestions('pas du json')) === '[]');
+  check('vide → []', JSON.stringify(parseQuestions('')) === '[]');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

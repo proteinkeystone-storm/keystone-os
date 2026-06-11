@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-6.0';
+const SA_ENGINE_VERSION = 'SA-6.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -2405,6 +2405,126 @@ function _parseProposals(raw) {
     if (v.ok) out.push({ type: p.type, title: String(p.title).trim(), body: v.body });
   }
   return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-6.1 — Cycle de vie quotidien (cron 0 3 * * *) : péremption des
+// fiches (review_at échu → quarantine = retirées du service) + purge
+// RGPD des données des visiteurs PUBLICS (rétention 90 j). Idempotent ;
+// n'agit QUE sur les fiches échues et les données publiques anciennes.
+// ═══════════════════════════════════════════════════════════════
+const PUBLIC_RETENTION_DAYS = 90;
+export async function handleSmartAgentLifecycle(env) {
+  await ensureSmartAgentSchema(env);
+  let quarantined = 0, usagePurged = 0, sessionsPurged = 0, error = null;
+  try {
+    const q = await env.DB.prepare(
+      "UPDATE kortex_units SET status = 'quarantine', updated_at = datetime('now') WHERE status = 'validated' AND review_at IS NOT NULL AND review_at < date('now')"
+    ).run();
+    quarantined = q?.meta?.changes ?? 0;
+    const u = await env.DB.prepare(
+      `DELETE FROM sa_public_usage WHERE day < date('now', '-${PUBLIC_RETENTION_DAYS} days')`
+    ).run();
+    usagePurged = u?.meta?.changes ?? 0;
+    // Sessions/messages PUBLICS anciens — l'historique INTERNE du proprio est conservé.
+    await env.DB.prepare(
+      `DELETE FROM sa_messages WHERE session_id IN (SELECT id FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days'))`
+    ).run();
+    const s = await env.DB.prepare(
+      `DELETE FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days')`
+    ).run();
+    sessionsPurged = s?.meta?.changes ?? 0;
+  } catch (e) { error = e.message; }
+  return { quarantined, usagePurged, sessionsPurged, error };
+}
+
+// ── SA-6.1 — Interview LIBRE : l'IA propose des questions au-delà des trous ──
+const EXPLORE_SYSTEM_PROMPT = `Tu aides un expert à enrichir le savoir de son agent conversationnel. On te donne la MISSION de l'agent et la liste des sujets qu'il sait DÉJÀ traiter. Tu proposes des questions ouvertes qu'un visiteur pourrait poser et que l'agent DEVRAIT savoir traiter, mais qui ne sont PAS déjà couvertes.
+
+RÈGLES :
+1. Des questions concrètes et utiles, strictement dans le périmètre de la mission. Pas de méta-questions.
+2. N'invente AUCUN fait ; propose seulement des QUESTIONS.
+3. Évite les sujets déjà couverts (liste fournie).
+4. Entre 4 et 8 questions, en français.
+5. Réponds UNIQUEMENT avec un tableau JSON de chaînes, sans texte autour : ["question 1 ?", "question 2 ?"]`;
+
+// Pur (testé) : extrait un tableau de questions (chaînes) d'une réponse IA tolérante.
+export function parseQuestions(raw) {
+  let s = String(raw || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  const start = s.indexOf('['); const end = s.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) return [];
+  try {
+    const arr = JSON.parse(s.slice(start, end + 1));
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(x => typeof x === 'string' && x.trim().length >= 5)
+      .map(x => x.trim().slice(0, 300)).slice(0, 8);
+  } catch (_) { return []; }
+}
+
+// POST /api/smart-agent/agents/:id/explore — génère des questions d'exploration
+export async function handleExploreQuestions(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const agent = await _agentOr404(env, gate.tenant, agentId, origin);
+  if (!agent) return err('Agent introuvable', 404, origin);
+  if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+
+  const vaultId = await _privateVaultOf(env, gate.tenant, agentId);
+  const { results: known } = await env.DB.prepare(
+    "SELECT title FROM kortex_units WHERE tenant_id = ? AND vault_id = ? AND status = 'validated' ORDER BY updated_at DESC LIMIT 60"
+  ).bind(gate.tenant, vaultId).all();
+  const knownList = known.length ? known.map(r => `- ${r.title}`).join('\n') : '(aucune fiche pour l\'instant)';
+  const mission = agent.config?.identity?.mission || 'renseigner les visiteurs';
+  const userContent = `MISSION DE L'AGENT :\n${mission}\n\nSUJETS DÉJÀ COUVERTS :\n${knownList}`;
+
+  let credit = null;
+  const sub = gate.claims?.sub;
+  if (sub && await isEnforceEnabled(env, sub)) {
+    credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
+    if (!credit.ok && credit.blocked) {
+      return json({ error: 'Crédits IA épuisés ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
+    }
+  }
+  const refund = async () => {
+    if (credit?.ok && credit.cost > 0) await refundCredits(env, { bucketKey: sub, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
+  };
+  try {
+    const res = await env.AI.run(KS_AI_MODEL, {
+      messages: [{ role: 'system', content: EXPLORE_SYSTEM_PROMPT }, { role: 'user', content: userContent }],
+      max_tokens: 800, stream: false,
+    });
+    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    const questions = parseQuestions(raw);
+    if (!questions.length) { await refund(); return json({ questions: [] }, 200, origin); }
+    return json({ questions, credits: credit?.payload || null }, 200, origin);
+  } catch (e) {
+    await refund();
+    return err(`Exploration impossible : ${e.message || 'erreur IA'}`, 502, origin);
+  }
+}
+
+// POST /api/smart-agent/agents/:id/structure — réponse prose → fiches (question
+// LIBRE, hors trou : aucune résolution de gap, juste l'ajout de savoir).
+export async function handleAgentStructure(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const agent = await _agentOr404(env, gate.tenant, agentId, origin);
+  if (!agent) return err('Agent introuvable', 404, origin);
+
+  const b = await parseBody(request);
+  const question = (typeof b?.question === 'string') ? b.question.trim() : '';
+  const answer   = (typeof b?.answer === 'string') ? b.answer.trim() : '';
+  if (question.length < 5)  return err('Question requise', 400, origin);
+  if (answer.length < 10)   return err('Réponse trop courte (10 caractères minimum)', 400, origin);
+  if (answer.length > 8000) return err('Réponse trop longue (8 000 caractères maximum)', 400, origin);
+
+  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, `QUESTION POSÉE :\n${question}\n\nRÉPONSE DE L'EXPERT :\n${answer}`);
+  if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
+  return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
 
 // ── Exports de test (scripts/test-smart-agent-search.mjs) ───────
