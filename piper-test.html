@@ -68,12 +68,6 @@
         <label for="voice">Voix française</label>
         <select id="voice">
           <option value="fr_FR-siwis-medium" selected>Siwis — féminine (qualité moyenne)</option>
-          <option value="fr_FR-tom-medium">Tom — masculine (qualité moyenne)</option>
-          <option value="fr_FR-upmc-medium">UPMC — (qualité moyenne)</option>
-          <option value="fr_FR-mls-medium">MLS — (qualité moyenne)</option>
-          <option value="fr_FR-siwis-low">Siwis — féminine (rapide, basse qualité)</option>
-          <option value="fr_FR-gilles-low">Gilles — masculine (rapide)</option>
-          <option value="fr_FR-mls_1840-low">MLS 1840 — (rapide)</option>
         </select>
       </div>
       <div class="row">
@@ -96,17 +90,12 @@
        piper_phonemize (espeak-ng, UMD chargé en <script>). Tout est en
        fichiers statiques → auto-hébergeable plus tard en same-origin.
        ═══════════════════════════════════════════════════════════════ */
-    const ORT_BASE  = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-    const PHON_BASE = 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/';
-    const HF_BASE   = 'https://huggingface.co/diffusionstudio/piper-voices/resolve/main';
+    // Tout en same-origin (/app/vendor/) → CSP minimale, zéro CDN tiers.
+    const ORT_BASE  = '/app/vendor/onnx/';
+    const PHON_BASE = '/app/vendor/piper/';
+    const HF_BASE   = '/app/vendor/piper-voices';
     const VOICES = {
-      'fr_FR-siwis-medium': 'fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx',
-      'fr_FR-tom-medium':   'fr/fr_FR/tom/medium/fr_FR-tom-medium.onnx',
-      'fr_FR-upmc-medium':  'fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx',
-      'fr_FR-mls-medium':   'fr/fr_FR/mls/medium/fr_FR-mls-medium.onnx',
-      'fr_FR-siwis-low':    'fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx',
-      'fr_FR-gilles-low':   'fr/fr_FR/gilles/low/fr_FR-gilles-low.onnx',
-      'fr_FR-mls_1840-low': 'fr/fr_FR/mls_1840/low/fr_FR-mls_1840-low.onnx',
+      'fr_FR-siwis-medium': 'fr_FR-siwis-medium.onnx',
     };
 
     const $ = (id) => document.getElementById(id);
