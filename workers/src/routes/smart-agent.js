@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-5.4';
+const SA_ENGINE_VERSION = 'SA-6.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -846,56 +846,99 @@ export async function handleKortexExtract(request, env) {
   if (text.length < 30)    return err('Texte trop court (30 caractères minimum)', 400, origin);
   if (text.length > 20000) return err('Texte trop long (20 000 caractères maximum)', 400, origin);
 
-  if (!env.AI || typeof env.AI.run !== 'function') {
-    return err('Moteur IA indisponible', 503, origin);
-  }
+  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT, `TEXTE À ANALYSER :\n\n${text}`);
+  if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
+  if (!r.proposals.length) return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
+  return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
+}
 
-  // ── Crédits IA — débit 1 crédit (DORMANT, patron Brainstorming) ──
+// ── Cœur d'extraction IA (crédit DORMANT + appel KS_AI_MODEL + parse) ──
+// Partagé par le coller-texte (handleKortexExtract) et l'interview
+// (handleGapStructure). Retourne { ok, proposals, creditPayload } ou
+// { ok:false, status, error[, code, quota] } — le caller fabrique la Response.
+async function _aiExtract(env, gate, systemPrompt, userContent) {
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return { ok: false, status: 503, error: 'Moteur IA indisponible' };
+  }
   let credit = null;
   const sub = gate.claims?.sub;
   if (sub && await isEnforceEnabled(env, sub)) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
-      return json({
+      return { ok: false, status: 429, code: 'AI_CREDITS_EXHAUSTED',
         error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
-        code : 'AI_CREDITS_EXHAUSTED',
-        quota: credit.payload,
-      }, 429, origin);
+        quota: credit.payload };
     }
   }
-
+  const refund = async () => {
+    if (credit?.ok && credit.cost > 0) {
+      await refundCredits(env, { bucketKey: sub, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
+    }
+  };
   try {
     const res = await env.AI.run(KS_AI_MODEL, {
       messages: [
-        { role: 'system', content: EXTRACT_SYSTEM_PROMPT },
-        { role: 'user',   content: `TEXTE À ANALYSER :\n\n${text}` },
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: userContent },
       ],
       max_tokens: 3000,
       stream: false,
     });
-
-    // Extraction multi-format (réponse Workers AI : .response ou choices)
-    const raw = (res?.response
-      ?? res?.choices?.[0]?.message?.content
-      ?? '').trim();
-
+    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
     const proposals = _parseProposals(raw);
-    if (!proposals.length) {
-      // L'IA n'a rien extrait d'exploitable : on rembourse (best-effort).
-      if (credit?.ok && credit.cost > 0) {
-        await refundCredits(env, { bucketKey: sub, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
-      }
-      return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
-    }
-
-    return json({ proposals, model: KS_AI_MODEL, credits: credit?.payload || null }, 200, origin);
+    if (!proposals.length) { await refund(); return { ok: true, proposals: [], creditPayload: null }; }
+    return { ok: true, proposals, creditPayload: credit?.payload || null };
   } catch (e) {
-    // Échec APRÈS débit → refund (patron Ghost Writer).
-    if (credit?.ok && credit.cost > 0) {
-      await refundCredits(env, { bucketKey: sub, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
-    }
-    return err(`Extraction impossible : ${e.message || 'erreur IA'}`, 502, origin);
+    await refund();
+    return { ok: false, status: 502, error: `Extraction impossible : ${e.message || 'erreur IA'}` };
   }
+}
+
+// ── SA-6 — Interview du savoir : prompt orienté « réponse d'expert » ──
+const INTERVIEW_SYSTEM_PROMPT = `Tu es l'assistant d'interview de Keystone. On te donne UNE question (posée par de vrais utilisateurs, restée sans réponse) et la RÉPONSE d'un expert formulée en langage naturel. Tu structures cette réponse en fiches de savoir typées, en français, réutilisables par un agent.
+
+Types autorisés et gabarits (champs du "body") :
+- "fact"       : { "statement": "...", "context": "..." (optionnel) }
+- "procedure"  : { "goal": "...", "steps": ["étape 1", "étape 2", ...], "warnings": "..." (optionnel) }
+- "qa"         : { "question": "...", "answer": "..." }
+- "case"       : { "situation": "...", "action": "...", "result": "..." }
+- "rule"       : { "rule": "...", "rationale": "..." (optionnel), "exceptions": "..." (optionnel) }
+- "objection"  : { "objection": "...", "response": "...", "proof": "..." (optionnel) }
+- "definition" : { "term": "...", "definition": "..." }
+
+RÈGLES STRICTES :
+1. N'utilise QUE ce que dit l'expert. Aucune invention, aucun enrichissement extérieur.
+2. PRIORITÉ au type "qa" : reprends la question posée et la réponse de l'expert (reformulée clairement). Choisis un autre type (procedure, fact, rule…) seulement si la réponse le justifie mieux.
+3. Souvent UNE seule fiche suffit ; n'en crée plusieurs que si l'expert couvre des points distincts. Maximum 4.
+4. "title" : court et descriptif (max 12 mots).
+5. Remplace les noms de personnes privées par leur rôle (« le client », « le visiteur »).
+6. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
+[{"type":"...","title":"...","body":{...}}, ...]`;
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/smart-agent/gaps/:id/structure — réponse prose d'expert →
+// fiches proposées (mode Interview, SA-6). La question vient du trou.
+// ═══════════════════════════════════════════════════════════════
+export async function handleGapStructure(request, env, gapId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const { results } = await env.DB
+    .prepare("SELECT id, question FROM sa_gaps WHERE id = ? AND tenant_id = ? AND status = 'open'")
+    .bind(gapId, gate.tenant).all();
+  if (!results.length) return err('Trou introuvable', 404, origin);
+
+  const b = await parseBody(request);
+  const answer = (typeof b?.answer === 'string') ? b.answer.trim() : '';
+  if (answer.length < 10)   return err('Réponse trop courte (10 caractères minimum)', 400, origin);
+  if (answer.length > 8000) return err('Réponse trop longue (8 000 caractères maximum)', 400, origin);
+
+  const userContent = `QUESTION POSÉE :\n${results[0].question}\n\nRÉPONSE DE L'EXPERT :\n${answer}`;
+  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, userContent);
+  if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
+  return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════

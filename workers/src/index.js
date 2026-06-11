@@ -107,7 +107,7 @@ import { handleSmartAgentHealth,
          handleKortexUnitUpdate, handleKortexUnitDelete,
          handleKortexExtract, handleKortexSearch, handleKortexReindex,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
-         handleAgentChat, handleGapsList, handleGapDismiss,
+         handleAgentChat, handleGapsList, handleGapDismiss, handleGapStructure,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
          handleSuggestOpening,
          handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
@@ -167,6 +167,8 @@ export default {
       if (path === '/api/smart-agent/gaps'               && method === 'GET')  return handleGapsList(request, env);
       const saGapMatch = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/dismiss$/);
       if (saGapMatch && method === 'POST') return handleGapDismiss(request, env, saGapMatch[1]);
+      const saGapStructure = path.match(/^\/api\/smart-agent\/gaps\/([A-Za-z0-9-]+)\/structure$/);
+      if (saGapStructure && method === 'POST') return handleGapStructure(request, env, saGapStructure[1]);
       const saChatMatch = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/chat$/);
       if (saChatMatch && method === 'POST') return handleAgentChat(request, env, saChatMatch[1]);
       // SA-5 — publication d'un agent (pad, protégé par _gate dans le handler)

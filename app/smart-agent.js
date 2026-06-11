@@ -132,6 +132,8 @@ const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | 
 const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
 // Golden set (SA-4) — jeu de questions étalon de l'agent en cours de test
 const _gold = { items: [], loaded: false, busy: false, replay: null, addExpect: 'answer' };
+// SA-6 — mode Interview du savoir (parcours guidé pour combler les trous)
+const _iv = { active: false, idx: 0, gaps: [], phase: 'ask', answer: '', busy: false, proposals: [], checked: new Set(), error: null };
 
 // ═══════════════════════════════════════════════════════════════
 // API
@@ -262,6 +264,15 @@ function _onClick(e) {
     // ── Trous (scopés agent) ──
     if (act === 'gap-answer')   { _answerGap(_ag.gaps.find(g => g.id === actEl.dataset.id)); return; }
     if (act === 'gap-dismiss')  { _dismissGap(actEl.dataset.id); return; }
+    // ── Interview du savoir (SA-6) ──
+    if (act === 'iv-start')     { _startInterview(); return; }
+    if (act === 'iv-structure') { _ivStructure(); return; }
+    if (act === 'iv-skip')      { _ivNext(); return; }
+    if (act === 'iv-dismiss')   { _ivDismiss(); return; }
+    if (act === 'iv-toggle')    { _ivToggle(parseInt(actEl.dataset.i, 10)); return; }
+    if (act === 'iv-back')      { _iv.phase = 'ask'; _renderMain(); return; }
+    if (act === 'iv-commit')    { _ivCommit(); return; }
+    if (act === 'iv-quit')      { _ivQuit(); return; }
     // ── Golden set ──
     if (act === 'gold-add')     { _goldAdd(); return; }
     if (act === 'gold-del')     { _goldDel(actEl.dataset.id); return; }
@@ -469,7 +480,8 @@ function _renderMain() {
     } else if (_cur.tab === 'tester') {
         main.innerHTML = _testerHTML(); _bindChatInput(main);
     } else if (_cur.tab === 'trous') {
-        main.innerHTML = _gapsHTML();
+        main.innerHTML = _iv.active ? _interviewHTML() : _gapsHTML();
+        if (_iv.active && _iv.phase === 'ask') { main.querySelector('[data-slot="iv-answer"]')?.focus(); }
     } else { // reglages
         main.innerHTML = _agentFormHTML();
     }
@@ -1097,8 +1109,11 @@ function _gapsHTML() {
     </article>`;
     return `
     <section class="sa-kx">
-      <div class="sa-kx-head"><div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''} · la plus fréquente en tête</p></div></div>
-      <p class="sa-field-hint" style="margin-bottom:14px;">« Répondre » ouvre une fiche Q/R pré-remplie dans le Savoir de cet agent. Validez-la, et il saura répondre la prochaine fois.</p>
+      <div class="sa-kx-head">
+        <div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''} · la plus fréquente en tête</p></div>
+        <button class="sa-btn is-primary" data-act="iv-start">${icon('smart-agent', 15)} Démarrer l'interview</button>
+      </div>
+      <p class="sa-field-hint" style="margin-bottom:14px;">« Répondre » ouvre une fiche Q/R pré-remplie. Ou lancez l'<strong>interview</strong> : répondez en langage naturel, l'IA structure et comble les trous un par un.</p>
       <div class="sa-gaps-list">${_ag.gaps.map(row).join('')}</div>
     </section>`;
 }
@@ -1125,6 +1140,150 @@ async function _dismissGap(id) {
         _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
         _renderRail(); _renderMain();
     } catch (e) { _toast(e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-6 — INTERVIEW DU SAVOIR : parcours guidé pour combler les trous.
+// L'expert répond en prose ; l'IA structure en fiches typées (réutilise
+// le moteur d'extraction) ; valider comble le trou (resolve_gap_id).
+// ═══════════════════════════════════════════════════════════════
+function _interviewHTML() {
+    const total = _iv.gaps.length;
+    if (_iv.phase === 'done' || _iv.idx >= total) {
+        return `
+      <section class="sa-kx sa-iv">
+        <div class="sa-iv-done">
+          ${icon('check-circle', 40)}
+          <h2>Interview terminée</h2>
+          <p>Vous avez parcouru toutes les questions. Les fiches ajoutées sont en brouillon dans « Savoir » — validez-les quand vous voulez.</p>
+          <button class="sa-btn is-primary" data-act="iv-quit">${icon('chevron-left', 15)} Retour aux questions</button>
+        </div>
+      </section>`;
+    }
+    const g = _iv.gaps[_iv.idx];
+    const head = `
+      <div class="sa-iv-head">
+        <span class="sa-iv-progress">Question ${_iv.idx + 1} / ${total}</span>
+        <button class="sa-btn" data-act="iv-quit">${icon('x', 14)} Quitter</button>
+      </div>`;
+    if (_iv.phase === 'review') {
+        const props = _iv.proposals.map((p, i) => {
+            const t = KORTEX_TYPES.find(x => x.id === p.type) || { icon: 'kortex', label: p.type };
+            return `
+          <label class="sa-prop ${_iv.checked.has(i) ? 'is-on' : ''}" data-act="iv-toggle" data-i="${i}">
+            <span class="sa-prop-check">${_iv.checked.has(i) ? icon('check', 13) : ''}</span>
+            <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
+            <span class="sa-prop-txt"><strong>${_esc(p.title)}</strong>
+              <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ')).slice(0, 140)}</span></span>
+          </label>`;
+        }).join('');
+        return `
+      <section class="sa-kx sa-iv">
+        ${head}
+        <p class="sa-iv-q">${_esc(g.question)}</p>
+        <p class="sa-field-hint">L'IA a structuré votre réponse. Décochez ce qui ne convient pas, puis comblez le trou.</p>
+        <div class="sa-ex-props">${props}</div>
+        ${_iv.error ? `<p class="sa-ed-error">${_esc(_iv.error)}</p>` : ''}
+        <div class="sa-ed-actions">
+          <button class="sa-btn" data-act="iv-back">${icon('chevron-left', 15)} Reformuler</button>
+          <button class="sa-btn is-primary" data-act="iv-commit" ${(!_iv.checked.size || _iv.busy) ? 'disabled' : ''}>${icon('check', 15)} Combler (${_iv.checked.size}) et continuer</button>
+        </div>
+      </section>`;
+    }
+    return `
+      <section class="sa-kx sa-iv">
+        ${head}
+        <div class="sa-iv-card">
+          <span class="sa-iv-hits" title="Posée ${g.hits} fois">${g.hits}× demandée</span>
+          <p class="sa-iv-q">${_esc(g.question)}</p>
+        </div>
+        <textarea class="sa-textarea sa-iv-answer" data-slot="iv-answer" rows="5" placeholder="Répondez comme à un collègue, en langage naturel…">${_esc(_iv.answer)}</textarea>
+        ${_iv.error ? `<p class="sa-ed-error">${_esc(_iv.error)}</p>` : ''}
+        <div class="sa-ed-actions">
+          <button class="sa-iconbtn" data-act="iv-dismiss" title="Ignorer définitivement cette question">${icon('x', 15)}</button>
+          <button class="sa-btn" data-act="iv-skip">Passer</button>
+          <button class="sa-btn is-primary" data-act="iv-structure" ${_iv.busy ? 'disabled' : ''}>${_iv.busy ? 'Analyse…' : `${icon('sparkles', 15)} Structurer en fiche`} <em class="sa-credit-note">1 crédit IA</em></button>
+        </div>
+      </section>`;
+}
+
+function _startInterview() {
+    if (!_ag.gaps.length) return;
+    _iv.gaps = [..._ag.gaps];
+    _iv.idx = 0; _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null; _iv.busy = false;
+    _iv.active = true;
+    _renderMain();
+}
+
+async function _ivStructure() {
+    const ta = _root.querySelector('[data-slot="iv-answer"]');
+    const answer = (ta?.value || '').trim();
+    if (answer.length < 10) { _iv.error = 'Réponse trop courte (10 caractères minimum).'; _renderMain(); return; }
+    _iv.answer = answer; _iv.busy = true; _iv.error = null; _renderMain();
+    const g = _iv.gaps[_iv.idx];
+    try {
+        const res = await _api(`/gaps/${g.id}/structure`, { method: 'POST', body: { answer } });
+        _iv.proposals = res.proposals || [];
+        _iv.checked = new Set(_iv.proposals.map((_, i) => i));
+        if (!_iv.proposals.length) { _iv.error = 'Aucune fiche exploitable — précisez ou reformulez votre réponse.'; }
+        else { _iv.phase = 'review'; }
+    } catch (e) {
+        _iv.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Crédits IA épuisés ce mois.' : e.message;
+    }
+    _iv.busy = false; _renderMain();
+}
+
+function _ivToggle(i) {
+    if (Number.isNaN(i)) return;
+    if (_iv.checked.has(i)) _iv.checked.delete(i); else _iv.checked.add(i);
+    _renderMain();
+}
+
+async function _ivCommit() {
+    if (!_iv.checked.size || _iv.busy) return;
+    _iv.busy = true; _renderMain();
+    const g = _iv.gaps[_iv.idx];
+    let added = 0;
+    for (const i of _iv.checked) {
+        const p = _iv.proposals[i];
+        try {
+            await _api('/kortex/units', { method: 'POST', body: {
+                type: p.type, title: p.title, body: p.body, status: 'draft',
+                source_kind: 'interview', resolve_gap_id: g.id, agent_id: _cur.id,
+            }});
+            added++;
+        } catch (_) { /* on continue, bilan via toast */ }
+    }
+    _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
+    _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
+    _iv.busy = false;
+    _toast(added ? `Trou comblé — ${added} fiche${added > 1 ? 's' : ''} en brouillon (à valider dans Savoir).` : 'Aucune fiche ajoutée.', added ? 'ok' : 'error');
+    _renderRail();
+    _ivNext();
+}
+
+async function _ivDismiss() {
+    const g = _iv.gaps[_iv.idx];
+    try {
+        await _api(`/gaps/${g.id}/dismiss`, { method: 'POST' });
+        _ag.gaps = _ag.gaps.filter(x => x.id !== g.id);
+        _ag.gapsCount = Math.max(0, _ag.gapsCount - 1);
+        _renderRail();
+    } catch (e) { _toast(e.message, 'error'); }
+    _ivNext();
+}
+
+function _ivNext() {
+    _iv.idx++;
+    _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null;
+    if (_iv.idx >= _iv.gaps.length) _iv.phase = 'done';
+    _renderMain();
+}
+
+function _ivQuit() {
+    _iv.active = false;
+    _loadGaps();   // recharge la file (trous comblés / ignorés retirés)
+    _renderMain();
 }
 
 async function _deleteAgent(id) {
