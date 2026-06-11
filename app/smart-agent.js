@@ -261,10 +261,10 @@ function _onClick(e) {
     // ── Formulaire agent (création/édition) ──
     if (act === 'form-save')    { _saveAgentForm(); return; }
     if (act === 'form-cancel')  { _cancelForm(); return; }
-    if (act === 'form-posture') { _readAgentForm(); _ag.form.posture = actEl.dataset.v; _renderMain(); return; }
+    if (act === 'form-posture') { _readAgentForm(); _ag.form.posture = actEl.dataset.v; _renderMainKeepScroll(); return; }
     if (act === 'form-suggest') { _suggestOpening(); return; }
     // SA-8.0 — persona : objectif, gabarit métier, variantes de repli
-    if (act === 'form-objective') { _readAgentForm(); _ag.form.objective = actEl.dataset.v; _renderMain(); return; }
+    if (act === 'form-objective') { _readAgentForm(); _ag.form.objective = actEl.dataset.v; _renderMainKeepScroll(); return; }
     if (act === 'form-preset')  { _applyPreset(actEl.dataset.v); return; }
     if (act === 'fb-suggest')   { _suggestFallbacks(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
@@ -510,6 +510,17 @@ function _renderMain() {
     }
     if (_cur.tab === 'tester') _scrollChatBottom();
     else main.scrollTop = 0;
+}
+
+// SA-8.3 — re-render SANS perdre la position de lecture. _renderMain remet
+// le scroll en haut (voulu pour les navigations) ; pour une action DANS un
+// long formulaire (chip, suggestion IA, QR…), ça éjectait l'utilisateur en
+// haut de page à chaque clic. Ici : on mémorise, on re-rend, on restaure.
+function _renderMainKeepScroll() {
+    const main = _root.querySelector('[data-slot="main"]');
+    const top = main ? main.scrollTop : 0;
+    _renderMain();
+    if (main) main.scrollTop = top;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -890,13 +901,13 @@ async function _loadPublicLinks(agentId) {
         _ag.publish.link = (r.links || []).find(l => l.status === 'active') || null;
     } catch (_) { _ag.publish.link = null; }
     _ag.publish.loading = false;
-    if (_cur.id === agentId && _cur.tab === 'reglages') _renderMain();
+    if (_cur.id === agentId && _cur.tab === 'reglages') _renderMainKeepScroll();
 }
 
 async function _doPublish() {
     const id = _ag.form?.id;
     if (!id || _ag.publish.busy) return;
-    _ag.publish.busy = true; _renderMain();
+    _ag.publish.busy = true; _renderMainKeepScroll();
     try {
         await _api('/agents/' + id + '/publish', { method: 'POST' });
         if (_cur.agent) _cur.agent.status = 'published';
@@ -905,7 +916,7 @@ async function _doPublish() {
     } catch (e) {
         _toast(e.message || 'Publication impossible.', 'error');
     }
-    _ag.publish.busy = false; _renderMain();
+    _ag.publish.busy = false; _renderMainKeepScroll();
 }
 
 function _copyPublic(url) {
@@ -915,7 +926,7 @@ function _copyPublic(url) {
 
 // QR généré à la demande (lib chargée depuis esm.sh, autorisée par la CSP).
 async function _toggleQr() {
-    if (_ag.publish.qr) { _ag.publish.qr = null; _renderMain(); return; }
+    if (_ag.publish.qr) { _ag.publish.qr = null; _renderMainKeepScroll(); return; }
     const url = _ag.publish.link?.url;
     if (!url) return;
     try {
@@ -927,7 +938,7 @@ async function _toggleQr() {
     } catch (_) {
         _ag.publish.qr = '<p class="sa-pub-note">QR indisponible — partagez le lien.</p>';
     }
-    _renderMain();
+    _renderMainKeepScroll();
 }
 
 async function _revokePublic(linkId) {
@@ -941,7 +952,7 @@ async function _revokePublic(linkId) {
     } catch (e) {
         _toast(e.message || 'Impossible de dépublier.', 'error');
     }
-    _renderMain();
+    _renderMainKeepScroll();
 }
 
 async function _savePublicSettings() {
@@ -1010,7 +1021,7 @@ function _applyPreset(presetId) {
         fallback:  p.data.fallback,
     });
     _toast(`Gabarit « ${p.label} » appliqué — personnalisez les [crochets] de la mission.`);
-    _renderMain();
+    _renderMainKeepScroll();
 }
 
 // SA-8.0 — variantes de repli : générées UNE FOIS ici (gratuit), servies
@@ -1018,7 +1029,7 @@ function _applyPreset(presetId) {
 async function _suggestFallbacks() {
     _readAgentForm();
     if (!_ag.form.mission) { _formError('Renseignez d\'abord la mission.'); return; }
-    _ag.fbBusy = true; _ag.formError = null; _renderMain();
+    _ag.fbBusy = true; _ag.formError = null; _renderMainKeepScroll();
     try {
         const r = await _api('/suggest-fallbacks', {
             method: 'POST',
@@ -1027,7 +1038,7 @@ async function _suggestFallbacks() {
         });
         if (Array.isArray(r.variants) && r.variants.length) _ag.form.fallbackVariants = r.variants;
     } catch (e) { _toast(e.message, 'error'); }
-    _ag.fbBusy = false; _renderMain();
+    _ag.fbBusy = false; _renderMainKeepScroll();
 }
 
 // Lit le formulaire agent (DOM → _ag.form).
@@ -1052,14 +1063,14 @@ function _readAgentForm() {
     // posture & objectif : pilotés par les chips (déjà dans d.posture / d.objective)
 }
 
-function _formError(msg) { _ag.formError = msg || null; _renderMain(); }
+function _formError(msg) { _ag.formError = msg || null; _renderMainKeepScroll(); }
 
 // « Proposer un accueil avec l'IA » : génère depuis nom/mission/posture
 // courants (endpoint sans état), puis remplit le champ Accueil.
 async function _suggestOpening() {
     _readAgentForm();
     if (!_ag.form.mission) { _formError('Renseignez d\'abord la mission.'); return; }
-    _ag.suggestBusy = true; _ag.formError = null; _renderMain();
+    _ag.suggestBusy = true; _ag.formError = null; _renderMainKeepScroll();
     try {
         const r = await _api('/suggest-opening', {
             method: 'POST',
@@ -1067,7 +1078,7 @@ async function _suggestOpening() {
         });
         if (r.opening) _ag.form.opening = r.opening;
     } catch (e) { _toast(e.message, 'error'); }
-    _ag.suggestBusy = false; _renderMain();
+    _ag.suggestBusy = false; _renderMainKeepScroll();
 }
 
 function _agentPayload() {
@@ -1103,7 +1114,7 @@ async function _saveAgentForm() {
             _kx.scope = 'private';
             _loadSharedVault();   // SA-4.4.2 — le dossier a pu changer → recharge le coffre partagé
             _toast('Agent enregistré.');
-            _renderRail(); _renderMain();
+            _renderRail(); _renderMainKeepScroll();
         } else {
             // Création — puis on entre dans l'agent (onglet Savoir).
             const r = await _api('/agents', { method: 'POST', body: _agentPayload() });
@@ -1594,6 +1605,13 @@ async function _sendChat() {
     const ta = main.querySelector('[data-slot="chat-text"]');
     const message = (ta?.value || '').trim();
     if (!message) return;
+
+    // SA-8.3 — une dictée encore active re-remplirait le champ après l'envoi
+    // (résultat final tardif) : on la coupe net, sans résultat.
+    if (_voice.listening) {
+        try { _voice.rec && _voice.rec.abort(); } catch (_) {}
+        _voice.listening = false;
+    }
 
     _chat.messages.push({ role: 'user', content: message });
     _chat.busy = true;

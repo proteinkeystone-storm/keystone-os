@@ -154,7 +154,7 @@
       background: #fff;
       border-radius: 22px;
       padding: 11px 16px;
-      font: inherit; font-size: 15px;
+      font: inherit; font-size: 16px;   /* < 16px = zoom automatique iOS au focus */
       color: var(--sa-body);
       outline: none;
       resize: none;
@@ -271,22 +271,28 @@
     let _voiceOn = false;
     try { _voiceOn = localStorage.getItem('sa_voice_on') === '1'; } catch (_) {}
     let _rec = null, _listening = false;
-    let _voices = [], _voicesReady = false;
+    let _voices = [], _voicesReady = false, _lastUtter = null;
 
     // Voix : choisir la PLUS NATURELLE dispo (la voix par défaut est souvent
-    // « robot » bas de gamme). getVoices() est asynchrone sur Chrome.
+    // « robot » bas de gamme). getVoices() est asynchrone sur Chrome, et sur
+    // iOS Safari `voiceschanged` ne se déclenche parfois JAMAIS : on relit la
+    // liste à intervalles courts au démarrage, et SURTOUT à chaque lecture
+    // (les objets voix iOS périment entre deux speak).
+    function refreshVoices() {
+      try { _voices = window.speechSynthesis.getVoices() || []; } catch (_) { _voices = []; }
+      return _voices;
+    }
     function ensureVoices() {
       if (!HAS_TTS) return;
-      try {
-        _voices = window.speechSynthesis.getVoices() || [];
-        if (!_voicesReady) {
-          _voicesReady = true;
-          window.speechSynthesis.addEventListener('voiceschanged', () => {
-            _voices = window.speechSynthesis.getVoices() || [];
-            fillVoicePicker();
-          });
-        }
-      } catch (_) {}
+      refreshVoices();
+      if (!_voicesReady) {
+        _voicesReady = true;
+        try {
+          window.speechSynthesis.addEventListener('voiceschanged', () => { refreshVoices(); fillVoicePicker(); });
+        } catch (_) {}
+        setTimeout(() => { if (!_voices.length) { refreshVoices(); fillVoicePicker(); } }, 400);
+        setTimeout(() => { if (!_voices.length) { refreshVoices(); fillVoicePicker(); } }, 1500);
+      }
     }
     function frVoices() { return _voices.filter(v => /^fr\b/i.test((v.lang || '').replace('_', '-'))); }
     function voiceScore(v) {
@@ -301,9 +307,15 @@
     function bestFrVoice() { const fr = frVoices(); return fr.length ? fr.slice().sort((a, b) => voiceScore(b) - voiceScore(a))[0] : null; }
     function currentVoiceName() { try { return localStorage.getItem('sa_voice_name') || ''; } catch (_) { return ''; } }
     function chosenVoice() {
+      refreshVoices();   // iOS : liste FRAÎCHE à chaque lecture (objets périmés sinon)
       const name = currentVoiceName();
       if (name) { const f = _voices.find(v => v.name === name); if (f) return f; }
-      return bestFrVoice();
+      const best = bestFrVoice();
+      // FIGE le choix automatique : sans ça, la liste iOS s'étoffe entre deux
+      // lectures et la « meilleure voix » change (une réponse Amélie, la
+      // suivante Thomas le robot). Première résolution = on la mémorise.
+      if (best) { try { localStorage.setItem('sa_voice_name', best.name); } catch (_) {} }
+      return best;
     }
     function fillVoicePicker() {
       const sel = document.getElementById('sa-voice-pick');
@@ -316,14 +328,7 @@
     }
     function setVoiceName(name) {
       try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
-      if (!HAS_TTS) return;
-      try {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance('Bonjour, voici ma voix.');
-        const v = chosenVoice();
-        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
-        window.speechSynthesis.speak(u);
-      } catch (_) {}
+      _speakRaw('Bonjour, voici ma voix.');   // échantillon par le chemin robuste
     }
 
     const SVG_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
@@ -332,15 +337,33 @@
         ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>'
         : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
     }
-    function speak(text) {
-      if (!_voiceOn || !HAS_TTS || !text) return;
+    // Construit et joue l'utterance : voix résolue à l'instant T, langue
+    // TOUJOURS posée (sans elle, iOS retombe sur une voix anglaise robot),
+    // référence gardée (sans elle, Chrome garbage-collecte et coupe net).
+    function _speakNow(text) {
+      const u = new SpeechSynthesisUtterance(text);
+      const v = chosenVoice();
+      if (v) u.voice = v;
+      u.lang = (v && v.lang) ? v.lang : 'fr-FR';
+      _lastUtter = u;
+      window.speechSynthesis.speak(u);
+    }
+    function _speakRaw(text) {
+      if (!HAS_TTS || !text) return;
       try {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
-        const v = chosenVoice();
-        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
-        window.speechSynthesis.speak(u);
+        const synth = window.speechSynthesis;
+        if (synth.speaking || synth.pending) {
+          synth.cancel();
+          // iOS saute l'utterance si speak() suit cancel() dans le même tick.
+          setTimeout(() => { try { _speakNow(text); } catch (_) {} }, 120);
+        } else {
+          _speakNow(text);
+        }
       } catch (_) {}
+    }
+    function speak(text) {
+      if (!_voiceOn || !text) return;
+      _speakRaw(String(text).replace(/\[\d{1,2}\]/g, ''));
     }
     function toggleVoice() {
       _voiceOn = !_voiceOn;
@@ -369,12 +392,18 @@
         const base = (input.value || '').trim();
         _rec.onstart = () => { _listening = true; mic && mic.classList.add('is-listening'); };
         _rec.onresult = (e) => {
+          if (_busy) return;   // un résultat tardif ne doit pas re-remplir le champ vidé à l'envoi
           let txt = '';
           for (let k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
           input.value = (base ? base + ' ' : '') + txt;
           input.dispatchEvent(new Event('input'));
         };
-        _rec.onerror = () => { _listening = false; mic && mic.classList.remove('is-listening'); };
+        _rec.onerror = (e) => {
+          _listening = false; mic && mic.classList.remove('is-listening');
+          if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) {
+            addBubble('agent', 'Le micro est bloqué par votre navigateur — autorisez-le dans les réglages du site pour dicter votre question.', true);
+          }
+        };
         _rec.onend = () => { _listening = false; mic && mic.classList.remove('is-listening'); input.focus(); };
         _rec.start();
       } catch (_) { _listening = false; }
@@ -419,6 +448,7 @@
         <div class="sa-composer">
           <div class="sa-composer-inner">
             <textarea class="sa-input" id="sa-input" rows="1" maxlength="500"
+                      autocapitalize="sentences" autocomplete="off" enterkeyhint="send"
                       placeholder="Posez votre question…" aria-label="Votre question"></textarea>
             ${HAS_SR ? `<button class="sa-mic" id="sa-mic" type="button" aria-label="Dicter votre question" title="Dicter votre question">${SVG_MIC}</button>` : ''}
             <button class="sa-send" id="sa-send" aria-label="Envoyer">
@@ -439,6 +469,10 @@
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
       });
       send.addEventListener('click', submit);
+      // Clavier virtuel : quand il s'ouvre (focus / resize du viewport visuel),
+      // on garde le fil collé en bas — sinon le composer disparaît derrière.
+      input.addEventListener('focus', () => setTimeout(scrollDown, 250));
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', scrollDown);
 
       const voiceBtn = document.getElementById('sa-voice');
       if (voiceBtn) voiceBtn.addEventListener('click', toggleVoice);
@@ -484,6 +518,14 @@
       const message = (input.value || '').trim();
       if (!message) return;
 
+      // Une dictée encore active re-remplirait le champ après l'envoi
+      // (résultat final tardif) : on la coupe net, sans résultat.
+      if (_listening) {
+        try { _rec && _rec.abort(); } catch (_) {}
+        _listening = false;
+        document.getElementById('sa-mic')?.classList.remove('is-listening');
+      }
+
       _busy = true;
       document.getElementById('sa-send').disabled = true;
       input.value = ''; input.style.height = 'auto';
@@ -497,18 +539,22 @@
           body: JSON.stringify({ message, session_id: _sessionId }),
         });
         const data = await res.json().catch(() => ({}));
-        hideTyping();
         if (!res.ok) {
           addBubble('agent', data.error || 'Une erreur est survenue. Réessayez.', true);
         } else {
-          if (data.session_id) _sessionId = data.session_id;
+          if (data.session_id) {
+            _sessionId = data.session_id;
+            // La conversation survit à un rafraîchissement PENDANT la visite
+            // (sessionStorage : rien ne persiste après fermeture — RGPD).
+            try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
+          }
           addBubble('agent', data.reply || '', !!data.gapped);
           speak(data.reply || '');
         }
       } catch (_) {
-        hideTyping();
         addBubble('agent', 'Connexion impossible. Vérifiez votre réseau et réessayez.', true);
       } finally {
+        hideTyping();
         _busy = false;
         document.getElementById('sa-send').disabled = false;
         document.getElementById('sa-input')?.focus();
@@ -518,6 +564,7 @@
     async function load() {
       _slug = getSlug();
       if (!_slug) { renderError('Lien invalide', 'Ce lien ne correspond à aucun assistant.'); return; }
+      try { _sessionId = sessionStorage.getItem('sa_sess_' + _slug) || null; } catch (_) {}
       try {
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}`);
         if (!res.ok) { renderError('Assistant introuvable', 'Ce lien n\'est plus actif ou n\'existe pas.'); return; }

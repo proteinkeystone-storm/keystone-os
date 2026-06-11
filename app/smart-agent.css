@@ -1310,6 +1310,9 @@
 
 @media (max-width: 520px) {
   .sa-posture-grid { grid-template-columns: 1fr; }
+  /* SA-8.3 — sous 16px, iOS zoome automatiquement la page au focus d'un
+     champ : sur mobile, toute saisie passe à 16px. */
+  .sa-input, .sa-textarea { font-size: 16px; }
 }
 
 /* ═══ Sprint SA-4.3 — agents cloisonnés (badge de rail) ════════ */
