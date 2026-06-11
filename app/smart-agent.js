@@ -907,8 +907,7 @@ function _testerHTML() {
           <p class="sa-kx-sub">Comme le verront vos visiteurs — réponses ancrées sur le savoir de cet agent.</p>
         </div>
         <div class="sa-voice-ctrl">
-          ${(_ttsSupported() && _voice.on) ? `<select class="sa-voice-pick" data-act="chat-voice-pick" title="Choisir la voix">${_voiceOptionsHTML()}</select>` : ''}
-          ${_ttsSupported() ? `<button class="sa-iconbtn sa-voice-toggle ${_voice.on ? 'is-on' : ''}" data-act="chat-voice" title="${_voice.on ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}" aria-pressed="${_voice.on ? 'true' : 'false'}">${icon(_voice.on ? 'volume-2' : 'volume-x', 17)}</button>` : ''}
+          ${(typeof WebAssembly !== 'undefined') ? `<button class="sa-iconbtn sa-voice-toggle ${_voice.on ? 'is-on' : ''}" data-act="chat-voice" title="${_voice.on ? 'Couper la lecture (Siwis)' : 'Lire les réponses avec Siwis (voix neuronale)'}" aria-pressed="${_voice.on ? 'true' : 'false'}">${icon(_voice.on ? 'volume-2' : 'volume-x', 17)}</button>` : ''}
         </div>
       </div>
       ${_sandboxHTML()}
@@ -1386,10 +1385,6 @@ function _bindChatInput(main) {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _sendChat(); }
     });
     if (!_chat.busy) setTimeout(() => ta.focus(), 30);
-    // Vocal : charger les voix + brancher le sélecteur (change immédiat + échantillon).
-    _ensureVoices();
-    const vsel = _root.querySelector('[data-act="chat-voice-pick"]');
-    if (vsel) vsel.addEventListener('change', () => _setVoiceName(vsel.value));
 }
 
 function _scrollChatBottom() {
@@ -1402,63 +1397,8 @@ function _scrollChatBottom() {
 // si le navigateur sait faire (dégradation propre sur Firefox notamment).
 function _speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 function _ttsSupported() { return typeof window !== 'undefined' && 'speechSynthesis' in window; }
-// Voix : liste + choix de la PLUS NATURELLE par défaut (la voix système par
-// défaut est souvent « robot » bas de gamme). getVoices() est asynchrone sur
-// Chrome → on (re)charge sur l'évènement voiceschanged.
-let _voicesReady = false;
-function _ensureVoices() {
-    if (!_ttsSupported()) return;
-    try {
-        _voice.voices = window.speechSynthesis.getVoices() || [];
-        if (!_voicesReady) {
-            _voicesReady = true;
-            window.speechSynthesis.addEventListener('voiceschanged', () => {
-                _voice.voices = window.speechSynthesis.getVoices() || [];
-                _fillVoiceSelect();
-            });
-        }
-    } catch (_) {}
-}
-function _frVoices() { return (_voice.voices || []).filter(v => /^fr\b/i.test((v.lang || '').replace('_', '-'))); }
-function _voiceScore(v) {
-    const n = (v.name || '').toLowerCase();
-    let s = 0;
-    if (n.includes('google')) s += 100;
-    if (/(siri|premium|enhanced|neural|natural|amélie|amelie|aurélie|aurelie|audrey|thomas|chantal|marie)/.test(n)) s += 60;
-    if (n.includes('compact')) s -= 60;
-    if (v.localService === false) s += 8;
-    return s;
-}
-function _bestFrVoice() { const fr = _frVoices(); return fr.length ? fr.slice().sort((a, b) => _voiceScore(b) - _voiceScore(a))[0] : null; }
-function _currentVoiceName() { try { return localStorage.getItem('sa_voice_name') || ''; } catch (_) { return ''; } }
-function _chosenVoice() {
-    const name = _currentVoiceName();
-    if (name) { const f = (_voice.voices || []).find(v => v.name === name); if (f) return f; }
-    return _bestFrVoice();
-}
-function _voiceOptionsHTML() {
-    const fr = _frVoices();
-    const sel = _currentVoiceName() || (_bestFrVoice() && _bestFrVoice().name) || '';
-    // Voix neuronale Piper en tête (qualité supérieure), puis les voix système.
-    const piper = `<option value="${PIPER_VOICE_KEY}"${sel === PIPER_VOICE_KEY ? ' selected' : ''}>Siwis — neuronale (IA, haute qualité)</option>`;
-    if (!fr.length) return piper;
-    return piper + fr.map(v => `<option value="${_escAttr(v.name)}"${v.name === sel ? ' selected' : ''}>${_esc(v.name)}</option>`).join('');
-}
-function _fillVoiceSelect() { const s = _root && _root.querySelector('[data-act="chat-voice-pick"]'); if (s) s.innerHTML = _voiceOptionsHTML(); }
-function _setVoiceName(name) {
-    try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
-    // Échantillon immédiat pour entendre la voix choisie.
-    if (name === PIPER_VOICE_KEY) { _piperSpeak('Bonjour, voici ma voix.'); return; }
-    if (!_ttsSupported()) return;
-    try {
-        window.speechSynthesis.cancel();
-        if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
-        const u = new SpeechSynthesisUtterance('Bonjour, voici ma voix.');
-        const v = _chosenVoice();
-        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
-        window.speechSynthesis.speak(u);
-    } catch (_) {}
-}
+// La lecture utilise UNIQUEMENT la voix neuronale Siwis (cf. _piperSpeak /
+// app/lib/piper-tts.js). Les voix système speechSynthesis ont été retirées.
 function _startDictation(slotSel) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
@@ -1486,8 +1426,7 @@ function _startDictation(slotSel) {
 function _toggleVoice() {
     _voice.on = !_voice.on;
     try { localStorage.setItem('sa_voice_on', _voice.on ? '1' : '0'); } catch (_) {}
-    if (_voice.on) { _ensureVoices(); }
-    else {
+    if (!_voice.on) {
         if (_ttsSupported()) window.speechSynthesis.cancel();
         if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
     }
@@ -1495,17 +1434,7 @@ function _toggleVoice() {
 }
 function _speak(text) {
     if (!_voice.on || !text) return;
-    // Voix neuronale Piper choisie → moteur maison ; sinon voix système.
-    if (_currentVoiceName() === PIPER_VOICE_KEY) { _piperSpeak(text); return; }
-    if (!_ttsSupported()) return;
-    try {
-        window.speechSynthesis.cancel();
-        if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
-        const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
-        const v = _chosenVoice();
-        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
-        window.speechSynthesis.speak(u);
-    } catch (_) {}
+    _piperSpeak(text);    // voix neuronale Siwis — seule voix proposée
 }
 // Lecture via le moteur Piper maison (import paresseux + génération + audio).
 // Voyant « is-loading » sur le bouton haut-parleur pendant le travail (1er
