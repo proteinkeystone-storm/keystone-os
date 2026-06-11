@@ -123,7 +123,9 @@ const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'lis
     // Formulaire agent (SA-4.3, ex-wizard) : données en cours
     form: null, formBusy: false, formError: null, suggestBusy: false,
     // File des trous (SA-4) — scopée par agent (SA-4.3)
-    gaps: [], gapsCount: 0 };
+    gaps: [], gapsCount: 0,
+    // SA-5.1 — publication publique (lien/QR) de l'agent courant
+    publish: { loading: false, busy: false, link: null, qr: null } };
 // SA-4.3 — SILO : agent courant + onglet actif. _cur.id null = liste d'agents.
 const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | trous | reglages
 // Conversation en cours avec un agent (SA-3) — sert aussi de bac à sable (SA-4)
@@ -248,6 +250,11 @@ function _onClick(e) {
     if (act === 'form-posture') { _readAgentForm(); _ag.form.posture = actEl.dataset.v; _renderMain(); return; }
     if (act === 'form-suggest') { _suggestOpening(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
+    // ── Publication publique (SA-5.1) ──
+    if (act === 'pub-create')   { _doPublish(); return; }
+    if (act === 'pub-copy')     { _copyPublic(actEl.dataset.url); return; }
+    if (act === 'pub-qr')       { _toggleQr(); return; }
+    if (act === 'pub-revoke')   { _revokePublic(actEl.dataset.id); return; }
     // ── Chat / bac à sable ──
     if (act === 'chat-send')    { _sendChat(); return; }
     if (act === 'chat-cite')    { _openUnitFromChat(actEl.dataset.uid); return; }
@@ -683,6 +690,9 @@ function _openForm(agent) {
         folderId: agent?.folder_id ?? null,
     };
     _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false;
+    // SA-5.1 — état de publication, rechargé pour un agent existant.
+    _ag.publish = { loading: !!agent?.id, busy: false, link: null, qr: null };
+    if (agent?.id) _loadPublicLinks(agent.id);
     // Création (hors agent) → bascule en mode formulaire plein écran.
     // Onglet Réglages (dans un agent) → _setTab gère le rendu.
     if (!_cur.id) { _ag.mode = 'form'; _renderMain(); }
@@ -738,7 +748,100 @@ function _agentFormHTML() {
             ? `<button class="sa-btn" data-act="form-cancel">Annuler</button>`
             : `<button class="sa-btn is-danger" data-act="form-delete">${icon('trash-2', 15)} Supprimer l'agent</button>`}
       </div>
+      ${!isNew ? _publishHTML() : ''}
     </section>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-5.1 — Publication publique (lien / QR) de l'agent
+// ═══════════════════════════════════════════════════════════════
+function _publishHTML() {
+    const p = _ag.publish || {};
+    if (p.loading) {
+        return `<div class="sa-pub"><div class="sa-pub-head">${icon('share-2', 16)} Partager</div>
+          <p class="sa-pub-note">Chargement…</p></div>`;
+    }
+    if (!p.link) {
+        return `<div class="sa-pub">
+          <div class="sa-pub-head">${icon('share-2', 16)} Partager avec le public</div>
+          <p class="sa-pub-note">Publiez cet agent : vos visiteurs lui parlent par un lien ou un QR code, sans compte. Les réponses restent ancrées sur son savoir, et l'IA est décomptée de vos crédits.</p>
+          <button class="sa-btn is-primary" data-act="pub-create" ${p.busy ? 'disabled' : ''}>${icon('globe', 15)} ${p.busy ? 'Publication…' : 'Publier cet agent'}</button>
+        </div>`;
+    }
+    const url = p.link.url || '';
+    return `<div class="sa-pub is-live">
+      <div class="sa-pub-head">${icon('globe', 16)} En ligne — accessible au public</div>
+      <p class="sa-pub-note">Partagez ce lien ou ce QR. Toute personne peut interroger l'agent, sans compte.</p>
+      <div class="sa-pub-linkrow">
+        <input class="sa-input sa-pub-url" value="${_escAttr(url)}" readonly onclick="this.select()">
+        <button class="sa-btn" data-act="pub-copy" data-url="${_escAttr(url)}" title="Copier le lien">${icon('copy', 15)}</button>
+      </div>
+      <div class="sa-pub-actions">
+        <button class="sa-btn" data-act="pub-qr">${icon('qr-code', 15)} ${p.qr ? 'Masquer le QR' : 'Afficher le QR'}</button>
+        <button class="sa-btn is-danger" data-act="pub-revoke" data-id="${_escAttr(p.link.id || '')}">${icon('trash-2', 15)} Dépublier</button>
+      </div>
+      ${p.qr ? `<div class="sa-pub-qr">${p.qr}</div>` : ''}
+    </div>`;
+}
+
+// Recharge le lien public ACTIF de l'agent (le plus récent).
+async function _loadPublicLinks(agentId) {
+    try {
+        const r = await _api('/agents/' + agentId + '/links');
+        _ag.publish.link = (r.links || []).find(l => l.status === 'active') || null;
+    } catch (_) { _ag.publish.link = null; }
+    _ag.publish.loading = false;
+    if (_cur.id === agentId && _cur.tab === 'reglages') _renderMain();
+}
+
+async function _doPublish() {
+    const id = _ag.form?.id;
+    if (!id || _ag.publish.busy) return;
+    _ag.publish.busy = true; _renderMain();
+    try {
+        await _api('/agents/' + id + '/publish', { method: 'POST' });
+        if (_cur.agent) _cur.agent.status = 'published';
+        await _loadPublicLinks(id);          // récupère le lien + son id
+        _toast('Agent publié — votre lien est prêt à partager.');
+    } catch (e) {
+        _toast(e.message || 'Publication impossible.', 'error');
+    }
+    _ag.publish.busy = false; _renderMain();
+}
+
+function _copyPublic(url) {
+    if (!url) return;
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => _toast('Lien copié'), () => {});
+}
+
+// QR généré à la demande (lib chargée depuis esm.sh, autorisée par la CSP).
+async function _toggleQr() {
+    if (_ag.publish.qr) { _ag.publish.qr = null; _renderMain(); return; }
+    const url = _ag.publish.link?.url;
+    if (!url) return;
+    try {
+        const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+        const qrcode = mod.default || mod;
+        const qr = qrcode(0, 'M');
+        qr.addData(url); qr.make();
+        _ag.publish.qr = qr.createSvgTag({ cellSize: 5, margin: 2 });
+    } catch (_) {
+        _ag.publish.qr = '<p class="sa-pub-note">QR indisponible — partagez le lien.</p>';
+    }
+    _renderMain();
+}
+
+async function _revokePublic(linkId) {
+    if (!linkId) return;
+    if (!confirm('Dépublier cet agent ? Le lien et le QR cesseront immédiatement de fonctionner.')) return;
+    try {
+        await _api('/links/' + linkId + '/revoke', { method: 'POST' });
+        _ag.publish.link = null; _ag.publish.qr = null;
+        _toast('Agent dépublié.');
+    } catch (e) {
+        _toast(e.message || 'Impossible de dépublier.', 'error');
+    }
+    _renderMain();
 }
 
 function _testerHTML() {

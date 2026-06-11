@@ -1235,3 +1235,35 @@
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ── SA-5.1 — Publication publique (lien / QR) ─────────────────── */
+.sa-pub {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+.sa-pub.is-live {
+  background: color-mix(in srgb, var(--green) 6%, var(--navy2));
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
+}
+.sa-pub-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 800; letter-spacing: -0.01em;
+  color: var(--text); margin-bottom: 8px;
+}
+.sa-pub-head .ws-icon { flex: none; color: var(--gold); }
+.sa-pub.is-live .sa-pub-head .ws-icon { color: var(--green); }
+.sa-pub-note { font-size: 12.5px; line-height: 1.55; color: var(--tx2); margin: 0 0 12px; }
+.sa-pub-linkrow { display: flex; gap: 8px; margin-bottom: 10px; }
+.sa-pub-url { flex: 1; font-size: 13px; font-family: 'SF Mono', Menlo, monospace; }
+.sa-pub-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sa-pub-qr {
+  margin-top: 14px;
+  display: flex; justify-content: center;
+  padding: 16px; border-radius: 12px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+.sa-pub-qr svg { width: 184px; height: 184px; display: block; }

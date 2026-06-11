@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a2741">
+  <title>Assistant</title>
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       SMART AGENT · Page publique de dialogue (SA-5.1)
+       Chat anonyme mobile-first, charte Apple premium navy/gold.
+       Le visiteur n'a pas de compte : il interroge un agent publié,
+       qui répond UNIQUEMENT depuis son coffre de savoir (ancré).
+       ═══════════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sa-brand:   #0a2741;
+      --sa-brand-2: #0d3254;
+      --sa-accent:  #c9b48a;
+      --sa-accent-2:#a8895a;
+      --sa-body:    #1a2a3a;
+      --sa-muted:   #6b7a8d;
+      --sa-light:   #f4f6f9;
+      --sa-border:  #dde3ec;
+      --sa-bg:      #eef1f5;
+      --sa-danger:  #e05c5c;
+    }
+
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background: var(--sa-bg);
+      color: var(--sa-body);
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
+
+    /* ── États plein écran (chargement / erreur) ───────────── */
+    .sa-full {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 40px 28px;
+    }
+    .sa-spinner {
+      width: 34px; height: 34px;
+      border: 3px solid var(--sa-border);
+      border-top-color: var(--sa-accent);
+      border-radius: 50%;
+      animation: sa-spin .9s linear infinite;
+      margin-bottom: 18px;
+    }
+    @keyframes sa-spin { to { transform: rotate(360deg); } }
+    .sa-full h1 {
+      font-size: 22px; font-weight: 900; letter-spacing: -.03em;
+      color: var(--sa-brand); margin-bottom: 8px;
+    }
+    .sa-full p { font-size: 14px; color: var(--sa-muted); line-height: 1.6; max-width: 360px; }
+
+    /* ── Header ────────────────────────────────────────────── */
+    .sa-header {
+      position: sticky; top: 0; z-index: 30;
+      background: var(--sa-brand);
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 13px;
+      display: flex; align-items: center; gap: 13px;
+      box-shadow: 0 2px 16px rgba(0, 0, 0, .16);
+    }
+    .sa-avatar {
+      flex-shrink: 0;
+      width: 40px; height: 40px; border-radius: 11px;
+      background: linear-gradient(135deg, var(--sa-accent-2), var(--sa-accent));
+      color: var(--sa-brand);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900;
+    }
+    .sa-head-txt { flex: 1; min-width: 0; }
+    .sa-head-tag {
+      font-size: 10px; font-weight: 800; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--sa-accent); opacity: .9;
+    }
+    .sa-head-name {
+      font-size: 16px; font-weight: 900; color: #fff;
+      letter-spacing: -.02em; line-height: 1.25;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* ── Fil de discussion ─────────────────────────────────── */
+    .sa-thread {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px 8px;
+    }
+    .sa-thread-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+    .sa-msg { display: flex; max-width: 86%; }
+    .sa-msg-bubble {
+      padding: 12px 15px;
+      border-radius: 16px;
+      font-size: 15px; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .sa-msg.agent { align-self: flex-start; }
+    .sa-msg.agent .sa-msg-bubble {
+      background: #fff;
+      color: var(--sa-body);
+      border-bottom-left-radius: 5px;
+      box-shadow: 0 1px 7px rgba(10, 39, 65, .07);
+    }
+    .sa-msg.user { align-self: flex-end; }
+    .sa-msg.user .sa-msg-bubble {
+      background: var(--sa-brand);
+      color: #fff;
+      border-bottom-right-radius: 5px;
+    }
+    .sa-msg.agent.is-fallback .sa-msg-bubble {
+      background: var(--sa-light);
+      color: var(--sa-muted);
+      border: 1px dashed var(--sa-border);
+      font-style: italic;
+    }
+
+    /* ── Indicateur de frappe ──────────────────────────────── */
+    .sa-typing { display: flex; gap: 4px; padding: 14px 16px; }
+    .sa-typing span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--sa-muted); opacity: .5;
+      animation: sa-bounce 1.2s infinite ease-in-out;
+    }
+    .sa-typing span:nth-child(2) { animation-delay: .15s; }
+    .sa-typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes sa-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-5px); opacity: .9; } }
+
+    /* ── Barre de saisie ───────────────────────────────────── */
+    .sa-composer {
+      position: sticky; bottom: 0;
+      background: rgba(238, 241, 245, .92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid var(--sa-border);
+      padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    }
+    .sa-composer-inner {
+      max-width: 720px; margin: 0 auto;
+      display: flex; align-items: flex-end; gap: 9px;
+    }
+    .sa-input {
+      flex: 1;
+      border: 1.5px solid var(--sa-border);
+      background: #fff;
+      border-radius: 22px;
+      padding: 11px 16px;
+      font: inherit; font-size: 15px;
+      color: var(--sa-body);
+      outline: none;
+      resize: none;
+      max-height: 120px;
+      line-height: 1.4;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .sa-input:focus { border-color: var(--sa-accent); box-shadow: 0 0 0 3px rgba(201, 180, 138, .18); }
+    .sa-send {
+      flex-shrink: 0;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, var(--sa-accent-2), var(--sa-accent));
+      color: var(--sa-brand);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 12px rgba(201, 180, 138, .3);
+      transition: transform .15s, opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sa-send:active { transform: scale(.92); }
+    .sa-send:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .sa-send svg { width: 20px; height: 20px; }
+
+    .sa-foot {
+      text-align: center;
+      font-size: 11px; color: var(--sa-muted); opacity: .7;
+      padding: 8px 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="sa-root">
+    <div class="sa-full">
+      <div class="sa-spinner" aria-hidden="true"></div>
+      <p>Chargement…</p>
+    </div>
+  </div>
+
+  <script type="module">
+    /* ═══════════════════════════════════════════════════════════════
+       Smart Agent Public · dialogue anonyme (SA-5.1)
+       Aucune authentification : on lit le slug du lien, on charge
+       l'accueil (GET /p/:slug), puis chaque question passe par
+       POST /p/:slug/chat (le worker débite le propriétaire, applique
+       le rate-limit et n'expose jamais le coffre).
+       ═══════════════════════════════════════════════════════════════ */
+    const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
+
+    let _slug = null;
+    let _sessionId = null;
+    let _busy = false;
+
+    function escape(s) {
+      return String(s == null ? '' : s)
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;').replaceAll('\'', '&#039;');
+    }
+
+    // Le rewrite Vercel /a/:slug est transparent (l'URL du navigateur reste
+    // /a/:slug) → on lit le slug depuis le chemin, avec repli sur ?s=.
+    function getSlug() {
+      const m = location.pathname.match(/^\/a\/([0-9A-Za-z]{8})\/?$/);
+      if (m) return m[1];
+      const q = new URLSearchParams(location.search).get('s');
+      return (q && /^[0-9A-Za-z]{8}$/.test(q)) ? q : null;
+    }
+
+    function renderError(title, msg) {
+      document.getElementById('sa-root').innerHTML =
+        `<div class="sa-full"><h1>${escape(title)}</h1><p>${escape(msg)}</p></div>`;
+    }
+
+    // Construit l'ossature du chat une fois l'accueil chargé.
+    function renderChat(meta) {
+      const initial = (meta.name || 'A').trim().charAt(0).toUpperCase() || 'A';
+      document.getElementById('sa-root').outerHTML = `
+        <header class="sa-header">
+          <div class="sa-avatar">${escape(initial)}</div>
+          <div class="sa-head-txt">
+            <div class="sa-head-tag">Assistant</div>
+            <div class="sa-head-name">${escape(meta.name || 'Assistant')}</div>
+          </div>
+        </header>
+        <main class="sa-thread" id="sa-thread"><div class="sa-thread-inner" id="sa-thread-inner"></div></main>
+        <div class="sa-composer">
+          <div class="sa-composer-inner">
+            <textarea class="sa-input" id="sa-input" rows="1" maxlength="500"
+                      placeholder="Posez votre question…" aria-label="Votre question"></textarea>
+            <button class="sa-send" id="sa-send" aria-label="Envoyer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                   stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+          <div class="sa-foot">Réponses issues du savoir de l'assistant.</div>
+        </div>`;
+
+      const input = document.getElementById('sa-input');
+      const send  = document.getElementById('sa-send');
+      input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+      });
+      send.addEventListener('click', submit);
+
+      if (meta.opening) addBubble('agent', meta.opening);
+      input.focus();
+    }
+
+    function addBubble(role, text, isFallback) {
+      const inner = document.getElementById('sa-thread-inner');
+      const div = document.createElement('div');
+      div.className = `sa-msg ${role}${isFallback ? ' is-fallback' : ''}`;
+      div.innerHTML = `<div class="sa-msg-bubble">${escape(text)}</div>`;
+      inner.appendChild(div);
+      scrollDown();
+      return div;
+    }
+
+    function showTyping() {
+      const inner = document.getElementById('sa-thread-inner');
+      const div = document.createElement('div');
+      div.className = 'sa-msg agent'; div.id = 'sa-typing-row';
+      div.innerHTML = `<div class="sa-msg-bubble"><div class="sa-typing"><span></span><span></span><span></span></div></div>`;
+      inner.appendChild(div);
+      scrollDown();
+    }
+    function hideTyping() { document.getElementById('sa-typing-row')?.remove(); }
+
+    function scrollDown() {
+      const t = document.getElementById('sa-thread');
+      if (t) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; });
+    }
+
+    async function submit() {
+      if (_busy) return;
+      const input = document.getElementById('sa-input');
+      const message = (input.value || '').trim();
+      if (!message) return;
+
+      _busy = true;
+      document.getElementById('sa-send').disabled = true;
+      input.value = ''; input.style.height = 'auto';
+      addBubble('user', message);
+      showTyping();
+
+      try {
+        const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, session_id: _sessionId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        hideTyping();
+        if (!res.ok) {
+          addBubble('agent', data.error || 'Une erreur est survenue. Réessayez.', true);
+        } else {
+          if (data.session_id) _sessionId = data.session_id;
+          addBubble('agent', data.reply || '', !!data.gapped);
+        }
+      } catch (_) {
+        hideTyping();
+        addBubble('agent', 'Connexion impossible. Vérifiez votre réseau et réessayez.', true);
+      } finally {
+        _busy = false;
+        document.getElementById('sa-send').disabled = false;
+        document.getElementById('sa-input')?.focus();
+      }
+    }
+
+    async function load() {
+      _slug = getSlug();
+      if (!_slug) { renderError('Lien invalide', 'Ce lien ne correspond à aucun assistant.'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}`);
+        if (!res.ok) { renderError('Assistant introuvable', 'Ce lien n\'est plus actif ou n\'existe pas.'); return; }
+        const data = await res.json();
+        renderChat(data.agent || {});
+      } catch (_) {
+        renderError('Connexion impossible', 'Impossible de charger l\'assistant. Réessayez plus tard.');
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

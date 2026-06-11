@@ -7,7 +7,8 @@
     { "source": "/app",         "destination": "/app.html"         },
     { "source": "/admin",       "destination": "/admin.html"       },
     { "source": "/auth/magic",  "destination": "/auth-magic"       },
-    { "source": "/f/(.*)",      "destination": "/form?s=$1"        }
+    { "source": "/f/(.*)",      "destination": "/form?s=$1"        },
+    { "source": "/a/(.*)",      "destination": "/agent?s=$1"       }
   ],
 
   "headers": [
@@ -61,6 +62,12 @@
     },
     {
       "source": "/form.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/agent.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
