@@ -12,7 +12,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback,
-  validateImportUrl, htmlToText, clampExtractText, importFileKindOf,
+  validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts }
   from '../workers/src/routes/smart-agent.js';
 
@@ -232,6 +232,34 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
   check('objectif inconnu → informer ; persona/variantes par défaut',
     d.config.identity.objective === 'informer' && d.config.identity.role === ''
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
+}
+
+console.log('── SA-8.5 — stripRepeatedFollowup (anti-radotage des relances) ──');
+{
+  const hist = [
+    { role: 'user',      content: 'Quels sont vos horaires ?' },
+    { role: 'assistant', content: 'Nous ouvrons de 9h à 18h [1]. Souhaitez-vous connaître les tarifs ?' },
+    { role: 'user',      content: 'Et le dimanche ?' },
+  ];
+  check('relance identique déjà posée → coupée',
+    stripRepeatedFollowup('Le dimanche, nous sommes fermés [2]. Souhaitez-vous connaître les tarifs ?', hist)
+      === 'Le dimanche, nous sommes fermés [2].');
+  check('relance reformulée (mêmes mots-clés) → coupée',
+    stripRepeatedFollowup('Le dimanche, nous sommes fermés [2]. Voulez-vous connaître nos tarifs ?', hist)
+      === 'Le dimanche, nous sommes fermés [2].');
+  check('relance NOUVELLE → conservée',
+    stripRepeatedFollowup('Fermé le dimanche [2]. Puis-je vous renseigner sur le parcours de visite ?', hist)
+      .endsWith('parcours de visite ?'));
+  check('réponse sans question finale → intacte',
+    stripRepeatedFollowup('Le dimanche, nous sommes fermés [2].', hist) === 'Le dimanche, nous sommes fermés [2].');
+  check('réponse qui N\'EST QUE la question → conservée (jamais de réponse vide)',
+    stripRepeatedFollowup('Souhaitez-vous connaître les tarifs ?', hist) === 'Souhaitez-vous connaître les tarifs ?');
+  check('historique vide → no-op',
+    stripRepeatedFollowup('Bonjour [1]. Souhaitez-vous connaître les tarifs ?', []).endsWith('tarifs ?'));
+  check('questions de l\'UTILISATEUR ignorées (seul l\'agent compte)',
+    stripRepeatedFollowup('Oui, ouvert le samedi [1]. Quels sont vos horaires préférés de visite ?',
+      [{ role: 'user', content: 'Quels sont vos horaires préférés de visite ?' }])
+      .endsWith('visite ?'));
 }
 
 console.log('── SA-8.4 — splitSentences (lecture phrase par phrase) ──');
