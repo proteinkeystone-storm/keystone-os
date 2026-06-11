@@ -109,7 +109,7 @@ import { handleSmartAgentHealth,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
          handleAgentChat, handleGapsList, handleGapDismiss, handleGapStructure,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
-         handleSuggestOpening,
+         handleSuggestOpening, handleSuggestFallbacks,
          handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
          handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete,
          handlePublicAgentMeta, handlePublicAgentChat,
@@ -153,6 +153,8 @@ export default {
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'POST') return handleAgentCreate(request, env);
       if (path === '/api/smart-agent/suggest-opening'    && method === 'POST') return handleSuggestOpening(request, env);
+      // SA-8.0 — variantes de repli pré-générées (gratuites à l'usage)
+      if (path === '/api/smart-agent/suggest-fallbacks'  && method === 'POST') return handleSuggestFallbacks(request, env);
       // SA-4.4.1 — dossiers d'agents (regroupement)
       if (path === '/api/smart-agent/folders'            && method === 'GET')  return handleFoldersList(request, env);
       if (path === '/api/smart-agent/folders'            && method === 'POST') return handleFolderCreate(request, env);

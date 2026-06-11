@@ -28,6 +28,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { icon }                               from './lib/ui-icons.js';
+import { SA_PRESETS }                         from './lib/sa-presets.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
@@ -257,6 +258,10 @@ function _onClick(e) {
     if (act === 'form-cancel')  { _cancelForm(); return; }
     if (act === 'form-posture') { _readAgentForm(); _ag.form.posture = actEl.dataset.v; _renderMain(); return; }
     if (act === 'form-suggest') { _suggestOpening(); return; }
+    // SA-8.0 — persona : objectif, gabarit métier, variantes de repli
+    if (act === 'form-objective') { _readAgentForm(); _ag.form.objective = actEl.dataset.v; _renderMain(); return; }
+    if (act === 'form-preset')  { _applyPreset(actEl.dataset.v); return; }
+    if (act === 'fb-suggest')   { _suggestFallbacks(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
     // ── Publication publique (SA-5.1) ──
     if (act === 'pub-create')   { _doPublish(); return; }
@@ -706,12 +711,20 @@ function _openForm(agent) {
         name:     agent?.name || '',
         mission:  agent?.config?.identity?.mission || '',
         tone:     agent?.config?.identity?.tone || 'professionnel et chaleureux',
+        // SA-8.0 — persona : rôle incarné, style libre (rhétorique), interdits,
+        // objectif de conversation (informer | conseiller | vendre).
+        role:      agent?.config?.identity?.role || '',
+        style:     agent?.config?.identity?.style || '',
+        avoid:     agent?.config?.identity?.avoid || '',
+        objective: agent?.config?.identity?.objective || 'informer',
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
+        fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
+            ? agent.config.scope.fallback_variants.slice(0, 4) : [],
         folderId: agent?.folder_id ?? null,
     };
-    _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false;
+    _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false; _ag.fbBusy = false;
     // SA-5.1 — état de publication, rechargé pour un agent existant.
     _ag.publish = { loading: !!agent?.id, busy: false, link: null, qr: null };
     if (agent?.id) _loadPublicLinks(agent.id);
@@ -727,19 +740,45 @@ function _agentFormHTML() {
       <button class="sa-posture ${d.posture === p.id ? 'is-on' : ''}" data-act="form-posture" data-v="${p.id}" title="${p.desc}">
         <strong>${p.label}</strong><span>${p.desc}</span>
       </button>`).join('');
+    // SA-8.0 — objectif de conversation (façonne les relances, pas les faits).
+    const objectiveChips = _OBJECTIVES.map(o => `
+      <button class="sa-posture ${d.objective === o.id ? 'is-on' : ''}" data-act="form-objective" data-v="${o.id}" title="${o.desc}">
+        <strong>${o.label}</strong><span>${o.desc}</span>
+      </button>`).join('');
+    // SA-8.0 — gabarits métier (création seulement) : pré-remplissent la persona.
+    const presetChips = isNew ? `
+      <label class="sa-field"><span class="sa-field-label">Partir d'un gabarit métier (optionnel) — tout reste modifiable</span></label>
+      <div class="sa-posture-grid">
+        ${SA_PRESETS.map(p => `
+        <button class="sa-posture" data-act="form-preset" data-v="${p.id}" title="${_escAttr(p.hint)}">
+          <strong>${icon(p.icon, 13)} ${_esc(p.label)}</strong><span>${_esc(p.hint)}</span>
+        </button>`).join('')}
+      </div>` : '';
+    // SA-8.0 — variantes du repli : l'agent alterne au lieu de se répéter.
+    const fbv = d.fallbackVariants || [];
+    const fbvInputs = fbv.length
+        ? fbv.map(v => `<input class="sa-input" data-field="fbv" value="${_escAttr(v)}" placeholder="Variante de repli" style="margin-top:6px;">`).join('')
+        : '';
     const err = _ag.formError ? `<p class="sa-ed-error">${_esc(_ag.formError)}</p>` : '';
     return `
     <section class="sa-kx sa-ed">
       ${isNew ? `<button class="sa-back" data-act="form-cancel">${icon('chevron-left', 16)} Mes agents</button>` : ''}
       <div class="sa-kx-head"><div><h2 class="sa-kx-title">${isNew ? 'Nouvel agent' : 'Réglages'}</h2></div></div>
       <p class="sa-wstep-intro">Qui est cet agent, et que fait-il ? C'est ce qui guide son ton, sa posture et son accueil.</p>
+      ${presetChips}
 
       <label class="sa-field"><span class="sa-field-label">Nom de l'agent *</span>
         <input class="sa-input" data-field="name" value="${_escAttr(d.name)}" placeholder="Ex. : Guide du musée, Conseiller boutique, Assistant SAV"></label>
+      <label class="sa-field"><span class="sa-field-label">Rôle / métier — qui il incarne</span>
+        <input class="sa-input" data-field="role" value="${_escAttr(d.role)}" placeholder="Ex. : conseiller de vente, concierge, guide, artisan"></label>
       <label class="sa-field"><span class="sa-field-label">Mission * — que fait-il, pour qui ?</span>
         <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
       <label class="sa-field"><span class="sa-field-label">Ton</span>
         <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
+      <label class="sa-field"><span class="sa-field-label">Style — sa manière de parler (tournures, vocabulaire, rhétorique)</span>
+        <textarea class="sa-textarea" data-field="style" rows="3" maxlength="500" placeholder="Ex. : Phrases courtes et concrètes. Reformule le besoin avant de proposer (« Si je comprends bien… »). Met le bénéfice avant la caractéristique.">${_esc(d.style)}</textarea></label>
+      <label class="sa-field"><span class="sa-field-label">À éviter — ce qu'il ne doit jamais dire ou faire</span>
+        <input class="sa-input" data-field="avoid" maxlength="200" value="${_escAttr(d.avoid)}" placeholder="Ex. : jargon technique, tutoiement, promesses de remise"></label>
 
       <label class="sa-field"><span class="sa-field-label">Dossier (optionnel) — pour regrouper vos agents</span>
         <select class="sa-input sa-select" data-field="folder">
@@ -747,7 +786,10 @@ function _agentFormHTML() {
           ${_ag.folders.map(f => `<option value="${f.id}"${d.folderId === f.id ? ' selected' : ''}>${_esc(f.name)}</option>`).join('')}
         </select></label>
 
-      <label class="sa-field"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
+      <label class="sa-field"><span class="sa-field-label">Objectif — vers quoi il fait avancer la conversation</span></label>
+      <div class="sa-posture-grid">${objectiveChips}</div>
+
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Posture — jusqu'où il relance avec ses propres questions</span></label>
       <div class="sa-posture-grid">${postureChips}</div>
 
       <label class="sa-field" style="margin-top:14px;">
@@ -761,7 +803,12 @@ function _agentFormHTML() {
 
       <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Phrase de repli — quand la réponse n'est pas dans son savoir</span>
         <input class="sa-input" data-field="fallback" value="${_escAttr(d.fallback)}" placeholder="Je ne dispose pas de cette information."></label>
-      <div class="sa-guard-note">${icon('shield-check', 16)} <span>Chaque réponse cite ses fiches sources. Hors de son savoir, l'agent se tait — et la question rejoint ses « Trous » à combler.</span></div>
+      ${fbvInputs}
+      <button class="sa-btn sa-suggest-btn" data-act="fb-suggest" ${_ag.fbBusy ? 'disabled' : ''}>
+        ${icon('sparkles', 14)} ${_ag.fbBusy ? 'Génération…' : 'Proposer des variantes avec l\'IA'}
+      </button>
+      <p class="sa-field-hint">Avec des variantes, l'agent alterne ses formulations au lieu de répéter la même phrase.</p>
+      <div class="sa-guard-note">${icon('shield-check', 16)} <span>Chaque réponse cite ses fiches sources. Hors de son savoir, l'agent le dit avec ses mots (sans inventer) — et la question rejoint ses « Trous » à combler.</span></div>
 
       ${err}
       <div class="sa-ed-actions">
@@ -921,6 +968,51 @@ const _POSTURES = [
     { id: 'proactif',   label: 'Proactif',   desc: 'Qualifie, propose la suite' },
 ];
 
+// SA-8.0 — objectif de conversation : la dynamique, jamais les faits
+// (le fond reste ancré sur les fiches quel que soit l'objectif).
+const _OBJECTIVES = [
+    { id: 'informer',   label: 'Informer',   desc: 'Renseigne, sans pousser' },
+    { id: 'conseiller', label: 'Conseiller', desc: 'Compare et recommande' },
+    { id: 'vendre',     label: 'Vendre',     desc: 'Lève les freins, amène à l\'action' },
+];
+
+// SA-8.0 — applique un gabarit métier au formulaire (création). Ne touche
+// ni au nom déjà saisi ni au dossier ; tout reste modifiable ensuite.
+function _applyPreset(presetId) {
+    const p = SA_PRESETS.find(x => x.id === presetId);
+    if (!p || !_ag.form) return;
+    _readAgentForm();                       // ne pas perdre le nom en cours de saisie
+    Object.assign(_ag.form, {
+        role:      p.data.role,
+        mission:   p.data.mission,
+        tone:      p.data.tone,
+        style:     p.data.style,
+        avoid:     p.data.avoid,
+        objective: p.data.objective,
+        posture:   p.data.posture,
+        fallback:  p.data.fallback,
+    });
+    _toast(`Gabarit « ${p.label} » appliqué — personnalisez les [crochets] de la mission.`);
+    _renderMain();
+}
+
+// SA-8.0 — variantes de repli : générées UNE FOIS ici (gratuit), servies
+// ensuite sans IA — l'agent alterne au lieu de marteler la même phrase.
+async function _suggestFallbacks() {
+    _readAgentForm();
+    if (!_ag.form.mission) { _formError('Renseignez d\'abord la mission.'); return; }
+    _ag.fbBusy = true; _ag.formError = null; _renderMain();
+    try {
+        const r = await _api('/suggest-fallbacks', {
+            method: 'POST',
+            body: { name: _ag.form.name, role: _ag.form.role, mission: _ag.form.mission,
+                    tone: _ag.form.tone, style: _ag.form.style, fallback: _ag.form.fallback },
+        });
+        if (Array.isArray(r.variants) && r.variants.length) _ag.form.fallbackVariants = r.variants;
+    } catch (e) { _toast(e.message, 'error'); }
+    _ag.fbBusy = false; _renderMain();
+}
+
 // Lit le formulaire agent (DOM → _ag.form).
 function _readAgentForm() {
     const main = _root.querySelector('[data-slot="main"]');
@@ -930,10 +1022,17 @@ function _readAgentForm() {
     d.name    = get('[data-field="name"]')?.value.trim() ?? d.name;
     d.mission = get('[data-field="mission"]')?.value.trim() ?? d.mission;
     d.tone    = get('[data-field="tone"]')?.value.trim() ?? d.tone;
+    // SA-8.0 — persona
+    const ro = get('[data-field="role"]');     if (ro) d.role  = ro.value.trim();
+    const st = get('[data-field="style"]');    if (st) d.style = st.value.trim();
+    const av = get('[data-field="avoid"]');    if (av) d.avoid = av.value.trim();
     const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
-    // posture : pilotée par les chips (déjà dans d.posture)
+    // SA-8.0 — variantes de repli (inputs indexés)
+    const fbvs = main.querySelectorAll('[data-field="fbv"]');
+    if (fbvs.length) d.fallbackVariants = Array.from(fbvs).map(i => i.value.trim()).filter(Boolean);
+    // posture & objectif : pilotés par les chips (déjà dans d.posture / d.objective)
 }
 
 function _formError(msg) { _ag.formError = msg || null; _renderMain(); }
@@ -960,8 +1059,10 @@ function _agentPayload() {
         name: d.name,
         folder_id: d.folderId ?? null,
         config: {
-            identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening },
-            scope:    { fallback_text: d.fallback },
+            identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening,
+                        role: d.role, style: d.style, avoid: d.avoid, objective: d.objective },
+            scope:    { fallback_text: d.fallback,
+                        fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
         },
     };
 }

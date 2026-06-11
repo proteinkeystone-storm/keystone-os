@@ -10,7 +10,8 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
-  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions }
+  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
+  splitGapReply, pickFallback }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -144,13 +145,96 @@ console.log('── buildChatMessages — posture (SA-4.2) ──');
 {
   const base = { agentName: 'A', mission: 'm', tone: 't', fallbackText: 'X', fiches: '[1] f', message: 'q', history: [] };
   const sysOf = p => buildChatMessages({ ...base, posture: p })[0].content;
-  check('proactif → relance TOUJOURS', /TOUJOURS une question/.test(sysOf('proactif')));
+  // SA-8.0 — la relance proactive est DOSÉE (l'ancien « TOUJOURS » créait un tic).
+  check('proactif → mène l\'échange, relances variées et dosées',
+    /proposition concrète/.test(sysOf('proactif')) && /Varie tes relances/.test(sysOf('proactif')));
   check('informatif → sobre, question seulement si indispensable', /indispensable pour lever une ambig/.test(sysOf('informatif')));
   check('equilibre par défaut (posture inconnue ou absente)',
     sysOf('zzz') === sysOf('equilibre') && sysOf(undefined) === sysOf('equilibre'));
   check('toute posture garde l\'ancrage (faits issus des fiches)',
     ['informatif', 'equilibre', 'proactif'].every(p => /UNIQUEMENT à la DERNIÈRE question/.test(sysOf(p))));
 }
+
+console.log('── SA-8.0 — persona (rôle, style, interdits, objectif) ──');
+{
+  const base = { agentName: 'Léa', mission: 'vendre du thé', tone: 'chaleureux',
+    fallbackText: 'X', fiches: '[1] f', message: 'q', history: [] };
+  const sys = o => buildChatMessages({ ...base, ...o })[0].content;
+  check('rôle injecté à côté du nom',
+    sys({ role: 'conseillère de vente' }).includes('« Léa », conseillère de vente'));
+  check('sans rôle : pas de virgule orpheline',
+    sys({}).includes('« Léa ». Tu t\'exprimes'));
+  check('style injecté', sys({ style: 'Phrases courtes, bénéfice avant caractéristique.' })
+    .includes('STYLE — ta manière de parler : Phrases courtes'));
+  check('interdits injectés', sys({ avoid: 'jargon, tutoiement' }).includes('À ÉVITER ABSOLUMENT : jargon, tutoiement'));
+  check('style/avoid absents → lignes absentes (prompt compact)',
+    !sys({}).includes('STYLE —') && !sys({}).includes('À ÉVITER'));
+  check('objectif vendre → règle de conversion, ancrée',
+    sys({ objective: 'vendre' }).includes('OBJECTIF : convertir') && sys({ objective: 'vendre' }).includes('n\'invente JAMAIS'));
+  check('objectif conseiller → recommande', sys({ objective: 'conseiller' }).includes('OBJECTIF : conseiller'));
+  check('objectif informer (défaut) → aucune ligne OBJECTIF',
+    !sys({}).includes('OBJECTIF :') && !sys({ objective: 'zzz' }).includes('OBJECTIF :'));
+}
+
+console.log('── SA-8.0 — canal public (zéro mention des fiches) ──');
+{
+  const base = { agentName: 'A', mission: 'm', tone: 't', fallbackText: 'X',
+    fiches: '[1] f', message: 'q', history: [] };
+  const internal = buildChatMessages({ ...base })[0].content;
+  const pub      = buildChatMessages({ ...base, channel: 'public' })[0].content;
+  check('interne → citations [n] exigées', internal.includes('Cite chaque fiche utilisée entre crochets'));
+  check('public → interdiction de mentionner fiches/sources',
+    pub.includes('Ne mentionne JAMAIS tes fiches') && !pub.includes('Cite chaque fiche'));
+  check('le marqueur [GAP] remplace le repli mot à mot (les 2 canaux)',
+    internal.includes('le marqueur exact [GAP]') && pub.includes('le marqueur exact [GAP]') &&
+    !internal.includes('EXACTEMENT'));
+  check('le repli configuré reste l\'« esprit » du repli', internal.includes('esprit : « X »'));
+}
+
+console.log('── SA-8.0 — splitGapReply (détection du repli par marqueur) ──');
+{
+  const r1 = splitGapReply('[GAP] Bonne question — je n\'ai pas ce détail, mais je peux vous guider.', 'Je ne sais pas.');
+  check('marqueur en tête → gapped + marqueur retiré',
+    r1.gapped === true && r1.text === 'Bonne question — je n\'ai pas ce détail, mais je peux vous guider.');
+  check('casse/espaces tolérés', splitGapReply('[ gap ] Désolé.').gapped === true
+    && splitGapReply('[ gap ] Désolé.').text === 'Désolé.');
+  check('marqueur en plein milieu → détecté et nettoyé',
+    splitGapReply('Hmm. [GAP] Je vérifie en boutique.').text === 'Hmm. Je vérifie en boutique.');
+  check('legacy : recopie du repli configuré → gapped',
+    splitGapReply('Je ne sais pas. Désolé.', 'Je ne sais pas.').gapped === true);
+  check('réponse normale → pas gapped, texte intact',
+    splitGapReply('Le musée ferme à 18h [1].', 'Je ne sais pas.').gapped === false
+    && splitGapReply('Le musée ferme à 18h [1].').text === 'Le musée ferme à 18h [1].');
+}
+
+console.log('── SA-8.0 — pickFallback (repli varié sans génération) ──');
+{
+  const scope = { fallback_text: 'A', fallback_variants: ['B', 'C'] };
+  check('rand=0 → la phrase principale', pickFallback(scope, () => 0) === 'A');
+  check('rand→variantes', pickFallback(scope, () => 0.5) === 'B' && pickFallback(scope, () => 0.99) === 'C');
+  check('sans variantes → la phrase principale seule', pickFallback({ fallback_text: 'A' }, () => 0.9) === 'A');
+  check('scope vide → repli par défaut', pickFallback({}, () => 0.5) === 'Je ne dispose pas de cette information.');
+  check('variantes vides filtrées', pickFallback({ fallback_text: 'A', fallback_variants: ['', '  '] }, () => 0.9) === 'A');
+}
+
+console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──');
+{
+  const v = validateAgentPayload({ name: 'X', config: { identity: {
+    mission: 'm', role: 'concierge', style: 's'.repeat(600), avoid: 'a', objective: 'vendre' },
+    scope: { fallback_text: 'F', fallback_variants: ['v1', '', 'v2', 'v3', 'v4', 'v5'] } } });
+  check('persona acceptée (role/avoid/objective)', v.ok && v.config.identity.role === 'concierge'
+    && v.config.identity.avoid === 'a' && v.config.identity.objective === 'vendre');
+  check('style borné à 500', v.config.identity.style.length === 500);
+  check('variantes : vides filtrées, cap à 4', JSON.stringify(v.config.scope.fallback_variants) === JSON.stringify(['v1', 'v2', 'v3', 'v4']));
+  const d = validateAgentPayload({ name: 'X', config: { identity: { mission: 'm', objective: 'zzz' } } });
+  check('objectif inconnu → informer ; persona/variantes par défaut',
+    d.config.identity.objective === 'informer' && d.config.identity.role === ''
+    && JSON.stringify(d.config.scope.fallback_variants) === '[]');
+}
+
+console.log('── SA-8.0 — publicAgentMeta expose le rôle ──');
+check('role exposé au visiteur', publicAgentMeta({ name: 'L', config: { identity: { role: ' guide ' } } }).role === 'guide');
+check('role absent → \'\'', publicAgentMeta({ name: 'L', config: { identity: {} } }).role === '');
 
 console.log('── contextualQuery (suivi « oui » — bug capture Stéphane) ──');
 {
@@ -266,9 +350,9 @@ console.log('── publicAgentMeta (SA-5 — config publique strippée) ──'
   check('expose name', meta.name === 'Guide du Musée');
   check('expose opening (trimmé)', meta.opening === 'Bonjour !');
   check('expose tone', meta.tone === 'chaleureux');
-  check('n\'expose NI tenant NI mission NI coffre',
+  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role)',
     meta.tenant_id === undefined && meta.mission === undefined &&
-    meta.config === undefined && Object.keys(meta).length === 3);
+    meta.config === undefined && Object.keys(meta).sort().join(',') === 'name,opening,role,tone');
   check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
   check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
 }

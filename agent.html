@@ -407,7 +407,7 @@
         <header class="sa-header">
           <div class="sa-avatar">${escape(initial)}</div>
           <div class="sa-head-txt">
-            <div class="sa-head-tag">Assistant</div>
+            <div class="sa-head-tag">${escape(meta.role || 'Assistant')}</div>
             <div class="sa-head-name">${escape(meta.name || 'Assistant')}</div>
           </div>
           ${HAS_TTS ? `<div class="sa-head-voice-wrap">

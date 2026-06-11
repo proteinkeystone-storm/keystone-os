@@ -57,6 +57,10 @@ export const ICONS = {
   // Living Layer V2 — mode Pilotable (annonce admin pushée par Stéphane).
   // Picto outline 1.5 cohérent avec la charte Keystone.
   'megaphone'  : '<path d="M3 11v3a1 1 0 0 0 1 1h2.51L11 18.5V6.5L6.51 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a4 4 0 0 1 0 8"/><path d="M19 5a8 8 0 0 1 0 14"/>',
+  // SA-8.0 — gabarits métier du Smart Agent (concierge / guide / artisan).
+  'key'        : '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3-3.5 3.5z"/>',
+  'compass'    : '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+  'tool'       : '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
 
   // Steps / catégories
   'target'     : '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
