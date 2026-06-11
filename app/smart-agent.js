@@ -130,6 +130,8 @@ const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'lis
 const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | trous | reglages
 // Conversation en cours avec un agent (SA-3) — sert aussi de bac à sable (SA-4)
 const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
+// Vocal — dictée (micro) + lecture à voix haute (interrupteur mémorisé).
+const _voice = { on: (() => { try { return localStorage.getItem('sa_voice_on') === '1'; } catch (_) { return false; } })(), rec: null, listening: false };
 // Golden set (SA-4) — jeu de questions étalon de l'agent en cours de test
 const _gold = { items: [], loaded: false, busy: false, replay: null, addExpect: 'answer' };
 // SA-6 — mode Interview du savoir (parcours guidé pour combler les trous)
@@ -260,6 +262,8 @@ function _onClick(e) {
     if (act === 'pub-save')     { _savePublicSettings(); return; }
     // ── Chat / bac à sable ──
     if (act === 'chat-send')    { _sendChat(); return; }
+    if (act === 'chat-mic')     { _startDictation('[data-slot="chat-text"]'); return; }
+    if (act === 'chat-voice')   { _toggleVoice(); return; }
     if (act === 'chat-cite')    { _openUnitFromChat(actEl.dataset.uid); return; }
     // ── Trous (scopés agent) ──
     if (act === 'gap-answer')   { _answerGap(_ag.gaps.find(g => g.id === actEl.dataset.id)); return; }
@@ -893,10 +897,13 @@ async function _savePublicSettings() {
 function _testerHTML() {
     return `
     <section class="sa-kx">
-      <div class="sa-kx-head"><div>
-        <h2 class="sa-kx-title">Tester</h2>
-        <p class="sa-kx-sub">Comme le verront vos visiteurs — réponses ancrées sur le savoir de cet agent.</p>
-      </div></div>
+      <div class="sa-kx-head">
+        <div>
+          <h2 class="sa-kx-title">Tester</h2>
+          <p class="sa-kx-sub">Comme le verront vos visiteurs — réponses ancrées sur le savoir de cet agent.</p>
+        </div>
+        ${_ttsSupported() ? `<button class="sa-iconbtn sa-voice-toggle ${_voice.on ? 'is-on' : ''}" data-act="chat-voice" title="${_voice.on ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}" aria-pressed="${_voice.on ? 'true' : 'false'}">${icon(_voice.on ? 'volume-2' : 'volume-x', 17)}</button>` : ''}
+      </div>
       ${_sandboxHTML()}
       ${_goldenHTML()}
     </section>`;
@@ -1001,6 +1008,7 @@ function _sandboxHTML() {
       </div>
       <div class="sa-chat-input">
         <textarea class="sa-textarea" data-slot="chat-text" rows="1" maxlength="1000" placeholder="Posez une question…" ${_chat.busy ? 'disabled' : ''}></textarea>
+        ${_speechSupported() ? `<button class="sa-iconbtn sa-mic-btn" data-act="chat-mic" title="Dicter votre question" aria-label="Dicter votre question" ${_chat.busy ? 'disabled' : ''}>${icon('mic', 18)}</button>` : ''}
         <button class="sa-btn is-primary" data-act="chat-send" ${_chat.busy ? 'disabled' : ''}>${icon('send', 16)}</button>
       </div>
     </div>`;
@@ -1378,6 +1386,51 @@ function _scrollChatBottom() {
     if (stream) stream.scrollTop = stream.scrollHeight;
 }
 
+// ── Vocal : dictée (SpeechRecognition) + lecture à voix haute (speechSynthesis).
+// Les deux sont des API navigateur (gratuites). Les boutons ne s'affichent que
+// si le navigateur sait faire (dégradation propre sur Firefox notamment).
+function _speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function _ttsSupported() { return typeof window !== 'undefined' && 'speechSynthesis' in window; }
+function _startDictation(slotSel) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (_voice.listening) { try { _voice.rec && _voice.rec.stop(); } catch (_) {} return; }
+    const ta = _root.querySelector(slotSel);
+    if (!ta) return;
+    const micBtn = _root.querySelector('[data-act="chat-mic"]');
+    try {
+        const rec = new SR();
+        _voice.rec = rec;
+        rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = false;
+        const base = (ta.value || '').trim();
+        rec.onstart = () => { _voice.listening = true; micBtn && micBtn.classList.add('is-listening'); };
+        rec.onresult = (e) => {
+            let txt = '';
+            for (let k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
+            ta.value = (base ? base + ' ' : '') + txt;
+            ta.dispatchEvent(new Event('input'));
+        };
+        rec.onerror = () => { _voice.listening = false; micBtn && micBtn.classList.remove('is-listening'); };
+        rec.onend = () => { _voice.listening = false; micBtn && micBtn.classList.remove('is-listening'); ta.focus(); };
+        rec.start();
+    } catch (_) { _voice.listening = false; }
+}
+function _toggleVoice() {
+    _voice.on = !_voice.on;
+    try { localStorage.setItem('sa_voice_on', _voice.on ? '1' : '0'); } catch (_) {}
+    if (!_voice.on && _ttsSupported()) window.speechSynthesis.cancel();
+    _renderMain();
+}
+function _speak(text) {
+    if (!_voice.on || !_ttsSupported() || !text) return;
+    try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
+        u.lang = 'fr-FR';
+        window.speechSynthesis.speak(u);
+    } catch (_) {}
+}
+
 async function _sendChat() {
     if (_chat.busy) return;
     const main = _root.querySelector('[data-slot="main"]');
@@ -1399,6 +1452,7 @@ async function _sendChat() {
             role: 'agent', content: res.reply || '',
             citations: res.citations || [], gapped: !!res.gapped,
         });
+        _speak(res.reply || '');
     } catch (e) {
         const msg = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
             ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'

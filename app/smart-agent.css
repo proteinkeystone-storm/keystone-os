@@ -969,6 +969,30 @@
   justify-content: center;
 }
 
+/* ── Vocal : micro (dictée) + interrupteur lecture à voix haute ── */
+.sa-chat-input .sa-mic-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+.sa-mic-btn.is-listening {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  animation: sa-mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sa-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 38%, transparent); }
+  50%      { box-shadow: 0 0 0 7px color-mix(in srgb, var(--danger) 0%, transparent); }
+}
+.sa-voice-toggle.is-on {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+.sa-voice-toggle.is-on:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+
 /* ═══ Sprint SA-4 — wizard, trous, golden set ══════════════════ */
 
 /* ── Bannière « questions sans réponse » (liste d'agents) ─────── */

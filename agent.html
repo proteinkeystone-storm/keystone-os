@@ -184,6 +184,49 @@
       font-size: 11px; color: var(--sa-muted); opacity: .7;
       padding: 8px 16px 0;
     }
+
+    /* ── Vocal : interrupteur lecture (header) + micro dictée (barre) ── */
+    .sa-head-voice {
+      flex-shrink: 0; margin-left: auto;
+      width: 38px; height: 38px; border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, .22);
+      background: rgba(255, 255, 255, .08);
+      color: rgba(255, 255, 255, .85);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sa-head-voice:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+    .sa-head-voice.is-on {
+      color: var(--sa-accent);
+      border-color: var(--sa-accent);
+      background: rgba(201, 180, 138, .16);
+    }
+    .sa-head-voice svg { width: 19px; height: 19px; }
+
+    .sa-mic {
+      flex-shrink: 0;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid var(--sa-border);
+      background: #fff;
+      color: var(--sa-muted);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sa-mic:hover { color: var(--sa-brand); border-color: var(--sa-accent); }
+    .sa-mic svg { width: 20px; height: 20px; }
+    .sa-mic.is-listening {
+      color: #fff;
+      background: #e5484d; border-color: #e5484d;
+      animation: sa-mic-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes sa-mic-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, .4); }
+      50%      { box-shadow: 0 0 0 7px rgba(229, 72, 77, 0); }
+    }
   </style>
 </head>
 <body>
@@ -207,6 +250,66 @@
     let _slug = null;
     let _sessionId = null;
     let _busy = false;
+
+    /* ── Vocal — dictée (micro) + lecture à voix haute (API navigateur, gratuites).
+       Les contrôles ne s'affichent que si le navigateur sait faire. La préférence
+       de lecture est mémorisée (localStorage), comme un interrupteur global. ── */
+    const SR_CLASS = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const HAS_SR  = !!SR_CLASS;
+    const HAS_TTS = ('speechSynthesis' in window);
+    let _voiceOn = false;
+    try { _voiceOn = localStorage.getItem('sa_voice_on') === '1'; } catch (_) {}
+    let _rec = null, _listening = false;
+
+    const SVG_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
+    function svgVol(on) {
+      return on
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
+    }
+    function speak(text) {
+      if (!_voiceOn || !HAS_TTS || !text) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
+        u.lang = 'fr-FR';
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+    function toggleVoice() {
+      _voiceOn = !_voiceOn;
+      try { localStorage.setItem('sa_voice_on', _voiceOn ? '1' : '0'); } catch (_) {}
+      if (!_voiceOn && HAS_TTS) window.speechSynthesis.cancel();
+      const btn = document.getElementById('sa-voice');
+      if (btn) {
+        btn.classList.toggle('is-on', _voiceOn);
+        btn.innerHTML = svgVol(_voiceOn);
+        btn.title = _voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute';
+        btn.setAttribute('aria-pressed', _voiceOn ? 'true' : 'false');
+      }
+    }
+    function startDictation() {
+      if (!SR_CLASS) return;
+      const input = document.getElementById('sa-input');
+      const mic = document.getElementById('sa-mic');
+      if (!input) return;
+      if (_listening) { try { _rec && _rec.stop(); } catch (_) {} return; }
+      try {
+        _rec = new SR_CLASS();
+        _rec.lang = 'fr-FR'; _rec.interimResults = true; _rec.continuous = false;
+        const base = (input.value || '').trim();
+        _rec.onstart = () => { _listening = true; mic && mic.classList.add('is-listening'); };
+        _rec.onresult = (e) => {
+          let txt = '';
+          for (let k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
+          input.value = (base ? base + ' ' : '') + txt;
+          input.dispatchEvent(new Event('input'));
+        };
+        _rec.onerror = () => { _listening = false; mic && mic.classList.remove('is-listening'); };
+        _rec.onend = () => { _listening = false; mic && mic.classList.remove('is-listening'); input.focus(); };
+        _rec.start();
+      } catch (_) { _listening = false; }
+    }
 
     function escape(s) {
       return String(s == null ? '' : s)
@@ -238,12 +341,14 @@
             <div class="sa-head-tag">Assistant</div>
             <div class="sa-head-name">${escape(meta.name || 'Assistant')}</div>
           </div>
+          ${HAS_TTS ? `<button class="sa-head-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${svgVol(_voiceOn)}</button>` : ''}
         </header>
         <main class="sa-thread" id="sa-thread"><div class="sa-thread-inner" id="sa-thread-inner"></div></main>
         <div class="sa-composer">
           <div class="sa-composer-inner">
             <textarea class="sa-input" id="sa-input" rows="1" maxlength="500"
                       placeholder="Posez votre question…" aria-label="Votre question"></textarea>
+            ${HAS_SR ? `<button class="sa-mic" id="sa-mic" type="button" aria-label="Dicter votre question" title="Dicter votre question">${SVG_MIC}</button>` : ''}
             <button class="sa-send" id="sa-send" aria-label="Envoyer">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                    stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -262,6 +367,11 @@
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
       });
       send.addEventListener('click', submit);
+
+      const voiceBtn = document.getElementById('sa-voice');
+      if (voiceBtn) voiceBtn.addEventListener('click', toggleVoice);
+      const micBtn = document.getElementById('sa-mic');
+      if (micBtn) micBtn.addEventListener('click', startDictation);
 
       if (meta.opening) addBubble('agent', meta.opening);
       input.focus();
@@ -317,6 +427,7 @@
         } else {
           if (data.session_id) _sessionId = data.session_id;
           addBubble('agent', data.reply || '', !!data.gapped);
+          speak(data.reply || '');
         }
       } catch (_) {
         hideTyping();
