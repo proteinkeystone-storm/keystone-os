@@ -91,6 +91,12 @@
   </div>
 
   <script type="module">
+    // Forcer le MONO-THREAD : la lib fixe le nb de threads ONNX sur
+    // navigator.hardwareConcurrency. En multi-thread, ORT exige SharedArrayBuffer
+    // (→ isolation cross-origin COOP/COEP, absente ici) → « no backend ». En
+    // forçant 1, ORT crée une mémoire NON partagée → pas de SAB requis → ça tourne.
+    try { Object.defineProperty(navigator, 'hardwareConcurrency', { value: 1, configurable: true }); } catch (_) {}
+
     // Runtime ONNX redirigé vers jsdelivr 1.19.2 (le CDN par défaut de la lib,
     // cdnjs 1.18.0, ne sert plus le loader .mjs → « no backend »).
     const WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
@@ -158,13 +164,36 @@
 
     $('go').addEventListener('click', run);
 
-    // Diagnostic : un Service Worker contrôle-t-il cette page ? (cause possible
-    // de « Load failed » s'il intercepte les CDN cross-origin redirigés).
-    (function(){
-      const sw = ('serviceWorker' in navigator) && navigator.serviceWorker.controller;
-      $('diag').innerHTML = 'Diagnostic — Service Worker sur cette page : <b>' + (sw ? 'ACTIF' : 'aucun') + '</b>'
-        + (sw ? ' (' + (navigator.serviceWorker.controller.scriptURL.split('/').pop()) + ')' : '') + '.';
-    })();
+    // ── Diagnostic complet : localise précisément la brique qui coince ──
+    async function swVersion(){
+      const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!c) return 'aucun';
+      return await new Promise(res => {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = e => res(e.data);
+        try { c.postMessage('GET_VERSION', [ch.port2]); } catch(_) { res('?'); }
+        setTimeout(() => res('(pas de réponse)'), 1500);
+      });
+    }
+    async function probe(label, url){
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        return label + ' : <b>' + r.status + (r.redirected ? ' (redirigé)' : '') + (r.ok ? ' ✓' : ' ✗') + '</b>';
+      } catch(e){ return label + ' : <b style="color:#f06d6d">ÉCHEC</b> (' + (e.name || '') + ' — ' + (e.message || e) + ')'; }
+    }
+    async function runDiag(){
+      $('diag').innerHTML = 'Diagnostic en cours…';
+      const lines = [];
+      lines.push('Service Worker : <b>' + (await swVersion()) + '</b>');
+      lines.push(await probe('① Runtime ONNX (jsdelivr)', 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort-wasm-simd-threaded.jsep.mjs'));
+      lines.push(await probe('② Phonémiseur (jsdelivr)', 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm'));
+      lines.push(await probe('③ Modèle Siwis (HuggingFace)', 'https://huggingface.co/diffusionstudio/piper-voices/resolve/main/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json'));
+      lines.push('④ SharedArrayBuffer : <b>' + (typeof SharedArrayBuffer !== 'undefined' ? 'disponible' : 'INDISPONIBLE → mono-thread requis') + '</b>');
+      lines.push('⑤ crossOriginIsolated : <b>' + (self.crossOriginIsolated ? 'oui' : 'non') + '</b>');
+      lines.push('⑥ Threads ONNX (hardwareConcurrency) : <b>' + navigator.hardwareConcurrency + '</b> (doit être 1)');
+      $('diag').innerHTML = '<b>Diagnostic —</b><br>' + lines.join('<br>');
+    }
+    runDiag();
   </script>
 </body>
 </html>
