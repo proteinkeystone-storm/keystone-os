@@ -38,7 +38,6 @@
 CREATE TABLE IF NOT EXISTS kortex_units (
   id            TEXT PRIMARY KEY,
   tenant_id     TEXT NOT NULL DEFAULT 'default',
-  collection_id TEXT,
   type          TEXT NOT NULL CHECK (type IN
                   ('fact','procedure','qa','case','rule','objection','definition')),
   title         TEXT NOT NULL,
@@ -57,7 +56,6 @@ CREATE TABLE IF NOT EXISTS kortex_units (
 CREATE INDEX IF NOT EXISTS idx_kortex_units_tenant  ON kortex_units(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_kortex_units_status  ON kortex_units(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_kortex_units_type    ON kortex_units(tenant_id, type);
-CREATE INDEX IF NOT EXISTS idx_kortex_units_coll    ON kortex_units(collection_id);
 CREATE INDEX IF NOT EXISTS idx_kortex_units_review  ON kortex_units(review_at);
 
 -- ── Kortex : index lexical FTS5 (recherche hybride, SA-2) ─────

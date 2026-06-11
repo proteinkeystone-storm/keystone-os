@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-5.3';
+const SA_ENGINE_VERSION = 'SA-5.4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -208,7 +208,6 @@ async function ensureSmartAgentSchema(env) {
     CREATE TABLE IF NOT EXISTS kortex_units (
       id            TEXT PRIMARY KEY,
       tenant_id     TEXT NOT NULL DEFAULT 'default',
-      collection_id TEXT,
       type          TEXT NOT NULL CHECK (type IN
                       ('fact','procedure','qa','case','rule','objection','definition')),
       title         TEXT NOT NULL,
@@ -228,7 +227,6 @@ async function ensureSmartAgentSchema(env) {
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_tenant  ON kortex_units(tenant_id)');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_status  ON kortex_units(tenant_id, status)');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_type    ON kortex_units(tenant_id, type)');
-  await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_coll    ON kortex_units(collection_id)');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_review  ON kortex_units(review_at)');
   // SA-4.3 — silo : chaque fiche appartient à UN agent (1 coffre par agent).
   // ALTER idempotent (SQLite n'a pas ADD COLUMN IF NOT EXISTS).
