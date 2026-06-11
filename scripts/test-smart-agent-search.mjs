@@ -10,7 +10,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
-  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch }
+  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -285,6 +285,18 @@ console.log('── validatePublicLinkPatch (SA-5.2 — réglages du lien) ─�
   check('date mal formée refusée', validatePublicLinkPatch({ expires_at: '31/12/2026' }).ok === false);
   check('patch vide → ok sans champ',
     (() => { const r = validatePublicLinkPatch({}); return r.ok && r.max_per_day === undefined && r.expires_at === undefined; })());
+}
+
+console.log('── goldenVerdict (SA-5.3 — replay fidèle des « doit ignorer ») ──');
+{
+  check('answer ancré → ok', goldenVerdict('answer', true, null).ok === true);
+  check('answer non ancré → ko (savoir manquant)', goldenVerdict('answer', false, null).ok === false);
+  check('fallback non ancré → ok (se tait, gratuit)', goldenVerdict('fallback', false, null).ok === true);
+  check('fallback ancré + 0 citation → ok (repli réel)', goldenVerdict('fallback', true, 0).ok === true);
+  check('fallback ancré + citations → ko (débordement réel)', goldenVerdict('fallback', true, 2).ok === false);
+  check('fallback ancré + pas d\'IA (cap) → ko prudent', goldenVerdict('fallback', true, null).ok === false);
+  check('predicted cohérent (fallback repli)', goldenVerdict('fallback', true, 0).predicted === 'fallback');
+  check('predicted cohérent (fallback débordement)', goldenVerdict('fallback', true, 3).predicted === 'answer');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-5.2';
+const SA_ENGINE_VERSION = 'SA-5.3';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -2275,6 +2275,20 @@ export async function handleGoldenDelete(request, env, goldenId) {
 // GRATUIT : on n'appelle PAS le LLM, seulement la récupération + la
 // décision d'ancrage (isGrounded) — le signal qui prédit répondre vs
 // repli. On compare au comportement attendu → score de santé.
+// Pur (testé) : verdict d'un test étalon. answer → ok si la récup s'ancre.
+// fallback → ok si l'agent se TAIT : soit récup non ancrée (gratuit), soit
+// récup ancrée mais la vraie réponse ne cite AUCUNE fiche (llmCites === 0).
+// llmCites === null = pas d'appel IA fait (cap atteint / IA en échec) → prudent (ko).
+export function goldenVerdict(expect, grounded, llmCites) {
+  if (expect === 'fallback') {
+    if (!grounded) return { ok: true, predicted: 'fallback' };
+    if (llmCites == null) return { ok: false, predicted: 'answer' };
+    const repli = llmCites === 0;
+    return { ok: repli, predicted: repli ? 'fallback' : 'answer' };
+  }
+  return { ok: grounded, predicted: grounded ? 'answer' : 'fallback' };
+}
+
 export async function handleGoldenReplay(request, env, agentId) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin);
@@ -2293,11 +2307,36 @@ export async function handleGoldenReplay(request, env, agentId) {
   let passed = 0;
   // SA-4.4 — coffres de l'agent résolus une fois (ils ne changent pas entre questions).
   const vaultIds = await _vaultsForAgent(env, gate.tenant, agentId);
+  // SA-5.3 — pour un « doit ignorer » dont la récup s'accroche quand même, la
+  // récup seule est PESSIMISTE : on fait PARLER l'agent et on regarde s'il cite
+  // une fiche (débordement = ko) ou s'il se replie (= ok). Gratuit pour le
+  // client, mais borné (REPLAY_LLM_MAX appels IA) pour rester rapide.
+  const REPLAY_LLM_MAX = 6;
+  let llmUsed = 0;
+  const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
   for (const g of golden) {
-    const ret = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, vaultIds });
-    const { grounded, grounding } = isGrounded(ret);
-    const predicted = grounded ? 'answer' : 'fallback';
-    const ok = predicted === g.expect;
+    const { semantic, hits } = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, vaultIds });
+    const { grounded, grounding } = isGrounded({ semantic, hits });
+    let llmCites = null;
+    if (g.expect === 'fallback' && grounded && llmUsed < REPLAY_LLM_MAX
+        && env.AI && typeof env.AI.run === 'function') {
+      llmUsed++;
+      try {
+        const fiches = hits.map((h, i) =>
+          `[${i + 1}] (${h.row.type}) ${h.row.title}\n${String(h.row.body_text || '').slice(0, 600)}`).join('\n\n');
+        const messages = buildChatMessages({
+          agentName: agent.name,
+          mission:   agent.config?.identity?.mission,
+          tone:      agent.config?.identity?.tone,
+          posture:   agent.config?.identity?.posture,
+          fallbackText, fiches, history: [], message: g.question,
+        });
+        const res = await env.AI.run(KS_AI_MODEL, { messages, max_tokens: 900, stream: false });
+        const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+        llmCites = extractCitations(raw, hits.length).length;
+      } catch (_) { llmCites = null; /* IA en échec → verdict prudent */ }
+    }
+    const { ok, predicted } = goldenVerdict(g.expect, grounded, llmCites);
     if (ok) passed++;
     out.push({ id: g.id, question: g.question, expect: g.expect, predicted, grounding, ok });
   }
