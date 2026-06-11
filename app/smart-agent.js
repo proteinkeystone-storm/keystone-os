@@ -132,6 +132,10 @@ const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | 
 const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
 // Vocal — dictée (micro) + lecture à voix haute (interrupteur mémorisé).
 const _voice = { on: (() => { try { return localStorage.getItem('sa_voice_on') === '1'; } catch (_) { return false; } })(), rec: null, listening: false, voices: [] };
+// Voix neuronale « Piper » (moteur maison auto-hébergé) — option spéciale du
+// sélecteur. Chargement paresseux (import dynamique + modèle ~60 Mo au 1er usage).
+const PIPER_VOICE_KEY = '__piper_siwis';
+const _piper = { mod: null, audio: null, busy: false };
 // Golden set (SA-4) — jeu de questions étalon de l'agent en cours de test
 const _gold = { items: [], loaded: false, busy: false, replay: null, addExpect: 'answer' };
 // SA-6 — mode Interview du savoir (parcours guidé pour combler les trous)
@@ -1434,17 +1438,21 @@ function _chosenVoice() {
 }
 function _voiceOptionsHTML() {
     const fr = _frVoices();
-    if (!fr.length) return '<option value="">Voix par défaut…</option>';
     const sel = _currentVoiceName() || (_bestFrVoice() && _bestFrVoice().name) || '';
-    return fr.map(v => `<option value="${_escAttr(v.name)}"${v.name === sel ? ' selected' : ''}>${_esc(v.name)}</option>`).join('');
+    // Voix neuronale Piper en tête (qualité supérieure), puis les voix système.
+    const piper = `<option value="${PIPER_VOICE_KEY}"${sel === PIPER_VOICE_KEY ? ' selected' : ''}>Siwis — neuronale (IA, haute qualité)</option>`;
+    if (!fr.length) return piper;
+    return piper + fr.map(v => `<option value="${_escAttr(v.name)}"${v.name === sel ? ' selected' : ''}>${_esc(v.name)}</option>`).join('');
 }
 function _fillVoiceSelect() { const s = _root && _root.querySelector('[data-act="chat-voice-pick"]'); if (s) s.innerHTML = _voiceOptionsHTML(); }
 function _setVoiceName(name) {
     try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
-    if (!_ttsSupported()) return;
     // Échantillon immédiat pour entendre la voix choisie.
+    if (name === PIPER_VOICE_KEY) { _piperSpeak('Bonjour, voici ma voix.'); return; }
+    if (!_ttsSupported()) return;
     try {
         window.speechSynthesis.cancel();
+        if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
         const u = new SpeechSynthesisUtterance('Bonjour, voici ma voix.');
         const v = _chosenVoice();
         if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
@@ -1478,19 +1486,52 @@ function _startDictation(slotSel) {
 function _toggleVoice() {
     _voice.on = !_voice.on;
     try { localStorage.setItem('sa_voice_on', _voice.on ? '1' : '0'); } catch (_) {}
-    if (_voice.on) _ensureVoices();
-    else if (_ttsSupported()) window.speechSynthesis.cancel();
+    if (_voice.on) { _ensureVoices(); }
+    else {
+        if (_ttsSupported()) window.speechSynthesis.cancel();
+        if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
+    }
     _renderMain();
 }
 function _speak(text) {
-    if (!_voice.on || !_ttsSupported() || !text) return;
+    if (!_voice.on || !text) return;
+    // Voix neuronale Piper choisie → moteur maison ; sinon voix système.
+    if (_currentVoiceName() === PIPER_VOICE_KEY) { _piperSpeak(text); return; }
+    if (!_ttsSupported()) return;
     try {
         window.speechSynthesis.cancel();
+        if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
         const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
         const v = _chosenVoice();
         if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
         window.speechSynthesis.speak(u);
     } catch (_) {}
+}
+// Lecture via le moteur Piper maison (import paresseux + génération + audio).
+// Voyant « is-loading » sur le bouton haut-parleur pendant le travail (1er
+// usage = téléchargement du modèle ~60 Mo, puis ~1-3 s/phrase).
+async function _piperSpeak(text) {
+    const clean = String(text).replace(/\[\d{1,2}\]/g, '').trim();
+    if (!clean) return;
+    try { if (_ttsSupported()) window.speechSynthesis.cancel(); } catch (_) {}
+    if (_piper.audio) { try { _piper.audio.pause(); } catch (_) {} }
+    if (_piper.busy) return;            // pas de générations concurrentes
+    _piper.busy = true;
+    const btn = _root && _root.querySelector('[data-act="chat-voice"]');
+    if (btn) btn.classList.add('is-loading');
+    try {
+        if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
+        const wav = await _piper.mod.synthToWav(clean);
+        if (!_voice.on) return;         // l'utilisateur a coupé entre-temps
+        if (!_piper.audio) _piper.audio = new Audio();
+        _piper.audio.src = URL.createObjectURL(wav);
+        _piper.audio.play().catch(() => {});
+    } catch (_) {
+        // silencieux : si le moteur échoue, on ne lit rien (pas de bruit parasite)
+    } finally {
+        _piper.busy = false;
+        if (btn) btn.classList.remove('is-loading');
+    }
 }
 
 async function _sendChat() {

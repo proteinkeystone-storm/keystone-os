@@ -1006,6 +1006,13 @@
 }
 .sa-voice-pick:hover { border-color: var(--tx3); }
 .sa-voice-pick:focus { outline: none; border-color: var(--gold); }
+/* Voyant pendant la génération de la voix neuronale Piper (1er usage = ~60 Mo). */
+.sa-voice-toggle.is-loading {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  animation: sa-voice-pulse 1s ease-in-out infinite;
+}
+@keyframes sa-voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
 /* ═══ Sprint SA-4 — wizard, trous, golden set ══════════════════ */
 
