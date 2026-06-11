@@ -11,7 +11,8 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
-  splitGapReply, pickFallback }
+  splitGapReply, pickFallback,
+  validateImportUrl, htmlToText, clampExtractText, importFileKindOf }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -235,6 +236,50 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
 console.log('── SA-8.0 — publicAgentMeta expose le rôle ──');
 check('role exposé au visiteur', publicAgentMeta({ name: 'L', config: { identity: { role: ' guide ' } } }).role === 'guide');
 check('role absent → \'\'', publicAgentMeta({ name: 'L', config: { identity: {} } }).role === '');
+
+console.log('── SA-8.1 — validateImportUrl (import de page web) ──');
+check('https accepté', validateImportUrl('https://exemple.fr/tarifs').ok === true);
+check('http accepté', validateImportUrl('http://exemple.fr').ok === true);
+check('schéma implicite → https ajouté', validateImportUrl('exemple.fr/menu').url === 'https://exemple.fr/menu');
+check('ftp refusé', validateImportUrl('ftp://exemple.fr').ok === false);
+check('javascript: refusé', validateImportUrl('javascript:alert(1)').ok === false);
+check('credentials refusés', validateImportUrl('https://admin:pass@exemple.fr').ok === false);
+check('IP littérale refusée', validateImportUrl('https://192.168.1.10/x').ok === false);
+check('localhost refusé', validateImportUrl('http://localhost:8080').ok === false);
+check('hôte sans point refusé', validateImportUrl('https://intranet/page').ok === false);
+check('vide / trop long refusés',
+  validateImportUrl('').ok === false && validateImportUrl('https://e.fr/' + 'a'.repeat(2050)).ok === false);
+
+console.log('── SA-8.1 — htmlToText (repli maison sans toMarkdown) ──');
+{
+  const html = `<html><head><title>T</title><style>.x{color:red}</style></head>
+    <body><script>alert(1)</script><h1>Nos tarifs</h1><p>Adulte&nbsp;: 12&amp;euro;</p>
+    <ul><li>Lundi</li><li>Mardi</li></ul><!-- caché --></body></html>`;
+  const t = htmlToText(html);
+  check('scripts/styles/commentaires retirés', !t.includes('alert') && !t.includes('color:red') && !t.includes('caché'));
+  check('contenu lisible conservé', t.includes('Nos tarifs') && t.includes('Adulte'));
+  check('listes → lignes à puce', t.includes('- Lundi') && t.includes('- Mardi'));
+  check('entités décodées', htmlToText('A &amp; B &#233;t&eacute;'.replace('&eacute;', '&#233;')).includes('A & B'));
+  check('vide → \'\'', htmlToText('') === '');
+}
+
+console.log('── SA-8.1 — clampExtractText (borne d\'extraction) ──');
+{
+  const short = clampExtractText('Bonjour.', 100);
+  check('court → intact, non tronqué', short.text === 'Bonjour.' && short.truncated === false);
+  const long = clampExtractText(('Phrase utile. '.repeat(40)).trim(), 100);
+  check('long → tronqué sous la borne, à la frontière de phrase',
+    long.truncated === true && long.text.length <= 100 && long.text.endsWith('.'));
+  const noBreak = clampExtractText('a'.repeat(500), 100);
+  check('sans frontière → coupe dure à la borne', noBreak.truncated === true && noBreak.text.length === 100);
+}
+
+console.log('── SA-8.1 — importFileKindOf (whitelist fichiers) ──');
+check('pdf → binaire', importFileKindOf('Carte 2026.PDF').kind === 'binary');
+check('docx/xlsx/csv → binaire', ['a.docx', 'b.xlsx', 'c.csv'].every(n => importFileKindOf(n).kind === 'binary'));
+check('txt/md → texte', importFileKindOf('notes.txt').kind === 'text' && importFileKindOf('doc.md').kind === 'text');
+check('image refusée (coût IA récurrent)', importFileKindOf('photo.jpeg').ok === false && importFileKindOf('logo.png').ok === false);
+check('extension inconnue / absente refusée', importFileKindOf('app.exe').ok === false && importFileKindOf('sansext').ok === false);
 
 console.log('── contextualQuery (suivi « oui » — bug capture Stéphane) ──');
 {

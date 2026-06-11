@@ -123,6 +123,44 @@
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
+/* ── SA-8.1 — modal « Nourrir le coffre » : modes + bouton fichier ── */
+.sa-ex-modes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.sa-ex-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  color: var(--tx2);
+  background: var(--navy2);
+  border: 1px solid var(--bd);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.sa-ex-mode:hover { border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.sa-ex-mode.is-on {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
+}
+.sa-ex-filebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* ── Grille des 7 types de fiches (vue Kortex) ─────────────────── */
 .sa-types-grid {
   width: 100%;

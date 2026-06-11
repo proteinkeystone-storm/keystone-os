@@ -114,7 +114,10 @@ const _kx = {
     editing: null,             // unit en édition (null = création)
     editType: 'qa',            // type sélectionné en création
 };
-const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error: null, adding: false };
+// SA-8.1 — mode : 'paste' (coller du texte) | 'url' (page web) | 'file'
+// (PDF, Word…). source = { ref } quand les propositions viennent d'un import.
+const _ex = { open: false, busy: false, proposals: [], checked: new Set(), error: null, adding: false,
+    mode: 'paste', source: null, file: null };
 // Recherche hybride (SA-2) — results null = pas de recherche active.
 const _kxs = { q: '', busy: false, mode: null, results: null };
 // Agents (SA-3) — mode : 'list' | 'form' (création/édition d'agent)
@@ -295,6 +298,10 @@ function _onClick(e) {
     // ── Coffre (onglet Savoir) : liste ──
     if (act === 'kx-new')       { _openEditor(null); return; }
     if (act === 'kx-extract')   { _openExtract(); return; }
+    // SA-8.1 — sources d'import (modes du modal « Nourrir le coffre »)
+    if (act === 'ex-mode')      { _ex.mode = actEl.dataset.v; _ex.error = null; _renderOverlay(); return; }
+    if (act === 'ex-run-url')   { _runImportUrl(); return; }
+    if (act === 'ex-run-file')  { _runImportFile(); return; }
     // ── Coffre partagé (SA-4.4.2) ──
     if (act === 'kx-scope')         { _setKxScope(actEl.dataset.v); return; }
     if (act === 'kx-create-shared') { _createSharedVault(); return; }
@@ -1664,7 +1671,7 @@ function _kortexViewHTML() {
           </p>
           <div class="sa-cta-row">
             <button class="sa-btn is-primary" data-act="kx-new">${icon('plus', 16)} Créer ma première fiche</button>
-            <button class="sa-btn" data-act="kx-extract">${icon('sparkles', 16)} Coller du texte</button>
+            <button class="sa-btn" data-act="kx-extract">${icon('sparkles', 16)} Nourrir le coffre</button>
           </div>
           ${isShared ? '' : `
           <div class="sa-types-grid">
@@ -1696,8 +1703,8 @@ function _kortexViewHTML() {
           <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''} · ${isShared ? 'commun au dossier' : 'propre à cet agent'}</p>
         </div>
         <div class="sa-kx-acts">
-          <button class="sa-btn" data-act="kx-extract" title="Analyser un texte et en extraire des fiches (1 crédit IA)">
-            ${icon('sparkles', 16)} Coller du texte
+          <button class="sa-btn" data-act="kx-extract" title="Coller un texte, lire une page web ou un fichier → fiches proposées (1 crédit IA)">
+            ${icon('sparkles', 16)} Nourrir le coffre
           </button>
           <button class="sa-btn is-primary" data-act="kx-new">${icon('plus', 16)} Nouvelle fiche</button>
         </div>
@@ -2028,6 +2035,7 @@ async function _deleteUnit(id, fromEditor = false) {
 // ═══════════════════════════════════════════════════════════════
 function _openExtract() {
     _ex.open = true; _ex.busy = false; _ex.proposals = []; _ex.checked = new Set(); _ex.error = null;
+    _ex.mode = 'paste'; _ex.source = null; _ex.file = null;
     _renderOverlay();
 }
 function _closeExtract() {
@@ -2068,7 +2076,38 @@ function _renderOverlay() {
         </button>
       </div>`;
     } else {
-        inner = `
+        // SA-8.1 — trois sources : coller du texte / page web / fichier.
+        const modes = [
+            { id: 'paste', icon: 'edit',           label: 'Coller du texte' },
+            { id: 'url',   icon: 'globe',          label: 'Page web' },
+            { id: 'file',  icon: 'upload-cloud',   label: 'Fichier' },
+        ];
+        const chips = `<div class="sa-ex-modes">${modes.map(m => `
+          <button class="sa-ex-mode ${_ex.mode === m.id ? 'is-on' : ''}" data-act="ex-mode" data-v="${m.id}">${icon(m.icon, 13)} ${m.label}</button>`).join('')}</div>`;
+        let zone;
+        if (_ex.mode === 'url') {
+            zone = `
+      <p class="sa-ex-lead">Indiquez l'adresse d'une page de votre site (présentation, tarifs, FAQ, menu…).
+      L'IA lit la page et en propose des fiches typées que <strong>vous relisez avant d'ajouter</strong>.</p>
+      <input class="sa-input" type="url" data-slot="ex-url" placeholder="https://votre-site.fr/tarifs" inputmode="url">
+      ${_ex.error ? `<p class="sa-ed-error">${_esc(_ex.error)}</p>` : ''}
+      <div class="sa-ed-actions">
+        <button class="sa-btn" data-act="ex-close">Annuler</button>
+        <button class="sa-btn is-primary" data-act="ex-run-url">${icon('sparkles', 15)} Lire la page <em class="sa-credit-note">1 crédit IA</em></button>
+      </div>`;
+        } else if (_ex.mode === 'file') {
+            zone = `
+      <p class="sa-ex-lead">Vos documents existants contiennent déjà le savoir : plaquette, carte, tarifs, procédures.
+      Formats : PDF, Word, Excel, CSV, texte — <strong>8 Mo max</strong>. Relecture avant tout ajout.</p>
+      <label class="sa-btn sa-ex-filebtn">${icon('upload-cloud', 15)} ${_ex.file ? _esc(_ex.file.name) : 'Choisir un fichier…'}
+        <input type="file" data-slot="ex-file" hidden accept=".pdf,.docx,.xlsx,.xls,.ods,.odt,.csv,.html,.htm,.xml,.txt,.md"></label>
+      ${_ex.error ? `<p class="sa-ed-error">${_esc(_ex.error)}</p>` : ''}
+      <div class="sa-ed-actions">
+        <button class="sa-btn" data-act="ex-close">Annuler</button>
+        <button class="sa-btn is-primary" data-act="ex-run-file" ${_ex.file ? '' : 'disabled'}>${icon('sparkles', 15)} Analyser le fichier <em class="sa-credit-note">1 crédit IA</em></button>
+      </div>`;
+        } else {
+            zone = `
       <p class="sa-ex-lead">Collez n'importe quel texte qui contient du savoir — notes, email, page de documentation,
       transcription d'une explication orale. L'IA en propose des fiches typées que <strong>vous relisez avant d'ajouter</strong>.</p>
       <textarea class="sa-textarea sa-ex-text" data-slot="ex-text" rows="10" placeholder="Collez votre texte ici (30 caractères minimum)…"></textarea>
@@ -2077,29 +2116,70 @@ function _renderOverlay() {
         <button class="sa-btn" data-act="ex-close">Annuler</button>
         <button class="sa-btn is-primary" data-act="ex-run">${icon('sparkles', 15)} Analyser le texte <em class="sa-credit-note">1 crédit IA</em></button>
       </div>`;
+        }
+        inner = chips + zone;
     }
 
     slot.innerHTML = `
     <div class="sa-modal-backdrop" data-act="ex-close"></div>
-    <div class="sa-modal" role="dialog" aria-label="Extraction de fiches">
+    <div class="sa-modal" role="dialog" aria-label="Nourrir le coffre">
       <button class="sa-modal-close" data-act="ex-close" aria-label="Fermer">${icon('x', 16)}</button>
-      <h3 class="sa-modal-title">${icon('sparkles', 18)} Coller du texte</h3>
+      <h3 class="sa-modal-title">${icon('sparkles', 18)} Nourrir le coffre</h3>
       ${inner}
     </div>`;
+    // SA-8.1 — input file : retient le fichier choisi et réaffiche son nom.
+    const fi = slot.querySelector('[data-slot="ex-file"]');
+    if (fi) fi.addEventListener('change', () => { _ex.file = fi.files?.[0] || null; _ex.error = null; _renderOverlay(); });
 }
 
 async function _runExtract() {
     const ta = _root.querySelector('[data-slot="ex-text"]');
     const text = (ta?.value || '').trim();
     if (text.length < 30) { _ex.error = 'Texte trop court (30 caractères minimum).'; _renderOverlay(); return; }
+    _ex.source = null;
+    await _exCall(() => _api('/kortex/extract', { method: 'POST', body: { text } }));
+}
 
+// SA-8.1 — import d'une page web : le worker lit la page (toMarkdown ou
+// repli maison) et passe par le même pipeline d'extraction.
+async function _runImportUrl() {
+    const inp = _root.querySelector('[data-slot="ex-url"]');
+    const url = (inp?.value || '').trim();
+    if (!url) { _ex.error = 'Indiquez l\'adresse de la page.'; _renderOverlay(); return; }
+    _ex.source = { ref: url };
+    await _exCall(() => _api('/kortex/import-url', { method: 'POST', body: { url } }));
+}
+
+// SA-8.1 — import d'un fichier : envoyé BINAIRE (pas de JSON) avec son nom
+// en query — _api ne convient pas, fetch dédié.
+async function _runImportFile() {
+    const f = _ex.file;
+    if (!f) { _ex.error = 'Choisissez d\'abord un fichier.'; _renderOverlay(); return; }
+    if (f.size > 8 * 1024 * 1024) { _ex.error = 'Fichier trop lourd (8 Mo max).'; _renderOverlay(); return; }
+    _ex.source = { ref: f.name };
+    await _exCall(async () => {
+        const res = await fetch(`${API_BASE}/api/smart-agent/kortex/import-file?name=${encodeURIComponent(f.name)}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': f.type || 'application/octet-stream' },
+            body: f,
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) { const e = new Error(data.error || `Erreur ${res.status}`); e.data = data; throw e; }
+        return data;
+    });
+}
+
+// Tronc commun des trois sources : appel → propositions cochées → erreurs.
+async function _exCall(call) {
     _ex.busy = true; _ex.error = null;
     _renderOverlay();
     try {
-        const res = await _api('/kortex/extract', { method: 'POST', body: { text } });
+        const res = await call();
         _ex.proposals = res.proposals || [];
         _ex.checked   = new Set(_ex.proposals.map((_, i) => i));
         if (!_ex.proposals.length) _ex.error = res.note || 'Aucune fiche exploitable extraite.';
+        else if (res.truncated) _toast('Document long : seul le début a été analysé.', 'ok');
     } catch (e) {
         _ex.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
             ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
@@ -2123,7 +2203,10 @@ async function _addProposals() {
         try {
             await _api('/kortex/units', {
                 method: 'POST',
-                body: { type: p.type, title: p.title, body: p.body, status: 'draft', source_kind: 'paste',
+                body: { type: p.type, title: p.title, body: p.body, status: 'draft',
+                    // SA-8.1 — la provenance suit la source : import (URL/fichier) ou coller-texte.
+                    source_kind: _ex.source ? 'import' : 'paste',
+                    ...(_ex.source?.ref ? { source_ref: _ex.source.ref } : {}),
                     ...((_kx.scope === 'shared' && _kx.sharedVault) ? { vault_id: _kx.sharedVault.id } : { agent_id: _cur.id }) },
             });
             added++;

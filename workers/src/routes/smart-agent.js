@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-8.0';
+const SA_ENGINE_VERSION = 'SA-8.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -850,6 +850,190 @@ export async function handleKortexExtract(request, env) {
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
   return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-8.1 — INGESTION SANS FRICTION : page web (URL) et fichier
+// (PDF, DOCX, CSV…) → markdown (env.AI.toMarkdown, gratuit hors
+// images) → MÊME pipeline _aiExtract que le coller-texte (1 crédit
+// dormant) → fiches proposées, relecture humaine avant ajout.
+// Coût ponctuel à l'import, RIEN de récurrent (doctrine flat).
+// ═══════════════════════════════════════════════════════════════
+const IMPORT_URL_TIMEOUT_MS = 15000;
+const IMPORT_MAX_HTML  = 2  * 1024 * 1024;   // 2 Mo — page web
+const IMPORT_MAX_FILE  = 8  * 1024 * 1024;   // 8 Mo — fichier envoyé
+const EXTRACT_MAX_CHARS = 20000;             // même borne que le coller-texte
+
+// Pur (testé) : valide une URL d'import. http(s) public uniquement —
+// pas de credentials, pas d'IP littérale ni d'hôte local (defense in
+// depth anti-SSRF ; le réseau privé est de toute façon hors d'atteinte
+// d'un Worker, mais on refuse proprement plutôt que d'échouer salement).
+export function validateImportUrl(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s.length > 2048) return { ok: false, msg: 'Adresse invalide.' };
+  let u;
+  try { u = new URL(s.includes('://') ? s : `https://${s}`); } catch (_) {
+    return { ok: false, msg: 'Adresse invalide.' };
+  }
+  if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, msg: 'Seules les adresses http(s) sont acceptées.' };
+  if (u.username || u.password) return { ok: false, msg: 'Adresse invalide.' };
+  const host = u.hostname.toLowerCase();
+  const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
+  const isLocal = host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || !host.includes('.');
+  if (isIp || isLocal) return { ok: false, msg: 'Adresse non accessible.' };
+  return { ok: true, url: u.toString() };
+}
+
+// Pur (testé) : repli maison HTML → texte, si toMarkdown est indisponible.
+// Pas un parseur complet — assez bon pour extraire le contenu lisible.
+export function htmlToText(html) {
+  let s = String(html || '');
+  s = s.replace(/<!--[\s\S]*?-->/g, ' ');
+  s = s.replace(/<(script|style|noscript|svg|head|template)\b[\s\S]*?<\/\1>/gi, ' ');
+  s = s.replace(/<(br|hr)\s*\/?>/gi, '\n');
+  s = s.replace(/<\/(p|div|li|tr|h[1-6]|section|article|blockquote)>/gi, '\n');
+  s = s.replace(/<li\b[^>]*>/gi, '\n- ');
+  s = s.replace(/<[^>]+>/g, ' ');
+  s = s.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+       .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#0?39;/g, '\'')
+       .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(+n); } catch (_) { return ' '; } });
+  return s.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Pur (testé) : tronque le texte à la borne d'extraction, en coupant à la
+// dernière frontière naturelle (fin de ligne ou de phrase) — pas en plein mot.
+export function clampExtractText(text, max = EXTRACT_MAX_CHARS) {
+  const s = String(text || '').trim();
+  if (s.length <= max) return { text: s, truncated: false };
+  let cut = s.slice(0, max);
+  const brk = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf('. '));
+  if (brk > max * 0.6) cut = cut.slice(0, brk + 1);
+  return { text: cut.trim(), truncated: true };
+}
+
+// Pur (testé) : whitelist des fichiers importables. Les IMAGES sont refusées
+// volontairement (toMarkdown les convertit via 2 modèles IA payants — coût
+// récurrent contraire à la doctrine flat). kind 'text' = décodage direct,
+// 'binary' = conversion toMarkdown.
+const IMPORT_FILE_KINDS = {
+  pdf:  'binary', docx: 'binary', xlsx: 'binary', xls: 'binary',
+  ods:  'binary', odt:  'binary', numbers: 'binary', csv: 'binary',
+  html: 'binary', htm:  'binary', xml: 'binary',
+  txt:  'text',   md:   'text',   markdown: 'text',
+};
+export function importFileKindOf(name) {
+  const n = String(name || '').trim().toLowerCase();
+  const ext = n.includes('.') ? n.split('.').pop() : '';
+  const kind = IMPORT_FILE_KINDS[ext];
+  if (!kind) {
+    return { ok: false, msg: 'Format non pris en charge. Acceptés : PDF, Word, Excel, CSV, HTML, texte.' };
+  }
+  return { ok: true, kind, ext };
+}
+
+// toMarkdown best-effort : null si indisponible/échec (le caller décide
+// du repli). Forme de réponse tolérante (objet ou tableau).
+async function _mdFromBlob(env, name, buf, mimeType) {
+  if (!env.AI || typeof env.AI.toMarkdown !== 'function') return null;
+  try {
+    const res = await env.AI.toMarkdown({ name, blob: new Blob([buf], { type: mimeType }) });
+    const one = Array.isArray(res) ? res[0] : res;
+    if (one && one.format === 'markdown' && typeof one.data === 'string' && one.data.trim()) return one.data;
+    return null;
+  } catch (_) { return null; }
+}
+
+// Lance l'extraction sur un texte importé (borne partagée + même prompt que
+// le coller-texte) et fabrique la réponse JSON commune aux deux imports.
+async function _extractFromImport(env, gate, origin, rawText, sourceRef) {
+  const { text, truncated } = clampExtractText(rawText);
+  if (text.length < 30) {
+    return err('Contenu illisible ou vide — si la page est très dynamique, copiez son texte et utilisez « Coller du texte ».', 422, origin);
+  }
+  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT,
+    `TEXTE À ANALYSER (importé de : ${sourceRef}) :\n\n${text}`);
+  if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
+  if (!r.proposals.length) {
+    return json({ proposals: [], truncated, source_ref: sourceRef, note: 'Aucune fiche exploitable extraite de ce contenu.' }, 200, origin);
+  }
+  return json({ proposals: r.proposals, truncated, source_ref: sourceRef,
+    model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
+}
+
+// POST /api/smart-agent/kortex/import-url — { url } → fiches proposées.
+export async function handleKortexImportUrl(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const b = await parseBody(request);
+  const v = validateImportUrl(b?.url);
+  if (!v.ok) return err(v.msg, 400, origin);
+
+  let res;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), IMPORT_URL_TIMEOUT_MS);
+    res = await fetch(v.url, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'KeystoneImport/1.0 (+https://protein-keystone.com)', 'Accept': 'text/html,application/pdf,text/plain,*/*' },
+    });
+    clearTimeout(t);
+  } catch (_) {
+    return err('Page injoignable — vérifiez l\'adresse (ou copiez le texte de la page).', 502, origin);
+  }
+  if (!res.ok) return err(`La page répond « ${res.status} » — vérifiez l'adresse.`, 422, origin);
+
+  const len = parseInt(res.headers.get('content-length') || '0', 10);
+  if (len > IMPORT_MAX_HTML) return err('Page trop lourde (2 Mo max).', 413, origin);
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > IMPORT_MAX_HTML) return err('Page trop lourde (2 Mo max).', 413, origin);
+
+  const ctype = (res.headers.get('content-type') || '').toLowerCase();
+  let text = null;
+  if (ctype.includes('application/pdf')) {
+    text = await _mdFromBlob(env, 'page.pdf', buf, 'application/pdf');
+    if (!text) return err('Conversion du PDF indisponible pour le moment — réessayez.', 502, origin);
+  } else if (ctype.includes('text/plain') || ctype.includes('text/markdown')) {
+    text = new TextDecoder().decode(buf);
+  } else {
+    // HTML (ou type inconnu : on tente en HTML) — toMarkdown, sinon repli maison.
+    const html = new TextDecoder().decode(buf);
+    text = await _mdFromBlob(env, 'page.html', buf, 'text/html') || htmlToText(html);
+  }
+  return _extractFromImport(env, gate, origin, text, v.url);
+}
+
+// POST /api/smart-agent/kortex/import-file?name=<fichier> — corps BINAIRE
+// (pas de JSON : le front envoie le File tel quel) → fiches proposées.
+export async function handleKortexImportFile(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const name = decodeURIComponent(new URL(request.url).searchParams.get('name') || '').trim().slice(0, 200);
+  const fk = importFileKindOf(name);
+  if (!fk.ok) return err(fk.msg, 400, origin);
+
+  const len = parseInt(request.headers.get('content-length') || '0', 10);
+  if (len > IMPORT_MAX_FILE) return err('Fichier trop lourd (8 Mo max).', 413, origin);
+  let buf;
+  try { buf = await request.arrayBuffer(); } catch (_) { buf = null; }
+  if (!buf || !buf.byteLength) return err('Fichier vide ou illisible.', 400, origin);
+  if (buf.byteLength > IMPORT_MAX_FILE) return err('Fichier trop lourd (8 Mo max).', 413, origin);
+
+  let text;
+  if (fk.kind === 'text') {
+    text = new TextDecoder().decode(buf);
+  } else {
+    const mime = request.headers.get('content-type') || 'application/octet-stream';
+    text = await _mdFromBlob(env, name, buf, mime);
+    if (!text) return err('Conversion indisponible pour ce fichier — réessayez, ou copiez son texte dans « Coller du texte ».', 502, origin);
+  }
+  return _extractFromImport(env, gate, origin, text, name);
 }
 
 // ── Cœur d'extraction IA (crédit DORMANT + appel KS_AI_MODEL + parse) ──

@@ -106,6 +106,7 @@ import { handleSmartAgentHealth,
          handleKortexUnitsList, handleKortexUnitCreate,
          handleKortexUnitUpdate, handleKortexUnitDelete,
          handleKortexExtract, handleKortexSearch, handleKortexReindex,
+         handleKortexImportUrl, handleKortexImportFile,
          handleAgentsList, handleAgentCreate, handleAgentUpdate, handleAgentDelete,
          handleAgentChat, handleGapsList, handleGapDismiss, handleGapStructure,
          handleGoldenList, handleGoldenAdd, handleGoldenDelete, handleGoldenReplay,
@@ -148,6 +149,9 @@ export default {
       if (path === '/api/smart-agent/kortex/units'       && method === 'GET')  return handleKortexUnitsList(request, env);
       if (path === '/api/smart-agent/kortex/units'       && method === 'POST') return handleKortexUnitCreate(request, env);
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
+      // SA-8.1 — ingestion sans friction : page web / fichier → fiches proposées
+      if (path === '/api/smart-agent/kortex/import-url'  && method === 'POST') return handleKortexImportUrl(request, env);
+      if (path === '/api/smart-agent/kortex/import-file' && method === 'POST') return handleKortexImportFile(request, env);
       if (path === '/api/smart-agent/kortex/search'      && method === 'GET')  return handleKortexSearch(request, env);
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
