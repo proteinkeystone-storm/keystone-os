@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <title>Test voix Piper — Keystone</title>
+  <style>
+    :root {
+      --navy: #0a2741; --navy2: #0f3050; --gold: #c9b48a; --gold2: #e3d2ad;
+      --txt: #f4f7fb; --muted: #9fb2c6; --border: rgba(255,255,255,.14);
+      --ok: #34d399; --err: #f06d6d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(160deg, var(--navy), #07101c);
+      color: var(--txt);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; justify-content: center;
+      padding: calc(env(safe-area-inset-top,0) + 28px) 18px 40px;
+    }
+    .wrap { width: 100%; max-width: 560px; }
+    h1 { font-size: 22px; font-weight: 900; letter-spacing: -.02em; margin: 0 0 6px; }
+    .sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+    .card {
+      background: rgba(255,255,255,.04); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px; margin-bottom: 16px;
+    }
+    label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--gold); margin: 0 0 8px; }
+    select, textarea {
+      width: 100%; font: inherit; color: var(--txt);
+      background: var(--navy2); border: 1px solid var(--border);
+      border-radius: 11px; padding: 11px 13px; outline: none;
+    }
+    select:focus, textarea:focus { border-color: var(--gold); }
+    textarea { resize: vertical; min-height: 84px; margin-top: 4px; }
+    .row { margin-bottom: 14px; }
+    button {
+      width: 100%; font: inherit; font-weight: 800; font-size: 15px;
+      color: var(--navy); cursor: pointer;
+      background: linear-gradient(135deg, var(--gold2), var(--gold));
+      border: none; border-radius: 12px; padding: 14px;
+      transition: transform .12s, opacity .12s;
+    }
+    button:active { transform: scale(.98); }
+    button:disabled { opacity: .5; cursor: progress; }
+    .status { font-size: 13px; color: var(--muted); margin-top: 14px; min-height: 18px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); white-space: pre-wrap; }
+    .bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,.10);
+      overflow: hidden; margin-top: 10px; display: none; }
+    .bar > i { display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .2s; }
+    audio { width: 100%; margin-top: 14px; display: none; }
+    .note { font-size: 12px; color: var(--muted); opacity: .8; line-height: 1.5; }
+    .note b { color: var(--txt); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Test voix Piper</h1>
+    <p class="sub">Synthèse vocale neuronale <b>open source</b>, 100&nbsp;% dans le navigateur — aucun serveur, aucun coût.</p>
+
+    <div class="card">
+      <div class="row">
+        <label for="voice">Voix française</label>
+        <select id="voice">
+          <option value="fr_FR-siwis-medium" selected>Siwis — féminine (qualité moyenne)</option>
+          <option value="fr_FR-tom-medium">Tom — masculine (qualité moyenne)</option>
+          <option value="fr_FR-upmc-medium">UPMC — (qualité moyenne)</option>
+          <option value="fr_FR-mls-medium">MLS — (qualité moyenne)</option>
+          <option value="fr_FR-siwis-low">Siwis — féminine (rapide, basse qualité)</option>
+          <option value="fr_FR-gilles-low">Gilles — masculine (rapide)</option>
+          <option value="fr_FR-mls_1840-low">MLS 1840 — (rapide)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="text">Texte à dire</label>
+        <textarea id="text">Bonjour, je suis le guide du musée. Les horaires d'ouverture sont de neuf heures à dix-huit heures, du mardi au dimanche.</textarea>
+      </div>
+      <button id="go">Générer et écouter</button>
+      <div class="bar" id="bar"><i></i></div>
+      <div class="status" id="status"></div>
+      <audio id="audio" controls></audio>
+    </div>
+
+    <p class="note">Au <b>premier</b> usage d'une voix, son modèle (~20–60&nbsp;Mo selon la qualité) se télécharge puis reste en cache. Les voix « moyenne » sonnent mieux mais sont plus lourdes ; les « rapide » se chargent vite.</p>
+  </div>
+
+  <script type="module">
+    // Runtime ONNX redirigé vers jsdelivr 1.19.2 (le CDN par défaut de la lib,
+    // cdnjs 1.18.0, ne sert plus le loader .mjs → « no backend »).
+    const WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+    const LIB = 'https://esm.sh/@mintplex-labs/piper-tts-web';
+
+    const $ = (id) => document.getElementById(id);
+    const status = $('status'), bar = $('bar'), barFill = bar.firstElementChild, audio = $('audio');
+    let _piper = null;          // module
+    let _session = null, _sessionVoice = null;
+
+    function setStatus(msg, kind) { status.textContent = msg; status.className = 'status' + (kind ? ' ' + kind : ''); }
+    function setProgress(p) {
+      if (p == null) { bar.style.display = 'none'; return; }
+      bar.style.display = 'block';
+      barFill.style.width = Math.max(0, Math.min(100, p)) + '%';
+    }
+
+    async function ensureSession(voiceId) {
+      if (_session && _sessionVoice === voiceId) return _session;
+      if (!_piper) { setStatus('Chargement du moteur…'); _piper = await import(LIB); }
+      setStatus('Préparation de la voix « ' + voiceId + ' »…');
+      setProgress(0);
+      _session = await _piper.TtsSession.create({
+        voiceId,
+        wasmPaths: WASM_PATHS,
+        progress: (e) => {
+          // Format défensif : {loaded,total} ou un ratio.
+          let pct = null;
+          if (e && typeof e === 'object' && e.total) pct = (e.loaded / e.total) * 100;
+          else if (typeof e === 'number') pct = e <= 1 ? e * 100 : e;
+          if (pct != null) setProgress(pct);
+        },
+      });
+      _sessionVoice = voiceId;
+      setProgress(null);
+      return _session;
+    }
+
+    async function run() {
+      const voiceId = $('voice').value;
+      const text = ($('text').value || '').trim();
+      if (!text) { setStatus('Saisis un texte.', 'err'); return; }
+      $('go').disabled = true;
+      audio.style.display = 'none';
+      try {
+        const t0 = performance.now();
+        const session = await ensureSession(voiceId);
+        setStatus('Génération de l’audio…');
+        const blob = await session.predict(text);
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        audio.src = URL.createObjectURL(blob);
+        audio.style.display = 'block';
+        await audio.play().catch(() => {});
+        setStatus('Prêt — ' + Math.round(blob.size / 1024) + ' Ko, en ' + secs + ' s. Réécoute avec le lecteur.', 'ok');
+      } catch (e) {
+        setProgress(null);
+        setStatus('Échec : ' + (e && e.message ? e.message : String(e)), 'err');
+      } finally {
+        $('go').disabled = false;
+      }
+    }
+
+    $('go').addEventListener('click', run);
+  </script>
+</body>
+</html>
