@@ -255,6 +255,7 @@ function _onClick(e) {
     if (act === 'pub-copy')     { _copyPublic(actEl.dataset.url); return; }
     if (act === 'pub-qr')       { _toggleQr(); return; }
     if (act === 'pub-revoke')   { _revokePublic(actEl.dataset.id); return; }
+    if (act === 'pub-save')     { _savePublicSettings(); return; }
     // ── Chat / bac à sable ──
     if (act === 'chat-send')    { _sendChat(); return; }
     if (act === 'chat-cite')    { _openUnitFromChat(actEl.dataset.uid); return; }
@@ -595,7 +596,7 @@ function _agentsListHTML() {
       <article class="sa-agent-card" data-act="ag-open" data-id="${a.id}" role="button" tabindex="0">
         <span class="sa-agent-ico">${icon('smart-agent', 22)}</span>
         <div class="sa-agent-txt">
-          <strong class="sa-agent-name">${_esc(a.name)}${paused ? ' <span class="sa-badge is-quarantine">En pause</span>' : ''}</strong>
+          <strong class="sa-agent-name">${_esc(a.name)}${paused ? ' <span class="sa-badge is-quarantine">En pause</span>' : ''}${a.status === 'published' ? ' <span class="sa-badge is-live">En ligne</span>' : ''}</strong>
           <span class="sa-agent-mission">${_esc(a.config?.identity?.mission || 'Sans mission définie')}</span>
         </div>
         <div class="sa-agent-acts">
@@ -769,8 +770,13 @@ function _publishHTML() {
         </div>`;
     }
     const url = p.link.url || '';
+    const today = p.link.usage_today ?? 0;
+    const total = p.link.usage_total ?? 0;
+    const cap = p.link.max_per_day ?? 500;
+    const exp = p.link.expires_at || '';
     return `<div class="sa-pub is-live">
       <div class="sa-pub-head">${icon('globe', 16)} En ligne — accessible au public</div>
+      <div class="sa-pub-stat"><strong>${today}</strong> question${today === 1 ? '' : 's'} aujourd'hui · <strong>${total}</strong> au total${exp ? ` · expire le ${_esc(exp)}` : ''}</div>
       <p class="sa-pub-note">Partagez ce lien ou ce QR. Toute personne peut interroger l'agent, sans compte.</p>
       <div class="sa-pub-linkrow">
         <input class="sa-input sa-pub-url" value="${_escAttr(url)}" readonly onclick="this.select()">
@@ -781,6 +787,14 @@ function _publishHTML() {
         <button class="sa-btn is-danger" data-act="pub-revoke" data-id="${_escAttr(p.link.id || '')}">${icon('trash-2', 15)} Dépublier</button>
       </div>
       ${p.qr ? `<div class="sa-pub-qr">${p.qr}</div>` : ''}
+      <details class="sa-pub-settings">
+        <summary>Réglages du lien</summary>
+        <label class="sa-field"><span class="sa-field-label">Questions max par jour (tous visiteurs confondus)</span>
+          <input class="sa-input" type="number" min="1" max="100000" data-pub="maxday" value="${_escAttr(String(cap))}"></label>
+        <label class="sa-field"><span class="sa-field-label">Expire le — vide = pas d'expiration</span>
+          <input class="sa-input" type="date" data-pub="expire" value="${_escAttr(exp)}"></label>
+        <button class="sa-btn is-primary" data-act="pub-save" ${p.busy ? 'disabled' : ''}>${icon('save', 15)} Mettre à jour</button>
+      </details>
     </div>`;
 }
 
@@ -837,11 +851,30 @@ async function _revokePublic(linkId) {
     try {
         await _api('/links/' + linkId + '/revoke', { method: 'POST' });
         _ag.publish.link = null; _ag.publish.qr = null;
+        if (_cur.agent) _cur.agent.status = 'draft';   // badge « En ligne » retiré
         _toast('Agent dépublié.');
     } catch (e) {
         _toast(e.message || 'Impossible de dépublier.', 'error');
     }
     _renderMain();
+}
+
+async function _savePublicSettings() {
+    const id = _ag.publish.link?.id;
+    if (!id) return;
+    const main = _root.querySelector('[data-slot="main"]');
+    const maxRaw = main?.querySelector('[data-pub="maxday"]')?.value;
+    const expRaw = main?.querySelector('[data-pub="expire"]')?.value;
+    const body = { expires_at: expRaw || null };
+    const n = parseInt(maxRaw, 10);
+    if (Number.isInteger(n)) body.max_per_day = n;
+    try {
+        await _api('/links/' + id, { method: 'PATCH', body });
+        _toast('Réglages du lien mis à jour.');
+        await _loadPublicLinks(_ag.form.id);   // recharge usage + réglages, re-render
+    } catch (e) {
+        _toast(e.message || 'Mise à jour impossible.', 'error');
+    }
 }
 
 function _testerHTML() {

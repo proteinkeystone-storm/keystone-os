@@ -1267,3 +1267,17 @@
   border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 }
 .sa-pub-qr svg { width: 184px; height: 184px; display: block; }
+
+/* SA-5.2 — visibilité (compteur + badge) & contrôle du lien */
+.sa-pub-stat { font-size: 12.5px; color: var(--tx2); margin: -2px 0 10px; }
+.sa-pub-stat strong { color: var(--text); font-weight: 800; }
+.sa-pub-settings { margin-top: 14px; }
+.sa-pub-settings > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 700;
+  color: var(--gold); padding: 4px 0; user-select: none;
+}
+.sa-pub-settings .sa-field { margin-top: 10px; }
+.sa-badge.is-live {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}

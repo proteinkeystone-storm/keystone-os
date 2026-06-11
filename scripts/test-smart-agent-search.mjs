@@ -10,7 +10,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   buildChatMessages, stripCitations, contextualQuery,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
-  validatePublicSlug, publicAgentMeta }
+  validatePublicSlug, publicAgentMeta, validatePublicLinkPatch }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -271,6 +271,20 @@ console.log('── publicAgentMeta (SA-5 — config publique strippée) ──'
     meta.config === undefined && Object.keys(meta).length === 3);
   check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
   check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
+}
+
+console.log('── validatePublicLinkPatch (SA-5.2 — réglages du lien) ──');
+{
+  check('plafond valide', validatePublicLinkPatch({ max_per_day: 200 }).max_per_day === 200);
+  check('plafond string numérique accepté', validatePublicLinkPatch({ max_per_day: '300' }).max_per_day === 300);
+  check('plafond 0 refusé', validatePublicLinkPatch({ max_per_day: 0 }).ok === false);
+  check('plafond hors borne refusé', validatePublicLinkPatch({ max_per_day: 999999 }).ok === false);
+  check('date valide conservée', validatePublicLinkPatch({ expires_at: '2026-12-31' }).expires_at === '2026-12-31');
+  check('date vide → null (retire l\'échéance)', validatePublicLinkPatch({ expires_at: '' }).expires_at === null);
+  check('date null → null', validatePublicLinkPatch({ expires_at: null }).expires_at === null);
+  check('date mal formée refusée', validatePublicLinkPatch({ expires_at: '31/12/2026' }).ok === false);
+  check('patch vide → ok sans champ',
+    (() => { const r = validatePublicLinkPatch({}); return r.ok && r.max_per_day === undefined && r.expires_at === undefined; })());
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);

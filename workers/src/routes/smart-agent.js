@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-5.0';
+const SA_ENGINE_VERSION = 'SA-5.2';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -380,6 +380,7 @@ async function ensureSmartAgentSchema(env) {
     )
   `);
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_public_links_agent ON sa_public_links(tenant_id, agent_id)');
+  await safe('ALTER TABLE sa_public_links ADD COLUMN expires_at TEXT');  // SA-5.2 — expiration optionnelle (YYYY-MM-DD)
   // Compteur anti-abus : (slug, jour, appareil) → nb de questions. L'agrégat
   // sur (slug, day) sert le plafond/jour du lien ; la ligne sert le cap/appareil.
   await safe(`
@@ -1097,6 +1098,23 @@ export function publicAgentMeta(agent) {
     opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
     tone:    (typeof idn.tone === 'string') ? idn.tone : '',
   };
+}
+
+// Pur (testé) : valide un PATCH de lien public — plafond/jour (entier borné)
+// et expiration (date AAAA-MM-JJ, ou null/'' pour retirer l'échéance).
+export function validatePublicLinkPatch(b) {
+  const out = {};
+  if (b && b.max_per_day !== undefined) {
+    const n = parseInt(b.max_per_day, 10);
+    if (!Number.isInteger(n) || n < 1 || n > 100000) return { ok: false, msg: 'Plafond invalide (entre 1 et 100000).' };
+    out.max_per_day = n;
+  }
+  if (b && b.expires_at !== undefined) {
+    if (b.expires_at === null || b.expires_at === '') out.expires_at = null;
+    else if (typeof b.expires_at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.expires_at)) out.expires_at = b.expires_at;
+    else return { ok: false, msg: 'Date d\'expiration invalide (AAAA-MM-JJ).' };
+  }
+  return { ok: true, ...out };
 }
 
 // Décision d'ancrage PARTAGÉE (chat SA-3 + replay golden SA-4) : la
@@ -1850,7 +1868,8 @@ async function _gatePublicLink(env, slug) {
            a.name, a.status AS agent_status, a.config
       FROM sa_public_links l
       JOIN sa_agents a ON a.id = l.agent_id AND a.tenant_id = l.tenant_id
-     WHERE l.slug = ? AND l.status = 'active' LIMIT 1
+     WHERE l.slug = ? AND l.status = 'active'
+       AND (l.expires_at IS NULL OR l.expires_at >= date('now')) LIMIT 1
   `).bind(s).all();
   if (!results.length) return null;
   const r = results[0];
@@ -2094,12 +2113,21 @@ export async function handleAgentLinksList(request, env, agentId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
-  const { results } = await env.DB.prepare(
-    "SELECT id, slug, status, max_per_day, created_at, revoked_at FROM sa_public_links WHERE agent_id = ? AND tenant_id = ? ORDER BY created_at DESC"
-  ).bind(agentId, gate.tenant).all();
+  const { results } = await env.DB.prepare(`
+    SELECT l.id, l.slug, l.status, l.max_per_day, l.expires_at, l.created_at, l.revoked_at,
+           COALESCE(SUM(u.count), 0) AS usage_total,
+           COALESCE(SUM(CASE WHEN u.day = date('now') THEN u.count ELSE 0 END), 0) AS usage_today
+      FROM sa_public_links l
+      LEFT JOIN sa_public_usage u ON u.slug = l.slug
+     WHERE l.agent_id = ? AND l.tenant_id = ?
+     GROUP BY l.id
+     ORDER BY l.created_at DESC
+  `).bind(agentId, gate.tenant).all();
   const links = results.map(r => ({
     id: r.id, slug: r.slug, status: r.status, max_per_day: r.max_per_day,
-    created_at: r.created_at, revoked_at: r.revoked_at, url: publicAgentUrl(env, r.slug),
+    expires_at: r.expires_at || null, created_at: r.created_at, revoked_at: r.revoked_at,
+    usage_today: r.usage_today, usage_total: r.usage_total,
+    url: publicAgentUrl(env, r.slug),
   }));
   return json({ links }, 200, origin);
 }
@@ -2110,9 +2138,41 @@ export async function handlePublicLinkRevoke(request, env, linkId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
+  const { results: lr } = await env.DB
+    .prepare('SELECT agent_id FROM sa_public_links WHERE id = ? AND tenant_id = ?')
+    .bind(linkId, gate.tenant).all();
+  if (!lr.length) return err('Lien introuvable', 404, origin);
   const res = await env.DB.prepare(
     "UPDATE sa_public_links SET status = 'revoked', revoked_at = datetime('now') WHERE id = ? AND tenant_id = ? AND status = 'active'"
   ).bind(linkId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Lien introuvable', 404, origin);
+  // Plus aucun lien actif → l'agent quitte « publié » (badge « En ligne » juste).
+  const { results: act } = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM sa_public_links WHERE agent_id = ? AND tenant_id = ? AND status = 'active'")
+    .bind(lr[0].agent_id, gate.tenant).all();
+  if (!act[0].n) {
+    await env.DB.prepare("UPDATE sa_agents SET status = 'draft', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+      .bind(lr[0].agent_id, gate.tenant).run();
+  }
+  return json({ ok: true }, 200, origin);
+}
+
+// ── PATCH /api/smart-agent/links/:id — régler plafond/jour + expiration ──
+export async function handlePublicLinkUpdate(request, env, linkId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const v = validatePublicLinkPatch(await parseBody(request));
+  if (!v.ok) return err(v.msg, 400, origin);
+  const sets = [], binds = [];
+  if (v.max_per_day !== undefined) { sets.push('max_per_day = ?'); binds.push(v.max_per_day); }
+  if (v.expires_at  !== undefined) { sets.push('expires_at = ?');  binds.push(v.expires_at); }
+  if (!sets.length) return json({ ok: true }, 200, origin);
+  binds.push(linkId, gate.tenant);
+  const res = await env.DB.prepare(
+    `UPDATE sa_public_links SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ? AND status = 'active'`
+  ).bind(...binds).run();
   if (!res.meta?.changes) return err('Lien introuvable', 404, origin);
   return json({ ok: true }, 200, origin);
 }

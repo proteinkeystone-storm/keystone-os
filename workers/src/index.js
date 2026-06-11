@@ -113,7 +113,7 @@ import { handleSmartAgentHealth,
          handleFoldersList, handleFolderCreate, handleFolderUpdate, handleFolderDelete,
          handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete,
          handlePublicAgentMeta, handlePublicAgentChat,
-         handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke } from './routes/smart-agent.js';
+         handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke, handlePublicLinkUpdate } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -176,6 +176,8 @@ export default {
       if (saLinksMatch && method === 'GET') return handleAgentLinksList(request, env, saLinksMatch[1]);
       const saLinkRevoke = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)\/revoke$/);
       if (saLinkRevoke && method === 'POST') return handlePublicLinkRevoke(request, env, saLinkRevoke[1]);
+      const saLinkMatch = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)$/);
+      if (saLinkMatch && method === 'PATCH') return handlePublicLinkUpdate(request, env, saLinkMatch[1]);
       // Golden set — /golden/replay AVANT /golden (sous-chemin plus spécifique)
       const saGoldReplay = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/golden\/replay$/);
       if (saGoldReplay && method === 'POST') return handleGoldenReplay(request, env, saGoldReplay[1]);
