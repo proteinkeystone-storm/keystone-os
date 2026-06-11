@@ -204,6 +204,17 @@
       background: rgba(201, 180, 138, .16);
     }
     .sa-head-voice svg { width: 19px; height: 19px; }
+    .sa-head-voice-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .sa-head-voice-pick {
+      max-width: 150px; height: 34px;
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, .22);
+      background: rgba(255, 255, 255, .10);
+      color: #fff;
+      font-size: 12px; padding: 0 8px;
+      cursor: pointer;
+    }
+    .sa-head-voice-pick option { color: #111; }
 
     .sa-mic {
       flex-shrink: 0;
@@ -260,6 +271,60 @@
     let _voiceOn = false;
     try { _voiceOn = localStorage.getItem('sa_voice_on') === '1'; } catch (_) {}
     let _rec = null, _listening = false;
+    let _voices = [], _voicesReady = false;
+
+    // Voix : choisir la PLUS NATURELLE dispo (la voix par défaut est souvent
+    // « robot » bas de gamme). getVoices() est asynchrone sur Chrome.
+    function ensureVoices() {
+      if (!HAS_TTS) return;
+      try {
+        _voices = window.speechSynthesis.getVoices() || [];
+        if (!_voicesReady) {
+          _voicesReady = true;
+          window.speechSynthesis.addEventListener('voiceschanged', () => {
+            _voices = window.speechSynthesis.getVoices() || [];
+            fillVoicePicker();
+          });
+        }
+      } catch (_) {}
+    }
+    function frVoices() { return _voices.filter(v => /^fr\b/i.test((v.lang || '').replace('_', '-'))); }
+    function voiceScore(v) {
+      const n = (v.name || '').toLowerCase();
+      let s = 0;
+      if (n.includes('google')) s += 100;
+      if (/(siri|premium|enhanced|neural|natural|amélie|amelie|aurélie|aurelie|audrey|thomas|chantal|marie)/.test(n)) s += 60;
+      if (n.includes('compact')) s -= 60;
+      if (v.localService === false) s += 8;
+      return s;
+    }
+    function bestFrVoice() { const fr = frVoices(); return fr.length ? fr.slice().sort((a, b) => voiceScore(b) - voiceScore(a))[0] : null; }
+    function currentVoiceName() { try { return localStorage.getItem('sa_voice_name') || ''; } catch (_) { return ''; } }
+    function chosenVoice() {
+      const name = currentVoiceName();
+      if (name) { const f = _voices.find(v => v.name === name); if (f) return f; }
+      return bestFrVoice();
+    }
+    function fillVoicePicker() {
+      const sel = document.getElementById('sa-voice-pick');
+      if (!sel) return;
+      const fr = frVoices();
+      const cur = currentVoiceName() || (bestFrVoice() && bestFrVoice().name) || '';
+      sel.innerHTML = fr.length
+        ? fr.map(v => `<option value="${escape(v.name)}"${v.name === cur ? ' selected' : ''}>${escape(v.name)}</option>`).join('')
+        : '<option value="">Voix par défaut…</option>';
+    }
+    function setVoiceName(name) {
+      try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
+      if (!HAS_TTS) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance('Bonjour, voici ma voix.');
+        const v = chosenVoice();
+        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
 
     const SVG_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
     function svgVol(on) {
@@ -272,14 +337,16 @@
       try {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
-        u.lang = 'fr-FR';
+        const v = chosenVoice();
+        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
         window.speechSynthesis.speak(u);
       } catch (_) {}
     }
     function toggleVoice() {
       _voiceOn = !_voiceOn;
       try { localStorage.setItem('sa_voice_on', _voiceOn ? '1' : '0'); } catch (_) {}
-      if (!_voiceOn && HAS_TTS) window.speechSynthesis.cancel();
+      if (_voiceOn) ensureVoices();
+      else if (HAS_TTS) window.speechSynthesis.cancel();
       const btn = document.getElementById('sa-voice');
       if (btn) {
         btn.classList.toggle('is-on', _voiceOn);
@@ -287,6 +354,8 @@
         btn.title = _voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute';
         btn.setAttribute('aria-pressed', _voiceOn ? 'true' : 'false');
       }
+      const pick = document.getElementById('sa-voice-pick');
+      if (pick) { pick.hidden = !_voiceOn; if (_voiceOn) fillVoicePicker(); }
     }
     function startDictation() {
       if (!SR_CLASS) return;
@@ -341,7 +410,10 @@
             <div class="sa-head-tag">Assistant</div>
             <div class="sa-head-name">${escape(meta.name || 'Assistant')}</div>
           </div>
-          ${HAS_TTS ? `<button class="sa-head-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${svgVol(_voiceOn)}</button>` : ''}
+          ${HAS_TTS ? `<div class="sa-head-voice-wrap">
+            <select class="sa-head-voice-pick" id="sa-voice-pick"${_voiceOn ? '' : ' hidden'} title="Choisir la voix"></select>
+            <button class="sa-head-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${svgVol(_voiceOn)}</button>
+          </div>` : ''}
         </header>
         <main class="sa-thread" id="sa-thread"><div class="sa-thread-inner" id="sa-thread-inner"></div></main>
         <div class="sa-composer">
@@ -372,6 +444,10 @@
       if (voiceBtn) voiceBtn.addEventListener('click', toggleVoice);
       const micBtn = document.getElementById('sa-mic');
       if (micBtn) micBtn.addEventListener('click', startDictation);
+
+      ensureVoices();
+      const pick = document.getElementById('sa-voice-pick');
+      if (pick) { pick.addEventListener('change', () => setVoiceName(pick.value)); fillVoicePicker(); }
 
       if (meta.opening) addBubble('agent', meta.opening);
       input.focus();

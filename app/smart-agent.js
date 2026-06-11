@@ -131,7 +131,7 @@ const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | 
 // Conversation en cours avec un agent (SA-3) — sert aussi de bac à sable (SA-4)
 const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
 // Vocal — dictée (micro) + lecture à voix haute (interrupteur mémorisé).
-const _voice = { on: (() => { try { return localStorage.getItem('sa_voice_on') === '1'; } catch (_) { return false; } })(), rec: null, listening: false };
+const _voice = { on: (() => { try { return localStorage.getItem('sa_voice_on') === '1'; } catch (_) { return false; } })(), rec: null, listening: false, voices: [] };
 // Golden set (SA-4) — jeu de questions étalon de l'agent en cours de test
 const _gold = { items: [], loaded: false, busy: false, replay: null, addExpect: 'answer' };
 // SA-6 — mode Interview du savoir (parcours guidé pour combler les trous)
@@ -902,7 +902,10 @@ function _testerHTML() {
           <h2 class="sa-kx-title">Tester</h2>
           <p class="sa-kx-sub">Comme le verront vos visiteurs — réponses ancrées sur le savoir de cet agent.</p>
         </div>
-        ${_ttsSupported() ? `<button class="sa-iconbtn sa-voice-toggle ${_voice.on ? 'is-on' : ''}" data-act="chat-voice" title="${_voice.on ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}" aria-pressed="${_voice.on ? 'true' : 'false'}">${icon(_voice.on ? 'volume-2' : 'volume-x', 17)}</button>` : ''}
+        <div class="sa-voice-ctrl">
+          ${(_ttsSupported() && _voice.on) ? `<select class="sa-voice-pick" data-act="chat-voice-pick" title="Choisir la voix">${_voiceOptionsHTML()}</select>` : ''}
+          ${_ttsSupported() ? `<button class="sa-iconbtn sa-voice-toggle ${_voice.on ? 'is-on' : ''}" data-act="chat-voice" title="${_voice.on ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}" aria-pressed="${_voice.on ? 'true' : 'false'}">${icon(_voice.on ? 'volume-2' : 'volume-x', 17)}</button>` : ''}
+        </div>
       </div>
       ${_sandboxHTML()}
       ${_goldenHTML()}
@@ -1379,6 +1382,10 @@ function _bindChatInput(main) {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _sendChat(); }
     });
     if (!_chat.busy) setTimeout(() => ta.focus(), 30);
+    // Vocal : charger les voix + brancher le sélecteur (change immédiat + échantillon).
+    _ensureVoices();
+    const vsel = _root.querySelector('[data-act="chat-voice-pick"]');
+    if (vsel) vsel.addEventListener('change', () => _setVoiceName(vsel.value));
 }
 
 function _scrollChatBottom() {
@@ -1391,6 +1398,59 @@ function _scrollChatBottom() {
 // si le navigateur sait faire (dégradation propre sur Firefox notamment).
 function _speechSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 function _ttsSupported() { return typeof window !== 'undefined' && 'speechSynthesis' in window; }
+// Voix : liste + choix de la PLUS NATURELLE par défaut (la voix système par
+// défaut est souvent « robot » bas de gamme). getVoices() est asynchrone sur
+// Chrome → on (re)charge sur l'évènement voiceschanged.
+let _voicesReady = false;
+function _ensureVoices() {
+    if (!_ttsSupported()) return;
+    try {
+        _voice.voices = window.speechSynthesis.getVoices() || [];
+        if (!_voicesReady) {
+            _voicesReady = true;
+            window.speechSynthesis.addEventListener('voiceschanged', () => {
+                _voice.voices = window.speechSynthesis.getVoices() || [];
+                _fillVoiceSelect();
+            });
+        }
+    } catch (_) {}
+}
+function _frVoices() { return (_voice.voices || []).filter(v => /^fr\b/i.test((v.lang || '').replace('_', '-'))); }
+function _voiceScore(v) {
+    const n = (v.name || '').toLowerCase();
+    let s = 0;
+    if (n.includes('google')) s += 100;
+    if (/(siri|premium|enhanced|neural|natural|amélie|amelie|aurélie|aurelie|audrey|thomas|chantal|marie)/.test(n)) s += 60;
+    if (n.includes('compact')) s -= 60;
+    if (v.localService === false) s += 8;
+    return s;
+}
+function _bestFrVoice() { const fr = _frVoices(); return fr.length ? fr.slice().sort((a, b) => _voiceScore(b) - _voiceScore(a))[0] : null; }
+function _currentVoiceName() { try { return localStorage.getItem('sa_voice_name') || ''; } catch (_) { return ''; } }
+function _chosenVoice() {
+    const name = _currentVoiceName();
+    if (name) { const f = (_voice.voices || []).find(v => v.name === name); if (f) return f; }
+    return _bestFrVoice();
+}
+function _voiceOptionsHTML() {
+    const fr = _frVoices();
+    if (!fr.length) return '<option value="">Voix par défaut…</option>';
+    const sel = _currentVoiceName() || (_bestFrVoice() && _bestFrVoice().name) || '';
+    return fr.map(v => `<option value="${_escAttr(v.name)}"${v.name === sel ? ' selected' : ''}>${_esc(v.name)}</option>`).join('');
+}
+function _fillVoiceSelect() { const s = _root && _root.querySelector('[data-act="chat-voice-pick"]'); if (s) s.innerHTML = _voiceOptionsHTML(); }
+function _setVoiceName(name) {
+    try { localStorage.setItem('sa_voice_name', name || ''); } catch (_) {}
+    if (!_ttsSupported()) return;
+    // Échantillon immédiat pour entendre la voix choisie.
+    try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance('Bonjour, voici ma voix.');
+        const v = _chosenVoice();
+        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
+        window.speechSynthesis.speak(u);
+    } catch (_) {}
+}
 function _startDictation(slotSel) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
@@ -1418,7 +1478,8 @@ function _startDictation(slotSel) {
 function _toggleVoice() {
     _voice.on = !_voice.on;
     try { localStorage.setItem('sa_voice_on', _voice.on ? '1' : '0'); } catch (_) {}
-    if (!_voice.on && _ttsSupported()) window.speechSynthesis.cancel();
+    if (_voice.on) _ensureVoices();
+    else if (_ttsSupported()) window.speechSynthesis.cancel();
     _renderMain();
 }
 function _speak(text) {
@@ -1426,7 +1487,8 @@ function _speak(text) {
     try {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(String(text).replace(/\[\d{1,2}\]/g, ''));
-        u.lang = 'fr-FR';
+        const v = _chosenVoice();
+        if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'fr-FR'; }
         window.speechSynthesis.speak(u);
     } catch (_) {}
 }

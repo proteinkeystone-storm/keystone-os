@@ -992,6 +992,20 @@
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 .sa-voice-toggle.is-on:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.sa-voice-ctrl { display: inline-flex; align-items: center; gap: 8px; }
+.sa-voice-pick {
+  height: 30px;
+  max-width: 160px;
+  border-radius: 9px;
+  border: 1px solid var(--bd);
+  background: var(--navy2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.sa-voice-pick:hover { border-color: var(--tx3); }
+.sa-voice-pick:focus { outline: none; border-color: var(--gold); }
 
 /* ═══ Sprint SA-4 — wizard, trous, golden set ══════════════════ */
 
