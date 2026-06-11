@@ -24,7 +24,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.86-voice-natural';
+const VERSION       = 'ks-os-v5.22.87-sw-crossorigin-fix';
 const STATIC_CACHE  = `${VERSION}-static`;
 const API_CACHE     = `${VERSION}-api`;
 
@@ -124,6 +124,14 @@ self.addEventListener('fetch', event => {
     event.respondWith(_networkFirst(req, API_CACHE));
     return;
   }
+
+  // ── Cross-origin (hors API) : NE PAS intercepter ────────────
+  // Les CDN externes (esm.sh, jsdelivr, HuggingFace…) répondent souvent
+  // par une REDIRECTION (302). En cache-first, cache.put() rejette une
+  // réponse redirigée → l'import de module / le fetch de modèle échoue
+  // (« Load failed »). On laisse le navigateur gérer nativement (il a son
+  // propre cache HTTP) : ça débloque les libs TTS/WASM et tout CDN tiers.
+  if (url.origin !== location.origin) return;
 
   // ── Assets vendor (Grammalecte, PDF.js) : cache-first ───────
   // Gros dictionnaires .json + workers chargés par XHR/import. On les

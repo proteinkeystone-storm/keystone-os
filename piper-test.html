@@ -84,6 +84,7 @@
       <div class="bar" id="bar"><i></i></div>
       <div class="status" id="status"></div>
       <audio id="audio" controls></audio>
+      <div class="note" id="diag" style="margin-top:12px"></div>
     </div>
 
     <p class="note">Au <b>premier</b> usage d'une voix, son modèle (~20–60&nbsp;Mo selon la qualité) se télécharge puis reste en cache. Les voix « moyenne » sonnent mieux mais sont plus lourdes ; les « rapide » se chargent vite.</p>
@@ -99,6 +100,7 @@
     const status = $('status'), bar = $('bar'), barFill = bar.firstElementChild, audio = $('audio');
     let _piper = null;          // module
     let _session = null, _sessionVoice = null;
+    let _step = 'init';
 
     function setStatus(msg, kind) { status.textContent = msg; status.className = 'status' + (kind ? ' ' + kind : ''); }
     function setProgress(p) {
@@ -109,7 +111,8 @@
 
     async function ensureSession(voiceId) {
       if (_session && _sessionVoice === voiceId) return _session;
-      if (!_piper) { setStatus('Chargement du moteur…'); _piper = await import(LIB); }
+      if (!_piper) { _step = 'import lib (esm.sh)'; setStatus('Chargement du moteur…'); _piper = await import(LIB); }
+      _step = 'init runtime (jsdelivr) + voix (HuggingFace)';
       setStatus('Préparation de la voix « ' + voiceId + ' »…');
       setProgress(0);
       _session = await _piper.TtsSession.create({
@@ -137,6 +140,7 @@
       try {
         const t0 = performance.now();
         const session = await ensureSession(voiceId);
+        _step = 'génération (predict)';
         setStatus('Génération de l’audio…');
         const blob = await session.predict(text);
         const secs = ((performance.now() - t0) / 1000).toFixed(1);
@@ -146,13 +150,21 @@
         setStatus('Prêt — ' + Math.round(blob.size / 1024) + ' Ko, en ' + secs + ' s. Réécoute avec le lecteur.', 'ok');
       } catch (e) {
         setProgress(null);
-        setStatus('Échec : ' + (e && e.message ? e.message : String(e)), 'err');
+        setStatus('Échec à l’étape « ' + _step + ' » : ' + (e && e.message ? e.message : String(e)), 'err');
       } finally {
         $('go').disabled = false;
       }
     }
 
     $('go').addEventListener('click', run);
+
+    // Diagnostic : un Service Worker contrôle-t-il cette page ? (cause possible
+    // de « Load failed » s'il intercepte les CDN cross-origin redirigés).
+    (function(){
+      const sw = ('serviceWorker' in navigator) && navigator.serviceWorker.controller;
+      $('diag').innerHTML = 'Diagnostic — Service Worker sur cette page : <b>' + (sw ? 'ACTIF' : 'aucun') + '</b>'
+        + (sw ? ' (' + (navigator.serviceWorker.controller.scriptURL.split('/').pop()) + ')' : '') + '.';
+    })();
   </script>
 </body>
 </html>
