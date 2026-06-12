@@ -254,12 +254,12 @@
       "id": "O-AGT-001",
       "padKey": null,
       "title": "Smart Agent",
-      "subtitle": "Jumeau numérique de savoir-faire — beta en construction",
+      "subtitle": "Jumeau numérique de votre savoir-faire — répond par chat, voix ou QR, sans rien inventer",
       "category": "COM",
       "plan": "MAX",
       "price": 49,
       "lifetimePrice": 199,
-      "longDesc": "Smart Agent transforme votre savoir-faire en un expert numérique interrogeable. Remplissez votre coffre de savoir Kortex avec des fiches typées (faits, procédures, questions/réponses, cas vécus, règles, objections, définitions) : votre agent répond uniquement à partir de votre connaissance validée — chaque réponse cite ses sources, et l'agent préfère « Je ne dispose pas de cette information » à une invention. Un vendeur, un gardien de musée, un formateur : même moteur, votre savoir. En construction pendant la beta — coffre Kortex, recherche, dialogue ancré et création guidée arrivent par étapes.",
+      "longDesc": "Smart Agent transforme votre savoir-faire en un assistant que vos clients interrogent par chat, à la voix ou via un simple QR code — sans compte. Nourrissez son coffre de savoir en quelques minutes : partez d'un pack métier prêt à l'emploi (vendeur, agent immobilier, gardien de musée, concierge, guide, SAV), collez un texte, importez une page de votre site ou un PDF, ou répondez à l'oral à l'interview guidée — l'IA structure tout en fiches que vous validez. Donnez-lui sa personnalité : rôle, ton, style et objectif (informer, conseiller ou vendre). En service, il répond UNIQUEMENT depuis votre savoir validé — jamais d'invention : s'il ne sait pas, il le dit, et la question remonte dans sa liste de travail pour que vous la combliez. Un vendeur, un concierge, un formateur : même moteur, votre savoir. Voix neuronale française incluse.",
       "icon": "smart-agent",
       "ai_optimized": "Mistral",
       "isNew": true,
@@ -272,7 +272,10 @@
         "expertise",
         "jumeau",
         "assistant",
-        "connaissance"
+        "connaissance",
+        "vendeur",
+        "voix",
+        "qr"
       ]
     }
   ]
