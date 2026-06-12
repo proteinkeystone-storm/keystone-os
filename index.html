@@ -264,12 +264,18 @@ section,nav{position:relative;z-index:1}
 .tools-more b{color:var(--accent-3); font-weight:600}
 
 /* KEYSTONE AU QUOTIDIEN : téléphone + chat concierge */
-.daily-visual{display:flex; justify-content:center; align-items:center}
+.daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center}
 .phone{width:280px; height:572px; border-radius:42px; padding:13px; position:relative;
   background:linear-gradient(165deg,#11162a,#05080f); border:1px solid var(--border-strong);
   box-shadow:0 60px 120px -50px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03), inset 0 1px 0 rgba(255,255,255,.08)}
 .phone::after{content:''; position:absolute; top:13px; left:50%; transform:translateX(-50%); width:118px; height:24px; background:#05080f; border-radius:0 0 16px 16px; z-index:3}
 .phone-screen{width:100%; height:100%; border-radius:30px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
+/* Démo LIVE : la vraie page publique de l'agent (/a/…) embarquée dans le
+   téléphone — micro + voix natifs de la page, rien de dupliqué ici. */
+.phone-live{width:100%; height:100%; border:0; display:block; background:var(--bg)}
+.phone-live-note{text-align:center; margin:12px 0 0; font-size:12.5px; color:rgba(220,225,240,.55)}
+.phone-live-note a{color:var(--accent-3); text-decoration:none}
+.phone-live-note a:hover{text-decoration:underline}
 .chat-top{display:flex; align-items:center; gap:10px; padding:36px 16px 13px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,rgba(99,102,241,.12),transparent)}
 .chat-av{width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#fff; background:linear-gradient(135deg,var(--accent-2),var(--accent)); box-shadow:0 6px 16px -6px var(--accent)}
 .chat-av svg{width:20px; height:20px}
@@ -525,32 +531,17 @@ section,nav{position:relative;z-index:1}
       <span class="eyebrow">Nouveau · Smart Agent</span>
       <h2 class="h2">Vos clients ont une question.<br>Votre agent IA répond. Sans vous.</h2>
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
-      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre. <b>Posez-lui vos questions sur Keystone</b> — il écoute même au micro et vous répond à la voix.</p>
-      <div class="hero-ctas" style="justify-content:flex-start;margin-top:22px">
-        <a class="btn btn-primary" href="/a/Vtg9eJfs" target="_blank" rel="noopener">Parlez-lui en vrai <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-      </div>
-      <p style="margin:10px 0 0;font-size:12.5px;color:var(--muted,rgba(220,225,240,.55))">Gratuit, sans compte — c'est lui qui vous répond, pas un script.</p>
+      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez-lui vos questions sur Keystone dans le téléphone ci-contre — à l'écrit ou au micro, et activez le haut-parleur pour l'entendre.</p>
+      <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script.</p>
     </div>
     <div class="daily-visual reveal">
       <div class="phone">
         <div class="phone-screen">
-          <div class="chat-top">
-            <span class="chat-av"><svg viewBox="0 0 260.85 246.17"><use href="#kpuce"/></svg></span>
-            <div>
-              <div class="chat-name">Conseiller Keystone</div>
-              <div class="chat-status">en ligne · à l'écrit ou au micro</div>
-            </div>
-          </div>
-          <div class="chat-body" id="chat">
-            <div class="msg user">Keystone, c'est quoi ?</div>
-            <div class="msg bot">Un OS qui réunit vos outils métier : QR dynamiques, formulaires, rédaction IA, réseaux sociaux.</div>
-            <div class="msg user">Et un agent comme vous, pour mon activité ?</div>
-            <div class="msg bot">Il apprend votre savoir et ne répond que ça — sans inventer. Vos clients lui parlent par lien ou QR.</div>
-            <div class="msg user">Je peux vous tester en vrai ?</div>
-            <div class="msg bot">Oui — le bouton juste à côté. À l'écrit ou au micro.</div>
-          </div>
+          <iframe class="phone-live" src="/a/Vtg9eJfs" title="Conseiller Keystone — démo en direct"
+                  loading="lazy" allow="microphone"></iframe>
         </div>
       </div>
+      <p class="phone-live-note">Un peu à l'étroit ? <a href="/a/Vtg9eJfs" target="_blank" rel="noopener">Ouvrir en plein écran</a></p>
     </div>
   </div>
 </section>
