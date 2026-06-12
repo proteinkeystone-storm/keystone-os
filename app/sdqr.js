@@ -211,6 +211,9 @@ export function openSDQR(opts = {}) {
   // Deep-link : ouverture directe du formulaire de création sur Concierge
   // (depuis le CTA VEFA Studio). 'immo' | 'general'.
   if (opts && opts.createConcierge) { _openCreateForm(panel, { presetConcierge: opts.createConcierge }); return; }
+  // Deep-link Smart Agent (CTA « Designer le QR ») : QR dynamique pointant sur
+  // l'URL publique de l'agent, prêt à styler + tracker. URL + nom pré-remplis.
+  if (opts && opts.createUrl) { _openCreateForm(panel, { presetUrl: opts.createUrl, presetName: opts.presetName }); return; }
   // Concierge VEFA (S7) — si VEFA Studio vient de relayer un programme frais.
   _maybeAutoOpenVefaConcierge(panel);
 }
@@ -632,6 +635,14 @@ function _openCreateForm(panel, opts = {}) {
     _creating.template_id      = 'concierge';
     _creating.concierge_source = opts.presetConcierge === 'general' ? 'keyform' : 'inline';
     _creating._templatePicked  = true;    // deep-link -> modèle déjà choisi
+  } else if (opts && opts.presetUrl) {
+    // Deep-link depuis le Smart Agent : QR dynamique vers l'URL publique de
+    // l'agent. Mode dynamique + type URL = déjà les défauts ; on pose juste le
+    // payload (lu par _renderFormFields -> _renderField) et le nom interne.
+    _creating.mode    = 'dynamic';
+    _creating.type    = 'url';
+    _creating.payload = { url: opts.presetUrl };
+    if (opts.presetName) _creating.name = opts.presetName;
   }
 
   content.innerHTML = `

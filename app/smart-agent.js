@@ -301,6 +301,7 @@ function _onClick(e) {
     if (act === 'pub-create')   { _doPublish(); return; }
     if (act === 'pub-copy')     { _copyPublic(actEl.dataset.url); return; }
     if (act === 'pub-qr')       { _toggleQr(); return; }
+    if (act === 'pub-sdqr')     { _openInSdqr(actEl.dataset.url); return; }
     if (act === 'pub-revoke')   { _revokePublic(actEl.dataset.id); return; }
     if (act === 'pub-save')     { _savePublicSettings(); return; }
     // ── Chat / bac à sable ──
@@ -917,6 +918,7 @@ function _publishHTML() {
       </div>
       <div class="sa-pub-actions">
         <button class="sa-btn" data-act="pub-qr">${icon('qr-code', 15)} ${p.qr ? 'Masquer le QR' : 'Afficher le QR'}</button>
+        <button class="sa-btn" data-act="pub-sdqr" data-url="${_escAttr(url)}" title="Designer un QR au rendu soigné, avec statistiques de scan — ouvre Smart Dynamic QR">${icon('sparkles', 15)} Designer le QR</button>
         <button class="sa-btn is-danger" data-act="pub-revoke" data-id="${_escAttr(p.link.id || '')}">${icon('trash-2', 15)} Dépublier</button>
       </div>
       ${p.qr ? `<div class="sa-pub-qr">${p.qr}</div>` : ''}
@@ -976,6 +978,22 @@ async function _toggleQr() {
         _ag.publish.qr = '<p class="sa-pub-note">QR indisponible — partagez le lien.</p>';
     }
     _renderMainKeepScroll();
+}
+
+// Relai vers Smart Dynamic QR (A-COM-001) : ouvre l'outil dédié avec l'URL
+// publique de l'agent pré-remplie, pour un QR au design soigné + stats de
+// scan. Même pattern que VEFA Studio -> SDQR (import dynamique + close).
+async function _openInSdqr(url) {
+    if (!url) return;
+    try {
+        const m = await import('./sdqr.js');
+        const presetName = _cur.name ? `Smart Agent — ${_cur.name}` : 'Smart Agent';
+        closeSmartAgent();
+        m.openSDQR?.({ createUrl: url, presetName });
+    } catch (e) {
+        console.error('[SmartAgent] openSDQR createUrl', e);
+        _toast('Ouvrez Smart Dynamic QR pour créer le QR.', 'error');
+    }
 }
 
 async function _revokePublic(linkId) {
