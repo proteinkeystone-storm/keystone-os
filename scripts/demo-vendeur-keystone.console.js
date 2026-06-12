@@ -2,19 +2,19 @@
    DÉMO — « Conseiller Keystone » : un agent vendeur complet qui
    vend Keystone OS et son écosystème. À utiliser comme démo client.
 
-   MODE D'EMPLOI (2 minutes) :
+   MODE D'EMPLOI (1 minute) :
      1. Ouvrez https://protein-keystone.com/app et CONNECTEZ-VOUS.
-     2. Ouvrez la console du navigateur (F12 → onglet Console).
-     3. Collez TOUT ce fichier, Entrée.
-     4. Ouvrez le pad Smart Agent → l'agent « Conseiller Keystone »
-        est prêt : Savoir rempli et validé, persona vendeur, tests
-        étalons. Testez-le, puis publiez-le (Réglages → Publier)
-        pour obtenir le lien/QR de démo.
+     2. Ouvrez la console du navigateur (Cmd+Option+J), collez :
+          import('/scripts/demo-vendeur-keystone.console.js')
+     3. À la fin, le script PUBLIE l'agent et affiche son URL
+        publique → c'est elle qui alimente le bouton « Démo » de la
+        topbar du pad (à communiquer à Claude pour l'activer).
 
    Le script crée : 1 agent (persona vendeur Keystone, repli varié)
-   + 16 fiches VALIDÉES (indexées immédiatement) + 4 tests étalons.
-   Relançable : si « Conseiller Keystone » existe déjà, il refuse
-   (supprimez l'ancien agent d'abord — ou renommez-le).
+   + 16 fiches VALIDÉES (indexées immédiatement) + 4 tests étalons,
+   puis le publie. RELANÇABLE sans risque : si « Conseiller
+   Keystone » existe déjà, il est réutilisé tel quel (pas de
+   doublon de fiches) et simplement (re)publié.
    ═══════════════════════════════════════════════════════════════ */
 (async () => {
   const API = 'https://keystone-os-api.keystone-os.workers.dev/api/smart-agent';
@@ -33,12 +33,20 @@
 
   const NAME = 'Conseiller Keystone';
   const { agents } = await api('/agents');
-  if ((agents || []).some(a => a.name === NAME)) {
-    console.error(`⛔ Un agent « ${NAME} » existe déjà — supprimez-le ou renommez-le avant de relancer.`);
+  const existing = (agents || []).find(a => a.name === NAME);
+  if (existing) {
+    console.log(`ℹ « ${NAME} » existe déjà — réutilisé tel quel (fiches non dupliquées).`);
+    console.log('5/5 — Publication…');
+    const pub = await api(`/agents/${existing.id}/publish`, {});
+    console.log('══════════════════════════════════════════════');
+    console.log('✓ DÉMO PUBLIÉE — URL publique :');
+    console.log('   ' + pub.url);
+    console.log('→ Communiquez cette URL à Claude pour activer le bouton « Démo » de la topbar.');
+    console.log('══════════════════════════════════════════════');
     return;
   }
 
-  console.log('1/4 — Création de l\'agent…');
+  console.log('1/5 — Création de l\'agent…');
   const { agent } = await api('/agents', {
     name: NAME,
     config: {
@@ -64,7 +72,7 @@
   const A = agent.id;
   console.log('   ✓ agent', A);
 
-  console.log('2/4 — Savoir : 16 fiches validées…');
+  console.log('2/5 — Savoir : 16 fiches validées…');
   const fiches = [
     { type: 'fact', title: 'Keystone OS en une phrase', body: {
       statement: 'Keystone OS est un tableau de bord unique qui regroupe les outils métier d\'un professionnel : assistants IA ancrés sur son propre savoir, publication sur les réseaux sociaux, rédaction et correction, formulaires intelligents, QR codes dynamiques et une suite immobilière — le tout dans le navigateur, sans installation.',
@@ -118,7 +126,7 @@
     n++; console.log(`   ✓ ${n}/${fiches.length} — ${f.title}`);
   }
 
-  console.log('3/4 — Tests étalons…');
+  console.log('3/5 — Tests étalons…');
   const golden = [
     { question: 'Que fait Smart Agent ?',                          expect: 'answer'   },
     { question: 'Quels réseaux sociaux Social Manager gère-t-il ?', expect: 'answer'   },
@@ -127,8 +135,15 @@
   ];
   for (const g of golden) { await api(`/agents/${A}/golden`, g); console.log('   ✓', g.question); }
 
-  console.log('4/4 — Terminé ✓');
-  console.log(`➡ Ouvrez le pad Smart Agent → « ${NAME} » → onglet Tester.`);
-  console.log('➡ Pour la démo publique : Réglages → « Publier cet agent » → QR/lien.');
-  console.log('   (Astuce : lancez aussi « Rejouer » dans les Tests étalons pour montrer le garde-fou anti-invention.)');
+  console.log('4/5 — Vérification : agent + savoir en place ✓');
+
+  console.log('5/5 — Publication (lien public + QR)…');
+  const pub = await api(`/agents/${A}/publish`, {});
+  console.log('══════════════════════════════════════════════');
+  console.log('✓ TERMINÉ — DÉMO PUBLIÉE. URL publique :');
+  console.log('   ' + pub.url);
+  console.log('→ Communiquez cette URL à Claude pour activer le bouton « Démo » de la topbar.');
+  console.log('→ Le QR est disponible dans le pad : « Conseiller Keystone » → Réglages → Partager.');
+  console.log('   (Astuce démo : « Rejouer » dans les Tests étalons montre le garde-fou anti-invention.)');
+  console.log('══════════════════════════════════════════════');
 })();

@@ -126,6 +126,21 @@
 /* ── SA-8.4 — bulles de l'agent lisibles au toucher ───────────── */
 .sa-msg.is-agent .sa-bubble[data-act="chat-say"] { cursor: pointer; }
 
+/* ── SA-9.3 — bouton « Démo » de la topbar (agent public exemple) ── */
+.sa-demo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 0 12px;
+  text-decoration: none;
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+}
+.sa-demo-link:hover { border-color: color-mix(in srgb, var(--gold) 65%, transparent); }
+.sa-demo-lbl { font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em; }
+@media (max-width: 520px) { .sa-demo-lbl { display: none; } }
+
 /* ── SA-9 — packs métier (démarrage + bandeau de validation) ──── */
 .sa-pack {
   width: 100%;

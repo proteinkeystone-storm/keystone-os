@@ -35,6 +35,13 @@ import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 
 const WORKSPACE_META = { id: 'O-AGT-001', name: 'Smart Agent' };
+
+// SA-9.3 — agent de DÉMONSTRATION public (« Conseiller Keystone », hébergé
+// sur le tenant Keystone et publié par lien) : le bouton « Démo » de la
+// topbar l'ouvre pour TOUS les utilisateurs — l'exemple vivant d'un agent
+// fini, qui présente l'écosystème au passage. Vide = bouton masqué.
+// (Le produit se démontre lui-même : la démo du Smart Agent EST un agent.)
+const DEMO_AGENT_URL = '';
 const API_BASE       = 'https://keystone-os-api.keystone-os.workers.dev';
 
 // ── Les 7 types de fiches Kortex + gabarits de saisie ──────────
@@ -230,6 +237,11 @@ function _buildShell() {
       </div>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
+        ${DEMO_AGENT_URL ? `
+        <a class="ws-iconbtn sa-demo-link" href="${DEMO_AGENT_URL}" target="_blank" rel="noopener"
+           title="Parler au Conseiller Keystone — l'exemple vivant d'un agent terminé">
+          ${icon('play', 16)}<span class="sa-demo-lbl">Démo</span>
+        </a>` : ''}
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
       </div>
