@@ -173,6 +173,45 @@ function pcmToWav(f32, sr) {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
+/* ═══ SA-9.5 — normalisation « écrit → dit » ═════════════════════════
+   Le phonémiseur lit le texte tel quel : « 20h30 » devenait « vingt
+   h trente » et « Keystone OS » … « keystone os » (l'os !). On réécrit
+   AVANT la phonémisation ce qui se prononce autrement que ça s'écrit :
+   heures, puis sigles épelés à la française (frontières de mots et
+   CASSE STRICTE : « OS » majuscule est épelé, « les os » reste intact).
+   Lexique volontairement ciblé (écosystème + commerce) — extensible. */
+const SPEECH_RULES = [
+  // Heures : 20h30 → « 20 heures 30 » · 9h00 → « 9 heures » · 9h → « 9 heures » · 1h → « 1 heure »
+  [/\b(\d{1,2})\s*[hH]\s*(\d{2})\b/g, (m, h, mn) => `${h} ${h === '1' ? 'heure' : 'heures'}${mn === '00' ? '' : ' ' + mn}`],
+  [/\b(\d{1,2})\s*[hH]\b/g,           (m, h)     => `${h} ${h === '1' ? 'heure' : 'heures'}`],
+  // Tailles de fichiers : 60 Mo → « 60 mégaoctets »
+  [/\b(\d+)\s*Mo\b/g, '$1 mégaoctets'],
+  [/\b(\d+)\s*Go\b/g, '$1 gigaoctets'],
+  // Abréviation courante : RDV → le mot, pas l'épellation
+  [/\bRDV\b/g, 'rendez-vous'],
+  // Sigles épelés (noms de lettres écrits pour une lecture sûre)
+  [/\bOS\b/g,   'o-èsse'],
+  [/\bQR\b/g,   'ku-èrre'],
+  [/\bSAV\b/g,  'èsse-a-vé'],
+  [/\bIA\b/g,   'i-a'],
+  [/\bPDF\b/g,  'pé-dé-èffe'],
+  [/\bURL\b/g,  'u-èrre-èlle'],
+  [/\bRGPD\b/g, 'èrre-gé-pé-dé'],
+  [/\bFAQ\b/g,  'èffe-a-ku'],
+  [/\bCSV\b/g,  'cé-èsse-vé'],
+  [/\bTVA\b/g,  'té-vé-a'],
+  [/\bTTC\b/g,  'té-té-cé'],
+  [/\bHT\b/g,   'ache-té'],
+  [/\bPMR\b/g,  'pé-èmme-èrre'],
+  [/\bSMS\b/g,  'èsse-èmme-èsse'],
+  [/\bCB\b/g,   'cé-bé'],
+];
+export function normalizeForSpeech(text) {
+  let s = String(text || '');
+  for (const [re, rep] of SPEECH_RULES) s = s.replace(re, rep);
+  return s;
+}
+
 // Cache des WAV déjà générés (SA-9.2) : accueil, replis et bulles
 // réécoutées ressortent instantanément. LRU borné (~24 phrases ≈ 7 Mo).
 const _wavCache = new Map();
@@ -196,7 +235,7 @@ export async function synthToWav(text, voiceId = DEFAULT_VOICE, onProgress) {
   const cfg = await getConfig(voiceId);
   const ort = await ensureOrt();
   const session = await getSession(voiceId, onProgress);
-  const ids = await phonemize(text, (cfg.espeak && cfg.espeak.voice) || 'fr');
+  const ids = await phonemize(normalizeForSpeech(text), (cfg.espeak && cfg.espeak.voice) || 'fr');
   const inf = cfg.inference || {};
   const input = new ort.Tensor('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]);
   const input_lengths = new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]);

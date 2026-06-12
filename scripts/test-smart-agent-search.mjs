@@ -234,6 +234,23 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
 }
 
+console.log('── SA-9.5 — normalizeForSpeech (heures, sigles épelés) ──');
+{
+  const { normalizeForSpeech: n } = await import('../app/lib/piper-tts.js');
+  check('20h30 → 20 heures 30', n('Ouvert jusqu\'à 20h30.') === 'Ouvert jusqu\'à 20 heures 30.');
+  check('9h00 → 9 heures (minutes muettes)', n('de 9h00 à 12h00') === 'de 9 heures à 12 heures');
+  check('9h → 9 heures · 1h → 1 heure', n('9h puis 1h') === '9 heures puis 1 heure');
+  check('Keystone OS → épelé', n('Keystone OS est un tableau de bord.') === 'Keystone o-èsse est un tableau de bord.');
+  check('« les os » (minuscules) intact', n('les os du squelette') === 'les os du squelette');
+  check('QR code → épelé', n('un QR code à scanner') === 'un ku-èrre code à scanner');
+  check('SAV / RGPD / PDF épelés', n('le SAV, le RGPD et un PDF')
+    === 'le èsse-a-vé, le èrre-gé-pé-dé et un pé-dé-èffe');
+  check('RDV → rendez-vous', n('prendre RDV demain') === 'prendre rendez-vous demain');
+  check('60 Mo → mégaoctets', n('un modèle de 60 Mo') === 'un modèle de 60 mégaoctets');
+  check('HT épelé mais HTML intact', n('prix HT en HTML') === 'prix ache-té en HTML');
+  check('texte ordinaire → intact', n('Bonjour, bienvenue au musée !') === 'Bonjour, bienvenue au musée !');
+}
+
 console.log('── SA-9.4 — trimSilence (pauses raccourcies entre les phrases) ──');
 {
   const { trimSilence } = await import('../app/lib/piper-tts.js');
