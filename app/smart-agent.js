@@ -41,7 +41,7 @@ const WORKSPACE_META = { id: 'O-AGT-001', name: 'Smart Agent' };
 // topbar l'ouvre pour TOUS les utilisateurs — l'exemple vivant d'un agent
 // fini, qui présente l'écosystème au passage. Vide = bouton masqué.
 // (Le produit se démontre lui-même : la démo du Smart Agent EST un agent.)
-const DEMO_AGENT_URL = '';
+const DEMO_AGENT_URL = 'https://protein-keystone.com/a/Vtg9eJfs';
 const API_BASE       = 'https://keystone-os-api.keystone-os.workers.dev';
 
 // ── Les 7 types de fiches Kortex + gabarits de saisie ──────────
