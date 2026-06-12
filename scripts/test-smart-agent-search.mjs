@@ -234,6 +234,22 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
 }
 
+console.log('── SA-9.2 — shortenFirst (premier son plus tôt) ──');
+{
+  const { shortenFirst } = await import('../app/lib/piper-tts.js');
+  const longue = 'Le Musée Copte est ouvert du lundi au samedi de neuf heures à midi, puis de quatorze heures à dix-huit heures, et il est fermé le dimanche toute la journée.';
+  const out = shortenFirst([longue, 'Suite.']);
+  check('phrase longue scindée à une virgule (30-95)',
+    out.length === 3 && out[0].endsWith(',') && out[0].length <= 95 && out[0].length >= 30);
+  check('rien n\'est perdu à la scission',
+    (out[0] + ' ' + out[1]).replace(/\s+/g, ' ') === longue.replace(/\s+/g, ' '));
+  check('phrase courte intacte', JSON.stringify(shortenFirst(['Bonjour à tous.', 'Suite.']))
+    === JSON.stringify(['Bonjour à tous.', 'Suite.']));
+  check('longue SANS virgule → intacte (pas de coupe en plein mot)',
+    shortenFirst(['a'.repeat(140) + '.']).length === 1);
+  check('liste vide → vide', shortenFirst([]).length === 0);
+}
+
 console.log('── SA-9 — packs métier (contenu conforme au contrat des fiches) ──');
 {
   const { SA_PACKS, packForRole } = await import('../app/lib/sa-packs.js');

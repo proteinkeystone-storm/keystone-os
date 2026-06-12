@@ -1721,17 +1721,20 @@ function _toggleVoice() {
 }
 // SA-8.4 — préchauffe le moteur dès l'activation (voyant pendant le 1er
 // téléchargement) : la 1re réponse n'attend plus les ~60 Mo du modèle.
+// SA-9.2 — appelé AUSSI à chaque envoi (idempotent, quasi gratuit une
+// fois chaud) : phonémiseur monté + tir d'amorçage ONNX inclus.
 async function _piperWarmUp() {
     try {
         if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
-        if (!_piper.mod.isSupported() || _piper.mod.isVoiceReady()) return;
+        if (!_piper.mod.isSupported()) return;
+        const cold = !_piper.mod.isVoiceReady();   // voyant uniquement au vrai 1er chargement
         const setLoad = (on) => {
             const b = _root && _root.querySelector('[data-act="chat-voice"]');
             if (b) b.classList.toggle('is-loading', on);
         };
-        setLoad(true);
+        if (cold) setLoad(true);
         await _piper.mod.warmUp();
-        setLoad(false);
+        if (cold) setLoad(false);
     } catch (_) {}
 }
 function _speak(text) {
@@ -1787,6 +1790,9 @@ async function _sendChat() {
     _chat.messages.push({ role: 'user', content: message });
     _chat.busy = true;
     _renderMain();
+    // SA-9.2 — la réponse IA prend quelques secondes : on en profite pour
+    // chauffer le moteur vocal (téléchargement/amorçage faits AVANT la voix).
+    if (_voice.on) _piperWarmUp();
 
     try {
         const res = await _api(`/agents/${_chat.agentId}/chat`, {

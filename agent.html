@@ -323,10 +323,13 @@
       try {
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (!_piperMod.isSupported()) { _piperMod = { unsupported: true }; return; }
-        if (_piperMod.isVoiceReady()) return;
-        setVoiceLoading(true);
+        // SA-9.2 — idempotent et quasi gratuit une fois chaud (phonémiseur
+        // monté + tir d'amorçage inclus) : rappelable à chaque envoi.
+        const cold = !_piperMod.isVoiceReady();
+        if (cold) setVoiceLoading(true);
         await _piperMod.warmUp();
-      } catch (_) {} finally { setVoiceLoading(false); }
+        if (cold) setVoiceLoading(false);
+      } catch (_) { setVoiceLoading(false); }
     }
     // Lecture « intelligente » : Siwis phrase par phrase, voix système en repli.
     async function _speakSmart(text) {
@@ -638,6 +641,9 @@
       _busy = true;
       document.getElementById('sa-send').disabled = true;
       showTyping();
+      // SA-9.2 — la réponse prend quelques secondes : le moteur vocal
+      // chauffe pendant ce temps (téléchargement/amorçage hors du chemin).
+      if (_voiceOn) _warmPiper();
 
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 45000);
