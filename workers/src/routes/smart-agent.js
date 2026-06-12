@@ -59,7 +59,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } fr
 import { budgetGuard }                            from '../lib/ai-budget.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-8.5';
+const SA_ENGINE_VERSION = 'SA-9.6';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1311,6 +1311,10 @@ const PUBLIC_SLUG_RE        = /^[0-9A-Za-z]{8}$/;  // 8 chars (alphabet shortId)
 const PUBLIC_MAX_LEN        = 500;                 // question publique (plus courte qu'en interne)
 const PUBLIC_CAP_DEVICE     = 50;                  // questions/jour/appareil (anti-abus, valeur Stéphane)
 const PUBLIC_DEFAULT_MAX_DAY = 500;                // plafond/jour/lien par défaut (protège le portefeuille)
+// Agent VITRINE de la landing : seul slug dont le compteur de questions
+// est exposé dans la méta publique (preuve d'usage). Les stats des
+// agents clients ne sont JAMAIS exposées.
+const DEMO_PUBLIC_SLUG       = 'Vtg9eJfs';
 
 // nanoid 8 chars URL-safe — réplique qr.js shortId (pas de couplage inter-routes).
 function publicSlug(len = 8) {
@@ -2386,7 +2390,15 @@ export async function handlePublicAgentMeta(request, env, slug) {
   await ensureSmartAgentSchema(env);
   const gp = await _gatePublicLink(env, slug);
   if (!gp) return err('Agent introuvable', 404, origin);
-  return json({ agent: publicAgentMeta(gp.agent) }, 200, origin);
+  const meta = publicAgentMeta(gp.agent);
+  // Preuve d'usage sur la landing : total de questions, vitrine SEULE.
+  if (slug === DEMO_PUBLIC_SLUG) {
+    const t = await env.DB
+      .prepare('SELECT COALESCE(SUM(count), 0) AS n FROM sa_public_usage WHERE slug = ?')
+      .bind(slug).first().catch(() => null);
+    meta.questions_total = Number(t?.n) || 0;
+  }
+  return json({ agent: meta }, 200, origin);
 }
 
 // ── POST /api/smart-agent/p/:slug/chat — dialogue public anonyme ──
