@@ -234,6 +234,32 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
 }
 
+console.log('── SA-9.4 — trimSilence (pauses raccourcies entre les phrases) ──');
+{
+  const { trimSilence } = await import('../app/lib/piper-tts.js');
+  const sr = 22050;
+  const sil = (ms) => new Float32Array(Math.round(sr * ms / 1000));            // silence
+  const ton = (ms) => Float32Array.from({ length: Math.round(sr * ms / 1000) },
+    (_, i) => 0.5 * Math.sin(i / 8));                                          // signal
+  const concat = (...parts) => {
+    const out = new Float32Array(parts.reduce((s, p) => s + p.length, 0));
+    let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  };
+  const brut = concat(sil(400), ton(1000), sil(500));
+  const net = trimSilence(brut, sr);
+  const dureeMs = Math.round(net.length / sr * 1000);
+  check('silences tête/queue taillés (1,9 s → ~1,2 s : signal + marges)',
+    dureeMs >= 1150 && dureeMs <= 1260);
+  check('le signal utile est intégralement conservé',
+    net.some(v => Math.abs(v) > 0.4) && Math.abs(net.length - (sil(60).length + ton(1000).length + sil(140).length)) < sr * 0.02);
+  const sansSilence = ton(800);
+  check('signal sans silence → intact', trimSilence(sansSilence, sr).length === sansSilence.length);
+  check('tout-silence → intact (rien à tailler proprement)',
+    trimSilence(sil(500), sr).length === sil(500).length);
+  check('vide → vide', trimSilence(new Float32Array(0), sr).length === 0);
+}
+
 console.log('── SA-9.2 — shortenFirst (premier son plus tôt) ──');
 {
   const { shortenFirst } = await import('../app/lib/piper-tts.js');

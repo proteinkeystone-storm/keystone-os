@@ -142,6 +142,25 @@ async function phonemize(text, voice) {
   return ids;
 }
 
+// SA-9.4 — taille les silences que le modèle génère en tête et en queue de
+// chaque phrase (~0,2-0,5 s chacun) : lus phrase par phrase, ils
+// s'additionnaient à chaque jonction (queue + tête = pause à rallonge entre
+// les phrases). Marges conservées pour ne pas écorner l'attaque ni la chute
+// (consonnes douces en fin de mot). Pur → testé.
+export function trimSilence(f32, sr, { threshold = 0.008, headMs = 60, tailMs = 140 } = {}) {
+  const n = f32.length;
+  if (!n) return f32;
+  let start = 0, end = n - 1;
+  while (start < n && Math.abs(f32[start]) < threshold) start++;
+  while (end > start && Math.abs(f32[end]) < threshold) end--;
+  if (start >= end) return f32;   // tout-silence ou signal introuvable : intact
+  const head = Math.round(sr * headMs / 1000);
+  const tail = Math.round(sr * tailMs / 1000);
+  start = Math.max(0, start - head);
+  end = Math.min(n - 1, end + tail);
+  return f32.subarray ? f32.subarray(start, end + 1) : f32.slice(start, end + 1);
+}
+
 function pcmToWav(f32, sr) {
   const len = f32.length, buf = new ArrayBuffer(44 + len * 2), dv = new DataView(buf);
   let p = 0;
@@ -187,7 +206,8 @@ export async function synthToWav(text, voiceId = DEFAULT_VOICE, onProgress) {
     inf.noise_w != null ? inf.noise_w : 0.8,
   ]), [3]);
   const out = await session.run({ input, input_lengths, scales });
-  const wav = pcmToWav(out.output.data, (cfg.audio && cfg.audio.sample_rate) || 22050);
+  const sr = (cfg.audio && cfg.audio.sample_rate) || 22050;
+  const wav = pcmToWav(trimSilence(out.output.data, sr), sr);
   _wavCachePut(cacheKey, wav);
   _ensureNextPhon();   // l'instance suivante se monte maintenant, hors du chemin du son
   return wav;
