@@ -270,12 +270,23 @@ section,nav{position:relative;z-index:1}
   box-shadow:0 60px 120px -50px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03), inset 0 1px 0 rgba(255,255,255,.08)}
 .phone::after{content:''; position:absolute; top:13px; left:50%; transform:translateX(-50%); width:118px; height:24px; background:#05080f; border-radius:0 0 16px 16px; z-index:3}
 .phone-screen{width:100%; height:100%; border-radius:30px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
-/* Démo LIVE : la vraie page publique de l'agent (/a/…) embarquée dans le
-   téléphone — micro + voix natifs de la page, rien de dupliqué ici. */
+/* Démo LIVE : la vraie page publique de l'agent embarquée dans le téléphone
+   (mode ?embed = conversation seule). La saisie vit ICI, dans la colonne de
+   gauche : la barre ci-dessous pilote l'agent par postMessage. */
 .phone-live{width:100%; height:100%; border:0; display:block; background:var(--bg)}
-.phone-live-note{text-align:center; margin:12px 0 0; font-size:12.5px; color:rgba(220,225,240,.55)}
-.phone-live-note a{color:var(--accent-3); text-decoration:none}
-.phone-live-note a:hover{text-decoration:underline}
+.ask-bar{display:flex; gap:12px; align-items:center; margin-top:22px; max-width:560px}
+.ask-bar input{flex:1; min-width:0; height:56px; padding:0 22px; border-radius:28px; font-size:16px; font-family:inherit;
+  background:#fff; color:#0b1020; border:2px solid #c9a84c; outline:none;
+  box-shadow:0 0 0 4px rgba(201,168,76,.16), 0 18px 40px -18px rgba(0,0,0,.55); transition:box-shadow .2s}
+.ask-bar input:focus{box-shadow:0 0 0 4px rgba(201,168,76,.32), 0 18px 40px -18px rgba(0,0,0,.55)}
+.ask-bar input::placeholder{color:#9aa0ab}
+.ask-mic,.ask-send{flex:0 0 auto; width:54px; height:54px; border-radius:50%; display:grid; place-items:center; cursor:pointer; padding:0; transition:transform .15s, box-shadow .15s}
+.ask-mic{background:#fff; border:1px solid #d8dbe2; color:#3a4150}
+.ask-send{background:linear-gradient(135deg,#d9b96a,#b08c3e); border:none; color:#0b1020}
+.ask-mic svg,.ask-send svg{width:21px; height:21px}
+.ask-mic:hover,.ask-send:hover{transform:translateY(-1px)}
+.ask-mic.is-rec{color:#e5484d; border-color:#e5484d; animation:askPulse 1.3s ease-in-out infinite}
+@keyframes askPulse{0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,.35)} 50%{box-shadow:0 0 0 9px rgba(229,72,77,0)}}
 .chat-top{display:flex; align-items:center; gap:10px; padding:36px 16px 13px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,rgba(99,102,241,.12),transparent)}
 .chat-av{width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#fff; background:linear-gradient(135deg,var(--accent-2),var(--accent)); box-shadow:0 6px 16px -6px var(--accent)}
 .chat-av svg{width:20px; height:20px}
@@ -531,17 +542,25 @@ section,nav{position:relative;z-index:1}
       <span class="eyebrow">Nouveau · Smart Agent</span>
       <h2 class="h2">Vos clients ont une question.<br>Votre agent IA répond. Sans vous.</h2>
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
-      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez-lui vos questions sur Keystone dans le téléphone ci-contre — à l'écrit ou au micro, et activez le haut-parleur pour l'entendre.</p>
-      <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script.</p>
+      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — et regardez-le répondre dans le téléphone. Activez le haut-parleur pour l'entendre.</p>
+      <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script. Questions anonymes, effacées après 90&nbsp;jours.</p>
+      <div class="ask-bar" id="askBar">
+        <input id="askInput" type="text" maxlength="500" placeholder="Posez votre question…" autocomplete="off" aria-label="Votre question au Conseiller Keystone">
+        <button class="ask-mic" id="askMic" type="button" aria-label="Dicter votre question" title="Dicter votre question" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <button class="ask-send" id="askSend" type="button" aria-label="Envoyer la question" title="Envoyer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        </button>
+      </div>
     </div>
     <div class="daily-visual reveal">
       <div class="phone">
         <div class="phone-screen">
-          <iframe class="phone-live" src="/a/Vtg9eJfs" title="Conseiller Keystone — démo en direct"
+          <iframe class="phone-live" src="/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
                   loading="lazy" allow="microphone"></iframe>
         </div>
       </div>
-      <p class="phone-live-note">Un peu à l'étroit ? <a href="/a/Vtg9eJfs" target="_blank" rel="noopener">Ouvrir en plein écran</a></p>
     </div>
   </div>
 </section>
@@ -821,6 +840,56 @@ if('IntersectionObserver' in window){
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
     grid.innerHTML=TOOLS.map(t=>'<div class="tcard" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p></div>').join('');
+  }
+})();
+
+/* ── Démo Smart Agent : la barre de saisie pilote l'agent embarqué ──
+   postMessage same-origin vers l'iframe (mode ?embed). Les questions
+   posées avant que l'agent soit prêt sont mises en file (sa-ready). */
+(function(){
+  const bar = document.getElementById('askBar'); if(!bar) return;
+  const frame = document.querySelector('.phone-live');
+  const input = document.getElementById('askInput');
+  const mic   = document.getElementById('askMic');
+  const send  = document.getElementById('askSend');
+  let ready = false; const queue = [];
+
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'sa-ready') { ready = true; queue.splice(0).forEach(post); }
+    // L'agent répondait déjà : il rend le texte, on le remet dans la barre.
+    if (e.data.type === 'sa-rejected' && !input.value) input.value = e.data.text || '';
+  });
+  function post(text){ try { frame.contentWindow.postMessage({ type:'sa-ask', text }, location.origin); } catch(_){} }
+
+  function ask(){
+    const text = (input.value || '').trim();
+    if (!text) { input.focus(); return; }
+    stopDictation();                      // un résultat tardif re-remplirait le champ vidé
+    if (ready) post(text); else { queue.push(text); frame.loading = 'eager'; }
+    input.value = '';
+    // Le téléphone doit être visible pour suivre la réponse (mobile : il est sous la barre).
+    const r = frame.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > innerHeight) frame.scrollIntoView({ block:'center', behavior:'smooth' });
+  }
+  send.addEventListener('click', ask);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+
+  /* Dictée — SpeechRecognition natif (gratuit) ; micro masqué si non supporté. */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null;
+  function stopDictation(){ if (rec) { try { rec.abort(); } catch(_){} rec = null; } mic.classList.remove('is-rec'); }
+  if (SR) {
+    mic.hidden = false;
+    mic.addEventListener('click', () => {
+      if (rec) { stopDictation(); return; }
+      rec = new SR(); rec.lang = 'fr-FR'; rec.interimResults = true;
+      mic.classList.add('is-rec');
+      rec.onresult = ev => { let t = ''; for (const r of ev.results) t += r[0].transcript; input.value = t; };
+      rec.onend   = () => { mic.classList.remove('is-rec'); rec = null; input.focus(); };
+      rec.onerror = () => stopDictation();
+      try { rec.start(); } catch(_) { stopDictation(); }
+    });
   }
 })();
 

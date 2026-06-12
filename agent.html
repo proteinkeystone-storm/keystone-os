@@ -253,6 +253,13 @@
       0%, 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, .4); }
       50%      { box-shadow: 0 0 0 7px rgba(229, 72, 77, 0); }
     }
+
+    /* ── Mode embed (?embed=1) — la landing embarque la page dans un
+       téléphone et porte SA PROPRE barre de saisie (postMessage) : on
+       n'affiche que la conversation, header épuré. Opt-in par query,
+       zéro impact sur la page publique normale. ── */
+    .sa-embed .sa-composer { display: none; }
+    .sa-embed .sa-head-tag { display: none; }
   </style>
 </head>
 <body>
@@ -276,6 +283,12 @@
     let _slug = null;
     let _sessionId = null;
     let _busy = false;
+
+    // Mode embed : la landing (même origine) embarque la page dans son
+    // téléphone vitrine et envoie les questions par postMessage — la
+    // saisie vit chez elle, la conversation s'affiche ici.
+    const IS_EMBED = new URLSearchParams(location.search).has('embed');
+    if (IS_EMBED) document.documentElement.classList.add('sa-embed');
 
     /* ── Vocal — dictée (micro) + lecture à voix haute (API navigateur, gratuites).
        Les contrôles ne s'affichent que si le navigateur sait faire. La préférence
@@ -687,6 +700,26 @@
         if (!res.ok) { renderError('Assistant introuvable', 'Ce lien n\'est plus actif ou n\'existe pas.'); return; }
         const data = await res.json();
         renderChat(data.agent || {});
+        if (IS_EMBED) {
+          // Pont avec la landing : elle envoie { type:'sa-ask', text } ;
+          // on rend la bulle + la réponse comme un submit() normal. Si un
+          // envoi arrive pendant qu'on répond déjà, on rend le texte au
+          // parent (il le remet dans sa barre) plutôt que de l'avaler.
+          window.addEventListener('message', (e) => {
+            if (e.origin !== location.origin) return;
+            const d = e.data || {};
+            if (d.type !== 'sa-ask' || typeof d.text !== 'string') return;
+            const text = d.text.trim().slice(0, 500);
+            if (!text) return;
+            if (_busy) {
+              try { parent.postMessage({ type: 'sa-rejected', text }, location.origin); } catch (_) {}
+              return;
+            }
+            addBubble('user', text);
+            sendMessage(text);
+          });
+          try { parent.postMessage({ type: 'sa-ready' }, location.origin); } catch (_) {}
+        }
       } catch (_) {
         renderError('Connexion impossible', 'Impossible de charger l\'assistant. Réessayez plus tard.');
       }
