@@ -32,6 +32,7 @@ import { exportArtifactPDF }                                           from './p
 import { ratingButtonHTML, bindRatingButton }                          from './lib/rating-widget.js';
 import { icon as uiIcon }                                              from './lib/ui-icons.js';
 import { helpButtonHTML, bindHelpButton }                              from './lib/help-overlay.js';
+import { keystoneDocHTML }                                            from './lib/keystone-doc.js';
 // Sprint Démo Limited A+B — TTL 7j + 1 app simultanée
 import {
   isDemoMode, isDemoExpired, ensureDemoStarted,
@@ -4385,7 +4386,7 @@ function _renderSettingsBody() {
         {
             id: 'acc-doc', icon: ACC_ICONS.doc, title: 'Documentation',
             open: false,
-            content: `<div class="sp-placeholder">Guide d'utilisation et changelog — disponible prochainement.</div>`,
+            content: keystoneDocHTML(),
         },
         {
             id: 'acc-rgpd', icon: ACC_ICONS.rgpd, title: 'RGPD & Données',

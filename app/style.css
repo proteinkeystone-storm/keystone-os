@@ -2351,6 +2351,32 @@ html.light-mode .ks-chip-filter.active { background: rgba(99,102,241,.15); }
 .sp-body::-webkit-scrollbar { width: 4px; }
 .sp-body::-webkit-scrollbar-thumb { background: rgba(99,102,241,.18); border-radius: 2px; }
 
+/* ── Documentation (accordéon Réglages) ──────────────────────── */
+.ks-doc { display: flex; flex-direction: column; }
+.ks-doc-intro {
+  font-size: 12px; line-height: 1.55; color: var(--tx2);
+  margin: 0 0 4px; padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.ks-doc-sec { padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+.ks-doc-sec:last-child { border-bottom: 0; padding-bottom: 2px; }
+.ks-doc-h {
+  font-size: 12px; font-weight: 800; letter-spacing: -.01em;
+  color: var(--tx); margin: 0 0 6px;
+}
+.ks-doc-b { font-size: 11.5px; line-height: 1.6; color: var(--tx2); }
+.ks-doc-b p { margin: 0 0 7px; }
+.ks-doc-b p:last-child { margin-bottom: 0; }
+.ks-doc-b strong { color: var(--tx); font-weight: 700; }
+.ks-doc-b ul { margin: 4px 0 7px; padding-left: 17px; }
+.ks-doc-b li { margin: 0 0 5px; }
+.ks-doc-cl-block { margin-top: 2px; }
+.ks-doc-cl-date {
+  display: inline-block; font-size: 10px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 2px;
+}
+
 /* ── ACCORDÉON SETTINGS ──────────────────────────────────────── */
 .acc-section { border-bottom: 1px solid rgba(255,255,255,.05); }
 .acc-header {
