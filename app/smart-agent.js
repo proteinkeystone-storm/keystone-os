@@ -29,6 +29,7 @@
 
 import { icon }                               from './lib/ui-icons.js';
 import { SA_PRESETS }                         from './lib/sa-presets.js';
+import { SA_PACKS, packForRole }              from './lib/sa-packs.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
@@ -113,6 +114,8 @@ const _kx = {
     mode: 'list',              // 'list' | 'editor'
     editing: null,             // unit en édition (null = création)
     editType: 'qa',            // type sélectionné en création
+    // SA-9 — pack métier : choix manuel (sinon déduit du rôle) + verrou
+    packId: null, packBusy: false,
 };
 // SA-8.1 — mode : 'paste' (coller du texte) | 'url' (page web) | 'file'
 // (PDF, Word…). source = { ref } quand les propositions viennent d'un import.
@@ -316,6 +319,11 @@ function _onClick(e) {
     // ── Coffre (onglet Savoir) : liste ──
     if (act === 'kx-new')       { _openEditor(null); return; }
     if (act === 'kx-extract')   { _openExtract(); return; }
+    // SA-9 — pack métier : choix, installation, interview curée, validation
+    if (act === 'pk-pick')      { _kx.packId = actEl.dataset.v; _renderMainKeepScroll(); return; }
+    if (act === 'pk-install')   { _installPack(); return; }
+    if (act === 'pk-interview') { _startPackInterview(); return; }
+    if (act === 'pk-validate')  { _validatePackDrafts(); return; }
     // SA-8.1 — sources d'import (modes du modal « Nourrir le coffre »)
     if (act === 'ex-mode')      { _ex.mode = actEl.dataset.v; _ex.error = null; _renderOverlay(); return; }
     if (act === 'ex-run-url')   { _runImportUrl(); return; }
@@ -401,6 +409,7 @@ function _enterAgent(id, tab = 'savoir') {
     _kx.filterType = 'all'; _kx.filterStatus = 'all'; _kx.prefill = null; _kx.resolveGapId = null;
     _kxs.results = null; _kxs.q = '';
     _kx.scope = 'private'; _kx.sharedVault = null;   // SA-4.4.2
+    _kx.packId = null; _kx.packBusy = false;         // SA-9
     _gold.loaded = false; _gold.replay = null; _gold.items = [];
     // bac à sable : amorce l'accueil de cet agent
     const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} ». Comment puis-je vous aider ?`;
@@ -1251,10 +1260,16 @@ async function _loadGaps() {
 }
 
 function _gapsHTML() {
+    // SA-9 — l'interview métier (questions curées du pack) reste accessible
+    // depuis l'onglet Trous, coffre rempli ou non.
+    const packHere = SA_PACKS[_curPackId()];
+    const packBtn = packHere
+        ? `<button class="sa-btn" data-act="pk-interview" title="Répondre aux questions types du métier — vos réponses deviennent des fiches">${icon(packHere.icon, 15)} Questions du métier (${packHere.questions.length})</button>`
+        : '';
     if (!_ag.gaps.length) {
         return `
       <section class="sa-kx">
-        <div class="sa-kx-head"><div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">Rien à combler pour l'instant</p></div></div>
+        <div class="sa-kx-head"><div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">Rien à combler pour l'instant</p></div>${packBtn}</div>
         <div class="sa-empty-filter">Aucun trou de savoir.<br><small>Quand cet agent ne sait pas répondre, la question atterrit ici — sa liste de travail pour faire grandir son coffre.</small></div>
       </section>`;
     }
@@ -1278,7 +1293,7 @@ function _gapsHTML() {
     <section class="sa-kx">
       <div class="sa-kx-head">
         <div><h2 class="sa-kx-title">Questions sans réponse</h2><p class="sa-kx-sub">${_ag.gaps.length} question${_ag.gaps.length > 1 ? 's' : ''}${weekN ? ` · <strong>${weekN} demandée${weekN > 1 ? 's' : ''} ces 7 derniers jours</strong>` : ''} · la plus fréquente en tête</p></div>
-        <button class="sa-btn is-primary" data-act="iv-start">${icon('smart-agent', 15)} Démarrer l'interview</button>
+        <div class="sa-gap-headacts">${packBtn}<button class="sa-btn is-primary" data-act="iv-start">${icon('smart-agent', 15)} Démarrer l'interview</button></div>
       </div>
       <p class="sa-field-hint" style="margin-bottom:14px;">Vos visiteurs nourrissent cette liste : chaque question sans réponse atterrit ici (les reformulations d'une même question se cumulent). « Répondre » ouvre une fiche Q/R pré-remplie — ou lancez l'<strong>interview</strong> : l'IA structure vos réponses et comble les trous un par un, en commençant par les plus demandés.</p>
       <div class="sa-gaps-list">${_ag.gaps.map(row).join('')}</div>
@@ -1386,6 +1401,97 @@ function _startInterview() {
     _iv.idx = 0; _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null; _iv.busy = false;
     _iv.active = true;
     _renderMain();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-9 — Packs métier : savoir-faire générique prêt à relire +
+// questions d'interview curées. CONTENU dans app/lib/sa-packs.js ;
+// ici uniquement la mécanique (routes existantes, zéro worker).
+// ═══════════════════════════════════════════════════════════════
+function _curPackId() {
+    return _kx.packId || packForRole(_cur.agent?.config?.identity?.role);
+}
+
+// Bloc « Démarrage » de la vue Savoir vide (coffre privé uniquement).
+function _packStartHTML() {
+    const picked = _curPackId();
+    const pack = picked ? SA_PACKS[picked] : null;
+    const chips = Object.entries(SA_PACKS).map(([id, p]) => `
+      <button class="sa-posture ${picked === id ? 'is-on' : ''}" data-act="pk-pick" data-v="${id}">
+        <strong>${icon(p.icon, 13)} ${_esc(p.label)}</strong><span>${p.fiches.length} fiches · ${p.questions.length} questions</span>
+      </button>`).join('');
+    return `
+      <div class="sa-pack">
+        <div class="sa-pack-head">${icon('sparkles', 16)} Démarrer avec un pack métier</div>
+        <p class="sa-pack-note">Le savoir-faire du métier (objections, règles, procédures) prêt à relire, puis vos réponses
+        aux questions qui comptent. Tout s'ajoute en <strong>brouillon</strong> : rien ne sert sans votre validation.</p>
+        <div class="sa-posture-grid">${chips}</div>
+        ${pack ? `
+        <div class="sa-cta-row" style="margin-top:14px;">
+          <button class="sa-btn is-primary" data-act="pk-install" ${_kx.packBusy ? 'disabled' : ''}>
+            ${icon('kortex', 15)} ${_kx.packBusy ? 'Installation…' : `Installer les ${pack.fiches.length} fiches de savoir-faire`}</button>
+          <button class="sa-btn" data-act="pk-interview">${icon('mic', 15)} Répondre aux ${pack.questions.length} questions du métier</button>
+        </div>` : ''}
+      </div>`;
+}
+
+// Installe les fiches méthode du pack — en BROUILLON, provenance
+// source_ref `pack:<id>` (l'enum source_kind reste 'import').
+async function _installPack() {
+    const packId = _curPackId();
+    const pack = SA_PACKS[packId];
+    if (!pack || _kx.packBusy) return;
+    _kx.packBusy = true; _renderMainKeepScroll();
+    let added = 0, failed = 0;
+    for (const f of pack.fiches) {
+        try {
+            await _api('/kortex/units', { method: 'POST',
+                body: { type: f.type, title: f.title, body: f.body, status: 'draft',
+                        source_kind: 'import', source_ref: `pack:${packId}`, agent_id: _cur.id } });
+            added++;
+        } catch (_) { failed++; }
+    }
+    _kx.packBusy = false;
+    _toast(failed
+        ? `${added} fiche(s) installée(s), ${failed} échec(s).`
+        : `${added} fiches de savoir-faire ajoutées en brouillon — relisez, personnalisez les [crochets], puis validez.`,
+        failed ? 'error' : 'ok');
+    _kxReload();
+}
+
+// Lance l'interview avec les questions CURÉES du pack (questions
+// virtuelles : même pipeline que « Explorer d'autres questions »).
+function _startPackInterview() {
+    const pack = SA_PACKS[_curPackId()];
+    if (!pack) return;
+    _cur.tab = 'trous';
+    _iv.gaps = pack.questions.map(q => ({ id: null, virtual: true, question: q, hits: 0 }));
+    _iv.idx = 0; _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null; _iv.busy = false;
+    _iv.active = true;
+    _renderRail(); _renderMain();
+}
+
+// « Tout valider » les fiches du pack relues — SAUF celles qui
+// contiennent encore un [À compléter] : elles restent en brouillon.
+async function _validatePackDrafts() {
+    if (_kx.packBusy) return;
+    const drafts = _kx.units.filter(u => u.status === 'draft' && String(u.source_ref || '').startsWith('pack:'));
+    if (!drafts.length) return;
+    const ready = drafts.filter(u => !JSON.stringify(u.body || {}).includes('[À compléter'));
+    const todo  = drafts.length - ready.length;
+    if (!ready.length) { _toast('Ces fiches contiennent des [À compléter] — personnalisez-les d\'abord.', 'error'); return; }
+    if (!confirm(`Valider ${ready.length} fiche(s) du pack métier ?${todo ? `\n${todo} fiche(s) avec [À compléter] resteront en brouillon.` : ''}`)) return;
+    _kx.packBusy = true; _renderMainKeepScroll();
+    let ok = 0, ko = 0;
+    for (const u of ready) {
+        try { await _api(`/kortex/units/${u.id}`, { method: 'PATCH', body: { status: 'validated' } }); ok++; }
+        catch (_) { ko++; }
+    }
+    _kx.packBusy = false;
+    _toast(ko ? `${ok} validée(s), ${ko} échec(s).`
+              : `${ok} fiche${ok > 1 ? 's' : ''} validée${ok > 1 ? 's' : ''}${todo ? ` — ${todo} à compléter restent en brouillon` : ''}.`,
+        ko ? 'error' : 'ok');
+    _kxReload();
 }
 
 async function _ivStructure() {
@@ -1769,6 +1875,7 @@ function _kortexViewHTML() {
                 ? 'Les fiches ajoutées ici sont <strong>communes à tous les agents</strong> de ce dossier — idéal pour un savoir mutualisé (infos pratiques, règles maison…).'
                 : 'Votre savoir-faire, structuré en fiches typées — la matière première de vos agents. Chaque fiche est validée par vous avant d\'être servie : c\'est votre actif, pas celui de l\'IA.'}
           </p>
+          ${isShared ? '' : _packStartHTML()}
           <div class="sa-cta-row">
             <button class="sa-btn is-primary" data-act="kx-new">${icon('plus', 16)} Créer ma première fiche</button>
             <button class="sa-btn" data-act="kx-extract">${icon('sparkles', 16)} Nourrir le coffre</button>
@@ -1787,6 +1894,15 @@ function _kortexViewHTML() {
     }
 
     const c = _kx.counts;
+    // SA-9 — fiches du pack encore en brouillon → bandeau « relire & valider »
+    // (coffre privé uniquement ; le partagé n'installe pas de pack).
+    const packDrafts = isShared ? [] : _kx.units.filter(u => u.status === 'draft' && String(u.source_ref || '').startsWith('pack:'));
+    const packBanner = packDrafts.length ? `
+    <div class="sa-guard-note sa-pack-banner">${icon('kortex', 16)}
+      <span><strong>${packDrafts.length} fiche${packDrafts.length > 1 ? 's' : ''} du pack métier en brouillon.</strong>
+      Relisez-les, personnalisez les [crochets], puis validez — seules les fiches validées servent à l'agent.</span>
+      <button class="sa-btn" data-act="pk-validate" ${_kx.packBusy ? 'disabled' : ''}>${_kx.packBusy ? 'Validation…' : 'Tout valider'}</button>
+    </div>` : '';
     const fStatus = (v, label, n) => `
     <button class="sa-fchip ${_kx.filterStatus === v ? 'is-on' : ''}" data-act="kx-fstatus" data-v="${v}">
       ${label}${n !== undefined ? ` <em>${n}</em>` : ''}
@@ -1797,6 +1913,7 @@ function _kortexViewHTML() {
     return `
     <section class="sa-kx">
       ${scopeBar}
+      ${packBanner}
       <div class="sa-kx-head">
         <div>
           <h2 class="sa-kx-title">${isShared ? 'Savoir partagé' : 'Savoir'}</h2>

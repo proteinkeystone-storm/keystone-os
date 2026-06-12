@@ -126,6 +126,43 @@
 /* ── SA-8.4 — bulles de l'agent lisibles au toucher ───────────── */
 .sa-msg.is-agent .sa-bubble[data-act="chat-say"] { cursor: pointer; }
 
+/* ── SA-9 — packs métier (démarrage + bandeau de validation) ──── */
+.sa-pack {
+  width: 100%;
+  max-width: 680px;
+  margin: 18px auto 6px;
+  padding: 16px 18px;
+  text-align: left;
+  border-radius: 14px;
+  background: var(--navy2);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+}
+.sa-pack-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+.sa-pack-note {
+  font-size: 12.5px;
+  color: var(--tx2);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.sa-pack-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sa-pack-banner span { flex: 1; }
+.sa-pack-banner .sa-btn { flex: none; }
+.sa-gap-headacts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
 /* ── SA-8.2 — boucle d'amélioration visible ───────────────────── */
 /* Badge « N questions à combler » sur la carte agent (cliquable → Trous). */
 .sa-agent-gaps {

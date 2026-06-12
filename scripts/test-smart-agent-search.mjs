@@ -234,6 +234,36 @@ console.log('── SA-8.0 — validateAgentPayload (persona + variantes) ──
     && JSON.stringify(d.config.scope.fallback_variants) === '[]');
 }
 
+console.log('── SA-9 — packs métier (contenu conforme au contrat des fiches) ──');
+{
+  const { SA_PACKS, packForRole } = await import('../app/lib/sa-packs.js');
+  const ids = Object.keys(SA_PACKS);
+  check('6 packs : vendeur, immo, gardien, concierge, guide, sav',
+    JSON.stringify(ids.sort()) === JSON.stringify(['concierge', 'gardien', 'guide', 'immo', 'sav', 'vendeur']));
+  let fiches = 0, invalides = [];
+  for (const [id, p] of Object.entries(SA_PACKS)) {
+    for (const f of p.fiches) {
+      fiches++;
+      const v = validateUnit(f.type, f.title, f.body);
+      if (!v.ok) invalides.push(`${id}/${f.title} : ${v.msg}`);
+    }
+    if (!Array.isArray(p.questions) || p.questions.length < 8) invalides.push(`${id} : questions < 8`);
+    if (p.questions.some(q => typeof q !== 'string' || q.length < 15)) invalides.push(`${id} : question trop courte`);
+    if (!p.label || !p.icon || p.fiches.length < 6) invalides.push(`${id} : pack incomplet`);
+  }
+  check(`TOUTES les fiches des packs passent validateUnit (${fiches} fiches)`, invalides.length === 0);
+  if (invalides.length) console.error('   →', invalides.join(' | '));
+  check('packForRole : déductions correctes',
+    packForRole('conseiller de vente') === 'vendeur'
+    && packForRole('Conseiller immobilier') === 'immo'
+    && packForRole('agent d\'accueil et de surveillance') === 'gardien'
+    && packForRole('concierge') === 'concierge'
+    && packForRole('guide') === 'guide'
+    && packForRole('conseiller service client') === 'sav');
+  check('packForRole : rôle inconnu ou vide → null',
+    packForRole('boulanger') === null && packForRole('') === null && packForRole(null) === null);
+}
+
 console.log('── SA-8.5 — stripRepeatedFollowup (anti-radotage des relances) ──');
 {
   const hist = [
