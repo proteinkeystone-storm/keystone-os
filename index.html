@@ -361,6 +361,16 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .hl-inner .lead{margin:14px auto 26px}
 
 /* 6 · prix */
+/* Preuve d'usage sous la barre de la démo (chiffre réel du worker ;
+   masqué sous 25 questions — un petit chiffre dessert plus qu'il ne sert) */
+.demo-count{margin:12px 0 0; font-size:12.5px; color:var(--text-3)}
+.demo-count b{color:var(--accent-3); font-weight:700}
+/* Beta = accès anticipé (pas de témoignages clients avant septembre) */
+.beta-note{display:table; margin:20px auto 0; font-size:13.5px; color:var(--text-2);
+  padding:9px 18px; border:1px solid var(--accent-bd); border-radius:999px; background:var(--accent-bg)}
+.beta-note b{color:var(--accent-3)}
+/* Réassurance factuelle au moment du choix de plan */
+.plans-trust{margin:22px auto 0; text-align:center; font-size:12.5px; color:var(--text-3)}
 .plans{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:44px}
 .plan{border:1px solid var(--border-strong); border-radius:20px; padding:28px; background:linear-gradient(160deg,var(--bg-2),var(--bg-3)); display:flex; flex-direction:column}
 .plan--pro{border-color:var(--accent-bd); box-shadow:0 30px 70px -40px var(--accent)}
@@ -571,6 +581,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
         </button>
       </div>
+      <p class="demo-count" id="demoCount" hidden>Déjà <b>—</b> questions posées à notre agent.</p>
     </div>
     <div class="daily-visual reveal">
       <div class="phone">
@@ -651,7 +662,9 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <!-- 6 · PRIX -->
 <section class="sec pricing" id="plans">
   <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Choisissez votre plan.</h2></div>
+  <p class="beta-note reveal">Keystone est en <b>beta</b> — rejoignez les premiers utilisateurs et façonnez l'OS avec nous.</p>
   <div class="plans" id="plansGrid"></div>
+  <p class="plans-trust reveal">Données hébergées en Europe · Conforme RGPD · Activation sans carte bancaire</p>
 </section>
 
 <!-- 7 · CTA FINAL -->
@@ -892,6 +905,18 @@ if('IntersectionObserver' in window){
   }
   send.addEventListener('click', ask);
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+
+  /* Preuve d'usage : compteur réel exposé par le worker (vitrine seule).
+     Seuil 25 : en dessous, le chiffre dessert plus qu'il ne sert. */
+  fetch('https://keystone-os-api.keystone-os.workers.dev/api/smart-agent/p/Vtg9eJfs')
+    .then(r => r.json())
+    .then(d => {
+      const n = Number(d?.agent?.questions_total);
+      if (!Number.isFinite(n) || n < 25) return;
+      const el = document.getElementById('demoCount');
+      el.querySelector('b').textContent = n.toLocaleString('fr-FR');
+      el.hidden = false;
+    }).catch(() => {});
 
   /* Dictée — SpeechRecognition natif (gratuit) ; micro masqué si non supporté. */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
