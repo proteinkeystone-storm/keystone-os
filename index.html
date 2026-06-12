@@ -181,6 +181,13 @@ section,nav{position:relative;z-index:1}
   background:var(--accent-bg); border:1px solid var(--accent-bd);
 }
 .hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 0 4px var(--accent-bg)}
+/* Le badge mène au catalogue (remplace l'ancien CTA « Voir les outils ») */
+a.hero-badge{text-decoration:none; transition:border-color .2s, background .2s}
+a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
+/* Pastille « live » du CTA démo — la démo est réellement en direct */
+.live-dot{flex:0 0 auto; width:8px; height:8px; border-radius:50%; background:var(--green); animation:livePulse 1.8s ease-in-out infinite}
+@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.40)} 50%{box-shadow:0 0 0 6px rgba(52,211,153,0)}}
+.hero-trust{margin:12px 0 0; font-size:12px; color:var(--text-3); pointer-events:none}
 .hero-title{
   font-size:clamp(30px,4.8vw,46px); font-weight:900; letter-spacing:-.034em;
   line-height:1.03; color:var(--text);
@@ -190,6 +197,7 @@ section,nav{position:relative;z-index:1}
   color:var(--text-2); font-size:clamp(14px,2.1vw,16px); line-height:1.55;
   margin:20px auto 0; max-width:400px;
 }
+.hero-sub b{color:var(--text); font-weight:600}
 .hero-ctas{display:flex; gap:12px; justify-content:center; margin-top:30px; flex-wrap:wrap; pointer-events:auto}
 .btn{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;
   padding:12px 22px;border-radius:999px;text-decoration:none;cursor:pointer;border:1px solid transparent;
@@ -464,6 +472,15 @@ section,nav{position:relative;z-index:1}
   .hero-title{font-size:clamp(25px,7vw,31px); letter-spacing:-.03em}
   .hero-sub{font-size:13px; margin-top:13px; max-width:330px}
   .hero-badge{margin-bottom:15px}
+  /* Bande centrale compactée : le sub (3 bénéfices) + la ligne de
+     réassurance ne doivent pas mordre sur l'arc de cartes du bas
+     (positionné en JS sur innerHeight, aveugle à la hauteur du texte). */
+  .hero-ctas{margin-top:18px; gap:9px}
+  .hero-ctas .btn{padding:10px 18px; font-size:13.5px}
+  /* La bande de texte ne peut pas grandir plus sans mordre l'arc de
+     cartes (position JS sur innerHeight) : la réassurance s'efface en
+     mobile — elle reste sur desktop et sera répétée aux tarifs. */
+  .hero-trust{display:none}
   /* base du laptop : pas de débord → supprime le micro-scroll horizontal */
   .laptop-base{width:100%; margin-left:0}
   /* anti-débordement du mini-dashboard sur écrans très étroits (grid min-width:auto) */
@@ -494,13 +511,14 @@ section,nav{position:relative;z-index:1}
     <div class="constellation" id="cz"></div>
 
     <div class="hero-center" id="center">
-      <span class="hero-badge"><span class="dot"></span><span id="czcount">0</span>&nbsp;outils&nbsp;·&nbsp;et&nbsp;ça&nbsp;grandit</span>
+      <a class="hero-badge" href="#outils" title="Voir le catalogue des outils"><span class="dot"></span><span id="czcount">0</span>&nbsp;outils&nbsp;·&nbsp;et&nbsp;ça&nbsp;grandit</a>
       <h1 class="hero-title">Tous vos outils métier.<br><em>Un seul OS.</em></h1>
-      <p class="hero-sub">Annonces immo, QR interactifs, formulaires intelligents, war room créative… Un seul système pour vos outils métier. Vous activez ce dont vous avez besoin.</p>
+      <p class="hero-sub">Un agent IA qui <b>répond à vos clients 24h/24</b>. Vos posts <b>publiés sur tous vos réseaux en un clic</b>. Vos textes <b>prêts en trente secondes</b>. Activez ce qu'il vous faut — sans empiler les abonnements.</p>
       <div class="hero-ctas">
         <a class="btn btn-primary" href="#plans">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-        <a class="btn btn-ghost" href="#outils">Voir les outils</a>
+        <a class="btn btn-ghost" href="#demo"><span class="live-dot" aria-hidden="true"></span> Essayer la démo en direct</a>
       </div>
+      <p class="hero-trust">Sans carte bancaire · accès en 2 minutes</p>
     </div>
 
     <div class="hero-hint" id="hint">
@@ -536,7 +554,7 @@ section,nav{position:relative;z-index:1}
 </section>
 
 <!-- 3.5 · SMART AGENT (téléphone + Conseiller Keystone — la démo LIVE /a/Vtg9eJfs) -->
-<section class="sec daily">
+<section class="sec daily" id="demo">
   <div class="what-grid">
     <div class="daily-copy reveal">
       <span class="eyebrow">Nouveau · Smart Agent</span>
