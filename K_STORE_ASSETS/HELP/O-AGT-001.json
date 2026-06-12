@@ -1,0 +1,43 @@
+{
+  "title": "Smart Agent",
+  "tldr": "Votre jumeau numérique de savoir-faire. Un agent qui répond à vos clients UNIQUEMENT depuis le savoir que vous avez validé — jamais d'invention : s'il ne sait pas, il le dit, et la question rejoint sa liste de travail. Vous le nourrissez (texte, page web, fichier, interview guidée), vous le testez, puis vous le publiez par lien ou QR code : vos visiteurs lui parlent sans compte, à l'écrit ou à la voix.",
+  "key_points": [
+    "Créer l'agent : « Nouvel agent » → partez d'un gabarit métier (vendeur, agent immobilier, gardien de musée, concierge, guide, SAV…) qui pré-remplit son rôle, son style et son objectif. Tout reste modifiable dans Réglages.",
+    "Le nourrir : onglet Savoir → « Démarrer avec un pack métier » installe des fiches de savoir-faire prêtes à relire, et « Répondre aux questions du métier » lance l'interview guidée : vous répondez à l'oral ou au clavier, l'IA structure en fiches. « Nourrir le coffre » accepte aussi un texte collé, une page de votre site ou un fichier (PDF, Word, Excel…).",
+    "Valider : une fiche ne sert l'agent que si VOUS l'avez validée. Les fiches en brouillon (dont celles des packs, à personnaliser : remplacez les [crochets]) sont inactives tant qu'elles ne sont pas validées.",
+    "Tester : l'onglet Tester est votre bac à sable — chaque réponse cite ses fiches sources, et le haut-parleur lit les réponses avec la voix neuronale Siwis. Les « Tests étalons » vérifient en un clic que l'agent répond là où il doit, et se tait là où il faut.",
+    "Combler les trous : quand l'agent sèche (chez vous ou face à un visiteur), la question atterrit dans l'onglet Trous, les reformulations d'une même question se cumulent. « Démarrer l'interview » les comble une par une, les plus demandées d'abord.",
+    "Publier : Réglages → « Publier cet agent » → lien public + QR code à imprimer. Vos visiteurs lui parlent sans compte ; vous suivez le nombre de questions, le plafond par jour et l'expiration du lien."
+  ],
+  "faq": [
+    {
+      "q": "L'agent peut-il inventer une réponse ?",
+      "a": "Non, c'est le principe fondateur : il ne répond que depuis vos fiches validées, en les citant (dans le bac à sable). Hors de son savoir, il le dit avec ses mots — sans rien inventer — et la question rejoint ses Trous pour que vous puissiez la combler."
+    },
+    {
+      "q": "Qu'est-ce qui consomme mes crédits IA ?",
+      "a": "Une question posée à l'agent (par vous ou un visiteur public) et une extraction de fiches (coller un texte, lire une page web ou un fichier, structurer une réponse d'interview) : 1 crédit chacune. Quand l'agent ne sait pas répondre sans génération, le crédit est rendu. La lecture vocale, la dictée et le correcteur de trous sont gratuits."
+    },
+    {
+      "q": "Que voient mes visiteurs sur la page publique ?",
+      "a": "Le nom de l'agent, son métier, son message d'accueil et ses réponses — jamais vos fiches, vos sources ni votre coffre. Leurs questions ne sont pas rattachées à leur identité et sont effacées après 90 jours."
+    },
+    {
+      "q": "Un visiteur peut-il épuiser mes crédits ?",
+      "a": "Des garde-fous limitent chaque appareil (50 questions/jour) et chaque lien (plafond quotidien réglable dans Réglages → Publier, 500 par défaut). Vous pouvez aussi fixer une date d'expiration ou dépublier à tout moment — le lien et le QR cessent immédiatement de fonctionner."
+    },
+    {
+      "q": "À quoi servent le coffre partagé et les dossiers ?",
+      "a": "Un dossier regroupe des agents (par établissement, par équipe…). Son coffre partagé contient le savoir commun à tous ses agents (horaires, règles maison) : chaque agent lit son coffre privé ET le coffre partagé de son dossier."
+    },
+    {
+      "q": "La voix et la dictée sont-elles payantes ?",
+      "a": "Non. La dictée utilise la reconnaissance vocale de votre navigateur, et la lecture utilise Siwis, une voix neuronale française hébergée par Keystone, exécutée dans votre navigateur (premier chargement d'environ 60 Mo, puis en cache). Aucun coût IA récurrent."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer le workspace ou ce panneau d'aide" },
+    { "keys": "Entrée", "desc": "Envoyer votre message dans le bac à sable (Maj + Entrée : nouvelle ligne)" }
+  ],
+  "updated_at": "2026-06-12"
+}

@@ -1,0 +1,46 @@
+{
+  "title": "Social Manager",
+  "tldr": "Votre régie de publication. Écrivez une fois, publiez sur Facebook, Instagram, Threads et Telegram — tout de suite ou à l'heure programmée. Le composer vérifie les contraintes de chaque réseau avant l'envoi, la file de publication montre ce qui part et ce qui est parti, et en cas de pépin réseau l'envoi se retente tout seul, uniquement sur les réseaux qui ont échoué.",
+  "key_points": [
+    "Connecter vos comptes : « Connecter un réseau » → Telegram se branche en quelques minutes (assistant pas à pas), Facebook, Instagram et Threads passent par une connexion officielle en deux clics (aucun mot de passe à confier à Keystone).",
+    "Composer : écrivez votre texte, ajoutez une image, cochez les réseaux de destination. L'aperçu signale en rouge ce qu'un réseau n'acceptera pas (longueur, image manquante…) avant même d'envoyer.",
+    "« Publier maintenant » ou « Programmer… » : choisissez le jour et l'heure — le post part tout seul, même dashboard fermé.",
+    "La file de publication : posts programmés (annulables), posts envoyés avec lien « voir le post », et bouton « Renvoyer » si un réseau a échoué après les réessais automatiques.",
+    "Santé des connexions : si un compte expire (mot de passe changé, autorisation révoquée), un bandeau vous prévient — un clic pour reconnecter, sans rien perdre.",
+    "Besoin d'inspiration ? « Trouver des idées » ouvre le Brainstorming (mode Idées de posts), et Ghost Writer peut envoyer ses textes directement dans le composer : la chaîne de contenu est branchée dans les deux sens."
+  ],
+  "faq": [
+    {
+      "q": "Quels réseaux sont gérés aujourd'hui ?",
+      "a": "Facebook (pages), Instagram (comptes professionnels liés à une page), Threads et Telegram (canaux et groupes). D'autres viendront selon la demande — X a été volontairement écarté (accès payant imposé par la plateforme, contraire à notre formule tout compris)."
+    },
+    {
+      "q": "Keystone connaît-il mes mots de passe ?",
+      "a": "Jamais. Facebook, Instagram et Threads utilisent leur connexion officielle (vous autorisez Keystone depuis VOTRE session, et pouvez révoquer à tout moment depuis le réseau). Telegram utilise un jeton de bot que vous créez vous-même."
+    },
+    {
+      "q": "Que se passe-t-il si un envoi échoue ?",
+      "a": "L'envoi se retente automatiquement (jusqu'à 4 tentatives espacées de 5, 15 puis 60 minutes), et UNIQUEMENT sur les réseaux qui ont échoué — jamais de double publication sur ceux qui ont réussi. Au-delà, le post passe en erreur avec un bouton « Renvoyer »."
+    },
+    {
+      "q": "Un post programmé part-il si je ferme mon navigateur ?",
+      "a": "Oui. La programmation vit côté serveur : le post part à l'heure dite (à 5 minutes près), dashboard ouvert ou non, ordinateur éteint ou non."
+    },
+    {
+      "q": "Puis-je voir les performances de mes posts ?",
+      "a": "Oui, à la demande : les statistiques (vues, réactions) sont relevées depuis les réseaux qui les fournissent gratuitement — Facebook, Instagram et Threads. Telegram ne fournit pas de statistiques aux bots, ce réseau reste donc sans chiffres."
+    },
+    {
+      "q": "Pourquoi mon Instagram n'apparaît-il pas après la connexion Facebook ?",
+      "a": "Instagram exige un compte professionnel LIÉ à une page Facebook, et c'est cette page qui doit être choisie pendant la connexion. Si votre Instagram est lié à une autre page (ou à aucune), reliez-le d'abord dans les paramètres Meta, puis reconnectez."
+    },
+    {
+      "q": "Plusieurs images dans un même post ?",
+      "a": "Pas encore : un post = un texte + une image au maximum, sur tous les réseaux. Le carrousel est à l'étude."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Échap", "desc": "Fermer le workspace ou ce panneau d'aide" }
+  ],
+  "updated_at": "2026-06-12"
+}
