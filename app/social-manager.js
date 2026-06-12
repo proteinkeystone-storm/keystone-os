@@ -314,20 +314,11 @@ function _renderNets() {
         </span>
       </button>`;
   }).join('');
-
-  _equalizeNetWidths(box);
 }
-
-// Largeur homogène : toutes les chips réseaux calées sur la plus large
-// (mesure de la largeur naturelle, puis application du max à toutes).
-function _equalizeNetWidths(box) {
-  const chips = [...box.querySelectorAll('.sm-net')];
-  if (chips.length < 2) return;
-  chips.forEach(c => { c.style.width = 'auto'; });
-  let max = 0;
-  for (const c of chips) max = Math.max(max, Math.ceil(c.getBoundingClientRect().width));
-  chips.forEach(c => { c.style.width = `${max}px`; });
-}
+// Largeur homogène des chips : assurée par la grille .sm-nets (colonnes 1fr,
+// items étirés) — surtout PAS de largeur px figée en JS : mesurée panneau
+// large puis conservée après rétrécissement (rotation iPad, resize), elle
+// faisait déborder/chevaucher les cartes.
 
 // ── Zone média : bouton d'upload OU vignette avec retrait ──────
 function _renderMedia() {
@@ -1554,6 +1545,10 @@ function _injectStyles() {
   .sm-ins-msg { display:inline-flex; align-items:center; font-size:12px; color: var(--tx3); }
 
   @media (max-width: 820px) { .sm-split { flex-direction:column; } .sm-left { width:100%; border-right:none; border-bottom:1px solid var(--bd); } }
+  /* Téléphone : 3 chips réseaux par ligne = noms tronqués à 3-4 lettres.
+     On passe à 2 colonnes, puis 1 sur les très petits écrans. */
+  @media (max-width: 560px) { .sm-nets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 360px) { .sm-nets { grid-template-columns: minmax(0, 1fr); } }
   `;
   const tag = document.createElement('style');
   tag.id = 'sm-styles';
