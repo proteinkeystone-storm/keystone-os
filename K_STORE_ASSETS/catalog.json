@@ -1,6 +1,6 @@
 {
-  "version": "1.5",
-  "updatedAt": "2026-06-08",
+  "version": "1.6",
+  "updatedAt": "2026-06-12",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -248,6 +248,31 @@
         "communication",
         "ghostwriter",
         "gemma"
+      ]
+    },
+    {
+      "id": "O-AGT-001",
+      "padKey": null,
+      "title": "Smart Agent",
+      "subtitle": "Jumeau numérique de savoir-faire — beta en construction",
+      "category": "COM",
+      "plan": "MAX",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Smart Agent transforme votre savoir-faire en un expert numérique interrogeable. Remplissez votre coffre de savoir Kortex avec des fiches typées (faits, procédures, questions/réponses, cas vécus, règles, objections, définitions) : votre agent répond uniquement à partir de votre connaissance validée — chaque réponse cite ses sources, et l'agent préfère « Je ne dispose pas de cette information » à une invention. Un vendeur, un gardien de musée, un formateur : même moteur, votre savoir. En construction pendant la beta — coffre Kortex, recherche, dialogue ancré et création guidée arrivent par étapes.",
+      "icon": "smart-agent",
+      "ai_optimized": "Mistral",
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "agent",
+        "savoir",
+        "kortex",
+        "expertise",
+        "jumeau",
+        "assistant",
+        "connaissance"
       ]
     }
   ]
