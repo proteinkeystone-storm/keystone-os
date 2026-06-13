@@ -55,6 +55,7 @@ import {
 } from './routes/living-messages-admin.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleLeadCapture, handleLeadsList }                           from './routes/leads.js';
+import { handleTrack, handleFunnel, pruneTrackEvents }                  from './routes/track.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
 import { handlePulsaPublic } from './routes/pulsa-public.js';
@@ -371,6 +372,10 @@ export default {
       // ── Capture email beta (landing) — public POST + listing admin ──
       if (path === '/api/leads'        && method === 'POST') return handleLeadCapture(request, env);
       if (path === '/api/admin/leads'  && method === 'GET')  return handleLeadsList(request, env);
+
+      // ── Funnel landing (mesure d'audience souveraine) — public + admin ──
+      if (path === '/api/track'        && method === 'POST') return handleTrack(request, env);
+      if (path === '/api/admin/funnel' && method === 'GET')  return handleFunnel(request, env);
 
       // ── Kodex Assets (Sprint Kodex-3.1.5) — upload binaire ─────
       if (path === '/api/kodex/asset'   && method === 'POST')   return handleUploadAsset(request, env);
@@ -702,6 +707,12 @@ export default {
       handleSmartAgentLifecycle(env)
         .then(r => console.log('[smart-agent-lifecycle]', JSON.stringify(r)))
         .catch(e => console.warn('[smart-agent-lifecycle] failed', e?.message || e))
+    );
+    // Funnel landing — purge des événements > 90j (minimisation RGPD).
+    ctx.waitUntil(
+      pruneTrackEvents(env)
+        .then(r => console.log('[track-prune]', JSON.stringify(r)))
+        .catch(e => console.warn('[track-prune] failed', e?.message || e))
     );
   },
 };
