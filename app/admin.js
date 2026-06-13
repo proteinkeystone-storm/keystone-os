@@ -341,6 +341,7 @@ const TAB_RENDERERS = {
   living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
   budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
   monitoring: renderMonitoring,
+  funnel:     renderFunnel,         // Funnel landing — mesure d'audience souveraine (2026-06-13)
   devices:    renderDevices,
   audit:      renderAuditLog,      // Sprint S5.4
   settings:   renderSettings,
@@ -3091,6 +3092,65 @@ async function renderMonitoring(panel) {
           <td style="color:var(--text-muted);font-size:12px">${d}</td></tr>`;
       }).join('')}</tbody></table>`}`;
     panel.querySelector('#btn-refresh').addEventListener('click', () => renderMonitoring(panel));
+  } catch(err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — FUNNEL LANDING (mesure d'audience souveraine) · 2026-06-13
+// Lit GET /api/admin/funnel (sessions distinctes par étape + taux) et
+// le total d'emails captés (GET /api/admin/leads). Zéro cookie côté
+// visiteur ; ici simple lecture admin. Sélecteur de période 7/30/90 j.
+// ══════════════════════════════════════════════════════════════════
+async function renderFunnel(panel, days = 30) {
+  try {
+    const data = await api(`/api/admin/funnel?days=${days}`);
+    // Total emails beta — best-effort, ne casse pas le funnel s'il échoue.
+    let leadCount = null;
+    try { const l = await api('/api/admin/leads'); leadCount = l?.count ?? null; } catch(_) {}
+
+    const f = data.funnel || {};
+    const steps = [
+      { key:'visites',      label:'Visites',      color:'var(--text)' },
+      { key:'demo_essayee', label:'Démo essayée', color:'#4caf80' },
+      { key:'plan_clique',  label:'Plan cliqué',  color:'var(--gold)' },
+      { key:'email_laisse', label:'Email laissé', color:'#5b9dff' },
+      { key:'activation',   label:'Activation',   color:'#b464ff' },
+    ];
+    const plans = data.plans_clics || [];
+    const periodBtn = d => `<button class="btn ${d===days?'btn-primary':'btn-secondary'} fn-period" data-days="${d}" style="font-size:12px">${d} j</button>`;
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Funnel landing</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${periodBtn(7)}${periodBtn(30)}${periodBtn(90)}
+          <button class="btn btn-secondary" id="btn-refresh" style="font-size:12px">↻</button>
+        </div>
+      </div>
+      <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px">
+        Mesure d'audience anonyme · ${days} derniers jours · sessions distinctes par étape (taux calculé sur les visites).</p>
+      <div class="stats-grid">
+        ${steps.map(s => {
+          const v = f[s.key] || {};
+          const pct = (v.pct == null) ? '' : `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${v.pct}%</div>`;
+          return `<div class="stat-card"><div class="stat-label">${s.label}</div>
+            <div class="stat-value" style="color:${s.color}">${v.sessions ?? 0}</div>${pct}</div>`;
+        }).join('')}
+      </div>
+      <div class="stats-grid" style="margin-top:14px">
+        <div class="stat-card"><div class="stat-label">Emails beta captés (total)</div>
+          <div class="stat-value" style="color:#5b9dff">${leadCount == null ? '—' : leadCount}</div></div>
+      </div>
+      <h3 style="font-size:14px;font-weight:700;letter-spacing:-0.02em;margin:22px 0 14px">Clics par plan</h3>
+      ${plans.length === 0 ? '<div class="empty-state"><p>Aucun clic plan sur la période</p></div>' : `
+      <table class="data-table"><thead><tr><th>Plan</th><th>Clics</th></tr></thead>
+      <tbody>${plans.map(p => `<tr><td>${esc(p.plan || '—')}</td><td>${p.clicks}</td></tr>`).join('')}</tbody></table>`}`;
+
+    panel.querySelector('#btn-refresh').addEventListener('click', () => renderFunnel(panel, days));
+    panel.querySelectorAll('.fn-period').forEach(b =>
+      b.addEventListener('click', () => renderFunnel(panel, parseInt(b.dataset.days, 10))));
   } catch(err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
   }
