@@ -352,6 +352,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 
 /* 5 · innovation vedette */
 .hl{max-width:1120px; margin:0 auto; padding:24px}
+.hl-cta{text-align:center; margin-top:22px}
 .hl-inner{position:relative; overflow:hidden; border:1px solid var(--accent-bd); border-radius:24px; padding:clamp(34px,5vw,64px); text-align:center;
   background:radial-gradient(ellipse at 50% 0%, rgba(99,102,241,.18), transparent 70%), linear-gradient(160deg,var(--bg-2),var(--bg))}
 .scratch{position:absolute; inset:0; z-index:5; cursor:grab; touch-action:none; transition:opacity .6s ease}
@@ -563,7 +564,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <p class="lead">Keystone sépare le <b>contenant</b> — un cockpit unique, rapide, cohérent — du <b>contenu</b> : vos outils métier, ajoutés à la carte. Vous démarrez avec ce qu'il vous faut, vous étendez quand vous voulez.</p>
       <ul class="feat">
         <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span><span><b>Modulaire</b> — chaque outil s'ajoute d'un clic, sans refonte.</span></li>
-        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><span><b>Piloté par licence</b> — votre dashboard démarre vide ; vous chargez les outils de votre plan, à la carte.</span></li>
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><span><b>Vous payez ce que vous activez</b> — votre dashboard démarre vide ; vous chargez les outils de votre plan, à la carte.</span></li>
         <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span><span><b>Souverain</b> — vos données restent à vous, hébergées en Europe.</span></li>
       </ul>
     </div>
@@ -673,7 +674,9 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   <h2 class="h2">Smart QR — un QR qui ouvre une expérience, pas juste un lien.</h2>
   <p class="lead">Compte à rebours, jeu à gratter, carte de fidélité, quiz qui oriente… Le même QR, des expériences pilotées par template métier. Innovation déposée.</p>
   <canvas class="scratch" id="scratchCanvas" aria-hidden="true"></canvas>
-</div></section>
+</div>
+<div class="hl-cta reveal"><a class="btn btn-ghost" href="#plans">Voir les offres <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></div>
+</section>
 
 <!-- 6 · PRIX -->
 <!-- 5.5 · CAPTURE EMAIL BETA -->
@@ -896,7 +899,12 @@ if('IntersectionObserver' in window){
 /* ── Mini-dashboard (sec 3) + grille d'outils par métier (sec 4), data-driven ── */
 (function(){
   const ag=document.getElementById('appgrid');
-  if(ag) ag.innerHTML=TOOLS.slice(0,6).map(t=>'<div class="appchip" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><span>'+t.name+'</span></div>').join('');
+  // Vitrine du mini-dashboard : on met EN AVANT les 2 produits phares
+  // (Smart Agent, Social Manager) + 4 outils repères, au lieu des 6
+  // premiers de TOOLS qui les excluaient.
+  const SHOWCASE=['Smart Agent','Social Manager','Smart Dynamic QR','Ghost Writer','Brainstorming','Key Form'];
+  const showcase=SHOWCASE.map(n=>TOOLS.find(t=>t.name===n)).filter(Boolean);
+  if(ag) ag.innerHTML=showcase.map(t=>'<div class="appchip" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><span>'+t.name+'</span></div>').join('');
   const grid=document.getElementById('toolsGrid');
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
