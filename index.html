@@ -270,6 +270,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .tcard p{font-size:13px; color:var(--text-2); line-height:1.45; margin-top:6px}
 .tools-more{text-align:center; margin-top:38px; font-size:14px; color:var(--text-3)}
 .tools-more b{color:var(--accent-3); font-weight:600}
+.tools-rise{transform-origin:center center}   /* zoom « depuis le fond » piloté au scroll (desktop) — voir JS */
 
 /* KEYSTONE AU QUOTIDIEN : téléphone + chat concierge */
 .daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center}
@@ -485,6 +486,20 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   .bcell.b2{grid-column:span 2}
 }
 
+/* Démo Smart Agent — desktop uniquement (grille 2 colonnes) :
+   la colonne de texte s'étire sur la hauteur du téléphone et la barre de
+   saisie descend s'aligner sur son pied. En mobile (≤820px, 1 colonne) la
+   barre garde son flux normal. */
+@media (min-width:821px){
+  .daily{overflow:hidden}                /* le téléphone démarre hors-champ à droite et est clippé ici → zéro scroll horizontal */
+  .daily .daily-copy{align-self:stretch; display:flex; flex-direction:column}
+  .daily .ask-bar{margin-top:auto}
+  .daily .phone{will-change:transform}
+  /* catalogue : seul le zoom du conteneur anime la zone → on désarme les reveals enfants */
+  .tools-rise{will-change:transform, opacity}
+  .tools .reveal{opacity:1; transform:none}
+}
+
 @media (max-width:760px){
   .cz-card{width:106px;height:122px}
   .cz-name{font-size:12px}
@@ -600,7 +615,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       </div>
       <p class="demo-count" id="demoCount" hidden>Déjà <b>—</b> questions posées à notre agent.</p>
     </div>
-    <div class="daily-visual reveal">
+    <div class="daily-visual">
       <div class="phone">
         <div class="phone-screen">
           <iframe class="phone-live" src="/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
@@ -659,13 +674,15 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 
 <!-- 4 · LES OUTILS PAR MÉTIER -->
 <section class="sec tools" id="outils">
-  <div class="tools-head reveal">
-    <span class="eyebrow">Le catalogue</span>
-    <h2 class="h2">Vos outils.</h2>
-    <p class="lead" style="margin:14px auto 0">9 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
+  <div class="tools-rise">
+    <div class="tools-head reveal">
+      <span class="eyebrow">Le catalogue</span>
+      <h2 class="h2">Vos outils.</h2>
+      <p class="lead" style="margin:14px auto 0">9 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
+    </div>
+    <div id="toolsGrid"></div>
+    <p class="tools-more reveal">… et <b>de nouveaux outils chaque mois</b> dans le Key-Store.</p>
   </div>
-  <div id="toolsGrid"></div>
-  <p class="tools-more reveal">… et <b>de nouveaux outils chaque mois</b> dans le Key-Store.</p>
 </section>
 
 <!-- 5 · INNOVATION VEDETTE -->
@@ -1089,6 +1106,60 @@ function cascadeItems(items, delay){
   function applyTilt(){ ttick=0; win.style.transform='perspective(1000px) rotateY('+(tpx*9).toFixed(2)+'deg) rotateX('+(-tpy*9).toFixed(2)+'deg)'; }
   sec.addEventListener('mousemove',function(e){const r=sec.getBoundingClientRect();tpx=(e.clientX-r.left)/r.width-0.5; tpy=(e.clientY-r.top)/r.height-0.5; if(!ttick)ttick=requestAnimationFrame(applyTilt);},{passive:true}); // 1 écriture/frame
   sec.addEventListener('mouseleave',function(){tpx=0;tpy=0; if(!ttick)ttick=requestAnimationFrame(applyTilt);},{passive:true});
+})();
+
+/* ── Parallaxe : le téléphone de la démo entre par la droite et glisse à sa place ── */
+(function(){
+  if(RM) return;                                                  // reduced-motion : pas de glissement
+  const sec=document.querySelector('.daily'), phone=document.querySelector('.daily .phone');
+  if(!sec||!phone) return;
+  const mq=matchMedia('(min-width:821px)');                       // desktop seulement (grille 2 colonnes)
+  const visual=phone.parentElement;                               // colonne droite (.daily-visual)
+  const cl=(v,a,b)=>v<a?a:v>b?b:v;
+  let startShift=0;                                               // distance pour démarrer le téléphone hors-champ à droite (clippé par .daily)
+  function measure(){                                             // repère horizontal, indépendant du scroll vertical
+    const sr=sec.getBoundingClientRect(), vr=visual.getBoundingClientRect();
+    const homeLeft=vr.left+(vr.width-phone.offsetWidth)/2;        // X du téléphone une fois à sa place
+    startShift=Math.max(0, sr.right-homeLeft+16);                 // assez pour le sortir entièrement par le bord droit de la section
+  }
+  let tick=0;
+  function apply(){
+    tick=0;
+    if(!mq.matches){ phone.style.transform=''; return; }          // mobile : téléphone sous le texte, aucune parallaxe
+    const r=sec.getBoundingClientRect();
+    // p=0 quand le haut de la section pointe en bas (≈85% du viewport) → téléphone hors-champ à droite ;
+    // p=1 quand elle est bien remontée (≈35%) → téléphone à sa place. Linéaire = glissement net et VISIBLE.
+    const p=cl((innerHeight*0.85 - r.top)/(innerHeight*0.5),0,1);
+    phone.style.transform='translate3d('+((1-p)*startShift).toFixed(1)+'px,0,0)';  // arrive de la droite, glisse vers la gauche
+  }
+  function onScroll(){ if(!tick) tick=requestAnimationFrame(apply); } // 1 écriture/frame max
+  addEventListener('scroll',onScroll,{passive:true});
+  addEventListener('resize',function(){ measure(); onScroll(); },{passive:true});  // la largeur change → on recalcule le départ
+  measure(); apply();                                             // état initial → pas de saut au 1er scroll
+})();
+
+/* ── Zoom « depuis le fond » de la zone catalogue, lié au scroll (desktop) ── */
+(function(){
+  if(RM) return;                                                  // reduced-motion : zone pleinement visible, pas de zoom
+  const sec=document.querySelector('.tools'), rise=document.querySelector('.tools .tools-rise');
+  if(!sec||!rise) return;
+  const mq=matchMedia('(min-width:821px)');                       // desktop : zone < hauteur d'écran → zoom centré propre
+  const cl=(v,a,b)=>v<a?a:v>b?b:v;
+  let tick=0;
+  function apply(){
+    tick=0;
+    if(!mq.matches){ rise.style.transform=''; rise.style.opacity=''; return; }  // mobile : on laisse les reveals d'origine
+    const r=sec.getBoundingClientRect();                          // rect de la SECTION (non transformée) → pas de boucle de retour
+    // p=0 quand le haut de la zone pointe en bas (≈90% du viewport) → réduite/transparente, « au fond » ;
+    // p=1 quand il est bien remonté (≈25%) → pleine taille/opaque, à sa place. Linéaire = zoom net et VISIBLE.
+    const p=cl((innerHeight*0.9 - r.top)/(innerHeight*0.65),0,1);
+    rise.style.transform='scale('+(0.82+0.18*p).toFixed(4)+')';   // 0,82 (au fond) → 1 (sa position)
+    rise.style.opacity=cl(p*1.35,0,1).toFixed(3);                 // devient nette un peu avant d'arriver
+  }
+  function onScroll(){ if(!tick) tick=requestAnimationFrame(apply); } // 1 écriture/frame max
+  addEventListener('scroll',onScroll,{passive:true});
+  addEventListener('resize',onScroll,{passive:true});
+  apply();                                                        // état initial → pas de saut au 1er scroll
 })();
 
 /* ── Sablier Lottie (ton animation) ── */
