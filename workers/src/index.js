@@ -54,6 +54,7 @@ import {
   handleLivingDelete, handleLivingArchive,
 } from './routes/living-messages-admin.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
+import { handleLeadCapture, handleLeadsList }                           from './routes/leads.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
 import { handlePulsaPublic } from './routes/pulsa-public.js';
@@ -366,6 +367,10 @@ export default {
       if (path === '/api/csp-report' && method === 'POST') {
         return handleCspReport(request, env);
       }
+
+      // ── Capture email beta (landing) — public POST + listing admin ──
+      if (path === '/api/leads'        && method === 'POST') return handleLeadCapture(request, env);
+      if (path === '/api/admin/leads'  && method === 'GET')  return handleLeadsList(request, env);
 
       // ── Kodex Assets (Sprint Kodex-3.1.5) — upload binaire ─────
       if (path === '/api/kodex/asset'   && method === 'POST')   return handleUploadAsset(request, env);
