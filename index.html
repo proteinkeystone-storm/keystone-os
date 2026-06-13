@@ -92,7 +92,7 @@ section,nav{position:relative;z-index:1}
 .nav-cta:hover{background:rgba(255,255,255,.07); border-color:var(--accent-bd)}
 
 /* ── HERO STAGE (sticky, scroll-linked — PAS de scroll-hijack) ── */
-.hero-stage{height:240vh}
+.hero-stage{height:180vh}
 .hero-pin{position:sticky; top:0; height:100vh; width:100%; overflow:hidden}
 
 .hero-aura{
@@ -102,7 +102,7 @@ section,nav{position:relative;z-index:1}
   filter:blur(8px);
 }
 /* COSMOS : limbe de planète (horizon lumineux sous le hero) */
-.hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden}
+.hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; will-change:transform}
 .hero-cosmos::before{content:''; position:absolute; left:50%; top:54%; transform:translate(-50%,-100%);
   width:150%; height:80%;
   background:radial-gradient(ellipse 40% 100% at 50% 100%,
@@ -789,6 +789,7 @@ const cz = document.getElementById('cz');
 const center = document.getElementById('center');
 const hint = document.getElementById('hint');
 const stage = document.querySelector('.hero-stage');
+const cosmos = document.querySelector('.hero-cosmos');
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CARD_W = 116, CARD_H = 132;
 
@@ -828,8 +829,11 @@ const easeOutBack=t=>{const c=2.0,c3=c+1;return 1+c3*Math.pow(t-1,3)+c*Math.pow(
 
 /* ═══ RÉGLAGES FEEL (ajustables ensemble) ═══ */
 const T_SCAT=300, T_LINE=1100, T_CIRC=2050, T_REVEAL=2350;  // intro : dispersé → ligne → cercle → titre
-const MORPH_A=0.40, MORPH_B=0.90;        // plage de scroll : cercle → arc bas
+const MORPH_A=0.05, MORPH_B=0.62;        // plage de scroll : cercle → arc (étalée → mouvement continu, fin des zones mortes)
 const ARC_TILT=0;                        // 0 = cartes parfaitement uniformes dans l'arc (pas d'inclinaison)
+const SMOOTH_K=0.25;                     // lissage scroll : ↑ colle au doigt (moins de traîne) · ↓ plus flottant
+const DRIFT_EARLY=48;                    // parallaxe DOUCE du hero (fond + cartes ensemble) pendant le morph (px)
+const RISE_START=0.55;                   // p où démarre la MONTÉE d'éjection (le hero s'élève, vitesse raccordée au scroll au relâchement)
 
 /* ── positions ─────────────────────────────────────────────── */
 function arcSpread(c,s,e){const o=[];for(let k=0;k<c;k++)o.push(c===1?(s+e)/2:s+(e-s)*k/(c-1));return o;}
@@ -866,18 +870,26 @@ if(!RM) addEventListener('mousemove',e=>{tmx=e.clientX/innerWidth*2-1;tmy=e.clie
 
 const t0=performance.now();
 let sp=0;                                  // progression de scroll LISSÉE (anti-saccade)
-let R, ANG, ARCS, stageTop=0, stageH=0, rafId=null, cardScale=1;
+let R, ANG, ARCS, stageTop=0, stageH=0, rafId=null, cardScale=1, driftEarly=0, riseLift=0;
 function measureStage(){ const r=stage.getBoundingClientRect(); stageTop=r.top+scrollY; stageH=r.height; } // figé → plus de lecture layout par frame
-function recompute(){ measureStage(); cardScale = innerWidth<=760 ? 0.58 : 1; R=radii(); ANG=baseAngles(); ARCS=[]; for(let i=0;i<N;i++) ARCS[i]=arcPos(i); }
+function recompute(){ measureStage(); cardScale = innerWidth<=760 ? 0.58 : 1;
+  const D = Math.max(1, stageH - innerHeight);
+  driftEarly = RM ? 0 : (innerWidth<=760 ? DRIFT_EARLY*0.6 : DRIFT_EARLY);
+  riseLift   = RM ? 0 : (D - driftEarly)*(1-RISE_START)/2;     // calé pour que la montée rejoigne la vitesse du scroll → relâchement sans à-coup
+  R=radii(); ANG=baseAngles(); ARCS=[]; for(let i=0;i<N;i++) ARCS[i]=arcPos(i); }
 recompute();
 let _rz=0; addEventListener('resize',()=>{ if(!_rz) _rz=requestAnimationFrame(()=>{ _rz=0; recompute(); }); }); // resize coalescé : 1 recalcul/frame max
 function scrollP(){ const d=stageH-innerHeight; return d>0?clamp((scrollY-stageTop)/d,0,1):0; }
 
 function frame(now){
   const t=RM?9999:now-t0;
-  const pRaw=scrollP(); sp += (pRaw - sp)*0.12;   // lissage du scroll (anti-saccade)
+  const pRaw=scrollP(); sp += (pRaw - sp)*SMOOTH_K;   // lissage du scroll (anti-saccade)
   const p=sp;
   mx=lerp(mx,tmx,0.06); my=lerp(my,tmy,0.06);
+
+  const exitU = RM ? 0 : clamp((p-RISE_START)/(1-RISE_START),0,1);   // 0 avant RISE_START, 1 à la fin du scroll
+  const riseY = -(driftEarly*p + riseLift*exitU*exitU);              // parallaxe douce + montée d'éjection (ease-in quadratique, vitesse raccordée au scroll)
+  if(cosmos) cosmos.style.transform='translateY('+riseY.toFixed(1)+'px)';
 
   const rotDeg=p*14;
   const morphT=RM?0:smooth(p,MORPH_A,MORPH_B);     // cercle → arc bas
@@ -885,14 +897,14 @@ function frame(now){
   const cFade=1-smooth(p,0.05,0.40);
 
   center.style.opacity=(reveal*cFade).toFixed(3);
-  center.style.transform='translate(-50%,-50%) translateY('+(-(1-cFade)*46).toFixed(1)+'px)';
+  center.style.transform='translate(-50%,-50%) translateY('+(-(1-cFade)*46 + riseY).toFixed(1)+'px)';
   if(hint) hint.style.opacity=(p>0.03?0:reveal).toFixed(3);
 
   for(let i=0;i<N;i++){
     const cir=circlePos(i,R,rotDeg,ANG), arc=ARCS[i];
     const restS=1, restO=lerp(0.88,1,cir.depth); // taille uniforme (profondeur = opacité légère seulement)
 
-    let x=lerp(cir.x,arc.x,morphT), y=lerp(cir.y,arc.y,morphT);
+    let x=lerp(cir.x,arc.x,morphT), y=lerp(cir.y,arc.y,morphT)+riseY;   // +riseY : fond + cartes s'élèvent ENSEMBLE (cartes soudées au limbe)
     let rot=lerp(0,arc.rot,morphT), s=lerp(restS,arc.scale,morphT), o=lerp(restO,1,morphT);
 
     if(!RM && morphT<1){const k=1-morphT;
