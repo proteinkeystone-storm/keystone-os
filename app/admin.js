@@ -3143,6 +3143,10 @@ async function renderFunnel(panel, days = 30) {
         <div class="stat-card"><div class="stat-label">Emails beta captés (total)</div>
           <div class="stat-value" style="color:#5b9dff">${leadCount == null ? '—' : leadCount}</div></div>
       </div>
+      ${leadCount == null ? '' : `<div style="margin-top:10px">
+        <button class="btn btn-secondary" id="btn-dl-leads" style="font-size:12px"${leadCount === 0 ? ' disabled' : ''}>⇩ Télécharger les emails (CSV)</button>
+        <span style="color:var(--text-muted);font-size:12px;margin-left:8px">email · source · date</span>
+      </div>`}
       <h3 style="font-size:14px;font-weight:700;letter-spacing:-0.02em;margin:22px 0 14px">Clics par plan</h3>
       ${plans.length === 0 ? '<div class="empty-state"><p>Aucun clic plan sur la période</p></div>' : `
       <table class="data-table"><thead><tr><th>Plan</th><th>Clics</th></tr></thead>
@@ -3151,6 +3155,28 @@ async function renderFunnel(panel, days = 30) {
     panel.querySelector('#btn-refresh').addEventListener('click', () => renderFunnel(panel, days));
     panel.querySelectorAll('.fn-period').forEach(b =>
       b.addEventListener('click', () => renderFunnel(panel, parseInt(b.dataset.days, 10))));
+
+    // Téléchargement CSV des emails — fetch brut (api() parse en JSON) avec
+    // le Bearer admin de la session, puis download via blob (le header
+    // d'auth interdit un simple <a href>).
+    const dl = panel.querySelector('#btn-dl-leads');
+    if (dl) dl.addEventListener('click', async () => {
+      const prev = dl.textContent; dl.disabled = true; dl.textContent = '…';
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/leads?format=csv`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` },
+        });
+        if (!res.ok) throw new Error('Erreur ' + res.status);
+        const txt = await res.text();
+        const url = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = 'keystone-leads.csv';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Téléchargement impossible : ' + e.message);
+      } finally { dl.disabled = false; dl.textContent = prev; }
+    });
   } catch(err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
   }
