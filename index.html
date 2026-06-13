@@ -904,6 +904,38 @@ if('IntersectionObserver' in window){
   }
 })();
 
+/* ── Funnel souverain : mesure d'audience anonyme, zéro cookie ──
+   Session ÉPHÉMÈRE (sessionStorage, effacée à la fermeture de l'onglet),
+   aucune donnée perso, aucune IP. Envoi par sendBeacon en text/plain
+   (requête simple → pas de preflight ; le worker lit le JSON quand même). */
+(function(){
+  const API = 'https://keystone-os-api.keystone-os.workers.dev/api/track';
+  let sid;
+  try {
+    sid = sessionStorage.getItem('ks_sid');
+    if (!sid) { sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('ks_sid', sid); }
+  } catch (_) { sid = 'nostore'; }
+  function track(e, p) {
+    try {
+      const body = JSON.stringify(p ? { e, s: sid, p } : { e, s: sid });
+      if (navigator.sendBeacon) navigator.sendBeacon(API, new Blob([body], { type: 'text/plain' }));
+      else fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, keepalive: true }).catch(() => {});
+    } catch (_) {}
+  }
+  window.__ksTrack = track;
+  // view : une seule fois par visite
+  try { if (!sessionStorage.getItem('ks_viewed')) { track('view'); sessionStorage.setItem('ks_viewed', '1'); } }
+  catch (_) { track('view'); }
+  // plan (clic carte tarif) + activation (lien /activate) — délégation,
+  // robuste au rendu dynamique des plans. Capture en phase capture pour
+  // partir avant la navigation (sendBeacon survit de toute façon).
+  document.addEventListener('click', ev => {
+    const planBtn = ev.target.closest('.plan .btn');
+    if (planBtn) { track('plan', (planBtn.closest('.plan')?.querySelector('h3')?.textContent || '').trim().toLowerCase()); return; }
+    if (ev.target.closest('a[href*="/activate"]')) track('activate');
+  }, true);
+})();
+
 /* ── Démo Smart Agent : la barre de saisie pilote l'agent embarqué ──
    postMessage same-origin vers l'iframe (mode ?embed). Les questions
    posées avant que l'agent soit prêt sont mises en file (sa-ready). */
@@ -928,6 +960,7 @@ if('IntersectionObserver' in window){
     if (!text) { input.focus(); return; }
     stopDictation();                      // un résultat tardif re-remplirait le champ vidé
     if (ready) post(text); else { queue.push(text); frame.loading = 'eager'; }
+    window.__ksTrack?.('demo');
     input.value = '';
     // Le téléphone doit être visible pour suivre la réponse (mobile : il est sous la barre).
     const r = frame.getBoundingClientRect();
@@ -969,6 +1002,7 @@ if('IntersectionObserver' in window){
         if (!r.ok) throw new Error('http');
         bform.reset();
         bmsg.textContent = 'C\'est noté — on vous écrit très vite. Merci !'; bmsg.classList.add('ok');
+        window.__ksTrack?.('lead');
       } catch (_) {
         bmsg.textContent = 'Oups, réessayez dans un instant.'; bmsg.classList.add('error');
       } finally { bbtn.disabled = false; }
