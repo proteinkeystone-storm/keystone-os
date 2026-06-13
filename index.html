@@ -371,6 +371,22 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .beta-note b{color:var(--accent-3)}
 /* Réassurance factuelle au moment du choix de plan */
 .plans-trust{margin:22px auto 0; text-align:center; font-size:12.5px; color:var(--text-3)}
+
+/* Capture email beta — bloc sobre avant les tarifs */
+.beta-capture{max-width:560px; margin:0 auto; text-align:center}
+.beta-capture .h2{font-size:clamp(22px,3.4vw,32px)}
+.beta-form{display:flex; gap:10px; margin:24px auto 0; max-width:460px; flex-wrap:wrap; justify-content:center}
+.beta-form input[type=email]{flex:1; min-width:220px; height:52px; padding:0 20px; border-radius:26px; font-size:16px; font-family:inherit;
+  background:var(--bg-3); color:var(--text); border:1px solid var(--border); outline:none; transition:border-color .2s, box-shadow .2s}
+.beta-form input[type=email]:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg)}
+.beta-form input[type=email]::placeholder{color:var(--text-3)}
+.beta-form .btn-primary{height:52px}
+/* Honeypot : invisible pour l'humain, rempli par les bots */
+.beta-hp{position:absolute; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none}
+.beta-msg{margin:14px 0 0; font-size:13px; min-height:18px; color:var(--accent-3)}
+.beta-msg.ok{color:var(--green)}
+.beta-msg.error{color:#f87171}
+.beta-fine{margin:10px 0 0; font-size:11.5px; color:var(--text-3)}
 .plans{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:44px}
 .plan{border:1px solid var(--border-strong); border-radius:20px; padding:28px; background:linear-gradient(160deg,var(--bg-2),var(--bg-3)); display:flex; flex-direction:column}
 .plan--pro{border-color:var(--accent-bd); box-shadow:0 30px 70px -40px var(--accent)}
@@ -660,6 +676,20 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 </div></section>
 
 <!-- 6 · PRIX -->
+<!-- 5.5 · CAPTURE EMAIL BETA -->
+<section class="sec beta-capture reveal" id="beta">
+  <span class="eyebrow">Accès beta</span>
+  <h2 class="h2">Pas encore prêt ? Gardons le contact.</h2>
+  <p class="lead" style="margin:14px auto 0; max-width:480px">Recevez votre accès anticipé et les nouveautés de Keystone, directement par e-mail. Rien d'autre.</p>
+  <form class="beta-form" id="betaForm" novalidate>
+    <input type="text" class="beta-hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <input type="email" id="betaEmail" name="email" placeholder="vous@exemple.com" autocomplete="email" required aria-label="Votre adresse e-mail">
+    <button class="btn btn-primary" type="submit" id="betaSubmit">Recevoir l'accès</button>
+  </form>
+  <p class="beta-msg" id="betaMsg" role="status" aria-live="polite"></p>
+  <p class="beta-fine">Aucune campagne commerciale · désinscription sur simple demande · données en Europe.</p>
+</section>
+
 <section class="sec pricing" id="plans">
   <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Choisissez votre plan.</h2></div>
   <p class="beta-note reveal">Keystone est en <b>beta</b> — rejoignez les premiers utilisateurs et façonnez l'OS avec nous.</p>
@@ -917,6 +947,33 @@ if('IntersectionObserver' in window){
       el.querySelector('b').textContent = n.toLocaleString('fr-FR');
       el.hidden = false;
     }).catch(() => {});
+
+  /* Capture email beta — POST souverain vers le worker (table D1). */
+  const bform = document.getElementById('betaForm');
+  if (bform) {
+    const bemail = document.getElementById('betaEmail');
+    const bmsg   = document.getElementById('betaMsg');
+    const bbtn   = document.getElementById('betaSubmit');
+    const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    bform.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = (bemail.value || '').trim();
+      bmsg.className = 'beta-msg';
+      if (!EMAIL_RE.test(email)) { bmsg.textContent = 'Vérifiez votre adresse e-mail.'; bmsg.classList.add('error'); bemail.focus(); return; }
+      bbtn.disabled = true; bmsg.textContent = 'Envoi…';
+      try {
+        const r = await fetch('https://keystone-os-api.keystone-os.workers.dev/api/leads', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, source: 'landing', company: bform.company.value }),
+        });
+        if (!r.ok) throw new Error('http');
+        bform.reset();
+        bmsg.textContent = 'C\'est noté — on vous écrit très vite. Merci !'; bmsg.classList.add('ok');
+      } catch (_) {
+        bmsg.textContent = 'Oups, réessayez dans un instant.'; bmsg.classList.add('error');
+      } finally { bbtn.disabled = false; }
+    });
+  }
 
   /* Dictée — SpeechRecognition natif (gratuit) ; micro masqué si non supporté. */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
