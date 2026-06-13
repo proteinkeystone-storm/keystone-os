@@ -500,6 +500,15 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   .tools .reveal{opacity:1; transform:none}
 }
 
+/* Desktop (au-dessus de la bascule mobile 820px) : on élargit le centre du hero
+   → « Tous vos outils métier. » sur une ligne + les 2 CTA côte à côte. La police du
+   titre rétrécit avec la largeur (clamp 4.8vw), donc il dégage les cartes à toute
+   largeur desktop (vérifié sans collision jusqu'à 840px). En mobile : retour à la ligne. */
+@media (min-width:821px){
+  .hero-center{width:min(92vw,620px)}
+  .beta-capture .h2{white-space:nowrap}   /* « Pas encore prêt ? Gardons le contact. » sur une ligne */
+}
+
 @media (max-width:760px){
   .cz-card{width:106px;height:122px}
   .cz-name{font-size:12px}
@@ -557,8 +566,8 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <h1 class="hero-title">Tous vos outils métier.<br><em>Un seul OS.</em></h1>
       <p class="hero-sub">Un agent IA qui <b>répond à vos clients 24h/24</b>. Vos posts <b>publiés sur tous vos réseaux en un clic</b>. Vos textes <b>prêts en trente secondes</b>. Activez ce qu'il vous faut — sans empiler les abonnements.</p>
       <div class="hero-ctas">
+        <a class="btn btn-ghost" href="#demo"><span class="live-dot" aria-hidden="true"></span> Essayer Smart Agent</a>
         <a class="btn btn-primary" href="#plans">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-        <a class="btn btn-ghost" href="#demo"><span class="live-dot" aria-hidden="true"></span> Essayer la démo en direct</a>
       </div>
       <p class="hero-trust">Sans carte bancaire · accès en 2 minutes</p>
     </div>
@@ -663,7 +672,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <ul class="ts-list">
         <li><b>Une annonce qui vend</b> <span>l'après-midi <em>→</em> 30 s</span></li>
         <li><b>Un brief créatif carré</b> <span>2 h <em>→</em> 2 min</span></li>
-        <li><b>Répondre à un prospect</b> <span>le lendemain <em>→</em> instantané</span></li>
+        <li><b>Publier sur tous vos réseaux</b> <span>une matinée <em>→</em> un clic</span></li>
       </ul>
     </div>
     <div class="ts-visual reveal">
@@ -712,7 +721,6 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 
 <section class="sec pricing" id="plans">
   <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Choisissez votre plan.</h2></div>
-  <p class="beta-note reveal">Keystone est en <b>beta</b> — rejoignez les premiers utilisateurs et façonnez l'OS avec nous.</p>
   <div class="plans" id="plansGrid"></div>
   <p class="plans-trust reveal">Données hébergées en Europe · Conforme RGPD · Activation sans carte bancaire</p>
 </section>
