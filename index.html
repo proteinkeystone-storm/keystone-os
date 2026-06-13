@@ -832,7 +832,7 @@ const T_SCAT=300, T_LINE=1100, T_CIRC=2050, T_REVEAL=2350;  // intro : dispersé
 const MORPH_A=0.05, MORPH_B=0.62;        // plage de scroll : cercle → arc (étalée → mouvement continu, fin des zones mortes)
 const ARC_TILT=0;                        // 0 = cartes parfaitement uniformes dans l'arc (pas d'inclinaison)
 const SMOOTH_K=0.25;                     // lissage scroll : ↑ colle au doigt (moins de traîne) · ↓ plus flottant
-const DRIFT_EARLY=48;                    // parallaxe DOUCE du hero (fond + cartes ensemble) pendant le morph (px)
+const DRIFT_EARLY=140;                   // parallaxe VISIBLE du hero (fond + cartes ensemble) DÈS le morph (px) — ↑ = bouge plus tôt/plus fort ; riseLift se recale pour garder l'éjection fluide
 const RISE_START=0.55;                   // p où démarre la MONTÉE d'éjection (le hero s'élève, vitesse raccordée au scroll au relâchement)
 
 /* ── positions ─────────────────────────────────────────────── */
