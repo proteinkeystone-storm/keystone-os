@@ -1620,6 +1620,13 @@ function startDemo() {
   if (typeof activateLicence === 'function') activateLicence();
 }
 
+// Démo en un clic depuis la landing : /activate?demo=1 → lance directement le
+// flux démo (remplit + soumet → pop-ups de configuration → dashboard démo).
+// DOMContentLoaded garantit que activateLicence() et le DOM sont prêts.
+addEventListener('DOMContentLoaded', () => {
+  if (new URLSearchParams(location.search).get('demo') === '1') startDemo();
+});
+
 // UX-3.7 — Toggle visibilité de la clé de licence (eye icon).
 // type="password" est obligatoire pour que le Trousseau iCloud reconnaisse
 // le champ et propose autofill. Mais l'utilisateur peut vouloir relire

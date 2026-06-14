@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Keystone OS — Tous vos outils métier, un seul OS.</title>
-<meta name="description" content="Keystone réunit vos outils métier — annonces immo, QR interactifs, formulaires intelligents, war room créative — dans un seul OS modulaire et souverain, hébergé en Europe. Vous activez ce dont vous avez besoin.">
+<meta name="description" content="Keystone réunit vos outils métier — annonces immo, QR interactifs, formulaires intelligents, table ronde créative — dans un seul OS modulaire et souverain, hébergé en Europe. Vous activez ce dont vous avez besoin.">
 <meta property="og:title" content="Keystone OS — Tous vos outils métier, un seul OS.">
 <meta property="og:description" content="Un OS modulaire pour vos outils métier. Souverain, hébergé en Europe. Vous activez ce dont vous avez besoin.">
 <meta property="og:type" content="website">
@@ -288,6 +288,8 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
    gauche : la barre ci-dessous pilote l'agent par postMessage. */
 .phone-live{width:100%; height:100%; border:0; display:block; background:var(--bg)}
 .ask-bar{display:flex; gap:12px; align-items:center; margin-top:22px; max-width:560px}
+.daily-ask{display:flex; flex-direction:column}
+.daily-ask .ask-bar{margin-top:0}      /* l'espacement vient du gap de grille (mobile) / de l'alignement bas (desktop) */
 .ask-bar input{flex:1; min-width:0; height:56px; padding:0 22px; border-radius:28px; font-size:16px; font-family:inherit;
   background:#fff; color:#0b1020; border:2px solid #c9a84c; outline:none;
   box-shadow:0 0 0 4px rgba(201,168,76,.16), 0 18px 40px -18px rgba(0,0,0,.55); transition:box-shadow .2s}
@@ -496,8 +498,11 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
    barre garde son flux normal. */
 @media (min-width:821px){
   .daily{overflow:hidden}                /* le téléphone démarre hors-champ à droite et est clippé ici → zéro scroll horizontal */
-  .daily .daily-copy{align-self:stretch; display:flex; flex-direction:column}
-  .daily .ask-bar{margin-top:auto}
+  /* grid-areas : barre sous le texte (col gauche), téléphone à droite sur 2 rangées → desktop INCHANGÉ */
+  .daily .what-grid{grid-template-rows:auto 1fr; grid-template-areas:"copy phone" "ask phone"; align-items:start}
+  .daily .daily-copy{grid-area:copy}
+  .daily .daily-visual{grid-area:phone; align-self:center}
+  .daily .daily-ask{grid-area:ask; align-self:end}
   .daily .phone{will-change:transform}
   /* catalogue : seul le zoom du conteneur anime la zone → on désarme les reveals enfants */
   .tools-rise{will-change:transform, opacity}
@@ -593,7 +598,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <p class="lead">Keystone sépare le <b>contenant</b> — un cockpit unique, rapide, cohérent — du <b>contenu</b> : vos outils métier, ajoutés à la carte. Vous démarrez avec ce qu'il vous faut, vous étendez quand vous voulez.</p>
       <ul class="feat">
         <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span><span><b>Modulaire</b> — chaque outil s'ajoute d'un clic, sans refonte.</span></li>
-        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><span><b>Vous payez ce que vous activez</b> — votre dashboard démarre vide ; vous chargez les outils de votre plan, à la carte.</span></li>
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><span><b>Vous payez ce que vous activez</b> — à la configuration, vous choisissez les outils de votre plan ; votre dashboard arrive prêt avec votre sélection.</span></li>
         <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span><span><b>Souverain</b> — vos données restent à vous, hébergées en Europe.</span></li>
       </ul>
     </div>
@@ -618,6 +623,17 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
       <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — et regardez-le répondre dans le téléphone. Activez le haut-parleur pour l'entendre.</p>
       <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script. Questions anonymes, effacées après 90&nbsp;jours.</p>
+    </div>
+    <div class="daily-visual">
+      <div class="phone">
+        <div class="phone-screen">
+          <iframe class="phone-live" src="/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
+                  loading="lazy" allow="microphone"></iframe>
+        </div>
+      </div>
+    </div>
+    <!-- barre sortie de .daily-copy : en mobile elle suit le téléphone (sous lui) ; en desktop, grid-areas la replace sous le texte, au pied du téléphone -->
+    <div class="daily-ask">
       <div class="ask-bar" id="askBar">
         <input id="askInput" type="text" maxlength="500" placeholder="Posez votre question…" autocomplete="off" aria-label="Votre question au Conseiller Keystone">
         <button class="ask-mic" id="askMic" type="button" aria-label="Dicter votre question" title="Dicter votre question" hidden>
@@ -628,14 +644,6 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         </button>
       </div>
       <p class="demo-count" id="demoCount" hidden>Déjà <b>—</b> questions posées à notre agent.</p>
-    </div>
-    <div class="daily-visual">
-      <div class="phone">
-        <div class="phone-screen">
-          <iframe class="phone-live" src="/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
-                  loading="lazy" allow="microphone"></iframe>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -734,7 +742,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <section class="cta-final reveal">
   <h2 class="h2">Vos outils métier, enfin réunis.</h2>
   <p class="lead" style="margin:14px auto 26px">Démo gratuite, sans carte. Activez votre accès en 2 minutes.</p>
-  <a class="btn btn-hero" href="#plans">Essayez gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+  <a class="btn btn-hero" href="/activate?demo=1">Essayez gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
 </section>
 
 <footer class="foot">
@@ -779,7 +787,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 const TOOLS = [
   { name:"Smart Dynamic QR", fam:"Communication", tag:"Des QR qui s'adaptent et se mettent à jour.", icon:'<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>' },
   { name:"Brief Prod", fam:"Communication", tag:"Le brief créatif parfait, en 2 minutes.", icon:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>' },
-  { name:"Brainstorming", fam:"Communication", tag:"Une war room d'IA qui débat vos idées.", icon:'<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14 7a2 2 0 0 0 1.44 1.44L21.6 10a.5.5 0 0 1 0 .96L15.5 12.6A2 2 0 0 0 14 14.06L12.46 20a.5.5 0 0 1-.96 0Z"/><path d="M20 3v4"/><path d="M22 5h-4"/>' },
+  { name:"Brainstorming", fam:"Communication", tag:"Une table ronde d'IA qui débat vos idées.", icon:'<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14 7a2 2 0 0 0 1.44 1.44L21.6 10a.5.5 0 0 1 0 .96L15.5 12.6A2 2 0 0 0 14 14.06L12.46 20a.5.5 0 0 1-.96 0Z"/><path d="M20 3v4"/><path d="M22 5h-4"/>' },
   { name:"Key Form", fam:"Communication", tag:"Des formulaires intelligents, sans code.", icon:'<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
   { name:"Ghost Writer", fam:"Communication", tag:"Vos textes réécrits, dans votre ton.", icon:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
   { name:"Annonces Immo", fam:"Immobilier", tag:"L'annonce qui vend, générée pour vous.", icon:'<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M8 10h.01"/>' },
