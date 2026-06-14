@@ -28,6 +28,8 @@ import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
+// Identité de session + reconnexion propre (incident 2026-06-14).
+import { ksWhoami, ksCleanLogout }                                     from './lib/session-guard.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
 import { ratingButtonHTML, bindRatingButton }                          from './lib/rating-widget.js';
 import { icon as uiIcon }                                              from './lib/ui-icons.js';
@@ -4310,6 +4312,9 @@ function _renderSettingsBody() {
             open: false,
             content: (() => {
                 const lic = getLicenceStatus();
+                // Identité réelle de la session (claims du JWT) — diagnostic
+                // « autre adresse » coincée (incident 2026-06-14).
+                const _who = ksWhoami();
                 // CTA résiliation : visible pour les vrais abonnés uniquement
                 // (actif, pas en démo, pas admin — eux n'ont rien à résilier).
                 // Ouvre un e-mail prérempli vers le support (la résiliation
@@ -4339,6 +4344,7 @@ function _renderSettingsBody() {
                         <span id="lic-tools-badge">${toolBadge}</span>
                     </div>
                     ${lic.owner ? `<div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Titulaire</div><div class="sp-row-val" id="lic-owner">${lic.owner}</div></div></div>` : ''}
+                    ${_who && (_who.owner || _who.email) ? `<div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Compte connecté</div><div class="sp-row-val" id="lic-account">${_who.owner || _who.email}</div></div></div>` : ''}
                     <div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Éditeur</div><div class="sp-row-val">Protein Studio · Ollioules</div></div></div>
 
                     <div class="sp-user-row" style="margin-top:10px">
@@ -4358,6 +4364,16 @@ function _renderSettingsBody() {
                     <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
                         Efface ta clé et vide le cache de ce navigateur (utile si tu vois une ancienne version). Tes brouillons et préférences sont conservés. Ta licence et ton abonnement ne sont pas affectés.
                     </p>` : ''}
+                    <!-- Reconnexion propre — sortie de secours « nucléaire » (incident
+                         2026-06-14). Wipe TOTAL du navigateur (clé + prefs + brouillons +
+                         cache + IndexedDB hors-ligne) quand une session d'un autre compte
+                         reste coincée. Toujours disponible. Données serveur intactes. -->
+                    <button class="api-key-save-btn" id="licence-clean-relogin" style="margin-top:8px;width:100%;background:transparent;border:1px solid var(--bd);color:var(--tx2)">
+                        Reconnexion propre (réinitialiser ce navigateur)
+                    </button>
+                    <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
+                        Solution radicale si l'app reste vide ou bloquée : efface tout l'état local de ce navigateur (clé, brouillons, cache, coffre hors-ligne) et repart sur une connexion neuve. Ton compte et tes données serveur ne sont pas touchés.
+                    </p>
                     <!-- S5.6 — Bouton de push manuel vers le Cloud Vault.
                          Utile au 1er login sur un nouvel appareil, ou si l'admin
                          vient de poser son ks_jwt et veut push toute sa config
@@ -4654,6 +4670,16 @@ function _renderSettingsBody() {
             }
         } catch (_) { /* best-effort */ }
         location.replace('/?logout=1');
+    });
+
+    // « Reconnexion propre » — wipe TOTAL du navigateur (incident 2026-06-14).
+    // Contrairement au logout doux ci-dessus (qui conserve prefs/brouillons),
+    // ksCleanLogout efface AUSSI les préférences, brouillons ET l'IndexedDB
+    // hors-ligne `keystone-data-fabric` → la sortie de secours quand une
+    // session d'un AUTRE compte reste coincée. Données serveur intactes.
+    body.querySelector('#licence-clean-relogin')?.addEventListener('click', async () => {
+        if (!confirm('Reconnexion propre ?\n\nCela réinitialise CE navigateur : clé, préférences, brouillons locaux, cache et coffre hors-ligne sont effacés, puis l\'app repart sur une connexion neuve.\n\nÀ utiliser si l\'app reste vide ou bloquée. Ton compte, ta licence et tes données serveur ne sont pas affectés.')) return;
+        await ksCleanLogout({ reason: 'settings-clean-relogin' });
     });
 
     // S5.6 — Bouton « Forcer la synchronisation Cloud »

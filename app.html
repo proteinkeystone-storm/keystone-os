@@ -29,7 +29,12 @@
       var p2 = ('caches' in window)
         ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).catch(() => {})
         : Promise.resolve();
-      Promise.all([p1, p2]).then(done, done);
+      // IndexedDB keystone-data-fabric — oublié jusqu'ici, c'est pourtant le
+      // vecteur de la fausse panne du 14/06 (vieux jeton/coffre coincé).
+      var p3 = ('indexedDB' in window)
+        ? new Promise(function(r){ try { var rq = indexedDB.deleteDatabase('keystone-data-fabric'); rq.onsuccess = rq.onerror = rq.onblocked = function(){ r(); }; setTimeout(r, 1500); } catch(e){ r(); } })
+        : Promise.resolve();
+      Promise.all([p1, p2, p3]).then(done, done);
       document.documentElement.innerHTML = '<body style="background:#07102a;color:#d4af37;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Reset en cours…</body>';
       return;
     }
@@ -409,6 +414,13 @@
     let _hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!_hadController) { _hadController = true; return; }
+      // Garde one-shot : un nouveau SW ne déclenche qu'UN seul reload par
+      // session d'onglet → élimine tout risque de boucle de rechargement
+      // (demi-état mi-ancien/mi-nouveau, incident 2026-06-14).
+      try {
+        if (sessionStorage.getItem('ks_sw_reloaded') === '1') return;
+        sessionStorage.setItem('ks_sw_reloaded', '1');
+      } catch (_) {}
       window.location.reload();
     });
     window.addEventListener('load', () => {

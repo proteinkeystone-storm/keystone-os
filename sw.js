@@ -7,10 +7,12 @@
    - Assets statiques (script, style, image, font) : cache-first.
      Si le cache contient, on sert direct. Sinon réseau + mise en cache.
    - HTML : network-first, fallback cache (sinon /app.html shell).
-   - Requêtes API (Worker Cloudflare) : network-first avec mise en
-     cache des GET pour permettre une lecture seule offline. POST,
-     PATCH, DELETE passent au réseau et NE SONT JAMAIS cachées —
-     les mutations offline sont gérées par dataFabric (IndexedDB).
+   - Requêtes API (Worker Cloudflare) : RÉSEAU PUR. Aucune réponse
+     d'API n'est jamais mise en cache (ni lue, ni écrite) : elles sont
+     authentifiées (JWT) et propres à UN compte — les cacher risquait de
+     resservir les données d'un AUTRE compte au changement de session
+     (incident 2026-06-14, fausse panne). L'offline des entités qui en
+     ont besoin est géré par dataFabric (IndexedDB), pas par le SW.
 
    Versionnage :
    ─────────────────────────────────────────────────────────────
@@ -24,9 +26,9 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.111-hero-parallax';
+const VERSION       = 'ks-os-v5.22.112-session-hardening';
 const STATIC_CACHE  = `${VERSION}-static`;
-const API_CACHE     = `${VERSION}-api`;
+// Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
 // URL de l'API Worker (cross-origin → on doit la détecter par hostname).
 const API_HOSTS = new Set([
@@ -59,7 +61,10 @@ self.addEventListener('activate', event => {
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter(k => !k.startsWith(VERSION))
+        // Purge toute version ≠ courante ET tout cache d'API résiduel
+        // (les anciennes versions stockaient les GET /api/* — on s'assure
+        // qu'aucun reliquat authentifié ne survit à la mise à jour).
+        .filter(k => !k.startsWith(VERSION) || k.endsWith('-api'))
         .map(k => caches.delete(k)),
     );
     await self.clients.claim();
@@ -87,6 +92,20 @@ async function _cacheFirst(req, cacheName) {
     return res;
   } catch {
     return cached || Response.error();
+  }
+}
+
+// Réseau PUR : ni lecture ni écriture de cache. Pour les /api/* (réponses
+// authentifiées, propres à un compte). Sur coupure réseau → sentinelle 503
+// JSON lisible par le client (dataFabric bascule sur IndexedDB).
+async function _networkOnly(req) {
+  try {
+    return await fetch(req);
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'offline', cached: false }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 }
 
@@ -119,9 +138,12 @@ self.addEventListener('fetch', event => {
   // dataFabric gère l'offline via sa propre syncQueue IndexedDB.
   if (req.method !== 'GET') return;
 
-  // ── API Worker (cross-origin) ───────────────────────────────
+  // ── API Worker (cross-origin OU /api/) : RÉSEAU PUR ─────────
+  // JAMAIS de cache : ni lecture, ni écriture. Réponses authentifiées
+  // (JWT), propres à un compte → les cacher resservait les données d'un
+  // AUTRE compte au changement de session (incident 2026-06-14).
   if (API_HOSTS.has(url.hostname) || url.pathname.startsWith('/api/')) {
-    event.respondWith(_networkFirst(req, API_CACHE));
+    event.respondWith(_networkOnly(req));
     return;
   }
 
