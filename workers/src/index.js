@@ -117,7 +117,8 @@ import { handleSmartAgentHealth,
          handleKortexVaultsList, handleKortexVaultCreate, handleKortexVaultUpdate, handleKortexVaultDelete,
          handlePublicAgentMeta, handlePublicAgentChat,
          handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke, handlePublicLinkUpdate,
-         handleSmartAgentLifecycle, handleExploreQuestions, handleAgentStructure } from './routes/smart-agent.js';
+         handleSmartAgentLifecycle, handleExploreQuestions, handleAgentStructure,
+         handleCardImageServe, handleAgentCardImageUpload } from './routes/smart-agent.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -148,6 +149,9 @@ export default {
       if (saPubChat && method === 'POST') return handlePublicAgentChat(request, env, saPubChat[1]);
       const saPubMeta = path.match(/^\/api\/smart-agent\/p\/([A-Za-z0-9]+)$/);
       if (saPubMeta && method === 'GET') return handlePublicAgentMeta(request, env, saPubMeta[1]);
+      // Lot 3 — image d'une carte (public, servie depuis R2). Clé avec slashes → (.+).
+      const saCardImg = path.match(/^\/api\/smart-agent\/card-img\/(.+)$/);
+      if (saCardImg && method === 'GET') return handleCardImageServe(request, env, saCardImg[1]);
       if (path === '/api/smart-agent/kortex/units'       && method === 'GET')  return handleKortexUnitsList(request, env);
       if (path === '/api/smart-agent/kortex/units'       && method === 'POST') return handleKortexUnitCreate(request, env);
       if (path === '/api/smart-agent/kortex/extract'     && method === 'POST') return handleKortexExtract(request, env);
@@ -189,6 +193,9 @@ export default {
       if (saExplore && method === 'POST') return handleExploreQuestions(request, env, saExplore[1]);
       const saAgStructure = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/structure$/);
       if (saAgStructure && method === 'POST') return handleAgentStructure(request, env, saAgStructure[1]);
+      // Lot 3 — upload de l'image d'une carte (pad authentifié)
+      const saCardUp = path.match(/^\/api\/smart-agent\/agents\/([A-Za-z0-9-]+)\/cards\/image$/);
+      if (saCardUp && method === 'POST') return handleAgentCardImageUpload(request, env, saCardUp[1]);
       const saLinkRevoke = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)\/revoke$/);
       if (saLinkRevoke && method === 'POST') return handlePublicLinkRevoke(request, env, saLinkRevoke[1]);
       const saLinkMatch = path.match(/^\/api\/smart-agent\/links\/([A-Za-z0-9-]+)$/);

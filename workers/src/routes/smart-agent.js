@@ -1339,11 +1339,82 @@ export function validatePublicSlug(slug) {
   return PUBLIC_SLUG_RE.test(s) ? s : null;
 }
 
+// ── Lot 3 — cartes-photos cliquables ──────────────────────────────
+// Une carte = image (clé R2) + question CACHÉE (posée au clic) + alt.
+// Stockées dans config.cards (liste). Images sur R2 (bucket HELP_MEDIA,
+// préfixe sa-cards/), servies par /api/smart-agent/card-img/<key>.
+const SA_CARD_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const SA_CARD_EXT  = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const SA_CARD_MAX_BYTES = 3 * 1024 * 1024;   // 3 Mo (le pad redimensionne avant l'upload)
+const SA_CARDS_MAX = 50;                      // garde-fou anti-abus (pas une limite UX)
+// Clé R2 attendue : sa-cards/<agentId>/<uuid>.<ext> (anti path-traversal).
+const SA_CARD_KEY_RE = /^sa-cards\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:jpg|jpeg|png|webp)$/;
+
+// Pur (testé) : valide/normalise la liste de cartes (config.cards). Une carte
+// sans image valide OU sans question est écartée. alt optionnel.
+export function validateCards(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(c => c && typeof c === 'object')
+    .map(c => ({
+      img: (typeof c.img === 'string' && SA_CARD_KEY_RE.test(c.img)) ? c.img : '',
+      q:   (typeof c.q === 'string') ? c.q.trim().slice(0, 200) : '',
+      alt: (typeof c.alt === 'string') ? c.alt.trim().slice(0, 120) : '',
+    }))
+    .filter(c => c.img && c.q)
+    .slice(0, SA_CARDS_MAX);
+}
+
+// GET /api/smart-agent/card-img/<key> — public : sert l'image d'une carte
+// depuis R2. Clé unique (uuid) → cache immuable. Clé validée (anti-traversal).
+export async function handleCardImageServe(request, env, key) {
+  if (!env.HELP_MEDIA) return new Response('R2 non configuré', { status: 500 });
+  if (!SA_CARD_KEY_RE.test(key || '')) return new Response('Bad request', { status: 400 });
+  const obj = await env.HELP_MEDIA.get(key);
+  if (!obj) return new Response('Not found', { status: 404 });
+  const headers = new Headers();
+  obj.writeHttpMetadata(headers);
+  headers.set('Content-Length', String(obj.size));
+  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  headers.set('Access-Control-Allow-Origin', '*');
+  return new Response(obj.body, { status: 200, headers });
+}
+
+// POST /api/smart-agent/agents/:id/cards/image — pad (authentifié) : reçoit une
+// image (multipart) et la range dans R2. Renvoie { key, url }. La carte elle-même
+// (clé + question) est ensuite enregistrée via le PATCH config.cards.
+export async function handleAgentCardImageUpload(request, env, agentId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  if (!env.HELP_MEDIA) return err('Stockage R2 non configuré', 500, origin);
+  await ensureSmartAgentSchema(env);
+  const { results } = await env.DB
+    .prepare('SELECT id FROM sa_agents WHERE id = ? AND tenant_id = ?')
+    .bind(agentId, gate.tenant).all();
+  if (!results.length) return err('Agent introuvable', 404, origin);
+
+  let form;
+  try { form = await request.formData(); }
+  catch { return err('multipart/form-data attendu', 400, origin); }
+  const file = form.get('file');
+  if (!file || typeof file === 'string') return err('Champ « file » requis', 400, origin);
+  const mime = file.type || '';
+  if (!SA_CARD_MIME.includes(mime)) return err('Image JPEG, PNG ou WebP attendue', 400, origin);
+  if (file.size > SA_CARD_MAX_BYTES) return err('Image trop lourde (max 3 Mo)', 413, origin);
+
+  const key = `sa-cards/${agentId}/${crypto.randomUUID()}.${SA_CARD_EXT[mime]}`;
+  await env.HELP_MEDIA.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: mime } });
+  return json({ key, url: new URL(request.url).origin + '/api/smart-agent/card-img/' + key }, 200, origin);
+}
+
 // Pur (testé) : config STRIPPÉE servie au visiteur anonyme. JAMAIS le tenant,
 // la mission interne, les collections ni le coffre — juste de quoi accueillir.
-export function publicAgentMeta(agent) {
+// apiOrigin = origine du worker (pour bâtir l'URL absolue des images de cartes).
+export function publicAgentMeta(agent, apiOrigin = '') {
   const idn = (agent && agent.config && agent.config.identity) ? agent.config.identity : {};
   const cnt = (agent && agent.config && agent.config.contact) ? agent.config.contact : {};
+  const cds = Array.isArray(agent && agent.config && agent.config.cards) ? agent.config.cards : [];
   return {
     name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
     opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
@@ -1353,6 +1424,10 @@ export function publicAgentMeta(agent) {
     // Lot 2 (page v2) — lien web + téléphone : boutons du header public (masqués si vides).
     url:     (typeof cnt.website_url === 'string') ? cnt.website_url.trim() : '',
     phone:   (typeof cnt.phone === 'string') ? cnt.phone.trim() : '',
+    // Lot 3 — cartes : image (URL absolue servie par le worker) + question cachée + alt.
+    cards: cds
+      .filter(c => c && typeof c.img === 'string' && c.img && typeof c.q === 'string' && c.q)
+      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '' })),
   };
 }
 
@@ -1699,6 +1774,8 @@ function validateAgentPayload(b, { partial = false } = {}) {
       website_url: sanitizePublicUrl(cnt.website_url),
       phone:       (typeof cnt.phone === 'string') ? cnt.phone.trim().slice(0, 30) : '',
     },
+    // Lot 3 — cartes-photos cliquables (liste validée/normalisée).
+    cards: validateCards(cfg.cards),
   };
   if (!partial && !out.config.identity.mission) {
     return { ok: false, msg: 'Mission requise — que doit faire cet agent ?' };
@@ -1811,6 +1888,7 @@ export async function handleAgentUpdate(request, env, agentId) {
         identity: { ...(cur.config?.identity || {}), ...((b.config.identity && typeof b.config.identity === 'object') ? b.config.identity : {}) },
         scope:    { ...(cur.config?.scope || {}),    ...((b.config.scope && typeof b.config.scope === 'object') ? b.config.scope : {}) },
         contact:  { ...(cur.config?.contact || {}),  ...((b.config.contact && typeof b.config.contact === 'object') ? b.config.contact : {}) },
+        cards:    (b.config.cards !== undefined) ? b.config.cards : (cur.config?.cards || []),
       }
     : cur.config;
   const v = validateAgentPayload({ name: b.name ?? cur.name, config: mergedConfig });
@@ -1846,6 +1924,21 @@ export async function handleAgentDelete(request, env, agentId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
+  // Lot 3 — images de cartes (R2), best-effort, AVANT de perdre la config.
+  if (env.HELP_MEDIA) {
+    try {
+      const { results: agRows } = await env.DB
+        .prepare('SELECT config FROM sa_agents WHERE id = ? AND tenant_id = ?')
+        .bind(agentId, gate.tenant).all();
+      if (agRows.length) {
+        let cfg = {}; try { cfg = JSON.parse(agRows[0].config); } catch (_) {}
+        const cards = Array.isArray(cfg.cards) ? cfg.cards : [];
+        for (const c of cards) {
+          if (c && typeof c.img === 'string' && c.img) await env.HELP_MEDIA.delete(c.img).catch(() => {});
+        }
+      }
+    } catch (_) { /* best-effort */ }
+  }
   // SA-4.4.3 — supprime l'agent et son coffre PRIVÉ (savoir, trous, golden,
   // dialogue). Les coffres PARTAGÉS du dossier sont CONSERVÉS (leurs fiches
   // ont agent_id NULL, jamais purgées ci-dessous). Confirmation côté front.
@@ -2411,7 +2504,7 @@ export async function handlePublicAgentMeta(request, env, slug) {
   await ensureSmartAgentSchema(env);
   const gp = await _gatePublicLink(env, slug);
   if (!gp) return err('Agent introuvable', 404, origin);
-  const meta = publicAgentMeta(gp.agent);
+  const meta = publicAgentMeta(gp.agent, new URL(request.url).origin);
   // Preuve d'usage sur la landing : total de questions, vitrine SEULE.
   if (slug === DEMO_PUBLIC_SLUG) {
     const t = await env.DB

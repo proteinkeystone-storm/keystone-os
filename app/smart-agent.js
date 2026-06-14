@@ -296,6 +296,11 @@ function _onClick(e) {
     if (act === 'form-objective') { _readAgentForm(); _ag.form.objective = actEl.dataset.v; _renderMainKeepScroll(); return; }
     if (act === 'form-preset')  { _applyPreset(actEl.dataset.v); return; }
     if (act === 'fb-suggest')   { _suggestFallbacks(); return; }
+    // Lot 3 — cartes-photos (config dans Réglages)
+    if (act === 'form-card-add')  { _pickCardImage(); return; }
+    if (act === 'form-card-del')  { _readAgentForm(); _ag.form.cards.splice(+actEl.dataset.i, 1); _renderMainKeepScroll(); return; }
+    if (act === 'form-card-up')   { _readAgentForm(); _moveCard(+actEl.dataset.i, -1); return; }
+    if (act === 'form-card-down') { _readAgentForm(); _moveCard(+actEl.dataset.i, 1); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
     // ── Publication publique (SA-5.1) ──
     if (act === 'pub-create')   { _doPublish(); return; }
@@ -788,12 +793,16 @@ function _openForm(agent) {
         // Lot 2 — contact public (boutons du header de la page v2).
         websiteUrl: agent?.config?.contact?.website_url || '',
         phone:      agent?.config?.contact?.phone || '',
+        // Lot 3 — cartes-photos cliquables (copie éditable).
+        cards: Array.isArray(agent?.config?.cards)
+            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '' })) : [],
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
         fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
             ? agent.config.scope.fallback_variants.slice(0, 4) : [],
         folderId: agent?.folder_id ?? null,
     };
     _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false; _ag.fbBusy = false;
+    _ag.cardBusy = false; _ag.cardError = null;   // Lot 3
     // SA-5.1 — état de publication, rechargé pour un agent existant.
     _ag.publish = { loading: !!agent?.id, busy: false, link: null, qr: null };
     if (agent?.id) _loadPublicLinks(agent.id);
@@ -829,6 +838,26 @@ function _agentFormHTML() {
         ? fbv.map(v => `<input class="sa-input" data-field="fbv" value="${_escAttr(v)}" placeholder="Variante de repli" style="margin-top:6px;">`).join('')
         : '';
     const err = _ag.formError ? `<p class="sa-ed-error">${_esc(_ag.formError)}</p>` : '';
+    // Lot 3 — cartes-photos (config). Disponible une fois l'agent créé (l'upload
+    // a besoin de son id). Chaque carte = vignette + question posée au clic.
+    const cardsSection = !isNew ? `
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Cartes de la page publique (optionnel) — une photo, et la question posée quand on la touche</span></label>
+      <div class="sa-cards-cfg">
+        ${(d.cards || []).map((c, i) => `
+          <div class="sa-cardcfg">
+            <img class="sa-cardcfg-img" src="${API_BASE}/api/smart-agent/card-img/${_escAttr(c.img)}" alt="" loading="lazy">
+            <input class="sa-input sa-cardcfg-q" data-card-q="${i}" value="${_escAttr(c.q)}" maxlength="200" placeholder="Question posée au clic (ex. : Parlez-moi de cet objet)">
+            <div class="sa-cardcfg-ops">
+              <button class="sa-cardcfg-op" type="button" data-act="form-card-up" data-i="${i}" title="Monter"${i === 0 ? ' disabled' : ''}>${icon('chevron-up', 15)}</button>
+              <button class="sa-cardcfg-op" type="button" data-act="form-card-down" data-i="${i}" title="Descendre"${i === (d.cards.length - 1) ? ' disabled' : ''}>${icon('chevron-down', 15)}</button>
+              <button class="sa-cardcfg-op is-danger" type="button" data-act="form-card-del" data-i="${i}" title="Supprimer">${icon('trash-2', 15)}</button>
+            </div>
+          </div>`).join('')}
+        <button class="sa-btn sa-card-add" type="button" data-act="form-card-add"${_ag.cardBusy ? ' disabled' : ''}>${icon('image', 15)} ${_ag.cardBusy ? 'Envoi de l\'image…' : 'Ajouter une carte'}</button>
+        <input type="file" data-slot="card-file" hidden accept="image/jpeg,image/png,image/webp">
+        ${_ag.cardError ? `<p class="sa-ed-error">${_esc(_ag.cardError)}</p>` : ''}
+      </div>`
+      : `<p class="sa-field-hint" style="margin-top:14px;">Les cartes-photos de la page publique se configureront ici une fois l'agent créé.</p>`;
     return `
     <section class="sa-kx sa-ed">
       ${isNew ? `<button class="sa-back" data-act="form-cancel">${icon('chevron-left', 16)} Mes agents</button>` : ''}
@@ -883,6 +912,8 @@ function _agentFormHTML() {
         <input class="sa-input" data-field="websiteUrl" value="${_escAttr(d.websiteUrl)}" placeholder="https://votre-site.fr"></label>
       <label class="sa-field"><span class="sa-field-label">Téléphone (optionnel) — bouton d'appel en haut de la page publique</span>
         <input class="sa-input" data-field="phone" value="${_escAttr(d.phone)}" placeholder="+33 1 23 45 67 89"></label>
+
+      ${cardsSection}
 
       ${err}
       <div class="sa-ed-actions">
@@ -1122,6 +1153,8 @@ function _readAgentForm() {
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
     const ph = get('[data-field="phone"]');      if (ph) d.phone = ph.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
+    // Lot 3 — questions des cartes (l'image est déjà en mémoire dans d.cards)
+    main.querySelectorAll('[data-card-q]').forEach(inp => { const i = +inp.dataset.cardQ; if (d.cards && d.cards[i]) d.cards[i].q = inp.value.trim(); });
     // SA-8.0 — variantes de repli (inputs indexés)
     const fbvs = main.querySelectorAll('[data-field="fbv"]');
     if (fbvs.length) d.fallbackVariants = Array.from(fbvs).map(i => i.value.trim()).filter(Boolean);
@@ -1146,6 +1179,56 @@ async function _suggestOpening() {
     _ag.suggestBusy = false; _renderMainKeepScroll();
 }
 
+// ── Lot 3 — cartes-photos (config) ────────────────────────────
+// Redimensionne l'image AVANT l'upload (vignette légère → page publique rapide
+// + R2 économe). Sortie JPEG, côté long borné.
+function _resizeCardImage(file, maxDim = 1024, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let w = img.width, h = img.height;
+            if (Math.max(w, h) > maxDim) { const r = maxDim / Math.max(w, h); w = Math.round(w * r); h = Math.round(h * r); }
+            const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(img, 0, 0, w, h);
+            cv.toBlob(b => b ? resolve(b) : reject(new Error('Conversion impossible')), 'image/jpeg', quality);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+        img.src = url;
+    });
+}
+function _pickCardImage() {
+    if (!_ag.form?.id) { _ag.cardError = 'Créez d\'abord l\'agent.'; _renderMainKeepScroll(); return; }
+    const inp = _root.querySelector('[data-slot="card-file"]');
+    if (!inp) return;
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) _uploadCardImage(f); };
+    inp.click();
+}
+async function _uploadCardImage(file) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { _ag.cardError = 'Image JPEG, PNG ou WebP.'; _renderMainKeepScroll(); return; }
+    _readAgentForm();                          // préserve les questions déjà tapées
+    _ag.cardBusy = true; _ag.cardError = null; _renderMainKeepScroll();
+    try {
+        const blob = await _resizeCardImage(file);
+        const fd = new FormData(); fd.append('file', blob, 'card.jpg');
+        // multipart : on NE met PAS Content-Type (le navigateur pose le boundary).
+        const res = await fetch(`${API_BASE}/api/smart-agent/agents/${_ag.form.id}/cards/image`, {
+            method: 'POST', headers: { 'Authorization': `Bearer ${_jwt()}` }, body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+        _ag.form.cards.push({ img: data.key, q: '', alt: '' });
+    } catch (e) { _ag.cardError = e.message || 'Envoi impossible.'; }
+    _ag.cardBusy = false; _renderMainKeepScroll();
+}
+function _moveCard(i, dir) {
+    const a = _ag.form.cards; const j = i + dir;
+    if (!a || j < 0 || j >= a.length) return;
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+    _renderMainKeepScroll();
+}
+
 function _agentPayload() {
     const d = _ag.form;
     return {
@@ -1157,6 +1240,7 @@ function _agentPayload() {
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', phone: d.phone || '' },
+            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '' })),
         },
     };
 }

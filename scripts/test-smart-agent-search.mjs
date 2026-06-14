@@ -13,7 +13,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
-  gapMergeTarget, attachGapCounts, sanitizePublicUrl }
+  gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -383,6 +383,23 @@ check('publicAgentMeta expose url', publicAgentMeta({ name: 'L', config: { conta
 check('publicAgentMeta expose phone', publicAgentMeta({ name: 'L', config: { contact: { phone: '0102' } } }).phone === '0102');
 check('publicAgentMeta url absent → ""', publicAgentMeta({ name: 'L', config: {} }).url === '');
 
+console.log('── Lot 3 — cartes-photos (validateCards + meta) ──');
+{
+  const good = { img: 'sa-cards/abc-123/de-f456.jpg', q: 'Parlez-moi de cet objet', alt: 'encensoir' };
+  const v = validateCards([good]);
+  check('carte valide conservée', v.length === 1 && v[0].img === good.img && v[0].q === good.q);
+  check('clé R2 invalide (traversal) → écartée', validateCards([{ img: '../etc/passwd', q: 'x' }]).length === 0);
+  check('carte sans question → écartée', validateCards([{ img: 'sa-cards/a/b.jpg', q: '  ' }]).length === 0);
+  check('non-tableau → []', validateCards('nope').length === 0);
+  check('plafonné à 50', validateCards(Array.from({ length: 60 }, () => ({ img: 'sa-cards/a/b.jpg', q: 'q' }))).length === 50);
+}
+{
+  const meta = publicAgentMeta({ name: 'M', config: { cards: [{ img: 'sa-cards/a1/b2.jpg', q: 'Voir ceci', alt: 'x' }] } }, 'https://api.test');
+  check('meta.cards : image absolue', meta.cards.length === 1 && meta.cards[0].image === 'https://api.test/api/smart-agent/card-img/sa-cards/a1/b2.jpg');
+  check('meta.cards : question exposée', meta.cards[0].question === 'Voir ceci');
+  check('meta sans cards → []', publicAgentMeta({ name: 'M', config: {} }).cards.length === 0);
+}
+
 console.log('── SA-8.1 — validateImportUrl (import de page web) ──');
 check('https accepté', validateImportUrl('https://exemple.fr/tarifs').ok === true);
 check('http accepté', validateImportUrl('http://exemple.fr').ok === true);
@@ -564,9 +581,9 @@ console.log('── publicAgentMeta (SA-5 — config publique strippée) ──'
   check('expose name', meta.name === 'Guide du Musée');
   check('expose opening (trimmé)', meta.opening === 'Bonjour !');
   check('expose tone', meta.tone === 'chaleureux');
-  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role/url/phone)',
+  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role/url/phone/cards)',
     meta.tenant_id === undefined && meta.mission === undefined &&
-    meta.config === undefined && Object.keys(meta).sort().join(',') === 'name,opening,phone,role,tone,url');
+    meta.config === undefined && Object.keys(meta).sort().join(',') === 'cards,name,opening,phone,role,tone,url');
   check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
   check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
 }

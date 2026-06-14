@@ -1477,3 +1477,25 @@
 .sa-iv-doneacts { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 /* SA-6.1 — reformulation conversationnelle (enrobage de la question) */
 .sa-iv-intro { font-size: 12.5px; font-weight: 600; color: var(--tx2); margin: 0 0 4px; }
+
+/* ── Lot 3 — cartes-photos cliquables (config dans Réglages) ── */
+.sa-cards-cfg { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.sa-cardcfg { display: flex; align-items: center; gap: 10px; }
+.sa-cardcfg-img {
+  width: 58px; height: 44px; flex-shrink: 0;
+  object-fit: cover; border-radius: 9px;
+  background: var(--navy2); border: 1px solid var(--bd);
+}
+.sa-cardcfg-q { flex: 1; min-width: 0; }
+.sa-cardcfg-ops { display: flex; gap: 4px; flex-shrink: 0; }
+.sa-cardcfg-op {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9px; border: 1px solid var(--bd);
+  background: var(--navy3, var(--navy2)); color: var(--tx2);
+  cursor: pointer; transition: filter .15s;
+}
+.sa-cardcfg-op:hover:not(:disabled) { filter: brightness(1.15); }
+.sa-cardcfg-op:disabled { opacity: .35; cursor: default; }
+.sa-cardcfg-op.is-danger { color: var(--danger); }
+.sa-card-add { align-self: flex-start; margin-top: 2px; }
