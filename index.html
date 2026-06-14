@@ -104,15 +104,15 @@ section,nav{position:relative;z-index:1}
 /* COSMOS : limbe de planète (horizon lumineux sous le hero) */
 .hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; --crest:1}
 /* pas d'overflow:hidden : le pin clippe déjà au viewport ; le corps de la planète couvre le bas même tout petit. --crest pilote le fondu du halo d'horizon quand le cercle se referme */
-.hero-cosmos::before{content:''; position:absolute; left:50%; top:54%; transform:translate(-50%,-100%);
+.hero-cosmos::before{content:''; position:absolute; left:50%; top:var(--flareY,54%); transform:translate(-50%,-100%);
   width:150%; height:80%;
   background:radial-gradient(ellipse 40% 100% at 50% 100%,
     rgba(226,233,255,.72) 0%, rgba(150,162,255,.55) 15%, rgba(140,100,250,.34) 38%, rgba(110,90,240,.14) 60%, transparent 78%);
   opacity:var(--crest); filter:blur(14px)}
-.hero-cosmos::after{content:''; position:absolute; left:50%; top:53.5%; transform:translate(-50%,-62%);
-  width:420px; height:160px;
-  background:radial-gradient(ellipse at 50% 100%, rgba(240,243,255,.9) 0%, rgba(178,188,255,.45) 38%, transparent 70%);
-  opacity:var(--crest); filter:blur(10px)}
+.hero-cosmos::after{content:''; position:absolute; left:50%; top:var(--flareY,54%); transform:translate(-50%,-50%);
+  width:380px; height:150px;
+  background:radial-gradient(ellipse at 50% 50%, rgba(255,255,255,.98) 0%, rgba(214,221,255,.62) 28%, rgba(168,180,255,.32) 52%, transparent 72%);
+  opacity:1; filter:blur(9px)}
 .hero-planet{position:absolute; left:50%; top:54%; transform:translateX(-50%);
   width:min(340%,3000px); aspect-ratio:1; border-radius:50%; will-change:width,top;
   background:radial-gradient(circle at 50% 10%, #2c2658 0%, #181140 26%, #080518 78%, #040310 100%);
@@ -835,10 +835,10 @@ const MORPH_A=0.05, MORPH_B=0.45;        // intro-cercle (autour du titre) → c
 const ARC_TILT=0;                        // 0 = cartes parfaitement uniformes (pas d'inclinaison)
 const SMOOTH_K=0.25;                     // lissage scroll : ↑ colle au doigt (moins de traîne) · ↓ plus flottant
 const FOCUS_A=0.04, FOCUS_B=0.96;        // la planète passe de l'HORIZON géant au CERCLE COMPLET centré sur cette plage
-const CIRCLE_FINAL=0.32;                 // rayon du cercle final = innerHeight × ça (assez petit pour tenir ENTIER, non coupé)
+const CIRCLE_FINAL=0.36;                 // rayon du cercle final = innerHeight × ça (assez petit pour tenir ENTIER, non coupé)
 const CIRCLE_CY=0.47;                    // hauteur du centre du cercle final (× innerHeight)
 const SPAN_NARROW=50, SPAN_WIDE=320;     // étalement angulaire des cartes (deg) : fine arcade en haut → anneau quasi complet
-const RING_SCALE=0.6;                    // taille des cartes une fois en anneau sur le cercle final
+const RING_SCALE=0.78;                   // taille des cartes une fois en anneau sur le cercle final
 
 /* ── positions ─────────────────────────────────────────────── */
 function arcSpread(c,s,e){const o=[];for(let k=0;k<c;k++)o.push(c===1?(s+e)/2:s+(e-s)*k/(c-1));return o;}
@@ -899,7 +899,8 @@ function frame(now){
   const Rp  = lerp(R_huge, R_small, focusT);        // rayon courant du cercle
   const cyP = lerp(cyHuge, cySmall, focusT);        // centre vertical courant
   if(planet){ planet.style.width=(2*Rp).toFixed(1)+'px'; planet.style.top=(cyP-Rp).toFixed(1)+'px'; }
-  if(cosmos) cosmos.style.setProperty('--crest', clamp(1-focusT*2,0,1).toFixed(3)); // le halo d'horizon s'efface quand le cercle se referme
+  if(cosmos){ cosmos.style.setProperty('--crest', clamp(1-focusT*1.6,0,1).toFixed(3));   // halo LARGE d'horizon : s'efface quand le cercle se referme
+              cosmos.style.setProperty('--flareY', (cyP-Rp).toFixed(1)+'px'); }            // le FLARE lumineux suit le SOMMET du cercle (haut du limbe) et garde son intensité
 
   const rotDeg=p*14;
   const morphT=RM?0:smooth(p,MORPH_A,MORPH_B);     // intro-cercle → tracé de la planète
@@ -913,7 +914,7 @@ function frame(now){
   // ── Cartes : posées sur le TRACÉ du cercle de la planète — fine arcade en haut → anneau ──
   const spanT  = smooth(focusT, 0.55, 1.0);                          // l'étalement ne s'ouvre qu'une fois le cercle assez petit (sinon cartes hors champ)
   const spacing= lerp(SPAN_NARROW, SPAN_WIDE, spanT)/(N-1);          // deg entre cartes
-  const rr     = Rp*lerp(0.95,0.62,focusT);                          // rayon de l'anneau (sous le limbe → bien à l'intérieur)
+  const rr     = Rp*lerp(0.95,0.72,focusT);                          // rayon de l'anneau (sous le limbe → bien à l'intérieur)
   const cyOff  = cyP - innerHeight/2;                                // centre du cercle vs centre viewport (origine des cartes)
   const ringS  = lerp(1, RING_SCALE, focusT);
 
