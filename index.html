@@ -104,22 +104,22 @@ section,nav{position:relative;z-index:1}
 /* COSMOS : limbe de planète (horizon lumineux sous le hero) */
 .hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; --crest:1}
 /* pas d'overflow:hidden : le pin clippe déjà au viewport ; le corps de la planète couvre le bas même tout petit. --crest pilote le fondu du halo d'horizon quand le cercle se referme */
-.hero-cosmos::before{content:''; position:absolute; left:50%; top:var(--flareY,54%); transform:translate(-50%,-100%);
+.hero-cosmos::before{content:''; position:absolute; left:50%; top:54%; transform:translate(-50%,-100%) translateY(var(--flareDY,0px)); will-change:transform,opacity;
   width:150%; height:80%;
   background:radial-gradient(ellipse 40% 100% at 50% 100%,
     rgba(226,233,255,.72) 0%, rgba(150,162,255,.55) 15%, rgba(140,100,250,.34) 38%, rgba(110,90,240,.14) 60%, transparent 78%);
-  opacity:var(--crest); filter:blur(14px)}
-.hero-cosmos::after{content:''; position:absolute; left:50%; top:var(--flareY,54%); transform:translate(-50%,-50%);
+  opacity:var(--crest); filter:blur(12px)}
+.hero-cosmos::after{content:''; position:absolute; left:50%; top:54%; transform:translate(-50%,-50%) translateY(var(--flareDY,0px)); will-change:transform,opacity;
   width:380px; height:150px;
   background:radial-gradient(ellipse at 50% 50%, rgba(255,255,255,.98) 0%, rgba(214,221,255,.62) 28%, rgba(168,180,255,.32) 52%, transparent 72%);
-  opacity:1; filter:blur(9px)}
+  opacity:1; filter:blur(8px)}
 .hero-planet{position:absolute; left:50%; top:54%; transform:translateX(-50%);
-  width:min(340%,3000px); aspect-ratio:1; border-radius:50%; will-change:width,top;
+  width:min(340%,3000px); aspect-ratio:1; border-radius:50%;
   background:radial-gradient(circle at 50% 10%, #2c2658 0%, #181140 26%, #080518 78%, #040310 100%);
   box-shadow:
     0 0 0 2px rgba(232,236,255,.85),
-    0 0 34px 2px rgba(190,175,255,.6),
-    0 0 90px 8px rgba(140,110,255,.34)}
+    0 0 26px 2px rgba(190,175,255,.55),
+    0 0 60px 6px rgba(140,110,255,.32)}
 .hero-logo{position:absolute; left:50%; top:50%; width:140px; height:auto; z-index:2; opacity:0; pointer-events:none;
   transform:translate(-50%,-50%) scale(.3); will-change:transform,opacity;
   filter:drop-shadow(0 0 16px rgba(196,186,255,.5))}
@@ -909,7 +909,7 @@ function frame(now){
   const cyP = lerp(cyHuge, cySmall, focusT);        // centre vertical courant
   if(planet){ planet.style.width=(2*Rp).toFixed(1)+'px'; planet.style.top=(cyP-Rp).toFixed(1)+'px'; }
   if(cosmos){ cosmos.style.setProperty('--crest', clamp(1-focusT*1.6,0,1).toFixed(3));   // halo LARGE d'horizon : s'efface quand le cercle se referme
-              cosmos.style.setProperty('--flareY', (cyP-Rp).toFixed(1)+'px'); }            // le FLARE lumineux suit le SOMMET du cercle (haut du limbe) et garde son intensité
+              cosmos.style.setProperty('--flareDY', ((cyP-Rp)-innerHeight*0.54).toFixed(1)+'px'); }   // le FLARE suit le sommet via TRANSFORM (composité GPU, zéro reflow → fluide)
   if(logo){                                                          // la PUCE surgit du fond au centre du cercle : zoom avant + fondu 0→100
     const logoT = RM ? 0 : smooth(focusT, LOGO_APPEAR, 1.0);
     logo.style.opacity = (logoT*LOGO_OPACITY).toFixed(3);
