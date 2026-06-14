@@ -785,6 +785,9 @@ function _openForm(agent) {
         objective: agent?.config?.identity?.objective || 'informer',
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
+        // Lot 2 — contact public (boutons du header de la page v2).
+        websiteUrl: agent?.config?.contact?.website_url || '',
+        phone:      agent?.config?.contact?.phone || '',
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
         fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
             ? agent.config.scope.fallback_variants.slice(0, 4) : [],
@@ -875,6 +878,11 @@ function _agentFormHTML() {
       </button>
       <p class="sa-field-hint">Avec des variantes, l'agent alterne ses formulations au lieu de répéter la même phrase.</p>
       <div class="sa-guard-note">${icon('shield-check', 16)} <span>Chaque réponse cite ses fiches sources. Hors de son savoir, l'agent le dit avec ses mots (sans inventer) — et la question rejoint ses « Trous » à combler.</span></div>
+
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Lien vers votre site (optionnel) — bouton en haut de la page publique</span>
+        <input class="sa-input" data-field="websiteUrl" value="${_escAttr(d.websiteUrl)}" placeholder="https://votre-site.fr"></label>
+      <label class="sa-field"><span class="sa-field-label">Téléphone (optionnel) — bouton d'appel en haut de la page publique</span>
+        <input class="sa-input" data-field="phone" value="${_escAttr(d.phone)}" placeholder="+33 1 23 45 67 89"></label>
 
       ${err}
       <div class="sa-ed-actions">
@@ -1111,6 +1119,8 @@ function _readAgentForm() {
     const av = get('[data-field="avoid"]');    if (av) d.avoid = av.value.trim();
     const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
+    const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
+    const ph = get('[data-field="phone"]');      if (ph) d.phone = ph.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
     // SA-8.0 — variantes de repli (inputs indexés)
     const fbvs = main.querySelectorAll('[data-field="fbv"]');
@@ -1146,6 +1156,7 @@ function _agentPayload() {
                         role: d.role, style: d.style, avoid: d.avoid, objective: d.objective },
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
+            contact:  { website_url: d.websiteUrl || '', phone: d.phone || '' },
         },
     };
 }

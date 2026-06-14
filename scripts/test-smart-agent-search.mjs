@@ -13,7 +13,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
-  gapMergeTarget, attachGapCounts }
+  gapMergeTarget, attachGapCounts, sanitizePublicUrl }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -367,6 +367,22 @@ console.log('── SA-8.0 — publicAgentMeta expose le rôle ──');
 check('role exposé au visiteur', publicAgentMeta({ name: 'L', config: { identity: { role: ' guide ' } } }).role === 'guide');
 check('role absent → \'\'', publicAgentMeta({ name: 'L', config: { identity: {} } }).role === '');
 
+console.log('── Lot 2 — contact public (lien web + téléphone) ──');
+check('sanitizePublicUrl garde https', sanitizePublicUrl('https://musee.fr') === 'https://musee.fr');
+check('sanitizePublicUrl tolère sans schéma', sanitizePublicUrl('  www.musee.fr ') === 'www.musee.fr');
+check('sanitizePublicUrl rejette javascript:', sanitizePublicUrl('javascript:alert(1)') === '');
+check('sanitizePublicUrl rejette data:', sanitizePublicUrl('data:text/html,x') === '');
+check('sanitizePublicUrl vide → ""', sanitizePublicUrl('') === '');
+{
+  const v = validateAgentPayload({ name: 'X', config: { identity: { mission: 'm' }, contact: { website_url: 'www.x.fr', phone: ' +33 1 23 ' } } });
+  check('contact validé : url conservée', v.ok && v.config.contact.website_url === 'www.x.fr');
+  check('contact validé : phone trim', v.ok && v.config.contact.phone === '+33 1 23');
+  check('contact javascript: neutralisé', validateAgentPayload({ name: 'X', config: { identity: { mission: 'm' }, contact: { website_url: 'javascript:x' } } }).config.contact.website_url === '');
+}
+check('publicAgentMeta expose url', publicAgentMeta({ name: 'L', config: { contact: { website_url: 'www.x.fr' } } }).url === 'www.x.fr');
+check('publicAgentMeta expose phone', publicAgentMeta({ name: 'L', config: { contact: { phone: '0102' } } }).phone === '0102');
+check('publicAgentMeta url absent → ""', publicAgentMeta({ name: 'L', config: {} }).url === '');
+
 console.log('── SA-8.1 — validateImportUrl (import de page web) ──');
 check('https accepté', validateImportUrl('https://exemple.fr/tarifs').ok === true);
 check('http accepté', validateImportUrl('http://exemple.fr').ok === true);
@@ -548,9 +564,9 @@ console.log('── publicAgentMeta (SA-5 — config publique strippée) ──'
   check('expose name', meta.name === 'Guide du Musée');
   check('expose opening (trimmé)', meta.opening === 'Bonjour !');
   check('expose tone', meta.tone === 'chaleureux');
-  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role)',
+  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role/url/phone)',
     meta.tenant_id === undefined && meta.mission === undefined &&
-    meta.config === undefined && Object.keys(meta).sort().join(',') === 'name,opening,role,tone');
+    meta.config === undefined && Object.keys(meta).sort().join(',') === 'name,opening,phone,role,tone,url');
   check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
   check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
 }

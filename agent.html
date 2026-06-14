@@ -2,8 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a2741">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#05060f">
   <title>Assistant</title>
   <style>
     /* ═══════════════════════════════════════════════════════════════
@@ -260,7 +260,93 @@
        zéro impact sur la page publique normale. ── */
     .sa-embed .sa-composer { display: none; }
     .sa-embed .sa-head-tag { display: none; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MODE PUBLIC v2 (refonte 2026-06) — thème sombre, réponse unique.
+       Actif via la classe `sa-v2` (ajoutée tôt, hors embed). Le mode
+       embed (landing) garde l'ancien rendu clair ci-dessus, intact.
+       Classes préfixées `sav2-` → zéro collision avec l'ancien.
+       ═══════════════════════════════════════════════════════════════ */
+    .sa-v2 body {
+      color: #fff;
+      background:
+        radial-gradient(125% 78% at 50% 102%, rgba(96,74,206,.50) 0%, rgba(40,28,86,0) 58%),
+        linear-gradient(180deg,#05060f 0%,#0a0b1e 27%,#15123a 54%,#221a52 80%,#2c2160 100%);
+      background-attachment: fixed;
+    }
+    .sa-v2 .sa-full h1 { color: #fff; }
+    .sa-v2 .sa-full p  { color: rgba(255,255,255,.72); }
+
+    /* Header : lien URL (gauche) · téléphone · onde voix (droite) */
+    .sav2-top { display: flex; align-items: center; gap: 11px; padding: calc(env(safe-area-inset-top,0px) + 16px) 16px 6px; }
+    .sav2-url { flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; gap: 11px; padding: 0 16px;
+      border: 2px solid #c2c0ff; border-radius: 24px; background: rgba(255,255,255,.045); text-decoration: none; }
+    .sav2-url-globe { flex-shrink: 0; color: #c2c0ff; display: flex; align-items: center; justify-content: center; }
+    .sav2-url-globe svg { width: 22px; height: 22px; }
+    .sav2-url-txt { font-size: 14px; letter-spacing: .01em; color: rgba(196,194,255,.82); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sav2-top-spacer { flex: 1; }
+    .sav2-top-btn { flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%; background: transparent; border: none; cursor: pointer;
+      color: #c2c0ff; display: flex; align-items: center; justify-content: center; text-decoration: none;
+      -webkit-tap-highlight-color: transparent; transition: transform .12s; }
+    .sav2-top-btn:active { transform: scale(.92); }
+    .sav2-top-btn svg { width: 46px; height: 46px; display: block; }
+    .sav2-voice.is-on { color: #fff; }
+    .sav2-voice.is-on svg { filter: drop-shadow(0 0 6px rgba(160,160,255,.7)); }
+    .sav2-voice.is-loading { animation: sav2-pulse 1s ease-in-out infinite; }
+    @keyframes sav2-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+    /* Carrousel de cartes (slide latéral, nombre illimité) */
+    .sav2-cards { display: flex; gap: 10px; padding: 12px 16px 6px; overflow-x: auto; scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .sav2-cards::-webkit-scrollbar { display: none; }
+    .sav2-card { flex: 0 0 31%; aspect-ratio: 4/3; border: 1px solid rgba(164,162,255,.42); border-radius: 16px; overflow: hidden;
+      cursor: pointer; scroll-snap-align: start; background: rgba(255,255,255,.04); padding: 0;
+      -webkit-tap-highlight-color: transparent; transition: transform .14s; }
+    .sav2-card:active { transform: scale(.96); }
+    .sav2-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* Zone de réponse : UNE seule réponse, centrée (pas de fil) */
+    .sav2-answer { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
+    .sav2-answer::-webkit-scrollbar { width: 3px; }
+    .sav2-answer::-webkit-scrollbar-thumb { background: rgba(180,178,255,.45); border-radius: 3px; }
+    .sav2-answer-scroll { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 26px 24px; }
+    .sav2-answer-text { text-align: center; font-weight: 800; font-size: clamp(20px,5.6vw,24px); line-height: 1.36;
+      letter-spacing: -.01em; color: #fff; white-space: pre-wrap; cursor: pointer; animation: sav2-rise .45s ease both; }
+    @keyframes sav2-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .sav2-answer-text.is-fallback { font-weight: 600; color: rgba(228,227,255,.92); }
+    .sav2-answer.is-thinking .sav2-answer-text { opacity: .3; filter: blur(.3px); }
+    .sav2-thinking { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+      display: none; justify-content: center; gap: 7px; }
+    .sav2-answer.is-thinking .sav2-thinking { display: flex; }
+    .sav2-thinking span { width: 8px; height: 8px; border-radius: 50%; background: rgba(200,198,255,.85); animation: sav2-blink 1.25s ease-in-out infinite; }
+    .sav2-thinking span:nth-child(2) { animation-delay: .18s; }
+    .sav2-thinking span:nth-child(3) { animation-delay: .36s; }
+    @keyframes sav2-blink { 0%,60%,100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+    /* Composer : champ blanc + micro + envoyer */
+    .sav2-composer { padding: 6px 16px 4px; }
+    .sav2-field { display: flex; align-items: flex-end; gap: 8px; background: #fff; border-radius: 22px;
+      padding: 11px 11px 11px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.32); }
+    .sav2-input { flex: 1; border: none; outline: none; resize: none; background: transparent; font: inherit; font-size: 16px;
+      line-height: 1.4; color: #11122a; max-height: 104px; padding: 6px 0; }
+    .sav2-input::placeholder { color: #9498a8; }
+    .sav2-mic { flex-shrink: 0; width: 40px; height: 40px; border: none; background: transparent; cursor: pointer; color: #3c3c4c;
+      display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+    .sav2-mic svg { width: 23px; height: 23px; }
+    .sav2-mic.is-listening { color: #e0484f; }
+    .sav2-send { flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer;
+      background: linear-gradient(135deg,#6f6cf0,#5046d6); color: #fff; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(80,70,214,.5); -webkit-tap-highlight-color: transparent; transition: transform .12s; }
+    .sav2-send:active { transform: scale(.92); }
+    .sav2-send:disabled { opacity: .5; }
+    .sav2-send svg { width: 22px; height: 22px; }
+    .sav2-retry { margin-left: 8px; padding: 4px 12px; border: 1px solid rgba(196,194,255,.5); border-radius: 999px;
+      background: transparent; color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .sav2-rgpd { text-align: center; font-size: 11px; line-height: 1.45; color: rgba(196,194,255,.78); opacity: .82;
+      padding: 8px 20px calc(env(safe-area-inset-bottom,0px) + 14px); }
   </style>
+  <!-- Très tôt : thème sombre par défaut (public v2), ancien rendu clair pour l'embed. Évite le flash de fond. -->
+  <script>(function(){ var e = new URLSearchParams(location.search).has('embed'); document.documentElement.classList.add(e ? 'sa-embed' : 'sa-v2'); })();</script>
 </head>
 <body>
   <div id="sa-root">
@@ -289,6 +375,15 @@
     // saisie vit chez elle, la conversation s'affiche ici.
     const IS_EMBED = new URLSearchParams(location.search).has('embed');
     if (IS_EMBED) document.documentElement.classList.add('sa-embed');
+
+    // Refonte 2026-06 : le public normal passe sur le design v2 (sombre,
+    // réponse unique). L'embed (landing) garde l'ancien rendu fil → vitrine
+    // intacte. NEW_UI ne change QUE le rendu ; la logique réseau / session /
+    // voix reste commune et inchangée.
+    const NEW_UI = !IS_EMBED;
+    // Démo (?preview=1) : montre le design v2 SANS worker (réponses simulées),
+    // pour valider l'écran sur un vrai appareil. Opt-in, invisible aux visiteurs.
+    const IS_PREVIEW = new URLSearchParams(location.search).has('preview');
 
     /* ── Vocal — dictée (micro) + lecture à voix haute (API navigateur, gratuites).
        Les contrôles ne s'affichent que si le navigateur sait faire. La préférence
@@ -469,7 +564,7 @@
       const btn = document.getElementById('sa-voice');
       if (btn) {
         btn.classList.toggle('is-on', _voiceOn);
-        btn.innerHTML = svgVol(_voiceOn);
+        if (!NEW_UI) btn.innerHTML = svgVol(_voiceOn);   // v2 : garde l'icône onde (l'état ON est porté par .is-on)
         btn.title = _voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute';
         btn.setAttribute('aria-pressed', _voiceOn ? 'true' : 'false');
       }
@@ -580,6 +675,11 @@
     }
 
     function addBubble(role, text, isFallback) {
+      if (NEW_UI) {                         // v2 : zone unique ; la question ne s'affiche jamais
+        if (role === 'user') return null;
+        setAnswerV2(text, isFallback);
+        return null;
+      }
       const inner = document.getElementById('sa-thread-inner');
       const div = document.createElement('div');
       div.className = `sa-msg ${role}${isFallback ? ' is-fallback' : ''}`;
@@ -597,6 +697,7 @@
 
     // Erreur réseau : bulle avec bouton « Réessayer » (renvoie le même message).
     function addRetryBubble(message) {
+      if (NEW_UI) { setAnswerRetryV2(message); return; }
       const inner = document.getElementById('sa-thread-inner');
       const div = document.createElement('div');
       div.className = 'sa-msg agent is-fallback';
@@ -611,6 +712,7 @@
     }
 
     function showTyping() {
+      if (NEW_UI) { showThinkingV2(); return; }
       const inner = document.getElementById('sa-thread-inner');
       const div = document.createElement('div');
       div.className = 'sa-msg agent'; div.id = 'sa-typing-row';
@@ -618,9 +720,13 @@
       inner.appendChild(div);
       scrollDown();
     }
-    function hideTyping() { document.getElementById('sa-typing-row')?.remove(); }
+    function hideTyping() {
+      if (NEW_UI) { hideThinkingV2(); return; }
+      document.getElementById('sa-typing-row')?.remove();
+    }
 
     function scrollDown(force) {
+      if (NEW_UI) { const a = document.getElementById('sav2-answer'); if (a) a.scrollTop = 0; return; }
       const t = document.getElementById('sa-thread');
       if (!t) return;
       // SA-8.4 — ne recolle en bas que si le visiteur y était déjà (à 140 px
@@ -651,6 +757,7 @@
     // Envoi proprement dit — séparé de submit() pour le bouton « Réessayer ».
     async function sendMessage(message) {
       if (_busy) return;
+      if (IS_PREVIEW) { previewReply(message); return; }   // démo : réponse simulée, pas d'appel worker
       _busy = true;
       document.getElementById('sa-send').disabled = true;
       showTyping();
@@ -691,15 +798,142 @@
       }
     }
 
+    /* ═══════════════════════════════════════════════════════════════
+       Rendu v2 (public normal) — header 3 actions, carrousel de cartes,
+       réponse unique. Réutilise voix / dictée / session existantes : seul
+       le RENDU change, jamais la logique réseau.
+       ═══════════════════════════════════════════════════════════════ */
+    const SVG_V2 = {
+      globe: '<svg viewBox="0 0 56 56" fill="currentColor" aria-hidden="true"><path d="M 28.0234 51.2734 C 40.7500 51.2734 51.2735 40.7266 51.2735 28 C 51.2735 15.2968 40.7265 4.7266 28.0000 4.7266 C 15.2734 4.7266 4.7265 15.2968 4.7265 28 C 4.7265 40.7266 15.2968 51.2734 28.0234 51.2734 Z M 21.2734 15.8594 C 22.6562 12.3672 24.5546 9.8594 26.6406 9.0859 L 26.6406 16.3984 C 24.7187 16.3516 22.9141 16.1641 21.2734 15.8594 Z M 29.3359 9.0859 C 31.4219 9.8594 33.3437 12.3672 34.7031 15.8594 C 33.0625 16.1641 31.2812 16.3516 29.3359 16.3984 Z M 34.2812 9.7422 C 36.7890 10.6094 39.0625 11.9453 40.9609 13.7031 C 39.9297 14.2890 38.7343 14.7812 37.3984 15.2031 C 36.5546 13.0234 35.4765 11.1719 34.2812 9.7422 Z M 15.0156 13.7031 C 16.9375 11.9688 19.2109 10.6094 21.7187 9.7422 C 20.5000 11.1719 19.4453 13.0234 18.5781 15.2031 C 17.2656 14.7812 16.0703 14.2890 15.0156 13.7031 Z M 39.6250 26.6406 C 39.5078 23.3828 39.0156 20.3594 38.2422 17.6875 C 40.0000 17.1484 41.5468 16.4688 42.8594 15.6719 C 45.3437 18.6719 46.9609 22.4688 47.2422 26.6406 Z M 8.7578 26.6406 C 9.0390 22.4688 10.6328 18.6719 13.1406 15.6719 C 14.4297 16.4688 16.0000 17.1484 17.7343 17.6875 C 16.9609 20.3594 16.4922 23.3828 16.3750 26.6406 Z M 29.3359 26.6406 L 29.3359 19.0937 C 31.5390 19.0234 33.6250 18.7656 35.5703 18.3672 C 36.2734 20.8750 36.7422 23.6875 36.8594 26.6406 Z M 19.1406 26.6406 C 19.2343 23.6875 19.7031 20.8750 20.4297 18.3672 C 22.3515 18.7656 24.4609 19.0234 26.6406 19.0937 L 26.6406 26.6406 Z M 8.7578 29.3359 L 16.3750 29.3359 C 16.4687 32.6406 16.9609 35.7344 17.7343 38.4297 C 16.0234 38.9688 14.4765 39.6250 13.1875 40.4219 C 10.6562 37.3750 9.0390 33.5547 8.7578 29.3359 Z M 19.1172 29.3359 L 26.6406 29.3359 L 26.6406 37.0234 C 24.4609 37.0937 22.3515 37.3281 20.4297 37.75 C 19.7031 35.2188 19.2343 32.3359 19.1172 29.3359 Z M 29.3359 37.0234 L 29.3359 29.3359 L 36.8594 29.3359 C 36.7656 32.3359 36.2968 35.2188 35.5703 37.75 C 33.6250 37.3281 31.5390 37.0937 29.3359 37.0234 Z M 38.2422 38.4297 C 39.0390 35.7344 39.5078 32.6406 39.6250 29.3359 L 47.2422 29.3359 C 46.9843 33.5547 45.3672 37.3984 42.8125 40.4219 C 41.5234 39.6484 39.9765 38.9688 38.2422 38.4297 Z M 21.2734 40.2578 C 22.9141 39.9531 24.7187 39.7656 26.6406 39.7188 L 26.6406 47.0312 C 24.5546 46.2578 22.6562 43.7500 21.2734 40.2578 Z M 29.3359 39.7188 C 31.2812 39.7656 33.0625 39.9531 34.7031 40.2578 C 33.3437 43.7500 31.4219 46.2578 29.3359 47.0312 Z M 15.0859 42.3672 C 16.1172 41.8047 17.2890 41.3125 18.5781 40.9141 C 19.4219 43.0234 20.4297 44.8047 21.6015 46.2344 C 19.1641 45.3906 16.9609 44.0547 15.0859 42.3672 Z M 37.3984 40.9141 C 38.7109 41.3125 39.8828 41.8047 40.9141 42.3906 C 39.0390 44.0781 36.8125 45.4141 34.3750 46.2578 C 35.5468 44.8281 36.5781 43.0234 37.3984 40.9141 Z"/></svg>',
+      phone: '<svg viewBox="0 0 56 56" fill="currentColor" aria-hidden="true"><path d="M 27.9999 51.9063 C 41.0546 51.9063 51.9063 41.0781 51.9063 28 C 51.9063 14.9453 41.0312 4.0937 27.9765 4.0937 C 14.8983 4.0937 4.0937 14.9453 4.0937 28 C 4.0937 41.0781 14.9218 51.9063 27.9999 51.9063 Z M 27.9999 47.9219 C 16.9374 47.9219 8.1014 39.0625 8.1014 28 C 8.1014 16.9609 16.9140 8.0781 27.9765 8.0781 C 39.0155 8.0781 47.8983 16.9609 47.9219 28 C 47.9454 39.0625 39.0390 47.9219 27.9999 47.9219 Z M 22.3749 33.5312 C 27.8358 39.0156 34.7968 42.4844 38.9218 38.3828 C 39.0858 38.2188 39.2030 38.0781 39.3202 37.9141 C 40.3983 36.7188 40.7030 35.1250 39.3202 34.0937 C 38.2421 33.3203 37.0936 32.5234 35.1483 31.1641 C 33.7890 30.2031 32.8983 30.4375 31.8436 31.4922 L 30.9062 32.4063 C 30.6249 32.6641 30.1796 32.6406 29.8749 32.4531 C 29.0546 31.9609 27.6718 30.8594 26.3593 29.5469 C 25.0702 28.2578 23.8983 26.8047 23.4530 26.0312 C 23.2890 25.7734 23.1718 25.3516 23.4999 25.0469 L 24.4140 24.0625 C 25.4687 22.9609 25.7030 22.1172 24.7187 20.7344 L 21.8358 16.6563 C 20.8514 15.2734 19.4218 15.5312 17.8514 16.7031 C 17.7343 16.7968 17.6405 16.8906 17.5468 16.9844 C 13.4218 21.1094 16.9140 28.0703 22.3749 33.5312 Z"/></svg>',
+      voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.85986V14.1499"/><path d="M9 8.42993V15.5699"/><path d="M12 7V17"/><path d="M15 8.42993V15.5699"/><path d="M18 9.85986V14.1499"/><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/></svg>',
+      mic:   '<svg viewBox="0 0 96 96" fill="currentColor" aria-hidden="true"><path d="M84,36a6,6,0,0,0-12,0,24,24,0,0,1-48,0,6,6,0,0,0-12,0A35.9772,35.9772,0,0,0,42,71.3936V84H30a6,6,0,0,0,0,12H66a6,6,0,0,0,0-12H54V71.3936A35.9772,35.9772,0,0,0,84,36Z"/><path d="M48,48A12.0157,12.0157,0,0,0,60,36V12a12,12,0,0,0-24,0V36A12.0157,12.0157,0,0,0,48,48Z"/></svg>',
+      send:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.0004 18.5816V12.5M12.7976 18.754L15.8103 19.7625C17.4511 20.3118 18.2714 20.5864 18.7773 20.3893C19.2166 20.2182 19.5499 19.8505 19.6771 19.3965C19.8236 18.8737 19.4699 18.0843 18.7624 16.5053L14.2198 6.36709C13.5279 4.82299 13.182 4.05094 12.7001 3.81172C12.2814 3.60388 11.7898 3.60309 11.3705 3.80958C10.8878 4.04726 10.5394 4.8182 9.84259 6.36006L5.25633 16.5082C4.54325 18.086 4.18671 18.875 4.33169 19.3983C4.4576 19.8528 4.78992 20.2216 5.22888 20.394C5.73435 20.5926 6.55603 20.3198 8.19939 19.7744L11.2797 18.752C11.5614 18.6585 11.7023 18.6117 11.8464 18.5933C11.9742 18.5769 12.1036 18.5771 12.2314 18.5938C12.3754 18.6126 12.5162 18.6597 12.7976 18.754Z"/></svg>'
+    };
+    function prettyUrl(u) { return String(u || '').replace(/^https?:\/\//i, '').replace(/\/+$/, ''); }
+    function fullUrl(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? u : ('https://' + u); }
+
+    function renderChatV2(meta) {
+      const hasVoice = (HAS_WASM || HAS_TTS);
+      const url   = (meta.url || '').trim();           // Lot 2 (pas encore dans la meta) → masqué si vide
+      const phone = (meta.phone || '').trim();         // Lot 2
+      const cards = Array.isArray(meta.cards) ? meta.cards.filter(c => c && c.image) : [];  // Lot 3
+
+      document.getElementById('sa-root').outerHTML = `
+        <header class="sav2-top">
+          ${url
+            ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape(prettyUrl(url))}</span></a>`
+            : `<div class="sav2-top-spacer"></div>`}
+          ${phone ? `<a class="sav2-top-btn" href="tel:${escape(phone.replace(/[^0-9+]/g, ''))}" aria-label="Appeler">${SVG_V2.phone}</a>` : ''}
+          ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${SVG_V2.voice}</button>` : ''}
+        </header>
+        ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
+            `<button class="sav2-card" type="button" data-i="${i}" aria-label="Question suggérée"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy"></button>`).join('')}</div>` : ''}
+        <main class="sav2-answer" id="sav2-answer">
+          <div class="sav2-answer-scroll"><div class="sav2-answer-text" id="sav2-answer-text"></div></div>
+          <div class="sav2-thinking" aria-hidden="true"><span></span><span></span><span></span></div>
+        </main>
+        <div class="sav2-composer">
+          <div class="sav2-field">
+            <textarea class="sav2-input" id="sa-input" rows="1" maxlength="500" autocapitalize="sentences" autocomplete="off" enterkeyhint="send" placeholder="Posez-nous vos questions" aria-label="Votre question"></textarea>
+            ${HAS_SR ? `<button class="sav2-mic" id="sa-mic" type="button" aria-label="Dicter votre question" title="Dicter votre question">${SVG_V2.mic}</button>` : ''}
+            <button class="sav2-send" id="sa-send" type="button" aria-label="Envoyer">${SVG_V2.send}</button>
+          </div>
+        </div>
+        <div class="sav2-rgpd">Réponses issues du savoir de l'assistant. Vos questions sont anonymes et effacées après 90&nbsp;jours.</div>`;
+
+      const input = document.getElementById('sa-input');
+      const send  = document.getElementById('sa-send');
+      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 104) + 'px'; });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
+      send.addEventListener('click', submit);
+      input.addEventListener('focus', () => setTimeout(scrollDown, 250));
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', scrollDown);
+
+      const voiceBtn = document.getElementById('sa-voice');
+      if (voiceBtn) voiceBtn.addEventListener('click', toggleVoice);
+      const micBtn = document.getElementById('sa-mic');
+      if (micBtn) micBtn.addEventListener('click', startDictation);
+
+      if (cards.length) {
+        document.querySelectorAll('.sav2-card').forEach(btn => {
+          btn.addEventListener('click', () => { const c = cards[+btn.dataset.i]; if (c && c.question) askCard(c.question); });
+        });
+      }
+      const ansText = document.getElementById('sav2-answer-text');
+      if (ansText) ansText.addEventListener('click', () => { const t = ansText.dataset.text; if (t) speakTap(t); });
+
+      if (_voiceOn && HAS_WASM) _warmPiper();
+      setAnswerV2(meta.opening || 'Bonjour ! Comment puis-je vous aider ?');   // jamais d'écran vide
+      input.focus();
+    }
+
+    // Réponse unique : on REMPLACE le contenu, on n'empile jamais.
+    function setAnswerV2(text, isFallback) {
+      const a = document.getElementById('sav2-answer');
+      const t = document.getElementById('sav2-answer-text');
+      if (!t) return;
+      if (a) a.classList.remove('is-thinking');
+      t.classList.toggle('is-fallback', !!isFallback);
+      t.textContent = text;
+      t.dataset.text = text;                                    // pour la lecture au toucher
+      t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
+      if (a) a.scrollTop = 0;
+    }
+    // « Réflexion » : la réponse précédente reste estompée + points (overlay).
+    function showThinkingV2() { document.getElementById('sav2-answer')?.classList.add('is-thinking'); }
+    function hideThinkingV2() { document.getElementById('sav2-answer')?.classList.remove('is-thinking'); }
+    function setAnswerRetryV2(message) {
+      const a = document.getElementById('sav2-answer');
+      const t = document.getElementById('sav2-answer-text');
+      if (!t) return;
+      if (a) a.classList.remove('is-thinking');
+      t.classList.add('is-fallback');
+      t.textContent = 'Connexion impossible. ';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'sav2-retry'; btn.textContent = 'Réessayer';
+      btn.addEventListener('click', () => sendMessage(message));
+      t.appendChild(btn);
+    }
+    // Carte cliquée : on pose sa question CACHÉE (jamais affichée) dans le flux normal.
+    function askCard(q) { if (_busy || !q) return; sendMessage(q); }
+
+    /* Démo (?preview=1) — design v2 sans worker : meta + réponses simulées. */
+    function demoImg(col) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90"><rect width="120" height="90" fill="' + col + '"/></svg>'); }
+    const DEMO_META = {
+      role: 'Conseiller', opening: 'Bienvenue !\nJe suis votre conseiller,\ncomment puis-je vous aider ?',
+      url: 'www.musee-copte.eg', phone: '+20 2 2362 8766',
+      cards: [
+        { image: demoImg('#a87b3a'), question: 'Parlez-moi de cet objet',          answer: 'Cet encensoir en argent ciselé date du XVIIIᵉ siècle ; la fumée de l\'encens y symbolise les prières qui montent vers le ciel.' },
+        { image: demoImg('#5d6b86'), question: 'Qu\'est-ce que cette fontaine ?',    answer: 'Une fontaine d\'ablutions du XIᵉ siècle, en marbre incrusté, qui ornait la cour d\'une maison copte.' },
+        { image: demoImg('#9a7a3a'), question: 'Racontez-moi cette icône',          answer: 'Une icône de la Fuite en Égypte : la Sainte Famille accueillie sur la terre d\'Égypte, épisode cher aux coptes.' }
+      ]
+    };
+    const DEMO_DEFAULT = 'Le Musée Copte est ouvert du lundi au samedi de 9h00 à 12h00 et de 14h00 à 18h00. Il est fermé le dimanche. Avez-vous besoin d\'autres informations pour préparer votre visite ?';
+    function previewReply(message) {
+      _busy = true;
+      const send = document.getElementById('sa-send'); if (send) send.disabled = true;
+      showTyping();
+      if (_voiceOn) _warmPiper();
+      const card = (DEMO_META.cards || []).find(c => c.question === message);
+      const reply = card ? card.answer : DEMO_DEFAULT;
+      setTimeout(() => {
+        hideTyping(); addBubble('agent', reply); speak(reply);
+        _busy = false; if (send) send.disabled = false;
+        document.getElementById('sa-input')?.focus();
+      }, 950);
+    }
+
     async function load() {
       _slug = getSlug();
+      if (IS_PREVIEW) { renderChatV2(DEMO_META); return; }   // démo : design v2 sans worker/slug
       if (!_slug) { renderError('Lien invalide', 'Ce lien ne correspond à aucun assistant.'); return; }
       try { _sessionId = sessionStorage.getItem('sa_sess_' + _slug) || null; } catch (_) {}
       try {
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}`);
         if (!res.ok) { renderError('Assistant introuvable', 'Ce lien n\'est plus actif ou n\'existe pas.'); return; }
         const data = await res.json();
-        renderChat(data.agent || {});
+        (NEW_UI ? renderChatV2 : renderChat)(data.agent || {});
         if (IS_EMBED) {
           // Pont avec la landing : elle envoie { type:'sa-ask', text } ;
           // on rend la bulle + la réponse comme un submit() normal. Si un

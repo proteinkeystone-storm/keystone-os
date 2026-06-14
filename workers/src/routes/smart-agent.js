@@ -1343,12 +1343,16 @@ export function validatePublicSlug(slug) {
 // la mission interne, les collections ni le coffre — juste de quoi accueillir.
 export function publicAgentMeta(agent) {
   const idn = (agent && agent.config && agent.config.identity) ? agent.config.identity : {};
+  const cnt = (agent && agent.config && agent.config.contact) ? agent.config.contact : {};
   return {
     name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
     opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
     tone:    (typeof idn.tone === 'string') ? idn.tone : '',
     // SA-8.0 — le rôle (métier) est public par nature : affiché sous le nom.
     role:    (typeof idn.role === 'string' && idn.role.trim()) ? idn.role.trim() : '',
+    // Lot 2 (page v2) — lien web + téléphone : boutons du header public (masqués si vides).
+    url:     (typeof cnt.website_url === 'string') ? cnt.website_url.trim() : '',
+    phone:   (typeof cnt.phone === 'string') ? cnt.phone.trim() : '',
   };
 }
 
@@ -1645,6 +1649,16 @@ export async function handleSuggestFallbacks(request, env) {
   }
 }
 
+// Pur (testé) : nettoie une URL de site fournie par le propriétaire (lien
+// public du header). Tolère l'absence de schéma (le front préfixe https://) ;
+// rejette tout schéma dangereux (javascript:/data:…) → pas de href piégé.
+export function sanitizePublicUrl(raw) {
+  const u = (typeof raw === 'string') ? raw.trim().slice(0, 200) : '';
+  if (!u) return '';
+  if (/^\s*(javascript|data|vbscript|file|blob):/i.test(u)) return '';
+  return u;
+}
+
 function validateAgentPayload(b, { partial = false } = {}) {
   const out = {};
   if (!partial || b.name !== undefined) {
@@ -1655,6 +1669,7 @@ function validateAgentPayload(b, { partial = false } = {}) {
   const cfg = (b.config && typeof b.config === 'object' && !Array.isArray(b.config)) ? b.config : {};
   const idn = (cfg.identity && typeof cfg.identity === 'object') ? cfg.identity : {};
   const scp = (cfg.scope && typeof cfg.scope === 'object') ? cfg.scope : {};
+  const cnt = (cfg.contact && typeof cfg.contact === 'object') ? cfg.contact : {};
   out.config = {
     identity: {
       mission: (typeof idn.mission === 'string') ? idn.mission.trim().slice(0, 600) : '',
@@ -1678,6 +1693,11 @@ function validateAgentPayload(b, { partial = false } = {}) {
         ? scp.fallback_variants.filter(v => typeof v === 'string' && v.trim())
             .map(v => v.trim().slice(0, 220)).slice(0, 4)
         : [],
+    },
+    // Lot 2 — contact public (page v2) : lien web + téléphone, optionnels.
+    contact: {
+      website_url: sanitizePublicUrl(cnt.website_url),
+      phone:       (typeof cnt.phone === 'string') ? cnt.phone.trim().slice(0, 30) : '',
     },
   };
   if (!partial && !out.config.identity.mission) {
@@ -1790,6 +1810,7 @@ export async function handleAgentUpdate(request, env, agentId) {
     ? {
         identity: { ...(cur.config?.identity || {}), ...((b.config.identity && typeof b.config.identity === 'object') ? b.config.identity : {}) },
         scope:    { ...(cur.config?.scope || {}),    ...((b.config.scope && typeof b.config.scope === 'object') ? b.config.scope : {}) },
+        contact:  { ...(cur.config?.contact || {}),  ...((b.config.contact && typeof b.config.contact === 'object') ? b.config.contact : {}) },
       }
     : cur.config;
   const v = validateAgentPayload({ name: b.name ?? cur.name, config: mergedConfig });
