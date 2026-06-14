@@ -5468,19 +5468,19 @@ function _renderLivingReadout(metrics) {
     let focusMin = 0, sessionMin = 0;
     try { const s = _focusSnapshot(); focusMin = +s.focusMin || 0; sessionMin = +s.sessionMin || 0; } catch (e) { /* no-op */ }
     const E = _escapeLivingText;
-    // Jauges TOUJOURS visibles : repli sur les cumuls si aucune activité du jour,
-    // + "Session" en ancre garantie. Cap à 4 segments pour rester sobre.
+    // Jauges = ACTIVITÉ DU JOUR, libellés explicites + unités. On ne mélange
+    // plus « 24h » et cumul sous un même mot (c'est ce qui rendait « Key Form 1 »
+    // illisible : tantôt réponses 24h, tantôt nombre de formulaires). Une jauge
+    // ne s'affiche que si elle a une vraie valeur du jour ; « Session » (durée
+    // de la visite en cours) reste l'ancre garantie. Cap à 4 segments.
     const all = [];
     if (+m.scans24h > 0) {
         const trend = (+m.scansDelta > 0) ? ` <span class="up">↑${(+m.scansDelta)}</span>` : '';
-        all.push({ k: 'Scans', vHtml: E(String(+m.scans24h)) + trend });
-    } else if (+m.scansTotal > 0) {
-        all.push({ k: 'Scans', vHtml: E(String(+m.scansTotal)) });
+        all.push({ k: 'Scans 24h', vHtml: E(String(+m.scans24h)) + trend });
     }
-    if (+m.keyform24h > 0)          all.push({ k: 'Key Form', vHtml: E(String(+m.keyform24h)) });
-    else if (+m.formsPublished > 0) all.push({ k: 'Key Form', vHtml: E(String(+m.formsPublished)) });
-    if (focusMin >= 1)             all.push({ k: 'Focus', vHtml: E(focusMin + ' min') });
-    if (+m.ghostUsed > 0 && m.ghostQuota != null) all.push({ k: 'Ghost', vHtml: E((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
+    if (+m.keyform24h > 0) all.push({ k: 'Réponses 24h', vHtml: E(String(+m.keyform24h)) });
+    if (focusMin >= 1)     all.push({ k: 'Focus', vHtml: E(focusMin + ' min') });
+    if (+m.ghostUsed > 0 && m.ghostQuota != null) all.push({ k: 'Ghost 24h', vHtml: E((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
     all.push({ k: 'Session', vHtml: E(sessionMin >= 1 ? sessionMin + ' min' : '< 1 min') });  // ancre
     host.innerHTML = all.slice(0, 4).map(s =>
         `<span class="seg"><span class="k">${E(s.k)}</span><span class="v">${s.vHtml}</span></span>`

@@ -42,6 +42,20 @@ const LIVING_MODEL_ID = KS_AI_MODEL;
 const LIVING_MAX_TOK  = 300;
 const URGENT_PRIORITY = 80;
 
+// ── Fuseau horaire — heure ET jour dérivés du MÊME instant en Europe/Paris ──
+// Le worker tourne en UTC : `new Date().getHours()` renvoie l'heure UTC, ce
+// qui désynchronise la PÉRIODE (matin/après-midi/soir) du JOUR de la semaine
+// près de minuit à Paris → « Belle soirée de lundi » un dimanche soir
+// (incident 2026-06-15). On dérive les deux du même instant, même fuseau.
+function _parisNow() {
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'long', hour: '2-digit', hour12: false, timeZone: 'Europe/Paris',
+  }).formatToParts(new Date());
+  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+  const hour    = (parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10)) % 24;
+  return { hour, weekday };
+}
+
 // ── Auto-migration (pattern Keystone) ─────────────────────────────
 let _schemaReady = false;
 
@@ -454,8 +468,7 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
   //    même quand un seul signal fort domine, ex: que des scans QR) ──
   const toolsCount = Number.isFinite(+clientSensors.toolsCount) && +clientSensors.toolsCount > 0
     ? +clientSensors.toolsCount : 7;
-  const hour    = new Date().getHours();
-  const weekday = new Date().toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+  const { hour, weekday } = _parisNow();
   const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matinée' : hour < 18 ? 'après-midi' : 'soirée';
 
   candidates.push({
@@ -526,9 +539,8 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
   // Le topic dominant = celui du signal n°1 (que le LLM doit privilégier).
   const topic = signals[0].topic;
 
-  const hour    = new Date().getHours();
+  const { hour, weekday } = _parisNow();
   const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
-  const weekday = new Date().toLocaleString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
 
   const systemPrompt = [
     'Tu es l\'analyseur de télémétrie du Living Layer, l\'ordinateur de bord de Keystone OS.',
@@ -850,7 +862,7 @@ export async function handleLivingBoard(request, env) {
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
   const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
   if (ai) {
-    return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120 }, 200, origin);
+    return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
   }
 
   // 3. Pilotable normal actif
