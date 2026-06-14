@@ -845,7 +845,8 @@ const CIRCLE_CY=0.47;                    // hauteur du centre du cercle final (�
 const SPAN_NARROW=50, SPAN_WIDE=320;     // étalement angulaire des cartes (deg) : fine arcade en haut → anneau quasi complet
 const RING_SCALE=0.78;                   // taille des cartes une fois en anneau sur le cercle final
 const LOGO_RATIO=0.4;                     // taille de la puce centrale = R_small × ça (ni trop petite ni envahissante)
-const LOGO_APPEAR=0.66;                   // focusT où la puce surgit du fond (zoom avant + fondu 0→100)
+const LOGO_APPEAR=0.66;                   // focusT où la puce surgit du fond (zoom avant + fondu)
+const LOGO_OPACITY=0.4;                    // opacité FINALE de la puce (filigrane discret au centre — ↓ = plus fantôme)
 
 /* ── positions ─────────────────────────────────────────────── */
 function arcSpread(c,s,e){const o=[];for(let k=0;k<c;k++)o.push(c===1?(s+e)/2:s+(e-s)*k/(c-1));return o;}
@@ -911,7 +912,7 @@ function frame(now){
               cosmos.style.setProperty('--flareY', (cyP-Rp).toFixed(1)+'px'); }            // le FLARE lumineux suit le SOMMET du cercle (haut du limbe) et garde son intensité
   if(logo){                                                          // la PUCE surgit du fond au centre du cercle : zoom avant + fondu 0→100
     const logoT = RM ? 0 : smooth(focusT, LOGO_APPEAR, 1.0);
-    logo.style.opacity = logoT.toFixed(3);
+    logo.style.opacity = (logoT*LOGO_OPACITY).toFixed(3);
     logo.style.transform = 'translate(-50%,-50%) translateY('+(cyP-innerHeight/2).toFixed(1)+'px) scale('+lerp(0.3,1,easeOut(logoT)).toFixed(3)+')';
   }
 
