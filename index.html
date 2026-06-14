@@ -120,6 +120,9 @@ section,nav{position:relative;z-index:1}
     0 0 0 2px rgba(232,236,255,.85),
     0 0 34px 2px rgba(190,175,255,.6),
     0 0 90px 8px rgba(140,110,255,.34)}
+.hero-logo{position:absolute; left:50%; top:50%; width:140px; height:auto; z-index:2; opacity:0; pointer-events:none;
+  transform:translate(-50%,-50%) scale(.3); will-change:transform,opacity;
+  filter:drop-shadow(0 0 16px rgba(196,186,255,.5))}
 
 .constellation{position:absolute; inset:0; z-index:3}
 .cz-card{
@@ -560,6 +563,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <section class="hero-stage">
   <div class="hero-pin">
     <div class="hero-cosmos" aria-hidden="true"><div class="hero-planet"></div></div>
+    <img class="hero-logo" id="herologo" src="/keystone-puce-blanc.svg" alt="" aria-hidden="true">
     <div class="constellation" id="cz"></div>
 
     <div class="hero-center" id="center">
@@ -792,6 +796,7 @@ const hint = document.getElementById('hint');
 const stage = document.querySelector('.hero-stage');
 const cosmos = document.querySelector('.hero-cosmos');
 const planet = document.querySelector('.hero-planet');
+const logo = document.getElementById('herologo');
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CARD_W = 116, CARD_H = 132;
 
@@ -839,6 +844,8 @@ const CIRCLE_FINAL=0.36;                 // rayon du cercle final = innerHeight 
 const CIRCLE_CY=0.47;                    // hauteur du centre du cercle final (× innerHeight)
 const SPAN_NARROW=50, SPAN_WIDE=320;     // étalement angulaire des cartes (deg) : fine arcade en haut → anneau quasi complet
 const RING_SCALE=0.78;                   // taille des cartes une fois en anneau sur le cercle final
+const LOGO_RATIO=0.6;                     // taille de la puce centrale = R_small × ça (ni trop petite ni envahissante)
+const LOGO_APPEAR=0.66;                   // focusT où la puce surgit du fond (zoom avant + fondu 0→100)
 
 /* ── positions ─────────────────────────────────────────────── */
 function arcSpread(c,s,e){const o=[];for(let k=0;k<c;k++)o.push(c===1?(s+e)/2:s+(e-s)*k/(c-1));return o;}
@@ -881,6 +888,7 @@ function recompute(){ measureStage(); cardScale = innerWidth<=760 ? 0.58 : 1;
   R_huge = Math.min(innerWidth*3.4,3000)/2;        // rayon de .hero-planet à l'état horizon (3000px plafonné)
   cyHuge = innerHeight*0.54 + R_huge;              // centre naturel (hors écran sous le pli) → top = 54% comme aujourd'hui
   R_small= Math.min(innerWidth*0.42, innerHeight*CIRCLE_FINAL);   // tient en LARGEUR ET en hauteur (mobile compris : sinon le cercle déborde sur les côtés)
+  if(logo) logo.style.width=(R_small*LOGO_RATIO).toFixed(0)+'px';  // puce centrale dimensionnée sur le cercle final
   cySmall= innerHeight*CIRCLE_CY;                  // centre du cercle final
   R=radii(); ANG=baseAngles(); }
 recompute();
@@ -901,6 +909,11 @@ function frame(now){
   if(planet){ planet.style.width=(2*Rp).toFixed(1)+'px'; planet.style.top=(cyP-Rp).toFixed(1)+'px'; }
   if(cosmos){ cosmos.style.setProperty('--crest', clamp(1-focusT*1.6,0,1).toFixed(3));   // halo LARGE d'horizon : s'efface quand le cercle se referme
               cosmos.style.setProperty('--flareY', (cyP-Rp).toFixed(1)+'px'); }            // le FLARE lumineux suit le SOMMET du cercle (haut du limbe) et garde son intensité
+  if(logo){                                                          // la PUCE surgit du fond au centre du cercle : zoom avant + fondu 0→100
+    const logoT = RM ? 0 : smooth(focusT, LOGO_APPEAR, 1.0);
+    logo.style.opacity = logoT.toFixed(3);
+    logo.style.transform = 'translate(-50%,-50%) translateY('+(cyP-innerHeight/2).toFixed(1)+'px) scale('+lerp(0.3,1,easeOut(logoT)).toFixed(3)+')';
+  }
 
   const rotDeg=p*14;
   const morphT=RM?0:smooth(p,MORPH_A,MORPH_B);     // intro-cercle → tracé de la planète
