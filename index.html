@@ -102,23 +102,24 @@ section,nav{position:relative;z-index:1}
   filter:blur(8px);
 }
 /* COSMOS : limbe de planète (horizon lumineux sous le hero) */
-.hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; will-change:transform}
+.hero-cosmos{position:absolute; inset:0; z-index:0; pointer-events:none; --crest:1}
+/* pas d'overflow:hidden : le pin clippe déjà au viewport ; le corps de la planète couvre le bas même tout petit. --crest pilote le fondu du halo d'horizon quand le cercle se referme */
 .hero-cosmos::before{content:''; position:absolute; left:50%; top:54%; transform:translate(-50%,-100%);
   width:150%; height:80%;
   background:radial-gradient(ellipse 40% 100% at 50% 100%,
     rgba(226,233,255,.72) 0%, rgba(150,162,255,.55) 15%, rgba(140,100,250,.34) 38%, rgba(110,90,240,.14) 60%, transparent 78%);
-  filter:blur(14px)}
+  opacity:var(--crest); filter:blur(14px)}
 .hero-cosmos::after{content:''; position:absolute; left:50%; top:53.5%; transform:translate(-50%,-62%);
   width:420px; height:160px;
   background:radial-gradient(ellipse at 50% 100%, rgba(240,243,255,.9) 0%, rgba(178,188,255,.45) 38%, transparent 70%);
-  filter:blur(10px)}
+  opacity:var(--crest); filter:blur(10px)}
 .hero-planet{position:absolute; left:50%; top:54%; transform:translateX(-50%);
-  width:min(340%,3000px); aspect-ratio:1; border-radius:50%;
-  background:radial-gradient(circle at 50% 0%, #2a2154 0%, #0b0820 5%, #030107 14%);
+  width:min(340%,3000px); aspect-ratio:1; border-radius:50%; will-change:width,top;
+  background:radial-gradient(circle at 50% 10%, #2c2658 0%, #181140 26%, #080518 78%, #040310 100%);
   box-shadow:
     0 0 0 2px rgba(232,236,255,.85),
-    0 0 26px 1px rgba(190,175,255,.7),
-    0 -12px 120px 6px rgba(140,110,255,.42)}
+    0 0 34px 2px rgba(190,175,255,.6),
+    0 0 90px 8px rgba(140,110,255,.34)}
 
 .constellation{position:absolute; inset:0; z-index:3}
 .cz-card{
@@ -790,6 +791,7 @@ const center = document.getElementById('center');
 const hint = document.getElementById('hint');
 const stage = document.querySelector('.hero-stage');
 const cosmos = document.querySelector('.hero-cosmos');
+const planet = document.querySelector('.hero-planet');
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CARD_W = 116, CARD_H = 132;
 
@@ -829,11 +831,14 @@ const easeOutBack=t=>{const c=2.0,c3=c+1;return 1+c3*Math.pow(t-1,3)+c*Math.pow(
 
 /* ═══ RÉGLAGES FEEL (ajustables ensemble) ═══ */
 const T_SCAT=300, T_LINE=1100, T_CIRC=2050, T_REVEAL=2350;  // intro : dispersé → ligne → cercle → titre
-const MORPH_A=0.05, MORPH_B=0.62;        // plage de scroll : cercle → arc (étalée → mouvement continu, fin des zones mortes)
-const ARC_TILT=0;                        // 0 = cartes parfaitement uniformes dans l'arc (pas d'inclinaison)
+const MORPH_A=0.05, MORPH_B=0.45;        // intro-cercle (autour du titre) → cartes posées sur le TRACÉ de la planète
+const ARC_TILT=0;                        // 0 = cartes parfaitement uniformes (pas d'inclinaison)
 const SMOOTH_K=0.25;                     // lissage scroll : ↑ colle au doigt (moins de traîne) · ↓ plus flottant
-const DRIFT_EARLY=140;                   // parallaxe VISIBLE du hero (fond + cartes ensemble) DÈS le morph (px) — ↑ = bouge plus tôt/plus fort ; riseLift se recale pour garder l'éjection fluide
-const RISE_START=0.55;                   // p où démarre la MONTÉE d'éjection (le hero s'élève, vitesse raccordée au scroll au relâchement)
+const FOCUS_A=0.04, FOCUS_B=0.96;        // la planète passe de l'HORIZON géant au CERCLE COMPLET centré sur cette plage
+const CIRCLE_FINAL=0.32;                 // rayon du cercle final = innerHeight × ça (assez petit pour tenir ENTIER, non coupé)
+const CIRCLE_CY=0.47;                    // hauteur du centre du cercle final (× innerHeight)
+const SPAN_NARROW=50, SPAN_WIDE=320;     // étalement angulaire des cartes (deg) : fine arcade en haut → anneau quasi complet
+const RING_SCALE=0.6;                    // taille des cartes une fois en anneau sur le cercle final
 
 /* ── positions ─────────────────────────────────────────────── */
 function arcSpread(c,s,e){const o=[];for(let k=0;k<c;k++)o.push(c===1?(s+e)/2:s+(e-s)*k/(c-1));return o;}
@@ -870,13 +875,14 @@ if(!RM) addEventListener('mousemove',e=>{tmx=e.clientX/innerWidth*2-1;tmy=e.clie
 
 const t0=performance.now();
 let sp=0;                                  // progression de scroll LISSÉE (anti-saccade)
-let R, ANG, ARCS, stageTop=0, stageH=0, rafId=null, cardScale=1, driftEarly=0, riseLift=0;
+let R, ANG, stageTop=0, stageH=0, rafId=null, cardScale=1, R_huge=1500, cyHuge=0, R_small=0, cySmall=0;
 function measureStage(){ const r=stage.getBoundingClientRect(); stageTop=r.top+scrollY; stageH=r.height; } // figé → plus de lecture layout par frame
 function recompute(){ measureStage(); cardScale = innerWidth<=760 ? 0.58 : 1;
-  const D = Math.max(1, stageH - innerHeight);
-  driftEarly = RM ? 0 : (innerWidth<=760 ? DRIFT_EARLY*0.6 : DRIFT_EARLY);
-  riseLift   = RM ? 0 : (D - driftEarly)*(1-RISE_START)/2;     // calé pour que la montée rejoigne la vitesse du scroll → relâchement sans à-coup
-  R=radii(); ANG=baseAngles(); ARCS=[]; for(let i=0;i<N;i++) ARCS[i]=arcPos(i); }
+  R_huge = Math.min(innerWidth*3.4,3000)/2;        // rayon de .hero-planet à l'état horizon (3000px plafonné)
+  cyHuge = innerHeight*0.54 + R_huge;              // centre naturel (hors écran sous le pli) → top = 54% comme aujourd'hui
+  R_small= Math.min(innerWidth*0.42, innerHeight*CIRCLE_FINAL);   // tient en LARGEUR ET en hauteur (mobile compris : sinon le cercle déborde sur les côtés)
+  cySmall= innerHeight*CIRCLE_CY;                  // centre du cercle final
+  R=radii(); ANG=baseAngles(); }
 recompute();
 let _rz=0; addEventListener('resize',()=>{ if(!_rz) _rz=requestAnimationFrame(()=>{ _rz=0; recompute(); }); }); // resize coalescé : 1 recalcul/frame max
 function scrollP(){ const d=stageH-innerHeight; return d>0?clamp((scrollY-stageTop)/d,0,1):0; }
@@ -887,30 +893,43 @@ function frame(now){
   const p=sp;
   mx=lerp(mx,tmx,0.06); my=lerp(my,tmy,0.06);
 
-  const exitU = RM ? 0 : clamp((p-RISE_START)/(1-RISE_START),0,1);   // 0 avant RISE_START, 1 à la fin du scroll
-  const riseY = -(driftEarly*p + riseLift*exitU*exitU);              // parallaxe douce + montée d'éjection (ease-in quadratique, vitesse raccordée au scroll)
-  if(cosmos) cosmos.style.transform='translateY('+riseY.toFixed(1)+'px)';
+  // ── La planète passe de l'HORIZON géant au CERCLE COMPLET centré ──
+  // (redimensionnée par sa LARGEUR, pas par scale → son rebord lumineux reste net même tout petit)
+  const focusT = RM ? 0 : smooth(p, FOCUS_A, FOCUS_B);
+  const Rp  = lerp(R_huge, R_small, focusT);        // rayon courant du cercle
+  const cyP = lerp(cyHuge, cySmall, focusT);        // centre vertical courant
+  if(planet){ planet.style.width=(2*Rp).toFixed(1)+'px'; planet.style.top=(cyP-Rp).toFixed(1)+'px'; }
+  if(cosmos) cosmos.style.setProperty('--crest', clamp(1-focusT*2,0,1).toFixed(3)); // le halo d'horizon s'efface quand le cercle se referme
 
   const rotDeg=p*14;
-  const morphT=RM?0:smooth(p,MORPH_A,MORPH_B);     // cercle → arc bas
+  const morphT=RM?0:smooth(p,MORPH_A,MORPH_B);     // intro-cercle → tracé de la planète
   const reveal=RM?1:smooth(t,T_LINE,T_REVEAL);     // le titre se révèle quand le cercle se forme
   const cFade=1-smooth(p,0.05,0.40);
 
   center.style.opacity=(reveal*cFade).toFixed(3);
-  center.style.transform='translate(-50%,-50%) translateY('+(-(1-cFade)*46 + riseY).toFixed(1)+'px)';
+  center.style.transform='translate(-50%,-50%) translateY('+(-(1-cFade)*46).toFixed(1)+'px)';
   if(hint) hint.style.opacity=(p>0.03?0:reveal).toFixed(3);
 
-  for(let i=0;i<N;i++){
-    const cir=circlePos(i,R,rotDeg,ANG), arc=ARCS[i];
-    const restS=1, restO=lerp(0.88,1,cir.depth); // taille uniforme (profondeur = opacité légère seulement)
+  // ── Cartes : posées sur le TRACÉ du cercle de la planète — fine arcade en haut → anneau ──
+  const spanT  = smooth(focusT, 0.55, 1.0);                          // l'étalement ne s'ouvre qu'une fois le cercle assez petit (sinon cartes hors champ)
+  const spacing= lerp(SPAN_NARROW, SPAN_WIDE, spanT)/(N-1);          // deg entre cartes
+  const rr     = Rp*lerp(0.95,0.62,focusT);                          // rayon de l'anneau (sous le limbe → bien à l'intérieur)
+  const cyOff  = cyP - innerHeight/2;                                // centre du cercle vs centre viewport (origine des cartes)
+  const ringS  = lerp(1, RING_SCALE, focusT);
 
-    let x=lerp(cir.x,arc.x,morphT), y=lerp(cir.y,arc.y,morphT)+riseY;   // +riseY : fond + cartes s'élèvent ENSEMBLE (cartes soudées au limbe)
-    let rot=lerp(0,arc.rot,morphT), s=lerp(restS,arc.scale,morphT), o=lerp(restO,1,morphT);
+  for(let i=0;i<N;i++){
+    const cir=circlePos(i,R,rotDeg,ANG);
+    const restS=1, restO=lerp(0.88,1,cir.depth);
+    const th=(-90+(i-(N-1)/2)*spacing)*Math.PI/180;                  // angle de la carte sur le cercle (0 = haut)
+    const tx=rr*Math.cos(th), ty=cyOff+rr*Math.sin(th);
+
+    let x=lerp(cir.x,tx,morphT), y=lerp(cir.y,ty,morphT);
+    let s=lerp(restS,ringS,morphT), o=lerp(restO,1,morphT), rot=0;
 
     if(!RM && morphT<1){const k=1-morphT;
       y+=Math.sin(now*0.0009+i*1.7)*5*k; x+=mx*16*cir.depth*k; y+=my*11*cir.depth*k;}
 
-    if(t<T_CIRC){                                    // INTRO : dispersé → ligne → cercle (ressort)
+    if(t<T_CIRC){                                    // INTRO : dispersé → ligne → cercle (ressort) — inchangée
       const sc=scatterFor(i), ln=linePos(i);
       if(t<T_LINE){const e=easeOut(clamp((t-T_SCAT)/(T_LINE-T_SCAT),0,1));
         x=lerp(sc.x,ln.x,e); y=lerp(sc.y,ln.y,e); s=lerp(0.55,restS,e); o=restO*e;}
