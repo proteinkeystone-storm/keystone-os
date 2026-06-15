@@ -38,6 +38,15 @@ const Z_FAR = 0.5, Z_NEAR = 0.95;
 
 const reduceMotion = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Élasticité du drag : la bulle saisie suit le curseur via un ressort doux
+// (fraction du gap rattrapée par tick). 1 = rigide (collé) ; plus bas = plus
+// élastique. Rigide si l'utilisateur préfère moins d'animations.
+const DRAG_SPRING = reduceMotion ? 1 : 0.4;
+// Entraînement des voisines : pendant qu'on déplace une bulle, ses bulles
+// DIRECTEMENT reliées sont tirées TRÈS très légèrement vers elle (micro-ressort
+// le long des liens). N'agit que durant le drag ; au repos = aucun effet (le
+// rangement libre est préservé). 0 si l'utilisateur préfère moins d'animations.
+const NEIGHBOR_PULL = reduceMotion ? 0 : 0.0001;
 
 export function createConstellation({ container, onBubbleClick, onBubbleMoved } = {}) {
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -173,6 +182,20 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
       }
     }
   }
+  // Pendant le drag : tire TRÈS légèrement les voisines directes vers la bulle
+  // saisie (le long des liens). Leur ancre les retient → petit penchant, puis
+  // retour quand on lâche. Désactivé hors drag.
+  function neighborPull() {
+    if (!dragNode || !NEIGHBOR_PULL) return;
+    for (const l of links) {
+      let o = null;
+      if (l.from === dragNode.id) o = byId.get(l.to);
+      else if (l.to === dragNode.id) o = byId.get(l.from);
+      if (!o || o.fx != null) continue;
+      o.vx += (dragNode.x - o.x) * NEIGHBOR_PULL;
+      o.vy += (dragNode.y - o.y) * NEIGHBOR_PULL;
+    }
+  }
   function collide() {
     const base = R * 2 + COLLIDE_PAD;
     for (let i = 0; i < nodes.length; i++) {
@@ -203,10 +226,15 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
     const cents = centroids();
     if (!reduceMotion) breath();
     cohesion(cents);
+    neighborPull();
     collide();
     speedLimit();
     for (const n of nodes) {
-      if (n.fx != null) { n.x = n.fx; n.y = n.fy; n.vx = 0; n.vy = 0; continue; }
+      if (n.fx != null) {            // bulle saisie : suit le curseur avec une légère élasticité
+        n.x += (n.fx - n.x) * DRAG_SPRING;
+        n.y += (n.fy - n.y) * DRAG_SPRING;
+        n.vx = 0; n.vy = 0; continue;
+      }
       n.x += n.vx; n.y += n.vy;
       n.vx *= (1 - V_DECAY); n.vy *= (1 - V_DECAY);
     }
@@ -273,8 +301,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
       if (!dragMoved && downPos && Math.hypot(p.x - downPos.x, p.y - downPos.y) > DRAG_THRESHOLD) dragMoved = true;
       const w = toWorld(p.x, p.y);
       dragNode.fx = w.x - dragOff.x; dragNode.fy = w.y - dragOff.y;
-      dragNode.x = dragNode.fx; dragNode.y = dragNode.fy;
-      renderPositions();
+      // Pas de snap : le tick fait suivre la bulle avec une légère élasticité.
     } else if (mode === 'pan' && panStart) {
       tx = panStart.tx + (p.x - panStart.px); ty = panStart.ty + (p.y - panStart.py); applyTransform();
     }
