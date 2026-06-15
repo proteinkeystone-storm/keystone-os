@@ -266,3 +266,34 @@
 
 /* Sélecteur d'animation (mal de mer) — état figé = picto atténué */
 .kyn-motion-btn.is-off { opacity: 0.5; }
+
+/* ═══ Captures média (Sprint 5) ════════════════════════════════ */
+.kyn-caps { display: flex; flex-wrap: wrap; gap: 8px; }
+.kyn-cap { position: relative; width: 64px; height: 64px; }
+.kyn-cap-btn { width: 64px; height: 64px; padding: 0; border: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--navy, #131826); display: block; }
+.kyn-cap-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kyn-cap-del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--navy3, #242d42); color: var(--text, #f8fafc); cursor: pointer; font-size: 13px; line-height: 1; display: grid; place-items: center; opacity: 0; box-shadow: var(--ws-shadow-1, 0 1px 2px rgba(0,0,0,.4)); }
+.kyn-cap:hover .kyn-cap-del, .kyn-cap:focus-within .kyn-cap-del { opacity: 1; }
+.kyn-cap-del:hover { color: var(--danger, #e05c5c); }
+.kyn-cap-add { width: 64px; height: 64px; border: 1px dashed var(--bd, rgba(255,255,255,.18)); border-radius: 10px; background: transparent; color: var(--tx2, rgba(248,250,252,.55)); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; }
+.kyn-cap-add:hover { border-color: var(--gold, #6366f1); color: var(--text, #f8fafc); }
+
+/* Lightbox plein écran (Niveau 3) */
+.kyn-lightbox { position: fixed; inset: 0; z-index: 20; background: rgba(6, 8, 14, .92); display: grid; place-items: center; }
+.kyn-lb-img { max-width: 92vw; max-height: 88vh; border-radius: 8px; box-shadow: 0 20px 70px rgba(0,0,0,.6); }
+.kyn-lb-close { position: absolute; top: 16px; right: 18px; width: 40px; height: 40px; border: none; background: rgba(255,255,255,.12); color: #fff; border-radius: 50%; cursor: pointer; font-size: 22px; line-height: 1; }
+.kyn-lb-close:hover { background: rgba(255,255,255,.22); }
+.kyn-lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; border: none; background: rgba(255,255,255,.12); color: #fff; border-radius: 50%; cursor: pointer; font-size: 26px; line-height: 1; }
+.kyn-lb-nav:hover { background: rgba(255,255,255,.22); }
+.kyn-lb-prev { left: 18px; } .kyn-lb-next { right: 18px; }
+.kyn-lb-count { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,.7); font-size: 12px; }
+
+/* Modale de dessin (croquis) */
+.kyn-drawmodal { position: absolute; inset: 0; z-index: 8; background: rgba(8,11,20,.6); backdrop-filter: blur(6px); display: grid; place-items: center; }
+.kyn-draw-card { background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: var(--r2, 20px); padding: 14px; box-shadow: var(--ws-shadow-3, 0 12px 40px rgba(0,0,0,.5)); max-width: 96vw; }
+.kyn-draw-canvas { display: block; width: min(640px, 90vw); height: auto; border-radius: 12px; background: #11151f; touch-action: none; cursor: crosshair; }
+.kyn-draw-tools { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.kyn-draw-colors { display: flex; gap: 6px; }
+.kyn-draw-color { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.kyn-draw-color.is-on { border-color: var(--text, #f8fafc); }
+.kyn-draw-spacer { flex: 1; }

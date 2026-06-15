@@ -127,7 +127,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleBubbleDetail, handleTodoCreate, handleTodoUpdate, handleTodoDelete,
          handleNoteCreate, handleNoteDelete,
          handleZoneCreate, handleZoneUpdate, handleZoneDelete,
-         handleLinkCreate, handleLinkDelete } from './routes/keynapse.js';
+         handleLinkCreate, handleLinkDelete,
+         handleMediaUpload, handleMediaServe, handleMediaDelete } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -167,6 +168,11 @@ export default {
       if (knLinkCreate && method === 'POST') return handleLinkCreate(request, env, knLinkCreate[1]);
       const knLink = path.match(/^\/api\/keynapse\/links\/([A-Za-z0-9-]+)$/);
       if (knLink && method === 'DELETE') return handleLinkDelete(request, env, knLink[1]);
+      const knMediaUp = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/media$/);
+      if (knMediaUp && method === 'POST') return handleMediaUpload(request, env, knMediaUp[1]);
+      const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
+      if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
+      if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);
       const knTodo = path.match(/^\/api\/keynapse\/todos\/([A-Za-z0-9-]+)$/);
       if (knTodo && method === 'PATCH')  return handleTodoUpdate(request, env, knTodo[1]);
       if (knTodo && method === 'DELETE') return handleTodoDelete(request, env, knTodo[1]);

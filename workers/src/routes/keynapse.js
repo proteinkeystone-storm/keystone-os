@@ -22,7 +22,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KN_ENGINE_VERSION = 'KN-4';
+const KN_ENGINE_VERSION = 'KN-5';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -215,6 +215,12 @@ export async function handleBubbleDelete(request, env, id) {
   const existing = await env.DB.prepare('SELECT id FROM kn_bubbles WHERE id = ? AND tenant_id = ?').bind(id, t).first();
   if (!existing) return err('Bulle introuvable', 404, origin);
 
+  // Nettoyage R2 des médias de la bulle (avant de purger les fiches).
+  if (env.HELP_MEDIA) {
+    const mr = (await env.DB.prepare('SELECT r2_key FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND r2_key IS NOT NULL').bind(t, id).all()).results || [];
+    for (const m of mr) { try { await env.HELP_MEDIA.delete(m.r2_key); } catch (_) {} }
+  }
+
   // D1 sans ON DELETE CASCADE → nettoyage explicite des dépendances.
   await env.DB.batch([
     env.DB.prepare('DELETE FROM kn_links     WHERE tenant_id = ? AND (from_bubble = ? OR to_bubble = ?)').bind(t, id, id),
@@ -247,7 +253,8 @@ export async function handleBubbleDetail(request, env, id) {
   const todos = (await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE tenant_id = ? AND bubble_id = ? ORDER BY position, created_at`).bind(t, id).all()).results || [];
   const notes = (await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'note' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
   const links = (await env.DB.prepare('SELECT id, from_bubble, to_bubble FROM kn_links WHERE tenant_id = ? AND (from_bubble = ? OR to_bubble = ?)').bind(t, id, id).all()).results || [];
-  return json({ ok: true, bubble, todos, notes, links }, 200, origin);
+  const media = (await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind IN ('photo','drawing') ORDER BY created_at`).bind(t, id).all()).results || [];
+  return json({ ok: true, bubble, todos, notes, links, media }, 200, origin);
 }
 
 // POST /bubbles/:id/todos — ajouter une tâche
@@ -401,5 +408,67 @@ export async function handleLinkDelete(request, env, id) {
   const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
   const t = gate.tenant;
   await env.DB.prepare('DELETE FROM kn_links WHERE id = ? AND tenant_id = ?').bind(id, t).run();
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 5 — captures média (photo / dessin) : R2 + service privé
+// Stockées dans le bucket HELP_MEDIA, préfixe keynapse/<tenant>/<bubble>/.
+// JAMAIS d'URL publique : servies uniquement au propriétaire (gate JWT) — le
+// front les récupère en blob authentifié. (kind 'note' reste géré au Sprint 2.)
+// ════════════════════════════════════════════════════════════════
+const MEDIA_KINDS = ['photo', 'drawing'];
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024;     // 8 Mo (redimensionnement côté front)
+const MEDIA_COLS = 'id, bubble_id, kind, r2_key, created_at';
+
+// POST /bubbles/:id/media?kind=photo|drawing  (corps = octets de l'image)
+export async function handleMediaUpload(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!env.HELP_MEDIA) return err('Stockage média indisponible', 500, origin);
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+  const kind = String(new URL(request.url).searchParams.get('kind') || 'photo');
+  if (!MEDIA_KINDS.includes(kind)) return err('Type de média invalide', 400, origin);
+  const ct = request.headers.get('content-type') || '';
+  if (!/^image\//i.test(ct)) return err('Image attendue', 400, origin);
+  const buf = await request.arrayBuffer();
+  if (!buf || buf.byteLength === 0) return err('Fichier vide', 400, origin);
+  if (buf.byteLength > MAX_MEDIA_BYTES) return err('Image trop lourde (max 8 Mo)', 413, origin);
+  const id = generateId();
+  const key = `keynapse/${t}/${bubbleId}/${id}`;
+  await env.HELP_MEDIA.put(key, buf, { httpMetadata: { contentType: ct } });
+  await env.DB.prepare('INSERT INTO kn_media (id, tenant_id, bubble_id, kind, r2_key) VALUES (?, ?, ?, ?, ?)').bind(id, t, bubbleId, kind, key).run();
+  const media = await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, media }, 200, origin);
+}
+
+// GET /media/:id — sert l'image au PROPRIÉTAIRE uniquement (blob authentifié).
+export async function handleMediaServe(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const row = await env.DB.prepare("SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ? AND kind IN ('photo','drawing')").bind(id, t).first();
+  if (!row || !row.r2_key || !env.HELP_MEDIA) return err('Média introuvable', 404, origin);
+  const obj = await env.HELP_MEDIA.get(row.r2_key);
+  if (!obj) return err('Média introuvable', 404, origin);
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'private, max-age=3600',
+      'Access-Control-Allow-Origin': origin,
+    },
+  });
+}
+
+// DELETE /media/:id — retire la fiche média + l'objet R2.
+export async function handleMediaDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const row = await env.DB.prepare('SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ?').bind(id, t).first();
+  if (row && row.r2_key && env.HELP_MEDIA) { try { await env.HELP_MEDIA.delete(row.r2_key); } catch (_) {} }
+  await env.DB.prepare('DELETE FROM kn_media WHERE id = ? AND tenant_id = ?').bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
 }

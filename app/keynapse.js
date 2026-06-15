@@ -129,6 +129,7 @@ function _buildShell() {
 // ── Délégation ──────────────────────────────────────────────────
 function _onClick(e) {
   if (e.target.classList && e.target.classList.contains('kyn-composer')) { _closeComposer(); return; }
+  if (e.target.classList && e.target.classList.contains('kyn-lightbox')) { _closeLightbox(); return; }
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act;
@@ -155,6 +156,17 @@ function _onClick(e) {
     case 'kyn-link-add':    return _addLink();
     case 'kyn-link-del':    return _delLink(el.dataset.id);
     case 'kyn-link-go':     return _goLink(el.dataset.id);
+    case 'kyn-photo-add':   return _pickPhoto();
+    case 'kyn-draw-add':    return _openDraw();
+    case 'kyn-media-open':  return _openLightbox(el.dataset.id);
+    case 'kyn-media-del':   return _delMedia(el.dataset.id);
+    case 'kyn-lightbox-close': return _closeLightbox();
+    case 'kyn-lightbox-prev':  return _lightboxStep(-1);
+    case 'kyn-lightbox-next':  return _lightboxStep(1);
+    case 'kyn-draw-color':  return _drawSetColor(el.dataset.color);
+    case 'kyn-draw-clear':  return _drawClear();
+    case 'kyn-draw-cancel': return _closeDraw();
+    case 'kyn-draw-save':   return _drawSave();
     // Zones
     case 'kyn-zones-open':  return _openZonesPanel();
     case 'kyn-zones-close': return _closeZonesPanel();
@@ -178,7 +190,10 @@ function _onKey(e) {
     if (e.target.dataset && e.target.dataset.field === 'todo-add') { e.preventDefault(); return _addTodo(); }
     if (e.target.dataset && e.target.dataset.field === 'newzone') { e.preventDefault(); return _createZone(); }
   }
+  if (_lightbox && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); return _lightboxStep(e.key === 'ArrowLeft' ? -1 : 1); }
   if (e.key === 'Escape') {
+    if (_lightbox) return _closeLightbox();
+    if (_draw) return _closeDraw();
     if (_root && _root.querySelector('.kyn-composer')) return _closeComposer();
     if (_panel) return _closePanel();
     if (_zonesEl) return _closeZonesPanel();
@@ -284,7 +299,13 @@ function _ensurePanelEl() {
   if (!el) { el = document.createElement('aside'); el.className = 'kyn-panel'; wrap.appendChild(el); }
   _panelEl = el;
 }
-function _closePanel() { _panel = null; if (_panelEl) { _panelEl.remove(); _panelEl = null; } }
+function _closePanel() {
+  _closeLightbox(); _closeDraw();
+  for (const u of _mediaUrls.values()) { try { URL.revokeObjectURL(u); } catch (_) {} }
+  _mediaUrls.clear();
+  _panel = null;
+  if (_panelEl) { _panelEl.remove(); _panelEl = null; }
+}
 function _renderPanel() {
   if (!_panelEl || !_panel) return;
   if (_panel.loading) { _panelEl.innerHTML = `<div class="kyn-state"><div class="kyn-spin"></div></div>`; return; }
@@ -316,6 +337,7 @@ function _renderPanel() {
     </div>
     <div class="kyn-panel-body">${_panelBodyHTML()}</div>
     <div class="kyn-panel-foot"><button class="kyn-del-bubble" data-act="kyn-bubble-del">Supprimer cette bulle</button></div>`;
+  _hydrateMedia();
 }
 function _panelBodyHTML() {
   const d = _panel.detail;
@@ -352,6 +374,7 @@ function _panelBodyHTML() {
         <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
       </div>
     </div>
+    ${_capturesSectionHTML()}
     ${_linksSectionHTML()}`;
 }
 // ── Liens (Sprint 4 : tisser + naviguer) ────────────────────────
@@ -401,6 +424,169 @@ async function _delLink(linkId) {
 function _goLink(otherId) {
   if (_engine) _engine.revealBubble(otherId);
   _openPanel(otherId);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 5 — captures média (photo / croquis) + lightbox plein écran
+// Images servies UNIQUEMENT au propriétaire (gate JWT) → on les récupère en
+// blob authentifié (jamais en URL publique : ce sont des notes perso).
+// ════════════════════════════════════════════════════════════════
+const _mediaUrls = new Map();   // mediaId → objectURL (blob mis en cache)
+let _lightbox = null;           // { ids:[…], i }
+let _draw = null;               // modale de dessin
+
+const PENCIL_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+const IMAGE_ICON  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+
+function _capturesSectionHTML() {
+  const media = _panel.detail.media || [];
+  return `
+    <div class="kyn-sec">
+      <p class="kyn-sec-h">Captures${media.length ? ` · ${media.length}` : ''}</p>
+      <div class="kyn-caps">
+        ${media.map((m) => `
+          <div class="kyn-cap">
+            <button class="kyn-cap-btn" data-act="kyn-media-open" data-id="${m.id}" aria-label="Voir la capture en grand"><img data-media-id="${m.id}" alt=""></button>
+            <button class="kyn-cap-del" data-act="kyn-media-del" data-id="${m.id}" aria-label="Supprimer la capture">×</button>
+          </div>`).join('')}
+        <button class="kyn-cap-add" data-act="kyn-photo-add" aria-label="Ajouter une photo">${IMAGE_ICON}<span>Photo</span></button>
+        <button class="kyn-cap-add" data-act="kyn-draw-add" aria-label="Dessiner un croquis">${PENCIL_ICON}<span>Croquis</span></button>
+      </div>
+    </div>`;
+}
+
+// Charge les images du panneau en blob authentifié (une fois chacune).
+function _hydrateMedia() {
+  if (!_panelEl) return;
+  _panelEl.querySelectorAll('img[data-media-id]').forEach((img) => {
+    if (img.dataset.loaded) return;
+    img.dataset.loaded = '1';
+    _loadMediaInto(img, img.getAttribute('data-media-id'));
+  });
+}
+async function _loadMediaInto(img, id) {
+  const cached = _mediaUrls.get(id);
+  if (cached) { img.src = cached; return; }
+  try {
+    const res = await fetch(`${API_BASE}/api/keynapse/media/${encodeURIComponent(id)}`, { headers: { 'Authorization': `Bearer ${_jwt()}` } });
+    if (!res.ok) return;
+    const url = URL.createObjectURL(await res.blob());
+    _mediaUrls.set(id, url);
+    img.src = url;
+  } catch (_) {}
+}
+
+// Photo : input fichier → redimensionnement canvas → upload binaire.
+function _pickPhoto() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.addEventListener('change', async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    try { await _uploadMedia(await _resizeImage(f, 1600, 0.85), 'photo'); } catch (_) {}
+  });
+  inp.click();
+}
+function _resizeImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      const s = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * s); h = Math.round(h * s);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob((b) => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', quality);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function _uploadMedia(blob, kind) {
+  if (!_panel) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/keynapse/bubbles/${encodeURIComponent(_panel.id)}/media?kind=${kind}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.media) { _panel.detail.media = _panel.detail.media || []; _panel.detail.media.push(data.media); _refreshBody(); }
+  } catch (_) {}
+}
+async function _delMedia(id) {
+  _panel.detail.media = (_panel.detail.media || []).filter((m) => m.id !== id);
+  const u = _mediaUrls.get(id); if (u) { URL.revokeObjectURL(u); _mediaUrls.delete(id); }
+  _refreshBody();
+  try { await _api(`/media/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+
+// ── Lightbox plein écran (Niveau 3) ─────────────────────────────
+function _openLightbox(id) {
+  const media = _panel.detail.media || [];
+  const i = media.findIndex((m) => m.id === id); if (i < 0) return;
+  _lightbox = { ids: media.map((m) => m.id), i };
+  _renderLightbox();
+}
+function _closeLightbox() { _lightbox = null; const o = _root && _root.querySelector('.kyn-lightbox'); if (o) o.remove(); }
+function _lightboxStep(d) { if (!_lightbox) return; const n = _lightbox.ids.length; _lightbox.i = (_lightbox.i + d + n) % n; _renderLightbox(); }
+function _renderLightbox() {
+  if (!_lightbox) return;
+  let el = _root && _root.querySelector('.kyn-lightbox');
+  if (!el) { el = document.createElement('div'); el.className = 'kyn-lightbox'; (_canvas() || _root).appendChild(el); }
+  const id = _lightbox.ids[_lightbox.i], multi = _lightbox.ids.length > 1;
+  el.innerHTML = `
+    <button class="kyn-lb-close" data-act="kyn-lightbox-close" aria-label="Fermer">×</button>
+    ${multi ? '<button class="kyn-lb-nav kyn-lb-prev" data-act="kyn-lightbox-prev" aria-label="Précédent">‹</button>' : ''}
+    <img class="kyn-lb-img" alt="">
+    ${multi ? '<button class="kyn-lb-nav kyn-lb-next" data-act="kyn-lightbox-next" aria-label="Suivant">›</button>' : ''}
+    ${multi ? `<div class="kyn-lb-count">${_lightbox.i + 1} / ${_lightbox.ids.length}</div>` : ''}`;
+  const img = el.querySelector('.kyn-lb-img');
+  const cached = _mediaUrls.get(id);
+  if (cached) img.src = cached; else _loadMediaInto(img, id);
+  // Swipe tactile (seuil 40px)
+  let sx = null;
+  el.addEventListener('touchstart', (e) => { sx = e.touches[0] ? e.touches[0].clientX : null; }, { passive: true });
+  el.addEventListener('touchend', (e) => { if (sx == null) return; const dx = (e.changedTouches[0] ? e.changedTouches[0].clientX : sx) - sx; sx = null; if (Math.abs(dx) > 40) _lightboxStep(dx > 0 ? -1 : 1); }, { passive: true });
+}
+
+// ── Croquis : modale de dessin ──────────────────────────────────
+function _openDraw() {
+  const wrap = _canvas() || _root; if (!wrap || (_draw && _draw.el)) return;
+  const el = document.createElement('div'); el.className = 'kyn-drawmodal';
+  const colors = ['#f8fafc', '#6366f1', '#22c55e', '#fcd34d', '#f472b6', '#e05c5c'];
+  el.innerHTML = `
+    <div class="kyn-draw-card">
+      <canvas class="kyn-draw-canvas" width="640" height="440"></canvas>
+      <div class="kyn-draw-tools">
+        <div class="kyn-draw-colors">${colors.map((c, i) => `<button class="kyn-draw-color${i === 0 ? ' is-on' : ''}" data-act="kyn-draw-color" data-color="${c}" style="background:${c}" aria-label="Couleur du trait"></button>`).join('')}</div>
+        <button class="kyn-btn" data-act="kyn-draw-clear">Effacer</button>
+        <span class="kyn-draw-spacer"></span>
+        <button class="kyn-btn" data-act="kyn-draw-cancel">Annuler</button>
+        <button class="kyn-btn kyn-btn--accent" data-act="kyn-draw-save">Ajouter</button>
+      </div>
+    </div>`;
+  wrap.appendChild(el);
+  const canvas = el.querySelector('.kyn-draw-canvas'), ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#11151f'; ctx.fillRect(0, 0, canvas.width, canvas.height);   // fond (sinon PNG transparent)
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#f8fafc';
+  _draw = { el, canvas, ctx, drawing: false, lx: 0, ly: 0 };
+  const pos = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; };
+  canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} _draw.drawing = true; const p = pos(e); _draw.lx = p.x; _draw.ly = p.y; ctx.beginPath(); ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill(); });
+  canvas.addEventListener('pointermove', (e) => { if (!_draw.drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(_draw.lx, _draw.ly); ctx.lineTo(p.x, p.y); ctx.stroke(); _draw.lx = p.x; _draw.ly = p.y; });
+  const end = () => { if (_draw) _draw.drawing = false; };
+  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+}
+function _closeDraw() { if (_draw) { _draw.el.remove(); _draw = null; } }
+function _drawSetColor(c) {
+  if (!_draw) return;
+  _draw.ctx.strokeStyle = c;
+  _draw.el.querySelectorAll('.kyn-draw-color').forEach((b) => b.classList.toggle('is-on', b.dataset.color === c));
+}
+function _drawClear() { if (!_draw) return; const { ctx, canvas } = _draw; const s = ctx.strokeStyle; ctx.fillStyle = '#11151f'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = s; }
+async function _drawSave() {
+  if (!_draw) return;
+  const canvas = _draw.canvas; _closeDraw();
+  await new Promise((resolve) => canvas.toBlob(async (b) => { if (b) await _uploadMedia(b, 'drawing'); resolve(); }, 'image/png'));
 }
 function _refreshBody() {
   if (!_panelEl || !_panel || !_panel.detail) return;
