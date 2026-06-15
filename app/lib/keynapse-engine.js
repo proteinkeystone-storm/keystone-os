@@ -50,10 +50,10 @@ const DRAG_SPRING = 1;
 // au repos, force ~nulle (ton rangement est préservé) ; quand tu déplaces une
 // bulle, le réseau relié FLÉCHIT de façon organique et transitive, puis se
 // repose proprement sans « revenir en arrière ». 0 si reduced-motion.
-const LINK_K     = reduceMotion ? 0 : 0.005;   // raideur du ressort de lien
+const LINK_K     = 0.005;                       // raideur du ressort de lien (coupé quand animation OFF)
 const REST_ADAPT = 0.08;                        // vitesse d'adaptation du repos
 
-export function createConstellation({ container, onBubbleClick, onBubbleMoved } = {}) {
+export function createConstellation({ container, onBubbleClick, onBubbleMoved, motion = true } = {}) {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'kyn-svg');
   // Fond transparent FIXE : capte les gestes pan/zoom sur les zones vides.
@@ -76,6 +76,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
   let nodes = [], links = [], zones = [], byId = new Map();
   const zoneLabels = new Map();             // zoneId → <text>
   let raf = null, running = false;
+  let motionOn = motion;   // animation ambiante (respiration + flexion des liens) — pilotable à chaud (mal de mer)
   let k = 1, tx = 0, ty = 0;
   const pointers = new Map();
   let mode = null, dragNode = null, dragMoved = false, dragOff = { x: 0, y: 0 }, downPos = null;
@@ -191,7 +192,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
   // Le repos adaptatif fait qu'au repos la force est ~nulle (placement préservé) ;
   // seuls les mouvements font fléchir le réseau, de proche en proche.
   function linkSpring() {
-    if (!LINK_K) return;
+    if (!motionOn || !LINK_K) return;
     for (const l of links) {
       const a = byId.get(l.from), b = byId.get(l.to);
       if (!a || !b) continue;
@@ -233,7 +234,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
 
   function tick() {
     const cents = centroids();
-    if (!reduceMotion) breath();
+    if (motionOn) breath();
     cohesion(cents);
     linkSpring();
     collide();
@@ -251,7 +252,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
   }
   function frame() {
     tick();
-    const moving = !reduceMotion || interacting || energy() > 0.001;
+    const moving = motionOn || interacting || energy() > 0.001;
     if (running && moving) { raf = requestAnimationFrame(frame); }
     else { running = false; raf = null; }
   }
@@ -421,7 +422,15 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
     setTimeout(() => { if (n.el) n.el.classList.remove('kyn-pulse'); }, 1200);
   }
 
-  return { setData, fitAll, focusBubbles, revealBubble, zoomBy, updateNode, destroy };
+  // Active/coupe l'animation ambiante (respiration + flexion des liens). Coupée :
+  // la carte se fige (on annule les vitesses) ; tout reste cliquable/déplaçable.
+  function setMotion(on) {
+    motionOn = !!on;
+    if (!motionOn) { for (const n of nodes) { n.vx = 0; n.vy = 0; } }
+    ensureRunning();
+  }
+
+  return { setData, fitAll, focusBubbles, revealBubble, zoomBy, updateNode, setMotion, destroy };
 }
 
 function truncate(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }

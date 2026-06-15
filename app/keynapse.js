@@ -25,6 +25,9 @@ const KN_COLORS = ['#6366f1', '#a78bfa', '#22d3ee', '#14b8a6', '#22c55e', '#fcd3
 const FIT_ICON    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 const LAYERS_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
 const LOCATE_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>';
+// Sélecteur d'animation (mal de mer) : ondes = animée ; ligne plate = figée.
+const MOTION_ON_ICON  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c2.5-4.5 5.5-4.5 8 0s5.5 4.5 8 0"/></svg>';
+const MOTION_OFF_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/></svg>';
 
 let _root = null;
 let _state = { zones: [], bubbles: [], links: [] };
@@ -105,6 +108,7 @@ function _buildShell() {
       </div>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
+        <button class="ws-iconbtn kyn-motion-btn" data-act="kyn-motion-toggle" aria-label="Activer ou figer l'animation des bulles"></button>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
       </div>
@@ -119,6 +123,7 @@ function _buildShell() {
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindHelpButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindBurger(_root); } catch (_) {}
+  _updateMotionBtn();
 }
 
 // ── Délégation ──────────────────────────────────────────────────
@@ -136,6 +141,7 @@ function _onClick(e) {
     case 'kyn-zoom-in':   return _engine && _engine.zoomBy(1.25);
     case 'kyn-zoom-out':  return _engine && _engine.zoomBy(0.8);
     case 'kyn-fit':       return _engine && _engine.fitAll();
+    case 'kyn-motion-toggle': return _toggleMotion();
     // Fiche
     case 'kyn-panel-close': return _closePanel();
     case 'kyn-color':       return _patchBubble({ color: el.dataset.color });
@@ -210,7 +216,7 @@ function _render() {
       </div>
       <button class="kyn-fab" data-act="kyn-compose" title="Nouvelle bulle" aria-label="Nouvelle bulle">${icon('plus', 24) || '+'}</button>`;
     const stage = c.querySelector('[data-slot="stage"]');
-    _engine = createConstellation({ container: stage, onBubbleMoved: _persistMove, onBubbleClick: _onBubbleClick });
+    _engine = createConstellation({ container: stage, onBubbleMoved: _persistMove, onBubbleClick: _onBubbleClick, motion: _motionOn() });
   }
   _pushEngine();
 }
@@ -526,6 +532,33 @@ async function _deleteZone(id) {
   _renderZonesPanel(); _pushEngine();
   if (_panel && _panel.detail && _panel.detail.bubble.zone_id === id) { _panel.detail.bubble.zone_id = null; _renderPanel(); }
   try { await _api(`/zones/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+
+// ── Animation : sélecteur « mal de mer » (persisté localStorage) ─
+// Défaut : suit le réglage système (prefers-reduced-motion) ; le choix manuel
+// le surcharge et est mémorisé.
+function _motionOn() {
+  const p = localStorage.getItem('kn_motion');
+  if (p === 'on') return true;
+  if (p === 'off') return false;
+  return !(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function _toggleMotion() {
+  const on = !_motionOn();
+  try { localStorage.setItem('kn_motion', on ? 'on' : 'off'); } catch (_) {}
+  if (_engine) _engine.setMotion(on);
+  _updateMotionBtn();
+}
+function _updateMotionBtn() {
+  const btn = _root && _root.querySelector('.kyn-motion-btn');
+  if (!btn) return;
+  const on = _motionOn();
+  btn.setAttribute('aria-pressed', String(on));
+  btn.classList.toggle('is-off', !on);
+  btn.innerHTML = on ? MOTION_ON_ICON : MOTION_OFF_ICON;
+  btn.title = on
+    ? "Animation des bulles : activée — cliquez pour la figer (confort / mal de mer)"
+    : "Animation des bulles : figée — cliquez pour la réactiver";
 }
 
 // ── Utils ───────────────────────────────────────────────────────

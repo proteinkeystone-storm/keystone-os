@@ -263,3 +263,6 @@
 /* Pulsation « aller à la bulle » (navigation par les liens) */
 @keyframes kyn-pulse { 0% { stroke-width: 1.6; } 35% { stroke-width: 6; } 100% { stroke-width: 1.6; } }
 .kyn-bubble.kyn-pulse circle { animation: kyn-pulse 1.1s ease-out; }
+
+/* Sélecteur d'animation (mal de mer) — état figé = picto atténué */
+.kyn-motion-btn.is-off { opacity: 0.5; }
