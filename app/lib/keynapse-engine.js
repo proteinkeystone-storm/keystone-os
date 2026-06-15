@@ -43,10 +43,11 @@ const reduceMotion = typeof matchMedia === 'function'
 // élastique. Rigide si l'utilisateur préfère moins d'animations.
 const DRAG_SPRING = reduceMotion ? 1 : 0.4;
 // Entraînement des voisines : pendant qu'on déplace une bulle, ses bulles
-// DIRECTEMENT reliées sont tirées TRÈS très légèrement vers elle (micro-ressort
-// le long des liens). N'agit que durant le drag ; au repos = aucun effet (le
+// DIRECTEMENT reliées sont attirées vers elle (ressort le long des liens) pour
+// un rendu organique. N'agit que durant le drag ; au repos = aucun effet (le
 // rangement libre est préservé). 0 si l'utilisateur préfère moins d'animations.
-const NEIGHBOR_PULL = reduceMotion ? 0 : 0.0001;
+// ~0.0003 = suit nettement mais reste retenu par l'ancre (pas de collage).
+const NEIGHBOR_PULL = reduceMotion ? 0 : 0.0003;
 
 export function createConstellation({ container, onBubbleClick, onBubbleMoved } = {}) {
   const svg = document.createElementNS(SVG_NS, 'svg');
