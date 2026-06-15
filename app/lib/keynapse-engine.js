@@ -41,13 +41,17 @@ const reduceMotion = typeof matchMedia === 'function'
 // Élasticité du drag : la bulle saisie suit le curseur via un ressort doux
 // (fraction du gap rattrapée par tick). 1 = rigide (collé) ; plus bas = plus
 // élastique. Rigide si l'utilisateur préfère moins d'animations.
-const DRAG_SPRING = reduceMotion ? 1 : 0.4;
-// Entraînement des voisines : pendant qu'on déplace une bulle, ses bulles
-// DIRECTEMENT reliées sont attirées vers elle (ressort le long des liens) pour
-// un rendu organique. N'agit que durant le drag ; au repos = aucun effet (le
-// rangement libre est préservé). 0 si l'utilisateur préfère moins d'animations.
-// ~0.0003 = suit nettement mais reste retenu par l'ancre (pas de collage).
-const NEIGHBOR_PULL = reduceMotion ? 0 : 0.0003;
+// Drag : la bulle saisie suit le curseur EXACTEMENT (comme Trait d'union, d.fx=
+// event.x) ; la fluidité ne vient pas d'un retard du curseur mais des ressorts.
+const DRAG_SPRING = 1;
+// Ressorts de liens — l'ingrédient « réaliste/fluide » de Trait d'union (d3
+// forceLink). Chaque lien tire ses deux bulles vers une distance de REPOS, mais
+// ce repos est ADAPTATIF : il suit lentement la distance réelle. Conséquence :
+// au repos, force ~nulle (ton rangement est préservé) ; quand tu déplaces une
+// bulle, le réseau relié FLÉCHIT de façon organique et transitive, puis se
+// repose proprement sans « revenir en arrière ». 0 si reduced-motion.
+const LINK_K     = reduceMotion ? 0 : 0.005;   // raideur du ressort de lien
+const REST_ADAPT = 0.08;                        // vitesse d'adaptation du repos
 
 export function createConstellation({ container, onBubbleClick, onBubbleMoved } = {}) {
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -183,18 +187,22 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
       }
     }
   }
-  // Pendant le drag : tire TRÈS légèrement les voisines directes vers la bulle
-  // saisie (le long des liens). Leur ancre les retient → petit penchant, puis
-  // retour quand on lâche. Désactivé hors drag.
-  function neighborPull() {
-    if (!dragNode || !NEIGHBOR_PULL) return;
+  // Ressorts de liens (façon Trait d'union) : agit en CONTINU sur tous les liens.
+  // Le repos adaptatif fait qu'au repos la force est ~nulle (placement préservé) ;
+  // seuls les mouvements font fléchir le réseau, de proche en proche.
+  function linkSpring() {
+    if (!LINK_K) return;
     for (const l of links) {
-      let o = null;
-      if (l.from === dragNode.id) o = byId.get(l.to);
-      else if (l.to === dragNode.id) o = byId.get(l.from);
-      if (!o || o.fx != null) continue;
-      o.vx += (dragNode.x - o.x) * NEIGHBOR_PULL;
-      o.vy += (dragNode.y - o.y) * NEIGHBOR_PULL;
+      const a = byId.get(l.from), b = byId.get(l.to);
+      if (!a || !b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (l.rest == null) l.rest = d;              // repos initial = distance posée
+      l.rest += (d - l.rest) * REST_ADAPT;          // le repos suit lentement le réel
+      const f = (d - l.rest) * LINK_K / d;          // ressort vers la distance de repos
+      const fx = dx * f, fy = dy * f;
+      if (a.fx == null) { a.vx += fx; a.vy += fy; }
+      if (b.fx == null) { b.vx -= fx; b.vy -= fy; }
     }
   }
   function collide() {
@@ -227,7 +235,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
     const cents = centroids();
     if (!reduceMotion) breath();
     cohesion(cents);
-    neighborPull();
+    linkSpring();
     collide();
     speedLimit();
     for (const n of nodes) {
