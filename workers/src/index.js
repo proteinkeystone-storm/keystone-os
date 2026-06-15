@@ -25,6 +25,7 @@
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
 import { handleActivateV2, handleMe, handleRefresh }                   from './routes/licence-public.js';
 import { handleVaultLoad, handleVaultSave, handleVaultHealth, handleVaultDelete } from './routes/vault-user.js';
+import { handleBillingPortal }                                          from './routes/billing.js';
 import { handleStripeWebhook }                                         from './routes/stripe-webhook.js';
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
@@ -300,6 +301,11 @@ export default {
       if (path === '/api/vault/health'        && method === 'GET')    return handleVaultHealth(request, env);
       // UX-3.5 — RGPD droit à l'oubli : purge le profil cloud (PREFS_KEYS)
       if (path === '/api/vault/delete'        && method === 'DELETE') return handleVaultDelete(request, env);
+
+      // ── Facturation : portail Stripe (changement de plan prorraté) ──
+      // Ouvre le Customer Portal pour l'abonné (JWT) → upgrade/downgrade
+      // sur l'abo EXISTANT = prorata auto, pas de double facturation.
+      if (path === '/api/billing/portal'      && method === 'POST')   return handleBillingPortal(request, env);
 
       // ── Stripe webhook (Sprint 5 — auto-delivery clés) ────
       if (path === '/api/stripe/webhook'      && method === 'POST') return handleStripeWebhook(request, env);

@@ -4315,15 +4315,13 @@ function _renderSettingsBody() {
                 // Identité réelle de la session (claims du JWT) — diagnostic
                 // « autre adresse » coincée (incident 2026-06-14).
                 const _who = ksWhoami();
-                // CTA résiliation : visible pour les vrais abonnés uniquement
-                // (actif, pas en démo, pas admin — eux n'ont rien à résilier).
-                // Ouvre un e-mail prérempli vers le support (la résiliation
-                // passe par Stripe côté Protein Studio, cf. FAQ landing).
+                // CTA « Gérer mon abonnement » (portail Stripe) : visible pour
+                // les vrais abonnés uniquement (actif, pas en démo, pas admin).
+                // Le portail gère lui-même le changement de plan ET la
+                // résiliation → le mailto de résiliation a été retiré
+                // (2026-06-15), il faisait doublon.
                 const _isAdminLic  = /admin/i.test(lic.plan || '');
                 const _showCancel  = lic.active && !isDemoMode() && !_isAdminLic;
-                const _cancelSubj  = `Annulation d'abonnement Keystone — ${lic.owner || lic.key || ''}`;
-                const _cancelBody  = `Bonjour,\n\nJe souhaite résilier mon abonnement Keystone OS.\n\nTitulaire : ${lic.owner || '—'}\nClé de licence : ${lic.key || '—'}\nFormule : ${lic.plan || '—'}\n\nMerci de me confirmer la date d'effet (fin de la période en cours).\n\nCordialement,`;
-                const _cancelHref  = `mailto:protein.keystone@gmail.com?subject=${encodeURIComponent(_cancelSubj)}&body=${encodeURIComponent(_cancelBody)}`;
                 const statusBadge = lic.active
                     ? `<span class="sp-badge-green">Active · ${lic.plan}</span>`
                     : `<span class="sp-badge-warn">Non activée</span>`;
@@ -4388,12 +4386,11 @@ function _renderSettingsBody() {
                     </p>
                     ${_showCancel ? `
                     <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd)">
-                        <a id="licence-cancel-sub" href="${_cancelHref}"
-                           style="display:inline-block;font-size:12.5px;color:var(--tx2);text-decoration:underline;cursor:pointer">
-                            Résilier mon abonnement
-                        </a>
-                        <p class="sp-user-hint" style="margin-top:4px;font-size:11px;line-height:1.4">
-                            Ouvre un e-mail prérempli vers notre support. La résiliation prend effet à la fin de la période en cours, sans frais.
+                        <button class="api-key-save-btn" id="billing-portal-btn" style="width:100%">
+                            Gérer mon abonnement (changer de plan, résilier)
+                        </button>
+                        <p class="sp-user-hint" id="billing-portal-feedback" style="margin-top:4px;font-size:11px;line-height:1.4;min-height:16px">
+                            Ouvre votre espace de facturation sécurisé Stripe. Un changement de plan en cours de mois est calculé au prorata — vous ne payez que la différence. Vous pouvez aussi mettre à jour votre moyen de paiement ou résilier.
                         </p>
                     </div>` : ''}
                 </div>`;
@@ -4680,6 +4677,31 @@ function _renderSettingsBody() {
     body.querySelector('#licence-clean-relogin')?.addEventListener('click', async () => {
         if (!confirm('Reconnexion propre ?\n\nCela réinitialise CE navigateur : clé, préférences, brouillons locaux, cache et coffre hors-ligne sont effacés, puis l\'app repart sur une connexion neuve.\n\nÀ utiliser si l\'app reste vide ou bloquée. Ton compte, ta licence et tes données serveur ne sont pas affectés.')) return;
         await ksCleanLogout({ reason: 'settings-clean-relogin' });
+    });
+
+    // « Gérer mon abonnement » — ouvre le portail de facturation Stripe.
+    // Le changement de plan y est PRORATISÉ (modification de l'abo existant,
+    // pas un 2e abo) → pas de double facturation. Côté serveur : billing.js.
+    body.querySelector('#billing-portal-btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const fb  = body.querySelector('#billing-portal-feedback');
+        const original = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Ouverture…';
+        if (fb) { fb.textContent = ''; fb.style.color = ''; }
+        try {
+            const jwt = localStorage.getItem('ks_jwt') || '';
+            if (!jwt) throw new Error('Reconnectez-vous pour gérer votre abonnement.');
+            const res  = await fetch(`${CF_API}/api/billing/portal`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + jwt },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.url) throw new Error(data.error || `Erreur ${res.status}`);
+            window.location.href = data.url;   // redirection vers le portail Stripe
+        } catch (err) {
+            btn.disabled = false; btn.textContent = original;
+            if (fb) { fb.textContent = err.message; fb.style.color = '#f26a4b'; }
+        }
     });
 
     // S5.6 — Bouton « Forcer la synchronisation Cloud »
