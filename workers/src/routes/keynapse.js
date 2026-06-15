@@ -22,7 +22,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KN_ENGINE_VERSION = 'KN-0';
+const KN_ENGINE_VERSION = 'KN-2';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -223,5 +223,97 @@ export async function handleBubbleDelete(request, env, id) {
     env.DB.prepare('DELETE FROM kn_media     WHERE tenant_id = ? AND bubble_id = ?').bind(t, id),
     env.DB.prepare('DELETE FROM kn_bubbles   WHERE id = ? AND tenant_id = ?').bind(id, t),
   ]);
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 2 — contenu d'une bulle : détail + to-do + notes libres
+// ════════════════════════════════════════════════════════════════
+const TODO_COLS = 'id, bubble_id, label, done, position, created_at';
+const NOTE_COLS = 'id, bubble_id, body, created_at';
+
+async function _ownsBubble(env, tenant, bubbleId) {
+  const r = await env.DB.prepare('SELECT id FROM kn_bubbles WHERE id = ? AND tenant_id = ?').bind(bubbleId, tenant).first();
+  return !!r;
+}
+
+// GET /bubbles/:id — détail (bulle + tâches + notes)
+export async function handleBubbleDetail(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const bubble = await env.DB.prepare(`SELECT ${BUBBLE_COLS} FROM kn_bubbles WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  if (!bubble) return err('Bulle introuvable', 404, origin);
+  const todos = (await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE tenant_id = ? AND bubble_id = ? ORDER BY position, created_at`).bind(t, id).all()).results || [];
+  const notes = (await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'note' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
+  return json({ ok: true, bubble, todos, notes }, 200, origin);
+}
+
+// POST /bubbles/:id/todos — ajouter une tâche
+export async function handleTodoCreate(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+  const body = await parseBody(request);
+  const label = String(body.label || '').trim();
+  if (!label) return err('Texte de tâche requis', 400, origin);
+  if (label.length > 500) return err('Tâche trop longue (max 500)', 400, origin);
+  const id = generateId();
+  const pos = (await env.DB.prepare('SELECT COALESCE(MAX(position),-1)+1 AS p FROM kn_todos WHERE tenant_id = ? AND bubble_id = ?').bind(t, bubbleId).first())?.p || 0;
+  await env.DB.prepare('INSERT INTO kn_todos (id, tenant_id, bubble_id, label, done, position) VALUES (?, ?, ?, ?, 0, ?)').bind(id, t, bubbleId, label, pos).run();
+  const todo = await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, todo }, 200, origin);
+}
+
+// PATCH /todos/:id — cocher / renommer
+export async function handleTodoUpdate(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const existing = await env.DB.prepare('SELECT id FROM kn_todos WHERE id = ? AND tenant_id = ?').bind(id, t).first();
+  if (!existing) return err('Tâche introuvable', 404, origin);
+  const body = await parseBody(request);
+  const sets = [], vals = [];
+  if ('done' in body) { sets.push('done = ?'); vals.push(body.done ? 1 : 0); }
+  if (typeof body.label === 'string') { const l = body.label.trim(); if (!l) return err('Texte requis', 400, origin); sets.push('label = ?'); vals.push(l.slice(0, 500)); }
+  if (!sets.length) return err('Rien à modifier', 400, origin);
+  vals.push(id, t);
+  await env.DB.prepare(`UPDATE kn_todos SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).bind(...vals).run();
+  const todo = await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, todo }, 200, origin);
+}
+
+// DELETE /todos/:id
+export async function handleTodoDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  await env.DB.prepare('DELETE FROM kn_todos WHERE id = ? AND tenant_id = ?').bind(id, t).run();
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// POST /bubbles/:id/notes — ajouter une note libre (kn_media kind='note')
+export async function handleNoteCreate(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+  const body = await parseBody(request);
+  const text = String(body.body || '').trim();
+  if (!text) return err('Note vide', 400, origin);
+  if (text.length > 4000) return err('Note trop longue (max 4000)', 400, origin);
+  const id = generateId();
+  await env.DB.prepare("INSERT INTO kn_media (id, tenant_id, bubble_id, kind, body) VALUES (?, ?, ?, 'note', ?)").bind(id, t, bubbleId, text).run();
+  const note = await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, note }, 200, origin);
+}
+
+// DELETE /notes/:id
+export async function handleNoteDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  await env.DB.prepare("DELETE FROM kn_media WHERE id = ? AND tenant_id = ? AND kind = 'note'").bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
 }

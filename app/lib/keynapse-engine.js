@@ -321,7 +321,20 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
     svg.remove();
   }
 
-  return { setData, fitAll, zoomBy, destroy };
+  // Mise à jour à chaud d'un nœud (titre/couleur) sans reconstruire la scène.
+  function updateNode(id, patch = {}) {
+    const n = byId.get(id); if (!n || !n.el) return;
+    if (typeof patch.title === 'string') {
+      n.title = patch.title;
+      const t = n.el.querySelector('.kyn-bubble-label'); if (t) t.textContent = truncate(n.title, 14);
+    }
+    if (patch.color) {
+      n.color = patch.color;
+      const c = n.el.querySelector('circle'); if (c) { c.setAttribute('fill', n.color); c.setAttribute('stroke', n.color); }
+    }
+  }
+
+  return { setData, fitAll, zoomBy, updateNode, destroy };
 }
 
 function truncate(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }

@@ -113,3 +113,83 @@
 }
 .kyn-composer-card h3 { margin: 0 0 12px; font-size: 18px; font-weight: 900; letter-spacing: -0.02em; color: var(--text, #f8fafc); }
 .kyn-composer-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+
+/* ═══ Panneau latéral de la fiche (Sprint 2) ═══════════════════ */
+.kyn-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); z-index: 6;
+  background: var(--navy2, #1c2234); border-left: 1px solid var(--bd, rgba(255,255,255,.1));
+  box-shadow: -14px 0 44px rgba(0,0,0,.42);
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: kyn-slidein .28s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes kyn-slidein { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .kyn-panel { animation: none; } }
+
+.kyn-panel-head { position: relative; padding: 20px 18px 14px; border-bottom: 1px solid var(--bd, rgba(255,255,255,.08)); }
+.kyn-panel-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-panel-x {
+  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: none; background: transparent;
+  color: var(--tx2, rgba(248,250,252,.55)); border-radius: 8px; cursor: pointer; font-size: 21px; line-height: 1; display: grid; place-items: center;
+}
+.kyn-panel-x:hover { background: var(--navy3, #242d42); color: var(--text, #f8fafc); }
+.kyn-panel-id { display: flex; align-items: center; gap: 10px; padding-right: 34px; }
+.kyn-panel-ico {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; flex: none;
+  background: color-mix(in srgb, var(--kyn-accent, #6366f1) 16%, transparent); color: var(--kyn-accent, #6366f1);
+}
+.kyn-panel-title {
+  flex: 1; min-width: 0; font: inherit; font-size: 19px; font-weight: 900; letter-spacing: -0.02em;
+  color: var(--text, #f8fafc); background: transparent; border: none; padding: 3px 5px; border-radius: 6px;
+}
+.kyn-panel-title:focus { outline: none; background: var(--navy3, #242d42); }
+.kyn-panel-dates { margin-top: 7px; font-size: 11px; color: var(--tx3, rgba(248,250,252,.4)); }
+.kyn-swatches { display: flex; gap: 7px; margin-top: 13px; flex-wrap: wrap; }
+.kyn-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.kyn-swatch[aria-pressed="true"] { border-color: var(--text, #f8fafc); }
+
+.kyn-panel-body { flex: 1; overflow-y: auto; padding: 16px 18px 26px; }
+.kyn-sec { margin-bottom: 22px; }
+.kyn-sec-h { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3, rgba(248,250,252,.4)); margin: 0 0 9px; }
+.kyn-desc {
+  width: 100%; font: inherit; font-size: 14px; line-height: 1.5; color: var(--text, #f8fafc);
+  background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.08)); border-radius: 10px;
+  padding: 10px 12px; resize: vertical; min-height: 58px;
+}
+.kyn-desc:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+
+.kyn-prog { height: 5px; border-radius: 3px; background: var(--bd, rgba(255,255,255,.08)); overflow: hidden; margin-bottom: 10px; }
+.kyn-prog-fill { height: 100%; background: var(--kyn-accent, var(--gold, #6366f1)); transition: width .3s ease; }
+.kyn-todo { display: flex; align-items: center; gap: 9px; padding: 5px 0; }
+.kyn-check {
+  flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--bd, rgba(255,255,255,.25));
+  background: transparent; cursor: pointer; display: grid; place-items: center; padding: 0; color: #fff; font-size: 11px;
+}
+.kyn-check[aria-checked="true"] { background: var(--kyn-accent, var(--gold, #6366f1)); border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-todo-lbl { flex: 1; font-size: 14px; color: var(--text, #f8fafc); word-break: break-word; }
+.kyn-todo[data-done="1"] .kyn-todo-lbl { color: var(--tx3, rgba(248,250,252,.4)); text-decoration: line-through; }
+.kyn-row-del { flex: none; opacity: 0; border: none; background: transparent; color: var(--tx3, rgba(248,250,252,.4)); cursor: pointer; font-size: 16px; padding: 2px 7px; border-radius: 6px; }
+.kyn-todo:hover .kyn-row-del, .kyn-note:hover .kyn-row-del { opacity: 1; }
+.kyn-row-del:hover { color: var(--danger, #e05c5c); background: var(--navy3, #242d42); }
+
+.kyn-add { display: flex; gap: 8px; margin-top: 9px; }
+.kyn-add input, .kyn-add textarea {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--bd, rgba(255,255,255,.08)); background: var(--navy, #131826); color: var(--text, #f8fafc); resize: vertical;
+}
+.kyn-add input:focus, .kyn-add textarea:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-add-btn { flex: none; align-self: flex-start; border: none; background: var(--navy3, #242d42); color: var(--text, #f8fafc); border-radius: 8px; padding: 8px 13px; cursor: pointer; font-size: 18px; line-height: 1; }
+.kyn-add-btn:hover { background: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; }
+
+.kyn-note { padding: 9px 0; border-bottom: 1px solid var(--bd, rgba(255,255,255,.05)); display: flex; gap: 8px; align-items: flex-start; }
+.kyn-note-body { font-size: 13.5px; line-height: 1.5; color: var(--text, #f8fafc); white-space: pre-wrap; word-break: break-word; }
+.kyn-note-date { font-size: 10px; color: var(--tx3, rgba(248,250,252,.4)); margin-top: 4px; }
+
+.kyn-panel-foot { padding: 12px 18px; border-top: 1px solid var(--bd, rgba(255,255,255,.08)); }
+.kyn-del-bubble { width: 100%; border: 1px solid rgba(224,92,92,.32); background: transparent; color: var(--danger, #e05c5c); border-radius: 10px; padding: 10px; cursor: pointer; font: inherit; font-size: 13px; }
+.kyn-del-bubble:hover { background: var(--danger-soft, rgba(224,92,92,.12)); }
+.kyn-del-bubble[data-confirm="1"] { background: var(--danger-soft, rgba(224,92,92,.12)); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .kyn-panel { top: auto; width: 100%; height: 86%; border-left: none; border-top: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: 18px 18px 0 0; animation: kyn-sheetup .3s cubic-bezier(.22,.61,.36,1); }
+  @keyframes kyn-sheetup { from { transform: translateY(100%); } to { transform: translateY(0); } }
+}

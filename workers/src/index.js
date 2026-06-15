@@ -123,7 +123,9 @@ import { handleSmartAgentHealth,
 
 // ── Keynapse — espace de connaissances en bulles (Pad O-Keyn-001 · KN-0) ──
 import { handleKeynapseHealth, handleKeynapseState,
-         handleBubbleCreate, handleBubbleUpdate, handleBubbleDelete } from './routes/keynapse.js';
+         handleBubbleCreate, handleBubbleUpdate, handleBubbleDelete,
+         handleBubbleDetail, handleTodoCreate, handleTodoUpdate, handleTodoDelete,
+         handleNoteCreate, handleNoteDelete } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -151,7 +153,17 @@ export default {
       if (path === '/api/keynapse/health'  && method === 'GET')  return handleKeynapseHealth(request, env);
       if (path === '/api/keynapse/state'   && method === 'GET')  return handleKeynapseState(request, env);
       if (path === '/api/keynapse/bubbles' && method === 'POST') return handleBubbleCreate(request, env);
+      const knTodoCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/todos$/);
+      if (knTodoCreate && method === 'POST') return handleTodoCreate(request, env, knTodoCreate[1]);
+      const knNoteCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/notes$/);
+      if (knNoteCreate && method === 'POST') return handleNoteCreate(request, env, knNoteCreate[1]);
+      const knTodo = path.match(/^\/api\/keynapse\/todos\/([A-Za-z0-9-]+)$/);
+      if (knTodo && method === 'PATCH')  return handleTodoUpdate(request, env, knTodo[1]);
+      if (knTodo && method === 'DELETE') return handleTodoDelete(request, env, knTodo[1]);
+      const knNote = path.match(/^\/api\/keynapse\/notes\/([A-Za-z0-9-]+)$/);
+      if (knNote && method === 'DELETE') return handleNoteDelete(request, env, knNote[1]);
       const knBubbleMatch = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)$/);
+      if (knBubbleMatch && method === 'GET')    return handleBubbleDetail(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'PATCH')  return handleBubbleUpdate(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'DELETE') return handleBubbleDelete(request, env, knBubbleMatch[1]);
 
