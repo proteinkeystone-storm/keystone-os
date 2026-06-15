@@ -189,6 +189,8 @@ function _onClick(e) {
     // Rappels (Sprint 7)
     case 'kyn-rem-add':      return _addReminder();
     case 'kyn-rem-del':      return _delReminder(el.dataset.id);
+    case 'kyn-time-open':    if (_panel) { _panel.remOpen = true; _refreshBody(); } return;
+    case 'kyn-time-ok':      return _confirmRemTime();
     case 'kyn-notif-enable': return _enableNotifs();
     case 'kyn-toast-open':   _openPanel(el.dataset.id); { const tw = el.closest('.kyn-toast'); if (tw) tw.remove(); } return;
     case 'kyn-toast-close':  { const tw = el.closest('.kyn-toast'); if (tw) tw.remove(); } return;
@@ -311,7 +313,7 @@ async function _submitComposer() {
 // ════════════════════════════════════════════════════════════════
 function _onBubbleClick(node) { if (node && node.id) _openPanel(node.id); }
 async function _openPanel(id) {
-  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' } };
+  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' }, remTime: null, remOpen: false };
   _ensurePanelEl(); _renderPanel();
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(id)}`);
@@ -824,14 +826,27 @@ function _remindersSectionHTML() {
   const now = Date.now();
   const today = _toDateInput(new Date());
   const hours = Array.from({ length: 24 }, (_, i) => i);
-  const mins  = Array.from({ length: 12 }, (_, i) => i * 5);
-  // Roulette scroll-snap (portée de Social Manager) : heure en molettes, date native.
+  const mins  = Array.from({ length: 60 }, (_, i) => i);     // minute par minute
+  const tt = _remCurrentTime();
+  const open = !!(_panel && _panel.remOpen);
+  const p2 = (n) => String(n).padStart(2, '0');
+  // Roulette scroll-snap (portée de Social Manager), DÉPLIÉE seulement pendant le
+  // choix de l'heure ; repliée = puce compacte affichant l'heure choisie.
   const wheel = (kind, vals) => `
     <div class="kyn-wheel" data-wheel="${kind}">
       <div class="kyn-wheel-pad"></div>
-      ${vals.map((v, i) => `<div class="kyn-wheel-item" data-wheel="${kind}" data-idx="${i}">${String(v).padStart(2, '0')}</div>`).join('')}
+      ${vals.map((v, i) => `<div class="kyn-wheel-item" data-wheel="${kind}" data-idx="${i}">${p2(v)}</div>`).join('')}
       <div class="kyn-wheel-pad"></div>
     </div>`;
+  const timeUI = open
+    ? `<div class="kyn-time-edit">
+         <div class="kyn-wheel-wrap" aria-label="Heure du rappel">
+           ${wheel('h', hours)}<div class="kyn-wheel-sep">:</div>${wheel('m', mins)}
+           <div class="kyn-wheel-band" aria-hidden="true"></div>
+         </div>
+         <button type="button" class="kyn-time-ok" data-act="kyn-time-ok" aria-label="Valider l'heure">${icon('check', 16) || 'OK'}</button>
+       </div>`
+    : `<button type="button" class="kyn-time-chip" data-act="kyn-time-open" aria-label="Choisir l'heure">${icon('clock', 14) || ''}<span>${p2(tt.h)}:${p2(tt.m)}</span></button>`;
   return `
     <div class="kyn-sec">
       <p class="kyn-sec-h">Rappels${rems.length ? ` · ${rems.length}` : ''}</p>
@@ -840,12 +855,7 @@ function _remindersSectionHTML() {
         <input data-field="rem-label" type="text" maxlength="200" placeholder="Intitulé (optionnel)…" autocomplete="off">
         <div class="kyn-rem-when">
           <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
-          <div class="kyn-wheel-wrap" aria-label="Heure du rappel">
-            ${wheel('h', hours)}
-            <div class="kyn-wheel-sep">:</div>
-            ${wheel('m', mins)}
-            <div class="kyn-wheel-band" aria-hidden="true"></div>
-          </div>
+          ${timeUI}
         </div>
         <div class="kyn-rem-form-row">
           <select data-field="rem-repeat" class="kyn-rem-rep" aria-label="Répétition">
@@ -907,13 +917,23 @@ async function _enableNotifs() {
   try { await Notification.requestPermission(); } catch (_) {}
   _refreshBody();
 }
+// Heure par défaut (now + 1 h) ; heure courante = choix mémorisé sinon défaut.
+function _remDefaultTime() { const b = new Date(Date.now() + 3600000); return { h: b.getHours(), m: b.getMinutes() }; }
+function _remCurrentTime() { return (_panel && _panel.remTime) ? _panel.remTime : _remDefaultTime(); }
+// Valide la roulette : capture la sélection, replie l'affichage.
+function _confirmRemTime() {
+  if (!_panel) return;
+  _panel.remTime = { h: Math.min(23, _knWheelIndex('h')), m: Math.min(59, _knWheelIndex('m')) };
+  _panel.remOpen = false;
+  _refreshBody();
+}
 async function _addReminder() {
   if (!_panel || !_panel.detail || !_panelEl) return;
   const dateEl = _panelEl.querySelector('[data-field="rem-date"]');
   if (!dateEl || !dateEl.value) { if (dateEl) dateEl.focus(); return; }
-  const hh = String(Math.min(23, _knWheelIndex('h'))).padStart(2, '0');
-  const mm = String(Math.min(55, _knWheelIndex('m') * 5)).padStart(2, '0');
-  const when = new Date(`${dateEl.value}T${hh}:${mm}`);   // date + molettes (heure locale) → Date
+  if (_panel.remOpen) _panel.remTime = { h: Math.min(23, _knWheelIndex('h')), m: Math.min(59, _knWheelIndex('m')) };
+  const tt = _remCurrentTime();
+  const when = new Date(`${dateEl.value}T${String(tt.h).padStart(2, '0')}:${String(tt.m).padStart(2, '0')}`);   // date + heure locale → Date
   if (isNaN(when.getTime())) return;
   const labelEl = _panelEl.querySelector('[data-field="rem-label"]');
   const repEl   = _panelEl.querySelector('[data-field="rem-repeat"]');
@@ -921,8 +941,9 @@ async function _addReminder() {
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/reminders`, { method: 'POST', body });
     if (r.reminder) { _panel.detail.reminders = _panel.detail.reminders || []; _panel.detail.reminders.push(r.reminder); }
-    _refreshBody();
   } catch (_) {}
+  _panel.remTime = null; _panel.remOpen = false;   // remet le formulaire au défaut
+  _refreshBody();
 }
 // Index sélectionné d'une molette = position de scroll / hauteur d'un cran (patron SM).
 function _knWheelIndex(kind) {
@@ -935,21 +956,19 @@ function _toDateInput(d) {
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
-// Cale les molettes sur l'heure par défaut (+1 h, minute au pas de 5) après peinture.
+// Cale les molettes sur l'heure courante (après peinture). No-op si repliée.
 function _calibrateRemWheels() {
   if (!_panelEl) return;
   const wrap = _panelEl.querySelector('.kyn-wheel-wrap'); if (!wrap) return;
-  const base = new Date(Date.now() + 3600000);
-  const defH = base.getHours();
-  const defM = Math.round(base.getMinutes() / 5) % 12;
+  const tt = _remCurrentTime();
   requestAnimationFrame(() => {
     const place = (kind, idx) => {
       const w = wrap.querySelector(`.kyn-wheel[data-wheel="${kind}"]`);
       const it = w && w.querySelector('.kyn-wheel-item');
       if (w && it) w.scrollTop = idx * it.offsetHeight;
     };
-    place('h', defH);
-    place('m', defM);
+    place('h', tt.h);
+    place('m', tt.m);
   });
 }
 async function _delReminder(id) {

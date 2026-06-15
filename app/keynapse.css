@@ -167,8 +167,11 @@
 .kyn-check[aria-checked="true"] { background: var(--kyn-accent, var(--gold, #6366f1)); border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-todo-lbl { flex: 1; font-size: 14px; color: var(--text, #f8fafc); word-break: break-word; }
 .kyn-todo[data-done="1"] .kyn-todo-lbl { color: var(--tx3, rgba(248,250,252,.4)); text-decoration: line-through; }
-.kyn-row-del { flex: none; opacity: 0; border: none; background: transparent; color: var(--tx3, rgba(248,250,252,.4)); cursor: pointer; font-size: 16px; padding: 2px 7px; border-radius: 6px; }
-.kyn-todo:hover .kyn-row-del, .kyn-note:hover .kyn-row-del { opacity: 1; }
+/* Toujours faiblement visible (découvrable au tactile, pas de survol sur iPhone),
+   plein au survol/focus. Couvre tâches, notes, LIENS et RAPPELS. */
+.kyn-row-del { flex: none; opacity: 0.4; border: none; background: transparent; color: var(--tx3, rgba(248,250,252,.4)); cursor: pointer; font-size: 16px; padding: 2px 7px; border-radius: 6px; transition: opacity .15s, color .15s; }
+.kyn-todo:hover .kyn-row-del, .kyn-note:hover .kyn-row-del, .kyn-linkrow:hover .kyn-row-del, .kyn-rem:hover .kyn-row-del,
+.kyn-todo:focus-within .kyn-row-del, .kyn-note:focus-within .kyn-row-del, .kyn-linkrow:focus-within .kyn-row-del, .kyn-rem:focus-within .kyn-row-del { opacity: 1; }
 .kyn-row-del:hover { color: var(--danger, #e05c5c); background: var(--navy3, #242d42); }
 
 .kyn-add { display: flex; gap: 8px; margin-top: 9px; }
@@ -388,12 +391,20 @@
 .kyn-rem-when { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .kyn-rem-date { background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 8px 10px; color-scheme: dark; }
 .kyn-rem-date:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-wheel-wrap { position: relative; display: flex; align-items: stretch; gap: 2px; padding: 0 8px; border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 10px; background: var(--navy, #131826); }
-.kyn-wheel { position: relative; height: 114px; width: 48px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -ms-overflow-style: none; touch-action: pan-y; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 33%, #000 67%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 33%, #000 67%, transparent); }
+/* Puce repliée : affichage compact de l'heure choisie (la roulette est cachée). */
+.kyn-time-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 14px; font-variant-numeric: tabular-nums; padding: 8px 12px; cursor: pointer; }
+.kyn-time-chip:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-time-chip svg { color: var(--tx2, rgba(248,250,252,.55)); }
+/* Roulette dépliée seulement pendant le choix : molettes compactes + valider. */
+.kyn-time-edit { display: inline-flex; align-items: center; gap: 8px; }
+.kyn-time-ok { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: none; background: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; border-radius: 10px; cursor: pointer; }
+.kyn-time-ok:hover { background: var(--gold2, #818cf8); }
+.kyn-wheel-wrap { position: relative; display: flex; align-items: stretch; gap: 1px; padding: 0 7px; border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 10px; background: var(--navy, #131826); }
+.kyn-wheel { position: relative; height: 90px; width: 38px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -ms-overflow-style: none; touch-action: pan-y; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); }
 .kyn-wheel::-webkit-scrollbar { display: none; }
-.kyn-wheel-pad { height: 38px; }
-.kyn-wheel-item { height: 38px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 18px; font-weight: 700; color: var(--tx2, rgba(248,250,252,.55)); font-variant-numeric: tabular-nums; cursor: pointer; transition: color .15s; }
+.kyn-wheel-pad { height: 30px; }
+.kyn-wheel-item { height: 30px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 16px; font-weight: 700; color: var(--tx2, rgba(248,250,252,.55)); font-variant-numeric: tabular-nums; cursor: pointer; transition: color .15s; }
 .kyn-wheel-item:hover { color: var(--text, #f8fafc); }
-.kyn-wheel-sep { display: flex; align-items: center; font-size: 18px; font-weight: 800; color: var(--tx3, rgba(248,250,252,.4)); }
-.kyn-wheel-band { position: absolute; left: 6px; right: 6px; top: 50%; transform: translateY(-50%); height: 38px; border-radius: 9px; background: color-mix(in srgb, var(--gold, #6366f1) 20%, transparent); border: 1px solid color-mix(in srgb, var(--gold, #6366f1) 38%, transparent); pointer-events: none; }
+.kyn-wheel-sep { display: flex; align-items: center; font-size: 16px; font-weight: 800; color: var(--tx3, rgba(248,250,252,.4)); padding: 0 1px; }
+.kyn-wheel-band { position: absolute; left: 5px; right: 5px; top: 50%; transform: translateY(-50%); height: 30px; border-radius: 8px; background: color-mix(in srgb, var(--gold, #6366f1) 20%, transparent); border: 1px solid color-mix(in srgb, var(--gold, #6366f1) 38%, transparent); pointer-events: none; }
 .kyn-rem-addbtn { font-size: 13px; padding: 8px 16px; }
