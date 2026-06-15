@@ -345,3 +345,41 @@
 .kyn-voicemsg span { flex: 1; }
 .kyn-voicemsg-x { flex: none; border: none; background: transparent; color: inherit; opacity: .7; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
 .kyn-voicemsg-x:hover { opacity: 1; }
+
+/* ═══ Sprint 7 — rappels (fiche) + notifications locales ═══════════ */
+.kyn-rem { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--bd, rgba(255,255,255,.05)); }
+.kyn-rem-ico { flex: none; color: var(--tx3, rgba(248,250,252,.4)); display: grid; place-items: center; }
+.kyn-rem.is-due .kyn-rem-ico { color: var(--danger, #e05c5c); }
+.kyn-rem.is-soon .kyn-rem-ico { color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-rem-main { flex: 1; min-width: 0; }
+.kyn-rem-lbl { font-size: 13.5px; color: var(--text, #f8fafc); word-break: break-word; }
+.kyn-rem.is-done .kyn-rem-lbl { color: var(--tx3, rgba(248,250,252,.4)); text-decoration: line-through; }
+.kyn-rem-nolbl { color: var(--tx2, rgba(248,250,252,.55)); }
+.kyn-rem-meta { font-size: 11px; color: var(--tx3, rgba(248,250,252,.45)); margin-top: 2px; }
+.kyn-rem-tag { font-weight: 600; color: var(--tx2, rgba(248,250,252,.6)); }
+.kyn-rem.is-due .kyn-rem-tag { color: var(--danger, #e05c5c); }
+.kyn-rem.is-soon .kyn-rem-tag { color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-rem-rep { flex: none; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 8px; color: var(--text, #f8fafc); font-size: 11px; padding: 5px 6px; color-scheme: dark; cursor: pointer; }
+.kyn-rem-rep:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-rem-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.kyn-rem-form input[data-field="rem-label"] { background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 13px; padding: 8px 11px; width: 100%; box-sizing: border-box; }
+.kyn-rem-form input[data-field="rem-label"]:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-rem-form-row { display: flex; gap: 8px; align-items: center; }
+.kyn-rem-form-row input[type="datetime-local"] { flex: 1; min-width: 0; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 12px; padding: 7px 9px; color-scheme: dark; }
+.kyn-rem-form-row input[type="datetime-local"]:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-rem-notif { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--bd, rgba(255,255,255,.14)); background: transparent; color: var(--tx2, rgba(248,250,252,.7)); font-size: 12.5px; cursor: pointer; }
+.kyn-rem-notif:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); color: var(--text, #f8fafc); }
+.kyn-rem-hint { margin-top: 9px; font-size: 11.5px; color: var(--tx3, rgba(248,250,252,.4)); }
+
+/* Bandeau in-app (notification locale fiable partout) */
+.kyn-toasts { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 15; display: flex; flex-direction: column; gap: 8px; width: min(420px, 92vw); pointer-events: none; }
+.kyn-toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 14px; background: var(--navy2, #1c2234); border: 1px solid color-mix(in srgb, var(--gold, #6366f1) 36%, transparent); box-shadow: var(--ws-shadow-3, 0 12px 40px rgba(0,0,0,.5)); animation: kyn-toastin .25s ease; }
+@keyframes kyn-toastin { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.kyn-toast-ico { flex: none; color: var(--gold, #6366f1); display: grid; place-items: center; }
+.kyn-toast-main { flex: 1; min-width: 0; }
+.kyn-toast-t { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3, rgba(248,250,252,.45)); }
+.kyn-toast-b { font-size: 13.5px; color: var(--text, #f8fafc); word-break: break-word; margin-top: 1px; }
+.kyn-toast-go { flex: none; border: none; background: var(--gold, #6366f1); color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+.kyn-toast-go:hover { background: var(--gold2, #818cf8); }
+.kyn-toast-x { flex: none; border: none; background: transparent; color: var(--tx3, rgba(248,250,252,.4)); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 5px; }
+.kyn-toast-x:hover { color: var(--text, #f8fafc); }

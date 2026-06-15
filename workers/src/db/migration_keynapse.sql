@@ -76,11 +76,16 @@ CREATE TABLE IF NOT EXISTS kn_todos (
 );
 CREATE INDEX IF NOT EXISTS idx_kn_todos_bubble ON kn_todos(tenant_id, bubble_id);
 
--- ── Rappels : date/heure/répétition + notification ─────────────
+-- ── Rappels : libellé + date/heure/répétition + notification ───
+-- label : « de quoi il s'agit » (Sprint 7 ; nullable, ajouté via ALTER
+-- tolérant côté _ensureSchema pour les tables créées avant le S7).
+-- repeat : NULL | 'daily' | 'weekly' | 'monthly'. notified_at : dernier
+-- déclenchement local (NULL = armé / à venir).
 CREATE TABLE IF NOT EXISTS kn_reminders (
   id          TEXT PRIMARY KEY,
   tenant_id   TEXT NOT NULL DEFAULT 'default',
   bubble_id   TEXT NOT NULL,
+  label       TEXT,
   at          TEXT NOT NULL,
   repeat      TEXT,
   notified_at TEXT,

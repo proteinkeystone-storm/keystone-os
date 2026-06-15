@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.124-keynapse-s6';
+const VERSION       = 'ks-os-v5.22.125-keynapse-s7';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -199,4 +199,21 @@ self.addEventListener('fetch', event => {
 
   // ── Fallback générique : network-first sans cache ───────────
   event.respondWith(_networkFirst(req, STATIC_CACHE, { cacheable: false }));
+});
+
+// ── Clic sur une notification de rappel Keynapse (Sprint 7) ────
+// Notifications LOCALES uniquement (pas de push serveur) : on ne traite QUE
+// les nôtres (data.kind). Focalise/ouvre l'app, puis signale au front la bulle
+// à ouvrir (le pad Keynapse écoute les messages SW quand il est ouvert).
+self.addEventListener('notificationclick', (event) => {
+  const data = (event.notification && event.notification.data) || {};
+  if (data.kind !== 'keynapse-reminder') return;
+  event.notification.close();
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    let client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
+    if (client) { try { await client.focus(); } catch (_) {} }
+    else { try { client = await self.clients.openWindow('./app'); } catch (_) {} }
+    if (client && data.bubbleId) { try { client.postMessage({ type: 'keynapse-open-bubble', bubbleId: data.bubbleId }); } catch (_) {} }
+  })());
 });

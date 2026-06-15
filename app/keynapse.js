@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
-// KEYNAPSE — Pad O-Keyn-001 · KN-6 (Sprint 6 : la voix)
+// KEYNAPSE — Pad O-Keyn-001 · KN-7 (Sprint 7 : rappels & notifications)
 //
 // Constellation vivante (moteur lib/keynapse-engine.js) + fiche latérale
-// (Sprint 2) + ZONES (Sprint 3) + liens (Sprint 4) + captures média
-// (Sprint 5) + MÉMOS VOCAUX (Sprint 6) : enregistrement MediaRecorder →
-// upload authentifié → transcription Whisper + propositions IA (tâches/
-// rappels) à valider. La couleur d'une bulle est héritée de sa zone ;
-// zoom sémantique (loin = noms de zones, près = détail) géré par le moteur.
+// (S2) + ZONES (S3) + liens (S4) + captures média (S5) + MÉMOS VOCAUX (S6)
+// + RAPPELS (S7) : date/heure/répétition dans la fiche + notifications
+// LOCALES (poller → notif OS via SW si supportée + bandeau in-app fiable
+// partout, indicateur « à venir »). La couleur d'une bulle est héritée de
+// sa zone ; zoom sémantique (loin = zones, près = détail) géré par le moteur.
 //
 // ISOLATION : aucun code partagé avec Smart Agent / Key Form.
 // ═══════════════════════════════════════════════════════════════
@@ -79,10 +79,13 @@ export function openKeynapse(opts = {}) {
   _buildShell();
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
+  _bindSWMessages();           // clic notif → ouvrir la bulle
+  _startReminderPoll();        // notifications locales (S7)
   _load();
 }
 export function closeKeynapse() {
   if (!_root) return;
+  _stopReminderPoll(); _unbindSWMessages();
   _closePanel(); _closeZonesPanel(); _teardownEngine();
   document.removeEventListener('keydown', _onKey);
   _root.remove(); _root = null;
@@ -175,6 +178,12 @@ function _onClick(e) {
     case 'kyn-prop-add':     return _addProposals();
     case 'kyn-prop-skip':    return _skipProposals();
     case 'kyn-voice-dismiss': return _clearVoiceMsg();
+    // Rappels (Sprint 7)
+    case 'kyn-rem-add':      return _addReminder();
+    case 'kyn-rem-del':      return _delReminder(el.dataset.id);
+    case 'kyn-notif-enable': return _enableNotifs();
+    case 'kyn-toast-open':   _openPanel(el.dataset.id); { const tw = el.closest('.kyn-toast'); if (tw) tw.remove(); } return;
+    case 'kyn-toast-close':  { const tw = el.closest('.kyn-toast'); if (tw) tw.remove(); } return;
     // Zones
     case 'kyn-zones-open':  return _openZonesPanel();
     case 'kyn-zones-close': return _closeZonesPanel();
@@ -191,6 +200,7 @@ function _onChange(e) {
   if (f === 'title' && _panel && _panel.detail) { const v = t.value.trim(); if (v) _patchBubble({ title: v }); }
   else if (f === 'desc' && _panel && _panel.detail) { _patchBubble({ description: t.value }); }
   else if (f === 'zonename' && t.dataset.id) { const v = t.value.trim(); if (v) _renameZone(t.dataset.id, v); }
+  else if (f === 'rem-rep-edit' && t.dataset.id) { _patchReminder(t.dataset.id, { repeat: t.value }); }
 }
 function _onKey(e) {
   if (e.key === 'Enter' && e.target) {
@@ -304,6 +314,7 @@ async function _openPanel(id) {
     _panel.detail = {
       bubble: r.bubble, todos: r.todos || [], notes: r.notes || [],
       links: r.links || [], media: r.media || [], audios: r.audios || [],
+      reminders: r.reminders || [],
     };
     _panel.loading = false; _renderPanel();
   } catch (e) { if (_panel && _panel.id === id) { _panel.error = e.message || 'Chargement impossible.'; _panel.loading = false; _renderPanel(); } }
@@ -389,6 +400,7 @@ function _panelBodyHTML() {
         <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
       </div>
     </div>
+    ${_remindersSectionHTML()}
     ${_capturesSectionHTML()}
     ${_linksSectionHTML()}`;
 }
@@ -758,7 +770,11 @@ async function _addProposals() {
   }
   for (const r of rems) {
     const ms = Date.parse(r.at); if (Number.isNaN(ms)) continue;
-    try { await _api(`/bubbles/${encodeURIComponent(bubbleId)}/reminders`, { method: 'POST', body: { at: new Date(ms).toISOString() } }); nR++; } catch (_) {}
+    try {
+      const res = await _api(`/bubbles/${encodeURIComponent(bubbleId)}/reminders`, { method: 'POST', body: { at: new Date(ms).toISOString(), label: (r.label || '').trim() } });
+      if (res.reminder && _panel && _panel.id === bubbleId) { _panel.detail.reminders = _panel.detail.reminders || []; _panel.detail.reminders.push(res.reminder); }
+      nR++;
+    } catch (_) {}
   }
   if (!_panel || _panel.id !== bubbleId) return;
   _panel.voice.busy = '';
@@ -785,6 +801,204 @@ function _toLocalInput(s) {
   if (isNaN(d.getTime())) return '';
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 7 — rappels (date/heure/répétition) dans la fiche + indicateur
+// « à venir », et notifications LOCALES : un poller (pad ouvert) repère les
+// échéances → bandeau in-app (fiable partout) + notif OS via le SW si
+// supportée (desktop / PWA installée ; sur iPhone Safari onglet = pas de
+// Notification → on retombe sur le bandeau). Pas de push serveur (futur).
+// ════════════════════════════════════════════════════════════════
+function _remindersSectionHTML() {
+  const rems = (_panel.detail.reminders || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const now = Date.now();
+  return `
+    <div class="kyn-sec">
+      <p class="kyn-sec-h">Rappels${rems.length ? ` · ${rems.length}` : ''}</p>
+      ${rems.map((r) => _reminderRowHTML(r, now)).join('')}
+      <div class="kyn-rem-form">
+        <input data-field="rem-label" type="text" maxlength="200" placeholder="Intitulé (optionnel)…" autocomplete="off">
+        <div class="kyn-rem-form-row">
+          <input data-field="rem-at" type="datetime-local" aria-label="Date et heure du rappel">
+          <select data-field="rem-repeat" class="kyn-rem-rep" aria-label="Répétition">
+            <option value="">Une fois</option>
+            <option value="daily">Jour</option>
+            <option value="weekly">Sem.</option>
+            <option value="monthly">Mois</option>
+          </select>
+          <button class="kyn-add-btn" data-act="kyn-rem-add" aria-label="Ajouter le rappel">+</button>
+        </div>
+      </div>
+      ${_notifAffordanceHTML()}
+    </div>`;
+}
+function _reminderRowHTML(r, now) {
+  const st = _reminderState(r, now);
+  const lbl = (r.label && r.label.trim()) ? _esc(r.label) : `<span class="kyn-rem-nolbl">${_esc(r.bubble_title || 'Rappel')}</span>`;
+  return `
+    <div class="kyn-rem ${st.cls}">
+      <span class="kyn-rem-ico" aria-hidden="true">${icon('clock', 14) || ''}</span>
+      <div class="kyn-rem-main">
+        <div class="kyn-rem-lbl">${lbl}</div>
+        <div class="kyn-rem-meta">${_esc(_fmtDateTime(r.at))}${st.tag ? ` · <span class="kyn-rem-tag">${st.tag}</span>` : ''}</div>
+      </div>
+      <select class="kyn-rem-rep" data-field="rem-rep-edit" data-id="${_escAttr(r.id)}" aria-label="Répétition du rappel">
+        <option value=""${!r.repeat ? ' selected' : ''}>Une fois</option>
+        <option value="daily"${r.repeat === 'daily' ? ' selected' : ''}>Jour</option>
+        <option value="weekly"${r.repeat === 'weekly' ? ' selected' : ''}>Sem.</option>
+        <option value="monthly"${r.repeat === 'monthly' ? ' selected' : ''}>Mois</option>
+      </select>
+      <button class="kyn-row-del" data-act="kyn-rem-del" data-id="${_escAttr(r.id)}" aria-label="Supprimer le rappel">×</button>
+    </div>`;
+}
+function _reminderState(r, now) {
+  const ms = Date.parse(r.at);
+  if (Number.isNaN(ms)) return { cls: '', tag: '' };
+  if (r.notified_at && !r.repeat) return { cls: 'is-done', tag: 'fait' };
+  if (ms <= now) return { cls: 'is-due', tag: 'à faire' };
+  if (ms - now < 86400000) return { cls: 'is-soon', tag: 'bientôt' };
+  return { cls: '', tag: '' };
+}
+function _fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  try { return d.toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  catch (_) { return '—'; }
+}
+function _notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+function _notifAffordanceHTML() {
+  if (!_notifSupported()) return '';
+  const perm = Notification.permission;
+  if (perm === 'granted') return '';
+  if (perm === 'denied')  return `<p class="kyn-rem-hint">Notifications bloquées — les rappels restent signalés dans l'app.</p>`;
+  return `<button class="kyn-rem-notif" data-act="kyn-notif-enable">${icon('bell', 14) || ''}<span>Activer les notifications</span></button>`;
+}
+async function _enableNotifs() {
+  if (!_notifSupported()) return;
+  try { await Notification.requestPermission(); } catch (_) {}
+  _refreshBody();
+}
+async function _addReminder() {
+  if (!_panel || !_panel.detail || !_panelEl) return;
+  const atEl  = _panelEl.querySelector('[data-field="rem-at"]');
+  if (!atEl || !atEl.value) { if (atEl) atEl.focus(); return; }
+  const ms = Date.parse(atEl.value); if (Number.isNaN(ms)) return;
+  const labelEl = _panelEl.querySelector('[data-field="rem-label"]');
+  const repEl   = _panelEl.querySelector('[data-field="rem-repeat"]');
+  const body = { at: new Date(ms).toISOString(), label: labelEl ? labelEl.value.trim() : '', repeat: repEl ? repEl.value : '' };
+  try {
+    const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/reminders`, { method: 'POST', body });
+    if (r.reminder) { _panel.detail.reminders = _panel.detail.reminders || []; _panel.detail.reminders.push(r.reminder); }
+    _refreshBody();
+  } catch (_) {}
+}
+async function _delReminder(id) {
+  if (!_panel || !_panel.detail) return;
+  _panel.detail.reminders = (_panel.detail.reminders || []).filter((r) => r.id !== id);
+  _refreshBody();
+  try { await _api(`/reminders/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+async function _patchReminder(id, patch) {
+  if (!_panel || !_panel.detail) return;
+  const rem = (_panel.detail.reminders || []).find((x) => x.id === id);
+  if (rem) Object.assign(rem, patch);
+  _refreshBody();
+  try { const res = await _api(`/reminders/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }); if (res.reminder && rem) Object.assign(rem, res.reminder); } catch (_) {}
+}
+
+// ── Notifications locales : poller + déclenchement + accusé ──────
+let _remPoll = null;             // id setInterval
+const _remAcking = new Set();    // anti-doublon pendant l'aller-retour d'ack
+function _startReminderPoll() {
+  if (_remPoll) return;
+  _checkReminders();                                  // immédiat (rattrape l'échu)
+  _remPoll = setInterval(_checkReminders, 30000);
+}
+function _stopReminderPoll() {
+  if (_remPoll) { clearInterval(_remPoll); _remPoll = null; }
+  _remAcking.clear();
+}
+async function _checkReminders() {
+  if (!_root || !_jwt()) return;
+  let data;
+  try { data = await _api('/reminders'); } catch (_) { return; }
+  const now = Date.now();
+  const due = (data.reminders || []).filter((r) => {
+    const ms = Date.parse(r.at);
+    return !Number.isNaN(ms) && ms <= now && !r.notified_at && !_remAcking.has(r.id);
+  });
+  for (const r of due) {
+    _remAcking.add(r.id);
+    _fireReminder(r);
+    _ackReminder(r.id).finally(() => _remAcking.delete(r.id));
+  }
+}
+async function _ackReminder(id) {
+  try {
+    const res = await _api(`/reminders/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ack: true } });
+    if (res.reminder && _panel && _panel.detail && Array.isArray(_panel.detail.reminders)) {
+      const i = _panel.detail.reminders.findIndex((x) => x.id === id);
+      if (i >= 0) { _panel.detail.reminders[i] = res.reminder; _refreshBody(); }
+    }
+  } catch (_) {}
+}
+function _fireReminder(r) {
+  _showInAppReminder(r);   // toujours (fiable partout)
+  if (_notifSupported() && Notification.permission === 'granted') {
+    _osNotify('Rappel — Keynapse', (r.label && r.label.trim()) ? r.label : (r.bubble_title || 'Rappel'), r.bubble_id);
+  }
+}
+async function _osNotify(title, body, bubbleId) {
+  try {
+    const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
+    if (reg && reg.showNotification) {
+      await reg.showNotification(title, { body, tag: `kn-rem-${bubbleId || ''}`, data: { kind: 'keynapse-reminder', bubbleId } });
+      return;
+    }
+  } catch (_) {}
+  // Repli desktop sans SW : constructeur (échoue sur mobile → ignoré).
+  try {
+    const n = new Notification(title, { body });
+    n.onclick = () => { try { window.focus(); } catch (_) {} if (bubbleId) _openPanel(bubbleId); n.close(); };
+  } catch (_) {}
+}
+function _toastHost() {
+  const wrap = _canvas() || _root; if (!wrap) return null;
+  let host = wrap.querySelector('.kyn-toasts');
+  if (!host) { host = document.createElement('div'); host.className = 'kyn-toasts'; wrap.appendChild(host); }
+  return host;
+}
+function _showInAppReminder(r) {
+  const host = _toastHost(); if (!host) return;
+  const txt = (r.label && r.label.trim()) ? r.label : (r.bubble_title || 'Rappel');
+  const el = document.createElement('div');
+  el.className = 'kyn-toast';
+  el.innerHTML = `
+    <span class="kyn-toast-ico" aria-hidden="true">${icon('bell', 16) || ''}</span>
+    <div class="kyn-toast-main"><div class="kyn-toast-t">Rappel</div><div class="kyn-toast-b">${_esc(txt)}</div></div>
+    <button class="kyn-toast-go" data-act="kyn-toast-open" data-id="${_escAttr(r.bubble_id)}">Ouvrir</button>
+    <button class="kyn-toast-x" data-act="kyn-toast-close" aria-label="Fermer">×</button>`;
+  host.appendChild(el);
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 12000);
+}
+
+// ── Messages du SW (clic sur une notif → ouvrir la bulle) ───────
+let _swMsgHandler = null;
+function _bindSWMessages() {
+  if (_swMsgHandler || !('serviceWorker' in navigator)) return;
+  _swMsgHandler = (e) => {
+    const d = e && e.data;
+    if (d && d.type === 'keynapse-open-bubble' && d.bubbleId) { if (!_root) openKeynapse(); _openPanel(d.bubbleId); }
+  };
+  try { navigator.serviceWorker.addEventListener('message', _swMsgHandler); } catch (_) {}
+}
+function _unbindSWMessages() {
+  if (_swMsgHandler && 'serviceWorker' in navigator) {
+    try { navigator.serviceWorker.removeEventListener('message', _swMsgHandler); } catch (_) {}
+  }
+  _swMsgHandler = null;
 }
 
 // ── Lightbox plein écran (Niveau 3) ─────────────────────────────

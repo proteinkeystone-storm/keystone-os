@@ -27,7 +27,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credi
 import { budgetGuard } from '../lib/ai-budget.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 
-const KN_ENGINE_VERSION = 'KN-6';
+const KN_ENGINE_VERSION = 'KN-7';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -66,7 +66,7 @@ async function _ensureSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_kn_todos_bubble ON kn_todos(tenant_id, bubble_id)`,
     `CREATE TABLE IF NOT EXISTS kn_reminders (
        id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
-       bubble_id TEXT NOT NULL, at TEXT NOT NULL, repeat TEXT, notified_at TEXT,
+       bubble_id TEXT NOT NULL, label TEXT, at TEXT NOT NULL, repeat TEXT, notified_at TEXT,
        created_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
     `CREATE INDEX IF NOT EXISTS idx_kn_reminders_bubble ON kn_reminders(tenant_id, bubble_id)`,
@@ -78,6 +78,9 @@ async function _ensureSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_kn_media_bubble ON kn_media(tenant_id, bubble_id)`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
+  // Sprint 7 — colonne `label` (rappels lisibles), ajoutée a posteriori.
+  // SQLite n'a pas ADD COLUMN IF NOT EXISTS → ALTER tolérant (déjà-présent = OK).
+  try { await env.DB.prepare('ALTER TABLE kn_reminders ADD COLUMN label TEXT').run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -261,7 +264,9 @@ export async function handleBubbleDetail(request, env, id) {
   const media = (await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind IN ('photo','drawing') ORDER BY created_at`).bind(t, id).all()).results || [];
   // Sprint 6 — mémos vocaux (kind='audio') : id + transcript pour la fiche.
   const audios = (await env.DB.prepare(`SELECT ${AUDIO_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'audio' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
-  return json({ ok: true, bubble, todos, notes, links, media, audios }, 200, origin);
+  // Sprint 7 — rappels de la bulle (triés par échéance).
+  const reminders = (await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE tenant_id = ? AND bubble_id = ? ORDER BY at`).bind(t, id).all()).results || [];
+  return json({ ok: true, bubble, todos, notes, links, media, audios, reminders }, 200, origin);
 }
 
 // POST /bubbles/:id/todos — ajouter une tâche
@@ -502,7 +507,7 @@ export async function handleMediaDelete(request, env, id) {
 const WHISPER_MODEL   = '@cf/openai/whisper';
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;     // 10 Mo
 const AUDIO_COLS      = 'id, bubble_id, transcript, created_at';
-const REMINDER_COLS   = 'id, bubble_id, at, repeat, notified_at, created_at';
+const REMINDER_COLS   = 'id, bubble_id, label, at, repeat, notified_at, created_at';
 
 // ── Crédit DORMANT (patron _aiExtract de smart-agent.js) ─────────
 // Consomme 1 crédit 'keynapse' si l'enforcement est actif pour la licence,
@@ -645,8 +650,7 @@ export async function handleVoiceUpload(request, env, bubbleId) {
   return _finish(transcript, proposals);
 }
 
-// POST /bubbles/:id/reminders — create MINIMAL d'un rappel (la gestion/édition
-// + notifications = Sprint 7). Corps : { at (date/heure), repeat? }.
+// POST /bubbles/:id/reminders — créer un rappel. Corps : { at, label?, repeat? }.
 export async function handleReminderCreate(request, env, bubbleId) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
@@ -657,9 +661,98 @@ export async function handleReminderCreate(request, env, bubbleId) {
   const ms = Date.parse(rawAt);
   if (!rawAt || Number.isNaN(ms)) return err('Date/heure du rappel invalide', 400, origin);
   const at = new Date(ms).toISOString();
-  const repeat = body.repeat ? String(body.repeat).slice(0, 20) : null;
+  const label = body.label != null ? (String(body.label).trim().slice(0, 200) || null) : null;
+  const repeat = _sanitRepeat(body.repeat);
   const id = generateId();
-  await env.DB.prepare('INSERT INTO kn_reminders (id, tenant_id, bubble_id, at, repeat) VALUES (?, ?, ?, ?, ?)').bind(id, t, bubbleId, at, repeat).run();
+  await env.DB.prepare('INSERT INTO kn_reminders (id, tenant_id, bubble_id, label, at, repeat) VALUES (?, ?, ?, ?, ?, ?)').bind(id, t, bubbleId, label, at, repeat).run();
   const reminder = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
   return json({ ok: true, reminder }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 7 — gestion des rappels + accusé de déclenchement (pour les
+// notifications LOCALES côté front : poller → notif → ack). Pas de push
+// serveur (futur). repeat ∈ { daily, weekly, monthly } ; ack reprogramme
+// la prochaine occurrence (répétitif) ou marque notifié (ponctuel).
+// ════════════════════════════════════════════════════════════════
+const REPEAT_CYCLES = ['daily', 'weekly', 'monthly'];
+function _sanitRepeat(r) {
+  const v = String(r == null ? '' : r).trim().toLowerCase();
+  return REPEAT_CYCLES.includes(v) ? v : null;
+}
+// Pur : prochaine occurrence STRICTEMENT après `nowMs` (UTC, comme le stockage).
+// Avance par pas tant que l'échéance est passée (garde anti-boucle). null si ponctuel.
+function _nextOccurrence(atISO, repeat, nowMs) {
+  const cycle = _sanitRepeat(repeat);
+  if (!cycle) return null;
+  const d = new Date(atISO);
+  if (Number.isNaN(d.getTime())) return null;
+  let guard = 0;
+  while (d.getTime() <= nowMs && guard < 4000) {
+    if (cycle === 'daily')   d.setUTCDate(d.getUTCDate() + 1);
+    else if (cycle === 'weekly')  d.setUTCDate(d.getUTCDate() + 7);
+    else if (cycle === 'monthly') d.setUTCMonth(d.getUTCMonth() + 1);
+    guard++;
+  }
+  return d.toISOString();
+}
+
+// GET /reminders — tous les rappels du tenant (+ titre de la bulle), triés par
+// échéance. Source du poller de notifications locales et de la vue « à venir ».
+export async function handleRemindersList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const reminders = (await env.DB.prepare(
+    `SELECT r.id, r.bubble_id, r.label, r.at, r.repeat, r.notified_at, b.title AS bubble_title
+       FROM kn_reminders r JOIN kn_bubbles b ON b.id = r.bubble_id AND b.tenant_id = r.tenant_id
+      WHERE r.tenant_id = ? ORDER BY r.at LIMIT 500`
+  ).bind(t).all()).results || [];
+  return json({ ok: true, reminders }, 200, origin);
+}
+
+// PATCH /reminders/:id — édition utilisateur { at?, label?, repeat? } OU accusé
+// de déclenchement { ack:true } (le poller l'appelle après avoir notifié).
+export async function handleReminderUpdate(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const existing = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  if (!existing) return err('Rappel introuvable', 404, origin);
+  const body = await parseBody(request);
+
+  if (body.ack === true) {
+    const next = _nextOccurrence(existing.at, existing.repeat, Date.now());
+    if (next) {
+      await env.DB.prepare('UPDATE kn_reminders SET at = ?, notified_at = NULL WHERE id = ? AND tenant_id = ?').bind(next, id, t).run();
+    } else {
+      await env.DB.prepare("UPDATE kn_reminders SET notified_at = datetime('now') WHERE id = ? AND tenant_id = ?").bind(id, t).run();
+    }
+    const r = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+    return json({ ok: true, reminder: r }, 200, origin);
+  }
+
+  const sets = [], vals = [];
+  if ('at' in body) {
+    const ms = Date.parse(String(body.at || '').trim());
+    if (Number.isNaN(ms)) return err('Date/heure du rappel invalide', 400, origin);
+    sets.push('at = ?'); vals.push(new Date(ms).toISOString());
+    sets.push('notified_at = NULL');   // déplacer l'échéance ré-arme le rappel
+  }
+  if ('label'  in body) { sets.push('label = ?');  vals.push(body.label != null ? (String(body.label).trim().slice(0, 200) || null) : null); }
+  if ('repeat' in body) { sets.push('repeat = ?'); vals.push(_sanitRepeat(body.repeat)); }
+  if (!sets.length) return err('Rien à modifier', 400, origin);
+  vals.push(id, t);
+  await env.DB.prepare(`UPDATE kn_reminders SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).bind(...vals).run();
+  const r = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, reminder: r }, 200, origin);
+}
+
+// DELETE /reminders/:id
+export async function handleReminderDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  await env.DB.prepare('DELETE FROM kn_reminders WHERE id = ? AND tenant_id = ?').bind(id, t).run();
+  return json({ ok: true, deleted: id }, 200, origin);
 }

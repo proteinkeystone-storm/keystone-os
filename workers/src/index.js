@@ -129,7 +129,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleZoneCreate, handleZoneUpdate, handleZoneDelete,
          handleLinkCreate, handleLinkDelete,
          handleMediaUpload, handleMediaServe, handleMediaDelete,
-         handleVoiceUpload, handleReminderCreate } from './routes/keynapse.js';
+         handleVoiceUpload, handleReminderCreate,
+         handleRemindersList, handleReminderUpdate, handleReminderDelete } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -156,6 +157,7 @@ export default {
       // ── Keynapse (Pad O-Keyn-001 · KN-0) — bulles de connaissances ──
       if (path === '/api/keynapse/health'  && method === 'GET')  return handleKeynapseHealth(request, env);
       if (path === '/api/keynapse/state'   && method === 'GET')  return handleKeynapseState(request, env);
+      if (path === '/api/keynapse/reminders' && method === 'GET') return handleRemindersList(request, env);
       if (path === '/api/keynapse/bubbles' && method === 'POST') return handleBubbleCreate(request, env);
       if (path === '/api/keynapse/zones'   && method === 'POST') return handleZoneCreate(request, env);
       const knZone = path.match(/^\/api\/keynapse\/zones\/([A-Za-z0-9-]+)$/);
@@ -175,6 +177,9 @@ export default {
       if (knVoice && method === 'POST') return handleVoiceUpload(request, env, knVoice[1]);
       const knReminderCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/reminders$/);
       if (knReminderCreate && method === 'POST') return handleReminderCreate(request, env, knReminderCreate[1]);
+      const knReminder = path.match(/^\/api\/keynapse\/reminders\/([A-Za-z0-9-]+)$/);
+      if (knReminder && method === 'PATCH')  return handleReminderUpdate(request, env, knReminder[1]);
+      if (knReminder && method === 'DELETE') return handleReminderDelete(request, env, knReminder[1]);
       const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
       if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
       if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);
