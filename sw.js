@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.114-billing-portal';
+const VERSION       = 'ks-os-v5.22.115-keynapse';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 

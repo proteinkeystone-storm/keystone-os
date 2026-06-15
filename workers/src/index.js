@@ -121,6 +121,10 @@ import { handleSmartAgentHealth,
          handleSmartAgentLifecycle, handleExploreQuestions, handleAgentStructure,
          handleCardImageServe, handleAgentCardImageUpload } from './routes/smart-agent.js';
 
+// ── Keynapse — espace de connaissances en bulles (Pad O-Keyn-001 · KN-0) ──
+import { handleKeynapseHealth, handleKeynapseState,
+         handleBubbleCreate, handleBubbleUpdate, handleBubbleDelete } from './routes/keynapse.js';
+
 // ── Router ────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -143,6 +147,14 @@ export default {
     const method = request.method;
 
     try {
+      // ── Keynapse (Pad O-Keyn-001 · KN-0) — bulles de connaissances ──
+      if (path === '/api/keynapse/health'  && method === 'GET')  return handleKeynapseHealth(request, env);
+      if (path === '/api/keynapse/state'   && method === 'GET')  return handleKeynapseState(request, env);
+      if (path === '/api/keynapse/bubbles' && method === 'POST') return handleBubbleCreate(request, env);
+      const knBubbleMatch = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)$/);
+      if (knBubbleMatch && method === 'PATCH')  return handleBubbleUpdate(request, env, knBubbleMatch[1]);
+      if (knBubbleMatch && method === 'DELETE') return handleBubbleDelete(request, env, knBubbleMatch[1]);
+
       // ── Smart Agent / Kortex (SA-0 santé · SA-1 coffre) ──────
       if (path === '/api/smart-agent/health' && method === 'GET') return handleSmartAgentHealth(request, env);
       // SA-5 — exposition publique anonyme (lien/QR, SANS JWT : le handler résout le tenant du propriétaire)

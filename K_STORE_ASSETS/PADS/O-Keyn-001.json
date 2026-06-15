@@ -1,0 +1,15 @@
+{
+  "id": "O-Keyn-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "Keynapse",
+  "subtitle": "Vos idées en bulles vivantes — une constellation de notes qui respire",
+  "category": "COM",
+  "icon": "keynapse",
+  "ai_optimized": "Whisper",
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nEspace personnel de connaissances : des bulles de notes sur un canevas infini, regroupées en zones colorées (dossiers virtuels sans contour), reliées par des traits simples. Le moteur (app/keynapse.js, workers/src/routes/keynapse.js) est 100% isolé — aucune table ni route partagée avec Smart Agent ou Key Form (préfixe kn_).\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Keynapse transforme vos idées en une constellation vivante. Chaque note est une bulle — projet, idée, personne, lieu, tâche — que vous posez sur un canevas infini et reliez aux autres pour tisser votre carte mentale. Les bulles respirent et se regroupent en zones colorées, sans dossiers ni arborescence : votre pensée s'organise par la couleur, la proximité et les liens. Chaque bulle contient ce dont vous avez besoin — description, tâches, rappels, photos, croquis et notes vocales — et chaque section vide disparaît pour une fiche toujours nette. Dictez un mémo vocal : il est transcrit, et Keynapse vous propose tâches et rappels à valider d'un geste."
+}
