@@ -193,3 +193,54 @@
   .kyn-panel { top: auto; width: 100%; height: 86%; border-left: none; border-top: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: 18px 18px 0 0; animation: kyn-sheetup .3s cubic-bezier(.22,.61,.36,1); }
   @keyframes kyn-sheetup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
+
+/* ═══ Zones (Sprint 3) ═════════════════════════════════════════ */
+.kyn-tool-sep { width: 1px; align-self: stretch; background: var(--bd, rgba(255,255,255,.12)); margin: 5px 2px; }
+
+/* Libellés de zone (moteur) + zoom sémantique */
+.kyn-zone-label { font-weight: 800; letter-spacing: .12em; pointer-events: none; opacity: .92; transition: opacity .25s ease; }
+.kyn-bubble-label { transition: opacity .25s ease; }
+.kyn-svg[data-zoom="far"] .kyn-bubble-label,
+.kyn-svg[data-zoom="mid"] .kyn-bubble-label { opacity: 0; }
+.kyn-svg[data-zoom="near"] .kyn-zone-label { opacity: 0; }
+
+/* Chips de zone dans la fiche */
+.kyn-color-note { font-size: 11.5px; color: var(--tx2, rgba(248,250,252,.55)); margin-top: 10px; line-height: 1.4; }
+.kyn-zonepick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.kyn-zchip {
+  display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; cursor: pointer;
+  padding: 5px 10px; border-radius: 999px; border: 1px solid var(--bd, rgba(255,255,255,.12));
+  background: var(--navy, #131826); color: var(--text, #f8fafc);
+}
+.kyn-zchip:hover { border-color: rgba(255,255,255,.28); }
+.kyn-zchip.is-on { border-color: var(--kyn-accent, var(--gold, #6366f1)); background: var(--navy3, #242d42); }
+.kyn-zchip-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+/* Panneau Zones (tiroir gauche) */
+.kyn-zones-panel {
+  position: absolute; top: 0; left: 0; bottom: 0; width: min(340px, 90vw); z-index: 6;
+  background: var(--navy2, #1c2234); border-right: 1px solid var(--bd, rgba(255,255,255,.1));
+  box-shadow: 14px 0 44px rgba(0,0,0,.42); display: flex; flex-direction: column; overflow: hidden;
+  animation: kyn-slideleft .28s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes kyn-slideleft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .kyn-zones-panel { animation: none; } }
+.kyn-zhead { display: flex; align-items: center; justify-content: space-between; padding: 16px 14px 14px 18px; border-bottom: 1px solid var(--bd, rgba(255,255,255,.08)); }
+.kyn-zhead-t { font-size: 18px; font-weight: 900; letter-spacing: -0.02em; color: var(--text, #f8fafc); }
+.kyn-zbody { flex: 1; overflow-y: auto; padding: 12px 14px 24px; }
+.kyn-zempty { font-size: 13px; color: var(--tx2, rgba(248,250,252,.55)); line-height: 1.5; padding: 6px 4px 12px; }
+.kyn-zrow { display: flex; align-items: center; gap: 9px; padding: 5px 0; }
+.kyn-zdot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); cursor: pointer; flex: none; padding: 0; }
+.kyn-zname { flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--text, #f8fafc); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; }
+.kyn-zname:hover { border-color: var(--bd, rgba(255,255,255,.1)); }
+.kyn-zname:focus { outline: none; border-color: var(--gold, #6366f1); background: var(--navy, #131826); }
+.kyn-zcount { flex: none; font-size: 11px; color: var(--tx3, rgba(248,250,252,.4)); min-width: 18px; text-align: center; }
+.kyn-zact { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: var(--tx2, rgba(248,250,252,.55)); border-radius: 7px; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+.kyn-zact:hover { background: var(--navy3, #242d42); color: var(--text, #f8fafc); }
+.kyn-zdel:hover { color: var(--danger, #e05c5c); }
+.kyn-zswatches { display: flex; flex-wrap: wrap; gap: 7px; padding: 6px 4px 12px 31px; }
+.kyn-zcreate { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--bd, rgba(255,255,255,.08)); }
+
+@media (max-width: 640px) {
+  .kyn-zones-panel { top: auto; bottom: 0; width: 100%; height: 70%; border-right: none; border-top: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: 18px 18px 0 0; animation: kyn-sheetup .3s cubic-bezier(.22,.61,.36,1); }
+}

@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
-// KEYNAPSE — Pad O-Keyn-001 · KN-2 (Sprint 2 : panneau de la fiche)
+// KEYNAPSE — Pad O-Keyn-001 · KN-3 (Sprint 3 : les zones)
 //
-// Espace personnel de connaissances : des bulles de notes sur un
-// canevas infini (moteur lib/keynapse-engine.js). Clic sur une bulle
-// → panneau latéral droit (bottom-sheet sur mobile), teinté de la
-// couleur de la bulle : identité (titre éditable + couleur + dates),
-// Description, Actions (to-do + progression), Notes libres — sections
-// remplies « dans le mémo », vides discrètes. Suppression de la bulle.
+// Constellation vivante (moteur lib/keynapse-engine.js) + fiche latérale
+// (Sprint 2) + ZONES (Sprint 3) : dossiers virtuels sans contour, par
+// cohésion + couleur partagée. Panneau Zones (créer/renommer/recolorer/
+// aller-à/supprimer) ; sélecteur de zone dans la fiche ; la couleur d'une
+// bulle est HÉRITÉE de sa zone (sinon couleur propre). Zoom sémantique
+// (loin = noms de zones, près = détail) géré par le moteur.
 //
 // ISOLATION : aucun code partagé avec Smart Agent / Key Form.
 // ═══════════════════════════════════════════════════════════════
@@ -19,24 +19,25 @@ import { createConstellation }                from './lib/keynapse-engine.js';
 
 const WORKSPACE_META = { id: 'O-Keyn-001', name: 'Keynapse' };
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
-
-// Nuancier catégoriel Keystone (zones/bulles).
+const DEFAULT_COLOR = '#6366f1';
 const KN_COLORS = ['#6366f1', '#a78bfa', '#22d3ee', '#14b8a6', '#22c55e', '#fcd34d', '#f97316', '#f472b6', '#e05c5c', '#94a3b8'];
 
-const FIT_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+const FIT_ICON    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+const LAYERS_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+const LOCATE_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>';
 
 let _root = null;
 let _state = { zones: [], bubbles: [], links: [] };
 let _engine = null;
 let _loading = false;
 let _error = null;
-let _panel = null;      // { id, detail:{bubble,todos,notes}, loading, error }
+let _panel = null;       // fiche : { id, detail, loading, error }
 let _panelEl = null;
+let _zonesEl = null;     // panneau Zones
+let _recolorZone = null; // id de la zone dont on édite la couleur (palette inline)
 
-// ── API (patron _api de smart-agent.js) ─────────────────────────
-function _jwt() {
-  return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || '';
-}
+// ── API ─────────────────────────────────────────────────────────
+function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
 async function _api(path, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
@@ -44,24 +45,29 @@ async function _api(path, opts = {}) {
   try {
     res = await fetch(`${API_BASE}/api/keynapse${path}`, {
       method: opts.method || 'GET',
-      headers: {
-        'Authorization': `Bearer ${_jwt()}`,
-        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-      },
+      headers: { 'Authorization': `Bearer ${_jwt()}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       signal: ctrl.signal,
     });
   } catch (e) {
     clearTimeout(timer);
-    throw (e && e.name === 'AbortError')
-      ? new Error('Le serveur met trop de temps à répondre — réessayez.')
-      : e;
+    throw (e && e.name === 'AbortError') ? new Error('Le serveur met trop de temps à répondre — réessayez.') : e;
   }
   clearTimeout(timer);
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) { const e = new Error(data.error || `Erreur ${res.status}`); e.status = res.status; throw e; }
   return data;
+}
+
+// ── Zones : helpers ─────────────────────────────────────────────
+function _zoneById(id) { return _state.zones.find((z) => z.id === id) || null; }
+function _effColor(b) { const z = b.zone_id ? _zoneById(b.zone_id) : null; return z ? z.color : (b.color || DEFAULT_COLOR); }
+function _engineBubbles() { return _state.bubbles.map((b) => ({ ...b, color: _effColor(b) })); }
+function _pushEngine() { if (_engine) _engine.setData(_engineBubbles(), _state.links, _state.zones); }
+function _nextZoneColor() {
+  const used = new Set(_state.zones.map((z) => z.color));
+  return KN_COLORS.find((c) => !used.has(c)) || KN_COLORS[_state.zones.length % KN_COLORS.length];
 }
 
 // ── Ouverture / fermeture ───────────────────────────────────────
@@ -74,15 +80,13 @@ export function openKeynapse(opts = {}) {
 }
 export function closeKeynapse() {
   if (!_root) return;
-  _closePanel();
-  _teardownEngine();
+  _closePanel(); _closeZonesPanel(); _teardownEngine();
   document.removeEventListener('keydown', _onKey);
-  _root.remove();
-  _root = null;
+  _root.remove(); _root = null;
   document.body.style.overflow = '';
 }
 
-// ── Coquille workspace (ws-*) ───────────────────────────────────
+// ── Coquille workspace ──────────────────────────────────────────
 function _buildShell() {
   _root = document.createElement('div');
   _root.className = 'ws-app kyn-app';
@@ -93,9 +97,7 @@ function _buildShell() {
           <img src="./LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark">
           <img src="./LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" class="ws-logo-light">
         </a>
-        <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">
-          ${icon('chevron-left', 34)}
-        </button>
+        <button class="ws-topbar-back" data-act="close" title="Retour" aria-label="Retour">${icon('chevron-left', 34)}</button>
       </div>
       <div class="ws-topbar-title">
         <span class="ws-topbar-app-picto">${icon('keynapse', 24)}</span>
@@ -108,9 +110,7 @@ function _buildShell() {
       </div>
     </header>
     <div class="ws-body">
-      <main class="ws-main kyn-main" data-slot="main">
-        <div class="kyn-canvas-wrap" data-slot="canvas"></div>
-      </main>
+      <main class="ws-main kyn-main" data-slot="main"><div class="kyn-canvas-wrap" data-slot="canvas"></div></main>
     </div>
   `;
   document.body.appendChild(_root);
@@ -121,86 +121,86 @@ function _buildShell() {
   try { bindBurger(_root); } catch (_) {}
 }
 
-// ── Délégation des actions ──────────────────────────────────────
+// ── Délégation ──────────────────────────────────────────────────
 function _onClick(e) {
   if (e.target.classList && e.target.classList.contains('kyn-composer')) { _closeComposer(); return; }
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act;
-  if (act === 'close')        { closeKeynapse(); return; }
-  if (act === 'kyn-retry')    { _load(); return; }
-  if (act === 'kyn-compose')  { _openComposer(); return; }
-  if (act === 'kyn-cancel')   { _closeComposer(); return; }
-  if (act === 'kyn-create')   { _submitComposer(); return; }
-  if (act === 'kyn-zoom-in')  { _engine && _engine.zoomBy(1.25); return; }
-  if (act === 'kyn-zoom-out') { _engine && _engine.zoomBy(0.8);  return; }
-  if (act === 'kyn-fit')      { _engine && _engine.fitAll();     return; }
-  // Panneau (Sprint 2)
-  if (act === 'kyn-panel-close') { _closePanel(); return; }
-  if (act === 'kyn-color')       { _patchBubble({ color: el.dataset.color }); return; }
-  if (act === 'kyn-todo-toggle') { _toggleTodo(el.dataset.id); return; }
-  if (act === 'kyn-todo-del')    { _delTodo(el.dataset.id); return; }
-  if (act === 'kyn-todo-add')    { _addTodo(); return; }
-  if (act === 'kyn-note-add')    { _addNote(); return; }
-  if (act === 'kyn-note-del')    { _delNote(el.dataset.id); return; }
-  if (act === 'kyn-bubble-del')  { _confirmDeleteBubble(el); return; }
+  switch (act) {
+    case 'close':         return closeKeynapse();
+    case 'kyn-retry':     return _load();
+    case 'kyn-compose':   return _openComposer();
+    case 'kyn-cancel':    return _closeComposer();
+    case 'kyn-create':    return _submitComposer();
+    case 'kyn-zoom-in':   return _engine && _engine.zoomBy(1.25);
+    case 'kyn-zoom-out':  return _engine && _engine.zoomBy(0.8);
+    case 'kyn-fit':       return _engine && _engine.fitAll();
+    // Fiche
+    case 'kyn-panel-close': return _closePanel();
+    case 'kyn-color':       return _patchBubble({ color: el.dataset.color });
+    case 'kyn-todo-toggle': return _toggleTodo(el.dataset.id);
+    case 'kyn-todo-del':    return _delTodo(el.dataset.id);
+    case 'kyn-todo-add':    return _addTodo();
+    case 'kyn-note-add':    return _addNote();
+    case 'kyn-note-del':    return _delNote(el.dataset.id);
+    case 'kyn-bubble-del':  return _confirmDeleteBubble(el);
+    case 'kyn-bubble-zone': return _assignZone(el.dataset.id || null);
+    // Zones
+    case 'kyn-zones-open':  return _openZonesPanel();
+    case 'kyn-zones-close': return _closeZonesPanel();
+    case 'kyn-zone-create': return _createZone();
+    case 'kyn-zone-fly':    return _flyToZone(el.dataset.id);
+    case 'kyn-zone-del':    return _deleteZone(el.dataset.id);
+    case 'kyn-zone-recolor': _recolorZone = (_recolorZone === el.dataset.id ? null : el.dataset.id); return _renderZonesPanel();
+    case 'kyn-zone-setcolor': return _setZoneColor(el.dataset.id, el.dataset.color);
+  }
 }
 function _onChange(e) {
-  const f = e.target && e.target.dataset && e.target.dataset.field;
-  if (!f || !_panel || !_panel.detail) return;
-  if (f === 'title') { const v = e.target.value.trim(); if (v) _patchBubble({ title: v }); }
-  else if (f === 'desc') { _patchBubble({ description: e.target.value }); }
+  const t = e.target, f = t && t.dataset && t.dataset.field;
+  if (!f) return;
+  if (f === 'title' && _panel && _panel.detail) { const v = t.value.trim(); if (v) _patchBubble({ title: v }); }
+  else if (f === 'desc' && _panel && _panel.detail) { _patchBubble({ description: t.value }); }
+  else if (f === 'zonename' && t.dataset.id) { const v = t.value.trim(); if (v) _renameZone(t.dataset.id, v); }
 }
 function _onKey(e) {
-  if (e.key === 'Enter' && e.target && e.target.id === 'kyn-new-title') { e.preventDefault(); _submitComposer(); return; }
-  if (e.key === 'Enter' && e.target && e.target.dataset && e.target.dataset.field === 'todo-add') { e.preventDefault(); _addTodo(); return; }
+  if (e.key === 'Enter' && e.target) {
+    if (e.target.id === 'kyn-new-title') { e.preventDefault(); return _submitComposer(); }
+    if (e.target.dataset && e.target.dataset.field === 'todo-add') { e.preventDefault(); return _addTodo(); }
+    if (e.target.dataset && e.target.dataset.field === 'newzone') { e.preventDefault(); return _createZone(); }
+  }
   if (e.key === 'Escape') {
-    if (_root && _root.querySelector('.kyn-composer')) { _closeComposer(); return; }
-    if (_panel) { _closePanel(); return; }
+    if (_root && _root.querySelector('.kyn-composer')) return _closeComposer();
+    if (_panel) return _closePanel();
+    if (_zonesEl) return _closeZonesPanel();
     closeKeynapse();
   }
 }
 
-// ── Chargement de l'état ────────────────────────────────────────
+// ── Chargement ──────────────────────────────────────────────────
 async function _load() {
   _loading = true; _error = null; _render();
   try {
     const r = await _api('/state');
     _state = { zones: r.zones || [], bubbles: r.bubbles || [], links: r.links || [] };
-  } catch (e) {
-    _error = e.message || 'Chargement impossible.';
-  } finally {
-    _loading = false; _render();
-  }
+  } catch (e) { _error = e.message || 'Chargement impossible.'; }
+  finally { _loading = false; _render(); }
 }
 
-// ── Rendu du canevas ────────────────────────────────────────────
+// ── Rendu canevas ───────────────────────────────────────────────
 function _canvas() { return _root && _root.querySelector('[data-slot="canvas"]'); }
 function _teardownEngine() { if (_engine) { _engine.destroy(); _engine = null; } }
-
 function _render() {
-  const c = _canvas();
-  if (!c) return;
-  if (_loading) {
-    _teardownEngine();
-    c.innerHTML = `<div class="kyn-state"><div class="kyn-spin"></div><p>Chargement de votre constellation…</p></div>`;
-    return;
-  }
-  if (_error) {
-    _teardownEngine();
-    c.innerHTML = `<div class="kyn-state"><p class="kyn-err">${_esc(_error)}</p><button class="kyn-btn" data-act="kyn-retry">Réessayer</button></div>`;
-    return;
-  }
-  if (!_state.bubbles.length) {
-    _teardownEngine();
-    c.innerHTML = _emptyHTML();
-    _focusComposer();
-    return;
-  }
+  const c = _canvas(); if (!c) return;
+  if (_loading) { _teardownEngine(); c.innerHTML = `<div class="kyn-state"><div class="kyn-spin"></div><p>Chargement de votre constellation…</p></div>`; return; }
+  if (_error) { _teardownEngine(); c.innerHTML = `<div class="kyn-state"><p class="kyn-err">${_esc(_error)}</p><button class="kyn-btn" data-act="kyn-retry">Réessayer</button></div>`; return; }
+  if (!_state.bubbles.length) { _teardownEngine(); c.innerHTML = _emptyHTML(); _focusComposer(); return; }
   if (!_engine) {
     c.innerHTML = `
       <div class="kyn-stage" data-slot="stage"></div>
       <div class="kyn-toolbar">
+        <button class="kyn-tool" data-act="kyn-zones-open" title="Zones" aria-label="Zones">${LAYERS_ICON}</button>
+        <span class="kyn-tool-sep"></span>
         <button class="kyn-tool" data-act="kyn-zoom-out" title="Dézoomer" aria-label="Dézoomer">−</button>
         <button class="kyn-tool" data-act="kyn-fit" title="Tout voir" aria-label="Tout voir">${FIT_ICON}</button>
         <button class="kyn-tool" data-act="kyn-zoom-in" title="Zoomer" aria-label="Zoomer">+</button>
@@ -209,17 +209,14 @@ function _render() {
     const stage = c.querySelector('[data-slot="stage"]');
     _engine = createConstellation({ container: stage, onBubbleMoved: _persistMove, onBubbleClick: _onBubbleClick });
   }
-  _engine.setData(_state.bubbles, _state.links);
+  _pushEngine();
 }
-
-// Drag lâché → persiste la nouvelle position.
 async function _persistMove(id, x, y) {
   const b = _state.bubbles.find((bb) => bb.id === id);
   if (b) { b.x = x; b.y = y; }
   try { await _api(`/bubbles/${encodeURIComponent(id)}`, { method: 'PATCH', body: { x, y } }); } catch (_) {}
 }
 
-// ── État vide ───────────────────────────────────────────────────
 function _emptyHTML() {
   return `
     <div class="kyn-state kyn-empty">
@@ -233,12 +230,10 @@ function _emptyHTML() {
     </div>`;
 }
 
-// ── Composer (overlay du bouton +) ──────────────────────────────
+// ── Composer (nouvelle bulle) ───────────────────────────────────
 function _openComposer() {
-  const wrap = _canvas();
-  if (!wrap || wrap.querySelector('.kyn-composer')) return;
-  const div = document.createElement('div');
-  div.className = 'kyn-composer';
+  const wrap = _canvas(); if (!wrap || wrap.querySelector('.kyn-composer')) return;
+  const div = document.createElement('div'); div.className = 'kyn-composer';
   div.innerHTML = `
     <div class="kyn-composer-card">
       <h3>Nouvelle bulle</h3>
@@ -248,50 +243,31 @@ function _openComposer() {
         <button class="kyn-btn kyn-btn--accent" data-act="kyn-create">Créer</button>
       </div>
     </div>`;
-  wrap.appendChild(div);
-  _focusComposer();
+  wrap.appendChild(div); _focusComposer();
 }
-function _closeComposer() {
-  const o = _root && _root.querySelector('.kyn-composer');
-  if (o) o.remove();
-}
-function _focusComposer() {
-  setTimeout(() => { const i = _root && _root.querySelector('#kyn-new-title'); if (i) i.focus(); }, 40);
-}
+function _closeComposer() { const o = _root && _root.querySelector('.kyn-composer'); if (o) o.remove(); }
+function _focusComposer() { setTimeout(() => { const i = _root && _root.querySelector('#kyn-new-title'); if (i) i.focus(); }, 40); }
 async function _submitComposer() {
-  const input = _root && _root.querySelector('#kyn-new-title');
-  if (!input) return;
-  const title = input.value.trim();
-  if (!title) { input.focus(); return; }
+  const input = _root && _root.querySelector('#kyn-new-title'); if (!input) return;
+  const title = input.value.trim(); if (!title) { input.focus(); return; }
   input.disabled = true;
-  try {
-    await _api('/bubbles', { method: 'POST', body: { title } });
-    _closeComposer();
-    await _load();
-  } catch (e) {
-    _error = e.message || 'Création impossible.';
-    _render();
-  }
+  try { await _api('/bubbles', { method: 'POST', body: { title } }); _closeComposer(); await _load(); }
+  catch (e) { _error = e.message || 'Création impossible.'; _render(); }
 }
 
 // ════════════════════════════════════════════════════════════════
-// Sprint 2 — panneau latéral de la fiche
+// Fiche latérale (Sprint 2) + sélecteur de zone (Sprint 3)
 // ════════════════════════════════════════════════════════════════
 function _onBubbleClick(node) { if (node && node.id) _openPanel(node.id); }
-
 async function _openPanel(id) {
   _panel = { id, detail: null, loading: true, error: null };
-  _ensurePanelEl();
-  _renderPanel();
+  _ensurePanelEl(); _renderPanel();
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(id)}`);
-    if (!_panel || _panel.id !== id) return;          // fermé/changé entre-temps
+    if (!_panel || _panel.id !== id) return;
     _panel.detail = { bubble: r.bubble, todos: r.todos || [], notes: r.notes || [] };
-    _panel.loading = false;
-    _renderPanel();
-  } catch (e) {
-    if (_panel && _panel.id === id) { _panel.error = e.message || 'Chargement impossible.'; _panel.loading = false; _renderPanel(); }
-  }
+    _panel.loading = false; _renderPanel();
+  } catch (e) { if (_panel && _panel.id === id) { _panel.error = e.message || 'Chargement impossible.'; _panel.loading = false; _renderPanel(); } }
 }
 function _ensurePanelEl() {
   const wrap = _canvas(); if (!wrap) return;
@@ -299,20 +275,23 @@ function _ensurePanelEl() {
   if (!el) { el = document.createElement('aside'); el.className = 'kyn-panel'; wrap.appendChild(el); }
   _panelEl = el;
 }
-function _closePanel() {
-  _panel = null;
-  if (_panelEl) { _panelEl.remove(); _panelEl = null; }
-}
+function _closePanel() { _panel = null; if (_panelEl) { _panelEl.remove(); _panelEl = null; } }
 function _renderPanel() {
   if (!_panelEl || !_panel) return;
   if (_panel.loading) { _panelEl.innerHTML = `<div class="kyn-state"><div class="kyn-spin"></div></div>`; return; }
-  if (_panel.error) {
-    _panelEl.innerHTML = `<div class="kyn-panel-head"><button class="kyn-panel-x" data-act="kyn-panel-close" aria-label="Fermer">×</button></div><div class="kyn-state"><p class="kyn-err">${_esc(_panel.error)}</p></div>`;
-    return;
-  }
+  if (_panel.error) { _panelEl.innerHTML = `<div class="kyn-panel-head"><button class="kyn-panel-x" data-act="kyn-panel-close" aria-label="Fermer">×</button></div><div class="kyn-state"><p class="kyn-err">${_esc(_panel.error)}</p></div>`; return; }
   const b = _panel.detail.bubble;
-  const accent = b.color || '#6366f1';
+  const accent = _effColor(b);
+  const zoned = !!b.zone_id;
   _panelEl.style.setProperty('--kyn-accent', accent);
+  const zoneChips = `
+    <div class="kyn-zonepick">
+      <button class="kyn-zchip ${!zoned ? 'is-on' : ''}" data-act="kyn-bubble-zone" data-id="">Aucune</button>
+      ${_state.zones.map((z) => `<button class="kyn-zchip ${b.zone_id === z.id ? 'is-on' : ''}" data-act="kyn-bubble-zone" data-id="${z.id}"><span class="kyn-zchip-dot" style="background:${z.color}"></span>${_esc(z.name)}</button>`).join('')}
+    </div>`;
+  const colorBlock = zoned
+    ? `<div class="kyn-color-note">Couleur héritée de la zone — modifiable dans le panneau Zones.</div>`
+    : `<div class="kyn-swatches">${KN_COLORS.map((c) => `<button class="kyn-swatch" data-act="kyn-color" data-color="${c}" style="background:${c}" aria-label="Couleur" aria-pressed="${c === accent}"></button>`).join('')}</div>`;
   _panelEl.innerHTML = `
     <div class="kyn-panel-head">
       <span class="kyn-panel-accent"></span>
@@ -322,14 +301,12 @@ function _renderPanel() {
         <input class="kyn-panel-title" data-field="title" value="${_escAttr(b.title)}" maxlength="200" aria-label="Titre de la bulle">
       </div>
       <div class="kyn-panel-dates">Créé le ${_fmtDate(b.created_at)} · modifié le ${_fmtDate(b.updated_at)}</div>
-      <div class="kyn-swatches">
-        ${KN_COLORS.map((c) => `<button class="kyn-swatch" data-act="kyn-color" data-color="${c}" style="background:${c}" aria-label="Couleur" aria-pressed="${c === accent}"></button>`).join('')}
-      </div>
+      <p class="kyn-sec-h" style="margin-top:14px">Zone</p>
+      ${zoneChips}
+      ${colorBlock}
     </div>
     <div class="kyn-panel-body">${_panelBodyHTML()}</div>
-    <div class="kyn-panel-foot">
-      <button class="kyn-del-bubble" data-act="kyn-bubble-del">Supprimer cette bulle</button>
-    </div>`;
+    <div class="kyn-panel-foot"><button class="kyn-del-bubble" data-act="kyn-bubble-del">Supprimer cette bulle</button></div>`;
 }
 function _panelBodyHTML() {
   const d = _panel.detail;
@@ -358,10 +335,7 @@ function _panelBodyHTML() {
       <p class="kyn-sec-h">Notes libres</p>
       ${d.notes.map((n) => `
         <div class="kyn-note">
-          <div style="flex:1;min-width:0">
-            <div class="kyn-note-body">${_esc(n.body)}</div>
-            <div class="kyn-note-date">${_fmtDate(n.created_at)}</div>
-          </div>
+          <div style="flex:1;min-width:0"><div class="kyn-note-body">${_esc(n.body)}</div><div class="kyn-note-date">${_fmtDate(n.created_at)}</div></div>
           <button class="kyn-row-del" data-act="kyn-note-del" data-id="${n.id}" aria-label="Supprimer la note">×</button>
         </div>`).join('')}
       <div class="kyn-add">
@@ -372,34 +346,36 @@ function _panelBodyHTML() {
 }
 function _refreshBody() {
   if (!_panelEl || !_panel || !_panel.detail) return;
-  const body = _panelEl.querySelector('.kyn-panel-body');
-  if (body) body.innerHTML = _panelBodyHTML();
+  const body = _panelEl.querySelector('.kyn-panel-body'); if (body) body.innerHTML = _panelBodyHTML();
 }
-
-// PATCH bulle (titre/description/couleur) — optimiste + reflet sur la carte.
 async function _patchBubble(patch) {
   if (!_panel || !_panel.detail) return;
   const id = _panel.id;
   Object.assign(_panel.detail.bubble, patch);
   const sb = _state.bubbles.find((x) => x.id === id); if (sb) Object.assign(sb, patch);
-  if (patch.color || typeof patch.title === 'string') _engine && _engine.updateNode(id, patch);
-  if (patch.color && _panelEl) {
-    _panelEl.style.setProperty('--kyn-accent', patch.color);
-    _panelEl.querySelectorAll('.kyn-swatch').forEach((s) => s.setAttribute('aria-pressed', String(s.dataset.color === patch.color)));
+  if ('color' in patch || typeof patch.title === 'string') _engine && _engine.updateNode(id, { ...patch, color: _effColor(_panel.detail.bubble) });
+  if ('color' in patch && _panelEl) {
+    const acc = _effColor(_panel.detail.bubble);
+    _panelEl.style.setProperty('--kyn-accent', acc);
+    _panelEl.querySelectorAll('.kyn-swatch').forEach((s) => s.setAttribute('aria-pressed', String(s.dataset.color === acc)));
   }
   try { await _api(`/bubbles/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }); } catch (_) {}
 }
+// Affecter / retirer la bulle d'une zone (zone_id null = aucune).
+async function _assignZone(zoneId) {
+  if (!_panel || !_panel.detail) return;
+  const id = _panel.id;
+  _panel.detail.bubble.zone_id = zoneId || null;
+  const sb = _state.bubbles.find((x) => x.id === id); if (sb) sb.zone_id = zoneId || null;
+  _renderPanel();          // rafraîchit chips + bloc couleur + accent
+  _pushEngine();           // recolore + recohésion
+  try { await _api(`/bubbles/${encodeURIComponent(id)}`, { method: 'PATCH', body: { zone_id: zoneId || null } }); } catch (_) {}
+}
 
 async function _addTodo() {
-  const inp = _panelEl && _panelEl.querySelector('[data-field="todo-add"]');
-  if (!inp) return;
-  const label = inp.value.trim(); if (!label) return;
-  inp.value = '';
-  try {
-    const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/todos`, { method: 'POST', body: { label } });
-    _panel.detail.todos.push(r.todo); _refreshBody();
-    const ni = _panelEl.querySelector('[data-field="todo-add"]'); if (ni) ni.focus();
-  } catch (_) {}
+  const inp = _panelEl && _panelEl.querySelector('[data-field="todo-add"]'); if (!inp) return;
+  const label = inp.value.trim(); if (!label) return; inp.value = '';
+  try { const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/todos`, { method: 'POST', body: { label } }); _panel.detail.todos.push(r.todo); _refreshBody(); const ni = _panelEl.querySelector('[data-field="todo-add"]'); if (ni) ni.focus(); } catch (_) {}
 }
 async function _toggleTodo(id) {
   const t = _panel.detail.todos.find((x) => x.id === id); if (!t) return;
@@ -411,44 +387,99 @@ async function _delTodo(id) {
   try { await _api(`/todos/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
 }
 async function _addNote() {
-  const ta = _panelEl && _panelEl.querySelector('[data-field="note-add"]');
-  if (!ta) return;
-  const text = ta.value.trim(); if (!text) return;
-  ta.value = '';
-  try {
-    const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/notes`, { method: 'POST', body: { body: text } });
-    _panel.detail.notes.unshift(r.note); _refreshBody();
-  } catch (_) {}
+  const ta = _panelEl && _panelEl.querySelector('[data-field="note-add"]'); if (!ta) return;
+  const text = ta.value.trim(); if (!text) return; ta.value = '';
+  try { const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/notes`, { method: 'POST', body: { body: text } }); _panel.detail.notes.unshift(r.note); _refreshBody(); } catch (_) {}
 }
 async function _delNote(id) {
   _panel.detail.notes = _panel.detail.notes.filter((x) => x.id !== id); _refreshBody();
   try { await _api(`/notes/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
 }
-
 function _confirmDeleteBubble(btn) {
-  if (btn.dataset.confirm === '1') { _deleteBubble(); return; }
-  btn.dataset.confirm = '1';
-  btn.textContent = 'Confirmer la suppression ?';
+  if (btn.dataset.confirm === '1') return _deleteBubble();
+  btn.dataset.confirm = '1'; btn.textContent = 'Confirmer la suppression ?';
   setTimeout(() => { if (btn && btn.isConnected) { btn.dataset.confirm = ''; btn.textContent = 'Supprimer cette bulle'; } }, 4000);
 }
 async function _deleteBubble() {
   if (!_panel) return;
-  const id = _panel.id;
-  _closePanel();
+  const id = _panel.id; _closePanel();
   _state.bubbles = _state.bubbles.filter((b) => b.id !== id);
   _state.links = _state.links.filter((l) => l.from_bubble !== id && l.to_bubble !== id);
-  if (!_state.bubbles.length) { _teardownEngine(); _render(); }
-  else if (_engine) _engine.setData(_state.bubbles, _state.links);
+  if (!_state.bubbles.length) { _teardownEngine(); _render(); } else _pushEngine();
   try { await _api(`/bubbles/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
 }
 
-// ── Utils ───────────────────────────────────────────────────────
-function _esc(s) {
-  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// ════════════════════════════════════════════════════════════════
+// Panneau Zones (Sprint 3)
+// ════════════════════════════════════════════════════════════════
+function _openZonesPanel() {
+  const wrap = _canvas(); if (!wrap) return;
+  if (!_zonesEl) { _zonesEl = document.createElement('aside'); _zonesEl.className = 'kyn-zones-panel'; wrap.appendChild(_zonesEl); }
+  _renderZonesPanel();
 }
+function _closeZonesPanel() { _recolorZone = null; if (_zonesEl) { _zonesEl.remove(); _zonesEl = null; } }
+function _zoneCount(id) { return _state.bubbles.filter((b) => b.zone_id === id).length; }
+function _renderZonesPanel() {
+  if (!_zonesEl) return;
+  const rows = _state.zones.map((z) => `
+    <div class="kyn-zrow">
+      <button class="kyn-zdot" data-act="kyn-zone-recolor" data-id="${z.id}" style="background:${z.color}" aria-label="Changer la couleur"></button>
+      <input class="kyn-zname" data-field="zonename" data-id="${z.id}" value="${_escAttr(z.name)}" maxlength="80" aria-label="Nom de la zone">
+      <span class="kyn-zcount">${_zoneCount(z.id)}</span>
+      <button class="kyn-zact" data-act="kyn-zone-fly" data-id="${z.id}" title="Aller à la zone" aria-label="Aller à la zone">${LOCATE_ICON}</button>
+      <button class="kyn-zact kyn-zdel" data-act="kyn-zone-del" data-id="${z.id}" title="Supprimer la zone" aria-label="Supprimer la zone">×</button>
+    </div>
+    ${_recolorZone === z.id ? `<div class="kyn-zswatches">${KN_COLORS.map((c) => `<button class="kyn-swatch" data-act="kyn-zone-setcolor" data-id="${z.id}" data-color="${c}" style="background:${c}" aria-pressed="${c === z.color}" aria-label="Couleur"></button>`).join('')}</div>` : ''}
+  `).join('');
+  _zonesEl.innerHTML = `
+    <div class="kyn-zhead">
+      <span class="kyn-zhead-t">Zones</span>
+      <button class="kyn-panel-x" data-act="kyn-zones-close" aria-label="Fermer">×</button>
+    </div>
+    <div class="kyn-zbody">
+      ${_state.zones.length ? rows : `<p class="kyn-zempty">Aucune zone. Crée-en une pour regrouper tes bulles par couleur.</p>`}
+      <div class="kyn-add kyn-zcreate">
+        <input data-field="newzone" type="text" maxlength="80" placeholder="Nouvelle zone…" autocomplete="off">
+        <button class="kyn-add-btn" data-act="kyn-zone-create" aria-label="Créer la zone">+</button>
+      </div>
+    </div>`;
+}
+async function _createZone() {
+  const inp = _zonesEl && _zonesEl.querySelector('[data-field="newzone"]'); if (!inp) return;
+  const name = inp.value.trim(); if (!name) return; inp.value = '';
+  try {
+    const r = await _api('/zones', { method: 'POST', body: { name, color: _nextZoneColor() } });
+    _state.zones.push(r.zone); _renderZonesPanel(); _pushEngine();
+  } catch (_) {}
+}
+async function _renameZone(id, name) {
+  const z = _zoneById(id); if (!z) return; z.name = name;
+  _pushEngine();
+  try { await _api(`/zones/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }); } catch (_) {}
+}
+async function _setZoneColor(id, color) {
+  const z = _zoneById(id); if (!z) return; z.color = color; _recolorZone = null;
+  _renderZonesPanel(); _pushEngine();
+  if (_panel && _panel.detail && _panel.detail.bubble.zone_id === id) _renderPanel();   // accent fiche
+  try { await _api(`/zones/${encodeURIComponent(id)}`, { method: 'PATCH', body: { color } }); } catch (_) {}
+}
+function _flyToZone(id) {
+  const ids = _state.bubbles.filter((b) => b.zone_id === id).map((b) => b.id);
+  if (_engine && ids.length) _engine.focusBubbles(ids);
+}
+async function _deleteZone(id) {
+  _state.zones = _state.zones.filter((z) => z.id !== id);
+  _state.bubbles.forEach((b) => { if (b.zone_id === id) b.zone_id = null; });
+  if (_recolorZone === id) _recolorZone = null;
+  _renderZonesPanel(); _pushEngine();
+  if (_panel && _panel.detail && _panel.detail.bubble.zone_id === id) { _panel.detail.bubble.zone_id = null; _renderPanel(); }
+  try { await _api(`/zones/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+
+// ── Utils ───────────────────────────────────────────────────────
+function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function _escAttr(s) { return _esc(s).replace(/"/g, '&quot;'); }
 function _fmtDate(iso) {
   if (!iso) return '—';
-  try { return new Date(String(iso).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
-  catch (_) { return '—'; }
+  try { return new Date(String(iso).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); } catch (_) { return '—'; }
 }

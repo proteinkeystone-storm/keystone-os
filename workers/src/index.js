@@ -125,7 +125,8 @@ import { handleSmartAgentHealth,
 import { handleKeynapseHealth, handleKeynapseState,
          handleBubbleCreate, handleBubbleUpdate, handleBubbleDelete,
          handleBubbleDetail, handleTodoCreate, handleTodoUpdate, handleTodoDelete,
-         handleNoteCreate, handleNoteDelete } from './routes/keynapse.js';
+         handleNoteCreate, handleNoteDelete,
+         handleZoneCreate, handleZoneUpdate, handleZoneDelete } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -153,6 +154,10 @@ export default {
       if (path === '/api/keynapse/health'  && method === 'GET')  return handleKeynapseHealth(request, env);
       if (path === '/api/keynapse/state'   && method === 'GET')  return handleKeynapseState(request, env);
       if (path === '/api/keynapse/bubbles' && method === 'POST') return handleBubbleCreate(request, env);
+      if (path === '/api/keynapse/zones'   && method === 'POST') return handleZoneCreate(request, env);
+      const knZone = path.match(/^\/api\/keynapse\/zones\/([A-Za-z0-9-]+)$/);
+      if (knZone && method === 'PATCH')  return handleZoneUpdate(request, env, knZone[1]);
+      if (knZone && method === 'DELETE') return handleZoneDelete(request, env, knZone[1]);
       const knTodoCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/todos$/);
       if (knTodoCreate && method === 'POST') return handleTodoCreate(request, env, knTodoCreate[1]);
       const knNoteCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/notes$/);

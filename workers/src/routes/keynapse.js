@@ -22,7 +22,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KN_ENGINE_VERSION = 'KN-2';
+const KN_ENGINE_VERSION = 'KN-3';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -315,5 +315,57 @@ export async function handleNoteDelete(request, env, id) {
   const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
   const t = gate.tenant;
   await env.DB.prepare("DELETE FROM kn_media WHERE id = ? AND tenant_id = ? AND kind = 'note'").bind(id, t).run();
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 3 — zones (dossiers virtuels : cohésion + couleur partagée)
+// L'appartenance d'une bulle à une zone passe par PATCH /bubbles/:id
+// { zone_id }. Ici : CRUD des zones elles-mêmes.
+// ════════════════════════════════════════════════════════════════
+const ZONE_COLS = 'id, name, color, created_at, updated_at';
+
+export async function handleZoneCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const body = await parseBody(request);
+  const name = String(body.name || '').trim();
+  if (!name) return err('Nom de zone requis', 400, origin);
+  if (name.length > 80) return err('Nom trop long (max 80)', 400, origin);
+  const color = _sanitColor(body.color) || '#6366f1';
+  const id = generateId();
+  await env.DB.prepare('INSERT INTO kn_zones (id, tenant_id, name, color) VALUES (?, ?, ?, ?)').bind(id, t, name, color).run();
+  const zone = await env.DB.prepare(`SELECT ${ZONE_COLS} FROM kn_zones WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, zone }, 200, origin);
+}
+
+export async function handleZoneUpdate(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const existing = await env.DB.prepare('SELECT id FROM kn_zones WHERE id = ? AND tenant_id = ?').bind(id, t).first();
+  if (!existing) return err('Zone introuvable', 404, origin);
+  const body = await parseBody(request);
+  const sets = [], vals = [];
+  if (typeof body.name === 'string') { const n = body.name.trim(); if (!n) return err('Nom requis', 400, origin); sets.push('name = ?'); vals.push(n.slice(0, 80)); }
+  if ('color' in body) { const c = _sanitColor(body.color); if (!c) return err('Couleur invalide', 400, origin); sets.push('color = ?'); vals.push(c); }
+  if (!sets.length) return err('Rien à modifier', 400, origin);
+  sets.push("updated_at = datetime('now')");
+  vals.push(id, t);
+  await env.DB.prepare(`UPDATE kn_zones SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).bind(...vals).run();
+  const zone = await env.DB.prepare(`SELECT ${ZONE_COLS} FROM kn_zones WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, zone }, 200, origin);
+}
+
+// Supprimer une zone : ses bulles redeviennent libres (zone_id = NULL).
+export async function handleZoneDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE kn_bubbles SET zone_id = NULL WHERE tenant_id = ? AND zone_id = ?').bind(t, id),
+    env.DB.prepare('DELETE FROM kn_zones WHERE id = ? AND tenant_id = ?').bind(id, t),
+  ]);
   return json({ ok: true, deleted: id }, 200, origin);
 }
