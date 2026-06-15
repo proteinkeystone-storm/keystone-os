@@ -131,8 +131,16 @@ function _buildShell() {
 
 // ── Délégation ──────────────────────────────────────────────────
 function _onClick(e) {
+  _primeAudio();   // 1er geste → débloque la sonnerie des rappels
   if (e.target.classList && e.target.classList.contains('kyn-composer')) { _closeComposer(); return; }
   if (e.target.classList && e.target.classList.contains('kyn-lightbox')) { _closeLightbox(); return; }
+  // Molette (heure du rappel) : clic sur un cran → on le centre.
+  const wItem = e.target.closest('.kyn-wheel-item');
+  if (wItem) {
+    const w = wItem.closest('.kyn-wheel');
+    if (w) w.scrollTo({ top: (Number(wItem.dataset.idx) || 0) * wItem.offsetHeight, behavior: 'smooth' });
+    return;
+  }
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act;
@@ -364,6 +372,7 @@ function _renderPanel() {
     <div class="kyn-panel-body">${_panelBodyHTML()}</div>
     <div class="kyn-panel-foot"><button class="kyn-del-bubble" data-act="kyn-bubble-del">Supprimer cette bulle</button></div>`;
   _hydrateMedia();
+  _calibrateRemWheels();
 }
 function _panelBodyHTML() {
   const d = _panel.detail;
@@ -813,21 +822,39 @@ function _toLocalInput(s) {
 function _remindersSectionHTML() {
   const rems = (_panel.detail.reminders || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const now = Date.now();
+  const today = _toDateInput(new Date());
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const mins  = Array.from({ length: 12 }, (_, i) => i * 5);
+  // Roulette scroll-snap (portée de Social Manager) : heure en molettes, date native.
+  const wheel = (kind, vals) => `
+    <div class="kyn-wheel" data-wheel="${kind}">
+      <div class="kyn-wheel-pad"></div>
+      ${vals.map((v, i) => `<div class="kyn-wheel-item" data-wheel="${kind}" data-idx="${i}">${String(v).padStart(2, '0')}</div>`).join('')}
+      <div class="kyn-wheel-pad"></div>
+    </div>`;
   return `
     <div class="kyn-sec">
       <p class="kyn-sec-h">Rappels${rems.length ? ` · ${rems.length}` : ''}</p>
       ${rems.map((r) => _reminderRowHTML(r, now)).join('')}
       <div class="kyn-rem-form">
         <input data-field="rem-label" type="text" maxlength="200" placeholder="Intitulé (optionnel)…" autocomplete="off">
+        <div class="kyn-rem-when">
+          <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
+          <div class="kyn-wheel-wrap" aria-label="Heure du rappel">
+            ${wheel('h', hours)}
+            <div class="kyn-wheel-sep">:</div>
+            ${wheel('m', mins)}
+            <div class="kyn-wheel-band" aria-hidden="true"></div>
+          </div>
+        </div>
         <div class="kyn-rem-form-row">
-          <input data-field="rem-at" type="datetime-local" aria-label="Date et heure du rappel">
           <select data-field="rem-repeat" class="kyn-rem-rep" aria-label="Répétition">
             <option value="">Une fois</option>
             <option value="daily">Jour</option>
             <option value="weekly">Sem.</option>
             <option value="monthly">Mois</option>
           </select>
-          <button class="kyn-add-btn" data-act="kyn-rem-add" aria-label="Ajouter le rappel">+</button>
+          <button class="kyn-add-btn kyn-rem-addbtn" data-act="kyn-rem-add">Ajouter</button>
         </div>
       </div>
       ${_notifAffordanceHTML()}
@@ -882,17 +909,48 @@ async function _enableNotifs() {
 }
 async function _addReminder() {
   if (!_panel || !_panel.detail || !_panelEl) return;
-  const atEl  = _panelEl.querySelector('[data-field="rem-at"]');
-  if (!atEl || !atEl.value) { if (atEl) atEl.focus(); return; }
-  const ms = Date.parse(atEl.value); if (Number.isNaN(ms)) return;
+  const dateEl = _panelEl.querySelector('[data-field="rem-date"]');
+  if (!dateEl || !dateEl.value) { if (dateEl) dateEl.focus(); return; }
+  const hh = String(Math.min(23, _knWheelIndex('h'))).padStart(2, '0');
+  const mm = String(Math.min(55, _knWheelIndex('m') * 5)).padStart(2, '0');
+  const when = new Date(`${dateEl.value}T${hh}:${mm}`);   // date + molettes (heure locale) → Date
+  if (isNaN(when.getTime())) return;
   const labelEl = _panelEl.querySelector('[data-field="rem-label"]');
   const repEl   = _panelEl.querySelector('[data-field="rem-repeat"]');
-  const body = { at: new Date(ms).toISOString(), label: labelEl ? labelEl.value.trim() : '', repeat: repEl ? repEl.value : '' };
+  const body = { at: when.toISOString(), label: labelEl ? labelEl.value.trim() : '', repeat: repEl ? repEl.value : '' };
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/reminders`, { method: 'POST', body });
     if (r.reminder) { _panel.detail.reminders = _panel.detail.reminders || []; _panel.detail.reminders.push(r.reminder); }
     _refreshBody();
   } catch (_) {}
+}
+// Index sélectionné d'une molette = position de scroll / hauteur d'un cran (patron SM).
+function _knWheelIndex(kind) {
+  const w = _panelEl && _panelEl.querySelector(`.kyn-wheel[data-wheel="${kind}"]`);
+  const it = w && w.querySelector('.kyn-wheel-item');
+  if (!w || !it) return 0;
+  return Math.max(0, Math.round(w.scrollTop / it.offsetHeight));
+}
+function _toDateInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+// Cale les molettes sur l'heure par défaut (+1 h, minute au pas de 5) après peinture.
+function _calibrateRemWheels() {
+  if (!_panelEl) return;
+  const wrap = _panelEl.querySelector('.kyn-wheel-wrap'); if (!wrap) return;
+  const base = new Date(Date.now() + 3600000);
+  const defH = base.getHours();
+  const defM = Math.round(base.getMinutes() / 5) % 12;
+  requestAnimationFrame(() => {
+    const place = (kind, idx) => {
+      const w = wrap.querySelector(`.kyn-wheel[data-wheel="${kind}"]`);
+      const it = w && w.querySelector('.kyn-wheel-item');
+      if (w && it) w.scrollTop = idx * it.offsetHeight;
+    };
+    place('h', defH);
+    place('m', defM);
+  });
 }
 async function _delReminder(id) {
   if (!_panel || !_panel.detail) return;
@@ -944,8 +1002,38 @@ async function _ackReminder(id) {
     }
   } catch (_) {}
 }
+// ── Sonnerie : carillon Web Audio (2 notes douces, aucun fichier) ──
+// Amorcé au 1er clic dans le pad (geste utilisateur requis par l'autoplay) ;
+// best-effort, jamais bloquant.
+let _audioCtx = null;
+function _primeAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!_audioCtx) _audioCtx = new AC();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+  } catch (_) {}
+}
+function _chime() {
+  try {
+    _primeAudio();
+    const ctx = _audioCtx; if (!ctx) return;
+    const t0 = ctx.currentTime;
+    [784, 1047].forEach((freq, i) => {                 // sol5 → do6
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      const s = t0 + i * 0.16;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.18, s + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(s); o.stop(s + 0.55);
+    });
+  } catch (_) {}
+}
 function _fireReminder(r) {
-  _showInAppReminder(r);   // toujours (fiable partout)
+  _chime();                // sonnerie
+  _showInAppReminder(r);   // bandeau (fiable partout)
   if (_notifSupported() && Notification.permission === 'granted') {
     _osNotify('Rappel — Keynapse', (r.label && r.label.trim()) ? r.label : (r.bubble_title || 'Rappel'), r.bubble_id);
   }
@@ -1075,6 +1163,7 @@ function _refreshBody() {
   // Le ré-injection d'innerHTML recrée les <img>/<audio> (src perdu) → ré-hydrate
   // depuis le cache blob (instantané si déjà chargé).
   _hydrateMedia();
+  _calibrateRemWheels();   // recale les molettes (scrollTop perdu au ré-render)
 }
 async function _patchBubble(patch) {
   if (!_panel || !_panel.detail) return;
