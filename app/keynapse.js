@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
-// KEYNAPSE — Pad O-Keyn-001 · KN-3 (Sprint 3 : les zones)
+// KEYNAPSE — Pad O-Keyn-001 · KN-6 (Sprint 6 : la voix)
 //
 // Constellation vivante (moteur lib/keynapse-engine.js) + fiche latérale
-// (Sprint 2) + ZONES (Sprint 3) : dossiers virtuels sans contour, par
-// cohésion + couleur partagée. Panneau Zones (créer/renommer/recolorer/
-// aller-à/supprimer) ; sélecteur de zone dans la fiche ; la couleur d'une
-// bulle est HÉRITÉE de sa zone (sinon couleur propre). Zoom sémantique
-// (loin = noms de zones, près = détail) géré par le moteur.
+// (Sprint 2) + ZONES (Sprint 3) + liens (Sprint 4) + captures média
+// (Sprint 5) + MÉMOS VOCAUX (Sprint 6) : enregistrement MediaRecorder →
+// upload authentifié → transcription Whisper + propositions IA (tâches/
+// rappels) à valider. La couleur d'une bulle est héritée de sa zone ;
+// zoom sémantique (loin = noms de zones, près = détail) géré par le moteur.
 //
 // ISOLATION : aucun code partagé avec Smart Agent / Key Form.
 // ═══════════════════════════════════════════════════════════════
@@ -167,6 +167,14 @@ function _onClick(e) {
     case 'kyn-draw-clear':  return _drawClear();
     case 'kyn-draw-cancel': return _closeDraw();
     case 'kyn-draw-save':   return _drawSave();
+    // Mémos vocaux (Sprint 6)
+    case 'kyn-voice-add':    return _openVoiceRecorder();
+    case 'kyn-voice-stop':   return _stopVoiceRecorder(true);
+    case 'kyn-voice-cancel': return _stopVoiceRecorder(false);
+    case 'kyn-voice-del':    return _delVoice(el.dataset.id);
+    case 'kyn-prop-add':     return _addProposals();
+    case 'kyn-prop-skip':    return _skipProposals();
+    case 'kyn-voice-dismiss': return _clearVoiceMsg();
     // Zones
     case 'kyn-zones-open':  return _openZonesPanel();
     case 'kyn-zones-close': return _closeZonesPanel();
@@ -192,6 +200,7 @@ function _onKey(e) {
   }
   if (_lightbox && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); return _lightboxStep(e.key === 'ArrowLeft' ? -1 : 1); }
   if (e.key === 'Escape') {
+    if (_rec) return _stopVoiceRecorder(false);
     if (_lightbox) return _closeLightbox();
     if (_draw) return _closeDraw();
     if (_root && _root.querySelector('.kyn-composer')) return _closeComposer();
@@ -284,12 +293,18 @@ async function _submitComposer() {
 // ════════════════════════════════════════════════════════════════
 function _onBubbleClick(node) { if (node && node.id) _openPanel(node.id); }
 async function _openPanel(id) {
-  _panel = { id, detail: null, loading: true, error: null };
+  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' } };
   _ensurePanelEl(); _renderPanel();
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(id)}`);
     if (!_panel || _panel.id !== id) return;
-    _panel.detail = { bubble: r.bubble, todos: r.todos || [], notes: r.notes || [] };
+    // Charge TOUTES les sections persistées (le worker renvoie aussi links/
+    // media/audios — non hydratés jusqu'ici, d'où des liens/captures absents
+    // en rouvrant une bulle ; corrigé au Sprint 6 pour recharger les mémos).
+    _panel.detail = {
+      bubble: r.bubble, todos: r.todos || [], notes: r.notes || [],
+      links: r.links || [], media: r.media || [], audios: r.audios || [],
+    };
     _panel.loading = false; _renderPanel();
   } catch (e) { if (_panel && _panel.id === id) { _panel.error = e.message || 'Chargement impossible.'; _panel.loading = false; _renderPanel(); } }
 }
@@ -300,7 +315,7 @@ function _ensurePanelEl() {
   _panelEl = el;
 }
 function _closePanel() {
-  _closeLightbox(); _closeDraw();
+  _closeLightbox(); _closeDraw(); _teardownRec();
   for (const u of _mediaUrls.values()) { try { URL.revokeObjectURL(u); } catch (_) {} }
   _mediaUrls.clear();
   _panel = null;
@@ -440,9 +455,11 @@ const IMAGE_ICON  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
 
 function _capturesSectionHTML() {
   const media = _panel.detail.media || [];
+  const audios = _panel.detail.audios || [];
+  const n = media.length + audios.length;
   return `
     <div class="kyn-sec">
-      <p class="kyn-sec-h">Captures${media.length ? ` · ${media.length}` : ''}</p>
+      <p class="kyn-sec-h">Captures${n ? ` · ${n}` : ''}</p>
       <div class="kyn-caps">
         ${media.map((m) => `
           <div class="kyn-cap">
@@ -451,17 +468,78 @@ function _capturesSectionHTML() {
           </div>`).join('')}
         <button class="kyn-cap-add" data-act="kyn-photo-add" aria-label="Ajouter une photo">${IMAGE_ICON}<span>Photo</span></button>
         <button class="kyn-cap-add" data-act="kyn-draw-add" aria-label="Dessiner un croquis">${PENCIL_ICON}<span>Croquis</span></button>
+        <button class="kyn-cap-add" data-act="kyn-voice-add" aria-label="Enregistrer une note vocale">${icon('mic', 15) || ''}<span>Vocal</span></button>
       </div>
+      ${_audiosListHTML()}
+      ${_voiceUIHTML()}
     </div>`;
 }
 
-// Charge les images du panneau en blob authentifié (une fois chacune).
+// Liste des mémos vocaux : lecteur (blob authentifié) + transcript visible.
+function _audiosListHTML() {
+  const audios = _panel.detail.audios || [];
+  if (!audios.length) return '';
+  return `<div class="kyn-audios">${audios.map((a) => `
+    <div class="kyn-audio">
+      <div class="kyn-audio-head">
+        <span class="kyn-audio-ico" aria-hidden="true">${icon('mic', 13) || ''}</span>
+        <audio class="kyn-audio-player" data-audio-id="${_escAttr(a.id)}" controls preload="none"></audio>
+        <button class="kyn-row-del kyn-audio-del" data-act="kyn-voice-del" data-id="${_escAttr(a.id)}" aria-label="Supprimer le mémo vocal">×</button>
+      </div>
+      ${a.transcript ? `<p class="kyn-audio-tr">${_esc(a.transcript)}</p>` : `<p class="kyn-audio-tr is-empty">Transcription indisponible.</p>`}
+    </div>`).join('')}</div>`;
+}
+
+// État voix transitoire (occupé / propositions à valider / message) — vit sur
+// _panel.voice, survit aux _refreshBody, jeté à la fermeture de la fiche.
+function _voiceUIHTML() {
+  const v = (_panel && _panel.voice) || {};
+  let html = '';
+  if (v.busy) html += `<div class="kyn-voicebusy"><span class="kyn-spin kyn-spin--sm"></span><span>${_esc(v.busy)}</span></div>`;
+  const p = v.props;
+  if (p && (p.tasks.length || p.reminders.length)) {
+    const tasks = p.tasks.map((t, i) => `
+      <label class="kyn-prop-row">
+        <input type="checkbox" class="kyn-prop-check" data-prop="task" data-i="${i}"${t.on ? ' checked' : ''}>
+        <span class="kyn-prop-lbl">${_esc(t.label)}</span>
+      </label>`).join('');
+    const reminders = p.reminders.map((r, i) => `
+      <div class="kyn-prop-row kyn-prop-rem">
+        <label class="kyn-prop-remmain">
+          <input type="checkbox" class="kyn-prop-check" data-prop="rem" data-i="${i}"${r.on ? ' checked' : ''}>
+          <span class="kyn-prop-lbl">${_esc(r.label || 'Rappel')}</span>
+        </label>
+        <input type="datetime-local" class="kyn-prop-at" data-i="${i}" value="${_escAttr(r.at || '')}" aria-label="Date et heure du rappel">
+      </div>`).join('');
+    html += `
+      <div class="kyn-props">
+        <p class="kyn-props-h">${icon('check', 13) || ''}<span>Détecté dans le mémo — à valider</span></p>
+        ${p.tasks.length ? `<p class="kyn-props-sub">Tâches</p>${tasks}` : ''}
+        ${p.reminders.length ? `<p class="kyn-props-sub">Rappels</p>${reminders}` : ''}
+        <div class="kyn-props-foot">
+          <button class="kyn-btn" data-act="kyn-prop-skip">Ignorer</button>
+          <button class="kyn-btn kyn-btn--accent" data-act="kyn-prop-add">Ajouter</button>
+        </div>
+      </div>`;
+  }
+  if (v.error)     html += `<div class="kyn-voicemsg is-err"><span>${_esc(v.error)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
+  else if (v.note) html += `<div class="kyn-voicemsg"><span>${_esc(v.note)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
+  return html;
+}
+
+// Charge les médias du panneau en blob authentifié (images + lecteurs audio),
+// une fois chacun. Réutilise le cache _mediaUrls (clé = id du média).
 function _hydrateMedia() {
   if (!_panelEl) return;
   _panelEl.querySelectorAll('img[data-media-id]').forEach((img) => {
     if (img.dataset.loaded) return;
     img.dataset.loaded = '1';
     _loadMediaInto(img, img.getAttribute('data-media-id'));
+  });
+  _panelEl.querySelectorAll('audio[data-audio-id]').forEach((au) => {
+    if (au.dataset.loaded) return;
+    au.dataset.loaded = '1';
+    _loadMediaInto(au, au.getAttribute('data-audio-id'));
   });
 }
 async function _loadMediaInto(img, id) {
@@ -518,6 +596,195 @@ async function _delMedia(id) {
   const u = _mediaUrls.get(id); if (u) { URL.revokeObjectURL(u); _mediaUrls.delete(id); }
   _refreshBody();
   try { await _api(`/media/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 6 — mémos vocaux : MediaRecorder → upload authentifié →
+// transcription Whisper + propositions IA (tâches/rappels) à valider.
+// L'état transitoire (occupé / propositions / message) vit sur _panel.voice.
+// ════════════════════════════════════════════════════════════════
+let _rec = null;   // enregistrement en cours : { stream, mr, chunks, el, t0, timer, mime, send }
+
+// Conteneur audio supporté (Chrome = webm/opus, Safari/iOS = mp4).
+function _pickAudioMime() {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg'];
+  return cands.find((c) => { try { return MediaRecorder.isTypeSupported(c); } catch (_) { return false; } }) || '';
+}
+function _voiceMsg(msg, isErr) {
+  if (!_panel || !_panel.voice) return;
+  _panel.voice.error = isErr ? msg : '';
+  _panel.voice.note  = isErr ? '' : msg;
+  _panel.voice.busy  = '';
+  _refreshBody();
+}
+function _clearVoiceMsg() {
+  if (!_panel || !_panel.voice) return;
+  _panel.voice.error = ''; _panel.voice.note = ''; _refreshBody();
+}
+
+async function _openVoiceRecorder() {
+  if (!_panel || _rec) return;
+  if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return _voiceMsg("L'enregistrement vocal n'est pas disponible sur cet appareil.", true);
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    return _voiceMsg((e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'))
+      ? "Micro refusé. Autorisez l'accès au micro pour enregistrer un mémo."
+      : "Micro indisponible sur cet appareil.", true);
+  }
+  if (!_panel) { try { stream.getTracks().forEach((x) => x.stop()); } catch (_) {} return; }
+  const mime = _pickAudioMime();
+  let mr;
+  try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch (_) {
+    try { mr = new MediaRecorder(stream); }
+    catch (_2) { stream.getTracks().forEach((x) => x.stop()); return _voiceMsg('Enregistrement impossible sur cet appareil.', true); }
+  }
+  const chunks = [];
+  mr.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) chunks.push(e.data); });
+  mr.addEventListener('stop', () => _onRecStop());
+  _rec = { stream, mr, chunks, el: null, t0: Date.now(), timer: null, mime: mr.mimeType || mime || 'audio/webm', send: true };
+  _clearVoiceMsg();
+  _renderRecorder();
+  try { mr.start(); } catch (_) { _teardownRec(); return _voiceMsg('Enregistrement impossible sur cet appareil.', true); }
+  _rec.timer = setInterval(_updateRecTime, 200);
+}
+function _renderRecorder() {
+  const wrap = _canvas() || _root; if (!wrap || !_rec) return;
+  const el = document.createElement('div'); el.className = 'kyn-recmodal';
+  el.innerHTML = `
+    <div class="kyn-rec-card">
+      <div class="kyn-rec-live"><span class="kyn-rec-dot"></span><span class="kyn-rec-state">Enregistrement…</span></div>
+      <div class="kyn-rec-time" data-field="rec-time">0:00</div>
+      <p class="kyn-rec-hint">Parlez, puis « Envoyer » — l'IA transcrit et propose des tâches/rappels.</p>
+      <div class="kyn-rec-actions">
+        <button class="kyn-btn" data-act="kyn-voice-cancel">Annuler</button>
+        <button class="kyn-btn kyn-btn--accent" data-act="kyn-voice-stop">Envoyer</button>
+      </div>
+    </div>`;
+  wrap.appendChild(el);
+  _rec.el = el;
+}
+function _updateRecTime() {
+  if (!_rec || !_rec.el) return;
+  const s = Math.floor((Date.now() - _rec.t0) / 1000);
+  const t = _rec.el.querySelector('[data-field="rec-time"]');
+  if (t) t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  if (s >= 300) _stopVoiceRecorder(true);   // garde-fou 5 min (limite serveur 10 Mo)
+}
+function _stopVoiceRecorder(send) {
+  if (!_rec) return;
+  _rec.send = !!send;
+  try { if (_rec.mr && _rec.mr.state !== 'inactive') _rec.mr.stop(); else _onRecStop(); }
+  catch (_) { _onRecStop(); }
+}
+function _teardownRec() {
+  if (!_rec) return;
+  if (_rec.timer) clearInterval(_rec.timer);
+  try { _rec.stream.getTracks().forEach((x) => x.stop()); } catch (_) {}
+  if (_rec.el) _rec.el.remove();
+  _rec = null;
+}
+async function _onRecStop() {
+  const rec = _rec; if (!rec) return;
+  const send = rec.send, dur = Date.now() - rec.t0;
+  const blob = new Blob(rec.chunks, { type: rec.mime });
+  _teardownRec();
+  if (!send) return;                                  // annulé
+  if (!blob.size || dur < 600) return _voiceMsg('Enregistrement trop court.', true);
+  await _uploadVoice(blob);
+}
+async function _uploadVoice(blob) {
+  if (!_panel || !_panel.voice) return;
+  const bubbleId = _panel.id;
+  _panel.voice.busy = 'Transcription et analyse…';
+  _panel.voice.error = ''; _panel.voice.note = '';
+  _refreshBody();
+  let res, data;
+  try {
+    res = await fetch(`${API_BASE}/api/keynapse/bubbles/${encodeURIComponent(bubbleId)}/voice`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': blob.type || 'audio/webm' },
+      body: blob,
+    });
+    data = await res.json().catch(() => ({}));
+  } catch (_) {
+    if (_panel && _panel.id === bubbleId) _voiceMsg('Le serveur met trop de temps à répondre — réessayez.', true);
+    return;
+  }
+  if (!_panel || _panel.id !== bubbleId) return;
+  _panel.voice.busy = '';
+  if (!res.ok) return _voiceMsg(data && data.error ? data.error : "Échec de l'envoi du mémo vocal.", true);
+  if (data.media) { _panel.detail.audios = _panel.detail.audios || []; _panel.detail.audios.unshift(data.media); }
+  const tasks = (data.proposals && Array.isArray(data.proposals.tasks)) ? data.proposals.tasks : [];
+  const rems  = (data.proposals && Array.isArray(data.proposals.reminders)) ? data.proposals.reminders : [];
+  _panel.voice.props = (tasks.length || rems.length)
+    ? { tasks: tasks.map((l) => ({ label: String(l), on: true })),
+        reminders: rems.map((r) => ({ label: String(r.label || ''), at: _toLocalInput(r.at), on: true })) }
+    : null;
+  _panel.voice.note = data.note || '';
+  _refreshBody();
+}
+// Relit l'état des cases/dates dans le DOM (source de vérité après rendu).
+function _syncPropsFromDOM() {
+  const v = _panel && _panel.voice; if (!v || !v.props || !_panelEl) return;
+  _panelEl.querySelectorAll('.kyn-prop-check').forEach((c) => {
+    const i = parseInt(c.dataset.i, 10);
+    const arr = c.dataset.prop === 'rem' ? v.props.reminders : v.props.tasks;
+    if (arr[i]) arr[i].on = c.checked;
+  });
+  _panelEl.querySelectorAll('.kyn-prop-at').forEach((inp) => {
+    const i = parseInt(inp.dataset.i, 10);
+    if (v.props.reminders[i]) v.props.reminders[i].at = inp.value;
+  });
+}
+async function _addProposals() {
+  const v = _panel && _panel.voice; if (!v || !v.props) return;
+  _syncPropsFromDOM();
+  const bubbleId = _panel.id;
+  const tasks = v.props.tasks.filter((t) => t.on && t.label.trim());
+  const rems  = v.props.reminders.filter((r) => r.on && r.at);
+  v.props = null; v.busy = 'Ajout…'; _refreshBody();
+  let nT = 0, nR = 0;
+  for (const t of tasks) {
+    try {
+      const r = await _api(`/bubbles/${encodeURIComponent(bubbleId)}/todos`, { method: 'POST', body: { label: t.label.trim().slice(0, 500) } });
+      if (r.todo && _panel && _panel.id === bubbleId) { _panel.detail.todos.push(r.todo); nT++; }
+    } catch (_) {}
+  }
+  for (const r of rems) {
+    const ms = Date.parse(r.at); if (Number.isNaN(ms)) continue;
+    try { await _api(`/bubbles/${encodeURIComponent(bubbleId)}/reminders`, { method: 'POST', body: { at: new Date(ms).toISOString() } }); nR++; } catch (_) {}
+  }
+  if (!_panel || _panel.id !== bubbleId) return;
+  _panel.voice.busy = '';
+  _panel.voice.note = (nT || nR)
+    ? `Ajouté : ${nT} tâche${nT > 1 ? 's' : ''}${nR ? ` · ${nR} rappel${nR > 1 ? 's' : ''}` : ''}.`
+    : 'Rien à ajouter.';
+  _refreshBody();
+}
+function _skipProposals() {
+  if (!_panel || !_panel.voice) return;
+  _panel.voice.props = null; _refreshBody();
+}
+async function _delVoice(id) {
+  if (!_panel) return;
+  _panel.detail.audios = (_panel.detail.audios || []).filter((a) => a.id !== id);
+  const u = _mediaUrls.get(id); if (u) { URL.revokeObjectURL(u); _mediaUrls.delete(id); }
+  _refreshBody();
+  try { await _api(`/media/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch (_) {}
+}
+// ISO / chaîne parseable → valeur d'un <input type="datetime-local"> (heure LOCALE).
+function _toLocalInput(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // ── Lightbox plein écran (Niveau 3) ─────────────────────────────
@@ -591,6 +858,9 @@ async function _drawSave() {
 function _refreshBody() {
   if (!_panelEl || !_panel || !_panel.detail) return;
   const body = _panelEl.querySelector('.kyn-panel-body'); if (body) body.innerHTML = _panelBodyHTML();
+  // Le ré-injection d'innerHTML recrée les <img>/<audio> (src perdu) → ré-hydrate
+  // depuis le cache blob (instantané si déjà chargé).
+  _hydrateMedia();
 }
 async function _patchBubble(patch) {
   if (!_panel || !_panel.detail) return;

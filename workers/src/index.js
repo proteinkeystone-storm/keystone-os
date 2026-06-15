@@ -128,7 +128,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleNoteCreate, handleNoteDelete,
          handleZoneCreate, handleZoneUpdate, handleZoneDelete,
          handleLinkCreate, handleLinkDelete,
-         handleMediaUpload, handleMediaServe, handleMediaDelete } from './routes/keynapse.js';
+         handleMediaUpload, handleMediaServe, handleMediaDelete,
+         handleVoiceUpload, handleReminderCreate } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -170,6 +171,10 @@ export default {
       if (knLink && method === 'DELETE') return handleLinkDelete(request, env, knLink[1]);
       const knMediaUp = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/media$/);
       if (knMediaUp && method === 'POST') return handleMediaUpload(request, env, knMediaUp[1]);
+      const knVoice = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/voice$/);
+      if (knVoice && method === 'POST') return handleVoiceUpload(request, env, knVoice[1]);
+      const knReminderCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/reminders$/);
+      if (knReminderCreate && method === 'POST') return handleReminderCreate(request, env, knReminderCreate[1]);
       const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
       if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
       if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);

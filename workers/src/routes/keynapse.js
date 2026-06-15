@@ -21,8 +21,13 @@
 
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+// Sprint 6 (voix) — mêmes briques IA que Smart Agent : crédit DORMANT par
+// licence (flag enforce_ai_credits_v1) + garde-fou budget global + modèle.
+import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
+import { budgetGuard } from '../lib/ai-budget.js';
+import { KS_AI_MODEL } from '../lib/ai-model.js';
 
-const KN_ENGINE_VERSION = 'KN-5';
+const KN_ENGINE_VERSION = 'KN-6';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -254,7 +259,9 @@ export async function handleBubbleDetail(request, env, id) {
   const notes = (await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'note' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
   const links = (await env.DB.prepare('SELECT id, from_bubble, to_bubble FROM kn_links WHERE tenant_id = ? AND (from_bubble = ? OR to_bubble = ?)').bind(t, id, id).all()).results || [];
   const media = (await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind IN ('photo','drawing') ORDER BY created_at`).bind(t, id).all()).results || [];
-  return json({ ok: true, bubble, todos, notes, links, media }, 200, origin);
+  // Sprint 6 — mémos vocaux (kind='audio') : id + transcript pour la fiche.
+  const audios = (await env.DB.prepare(`SELECT ${AUDIO_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'audio' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
+  return json({ ok: true, bubble, todos, notes, links, media, audios }, 200, origin);
 }
 
 // POST /bubbles/:id/todos — ajouter une tâche
@@ -443,19 +450,21 @@ export async function handleMediaUpload(request, env, bubbleId) {
   return json({ ok: true, media }, 200, origin);
 }
 
-// GET /media/:id — sert l'image au PROPRIÉTAIRE uniquement (blob authentifié).
+// GET /media/:id — sert le média (photo / dessin / audio) au PROPRIÉTAIRE
+// uniquement (blob authentifié). Le Content-Type vient des métadonnées R2
+// posées à l'upload (audio/webm | audio/mp4 pour les mémos vocaux, Sprint 6).
 export async function handleMediaServe(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
   const t = gate.tenant;
-  const row = await env.DB.prepare("SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ? AND kind IN ('photo','drawing')").bind(id, t).first();
+  const row = await env.DB.prepare("SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ? AND kind IN ('photo','drawing','audio')").bind(id, t).first();
   if (!row || !row.r2_key || !env.HELP_MEDIA) return err('Média introuvable', 404, origin);
   const obj = await env.HELP_MEDIA.get(row.r2_key);
   if (!obj) return err('Média introuvable', 404, origin);
   return new Response(obj.body, {
     status: 200,
     headers: {
-      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
       'Cache-Control': 'private, max-age=3600',
       'Access-Control-Allow-Origin': origin,
     },
@@ -471,4 +480,186 @@ export async function handleMediaDelete(request, env, id) {
   if (row && row.r2_key && env.HELP_MEDIA) { try { await env.HELP_MEDIA.delete(row.r2_key); } catch (_) {} }
   await env.DB.prepare('DELETE FROM kn_media WHERE id = ? AND tenant_id = ?').bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 6 — note vocale : R2 + transcription Whisper + extraction IA
+// (tâches/rappels PROPOSÉS, validés par l'utilisateur côté front).
+//
+// COÛT IA RÉEL → tout appel est MÉTRÉ comme Smart Agent : crédit DORMANT
+// (1 par appel, flag enforce_ai_credits_v1 ; sinon legacy/illimité) +
+// garde-fou budget global (budgetGuard). Un mémo = jusqu'à 2 crédits
+// (transcription + extraction), chacun remboursé si SON appel échoue.
+//
+// L'audio est TOUJOURS conservé en R2, même si l'IA échoue ou si les
+// crédits sont épuisés : on ne perd jamais l'enregistrement.
+// ════════════════════════════════════════════════════════════════
+// Modèle Whisper « base » multilingue : entrée en TABLEAU D'OCTETS
+// (cf. doc Cloudflare : `{ audio: [...new Uint8Array(buf)] }`), sortie
+// `res.text`. Le français est pris en charge. NB : whisper-large-v3-turbo
+// (meilleur FR via `language:'fr'`) attend du base64, pas des octets → voie
+// d'amélioration possible si la qualité FR du modèle base est insuffisante.
+const WHISPER_MODEL   = '@cf/openai/whisper';
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;     // 10 Mo
+const AUDIO_COLS      = 'id, bubble_id, transcript, created_at';
+const REMINDER_COLS   = 'id, bubble_id, at, repeat, notified_at, created_at';
+
+// ── Crédit DORMANT (patron _aiExtract de smart-agent.js) ─────────
+// Consomme 1 crédit 'keynapse' si l'enforcement est actif pour la licence,
+// sinon ne fait rien (legacy/illimité ; admin sans claims → ignoré).
+// Retour : { blocked, payload } si quota épuisé, sinon { credit, sub }.
+async function _knConsumeCredit(env, gate) {
+  const sub = gate.claims?.sub;
+  try {
+    if (sub && await isEnforceEnabled(env, sub)) {
+      const credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'keynapse' });
+      if (!credit.ok && credit.blocked) return { blocked: true, payload: credit.payload, sub };
+      return { credit, sub };
+    }
+  } catch (_) { /* compteur indisponible → on ne facture pas, on laisse passer (legacy) */ }
+  return { credit: null, sub };
+}
+async function _knRefundCredit(env, ticket) {
+  if (ticket && ticket.credit?.ok && ticket.credit.cost > 0) {
+    await refundCredits(env, { bucketKey: ticket.sub, tool: 'keynapse', cost: ticket.credit.cost, packsDrawn: ticket.credit.packsDrawn });
+  }
+}
+
+// Pur : parse la réponse IA en { tasks:[string], reminders:[{label, at}] }.
+// Tolère un bloc ```json et du texte autour. Filtre/borne tout ; ne lève jamais.
+function _parseVoicePlan(raw) {
+  const empty = { tasks: [], reminders: [] };
+  if (!raw || typeof raw !== 'string') return empty;
+  let s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) return empty;
+  let obj;
+  try { obj = JSON.parse(s.slice(a, b + 1)); } catch (_) { return empty; }
+  if (!obj || typeof obj !== 'object') return empty;
+  const tasks = Array.isArray(obj.tasks)
+    ? obj.tasks.map((x) => String(x == null ? '' : x).trim()).filter(Boolean).slice(0, 8).map((l) => l.slice(0, 500))
+    : [];
+  const reminders = Array.isArray(obj.reminders)
+    ? obj.reminders.map((r) => {
+        if (!r || typeof r !== 'object') return null;
+        const label = String(r.label == null ? '' : r.label).trim().slice(0, 200);
+        let at = (typeof r.at === 'string') ? r.at.trim() : '';
+        if (at && Number.isNaN(Date.parse(at))) at = '';   // ne garder qu'une date parseable
+        if (!label && !at) return null;
+        return { label, at };
+      }).filter(Boolean).slice(0, 8)
+    : [];
+  return { tasks, reminders };
+}
+
+const VOICE_EXTRACT_PROMPT = `Tu es l'assistant de Keynapse. On te donne la transcription d'un mémo vocal en français. Tu en extrais UNIQUEMENT les tâches à faire et les rappels datés réellement exprimés.
+
+RÈGLES STRICTES :
+1. N'invente rien. N'extrais que ce qui est dit. Si le mémo ne contient aucune action ni échéance, renvoie des listes vides.
+2. "tasks" : actions à faire, en français, à l'impératif court (max 12 mots). Sans date à l'intérieur.
+3. "reminders" : UNIQUEMENT si une échéance (date et/ou heure) est mentionnée. "label" = de quoi il s'agit (court). "at" = date/heure absolue au format ISO 8601 local "AAAA-MM-JJTHH:MM", calculée depuis AUJOURD'HUI ci-dessous pour les expressions relatives ("demain", "lundi", "dans deux heures"). Si l'heure n'est pas précisée, mets 09:00.
+4. Une même action ne peut pas être à la fois une tâche et un rappel : si elle a une échéance → rappel ; sinon → tâche.
+5. Maximum 8 tâches et 8 rappels. Qualité avant quantité.
+6. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
+{"tasks":["...","..."],"reminders":[{"label":"...","at":"2026-06-17T15:00"}]}`;
+
+// Extraction tâches/rappels depuis le transcript (1 crédit, refund si rien
+// d'exploitable ou si l'IA échoue). Best-effort : ne lève jamais, renvoie au
+// pire des listes vides (l'audio + le transcript sont déjà rendus au client).
+async function _extractVoicePlan(env, gate, transcript) {
+  if (!env.AI || typeof env.AI.run !== 'function') return { tasks: [], reminders: [] };
+  const ticket = await _knConsumeCredit(env, gate);
+  if (ticket.blocked) return { tasks: [], reminders: [] };   // plus de crédits → pas de propositions
+  const today = new Date().toISOString().slice(0, 16);
+  try {
+    const res = await env.AI.run(KS_AI_MODEL, {
+      messages: [
+        { role: 'system', content: `${VOICE_EXTRACT_PROMPT}\n\nAUJOURD'HUI : ${today}` },
+        { role: 'user',   content: `TRANSCRIPTION :\n\n${transcript.slice(0, 6000)}` },
+      ],
+      max_tokens: 800,
+      stream: false,
+    });
+    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    const plan = _parseVoicePlan(raw);
+    if (!plan.tasks.length && !plan.reminders.length) await _knRefundCredit(env, ticket);
+    return plan;
+  } catch (_) {
+    await _knRefundCredit(env, ticket);
+    return { tasks: [], reminders: [] };
+  }
+}
+
+// POST /bubbles/:id/voice — corps = octets audio (audio/webm | audio/mp4).
+// Stocke en R2 → transcrit (Whisper) → propose tâches/rappels (Mistral).
+// Retourne { media, transcript, proposals:{ tasks, reminders } }.
+export async function handleVoiceUpload(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const braked = await budgetGuard(env, origin); if (braked) return braked;
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!env.HELP_MEDIA) return err('Stockage média indisponible', 500, origin);
+  if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+
+  const ct = request.headers.get('content-type') || '';
+  if (!/^audio\//i.test(ct)) return err('Audio attendu', 400, origin);
+  const buf = await request.arrayBuffer();
+  if (!buf || buf.byteLength === 0) return err('Enregistrement vide', 400, origin);
+  if (buf.byteLength > MAX_AUDIO_BYTES) return err('Enregistrement trop lourd (max 10 Mo)', 413, origin);
+
+  // 1) Stocke l'audio en R2 (conservé quoi qu'il arrive ensuite).
+  const id  = generateId();
+  const key = `keynapse/${t}/${bubbleId}/${id}`;
+  await env.HELP_MEDIA.put(key, buf, { httpMetadata: { contentType: ct } });
+
+  // Renvoie la fiche audio (avec ou sans transcript) + d'éventuelles propositions.
+  const _finish = async (transcript, proposals, extra) => {
+    await env.DB.prepare(
+      "INSERT INTO kn_media (id, tenant_id, bubble_id, kind, r2_key, transcript) VALUES (?, ?, ?, 'audio', ?, ?)"
+    ).bind(id, t, bubbleId, key, transcript || null).run();
+    const media = await env.DB.prepare(`SELECT ${AUDIO_COLS} FROM kn_media WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+    return json({ ok: true, media, transcript: transcript || '', proposals: proposals || { tasks: [], reminders: [] }, ...(extra || {}) }, 200, origin);
+  };
+
+  // 2) Transcription Whisper (1 crédit métré, refund si échec).
+  const ticket = await _knConsumeCredit(env, gate);
+  if (ticket.blocked) {
+    return _finish('', null, { note: 'Crédits IA épuisés — l’audio est conservé, transcription indisponible.', code: 'AI_CREDITS_EXHAUSTED', quota: ticket.payload });
+  }
+  let transcript = '';
+  try {
+    const res = await env.AI.run(WHISPER_MODEL, { audio: [...new Uint8Array(buf)] });
+    transcript = String(res?.text ?? res?.transcription ?? '').trim();
+  } catch (_) {
+    await _knRefundCredit(env, ticket);
+    return _finish('', null, { note: 'Transcription indisponible pour le moment — l’audio est conservé.' });
+  }
+  if (!transcript) await _knRefundCredit(env, ticket);   // rien transcrit → on rend le crédit
+
+  // 3) Extraction des actions proposées (best-effort, second crédit).
+  let proposals = { tasks: [], reminders: [] };
+  if (transcript.length >= 12) {
+    proposals = await _extractVoicePlan(env, gate, transcript);
+  }
+  return _finish(transcript, proposals);
+}
+
+// POST /bubbles/:id/reminders — create MINIMAL d'un rappel (la gestion/édition
+// + notifications = Sprint 7). Corps : { at (date/heure), repeat? }.
+export async function handleReminderCreate(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+  const body = await parseBody(request);
+  const rawAt = String(body.at || '').trim();
+  const ms = Date.parse(rawAt);
+  if (!rawAt || Number.isNaN(ms)) return err('Date/heure du rappel invalide', 400, origin);
+  const at = new Date(ms).toISOString();
+  const repeat = body.repeat ? String(body.repeat).slice(0, 20) : null;
+  const id = generateId();
+  await env.DB.prepare('INSERT INTO kn_reminders (id, tenant_id, bubble_id, at, repeat) VALUES (?, ?, ?, ?, ?)').bind(id, t, bubbleId, at, repeat).run();
+  const reminder = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, reminder }, 200, origin);
 }
