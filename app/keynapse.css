@@ -244,3 +244,22 @@
 @media (max-width: 640px) {
   .kyn-zones-panel { top: auto; bottom: 0; width: 100%; height: 70%; border-right: none; border-top: 1px solid var(--bd, rgba(255,255,255,.1)); border-radius: 18px 18px 0 0; animation: kyn-sheetup .3s cubic-bezier(.22,.61,.36,1); }
 }
+
+/* ═══ Liens (Sprint 4) ═════════════════════════════════════════ */
+.kyn-linkrow { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.kyn-linkgo {
+  flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 14px; cursor: pointer; background: transparent; border: none;
+  color: var(--text, #f8fafc); text-align: left; padding: 5px 6px; border-radius: 7px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kyn-linkgo:hover { background: var(--navy3, #242d42); }
+.kyn-linkgo > .kyn-zchip-dot { flex: none; }
+.kyn-link-select {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--bd, rgba(255,255,255,.08)); background: var(--navy, #131826); color: var(--text, #f8fafc);
+}
+.kyn-link-select:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+/* Pulsation « aller à la bulle » (navigation par les liens) */
+@keyframes kyn-pulse { 0% { stroke-width: 1.6; } 35% { stroke-width: 6; } 100% { stroke-width: 1.6; } }
+.kyn-bubble.kyn-pulse circle { animation: kyn-pulse 1.1s ease-out; }

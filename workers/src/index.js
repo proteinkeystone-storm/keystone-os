@@ -126,7 +126,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleBubbleCreate, handleBubbleUpdate, handleBubbleDelete,
          handleBubbleDetail, handleTodoCreate, handleTodoUpdate, handleTodoDelete,
          handleNoteCreate, handleNoteDelete,
-         handleZoneCreate, handleZoneUpdate, handleZoneDelete } from './routes/keynapse.js';
+         handleZoneCreate, handleZoneUpdate, handleZoneDelete,
+         handleLinkCreate, handleLinkDelete } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -162,6 +163,10 @@ export default {
       if (knTodoCreate && method === 'POST') return handleTodoCreate(request, env, knTodoCreate[1]);
       const knNoteCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/notes$/);
       if (knNoteCreate && method === 'POST') return handleNoteCreate(request, env, knNoteCreate[1]);
+      const knLinkCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/links$/);
+      if (knLinkCreate && method === 'POST') return handleLinkCreate(request, env, knLinkCreate[1]);
+      const knLink = path.match(/^\/api\/keynapse\/links\/([A-Za-z0-9-]+)$/);
+      if (knLink && method === 'DELETE') return handleLinkDelete(request, env, knLink[1]);
       const knTodo = path.match(/^\/api\/keynapse\/todos\/([A-Za-z0-9-]+)$/);
       if (knTodo && method === 'PATCH')  return handleTodoUpdate(request, env, knTodo[1]);
       if (knTodo && method === 'DELETE') return handleTodoDelete(request, env, knTodo[1]);

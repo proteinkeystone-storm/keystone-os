@@ -372,7 +372,20 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved } 
     svg.remove();
   }
 
-  return { setData, fitAll, focusBubbles, zoomBy, updateNode, destroy };
+  // Met une bulle en évidence : recentre (sans changer le zoom) + pulsation.
+  function centerOn(id) {
+    const n = byId.get(id); if (!n) return;
+    const s = rect();
+    tx = s.w / 2 - n.x * k; ty = s.h / 2 - n.y * k; applyTransform();
+  }
+  function revealBubble(id) {
+    const n = byId.get(id); if (!n || !n.el) return;
+    centerOn(id);
+    n.el.classList.add('kyn-pulse');
+    setTimeout(() => { if (n.el) n.el.classList.remove('kyn-pulse'); }, 1200);
+  }
+
+  return { setData, fitAll, focusBubbles, revealBubble, zoomBy, updateNode, destroy };
 }
 
 function truncate(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }

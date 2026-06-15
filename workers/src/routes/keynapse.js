@@ -22,7 +22,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KN_ENGINE_VERSION = 'KN-3';
+const KN_ENGINE_VERSION = 'KN-4';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -246,7 +246,8 @@ export async function handleBubbleDetail(request, env, id) {
   if (!bubble) return err('Bulle introuvable', 404, origin);
   const todos = (await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE tenant_id = ? AND bubble_id = ? ORDER BY position, created_at`).bind(t, id).all()).results || [];
   const notes = (await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'note' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
-  return json({ ok: true, bubble, todos, notes }, 200, origin);
+  const links = (await env.DB.prepare('SELECT id, from_bubble, to_bubble FROM kn_links WHERE tenant_id = ? AND (from_bubble = ? OR to_bubble = ?)').bind(t, id, id).all()).results || [];
+  return json({ ok: true, bubble, todos, notes, links }, 200, origin);
 }
 
 // POST /bubbles/:id/todos — ajouter une tâche
@@ -367,5 +368,38 @@ export async function handleZoneDelete(request, env, id) {
     env.DB.prepare('UPDATE kn_bubbles SET zone_id = NULL WHERE tenant_id = ? AND zone_id = ?').bind(t, id),
     env.DB.prepare('DELETE FROM kn_zones WHERE id = ? AND tenant_id = ?').bind(id, t),
   ]);
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 4 — liens entre bulles (« Tisser »)
+// ════════════════════════════════════════════════════════════════
+// POST /bubbles/:id/links { to_bubble } — relier deux bulles (paire
+// dédupliquée, sans auto-lien). Idempotent si le lien existe déjà.
+export async function handleLinkCreate(request, env, fromId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!(await _ownsBubble(env, t, fromId))) return err('Bulle introuvable', 404, origin);
+  const body = await parseBody(request);
+  const to = String(body.to_bubble || '').trim();
+  if (!to || to === fromId) return err('Bulle cible invalide', 400, origin);
+  if (!(await _ownsBubble(env, t, to))) return err('Bulle cible introuvable', 404, origin);
+  const existing = await env.DB.prepare(
+    'SELECT id, from_bubble, to_bubble FROM kn_links WHERE tenant_id = ? AND ((from_bubble = ? AND to_bubble = ?) OR (from_bubble = ? AND to_bubble = ?))'
+  ).bind(t, fromId, to, to, fromId).first();
+  if (existing) return json({ ok: true, link: existing, existed: true }, 200, origin);
+  const id = generateId();
+  await env.DB.prepare('INSERT INTO kn_links (id, tenant_id, from_bubble, to_bubble) VALUES (?, ?, ?, ?)').bind(id, t, fromId, to).run();
+  const link = await env.DB.prepare('SELECT id, from_bubble, to_bubble FROM kn_links WHERE id = ? AND tenant_id = ?').bind(id, t).first();
+  return json({ ok: true, link }, 200, origin);
+}
+
+// DELETE /links/:id
+export async function handleLinkDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  await env.DB.prepare('DELETE FROM kn_links WHERE id = ? AND tenant_id = ?').bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
 }

@@ -146,6 +146,9 @@ function _onClick(e) {
     case 'kyn-note-del':    return _delNote(el.dataset.id);
     case 'kyn-bubble-del':  return _confirmDeleteBubble(el);
     case 'kyn-bubble-zone': return _assignZone(el.dataset.id || null);
+    case 'kyn-link-add':    return _addLink();
+    case 'kyn-link-del':    return _delLink(el.dataset.id);
+    case 'kyn-link-go':     return _goLink(el.dataset.id);
     // Zones
     case 'kyn-zones-open':  return _openZonesPanel();
     case 'kyn-zones-close': return _closeZonesPanel();
@@ -342,7 +345,56 @@ function _panelBodyHTML() {
         <textarea data-field="note-add" rows="2" maxlength="4000" placeholder="Ajouter une note…"></textarea>
         <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
       </div>
+    </div>
+    ${_linksSectionHTML()}`;
+}
+// ── Liens (Sprint 4 : tisser + naviguer) ────────────────────────
+function _linksSectionHTML() {
+  const d = _panel.detail, id = _panel.id;
+  const linked = (d.links || []).map((l) => {
+    const otherId = l.from_bubble === id ? l.to_bubble : l.from_bubble;
+    const b = _state.bubbles.find((x) => x.id === otherId);
+    return b ? { linkId: l.id, id: otherId, title: b.title, color: _effColor(b) } : null;
+  }).filter(Boolean);
+  const linkedIds = new Set(linked.map((x) => x.id));
+  const candidates = _state.bubbles.filter((b) => b.id !== id && !linkedIds.has(b.id));
+  return `
+    <div class="kyn-sec">
+      <p class="kyn-sec-h">Liens${linked.length ? ` · ${linked.length}` : ''}</p>
+      ${linked.map((x) => `
+        <div class="kyn-linkrow">
+          <button class="kyn-linkgo" data-act="kyn-link-go" data-id="${x.id}"><span class="kyn-zchip-dot" style="background:${_escAttr(x.color)}"></span>${_esc(x.title)}</button>
+          <button class="kyn-row-del" data-act="kyn-link-del" data-id="${x.linkId}" aria-label="Retirer le lien">×</button>
+        </div>`).join('')}
+      ${candidates.length ? `
+      <div class="kyn-add">
+        <select data-field="link-target" class="kyn-link-select"><option value="" disabled selected>Relier à…</option>${candidates.map((b) => `<option value="${_escAttr(b.id)}">${_esc(b.title)}</option>`).join('')}</select>
+        <button class="kyn-add-btn" data-act="kyn-link-add" aria-label="Tisser le lien">+</button>
+      </div>` : (linked.length ? '' : `<p class="kyn-color-note">Crée d'autres bulles pour pouvoir les relier.</p>`)}
     </div>`;
+}
+async function _addLink() {
+  const sel = _panelEl && _panelEl.querySelector('[data-field="link-target"]'); if (!sel) return;
+  const to = sel.value; if (!to) return;
+  try {
+    const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/links`, { method: 'POST', body: { to_bubble: to } });
+    if (r.link) {
+      if (!_state.links.some((l) => l.id === r.link.id)) _state.links.push(r.link);
+      _panel.detail.links = _panel.detail.links || [];
+      if (!_panel.detail.links.some((l) => l.id === r.link.id)) _panel.detail.links.push(r.link);
+    }
+    _refreshBody(); _pushEngine();
+  } catch (_) {}
+}
+async function _delLink(linkId) {
+  _state.links = _state.links.filter((l) => l.id !== linkId);
+  if (_panel && _panel.detail) _panel.detail.links = (_panel.detail.links || []).filter((l) => l.id !== linkId);
+  _refreshBody(); _pushEngine();
+  try { await _api(`/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' }); } catch (_) {}
+}
+function _goLink(otherId) {
+  if (_engine) _engine.revealBubble(otherId);
+  _openPanel(otherId);
 }
 function _refreshBody() {
   if (!_panelEl || !_panel || !_panel.detail) return;
