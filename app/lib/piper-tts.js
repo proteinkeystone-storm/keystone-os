@@ -147,7 +147,7 @@ async function phonemize(text, voice) {
 // s'additionnaient à chaque jonction (queue + tête = pause à rallonge entre
 // les phrases). Marges conservées pour ne pas écorner l'attaque ni la chute
 // (consonnes douces en fin de mot). Pur → testé.
-export function trimSilence(f32, sr, { threshold = 0.008, headMs = 45, tailMs = 90 } = {}) {
+export function trimSilence(f32, sr, { threshold = 0.008, headMs = 30, tailMs = 50 } = {}) {
   const n = f32.length;
   if (!n) return f32;
   let start = 0, end = n - 1;
