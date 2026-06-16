@@ -182,6 +182,10 @@
 .kyn-add input:focus, .kyn-add textarea:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-add-btn { flex: none; align-self: flex-start; border: none; background: var(--navy3, #242d42); color: var(--text, #f8fafc); border-radius: 8px; padding: 8px 13px; cursor: pointer; font-size: 18px; line-height: 1; }
 .kyn-add-btn:hover { background: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; }
+/* Notes libres : champ « bloc-notes » jaune (Post-it) au lieu du fond navy. */
+.kyn-add textarea[data-field="note-add"] { background: #faf3cf; border-color: #d9bd5e; color: #5e4b18; }
+.kyn-add textarea[data-field="note-add"]::placeholder { color: #a78a44; opacity: 1; }
+.kyn-add textarea[data-field="note-add"]:focus { border-color: #c7a63a; }
 
 .kyn-note { padding: 9px 0; border-bottom: 1px solid var(--bd, rgba(255,255,255,.05)); display: flex; gap: 8px; align-items: flex-start; }
 .kyn-note-body { font-size: 13.5px; line-height: 1.5; color: var(--text, #f8fafc); white-space: pre-wrap; word-break: break-word; }
@@ -359,19 +363,14 @@
 .kyn-rem-main { flex: 1; min-width: 0; }
 .kyn-rem-lbl { font-size: 13.5px; color: var(--text, #f8fafc); word-break: break-word; }
 .kyn-rem.is-done .kyn-rem-lbl { color: var(--tx3, rgba(248,250,252,.4)); text-decoration: line-through; }
-.kyn-rem-nolbl { color: var(--tx2, rgba(248,250,252,.55)); }
 .kyn-rem-meta { font-size: 11px; color: var(--tx3, rgba(248,250,252,.45)); margin-top: 2px; }
 .kyn-rem-tag { font-weight: 600; color: var(--tx2, rgba(248,250,252,.6)); }
 .kyn-rem.is-due .kyn-rem-tag { color: var(--danger, #e05c5c); }
 .kyn-rem.is-soon .kyn-rem-tag { color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-rem-rep { flex: none; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 8px; color: var(--text, #f8fafc); font-size: 11px; padding: 5px 6px; color-scheme: dark; cursor: pointer; }
 .kyn-rem-rep:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-rem-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.kyn-rem-form input[data-field="rem-label"] { background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 13px; padding: 8px 11px; width: 100%; box-sizing: border-box; }
-.kyn-rem-form input[data-field="rem-label"]:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-rem-form-row { display: flex; gap: 8px; align-items: center; }
-.kyn-rem-form-row input[type="datetime-local"] { flex: 1; min-width: 0; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 12px; padding: 7px 9px; color-scheme: dark; }
-.kyn-rem-form-row input[type="datetime-local"]:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+/* Formulaire de rappel sur UNE seule ligne : date · heure · répétition · Ajouter. */
+.kyn-rem-form { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .kyn-rem-notif { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--bd, rgba(255,255,255,.14)); background: transparent; color: var(--tx2, rgba(248,250,252,.7)); font-size: 12.5px; cursor: pointer; }
 .kyn-rem-notif:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); color: var(--text, #f8fafc); }
 .kyn-rem-hint { margin-top: 9px; font-size: 11.5px; color: var(--tx3, rgba(248,250,252,.4)); }
@@ -390,7 +389,6 @@
 .kyn-toast-x:hover { color: var(--text, #f8fafc); }
 
 /* Sélecteur d'heure en roulette (scroll-snap, porté de Social Manager) */
-.kyn-rem-when { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .kyn-rem-date { background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 8px 10px; color-scheme: dark; }
 .kyn-rem-date:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Puce repliée : affichage compact de l'heure choisie (la roulette est cachée). */

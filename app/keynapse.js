@@ -411,8 +411,8 @@ function _panelBodyHTML() {
         <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
       </div>
     </div>
-    ${_remindersSectionHTML()}
     ${_capturesSectionHTML()}
+    ${_remindersSectionHTML()}
     ${_linksSectionHTML()}`;
 }
 // ── Liens (Sprint 4 : tisser + naviguer) ────────────────────────
@@ -852,27 +852,25 @@ function _remindersSectionHTML() {
       <p class="kyn-sec-h">Rappels${rems.length ? ` · ${rems.length}` : ''}</p>
       ${rems.map((r) => _reminderRowHTML(r, now)).join('')}
       <div class="kyn-rem-form">
-        <input data-field="rem-label" type="text" maxlength="200" placeholder="Intitulé (optionnel)…" autocomplete="off">
-        <div class="kyn-rem-when">
-          <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
-          ${timeUI}
-        </div>
-        <div class="kyn-rem-form-row">
-          <select data-field="rem-repeat" class="kyn-rem-rep" aria-label="Répétition">
-            <option value="">Une fois</option>
-            <option value="daily">Jour</option>
-            <option value="weekly">Sem.</option>
-            <option value="monthly">Mois</option>
-          </select>
-          <button class="kyn-add-btn kyn-rem-addbtn" data-act="kyn-rem-add">Ajouter</button>
-        </div>
+        <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
+        ${timeUI}
+        <select data-field="rem-repeat" class="kyn-rem-rep" aria-label="Répétition">
+          <option value="">Une fois</option>
+          <option value="daily">Jour</option>
+          <option value="weekly">Sem.</option>
+          <option value="monthly">Mois</option>
+        </select>
+        <button class="kyn-add-btn kyn-rem-addbtn" data-act="kyn-rem-add">Ajouter</button>
       </div>
       ${_notifAffordanceHTML()}
     </div>`;
 }
 function _reminderRowHTML(r, now) {
   const st = _reminderState(r, now);
-  const lbl = (r.label && r.label.trim()) ? _esc(r.label) : `<span class="kyn-rem-nolbl">${_esc(r.bubble_title || 'Rappel')}</span>`;
+  // Le rappel porte le TITRE de la note (pas d'intitulé propre) ; on retombe sur
+  // un éventuel ancien libellé, puis sur le titre fourni par la liste tenant-wide.
+  const bubbleTitle = (_panel && _panel.detail && _panel.detail.bubble && _panel.detail.bubble.title) || r.bubble_title || 'Rappel';
+  const lbl = _esc((r.label && r.label.trim()) ? r.label : bubbleTitle);
   return `
     <div class="kyn-rem ${st.cls}">
       <span class="kyn-rem-ico" aria-hidden="true">${icon('clock', 14) || ''}</span>
@@ -959,9 +957,9 @@ async function _addReminder() {
   const tt = _remCurrentTime();
   const when = new Date(`${dateEl.value}T${String(tt.h).padStart(2, '0')}:${String(tt.m).padStart(2, '0')}`);   // date + heure locale → Date
   if (isNaN(when.getTime())) return;
-  const labelEl = _panelEl.querySelector('[data-field="rem-label"]');
-  const repEl   = _panelEl.querySelector('[data-field="rem-repeat"]');
-  const body = { at: when.toISOString(), label: labelEl ? labelEl.value.trim() : '', repeat: repEl ? repEl.value : '' };
+  const repEl = _panelEl.querySelector('[data-field="rem-repeat"]');
+  // Pas d'intitulé : le rappel reprend le titre de la note (worker : label null).
+  const body = { at: when.toISOString(), label: '', repeat: repEl ? repEl.value : '' };
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(_panel.id)}/reminders`, { method: 'POST', body });
     if (r.reminder) { _panel.detail.reminders = _panel.detail.reminders || []; _panel.detail.reminders.push(r.reminder); }
