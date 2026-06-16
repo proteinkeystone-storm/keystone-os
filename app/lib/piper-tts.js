@@ -147,7 +147,7 @@ async function phonemize(text, voice) {
 // s'additionnaient à chaque jonction (queue + tête = pause à rallonge entre
 // les phrases). Marges conservées pour ne pas écorner l'attaque ni la chute
 // (consonnes douces en fin de mot). Pur → testé.
-export function trimSilence(f32, sr, { threshold = 0.008, headMs = 60, tailMs = 140 } = {}) {
+export function trimSilence(f32, sr, { threshold = 0.008, headMs = 45, tailMs = 90 } = {}) {
   const n = f32.length;
   if (!n) return f32;
   let start = 0, end = n - 1;
@@ -332,16 +332,28 @@ export function shortenFirst(sentences) {
 // Découpe un texte en phrases « lisibles » : coupe après . ! ? …, regroupe
 // les fragments trop courts (sigles, « Oui. ») pour éviter une diction hachée.
 export function splitSentences(text) {
-  const s = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!s) return [];
-  const parts = (s.match(/[^.!?…]+[.!?…]+["»)\]]?\s*|[^.!?…]+$/g) || [s])
-    .map(x => x.trim()).filter(Boolean);
+  // Les SAUTS DE LIGNE sont des frontières dures. Un sommaire en liste n'a pas
+  // de point final, et « 4. » / « 5. » contiennent un point : sans ça, le
+  // découpage collait le numéro de l'item SUIVANT à la fin de la ligne
+  // précédente (« …en Syrie CINQ. »). On transforme aussi « 4. » en tête de
+  // ligne en « 4, » → le numéro reste lu AVEC son item (virgule = légère
+  // pause), sans créer de fausse fin de phrase.
+  const lines = String(text || '')
+    .replace(/^[ \t]*(\d{1,3})[.)]\s+/gm, '$1, ')
+    .split(/\n+/);
   const out = [];
-  for (const p of parts) {
-    if (out.length && (out[out.length - 1].length < 25 || p.length < 12)) {
-      out[out.length - 1] += ' ' + p;
-    } else {
-      out.push(p);
+  for (const lineRaw of lines) {
+    const s = lineRaw.replace(/[ \t]+/g, ' ').trim();
+    if (!s) continue;
+    const parts = (s.match(/[^.!?…]+[.!?…]+["»)\]]?\s*|[^.!?…]+$/g) || [s])
+      .map(x => x.trim()).filter(Boolean);
+    const lineStart = out.length;   // ne JAMAIS fusionner par-dessus un saut de ligne
+    for (const p of parts) {
+      if (out.length > lineStart && (out[out.length - 1].length < 25 || p.length < 12)) {
+        out[out.length - 1] += ' ' + p;
+      } else {
+        out.push(p);
+      }
     }
   }
   return out;

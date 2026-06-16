@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.133-sa-voice-md';
+const VERSION       = 'ks-os-v5.22.134-sa-tts-list-pauses';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
