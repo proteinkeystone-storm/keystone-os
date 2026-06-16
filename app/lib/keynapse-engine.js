@@ -85,6 +85,13 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved, m
 
   function rect() { const r = container.getBoundingClientRect(); return { w: r.width || 800, h: r.height || 600, left: r.left, top: r.top }; }
   (function init() { const s = rect(); tx = s.w / 2; ty = s.h / 2; })();
+  // Taille du conteneur EN CACHE (évite un getBoundingClientRect par frame) pour le
+  // rendu hors-champ paresseux ; rafraîchie au redimensionnement.
+  let _vw = 800, _vh = 600;
+  function _measure() { const r = container.getBoundingClientRect(); _vw = r.width || 800; _vh = r.height || 600; }
+  _measure();
+  let _ro = null;
+  try { _ro = new ResizeObserver(_measure); _ro.observe(container); } catch (_) {}
   function applyTransform() {
     viewport.setAttribute('transform', `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${k.toFixed(4)})`);
     svg.dataset.zoom = k < Z_FAR ? 'far' : (k > Z_NEAR ? 'near' : 'mid');
@@ -260,10 +267,25 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved, m
 
   // ── Rendu ──────────────────────────────────────────────────
   function renderPositions(cents) {
-    for (const n of nodes) if (n.el) n.el.setAttribute('transform', `translate(${n.x.toFixed(2)},${n.y.toFixed(2)})`);
+    // Rendu hors-champ PARESSEUX : la physique tourne pour toutes les bulles, mais on
+    // n'écrit le transform DOM que des bulles visibles (+ marge) — les écritures
+    // invisibles sont sautées (gain net quand la respiration tourne en continu et
+    // qu'on est zoomé). On mémorise les coords écran pour le culling des liens.
+    const m = 100, xMin = -m, xMax = _vw + m, yMin = -m, yMax = _vh + m;
+    for (const n of nodes) {
+      if (!n.el) continue;
+      const sx = n.x * k + tx, sy = n.y * k + ty;
+      n._sx = sx; n._sy = sy;
+      if (sx < xMin || sx > xMax || sy < yMin || sy > yMax) continue;     // hors champ
+      n.el.setAttribute('transform', `translate(${n.x.toFixed(2)},${n.y.toFixed(2)})`);
+    }
     for (const l of links) {
       const a = byId.get(l.from), b = byId.get(l.to);
-      if (a && b && l.el) l.el.setAttribute('d', linkPath(a, b));
+      if (!a || !b || !l.el) continue;
+      // Saute si les deux extrémités sortent du MÊME bord (le trait ne traverse pas la vue).
+      if ((a._sx < xMin && b._sx < xMin) || (a._sx > xMax && b._sx > xMax) ||
+          (a._sy < yMin && b._sy < yMin) || (a._sy > yMax && b._sy > yMax)) continue;
+      l.el.setAttribute('d', linkPath(a, b));
     }
     if (zoneLabels.size) {
       const c = cents || centroids();
@@ -406,6 +428,7 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved, m
   function destroy() {
     running = false; if (raf) cancelAnimationFrame(raf); raf = null;
     document.removeEventListener('visibilitychange', onVis);
+    if (_ro) { try { _ro.disconnect(); } catch (_) {} _ro = null; }
     svg.remove();
   }
 

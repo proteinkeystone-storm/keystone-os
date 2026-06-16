@@ -67,6 +67,7 @@ const DOC_SECTIONS = [
 // non technique — les versions internes ne regardent pas l'utilisateur.
 const DOC_CHANGELOG = [
   { date: 'Juin 2026', items: [
+    'Keynapse : votre espace personnel de connaissances — des bulles de notes sur un canevas infini, rangées en zones de couleur et reliées entre elles. Attachez photos, croquis et mémos vocaux (transcrits et transformés en tâches ou rappels par l\'IA), et posez des rappels qui vous préviennent à l\'heure dite.',
     'Smart Agent : créez un assistant qui répond à vos clients depuis VOTRE savoir, sans rien inventer — packs métier prêts (vendeur, immobilier, musée, concierge, guide, SAV), interview à l\'oral, et publication par lien ou QR code.',
     'Voix neuronale française : vos agents lisent leurs réponses à voix haute, et vous pouvez leur dicter vos questions.',
     'Social Manager : composez une publication et diffusez-la sur Facebook, Instagram, Threads et Telegram, tout de suite ou à l\'heure programmée.',

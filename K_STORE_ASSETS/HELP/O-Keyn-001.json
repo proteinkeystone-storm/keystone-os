@@ -1,0 +1,42 @@
+{
+  "title": "Keynapse",
+  "tldr": "Votre espace personnel de connaissances. Des bulles de notes qui respirent sur un canevas infini, regroupées en zones de couleur et reliées par des traits. Chaque bulle s'ouvre dans un panneau où vous écrivez, cochez des tâches, attachez des photos, des croquis et des mémos vocaux (que l'IA transcrit et transforme en tâches ou rappels), et posez des rappels qui vous préviennent à l'heure dite. Vos notes restent privées : rien n'est publié.",
+  "key_points": [
+    "Créer une bulle : le bouton « + » crée une bulle dans la vue courante. Un clic sur une bulle ouvre son panneau (à droite sur ordinateur, en bas sur mobile). Glissez une bulle pour la déplacer, sa position est mémorisée.",
+    "Naviguer le canevas : molette ou pincement pour zoomer, glisser le fond pour vous déplacer. « Tout voir » recadre sur l'ensemble de vos bulles. De loin vous voyez les zones, de près le détail.",
+    "Ranger en zones : le bouton Zones ouvre le gestionnaire (créer, renommer, recolorer, aller à une zone). Les bulles d'une même zone partagent sa couleur et se regroupent doucement. Une bulle peut rester libre.",
+    "Tisser des liens : dans le panneau d'une bulle, section « Liens » → « Relier à… ». Cliquez une bulle reliée pour que la caméra y vole. Le « × » à droite d'un lien le retire.",
+    "Captures : ajoutez une photo, un croquis dessiné, ou un mémo vocal. La note vocale est transcrite et l'IA vous propose des tâches et des rappels à cocher avant de les créer. Tout est consultable en plein écran.",
+    "Rappels : posez une date, une heure (à la molette) et une répétition. Tant que Keynapse est ouvert, un bandeau et une sonnerie vous préviennent à l'échéance ; sur ordinateur, une notification système peut aussi s'afficher."
+  ],
+  "faq": [
+    {
+      "q": "Où sont stockées mes notes ? Sont-elles privées ?",
+      "a": "Tout est rangé dans votre espace Keystone (base de données et stockage de fichiers), rattaché à votre compte. Vos bulles, photos, croquis et mémos vocaux ne sont jamais publics ni partagés : Keynapse est un outil personnel."
+    },
+    {
+      "q": "La note vocale consomme-t-elle des crédits IA ?",
+      "a": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
+    },
+    {
+      "q": "Serai-je prévenu d'un rappel si Keynapse est fermé ?",
+      "a": "Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard."
+    },
+    {
+      "q": "Comment supprimer un lien, une capture ou un rappel ?",
+      "a": "Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation)."
+    },
+    {
+      "q": "L'animation des bulles me gêne (mal de mer).",
+      "a": "Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Clic", "desc": "Ouvrir le panneau d'une bulle" },
+    { "keys": "Glisser", "desc": "Déplacer une bulle ; glisser le fond déplace la vue" },
+    { "keys": "Molette / Pincement", "desc": "Zoomer et dézoomer le canevas" },
+    { "keys": "← / →", "desc": "Capture précédente / suivante en plein écran" },
+    { "keys": "Échap", "desc": "Fermer le panneau, le plein écran ou le workspace" }
+  ],
+  "updated_at": "2026-06-16"
+}

@@ -1,6 +1,6 @@
 {
-  "version": "1.6",
-  "updatedAt": "2026-06-12",
+  "version": "1.7",
+  "updatedAt": "2026-06-16",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -276,6 +276,33 @@
         "vendeur",
         "voix",
         "qr"
+      ]
+    },
+    {
+      "id": "O-Keyn-001",
+      "padKey": null,
+      "title": "Keynapse",
+      "subtitle": "Vos idées en bulles vivantes — une constellation de notes qui respire",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Keynapse transforme vos idées en une constellation vivante. Chaque note est une bulle — projet, idée, personne, lieu, tâche — que vous posez sur un canevas infini et reliez aux autres pour tisser votre carte mentale. Les bulles respirent et se regroupent en zones colorées, sans dossiers ni arborescence : votre pensée s'organise par la couleur, la proximité et les liens. Chaque bulle contient ce dont vous avez besoin — description, tâches, rappels, photos, croquis et notes vocales — et chaque section vide disparaît pour une fiche toujours nette. Dictez un mémo vocal : il est transcrit, et Keynapse vous propose tâches et rappels à valider d'un geste.",
+      "icon": "keynapse",
+      "ai_optimized": "Whisper",
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "notes",
+        "idées",
+        "constellation",
+        "mindmap",
+        "bulles",
+        "vocal",
+        "rappels",
+        "carte mentale",
+        "keynapse"
       ]
     }
   ]

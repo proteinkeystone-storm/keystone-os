@@ -144,6 +144,20 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    // ── Sprint Keynapse — espace de connaissances en bulles (constellation perso) ──
+    {
+        id: 'O-Keyn-001',
+        category: 'BIZ', subcategory: 'BIZ_COM',
+        title: 'Keynapse',
+        punchline: 'Vos idées en bulles vivantes',
+        shortDesc: 'Constellation de notes sur canevas infini · zones, liens, photos, croquis, mémos vocaux transcrits, rappels',
+        price: 49,
+        icon: 'keynapse',
+        ai_optimized: 'Whisper',
+        ai_compatible: ['Whisper', 'Mistral'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 ];
 
 // ── "À la une pour vous" — apps mises en avant (rail du haut) ──
