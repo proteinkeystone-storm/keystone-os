@@ -205,6 +205,21 @@ const SPEECH_RULES = [
   [/\bPMR\b/g,  'pé-èmme-èrre'],
   [/\bSMS\b/g,  'èsse-èmme-èsse'],
   [/\bCB\b/g,   'cé-bé'],
+  // ── Noms propres (prononciation forcée) : Siwis lit en français → les noms
+  // étrangers sont « francisés ». Ré-écriture phonétique, 1 ligne chacun.
+  // ⚠ réglé À L'OREILLE (affiner au besoin). Touche la VOIX seule, pas l'écrit.
+  [/\bWilhelm\b/g,      'Vilhelm'],
+  [/\bFischer\b/g,      'Fichère'],
+  [/\bShaoul\b/g,       'Chaoul'],
+  [/\bCohen\b/g,        'Cohène'],
+  [/\bKauders\b/g,      'Kaoudère'],
+  [/\bPenkovsky\b/g,    'Pennkovski'],
+  [/\bCholmondeley\b/g, 'Tcheumli'],
+  [/\bEwen\b/g,         'Youine'],
+  [/\bWilliam\b/g,      'Ouilliam'],
+  [/\bAnstalt\b/g,      'Annstalt'],
+  [/\bWIGMO\b/g,        'Ouigmo'],
+  [/\bBenedetti\b/g,    'Bénédetti'],
 ];
 // Le modèle peut répondre en Markdown (**gras**, listes, titres #, `code`,
 // liens). Sans nettoyage, la voix lit « étoile étoile gras étoile étoile ».
