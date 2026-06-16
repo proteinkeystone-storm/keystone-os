@@ -355,8 +355,10 @@ function _renderPanel() {
       <button class="kyn-zchip ${!zoned ? 'is-on' : ''}" data-act="kyn-bubble-zone" data-id="">Aucune</button>
       ${_state.zones.map((z) => `<button class="kyn-zchip ${b.zone_id === z.id ? 'is-on' : ''}" data-act="kyn-bubble-zone" data-id="${z.id}"><span class="kyn-zchip-dot" style="background:${z.color}"></span>${_esc(z.name)}</button>`).join('')}
     </div>`;
+  // Bulle rattachée à une zone : couleur héritée → aucun contrôle ici (note
+  // retirée pour coller à la maquette). Bulle libre : pastilles de couleur.
   const colorBlock = zoned
-    ? `<div class="kyn-color-note">Couleur héritée de la zone — modifiable dans le panneau Zones.</div>`
+    ? ''
     : `<div class="kyn-swatches">${KN_COLORS.map((c) => `<button class="kyn-swatch" data-act="kyn-color" data-color="${c}" style="background:${c}" aria-label="Couleur" aria-pressed="${c === accent}"></button>`).join('')}</div>`;
   _panelEl.innerHTML = `
     <div class="kyn-panel-head">
@@ -381,10 +383,19 @@ function _panelBodyHTML() {
   const todos = d.todos, done = todos.filter((t) => t.done).length;
   const pct = todos.length ? Math.round(done / todos.length * 100) : 0;
   return `
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Description</p>
-      <textarea class="kyn-desc" data-field="desc" placeholder="Résumé du sujet…">${_esc(d.bubble.description || '')}</textarea>
+    <div class="kyn-sec kyn-sec--notes">
+      <p class="kyn-sec-h">Notes libres</p>
+      ${d.notes.map((n) => `
+        <div class="kyn-note">
+          <div style="flex:1;min-width:0"><div class="kyn-note-body">${_esc(n.body)}</div><div class="kyn-note-date">${_fmtDate(n.created_at)}</div></div>
+          <button class="kyn-row-del" data-act="kyn-note-del" data-id="${n.id}" aria-label="Supprimer la note">×</button>
+        </div>`).join('')}
+      <div class="kyn-add">
+        <textarea data-field="note-add" maxlength="4000" placeholder="Ajouter une note…"></textarea>
+        <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
+      </div>
     </div>
+    ${_capturesSectionHTML()}
     <div class="kyn-sec">
       <p class="kyn-sec-h">Actions${todos.length ? ` · ${done}/${todos.length}` : ''}</p>
       ${todos.length ? `<div class="kyn-prog"><div class="kyn-prog-fill" style="width:${pct}%"></div></div>` : ''}
@@ -399,19 +410,6 @@ function _panelBodyHTML() {
         <button class="kyn-add-btn" data-act="kyn-todo-add" aria-label="Ajouter la tâche">+</button>
       </div>
     </div>
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Notes libres</p>
-      ${d.notes.map((n) => `
-        <div class="kyn-note">
-          <div style="flex:1;min-width:0"><div class="kyn-note-body">${_esc(n.body)}</div><div class="kyn-note-date">${_fmtDate(n.created_at)}</div></div>
-          <button class="kyn-row-del" data-act="kyn-note-del" data-id="${n.id}" aria-label="Supprimer la note">×</button>
-        </div>`).join('')}
-      <div class="kyn-add">
-        <textarea data-field="note-add" rows="2" maxlength="4000" placeholder="Ajouter une note…"></textarea>
-        <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
-      </div>
-    </div>
-    ${_capturesSectionHTML()}
     ${_remindersSectionHTML()}
     ${_linksSectionHTML()}`;
 }
@@ -860,7 +858,7 @@ function _remindersSectionHTML() {
           <option value="weekly">Sem.</option>
           <option value="monthly">Mois</option>
         </select>
-        <button class="kyn-add-btn kyn-rem-addbtn" data-act="kyn-rem-add">Ajouter</button>
+        <button class="kyn-add-btn" data-act="kyn-rem-add" aria-label="Ajouter le rappel">+</button>
       </div>
       ${_notifAffordanceHTML()}
     </div>`;

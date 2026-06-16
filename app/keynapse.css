@@ -116,6 +116,13 @@
 
 /* ═══ Panneau latéral de la fiche (Sprint 2) ═══════════════════ */
 .kyn-panel {
+  /* Langage FLAT unifié de la fiche : un seul fond/bord/rayon/séparateur pour
+     TOUS les champs (date, heure, répétition, liens, tâches, notes) et boutons +.
+     Le textarea Notes (jaune) est la seule exception. */
+  --kyn-field-bg: #232a3d;
+  --kyn-field-bd: rgba(255,255,255,.05);
+  --kyn-field-r: 10px;
+  --kyn-sep: rgba(255,255,255,.06);
   position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); z-index: 6;
   background: var(--navy2, #1c2234); border-left: 1px solid var(--bd, rgba(255,255,255,.1));
   box-shadow: -14px 0 44px rgba(0,0,0,.42);
@@ -125,7 +132,7 @@
 @keyframes kyn-slidein { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { .kyn-panel { animation: none; } }
 
-.kyn-panel-head { position: relative; padding: 20px 18px 14px; border-bottom: 1px solid var(--bd, rgba(255,255,255,.08)); }
+.kyn-panel-head { position: relative; padding: 20px 18px 16px; border-bottom: 1px solid var(--kyn-sep, rgba(255,255,255,.06)); }
 .kyn-panel-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-panel-x {
   position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: none; background: transparent;
@@ -147,15 +154,22 @@
 .kyn-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .kyn-swatch[aria-pressed="true"] { border-color: var(--text, #f8fafc); }
 
-.kyn-panel-body { flex: 1; overflow-y: auto; padding: 16px 18px 26px; }
-.kyn-sec { margin-bottom: 22px; }
+/* Corps en colonne flex : les Notes (1re section) grandissent pour occuper tout
+   l'espace libre ; les autres sections gardent leur taille ; débordement = scroll. */
+.kyn-panel-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 0 0 8px; }
+/* Séparateur fin et plein-largeur entre chaque catégorie (harmonisé avec head/foot). */
+.kyn-sec { flex: 0 0 auto; padding: 16px 18px; border-top: 1px solid var(--kyn-sep, rgba(255,255,255,.06)); }
+.kyn-sec:first-child { border-top: none; }
 .kyn-sec-h { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3, rgba(248,250,252,.4)); margin: 0 0 9px; }
-.kyn-desc {
-  width: 100%; font: inherit; font-size: 14px; line-height: 1.5; color: var(--text, #f8fafc);
-  background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.08)); border-radius: 10px;
-  padding: 10px 12px; resize: vertical; min-height: 58px;
-}
-.kyn-desc:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+/* Notes libres = grand bloc-notes adaptatif : grandit (flex-grow) pour occuper
+   tout l'espace libre si la fiche est vide, se réduit vers son min-height quand
+   on remplit captures / tâches / rappels / liens. flex-shrink: 0 ⇒ la section ne
+   descend JAMAIS sous son contenu : si le total déborde (mobile, fiche pleine),
+   c'est le CORPS qui scrolle et le textarea garde son min-height (pas de
+   chevauchement des sections du dessous). */
+.kyn-sec--notes { flex: 1 0 auto; display: flex; flex-direction: column; }
+.kyn-sec--notes .kyn-add { flex: 1 0 auto; }
+.kyn-sec--notes .kyn-add textarea[data-field="note-add"] { height: 100%; min-height: 120px; }
 
 .kyn-prog { height: 5px; border-radius: 3px; background: var(--bd, rgba(255,255,255,.08)); overflow: hidden; margin-bottom: 10px; }
 .kyn-prog-fill { height: 100%; background: var(--kyn-accent, var(--gold, #6366f1)); transition: width .3s ease; }
@@ -176,13 +190,13 @@
 
 .kyn-add { display: flex; gap: 8px; margin-top: 9px; }
 .kyn-add input, .kyn-add textarea {
-  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid var(--bd, rgba(255,255,255,.08)); background: var(--navy, #131826); color: var(--text, #f8fafc); resize: vertical;
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 9px 11px; border-radius: var(--kyn-field-r, 10px);
+  border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); background: var(--kyn-field-bg, #232a3d); color: var(--text, #f8fafc); resize: vertical;
 }
 .kyn-add input:focus, .kyn-add textarea:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-add-btn { flex: none; align-self: flex-start; border: none; background: var(--navy3, #242d42); color: var(--text, #f8fafc); border-radius: 8px; padding: 8px 13px; cursor: pointer; font-size: 18px; line-height: 1; }
-.kyn-add-btn:hover { background: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; }
-/* Notes libres : champ « bloc-notes » jaune (Post-it) au lieu du fond navy. */
+.kyn-add-btn { flex: none; align-self: flex-start; border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); background: var(--kyn-field-bg, #232a3d); color: var(--text, #f8fafc); border-radius: var(--kyn-field-r, 10px); padding: 0; width: 40px; height: 40px; display: grid; place-items: center; cursor: pointer; font-size: 20px; line-height: 1; }
+.kyn-add-btn:hover { background: var(--kyn-accent, var(--gold, #6366f1)); border-color: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; }
+/* EXCEPTION : champ Notes libres = bloc-notes jaune (Post-it), garde son fond. */
 .kyn-add textarea[data-field="note-add"] { background: #faf3cf; border-color: #d9bd5e; color: #5e4b18; }
 .kyn-add textarea[data-field="note-add"]::placeholder { color: #a78a44; opacity: 1; }
 .kyn-add textarea[data-field="note-add"]:focus { border-color: #c7a63a; }
@@ -191,7 +205,7 @@
 .kyn-note-body { font-size: 13.5px; line-height: 1.5; color: var(--text, #f8fafc); white-space: pre-wrap; word-break: break-word; }
 .kyn-note-date { font-size: 10px; color: var(--tx3, rgba(248,250,252,.4)); margin-top: 4px; }
 
-.kyn-panel-foot { padding: 12px 18px; border-top: 1px solid var(--bd, rgba(255,255,255,.08)); }
+.kyn-panel-foot { padding: 14px 18px; border-top: 1px solid var(--kyn-sep, rgba(255,255,255,.06)); }
 .kyn-del-bubble { width: 100%; border: 1px solid rgba(224,92,92,.32); background: transparent; color: var(--danger, #e05c5c); border-radius: 10px; padding: 10px; cursor: pointer; font: inherit; font-size: 13px; }
 .kyn-del-bubble:hover { background: var(--danger-soft, rgba(224,92,92,.12)); }
 .kyn-del-bubble[data-confirm="1"] { background: var(--danger-soft, rgba(224,92,92,.12)); font-weight: 600; }
@@ -265,8 +279,8 @@
 .kyn-linkgo:hover { background: var(--navy3, #242d42); }
 .kyn-linkgo > .kyn-zchip-dot { flex: none; }
 .kyn-link-select {
-  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid var(--bd, rgba(255,255,255,.08)); background: var(--navy, #131826); color: var(--text, #f8fafc);
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 9px 11px; border-radius: var(--kyn-field-r, 10px);
+  border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); background: var(--kyn-field-bg, #232a3d); color: var(--text, #f8fafc); color-scheme: dark;
 }
 .kyn-link-select:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Pulsation « aller à la bulle » (navigation par les liens) */
@@ -344,7 +358,7 @@
 .kyn-prop-lbl { flex: 1; font-size: 13.5px; color: var(--text, #f8fafc); word-break: break-word; }
 .kyn-prop-rem { flex-wrap: wrap; }
 .kyn-prop-remmain { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 140px; cursor: pointer; }
-.kyn-prop-at { flex: none; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 8px; color: var(--text, #f8fafc); font-size: 12px; padding: 5px 8px; color-scheme: dark; }
+.kyn-prop-at { flex: none; background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font-size: 12px; padding: 7px 9px; color-scheme: dark; }
 .kyn-prop-at:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-props-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 11px; }
 
@@ -367,7 +381,7 @@
 .kyn-rem-tag { font-weight: 600; color: var(--tx2, rgba(248,250,252,.6)); }
 .kyn-rem.is-due .kyn-rem-tag { color: var(--danger, #e05c5c); }
 .kyn-rem.is-soon .kyn-rem-tag { color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-rem-rep { flex: none; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 8px; color: var(--text, #f8fafc); font-size: 11px; padding: 5px 6px; color-scheme: dark; cursor: pointer; }
+.kyn-rem-rep { flex: none; background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: dark; cursor: pointer; }
 .kyn-rem-rep:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Formulaire de rappel sur UNE seule ligne : date · heure · répétition · Ajouter. */
 .kyn-rem-form { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -389,17 +403,17 @@
 .kyn-toast-x:hover { color: var(--text, #f8fafc); }
 
 /* Sélecteur d'heure en roulette (scroll-snap, porté de Social Manager) */
-.kyn-rem-date { background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 8px 10px; color-scheme: dark; }
+.kyn-rem-date { background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: dark; }
 .kyn-rem-date:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Puce repliée : affichage compact de l'heure choisie (la roulette est cachée). */
-.kyn-time-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--navy, #131826); border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 9px; color: var(--text, #f8fafc); font-size: 14px; font-variant-numeric: tabular-nums; padding: 8px 12px; cursor: pointer; }
+.kyn-time-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font-size: 14px; font-variant-numeric: tabular-nums; padding: 9px 12px; cursor: pointer; }
 .kyn-time-chip:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-time-chip svg { color: var(--tx2, rgba(248,250,252,.55)); }
 /* Roulette dépliée seulement pendant le choix : molettes compactes + valider. */
 .kyn-time-edit { display: inline-flex; align-items: center; gap: 8px; }
 .kyn-time-ok { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: none; background: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; border-radius: 10px; cursor: pointer; }
 .kyn-time-ok:hover { background: var(--gold2, #818cf8); }
-.kyn-wheel-wrap { position: relative; display: flex; align-items: stretch; gap: 1px; padding: 0 7px; border: 1px solid var(--bd, rgba(255,255,255,.12)); border-radius: 10px; background: var(--navy, #131826); }
+.kyn-wheel-wrap { position: relative; display: flex; align-items: stretch; gap: 1px; padding: 0 7px; border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); background: var(--kyn-field-bg, #232a3d); }
 .kyn-wheel { position: relative; height: 90px; width: 38px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -ms-overflow-style: none; touch-action: pan-y; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); }
 .kyn-wheel::-webkit-scrollbar { display: none; }
 .kyn-wheel-pad { height: 30px; }
@@ -407,4 +421,3 @@
 .kyn-wheel-item:hover { color: var(--text, #f8fafc); }
 .kyn-wheel-sep { display: flex; align-items: center; font-size: 16px; font-weight: 800; color: var(--tx3, rgba(248,250,252,.4)); padding: 0 1px; }
 .kyn-wheel-band { position: absolute; left: 5px; right: 5px; top: 50%; transform: translateY(-50%); height: 30px; border-radius: 8px; background: color-mix(in srgb, var(--gold, #6366f1) 20%, transparent); border: 1px solid color-mix(in srgb, var(--gold, #6366f1) 38%, transparent); pointer-events: none; }
-.kyn-rem-addbtn { font-size: 13px; padding: 8px 16px; }
