@@ -123,6 +123,8 @@
   --kyn-field-bd: rgba(255,255,255,.05);
   --kyn-field-r: 10px;
   --kyn-sep: rgba(255,255,255,.06);
+  /* Chevron ⇅ flat pour les <select> (appearance:none enlève le chrome natif). */
+  --kyn-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f8fafc' stroke-opacity='.55' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='8 10 12 6 16 10'/%3E%3Cpolyline points='8 14 12 18 16 14'/%3E%3C/svg%3E");
   position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); z-index: 6;
   background: var(--navy2, #1c2234); border-left: 1px solid var(--bd, rgba(255,255,255,.1));
   box-shadow: -14px 0 44px rgba(0,0,0,.42);
@@ -279,8 +281,10 @@
 .kyn-linkgo:hover { background: var(--navy3, #242d42); }
 .kyn-linkgo > .kyn-zchip-dot { flex: none; }
 .kyn-link-select {
-  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 9px 11px; border-radius: var(--kyn-field-r, 10px);
-  border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); background: var(--kyn-field-bg, #232a3d); color: var(--text, #f8fafc); color-scheme: dark;
+  flex: 1; min-width: 0; appearance: none; -webkit-appearance: none; cursor: pointer;
+  font: inherit; font-size: 13px; padding: 9px 32px 9px 12px; border-radius: var(--kyn-field-r, 10px);
+  border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); color: var(--text, #f8fafc); color-scheme: dark;
+  background-color: var(--kyn-field-bg, #232a3d); background-image: var(--kyn-chevron); background-repeat: no-repeat; background-position: right 12px center;
 }
 .kyn-link-select:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Pulsation « aller à la bulle » (navigation par les liens) */
@@ -381,10 +385,13 @@
 .kyn-rem-tag { font-weight: 600; color: var(--tx2, rgba(248,250,252,.6)); }
 .kyn-rem.is-due .kyn-rem-tag { color: var(--danger, #e05c5c); }
 .kyn-rem.is-soon .kyn-rem-tag { color: var(--kyn-accent, var(--gold, #6366f1)); }
-.kyn-rem-rep { flex: none; background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 9px 11px; color-scheme: dark; cursor: pointer; }
+.kyn-rem-rep { flex: none; appearance: none; -webkit-appearance: none; background-color: var(--kyn-field-bg, #232a3d); background-image: var(--kyn-chevron); background-repeat: no-repeat; background-position: right 11px center; border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05)); border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font: inherit; font-size: 13px; padding: 9px 32px 9px 12px; color-scheme: dark; cursor: pointer; }
 .kyn-rem-rep:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 /* Formulaire de rappel sur UNE seule ligne : date · heure · répétition · Ajouter. */
 .kyn-rem-form { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Le « + » des rappels est poussé tout à droite pour s'aligner avec les autres
+   boutons « + » (Notes/Actions/Liens) → colonne de « + » cohérente à droite. */
+.kyn-rem-form .kyn-add-btn { margin-left: auto; align-self: center; }
 .kyn-rem-notif { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--bd, rgba(255,255,255,.14)); background: transparent; color: var(--tx2, rgba(248,250,252,.7)); font-size: 12.5px; cursor: pointer; }
 .kyn-rem-notif:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); color: var(--text, #f8fafc); }
 .kyn-rem-hint { margin-top: 9px; font-size: 11.5px; color: var(--tx3, rgba(248,250,252,.4)); }
