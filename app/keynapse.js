@@ -912,9 +912,33 @@ function _notifAffordanceHTML() {
   if (perm === 'denied')  return `<p class="kyn-rem-hint">Notifications bloquées — les rappels restent signalés dans l'app.</p>`;
   return `<button class="kyn-rem-notif" data-act="kyn-notif-enable">${icon('bell', 14) || ''}<span>Activer les notifications</span></button>`;
 }
+// Web Push (Sprint 9) — clé publique VAPID (doit correspondre au worker).
+const KN_VAPID_PUBLIC = 'BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUqmP8Vvg30v-9067t9X5HTlEc';
+function _vapidKeyBytes() {
+  const s = KN_VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(s + '='.repeat((4 - s.length % 4) % 4));
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+// Abonne l'appareil au Web Push (rappels MÊME application fermée). Idempotent ;
+// réutilise l'abonnement existant. ⚠ iOS : seulement si la PWA est installée.
+async function _subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidKeyBytes() });
+    const j = sub.toJSON();
+    if (j && j.keys) await _api('/push/subscribe', { method: 'POST', body: { endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth } });
+  } catch (_) {}
+}
 async function _enableNotifs() {
   if (!_notifSupported()) return;
-  try { await Notification.requestPermission(); } catch (_) {}
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') await _subscribePush();   // active aussi le push (app fermée)
+  } catch (_) {}
   _refreshBody();
 }
 // Heure par défaut (now + 1 h) ; heure courante = choix mémorisé sinon défaut.
@@ -990,6 +1014,8 @@ let _remPoll = null;             // id setInterval
 const _remAcking = new Set();    // anti-doublon pendant l'aller-retour d'ack
 function _startReminderPoll() {
   if (_remPoll) return;
+  // Si les notifs sont déjà autorisées, on (re)confirme l'abonnement push au serveur.
+  if (_notifSupported() && Notification.permission === 'granted') _subscribePush();
   _checkReminders();                                  // immédiat (rattrape l'échu)
   _remPoll = setInterval(_checkReminders, 30000);
 }

@@ -130,7 +130,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleLinkCreate, handleLinkDelete,
          handleMediaUpload, handleMediaServe, handleMediaDelete,
          handleVoiceUpload, handleReminderCreate,
-         handleRemindersList, handleReminderUpdate, handleReminderDelete } from './routes/keynapse.js';
+         handleRemindersList, handleReminderUpdate, handleReminderDelete,
+         handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -180,6 +181,8 @@ export default {
       const knReminder = path.match(/^\/api\/keynapse\/reminders\/([A-Za-z0-9-]+)$/);
       if (knReminder && method === 'PATCH')  return handleReminderUpdate(request, env, knReminder[1]);
       if (knReminder && method === 'DELETE') return handleReminderDelete(request, env, knReminder[1]);
+      if (path === '/api/keynapse/push/subscribe'   && method === 'POST') return handlePushSubscribe(request, env);
+      if (path === '/api/keynapse/push/unsubscribe' && method === 'POST') return handlePushUnsubscribe(request, env);
       const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
       if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
       if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);
@@ -729,6 +732,12 @@ export default {
         sweepDuePosts(env)
           .then(r => console.log('[social-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[social-sweep] failed', e?.message || e))
+      );
+      // Sprint Keynapse-9 — push des rappels échus (même app fermée).
+      ctx.waitUntil(
+        sweepDueReminders(env)
+          .then(r => console.log('[keynapse-reminders]', JSON.stringify(r)))
+          .catch(e => console.warn('[keynapse-reminders] failed', e?.message || e))
       );
       return;
     }

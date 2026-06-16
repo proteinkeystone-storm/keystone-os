@@ -26,8 +26,10 @@ import { requireJWT } from '../lib/jwt.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 import { budgetGuard } from '../lib/ai-budget.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
+// Sprint 9 (push) — notifications de rappels même application fermée.
+import { sendPush } from '../lib/webpush.js';
 
-const KN_ENGINE_VERSION = 'KN-7';
+const KN_ENGINE_VERSION = 'KN-8';
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESC_LEN  = 4000;
@@ -76,6 +78,14 @@ async function _ensureSchema(env) {
        r2_key TEXT, transcript TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
     `CREATE INDEX IF NOT EXISTS idx_kn_media_bubble ON kn_media(tenant_id, bubble_id)`,
+    // Sprint 9 — abonnements Web Push (rappels même app fermée). endpoint = clé
+    // (unique par appareil/navigateur) ; p256dh/auth = clés de chiffrement client.
+    `CREATE TABLE IF NOT EXISTS kn_push_subs (
+       endpoint TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
+       p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+       created_at TEXT DEFAULT (datetime('now')),
+       FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
+    `CREATE INDEX IF NOT EXISTS idx_kn_push_subs_tenant ON kn_push_subs(tenant_id)`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
   // Sprint 7 — colonne `label` (rappels lisibles), ajoutée a posteriori.
@@ -722,12 +732,7 @@ export async function handleReminderUpdate(request, env, id) {
   const body = await parseBody(request);
 
   if (body.ack === true) {
-    const next = _nextOccurrence(existing.at, existing.repeat, Date.now());
-    if (next) {
-      await env.DB.prepare('UPDATE kn_reminders SET at = ?, notified_at = NULL WHERE id = ? AND tenant_id = ?').bind(next, id, t).run();
-    } else {
-      await env.DB.prepare("UPDATE kn_reminders SET notified_at = datetime('now') WHERE id = ? AND tenant_id = ?").bind(id, t).run();
-    }
+    await _ackReminderById(env, t, id, existing.at, existing.repeat);
     const r = await env.DB.prepare(`SELECT ${REMINDER_COLS} FROM kn_reminders WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
     return json({ ok: true, reminder: r }, 200, origin);
   }
@@ -755,4 +760,92 @@ export async function handleReminderDelete(request, env, id) {
   const t = gate.tenant;
   await env.DB.prepare('DELETE FROM kn_reminders WHERE id = ? AND tenant_id = ?').bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// Acquitte un rappel déclenché : reprogramme la prochaine occurrence (répétitif)
+// ou marque notifié (ponctuel). Partagé par le PATCH /reminders/:id {ack} et le
+// cron push (sweepDueReminders).
+async function _ackReminderById(env, tenant, id, atISO, repeat) {
+  const next = _nextOccurrence(atISO, repeat, Date.now());
+  if (next) await env.DB.prepare('UPDATE kn_reminders SET at = ?, notified_at = NULL WHERE id = ? AND tenant_id = ?').bind(next, id, tenant).run();
+  else      await env.DB.prepare("UPDATE kn_reminders SET notified_at = datetime('now') WHERE id = ? AND tenant_id = ?").bind(id, tenant).run();
+}
+
+// ════════════════════════════════════════════════════════════════
+// Sprint 9 — Web Push : notifications de rappels MÊME application fermée.
+// L'utilisateur s'abonne (1 abonnement par appareil/navigateur) ; le cron
+// (*/5) trouve les rappels échus et POSTe une notification CHIFFRÉE (libellé
+// dans la charge) à chaque abonnement du propriétaire ; le service worker
+// l'affiche. ⚠ iOS : Web Push uniquement si la PWA est installée (iOS 16.4+).
+// ════════════════════════════════════════════════════════════════
+// POST /push/subscribe — { endpoint, p256dh, auth } (auth JWT).
+export async function handlePushSubscribe(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const b = await parseBody(request);
+  const endpoint = String(b.endpoint || '').trim();
+  const p256dh = String(b.p256dh || '').trim();
+  const auth = String(b.auth || '').trim();
+  if (!/^https:\/\//i.test(endpoint) || endpoint.length > 1024 || !p256dh || !auth) return err('Abonnement invalide', 400, origin);
+  await env.DB.prepare(
+    `INSERT INTO kn_push_subs (endpoint, tenant_id, p256dh, auth) VALUES (?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET tenant_id = excluded.tenant_id, p256dh = excluded.p256dh, auth = excluded.auth`
+  ).bind(endpoint, t, p256dh, auth).run();
+  return json({ ok: true }, 200, origin);
+}
+
+// POST /push/unsubscribe — { endpoint } (auth JWT).
+export async function handlePushUnsubscribe(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const b = await parseBody(request);
+  const endpoint = String(b.endpoint || '').trim();
+  if (endpoint) await env.DB.prepare('DELETE FROM kn_push_subs WHERE endpoint = ? AND tenant_id = ?').bind(endpoint, t).run();
+  return json({ ok: true }, 200, origin);
+}
+
+// Cron (*/5) : push des rappels échus pour les tenants ABONNÉS, puis ack.
+// Les rappels des tenants SANS abonnement ne sont PAS acquittés ici (le poller
+// in-app du Sprint 7 les affichera à l'ouverture du pad — sinon notif perdue).
+export async function sweepDueReminders(env) {
+  if (!env.DB || !env.VAPID_PUBLIC || !env.VAPID_PRIVATE_JWK) return { skipped: 'no-vapid' };
+  let vapid;
+  try { vapid = { publicKey: env.VAPID_PUBLIC, privateJwk: JSON.parse(env.VAPID_PRIVATE_JWK), subject: 'mailto:' + (env.SDQR_DPO_EMAIL || 'contact@protein-keystone.com') }; }
+  catch (_) { return { skipped: 'bad-vapid' }; }
+  await _ensureSchema(env);
+  const nowIso = new Date().toISOString();
+  const due = (await env.DB.prepare(
+    `SELECT r.id, r.tenant_id, r.bubble_id, r.label, r.at, r.repeat, b.title AS bubble_title
+       FROM kn_reminders r JOIN kn_bubbles b ON b.id = r.bubble_id AND b.tenant_id = r.tenant_id
+      WHERE r.notified_at IS NULL AND r.at <= ? ORDER BY r.at LIMIT 200`
+  ).bind(nowIso).all()).results || [];
+  if (!due.length) return { due: 0, sent: 0 };
+  const subsCache = new Map();
+  let sent = 0, gone = 0, acked = 0;
+  for (const r of due) {
+    let subs = subsCache.get(r.tenant_id);
+    if (!subs) {
+      subs = (await env.DB.prepare('SELECT endpoint, p256dh, auth FROM kn_push_subs WHERE tenant_id = ?').bind(r.tenant_id).all()).results || [];
+      subsCache.set(r.tenant_id, subs);
+    }
+    if (!subs.length) continue;   // pas d'abonnement → laisser au poller in-app
+    const payload = {
+      kind: 'keynapse-reminder',
+      title: 'Rappel — Keynapse',
+      body: (r.label && r.label.trim()) ? r.label : (r.bubble_title || 'Rappel'),
+      bubbleId: r.bubble_id,
+    };
+    for (const s of subs) {
+      try {
+        const code = await sendPush(s, payload, vapid);
+        if (code >= 200 && code < 300) sent++;
+        else if (code === 404 || code === 410) { await env.DB.prepare('DELETE FROM kn_push_subs WHERE endpoint = ?').bind(s.endpoint).run(); gone++; }
+      } catch (_) {}
+    }
+    await _ackReminderById(env, r.tenant_id, r.id, r.at, r.repeat);
+    acked++;
+  }
+  return { due: due.length, sent, gone, acked };
 }

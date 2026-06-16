@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.22.128-keynapse-s8';
+const VERSION       = 'ks-os-v5.22.129-keynapse-s9';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -199,6 +199,19 @@ self.addEventListener('fetch', event => {
 
   // ── Fallback générique : network-first sans cache ───────────
   event.respondWith(_networkFirst(req, STATIC_CACHE, { cacheable: false }));
+});
+
+// ── Push reçu (Keynapse Sprint 9) — notification de rappel MÊME app fermée.
+// Le worker chiffre la charge (libellé + bulle) ; on ne traite QUE nos pushes.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) {}
+  if (data.kind !== 'keynapse-reminder') return;
+  event.waitUntil(self.registration.showNotification(data.title || 'Rappel — Keynapse', {
+    body: data.body || 'Vous avez un rappel.',
+    tag:  'kn-rem-' + (data.bubbleId || ''),
+    data: { kind: 'keynapse-reminder', bubbleId: data.bubbleId },
+  }));
 });
 
 // ── Clic sur une notification de rappel Keynapse (Sprint 7) ────

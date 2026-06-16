@@ -75,6 +75,11 @@ SDQR_SCAN_RETENTION_DAYS = "90"
 # Email du DPO affiché sur la page /sdqr-privacy
 SDQR_DPO_EMAIL = "protein.keystone@gmail.com"
 
+# ── Web Push (Keynapse Sprint 9) — clé PUBLIQUE VAPID (publique par nature :
+# elle est aussi côté navigateur). La clé PRIVÉE est un SECRET :
+#   echo '<jwk>' | npx wrangler secret put VAPID_PRIVATE_JWK
+VAPID_PUBLIC = "BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUqmP8Vvg30v-9067t9X5HTlEc"
+
 # ── Triggers — Cron Workers (Sprint SDQR-5) ──────────────────
 # "0 3 * * *"   (quotidien 3h UTC) — purges & maintenance (SDQR qr_scans, Pulsa,
 #               rappels d'expiration licence, auto-downgrade concierge).
