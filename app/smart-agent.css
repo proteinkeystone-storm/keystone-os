@@ -1010,6 +1010,26 @@
   border: 1px solid var(--bd);
   border-bottom-left-radius: 5px;
 }
+/* Markdown rendu dans la bulle de réponse (gras, italique, listes, code, liens) */
+.sa-bubble p { margin: 0 0 .5em; }
+.sa-bubble p:last-child { margin-bottom: 0; }
+.sa-bubble ol,
+.sa-bubble ul { margin: .4em 0; padding-left: 1.5em; }
+.sa-bubble ol { list-style: decimal; }
+.sa-bubble ul { list-style: disc; }
+.sa-bubble li { margin: .2em 0; }
+.sa-bubble li:last-child { margin-bottom: 0; }
+.sa-bubble strong { font-weight: 700; }
+.sa-bubble em { font-style: italic; }
+.sa-bubble code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .9em;
+  background: rgba(127, 127, 127, .16);
+  padding: .08em .34em;
+  border-radius: 5px;
+}
+.sa-bubble a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
+
 .sa-bubble-gap {
   display: inline-flex;
   align-items: center;

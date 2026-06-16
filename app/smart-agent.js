@@ -1749,9 +1749,43 @@ function _msgHTML(m) {
 
 // Rend la réponse : échappe le texte, puis transforme les [n] cités en
 // pastilles cliquables (vers la fiche source). pre-wrap géré en CSS.
+// Mini-rendu Markdown SÛR pour les bulles : le modèle répond souvent en
+// Markdown (**gras**, listes, `code`, liens). On ÉCHAPPE d'abord (anti-XSS)
+// puis on met en forme la chaîne échappée — donc aucune balise du modèle ne
+// peut s'injecter, seules NOS balises apparaissent. Les marqueurs [n] de
+// citation sont laissés intacts (transformés ensuite par _renderReply).
+function _mdInline(s) {
+    return s
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+function _mdToHtml(text) {
+    const lines = _esc(String(text ?? '')).split(/\r?\n/);
+    const out = []; let list = null, para = [];
+    const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+    const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
+    for (const line of lines) {
+        let m;
+        if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {            // 1. / 1) listes ordonnées
+            flushPara(); if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+            out.push('<li>' + _mdInline(m[1]) + '</li>');
+        } else if ((m = line.match(/^\s*[-+*]\s+(.*)$/))) {       // - + * listes à puces (marqueur + espace)
+            flushPara(); if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+            out.push('<li>' + _mdInline(m[1]) + '</li>');
+        } else if (line.trim() === '') {
+            flushPara(); closeList();
+        } else {
+            closeList(); para.push(_mdInline(line));
+        }
+    }
+    flushPara(); closeList();
+    return out.join('');
+}
 function _renderReply(reply, citations) {
-    const byN = new Map(citations.map(c => [c.n, c.unit_id]));
-    return _esc(reply).replace(/\[(\d{1,2})\]/g, (full, d) => {
+    const byN = new Map((citations || []).map(c => [c.n, c.unit_id]));
+    return _mdToHtml(reply).replace(/\[(\d{1,2})\]/g, (full, d) => {
         const n = parseInt(d, 10);
         const uid = byN.get(n);
         return uid

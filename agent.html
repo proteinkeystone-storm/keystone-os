@@ -315,6 +315,29 @@
     @keyframes sav2-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .sav2-answer-text.is-fallback { font-weight: 600; color: rgba(228,227,255,.92); }
     .sav2-answer.is-thinking .sav2-answer-text { opacity: .3; filter: blur(.3px); }
+    /* Markdown rendu dans la réponse v2 (gras + listes, lisibles dans le bloc centré) */
+    .sav2-answer-text p { margin: 0 0 .55em; }
+    .sav2-answer-text p:last-child { margin-bottom: 0; }
+    .sav2-answer-text strong { font-weight: 900; }
+    .sav2-answer-text em { font-style: italic; }
+    .sav2-answer-text ol,
+    .sav2-answer-text ul { display: inline-block; text-align: left; margin: .5em 0 0; padding-left: 1.25em;
+      font-weight: 600; font-size: .72em; line-height: 1.5; letter-spacing: normal; }
+    .sav2-answer-text li { margin: .3em 0; }
+    .sav2-answer-text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82em;
+      background: rgba(255,255,255,.12); padding: .08em .34em; border-radius: 5px; font-weight: 600; }
+    .sav2-answer-text a { color: #c7c5ff; text-decoration: underline; }
+    /* Markdown rendu dans la bulle embed (legacy) */
+    .sa-msg-bubble p { margin: 0 0 .5em; }
+    .sa-msg-bubble p:last-child { margin-bottom: 0; }
+    .sa-msg-bubble ol,
+    .sa-msg-bubble ul { margin: .4em 0; padding-left: 1.4em; }
+    .sa-msg-bubble li { margin: .2em 0; }
+    .sa-msg-bubble strong { font-weight: 700; }
+    .sa-msg-bubble em { font-style: italic; }
+    .sa-msg-bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em;
+      background: rgba(127, 127, 127, .16); padding: .08em .34em; border-radius: 5px; }
+    .sa-msg-bubble a { color: inherit; text-decoration: underline; }
     .sav2-thinking { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
       display: none; justify-content: center; gap: 7px; }
     .sav2-answer.is-thinking .sav2-thinking { display: flex; }
@@ -603,6 +626,38 @@
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;').replaceAll('\'', '&#039;');
     }
+    // Mini-rendu Markdown SÛR : on échappe d'abord (anti-XSS) puis on met en
+    // forme la chaîne échappée — **gras**, *italique*, `code`, liens http(s),
+    // listes (1. / -) et sauts de ligne. Seules NOS balises apparaissent.
+    function mdInline(s) {
+      return s
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    }
+    function mdToHtml(text) {
+      const lines = escape(String(text == null ? '' : text)).split(/\r?\n/);
+      const out = []; let list = null, para = [];
+      const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+      const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
+      for (const line of lines) {
+        let m;
+        if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+          flushPara(); if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+          out.push('<li>' + mdInline(m[1]) + '</li>');
+        } else if ((m = line.match(/^\s*[-+*]\s+(.*)$/))) {
+          flushPara(); if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+          out.push('<li>' + mdInline(m[1]) + '</li>');
+        } else if (line.trim() === '') {
+          flushPara(); closeList();
+        } else {
+          closeList(); para.push(mdInline(line));
+        }
+      }
+      flushPara(); closeList();
+      return out.join('');
+    }
 
     // Le rewrite Vercel /a/:slug est transparent (l'URL du navigateur reste
     // /a/:slug) → on lit le slug depuis le chemin, avec repli sur ?s=.
@@ -683,7 +738,7 @@
       const inner = document.getElementById('sa-thread-inner');
       const div = document.createElement('div');
       div.className = `sa-msg ${role}${isFallback ? ' is-fallback' : ''}`;
-      div.innerHTML = `<div class="sa-msg-bubble">${escape(text)}</div>`;
+      div.innerHTML = `<div class="sa-msg-bubble">${mdToHtml(text)}</div>`;
       // SA-8.4 — toute bulle de l'assistant se lit AU TOUCHER (accueil compris).
       if (role === 'agent') {
         const b = div.querySelector('.sa-msg-bubble');
@@ -875,8 +930,8 @@
       if (!t) return;
       if (a) a.classList.remove('is-thinking');
       t.classList.toggle('is-fallback', !!isFallback);
-      t.textContent = text;
-      t.dataset.text = text;                                    // pour la lecture au toucher
+      t.innerHTML = mdToHtml(text);                             // **gras**, listes… rendus (plus de Markdown brut lu/affiché)
+      t.dataset.text = text;                                    // texte BRUT conservé pour la lecture au toucher
       t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
       if (a) a.scrollTop = 0;
     }

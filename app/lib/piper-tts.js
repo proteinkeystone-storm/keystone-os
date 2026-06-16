@@ -206,8 +206,27 @@ const SPEECH_RULES = [
   [/\bSMS\b/g,  'èsse-èmme-èsse'],
   [/\bCB\b/g,   'cé-bé'],
 ];
+// Le modèle peut répondre en Markdown (**gras**, listes, titres #, `code`,
+// liens). Sans nettoyage, la voix lit « étoile étoile gras étoile étoile ».
+// On retire le balisage AVANT la diction (et donc avant la phonémisation).
+// Volontairement SANS lookbehind (compat Safari iOS) : on supprime simplement
+// les marqueurs ; les traits d'union (après-guerre, Lt-Col, 1961-1965) et les
+// underscores (snake_case) sont préservés.
+function stripMarkdownForSpeech(s) {
+  return String(s || '')
+    .replace(/```[\s\S]*?```/g, ' ')         // blocs de code ``` ```
+    .replace(/`/g, '')                       // code `inline`
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')   // images ![alt](url)
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // liens [libellé](url) → libellé
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')      // titres # ## ###
+    .replace(/^\s{0,3}>\s?/gm, '')           // citations >
+    .replace(/^\s{0,3}[-+]\s+/gm, '')        // puces de liste (- +) en début de ligne
+    .replace(/\*/g, '')                      // **gras**, *italique*, * puces → l'étoile disparaît
+    .replace(/~~/g, '');                     // ~~barré~~
+}
+
 export function normalizeForSpeech(text) {
-  let s = String(text || '');
+  let s = stripMarkdownForSpeech(text);
   for (const [re, rep] of SPEECH_RULES) s = s.replace(re, rep);
   return s;
 }
