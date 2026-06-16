@@ -1920,6 +1920,7 @@ export async function handleAgentUpdate(request, env, agentId) {
         identity: { ...(cur.config?.identity || {}), ...((b.config.identity && typeof b.config.identity === 'object') ? b.config.identity : {}) },
         scope:    { ...(cur.config?.scope || {}),    ...((b.config.scope && typeof b.config.scope === 'object') ? b.config.scope : {}) },
         contact:  { ...(cur.config?.contact || {}),  ...((b.config.contact && typeof b.config.contact === 'object') ? b.config.contact : {}) },
+        theme:    { ...(cur.config?.theme || {}),    ...((b.config.theme && typeof b.config.theme === 'object') ? b.config.theme : {}) },
         cards:    (b.config.cards !== undefined) ? b.config.cards : (cur.config?.cards || []),
       }
     : cur.config;
