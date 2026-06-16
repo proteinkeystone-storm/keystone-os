@@ -1415,6 +1415,7 @@ export function publicAgentMeta(agent, apiOrigin = '') {
   const idn = (agent && agent.config && agent.config.identity) ? agent.config.identity : {};
   const cnt = (agent && agent.config && agent.config.contact) ? agent.config.contact : {};
   const cds = Array.isArray(agent && agent.config && agent.config.cards) ? agent.config.cards : [];
+  const thm = (agent && agent.config && agent.config.theme && typeof agent.config.theme === 'object') ? agent.config.theme : {};
   return {
     name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
     opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
@@ -1422,8 +1423,17 @@ export function publicAgentMeta(agent, apiOrigin = '') {
     // SA-8.0 — le rôle (métier) est public par nature : affiché sous le nom.
     role:    (typeof idn.role === 'string' && idn.role.trim()) ? idn.role.trim() : '',
     // Lot 2 (page v2) — lien web + téléphone : boutons du header public (masqués si vides).
-    url:     (typeof cnt.website_url === 'string') ? cnt.website_url.trim() : '',
-    phone:   (typeof cnt.phone === 'string') ? cnt.phone.trim() : '',
+    // url_label : nom affiché dans la pill (la destination reste url).
+    url:       (typeof cnt.website_url === 'string') ? cnt.website_url.trim() : '',
+    url_label: (typeof cnt.website_label === 'string') ? cnt.website_label.trim() : '',
+    phone:     (typeof cnt.phone === 'string') ? cnt.phone.trim() : '',
+    // Personnalisation du fond (re-sanitisée par sécurité avant exposition) :
+    // couleur du bas (#rrggbb ou ''), URL absolue du filigrane (ou '') + opacité.
+    theme: {
+      bg_bottom:         sanitizeHexColor(thm.bg_bottom),
+      watermark:         (typeof thm.watermark_key === 'string' && SA_CARD_KEY_RE.test(thm.watermark_key)) ? (apiOrigin + '/api/smart-agent/card-img/' + thm.watermark_key) : '',
+      watermark_opacity: (typeof thm.watermark_opacity === 'number' && thm.watermark_opacity >= 0 && thm.watermark_opacity <= 0.6) ? thm.watermark_opacity : 0.15,
+    },
     // Lot 3 — cartes : image (URL absolue servie par le worker) + question cachée + alt.
     cards: cds
       .filter(c => c && typeof c.img === 'string' && c.img && typeof c.q === 'string' && c.q)
@@ -1734,6 +1744,16 @@ export function sanitizePublicUrl(raw) {
   return u;
 }
 
+// Pur (testé) : valide une couleur hexadécimale fournie par le propriétaire
+// (fond de la page publique). Accepte #rgb ou #rrggbb (le # est optionnel),
+// renvoie '#rrggbb' minuscule ou '' si invalide → AUCUNE injection possible
+// dans le CSS de la page (seuls 6 caractères hexa peuvent en sortir).
+export function sanitizeHexColor(raw) {
+  let h = (typeof raw === 'string') ? raw.trim().replace(/^#/, '').toLowerCase() : '';
+  if (/^[0-9a-f]{3}$/.test(h)) h = h.split('').map(c => c + c).join('');
+  return /^[0-9a-f]{6}$/.test(h) ? '#' + h : '';
+}
+
 function validateAgentPayload(b, { partial = false } = {}) {
   const out = {};
   if (!partial || b.name !== undefined) {
@@ -1745,6 +1765,7 @@ function validateAgentPayload(b, { partial = false } = {}) {
   const idn = (cfg.identity && typeof cfg.identity === 'object') ? cfg.identity : {};
   const scp = (cfg.scope && typeof cfg.scope === 'object') ? cfg.scope : {};
   const cnt = (cfg.contact && typeof cfg.contact === 'object') ? cfg.contact : {};
+  const thm = (cfg.theme && typeof cfg.theme === 'object' && !Array.isArray(cfg.theme)) ? cfg.theme : {};
   out.config = {
     identity: {
       mission: (typeof idn.mission === 'string') ? idn.mission.trim().slice(0, 600) : '',
@@ -1770,9 +1791,20 @@ function validateAgentPayload(b, { partial = false } = {}) {
         : [],
     },
     // Lot 2 — contact public (page v2) : lien web + téléphone, optionnels.
+    // + nom affiché du lien (pill) : la destination reste website_url.
     contact: {
-      website_url: sanitizePublicUrl(cnt.website_url),
-      phone:       (typeof cnt.phone === 'string') ? cnt.phone.trim().slice(0, 30) : '',
+      website_url:   sanitizePublicUrl(cnt.website_url),
+      website_label: (typeof cnt.website_label === 'string') ? cnt.website_label.trim().slice(0, 40) : '',
+      phone:         (typeof cnt.phone === 'string') ? cnt.phone.trim().slice(0, 30) : '',
+    },
+    // Personnalisation du fond de la page publique (tout optionnel) :
+    // couleur du bas du dégradé (le haut reste sombre), image en filigrane
+    // (réutilise une clé d'image déjà uploadée) + son opacité.
+    theme: {
+      bg_bottom:         sanitizeHexColor(thm.bg_bottom),
+      watermark_key:     (typeof thm.watermark_key === 'string' && SA_CARD_KEY_RE.test(thm.watermark_key)) ? thm.watermark_key : '',
+      watermark_opacity: (typeof thm.watermark_opacity === 'number' && thm.watermark_opacity >= 0 && thm.watermark_opacity <= 0.6)
+        ? Math.round(thm.watermark_opacity * 100) / 100 : 0.15,
     },
     // Lot 3 — cartes-photos cliquables (liste validée/normalisée).
     cards: validateCards(cfg.cards),

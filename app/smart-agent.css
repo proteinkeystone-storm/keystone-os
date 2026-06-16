@@ -1030,6 +1030,17 @@
 }
 .sa-bubble a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
 
+/* Apparence de la page publique — pastilles de couleur du fond */
+.sa-appear { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.sa-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.sa-swatch { width: 28px; height: 28px; border-radius: 50%; padding: 0; border: 2px solid transparent; cursor: pointer; transition: transform .1s ease; }
+.sa-swatch:hover { transform: scale(1.08); }
+.sa-swatch.is-sel { border-color: var(--gold); }
+.sa-appear-hex { display: flex; align-items: center; gap: 8px; }
+.sa-appear-grid { font-family: ui-monospace, monospace; color: var(--tx2); font-size: 14px; }
+.sa-appear-clear { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--bd); color: var(--tx2); border-radius: 9px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.sa-appear-clear:hover { color: var(--text); border-color: var(--tx2); }
+
 .sa-bubble-gap {
   display: inline-flex;
   align-items: center;

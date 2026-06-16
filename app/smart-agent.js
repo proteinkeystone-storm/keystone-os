@@ -301,6 +301,8 @@ function _onClick(e) {
     if (act === 'form-card-del')  { _readAgentForm(); _ag.form.cards.splice(+actEl.dataset.i, 1); _renderMainKeepScroll(); return; }
     if (act === 'form-card-up')   { _readAgentForm(); _moveCard(+actEl.dataset.i, -1); return; }
     if (act === 'form-card-down') { _readAgentForm(); _moveCard(+actEl.dataset.i, 1); return; }
+    if (act === 'form-bg')        { _readAgentForm(); _ag.form.themeBgBottom = (actEl.dataset.hex || '').replace(/^#/, '').toLowerCase(); _renderMainKeepScroll(); return; }
+    if (act === 'form-bg-clear')  { _readAgentForm(); _ag.form.themeBgBottom = ''; _renderMainKeepScroll(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
     // ── Publication publique (SA-5.1) ──
     if (act === 'pub-create')   { _doPublish(); return; }
@@ -791,8 +793,14 @@ function _openForm(agent) {
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
         // Lot 2 — contact public (boutons du header de la page v2).
-        websiteUrl: agent?.config?.contact?.website_url || '',
-        phone:      agent?.config?.contact?.phone || '',
+        websiteUrl:   agent?.config?.contact?.website_url || '',
+        websiteLabel: agent?.config?.contact?.website_label || '',
+        phone:        agent?.config?.contact?.phone || '',
+        // Apparence de la page publique : couleur du bas (sans #, en interne)
+        // + filigrane (clé d'image réutilisée + opacité 0..1).
+        themeBgBottom:  (agent?.config?.theme?.bg_bottom || '').replace(/^#/, '').toLowerCase(),
+        themeWmKey:     agent?.config?.theme?.watermark_key || '',
+        themeWmOpacity: (typeof agent?.config?.theme?.watermark_opacity === 'number') ? agent.config.theme.watermark_opacity : 0.15,
         // Lot 3 — cartes-photos cliquables (copie éditable).
         cards: Array.isArray(agent?.config?.cards)
             ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '' })) : [],
@@ -858,6 +866,21 @@ function _agentFormHTML() {
         ${_ag.cardError ? `<p class="sa-ed-error">${_esc(_ag.cardError)}</p>` : ''}
       </div>`
       : `<p class="sa-field-hint" style="margin-top:14px;">Les cartes-photos de la page publique se configureront ici une fois l'agent créé.</p>`;
+
+    const SA_SWATCHES = [['Indigo','221a52'],['Sarcelle','0f6e56'],['Bordeaux','72243e'],['Bleu roi','0c447c'],['Forêt','27500a'],['Bronze','633806']];
+    const appearanceSection = !isNew ? `
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Couleur du fond de la page publique (optionnel) — le haut du dégradé reste sombre</span></label>
+      <div class="sa-appear">
+        <div class="sa-swatches">
+          ${SA_SWATCHES.map(s => `<button type="button" class="sa-swatch${(d.themeBgBottom || '').toLowerCase() === s[1] ? ' is-sel' : ''}" data-act="form-bg" data-hex="${s[1]}" style="background:#${s[1]}" title="${s[0]}" aria-label="${s[0]}"></button>`).join('')}
+        </div>
+        <div class="sa-appear-hex">
+          <span class="sa-appear-grid">#</span>
+          <input class="sa-input" data-field="themeBgBottom" value="${_escAttr(d.themeBgBottom)}" maxlength="6" placeholder="221a52" style="width:120px;text-transform:uppercase;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+          <button type="button" class="sa-appear-clear" data-act="form-bg-clear" title="Revenir au thème par défaut">${icon('refresh-cw', 14)} Défaut</button>
+        </div>
+      </div>`
+      : '';
     return `
     <section class="sa-kx sa-ed">
       ${isNew ? `<button class="sa-back" data-act="form-cancel">${icon('chevron-left', 16)} Mes agents</button>` : ''}
@@ -910,8 +933,12 @@ function _agentFormHTML() {
 
       <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Lien vers votre site (optionnel) — bouton en haut de la page publique</span>
         <input class="sa-input" data-field="websiteUrl" value="${_escAttr(d.websiteUrl)}" placeholder="https://votre-site.fr"></label>
+      <label class="sa-field"><span class="sa-field-label">Nom affiché du lien (optionnel) — sinon l'adresse est montrée ; la destination reste votre site</span>
+        <input class="sa-input" data-field="websiteLabel" value="${_escAttr(d.websiteLabel)}" maxlength="40" placeholder="Ex. : Notre boutique"></label>
       <label class="sa-field"><span class="sa-field-label">Téléphone (optionnel) — bouton d'appel en haut de la page publique</span>
         <input class="sa-input" data-field="phone" value="${_escAttr(d.phone)}" placeholder="+33 1 23 45 67 89"></label>
+
+      ${appearanceSection}
 
       ${cardsSection}
 
@@ -1151,6 +1178,8 @@ function _readAgentForm() {
     const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
+    const wl = get('[data-field="websiteLabel"]'); if (wl) d.websiteLabel = wl.value.trim();
+    const tb = get('[data-field="themeBgBottom"]'); if (tb) d.themeBgBottom = tb.value.trim().replace(/^#/, '').toLowerCase();
     const ph = get('[data-field="phone"]');      if (ph) d.phone = ph.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
     // Lot 3 — questions des cartes (l'image est déjà en mémoire dans d.cards)
@@ -1239,7 +1268,8 @@ function _agentPayload() {
                         role: d.role, style: d.style, avoid: d.avoid, objective: d.objective },
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
-            contact:  { website_url: d.websiteUrl || '', phone: d.phone || '' },
+            contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
+            theme:    { bg_bottom: d.themeBgBottom || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
             cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '' })),
         },
     };

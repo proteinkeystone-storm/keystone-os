@@ -868,6 +868,35 @@
     function prettyUrl(u) { return String(u || '').replace(/^https?:\/\//i, '').replace(/\/+$/, ''); }
     function fullUrl(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? u : ('https://' + u); }
 
+    // Personnalisation du fond (page v2) : couleur du bas du dégradé (le haut
+    // reste sombre pour la lisibilité du header) + image en filigrane plein
+    // cadre derrière le contenu (z-index -1 → au-dessus du dégradé, sous le
+    // texte). Valeurs déjà sanitisées côté worker (couleur #rrggbb, URL =
+    // origine + clé validée). Voile (text-shadow) ajouté pour garder le texte
+    // blanc lisible quelle que soit la couleur choisie.
+    function applyTheme(meta) {
+      const th = (meta && meta.theme) ? meta.theme : {};
+      const bottom = (typeof th.bg_bottom === 'string' && /^#[0-9a-f]{6}$/i.test(th.bg_bottom)) ? th.bg_bottom : '';
+      if (bottom) {
+        document.body.style.background =
+          'radial-gradient(125% 78% at 50% 102%,' + bottom + '88 0%,transparent 58%),' +
+          'linear-gradient(180deg,#05060f 0%,#0a0b1e 30%,' + bottom + ' 100%)';
+        document.body.style.backgroundAttachment = 'fixed';
+      }
+      const wmUrl = (typeof th.watermark === 'string') ? th.watermark : '';
+      let wm = document.getElementById('sav2-wm');
+      if (wmUrl) {
+        if (!wm) { wm = document.createElement('div'); wm.id = 'sav2-wm'; document.body.appendChild(wm); }
+        const op = (typeof th.watermark_opacity === 'number' && th.watermark_opacity >= 0 && th.watermark_opacity <= 1) ? th.watermark_opacity : 0.15;
+        wm.style.cssText = 'position:fixed;inset:0;z-index:-1;pointer-events:none;background-position:center;background-size:cover;background-repeat:no-repeat;opacity:' + op;
+        wm.style.backgroundImage = 'url("' + wmUrl.replace(/["\\]/g, '') + '")';
+      } else if (wm) { wm.remove(); }
+      if (bottom || wmUrl) {
+        const at = document.getElementById('sav2-answer-text');
+        if (at) at.style.textShadow = '0 1px 16px rgba(0,0,0,.6)';
+      }
+    }
+
     function renderChatV2(meta) {
       const hasVoice = (HAS_WASM || HAS_TTS);
       const url   = (meta.url || '').trim();           // Lot 2 (pas encore dans la meta) → masqué si vide
@@ -877,7 +906,7 @@
       document.getElementById('sa-root').outerHTML = `
         <header class="sav2-top">
           ${url
-            ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape(prettyUrl(url))}</span></a>`
+            ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape((meta.url_label || '').trim() || prettyUrl(url))}</span></a>`
             : `<div class="sav2-top-spacer"></div>`}
           ${phone ? `<a class="sav2-top-btn" href="tel:${escape(phone.replace(/[^0-9+]/g, ''))}" aria-label="Appeler">${SVG_V2.phone}</a>` : ''}
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${SVG_V2.voice}</button>` : ''}
@@ -896,6 +925,8 @@
           </div>
         </div>
         <div class="sav2-rgpd">Réponses issues du savoir de l'assistant. Vos questions sont anonymes et effacées après 90&nbsp;jours.</div>`;
+
+      applyTheme(meta);
 
       const input = document.getElementById('sa-input');
       const send  = document.getElementById('sa-send');
