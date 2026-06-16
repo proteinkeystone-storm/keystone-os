@@ -258,6 +258,13 @@ function _buildShell() {
 
     document.body.appendChild(_root);
     _root.addEventListener('click', _onClick);
+    // Curseur d'opacité du filigrane : met à jour le « N% » en direct (sans re-render).
+    _root.addEventListener('input', (e) => {
+        if (e.target && e.target.matches && e.target.matches('[data-field="themeWmOpacity"]')) {
+            const out = e.target.parentElement && e.target.parentElement.querySelector('[data-slot="wm-opv"]');
+            if (out) out.textContent = e.target.value + '%';
+        }
+    });
     bindRatingButton(_root, WORKSPACE_META.id);
     bindHelpButton(_root, WORKSPACE_META.id);
     bindBurger(_root);
@@ -303,6 +310,8 @@ function _onClick(e) {
     if (act === 'form-card-down') { _readAgentForm(); _moveCard(+actEl.dataset.i, 1); return; }
     if (act === 'form-bg')        { _readAgentForm(); _ag.form.themeBgBottom = (actEl.dataset.hex || '').replace(/^#/, '').toLowerCase(); _renderMainKeepScroll(); return; }
     if (act === 'form-bg-clear')  { _readAgentForm(); _ag.form.themeBgBottom = ''; _renderMainKeepScroll(); return; }
+    if (act === 'form-wm-add')    { _pickWatermarkImage(); return; }
+    if (act === 'form-wm-del')    { _readAgentForm(); _ag.form.themeWmKey = ''; _renderMainKeepScroll(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
     // ── Publication publique (SA-5.1) ──
     if (act === 'pub-create')   { _doPublish(); return; }
@@ -811,6 +820,7 @@ function _openForm(agent) {
     };
     _ag.formError = null; _ag.formBusy = false; _ag.suggestBusy = false; _ag.fbBusy = false;
     _ag.cardBusy = false; _ag.cardError = null;   // Lot 3
+    _ag.wmBusy = false; _ag.wmError = null;       // filigrane (apparence)
     // SA-5.1 — état de publication, rechargé pour un agent existant.
     _ag.publish = { loading: !!agent?.id, busy: false, link: null, qr: null };
     if (agent?.id) _loadPublicLinks(agent.id);
@@ -868,17 +878,34 @@ function _agentFormHTML() {
       : `<p class="sa-field-hint" style="margin-top:14px;">Les cartes-photos de la page publique se configureront ici une fois l'agent créé.</p>`;
 
     const SA_SWATCHES = [['Indigo','221a52'],['Sarcelle','0f6e56'],['Bordeaux','72243e'],['Bleu roi','0c447c'],['Forêt','27500a'],['Bronze','633806']];
+    const _wmPct = Math.round((typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) * 100);
     const appearanceSection = !isNew ? `
-      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Couleur du fond de la page publique (optionnel) — le haut du dégradé reste sombre</span></label>
+      <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Apparence de la page publique (optionnel) — le haut du dégradé reste sombre</span></label>
       <div class="sa-appear">
-        <div class="sa-swatches">
-          ${SA_SWATCHES.map(s => `<button type="button" class="sa-swatch${(d.themeBgBottom || '').toLowerCase() === s[1] ? ' is-sel' : ''}" data-act="form-bg" data-hex="${s[1]}" style="background:#${s[1]}" title="${s[0]}" aria-label="${s[0]}"></button>`).join('')}
+        <div class="sa-appear-row">
+          <span class="sa-appear-lbl">Couleur du bas</span>
+          <div class="sa-swatches">
+            ${SA_SWATCHES.map(s => `<button type="button" class="sa-swatch${(d.themeBgBottom || '').toLowerCase() === s[1] ? ' is-sel' : ''}" data-act="form-bg" data-hex="${s[1]}" style="background:#${s[1]}" title="${s[0]}" aria-label="${s[0]}"></button>`).join('')}
+          </div>
         </div>
         <div class="sa-appear-hex">
           <span class="sa-appear-grid">#</span>
           <input class="sa-input" data-field="themeBgBottom" value="${_escAttr(d.themeBgBottom)}" maxlength="6" placeholder="221a52" style="width:120px;text-transform:uppercase;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
           <button type="button" class="sa-appear-clear" data-act="form-bg-clear" title="Revenir au thème par défaut">${icon('refresh-cw', 14)} Défaut</button>
         </div>
+        <div class="sa-appear-row">
+          <span class="sa-appear-lbl">Filigrane (plein cadre)</span>
+          ${d.themeWmKey
+            ? `<div class="sa-wm-has"><img class="sa-wm-thumb" src="${API_BASE}/api/smart-agent/card-img/${_escAttr(d.themeWmKey)}" alt="" loading="lazy"><button type="button" class="sa-cardcfg-op is-danger" data-act="form-wm-del" title="Retirer le filigrane">${icon('trash-2', 15)}</button></div>`
+            : `<button class="sa-btn sa-wm-add" type="button" data-act="form-wm-add"${_ag.wmBusy ? ' disabled' : ''}>${icon('image', 15)} ${_ag.wmBusy ? 'Envoi de l\'image…' : 'Choisir une image'}</button>`}
+        </div>
+        <div class="sa-appear-row sa-appear-op"${d.themeWmKey ? '' : ' style="opacity:.45;pointer-events:none"'}>
+          <span class="sa-appear-lbl">Opacité du filigrane</span>
+          <input type="range" class="sa-wm-range" data-field="themeWmOpacity" min="0" max="40" step="1" value="${_wmPct}" aria-label="Opacité du filigrane">
+          <span class="sa-appear-opv" data-slot="wm-opv">${_wmPct}%</span>
+        </div>
+        <input type="file" data-slot="wm-file" hidden accept="image/jpeg,image/png,image/webp">
+        ${_ag.wmError ? `<p class="sa-ed-error">${_esc(_ag.wmError)}</p>` : ''}
       </div>`
       : '';
     return `
@@ -1180,6 +1207,7 @@ function _readAgentForm() {
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
     const wl = get('[data-field="websiteLabel"]'); if (wl) d.websiteLabel = wl.value.trim();
     const tb = get('[data-field="themeBgBottom"]'); if (tb) d.themeBgBottom = tb.value.trim().replace(/^#/, '').toLowerCase();
+    const wo = get('[data-field="themeWmOpacity"]'); if (wo) d.themeWmOpacity = (+wo.value || 0) / 100;
     const ph = get('[data-field="phone"]');      if (ph) d.phone = ph.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
     // Lot 3 — questions des cartes (l'image est déjà en mémoire dans d.cards)
@@ -1250,6 +1278,32 @@ async function _uploadCardImage(file) {
         _ag.form.cards.push({ img: data.key, q: '', alt: '' });
     } catch (e) { _ag.cardError = e.message || 'Envoi impossible.'; }
     _ag.cardBusy = false; _renderMainKeepScroll();
+}
+// Filigrane : réutilise l'endpoint/stockage des images de cartes (clé sous
+// sa-cards/<agent>/…), stockée dans theme.watermark_key. Plein cadre → on garde
+// un peu plus de définition (1280) que les vignettes de cartes (1024).
+function _pickWatermarkImage() {
+    if (!_ag.form?.id) { _ag.wmError = 'Créez d\'abord l\'agent.'; _renderMainKeepScroll(); return; }
+    const inp = _root.querySelector('[data-slot="wm-file"]');
+    if (!inp) return;
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) _uploadWatermarkImage(f); };
+    inp.click();
+}
+async function _uploadWatermarkImage(file) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { _ag.wmError = 'Image JPEG, PNG ou WebP.'; _renderMainKeepScroll(); return; }
+    _readAgentForm();                          // préserve couleur/label déjà saisis
+    _ag.wmBusy = true; _ag.wmError = null; _renderMainKeepScroll();
+    try {
+        const blob = await _resizeCardImage(file, 1280);
+        const fd = new FormData(); fd.append('file', blob, 'wm.jpg');
+        const res = await fetch(`${API_BASE}/api/smart-agent/agents/${_ag.form.id}/cards/image`, {
+            method: 'POST', headers: { 'Authorization': `Bearer ${_jwt()}` }, body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+        _ag.form.themeWmKey = data.key;
+    } catch (e) { _ag.wmError = e.message || 'Envoi impossible.'; }
+    _ag.wmBusy = false; _renderMainKeepScroll();
 }
 function _moveCard(i, dir) {
     const a = _ag.form.cards; const j = i + dir;
