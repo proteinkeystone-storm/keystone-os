@@ -1357,9 +1357,10 @@ export function validateCards(raw) {
   return raw
     .filter(c => c && typeof c === 'object')
     .map(c => ({
-      img: (typeof c.img === 'string' && SA_CARD_KEY_RE.test(c.img)) ? c.img : '',
-      q:   (typeof c.q === 'string') ? c.q.trim().slice(0, 200) : '',
-      alt: (typeof c.alt === 'string') ? c.alt.trim().slice(0, 120) : '',
+      img:   (typeof c.img === 'string' && SA_CARD_KEY_RE.test(c.img)) ? c.img : '',
+      q:     (typeof c.q === 'string') ? c.q.trim().slice(0, 200) : '',
+      alt:   (typeof c.alt === 'string') ? c.alt.trim().slice(0, 120) : '',
+      title: (typeof c.title === 'string') ? c.title.trim().slice(0, 60) : '',
     }))
     .filter(c => c.img && c.q)
     .slice(0, SA_CARDS_MAX);
@@ -1437,7 +1438,7 @@ export function publicAgentMeta(agent, apiOrigin = '') {
     // Lot 3 — cartes : image (URL absolue servie par le worker) + question cachée + alt.
     cards: cds
       .filter(c => c && typeof c.img === 'string' && c.img && typeof c.q === 'string' && c.q)
-      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '' })),
+      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '', title: (typeof c.title === 'string') ? c.title : '' })),
   };
 }
 

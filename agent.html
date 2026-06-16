@@ -299,11 +299,14 @@
     .sav2-cards { display: flex; gap: 10px; padding: 12px 16px 6px; overflow-x: auto; scroll-snap-type: x proximity;
       -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .sav2-cards::-webkit-scrollbar { display: none; }
-    .sav2-card { flex: 0 0 31%; aspect-ratio: 4/3; border: 1px solid rgba(164,162,255,.42); border-radius: 16px; overflow: hidden;
+    .sav2-card { position: relative; flex: 0 0 31%; aspect-ratio: 4/3; border: 1px solid rgba(164,162,255,.42); border-radius: 16px; overflow: hidden;
       cursor: pointer; scroll-snap-align: start; background: rgba(255,255,255,.04); padding: 0;
       -webkit-tap-highlight-color: transparent; transition: transform .14s; }
     .sav2-card:active { transform: scale(.96); }
     .sav2-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sav2-card-pill { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 4px 9px; border-radius: 11px;
+      background: rgba(8,8,22,.66); color: #fff; font-size: 11px; font-weight: 500; line-height: 1.25; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 
     /* Zone de réponse : UNE seule réponse, centrée (pas de fil) */
     .sav2-answer { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
@@ -912,7 +915,7 @@
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? 'Couper la lecture vocale' : 'Lire les réponses à voix haute'}">${SVG_V2.voice}</button>` : ''}
         </header>
         ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
-            `<button class="sav2-card" type="button" data-i="${i}" aria-label="Question suggérée"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy"></button>`).join('')}</div>` : ''}
+            `<button class="sav2-card" type="button" data-i="${i}" aria-label="${escape(c.title || 'Question suggérée')}"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy">${c.title ? `<span class="sav2-card-pill">${escape(c.title)}</span>` : ''}</button>`).join('')}</div>` : ''}
         <main class="sav2-answer" id="sav2-answer">
           <div class="sav2-answer-scroll"><div class="sav2-answer-text" id="sav2-answer-text"></div></div>
           <div class="sav2-thinking" aria-hidden="true"><span></span><span></span><span></span></div>

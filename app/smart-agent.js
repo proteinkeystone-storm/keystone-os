@@ -812,7 +812,7 @@ function _openForm(agent) {
         themeWmOpacity: (typeof agent?.config?.theme?.watermark_opacity === 'number') ? agent.config.theme.watermark_opacity : 0.15,
         // Lot 3 — cartes-photos cliquables (copie éditable).
         cards: Array.isArray(agent?.config?.cards)
-            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '' })) : [],
+            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '', title: c.title || '' })) : [],
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
         fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
             ? agent.config.scope.fallback_variants.slice(0, 4) : [],
@@ -864,7 +864,10 @@ function _agentFormHTML() {
         ${(d.cards || []).map((c, i) => `
           <div class="sa-cardcfg">
             <img class="sa-cardcfg-img" src="${API_BASE}/api/smart-agent/card-img/${_escAttr(c.img)}" alt="" loading="lazy">
-            <input class="sa-input sa-cardcfg-q" data-card-q="${i}" value="${_escAttr(c.q)}" maxlength="200" placeholder="Question posée au clic (ex. : Parlez-moi de cet objet)">
+            <div class="sa-cardcfg-fields">
+              <input class="sa-input sa-cardcfg-title" data-card-title="${i}" value="${_escAttr(c.title || '')}" maxlength="60" placeholder="Titre affiché en pill au bas de la carte (optionnel)">
+              <input class="sa-input sa-cardcfg-q" data-card-q="${i}" value="${_escAttr(c.q)}" maxlength="200" placeholder="Question posée au clic (ex. : Parlez-moi de cet objet)">
+            </div>
             <div class="sa-cardcfg-ops">
               <button class="sa-cardcfg-op" type="button" data-act="form-card-up" data-i="${i}" title="Monter"${i === 0 ? ' disabled' : ''}>${icon('chevron-up', 15)}</button>
               <button class="sa-cardcfg-op" type="button" data-act="form-card-down" data-i="${i}" title="Descendre"${i === (d.cards.length - 1) ? ' disabled' : ''}>${icon('chevron-down', 15)}</button>
@@ -1212,6 +1215,7 @@ function _readAgentForm() {
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
     // Lot 3 — questions des cartes (l'image est déjà en mémoire dans d.cards)
     main.querySelectorAll('[data-card-q]').forEach(inp => { const i = +inp.dataset.cardQ; if (d.cards && d.cards[i]) d.cards[i].q = inp.value.trim(); });
+    main.querySelectorAll('[data-card-title]').forEach(inp => { const i = +inp.dataset.cardTitle; if (d.cards && d.cards[i]) d.cards[i].title = inp.value.trim(); });
     // SA-8.0 — variantes de repli (inputs indexés)
     const fbvs = main.querySelectorAll('[data-field="fbv"]');
     if (fbvs.length) d.fallbackVariants = Array.from(fbvs).map(i => i.value.trim()).filter(Boolean);
@@ -1324,7 +1328,7 @@ function _agentPayload() {
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
             theme:    { bg_bottom: d.themeBgBottom || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
-            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '' })),
+            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '' })),
         },
     };
 }
