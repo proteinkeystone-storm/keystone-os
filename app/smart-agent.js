@@ -1334,7 +1334,7 @@ async function _saveAgentForm() {
     const d = _ag.form;
     if (!d.name)    { _formError('Donnez un nom à votre agent.'); return; }
     if (!d.mission) { _formError('Décrivez la mission de l\'agent.'); return; }
-    _ag.formError = null; _ag.formBusy = true; _renderMain();
+    _ag.formError = null; _ag.formBusy = true; _renderMainKeepScroll();
     try {
         if (d.id) {
             // Édition (onglet Réglages) — on reste dans l'agent.
