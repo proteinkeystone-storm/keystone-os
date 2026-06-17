@@ -33,6 +33,7 @@ import { SA_PACKS, packForRole }              from './lib/sa-packs.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
+import { byokRequestFields }                  from './lib/engines.js';
 
 const WORKSPACE_META = { id: 'O-AGT-001', name: 'Smart Agent' };
 
@@ -1184,7 +1185,7 @@ async function _suggestFallbacks() {
     try {
         const r = await _api('/suggest-fallbacks', {
             method: 'POST',
-            body: { name: _ag.form.name, role: _ag.form.role, mission: _ag.form.mission,
+            body: { ...byokRequestFields(), name: _ag.form.name, role: _ag.form.role, mission: _ag.form.mission,
                     tone: _ag.form.tone, style: _ag.form.style, fallback: _ag.form.fallback },
         });
         if (Array.isArray(r.variants) && r.variants.length) _ag.form.fallbackVariants = r.variants;
@@ -1233,7 +1234,7 @@ async function _suggestOpening() {
     try {
         const r = await _api('/suggest-opening', {
             method: 'POST',
-            body: { name: _ag.form.name, mission: _ag.form.mission, posture: _ag.form.posture },
+            body: { ...byokRequestFields(), name: _ag.form.name, mission: _ag.form.mission, posture: _ag.form.posture },
         });
         if (r.opening) _ag.form.opening = r.opening;
     } catch (e) { _toast(e.message, 'error'); }
@@ -1454,7 +1455,7 @@ async function _goldReplay() {
     if (!_gold.items.length) return;
     _gold.busy = true; _renderMain();
     try {
-        _gold.replay = await _api(`/agents/${_cur.id}/golden/replay`, { method: 'POST' });
+        _gold.replay = await _api(`/agents/${_cur.id}/golden/replay`, { method: 'POST', body: byokRequestFields() });
     } catch (e) { _toast(e.message, 'error'); }
     _gold.busy = false; _renderMain();
 }
@@ -1715,8 +1716,8 @@ async function _ivStructure() {
     const g = _iv.gaps[_iv.idx];
     try {
         const res = g.virtual
-            ? await _api(`/agents/${_cur.id}/structure`, { method: 'POST', body: { question: g.question, answer } })
-            : await _api(`/gaps/${g.id}/structure`, { method: 'POST', body: { answer } });
+            ? await _api(`/agents/${_cur.id}/structure`, { method: 'POST', body: { question: g.question, answer, ...byokRequestFields() } })
+            : await _api(`/gaps/${g.id}/structure`, { method: 'POST', body: { answer, ...byokRequestFields() } });
         _iv.proposals = res.proposals || [];
         _iv.checked = new Set(_iv.proposals.map((_, i) => i));
         if (!_iv.proposals.length) { _iv.error = 'Aucune fiche exploitable — précisez ou reformulez votre réponse.'; }
@@ -1785,7 +1786,7 @@ async function _ivExplore() {
     if (_iv.busy) return;
     _iv.busy = true; _renderMain();
     try {
-        const res = await _api(`/agents/${_cur.id}/explore`, { method: 'POST' });
+        const res = await _api(`/agents/${_cur.id}/explore`, { method: 'POST', body: byokRequestFields() });
         const qs = (res.questions || []).map(q => ({ id: null, virtual: true, question: q, hits: 0 }));
         if (!qs.length) { _toast('Aucune nouvelle question proposée pour l\'instant.', 'error'); }
         else {
@@ -2044,7 +2045,7 @@ async function _sendChat() {
     try {
         const res = await _api(`/agents/${_chat.agentId}/chat`, {
             method: 'POST',
-            body: { message, session_id: _chat.sessionId },
+            body: { message, session_id: _chat.sessionId, ...byokRequestFields() },
         });
         _chat.sessionId = res.session_id || _chat.sessionId;
         _chat.messages.push({
@@ -2607,7 +2608,7 @@ async function _runExtract() {
     const text = (ta?.value || '').trim();
     if (text.length < 30) { _ex.error = 'Texte trop court (30 caractères minimum).'; _renderOverlay(); return; }
     _ex.source = null;
-    await _exCall(() => _api('/kortex/extract', { method: 'POST', body: { text } }));
+    await _exCall(() => _api('/kortex/extract', { method: 'POST', body: { text, ...byokRequestFields() } }));
 }
 
 // SA-8.1 — import d'une page web : le worker lit la page (toMarkdown ou
@@ -2617,7 +2618,7 @@ async function _runImportUrl() {
     const url = (inp?.value || '').trim();
     if (!url) { _ex.error = 'Indiquez l\'adresse de la page.'; _renderOverlay(); return; }
     _ex.source = { ref: url };
-    await _exCall(() => _api('/kortex/import-url', { method: 'POST', body: { url } }));
+    await _exCall(() => _api('/kortex/import-url', { method: 'POST', body: { url, ...byokRequestFields() } }));
 }
 
 // SA-8.1 — import d'un fichier : envoyé BINAIRE (pas de JSON) avec son nom

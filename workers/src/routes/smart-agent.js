@@ -57,6 +57,7 @@ import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
 import { budgetGuard }                            from '../lib/ai-budget.js';
+import { callLLM, byokRoutingEnabled }            from '../lib/llm-router.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
 const SA_ENGINE_VERSION = 'SA-9.6';
@@ -867,7 +868,7 @@ export async function handleKortexExtract(request, env) {
   if (text.length < 30)    return err('Texte trop court (30 caractères minimum)', 400, origin);
   if (text.length > 20000) return err('Texte trop long (20 000 caractères maximum)', 400, origin);
 
-  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT, `TEXTE À ANALYSER :\n\n${text}`);
+  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT, `TEXTE À ANALYSER :\n\n${text}`, _byokFromBody(b));
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
   return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
@@ -966,13 +967,13 @@ async function _mdFromBlob(env, name, buf, mimeType) {
 
 // Lance l'extraction sur un texte importé (borne partagée + même prompt que
 // le coller-texte) et fabrique la réponse JSON commune aux deux imports.
-async function _extractFromImport(env, gate, origin, rawText, sourceRef) {
+async function _extractFromImport(env, gate, origin, rawText, sourceRef, byok = null) {
   const { text, truncated } = clampExtractText(rawText);
   if (text.length < 30) {
     return err('Contenu illisible ou vide — si la page est très dynamique, copiez son texte et utilisez « Coller du texte ».', 422, origin);
   }
   const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT,
-    `TEXTE À ANALYSER (importé de : ${sourceRef}) :\n\n${text}`);
+    `TEXTE À ANALYSER (importé de : ${sourceRef}) :\n\n${text}`, byok);
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) {
     return json({ proposals: [], truncated, source_ref: sourceRef, note: 'Aucune fiche exploitable extraite de ce contenu.' }, 200, origin);
@@ -1024,7 +1025,7 @@ export async function handleKortexImportUrl(request, env) {
     const html = new TextDecoder().decode(buf);
     text = await _mdFromBlob(env, 'page.html', buf, 'text/html') || htmlToText(html);
   }
-  return _extractFromImport(env, gate, origin, text, v.url);
+  return _extractFromImport(env, gate, origin, text, v.url, _byokFromBody(b));
 }
 
 // POST /api/smart-agent/kortex/import-file?name=<fichier> — corps BINAIRE
@@ -1061,13 +1062,39 @@ export async function handleKortexImportFile(request, env) {
 // Partagé par le coller-texte (handleKortexExtract) et l'interview
 // (handleGapStructure). Retourne { ok, proposals, creditPayload } ou
 // { ok:false, status, error[, code, quota] } — le caller fabrique la Response.
-async function _aiExtract(env, gate, systemPrompt, userContent) {
+// ── BYOK Smart Agent (Phase 3) : wrapper one-shot. Flag + clé du proprio →
+// callLLM (vendor, HORS compteur) ; sinon Mistral (KS_AI_MODEL), extraction
+// texte identique. `system` passé SÉPARÉMENT (Anthropic l'exige en top-level).
+// ⚠ Les embeddings bge-m3 NE passent JAMAIS par ici (D2 — dims Vectorize figées).
+function _agentUseByok(env, engine, apiKey) {
+  return byokRoutingEnabled(env) && !!engine && !!apiKey;
+}
+// Extrait {engine, apiKey} d'un body owner-triggered (front présent).
+function _byokFromBody(b) {
+  return {
+    engine: (typeof b?.engine === 'string' && b.engine) ? b.engine : null,
+    apiKey: (typeof b?.apiKey === 'string' && b.apiKey.length > 10) ? b.apiKey : null,
+  };
+}
+async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens }) {
+  if (_agentUseByok(env, engine, apiKey)) {
+    const out = await callLLM(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError: false });
+    return out.text || '';
+  }
+  const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+  const res = await env.AI.run(KS_AI_MODEL, { messages: msgs, max_tokens, stream: false });
+  return (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+}
+
+async function _aiExtract(env, gate, systemPrompt, userContent, byok = null) {
   if (!env.AI || typeof env.AI.run !== 'function') {
     return { ok: false, status: 503, error: 'Moteur IA indisponible' };
   }
+  // BYOK (D1/D3) : moteur du proprio → HORS compteur (pas de débit crédit).
+  const useByok = _agentUseByok(env, byok?.engine, byok?.apiKey);
   let credit = null;
   const sub = gate.claims?.sub;
-  if (sub && await isEnforceEnabled(env, sub)) {
+  if (!useByok && sub && await isEnforceEnabled(env, sub)) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
       return { ok: false, status: 429, code: 'AI_CREDITS_EXHAUSTED',
@@ -1081,15 +1108,12 @@ async function _aiExtract(env, gate, systemPrompt, userContent) {
     }
   };
   try {
-    const res = await env.AI.run(KS_AI_MODEL, {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userContent },
-      ],
+    const raw = await _agentLLM(env, {
+      engine: byok?.engine, apiKey: byok?.apiKey,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
       max_tokens: 3000,
-      stream: false,
     });
-    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
     const proposals = _parseProposals(raw);
     if (!proposals.length) { await refund(); return { ok: true, proposals: [], creditPayload: null }; }
     return { ok: true, proposals, creditPayload: credit?.payload || null };
@@ -1141,7 +1165,7 @@ export async function handleGapStructure(request, env, gapId) {
   if (answer.length > 8000) return err('Réponse trop longue (8 000 caractères maximum)', 400, origin);
 
   const userContent = `QUESTION POSÉE :\n${results[0].question}\n\nRÉPONSE DE L'EXPERT :\n${answer}`;
-  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, userContent);
+  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, userContent, _byokFromBody(b));
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
@@ -1659,7 +1683,7 @@ export function isAffirmation(message) {
 // Gratuit (mise en place côté propriétaire). N'invente AUCUN fait précis —
 // juste un accueil chaleureux qui se termine par une question ouverte.
 // Best-effort : renvoie '' si l'IA est indisponible.
-async function _generateOpening(env, { name, mission, posture }) {
+async function _generateOpening(env, { name, mission, posture }, byok = null) {
   if (!env.AI || typeof env.AI.run !== 'function') return '';
   const hint = posture === 'proactif'
     ? 'Sois chaleureux et invite clairement à aller plus loin.'
@@ -1667,15 +1691,13 @@ async function _generateOpening(env, { name, mission, posture }) {
       ? 'Reste sobre et professionnel.'
       : 'Sois accueillant et naturel.';
   try {
-    const res = await env.AI.run(KS_AI_MODEL, {
-      messages: [
-        { role: 'system', content: `Tu rédiges le message d'accueil d'un agent conversationnel nommé « ${name || 'l\'agent'} », dont la mission est : ${mission || 'renseigner les visiteurs'}. ${hint} Écris 1 à 2 phrases en français qui se TERMINENT par UNE question ouverte invitant la personne à exprimer son besoin. N'invente AUCUN fait précis (ni horaire, ni prix, ni service particulier). Réponds uniquement par le message, sans guillemets.` },
-        { role: 'user', content: 'Rédige le message d\'accueil.' },
-      ],
+    const raw = await _agentLLM(env, {
+      engine: byok?.engine, apiKey: byok?.apiKey,
+      system: `Tu rédiges le message d'accueil d'un agent conversationnel nommé « ${name || 'l\'agent'} », dont la mission est : ${mission || 'renseigner les visiteurs'}. ${hint} Écris 1 à 2 phrases en français qui se TERMINENT par UNE question ouverte invitant la personne à exprimer son besoin. N'invente AUCUN fait précis (ni horaire, ni prix, ni service particulier). Réponds uniquement par le message, sans guillemets.`,
+      messages: [{ role: 'user', content: 'Rédige le message d\'accueil.' }],
       max_tokens: 160,
-      stream: false,
     });
-    return String(res?.response ?? res?.choices?.[0]?.message?.content ?? '')
+    return String(raw)
       .trim().replace(/^["«»\s]+|["«»\s]+$/g, '').slice(0, 300);
   } catch (_) { return ''; }
 }
@@ -1693,7 +1715,7 @@ export async function handleSuggestOpening(request, env) {
   if (!mission) return err('Renseignez d\'abord la mission de l\'agent.', 400, origin);
   const posture = ['informatif', 'equilibre', 'proactif'].includes(b?.posture) ? b.posture : 'equilibre';
 
-  const opening = await _generateOpening(env, { name, mission, posture });
+  const opening = await _generateOpening(env, { name, mission, posture }, _byokFromBody(b));
   if (!opening) return err('Suggestion indisponible pour le moment — réessayez.', 502, origin);
   return json({ opening }, 200, origin);
 }
@@ -1715,18 +1737,16 @@ export async function handleSuggestFallbacks(request, env) {
   const fallback = (typeof b?.fallback === 'string') ? b.fallback.trim().slice(0, 200) : '';
   if (!mission) return err('Renseignez d\'abord la mission de l\'agent.', 400, origin);
   if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+  const byok = _byokFromBody(b);
 
   try {
-    const res = await env.AI.run(KS_AI_MODEL, {
-      messages: [
-        { role: 'system', content: `Tu écris les phrases de repli d'un agent conversationnel nommé « ${name || 'l\'agent'} »${role ? ` (${role})` : ''} — ce qu'il dit quand il n'a PAS l'information demandée. Sa mission : ${mission}. Son ton : ${tone || 'professionnel et chaleureux'}.${style ? ` Sa manière de parler : ${style}.` : ''}${fallback ? ` Sa phrase de repli actuelle, à décliner sans la copier : « ${fallback} ».` : ''}
-Écris 3 variantes COURTES (140 caractères max chacune), naturelles et différentes entre elles, qui : reconnaissent honnêtement ne pas avoir cette information précise (sans rien inventer ni promettre), puis enchaînent sur une proposition d'aide. En français, sans placeholder ni crochets. Réponds UNIQUEMENT avec un tableau JSON de 3 chaînes : ["…", "…", "…"]` },
-        { role: 'user', content: 'Écris les 3 variantes.' },
-      ],
+    const raw = String(await _agentLLM(env, {
+      engine: byok.engine, apiKey: byok.apiKey,
+      system: `Tu écris les phrases de repli d'un agent conversationnel nommé « ${name || 'l\'agent'} »${role ? ` (${role})` : ''} — ce qu'il dit quand il n'a PAS l'information demandée. Sa mission : ${mission}. Son ton : ${tone || 'professionnel et chaleureux'}.${style ? ` Sa manière de parler : ${style}.` : ''}${fallback ? ` Sa phrase de repli actuelle, à décliner sans la copier : « ${fallback} ».` : ''}
+Écris 3 variantes COURTES (140 caractères max chacune), naturelles et différentes entre elles, qui : reconnaissent honnêtement ne pas avoir cette information précise (sans rien inventer ni promettre), puis enchaînent sur une proposition d'aide. En français, sans placeholder ni crochets. Réponds UNIQUEMENT avec un tableau JSON de 3 chaînes : ["…", "…", "…"]`,
+      messages: [{ role: 'user', content: 'Écris les 3 variantes.' }],
       max_tokens: 300,
-      stream: false,
-    });
-    const raw = String(res?.response ?? res?.choices?.[0]?.message?.content ?? '');
+    }));
     const variants = parseQuestions(raw).slice(0, 3).map(v => v.slice(0, 220));
     if (!variants.length) return err('Suggestion indisponible pour le moment — réessayez.', 502, origin);
     return json({ variants }, 200, origin);
@@ -2302,6 +2322,10 @@ export async function handleAgentChat(request, env, agentId) {
 
   if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
 
+  // BYOK (D1/D3) : moteur du proprio (bac à sable « Tester ») → HORS compteur.
+  const byok = _byokFromBody(b);
+  const useByok = _agentUseByok(env, byok.engine, byok.apiKey);
+
   // ── Session (créée au premier message, vérifiée ensuite) ──
   let sessionId = (typeof b.session_id === 'string' && b.session_id) ? b.session_id : null;
   if (sessionId) {
@@ -2331,7 +2355,7 @@ export async function handleAgentChat(request, env, agentId) {
   // ── Crédits (DORMANT — patron extract) : 1 crédit par question ──
   let credit = null;
   const sub = gate.claims?.sub;
-  if (sub && await isEnforceEnabled(env, sub)) {
+  if (!useByok && sub && await isEnforceEnabled(env, sub)) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
       return json({
@@ -2418,12 +2442,16 @@ export async function handleAgentChat(request, env, agentId) {
   });
 
   try {
-    const res = await env.AI.run(KS_AI_MODEL, {
-      messages,
+    // BYOK : on sépare le system (persona) de la conversation — Anthropic
+    // exige le system en top-level (cf. _agentLLM). Mistral le ré-assemble.
+    const sysMsg   = messages.find(m => m.role === 'system');
+    const convMsgs = messages.filter(m => m.role !== 'system');
+    const raw = (await _agentLLM(env, {
+      engine: byok.engine, apiKey: byok.apiKey,
+      system: sysMsg?.content,
+      messages: convMsgs,
       max_tokens: 900,
-      stream: false,
-    });
-    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    })).trim();
     if (!raw) { await _refund(); return err('Réponse IA vide — réessayez.', 502, origin); }
 
     // SA-8.0 — le repli est signalé par le marqueur [GAP] (retiré du texte),
@@ -2933,6 +2961,7 @@ export async function handleGoldenReplay(request, env, agentId) {
   const agent = await _agentOr404(env, gate.tenant, agentId, origin);
   if (!agent) return err('Agent introuvable', 404, origin);
 
+  const byok = _byokFromBody(await parseBody(request));   // BYOK : replay sur le moteur du proprio
   const { results: golden } = await env.DB.prepare(
     'SELECT id, question, expect FROM sa_golden WHERE tenant_id = ? AND agent_id = ?'
   ).bind(gate.tenant, agentId).all();
@@ -2970,8 +2999,12 @@ export async function handleGoldenReplay(request, env, agentId) {
           posture:   agent.config?.identity?.posture,
           fallbackText, fiches, history: [], message: g.question,
         });
-        const res = await env.AI.run(KS_AI_MODEL, { messages, max_tokens: 900, stream: false });
-        const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+        const sysMsg   = messages.find(m => m.role === 'system');
+        const convMsgs = messages.filter(m => m.role !== 'system');
+        const raw = (await _agentLLM(env, {
+          engine: byok.engine, apiKey: byok.apiKey,
+          system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+        })).trim();
         // SA-8.0 — marqueur retiré avant comptage (il n'est jamais une citation).
         llmCites = extractCitations(splitGapReply(raw, fallbackText).text, hits.length).length;
       } catch (_) { llmCites = null; /* IA en échec → verdict prudent */ }
@@ -3069,6 +3102,9 @@ export async function handleExploreQuestions(request, env, agentId) {
   const agent = await _agentOr404(env, gate.tenant, agentId, origin);
   if (!agent) return err('Agent introuvable', 404, origin);
   if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+  const b = await parseBody(request);
+  const byok = _byokFromBody(b);
+  const useByok = _agentUseByok(env, byok.engine, byok.apiKey);
 
   const vaultId = await _privateVaultOf(env, gate.tenant, agentId);
   const { results: known } = await env.DB.prepare(
@@ -3080,7 +3116,7 @@ export async function handleExploreQuestions(request, env, agentId) {
 
   let credit = null;
   const sub = gate.claims?.sub;
-  if (sub && await isEnforceEnabled(env, sub)) {
+  if (!useByok && sub && await isEnforceEnabled(env, sub)) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
       return json({ error: 'Crédits IA épuisés ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
@@ -3090,11 +3126,12 @@ export async function handleExploreQuestions(request, env, agentId) {
     if (credit?.ok && credit.cost > 0) await refundCredits(env, { bucketKey: sub, tool: 'smartagent', cost: credit.cost, packsDrawn: credit.packsDrawn });
   };
   try {
-    const res = await env.AI.run(KS_AI_MODEL, {
-      messages: [{ role: 'system', content: EXPLORE_SYSTEM_PROMPT }, { role: 'user', content: userContent }],
-      max_tokens: 800, stream: false,
-    });
-    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    const raw = (await _agentLLM(env, {
+      engine: byok.engine, apiKey: byok.apiKey,
+      system: EXPLORE_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+      max_tokens: 800,
+    })).trim();
     const questions = parseQuestions(raw);
     if (!questions.length) { await refund(); return json({ questions: [] }, 200, origin); }
     return json({ questions, credits: credit?.payload || null }, 200, origin);
@@ -3121,7 +3158,7 @@ export async function handleAgentStructure(request, env, agentId) {
   if (answer.length < 10)   return err('Réponse trop courte (10 caractères minimum)', 400, origin);
   if (answer.length > 8000) return err('Réponse trop longue (8 000 caractères maximum)', 400, origin);
 
-  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, `QUESTION POSÉE :\n${question}\n\nRÉPONSE DE L'EXPERT :\n${answer}`);
+  const r = await _aiExtract(env, gate, INTERVIEW_SYSTEM_PROMPT, `QUESTION POSÉE :\n${question}\n\nRÉPONSE DE L'EXPERT :\n${answer}`, _byokFromBody(b));
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
