@@ -38,9 +38,14 @@ export const PREFS_KEYS = [
     'ks_is_demo',
     'ks_demo_started_at',
     'ks_demo_last_switch',
-    // Living Layer (2026-05-24) — toggle on/off sync entre devices.
-    // Le cache ks_living_cache reste local (régénéré à la demande).
-    'ks_living_layer_on',
+    // ⚠ ks_living_layer_on VOLONTAIREMENT ABSENT (retiré 2026-06-17).
+    // C'est une préférence d'AFFICHAGE par-appareil, pas une donnée à
+    // synchroniser. Le synchroniser provoquait un bug : revenir au dashboard
+    // depuis une app (logo = href="./app" = full reload) re-déclenche
+    // loadFromCloud()→_hydrate(), qui réécrivait le toggle avec la valeur
+    // SERVEUR (souvent encore '1' car l'OFF n'avait pas eu le temps d'être
+    // sauvé — debounce 1,5 s) → le Living Layer « se rallumait » à chaque
+    // retour. Désormais l'état OFF est LOCAL et persistant.
 ];
 
 let _saveTimer = null;
@@ -81,7 +86,11 @@ function _hydrate(vault) {
         if (val) localStorage.setItem('ks_api_' + id, val);
     });
     Object.entries(prefs).forEach(([k, val]) => {
-        if (val != null) localStorage.setItem(k, val);
+        // On ne réinjecte QUE les clés ACTUELLEMENT synchronisées. Un ancien
+        // blob serveur peut contenir une clé retirée du sync depuis (ex.
+        // ks_living_layer_on) : sans ce filtre, elle « ressusciterait » à chaque
+        // hydrate (= chaque reload, dont le retour au dashboard via href="./app").
+        if (val != null && _shouldSync(k)) localStorage.setItem(k, val);
     });
     _lastHydrationTs = Date.now();
     window.dispatchEvent(new CustomEvent('ks-vault-hydrated'));

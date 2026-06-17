@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.27.2-pwa-auto-update';
+const VERSION       = 'ks-os-v5.27.3-living-toggle-fix';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
