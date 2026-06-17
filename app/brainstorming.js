@@ -696,6 +696,11 @@ async function _callOrchestration(panel) {
     target_network: _currentSession.target_network || null,
     history       : _currentSession.history,
     max_turns     : ORCHESTRATION_MAX_TURNS,
+    // BYOK universel (chantier streaming) : moteur ACTIF + sa clé, sous un
+    // champ NESTÉ `byok` (≠ apiKey legacy Devil ci-dessous, qu'on ne touche
+    // pas → byte-identique flag OFF). {} si pas de clé. Le flag BYOK_ROUTING
+    // tranche côté worker : ON ⇒ TOUS les agents streament depuis ce vendor.
+    byok          : byokRequestFields(),
   };
   // Sprint 7.12 — comité réduit : on transmet le comité de débat actif au
   // worker. Le tour de table = la taille du comité (sinon le serveur vise 8).

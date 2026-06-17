@@ -37,6 +37,7 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits } from '../lib/ai-credits.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
+import { streamLLM } from '../lib/llm-stream.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -1032,10 +1033,21 @@ export async function handleBrainstormingAgentRespond(request, env) {
     history        = [],
     max_turns      = DEFAULT_MAX_TURNS,
     active_agents,                   // Sprint 7.12 — comité de débat choisi (sélecteur d'agents)
-    apiKey,                          // BYOK Claude (optionnel) — agent premium Devil's Advocate
+    apiKey,                          // BYOK Claude (LEGACY) — agent premium Devil's Advocate, flag-OFF
+    byok,                            // BYOK universel (nesté) — { engine, apiKey } du moteur ACTIF
     target_network = null,           // Mode « Idées de Posts » — réseau social cible
   } = body;
   const claudeKey = (typeof apiKey === 'string' && apiKey.length > 10) ? apiKey : null;
+
+  // ── BYOK universel (chantier streaming) ─────────────────────────
+  // Le champ `byok` (nesté, ≠ apiKey legacy) porte le moteur ACTIF + sa clé
+  // (front : byokRequestFields()). On le distingue du `apiKey` legacy pour
+  // GARANTIR le byte-identique flag-OFF : on ne touche jamais au chemin
+  // Devil-on-Claude historique. byokActive ⇒ TOUS les agents streament
+  // depuis le vendor du client (D-S2), HORS compteur (D-S3).
+  const byokEngine = (byok && typeof byok.engine === 'string') ? byok.engine : null;
+  const byokKey    = (byok && typeof byok.apiKey === 'string' && byok.apiKey.length > 10) ? byok.apiKey : null;
+  const byokActive = byokRoutingEnabled(env) && !!byokEngine && !!byokKey;
 
   // Validation
   if (!agent_id || !SUPPORTED_AGENTS.has(agent_id)) {
@@ -1079,14 +1091,20 @@ export async function handleBrainstormingAgentRespond(request, env) {
   // Bridage budget IA (admin) : le débat multi-agent (8 agents Workers AI)
   // est de loin le plus gros poste de neurones → c'est le vrai levier du
   // plafond. On coupe net ici avant d'ouvrir le stream.
-  const _throttled = await budgetGuard(env, origin);
-  if (_throttled) return _throttled;
+  // BYOK : si le client streame depuis SON vendor (byokActive), aucun
+  // neurone Workers AI n'est consommé → on NE bride PAS sur MON budget
+  // (et on ne décompte pas ses crédits). D-S3, patron P2/P3.
+  if (!byokActive) {
+    const _throttled = await budgetGuard(env, origin);
+    if (_throttled) return _throttled;
+  }
 
   // ── Crédits IA — débit du portefeuille de la licence connectée ───
   // (Chantier B · Sprint 3). 1 crédit par tour de table (cet appel,
   // même en mode 'auto' multi-agents). DORMANT : ne s'active que si la
   // licence porte enforce_ai_credits_v1=1 ; sinon legacy/illimité.
-  if (await isEnforceEnabled(env, claims.sub)) {
+  // Skippé si byokActive (le client paie son vendor, hors compteur).
+  if (!byokActive && await isEnforceEnabled(env, claims.sub)) {
     const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
     if (!credit.ok && credit.blocked) {
       return json({
@@ -1246,11 +1264,39 @@ POSTURE
           let fullText  = '';
           let streamed  = false;
 
-          // ── Agent premium : Devil's Advocate sur Claude Haiku ──────
-          // Si la clé BYOK est fournie ET que c'est le tour du Devil's
-          // Advocate, on streame via Claude Haiku (caractère affûté). En
-          // cas d'échec (clé invalide, réseau…), on retombe sur Llama.
-          if (currentAgentId === PREMIUM_AGENT_ID && claudeKey) {
+          // ── BYOK universel : moteur ACTIF du client pour TOUS les agents ──
+          // (flag ON + clé). Le débat entier streame depuis le vendor choisi
+          // (Anthropic / OpenAI-compat / Gemini), HORS compteur. Le Devil
+          // garde sa persona enrichie quel que soit le vendor. Repli Workers
+          // AI ci-dessous SI le vendor échoue AVANT le 1er chunk ; s'il a déjà
+          // émis puis coupe, streamLLM renvoie le partiel (pas de double).
+          if (byokActive) {
+            const effSystem = (currentAgentId === PREMIUM_AGENT_ID)
+              ? _enrichDevilPromptForClaude(systemPrompt)
+              : systemPrompt;
+            const byokUser = _buildClaudeUserContent(recent, triggerContent);
+            try {
+              const byokText = await streamLLM(env, {
+                engine    : byokEngine,
+                apiKey    : byokKey,
+                system    : effSystem,
+                messages  : [{ role: 'user', content: byokUser }],
+                max_tokens: MAX_TOKENS,
+                onChunk   : (t) => send({ type: 'chunk', agent_id: currentAgentId, text: t }),
+              });
+              if (byokText) { fullText = byokText; streamed = true; }
+            } catch (e) {
+              // Échec AVANT le 1er chunk → repli Workers AI ci-dessous (rien
+              // d'émis). On ne notifie pas le client : bascule transparente.
+            }
+          }
+
+          // ── Agent premium : Devil's Advocate sur Claude Haiku (LEGACY) ──
+          // Chemin historique (flag OFF), INCHANGÉ : si une clé Anthropic est
+          // posée (apiKey legacy) ET tour du Devil, on streame via Claude
+          // Haiku (caractère affûté). Échec → fallback Llama. BYPASSÉ quand
+          // byokActive (le moteur actif gère déjà ce tour).
+          if (!streamed && !byokActive && currentAgentId === PREMIUM_AGENT_ID && claudeKey) {
             const enrichedSystem = _enrichDevilPromptForClaude(systemPrompt);
             const claudeUser     = _buildClaudeUserContent(recent, triggerContent);
             const claudeText     = await _streamAgentClaude(claudeKey, enrichedSystem, claudeUser, send, currentAgentId);

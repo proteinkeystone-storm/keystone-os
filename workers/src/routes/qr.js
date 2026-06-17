@@ -29,6 +29,10 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
 import { isEnforceEnabled, resolvePlanByHmac, consumeCredits, quotaForPlan } from '../lib/ai-credits.js';
 import { audit } from '../lib/audit.js';
+// BYOK universel (chantier streaming) : moteur + clé du PROPRIÉTAIRE du QR,
+// résolus serveur depuis le coffre chiffré (flag BYOK_ROUTING tranche).
+import { resolveEngineForTenant } from '../lib/llm-router.js';
+import { streamLLM } from '../lib/llm-stream.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -1811,9 +1815,22 @@ export async function handleSmartQrConcierge(request, env) {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
   }
 
+  // ── BYOK universel : moteur + clé du PROPRIÉTAIRE du QR ───────────
+  // Surface PUBLIQUE (visiteur anonyme) : la clé est celle du proprio,
+  // résolue serveur depuis le coffre chiffré (comme le chat public Smart
+  // Agent). resolveEngineForTenant est GATÉ par BYOK_ROUTING : flag OFF →
+  // null en 1re ligne (zéro requête DB) → concierge Mistral INCHANGÉ.
+  // Si byok ⇒ le proprio paie son vendor : on NE bride PAS sur MON budget
+  // et on NE décompte PAS ses crédits (repli Mistral plus bas si le vendor
+  // échoue — jamais casser le visiteur).
+  const byok = ownerKey ? await resolveEngineForTenant(env, ownerKey) : null;
+
   // Garde-fou budget IA global (admin) — endpoint public = protège le wallet.
-  const throttled = await budgetGuard(env, origin);
-  if (throttled) return throttled;
+  // Skippé si byok (aucun neurone Workers AI consommé tant que le vendor tient).
+  if (!byok) {
+    const throttled = await budgetGuard(env, origin);
+    if (throttled) return throttled;
+  }
 
   // ── Crédits IA — débit du portefeuille du PROPRIÉTAIRE du QR ──────
   // (Chantier B · Sprint 2). Le visiteur est anonyme : on débite la
@@ -1821,7 +1838,8 @@ export async function handleSmartQrConcierge(request, env) {
   // DORMANT : ne s'active que si la licence propriétaire porte le flag
   // enforce_ai_credits_v1 = 1. Sinon → comportement legacy (illimité),
   // zéro régression. Une question Concierge = 1 crédit (COST.concierge).
-  if (ownerKey && await isEnforceEnabled(env, ownerKey)) {
+  // Skippé si byok (le proprio paie son vendor, hors compteur — D-S3).
+  if (!byok && ownerKey && await isEnforceEnabled(env, ownerKey)) {
     const ownerPlan = await resolvePlanByHmac(env, ownerKey);
     const credit = await consumeCredits(env, { bucketKey: ownerKey, plan: ownerPlan, tool: 'concierge' });
     if (!credit.ok && credit.blocked) {
@@ -1875,59 +1893,92 @@ export async function handleSmartQrConcierge(request, env) {
       let fullText = '';
       let emitBuf  = '';   // tampon : retient un repère {{...}} en cours de formation
 
+      // Émission d'un morceau avec substitution des repères {{...}}, COMMUNE
+      // au chemin BYOK (vendor) et au repli Workers AI. On RETIENT un repère
+      // potentiellement incomplet en fin de tampon ({, {{, {{Pa, {{Pa}) pour
+      // ne jamais envoyer d'accolades au visiteur.
+      const pushChunk = (chunk) => {
+        if (!chunk) return;
+        fullText += chunk;
+        emitBuf  += chunk;
+        const hold = (emitBuf.match(/\{\{?[A-Za-z]{0,6}\}?$/) || [''])[0].length;
+        if (emitBuf.length > hold) {
+          const out = subTokens(emitBuf.slice(0, emitBuf.length - hold));
+          emitBuf   = emitBuf.slice(emitBuf.length - hold);
+          if (out) send({ type: 'chunk', text: out });
+        }
+      };
+
       try {
-        let aiStream;
-        try {
-          aiStream = await env.AI.run(KS_AI_MODEL, {
-            messages,
-            stream:     true,
-            max_tokens: CONCIERGE_MAX_TOK,
-          });
-        } catch (e) {
-          send({ type: 'error', message: `AI run failed: ${e?.message || e}` });
-          try { controller.close(); } catch (_) { /* déjà fermé */ }
-          return;
+        let viaByok = false;
+
+        // ── BYOK : moteur du PROPRIÉTAIRE (flag ON) ─────────────────
+        // Streame depuis le vendor du proprio. Repli Workers AI si le vendor
+        // échoue AVANT le 1er chunk ; s'il a déjà émis puis coupe, streamLLM
+        // renvoie le partiel (pas de throw) → on NE re-streame PAS (zéro
+        // duplication chez le visiteur). Vendor 200 mais vide → repli aussi.
+        if (byok) {
+          try {
+            const byokText = await streamLLM(env, {
+              engine    : byok.engine,
+              apiKey    : byok.apiKey,
+              system    : systemPrompt,
+              messages  : [...history, { role: 'user', content: question }],
+              max_tokens: CONCIERGE_MAX_TOK,
+              onChunk   : pushChunk,
+            });
+            viaByok = !!byokText;
+          } catch (e) {
+            // Échec : si rien n'a encore été émis → repli Mistral propre ;
+            // sinon (partiel déjà streamé) → on garde, pas de re-stream.
+            viaByok = !!fullText;
+          }
         }
 
-        // Consomme le stream Workers AI ligne par ligne. Fallback large sur
-        // la forme du chunk (cf. brainstorming.js) pour absorber d'éventuels
-        // changements de wrapping Cloudflare selon le modèle.
-        const reader  = aiStream.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let   buffer  = '';
+        // ── Repli / défaut : Mistral sur Workers AI (chemin INCHANGÉ) ──
+        if (!viaByok) {
+          let aiStream;
+          try {
+            aiStream = await env.AI.run(KS_AI_MODEL, {
+              messages,
+              stream:     true,
+              max_tokens: CONCIERGE_MAX_TOK,
+            });
+          } catch (e) {
+            send({ type: 'error', message: `AI run failed: ${e?.message || e}` });
+            try { controller.close(); } catch (_) { /* déjà fermé */ }
+            return;
+          }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const data = line.slice(5).trim();
-            if (!data || data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              const chunk =
-                parsed.response                     ??
-                parsed.text                         ??
-                parsed.choices?.[0]?.delta?.content ??
-                parsed.delta?.text                  ??
-                parsed.p                            ??
-                '';
-              if (chunk) {
-                fullText += chunk;
-                emitBuf  += chunk;
-                // Flush en remplaçant les repères, mais en RETENANT un repère
-                // potentiellement incomplet en fin de tampon ({, {{, {{Pa, {{Pa}).
-                const hold = (emitBuf.match(/\{\{?[A-Za-z]{0,6}\}?$/) || [''])[0].length;
-                if (emitBuf.length > hold) {
-                  const out = subTokens(emitBuf.slice(0, emitBuf.length - hold));
-                  emitBuf   = emitBuf.slice(emitBuf.length - hold);
-                  if (out) send({ type: 'chunk', text: out });
-                }
-              }
-            } catch (e) { /* ligne malformée ignorée */ }
+          // Consomme le stream Workers AI ligne par ligne. Fallback large sur
+          // la forme du chunk (cf. brainstorming.js) pour absorber d'éventuels
+          // changements de wrapping Cloudflare selon le modèle.
+          const reader  = aiStream.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let   buffer  = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.startsWith('data:')) continue;
+              const data = line.slice(5).trim();
+              if (!data || data === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(data);
+                const chunk =
+                  parsed.response                     ??
+                  parsed.text                         ??
+                  parsed.choices?.[0]?.delta?.content ??
+                  parsed.delta?.text                  ??
+                  parsed.p                            ??
+                  '';
+                pushChunk(chunk);
+              } catch (e) { /* ligne malformée ignorée */ }
+            }
           }
         }
 
@@ -1940,13 +1991,16 @@ export async function handleSmartQrConcierge(request, env) {
         const clean = subTokens(stripModelNoise(fullText));
         send({ type: 'done', full_text: clean });
 
-        // Compteur budget IA (best-effort, 1 écriture).
-        try {
-          await recordUsage(env, 'smartqr-concierge', {
-            inTokens:  estimateTokens(JSON.stringify(messages)),
-            outTokens: estimateTokens(clean),
-          });
-        } catch (e) { /* non-critique */ }
+        // Compteur budget IA (best-effort, 1 écriture). Skippé si viaByok
+        // (le proprio a payé son vendor — hors compteur, D-S3).
+        if (!viaByok) {
+          try {
+            await recordUsage(env, 'smartqr-concierge', {
+              inTokens:  estimateTokens(JSON.stringify(messages)),
+              outTokens: estimateTokens(clean),
+            });
+          } catch (e) { /* non-critique */ }
+        }
       } catch (e) {
         send({ type: 'error', message: `Stream error: ${e?.message || e}` });
       } finally {
