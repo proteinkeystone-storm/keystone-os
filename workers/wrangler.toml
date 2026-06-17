@@ -69,6 +69,14 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Pour les preview deployments Vercel (URL avec -git-XXX-storms-projects),
 # utilisez plutôt un domaine custom ou ajoutez explicitement chaque URL.
 
+# ── BYOK — Moteur IA universel (chantier « ma clé pilote tout ») ──
+# Drapeau de rollback du routage vendor des surfaces BYOK *nouvelles*
+# (Phase 2/3). OFF par défaut : on l'allume progressivement par phase.
+# Éteindre = retour Mistral instantané sur ces surfaces. N'affecte PAS
+# /api/proxy/llm (BYOK explicite déjà en prod : Brief, Annonces, pads).
+# Lu par lib/llm-router.js → byokRoutingEnabled(env).
+BYOK_ROUTING = "off"
+
 # ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
 SDQR_SCAN_RETENTION_DAYS = "90"

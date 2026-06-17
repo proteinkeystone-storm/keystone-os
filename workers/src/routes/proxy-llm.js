@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Proxy LLM (Sprint P2.3)
+   KEYSTONE OS — Proxy LLM (Sprint P2.3 · refactor BYOK Phase 0)
    Layer 2 · Bridge serveur vers les APIs LLM tierces.
 
    Pourquoi un proxy serveur ?
@@ -19,47 +19,17 @@
      Body : { engine, apiKey, model, system, messages, max_tokens }
      Réponse normalisée : { text, usage, model, stop_reason, engine }
 
-   Engines supportés (P2.3) :
-     claude     → Anthropic Messages API           (format propre)
-     gemini     → Google Generative Language API   (format propre)
-     gpt        → OpenAI Chat Completions API      (format OpenAI)
-     mistral    → Mistral AI Chat Completions      (format OpenAI-compat)
-     grok       → xAI Chat Completions             (format OpenAI-compat)
-     perplexity → Perplexity Sonar API             (format OpenAI-compat)
-     llama      → Groq Llama (api.groq.com)        (format OpenAI-compat)
+   ⚙️ Phase 0 (BYOK universel) : toute la logique de routage + les
+   helpers vendor + les modèles par défaut + les caps vivent désormais
+   dans lib/llm-router.js (`callLLM`). Cette route DÉLÈGUE — sa sortie
+   HTTP est identique à l'historique (Brief Prod, Annonces immo, pads
+   génériques ne bougent pas). callLLM, lui, est réutilisable côté
+   serveur (features sans front présent) et sait retomber sur Mistral.
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, getAllowedOrigin, requireDevice } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
-
-// Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
-// L'utilisateur peut override via `body.model`.
-const DEFAULT_MODELS = {
-  claude    : 'claude-sonnet-4-5-20250929',
-  gemini    : 'gemini-2.5-flash',
-  gpt       : 'gpt-4o-mini',
-  mistral   : 'mistral-small-latest',
-  grok      : 'grok-2-latest',
-  perplexity: 'sonar',
-  llama     : 'llama-3.3-70b-versatile',
-};
-
-// Mapping engine → base URL (pour les APIs OpenAI-compatibles).
-// On ne hardcode que la racine ; le helper _proxyOpenAICompatible
-// ajoute /chat/completions (ou équivalent).
-const OPENAI_COMPAT_ENDPOINTS = {
-  gpt       : 'https://api.openai.com/v1/chat/completions',
-  mistral   : 'https://api.mistral.ai/v1/chat/completions',
-  grok      : 'https://api.x.ai/v1/chat/completions',
-  perplexity: 'https://api.perplexity.ai/chat/completions',
-  llama     : 'https://api.groq.com/openai/v1/chat/completions',
-};
-
-// Cap raisonnable pour éviter qu'un client n'envoie un payload géant
-// au vendor en cas de bug. Anthropic accepte ~200k tokens, on cape bas
-// au niveau du proxy pour la V1.
-const MAX_MESSAGES_BYTES = 64 * 1024;   // 64 KB de messages JSON.stringified
-const MAX_OUTPUT_TOKENS  = 8192;        // borne haute sortie
+import { callLLM }    from '../lib/llm-router.js';
 
 export async function handleProxyLLM(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -79,16 +49,9 @@ export async function handleProxyLLM(request, env) {
     return err('Body JSON requis', 400, origin);
   }
 
-  const {
-    engine,
-    apiKey,
-    model,
-    system,
-    messages,
-    max_tokens = 1024,
-  } = body;
+  const { engine, apiKey, model, system, messages, max_tokens = 1024 } = body;
 
-  // Validation entrée
+  // Validation entrée (contrat public de la route — préservé à l'identique).
   if (!engine || typeof engine !== 'string') {
     return err('Champ "engine" requis', 400, origin);
   }
@@ -99,222 +62,19 @@ export async function handleProxyLLM(request, env) {
     return err('Champ "messages" requis (tableau non vide)', 400, origin);
   }
 
-  const messagesJson = JSON.stringify(messages);
-  if (messagesJson.length > MAX_MESSAGES_BYTES) {
-    return err(`Messages trop volumineux (max ${MAX_MESSAGES_BYTES} octets, recu ${messagesJson.length})`, 413, origin);
-  }
-
-  const cappedMaxTokens = Math.min(Math.max(parseInt(max_tokens, 10) || 1024, 1), MAX_OUTPUT_TOKENS);
-
-  // Routing par engine
-  switch (engine) {
-    case 'claude':
-      return _proxyAnthropic({
-        apiKey,
-        model  : model || DEFAULT_MODELS.claude,
-        system : typeof system === 'string' ? system : undefined,
-        messages,
-        max_tokens: cappedMaxTokens,
-      }, origin);
-
-    case 'gemini':
-      return _proxyGemini({
-        apiKey,
-        model     : model || DEFAULT_MODELS.gemini,
-        system    : typeof system === 'string' ? system : undefined,
-        messages,
-        max_tokens: cappedMaxTokens,
-      }, origin);
-
-    // Tous les engines OpenAI-compatibles passent par le même helper.
-    // Différences gérées dans OPENAI_COMPAT_ENDPOINTS + DEFAULT_MODELS.
-    case 'gpt':
-    case 'mistral':
-    case 'grok':
-    case 'perplexity':
-    case 'llama':
-      return _proxyOpenAICompatible({
-        engine,
-        endpoint  : OPENAI_COMPAT_ENDPOINTS[engine],
-        apiKey,
-        model     : model || DEFAULT_MODELS[engine],
-        system    : typeof system === 'string' ? system : undefined,
-        messages,
-        max_tokens: cappedMaxTokens,
-      }, origin);
-
-    default:
-      return err(`Engine '${engine}' pas encore supporté`, 400, origin);
-  }
-}
-
-// ── Anthropic Messages API ─────────────────────────────────────
-// Doc : https://docs.anthropic.com/en/api/messages
-// On utilise le format messages V1 (post Q3 2023). `system` est un champ
-// top-level, pas un message role=system.
-async function _proxyAnthropic({ apiKey, model, system, messages, max_tokens }, origin) {
-  const payload = { model, messages, max_tokens };
-  if (system) payload.system = system;
-
-  let res;
+  // Délégation au routeur central. callLLM applique les caps (taille
+  // messages → 413, max_tokens), route vers le vendor, et `throw`e une
+  // LLMError (avec httpStatus) en cas d'échec — qu'on remappe en err().
   try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key'        : apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type'     : 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    const out = await callLLM(env, { engine, apiKey, model, system, messages, max_tokens });
+    return json({
+      text       : out.text,
+      model      : out.model,
+      usage      : out.usage,
+      stop_reason: out.stop_reason,
+      engine     : out.engine,
+    }, 200, origin);
   } catch (e) {
-    return err(`Proxy network error: ${e.message}`, 502, origin);
+    return err(e?.message || 'Proxy LLM error', e?.httpStatus || 502, origin);
   }
-
-  let data;
-  try { data = await res.json(); }
-  catch { data = null; }
-
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.message || res.statusText || 'Anthropic error';
-    return err(`Anthropic [${res.status}] ${msg}`, res.status, origin);
-  }
-
-  // Format normalisé : on extrait le texte de la première content-part de
-  // type 'text'. (Anthropic peut renvoyer plusieurs parts en cas de
-  // tool_use ; pour la V1 on prend juste le texte.)
-  const textPart = (data?.content || []).find(p => p.type === 'text');
-  return json({
-    text       : textPart?.text || '',
-    model      : data?.model || model,
-    usage      : data?.usage || null,
-    stop_reason: data?.stop_reason || null,
-    engine     : 'claude',
-  }, 200, origin);
-}
-
-// ── Google Generative Language API (Gemini) ────────────────────
-// Doc : https://ai.google.dev/api/generate-content
-// Format request : { system_instruction, contents, generationConfig }
-// Format response : { candidates[].content.parts[].text, usageMetadata }
-// La clé API passe en query param (?key=...) — pas de header Authorization.
-async function _proxyGemini({ apiKey, model, system, messages, max_tokens }, origin) {
-  const contents = messages.map(m => ({
-    role : m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-  }));
-
-  const payload = {
-    contents,
-    generationConfig: {
-      maxOutputTokens: max_tokens,
-      temperature    : 0.7,
-      // Gemini 2.5+ : par défaut consomme des tokens en "thinking" interne,
-      // ce qui tronque le budget de sortie. On désactive pour les tâches
-      // courtes (redact-section) — réponse directe, plus de tokens utiles.
-      thinkingConfig : { thinkingBudget: 0 },
-    },
-  };
-  if (system) {
-    payload.system_instruction = { parts: [{ text: system }] };
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  let res;
-  try {
-    res = await fetch(url, {
-      method : 'POST',
-      headers: { 'content-type': 'application/json' },
-      body   : JSON.stringify(payload),
-    });
-  } catch (e) {
-    return err(`Proxy network error (Gemini): ${e.message}`, 502, origin);
-  }
-
-  let data;
-  try { data = await res.json(); }
-  catch { data = null; }
-
-  if (!res.ok) {
-    const msg = data?.error?.message || res.statusText || 'Gemini error';
-    return err(`Gemini [${res.status}] ${msg}`, res.status, origin);
-  }
-
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  const meta = data?.usageMetadata || {};
-  return json({
-    text,
-    model      : model,
-    usage      : {
-      input_tokens : meta.promptTokenCount     || null,
-      output_tokens: meta.candidatesTokenCount || null,
-    },
-    stop_reason: data?.candidates?.[0]?.finishReason || null,
-    engine     : 'gemini',
-  }, 200, origin);
-}
-
-// ── OpenAI-Compatible Chat Completions ─────────────────────────
-// Sert tous les vendors qui parlent le format OpenAI :
-//   gpt        → api.openai.com
-//   mistral    → api.mistral.ai
-//   grok       → api.x.ai
-//   perplexity → api.perplexity.ai
-//   llama      → api.groq.com/openai (Groq sert Llama via une API OpenAI-compat)
-//
-// Format request commun : { model, messages [role system|user|assistant], max_tokens }
-// Format response commun : { choices[].message.content, usage, model }
-//
-// Notes par vendor :
-//   - Perplexity : champ `usage` peut omettre prompt_tokens si requête grounded
-//   - Groq      : utilise `/openai/v1/chat/completions` (compatibilité explicite)
-//   - xAI Grok  : modèles `grok-2-latest`, `grok-3` selon plan
-async function _proxyOpenAICompatible({ engine, endpoint, apiKey, model, system, messages, max_tokens }, origin) {
-  const oaiMessages = [];
-  if (system) oaiMessages.push({ role: 'system', content: system });
-  for (const m of messages) {
-    oaiMessages.push({
-      role   : m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    });
-  }
-
-  const payload = { model, messages: oaiMessages, max_tokens };
-
-  let res;
-  try {
-    res = await fetch(endpoint, {
-      method : 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'content-type' : 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    return err(`Proxy network error (${engine}): ${e.message}`, 502, origin);
-  }
-
-  let data;
-  try { data = await res.json(); }
-  catch { data = null; }
-
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.detail || res.statusText || `${engine} error`;
-    return err(`${engine} [${res.status}] ${msg}`, res.status, origin);
-  }
-
-  const text  = data?.choices?.[0]?.message?.content || '';
-  const usage = data?.usage || {};
-  return json({
-    text,
-    model      : data?.model || model,
-    usage      : {
-      input_tokens : usage.prompt_tokens     || null,
-      output_tokens: usage.completion_tokens || null,
-    },
-    stop_reason: data?.choices?.[0]?.finish_reason || null,
-    engine,
-  }, 200, origin);
 }
