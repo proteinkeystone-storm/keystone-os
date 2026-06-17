@@ -45,6 +45,7 @@ import { handleProxyLLM }                                               from './
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleBrainstormingPostIdeas, handleBrainstormingPickRoster } from './routes/brainstorming.js';
+import { handleFetchSource } from './routes/content-source.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
 // Budget IA — compteur neurones Workers AI + bridage (2026-05-29)
 import { handleAiBudgetGet, handleAiBudgetThrottle, handleAiBudgetThreshold } from './routes/ai-budget-admin.js';
@@ -424,6 +425,10 @@ export default {
       // Mode « Auto » — l'IA choisit le comité de débat selon le sujet (one-shot)
       if (path === '/api/brainstorming/pick-roster' && (method === 'POST' || method === 'OPTIONS')) {
         return handleBrainstormingPickRoster(request, env);
+      }
+      // Chaîne de contenu — récupération d'une source web (ancrage débat + rédaction)
+      if (path === '/api/content/fetch-source' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleFetchSource(request, env);
       }
 
       // Phase 3 — génération texte libre via Gemma 4 (vs /rewrite

@@ -84,6 +84,11 @@ const MAX_TOKENS_HEAVY_SYNTH    = 4096;
 const MAX_TOKENS_HEAVY_INSIGHTS = 4096;
 const MIN_BRIEF   = 5;
 const MAX_BRIEF   = 2000;
+// Source fournie par l'utilisateur (chaîne de contenu) — bornée AVANT injection
+// dans le débat : elle est répétée dans le prompt système de chaque agent, donc
+// on la garde compacte (les 8 agents × tours). Le moteur étant Mistral/Cloudflare
+// (gratuit, capé au compteur), c'est une limite de pertinence, pas de coût €.
+const SOURCE_INJECT_MAX = 2500;
 const MAX_HISTORY = 40;
 // Sprint 7.1 — tour de table complet : 8 agents non-Synthesizer en un cycle
 const DEFAULT_MAX_TURNS = 8;
@@ -1165,6 +1170,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
     apiKey,                          // BYOK Claude (LEGACY) — agent premium Devil's Advocate, flag-OFF
     byok,                            // BYOK universel (nesté) — { engine, apiKey } du moteur ACTIF
     target_network = null,           // Mode « Idées de Posts » — réseau social cible
+    source,                          // Chaîne de contenu — { text, ref } source fournie par l'utilisateur
   } = body;
   const claudeKey = (typeof apiKey === 'string' && apiKey.length > 10) ? apiKey : null;
 
@@ -1209,9 +1215,16 @@ export async function handleBrainstormingAgentRespond(request, env) {
   // agents (sans toucher le brief affiché/historisé côté front). null sinon.
   const POST_NET_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', threads: 'Threads', telegram: 'Telegram' };
   const _netCible = (cognitive_mode === 'post-ideas' && POST_NET_LABELS[target_network]) ? POST_NET_LABELS[target_network] : null;
-  const effectiveBrief = _netCible
+  const _briefBase = _netCible
     ? `${brief}\n\n[RÉSEAU CIBLE : ${_netCible} — toutes les idées de posts doivent être pensées pour ce réseau.]`
     : brief;
+  // Chaîne de contenu — DOSSIER SOURCE : matière apportée par l'utilisateur (lien
+  // web extrait, texte collé, fichier .md/.txt/.csv). Injectée bornée pour que le
+  // débat s'appuie sur des FAITS au lieu de broder. Absente ⇒ comportement inchangé.
+  const _srcText = (source && typeof source.text === 'string') ? source.text.trim().slice(0, SOURCE_INJECT_MAX) : '';
+  const effectiveBrief = _srcText
+    ? `${_briefBase}\n\nDOSSIER SOURCE (matière fournie par l'utilisateur — appuie-toi dessus pour des angles FACTUELS et précis ; ne le recopie pas mot pour mot) :\n"""\n${_srcText}\n"""`
+    : _briefBase;
 
   if (!env.AI || typeof env.AI.run !== 'function') {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);

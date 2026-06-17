@@ -1875,3 +1875,83 @@ html.light-mode .wr-agents-modal { background: rgba(15, 23, 42, 0.32); }
     box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12), 0 0 16px var(--agent-color);
   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Chaîne de contenu — contrôle « Source » (lien / texte / fichier)
+   Le client apporte sa matière → ancre le débat + la rédaction.
+   ════════════════════════════════════════════════════════════════ */
+.wr-source { margin-bottom: 10px; }
+.wr-source:empty { display: none; }
+
+.wr-source-add {
+  border: 1px solid var(--wr-border); border-radius: 10px;
+  background: var(--wr-bg-subtle); overflow: hidden;
+}
+.wr-source-add[open] { border-color: var(--wr-border-strong); }
+.wr-source-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
+  padding: 9px 12px; font-size: 12.5px; font-weight: 600; color: var(--wr-text-muted);
+  user-select: none;
+}
+.wr-source-toggle::-webkit-details-marker { display: none; }
+.wr-source-toggle::marker { content: ''; }
+.wr-source-toggle:hover { color: var(--wr-text); }
+.wr-source-toggle svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.wr-source-toggle em {
+  font-style: normal; font-weight: 500; color: var(--wr-text-dim);
+  font-size: 11.5px; margin-left: auto;
+}
+.wr-source-panel { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 12px; }
+.wr-source-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wr-source-url, .wr-source-text {
+  flex: 1 1 200px; min-width: 0;
+  background: var(--wr-bg); border: 1px solid var(--wr-border); border-radius: 9px;
+  color: var(--wr-text); font: inherit; font-size: 13px; padding: 9px 11px;
+  transition: border-color 0.15s ease;
+}
+.wr-source-text { width: 100%; resize: vertical; min-height: 56px; line-height: 1.5; }
+.wr-source-url:focus, .wr-source-text:focus { outline: none; border-color: var(--wr-accent); }
+.wr-source-url::placeholder, .wr-source-text::placeholder { color: var(--wr-text-dim); }
+.wr-source-btn {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  background: var(--wr-bg-elevated); border: 1px solid var(--wr-border);
+  color: var(--wr-text); font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 8px 13px; border-radius: 9px; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.wr-source-btn:hover { border-color: var(--wr-border-strong); background: rgba(255, 255, 255, 0.06); }
+.wr-source-btn:disabled { opacity: 0.5; cursor: default; }
+.wr-source-btn svg { width: 15px; height: 15px; }
+.wr-source-fetch { background: var(--wr-accent); border-color: transparent; color: #fff; }
+.wr-source-fetch:hover { filter: brightness(1.08); background: var(--wr-accent); }
+.wr-source-msg { font-size: 11.5px; color: var(--wr-text-muted); min-height: 14px; }
+
+/* Source attachée : chip compacte avec retrait */
+.wr-source-chip {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 7px 8px 7px 11px; border-radius: 100px;
+  background: var(--wr-bg-elevated); border: 1px solid var(--wr-border-strong);
+  font-size: 12.5px; color: var(--wr-text);
+}
+.wr-source-chip-ico { display: inline-flex; color: var(--wr-accent); }
+.wr-source-chip-ico svg { width: 14px; height: 14px; }
+.wr-source-chip-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 360px; font-weight: 600;
+}
+.wr-source-chip-tag {
+  font-size: 10.5px; color: var(--wr-text-dim);
+  border: 1px solid var(--wr-border); border-radius: 100px; padding: 1px 7px;
+}
+.wr-source-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; border: 0; cursor: pointer;
+  background: transparent; color: var(--wr-text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.wr-source-remove:hover { background: rgba(255, 255, 255, 0.08); color: var(--wr-text); }
+.wr-source-remove svg { width: 14px; height: 14px; }
+
+@media (max-width: 720px) {
+  .wr-source-chip-label { max-width: 180px; }
+}

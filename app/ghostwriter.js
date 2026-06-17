@@ -228,6 +228,9 @@ async function _callReal(text, opts) {
             // Mode « composer un post » (chaîne) : 1 post développé, ton réseau.
             composePost : opts?.composePost === true || undefined,
             network     : opts?.network || undefined,
+            // Chaîne de contenu — DOSSIER SOURCE porté depuis Brainstorming (ou
+            // passé en opts). Ancre la rédaction sur des faits. undefined si absent.
+            source      : _chainedSource || opts?.source || undefined,
         }),
     };
 
@@ -707,12 +710,13 @@ function _refreshQuotaChip(overlay) {
 function _closeModal() {
     if (!_modalOpen) return;
     const overlay = document.getElementById('gw-overlay');
-    if (!overlay) { _modalOpen = false; _presetOpts = null; return; }
+    if (!overlay) { _modalOpen = false; _presetOpts = null; _chainedSource = null; return; }
     overlay.classList.remove('gw-on');
     setTimeout(() => {
         overlay.remove();
         _modalOpen  = false;
         _presetOpts = null;  // reset pour ne pas contaminer le prochain open
+        _chainedSource = null;  // idem : la source portée ne survit pas au modal
     }, 200);
 }
 
@@ -1195,6 +1199,7 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
         console.warn('[Ghost Writer] Flag désactivé. Active : localStorage.setItem("ks_ghostwriter", "1")');
         return;
     }
+    _chainedSource = null;   // entrée standalone → aucune source héritée d'une chaîne précédente
     _openModal(initialText, presetOpts);
 }
 
@@ -1204,10 +1209,23 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
  * la chaîne = entitled ; le quota serveur reste le vrai plafond) et SANS toucher
  * l'état porté (le réseau a déjà été posé par l'appelant). Sans ça, le relais
  * était silencieux quand `ks_ghostwriter` n'était pas activé dans la session.
+ *
+ * Chaîne de contenu — `source` (optionnelle) : matière apportée par
+ * l'utilisateur en amont (Brainstorming). Portée en ARGUMENT (pas via le rail,
+ * qui est effacé hors mode post-ideas), gardée en variable de module le temps
+ * du modal, injectée dans chaque appel `_callReal`, nettoyée à la fermeture.
  */
-export function openGhostwriterChained(initialText = '') {
+export function openGhostwriterChained(initialText = '', source = null) {
+    _chainedSource = (source && typeof source.text === 'string' && source.text.trim())
+        ? { text: source.text, ref: source.ref || '' }
+        : null;
     _openModal(initialText);
 }
+
+// Source portée depuis la chaîne (Brainstorming → Ghost Writer). Module-scope :
+// vit le temps d'un modal chaîné, remise à null à l'ouverture standalone et à
+// la fermeture (cf. _closeModal) pour ne jamais contaminer une session suivante.
+let _chainedSource = null;
 
 /**
  * API publique pour le workspace artefact A-COM-005 et tout autre

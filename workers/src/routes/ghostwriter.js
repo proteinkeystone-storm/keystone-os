@@ -221,6 +221,7 @@ export async function handleGhostwriterRewrite(request, env) {
     text, tone, intent, vouvoie, maxOutputTokens,
     mode, audience, action, lengthTarget,   // Sprint GW-2 (optionnels)
     engine, apiKey,                          // BYOK
+    source,                                  // Chaîne de contenu — { text, ref } source fournie par l'utilisateur
   } = body;
 
   // BYOK (D1/D3) : flag + moteur + clé → vendor à SES frais, HORS compteur
@@ -305,6 +306,14 @@ export async function handleGhostwriterRewrite(request, env) {
     MAX_MAX_TOKENS,
   );
 
+  // Chaîne de contenu — DOSSIER SOURCE : matière apportée par l'utilisateur
+  // (lien web extrait, texte collé, fichier .md/.txt/.csv ; portée depuis
+  // Brainstorming via le rail, ou saisie directement ici). Ancre la rédaction
+  // sur des faits. Absente ⇒ message inchangé (100 % rétro-compat).
+  const _srcBlock = (source && typeof source.text === 'string' && source.text.trim())
+    ? `\n\nDOSSIER SOURCE (matière fournie par l'utilisateur — appuie-toi dessus pour des faits précis ; ne le recopie pas mot pour mot) :\n"""\n${source.text.trim().slice(0, 4000)}\n"""`
+    : '';
+
   // ── Mode « composer un post » (chaîne de contenu → Social Manager) ──
   // UN SEUL post développé (économie de crédits), ton calé sur le RÉSEAU porté,
   // écriture humaine. Distinct du rewrite (3 variantes tonales). Même machinerie
@@ -318,7 +327,7 @@ export async function handleGhostwriterRewrite(request, env) {
       try {
         out = await callLLM(env, {
           engine, apiKey, system: sysCompose,
-          messages  : [{ role: 'user', content: `Angle / idée à développer en post :\n\n${text}` }],
+          messages  : [{ role: 'user', content: `Angle / idée à développer en post :\n\n${text}${_srcBlock}` }],
           max_tokens: cappedMaxTokens, fallbackOnError: false,
         });
       } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
@@ -336,7 +345,7 @@ export async function handleGhostwriterRewrite(request, env) {
         aiResp = await env.AI.run(MODEL_ID, {
           messages: [
             { role: 'system', content: sysCompose },
-            { role: 'user',   content: `Angle / idée à développer en post :\n\n${text}` },
+            { role: 'user',   content: `Angle / idée à développer en post :\n\n${text}${_srcBlock}` },
           ],
           max_tokens: cappedMaxTokens,
         });
@@ -454,7 +463,7 @@ export async function handleGhostwriterRewrite(request, env) {
     try {
       out = await callLLM(env, {
         engine, apiKey, system: systemPrompt,
-        messages  : [{ role: 'user', content: `Texte source à réécrire :\n\n${text}` }],
+        messages  : [{ role: 'user', content: `Texte source à réécrire :\n\n${text}${_srcBlock}` }],
         max_tokens: cappedMaxTokens, fallbackOnError: false,
       });
     } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
@@ -483,7 +492,7 @@ export async function handleGhostwriterRewrite(request, env) {
       aiResponse = await env.AI.run(MODEL_ID, {
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user',   content: `Texte source à réécrire :\n\n${text}` },
+          { role: 'user',   content: `Texte source à réécrire :\n\n${text}${_srcBlock}` },
         ],
         max_tokens: cappedMaxTokens,
       });

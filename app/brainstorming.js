@@ -379,6 +379,9 @@ function _renderShell() {
 
     <!-- Input -->
     <div class="wr-input-row">
+      <!-- Chaîne de contenu — source optionnelle (lien/texte/fichier) : ancre le
+           débat ET la rédaction sur des faits. Rempli par _renderSourceControl. -->
+      <div class="wr-source" id="wr-source"></div>
       <div class="wr-input-box">
         <input class="wr-input" id="wr-input" type="text"
           placeholder="Posez votre sujet de réflexion…"
@@ -503,6 +506,9 @@ function _wireShell(panel) {
       _submit(panel);
     });
   });
+
+  // Chaîne de contenu — contrôle « Source » (lien / texte / fichier) dans la barre.
+  _renderSourceControl(panel);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -696,6 +702,123 @@ function _hideEmpty(panel) {
 //   …
 //   data: {"type":"complete","reason":"auto_pause","turns":3}
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// SOURCE (chaîne de contenu) — lien web · texte collé · fichier .md/.txt/.csv
+// ════════════════════════════════════════════════════════════════
+// Mistral/Cloudflare ne navigue pas : le client APPORTE sa matière. On l'ancre
+// dans le débat (payload _callOrchestration) ET la rédaction (argument du relais
+// vers Ghost Writer). Lien → worker (fetch + htmlToText, gratuit) ; texte collé
+// et fichier texte → lus ICI, aucun aller-retour. Vit en mémoire de session
+// (_currentSession.source) ; pas dans le rail de chaîne (effacé hors post-ideas).
+const SOURCE_FRONT_MAX = 6000;
+
+function _sourceMsg(root, txt) {
+  const m = root.querySelector('.wr-source-msg');
+  if (m) m.textContent = txt || '';
+}
+
+function _setSource(panel, src) {
+  const text = String(src?.text || '').trim();
+  if (!text || !_currentSession) return;
+  _currentSession.source = {
+    text:      text.slice(0, SOURCE_FRONT_MAX),
+    ref:       String(src.ref || '').slice(0, 300),
+    title:     String(src.title || '').slice(0, 200),
+    truncated: !!src.truncated || text.length > SOURCE_FRONT_MAX,
+  };
+  _renderSourceControl(panel);
+}
+
+function _renderSourceControl(panel) {
+  const root = panel.querySelector('#wr-source');
+  if (!root) return;
+  const src = _currentSession?.source || null;
+
+  if (src && src.text) {
+    const label = _esc(src.title || src.ref || 'Source attachée');
+    root.innerHTML = `
+      <div class="wr-source-chip" title="${_esc(src.ref || '')}">
+        <span class="wr-source-chip-ico">${_iconSvg('link')}</span>
+        <span class="wr-source-chip-label">${label}</span>
+        ${src.truncated ? '<span class="wr-source-chip-tag">tronquée</span>' : ''}
+        <button type="button" class="wr-source-remove" aria-label="Retirer la source">${_iconSvg('x')}</button>
+      </div>`;
+    root.querySelector('.wr-source-remove')?.addEventListener('click', () => {
+      if (_currentSession) _currentSession.source = null;
+      _renderSourceControl(panel);
+    });
+    return;
+  }
+
+  root.innerHTML = `
+    <details class="wr-source-add">
+      <summary class="wr-source-toggle">${_iconSvg('plus')}<span>Ajouter une source</span><em>lien, texte ou .md / .txt / .csv — optionnel</em></summary>
+      <div class="wr-source-panel">
+        <div class="wr-source-line">
+          <input type="url" class="wr-source-url" placeholder="https://… (article, page web)" autocomplete="off" spellcheck="false"/>
+          <button type="button" class="wr-source-btn wr-source-fetch">Lier</button>
+        </div>
+        <textarea class="wr-source-text" rows="3" placeholder="…ou collez ici le texte de votre source"></textarea>
+        <div class="wr-source-line">
+          <button type="button" class="wr-source-btn wr-source-file-btn">${_iconSvg('file-text')}<span>Fichier .md / .txt / .csv</span></button>
+          <button type="button" class="wr-source-btn wr-source-text-save">Utiliser ce texte</button>
+          <input type="file" class="wr-source-file" accept=".md,.markdown,.txt,.csv,text/plain,text/markdown,text/csv" hidden/>
+        </div>
+        <div class="wr-source-msg" aria-live="polite"></div>
+      </div>
+    </details>`;
+  _wireSourceControl(panel, root);
+}
+
+function _wireSourceControl(panel, root) {
+  const urlInput = root.querySelector('.wr-source-url');
+  root.querySelector('.wr-source-fetch')?.addEventListener('click', () => _fetchSourceUrl(panel, root, (urlInput?.value || '').trim()));
+  urlInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _fetchSourceUrl(panel, root, (urlInput.value || '').trim()); }
+  });
+  root.querySelector('.wr-source-text-save')?.addEventListener('click', () => {
+    const ta = root.querySelector('.wr-source-text');
+    const v = (ta?.value || '').trim();
+    if (v.length < 20) { _sourceMsg(root, 'Texte trop court (au moins 20 caractères).'); return; }
+    _setSource(panel, { text: v, ref: 'Texte collé', title: 'Texte collé' });
+  });
+  const fileInput = root.querySelector('.wr-source-file');
+  root.querySelector('.wr-source-file-btn')?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => _readSourceFile(panel, root, fileInput.files && fileInput.files[0]));
+}
+
+async function _fetchSourceUrl(panel, root, url) {
+  if (!url) { _sourceMsg(root, 'Collez une adresse http(s).'); return; }
+  const btn = root.querySelector('.wr-source-fetch');
+  if (btn) btn.disabled = true;
+  _sourceMsg(root, 'Récupération de la page…');
+  try {
+    const res = await fetch(`${_apiBase()}/api/content/fetch-source`, {
+      method: 'POST', headers: _authHeaders(), body: JSON.stringify({ url }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { _sourceMsg(root, data.error || `Échec (${res.status}).`); return; }
+    _setSource(panel, { text: data.text, ref: data.source_ref || url, title: data.title, truncated: data.truncated });
+  } catch (_) {
+    _sourceMsg(root, 'Connexion impossible au service.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _readSourceFile(panel, root, file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { _sourceMsg(root, 'Fichier trop lourd (2 Mo max).'); return; }
+  if (!/\.(md|markdown|txt|csv)$/i.test(file.name || '')) {
+    _sourceMsg(root, 'Formats acceptés : .md, .txt, .csv (PDF/Word : collez le texte).');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload  = () => _setSource(panel, { text: String(reader.result || ''), ref: file.name, title: file.name });
+  reader.onerror = () => _sourceMsg(root, 'Lecture du fichier impossible.');
+  reader.readAsText(file);
+}
+
 // ── Mode « Auto » : l'IA compose le comité selon le sujet ─────────
 // Appelée UNE fois, au lancement de la séance (1er brief). Met à jour
 // _currentSession.roster avec les agents choisis par le worker (le worker
@@ -743,6 +866,9 @@ async function _callOrchestration(panel) {
     // pas → byte-identique flag OFF). {} si pas de clé. Le flag BYOK_ROUTING
     // tranche côté worker : ON ⇒ TOUS les agents streament depuis ce vendor.
     byok          : byokRequestFields(),
+    // Chaîne de contenu — DOSSIER SOURCE (lien/texte/fichier) : ancre le débat
+    // sur des faits. null si l'utilisateur n'a pas joint de source.
+    source        : _currentSession.source ? { text: _currentSession.source.text, ref: _currentSession.source.ref } : null,
   };
   // Sprint 7.12 — comité réduit : on transmet le comité de débat actif au
   // worker. Le tour de table = la taille du comité (sinon le serveur vise 8).
@@ -939,7 +1065,9 @@ async function _relayToGhostwriter(text) {
     const m = await import('./ghostwriter.js');
     // Ouverture « chaîne » INCONDITIONNELLE (pas le garde-fou de flag du modal
     // ambiant) : le réseau porté est préservé, le quota serveur reste le plafond.
-    m.openGhostwriterChained?.(text.trim());
+    // La SOURCE éventuelle (lien/texte/fichier) voyage en argument → Ghost Writer
+    // ancre la rédaction dessus, comme le débat l'a été.
+    m.openGhostwriterChained?.(text.trim(), _currentSession?.source || null);
   } catch (err) {
     console.error('[Brainstorming] openGhostwriter', err);
   }

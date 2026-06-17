@@ -623,6 +623,65 @@ try {
   else ko('pick-roster : front n\'appelle pas la passe correctement', '');
 } catch (e) { ko('pick-roster : câblage — read KO', e.message); }
 
+// ─── Juin 2026 — Source de contenu (lien / texte / fichier .md) ──
+// Mistral/Cloudflare ne navigue pas → le client APPORTE sa matière. On ancre le
+// débat ET la rédaction dessus, gratuitement. On teste l'import du module worker
+// (réutilise les briques Smart Agent) + le câblage complet worker/front.
+try {
+  const csMod = await import(`file://${join(ROOT, 'workers/src/routes/content-source.js')}`);
+  if (typeof csMod.handleFetchSource === 'function')
+    ok('source : handleFetchSource exporté (réutilise validateImportUrl/htmlToText/clampExtractText)');
+  else
+    ko('source : handleFetchSource absent', '');
+} catch (e) { ko('source : content-source.js — import KO', e.message); }
+
+try {
+  const cs    = await readFile(join(ROOT, 'workers/src/routes/content-source.js'), 'utf8');
+  const index = await readFile(join(ROOT, 'workers/src/index.js'), 'utf8');
+  const wbs   = await readFile(join(ROOT, 'workers/src/routes/brainstorming.js'), 'utf8');
+  const wgw   = await readFile(join(ROOT, 'workers/src/routes/ghostwriter.js'), 'utf8');
+  const fbs   = await readFile(join(ROOT, 'app/brainstorming.js'), 'utf8');
+  const fgw   = await readFile(join(ROOT, 'app/ghostwriter.js'), 'utf8');
+
+  // Route web câblée + GRATUITE (extraction maison ; binaire/PDF refusé = anti-coût)
+  if (index.includes("path === '/api/content/fetch-source'") && index.includes('handleFetchSource'))
+    ok('source : route /api/content/fetch-source câblée');
+  else ko('source : route non câblée', '');
+  if (cs.includes('htmlToText') && /application\/pdf/.test(cs) && cs.includes('415'))
+    ok('source : extraction gratuite (htmlToText) + binaire/PDF refusé (doctrine flat)');
+  else ko('source : garde-fous fetch manquants', '');
+
+  // Débat ancré (worker brainstorming) : champ source + DOSSIER SOURCE borné
+  if (/source,\s*\/\//.test(wbs) && wbs.includes('DOSSIER SOURCE') && wbs.includes('SOURCE_INJECT_MAX'))
+    ok('source : débat ancré (effectiveBrief + borne SOURCE_INJECT_MAX)');
+  else ko('source : injection débat manquante', '');
+
+  // Rédaction ancrée (worker ghostwriter) : champ source + _srcBlock (compose + rewrite)
+  const gwHits = (wgw.match(/\$\{_srcBlock\}/g) || []).length;
+  if (wgw.includes('source,') && gwHits >= 2)
+    ok(`source : rédaction ancrée (_srcBlock injecté ${gwHits}× : compose-post + rewrite, BYOK + Mistral)`);
+  else ko('source : injection rédaction manquante', `_srcBlock ×${gwHits}`);
+
+  // Front brainstorming : contrôle (lien/texte/fichier) + .md accepté + payload
+  if (fbs.includes('function _renderSourceControl') && fbs.includes('/api/content/fetch-source'))
+    ok('source : contrôle front (lien / texte collé / fichier)');
+  else ko('source : contrôle front absent', '');
+  if (fbs.includes('.md,.markdown,.txt,.csv'))
+    ok('source : fichiers .md / .txt / .csv acceptés (lus côté front, gratuit)');
+  else ko('source : .md non accepté', '');
+  if (/source\s*:\s*_currentSession\.source/.test(fbs))
+    ok('source : transmise dans le payload du débat');
+  else ko('source : absente du payload débat', '');
+
+  // Transport vers Ghost Writer en ARGUMENT (hors rail, effacé hors post-ideas)
+  if (fbs.includes('openGhostwriterChained?.(text.trim(), _currentSession?.source'))
+    ok('source : portée à Ghost Writer en argument (pas via le rail)');
+  else ko('source : non transmise à GW', '');
+  if (fgw.includes('_chainedSource') && /openGhostwriterChained\(initialText\s*=\s*'',\s*source/.test(fgw) && /source\s*:\s*_chainedSource/.test(fgw))
+    ok('source : Ghost Writer la reçoit + l\'injecte dans le body (_callReal), nettoyée à la fermeture');
+  else ko('source : GW ne consomme pas la source', '');
+} catch (e) { ko('source : câblage — read KO', e.message); }
+
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis
 try {
   const workerAgents = await readFile(join(ROOT, 'workers/src/lib/brainstorming-agents.js'), 'utf8');
