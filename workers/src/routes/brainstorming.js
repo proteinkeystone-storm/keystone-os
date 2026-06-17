@@ -36,6 +36,7 @@ import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrato
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits } from '../lib/ai-credits.js';
+import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -522,6 +523,45 @@ async function _generateSynthesis(env, brief, history, todayIso) {
   }
 }
 
+// BYOK généralisé (Phase 2) : synthèse sur le moteur choisi par le client via
+// callLLM (n'importe quel vendor). Même prompt + même parsing que les 2 voies
+// existantes ; HORS compteur (pas de recordUsage). Le repli (→ _generateSynthesis
+// Mistral) est géré par l'appelant.
+async function _generateSynthesisVendor(env, engine, apiKey, brief, history, todayIso) {
+  const dialogue = history
+    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
+    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .join('\n\n');
+  if (!dialogue || dialogue.length < 50) {
+    return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
+  }
+  const userMsg = `DATE DU JOUR : ${todayIso}\n\nBRIEF INITIAL : ${brief}\n\nDIALOGUE INTÉGRAL DU BRAINSTORMING :\n${dialogue}\n\nProduis le JSON Plan d'actions strict, sans préambule.`;
+
+  let out;
+  try {
+    out = await callLLM(env, {
+      engine, apiKey,
+      system    : SYNTHESIZER_PROMPT,
+      messages  : [{ role: 'user', content: userMsg }],
+      max_tokens: 4000,
+      fallbackOnError: false,
+    });
+  } catch (e) {
+    return { error: `${engine} KO : ${e?.message || e}` };
+  }
+
+  const raw = (out.text || '').trim();
+  if (!raw) return { error: `Réponse ${engine} vide` };
+
+  let parsed;
+  try {
+    const m = raw.match(/\{[\s\S]*"positioning"[\s\S]*\}/);
+    if (m) parsed = JSON.parse(m[0]);
+  } catch (e) { /* fallback */ }
+  if (!parsed) return { error: `Synthèse ${engine} non parsable`, raw: raw.slice(0, 500) };
+  return _normalizeSynthesis(parsed);
+}
+
 // Mode « Idées de Posts » — synthèse du débat en 5 idées de posts (angle +
 // accroche) pour le réseau cible. Réutilise POST_IDEAS_PROMPT + parsePostIdeas
 // (définis plus bas), avec le DÉBAT comme contexte au lieu d'un simple sujet.
@@ -588,9 +628,14 @@ export async function handleBrainstormingSynthesize(request, env) {
     return err('history requis (au moins 2 tours)', 400, origin);
   }
 
+  // BYOK (D1/D3) : flag + moteur + clé → synthèse sur le moteur du client,
+  // HORS compteur Keystone (pas de débit crédit). Sinon → chemin existant.
+  const useByok = byokRoutingEnabled(env) && !!engine && typeof apiKey === 'string' && apiKey.length > 10;
+
   // ── Crédits IA — débit (Chantier B · Sprint 3) : 1 crédit pour la
   // synthèse finale. DORMANT (flag enforce_ai_credits_v1 par licence).
-  if (await isEnforceEnabled(env, claims.sub)) {
+  // Skippé en BYOK (le client paie son fournisseur).
+  if (!useByok && await isEnforceEnabled(env, claims.sub)) {
     const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
     if (!credit.ok && credit.blocked) {
       return json({
@@ -615,7 +660,20 @@ export async function handleBrainstormingSynthesize(request, env) {
   // Sinon fallback Gemma 4 26B (Sprint 7.4) qui reste excellent.
   let synthesis;
   let engineUsed = 'mistral';
-  if (engine === 'claude' && typeof apiKey === 'string' && apiKey.length > 10) {
+  if (useByok) {
+    // Flag ON : synthèse sur N'IMPORTE QUEL moteur du client via callLLM.
+    synthesis = await _generateSynthesisVendor(env, engine, apiKey, brief, history, todayIso);
+    engineUsed = engine;
+    if (synthesis.error) {   // repli transparent Mistral
+      const vErr = synthesis.error;
+      synthesis = await _generateSynthesis(env, brief, history, todayIso);
+      engineUsed = 'mistral-fallback';
+      if (synthesis.error) {
+        return json({ error: `${engine} KO (${vErr}) + Mistral KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
+      }
+    }
+  } else if (engine === 'claude' && typeof apiKey === 'string' && apiKey.length > 10) {
+    // Flag OFF : chemin Claude existant INCHANGÉ (Sprint 7.9).
     synthesis = await _generateSynthesisClaude(apiKey, brief, history, todayIso);
     engineUsed = 'claude';
     // En cas d'échec Claude (clé invalide, quota...), fallback transparent sur Mistral

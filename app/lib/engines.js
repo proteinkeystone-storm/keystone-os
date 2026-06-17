@@ -157,3 +157,12 @@ export function listEnginesWithKey() {
     try { return !!localStorage.getItem(LS_PREFIX + e.id); } catch (_) { return false; }
   }).map(e => e.label);
 }
+
+// Champs BYOK à joindre au body d'une requête IA worker : moteur ACTIF (id
+// Worker) + sa clé. Renvoie {} si aucune clé → le worker retombe sur Mistral
+// (le flag BYOK_ROUTING tranche côté serveur). À spreader : { ...byokRequestFields() }.
+export function byokRequestFields() {
+  const label = getActiveEngine();
+  const key   = apiKeyForEngine(label);
+  return key ? { engine: engineIdForLabel(label), apiKey: key } : {};
+}

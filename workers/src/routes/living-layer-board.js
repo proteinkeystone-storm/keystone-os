@@ -34,6 +34,7 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { verifyJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { isThrottled, recordUsage } from '../lib/ai-budget.js';
+import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Remplace Llama 3.1 8B le 2026-05-29. (Mode IA premium Claude Haiku
@@ -705,20 +706,37 @@ async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
 // Dispatch : Claude Haiku si clé BYOK présente (qualité premium), sinon
 // Llama 3.1 8B. Si Claude échoue → fallback transparent Llama. Échec
 // total → null (le caller bascule sur le Calculateur).
-async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey = null) {
+async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey = null, engine = null) {
   const prompts = _buildAiPrompts(sensors, firstName, variantIndex);
   if (!prompts) return null;  // aucun signal exploitable
 
   let text = null;
-  // BYOK Claude prioritaire si clé valide fournie
-  if (typeof apiKey === 'string' && apiKey.length > 10) {
+  // BYOK généralisé (flag ON) : n'importe quel moteur du client via callLLM.
+  if (byokRoutingEnabled(env) && engine && typeof apiKey === 'string' && apiKey.length > 10) {
+    text = await _buildAiPhraseVendor(env, engine, apiKey, prompts.systemPrompt, prompts.userPrompt);
+    // Vendor KO → fallback transparent Llama (ci-dessous)
+  } else if (typeof apiKey === 'string' && apiKey.length > 10) {
+    // Flag OFF : chemin Claude existant INCHANGÉ (clé Anthropic supposée).
     text = await _buildAiPhraseClaude(apiKey, prompts.systemPrompt, prompts.userPrompt);
-    // Claude KO → fallback transparent Llama
   }
   if (!text) {
     text = await _buildAiPhraseLlama(env, prompts.systemPrompt, prompts.userPrompt);
   }
   return text ? { text, topic: prompts.topic } : null;
+}
+
+// BYOK généralisé (Phase 2) : phrase IA sur le moteur du client via callLLM.
+// Retourne la phrase, ou null en cas d'échec (→ fallback Llama). HORS compteur.
+async function _buildAiPhraseVendor(env, engine, apiKey, systemPrompt, userPrompt) {
+  let out;
+  try {
+    out = await callLLM(env, {
+      engine, apiKey, system: systemPrompt,
+      messages  : [{ role: 'user', content: userPrompt }],
+      max_tokens: 200, fallbackOnError: false,
+    });
+  } catch (e) { return null; }
+  return _parseAiPhrase(out.text || '');
 }
 
 // ── Endpoint principal ────────────────────────────────────────────
@@ -749,6 +767,9 @@ export async function handleLivingBoard(request, env) {
   // Clé Anthropic BYOK (optionnelle) → mode IA via Claude Haiku au lieu de
   // Llama. Envoyée par le frontend depuis le Vault (localStorage ks_api_anthropic).
   const apiKey        = (typeof body.apiKey === 'string' && body.apiKey.length > 10) ? body.apiKey : null;
+  // Moteur actif (BYOK généralisé Phase 2) — envoyé par le front (engines.js).
+  // Flag OFF ⇒ ignoré (le dispatch retombe sur Claude-si-clé / Llama).
+  const engine        = (typeof body.engine === 'string' && body.engine) ? body.engine : null;
 
   // JWT optionnel — si présent, on identifie la licence (audience + sensors personnels)
   let claims = null;
@@ -830,7 +851,7 @@ export async function handleLivingBoard(request, env) {
 
   // Si preferMode demande explicitement un mode, on tente celui-là
   if (preferMode === 'ai') {
-    const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
+    const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine);
     if (ai) {
       return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
     }
@@ -860,7 +881,7 @@ export async function handleLivingBoard(request, env) {
   // 2. Pas de preferMode → cycle par défaut au boot
   // Premier appel : on commence par le mode IA si signaux disponibles, sinon Calculateur.
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
-  const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey);
+  const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine);
   if (ai) {
     return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
   }

@@ -30,6 +30,7 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
+import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 
 // Réutilise la grille de quota côté ghostwriter.js. Idéalement on
 // importerait depuis là-bas, mais ghostwriter.js n'exporte pas ses
@@ -127,35 +128,44 @@ export async function handleAiGenerate(request, env) {
     );
   }
 
-  // ── Bridage budget IA (admin) ───────────────────────────────
-  const _throttled = await budgetGuard(env, origin);
-  if (_throttled) return _throttled;
-
-  // ── Quota check + pre-bump ──────────────────────────────────
-  await _ensureSchema(env);
-  const maxAllowed = _quotaForPlan(plan);
-  if (maxAllowed === 0) {
-    return err(`Plan inconnu (${plan}). Génération IA indisponible.`, 403, origin);
+  // ── Parse body TÔT : détection BYOK avant tout métrage ──────
+  const body = await parseBody(request);
+  if (!body || typeof body !== 'object') {
+    return err('Body JSON requis', 400, origin);
   }
-  await _bumpUsage(env, lookupHmac);
-  const usedAfterBump = await _readUsage(env, lookupHmac);
-  if (maxAllowed !== null && usedAfterBump > maxAllowed) {
-    await _revertUsage(env, lookupHmac);
-    return json({
-      error: `Quota IA atteint sur le plan ${plan} (${maxAllowed}/jour). `
-           + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
-      quota: _quotaPayload(plan, maxAllowed),
-    }, 429, origin);
+  const { systemPrompt, userPrompt, maxOutputTokens, engine, apiKey } = body;
+
+  // BYOK (D1/D3) : flag + moteur + clé → le client paie SON fournisseur,
+  // donc on saute TOUT le métrage Keystone (budget admin + quota/jour).
+  // Sinon → chemin Mistral métré (INCHANGÉ). Flag OFF ⇒ toujours non-BYOK.
+  const useByok = byokRoutingEnabled(env) && !!engine && !!apiKey;
+
+  let usedAfterBump = 0;
+  if (!useByok) {
+    // ── Bridage budget IA (admin) ───────────────────────────────
+    const _throttled = await budgetGuard(env, origin);
+    if (_throttled) return _throttled;
+
+    // ── Quota check + pre-bump ──────────────────────────────────
+    await _ensureSchema(env);
+    const maxAllowed = _quotaForPlan(plan);
+    if (maxAllowed === 0) {
+      return err(`Plan inconnu (${plan}). Génération IA indisponible.`, 403, origin);
+    }
+    await _bumpUsage(env, lookupHmac);
+    usedAfterBump = await _readUsage(env, lookupHmac);
+    if (maxAllowed !== null && usedAfterBump > maxAllowed) {
+      await _revertUsage(env, lookupHmac);
+      return json({
+        error: `Quota IA atteint sur le plan ${plan} (${maxAllowed}/jour). `
+             + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
+        quota: _quotaPayload(plan, maxAllowed),
+      }, 429, origin);
+    }
   }
 
   let committed = false;
   try {
-    // ── Parse + validate body ───────────────────────────────
-    const body = await parseBody(request);
-    if (!body || typeof body !== 'object') {
-      return err('Body JSON requis', 400, origin);
-    }
-    const { systemPrompt, userPrompt, maxOutputTokens } = body;
 
     if (!systemPrompt || typeof systemPrompt !== 'string' || !systemPrompt.trim()) {
       return err('Champ "systemPrompt" requis (string non vide)', 400, origin);
@@ -180,6 +190,24 @@ export async function handleAiGenerate(request, env) {
       Math.max(parseInt(maxOutputTokens, 10) || DEFAULT_MAX_TOKENS, 256),
       MAX_MAX_TOKENS,
     );
+
+    // ── BYOK : moteur du client via callLLM (HORS compteur) ───
+    if (useByok) {
+      let out;
+      try {
+        out = await callLLM(env, {
+          engine, apiKey,
+          system    : systemPrompt,
+          messages  : [{ role: 'user', content: userPrompt }],
+          max_tokens: cappedMaxTokens,
+          fallbackOnError: false,   // owner-triggered → erreur claire (D4)
+        });
+      } catch (e) {
+        return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin);
+      }
+      committed = true;            // aucun quota bumpé en BYOK → rien à revert
+      return json({ text: out.text, model: out.model, usage: out.usage, viaBYOK: true, quota: null }, 200, origin);
+    }
 
     // ── Appel Gemma 4 ────────────────────────────────────────
     let aiResponse;
@@ -246,7 +274,8 @@ export async function handleAiGenerate(request, env) {
     }, 200, origin);
 
   } finally {
-    if (!committed) {
+    // BYOK ne bumpe jamais le quota → ne jamais revert dans ce cas.
+    if (!committed && !useByok) {
       await _revertUsage(env, lookupHmac).catch(() => {});
     }
   }

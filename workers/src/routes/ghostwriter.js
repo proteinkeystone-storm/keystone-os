@@ -48,6 +48,7 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
+import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 import {
   isEnforceEnabled, consumeCredits, refundCredits,
   ensureAiCreditsSchema, readMonthUsed, readPackBalance, creditsPayload,
@@ -209,52 +210,64 @@ export async function handleGhostwriterRewrite(request, env) {
     );
   }
 
-  // ── Bridage budget IA (admin) — AVANT le pre-bump quota ──────
-  // Si le bridage global est actif, on coupe ici sans toucher au quota
-  // de la licence. Le frontend affiche un message clair (graceful).
-  const _throttled = await budgetGuard(env, origin);
-  if (_throttled) return _throttled;
+  // ── Parse body TÔT : détection BYOK avant tout métrage ──────
+  // (request.json() ne se lit qu'une fois → on parse ici, plus de re-parse
+  //  dans le try ci-dessous.)
+  const body = await parseBody(request);
+  if (!body || typeof body !== 'object') {
+    return err('Body JSON requis', 400, origin);
+  }
+  const {
+    text, tone, intent, vouvoie, maxOutputTokens,
+    mode, audience, action, lengthTarget,   // Sprint GW-2 (optionnels)
+    engine, apiKey,                          // BYOK
+  } = body;
 
-  // ── Quota check pre-flight (Phase 2) ─────────────────────────
-  // Pre-bump pour atomicité face aux races multi-device (plan MAX
-  // notamment). Si quota dépassé après bump → revert + 429.
-  // ADMIN : on track quand même les stats mais on ne bloque jamais.
-  // Chantier B · Sprint 6 — aiguillage du quota selon le flag de la licence.
-  // enforce_ai_credits_v1 ON → portefeuille mensuel unifié (crédits IA).
-  // OFF → quota/jour legacy (inchangé). Cohabitation pilotée par licence.
-  const creditsEnforced = await isEnforceEnabled(env, lookupHmac);
-  let creditResult  = null;   // retour de consumeCredits (chemin enforced)
-  let usedAfterBump = 0;      // compteur/jour (chemin legacy)
+  // BYOK (D1/D3) : flag + moteur + clé → vendor à SES frais, HORS compteur
+  // Keystone (ni budget admin, ni crédits/quota). Sinon → Mistral métré.
+  const useByok = byokRoutingEnabled(env) && !!engine && !!apiKey;
 
-  if (creditsEnforced) {
-    creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'ghostwriter' });
-    if (!creditResult.ok && creditResult.blocked) {
-      return json({
-        error: `Crédits IA épuisés ce mois sur le plan ${plan}. `
-             + `Ajoutez un pack de crédits ou attendez le 1er du mois (reset).`,
-        code : 'AI_CREDITS_EXHAUSTED',
-        quota: _gwQuotaFromWallet(creditResult.payload),
-      }, 429, origin);
-    }
-  } else {
-    await ensureGhostwriterSchema(env);
-    const maxAllowed = _quotaForPlan(plan);
-    if (maxAllowed === 0) {
-      return err(
-        `Plan inconnu (${plan}). Ghost Writer indisponible pour cette licence.`,
-        403,
-        origin,
-      );
-    }
-    await _bumpUsage(env, lookupHmac);
-    usedAfterBump = await _readUsage(env, lookupHmac);
-    if (maxAllowed !== null && usedAfterBump > maxAllowed) {
-      await _revertUsage(env, lookupHmac);
-      return json({
-        error: `Quota Ghost Writer atteint sur le plan ${plan} (${maxAllowed}/jour). `
-             + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
-        quota: _quotaPayload(plan, maxAllowed),  // reflète l'état clampé
-      }, 429, origin);
+  let creditsEnforced = false;   // chemin enforced (portefeuille mensuel)
+  let creditResult    = null;    // retour de consumeCredits
+  let usedAfterBump   = 0;       // compteur/jour (chemin legacy)
+
+  if (!useByok) {
+    // ── Bridage budget IA (admin) — AVANT le pre-bump quota ──────
+    const _throttled = await budgetGuard(env, origin);
+    if (_throttled) return _throttled;
+
+    // ── Quota / crédits (Chantier B · Sprint 6) — pre-bump atomique ──
+    creditsEnforced = await isEnforceEnabled(env, lookupHmac);
+    if (creditsEnforced) {
+      creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'ghostwriter' });
+      if (!creditResult.ok && creditResult.blocked) {
+        return json({
+          error: `Crédits IA épuisés ce mois sur le plan ${plan}. `
+               + `Ajoutez un pack de crédits ou attendez le 1er du mois (reset).`,
+          code : 'AI_CREDITS_EXHAUSTED',
+          quota: _gwQuotaFromWallet(creditResult.payload),
+        }, 429, origin);
+      }
+    } else {
+      await ensureGhostwriterSchema(env);
+      const maxAllowed = _quotaForPlan(plan);
+      if (maxAllowed === 0) {
+        return err(
+          `Plan inconnu (${plan}). Ghost Writer indisponible pour cette licence.`,
+          403,
+          origin,
+        );
+      }
+      await _bumpUsage(env, lookupHmac);
+      usedAfterBump = await _readUsage(env, lookupHmac);
+      if (maxAllowed !== null && usedAfterBump > maxAllowed) {
+        await _revertUsage(env, lookupHmac);
+        return json({
+          error: `Quota Ghost Writer atteint sur le plan ${plan} (${maxAllowed}/jour). `
+               + `Passez à un plan supérieur ou réessayez demain (reset 00:00 UTC).`,
+          quota: _quotaPayload(plan, maxAllowed),  // reflète l'état clampé
+        }, 429, origin);
+      }
     }
   }
 
@@ -268,24 +281,8 @@ export async function handleGhostwriterRewrite(request, env) {
   let committed = false;
   try {
 
-  // ── Parse body ───────────────────────────────────────────────
-  const body = await parseBody(request);
-  if (!body || typeof body !== 'object') {
-    return err('Body JSON requis', 400, origin);
-  }
-
-  const {
-    text,
-    tone,
-    intent,
-    vouvoie,
-    maxOutputTokens,
-    // Sprint GW-2 — extensions workspace (artefact A-COM-005)
-    mode,         // 'email' | 'internal' | 'marketing' | 'long'  (optionnel)
-    audience,     // 'client' | 'superior' | 'peer' | 'unknown' | 'partner'  (optionnel)
-    action,       // 'improve' (fluidifier sans dénaturer) | 'rewrite' (réécrire complètement)
-    lengthTarget, // 'shorter-50' | 'keep' | 'longer'  (optionnel)
-  } = body;
+  // body + champs (text, tone, …, engine, apiKey) déjà parsés/destructurés
+  // plus haut (avant le bloc métrage, pour la détection BYOK).
 
   // Validation texte
   if (!text || typeof text !== 'string') {
@@ -315,6 +312,24 @@ export async function handleGhostwriterRewrite(request, env) {
   // EST le post). N'EXISTE que pour la chaîne ; le Studio garde le rewrite.
   if (body.composePost === true) {
     const sysCompose = _composePostPrompt(typeof body.network === 'string' ? body.network : '');
+    // ── BYOK : moteur du client via callLLM (HORS compteur) ───
+    if (useByok) {
+      let out;
+      try {
+        out = await callLLM(env, {
+          engine, apiKey, system: sysCompose,
+          messages  : [{ role: 'user', content: `Angle / idée à développer en post :\n\n${text}` }],
+          max_tokens: cappedMaxTokens, fallbackOnError: false,
+        });
+      } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
+      const postText = _cleanPost(out.text);
+      if (!postText) return err('Le modèle n\'a pas pu composer le post.', 502, origin);
+      committed = true;
+      return json({
+        variants: [{ label: _composeLabel(body.network), text: postText }],
+        model: out.model, usage: out.usage, viaBYOK: true, composed: true, quota: null,
+      }, 200, origin);
+    }
     let aiResp = null, postText = '', issue = '';
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
@@ -433,6 +448,22 @@ export async function handleGhostwriterRewrite(request, env) {
     'Le texte réécrit de la troisième variante.',
   ].filter(Boolean).join('\n');
 
+  // ── BYOK : moteur du client via callLLM (HORS compteur) ──────
+  if (useByok) {
+    let out;
+    try {
+      out = await callLLM(env, {
+        engine, apiKey, system: systemPrompt,
+        messages  : [{ role: 'user', content: `Texte source à réécrire :\n\n${text}` }],
+        max_tokens: cappedMaxTokens, fallbackOnError: false,
+      });
+    } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
+    const parsedByok = _parseVariants(out.text);
+    if (!parsedByok) return err('Le modèle n\'a pas renvoyé de variantes exploitables.', 502, origin);
+    committed = true;
+    return json({ variants: parsedByok.variants, model: out.model, usage: out.usage, viaBYOK: true, quota: null }, 200, origin);
+  }
+
   // ── Appel Mistral via Workers AI : extraction string-safe + réessai ──
   // ⚠️ BUG RACINE (depuis le switch Gemma→Mistral du 2026-05-29) : Mistral
   // (format OpenAI) met le texte dans choices[0].message.content, mais expose
@@ -520,7 +551,7 @@ export async function handleGhostwriterRewrite(request, env) {
     // Chantier B · Sprint 6 — réversion si on n'a pas abouti (body invalide,
     // AI down, JSON cassé…) : chemin enforced → refund exact du portefeuille
     // (crédit + packs entamés) ; chemin legacy → revert du compteur/jour.
-    if (!committed) {
+    if (!committed && !useByok) {
       if (creditsEnforced) {
         if (creditResult && creditResult.ok) {
           await refundCredits(env, {

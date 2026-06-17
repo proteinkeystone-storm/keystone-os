@@ -20,6 +20,7 @@ import { renderChainRail, getChain, setChain, clearChain } from './lib/content-c
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { burgerHTML, bindBurger } from './lib/topbar-burger.js';
+import { byokRequestFields } from './lib/engines.js';
 import {
   AGENTS,
   getAgent,
@@ -1239,17 +1240,15 @@ async function _callSynthesize(panel) {
     // Sprint 7.9 — Si BYOK Claude configuré (Réglages → Vault), on demande
     // au worker d'utiliser Claude Sonnet pour une synthèse premium.
     // Sinon fallback Gemma 4 26B (Sprint 7.4).
-    const claudeKey = _getClaudeBYOKKey();
     const bodyPayload = {
       brief:   _currentSession.brief,
       history: _currentSession.history,
       mode:    _currentSession.mode,
       target_network: _currentSession.target_network || null,
+      // BYOK : moteur ACTIF + sa clé (fin du « claude » en dur). {} si pas de
+      // clé → Mistral. Le flag BYOK_ROUTING tranche côté worker.
+      ...byokRequestFields(),
     };
-    if (claudeKey) {
-      bodyPayload.engine = 'claude';
-      bodyPayload.apiKey = claudeKey;
-    }
 
     const res = await fetch(`${_apiBase()}/api/brainstorming/synthesize`, {
       method:  'POST',

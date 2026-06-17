@@ -34,6 +34,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { CF_API } from './pads-loader.js';
+import { byokRequestFields } from './lib/engines.js';
 import { renderChainRail, bindChainRail, getChain, setChain, networkLabel } from './lib/content-chain.js';
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -215,6 +216,7 @@ async function _callReal(text, opts) {
             'Authorization' : `Bearer ${jwt}`,
         },
         body: JSON.stringify({
+            ...byokRequestFields(),   // BYOK : moteur actif + clé (flag worker tranche)
             text,
             tone        : opts?.tone         || null,
             intent      : opts?.intent       || null,

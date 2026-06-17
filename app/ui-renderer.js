@@ -6,7 +6,7 @@
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
-import { ENGINES, VISIBLE_ENGINES } from './lib/engines.js';
+import { ENGINES, VISIBLE_ENGINES, byokRequestFields } from './lib/engines.js';
 import {
     initGridEngine, getSavedOrder,
     getUserLabel, isPadHidden, restorePad,
@@ -5517,7 +5517,9 @@ async function _renderLivingLayer(preferMode = null, preferTopic = null) {
 
     const payload = { firstName, clientSensors, preferMode, variantIndex: _livingVariant };
     if (preferTopic) payload.preferTopic = preferTopic;
-    if (anthropicKey.length > 10) payload.apiKey = anthropicKey;
+    // BYOK : moteur ACTIF + sa clé (selon le sélecteur, plus seulement Anthropic).
+    // {} si aucune clé ; le flag BYOK_ROUTING tranche côté worker.
+    Object.assign(payload, byokRequestFields());
 
     try {
         const r = await fetch(`${CF_API}/api/livinglayer/board`, {
