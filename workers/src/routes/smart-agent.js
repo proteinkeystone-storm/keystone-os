@@ -57,7 +57,7 @@ import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
 import { budgetGuard }                            from '../lib/ai-budget.js';
-import { callLLM, byokRoutingEnabled }            from '../lib/llm-router.js';
+import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-router.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
 const SA_ENGINE_VERSION = 'SA-9.6';
@@ -1076,9 +1076,9 @@ function _byokFromBody(b) {
     apiKey: (typeof b?.apiKey === 'string' && b.apiKey.length > 10) ? b.apiKey : null,
   };
 }
-async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens }) {
+async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError = false }) {
   if (_agentUseByok(env, engine, apiKey)) {
-    const out = await callLLM(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError: false });
+    const out = await callLLM(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError });
     return out.text || '';
   }
   const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
@@ -2633,11 +2633,18 @@ export async function handlePublicAgentChat(request, env, slug) {
     content: m.content,
   }));
 
+  // BYOK (D1/D6) : le chat PUBLIC tourne sur la clé du PROPRIÉTAIRE (coffre
+  // serveur per-tenant), résolue depuis SON tenant. flag OFF ⇒ null ⇒ Mistral
+  // (chat public INCHANGÉ). La clé n'est jamais exposée au visiteur.
+  const byok = await resolveEngineForTenant(env, tenant);
+  const useByok = !!byok;
+
   // Crédits débités sur le PROPRIÉTAIRE (lookup_hmac = tenant du lien), pas le
   // visiteur. Flag dormant : aucun blocage tant que enforce non activé.
+  // Skippés en BYOK (le proprio paie son fournisseur, D3).
   let credit = null;
   const ownerKey = tenant;
-  if (await isEnforceEnabled(env, ownerKey)) {
+  if (!useByok && await isEnforceEnabled(env, ownerKey)) {
     const ownerPlan = await resolvePlanByHmac(env, ownerKey);
     credit = await consumeCredits(env, { bucketKey: ownerKey, plan: ownerPlan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
@@ -2704,8 +2711,15 @@ export async function handlePublicAgentChat(request, env, slug) {
   });
 
   try {
-    const res = await env.AI.run(KS_AI_MODEL, { messages, max_tokens: 900, stream: false });
-    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    // BYOK : clé du proprio, repli Mistral si elle échoue (ne jamais casser le
+    // visiteur, D4). system isolé pour Anthropic.
+    const sysMsg   = messages.find(m => m.role === 'system');
+    const convMsgs = messages.filter(m => m.role !== 'system');
+    const raw = (await _agentLLM(env, {
+      engine: byok?.engine, apiKey: byok?.apiKey,
+      system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+      fallbackOnError: true,
+    })).trim();
     if (!raw) { await _refund(); return err('Réponse indisponible — réessayez.', 502, origin); }
 
     // SA-8.0 — repli signalé par le marqueur [GAP] (retiré du texte).

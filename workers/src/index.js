@@ -39,6 +39,7 @@ import { handleHelpMediaUpload, handleHelpMediaInfo,
          handleHelpMediaServe, handleHelpMediaDelete }                 from './routes/help-media.js';
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
+import { handleSaveUserKey, handleDeleteUserKey, handleListUserKeys }   from './routes/keys.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
@@ -659,6 +660,14 @@ export default {
       if (path.startsWith('/api/admin/keys/') && method === 'GET') {
         const provider = path.split('/').pop();
         return handleGetKey(request, env, provider);
+      }
+
+      // ── Coffre serveur per-tenant des clés BYOK (Phase 3b, user JWT) ──
+      if (path === '/api/keys' && method === 'POST') return handleSaveUserKey(request, env);
+      if (path === '/api/keys' && method === 'GET')  return handleListUserKeys(request, env);
+      {
+        const keyDel = path.match(/^\/api\/keys\/([a-z0-9]+)$/);
+        if (keyDel && method === 'DELETE') return handleDeleteUserKey(request, env, keyDel[1]);
       }
 
       // ── Messagerie ───────────────────────────────────────────

@@ -6,7 +6,7 @@
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
-import { ENGINES, VISIBLE_ENGINES, byokRequestFields } from './lib/engines.js';
+import { ENGINES, VISIBLE_ENGINES, byokRequestFields, engineIdForLabel } from './lib/engines.js';
 import {
     initGridEngine, getSavedOrder,
     getUserLabel, isPadHidden, restorePad,
@@ -173,7 +173,39 @@ const LIVING_TTL_MS   = 30 * 60 * 1000;
 const saveKey       = (id, key) => key ? localStorage.setItem(LS_PREFIX + id, key) : localStorage.removeItem(LS_PREFIX + id);
 const loadKey       = (id)      => localStorage.getItem(LS_PREFIX + id) || '';
 const getActiveEngine = ()      => localStorage.getItem(LS_ENGINE) || 'Claude';
-const setActiveEngine = (label) => { localStorage.setItem(LS_ENGINE, label); updateEngineChip(label); };
+// ── Coffre serveur per-tenant (BYOK Phase 3b) ─────────────────
+// Double-écriture best-effort de la clé / du moteur actif vers /api/keys
+// (chiffré côté worker) — alimente le chat PUBLIC, où le visiteur n'a pas
+// la clé. Échec silencieux : le local reste la source pour l'owner-side.
+// JWT requis (le coffre public n'a de sens qu'avec une licence).
+async function _syncServerKey({ engine, apiKey, activeEngine } = {}) {
+  try {
+    const jwt = localStorage.getItem('ks_jwt');
+    if (!jwt) return;
+    const payload = {};
+    if (engine && apiKey) { payload.engine = engine; payload.apiKey = apiKey; }
+    if (activeEngine) payload.active_engine = activeEngine;
+    if (!Object.keys(payload).length) return;
+    await fetch(`${CF_API}/api/keys`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+      body:    JSON.stringify(payload),
+    });
+  } catch (_) { /* best-effort */ }
+}
+async function _deleteServerKey(engine) {
+  try {
+    const jwt = localStorage.getItem('ks_jwt');
+    if (!jwt || !engine) return;
+    await fetch(`${CF_API}/api/keys/${encodeURIComponent(engine)}`, {
+      method: 'DELETE', headers: { 'Authorization': 'Bearer ' + jwt },
+    });
+  } catch (_) { /* best-effort */ }
+}
+const setActiveEngine = (label) => {
+  localStorage.setItem(LS_ENGINE, label); updateEngineChip(label);
+  _syncServerKey({ activeEngine: engineIdForLabel(label) });   // sync moteur actif (chat public)
+};
 
 // Vues dérivées de la source unique (app/lib/engines.js) — valeurs
 // IDENTIQUES aux anciens littéraux (garanti par scripts/test-engines.mjs).
@@ -4446,6 +4478,10 @@ function _renderSettingsBody() {
             const stEl  = document.getElementById('status-' + pid);
             const val   = input?.value.trim() || '';
             saveKey(pid, val);
+            // Phase 3b : reflète la clé dans le coffre SERVEUR (chat public).
+            const _eng = ENGINES.find(e => e.id === pid)?.engine;
+            if (_eng && val)  _syncServerKey({ engine: _eng, apiKey: val, activeEngine: engineIdForLabel(getActiveEngine()) });
+            if (_eng && !val) _deleteServerKey(_eng);   // clé vidée → retirée du serveur aussi
             if (stEl) { stEl.textContent = val ? 'Configurée' : 'Vide'; stEl.className = 'api-key-status ' + (val ? 'saved' : 'empty'); }
             btn.textContent = '✓ Sauvé';
             setTimeout(() => { btn.textContent = 'Sauver'; }, 1500);

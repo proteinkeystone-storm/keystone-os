@@ -32,6 +32,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { KS_AI_MODEL } from './ai-model.js';
+import { decrypt }     from './crypto.js';
 
 // Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
 // L'appelant peut override via `opts.model`.
@@ -84,6 +85,34 @@ export class LLMError extends Error {
 export function byokRoutingEnabled(env) {
   const v = String(env?.BYOK_ROUTING ?? '').trim().toLowerCase();
   return v === 'on' || v === '1' || v === 'true' || v === 'yes';
+}
+
+// ── Coffre serveur per-tenant (D6 / Phase 3b) ──────────────────
+// Résout le moteur + la clé du PROPRIÉTAIRE depuis le coffre serveur
+// chiffré (tables tenant_ai_prefs + tenant_api_keys, alimentées par
+// routes/keys.js). Pour les surfaces SANS front (chat public) : le
+// visiteur anonyme n'a pas la clé → c'est celle du proprio, déchiffrée
+// à l'instant de l'appel, JAMAIS loguée ni renvoyée au client.
+// Renvoie { engine, apiKey } ou null (→ Mistral). Gardé par le flag :
+// BYOK_ROUTING OFF ⇒ toujours null ⇒ chat public INCHANGÉ.
+export async function resolveEngineForTenant(env, tenantId) {
+  if (!byokRoutingEnabled(env) || !tenantId) return null;
+  if (!env?.DB || !env?.KS_ENCRYPTION_KEY) return null;
+  try {
+    const pref = await env.DB
+      .prepare('SELECT active_engine FROM tenant_ai_prefs WHERE tenant_id = ?')
+      .bind(tenantId).first();
+    const engine = pref?.active_engine;
+    if (!engine) return null;
+    const row = await env.DB
+      .prepare('SELECT ciphertext, iv FROM tenant_api_keys WHERE tenant_id = ? AND engine = ?')
+      .bind(tenantId, engine).first();
+    if (!row?.ciphertext || !row?.iv) return null;
+    const apiKey = await decrypt(row.ciphertext, row.iv, env.KS_ENCRYPTION_KEY);
+    return apiKey ? { engine, apiKey } : null;
+  } catch (_) {
+    return null;   // table absente / déchiffrement KO / etc. → Mistral (jamais casser le public)
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
