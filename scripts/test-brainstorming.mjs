@@ -215,8 +215,8 @@ try {
   const frontendMod = await import(`file://${join(ROOT, 'app/lib/brainstorming-agents.js')}`);
   const { COGNITIVE_MODES, getCognitiveMode, getEnabledCognitiveModes } = frontendMod;
 
-  // 5.1 — Les 7 modes existent
-  if (COGNITIVE_MODES?.length === 7) ok('COGNITIVE_MODES : 7 modes définis');
+  // 5.1 — Les 8 modes existent (7 modes de débat + « Idées de Posts »)
+  if (COGNITIVE_MODES?.length === 8) ok('COGNITIVE_MODES : 8 modes définis');
   else                                ko('COGNITIVE_MODES : nombre incorrect', String(COGNITIVE_MODES?.length));
 
   // 5.2 — Tous les modes attendus sont présents
@@ -226,14 +226,14 @@ try {
     else    ko(`COGNITIVE_MODES : ${mid} absent`, '');
   }
 
-  // 5.3 — Les 7 modes sont activés (enabled: true)
+  // 5.3 — Les 8 modes sont activés (enabled: true)
   const enabled = COGNITIVE_MODES?.filter(m => m.enabled);
-  if (enabled?.length === 7) ok('COGNITIVE_MODES : 7 modes enabled:true');
-  else                        ko('COGNITIVE_MODES : tous les modes ne sont pas enabled', `${enabled?.length}/7`);
+  if (enabled?.length === 8) ok('COGNITIVE_MODES : 8 modes enabled:true');
+  else                        ko('COGNITIVE_MODES : tous les modes ne sont pas enabled', `${enabled?.length}/8`);
 
   // 5.4 — Helper getEnabledCognitiveModes exporté et fonctionne
-  if (typeof getEnabledCognitiveModes === 'function' && getEnabledCognitiveModes().length === 7)
-    ok('getEnabledCognitiveModes() retourne 7 modes');
+  if (typeof getEnabledCognitiveModes === 'function' && getEnabledCognitiveModes().length === 8)
+    ok('getEnabledCognitiveModes() retourne 8 modes');
   else
     ko('getEnabledCognitiveModes() KO', String(getEnabledCognitiveModes?.()?.length));
 
@@ -246,11 +246,11 @@ try {
       ko(`mode ${mid} : champs Sprint 7 manquants`, JSON.stringify({ color: m.color, colorVar: m.colorVar, invite: !!m.invite }));
   }
 
-  // 5.6 — Les 7 colorVar sont uniques (pas de collision)
+  // 5.6 — Les 8 colorVar sont uniques (pas de collision)
   const colorVars = COGNITIVE_MODES.map(m => m.colorVar);
   const uniqColorVars = new Set(colorVars);
-  if (uniqColorVars.size === 7) ok('colorVars : 7 distincts');
-  else                            ko('colorVars : collision détectée', `${uniqColorVars.size}/7 uniques`);
+  if (uniqColorVars.size === 8) ok('colorVars : 8 distincts');
+  else                            ko('colorVars : collision détectée', `${uniqColorVars.size}/8 uniques`);
 } catch (e) { ko('Frontend agents.js : import KO', e.message); }
 
 try {
@@ -548,11 +548,80 @@ try {
     const bigEnough = r.length >= MIN_DEBATE_AGENTS;
     if (!(hasStrat && hasOppo && noSynth && bigEnough)) { allGood = false; details.push(`${mid}:[${r.join(',')}]`); }
   }
-  if (allGood && Object.keys(RECOMMENDED_ROSTER_BY_MODE).length === 7)
-    ok('Sprint 7.12 : 7 comités recommandés (strategic + ≥1 opposition + ≥ plancher, sans synth)');
+  if (allGood && Object.keys(RECOMMENDED_ROSTER_BY_MODE).length === 8)
+    ok('Sprint 7.12 : 8 comités recommandés (7 modes de débat : strategic + ≥1 opposition + ≥ plancher, sans synth ; + « Idées de Posts »)');
   else
     ko('Sprint 7.12 : comités recommandés invalides', details.join(' | '));
 } catch (e) { ko('Sprint 7.12 : lib frontend comités — import KO', e.message); }
+
+// ─── Juin 2026 — Sélecteur de comité par IA (mode « Auto ») ───────
+// Le mode Auto ne suit plus une table figée : l'IA choisit les agents les plus
+// adaptés au sujet, avec repli « les 9 » (comité complet). On teste le parse pur
+// + le câblage worker (endpoint, repli, garde-fous) + le câblage front.
+try {
+  const routeMod = await import(`file://${join(ROOT, 'workers/src/routes/brainstorming.js')}`);
+  const { parseRosterPick } = routeMod;
+  if (typeof parseRosterPick !== 'function') throw new Error('parseRosterPick non exporté');
+
+  // JSON strict : ids valides gardés, synth + invalides + doublons retirés
+  const p1 = parseRosterPick('{"agents":["creative","data","strategic","creative","synth","xxx"]}');
+  if (JSON.stringify(p1) === JSON.stringify(['creative', 'data', 'strategic']))
+    ok(`pick-roster : parse JSON (synth/invalides/doublons retirés) → [${p1.join(',')}]`);
+  else
+    ko('pick-roster : parse JSON incorrect', JSON.stringify(p1));
+
+  // Texte libre : ids repérés dans l'ordre d'apparition
+  const p2 = parseRosterPick('Pour ce sujet : creative, growth puis devil.');
+  if (JSON.stringify(p2) === JSON.stringify(['creative', 'growth', 'devil']))
+    ok('pick-roster : parse texte libre (ordre d\'apparition)');
+  else
+    ko('pick-roster : parse texte libre incorrect', JSON.stringify(p2));
+
+  // Réponse inexploitable → [] (le helper bascule alors sur le repli complet)
+  const p3 = parseRosterPick('désolé, je ne sais pas');
+  if (Array.isArray(p3) && p3.length === 0)
+    ok('pick-roster : réponse illisible → [] (repli côté helper)');
+  else
+    ko('pick-roster : devrait être vide', JSON.stringify(p3));
+
+  // Robuste au non-string
+  if (parseRosterPick(null).length === 0 && parseRosterPick(undefined).length === 0)
+    ok('pick-roster : null/undefined → []');
+  else
+    ko('pick-roster : null/undefined non géré', '');
+} catch (e) { ko('pick-roster : parseRosterPick — import/exec KO', e.message); }
+
+try {
+  const route = await readFile(join(ROOT, 'workers/src/routes/brainstorming.js'), 'utf8');
+  const index = await readFile(join(ROOT, 'workers/src/index.js'), 'utf8');
+  const front = await readFile(join(ROOT, 'app/brainstorming.js'), 'utf8');
+
+  if (route.includes('export async function handleBrainstormingPickRoster'))
+    ok('pick-roster : handler worker exporté');
+  else ko('pick-roster : handler worker absent', '');
+
+  if (index.includes("path === '/api/brainstorming/pick-roster'") && index.includes('handleBrainstormingPickRoster'))
+    ok('pick-roster : route câblée dans index.js');
+  else ko('pick-roster : route non câblée', '');
+
+  // Repli « les 9 » = comité de débat complet (strategic … devil … data)
+  if (/FULL_DEBATE_ROSTER\s*=\s*\[[^\]]*'strategic'[^\]]*'devil'[^\]]*'data'[^\]]*\]/.test(route))
+    ok('pick-roster : repli comité complet (FULL_DEBATE_ROSTER) défini');
+  else ko('pick-roster : FULL_DEBATE_ROSTER manquant/incomplet', '');
+
+  // Garde-fous : ≥1 voix d'opposition + métrage budget (pas de crédit en plus)
+  if (route.includes("roster.push('devil')")) ok('pick-roster : garantit une voix d\'opposition');
+  else ko('pick-roster : garde-fou opposition absent', '');
+  if (route.includes("recordUsage(env, 'brainstorming'")) ok('pick-roster : usage budget enregistré');
+  else ko('pick-roster : recordUsage absent', '');
+
+  // Front : passe IA déclenchée au lancement en Auto, JAMAIS en Manuel
+  if (front.includes('async function _pickRosterAuto')) ok('pick-roster : helper front _pickRosterAuto');
+  else ko('pick-roster : helper front absent', '');
+  if (/_pickRosterAuto\(panel\)/.test(front) && front.includes("rosterMode !== 'manual'"))
+    ok('pick-roster : front l\'appelle au lancement en Auto (jamais en Manuel)');
+  else ko('pick-roster : front n\'appelle pas la passe correctement', '');
+} catch (e) { ko('pick-roster : câblage — read KO', e.message); }
 
 // 5.12 — Worker _modeDescription contient les 7 modes enrichis
 try {

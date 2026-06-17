@@ -539,6 +539,9 @@ async function _submit(panel) {
   const text = (input.value || '').trim();
   if (!text) return;
 
+  // Mémorise l'état AVANT mutation : true au tout premier brief (→ passe IA comité).
+  const wasStarted = _currentSession.started;
+
   // Sprint 7.12 — garde-fou plancher comité (manuel) avant de lancer la séance.
   if (!_currentSession.started && _rosterEnabled() && _currentSession.rosterMode === 'manual'
       && (_currentSession.roster || []).length < MIN_DEBATE_AGENTS) {
@@ -574,6 +577,12 @@ async function _submit(panel) {
   }
 
   try {
+    // Mode « Auto » : au lancement de la séance, l'IA choisit les agents les
+    // plus adaptés au sujet (repli comité complet — les 9 — géré côté worker).
+    // En Manuel, on respecte strictement le comité coché par l'utilisateur.
+    if (!wasStarted && _rosterEnabled() && _currentSession.rosterMode !== 'manual') {
+      await _pickRosterAuto(panel);
+    }
     await _callOrchestration(panel);
   } catch (e) {
     _appendErrorMessage(panel, e?.message || 'Erreur réseau');
@@ -687,6 +696,39 @@ function _hideEmpty(panel) {
 //   …
 //   data: {"type":"complete","reason":"auto_pause","turns":3}
 // ════════════════════════════════════════════════════════════════
+// ── Mode « Auto » : l'IA compose le comité selon le sujet ─────────
+// Appelée UNE fois, au lancement de la séance (1er brief). Met à jour
+// _currentSession.roster avec les agents choisis par le worker (le worker
+// renvoie le comité complet — les 9 — en repli si l'IA est indisponible).
+// Échec réseau ici → on garde le comité provisoire du mode : la séance
+// démarre quand même, jamais bloquée par la sélection.
+async function _pickRosterAuto(panel) {
+  const living = panel.querySelector('.wr-living');
+  if (living) living.textContent = 'Composition du comité…';
+  try {
+    const res = await fetch(`${_apiBase()}/api/brainstorming/pick-roster`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({
+        brief:          _currentSession.brief,
+        cognitive_mode: _currentSession.mode,
+        byok:           byokRequestFields(),
+      }),
+    });
+    if (!res.ok) return;                       // garde le comité provisoire (mode)
+    const data   = await res.json();
+    const picked = normalizeDebateRoster(Array.isArray(data?.agents) ? data.agents : []);
+    if (picked.length) {
+      _currentSession.roster = picked;
+      _applyRosterToCells(panel);              // allume les pictos retenus
+    }
+  } catch (_) {
+    /* réseau KO : on garde le comité provisoire, la séance démarre */
+  } finally {
+    if (living) living.textContent = 'Strategic Lead ouvre la discussion…';
+  }
+}
+
 async function _callOrchestration(panel) {
   const url = `${_apiBase()}/api/brainstorming/agent-respond`;
   const payload = {
@@ -1767,7 +1809,7 @@ function _rosterModeBarHTML(rosterMode, modeLabel) {
   return `
     <div class="wr-roster-mode" role="tablist">
       <button type="button" class="wr-roster-mode-btn${rosterMode === 'auto' ? ' active' : ''}" data-roster-mode="auto">
-        Auto<span class="wr-roster-mode-hint">comité du mode ${_esc(modeLabel)}</span>
+        Auto<span class="wr-roster-mode-hint">l'IA choisit selon le sujet</span>
       </button>
       <button type="button" class="wr-roster-mode-btn${rosterMode === 'manual' ? ' active' : ''}" data-roster-mode="manual">
         Manuel<span class="wr-roster-mode-hint">je compose</span>

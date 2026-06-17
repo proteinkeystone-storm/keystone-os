@@ -797,6 +797,135 @@ export async function handleBrainstormingPostIdeas(request, env) {
   return json({ ideas: result.ideas, network, generated_at: new Date().toISOString() }, 200, origin);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SÉLECTEUR DE COMITÉ PAR IA — mode « Auto » (juin 2026)
+// ───────────────────────────────────────────────────────────────────
+// Le mode Auto ne suit plus une table figée par mode cognitif : une passe
+// IA légère (one-shot, ~120 tokens) lit le BRIEF et choisit les agents de
+// débat les PLUS adaptés à CE sujet. Repli si l'IA est indisponible /
+// bridée / illisible : comité complet (« les 9 » = 8 débatteurs ; le
+// Synthesizer s'ajoute hors-débat côté front).
+// ═══════════════════════════════════════════════════════════════════
+
+// Repli « les 9 » : comité de débat complet (8 agents non-Synthesizer).
+const FULL_DEBATE_ROSTER = ['strategic', 'creative', 'devil', 'consumer', 'cultural', 'growth', 'brand', 'data'];
+
+const ROSTER_PICK_PROMPT = `Tu es le chef de cabinet d'un boardroom marketing de 8 agents IA spécialisés. À partir d'un BRIEF, tu choisis QUELS agents doivent débattre — uniquement ceux dont l'expertise est réellement pertinente pour CE sujet précis.
+
+LES 8 AGENTS (id — expertise) :
+- strategic — Coordinateur stratégique : cadre et ouvre le débat (TOUJOURS inclus d'office).
+- creative — Concepts forts, angles créatifs, rupture, storytelling, identité visuelle.
+- growth — Acquisition, viralité, canaux, conversion, KPI, leviers de croissance.
+- consumer — Psychologie de l'audience, désirs cachés, motivations, jobs-to-be-done.
+- brand — Cohérence de marque, ton, perception et image long-terme, premium.
+- cultural — Tendances, signaux culturels, timing, niches, sous-cultures, communautés.
+- data — Chiffres, ordres de grandeur, taille de marché, faisabilité, hypothèses à vérifier.
+- devil — Contradicteur : challenge les hypothèses faibles, les clichés, le consensus mou.
+
+RÈGLES STRICTES
+- Choisis 4 à 6 agents au total (strategic compte dedans, déjà inclus).
+- Inclus TOUJOURS au moins une voix critique : devil OU data.
+- Choisis pour la complémentarité des angles utiles au brief, jamais pour le nombre. Un sujet ciblé mérite un petit comité affûté.
+- N'inclus jamais d'agent hors de la liste ci-dessus.
+- Réponds UNIQUEMENT par un JSON strict, sans aucun texte autour : {"agents":["strategic","..."]}`;
+
+// Parse défensif de la réponse LLM du sélecteur → liste d'ids d'agents de débat
+// valides. strategic forcé / synth exclus en aval par normalizeDebateRoster.
+export function parseRosterPick(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  const VALID = new Set(FULL_DEBATE_ROSTER);
+  // Tentative 1 — JSON strict { "agents": [...] }
+  try {
+    const m = raw.match(/\{[\s\S]*"agents"[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (Array.isArray(parsed.agents)) {
+        const ids = parsed.agents
+          .map(x => String(x || '').trim().toLowerCase())
+          .filter(id => VALID.has(id));
+        if (ids.length) return [...new Set(ids)];
+      }
+    }
+  } catch (_) { /* repli ci-dessous */ }
+  // Tentative 2 — repérage des ids en clair (ordre d'apparition, dédup)
+  const found = [];
+  const seen = new Set();
+  for (const tok of raw.toLowerCase().match(/[a-z]+/g) || []) {
+    if (VALID.has(tok) && !seen.has(tok)) { seen.add(tok); found.push(tok); }
+  }
+  return found;
+}
+
+async function _pickRosterAI(env, { brief, cognitiveMode, byokEngine, byokKey, byokActive }) {
+  const fallback = (source) => ({ roster: FULL_DEBATE_ROSTER.slice(), source });
+  if (!env.AI || typeof env.AI.run !== 'function') return fallback('no-ai');
+  // Bridage budget IA : on ne dépense pas une passe de sélection si l'IA est throttlée.
+  if (await isThrottled(env)) return fallback('throttled');
+
+  let out;
+  try {
+    out = await callLLM(env, {
+      engine: byokActive ? byokEngine : undefined,
+      apiKey: byokActive ? byokKey : undefined,
+      system: ROSTER_PICK_PROMPT,
+      messages: [{ role: 'user', content: `BRIEF :\n"""\n${brief}\n"""\n\nMODE DE RÉFLEXION : ${cognitiveMode}\n\nDonne le JSON du comité, rien d'autre.` }],
+      max_tokens: 120,
+      fallbackOnError: true,   // ne jamais casser le démarrage de la séance
+    });
+  } catch (_) {
+    return fallback('error');
+  }
+
+  const raw = (out?.text || '').trim();
+  await recordUsage(env, 'brainstorming', { usage: out?.usage, inText: ROSTER_PICK_PROMPT + brief, outText: raw });
+
+  const picked = parseRosterPick(raw);
+  if (!picked.length) return fallback('unparsable');
+
+  // Normalise (strategic forcé, synth/auto/invalides retirés, dédup) + garde-fous.
+  let roster = normalizeDebateRoster(picked);
+  if (!roster.some(id => id === 'devil' || id === 'data')) roster.push('devil');  // ≥ 1 voix d'opposition
+  if (roster.length < 3) return fallback('too-few');                              // plancher débat
+  if (roster.length > 8) roster = roster.slice(0, 8);
+  return { roster, source: out?.viaBYOK ? 'ai-byok' : 'ai' };
+}
+
+// POST /api/brainstorming/pick-roster — body { brief, cognitive_mode, byok? }. Auth JWT.
+// Mode « Auto » : l'IA compose le comité de débat selon le sujet. Aucun crédit
+// consommé ici (la séance agent-respond gère déjà le métrage) — on enregistre
+// seulement l'usage budget. Repli garanti : comité complet (les 9).
+export async function handleBrainstormingPickRoster(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: {
+      'Access-Control-Allow-Origin':  origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
+  }
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('Authentification requise', 401, origin);
+
+  const body = await parseBody(request);
+  if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
+  const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
+  const cognitiveMode = typeof body.cognitive_mode === 'string' ? body.cognitive_mode : 'exploration';
+  if (brief.length < MIN_BRIEF) return err(`brief requis (${MIN_BRIEF} caractères min)`, 400, origin);
+  if (brief.length > MAX_BRIEF) return err(`brief trop long (${MAX_BRIEF} max)`, 400, origin);
+
+  // BYOK universel — la passe de sélection suit le moteur ACTIF + sa clé (cohérent
+  // avec « ma clé pilote tout »). Flag OFF / pas de clé ⇒ Mistral Workers AI.
+  const byok = body.byok;
+  const byokEngine = (byok && typeof byok.engine === 'string') ? byok.engine : null;
+  const byokKey    = (byok && typeof byok.apiKey === 'string' && byok.apiKey.length > 10) ? byok.apiKey : null;
+  const byokActive = byokRoutingEnabled(env) && !!byokEngine && !!byokKey;
+
+  const { roster, source } = await _pickRosterAI(env, {
+    brief: brief.slice(0, MAX_BRIEF), cognitiveMode, byokEngine, byokKey, byokActive,
+  });
+  return json({ agents: roster, source, generated_at: new Date().toISOString() }, 200, origin);
+}
+
 // Sprint 7.12 — Parse défensif d'une réponse LLM en JSON insights
 function _parseInsightsFromText(raw) {
   if (!raw) return [];
