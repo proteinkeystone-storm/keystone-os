@@ -57,6 +57,7 @@ import {
 } from './routes/living-messages-admin.js';
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleLeadCapture, handleLeadsList }                           from './routes/leads.js';
+import { handleRatingSubmit, handleRatingsAdmin }                       from './routes/ratings.js';
 import { handleTrack, handleFunnel, pruneTrackEvents }                  from './routes/track.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -443,6 +444,10 @@ export default {
       // ── Funnel landing (mesure d'audience souveraine) — public + admin ──
       if (path === '/api/track'        && method === 'POST') return handleTrack(request, env);
       if (path === '/api/admin/funnel' && method === 'GET')  return handleFunnel(request, env);
+
+      // ── Notes des apps (étoiles) — user pose sa note (JWT) + agrégat admin ──
+      if (path === '/api/ratings'        && (method === 'POST' || method === 'OPTIONS')) return handleRatingSubmit(request, env);
+      if (path === '/api/admin/ratings'  && method === 'GET')  return handleRatingsAdmin(request, env);
 
       // ── Kodex Assets (Sprint Kodex-3.1.5) — upload binaire ─────
       if (path === '/api/kodex/asset'   && method === 'POST')   return handleUploadAsset(request, env);

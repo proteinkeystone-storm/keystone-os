@@ -342,6 +342,7 @@ const TAB_RENDERERS = {
   budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
   monitoring: renderMonitoring,
   funnel:     renderFunnel,         // Funnel landing — mesure d'audience souveraine (2026-06-13)
+  satisfaction: renderSatisfaction, // Notes étoiles des apps → agrégat anonyme (2026-06-17)
   devices:    renderDevices,
   audit:      renderAuditLog,      // Sprint S5.4
   settings:   renderSettings,
@@ -3178,6 +3179,89 @@ async function renderFunnel(panel, days = 30) {
       } finally { dl.disabled = false; dl.textContent = prev; }
     });
   } catch(err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — SATISFACTION (notes étoiles des apps → agrégat ANONYME) · 2026-06-17
+// ══════════════════════════════════════════════════════════════════
+// Source : GET /api/admin/ratings (agrégats par app, aucun identifiant).
+// Tri : moyennes basses d'abord → les mécontentements remontent en tête.
+async function renderSatisfaction(panel) {
+  try {
+    const data = await api('/api/admin/ratings');
+    const apps = data.apps || [];
+
+    // Mapping app_id → nom lisible (catalogue public, best-effort).
+    const names = {};
+    try {
+      const cat = await fetch(`${API_BASE}/api/catalog?_=${Date.now()}`).then(r => r.json());
+      (cat?.tools || []).forEach(t => { if (t.id) names[t.id] = t.title || t.id; });
+    } catch (_) { /* fallback = app_id brut */ }
+    const nameOf = id => names[id] || id;
+
+    const totalVotes = data.total_votes || 0;
+    const avgGlobal  = totalVotes
+      ? apps.reduce((s, a) => s + (a.avg || 0) * (a.n || 0), 0) / totalVotes
+      : 0;
+    const fmtAvg = v => (v ? Number(v).toFixed(2).replace('.', ',') : '—');
+    const avgColor = v => (v < 2.5 ? 'var(--danger)' : (v < 3.5 ? 'var(--gold)' : '#4caf80'));
+
+    const card = (a) => {
+      const n = a.n || 1;
+      const rows = [5, 4, 3, 2, 1].map(lab => {
+        const c   = a['s' + lab] || 0;
+        const pct = Math.round((c / n) * 100);
+        const col = lab <= 2 ? 'var(--danger)' : (lab === 3 ? 'var(--gold)' : '#4caf80');
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:11px;margin:3px 0">
+          <span style="width:24px;color:var(--text-muted)">${lab}★</span>
+          <div style="flex:1;height:7px;background:var(--navy);border-radius:5px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:${pct}%;background:${col};transition:width .3s"></div></div>
+          <span style="width:28px;text-align:right;color:var(--text-muted)">${c}</span>
+        </div>`;
+      }).join('');
+      const low = (a.avg ?? 5) < 2.5;
+      const flag = low
+        ? '<span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:700;color:var(--danger);border:1px solid var(--danger);border-radius:5px;padding:1px 7px">À TRAITER</span>'
+        : '';
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--navy2)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+          <div>
+            <div style="font-weight:700;font-size:14px">${esc(nameOf(a.app_id))}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${esc(a.app_id)} · ${a.n} vote${a.n > 1 ? 's' : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:22px;font-weight:800;color:${avgColor(a.avg ?? 5)}">★ ${fmtAvg(a.avg)}</div>
+            ${flag}
+          </div>
+        </div>
+        ${rows}
+      </div>`;
+    };
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Satisfaction</h2>
+        <button class="btn btn-secondary" id="btn-refresh-sat" style="font-size:12px">↻</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px">
+        Notes par étoiles laissées dans chaque application · <strong>anonyme</strong> · 1 note par utilisateur &amp; app ·
+        les moyennes les plus basses (à traiter) sont en tête.</p>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Votes au total</div><div class="stat-value">${totalVotes}</div></div>
+        <div class="stat-card"><div class="stat-label">Apps notées</div><div class="stat-value">${apps.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Moyenne globale</div><div class="stat-value" style="color:${avgColor(avgGlobal || 5)}">★ ${fmtAvg(avgGlobal)}</div></div>
+      </div>
+      <div style="margin-top:18px">
+        ${apps.length === 0
+          ? `<div class="empty-state"><p>Aucune note pour le moment.</p>
+             <p style="font-size:12px;color:var(--text-muted)">Elles apparaîtront ici dès qu'un utilisateur notera une app (bouton étoile « Noter » en haut de chaque outil).</p></div>`
+          : apps.map(card).join('')}
+      </div>`;
+
+    panel.querySelector('#btn-refresh-sat')?.addEventListener('click', () => renderSatisfaction(panel));
+  } catch (err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
   }
 }

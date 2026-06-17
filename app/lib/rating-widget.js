@@ -21,6 +21,25 @@
    ═══════════════════════════════════════════════════════════════ */
 
 const LS_PREFIX = 'ks_rating_';
+const API_BASE  = 'https://keystone-os-api.keystone-os.workers.dev';
+
+// ── Remontée serveur (agrégat Admin « Satisfaction ») ──────────
+// Fire-and-forget : ne bloque JAMAIS l'UI, n'affiche jamais d'erreur. La note
+// reste de toute façon en localStorage (état visuel) ; ceci ajoute juste
+// l'agrégat côté Admin. keepalive:true → survit si l'utilisateur navigue
+// juste après (clic étoile puis retour dashboard via le logo = reload).
+function _pushRating(appId, value) {
+  try {
+    const jwt = localStorage.getItem('ks_jwt') || '';
+    if (!jwt) return;                 // pas connecté → pas de remontée
+    fetch(`${API_BASE}/api/ratings`, {
+      method:    'POST',
+      headers:   { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+      body:      JSON.stringify({ app_id: appId, value: value || 0 }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) { /* jamais bloquant */ }
+}
 
 // ── Lecture / écriture en localStorage ─────────────────────────
 function _read(appId) {
@@ -33,6 +52,8 @@ function _write(appId, value) {
   else        localStorage.setItem(LS_PREFIX + appId, String(value));
   // Sync cross-device via le pattern existant (debounce 1.5s)
   try { import('../vault.js').then(m => m.scheduleAutoSave?.()); } catch (_) {}
+  // Remontée serveur pour l'agrégat Admin (note 1-5, ou 0 = retirée).
+  _pushRating(appId, value);
   // Émet un event pour que d'autres composants se rafraîchissent
   window.dispatchEvent(new CustomEvent('ks-rating-changed', {
     detail: { appId, value },
