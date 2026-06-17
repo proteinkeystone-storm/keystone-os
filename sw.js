@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.27.1-sdqr-living-cats';
+const VERSION       = 'ks-os-v5.27.2-pwa-auto-update';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -51,7 +51,11 @@ self.addEventListener('install', event => {
     await cache.addAll(PRECACHE).catch(err => {
       console.warn('[sw] precache partiel', err);
     });
-    self.skipWaiting();
+    // PAS de skipWaiting() ici : le nouveau SW ATTEND. La page affiche un
+    // bandeau « Nouvelle version — Actualiser » et c'est le CLIC utilisateur
+    // qui envoie SKIP_WAITING → activation propre. Évite tout takeover surprise
+    // (rechargement intempestif) et tout mélange ancien JS / nouveau module
+    // lazy-loadé pendant la session (cf. incident 2026-06-14).
   })());
 });
 
@@ -76,6 +80,12 @@ self.addEventListener('activate', event => {
 self.addEventListener('message', (event) => {
   if (event.data === 'GET_VERSION') {
     event.ports[0]?.postMessage(VERSION);
+  }
+  // Déclenché par le clic « Actualiser » du bandeau de mise à jour : on
+  // active immédiatement ce SW en attente (→ activate → clients.claim →
+  // controllerchange → la page se recharge avec les nouveaux assets).
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 
