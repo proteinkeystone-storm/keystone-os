@@ -6809,6 +6809,7 @@ html.light-mode .ksfs-detail-related-h { color: #0f172a; }
 
 .sdqr-sidebar-list {
   flex: 1; overflow-y: auto;
+  min-height: 0;            /* permet au flex-item de rétrécir → le scroll interne marche vraiment */
   padding: 8px 10px 16px;
   display: flex; flex-direction: column; gap: 6px;
 }
@@ -7266,8 +7267,19 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 
 /* Responsive : empile sidebar sous topbar sur mobile */
 @media (max-width: 880px) {
-  .sdqr-sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid rgba(255,255,255,.07); }
   .sdqr-body { flex-direction: column; }
+  /* Sidebar empilée : hauteur bornée + CLIP. Sans overflow ni min-height:0 sur
+     la liste, le contenu (filtres + dossiers + liste) débordait des 220px et
+     se superposait aux onglets Studio/Statistiques de la zone principale. */
+  .sdqr-sidebar {
+    width: 100%; max-height: 48vh; min-height: 0;
+    overflow: hidden;
+    border-right: none; border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .sdqr-sidebar-head,
+  .sdqr-sidebar-filters { flex-shrink: 0; }                       /* recherche + filtres restent visibles en haut */
+  .sdqr-folder-bar  { flex: 0 1 auto; max-height: 40%; min-height: 0; overflow-y: auto; }  /* dossiers scrollent si nombreux */
+  .sdqr-sidebar-list { flex: 1 1 0; min-height: 0; }              /* la liste prend le reste et scrolle (jamais de débordement) */
   .sdqr-detail { grid-template-columns: 1fr; }
   /* Empilé : on remet l'aperçu QR au-dessus des réglages (ordre source). */
   .sdqr-detail-left  { order: 0; }

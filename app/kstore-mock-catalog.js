@@ -13,25 +13,22 @@
    ═══════════════════════════════════════════════════════════════ */
 
 // ── Catégories du Key-Store ───────────────────────────────────
-// Seules les catégories réellement peuplées sont exposées dans la
-// sidebar. On rouvrira NEWS / FUN / FIN / etc. quand des apps de
-// ces univers seront produites.
+// Catégories À PLAT (pas de parent) : la sidebar liste directement
+// Immobilier / Communication / Productivité. Codes préfixés `KS_` pour
+// rester ISOLÉS de la taxonomie legacy du dashboard (IMM/COM/PRD…) — sans
+// ça, le catalog D1 écraserait le rangement (cf. _ksNormalizeD1).
+// On rouvrira d'autres univers quand des apps seront produites.
 export const KSTORE_CATEGORIES = [
-    {
-        id: 'BIZ',
-        label: 'Économie & entreprise',
-        sub: [
-            { id: 'BIZ_IMM', label: 'Immobilier' },
-            { id: 'BIZ_COM', label: 'Communication' },
-        ],
-    },
+    { id: 'KS_IMM', label: 'Immobilier' },
+    { id: 'KS_COM', label: 'Communication' },
+    { id: 'KS_PRD', label: 'Productivité' },
 ];
 
 // ── Apps du Key-Store ─────────────────────────────────────────
 // Toutes réelles : bouton d'achat actif, référencées par leur id
 // NOMEN-K (lien avec pads-data.js / flow Stripe).
 export const KSTORE_MOCK_APPS = [
-    // ── Économie & entreprise > Immobilier ────────────────────
+    // ── Immobilier (KS_IMM) ───────────────────────────────────
     // ── O-IMM-001 (Notices VEFA) et O-IMM-009 (Contrat VEFA) retirés
     //    du K-Store le 2026-05-22 : remplacés par VEFA Studio (O-IMM-010)
     //    qui fusionne les deux livrables en un seul outil. Les anciens
@@ -39,7 +36,7 @@ export const KSTORE_MOCK_APPS = [
     //    ont déjà achetés, et VEFA Studio migre leurs brouillons.
     {
         id: 'O-IMM-010',
-        category: 'BIZ', subcategory: 'BIZ_IMM',
+        category: 'KS_IMM',
         title: 'VEFA Studio',
         punchline: 'Notice + Contrat — un seul lot, deux livrables',
         shortDesc: 'Hero à onglets · saisie Programme partagée · auto-calculs HT/TTC',
@@ -52,7 +49,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'O-IMM-002',
-        category: 'BIZ', subcategory: 'BIZ_IMM',
+        category: 'KS_IMM',
         title: 'Annonces Immo',
         punchline: '6 portails en une saisie',
         shortDesc: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
@@ -64,10 +61,11 @@ export const KSTORE_MOCK_APPS = [
         real: true,
     },
 
-    // ── Économie & entreprise > Communication ─────────────────
+    // ── Communication (KS_COM) + Productivité (KS_PRD) ────────
+    // Le rangement réel suit le champ `category` de chaque app (pas l'ordre).
     {
         id: 'A-COM-001',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_COM',
         title: 'Smart Dynamic QR',
         punchline: 'QR codes souverains · sans GAFAM',
         shortDesc: 'Statiques + Dynamiques · stats RGPD · studio design',
@@ -80,7 +78,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-002',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_COM',
         title: 'Brief Prod',
         punchline: 'Le brief print/digital infaillible',
         shortDesc: 'Cahier des charges technique · calculateur d\'échelle pour grands formats',
@@ -93,7 +91,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-003',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_PRD',
         title: 'Brainstorming',
         punchline: '9 personnalités IA dialoguent pour enrichir votre réflexion',
         shortDesc: 'Atelier de brainstorming créatif · 9 personnalités IA en direct · synthèse + plan d\'actions PDF',
@@ -106,7 +104,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-004',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_COM',
         title: 'Key Form',
         punchline: 'Le formulaire intelligent qui collecte sans friction',
         shortDesc: 'Builder de questionnaires · URL partageable · notification mail direction',
@@ -119,7 +117,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-005',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_PRD',
         title: 'Ghost Writer',
         punchline: 'Vos emails et textes, réécrits en 3 variantes',
         shortDesc: '4 contextes · 5 critères · backend Gemma 4 quasi-gratuit · raccourci global',
@@ -133,7 +131,7 @@ export const KSTORE_MOCK_APPS = [
     // ── Sprint SA-0 — Smart Agent (jumeau numérique de savoir-faire, plan MAX)
     {
         id: 'O-AGT-001',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_PRD',
         title: 'Smart Agent',
         punchline: 'Votre savoir-faire devient un expert numérique',
         shortDesc: 'Coffre de savoir Kortex · réponses ancrées avec sources · « je ne sais pas » plutôt qu\'inventer',
@@ -147,7 +145,7 @@ export const KSTORE_MOCK_APPS = [
     // ── Sprint Keynapse — espace de connaissances en bulles (constellation perso) ──
     {
         id: 'O-Keyn-001',
-        category: 'BIZ', subcategory: 'BIZ_COM',
+        category: 'KS_PRD',
         title: 'Keynapse',
         punchline: 'Vos idées en bulles vivantes',
         shortDesc: 'Constellation de notes sur canevas infini · zones, liens, photos, croquis, mémos vocaux transcrits, rappels',

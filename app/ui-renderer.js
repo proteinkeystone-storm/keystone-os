@@ -880,10 +880,11 @@ window.addEventListener('ks-catalog-loaded', () => {
 // Whitelist des codes K-Store (cf. KSTORE_CATEGORIES). Les entrées du
 // catalog interne (CATALOG_DATA / D1) utilisent une taxonomie LEGACY
 // (IMM, COM, ANL, ADM, MKT, PRD) pour le dashboard ; le K-Store, lui,
-// a sa propre taxonomie (BIZ/NEWS/FUN/…) avec sous-cats (BIZ_IMM…).
-// Mélanger les deux fait disparaître les pads du K-Store sidebar.
+// a sa propre taxonomie ISOLÉE, préfixée KS_ (KS_IMM/KS_COM/KS_PRD).
+// Le préfixe garantit qu'aucun code D1 legacy ne matche ici → le mock
+// (kstore-mock-catalog.js) reste seul maître du rangement des apps.
 const _KSTORE_CAT_CODES = new Set([
-    'BIZ', 'BIZ_IMM', 'BIZ_COM',
+    'KS_IMM', 'KS_COM', 'KS_PRD',
 ]);
 
 // Normalise une entrée D1 catalog vers le shape attendu côté front
@@ -1165,6 +1166,9 @@ function _buildKStorePanel() {
             // Le chevron `v` ↔ `>` reflète l'état via CSS .collapsed.
             const li = btn.closest('.ksfs-nav-item--has-sub');
             if (li) li.classList.toggle('collapsed');
+            // Catégorie À PLAT (sans sous-rubriques) : le clic EST la
+            // sélection finale → on referme le drawer mobile (comme 'sub').
+            else wrap.classList.remove('nav-open');
         }
         if (action === 'sub')   _ksFilter = { kind: 'sub', id };
         if (action === 'plans') _ksFilter = { kind: 'plans', id: null };
@@ -4285,7 +4289,7 @@ function _renderSettingsBody() {
             </div>`,
         },
         {
-            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer ✦',
+            id: 'acc-living', icon: ACC_ICONS.engine, title: 'Living Layer',
             open: false,
             content: `<div class="sp-user-form">
                 <div class="sp-user-row sp-row-toggle">
@@ -4295,7 +4299,7 @@ function _renderSettingsBody() {
                         <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
                     </label>
                 </div>
-                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : 📊 statistiques certifiées, ✦ phrases IA contextuelles, et 📢 annonces. Rotation toutes les 7 secondes (la phrase s'écrit en direct). Activé par défaut.</div>
+                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : ${uiIcon('bar-chart', 13)} statistiques certifiées, ${uiIcon('sparkles', 13)} phrases IA contextuelles, et ${uiIcon('megaphone', 13)} annonces. Rotation toutes les 7 secondes (la phrase s'écrit en direct). Activé par défaut.</div>
             </div>`,
         },
         {
@@ -4794,6 +4798,12 @@ function _openSettings()  {
     document.getElementById('settings-panel')?.classList.add('open');
     document.getElementById('settings-backdrop')?.classList.add('open');
     document.body.style.overflow = 'hidden';
+    // Living Layer : re-synchronise l'affichage du toggle avec la préférence
+    // RÉELLEMENT persistée. Le panneau Réglages n'est rendu qu'une fois (init) ;
+    // si l'état affiché a divergé du localStorage, le toggle pouvait sembler
+    // « se remettre seul » à ON. On le réaligne à chaque ouverture.
+    const _llToggle = document.getElementById('living-on-toggle');
+    if (_llToggle) _llToggle.checked = localStorage.getItem(LS_LIVING_ON) !== '0';
 }
 
 /** Ouvre les Settings et déplie un accordéon spécifique (ex: 'acc-api') */
