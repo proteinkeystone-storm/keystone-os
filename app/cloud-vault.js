@@ -8,9 +8,12 @@
      sur Mac, elles arrivent automatiquement.
    ═══════════════════════════════════════════════════════════════ */
 
+import { PROVIDERS } from './lib/engines.js';
+
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
-const PROVIDERS  = ['anthropic','openai','gemini','xai','perplexity','mistral','meta'];
+// PROVIDERS (les 7 provider-ids, incl. legacy meta/perplexity) vient
+// désormais de la source unique app/lib/engines.js — sync clés inchangée.
 export const PREFS_KEYS = [
     'ks_active_engine','ks_user_name','ks_user_photo',
     'ks_lock_style','ks_lock_enabled','ks_lock_delay',

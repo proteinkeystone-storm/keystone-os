@@ -13,8 +13,11 @@
 // Conservé pour compatibilité avec les anciens fichiers vault.js
 // déposés manuellement dans le dossier /app/. Ne pas peupler à la
 // main : utiliser le panneau Settings + Cloud Vault (cross-device).
+import { PROVIDERS } from './lib/engines.js';
+
 const VAULT = {
-    api:     { anthropic:'', openai:'', gemini:'', xai:'', perplexity:'', mistral:'', meta:'' },
+    // api : vue dérivée de la source unique (tous les provider-ids, incl. legacy).
+    api:     Object.fromEntries(PROVIDERS.map(id => [id, ''])),
     prefs:   { engine:'', name:'', photo:'', onboarded:'', lockStyle:'',
                lockEnabled:'', lockDelay:'', ownedAssets:'', licenceKey:'' },
     licence: { key:'', plan:'', owner:'' },

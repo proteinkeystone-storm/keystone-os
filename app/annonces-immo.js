@@ -31,6 +31,7 @@ import { helpButtonHTML, bindHelpButton }       from './lib/help-overlay.js';
 import { ratingButtonHTML, bindRatingButton }    from './lib/rating-widget.js';
 import { burgerHTML, bindBurger }                from './lib/topbar-burger.js';
 import { icon }                                  from './lib/ui-icons.js';
+import { ENGINES }                               from './lib/engines.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { CF_API }                                from './pads-loader.js';
 
@@ -51,17 +52,9 @@ function _getActiveEngine() {
   catch (_) { return 'Claude'; }
 }
 
-// Mapping label affichage → engine id PromptEngine (cf. ui-renderer
-// _ENGINE_LABEL_TO_PROMPT_ENGINE, dupliqué ici pour éviter import croisé).
-const _ENGINE_LABEL_TO_ID = {
-  'Claude'    : 'claude',
-  'ChatGPT'   : 'gpt',
-  'Gemini'    : 'gemini',
-  'Grok'      : 'grok',
-  'Perplexity': 'perplexity',
-  'Mistral'   : 'mistral',
-  'Llama'     : 'llama',
-};
+// Mapping label affichage → engine id Worker (= id PromptEngine).
+// Vue dérivée de la source unique app/lib/engines.js (valeurs identiques).
+const _ENGINE_LABEL_TO_ID = Object.fromEntries(ENGINES.map(e => [e.label, e.engine]));
 
 // Retourne {id, label, hasApiKey} pour le moteur actif. Si l'utilisateur
 // a configuré une clé pour ce moteur (Réglages → Vault), hasApiKey=true

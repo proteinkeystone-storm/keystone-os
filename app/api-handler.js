@@ -23,19 +23,13 @@
      ApiHandler.getSupportedEngines()                   → [labels]
    ═══════════════════════════════════════════════════════════════ */
 
+import { ENGINES } from './lib/engines.js';
+
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 
-// Mapping label dashboard → engine id PromptEngine.
-// Cohérent avec _ENGINE_LABEL_TO_PROMPT_ENGINE dans ui-renderer.js.
-const ENGINE_LABEL_TO_ID = {
-    'Claude'    : 'claude',
-    'ChatGPT'   : 'gpt',
-    'Gemini'    : 'gemini',
-    'Grok'      : 'grok',
-    'Perplexity': 'perplexity',
-    'Mistral'   : 'mistral',
-    'Llama'     : 'llama',
-};
+// Mapping label dashboard → engine id Worker (= id PromptEngine).
+// Vue dérivée de la source unique app/lib/engines.js (valeurs identiques).
+const ENGINE_LABEL_TO_ID = Object.fromEntries(ENGINES.map(e => [e.label, e.engine]));
 
 // JWT cookie pour authentification Worker (cf. cloud-vault.js)
 function _jwt() {

@@ -28,6 +28,7 @@
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
+import { ENGINES, ENGINE_LABELS, apiKeyForEngine } from './lib/engines.js';
 import {
   loadCategories, getCategory, getCategoryDefaults,
   // v3 vendor-aware
@@ -2852,7 +2853,7 @@ async function _generateBrief() {
 // Liste ordonnée des engines à essayer : actif en tête, puis les autres
 // engines avec clé API configurée dans le Vault.
 function _resolveAIEnginesOrdered(activeLabel) {
-  const preferred = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity', 'Llama'];
+  const preferred = ENGINE_LABELS;   // moteurs visibles (source unique engines.js)
   const withKey = new Set(preferred.filter(l => _findApiKeyForEngine(l)));
   const ordered = [];
   if (withKey.has(activeLabel)) ordered.push(activeLabel);
@@ -2889,36 +2890,22 @@ function _humanizeEngineError(err, triedEngines) {
   return msg;
 }
 
-// ── Mapping moteur → URL de gestion de la clé API (renouvellement)
-const ENGINE_DOC_URL = {
-  'Claude'    : 'https://console.anthropic.com/settings/keys',
-  'ChatGPT'   : 'https://platform.openai.com/api-keys',
-  'GPT 5'     : 'https://platform.openai.com/api-keys',
-  'Gemini'    : 'https://aistudio.google.com/app/apikey',
-  'Mistral'   : 'https://console.mistral.ai/api-keys/',
-  'Grok'      : 'https://console.x.ai/',
-  'Perplexity': 'https://www.perplexity.ai/settings/api',
-  'Llama'     : 'https://api.together.xyz/settings/api-keys',
-};
+// ── Mapping moteur → URL de gestion de la clé API (renouvellement) ──
+// Vue dérivée de app/lib/engines.js (alias 'GPT 5' inclus, valeurs identiques).
+const ENGINE_DOC_URL = Object.fromEntries(
+  ENGINES.flatMap(e => [e.label, ...(e.aliases || [])].map(l => [l, e.docUrl])),
+);
 
-// ── Mapping moteur → URL de l'interface web GRATUITE (plan B humain)
+// ── Mapping moteur → URL de l'interface web GRATUITE (plan B humain) ──
 // L'utilisateur copie le Code Maître, ouvre un de ces liens, colle.
-// Toutes les interfaces ont une version gratuite (souvent avec compte).
-const ENGINE_WEB_URL = {
-  'Claude'    : { url: 'https://claude.ai/new',          host: 'claude.ai' },
-  'ChatGPT'   : { url: 'https://chatgpt.com/',           host: 'chatgpt.com' },
-  'GPT 5'     : { url: 'https://chatgpt.com/',           host: 'chatgpt.com' },
-  'Gemini'    : { url: 'https://gemini.google.com/app',  host: 'gemini.google.com' },
-  'Mistral'   : { url: 'https://chat.mistral.ai/chat',   host: 'chat.mistral.ai' },
-  'Grok'      : { url: 'https://grok.com/',              host: 'grok.com' },
-  'Perplexity': { url: 'https://www.perplexity.ai/',     host: 'perplexity.ai' },
-  'Llama'     : { url: 'https://www.meta.ai/',           host: 'meta.ai' },
-};
+// Vue dérivée de app/lib/engines.js (alias 'GPT 5' inclus).
+const ENGINE_WEB_URL = Object.fromEntries(
+  ENGINES.flatMap(e => [e.label, ...(e.aliases || [])].map(l => [l, { url: e.webUrl, host: e.host }])),
+);
 
-// Liste tous les moteurs avec une clé API configurée dans le Vault
+// Liste les moteurs VISIBLES (Llama/Perplexity masqués, D5) avec une clé Vault.
 function _listAvailableEngines() {
-  const labels = ['Claude', 'ChatGPT', 'Gemini', 'Mistral', 'Grok', 'Perplexity', 'Llama'];
-  return labels.filter(l => _findApiKeyForEngine(l));
+  return ENGINE_LABELS.filter(l => _findApiKeyForEngine(l));
 }
 
 // ── Card "Plan B humain" : copier le Code Maître + liens AI web ──
@@ -3466,19 +3453,10 @@ function _guessVendorIdFromLabel(label) {
 }
 
 // ── Trouve la clé API du vault correspondant au moteur ────────
+// Délègue à la source unique (gère l'alias 'GPT 5' + fallback minuscules) :
+// localStorage.getItem('ks_api_' + provider) || null — comportement identique.
 function _findApiKeyForEngine(label) {
-  const map = {
-    'Claude'    : 'anthropic',
-    'ChatGPT'   : 'openai',
-    'GPT 5'     : 'openai',
-    'Gemini'    : 'gemini',
-    'Mistral'   : 'mistral',
-    'Grok'      : 'xai',
-    'Perplexity': 'perplexity',
-    'Llama'     : 'meta',
-  };
-  const id = map[label] || label.toLowerCase();
-  return localStorage.getItem('ks_api_' + id) || null;
+  return apiKeyForEngine(label);
 }
 
 // ── Sauvegarde du brief en bibliothèque (D1 entity codex_briefs) ──

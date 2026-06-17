@@ -6,6 +6,7 @@
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
+import { ENGINES, VISIBLE_ENGINES } from './lib/engines.js';
 import {
     initGridEngine, getSavedOrder,
     getUserLabel, isPadHidden, restorePad,
@@ -153,36 +154,11 @@ export function initTools(toolList = [], artefactList = []) {
 }
 
 // ── Providers API ─────────────────────────────────────────────
-const API_PROVIDERS = [
-    { id:'anthropic',  name:'Anthropic',  label:'Claude',
-      logo:'./RESOURCES/LOGOS/Logo%20Claude.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Claude%20-%20fond%20clair.png',
-      placeholder:'sk-ant-api03-...' },
-    { id:'openai',     name:'OpenAI',     label:'ChatGPT',
-      logo:'./RESOURCES/LOGOS/Logo%20Chat%20GPT.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Chat%20GPT%20-%20fond%20clair.png',
-      placeholder:'sk-proj-...' },
-    { id:'gemini',     name:'Google',     label:'Gemini',
-      logo:'./RESOURCES/LOGOS/Logo%20Gemini.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Gemini%20-%20fond%20clair.png',
-      placeholder:'AIza...' },
-    { id:'xai',        name:'xAI',        label:'Grok',
-      logo:'./RESOURCES/LOGOS/Logo%20Grok.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Grok%20-%20fond%20clair.png',
-      placeholder:'xai-...' },
-    { id:'perplexity', name:'Perplexity', label:'Perplexity',
-      logo:'./RESOURCES/LOGOS/Logo%20Perplexity.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Perplexity%20-%20fond%20clair.png',
-      placeholder:'pplx-...' },
-    { id:'mistral',    name:'Mistral AI', label:'Mistral',
-      logo:'./RESOURCES/LOGOS/Logo%20Mistral%20AI.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Mistral%20AI%20-%20fond%20clair.png',
-      placeholder:'mis-...' },
-    { id:'meta',       name:'Meta',       label:'Llama',
-      logo:'./RESOURCES/LOGOS/Logo%20Meta%20ai.png',
-      logoLight:'./RESOURCES/LOGOS/Logo%20Meta%20ai%20-%20fond%20clair.png',
-      placeholder:'gsk-...' },
-];
+// Fournisseurs affichés (sélecteur « Moteur actif » + champs « Clés API »)
+// = moteurs VISIBLES de la source unique app/lib/engines.js. Réduit à 5 :
+// Llama + Perplexity sont masqués (handoff D5), support Worker conservé.
+// Chaque record garde id/name/label/logo/logoLight/placeholder (+ extras).
+const API_PROVIDERS = VISIBLE_ENGINES;
 
 // ── LocalStorage ──────────────────────────────────────────────
 const LS_PREFIX     = 'ks_api_';
@@ -199,16 +175,12 @@ const loadKey       = (id)      => localStorage.getItem(LS_PREFIX + id) || '';
 const getActiveEngine = ()      => localStorage.getItem(LS_ENGINE) || 'Claude';
 const setActiveEngine = (label) => { localStorage.setItem(LS_ENGINE, label); updateEngineChip(label); };
 
-const ENGINE_TO_PROVIDER = {
-    'Claude':'anthropic','ChatGPT':'openai','Gemini':'gemini',
-    'Grok':'xai','Perplexity':'perplexity','Mistral':'mistral','Llama':'meta',
-};
+// Vues dérivées de la source unique (app/lib/engines.js) — valeurs
+// IDENTIQUES aux anciens littéraux (garanti par scripts/test-engines.mjs).
+const ENGINE_TO_PROVIDER = Object.fromEntries(ENGINES.map(e => [e.label, e.id]));
 
-// Correspondance label dashboard → ID admin (clés dans engines.prompts côté D1)
-const ENGINE_LABEL_TO_ID = {
-    'Claude':'claude','ChatGPT':'gpt4o','Gemini':'gemini',
-    'Grok':'grok','Perplexity':'perplexity','Mistral':'mistral','Llama':'llama',
-};
+// Correspondance label dashboard → ID prompt D1 (engines.prompts) ; ⚠ ChatGPT→'gpt4o'.
+const ENGINE_LABEL_TO_ID = Object.fromEntries(ENGINES.map(e => [e.label, e.promptId]));
 
 /**
  * Résout le prompt système d'un pad selon le moteur actif.
@@ -2951,15 +2923,7 @@ function _initMultiSelects(container) {
 
 // Mapping label dashboard → engine id PromptEngine (cf. prompt-engine.js).
 // Différent de ENGINE_LABEL_TO_ID (qui mappe vers les ids D1 historiques).
-const _ENGINE_LABEL_TO_PROMPT_ENGINE = {
-    'Claude'    : 'claude',
-    'ChatGPT'   : 'gpt',
-    'Gemini'    : 'gemini',
-    'Grok'      : 'grok',
-    'Perplexity': 'perplexity',
-    'Mistral'   : 'mistral',
-    'Llama'     : 'llama',
-};
+const _ENGINE_LABEL_TO_PROMPT_ENGINE = Object.fromEntries(ENGINES.map(e => [e.label, e.engine]));
 
 // Renvoie la liste ORDONNÉE des moteurs à essayer :
 //   1. L'engine actif des Réglages (si clé présente)
