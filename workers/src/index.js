@@ -137,6 +137,9 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleRemindersList, handleReminderUpdate, handleReminderDelete,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 
+// ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
+import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete } from './routes/sentinel.js';
+
 // ── Router ────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -199,6 +202,13 @@ export default {
       if (knBubbleMatch && method === 'GET')    return handleBubbleDetail(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'PATCH')  return handleBubbleUpdate(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'DELETE') return handleBubbleDelete(request, env, knBubbleMatch[1]);
+
+      // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
+      if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);
+      if (path === '/api/sentinel/sites'  && method === 'GET')  return handleSitesList(request, env);
+      if (path === '/api/sentinel/sites'  && method === 'POST') return handleSiteCreate(request, env);
+      const sntSite = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)$/);
+      if (sntSite && method === 'DELETE') return handleSiteDelete(request, env, sntSite[1]);
 
       // ── Smart Agent / Kortex (SA-0 santé · SA-1 coffre) ──────
       if (path === '/api/smart-agent/health' && method === 'GET') return handleSmartAgentHealth(request, env);

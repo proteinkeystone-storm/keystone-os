@@ -96,7 +96,7 @@ const ARTIFACT_COMPONENTS = [
 ];
 
 const TOOL_FIELD_TYPES = ['text', 'textarea', 'select', 'number'];
-const CATEGORIES       = ['IMM', 'COM', 'PRD', 'ANL', 'ADM'];
+const CATEGORIES       = ['IMM', 'COM', 'WEB', 'PRD', 'ANL', 'ADM'];
 
 const ICON_MAP = {
   vefa: '📋', ad: '📢', mail: '✉️', social: '📱', brief: '📸',

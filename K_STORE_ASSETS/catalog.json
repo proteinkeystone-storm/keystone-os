@@ -304,6 +304,33 @@
         "carte mentale",
         "keynapse"
       ]
+    },
+    {
+      "id": "O-GEO-001",
+      "padKey": null,
+      "title": "Sentinel",
+      "subtitle": "Auditez et surveillez vos sites web — disponibilité, SEO, visibilité IA",
+      "category": "WEB",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Sentinel est un centre de contrôle qui surveille vos sites web en continu — disponibilité, performance, SEO technique, sécurité — et vous alerte au moindre incident. Il note chaque site, suit l'évolution dans le temps, et livre des correctifs clé en main : le code prêt à coller ou des instructions pas-à-pas selon votre plateforme (Wix, WordPress, sur-mesure), délégables à votre webmaster en un clic. Killer feature : la visibilité dans les IA génératives (GEO) — savez-vous si ChatGPT, Perplexity ou Gemini parlent de vous ? Souverain, sans dépendance à des outils tiers.",
+      "icon": "sentinel",
+      "ai_optimized": "Mistral",
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "web",
+        "audit",
+        "seo",
+        "geo",
+        "monitoring",
+        "surveillance",
+        "performance",
+        "wix",
+        "wordpress"
+      ]
     }
   ]
 }

@@ -24,6 +24,7 @@ import { openAnnoncesImmo }                      from './annonces-immo.js';
 import { openSocialManager } from './social-manager.js';
 import { openSmartAgent }                        from './smart-agent.js';
 import { openKeynapse }                          from './keynapse.js';
+import { openSentinel }                          from './sentinel.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -2154,6 +2155,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-SOC-001') { openSocialManager(opts); return; }   // opts.compose = handoff (Ghost Writer → composer)
     if (padId === 'O-AGT-001') { openSmartAgent(opts); return; }      // Smart Agent — jumeau numérique de savoir-faire (SA-0)
     if (padId === 'O-Keyn-001') { openKeynapse(opts); return; }       // Keynapse — constellation de notes en bulles (KN-0)
+    if (padId === 'O-GEO-001')  { openSentinel(opts); return; }       // Sentinel — audit web avec suivi (S0)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }
