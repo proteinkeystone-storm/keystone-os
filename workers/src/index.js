@@ -139,7 +139,9 @@ import { handleKeynapseHealth, handleKeynapseState,
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
-         handleSiteCheck, handleSiteHistory, sweepDueChecks } from './routes/sentinel.js';
+         handleSiteCheck, handleSiteHistory, handleSiteAudit, handleSiteAuditGet,
+         handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
+         sweepDueChecks } from './routes/sentinel.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -212,6 +214,11 @@ export default {
       if (sntCheck && method === 'POST') return handleSiteCheck(request, env, sntCheck[1]);
       const sntHist = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/history$/);
       if (sntHist && method === 'GET') return handleSiteHistory(request, env, sntHist[1]);
+      const sntAudit = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/audit$/);
+      if (sntAudit && method === 'POST') return handleSiteAudit(request, env, sntAudit[1]);
+      if (sntAudit && method === 'GET')  return handleSiteAuditGet(request, env, sntAudit[1]);
+      if (path === '/api/sentinel/push/subscribe'   && method === 'POST') return handleSentinelPushSub(request, env);
+      if (path === '/api/sentinel/push/unsubscribe' && method === 'POST') return handleSentinelPushUnsub(request, env);
       const sntSite = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)$/);
       if (sntSite && method === 'DELETE') return handleSiteDelete(request, env, sntSite[1]);
 

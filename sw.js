@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.27.16-update-btn-noloop';
+const VERSION       = 'ks-os-v5.27.17-update-btn-noloop';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -216,12 +216,23 @@ self.addEventListener('fetch', event => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (_) {}
-  if (data.kind !== 'keynapse-reminder') return;
-  event.waitUntil(self.registration.showNotification(data.title || 'Rappel — Keynapse', {
-    body: data.body || 'Vous avez un rappel.',
-    tag:  'kn-rem-' + (data.bubbleId || ''),
-    data: { kind: 'keynapse-reminder', bubbleId: data.bubbleId },
-  }));
+  if (data.kind === 'keynapse-reminder') {
+    event.waitUntil(self.registration.showNotification(data.title || 'Rappel — Keynapse', {
+      body: data.body || 'Vous avez un rappel.',
+      tag:  'kn-rem-' + (data.bubbleId || ''),
+      data: { kind: 'keynapse-reminder', bubbleId: data.bubbleId },
+    }));
+    return;
+  }
+  // Sentinel (Pad O-GEO-001) — alerte de disponibilité (site hors ligne / rétabli).
+  if (data.kind === 'sentinel-alert') {
+    event.waitUntil(self.registration.showNotification(data.title || 'Sentinel', {
+      body: data.body || '',
+      tag:  'snt-' + (data.siteId || ''),
+      data: { kind: 'sentinel-alert', url: data.url || './app' },
+    }));
+    return;
+  }
 });
 
 // ── Clic sur une notification de rappel Keynapse (Sprint 7) ────
@@ -230,13 +241,26 @@ self.addEventListener('push', (event) => {
 // à ouvrir (le pad Keynapse écoute les messages SW quand il est ouvert).
 self.addEventListener('notificationclick', (event) => {
   const data = (event.notification && event.notification.data) || {};
-  if (data.kind !== 'keynapse-reminder') return;
-  event.notification.close();
-  event.waitUntil((async () => {
-    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    let client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
-    if (client) { try { await client.focus(); } catch (_) {} }
-    else { try { client = await self.clients.openWindow('./app'); } catch (_) {} }
-    if (client && data.bubbleId) { try { client.postMessage({ type: 'keynapse-open-bubble', bubbleId: data.bubbleId }); } catch (_) {} }
-  })());
+  if (data.kind === 'keynapse-reminder') {
+    event.notification.close();
+    event.waitUntil((async () => {
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      let client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
+      if (client) { try { await client.focus(); } catch (_) {} }
+      else { try { client = await self.clients.openWindow('./app'); } catch (_) {} }
+      if (client && data.bubbleId) { try { client.postMessage({ type: 'keynapse-open-bubble', bubbleId: data.bubbleId }); } catch (_) {} }
+    })());
+    return;
+  }
+  // Sentinel — clic sur une alerte : focalise/ouvre le dashboard.
+  if (data.kind === 'sentinel-alert') {
+    event.notification.close();
+    event.waitUntil((async () => {
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
+      if (client) { try { await client.focus(); } catch (_) {} }
+      else { try { await self.clients.openWindow(data.url || './app'); } catch (_) {} }
+    })());
+    return;
+  }
 });
