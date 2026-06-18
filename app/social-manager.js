@@ -47,11 +47,11 @@ const _hexToRgba = (hex, a) => {
 // down). La source de vérité reste /api/social/registry ; ceci évite juste une
 // UI muette. À garder cohérent avec registry.js.
 const FALLBACK_CAPS = {
-  facebook:  { id:'facebook',  label:'Facebook',  text:{ maxLength:63206, maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10 } },
-  instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10 } },
-  linkedin:  { id:'linkedin',  label:'LinkedIn',  text:{ maxLength:3000,  maxHashtags:null }, media:{ enabled:false, required:false, imageMax:9  } },
-  threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10 } },
-  telegram:  { id:'telegram',  label:'Telegram',  text:{ maxLength:4096,  maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, captionMaxLength:1024 } },
+  facebook:  { id:'facebook',  label:'Facebook',  text:{ maxLength:63206, maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, videoEnabled:true,  videoMaxDurationSec:7200 } },
+  instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10, videoEnabled:false, videoMaxDurationSec:90   } },
+  linkedin:  { id:'linkedin',  label:'LinkedIn',  text:{ maxLength:3000,  maxHashtags:null }, media:{ enabled:false, required:false, imageMax:9,  videoEnabled:false } },
+  threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, videoEnabled:false, videoMaxDurationSec:300  } },
+  telegram:  { id:'telegram',  label:'Telegram',  text:{ maxLength:4096,  maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, captionMaxLength:1024, videoEnabled:true, videoMaxDurationSec:3600 } },
 };
 
 // ── État module ────────────────────────────────────────────────
@@ -60,7 +60,7 @@ let _styles   = false;
 let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
-let _form     = { text: '', targets: [], images: [] };   // images: [{ url, name }] — carrousel
+let _form     = { text: '', targets: [], images: [], video: null };   // images: [{url,name}] carrousel · video: {url,name,durationSec} — EXCLUSIF des images
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
@@ -325,6 +325,24 @@ function _renderNets() {
 function _renderMedia() {
   const box = _root && _root.querySelector('[data-slot="media"]');
   if (!box) return;
+
+  // ── Mode VIDÉO (exclusif) : 1 vignette vidéo + retrait, pas d'ajout d'image ──
+  if (_form.video) {
+    const v   = _form.video;
+    const dur = Number.isFinite(v.durationSec) ? ` · ${Math.round(v.durationSec)} s` : '';
+    box.innerHTML =
+      `<div class="sm-media-grid">
+        <div class="sm-thumb sm-thumb-video" title="${_esc(v.name || 'vidéo')}">
+          <video src="${_esc(v.url)}" muted playsinline preload="metadata"></video>
+          <span class="sm-thumb-badge">${icon('film', 12)}</span>
+          <button type="button" class="sm-thumb-x" data-act="remove-video" aria-label="Retirer la vidéo" title="Retirer">${icon('x', 13)}</button>
+        </div>
+      </div>` +
+      `<div class="sm-media-hint">Vidéo${dur} — publiée sur les réseaux compatibles (Facebook, Telegram).</div>`;
+    return;
+  }
+
+  // ── Mode IMAGES (carrousel) — défaut ────────────────────────────
   const imgs   = Array.isArray(_form.images) ? _form.images : [];
   const canAdd = imgs.length < SM_MAX_IMAGES;
   const thumbs = imgs.map((im, i) => `
@@ -334,8 +352,8 @@ function _renderMedia() {
       </div>`).join('');
   const addBtn = canAdd ? `
       <label class="sm-upload${imgs.length ? ' sm-upload-mini' : ''}">
-        <input type="file" accept="image/*" data-field="image" multiple hidden>
-        ${icon('image', 16)}&nbsp;<span data-slot="media-label">${imgs.length ? 'Ajouter' : 'Choisir une ou plusieurs images…'}</span>
+        <input type="file" accept="image/*,video/mp4" data-field="image" multiple hidden>
+        ${icon('image', 16)}&nbsp;<span data-slot="media-label">${imgs.length ? 'Ajouter' : 'Choisir des images ou une vidéo…'}</span>
       </label>` : '';
   box.innerHTML =
     `<div class="sm-media-grid">${thumbs}${addBtn}</div>` +
@@ -367,7 +385,9 @@ function _renderPreview() {
         </div>
       </div>
       <div class="sm-card-text">${txt ? _esc(txt).replace(/\n/g, '<br>') : '<span class="sm-muted">Votre message apparaîtra ici…</span>'}</div>
-      ${(_form.images && _form.images.length) ? `<div class="sm-card-img"><img src="${_esc(_form.images[0].url)}" alt="">${_form.images.length > 1 ? `<span class="sm-card-img-count">+${_form.images.length - 1}</span>` : ''}</div>` : ''}
+      ${_form.video
+        ? `<div class="sm-card-img sm-card-video"><video src="${_esc(_form.video.url)}" muted playsinline preload="metadata"></video><span class="sm-card-play">${icon('play', 20)}</span></div>`
+        : (_form.images && _form.images.length) ? `<div class="sm-card-img"><img src="${_esc(_form.images[0].url)}" alt="">${_form.images.length > 1 ? `<span class="sm-card-img-count">+${_form.images.length - 1}</span>` : ''}</div>` : ''}
     </div>
   `;
 }
@@ -401,11 +421,11 @@ const _textLimit = (c, hasImg) => (hasImg && c?.media?.captionMaxLength) ? c.med
 // Limite de caractères affichée = la PLUS contraignante parmi les réseaux
 // sélectionnés (ex. Threads 500 l'emporte sur Facebook 63206 ; Telegram+photo → 1024).
 function _counterInfo() {
-  const hasImg = (_form.images?.length || 0) > 0;
+  const hasMedia = (_form.images?.length || 0) > 0 || !!_form.video;
   let best = null;
   for (const p of _form.targets) {
     const c = _capOf(p);
-    const max = _textLimit(c, hasImg);
+    const max = _textLimit(c, hasMedia);
     if (max && (!best || max < best.limit)) best = { limit: max, label: c.label || _labelOf(p) };
   }
   if (!best) return null;
@@ -416,27 +436,36 @@ function _counterInfo() {
 function _validate() {
   const text   = _form.text.trim();
   const hasImg = (_form.images?.length || 0) > 0;
+  const hasVid = !!_form.video;
+  const hasMedia = hasImg || hasVid;
   const tags   = _countHashtags(text);
   const global = [];
   const perNet = {};
   const reasons = [];   // messages plats lisibles (pour le toast)
 
-  if (!text && !hasImg) global.push('Écris un message ou ajoute une photo.');
+  if (!text && !hasMedia) global.push('Écris un message ou ajoute une photo / vidéo.');
   if (!_form.targets.length) global.push('Sélectionne au moins un réseau.');
 
   for (const p of _form.targets) {
     const c = _capOf(p);
     const errors = [], warnings = [];
     if (c) {
-      const max = _textLimit(c, hasImg);
+      const max = _textLimit(c, hasMedia);
       if (max && text.length > max) {
-        errors.push(`texte trop long (${text.length}/${max}${hasImg && c.media?.captionMaxLength ? ', légende' : ''}).`);
+        errors.push(`texte trop long (${text.length}/${max}${hasMedia && c.media?.captionMaxLength ? ', légende' : ''}).`);
       }
-      if (c.media?.required && !hasImg) {
-        errors.push('exige une photo.');
+      if (c.media?.required && !hasMedia) {
+        errors.push('exige une photo ou une vidéo.');
       }
       if (hasImg && c.media && c.media.enabled === false) {
         errors.push('n\'accepte pas encore les photos — retire-la ou décoche ce réseau.');
+      }
+      if (hasVid) {
+        if (!c.media?.videoEnabled) {
+          errors.push('n\'accepte pas encore la vidéo — retire-la ou décoche ce réseau.');
+        } else if (c.media?.videoMaxDurationSec && Number.isFinite(_form.video.durationSec) && _form.video.durationSec > c.media.videoMaxDurationSec) {
+          errors.push(`vidéo trop longue (${Math.round(_form.video.durationSec)} s, max ${c.media.videoMaxDurationSec} s).`);
+        }
       }
       if (c.text?.maxHashtags && tags > c.text.maxHashtags) {
         warnings.push(`${tags} hashtags (max conseillé ${c.text.maxHashtags}).`);
@@ -583,11 +612,24 @@ async function _disconnectAccount(id) {
 // ══════════════════════════════════════════════════════════════
 // Upload image → R2
 // ══════════════════════════════════════════════════════════════
+// Routeur média : une VIDÉO dans la sélection → mode vidéo (exclusif) ; sinon images.
+async function _uploadMedia(fileList) {
+  const all   = Array.from(fileList || []);
+  const video = all.find(f => f.type && f.type.startsWith('video/'));
+  if (video) return _uploadVideo(video);
+  return _uploadImages(fileList);
+}
+
 async function _uploadImages(fileList) {
   const token = _adminToken();
   if (!token) { _toast('Connexion admin requise', 'warn'); return; }
   const files = Array.from(fileList || []).filter(f => f.type && f.type.startsWith('image/'));
   if (!files.length) { _toast('Fichier non image', 'warn'); return; }
+  // Exclusivité : des images remplacent une vidéo en cours (jamais les deux).
+  if (_form.video) {
+    if (!confirm('Remplacer la vidéo par des images ?')) return;
+    _form.video = null;
+  }
   if (!Array.isArray(_form.images)) _form.images = [];
   const room = SM_MAX_IMAGES - _form.images.length;
   if (room <= 0) { _toast(`Maximum ${SM_MAX_IMAGES} images.`, 'warn'); return; }
@@ -627,6 +669,62 @@ function _removeImage(idx) {
   _renderValidation();
 }
 
+// ── Vidéo (mode exclusif) : upload + mesure durée client + retrait ──
+async function _uploadVideo(file) {
+  const token = _adminToken();
+  if (!token) { _toast('Connexion admin requise', 'warn'); return; }
+  if (file.type !== 'video/mp4') { _toast('Vidéo : MP4 uniquement.', 'warn'); return; }
+  if (Array.isArray(_form.images) && _form.images.length) {
+    if (!confirm('Remplacer les images par cette vidéo ? (la vidéo et les images ne se mélangent pas)')) return;
+  }
+  const durationSec = await _readVideoDuration(file);   // mesurée côté client → garde-fou durée immédiat
+  _setMediaLabel(`Envoi de « ${file.name} »…`);
+  try {
+    const res  = await fetch(`${CF_API}/api/social/media`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) throw new Error(data.error || `Erreur ${res.status}`);
+    _form.images = [];
+    _form.video  = { url: data.url, name: file.name, durationSec };
+  } catch (e) {
+    _toast(`Upload vidéo échoué : ${e?.message || 'erreur'}`, 'warn');
+  }
+  _renderMedia();
+  _renderPreview();
+  _renderValidation();
+}
+
+// Lit la durée d'une vidéo locale (métadonnées) — sans upload, pour valider tôt.
+function _readVideoDuration(file) {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => { const d = v.duration; URL.revokeObjectURL(url); resolve(Number.isFinite(d) ? d : null); };
+      v.onerror          = () => { URL.revokeObjectURL(url); resolve(null); };
+      v.src = url;
+    } catch (_) { resolve(null); }
+  });
+}
+
+function _removeVideo() {
+  _form.video = null;
+  _renderMedia();
+  _renderPreview();
+  _renderValidation();
+}
+
+// Bloc média du payload publish/programme : 1 vidéo OU des images, jamais mixte.
+function _mediaPayload() {
+  if (_form.video) return { media: [{ type: 'video', url: _form.video.url, durationSec: _form.video.durationSec }] };
+  if (_form.images && _form.images.length) return { media: _form.images.map(im => ({ type: 'image', url: im.url })) };
+  return {};
+}
+
 // ══════════════════════════════════════════════════════════════
 // Publication
 // ══════════════════════════════════════════════════════════════
@@ -648,7 +746,7 @@ async function _publish() {
     targets: _form.targets,
     text,
     source: 'social-manager',
-    ...((_form.images && _form.images.length) ? { media: _form.images.map(im => ({ type: 'image', url: im.url })) } : {}),
+    ..._mediaPayload(),
   };
 
   try {
@@ -701,7 +799,7 @@ function _setResult(html) {
 
 // Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
 function _reset() {
-  _form = { text: '', targets: [], images: [] };
+  _form = { text: '', targets: [], images: [], video: null };
   _schedOpen = false;
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
@@ -850,7 +948,7 @@ async function _doSchedule() {
     text: _form.text.trim(),
     source: 'social-manager',
     scheduledAt: when.toISOString(),
-    ...((_form.images && _form.images.length) ? { media: _form.images.map(im => ({ type: 'image', url: im.url })) } : {}),
+    ..._mediaPayload(),
   };
 
   _busy = true; _renderValidation();
@@ -1096,6 +1194,7 @@ function _onClick(e) {
   if (act === 'clear-history'){ e.preventDefault(); _clearHistory(); return; }
   if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
   if (act === 'remove-image') { e.preventDefault(); _removeImage(e.target.closest('[data-idx]')?.dataset.idx); return; }
+  if (act === 'remove-video') { e.preventDefault(); _removeVideo(); return; }
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
   if (act === 'disconnect-acct') { e.preventDefault(); _disconnectAccount(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
@@ -1141,7 +1240,7 @@ function _onInput(e) {
 }
 
 function _onChange(e) {
-  if (e.target.dataset.field === 'image' && e.target.files?.length) _uploadImages(e.target.files);
+  if (e.target.dataset.field === 'image' && e.target.files?.length) _uploadMedia(e.target.files);
 }
 
 let _saveT = null;
@@ -1400,6 +1499,11 @@ function _injectStyles() {
   .sm-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
   .sm-thumb-x { position:absolute; top:3px; right:3px; width:22px; height:22px; display:grid; place-items:center; border:none; border-radius:50%; background:rgba(8,12,24,.72); color:#fff; cursor:pointer; transition:background .15s; }
   .sm-thumb-x:hover { background:var(--danger, #e05c5c); }
+  .sm-thumb-video video { width:100%; height:100%; object-fit:cover; display:block; }
+  .sm-thumb-badge { position:absolute; bottom:3px; left:3px; width:20px; height:20px; display:grid; place-items:center; border-radius:6px; background:rgba(8,12,24,.72); color:#fff; pointer-events:none; }
+  .sm-card-video { position:relative; }
+  .sm-card-video video { width:100%; height:100%; object-fit:cover; display:block; }
+  .sm-card-play { position:absolute; inset:0; margin:auto; width:44px; height:44px; display:grid; place-items:center; border-radius:50%; background:rgba(8,12,24,.55); color:#fff; pointer-events:none; }
   .sm-media-hint { margin-top:8px; font-size:12px; color: var(--tx2); }
   .sm-card-img { position:relative; }
   .sm-card-img-count { position:absolute; bottom:8px; right:8px; padding:3px 9px; border-radius:100px; background:rgba(8,12,24,.72); color:#fff; font-size:12px; font-weight:600; }

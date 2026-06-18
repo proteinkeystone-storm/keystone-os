@@ -43,6 +43,24 @@ export async function publish({ account, accessToken, payload }) {
   const cfg    = getPlatform(PLATFORM);
   const pageId = account.external_id;
   const images = (payload.media || []).filter(m => m.type === 'image');
+  const videos = (payload.media || []).filter(m => m.type === 'video');
+
+  // ── Vidéo → POST /{page-id}/videos {file_url} (Phase 3) ─────────
+  // FB va CHERCHER la vidéo à son URL R2, la traite côté serveur (asynchrone
+  // chez FB) puis la publie quand c'est prêt ; l'appel renvoie un id tout de
+  // suite → pas de poll côté worker (≠ IG/Threads). 1 vidéo, pas de mix images.
+  if (videos.length >= 1) {
+    const res  = await fetch(`${cfg.api.base}/${pageId}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_url: videos[0].url, description: payload.message || '', access_token: accessToken }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.id) {
+      throw new Error(`Facebook video ${res.status} : ${data?.error?.message || JSON.stringify(data).slice(0, 200)}`);
+    }
+    return { externalId: data.id, url: `https://www.facebook.com/${data.id}` };
+  }
 
   let endpoint, body;
   if (images.length > 1) {

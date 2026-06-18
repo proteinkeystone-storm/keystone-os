@@ -43,9 +43,15 @@ export async function publish({ account, accessToken, payload }) {
   const cfg    = getPlatform(PLATFORM);
   const chatId = account.external_id;                 // @canal (public) ou id numérique
   const images = (payload.media || []).filter(m => m.type === 'image');
+  const videos = (payload.media || []).filter(m => m.type === 'video');
 
   let method, body;
-  if (images.length > 1) {
+  if (videos.length >= 1) {
+    // Vidéo → sendVideo (Telegram va la chercher à son URL R2). ⚠ Par URL, la
+    // Bot API plafonne ~20 Mo : au-delà, Telegram renvoie une erreur (remontée telle quelle).
+    method = 'sendVideo';
+    body = { chat_id: chatId, video: videos[0].url, caption: (payload.text || '').slice(0, 1024) };
+  } else if (images.length > 1) {
     // Album : la légende ne vit que sur le 1er élément (Telegram l'affiche pour le groupe).
     method = 'sendMediaGroup';
     const caption = (payload.text || '').slice(0, 1024);

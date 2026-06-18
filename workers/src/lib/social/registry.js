@@ -49,7 +49,7 @@ export const PLATFORMS = {
     media: {
       enabled: false,             // ⚠ publication média PAS encore implémentée (adapter) → texte seul. Garde-fou registre ↔ UI ↔ moteur.
       image: { max: 9, mimes: ['image/jpeg', 'image/png', 'image/gif'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
-      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 600 },
+      video: { enabled: false, max: 1, mimes: ['video/mp4'], maxDurationSec: 600 },   // ⚠ vidéo LinkedIn = register-upload binaire → plus tard
       carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand le multi-image natif sera codé.
       required: false,            // un post texte seul est valide
       hostedUrlRequired: false,   // upload binaire natif (register upload)
@@ -87,7 +87,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
-      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 7200 },
+      video: { enabled: true, max: 1, mimes: ['video/mp4'], maxDurationSec: 7200 },   // Phase 3 — POST /{page-id}/videos {file_url}
       carousel: true,             // Phase 2 (juin 2026) — multi-image via attached_media (photos non publiées → feed).
       required: false,
       hostedUrlRequired: false,
@@ -122,7 +122,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
-      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels
+      video: { enabled: false, max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels — ⚠ vidéo asynchrone (container→poll→publish), branchée en Tranche 3.2
       carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: true,             // ⚠ IG n'accepte PAS de post texte seul
       hostedUrlRequired: true,    // ⚠ le média DOIT être servi sur une URL publique (→ R2)
@@ -160,7 +160,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
-      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },
+      video: { enabled: false, max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },   // ⚠ vidéo asynchrone (container→poll→publish), branchée en Tranche 3.2
       carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: false,            // Threads accepte le TEXTE SEUL (retour aux sources 😉)
       hostedUrlRequired: true,    // image servie sur URL publique (→ R2), comme IG
@@ -197,7 +197,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
-      video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 3600 },
+      video: { enabled: true, max: 1, mimes: ['video/mp4'], maxDurationSec: 3600 },   // Phase 3 — sendVideo {video:url} (⚠ ~20 Mo par URL)
       carousel: true,            // Phase 2 (juin 2026) — album multi-image via sendMediaGroup.
       required: false,           // Telegram accepte le texte seul
       hostedUrlRequired: true,   // photo passée par URL publique (R2), pas d'upload binaire
@@ -264,6 +264,9 @@ export function listPlatformsPublic() {
       required: !!p.media?.required,
       imageMax: p.media?.image?.max ?? 0,
       carousel: !!p.media?.carousel,
+      videoEnabled: p.media?.video?.enabled === true,
+      videoMax: p.media?.video?.enabled === true ? (p.media?.video?.max ?? 1) : 0,
+      videoMaxDurationSec: p.media?.video?.maxDurationSec ?? null,
       hostedUrlRequired: !!p.media?.hostedUrlRequired,
       captionMaxLength: p.media?.captionMaxLength ?? null,
     },
@@ -309,6 +312,23 @@ export function validateForPlatform(canonical, platformId) {
   }
   if (p.media?.image?.max && images.length > p.media.image.max) {
     errors.push(`Trop d'images pour ${p.label} : ${images.length}/${p.media.image.max}.`);
+  }
+  // Garde-fou vidéo (Phase 3). video.enabled distingue « branché » (FB/Telegram)
+  // de « pas encore » (IG/Threads = Tranche 3.2) → refus AVANT tout appel réseau.
+  const videos = media.filter(m => m.type === 'video');
+  if (videos.length > 0) {
+    const v = p.media?.video;
+    if (!v || v.enabled !== true || p.media?.enabled === false) {
+      errors.push(`${p.label} n'accepte pas encore la vidéo.`);
+    } else {
+      if (videos.length > (v.max ?? 1)) errors.push(`${p.label} n'accepte qu'une vidéo par publication.`);
+      for (const vid of videos) {
+        if (v.maxDurationSec && Number.isFinite(vid.durationSec) && vid.durationSec > v.maxDurationSec) {
+          errors.push(`Vidéo trop longue pour ${p.label} : ${Math.round(vid.durationSec)} s (max ${v.maxDurationSec} s).`);
+        }
+      }
+    }
+    if (images.length > 0) errors.push(`${p.label} : pas de mélange vidéo + images dans une même publication.`);
   }
   if (p.media?.hostedUrlRequired && media.some(m => !/^https?:\/\//.test(m.url || ''))) {
     errors.push(`${p.label} exige une URL média publique (https).`);
