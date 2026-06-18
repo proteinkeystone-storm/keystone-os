@@ -107,6 +107,7 @@ import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSo
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
+import { handleLinkedInConnect, handleLinkedInCallback } from './routes/social-oauth-linkedin.js';
 // ── Smart Agent / Kortex — jumeaux numériques de savoir-faire (SA-0 → SA-1) ──
 import { handleSmartAgentHealth,
          handleKortexUnitsList, handleKortexUnitCreate,
@@ -282,6 +283,8 @@ export default {
       // S3 — OAuth self-serve Facebook + Instagram (dormant tant que l'App Review Meta n'est pas validée)
       if (path === '/api/social/connect/facebook'    && method === 'GET')  return handleFacebookConnect(request, env);
       if (path === '/api/social/callback/facebook'   && method === 'GET')  return handleFacebookCallback(request, env);
+      if (path === '/api/social/connect/linkedin'    && method === 'GET')  return handleLinkedInConnect(request, env);
+      if (path === '/api/social/callback/linkedin'   && method === 'GET')  return handleLinkedInCallback(request, env);
       if (path === '/api/social/facebook/deauthorize'  && (method === 'GET' || method === 'POST')) return handleFacebookDeauthorize(request, env);
       if (path === '/api/social/facebook/data-deletion' && (method === 'GET' || method === 'POST')) return handleFacebookDataDeletion(request, env);
       if (path === '/api/social/provision/threads'   && method === 'POST') return handleSocialProvisionThreads(request, env);

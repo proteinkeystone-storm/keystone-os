@@ -546,6 +546,7 @@ function _accountHealth(a) {
 function _reconnectAct(platform) {
   if (platform === 'telegram') return 'pick-telegram';
   if (platform === 'threads')  return 'connect-threads';
+  if (platform === 'linkedin') return 'connect-linkedin';   // profil (org = reconnexion manuelle)
   return 'connect-facebook';   // facebook + instagram (1 OAuth)
 }
 // Bandeau au-dessus du composer si un réseau a expiré.
@@ -1091,6 +1092,8 @@ function _onClick(e) {
   if (act === 'pick-telegram') { e.preventDefault(); if (_connect) { _connect.view = 'wizard'; _connect.step = 0; _renderConnect(); } return; }
   if (act === 'connect-facebook') { e.preventDefault(); _connectOAuth('facebook', 'Facebook'); return; }
   if (act === 'connect-threads')  { e.preventDefault(); _connectOAuth('threads', 'Threads'); return; }
+  if (act === 'connect-linkedin')     { e.preventDefault(); _connectOAuth('linkedin', 'LinkedIn', '?target=profile'); return; }
+  if (act === 'connect-linkedin-org') { e.preventDefault(); _connectOAuth('linkedin', 'Page LinkedIn', '?target=organization'); return; }
   if (act === 'wiz-next')      { e.preventDefault(); _wizNext(); return; }
   if (act === 'wiz-back')      { e.preventDefault(); _wizBack(); return; }
   if (act === 'wiz-connect')   { e.preventDefault(); _connectTelegram(); return; }
@@ -1222,6 +1225,16 @@ function _renderConnect() {
           <div class="sm-conn-meta"><div class="sm-conn-name">Threads</div><div class="sm-conn-sub">Publie sur ton profil Threads</div></div>
           <span class="sm-conn-cta">Connecter →</span>
         </button>
+        <button type="button" class="sm-conn-row is-active" data-act="connect-linkedin">
+          <span class="sm-conn-glyph" style="--brand:#0A66C2">${icon('linkedin', 18)}</span>
+          <div class="sm-conn-meta"><div class="sm-conn-name">LinkedIn (profil)</div><div class="sm-conn-sub">Publie sur ton profil — immédiat</div></div>
+          <span class="sm-conn-cta">Connecter →</span>
+        </button>
+        <button type="button" class="sm-conn-row is-active" data-act="connect-linkedin-org">
+          <span class="sm-conn-glyph" style="--brand:#0A66C2">${icon('linkedin', 18)}</span>
+          <div class="sm-conn-meta"><div class="sm-conn-name">LinkedIn — Page entreprise</div><div class="sm-conn-sub">Nécessite la validation LinkedIn</div></div>
+          <span class="sm-conn-cta">Connecter →</span>
+        </button>
       </div>`;
     return;
   }
@@ -1301,13 +1314,13 @@ async function _connectTelegram() {
 // d'autorisation TOUT DE SUITE (dans le geste de clic) pour éviter le blocage
 // popup, puis on y charge l'URL OAuth signée (state = tenant) renvoyée par le
 // Worker. Au retour, le callback range les comptes ; l'utilisateur recharge le pad.
-async function _connectOAuth(network, label) {
+async function _connectOAuth(network, label, query = '') {
   const token = _adminToken();
   if (!token) { _toast(`Connecte-toi d\'abord pour connecter ${label}.`, 'warn'); return; }
   const popup = window.open('', '_blank');                       // synchrone = autorisé
   try { if (popup) popup.document.write(`<p style="font-family:system-ui;padding:24px;color:#333">Ouverture de ${label}…</p>`); } catch (_) {}
   try {
-    const r = await fetch(`${CF_API}/api/social/connect/${network}`, {
+    const r = await fetch(`${CF_API}/api/social/connect/${network}${query}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     const data = await r.json().catch(() => ({}));
