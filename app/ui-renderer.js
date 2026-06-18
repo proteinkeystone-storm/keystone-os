@@ -577,7 +577,7 @@ export function renderDashboard() {
     // Sans ça, une licence payante (owned_assets=null) voyait TOUS ses
     // artefacts disparaître du dashboard. Cf bug protein.std + clients Stripe.
     const ownedArts  = (ownedIds !== null || _admin || !isDemoMode())
-        ? ARTEFACTS.filter(a => _isOwned(a.id) && _isSelected(a.id))
+        ? ARTEFACTS.filter(a => _isOwned(a.id) && !isPadDeactivated(a.id) && _isSelected(a.id))
         : [];
     const lockedArts = ARTEFACTS.filter(a => {
         const notOwned    = !_isOwned(a.id);
