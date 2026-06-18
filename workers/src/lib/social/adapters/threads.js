@@ -59,26 +59,51 @@ export async function publish({ account, accessToken, payload }) {
   const user   = account.external_id;            // Threads user-id (dérivé au provision)
   const images = (payload.media || []).filter(m => m.type === 'image');
 
-  if (images.length > 1) throw new Error('Threads : carrousel multi-images = étape ultérieure.');
-
-  // 1) Container — IMAGE si une photo, sinon TEXT (texte seul OK sur Threads)
-  const body = images.length === 1
-    ? { media_type: 'IMAGE', image_url: images[0].url, text: payload.text || '', access_token: accessToken }
-    : { media_type: 'TEXT',  text: payload.text || '', access_token: accessToken };
-
-  const createRes = await fetch(`${base}/${user}/threads`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const created = await createRes.json().catch(() => ({}));
-  if (!createRes.ok || !created.id) {
-    throw new Error(`Threads container ${createRes.status} : ${created?.error?.message || JSON.stringify(created).slice(0, 200)}`);
+  // 1) Container à publier — carrousel (>1) · image · ou texte seul.
+  let creationId;
+  if (images.length > 1) {
+    // Carrousel : 1 conteneur enfant IMAGE par photo (is_carousel_item) → 1 conteneur CAROUSEL.
+    const childIds = [];
+    for (const img of images) {
+      const cRes = await fetch(`${base}/${user}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_type: 'IMAGE', image_url: img.url, is_carousel_item: true, access_token: accessToken }),
+      });
+      const c = await cRes.json().catch(() => ({}));
+      if (!cRes.ok || !c.id) {
+        throw new Error(`Threads item ${cRes.status} : ${c?.error?.message || JSON.stringify(c).slice(0, 200)}`);
+      }
+      childIds.push(c.id);
+    }
+    const carRes = await fetch(`${base}/${user}/threads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_type: 'CAROUSEL', children: childIds.join(','), text: payload.text || '', access_token: accessToken }),
+    });
+    const car = await carRes.json().catch(() => ({}));
+    if (!carRes.ok || !car.id) {
+      throw new Error(`Threads carousel ${carRes.status} : ${car?.error?.message || JSON.stringify(car).slice(0, 200)}`);
+    }
+    creationId = car.id;
+    await waitForContainer(base, creationId, accessToken);
+  } else {
+    // IMAGE si une photo, sinon TEXT (texte seul OK sur Threads)
+    const body = images.length === 1
+      ? { media_type: 'IMAGE', image_url: images[0].url, text: payload.text || '', access_token: accessToken }
+      : { media_type: 'TEXT',  text: payload.text || '', access_token: accessToken };
+    const createRes = await fetch(`${base}/${user}/threads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const created = await createRes.json().catch(() => ({}));
+    if (!createRes.ok || !created.id) {
+      throw new Error(`Threads container ${createRes.status} : ${created?.error?.message || JSON.stringify(created).slice(0, 200)}`);
+    }
+    creationId = created.id;
+    if (images.length === 1) await waitForContainer(base, creationId, accessToken);
   }
-  const creationId = created.id;
-
-  // 2) Attendre le traitement (surtout pour l'image ; texte ≈ instantané)
-  if (images.length === 1) await waitForContainer(base, creationId, accessToken);
 
   // 3) Publier le container
   const pubRes = await fetch(`${base}/${user}/threads_publish`, {

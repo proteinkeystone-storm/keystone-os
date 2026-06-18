@@ -37,18 +37,37 @@ export function formatPost(canonical, platformCfg) {
 
 // ── Contrat : publish ─────────────────────────────────────────
 // Texte → /{page-id}/feed · 1 image → /{page-id}/photos (URL R2).
-// Multi-images → Sprint Social-1 (attached_media).
+// Carrousel (Phase 2) → chaque photo postée NON publiée (published=false) →
+// media_fbid, puis 1 post /feed avec attached_media. Tout via URL R2.
 export async function publish({ account, accessToken, payload }) {
   const cfg    = getPlatform(PLATFORM);
   const pageId = account.external_id;
   const images = (payload.media || []).filter(m => m.type === 'image');
 
-  if (images.length > 1) {
-    throw new Error('Facebook : multi-images = Sprint Social-1.');
-  }
-
   let endpoint, body;
-  if (images.length === 1) {
+  if (images.length > 1) {
+    // 1) Upload chaque photo en NON publiée → on récupère son media_fbid.
+    const fbids = [];
+    for (const img of images) {
+      const upRes = await fetch(`${cfg.api.base}/${pageId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: img.url, published: false, access_token: accessToken }),
+      });
+      const up = await upRes.json().catch(() => ({}));
+      if (!upRes.ok || !up.id) {
+        throw new Error(`Facebook photo ${upRes.status} : ${up?.error?.message || JSON.stringify(up).slice(0, 200)}`);
+      }
+      fbids.push(up.id);
+    }
+    // 2) Post /feed qui attache toutes les photos (= carrousel natif FB).
+    endpoint = `${cfg.api.base}/${pageId}/feed`;
+    body = {
+      message: payload.message,
+      attached_media: fbids.map(id => ({ media_fbid: id })),
+      access_token: accessToken,
+    };
+  } else if (images.length === 1) {
     endpoint = `${cfg.api.base}/${pageId}/photos`;
     body = { url: images[0].url, caption: payload.message, access_token: accessToken };
   } else {

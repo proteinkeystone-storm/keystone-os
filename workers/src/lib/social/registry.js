@@ -88,7 +88,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 7200 },
-      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand attached_media sera codé.
+      carousel: true,             // Phase 2 (juin 2026) — multi-image via attached_media (photos non publiées → feed).
       required: false,
       hostedUrlRequired: false,
     },
@@ -123,7 +123,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels
-      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand les conteneurs carrousel seront codés.
+      carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: true,             // ⚠ IG n'accepte PAS de post texte seul
       hostedUrlRequired: true,    // ⚠ le média DOIT être servi sur une URL publique (→ R2)
     },
@@ -161,7 +161,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },
-      carousel: false,            // ⚠ multi-image PAS câblé (adapter throw >1 image) → garde-fou registre. Repasser true quand le carrousel Threads sera codé.
+      carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: false,            // Threads accepte le TEXTE SEUL (retour aux sources 😉)
       hostedUrlRequired: true,    // image servie sur URL publique (→ R2), comme IG
     },
@@ -198,7 +198,7 @@ export const PLATFORMS = {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '1.91:1', '4:5'] },
       video: { max: 1, mimes: ['video/mp4'], maxDurationSec: 3600 },
-      carousel: false,           // ⚠ multi-image PAS câblé (adapter throw >1) → garde-fou registre. Repasser true quand sendMediaGroup (album) sera codé.
+      carousel: true,            // Phase 2 (juin 2026) — album multi-image via sendMediaGroup.
       required: false,           // Telegram accepte le texte seul
       hostedUrlRequired: true,   // photo passée par URL publique (R2), pas d'upload binaire
       captionMaxLength: 1024,    // ⚠ avec photo, la légende est limitée à 1024 (vs 4096 en texte seul)

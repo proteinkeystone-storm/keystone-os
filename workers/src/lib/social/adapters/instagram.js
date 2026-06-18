@@ -65,19 +65,46 @@ export async function publish({ account, accessToken, payload }) {
   const images = (payload.media || []).filter(m => m.type === 'image');
 
   if (images.length === 0) throw new Error('Instagram exige une image.');
-  if (images.length > 1)   throw new Error('Instagram : carrousel multi-images = étape ultérieure.');
 
-  // 1) Créer le container média (image servie via URL R2 + légende)
-  const createRes = await fetch(`${base}/${igUser}/media`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_url: images[0].url, caption: payload.caption || '', access_token: accessToken }),
-  });
-  const created = await createRes.json().catch(() => ({}));
-  if (!createRes.ok || !created.id) {
-    throw new Error(`Instagram container ${createRes.status} : ${created?.error?.message || JSON.stringify(created).slice(0, 200)}`);
+  // 1) Créer le container à publier — carrousel (>1) ou mono-image.
+  let creationId;
+  if (images.length > 1) {
+    // Carrousel : 1 conteneur enfant par image (is_carousel_item) → 1 conteneur CAROUSEL.
+    const childIds = [];
+    for (const img of images) {
+      const cRes = await fetch(`${base}/${igUser}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: img.url, is_carousel_item: true, access_token: accessToken }),
+      });
+      const c = await cRes.json().catch(() => ({}));
+      if (!cRes.ok || !c.id) {
+        throw new Error(`Instagram item ${cRes.status} : ${c?.error?.message || JSON.stringify(c).slice(0, 200)}`);
+      }
+      childIds.push(c.id);
+    }
+    const carRes = await fetch(`${base}/${igUser}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_type: 'CAROUSEL', children: childIds.join(','), caption: payload.caption || '', access_token: accessToken }),
+    });
+    const car = await carRes.json().catch(() => ({}));
+    if (!carRes.ok || !car.id) {
+      throw new Error(`Instagram carousel ${carRes.status} : ${car?.error?.message || JSON.stringify(car).slice(0, 200)}`);
+    }
+    creationId = car.id;
+  } else {
+    const createRes = await fetch(`${base}/${igUser}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: images[0].url, caption: payload.caption || '', access_token: accessToken }),
+    });
+    const created = await createRes.json().catch(() => ({}));
+    if (!createRes.ok || !created.id) {
+      throw new Error(`Instagram container ${createRes.status} : ${created?.error?.message || JSON.stringify(created).slice(0, 200)}`);
+    }
+    creationId = created.id;
   }
-  const creationId = created.id;
 
   // 2) Attendre que le traitement du média soit terminé
   await waitForContainer(base, creationId, accessToken);

@@ -38,18 +38,24 @@ export function formatPost(canonical /* , platformCfg */) {
 
 // ── Contrat : publish ─────────────────────────────────────────
 // Texte → /sendMessage · 1 image → /sendPhoto (photo = URL R2).
-// Album multi-images → sendMediaGroup (étape ultérieure).
+// Album (Phase 2) → /sendMediaGroup : tableau de photos, légende sur la 1ʳᵉ.
 export async function publish({ account, accessToken, payload }) {
   const cfg    = getPlatform(PLATFORM);
   const chatId = account.external_id;                 // @canal (public) ou id numérique
   const images = (payload.media || []).filter(m => m.type === 'image');
 
-  if (images.length > 1) {
-    throw new Error('Telegram : album multi-images = étape ultérieure (sendMediaGroup).');
-  }
-
   let method, body;
-  if (images.length === 1) {
+  if (images.length > 1) {
+    // Album : la légende ne vit que sur le 1er élément (Telegram l'affiche pour le groupe).
+    method = 'sendMediaGroup';
+    const caption = (payload.text || '').slice(0, 1024);
+    body = {
+      chat_id: chatId,
+      media: images.map((img, i) => i === 0
+        ? { type: 'photo', media: img.url, caption }
+        : { type: 'photo', media: img.url }),
+    };
+  } else if (images.length === 1) {
     method = 'sendPhoto';
     body = { chat_id: chatId, photo: images[0].url, caption: (payload.text || '').slice(0, 1024) };
   } else {
@@ -67,7 +73,8 @@ export async function publish({ account, accessToken, payload }) {
     throw new Error(`Telegram ${method} ${res.status} : ${data?.description || JSON.stringify(data).slice(0, 200)}`);
   }
 
-  const msg       = data.result || {};
+  // sendMediaGroup → result = tableau de messages ; sinon result = 1 message.
+  const msg       = Array.isArray(data.result) ? (data.result[0] || {}) : (data.result || {});
   const messageId = msg.message_id;
   // URL t.me/<username>/<id> seulement si le canal a un @username public.
   const uname = (msg.chat && msg.chat.username)
