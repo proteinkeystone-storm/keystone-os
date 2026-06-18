@@ -294,11 +294,18 @@ function _findingsHTML(list) {
   if (!list || !list.length) return `<div class="snt-okmsg">${icon('check', 16)} Aucun problème détecté sur les axes audités.</div>`;
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...list].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
-  return `<div class="snt-find-h">À corriger en priorité</div><div class="snt-finds">` + sorted.map((f) => `
-    <div class="snt-find">
-      <span class="snt-sev ${_esc(f.sev)}">${SEV_LABEL[f.sev] || ''}</span>
-      <div class="snt-find-b"><div class="snt-find-t">${_esc(f.title)}</div>${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}</div>
-    </div>`).join('') + `</div>`;
+  return `<div class="snt-find-h">À corriger en priorité — solutions clé en main</div><div class="snt-finds">` + sorted.map((f, i) => {
+    const fix = f.fix;
+    const steps = (fix && fix.steps && fix.steps.length) ? `<ol class="snt-fix-steps">${fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
+    const codeId = `snt-code-${i}`;
+    const code = (fix && fix.code) ? `<div class="snt-fix-codehead"><span>${_esc(fix.codeLabel || 'Code à coller')}</span><button class="snt-copy" data-act="copy" data-target="${codeId}">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="${codeId}">${_esc(fix.code)}</pre>` : '';
+    const body = (steps || code) ? `<div class="snt-fix">${steps}${code}</div>` : '';
+    return `<details class="snt-find">
+      <summary><span class="snt-sev ${_esc(f.sev)}">${SEV_LABEL[f.sev] || ''}</span><span class="snt-find-t">${_esc(f.title)}</span><span class="snt-find-chev">${icon('chevron-down', 16)}</span></summary>
+      ${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}
+      ${body}
+    </details>`;
+  }).join('') + `</div>`;
 }
 function _openPanel(data) { _panel = data; _renderPanel(); }
 function _closePanel() { _panel = null; const el = _root && _root.querySelector('.snt-overlay'); if (el) el.remove(); }
@@ -314,13 +321,50 @@ function _renderPanel() {
     <div class="snt-modal">
       <div class="snt-modal-head">
         <div><div class="snt-modal-title">${_esc(p.name || 'Audit')}</div><div class="snt-modal-sub">Audit on-page${p.reachable === false ? ' · site injoignable' : ''}</div></div>
-        <button class="snt-icon" data-act="panel-close" aria-label="Fermer">${icon('x', 18)}</button>
+        <div class="snt-modal-actions">
+          <button class="snt-mini" data-act="pdf">${icon('download', 13)} PDF</button>
+          <button class="snt-icon" data-act="panel-close" aria-label="Fermer">${icon('x', 18)}</button>
+        </div>
       </div>
       <div class="snt-modal-score ${g != null ? _scoreClass(g) : ''}">${g != null ? g : '—'}<span>/100</span></div>
       <div class="snt-bars">${bars}</div>
       ${_findingsHTML(p.findings)}
     </div>
   `;
+}
+function _copyCode(targetId, btn) {
+  const el = _root && _root.querySelector('#' + (targetId || '')); if (!el) return;
+  const txt = el.textContent || '';
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
+  if (btn) btn.innerHTML = `${icon('check', 13)} Copié`;
+}
+function _exportPdf() {
+  const p = _panel; if (!p) return;
+  const d = new Date();
+  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const scores = p.scores || {}; const g = p.score;
+  const axisRows = AXES.map((a) => `<tr><td>${a.label}</td><td style="text-align:right">${scores[a.k] == null ? 'n/a' : scores[a.k] + ' / 100'}</td></tr>`).join('');
+  const order = { high: 0, medium: 1, low: 2 };
+  const finds = [...(p.findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3)).map((f) => {
+    const steps = (f.fix && f.fix.steps) ? `<ol>${f.fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
+    const code = (f.fix && f.fix.code) ? `<div class="cl">${_esc(f.fix.codeLabel || 'Code')}</div><pre>${_esc(f.fix.code)}</pre>` : '';
+    return `<div class="f"><div class="ft"><b>[${SEV_LABEL[f.sev] || ''}]</b> ${_esc(f.title)}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
+  }).join('');
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sentinel — ${_esc(p.name || 'Audit')}</title>
+  <style>body{font-family:-apple-system,system-ui,sans-serif;color:#0f172a;max-width:760px;margin:32px auto;padding:0 24px;line-height:1.5}
+  h1{font-size:24px;margin:0 0 2px}.sub{color:#64748b;font-size:13px;margin-bottom:18px}.score{font-size:52px;font-weight:800;margin:6px 0}
+  table{width:100%;border-collapse:collapse;margin:6px 0 18px}td{padding:6px 0;border-bottom:1px solid #eee;font-size:14px}
+  h2{font-size:16px;margin:16px 0 6px}.f{border-top:1px solid #eee;padding:10px 0}.ft{font-size:14px}.fd{color:#64748b;font-size:13px;margin:2px 0 6px}
+  .cl{font-size:12px;color:#64748b;margin:6px 0 2px}ol{margin:6px 0;padding-left:20px;font-size:13px;color:#334155}
+  pre{background:#f6f7f9;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word}.foot{margin-top:24px;color:#94a3b8;font-size:11px}</style></head><body>
+  <h1>Rapport Sentinel — ${_esc(p.name || 'Audit')}</h1><div class="sub">Audit web · ${date}</div>
+  <div class="score">${g != null ? g : '—'}<span style="font-size:18px;color:#94a3b8">/100</span></div>
+  <table>${axisRows}</table><h2>À corriger en priorité — solutions clé en main</h2>${finds || '<p>Aucun problème détecté.</p>'}
+  <div class="foot">Généré par Keystone Sentinel</div></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 400);
 }
 async function _auditNow(id) {
   if (_auditing.has(id)) return; _auditing.add(id); _render();
@@ -347,6 +391,8 @@ function _onClick(e) {
   if (a === 'score')       return _viewAudit(act.dataset.id);
   if (a === 'alerts')      return _toggleAlerts();
   if (a === 'panel-close') return _closePanel();
+  if (a === 'pdf')         return _exportPdf();
+  if (a === 'copy')        return _copyCode(act.dataset.target, act);
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;

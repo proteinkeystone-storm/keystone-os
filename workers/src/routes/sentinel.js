@@ -31,7 +31,7 @@ import { validateImportUrl } from './smart-agent.js';
 import { sendPush } from '../lib/webpush.js';
 import puppeteer from '@cloudflare/puppeteer';
 
-const SENTINEL_ENGINE_VERSION = 'S3';
+const SENTINEL_ENGINE_VERSION = 'S4';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -247,35 +247,35 @@ async function _audit(url) {
   const sec = {}; if (headers) for (const [h, label] of SEC_HEADERS) sec[label] = !!headers.get(h);
 
   const findings = [];
-  const add = (axis, sev, title2, detail) => findings.push({ axis, sev, title: title2, detail });
+  const add = (axis, sev, key, title2, detail) => findings.push({ axis, sev, key, title: title2, detail });
 
   // ── SEO technique ──
   let seo = 0;
-  if (title) { seo += (title.length >= 10 && title.length <= 70) ? 15 : 8; if (title.length > 70) add('seo', 'low', 'Balise title trop longue', `${title.length} caractères — visez 50-60.`); }
-  else add('seo', 'high', 'Balise <title> absente', 'Le titre est le premier signal SEO.');
+  if (title) { seo += (title.length >= 10 && title.length <= 70) ? 15 : 8; if (title.length > 70) add('seo', 'low', 'title_long', 'Balise title trop longue', `${title.length} caractères — visez 50-60.`); }
+  else add('seo', 'high', 'title_missing', 'Balise <title> absente', 'Le titre est le premier signal SEO.');
   if (metaDesc) { seo += (metaDesc.length >= 50 && metaDesc.length <= 165) ? 15 : 8; }
-  else add('seo', 'high', 'Méta description absente', 'Rédigez 50-160 caractères qui donnent envie de cliquer.');
-  if (h1 === 1) seo += 15; else add('seo', 'medium', h1 === 0 ? 'Aucun <h1>' : `${h1} balises <h1>`, 'Une page = un seul titre H1.');
-  if (canonical) seo += 10; else add('seo', 'low', 'Balise canonical absente', 'Évite le contenu dupliqué aux yeux de Google.');
-  if (viewport) seo += 10; else add('seo', 'high', 'Pas de balise viewport', 'Indispensable pour le mobile.');
-  if (ogTitle) seo += 8; else add('seo', 'low', 'Open Graph titre absent', 'Améliore l\'aperçu lors des partages.');
-  if (ogImage) seo += 7; else add('seo', 'low', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.');
-  if (jsonld) seo += 10; else add('seo', 'medium', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.');
-  if (sitemap) seo += 10; else add('seo', 'low', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
+  else add('seo', 'high', 'meta_missing', 'Méta description absente', 'Rédigez 50-160 caractères qui donnent envie de cliquer.');
+  if (h1 === 1) seo += 15; else add('seo', 'medium', 'h1', h1 === 0 ? 'Aucun <h1>' : `${h1} balises <h1>`, 'Une page = un seul titre H1.');
+  if (canonical) seo += 10; else add('seo', 'low', 'canonical', 'Balise canonical absente', 'Évite le contenu dupliqué aux yeux de Google.');
+  if (viewport) seo += 10; else add('seo', 'high', 'viewport', 'Pas de balise viewport', 'Indispensable pour le mobile.');
+  if (ogTitle) seo += 8; else add('seo', 'low', 'og_title', 'Open Graph titre absent', 'Améliore l\'aperçu lors des partages.');
+  if (ogImage) seo += 7; else add('seo', 'low', 'og_image', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.');
+  if (jsonld) seo += 10; else add('seo', 'medium', 'jsonld', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.');
+  if (sitemap) seo += 10; else add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
   seo = Math.min(100, seo);
 
   // ── Sécurité ──
   let securite = 0;
   for (const [, label] of SEC_HEADERS) {
     if (sec[label]) securite += 20;
-    else add('securite', label === 'HSTS' || label === 'CSP' ? 'medium' : 'low', `En-tête ${label} absent`, 'Renforce la protection des visiteurs.');
+    else add('securite', label === 'HSTS' || label === 'CSP' ? 'medium' : 'low', `sec_${label}`, `En-tête ${label} absent`, 'Renforce la protection des visiteurs.');
   }
 
   // ── Accessibilité ──
   let accessibilite = 0;
-  if (lang) accessibilite += 35; else add('accessibilite', 'low', 'Langue de la page non déclarée', 'Ajoutez lang="fr" sur <html>.');
+  if (lang) accessibilite += 35; else add('accessibilite', 'low', 'lang', 'Langue de la page non déclarée', 'Ajoutez lang="fr" sur <html>.');
   if (viewport) accessibilite += 25;
-  if (imgs > 0) { accessibilite += Math.round(40 * imgsAlt / imgs); if (imgsMissing > 0) add('accessibilite', 'medium', `${imgsMissing} image${imgsMissing > 1 ? 's' : ''} sans texte alternatif`, 'Le texte alt aide l\'accessibilité et le SEO images.'); }
+  if (imgs > 0) { accessibilite += Math.round(40 * imgsAlt / imgs); if (imgsMissing > 0) add('accessibilite', 'medium', 'img_alt', `${imgsMissing} image${imgsMissing > 1 ? 's' : ''} sans texte alternatif`, 'Le texte alt aide l\'accessibilité et le SEO images.'); }
   else accessibilite += 40;
   accessibilite = Math.min(100, accessibilite);
 
@@ -290,6 +290,67 @@ async function _uptime24(env, siteId) {
 }
 
 // ── Handlers ────────────────────────────────────────────────────
+// ── Générateur de correctifs clé en main (S4, déterministe) ─────
+// Pour chaque finding (par clé), des étapes contextualisées à la plateforme
+// + le code prêt à coller quand c'est pertinent. Zéro IA, zéro coût.
+function _headSteps(platform) {
+  if (platform === 'wordpress') return ['Installez l\'extension gratuite « WPCode » (Extensions › Ajouter, puis Activer).', 'Code Snippets › + Add Snippet › code HTML, emplacement « Site Wide Header ».', 'Collez le code ci-dessous, enregistrez et activez.'];
+  if (platform === 'wix') return ['Dans Wix : Réglages › Code personnalisé (Custom Code) › + Ajouter.', 'Collez le code, placez-le dans le <head>, appliquez à « Toutes les pages ».', 'Enregistrez.'];
+  return ['Collez le code ci-dessous dans la balise <head> de votre page (thème/gabarit).', 'Ou transmettez ce bloc à votre webmaster.'];
+}
+function _fixFor(key, ctx) {
+  const url = ctx.url || '';
+  let origin = url; try { origin = new URL(url).origin; } catch (_) {}
+  const head = _headSteps(ctx.platform);
+  switch (key) {
+    case 'jsonld': return { steps: head, codeLabel: 'Données structurées (à compléter)', code:
+`<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "Nom de votre établissement",
+  "url": "${origin}",
+  "telephone": "+33 1 23 45 67 89",
+  "address": { "@type": "PostalAddress", "streetAddress": "12 rue Exemple", "addressLocality": "Ville", "postalCode": "00000", "addressCountry": "FR" },
+  "openingHours": "Mo-Fr 09:00-18:00",
+  "priceRange": "€€"
+}
+</script>` };
+    case 'meta_missing': return {
+      steps: ctx.platform === 'wordpress' ? ['Avec Yoast SEO ou Rank Math : ouvrez la page › encart SEO › « Méta description ».', 'Collez le texte ci-dessous (personnalisez-le), enregistrez.']
+           : ctx.platform === 'wix' ? ['Wix : ouvrez la page › Réglages SEO (SEO de base) › « Description ».', 'Collez le texte ci-dessous, enregistrez et publiez.']
+           : ['Ajoutez cette balise dans le <head> de la page.'],
+      codeLabel: 'Méta description (modèle à personnaliser)',
+      code: `<meta name="description" content="[Votre activité] à [ville] — [bénéfice clé pour le client]. [Appel à l'action, ex. Réservez en ligne].">` };
+    case 'title_missing': return { steps: head, codeLabel: 'Balise titre', code: `<title>[Votre activité] à [ville] | [Nom de l'établissement]</title>` };
+    case 'viewport': return { steps: head, codeLabel: 'Balise viewport (mobile)', code: `<meta name="viewport" content="width=device-width, initial-scale=1">` };
+    case 'canonical': return { steps: head, codeLabel: 'URL canonique', code: `<link rel="canonical" href="${url || origin}">` };
+    case 'og_title': return { steps: head, codeLabel: 'Open Graph — titre', code: `<meta property="og:title" content="[Titre attractif de la page]">` };
+    case 'og_image': return { steps: head, codeLabel: 'Open Graph — image', code: `<meta property="og:image" content="${origin}/votre-image-partage.jpg">` };
+    case 'lang': return { steps: ['Modifiez la balise <html> d\'ouverture de votre page pour déclarer le français :'], codeLabel: 'Attribut de langue', code: `<html lang="fr">` };
+    case 'sitemap': return {
+      steps: ctx.platform === 'wordpress' ? ['Yoast/Rank Math génère le sitemap automatiquement (souvent /sitemap_index.xml).', 'Vérifiez qu\'il est déclaré dans robots.txt :']
+           : ctx.platform === 'wix' ? ['Wix génère un sitemap par défaut à /sitemap.xml.', 'Vérifiez sa déclaration dans robots.txt :']
+           : ['Générez un sitemap.xml et déclarez-le dans robots.txt :'],
+      codeLabel: 'Ligne à ajouter dans robots.txt', code: `Sitemap: ${origin}/sitemap.xml` };
+    case 'h1': return { steps: ['Assurez-vous d\'avoir UN seul titre principal (H1) par page — en général le titre principal défini dans l\'éditeur.', 'Les autres titres doivent être en H2/H3 (sous-titres).'] };
+    case 'img_alt': return { steps: ['Pour chaque image, renseignez le « texte alternatif » (alt) qui décrit l\'image.', ctx.platform === 'wordpress' ? 'WordPress : Médias › sélectionnez l\'image › champ « Texte alternatif ».' : ctx.platform === 'wix' ? 'Wix : clic sur l\'image › Paramètres › « Texte alternatif ».' : 'Ajoutez l\'attribut alt="description" sur chaque <img>.'] };
+    case 'perf_lcp': return { steps: ['Compressez l\'image principale (format WebP/AVIF) et donnez-lui une taille adaptée.', 'Activez le cache et différez les scripts non essentiels (chat, analytics).'] };
+    case 'perf_cls': return { steps: ['Donnez une largeur/hauteur fixe aux images, bannières et publicités pour éviter les sauts.', 'Réservez l\'espace des contenus chargés après coup.'] };
+    case 'perf_weight': return { steps: ['Compressez les images (WebP/AVIF), limitez les polices web et les scripts tiers.'] };
+    default:
+      if (key && key.indexOf('sec_') === 0) {
+        const label = key.slice(4);
+        const lines = { HSTS: 'Strict-Transport-Security: max-age=31536000; includeSubDomains', CSP: "Content-Security-Policy: default-src 'self'", 'X-Frame-Options': 'X-Frame-Options: SAMEORIGIN', 'X-Content-Type-Options': 'X-Content-Type-Options: nosniff', 'Referrer-Policy': 'Referrer-Policy: strict-origin-when-cross-origin' };
+        return {
+          steps: ['Cet en-tête se règle côté serveur/hébergeur (pas dans le HTML).', ctx.platform === 'wordpress' ? 'WordPress : une extension comme « HTTP Headers » permet de l\'ajouter sans code.' : ctx.platform === 'wix' ? 'Wix gère une partie de ces en-têtes (HSTS souvent déjà actif) ; sinon non réglable sans serveur dédié.' : 'Ajoutez cet en-tête dans la config de votre serveur ou de votre CDN.', 'En-tête à transmettre à votre hébergeur/webmaster :'],
+          codeLabel: `En-tête ${label}`, code: lines[label] || `${label}: ...` };
+      }
+      return null;
+  }
+}
+function _attachFixes(findings, ctx) { for (const f of findings) { try { f.fix = _fixFor(f.key, ctx); } catch (_) { f.fix = null; } } return findings; }
+
 export async function handleSentinelHealth(request, env) {
   const origin = getAllowedOrigin(env, request);
   let schema = 'ok';
@@ -439,7 +500,7 @@ export async function handleSiteAudit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
   const a = await _audit(site.url);
@@ -449,11 +510,12 @@ export async function handleSiteAudit(request, env, id) {
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
   const findings = a.findings.slice();
   if (cwv) {
-    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
-    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
-    if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
-    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
+    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
+    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
+    if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
+    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
+  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
   const global = _globalScore(scores);
   const scoresJson = JSON.stringify(scores);
   const findingsJson = JSON.stringify(findings);

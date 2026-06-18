@@ -94,13 +94,24 @@
 .snt-bar-track i.bad  { background: var(--danger); }
 .snt-bar-v { text-align: right; font-weight: 700; color: var(--ws-text); }
 
+.snt-modal-actions { display: flex; align-items: center; gap: 8px; }
 .snt-find-h { font-weight: 700; color: var(--ws-text); margin: 20px 0 6px; }
 .snt-finds { display: flex; flex-direction: column; }
-.snt-find { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-top: 1px solid var(--ws-border); }
+.snt-find { border-top: 1px solid var(--ws-border); }
+.snt-find > summary { display: flex; align-items: center; gap: 10px; padding: 11px 0; cursor: pointer; list-style: none; }
+.snt-find > summary::-webkit-details-marker { display: none; }
 .snt-sev { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
 .snt-sev.high   { color: var(--danger); background: var(--danger-soft); }
 .snt-sev.medium { color: var(--warn);   background: var(--warn-soft); }
 .snt-sev.low    { color: var(--ws-text-soft); background: var(--ws-surface-soft); }
-.snt-find-t { font-weight: 600; color: var(--ws-text); font-size: 14px; }
-.snt-find-d { font-size: 13px; color: var(--ws-text-soft); margin-top: 2px; }
+.snt-find-t { font-weight: 600; color: var(--ws-text); font-size: 14px; flex: 1; }
+.snt-find-chev { color: var(--ws-text-muted); display: inline-flex; transition: transform .15s; flex-shrink: 0; }
+.snt-find[open] .snt-find-chev { transform: rotate(180deg); }
+.snt-find-d { font-size: 13px; color: var(--ws-text-soft); margin: 0 0 8px; }
+.snt-fix { background: var(--ws-surface-soft); border-radius: var(--ws-radius); padding: 12px 14px; margin: 0 0 12px; }
+.snt-fix-steps { margin: 0; padding-left: 20px; font-size: 13px; color: var(--ws-text-soft); line-height: 1.7; }
+.snt-fix-codehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; font-size: 12px; color: var(--ws-text-soft); }
+.snt-copy { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ws-accent); background: transparent; border: 1px solid var(--ws-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.snt-copy:hover { background: var(--ws-accent-soft); }
+.snt-code { margin: 0; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; color: var(--ws-text); overflow-x: auto; white-space: pre; }
 .snt-okmsg { display: flex; align-items: center; gap: 8px; color: var(--green); margin-top: 16px; font-size: 14px; }
