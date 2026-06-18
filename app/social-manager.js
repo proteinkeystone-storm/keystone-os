@@ -65,6 +65,7 @@ let _connect  = null;          // état du wizard « Connecter un réseau social
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
 let _queueTimer = null;        // timer de rafraîchissement auto de la file
+let _watchPostId = null;       // post « en traitement » à réconcilier dans le panneau de résultat (vidéo IG/Threads)
 let _insights   = {};          // postId → { open, loading, data, error } : encart stats (analytique)
 
 const _adminToken = () => { try { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; } catch (_) { return ''; } };
@@ -759,35 +760,16 @@ async function _publish() {
     if (res.status === 401) { _setResult(`<div class="sm-result-ko">Session admin expirée — reconnecte-toi.</div>`); return; }
     if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
 
-    const rows = (data.results || []).map(r => {
-      const ok = r.status === 'published';
-      const processing = r.status === 'processing';
-      const label = _labelOf(r.platform);
-      return `<li class="${ok ? 'ok' : (processing ? 'warn' : 'ko')}">
-        <span class="sm-res-net">${_esc(label)}</span>
-        ${ok ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">voir le post ↗</a>`
-          : processing ? `<span class="sm-res-proc">traitement de la vidéo…</span>`
-          : `<span class="sm-res-err">${_esc(r.error || 'échec')}</span>`}
-      </li>`;
-    }).join('');
-
-    const ok = data.status === 'published';
-    const retrying = data.status === 'retrying';
+    _renderPublishResult(data.status, data.results || []);
     const processing = data.status === 'processing';
-    const accepted = ok || data.status === 'partial' || retrying || processing;
-    const headCls = ok ? 'ok' : (data.status === 'partial' || retrying || processing ? 'warn' : 'ko');
-    const headTxt = ok ? '✓ Publié'
-      : processing ? '◷ Vidéo en traitement — publication automatique dès qu\'elle est prête'
-      : retrying ? '◷ Envoi en cours — les réseaux qui ont coincé sont repris automatiquement'
-      : data.status === 'partial' ? '◐ Partiel' : '✕ Échec';
-    _setResult(`
-      <div class="sm-result-head ${headCls}">${headTxt}</div>
-      <ul class="sm-result-list">${rows}</ul>
-    `);
-    if (accepted) _toast(processing ? 'Vidéo envoyée — traitement en cours' : retrying ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
+    const accepted = ['published', 'partial', 'retrying', 'processing'].includes(data.status);
+    if (accepted) _toast(processing ? 'Vidéo envoyée — traitement en cours' : data.status === 'retrying' ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
     // Parcours bouclé : la publication est partie (ou la vidéo en traitement) → on
     // referme la chaîne (le rail quitte le hero), sans toucher au panneau résultat à droite.
     if (accepted) { clearChain(); _renderHero(); }
+    // Vidéo en traitement (IG/Threads) → on garde l'œil sur CE post : la file (qui
+    // se rafraîchit toute seule) réconcilie le panneau en « ✓ Publié » dès que le cron termine.
+    _watchPostId = processing ? data.postId : null;
   } catch (e) {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
@@ -986,6 +968,45 @@ async function _loadQueue() {
     _queue = Array.isArray(data.posts) ? data.posts : [];
   } catch (_) { _queue = []; }
   _renderQueue();
+  _reconcileResult();
+}
+
+// Rend le panneau de résultat (droite) — réutilisé par la publication immédiate ET
+// par la réconciliation de la file (vidéo en traitement → publiée par le cron).
+function _renderPublishResult(status, results) {
+  const rows = (results || []).map(r => {
+    const ok = r.status === 'published';
+    const processing = r.status === 'processing';
+    const label = _labelOf(r.platform);
+    return `<li class="${ok ? 'ok' : (processing ? 'warn' : 'ko')}">
+        <span class="sm-res-net">${_esc(label)}</span>
+        ${ok ? (r.url ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">voir le post ↗</a>` : `<span class="sm-res-ok">publié ✓</span>`)
+          : processing ? `<span class="sm-res-proc">traitement de la vidéo…</span>`
+          : `<span class="sm-res-err">${_esc(r.error || 'échec')}</span>`}
+      </li>`;
+  }).join('');
+  const headCls = status === 'published' ? 'ok'
+    : (status === 'partial' || status === 'retrying' || status === 'processing') ? 'warn' : 'ko';
+  const headTxt = status === 'published' ? '✓ Publié'
+    : status === 'processing' ? '◷ Vidéo en traitement — publication automatique dès qu\'elle est prête'
+    : status === 'retrying' ? '◷ Envoi en cours — les réseaux qui ont coincé sont repris automatiquement'
+    : status === 'partial' ? '◐ Partiel' : '✕ Échec';
+  _setResult(`
+      <div class="sm-result-head ${headCls}">${headTxt}</div>
+      <ul class="sm-result-list">${rows}</ul>
+    `);
+}
+
+// Le panneau de résultat est one-shot → sans ça, une vidéo IG/Threads resterait figée
+// sur « traitement » même après publication. Dès que la file montre le post suivi comme
+// terminé (publié/partiel/échec), on rafraîchit le panneau (et on cesse de le suivre).
+function _reconcileResult() {
+  if (!_watchPostId || !Array.isArray(_queue)) return;
+  const p = _queue.find(x => x.id === _watchPostId);
+  if (!p || p.status === 'processing' || p.status === 'publishing') return;   // encore en cours → on attend
+  _renderPublishResult(p.status, p.results || []);
+  if (p.status === 'published') _toast('Vidéo publiée ✓');
+  _watchPostId = null;
 }
 
 // Rafraîchissement auto : quand le cron publie un post programmé en arrière-plan,
@@ -1552,6 +1573,7 @@ function _injectStyles() {
   .sm-result-list li.ok a { color: var(--green); text-decoration:none; }
   .sm-res-err { color: var(--danger); }
   .sm-res-proc { color: var(--gold2); }
+  .sm-res-ok { color: var(--green); }
 
   .sm-toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background: var(--navy3); color: var(--text); border:1px solid var(--bd); padding:11px 18px; border-radius: var(--r); font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition: all .25s; z-index:9999; }
   .sm-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
