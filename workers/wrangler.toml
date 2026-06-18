@@ -96,7 +96,10 @@ VAPID_PUBLIC = "BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUq
 # ⚠ scheduled() (src/index.js) DISPATCHE selon event.cron : chaque expression
 #   déclenche son SEUL traitement. Cloudflare gère le retry si le run rate.
 [triggers]
-crons = ["0 3 * * *", "*/5 * * * *"]
+# "0 3 * * *"   = maintenance quotidienne (purges, refresh tokens…)
+# "* * * * *"   = publication sociale réactive (posts programmés / réessais / vidéo IG·Threads « en traitement » → publiée en <1 min)
+# "*/5 * * * *" = rappels web-push Keynapse échus
+crons = ["0 3 * * *", "* * * * *", "*/5 * * * *"]
 
 # ── Secrets à définir via `wrangler secret put` ───────────────
 # KS_ADMIN_SECRET   — même valeur que dans Vercel

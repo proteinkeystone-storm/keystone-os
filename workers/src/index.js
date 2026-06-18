@@ -750,16 +750,24 @@ export default {
   //   crons = ["0 3 * * *"]   # tous les jours à 3h UTC
   async scheduled(event, env, ctx) {
     // Plusieurs crons configurés (wrangler.toml) → DISPATCH selon l'expression
-    // déclenchée. Le balayage social tourne toutes les 5 min ; les purges & la
-    // maintenance restent quotidiennes — NE PAS les lancer au rythme du sweep.
-    if (event.cron === '*/5 * * * *') {
-      // Sprint Social-4.1 — publie les posts programmés arrivés à échéance.
+    // déclenchée. ⚠ CHAQUE branche DOIT `return` : le bloc de maintenance quotidien
+    // est le FALLTHROUGH (tout cron non matché le lance) — JAMAIS au rythme de la minute.
+    // Social = chaque minute · rappels Keynapse = 5 min · maintenance = 1×/jour.
+
+    // Toutes les minutes — publication sociale RÉACTIVE : posts programmés arrivés à
+    // échéance, réessais, et vidéo IG/Threads « en traitement » (poll → publie en <1 min
+    // au lieu d'attendre le tick 5 min). Idempotent (claim atomique anti-double-envoi).
+    if (event.cron === '* * * * *') {
       ctx.waitUntil(
         sweepDuePosts(env)
           .then(r => console.log('[social-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[social-sweep] failed', e?.message || e))
       );
-      // Sprint Keynapse-9 — push des rappels échus (même app fermée).
+      return;
+    }
+
+    // Toutes les 5 min — Sprint Keynapse-9, push des rappels échus (même app fermée).
+    if (event.cron === '*/5 * * * *') {
       ctx.waitUntil(
         sweepDueReminders(env)
           .then(r => console.log('[keynapse-reminders]', JSON.stringify(r)))
