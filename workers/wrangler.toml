@@ -15,6 +15,10 @@
 name            = "keystone-os-api"
 main            = "src/index.js"
 compatibility_date = "2025-04-01"
+# nodejs_compat : requis par @cloudflare/puppeteer (node:buffer) pour la mesure
+# perf Sentinel S3 (Browser Rendering). Additif — ajoute les modules/globaux
+# Node, n'altère pas les Web APIs déjà utilisées par les autres pads.
+compatibility_flags = ["nodejs_compat"]
 
 # Placement "smart" : Cloudflare choisit la région la plus proche des données D1
 [placement]
