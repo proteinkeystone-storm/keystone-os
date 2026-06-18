@@ -55,6 +55,14 @@ bucket_name = "keystone-help-media"
 binding    = "KORTEX_INDEX"
 index_name = "keystone-kortex"
 
+# ── Browser Rendering — mesure perf réelle (Sentinel S3 · Core Web Vitals) ──
+# Lance un navigateur headless pour mesurer LCP/CLS/poids/requêtes. 10 h/mois
+# incluses sur Workers Paid puis 0,09 $/h. Utilisé UNIQUEMENT par l'audit
+# on-demand de Sentinel (jamais le cron) → coût borné. Dégrade proprement si
+# absent (perf = n/a, le reste de l'audit fonctionne).
+[browser]
+binding = "BROWSER"
+
 # ── Variables publiques (non-secrètes) ─────────────────────────
 # CSV multi-origin : production Vercel + previews + dev local.
 # Le Worker renvoie l'origin qui correspond à celle de la requête

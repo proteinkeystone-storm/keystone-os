@@ -82,6 +82,7 @@
 .snt-modal-score.good { color: var(--green); }
 .snt-modal-score.warn { color: var(--warn); }
 .snt-modal-score.bad  { color: var(--danger); }
+.snt-cwv { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--ws-text-soft); margin: -8px 0 16px; }
 
 .snt-bars { display: flex; flex-direction: column; gap: 9px; }
 .snt-bar { display: grid; grid-template-columns: 132px 1fr 38px; align-items: center; gap: 10px; font-size: 13px; }

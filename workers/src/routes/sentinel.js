@@ -29,8 +29,9 @@ import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from
 import { requireJWT } from '../lib/jwt.js';
 import { validateImportUrl } from './smart-agent.js';
 import { sendPush } from '../lib/webpush.js';
+import puppeteer from '@cloudflare/puppeteer';
 
-const SENTINEL_ENGINE_VERSION = 'S2';
+const SENTINEL_ENGINE_VERSION = 'S3';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -370,6 +371,63 @@ export async function handleSiteHistory(request, env, id) {
   return json({ history: rows.reverse() }, 200, origin);
 }
 
+// ── Performance réelle (S3 · Core Web Vitals via Browser Rendering) ──
+// Best-effort : si le binding BROWSER est absent ou le navigateur échoue,
+// renvoie null → l'axe perf passe en « n/a », le reste de l'audit tient.
+function _threshScore(v, good, poor) {
+  if (v == null) return null;
+  if (v <= good) return 100;
+  if (v >= poor) return 0;
+  return Math.round(100 * (poor - v) / (poor - good));
+}
+function _perfScore(cwv) {
+  if (!cwv) return null;
+  const parts = [
+    [_threshScore(cwv.lcp, 2500, 4000), 0.5],
+    [_threshScore(cwv.cls, 0.1, 0.25), 0.3],
+    [_threshScore(cwv.fcp, 1800, 3000), 0.2],
+  ].filter((p) => p[0] != null);
+  if (!parts.length) return null;
+  const wsum = parts.reduce((a, p) => a + p[1], 0);
+  return Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / wsum);
+}
+async function _measurePerf(env, url) {
+  if (!env || !env.BROWSER) return null;
+  let browser = null;
+  try {
+    browser = await puppeteer.launch(env.BROWSER);
+    const page = await browser.newPage();
+    try { await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 }); } catch (_) {}
+    await page.evaluateOnNewDocument(() => {
+      window.__cwv = { lcp: 0, cls: 0 };
+      try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__cwv.lcp = e.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
+      try { new PerformanceObserver((l) => { for (const e of l.getEntries()) { if (!e.hadRecentInput) window.__cwv.cls += e.value; } }).observe({ type: 'layout-shift', buffered: true }); } catch (e) {}
+    });
+    await page.goto(url, { waitUntil: 'load', timeout: 25000 });
+    await new Promise((r) => setTimeout(r, 2500));   // laisse LCP/CLS se stabiliser
+    const m = await page.evaluate(() => {
+      const nav = performance.getEntriesByType('navigation')[0] || {};
+      const fcpE = performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint');
+      const res = performance.getEntriesByType('resource');
+      let weight = nav.transferSize || 0, count = 1;
+      for (const r of res) { weight += (r.transferSize || 0); count++; }
+      return {
+        lcp: Math.round((window.__cwv && window.__cwv.lcp) || 0),
+        cls: Math.round(((window.__cwv && window.__cwv.cls) || 0) * 1000) / 1000,
+        fcp: Math.round(fcpE ? fcpE.startTime : 0),
+        ttfb: Math.round(nav.responseStart || 0),
+        weightKb: Math.round(weight / 1024),
+        requests: count,
+      };
+    });
+    return m;
+  } catch (_) {
+    return null;
+  } finally {
+    if (browser) { try { await browser.close(); } catch (_) {} }
+  }
+}
+
 // Calcule le score global à partir des axes disponibles (audit + dispo S1).
 function _globalScore(scores) {
   const vals = Object.values(scores).filter(v => typeof v === 'number');
@@ -386,17 +444,26 @@ export async function handleSiteAudit(request, env, id) {
 
   const a = await _audit(site.url);
   const dispo = await _uptime24(env, site.id);
-  const scores = { disponibilite: dispo, ...a.scores };   // disponibilite peut être null
+  const cwv = await _measurePerf(env, site.url);
+  const perf = _perfScore(cwv);
+  const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
+  const findings = a.findings.slice();
+  if (cwv) {
+    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
+    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
+    if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
+    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
+  }
   const global = _globalScore(scores);
   const scoresJson = JSON.stringify(scores);
-  const findingsJson = JSON.stringify(a.findings);
+  const findingsJson = JSON.stringify(findings);
 
   await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
 
-  return json({ audit: { score: global, scores, findings: a.findings, reachable: a.reachable } }, 200, origin);
+  return json({ audit: { score: global, scores, findings, cwv, reachable: a.reachable } }, 200, origin);
 }
 
 export async function handleSiteAuditGet(request, env, id) {

@@ -25,11 +25,12 @@ const SNT_VAPID_PUBLIC = 'BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFieng
 const PLATFORM_LABEL = { wix: 'Wix', wordpress: 'WordPress', custom: 'Sur-mesure', unknown: 'Plateforme inconnue' };
 const AXES = [
   { k: 'disponibilite', label: 'Disponibilité' },
+  { k: 'performance',   label: 'Performance' },
   { k: 'seo',           label: 'SEO technique' },
   { k: 'securite',      label: 'Sécurité' },
   { k: 'accessibilite', label: 'Accessibilité' },
 ];
-const SOON_AXES = ['Performance', 'Mots-clés', 'Visibilité IA (GEO)', 'Présence locale'];
+const SOON_AXES = ['Mots-clés', 'Visibilité IA (GEO)', 'Présence locale'];
 const SEV_LABEL = { high: 'Élevé', medium: 'Moyen', low: 'Faible' };
 
 let _root = null;
@@ -50,7 +51,7 @@ let _panel = null;
 function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
 async function _api(path, opts = {}) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
   let res;
   try {
     res = await fetch(`${API_BASE}/api/sentinel${path}`, {
@@ -306,7 +307,8 @@ function _renderPanel() {
   let el = _root.querySelector('.snt-overlay');
   if (!el) { el = document.createElement('div'); el.className = 'snt-overlay'; el.addEventListener('click', (e) => { if (e.target === el) _closePanel(); }); _root.appendChild(el); }
   const p = _panel; if (!p) { el.remove(); return; }
-  const scores = p.scores || {}; const g = p.score;
+  const scores = p.scores || {}; const g = p.score; const cwv = p.cwv;
+  const cwvLine = cwv ? `<div class="snt-cwv">${icon('clock', 13)} LCP ${(cwv.lcp / 1000).toFixed(1)} s · CLS ${cwv.cls} · ${cwv.weightKb >= 1024 ? (cwv.weightKb / 1024).toFixed(1) + ' Mo' : cwv.weightKb + ' Ko'} · ${cwv.requests} requêtes</div>` : '';
   const bars = AXES.map((a) => _bar(a.label, scores[a.k])).join('') + SOON_AXES.map(_barSoon).join('');
   el.innerHTML = `
     <div class="snt-modal">
@@ -323,7 +325,7 @@ function _renderPanel() {
 async function _auditNow(id) {
   if (_auditing.has(id)) return; _auditing.add(id); _render();
   const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST' }); _openPanel({ name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); _openPanel({ name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
   catch (e) { alert(e.message || 'Audit impossible.'); }
   _auditing.delete(id); await _load(true);
 }
