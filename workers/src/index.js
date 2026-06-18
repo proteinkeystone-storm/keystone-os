@@ -749,76 +749,71 @@ export default {
   //   [triggers]
   //   crons = ["0 3 * * *"]   # tous les jours à 3h UTC
   async scheduled(event, env, ctx) {
-    // Plusieurs crons configurés (wrangler.toml) → DISPATCH selon l'expression
-    // déclenchée. ⚠ CHAQUE branche DOIT `return` : le bloc de maintenance quotidien
-    // est le FALLTHROUGH (tout cron non matché le lance) — JAMAIS au rythme de la minute.
-    // Social = chaque minute · rappels Keynapse = 5 min · maintenance = 1×/jour.
+    // DISPATCH par expression cron (wrangler.toml). La maintenance quotidienne est GATÉE
+    // EXPLICITEMENT sur '0 3 * * *' (plus de fallthrough) → un cron inattendu ne déclenche
+    // JAMAIS purges/refresh au mauvais rythme.
+    const cron = event.cron;
 
-    // Toutes les minutes — publication sociale RÉACTIVE : posts programmés arrivés à
-    // échéance, réessais, et vidéo IG/Threads « en traitement » (poll → publie en <1 min
-    // au lieu d'attendre le tick 5 min). Idempotent (claim atomique anti-double-envoi).
-    if (event.cron === '* * * * *') {
+    // Publication sociale (programmés / réessais / vidéo IG·Threads « en traitement ») : sur
+    // TOUT cron fréquent (≠ quotidien) → couvre le cron minute (réactif, <1 min) ET le 5 min
+    // (FILET prouvé, si le minute ne tire pas), quelle que soit la forme exacte de event.cron.
+    // sweepDuePosts est idempotent (claim atomique) → exécutions concurrentes sans double-envoi.
+    if (cron !== '0 3 * * *') {
       ctx.waitUntil(
         sweepDuePosts(env)
-          .then(r => console.log('[social-sweep]', JSON.stringify(r)))
+          .then(r => console.log('[social-sweep]', cron, JSON.stringify(r)))
           .catch(e => console.warn('[social-sweep] failed', e?.message || e))
       );
-      return;
     }
 
-    // Toutes les 5 min — Sprint Keynapse-9, push des rappels échus (même app fermée).
-    if (event.cron === '*/5 * * * *') {
+    // Rappels web-push Keynapse échus — toutes les 5 min (même app fermée).
+    if (cron === '*/5 * * * *') {
       ctx.waitUntil(
         sweepDueReminders(env)
           .then(r => console.log('[keynapse-reminders]', JSON.stringify(r)))
           .catch(e => console.warn('[keynapse-reminders] failed', e?.message || e))
       );
-      return;
     }
 
-    // Cron quotidien (0 3 * * *) — purges & maintenance.
-    ctx.waitUntil(handleScheduledPurge(env));
-    // Sprint Social-4.3 — refresh des tokens sociaux proches expiration (Threads ~60j).
-    ctx.waitUntil(
-      refreshSocialTokens(env)
-        .then(r => console.log('[social-token-refresh]', JSON.stringify(r)))
-        .catch(e => console.warn('[social-token-refresh] failed', e?.message || e))
-    );
-    // Purge des réponses Pulsa expirées (TTL configurable par formulaire,
-    // 90j par défaut). Indépendant de la purge SDQR.
-    ctx.waitUntil(
-      handlePulsaPurge(env)
-        .then(r => console.log('[pulsa-purge]', JSON.stringify(r)))
-        .catch(e => console.warn('[pulsa-purge] failed', e?.message || e))
-    );
-    // Sprint S5.2 — Rappels d'expiration licence (J-7, J-3, J-1).
-    // Kill-switch dormant : KS_EXPIRATION_REMINDERS_ENABLED doit valoir
-    // 'true' pour envoyer réellement les emails. Sinon : audit log only.
-    ctx.waitUntil(
-      handleExpirationReminders(env)
-        .then(r => console.log('[expiration-reminders]', JSON.stringify(r)))
-        .catch(e => console.warn('[expiration-reminders] failed', e?.message || e))
-    );
-    // Auto-dégradation des Concierge des licences inactives/expirées en
-    // redirection simple (coupe l'IA, le QR imprimé reste valide). DORMANT
-    // par défaut : sans KS_CONCIERGE_AUTODOWNGRADE_ENABLED='true', dry-run
-    // (audit de ce qui SERAIT fait, zéro mutation).
-    ctx.waitUntil(
-      handleConciergeAutoDowngrade(env)
-        .then(r => console.log('[concierge-downgrade]', JSON.stringify(r)))
-        .catch(e => console.warn('[concierge-downgrade] failed', e?.message || e))
-    );
-    // SA-6.1 — péremption des fiches (review_at échu → quarantine) + purge RGPD publique.
-    ctx.waitUntil(
-      handleSmartAgentLifecycle(env)
-        .then(r => console.log('[smart-agent-lifecycle]', JSON.stringify(r)))
-        .catch(e => console.warn('[smart-agent-lifecycle] failed', e?.message || e))
-    );
-    // Funnel landing — purge des événements > 90j (minimisation RGPD).
-    ctx.waitUntil(
-      pruneTrackEvents(env)
-        .then(r => console.log('[track-prune]', JSON.stringify(r)))
-        .catch(e => console.warn('[track-prune] failed', e?.message || e))
-    );
+    // ── Maintenance quotidienne (0 3 * * *) — purges & refresh, GATÉE explicitement ──
+    if (cron === '0 3 * * *') {
+      ctx.waitUntil(handleScheduledPurge(env));
+      // Refresh des tokens sociaux proches expiration (Threads ~60j).
+      ctx.waitUntil(
+        refreshSocialTokens(env)
+          .then(r => console.log('[social-token-refresh]', JSON.stringify(r)))
+          .catch(e => console.warn('[social-token-refresh] failed', e?.message || e))
+      );
+      // Purge des réponses Pulsa expirées (TTL par formulaire, 90j défaut).
+      ctx.waitUntil(
+        handlePulsaPurge(env)
+          .then(r => console.log('[pulsa-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[pulsa-purge] failed', e?.message || e))
+      );
+      // Rappels d'expiration licence (J-7/J-3/J-1) — dormant sauf KS_EXPIRATION_REMINDERS_ENABLED.
+      ctx.waitUntil(
+        handleExpirationReminders(env)
+          .then(r => console.log('[expiration-reminders]', JSON.stringify(r)))
+          .catch(e => console.warn('[expiration-reminders] failed', e?.message || e))
+      );
+      // Auto-dégradation Concierge des licences inactives — dormant sauf KS_CONCIERGE_AUTODOWNGRADE_ENABLED.
+      ctx.waitUntil(
+        handleConciergeAutoDowngrade(env)
+          .then(r => console.log('[concierge-downgrade]', JSON.stringify(r)))
+          .catch(e => console.warn('[concierge-downgrade] failed', e?.message || e))
+      );
+      // Péremption des fiches Smart Agent (review_at échu → quarantine) + purge RGPD publique.
+      ctx.waitUntil(
+        handleSmartAgentLifecycle(env)
+          .then(r => console.log('[smart-agent-lifecycle]', JSON.stringify(r)))
+          .catch(e => console.warn('[smart-agent-lifecycle] failed', e?.message || e))
+      );
+      // Funnel landing — purge des événements > 90j (minimisation RGPD).
+      ctx.waitUntil(
+        pruneTrackEvents(env)
+          .then(r => console.log('[track-prune]', JSON.stringify(r)))
+          .catch(e => console.warn('[track-prune] failed', e?.message || e))
+      );
+    }
   },
 };
