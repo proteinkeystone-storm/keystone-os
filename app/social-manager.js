@@ -27,6 +27,7 @@ import { renderChainRail, setChain, clearChain } from './lib/content-chain.js';
 
 const APP_ID    = 'O-SOC-001';
 const DRAFT_KEY = 'ks_social_manager_draft_v1';
+const SM_MAX_IMAGES = 10;   // plafond carrousel (cf. registry imageMax) — Phase 2b
 
 // Icône de marque par réseau (le set ui-icons fournit facebook/instagram/
 // linkedin/threads). Le LIBELLÉ, lui, vient du registre (jamais codé ici).
@@ -59,7 +60,7 @@ let _styles   = false;
 let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
-let _form     = { text: '', targets: [], imageUrl: null, imageName: null };
+let _form     = { text: '', targets: [], images: [] };   // images: [{ url, name }] — carrousel
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
@@ -130,7 +131,7 @@ function _applyCompose(payload, { silent = false } = {}) {
   if (typeof d.text === 'string') {
     _form.text = (d.append && _form.text) ? `${_form.text}\n\n${d.text}` : d.text;
   }
-  if (d.imageUrl) { _form.imageUrl = d.imageUrl; _form.imageName = d.imageName; }
+  if (d.imageUrl) { _form.images = [{ url: d.imageUrl, name: d.imageName || 'image' }]; }
   if (d.targets)  { _form.targets  = d.targets.slice(); }
   if (!silent) {
     _renderMain();
@@ -324,20 +325,21 @@ function _renderNets() {
 function _renderMedia() {
   const box = _root && _root.querySelector('[data-slot="media"]');
   if (!box) return;
-  if (_form.imageUrl) {
-    box.innerHTML = `
-      <div class="sm-media-chip">
-        ${icon('image', 15)}
-        <span class="sm-media-name" title="${_esc(_form.imageName || 'image')}">${_esc(_form.imageName || 'image')}</span>
-        <button type="button" class="sm-media-x" data-act="remove-image" aria-label="Retirer la photo" title="Retirer la photo">${icon('x', 15)}</button>
-      </div>`;
-  } else {
-    box.innerHTML = `
-      <label class="sm-upload">
-        <input type="file" accept="image/*" data-field="image" hidden>
-        ${icon('image', 16)}&nbsp;<span data-slot="media-label">Choisir une image…</span>
-      </label>`;
-  }
+  const imgs   = Array.isArray(_form.images) ? _form.images : [];
+  const canAdd = imgs.length < SM_MAX_IMAGES;
+  const thumbs = imgs.map((im, i) => `
+      <div class="sm-thumb" title="${_esc(im.name || 'image')}">
+        <img src="${_esc(im.url)}" alt="">
+        <button type="button" class="sm-thumb-x" data-act="remove-image" data-idx="${i}" aria-label="Retirer cette image" title="Retirer">${icon('x', 13)}</button>
+      </div>`).join('');
+  const addBtn = canAdd ? `
+      <label class="sm-upload${imgs.length ? ' sm-upload-mini' : ''}">
+        <input type="file" accept="image/*" data-field="image" multiple hidden>
+        ${icon('image', 16)}&nbsp;<span data-slot="media-label">${imgs.length ? 'Ajouter' : 'Choisir une ou plusieurs images…'}</span>
+      </label>` : '';
+  box.innerHTML =
+    `<div class="sm-media-grid">${thumbs}${addBtn}</div>` +
+    (imgs.length > 1 ? `<div class="sm-media-hint">${imgs.length} images — publiées en carrousel sur les réseaux compatibles (jusqu'à ${SM_MAX_IMAGES}).</div>` : '');
 }
 
 // ── Aperçu live du post (identité réelle du compte) ────────────
@@ -365,7 +367,7 @@ function _renderPreview() {
         </div>
       </div>
       <div class="sm-card-text">${txt ? _esc(txt).replace(/\n/g, '<br>') : '<span class="sm-muted">Votre message apparaîtra ici…</span>'}</div>
-      ${_form.imageUrl ? `<div class="sm-card-img"><img src="${_esc(_form.imageUrl)}" alt=""></div>` : ''}
+      ${(_form.images && _form.images.length) ? `<div class="sm-card-img"><img src="${_esc(_form.images[0].url)}" alt="">${_form.images.length > 1 ? `<span class="sm-card-img-count">+${_form.images.length - 1}</span>` : ''}</div>` : ''}
     </div>
   `;
 }
@@ -399,7 +401,7 @@ const _textLimit = (c, hasImg) => (hasImg && c?.media?.captionMaxLength) ? c.med
 // Limite de caractères affichée = la PLUS contraignante parmi les réseaux
 // sélectionnés (ex. Threads 500 l'emporte sur Facebook 63206 ; Telegram+photo → 1024).
 function _counterInfo() {
-  const hasImg = !!_form.imageUrl;
+  const hasImg = (_form.images?.length || 0) > 0;
   let best = null;
   for (const p of _form.targets) {
     const c = _capOf(p);
@@ -413,7 +415,7 @@ function _counterInfo() {
 // Calcule les problèmes par réseau À PARTIR DU REGISTRE (pas de règle en dur).
 function _validate() {
   const text   = _form.text.trim();
-  const hasImg = !!_form.imageUrl;
+  const hasImg = (_form.images?.length || 0) > 0;
   const tags   = _countHashtags(text);
   const global = [];
   const perNet = {};
@@ -581,37 +583,45 @@ async function _disconnectAccount(id) {
 // ══════════════════════════════════════════════════════════════
 // Upload image → R2
 // ══════════════════════════════════════════════════════════════
-async function _uploadImage(file) {
+async function _uploadImages(fileList) {
   const token = _adminToken();
   if (!token) { _toast('Connexion admin requise', 'warn'); return; }
-  if (!file.type.startsWith('image/')) { _toast('Fichier non image', 'warn'); return; }
+  const files = Array.from(fileList || []).filter(f => f.type && f.type.startsWith('image/'));
+  if (!files.length) { _toast('Fichier non image', 'warn'); return; }
+  if (!Array.isArray(_form.images)) _form.images = [];
+  const room = SM_MAX_IMAGES - _form.images.length;
+  if (room <= 0) { _toast(`Maximum ${SM_MAX_IMAGES} images.`, 'warn'); return; }
+  const toUpload = files.slice(0, room);
+  if (files.length > room) _toast(`Limité à ${SM_MAX_IMAGES} images — surplus ignoré.`, 'warn');
 
-  _setMediaLabel(`Envoi de « ${file.name} »…`);
-  try {
-    const res = await fetch(`${CF_API}/api/social/media`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type },
-      body: file,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.url) throw new Error(data.error || `Erreur ${res.status}`);
-    _form.imageUrl  = data.url;
-    _form.imageName = file.name;
+  // Upload séquentiel : chaque vignette apparaît au fil de l'eau.
+  for (const file of toUpload) {
+    _setMediaLabel(`Envoi de « ${file.name} »…`);
+    try {
+      const res = await fetch(`${CF_API}/api/social/media`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type },
+        body: file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || `Erreur ${res.status}`);
+      _form.images.push({ url: data.url, name: file.name });
+    } catch (e) {
+      _toast(`Upload « ${file.name} » échoué : ${e?.message || 'erreur'}`, 'warn');
+    }
     _renderMedia();
-    _renderPreview();
-    _renderValidation();
-  } catch (e) {
-    _renderMedia();
-    _toast('Upload échoué : ' + (e?.message || 'erreur'), 'warn');
   }
+  _renderPreview();
+  _renderValidation();
 }
 function _setMediaLabel(t) {
   const el = _root && _root.querySelector('[data-slot="media-label"]');
   if (el) el.textContent = t;
 }
-function _removeImage() {
-  _form.imageUrl  = null;
-  _form.imageName = null;
+function _removeImage(idx) {
+  if (!Array.isArray(_form.images)) return;
+  const i = Number(idx);
+  if (i >= 0 && i < _form.images.length) _form.images.splice(i, 1);
   _renderMedia();
   _renderPreview();
   _renderValidation();
@@ -638,7 +648,7 @@ async function _publish() {
     targets: _form.targets,
     text,
     source: 'social-manager',
-    ...(_form.imageUrl ? { media: [{ type: 'image', url: _form.imageUrl }] } : {}),
+    ...((_form.images && _form.images.length) ? { media: _form.images.map(im => ({ type: 'image', url: im.url })) } : {}),
   };
 
   try {
@@ -691,7 +701,7 @@ function _setResult(html) {
 
 // Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
 function _reset() {
-  _form = { text: '', targets: [], imageUrl: null, imageName: null };
+  _form = { text: '', targets: [], images: [] };
   _schedOpen = false;
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
@@ -840,7 +850,7 @@ async function _doSchedule() {
     text: _form.text.trim(),
     source: 'social-manager',
     scheduledAt: when.toISOString(),
-    ...(_form.imageUrl ? { media: [{ type: 'image', url: _form.imageUrl }] } : {}),
+    ...((_form.images && _form.images.length) ? { media: _form.images.map(im => ({ type: 'image', url: im.url })) } : {}),
   };
 
   _busy = true; _renderValidation();
@@ -1085,7 +1095,7 @@ function _onClick(e) {
   if (act === 'insights')     { e.preventDefault(); _toggleInsights(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'clear-history'){ e.preventDefault(); _clearHistory(); return; }
   if (act === 'sched-day')    { e.preventDefault(); _setSchedDay(Number(e.target.closest('[data-days]')?.dataset.days) || 0); return; }
-  if (act === 'remove-image') { e.preventDefault(); _removeImage(); return; }
+  if (act === 'remove-image') { e.preventDefault(); _removeImage(e.target.closest('[data-idx]')?.dataset.idx); return; }
   if (act === 'open-connect')  { e.preventDefault(); _openConnect(); return; }
   if (act === 'disconnect-acct') { e.preventDefault(); _disconnectAccount(e.target.closest('[data-id]')?.dataset.id); return; }
   if (act === 'close-connect') { e.preventDefault(); _closeConnect(); return; }
@@ -1131,7 +1141,7 @@ function _onInput(e) {
 }
 
 function _onChange(e) {
-  if (e.target.dataset.field === 'image' && e.target.files?.[0]) _uploadImage(e.target.files[0]);
+  if (e.target.dataset.field === 'image' && e.target.files?.length) _uploadImages(e.target.files);
 }
 
 let _saveT = null;
@@ -1384,6 +1394,15 @@ function _injectStyles() {
 
   .sm-upload { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border:1px dashed var(--bd); border-radius: var(--r); cursor:pointer; color: var(--tx2); font-size:13px; transition: all .15s; }
   .sm-upload:hover { border-color: var(--gold2); color: var(--text); }
+  .sm-upload-mini { padding:8px 12px; font-size:12.5px; }
+  .sm-media-grid { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sm-thumb { position:relative; width:64px; height:64px; border-radius:10px; overflow:hidden; border:1px solid var(--bd); background:var(--navy3); flex:0 0 auto; }
+  .sm-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .sm-thumb-x { position:absolute; top:3px; right:3px; width:22px; height:22px; display:grid; place-items:center; border:none; border-radius:50%; background:rgba(8,12,24,.72); color:#fff; cursor:pointer; transition:background .15s; }
+  .sm-thumb-x:hover { background:var(--danger, #e05c5c); }
+  .sm-media-hint { margin-top:8px; font-size:12px; color: var(--tx2); }
+  .sm-card-img { position:relative; }
+  .sm-card-img-count { position:absolute; bottom:8px; right:8px; padding:3px 9px; border-radius:100px; background:rgba(8,12,24,.72); color:#fff; font-size:12px; font-weight:600; }
   .sm-media-chip { display:inline-flex; align-items:center; gap:8px; padding:8px 8px 8px 12px; border:1px solid var(--bd); border-radius: var(--r); background: var(--navy3); font-size:13px; color: var(--text); }
   .sm-media-name { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sm-media-x { display:inline-grid; place-items:center; width:26px; height:26px; border:none; background:transparent; color: var(--tx3); cursor:pointer; border-radius:7px; transition: all .15s; }
