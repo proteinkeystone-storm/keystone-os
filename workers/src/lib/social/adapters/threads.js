@@ -53,11 +53,18 @@ async function waitForContainer(base, creationId, accessToken, { tries = 10, del
 }
 
 // ── Contrat : publish (RÉEL, flux 2 temps) ────────────────────
-export async function publish({ account, accessToken, payload }) {
+export async function publish({ account, accessToken, payload, prior }) {
   const cfg    = getPlatform(PLATFORM);
   const base   = cfg.api.base;
   const user   = account.external_id;            // Threads user-id (dérivé au provision)
   const images = (payload.media || []).filter(m => m.type === 'image');
+  const videos = (payload.media || []).filter(m => m.type === 'video');
+
+  // Vidéo — asynchrone : créée au 1er passage, publiée par le cron une fois le
+  // traitement terminé (cf. broadcast.publishOne + social.sweepDuePosts).
+  if (videos.length >= 1) {
+    return publishVideoStep({ base, user, accessToken, videoUrl: videos[0].url, text: payload.text || '', prior });
+  }
 
   // 1) Container à publier — carrousel (>1) · image · ou texte seul.
   let creationId;
@@ -125,6 +132,54 @@ export async function publish({ account, accessToken, payload }) {
     url = perm.permalink || undefined;
   } catch (_) { /* publié même si le permalink échoue */ }
 
+  return { externalId: mediaId, url };
+}
+
+// ── Vidéo en 2 temps — orchestrée par le cron ─────────────────
+// status (+ détail d'erreur) d'un conteneur, en 1 lecture NON bloquante (≠ waitForContainer).
+async function fetchContainerStatus(base, creationId, accessToken) {
+  const res  = await fetch(`${base}/${creationId}?fields=status,error_message&access_token=${encodeURIComponent(accessToken)}`);
+  const data = await res.json().catch(() => ({}));
+  return { code: data.status, detail: data.error_message };   // code ∈ IN_PROGRESS|FINISHED|ERROR|EXPIRED|PUBLISHED
+}
+
+// 1er appel (sans prior.creationId) : crée le conteneur VIDEO → { processing, creationId }.
+// Appels suivants (le cron repasse) : poll UNE fois ; FINISHED → threads_publish ;
+// encore en cours → reste 'processing' ; ERROR/EXPIRED → throw.
+async function publishVideoStep({ base, user, accessToken, videoUrl, text, prior }) {
+  if (!prior?.creationId) {
+    const createRes = await fetch(`${base}/${user}/threads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_type: 'VIDEO', video_url: videoUrl, text, access_token: accessToken }),
+    });
+    const created = await createRes.json().catch(() => ({}));
+    if (!createRes.ok || !created.id) {
+      throw new Error(`Threads vidéo ${createRes.status} : ${created?.error?.message || JSON.stringify(created).slice(0, 200)}`);
+    }
+    return { status: 'processing', creationId: created.id };
+  }
+
+  const { code, detail } = await fetchContainerStatus(base, prior.creationId, accessToken);
+  if (code === 'ERROR' || code === 'EXPIRED') throw new Error(`Threads conteneur vidéo ${code}${detail ? ` : ${detail}` : ''}`);
+  if (code !== 'FINISHED' && code !== 'PUBLISHED') return { status: 'processing', creationId: prior.creationId };
+
+  const pubRes = await fetch(`${base}/${user}/threads_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creation_id: prior.creationId, access_token: accessToken }),
+  });
+  const published = await pubRes.json().catch(() => ({}));
+  if (!pubRes.ok || !published.id) {
+    throw new Error(`Threads publish vidéo ${pubRes.status} : ${published?.error?.message || JSON.stringify(published).slice(0, 200)}`);
+  }
+  const mediaId = published.id;
+  let url;
+  try {
+    const permRes = await fetch(`${base}/${mediaId}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`);
+    const perm    = await permRes.json().catch(() => ({}));
+    url = perm.permalink || undefined;
+  } catch (_) { /* publié même si le permalink échoue */ }
   return { externalId: mediaId, url };
 }
 

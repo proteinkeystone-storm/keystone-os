@@ -122,7 +122,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
-      video: { enabled: false, max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels — ⚠ vidéo asynchrone (container→poll→publish), branchée en Tranche 3.2
+      video: { enabled: true, max: 1, mimes: ['video/mp4'], maxDurationSec: 90 },   // Reels — vidéo asynchrone (container→cron poll→publish), Tranche 3.2
       carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: true,             // ⚠ IG n'accepte PAS de post texte seul
       hostedUrlRequired: true,    // ⚠ le média DOIT être servi sur une URL publique (→ R2)
@@ -160,7 +160,7 @@ export const PLATFORMS = {
     media: {
       enabled: true,
       image: { max: 10, mimes: ['image/jpeg', 'image/png'], aspectRatios: ['1:1', '4:5', '1.91:1'] },
-      video: { enabled: false, max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },   // ⚠ vidéo asynchrone (container→poll→publish), branchée en Tranche 3.2
+      video: { enabled: true, max: 1, mimes: ['video/mp4'], maxDurationSec: 300 },   // vidéo asynchrone (container→cron poll→publish), Tranche 3.2
       carousel: true,             // Phase 2 (juin 2026) — carrousel via conteneurs is_carousel_item → CAROUSEL.
       required: false,            // Threads accepte le TEXTE SEUL (retour aux sources 😉)
       hostedUrlRequired: true,    // image servie sur URL publique (→ R2), comme IG

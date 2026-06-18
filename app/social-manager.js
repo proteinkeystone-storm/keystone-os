@@ -48,9 +48,9 @@ const _hexToRgba = (hex, a) => {
 // UI muette. À garder cohérent avec registry.js.
 const FALLBACK_CAPS = {
   facebook:  { id:'facebook',  label:'Facebook',  text:{ maxLength:63206, maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, videoEnabled:true,  videoMaxDurationSec:7200 } },
-  instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10, videoEnabled:false, videoMaxDurationSec:90   } },
+  instagram: { id:'instagram', label:'Instagram', text:{ maxLength:2200,  maxHashtags:30   }, media:{ enabled:true,  required:true,  imageMax:10, videoEnabled:true,  videoMaxDurationSec:90   } },
   linkedin:  { id:'linkedin',  label:'LinkedIn',  text:{ maxLength:3000,  maxHashtags:null }, media:{ enabled:false, required:false, imageMax:9,  videoEnabled:false } },
-  threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, videoEnabled:false, videoMaxDurationSec:300  } },
+  threads:   { id:'threads',   label:'Threads',   text:{ maxLength:500,   maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, videoEnabled:true,  videoMaxDurationSec:300  } },
   telegram:  { id:'telegram',  label:'Telegram',  text:{ maxLength:4096,  maxHashtags:null }, media:{ enabled:true,  required:false, imageMax:10, captionMaxLength:1024, videoEnabled:true, videoMaxDurationSec:3600 } },
 };
 
@@ -761,29 +761,33 @@ async function _publish() {
 
     const rows = (data.results || []).map(r => {
       const ok = r.status === 'published';
+      const processing = r.status === 'processing';
       const label = _labelOf(r.platform);
-      return `<li class="${ok ? 'ok' : 'ko'}">
+      return `<li class="${ok ? 'ok' : (processing ? 'warn' : 'ko')}">
         <span class="sm-res-net">${_esc(label)}</span>
-        ${ok
-          ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">voir le post ↗</a>`
+        ${ok ? `<a href="${_esc(r.url)}" target="_blank" rel="noopener">voir le post ↗</a>`
+          : processing ? `<span class="sm-res-proc">traitement de la vidéo…</span>`
           : `<span class="sm-res-err">${_esc(r.error || 'échec')}</span>`}
       </li>`;
     }).join('');
 
     const ok = data.status === 'published';
     const retrying = data.status === 'retrying';
-    const headCls = ok ? 'ok' : (data.status === 'partial' || retrying ? 'warn' : 'ko');
+    const processing = data.status === 'processing';
+    const accepted = ok || data.status === 'partial' || retrying || processing;
+    const headCls = ok ? 'ok' : (data.status === 'partial' || retrying || processing ? 'warn' : 'ko');
     const headTxt = ok ? '✓ Publié'
+      : processing ? '◷ Vidéo en traitement — publication automatique dès qu\'elle est prête'
       : retrying ? '◷ Envoi en cours — les réseaux qui ont coincé sont repris automatiquement'
       : data.status === 'partial' ? '◐ Partiel' : '✕ Échec';
     _setResult(`
       <div class="sm-result-head ${headCls}">${headTxt}</div>
       <ul class="sm-result-list">${rows}</ul>
     `);
-    if (ok || data.status === 'partial' || retrying) _toast(retrying ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
-    // Parcours bouclé : la publication est partie → on referme la chaîne (le rail
-    // quitte le hero), sans toucher au panneau résultat « ✓ Publié » à droite.
-    if (ok || data.status === 'partial' || retrying) { clearChain(); _renderHero(); }
+    if (accepted) _toast(processing ? 'Vidéo envoyée — traitement en cours' : retrying ? 'Envoyé — réessai auto des réseaux ratés' : 'Publication envoyée', 'ok');
+    // Parcours bouclé : la publication est partie (ou la vidéo en traitement) → on
+    // referme la chaîne (le rail quitte le hero), sans toucher au panneau résultat à droite.
+    if (accepted) { clearChain(); _renderHero(); }
   } catch (e) {
     _setResult(`<div class="sm-result-ko">${_esc(e?.message || 'Erreur de publication')}</div>`);
   } finally {
@@ -859,7 +863,7 @@ function _fmtWhen(iso) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-const _Q_LABEL = { scheduled: 'Programmé', publishing: 'En cours', retrying: 'On retente', published: 'Publié', partial: 'Partiel', failed: 'Échec', canceled: 'Annulé', draft: 'Brouillon' };
+const _Q_LABEL = { scheduled: 'Programmé', publishing: 'En cours', processing: 'Traitement…', retrying: 'On retente', published: 'Publié', partial: 'Partiel', failed: 'Échec', canceled: 'Annulé', draft: 'Brouillon' };
 const _qNetGlyphs = (targets) => (targets || []).map(p => `<span title="${_esc(_labelOf(p))}">${icon(NET_ICON[p] || 'globe', 13)}</span>`).join('');
 
 // Panneau de programmation (déplié sous les actions). Convertit l'heure locale
@@ -997,7 +1001,7 @@ function _stopQueuePolling() {
 }
 function _pollQueue() {
   if (!_root || document.hidden || _busy) return;
-  const pending = Array.isArray(_queue) && _queue.some(p => p.status === 'scheduled' || p.status === 'publishing' || p.status === 'retrying');
+  const pending = Array.isArray(_queue) && _queue.some(p => p.status === 'scheduled' || p.status === 'publishing' || p.status === 'retrying' || p.status === 'processing');
   if (pending) _loadQueue();
 }
 function _onVisible() { if (!document.hidden) _pollQueue(); }
@@ -1547,6 +1551,7 @@ function _injectStyles() {
   .sm-res-net { font-weight:700; color: var(--text); min-width:78px; }
   .sm-result-list li.ok a { color: var(--green); text-decoration:none; }
   .sm-res-err { color: var(--danger); }
+  .sm-res-proc { color: var(--gold2); }
 
   .sm-toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background: var(--navy3); color: var(--text); border:1px solid var(--bd); padding:11px 18px; border-radius: var(--r); font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition: all .25s; z-index:9999; }
   .sm-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -1662,6 +1667,7 @@ function _injectStyles() {
   .sm-q-badge.partial { color: var(--sm-warn); background: var(--warn-soft); }
   .sm-q-badge.failed { color: var(--danger); background: var(--danger-soft); }
   .sm-q-badge.retrying { color: var(--sm-warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--sm-warn) 30%, transparent); }
+  .sm-q-badge.processing { color: var(--gold2); background: var(--gold3); border-color: color-mix(in srgb, var(--gold2) 30%, transparent); }
   .sm-q-badge.canceled, .sm-q-badge.publishing, .sm-q-badge.draft { color: var(--tx3); background: var(--navy3); }
   .sm-q-excerpt { flex:1 1 auto; min-width:0; font-size:13px; color: var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sm-q-nets { flex:0 0 auto; display:inline-flex; gap:5px; color: var(--tx3); }

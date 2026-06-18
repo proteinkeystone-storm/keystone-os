@@ -298,7 +298,7 @@ export async function provisionTelegram(env, { chatId, tenantId = 'default' } = 
  * décident d'INSÉRER (publication immédiate) ou d'UPDATER (post programmé).
  * @returns {Promise<{results:Array, status:string}>}
  */
-async function _runBroadcast(env, { canonical, targets, tenantId, dryRun = false }) {
+async function _runBroadcast(env, { canonical, targets, priors = {}, tenantId, dryRun = false }) {
   const tgts = Array.isArray(targets) ? targets.filter(Boolean) : [];
   const accounts = {};
   if (tgts.length) {
@@ -308,7 +308,7 @@ async function _runBroadcast(env, { canonical, targets, tenantId, dryRun = false
       .bind(tenantId, ...tgts).all();
     for (const r of rows) accounts[r.platform] = r;   // broadcast() déchiffre lui-même
   }
-  const results = await broadcast({ canonical, targets: tgts, accounts, env, dryRun });
+  const results = await broadcast({ canonical, targets: tgts, accounts, priors, env, dryRun });
   return { results, status: computeStatus(results, dryRun) };
 }
 
@@ -334,10 +334,11 @@ export async function publishCanonical(env, opts = {}) {
   const canonical = _canonicalFromOpts(opts);
   const { results } = await _runBroadcast(env, { canonical, targets, tenantId, dryRun });
 
-  // 1er essai. Si un réseau a échoué (hors dry-run) → 'retrying' : le cron
-  // reprendra automatiquement les réseaux ratés (backoff borné).
-  const attempts = 1;
-  const { status, nextAttemptAt } = dryRun ? { status: 'draft', nextAttemptAt: null } : _retryDecision(results, attempts);
+  // 1er passage. Réseau raté → 'retrying' (le cron reprend, backoff borné) ; vidéo
+  // IG/Threads → 'processing' (le cron poll puis publie). _settle tranche + compte l'essai.
+  const { status, nextAttemptAt, attempts } = dryRun
+    ? { status: 'draft', nextAttemptAt: null, attempts: 1 }
+    : _settle(results, 0);
 
   const id = generateId();
   await env.DB.prepare(`
@@ -351,8 +352,9 @@ export async function publishCanonical(env, opts = {}) {
   return { postId: id, status, results };
 }
 
-function computeStatus(results, dryRun) {
+export function computeStatus(results, dryRun) {
   if (dryRun) return 'draft';
+  if (results.some(r => r.status === 'processing')) return 'processing';
   const published = results.filter(r => r.status === 'published').length;
   const failed    = results.filter(r => r.status === 'failed').length;
   if (published && failed) return 'partial';
@@ -367,9 +369,10 @@ function computeStatus(results, dryRun) {
 // vit en base (attempts, next_attempt_at) → durable sans Queues ni Workflows.
 const MAX_ATTEMPTS = 4;                              // 1 envoi initial + 3 réessais
 const RETRY_DELAY_MIN = { 1: 5, 2: 15, 3: 60 };      // après l'essai n°k → attendre N min
+const PROCESSING_POLL_MS = 45 * 1000;                // vidéo IG/Threads « en traitement » → cadence de re-poll du cron
 
 // Décide de la suite après un essai : terminé, ou à reprogrammer ('retrying').
-function _retryDecision(results, attempts) {
+export function _retryDecision(results, attempts) {
   const failed    = results.filter(r => r.status === 'failed').length;
   const published = results.filter(r => r.status === 'published').length;
   if (!failed) return { status: published ? 'published' : 'failed', nextAttemptAt: null };
@@ -377,6 +380,22 @@ function _retryDecision(results, attempts) {
     return { status: 'retrying', nextAttemptAt: new Date(Date.now() + RETRY_DELAY_MIN[attempts] * 60_000).toISOString() };
   }
   return { status: published ? 'partial' : 'failed', nextAttemptAt: null };   // réessais épuisés → terminal
+}
+
+// Décide statut + échéance + compteur d'essais après un passage de diffusion.
+// Vidéo IG/Threads « en traitement » → repasse vite SANS consommer d'essai (un poll
+// n'est pas un échec) ; sinon décision de réessai normale (qui, elle, incrémente).
+export function _settle(results, priorAttempts) {
+  if (results.some(r => r.status === 'processing')) {
+    return {
+      status: 'processing',
+      nextAttemptAt: new Date(Date.now() + PROCESSING_POLL_MS).toISOString(),
+      attempts: priorAttempts,
+    };
+  }
+  const attempts = priorAttempts + 1;
+  const { status, nextAttemptAt } = _retryDecision(results, attempts);
+  return { status, nextAttemptAt, attempts };
 }
 
 // Fusionne les résultats : garde les réseaux DÉJÀ publiés, remplace le reste par
@@ -442,7 +461,7 @@ export async function schedulePost(env, opts = {}) {
  * puis UPDATE le statut + results. Utilisé par le balayage du cron.
  * @returns {Promise<{postId,status,results}>}
  */
-async function publishScheduledRow(env, row, { dryRun = false } = {}) {
+async function publishScheduledRow(env, row, { dryRun = false, from = null } = {}) {
   let canonical, allTargets, prev;
   try {
     canonical  = JSON.parse(row.canonical);
@@ -455,14 +474,26 @@ async function publishScheduledRow(env, row, { dryRun = false } = {}) {
     return { postId: row.id, status: 'failed', results };
   }
 
-  // On ne (re)tente QUE les réseaux pas encore publiés → jamais de double-post.
-  const publishedSet = new Set((prev || []).filter(r => r.status === 'published').map(r => r.platform));
-  const toTry = allTargets.filter(p => !publishedSet.has(p));
+  // On ne (re)tente JAMAIS un réseau déjà publié → pas de double-post.
+  const publishedSet  = new Set((prev || []).filter(r => r.status === 'published').map(r => r.platform));
+  // Passage de POLL vidéo (on vient de 'processing') → on ne re-sollicite QUE les
+  // réseaux encore en traitement ; les ratés repartiront en 'retrying' une fois le
+  // traitement résolu (sinon leur budget d'essais brûlerait au rythme du poll).
+  const processingSet = new Set((prev || []).filter(r => r.status === 'processing').map(r => r.platform));
+  const toTry = (from === 'processing')
+    ? allTargets.filter(p => processingSet.has(p))
+    : allTargets.filter(p => !publishedSet.has(p));
 
-  const { results: fresh } = await _runBroadcast(env, { canonical, targets: toTry, tenantId: row.tenant_id, dryRun });
-  const merged   = _mergeResults(allTargets, prev, fresh);
-  const attempts = (row.attempts || 0) + 1;
-  const { status, nextAttemptAt } = dryRun ? { status: 'draft', nextAttemptAt: null } : _retryDecision(merged, attempts);
+  // priors : transmet l'état antérieur (creationId, since) aux réseaux re-sollicités
+  // → la vidéo poll son conteneur au lieu d'en recréer un (pas de double-post).
+  const priors = {};
+  for (const r of (prev || [])) if (r && r.platform) priors[r.platform] = r;
+
+  const { results: fresh } = await _runBroadcast(env, { canonical, targets: toTry, priors, tenantId: row.tenant_id, dryRun });
+  const merged = _mergeResults(allTargets, prev, fresh);
+  const { status, nextAttemptAt, attempts } = dryRun
+    ? { status: 'draft', nextAttemptAt: null, attempts: row.attempts || 0 }
+    : _settle(merged, row.attempts || 0);
 
   await env.DB.prepare(`
     UPDATE social_posts SET status=?, results=?, attempts=?, next_attempt_at=?, updated_at=datetime('now') WHERE id=?
@@ -490,13 +521,14 @@ export async function sweepDuePosts(env, { dryRun = false, limit = 10 } = {}) {
     `SELECT id, status FROM social_posts
        WHERE (status = 'scheduled'  AND scheduled_at    IS NOT NULL AND datetime(scheduled_at)    <= datetime('now'))
           OR (status = 'retrying'   AND next_attempt_at IS NOT NULL AND datetime(next_attempt_at) <= datetime('now') AND attempts < ?)
+          OR (status = 'processing' AND next_attempt_at IS NOT NULL AND datetime(next_attempt_at) <= datetime('now'))
           OR (status = 'publishing' AND datetime(updated_at) <= datetime('now','-10 minutes'))
        ORDER BY COALESCE(scheduled_at, next_attempt_at, updated_at) ASC LIMIT ?`
   ).bind(MAX_ATTEMPTS, limit + 1).all();   // +1 : détecte un débordement au-delà du cap
 
   const overflow = due.length > limit;
   const batch = due.slice(0, limit);
-  let published = 0, partial = 0, failed = 0, retrying = 0, skipped = 0;
+  let published = 0, partial = 0, failed = 0, retrying = 0, processing = 0, skipped = 0;
 
   for (const { id, status: from } of batch) {
     // Réclamation atomique sur le statut ATTENDU → 'publishing'. Si un autre tick
@@ -507,14 +539,16 @@ export async function sweepDuePosts(env, { dryRun = false, limit = 10 } = {}) {
     if ((claim.meta?.changes || 0) !== 1) { skipped++; continue; }
 
     const row = await env.DB.prepare(`SELECT * FROM social_posts WHERE id = ?`).bind(id).first();
-    const r = await publishScheduledRow(env, row, { dryRun });
-    if      (r.status === 'published') published++;
-    else if (r.status === 'partial')  partial++;
-    else if (r.status === 'retrying') retrying++;
-    else                              failed++;
+    // `from` indique au row s'il s'agit d'un poll vidéo ('processing') ou d'un passage normal.
+    const r = await publishScheduledRow(env, row, { dryRun, from });
+    if      (r.status === 'published')  published++;
+    else if (r.status === 'partial')   partial++;
+    else if (r.status === 'retrying')  retrying++;
+    else if (r.status === 'processing') processing++;
+    else                               failed++;
   }
 
-  const summary = { swept: batch.length, published, partial, failed, retrying, skipped, overflow };
+  const summary = { swept: batch.length, published, partial, failed, retrying, processing, skipped, overflow };
   if (overflow) console.warn('[social-sweep] cap atteint, posts dus restants pour le prochain tick', summary);
   return summary;
 }

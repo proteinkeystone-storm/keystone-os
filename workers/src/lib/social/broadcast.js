@@ -50,6 +50,10 @@ export function getAdapter(platformId) {
   return ADAPTERS[platformId] || null;
 }
 
+// Vidéo asynchrone (IG/Threads, Phase 3.2) : fenêtre max pendant laquelle le cron
+// poll un conteneur « en traitement » avant de l'abandonner (réseau marqué en échec).
+const MAX_PROCESSING_MS = 30 * 60 * 1000;   // 30 min
+
 /**
  * Diffuse un post canonique vers plusieurs plateformes.
  * @param {Object}  args
@@ -60,7 +64,7 @@ export function getAdapter(platformId) {
  * @param {boolean} [args.dryRun]                true = tout sauf l'appel réseau
  * @returns {Promise<Array<{platform:string,status:string,externalId?:string,url?:string,payload?:Object,error?:string}>>}
  */
-export async function broadcast({ canonical, targets, accounts = {}, env, dryRun = false }) {
+export async function broadcast({ canonical, targets, accounts = {}, priors = {}, env, dryRun = false }) {
   const base = validateCanonical(canonical);
   if (!base.ok) {
     return (targets || []).map(p => ({ platform: p, status: 'failed', error: base.errors.join(' ') }));
@@ -68,12 +72,12 @@ export async function broadcast({ canonical, targets, accounts = {}, env, dryRun
 
   const results = [];
   for (const platformId of (targets || [])) {
-    results.push(await publishOne(platformId, canonical, accounts[platformId], env, dryRun));
+    results.push(await publishOne(platformId, canonical, accounts[platformId], priors[platformId], env, dryRun));
   }
   return results;
 }
 
-async function publishOne(platformId, canonical, account, env, dryRun) {
+async function publishOne(platformId, canonical, account, prior, env, dryRun) {
   try {
     const platform = getPlatform(platformId);
     const adapter  = getAdapter(platformId);
@@ -98,6 +102,15 @@ async function publishOne(platformId, canonical, account, env, dryRun) {
       return { platform: platformId, status: 'failed', error: 'Aucun compte connecté.' };
     }
 
+    // Vidéo asynchrone (IG/Threads) : un conteneur « en traitement » depuis trop
+    // longtemps est abandonné — sinon le cron le poll indéfiniment.
+    if (prior?.status === 'processing' && prior.since) {
+      const elapsed = Date.now() - Date.parse(prior.since);
+      if (Number.isFinite(elapsed) && elapsed > MAX_PROCESSING_MS) {
+        return { platform: platformId, status: 'failed', error: 'Traitement vidéo trop long (délai dépassé).' };
+      }
+    }
+
     const accessToken = await decrypt(account.access_ciphertext, account.access_iv, env.KS_ENCRYPTION_KEY);
 
     // Médias : téléversement préalable si nécessaire et supporté par l'adapter.
@@ -107,8 +120,14 @@ async function publishOne(platformId, canonical, account, env, dryRun) {
       finalPayload = { ...payload, media: uploaded };
     }
 
-    const { externalId, url } = await adapter.publish({ account, accessToken, payload: finalPayload, env });
-    return { platform: platformId, status: 'published', externalId, url };
+    // L'adapter reçoit l'état antérieur (`prior`) → vidéo en 2 temps : 1er appel crée
+    // le conteneur et renvoie { status:'processing', creationId } ; appels suivants
+    // (via le cron) poll 1 fois et publient quand prêt. Réseaux synchrones = ignorent `prior`.
+    const ret = await adapter.publish({ account, accessToken, payload: finalPayload, env, prior });
+    if (ret && ret.status === 'processing') {
+      return { platform: platformId, status: 'processing', creationId: ret.creationId, since: prior?.since || new Date().toISOString() };
+    }
+    return { platform: platformId, status: 'published', externalId: ret?.externalId, url: ret?.url };
 
   } catch (e) {
     return { platform: platformId, status: 'failed', error: e?.message || String(e) };
