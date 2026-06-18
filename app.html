@@ -461,8 +461,14 @@
         _goBtn.style.gap = '7px';
         _goBtn.innerHTML = '<span class="ks-up-spin"></span>Actualisation…';
         const _x = bar.querySelector('#ks-up-x'); if (_x) _x.style.display = 'none';   // pas d'annulation en plein reload
+        // Le clic = intention EXPLICITE de recharger → on lève le garde one-shot
+        // anti-boucle (`ks_sw_reloaded`). Sinon un 2e « Actualiser » dans la même
+        // session (le flag ayant été posé au 1er reload) ne rechargeait JAMAIS →
+        // spinner infini (bug 2026-06-18). L'anti-boucle reste actif pour le reload
+        // AUTOMATIQUE via controllerchange (réarmé dès ce reload).
+        try { sessionStorage.removeItem('ks_sw_reloaded'); } catch (_) {}
         worker.postMessage('SKIP_WAITING');
-        // Filet : si le controllerchange ne suit pas vite, on recharge quand même.
+        // Filet : controllerchange OU ce timeout déclenche le reload (garde levé → il PASSE).
         setTimeout(_reloadOnce, 1800);
       });
       bar.querySelector('#ks-up-x').addEventListener('click', () => { bar.remove(); _toastShown = false; });
