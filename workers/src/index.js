@@ -138,7 +138,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
-import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete } from './routes/sentinel.js';
+import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
+         handleSiteCheck, handleSiteHistory, sweepDueChecks } from './routes/sentinel.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -207,6 +208,10 @@ export default {
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);
       if (path === '/api/sentinel/sites'  && method === 'GET')  return handleSitesList(request, env);
       if (path === '/api/sentinel/sites'  && method === 'POST') return handleSiteCreate(request, env);
+      const sntCheck = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/check$/);
+      if (sntCheck && method === 'POST') return handleSiteCheck(request, env, sntCheck[1]);
+      const sntHist = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/history$/);
+      if (sntHist && method === 'GET') return handleSiteHistory(request, env, sntHist[1]);
       const sntSite = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)$/);
       if (sntSite && method === 'DELETE') return handleSiteDelete(request, env, sntSite[1]);
 
@@ -782,6 +787,16 @@ export default {
         sweepDueReminders(env)
           .then(r => console.log('[keynapse-reminders]', JSON.stringify(r)))
           .catch(e => console.warn('[keynapse-reminders] failed', e?.message || e))
+      );
+    }
+
+    // Sentinel — battement de cœur (disponibilité des sites surveillés),
+    // file lissée, toutes les 5 min. Idempotent (lot borné par tick).
+    if (cron === '*/5 * * * *') {
+      ctx.waitUntil(
+        sweepDueChecks(env)
+          .then(r => console.log('[sentinel-sweep]', JSON.stringify(r)))
+          .catch(e => console.warn('[sentinel-sweep] failed', e?.message || e))
       );
     }
 

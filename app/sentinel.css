@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   SENTINEL — Pad O-GEO-001 · styles S0 (coquille & sites)
+   SENTINEL — Pad O-GEO-001 · styles S0 + S1 (cockpit live)
    Préfixe snt-. Variables --ws-* (workspace.css) → thème clair/sombre.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -9,20 +9,43 @@
 .snt-head { margin-bottom: 24px; }
 .snt-title { font-size: 30px; font-weight: 900; letter-spacing: -0.02em; color: var(--ws-text); margin: 0; }
 .snt-sub { color: var(--ws-text-soft); font-size: 14px; margin: 6px 0 0; }
+.snt-live { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 7px; vertical-align: middle; animation: snt-pulse 1.8s ease-in-out infinite; }
 
-.snt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.snt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(252px, 1fr)); gap: 14px; margin-bottom: 28px; }
 
-.snt-card { background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.snt-card { background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 16px; display: flex; flex-direction: column; gap: 9px; }
 .snt-card-top { display: flex; align-items: center; gap: 8px; }
-.snt-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex-shrink: 0; box-shadow: 0 0 0 3px var(--green-soft); }
+.snt-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--ws-text-muted); }
+.snt-dot.up   { background: var(--green);  box-shadow: 0 0 0 3px var(--green-soft);  animation: snt-pulse 1.8s ease-in-out infinite; }
+.snt-dot.down { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.snt-dot.wait { background: var(--ws-text-muted); }
+@keyframes snt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
 .snt-host { font-weight: 700; color: var(--ws-text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .snt-icon { background: transparent; border: 0; color: var(--ws-text-muted); cursor: pointer; padding: 4px; border-radius: 6px; display: inline-flex; }
 .snt-icon:hover { color: var(--danger); background: var(--danger-soft); }
 .snt-url { display: inline-flex; align-items: center; gap: 4px; color: var(--ws-text-soft); font-size: 13px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .snt-url:hover { color: var(--ws-accent); }
+
+.snt-status { display: flex; align-items: baseline; gap: 8px; }
+.snt-status-txt { font-weight: 700; font-size: 14px; }
+.snt-status-txt.up   { color: var(--green); }
+.snt-status-txt.down { color: var(--danger); }
+.snt-status-txt.wait { color: var(--ws-text-soft); }
+.snt-status-sub { font-size: 12px; color: var(--ws-text-soft); }
+
+.snt-sparkwrap { margin: 1px 0; }
+.snt-spark { width: 100%; height: 30px; display: block; }
+
+.snt-metrics { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ws-text-soft); }
+.snt-ago { color: var(--ws-text-muted); white-space: nowrap; }
+.snt-dim { color: var(--ws-text-muted); }
+
 .snt-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
 .snt-badge { font-size: 12px; font-weight: 600; color: var(--ws-accent); background: var(--ws-accent-soft); padding: 3px 10px; border-radius: 999px; }
-.snt-soon { font-size: 11px; color: var(--ws-text-muted); }
+.snt-mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ws-accent); background: transparent; border: 1px solid var(--ws-border); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.snt-mini:hover { background: var(--ws-accent-soft); }
+.snt-mini:disabled { opacity: .55; cursor: default; }
 
 .snt-add { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .snt-input { flex: 1 1 220px; min-width: 180px; height: 44px; padding: 0 14px; font-size: 16px; color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); }
