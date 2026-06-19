@@ -287,55 +287,214 @@ async function _toggleAlerts() {
   _render();
 }
 
-// ── Audit (S2) ──────────────────────────────────────────────────
-function _bar(label, v) {
-  if (v == null) return `<div class="snt-bar"><span class="snt-bar-l">${label}</span><div class="snt-bar-track"></div><span class="snt-bar-v snt-dim">n/a</span></div>`;
-  return `<div class="snt-bar"><span class="snt-bar-l">${label}</span><div class="snt-bar-track"><i class="${_scoreClass(v)}" style="width:${v}%"></i></div><span class="snt-bar-v">${v}</span></div>`;
+// ── S7 · Cockpit — vue site premium ─────────────────────────────
+const _AXIS_ICON = { performance: 'zap', seo: 'search', securite: 'shield-check', accessibilite: 'eye', presence: 'compass', disponibilite: 'check-circle', geo: 'sparkles' };
+const _SEV_PRIO = { high: { label: 'Priorité élevée', cls: 'high', gain: 5 }, medium: { label: 'Priorité moyenne', cls: 'medium', gain: 3 }, low: { label: 'À optimiser', cls: 'low', gain: 1 } };
+function _until(iso) {
+  if (!iso) return '';
+  const t = Date.parse(String(iso).replace(' ', 'T') + 'Z'); if (isNaN(t)) return '';
+  const s = Math.round((t - Date.now()) / 1000);
+  if (s <= 0) return 'imminente'; if (s < 60) return `dans ${s} s`;
+  const m = Math.floor(s / 60); return `dans ${m} min`;
 }
-function _barSoon(label) { return `<div class="snt-bar"><span class="snt-bar-l">${label}</span><div class="snt-bar-track"></div><span class="snt-bar-v snt-dim">à venir</span></div>`; }
-function _findingsHTML(list) {
+
+// Findings enrichis : icône d'axe + priorité + gain estimé + tag plateforme + total.
+function _findingsHTML(list, platform) {
   if (!list || !list.length) return `<div class="snt-okmsg">${icon('check', 16)} Aucun problème détecté sur les axes audités.</div>`;
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...list].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
-  return `<div class="snt-find-h">À corriger en priorité — solutions clé en main</div><div class="snt-finds">` + sorted.map((f, i) => {
+  const totalGain = sorted.reduce((s, f) => s + ((_SEV_PRIO[f.sev] || {}).gain || 0), 0);
+  const platLabel = PLATFORM_LABEL[platform] || '';
+  const head = `<div class="snt-find-h"><span>À corriger en priorité — solutions clé en main</span><span class="snt-find-sum">${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></div>`;
+  return head + `<div class="snt-finds">` + sorted.map((f, i) => {
+    const prio = _SEV_PRIO[f.sev] || _SEV_PRIO.low;
     const fix = f.fix;
     const steps = (fix && fix.steps && fix.steps.length) ? `<ol class="snt-fix-steps">${fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
     const codeId = `snt-code-${i}`;
     const code = (fix && fix.code) ? `<div class="snt-fix-codehead"><span>${_esc(fix.codeLabel || 'Code à coller')}</span><button class="snt-copy" data-act="copy" data-target="${codeId}">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="${codeId}">${_esc(fix.code)}</pre>` : '';
-    // S4.1 — sur la méta description, l'IA peut rédiger le VRAI texte (pas le gabarit).
     const ai = (f.key === 'meta_missing') ? `<div class="snt-ai" id="snt-ai-meta-${i}"><button class="snt-ai-btn" data-act="suggest" data-kind="meta" data-slot="snt-ai-meta-${i}">${icon('sparkles', 14)} Rédiger avec l'IA</button></div>` : '';
     const body = (steps || code || ai) ? `<div class="snt-fix">${steps}${code}${ai}</div>` : '';
+    const tag = (platLabel && fix) ? `<span class="snt-find-tag">${_esc(platLabel)}</span>` : '';
     return `<details class="snt-find">
-      <summary><span class="snt-sev ${_esc(f.sev)}">${SEV_LABEL[f.sev] || ''}</span><span class="snt-find-t">${_esc(f.title)}</span><span class="snt-find-chev">${icon('chevron-down', 16)}</span></summary>
+      <summary>
+        <span class="snt-find-ic">${icon(_AXIS_ICON[f.axis] || 'alert-triangle', 16)}</span>
+        <span class="snt-find-t">${_esc(f.title)}</span>
+        ${tag}<span class="snt-prio ${prio.cls}">${prio.label}</span>
+        <span class="snt-find-chev">${icon('chevron-down', 16)}</span>
+      </summary>
       ${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}
       ${body}
     </details>`;
   }).join('') + `</div>`;
 }
-function _openPanel(data) { _panel = data; _renderPanel(); }
+
+// 4 cartes KPI : disponibilité 30 j, score (+ tendance), LCP, SSL.
+function _kpiCardsHTML(c) {
+  const a = c.audit || {};
+  const score = a.score;
+  const lcp = a.cwv && a.cwv.lcp;
+  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1) + ' s' : 'n/a';
+  const lcpAssess = (lcp == null || lcp <= 0) ? ' ' : (lcp <= 2500 ? '✓ bon' : (lcp <= 4000 ? 'à améliorer' : 'lent'));
+  const upTxt = c.uptime30d != null ? String(c.uptime30d).replace('.', ',') + ' %' : 'n/a';
+  const upTrend = c.uptimeTrend === 'up' ? '↑ en hausse' : (c.uptimeTrend === 'down' ? '↓ en baisse' : 'stable');
+  const st = c.scoreTrend;
+  const scoreTrendTxt = (st == null) ? 'première mesure' : (st > 0 ? `↑ +${st} cette semaine` : (st < 0 ? `↓ ${st} cette semaine` : 'stable'));
+  const sslSub = c.ssl ? (c.ssl.valid ? 'vérifié à l\'instant' : (c.ssl.https ? 'à vérifier' : 'non sécurisé (HTTP)')) : '—';
+  return `<div class="snt-kpis">
+    <div class="snt-kpi"><div class="snt-kpi-l">Disponibilité · 30 j</div><div class="snt-kpi-v">${upTxt}</div><div class="snt-kpi-t">${upTrend}</div></div>
+    <div class="snt-kpi"><div class="snt-kpi-l">Score global</div><div class="snt-kpi-v ${score != null ? _scoreClass(score) : ''}">${score != null ? score : '—'}<span>/100</span></div><div class="snt-kpi-t">${scoreTrendTxt}</div></div>
+    <div class="snt-kpi"><div class="snt-kpi-l">Chargement (LCP)</div><div class="snt-kpi-v">${lcpTxt}</div><div class="snt-kpi-t">${lcpAssess}</div></div>
+    <div class="snt-kpi"><div class="snt-kpi-l">Certificat SSL</div><div class="snt-kpi-v snt-kpi-ssl">${icon('lock', 15)} ${c.ssl && c.ssl.valid ? 'Valide' : (c.ssl && c.ssl.https ? '?' : '—')}</div><div class="snt-kpi-t">${sslSub}</div></div>
+  </div>`;
+}
+
+// Radar SVG — 7 axes qualité vs « Objectif » (85). Disponibilité = KPI, hors radar.
+function _radarSVG(scores, geoScore) {
+  const axes = [
+    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Mots-clés', null],
+    ['Visibilité IA', geoScore], ['Présence locale', scores.presence], ['Sécurité', scores.securite], ['Accessibilité', scores.accessibilite],
+  ];
+  const N = axes.length, W = 520, H = 380, cx = 260, cy = 188, R = 122, OBJ = 85;
+  const ang = (i) => (-Math.PI / 2) + i * (2 * Math.PI / N);
+  const pt = (i, val) => { const r = R * Math.max(0, Math.min(100, val || 0)) / 100; return [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))]; };
+  const poly = (val) => axes.map((_, i) => pt(i, val).map((n) => n.toFixed(1)).join(',')).join(' ');
+  let grid = '';
+  for (const ring of [25, 50, 75, 100]) grid += `<polygon points="${axes.map((_, i) => pt(i, ring).map((n) => n.toFixed(1)).join(',')).join(' ')}" class="snt-radar-ring"/>`;
+  let spokes = '', labels = '', dots = '';
+  axes.forEach((a, i) => {
+    const [x, y] = pt(i, 100); spokes += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="snt-radar-spoke"/>`;
+    const lr = R + 16, lx = cx + lr * Math.cos(ang(i)), ly = cy + lr * Math.sin(ang(i));
+    const anchor = Math.abs(lx - cx) < 10 ? 'middle' : (lx < cx ? 'end' : 'start');
+    const muted = a[1] == null ? ' snt-radar-lbl-soon' : '';
+    labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" class="snt-radar-lbl${muted}">${a[0]}</text>`;
+    if (a[1] != null) { const [dx, dy] = pt(i, a[1]); dots += `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="3.2" class="snt-radar-dot"/>`; }
+  });
+  const sitePts = axes.map((a, i) => pt(i, a[1]).map((n) => n.toFixed(1)).join(',')).join(' ');
+  return `<svg class="snt-radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="Radar des axes">
+    ${grid}${spokes}
+    <polygon points="${poly(OBJ)}" class="snt-radar-obj"/>
+    <polygon points="${sitePts}" class="snt-radar-site"/>
+    ${dots}${labels}
+  </svg>`;
+}
+
+// Courbe de temps de réponse sur 30 jours (aire + pic annoté).
+function _responseChartSVG(series) {
+  if (!series || series.length < 2) return `<div class="snt-dim snt-ck-empty">Pas encore assez de relevés pour la courbe 30 jours.</div>`;
+  const W = 720, H = 210, padL = 46, padR = 14, padT = 14, padB = 26;
+  const n = series.length;
+  const vals = series.map((s) => s.ms || 0);
+  const max = Math.max(...vals, 100);
+  const niceMax = Math.max(200, Math.ceil(max / 200) * 200);
+  const x = (i) => padL + (n === 1 ? (W - padL - padR) / 2 : i * (W - padL - padR) / (n - 1));
+  const y = (v) => padT + (1 - v / niceMax) * (H - padT - padB);
+  const line = series.map((s, i) => `${x(i).toFixed(1)},${y(s.ms || 0).toFixed(1)}`).join(' ');
+  const area = `${x(0).toFixed(1)},${y(0).toFixed(1)} ${line} ${x(n - 1).toFixed(1)},${y(0).toFixed(1)}`;
+  let gl = '';
+  for (const gv of [0, niceMax / 2, niceMax]) gl += `<line x1="${padL}" y1="${y(gv).toFixed(1)}" x2="${W - padR}" y2="${y(gv).toFixed(1)}" class="snt-ch-grid"/><text x="${padL - 8}" y="${(y(gv) + 4).toFixed(1)}" text-anchor="end" class="snt-ch-axis">${gv} ms</text>`;
+  const ticks = [0, Math.floor(n / 2), n - 1].filter((v, idx, arr) => arr.indexOf(v) === idx);
+  let xl = ''; for (const ti of ticks) xl += `<text x="${x(ti).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="snt-ch-axis">J${ti + 1}</text>`;
+  const peakI = vals.indexOf(max);
+  const peak = `<circle cx="${x(peakI).toFixed(1)}" cy="${y(max).toFixed(1)}" r="3.6" class="snt-ch-peak"/>`;
+  return `<svg class="snt-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Temps de réponse 30 jours">
+    ${gl}<polygon points="${area}" class="snt-ch-area"/><polyline points="${line}" class="snt-ch-line"/>${peak}${xl}
+  </svg>`;
+}
+
+function _historyHTML(hist) {
+  if (!hist || hist.length < 2) return `<div class="snt-dim" style="padding:10px 2px">Pas encore d'historique — relancez l'audit régulièrement pour suivre la progression du score.</div>`;
+  const W = 320, H = 56, pad = 4;
+  const vals = hist.map((h) => (h.score == null ? 0 : h.score));
+  const n = vals.length, x = (i) => pad + (n === 1 ? 0 : i * (W - 2 * pad) / (n - 1)), y = (v) => H - pad - (v / 100) * (H - 2 * pad);
+  const line = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const dots = vals.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.4" class="snt-radar-dot"/>`).join('');
+  const last = hist[hist.length - 1], first = hist[0];
+  return `<div class="snt-hist"><div class="snt-hist-h">Historique du score · ${hist.length} audits</div>
+    <svg class="snt-hist-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${line}" class="snt-ch-line"/>${dots}</svg>
+    <div class="snt-hist-foot">${_esc((first.at || '').slice(0, 10))} : ${first.score ?? '—'} → ${_esc((last.at || '').slice(0, 10))} : ${last.score ?? '—'}</div></div>`;
+}
+function _historyToggle() { const h = _root && _root.querySelector('#snt-ck-history'); if (h) h.hidden = !h.hidden; }
+
+// ── Ouverture / chargement / rendu du cockpit ───────────────────
+async function _openCockpit(id) {
+  _panel = { id, loading: true };
+  _renderCockpit();
+  await _loadCockpit(id);
+}
+async function _loadCockpit(id, opts = {}) {
+  try {
+    let d = await _api(`/sites/${encodeURIComponent(id)}/cockpit`);
+    let c = d.cockpit;
+    if (c && !c.audit && !opts.noAutoRun) {
+      _panel = { id, name: (c.site && (c.site.label || _hostOf(c.site.url))) || 'Site', ...c, auditing: true };
+      _renderCockpit();
+      try { await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); d = await _api(`/sites/${encodeURIComponent(id)}/cockpit`); c = d.cockpit; } catch (_) {}
+      _load(true);
+    }
+    const site = _sites.find((s) => s.id === id);
+    const name = (c && c.site && (c.site.label || _hostOf(c.site.url))) || (site ? (site.label || _hostOf(site.url)) : 'Site');
+    _panel = { id, name, ...c,
+      // aplati pour la rétro-compat (PDF, GEO) :
+      geo: c ? c.geo : null,
+      score: (c && c.audit) ? c.audit.score : null,
+      scores: (c && c.audit) ? c.audit.scores : {},
+      findings: (c && c.audit) ? c.audit.findings : [],
+      cwv: (c && c.audit) ? c.audit.cwv : null,
+      platform: (c && c.site) ? c.site.platform : null,
+    };
+    _renderCockpit();
+  } catch (e) {
+    _panel = { id, error: e.message || 'Chargement impossible.' };
+    _renderCockpit();
+  }
+}
+async function _relaunchAudit() {
+  if (!_panel || !_panel.id || _panel.auditing) return;
+  _panel.auditing = true; _renderCockpit();
+  try { await _api(`/sites/${encodeURIComponent(_panel.id)}/audit`, { method: 'POST', timeout: 70000 }); }
+  catch (e) { alert(e.message || 'Audit impossible.'); }
+  await _loadCockpit(_panel.id, { noAutoRun: true });
+  _load(true);
+}
 function _closePanel() { _panel = null; const el = _root && _root.querySelector('.snt-overlay'); if (el) el.remove(); }
-function _renderPanel() {
+function _renderCockpit() {
   if (!_root) return;
   let el = _root.querySelector('.snt-overlay');
   if (!el) { el = document.createElement('div'); el.className = 'snt-overlay'; el.addEventListener('click', (e) => { if (e.target === el) _closePanel(); }); _root.appendChild(el); }
   const p = _panel; if (!p) { el.remove(); return; }
-  const scores = p.scores || {}; const g = p.score; const cwv = p.cwv;
-  const cwvLine = cwv ? `<div class="snt-cwv">${icon('clock', 13)} LCP ${(cwv.lcp / 1000).toFixed(1)} s · CLS ${cwv.cls} · ${cwv.weightKb >= 1024 ? (cwv.weightKb / 1024).toFixed(1) + ' Mo' : cwv.weightKb + ' Ko'} · ${cwv.requests} requêtes</div>` : '';
-  const geoBar = _geoEnabled ? _bar('Visibilité IA (GEO)', p.geo ? p.geo.score : null) : _barSoon('Visibilité IA (GEO)');
-  const bars = AXES.map((a) => _bar(a.label, scores[a.k])).join('') + geoBar + SOON_AXES.map(_barSoon).join('');
+  const closeBtn = `<button class="snt-icon" data-act="panel-close" aria-label="Fermer">${icon('x', 18)}</button>`;
+  if (p.loading) { el.innerHTML = `<div class="snt-cockpit"><div class="snt-ck-head"><div class="snt-ck-title">${_esc(p.name || 'Site')}</div>${closeBtn}</div><div class="snt-state">${icon('refresh', 26)}<p>${p.auditing ? 'Premier audit en cours…' : 'Chargement du cockpit…'}</p></div></div>`; return; }
+  if (p.error) { el.innerHTML = `<div class="snt-cockpit"><div class="snt-ck-head"><div class="snt-ck-title">${_esc(p.name || 'Site')}</div>${closeBtn}</div><div class="snt-state snt-state-err">${icon('x', 26)}<p>${_esc(p.error)}</p><button class="snt-btn" data-act="ck-retry">Réessayer</button></div></div>`; return; }
+  const c = p, site = c.site || {}, a = c.audit || {}, host = _hostOf(site.url);
+  const next = c.site && c.site.next_check_at ? `<span class="snt-ck-next">${icon('clock', 12)} prochaine vérification ${_until(c.site.next_check_at)}</span>` : '';
   el.innerHTML = `
-    <div class="snt-modal">
-      <div class="snt-modal-head">
-        <div><div class="snt-modal-title">${_esc(p.name || 'Audit')}</div><div class="snt-modal-sub">Audit on-page${p.reachable === false ? ' · site injoignable' : ''}</div></div>
-        <div class="snt-modal-actions">
+    <div class="snt-cockpit">
+      <div class="snt-ck-head">
+        <div class="snt-ck-headl">
+          <div class="snt-ck-title">${_esc(site.label || host || p.name)}</div>
+          <div class="snt-ck-sub"><a href="${_esc(site.url || '#')}" target="_blank" rel="noopener">${_esc(host)} ${icon('external-link', 12)}</a>${site.platform ? ' · ' + _esc(PLATFORM_LABEL[site.platform] || site.platform) : ''} · ${site.last_ok ? '<span class="snt-ck-on">en ligne</span>' : '<span class="snt-ck-off">hors ligne</span>'}</div>
+        </div>
+        <div class="snt-ck-actions">
+          <button class="snt-mini" data-act="history">${icon('history', 13)} Historique</button>
+          <button class="snt-mini" data-act="relaunch"${c.auditing ? ' disabled' : ''}>${icon('refresh', 13)} ${c.auditing ? 'Audit…' : 'Relancer l\'audit'}</button>
           ${_emailEnabled ? `<button class="snt-mini" data-act="email-toggle">${icon('mail', 13)} Webmaster</button>` : ''}
           <button class="snt-mini" data-act="pdf">${icon('download', 13)} PDF</button>
-          <button class="snt-icon" data-act="panel-close" aria-label="Fermer">${icon('x', 18)}</button>
+          ${closeBtn}
         </div>
       </div>
-      <div class="snt-modal-score ${g != null ? _scoreClass(g) : ''}">${g != null ? g : '—'}<span>/100</span></div>
-      <div class="snt-bars">${bars}</div>
-      ${_findingsHTML(p.findings)}
+      ${_kpiCardsHTML(c)}
+      <div class="snt-ck-grid">
+        <div class="snt-ck-panel">
+          <div class="snt-ck-panel-h"><span>Profil du site</span><span class="snt-radar-leg"><i class="snt-radar-leg-site"></i> Ton site${a.score != null ? ' · ' + a.score + '/100' : ''} &nbsp; <i class="snt-radar-leg-obj"></i> Objectif</span></div>
+          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null)}
+        </div>
+        <div class="snt-ck-panel">
+          <div class="snt-ck-panel-h"><span>Temps de réponse — 30 jours</span>${next}</div>
+          ${_responseChartSVG(c.series30d)}
+        </div>
+      </div>
+      <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
+      ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
       ${_geoSectionHTML()}
       ${_aeoCardHTML()}
       ${_emailEnabled ? _emailRowHTML() : ''}
@@ -424,7 +583,7 @@ async function _geoRun() {
   try {
     const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/geo/run`, { method: 'POST', body, timeout: 90000 });
     _panel.geo = Object.assign({}, _panel.geo, d.geo);
-    _renderPanel();
+    _renderCockpit();
     const s2 = _root && _root.querySelector('#snt-geo-sec'); if (s2 && s2.scrollIntoView) try { s2.scrollIntoView({ block: 'nearest' }); } catch (_) {}
   } catch (e) {
     if (sec) sec.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Mesure impossible.')}</div><button class="snt-ai-regen" data-act="geo-run">${icon('refresh', 12)} Réessayer</button>`;
@@ -531,25 +690,6 @@ async function _sendReport() {
     if (msg) msg.innerHTML = `<span class="snt-email-err">${_esc(e.message || 'Envoi impossible.')}</span>`;
   }
 }
-async function _auditNow(id) {
-  if (_auditing.has(id)) return; _auditing.add(id); _render();
-  const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); const geo = await _fetchGeo(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit, geo }); }
-  catch (e) { alert(e.message || 'Audit impossible.'); }
-  _auditing.delete(id); await _load(true);
-}
-async function _viewAudit(id) {
-  const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`); if (!d.audit) return _auditNow(id); const geo = await _fetchGeo(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit, geo }); }
-  catch (e) { alert(e.message || 'Audit indisponible.'); }
-}
-// S5 — état GEO du site (config + dernier relevé), best-effort.
-async function _fetchGeo(id) {
-  if (!_geoEnabled) return null;
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/geo`); return d.geo || null; }
-  catch (_) { return null; }
-}
-
 // ── Interactions ────────────────────────────────────────────────
 function _onClick(e) {
   const act = e.target.closest('[data-act]'); if (!act) return;
@@ -558,8 +698,11 @@ function _onClick(e) {
   if (a === 'reload')      return _load();
   if (a === 'del')         return _delSite(act.dataset.id);
   if (a === 'check')       return _checkNow(act.dataset.id);
-  if (a === 'audit')       return _auditNow(act.dataset.id);
-  if (a === 'score')       return _viewAudit(act.dataset.id);
+  if (a === 'audit')       return _openCockpit(act.dataset.id);
+  if (a === 'score')       return _openCockpit(act.dataset.id);
+  if (a === 'relaunch')    return _relaunchAudit();
+  if (a === 'history')     return _historyToggle();
+  if (a === 'ck-retry')    return (_panel && _panel.id) ? _openCockpit(_panel.id) : null;
   if (a === 'alerts')      return _toggleAlerts();
   if (a === 'panel-close') return _closePanel();
   if (a === 'pdf')         return _exportPdf();

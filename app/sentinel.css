@@ -95,7 +95,8 @@
 .snt-bar-v { text-align: right; font-weight: 700; color: var(--ws-text); }
 
 .snt-modal-actions { display: flex; align-items: center; gap: 8px; }
-.snt-find-h { font-weight: 700; color: var(--ws-text); margin: 20px 0 6px; }
+.snt-find-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-weight: 700; color: var(--ws-text); margin: 20px 0 6px; }
+.snt-find-sum { font-size: 12px; font-weight: 600; color: var(--ws-text-soft); }
 .snt-finds { display: flex; flex-direction: column; }
 .snt-find { border-top: 1px solid var(--ws-border); }
 .snt-find > summary { display: flex; align-items: center; gap: 10px; padding: 11px 0; cursor: pointer; list-style: none; }
@@ -177,6 +178,76 @@
   .snt-bar { grid-template-columns: 92px 1fr 32px; gap: 8px; font-size: 12px; }
   .snt-modal-score { font-size: 40px; }
   .snt-geo-two { flex-direction: column; gap: 8px; }
+}
+
+/* ═══ S7 · Cockpit premium ═══════════════════════════════════════ */
+.snt-cockpit { width: 100%; max-width: 1040px; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius-lg); padding: 24px 26px 28px; }
+.snt-ck-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.snt-ck-title { font-size: 24px; font-weight: 900; letter-spacing: -0.02em; color: var(--ws-text); }
+.snt-ck-sub { font-size: 13px; color: var(--ws-text-soft); margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.snt-ck-sub a { color: var(--ws-text-soft); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.snt-ck-sub a:hover { color: var(--ws-accent); }
+.snt-ck-on { color: var(--green); font-weight: 600; }
+.snt-ck-off { color: var(--danger); font-weight: 600; }
+.snt-ck-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.snt-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
+.snt-kpi { background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 14px 16px; }
+.snt-kpi-l { font-size: 12px; color: var(--ws-text-soft); }
+.snt-kpi-v { font-size: 30px; font-weight: 900; letter-spacing: -0.02em; color: var(--ws-text); line-height: 1.15; margin-top: 4px; }
+.snt-kpi-v span { font-size: 14px; color: var(--ws-text-muted); font-weight: 700; }
+.snt-kpi-v.good { color: var(--green); } .snt-kpi-v.warn { color: var(--warn); } .snt-kpi-v.bad { color: var(--danger); }
+.snt-kpi-ssl { display: inline-flex; align-items: center; gap: 6px; font-size: 22px; color: var(--green); }
+.snt-kpi-t { font-size: 12px; color: var(--ws-text-soft); margin-top: 5px; min-height: 15px; }
+
+.snt-ck-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 8px; }
+.snt-ck-panel { background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 14px 16px; min-width: 0; }
+.snt-ck-panel-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ws-text-soft); margin-bottom: 6px; }
+.snt-ck-next { font-size: 12px; font-weight: 500; color: var(--ws-text-muted); display: inline-flex; align-items: center; gap: 4px; }
+.snt-ck-empty { padding: 30px 0; text-align: center; }
+
+/* Radar */
+.snt-radar { width: 100%; height: auto; display: block; }
+.snt-radar-ring { fill: none; stroke: var(--ws-border); stroke-width: 1; opacity: .6; }
+.snt-radar-spoke { stroke: var(--ws-border); stroke-width: 1; opacity: .5; }
+.snt-radar-obj { fill: none; stroke: var(--ws-text-muted); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .7; }
+.snt-radar-site { fill: var(--ws-accent); fill-opacity: .22; stroke: var(--ws-accent); stroke-width: 2; stroke-linejoin: round; }
+.snt-radar-dot { fill: var(--ws-accent); }
+.snt-radar-lbl { fill: var(--ws-text-soft); font-size: 11.5px; font-weight: 600; }
+.snt-radar-lbl-soon { fill: var(--ws-text-muted); font-weight: 500; }
+.snt-radar-leg { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: var(--ws-text-muted); }
+.snt-radar-leg-site, .snt-radar-leg-obj { display: inline-block; width: 12px; height: 0; border-top: 2px solid var(--ws-accent); vertical-align: middle; }
+.snt-radar-leg-obj { border-top: 2px dashed var(--ws-text-muted); }
+
+/* Courbe 30 j */
+.snt-chart { width: 100%; height: auto; display: block; }
+.snt-ch-grid { stroke: var(--ws-border); stroke-width: 1; opacity: .5; }
+.snt-ch-axis { fill: var(--ws-text-muted); font-size: 10px; }
+.snt-ch-area { fill: var(--ws-accent); fill-opacity: .14; stroke: none; }
+.snt-ch-line { fill: none; stroke: var(--ws-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.snt-ch-peak { fill: var(--danger); }
+
+/* Historique */
+.snt-hist { background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 12px 14px; margin: 6px 0 4px; }
+.snt-hist-h { font-size: 13px; font-weight: 600; color: var(--ws-text-soft); margin-bottom: 6px; }
+.snt-hist-spark { width: 100%; max-width: 340px; height: 56px; display: block; }
+.snt-hist-foot { font-size: 12px; color: var(--ws-text-muted); margin-top: 4px; }
+
+/* Findings enrichis */
+.snt-find-ic { color: var(--ws-text-muted); display: inline-flex; flex-shrink: 0; }
+.snt-find-tag { font-size: 11px; font-weight: 600; color: var(--ws-accent); background: var(--ws-accent-soft); padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+.snt-prio { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+.snt-prio.high { color: var(--danger); background: var(--danger-soft); }
+.snt-prio.medium { color: var(--warn); background: var(--warn-soft); }
+.snt-prio.low { color: var(--ws-text-soft); background: var(--ws-surface-soft); }
+
+@media (max-width: 720px) {
+  .snt-cockpit { padding: 18px 16px 22px; }
+  .snt-ck-title { font-size: 21px; }
+  .snt-kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .snt-kpi-v { font-size: 26px; }
+  .snt-ck-grid { grid-template-columns: 1fr; }
+  .snt-find-ic { display: none; }
 }
 .snt-geo-b { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 .snt-geo-b.ok  { color: var(--green);  background: var(--green-soft); }

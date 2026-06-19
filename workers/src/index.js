@@ -140,7 +140,7 @@ import { handleKeynapseHealth, handleKeynapseState,
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
          handleSiteCheck, handleSiteHistory, handleSiteAudit, handleSiteAuditGet,
-         handleSiteSuggest, handleSiteSendReport,
+         handleSiteSuggest, handleSiteSendReport, handleSiteCockpit,
          handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun,
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
          sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
@@ -219,6 +219,8 @@ export default {
       const sntAudit = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/audit$/);
       if (sntAudit && method === 'POST') return handleSiteAudit(request, env, sntAudit[1]);
       if (sntAudit && method === 'GET')  return handleSiteAuditGet(request, env, sntAudit[1]);
+      const sntCockpit = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/cockpit$/);
+      if (sntCockpit && method === 'GET') return handleSiteCockpit(request, env, sntCockpit[1]);
       const sntSuggest = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/suggest$/);
       if (sntSuggest && method === 'POST') return handleSiteSuggest(request, env, sntSuggest[1]);
       const sntReport = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/send-report$/);

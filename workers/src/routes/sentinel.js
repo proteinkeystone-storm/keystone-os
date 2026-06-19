@@ -39,7 +39,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credi
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 
-const SENTINEL_ENGINE_VERSION = 'S6.0';
+const SENTINEL_ENGINE_VERSION = 'S7.0';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -115,6 +115,8 @@ async function _ensureSchema(env) {
   }
   // S5.1 — colonne ajoutée à la table sentinel_geo déjà créée en S5.0.
   try { await env.DB.prepare("ALTER TABLE sentinel_geo ADD COLUMN next_geo_at TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S7 — Core Web Vitals stockés avec l'audit (pour le KPI « Chargement » du cockpit).
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN cwv TEXT").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -734,8 +736,8 @@ export async function handleSiteAudit(request, env, id) {
   const scoresJson = JSON.stringify(scores);
   const findingsJson = JSON.stringify(findings);
 
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson).run();
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
 
@@ -752,6 +754,63 @@ export async function handleSiteAuditGet(request, env, id) {
   if (!row) return json({ audit: null }, 200, origin);
   let scores = null, findings = []; try { scores = JSON.parse(row.scores); } catch (_) {} try { findings = JSON.parse(row.findings); } catch (_) {}
   return json({ audit: { score: row.score, scores, findings, created_at: row.created_at } }, 200, origin);
+}
+
+// ── S7 · GET /sites/:id/cockpit — données consolidées de la vue cockpit ──
+// Lecture seule (aucun audit relancé, aucune IA) : KPI (dispo 30 j + tendance,
+// LCP, SSL, score + tendance), série 30 j (courbe), dernier audit, historique
+// des scores, GEO. Le « Relancer » reste POST /audit.
+export async function handleSiteCockpit(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id, url, label, platform, last_ok, last_status, last_ms, last_checked_at, next_check_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+
+  // Disponibilité 30 j + tendance (7 j vs 7 j précédents)
+  const up30 = await env.DB.prepare("SELECT AVG(ok) rate, COUNT(*) n FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-30 day')").bind(id).first();
+  const uptime30d = (up30 && up30.n) ? Math.round((up30.rate || 0) * 1000) / 10 : null;
+  const up7 = await env.DB.prepare("SELECT AVG(ok) rate FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-7 day')").bind(id).first();
+  const upPrev7 = await env.DB.prepare("SELECT AVG(ok) rate FROM sentinel_checks WHERE site_id = ? AND checked_at < datetime('now','-7 day') AND checked_at >= datetime('now','-14 day')").bind(id).first();
+  let uptimeTrend = 'stable';
+  if (up7 && upPrev7 && up7.rate != null && upPrev7.rate != null) {
+    const d = up7.rate - upPrev7.rate;
+    uptimeTrend = d > 0.005 ? 'up' : (d < -0.005 ? 'down' : 'stable');
+  }
+
+  // Série 30 j (moyenne par jour) pour la courbe de temps de réponse.
+  const seriesRows = (await env.DB.prepare("SELECT substr(checked_at,1,10) d, AVG(ms) ms, AVG(ok) up FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-30 day') GROUP BY d ORDER BY d").bind(id).all()).results || [];
+  const series30d = seriesRows.map((r) => ({ d: r.d, ms: Math.round(r.ms || 0), up: r.up }));
+
+  // Dernier audit + historique + tendance de score (vs ~7 j).
+  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  let audit = null;
+  if (auditRow) { let sc = null, fd = [], cw = null; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, created_at: auditRow.created_at }; }
+  const histRows = (await env.DB.prepare("SELECT created_at, score FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 12").bind(id).all()).results || [];
+  const scoreHistory = histRows.reverse().map((r) => ({ at: r.created_at, score: r.score }));
+  let scoreTrend = null;
+  if (audit && audit.score != null) {
+    const prev = await env.DB.prepare("SELECT score FROM sentinel_audits WHERE site_id = ? AND created_at <= datetime('now','-7 day') ORDER BY created_at DESC LIMIT 1").bind(id).first();
+    if (prev && prev.score != null) scoreTrend = audit.score - prev.score;
+  }
+
+  // SSL : souverain — un HTTPS joignable = certificat valide à l'instant (pas de J-XX).
+  let https = false; try { https = new URL(site.url).protocol === 'https:'; } catch (_) {}
+  const ssl = { https, valid: !!(https && site.last_ok) };
+
+  // GEO (config + dernier relevé).
+  const geoRow = await _geoConfigRow(env, id, g.tenant);
+  let geo = { enabled: _geoEnabled(env), configured: false, business_name: site.label || _hostOf(site.url), city: '', activity: '', prompts: _defaultGeoPrompts('', ''), score: null, results: null, run_at: null };
+  if (geoRow) {
+    let prompts = [], results = null; try { prompts = JSON.parse(geoRow.prompts || '[]'); } catch (_) {} try { results = geoRow.last_results ? JSON.parse(geoRow.last_results) : null; } catch (_) {}
+    geo = { enabled: _geoEnabled(env), configured: true, business_name: geoRow.business_name || (site.label || _hostOf(site.url)), city: geoRow.city || '', activity: geoRow.activity || '', prompts: prompts.length ? prompts : _defaultGeoPrompts(geoRow.activity || '', geoRow.city || ''), score: geoRow.last_score, results, run_at: geoRow.last_run_at };
+  }
+
+  return json({ cockpit: {
+    site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
+    uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo,
+    email_enabled: !!(env && env.RESEND_API_KEY),
+  } }, 200, origin);
 }
 
 // ── S4.1 · A) POST /sites/:id/suggest { kind:'meta'|'faq' } — IA rédactionnel ──
