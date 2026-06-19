@@ -48,9 +48,10 @@
 .snt-ago { color: var(--ws-text-muted); white-space: nowrap; }
 .snt-dim { color: var(--ws-text-muted); }
 
-.snt-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
-.snt-actions { display: flex; gap: 8px; }
-.snt-badge { font-size: 12px; font-weight: 600; color: var(--ws-accent); background: var(--ws-accent-soft); padding: 3px 10px; border-radius: 999px; }
+.snt-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; row-gap: 9px; margin-top: 2px; flex-wrap: wrap; }
+.snt-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.snt-badge { font-size: 12px; font-weight: 600; color: var(--ws-accent); background: var(--ws-accent-soft); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.snt-mini { white-space: nowrap; }
 .snt-mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ws-accent); background: transparent; border: 1px solid var(--ws-border); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
 .snt-mini:hover { background: var(--ws-accent-soft); }
 .snt-mini:disabled { opacity: .55; cursor: default; }
