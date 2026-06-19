@@ -1,0 +1,41 @@
+{
+  "title": "Sentinel",
+  "tldr": "Votre centre de contrôle d'audit web AVEC suivi dans le temps. Sentinel surveille vos sites en continu (en ligne / hors ligne, temps de réponse), les note sur un radar à plusieurs axes (disponibilité, performance, SEO, sécurité, accessibilité, présence locale, visibilité dans les IA), et livre des correctifs clé en main : les étapes exactes pour votre plateforme et le code prêt à coller. Sa fonction phare : savoir si les IA (ChatGPT, Perplexity, Gemini) citent votre établissement quand un prospect les interroge.",
+  "key_points": [
+    "Ajouter un site : saisissez son adresse — Sentinel détecte la plateforme (Wix, WordPress, sur-mesure) et lance la surveillance aussitôt. Le nombre de sites dépend de votre plan (Starter 1, Pro 3, Max 5).",
+    "Veille en direct : chaque carte montre l'état (en ligne / hors ligne), la disponibilité sur 24 h et une courbe des temps de réponse. « Vérifier » relance un contrôle immédiat. Activez les alertes (cloche) pour être prévenu si un site tombe ou revient.",
+    "Auditer : le bouton « Auditer » note le site et ouvre un radar par axe avec les problèmes priorisés (du plus grave au moins grave). La pastille de score sur la carte rouvre le dernier audit.",
+    "Correctifs clé en main : chaque problème se déplie avec les étapes pas-à-pas adaptées à votre plateforme + le code prêt à coller (bouton Copier). Pour les textes (méta description, FAQ), « Rédiger avec l'IA » génère le contenu réel, pas un gabarit.",
+    "Visibilité IA (GEO) : renseignez le nom, la ville et l'activité de l'établissement, puis « Mesurer ma visibilité IA » interroge plusieurs IA connectées au web et vous dit si vous êtes cité, à quelle position, avec quel score de citabilité.",
+    "Transmettre & archiver : « Envoyer au webmaster » expédie le rapport (étapes + code) par e-mail ; « PDF » l'exporte. Le prochain audit vérifie ce qui a été corrigé → le score remonte, la progression est prouvée."
+  ],
+  "faq": [
+    {
+      "q": "Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?",
+      "a": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
+    },
+    {
+      "q": "Pourquoi l'axe « Visibilité IA (GEO) » n'apparaît-il pas ?",
+      "a": "Le GEO s'active dès qu'une clé moteur est configurée côté serveur (une clé Gemini gratuite suffit pour démarrer). Tant qu'aucune clé n'est posée, l'axe et le bouton « Mesurer » restent masqués — le reste de l'audit fonctionne normalement."
+    },
+    {
+      "q": "Sentinel fonctionne-t-il avec Wix, WordPress et un site sur-mesure ?",
+      "a": "Oui. Sentinel détecte la plateforme à partir du site et adapte les instructions de chaque correctif : où cliquer dans votre éditeur, ou bien le bloc de code exact à coller dans l'en-tête. C'est pensé pour un utilisateur non technique."
+    },
+    {
+      "q": "Pourquoi je ne vois pas le nombre de jours avant l'expiration du certificat SSL ?",
+      "a": "Un site en HTTPS qui répond a un certificat valide à l'instant de la vérification. Le compte à rebours précis (J-14) n'est pas lisible de manière souveraine par notre sonde ; il sera ajouté via une vérification dédiée. En attendant, une chute du HTTPS est détectée par la veille."
+    },
+    {
+      "q": "Que reçoit mon webmaster par e-mail ?",
+      "a": "Le rapport complet : le score, les problèmes classés par priorité, les étapes adaptées à la plateforme et le code prêt à coller. L'envoi e-mail s'active côté serveur ; tant qu'il ne l'est pas, le bouton reste masqué et l'export PDF prend le relais."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Auditer", "desc": "Lancer un audit complet du site" },
+    { "keys": "Vérifier", "desc": "Relancer un contrôle de disponibilité immédiat" },
+    { "keys": "Clic sur le score", "desc": "Rouvrir le dernier audit du site" },
+    { "keys": "Échap", "desc": "Fermer le panneau d'audit, puis le workspace" }
+  ],
+  "updated_at": "2026-06-19"
+}

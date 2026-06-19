@@ -29,8 +29,9 @@ const AXES = [
   { k: 'seo',           label: 'SEO technique' },
   { k: 'securite',      label: 'Sécurité' },
   { k: 'accessibilite', label: 'Accessibilité' },
+  { k: 'presence',      label: 'Présence locale' },
 ];
-const SOON_AXES = ['Mots-clés', 'Présence locale'];
+const SOON_AXES = ['Mots-clés'];
 const SEV_LABEL = { high: 'Élevé', medium: 'Moyen', low: 'Faible' };
 
 let _root = null;
@@ -389,7 +390,10 @@ function _geoResultsHTML(g) {
     const repr = cells.find((c) => c.cited && c.snippet) || cells.find((c) => c.snippet && !c.error);
     return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-engines">${badges}</div>${(repr && repr.snippet) ? `<div class="snt-geo-snip">${_esc(repr.snippet)}</div>` : ''}</div>`;
   }).join('');
-  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div>${legend}<div class="snt-geo-rows">${rows}</div>`;
+  // Pont AEO→GEO : citabilité faible → proposer la génération FAQ (générateur S4.1, carte ci-dessous).
+  const weak = (sc != null && sc < 70) || (g.results || []).some((r) => _geoCells(r).some((c) => !c.error && !c.cited));
+  const cta = weak ? `<div class="snt-geo-cta">${icon('sparkles', 14)}<span>Pas assez cité ? Une FAQ structurée aide les IA à vous citer. <button class="snt-link-btn" data-act="suggest" data-kind="faq" data-slot="snt-ai-faq">Rédiger la FAQ avec l'IA</button> (apparaît juste en dessous).</span></div>` : '';
+  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div>${legend}<div class="snt-geo-rows">${rows}</div>${cta}`;
 }
 function _geoFormHTML(g) {
   const prompts = (g.prompts || []).join('\n');

@@ -39,7 +39,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credi
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 
-const SENTINEL_ENGINE_VERSION = 'S5.1';
+const SENTINEL_ENGINE_VERSION = 'S6.0';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -268,6 +268,14 @@ async function _audit(url) {
   const imgsMissing = Math.max(0, imgs - imgsAlt);
   const sec = {}; if (headers) for (const [h, label] of SEC_HEADERS) sec[label] = !!headers.get(h);
 
+  // ── Présence locale (NAP) — signaux on-page, souverain (S6) ──
+  const napPhone = /href=["']tel:/i.test(html) || /(?:\+33|0033)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/.test(html) || /\b0[1-9](?:[\s.\-]?\d{2}){4}\b/.test(html);
+  const napAddress = /postaladdress/i.test(html) || /<address[\s>]/i.test(html)
+    || (/\b(rue|avenue|boulevard|bd|impasse|chemin|place|all[ée]e|quai|cours)\b/i.test(lc) && /\b\d{5}\b/.test(html));
+  const napLocalBiz = /localbusiness/i.test(html)
+    || /"@type"\s*:\s*"(Restaurant|Store|Hotel|Bakery|CafeOrCoffeeShop|BarOrPub|ProfessionalService|MedicalBusiness|Dentist|Attorney|HairSalon|BeautySalon|AutoRepair|RealEstateAgent|Physician|FoodEstablishment)"/i.test(html);
+  const napHours = /openinghours/i.test(html);
+
   const findings = [];
   const add = (axis, sev, key, title2, detail) => findings.push({ axis, sev, key, title: title2, detail });
 
@@ -301,7 +309,15 @@ async function _audit(url) {
   else accessibilite += 40;
   accessibilite = Math.min(100, accessibilite);
 
-  const scores = { seo, securite, accessibilite };
+  // ── Présence locale (NAP + fiche établissement) ──
+  let presence = 0;
+  if (napPhone) presence += 30; else add('presence', 'low', 'nap_phone', 'Téléphone non détecté sur la page', 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA.');
+  if (napAddress) presence += 35; else add('presence', 'low', 'nap_address', 'Adresse postale non structurée', 'Affichez votre adresse complète, idéalement en données structurées (PostalAddress).');
+  if (napLocalBiz) presence += 20; else add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.');
+  if (napHours) presence += 15; else add('presence', 'low', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
+  presence = Math.min(100, presence);
+
+  const scores = { seo, securite, accessibilite, presence };
   return { reachable, scores, findings };
 }
 
@@ -325,7 +341,8 @@ function _fixFor(key, ctx) {
   let origin = url; try { origin = new URL(url).origin; } catch (_) {}
   const head = _headSteps(ctx.platform);
   switch (key) {
-    case 'jsonld': return { steps: head, codeLabel: 'Données structurées (à compléter)', code:
+    case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours':
+      return { steps: head, codeLabel: 'Fiche établissement (LocalBusiness — nom, adresse, téléphone, horaires)', code:
 `<script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -499,7 +516,7 @@ function _validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e |
 function _reportEmail({ name, url, score, scores, findings, date, platform }) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const sevLabel = { high: 'Priorité haute', medium: 'Priorité moyenne', low: 'À optimiser' };
-  const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité', accessibilite: 'Accessibilité' };
+  const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité', accessibilite: 'Accessibilité', presence: 'Présence locale', geo: 'Visibilité IA (GEO)' };
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...(findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
   const platTxt = PLAT_LABEL[platform] || platform || '';
