@@ -30,7 +30,7 @@ const AXES = [
   { k: 'securite',      label: 'Sécurité' },
   { k: 'accessibilite', label: 'Accessibilité' },
 ];
-const SOON_AXES = ['Mots-clés', 'Visibilité IA (GEO)', 'Présence locale'];
+const SOON_AXES = ['Mots-clés', 'Présence locale'];
 const SEV_LABEL = { high: 'Élevé', medium: 'Moyen', low: 'Faible' };
 
 let _root = null;
@@ -47,6 +47,7 @@ let _alerts = false;
 let _alertsSupported = false;
 let _panel = null;
 let _emailEnabled = false;   // S4.1 — l'envoi webmaster n'est exposé que si le serveur l'a câblé
+let _geoEnabled = false;     // S5 — la visibilité IA (GEO) n'est exposée que si une clé Gemini est câblée
 
 // ── API ─────────────────────────────────────────────────────────
 function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
@@ -134,7 +135,7 @@ async function _load(silent) {
   if (!silent) { _loading = true; _error = null; _render(); }
   try {
     const d = await _api('/sites');
-    _sites = d.sites || []; _limit = d.limit || 1; _plan = d.plan || ''; _emailEnabled = !!d.email_enabled; _error = null;
+    _sites = d.sites || []; _limit = d.limit || 1; _plan = d.plan || ''; _emailEnabled = !!d.email_enabled; _geoEnabled = !!d.geo_enabled; _error = null;
   } catch (e) {
     if (!silent) _error = e.message || 'Chargement impossible.';
   }
@@ -319,7 +320,8 @@ function _renderPanel() {
   const p = _panel; if (!p) { el.remove(); return; }
   const scores = p.scores || {}; const g = p.score; const cwv = p.cwv;
   const cwvLine = cwv ? `<div class="snt-cwv">${icon('clock', 13)} LCP ${(cwv.lcp / 1000).toFixed(1)} s · CLS ${cwv.cls} · ${cwv.weightKb >= 1024 ? (cwv.weightKb / 1024).toFixed(1) + ' Mo' : cwv.weightKb + ' Ko'} · ${cwv.requests} requêtes</div>` : '';
-  const bars = AXES.map((a) => _bar(a.label, scores[a.k])).join('') + SOON_AXES.map(_barSoon).join('');
+  const geoBar = _geoEnabled ? _bar('Visibilité IA (GEO)', p.geo ? p.geo.score : null) : _barSoon('Visibilité IA (GEO)');
+  const bars = AXES.map((a) => _bar(a.label, scores[a.k])).join('') + geoBar + SOON_AXES.map(_barSoon).join('');
   el.innerHTML = `
     <div class="snt-modal">
       <div class="snt-modal-head">
@@ -333,10 +335,79 @@ function _renderPanel() {
       <div class="snt-modal-score ${g != null ? _scoreClass(g) : ''}">${g != null ? g : '—'}<span>/100</span></div>
       <div class="snt-bars">${bars}</div>
       ${_findingsHTML(p.findings)}
+      ${_geoSectionHTML()}
       ${_aeoCardHTML()}
       ${_emailEnabled ? _emailRowHTML() : ''}
     </div>
   `;
+}
+// ── S5 · Visibilité IA (GEO) — section du panneau d'audit ────────
+function _geoDefault() {
+  const s = _panel && _sites.find((x) => x.id === _panel.id);
+  const name = (s ? (s.label || _hostOf(s.url)) : (_panel && _panel.name)) || '';
+  return { business_name: name, city: '', activity: '', prompts: [], score: null, results: null };
+}
+function _geoSectionHTML() {
+  if (!_geoEnabled) return '';
+  const g = (_panel && _panel.geo) || _geoDefault();
+  return `<div class="snt-geo" id="snt-geo-sec">${_geoBody(g)}</div>`;
+}
+function _geoBody(g) {
+  const head = `<div class="snt-aeo-head">${icon('compass', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA (GEO)</div><div class="snt-aeo-d">Quand un prospect interroge une IA, votre établissement ressort-il ? On pose la question à une IA connectée au web.</div></div></div>`;
+  const hasResults = g && g.results && g.results.length;
+  if (hasResults) {
+    return head + _geoResultsHTML(g)
+      + `<div class="snt-geo-actions"><button class="snt-ai-btn" data-act="geo-run">${icon('refresh', 13)} Relancer la mesure</button><button class="snt-ai-regen" data-act="geo-edit">${icon('edit', 12)} Modifier</button></div>`
+      + `<div id="snt-geo-form" hidden>${_geoFormHTML(g)}</div>`;
+  }
+  return head + _geoFormHTML(g);
+}
+function _geoResultsHTML(g) {
+  const sc = g.score;
+  const rows = (g.results || []).map((r) => {
+    const badge = r.error
+      ? `<span class="snt-geo-b x">${icon('x', 12)} échec</span>`
+      : (r.cited
+          ? `<span class="snt-geo-b ok">${icon('check', 12)} cité${r.rank ? ' · position ' + r.rank : ''}</span>`
+          : (r.sourced ? `<span class="snt-geo-b mid">site cité en source</span>` : `<span class="snt-geo-b no">non cité</span>`));
+    return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-badge">${badge}</div>${r.snippet ? `<div class="snt-geo-snip">${_esc(r.snippet)}</div>` : ''}</div>`;
+  }).join('');
+  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div><div class="snt-geo-rows">${rows}</div>`;
+}
+function _geoFormHTML(g) {
+  const prompts = (g.prompts || []).join('\n');
+  return `<div class="snt-geo-form">
+    <label class="snt-geo-l">Nom de l'établissement<input class="snt-input" id="snt-geo-name" type="text" value="${_esc(g.business_name || '')}" placeholder="Ex. Boulangerie Martin"></label>
+    <div class="snt-geo-two">
+      <label class="snt-geo-l">Ville<input class="snt-input" id="snt-geo-city" type="text" value="${_esc(g.city || '')}" placeholder="Ex. Lyon"></label>
+      <label class="snt-geo-l">Activité<input class="snt-input" id="snt-geo-act" type="text" value="${_esc(g.activity || '')}" placeholder="Ex. boulangerie artisanale"></label>
+    </div>
+    <label class="snt-geo-l">Questions testées <span class="snt-geo-hint">(une par ligne · max 5)</span><textarea class="snt-input snt-geo-ta" id="snt-geo-prompts" rows="3" placeholder="Une question de prospect par ligne">${_esc(prompts)}</textarea></label>
+    <button class="snt-btn snt-btn-sm" data-act="geo-run">${icon('compass', 14)} Mesurer ma visibilité IA</button>
+  </div>`;
+}
+function _geoEditToggle() { const f = _root && _root.querySelector('#snt-geo-form'); if (f) f.hidden = !f.hidden; }
+async function _geoRun() {
+  if (!_panel || !_panel.id) return;
+  const sec = _root && _root.querySelector('#snt-geo-sec');
+  const body = {};
+  const nameEl = _root && _root.querySelector('#snt-geo-name');
+  if (nameEl) {
+    body.business_name = (nameEl.value || '').trim();
+    const cityEl = _root.querySelector('#snt-geo-city'); body.city = cityEl ? cityEl.value.trim() : '';
+    const actEl = _root.querySelector('#snt-geo-act'); body.activity = actEl ? actEl.value.trim() : '';
+    const pEl = _root.querySelector('#snt-geo-prompts'); if (pEl) body.prompts = pEl.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!body.business_name) { alert("Indiquez le nom de l'établissement."); return; }
+  }
+  if (sec) sec.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} Mesure en cours — l'IA interroge le web…</div>`;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/geo/run`, { method: 'POST', body, timeout: 90000 });
+    _panel.geo = Object.assign({}, _panel.geo, d.geo);
+    _renderPanel();
+    const s2 = _root && _root.querySelector('#snt-geo-sec'); if (s2 && s2.scrollIntoView) try { s2.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+  } catch (e) {
+    if (sec) sec.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Mesure impossible.')}</div><button class="snt-ai-regen" data-act="geo-run">${icon('refresh', 12)} Réessayer</button>`;
+  }
 }
 // S4.1 — carte « opportunité » AEO : générer une FAQ structurée (pilier GEO).
 function _aeoCardHTML() {
@@ -442,14 +513,20 @@ async function _sendReport() {
 async function _auditNow(id) {
   if (_auditing.has(id)) return; _auditing.add(id); _render();
   const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); const geo = await _fetchGeo(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit, geo }); }
   catch (e) { alert(e.message || 'Audit impossible.'); }
   _auditing.delete(id); await _load(true);
 }
 async function _viewAudit(id) {
   const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`); if (!d.audit) return _auditNow(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`); if (!d.audit) return _auditNow(id); const geo = await _fetchGeo(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit, geo }); }
   catch (e) { alert(e.message || 'Audit indisponible.'); }
+}
+// S5 — état GEO du site (config + dernier relevé), best-effort.
+async function _fetchGeo(id) {
+  if (!_geoEnabled) return null;
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/geo`); return d.geo || null; }
+  catch (_) { return null; }
 }
 
 // ── Interactions ────────────────────────────────────────────────
@@ -469,6 +546,8 @@ function _onClick(e) {
   if (a === 'suggest')     return _suggestAI(act.dataset.kind, act.dataset.slot);
   if (a === 'email-toggle') return _toggleEmailForm();
   if (a === 'send-report') return _sendReport();
+  if (a === 'geo-run')     return _geoRun();
+  if (a === 'geo-edit')    return _geoEditToggle();
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;
