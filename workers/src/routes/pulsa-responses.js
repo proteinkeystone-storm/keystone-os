@@ -384,10 +384,12 @@ export async function handlePulsaResponsesCsv(request, env, url) {
 // Body attendu : { fields: { ... } } où fields ne peut contenir QUE :
 //   - fld_bio_courte    : string                         → remplacement simple
 //   - fld_bio_longue    : string                         → remplacement simple
-//   - fld_oeuvres       : { __op: 'set_image',
-//                           index: number,
-//                           oeuvre_slug?: string,
-//                           image_url: string }          → patch ciblé sur 1 œuvre
+//   - fld_oeuvres       : { __op, index, ... }            → patch ciblé sur 1 œuvre
+//       ops autorisées :
+//         · set_image     { index, image_url, oeuvre_slug? } → pose une image
+//         · clear_image   { index }                          → retire l'image
+//         · set_title     { index, titre }                   → renomme l'œuvre
+//         · set_intention { index, intention }               → édite la description
 //
 // Sécurité — TOUS les autres champs sont rejetés (400). Aucun upsert
 // d'op libre, aucun remplacement complet de fld_oeuvres (qui contient
@@ -451,42 +453,64 @@ export async function handlePulsaResponsePatch(request, env, id) {
     updated.fld_bio_longue = fields.fld_bio_longue.slice(0, MAX_TEXT_LEN);
   }
 
-  // ── fld_oeuvres : op `set_image` uniquement ──────────────────
+  // ── fld_oeuvres : ops ciblées set_image / clear_image / set_title / set_intention ──
+  // Toutes les ops opèrent sur UNE œuvre identifiée par son index. Aucun
+  // remplacement complet du tableau (qui contient les métadonnées saisies
+  // par l'artiste via le form public).
   if ('fld_oeuvres' in fields) {
     const op = fields.fld_oeuvres;
-    if (!op || typeof op !== 'object' || op.__op !== 'set_image') {
-      return err('fld_oeuvres : seule l\'op { __op: "set_image" } est autorisée', 400, origin);
+    const ALLOWED_OPS = new Set(['set_image', 'clear_image', 'set_title', 'set_intention']);
+    if (!op || typeof op !== 'object' || !ALLOWED_OPS.has(op.__op)) {
+      return err('fld_oeuvres : op autorisée parmi set_image, clear_image, set_title, set_intention', 400, origin);
     }
     const idx = Number(op.index);
-    const imageUrl = typeof op.image_url === 'string' ? op.image_url : '';
-    const oeuvreSlug = typeof op.oeuvre_slug === 'string' ? op.oeuvre_slug : '';
     if (!Number.isFinite(idx) || idx < 0) {
-      return err('set_image : index doit être un entier ≥ 0', 400, origin);
-    }
-    if (!imageUrl || imageUrl.length > 2048) {
-      return err('set_image : image_url requise (max 2048 chars)', 400, origin);
-    }
-    // Validation URL minimale — on accepte uniquement HTTPS pour la fiche publique.
-    if (!/^https:\/\//i.test(imageUrl)) {
-      return err('set_image : image_url doit être en HTTPS', 400, origin);
+      return err('fld_oeuvres : index doit être un entier ≥ 0', 400, origin);
     }
     const oeuvres = Array.isArray(updated.fld_oeuvres) ? updated.fld_oeuvres.slice() : [];
     if (idx >= oeuvres.length) {
-      return err(`set_image : index ${idx} hors borne (${oeuvres.length} œuvres)`, 400, origin);
-    }
-    // Vérification de cohérence du slug si fourni — protège contre un upload
-    // mal référencé après réordonnancement côté Pulsa. Heuristique : on compare
-    // au titre slugifié.
-    if (oeuvreSlug) {
-      const expected = _slugifyTitle((oeuvres[idx] || {}).titre || '');
-      if (expected && expected !== oeuvreSlug && !oeuvreSlug.startsWith(expected)) {
-        // On log mais on ne bloque pas — la disambiguation slug-2/slug-3 fait
-        // que ça peut diverger légitimement (cf. /api/artists côté Pages).
-        console.warn('[pulsa-patch] slug mismatch', { id, idx, expected, got: oeuvreSlug });
-      }
+      return err(`fld_oeuvres : index ${idx} hors borne (${oeuvres.length} œuvres)`, 400, origin);
     }
     const target = (oeuvres[idx] && typeof oeuvres[idx] === 'object') ? { ...oeuvres[idx] } : {};
-    target.image_url = imageUrl;
+
+    if (op.__op === 'set_image') {
+      const imageUrl = typeof op.image_url === 'string' ? op.image_url : '';
+      if (!imageUrl || imageUrl.length > 2048) {
+        return err('set_image : image_url requise (max 2048 chars)', 400, origin);
+      }
+      // Validation URL minimale — HTTPS only pour la fiche publique.
+      if (!/^https:\/\//i.test(imageUrl)) {
+        return err('set_image : image_url doit être en HTTPS', 400, origin);
+      }
+      // Cohérence du slug si fourni (warning non-bloquant).
+      const oeuvreSlug = typeof op.oeuvre_slug === 'string' ? op.oeuvre_slug : '';
+      if (oeuvreSlug) {
+        const expected = _slugifyTitle((oeuvres[idx] || {}).titre || '');
+        if (expected && expected !== oeuvreSlug && !oeuvreSlug.startsWith(expected)) {
+          console.warn('[pulsa-patch] slug mismatch', { id, idx, expected, got: oeuvreSlug });
+        }
+      }
+      target.image_url = imageUrl;
+    } else if (op.__op === 'clear_image') {
+      // Retire la référence image — la fiche publique ne montre que les œuvres
+      // avec image_url non vide. Le binaire reste dans R2 (pas de delete,
+      // rollback possible).
+      target.image_url = '';
+    } else if (op.__op === 'set_title') {
+      const titre = typeof op.titre === 'string' ? op.titre.trim().slice(0, 300) : '';
+      if (!titre) {
+        return err('set_title : titre requis (string non vide)', 400, origin);
+      }
+      target.titre = titre;
+    } else if (op.__op === 'set_intention') {
+      // Intention vide autorisée (= effacer la description). String requise
+      // (vs null/number) mais peut être ''. Cap à 4000 chars.
+      if (typeof op.intention !== 'string') {
+        return err('set_intention : intention doit être une string', 400, origin);
+      }
+      target.intention = op.intention.trim().slice(0, 4000);
+    }
+
     oeuvres[idx] = target;
     updated.fld_oeuvres = oeuvres;
   }
