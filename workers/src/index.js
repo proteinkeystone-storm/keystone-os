@@ -143,7 +143,7 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
          handleSiteSuggest, handleSiteSendReport,
          handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun,
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
-         sweepDueChecks } from './routes/sentinel.js';
+         sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -821,6 +821,12 @@ export default {
     // ── Maintenance quotidienne (0 3 * * *) — purges & refresh, GATÉE explicitement ──
     if (cron === '0 3 * * *') {
       ctx.waitUntil(handleScheduledPurge(env));
+      // Sentinel — mesure GEO hebdomadaire (file lissée par next_geo_at, lot borné).
+      ctx.waitUntil(
+        sweepDueGeo(env)
+          .then(r => console.log('[sentinel-geo-sweep]', JSON.stringify(r)))
+          .catch(e => console.warn('[sentinel-geo-sweep] failed', e?.message || e))
+      );
       // Refresh des tokens sociaux proches expiration (Threads ~60j).
       ctx.waitUntil(
         refreshSocialTokens(env)

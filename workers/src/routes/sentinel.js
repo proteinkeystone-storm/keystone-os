@@ -36,10 +36,10 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
-// sinon clé serveur GEMINI_API_KEY (free tier = levier coût du brief).
+// sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 
-const SENTINEL_ENGINE_VERSION = 'S5.0';
+const SENTINEL_ENGINE_VERSION = 'S5.1';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -97,10 +97,11 @@ async function _ensureSchema(env) {
        tenant_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
        PRIMARY KEY (tenant_id, day))`,
     // S5 — visibilité IA (GEO) : 1 config + dernier relevé par site.
+    // next_geo_at (S5.1) = échéance de la mesure hebdo automatique (cron lissé).
     `CREATE TABLE IF NOT EXISTS sentinel_geo (
        site_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
        business_name TEXT, city TEXT, activity TEXT, prompts TEXT,
-       last_score INTEGER, last_results TEXT, last_run_at TEXT,
+       last_score INTEGER, last_results TEXT, last_run_at TEXT, next_geo_at TEXT,
        updated_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
   ];
@@ -112,6 +113,8 @@ async function _ensureSchema(env) {
   ]) {
     try { await env.DB.prepare(`ALTER TABLE sentinel_sites ADD COLUMN ${col}`).run(); } catch (_) { /* déjà présent */ }
   }
+  // S5.1 — colonne ajoutée à la table sentinel_geo déjà créée en S5.0.
+  try { await env.DB.prepare("ALTER TABLE sentinel_geo ADD COLUMN next_geo_at TEXT").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -893,16 +896,30 @@ export async function handleSiteSendReport(request, env, id) {
 const GEO_MODEL = 'gemini-2.5-flash';
 const GEO_MAX_PROMPTS = 5;
 
-function _geoEnabled(env) { return !!(env && env.GEMINI_API_KEY); }
-
-// Clé Gemini : propriétaire (BYOK, respecte le flag) sinon serveur.
-async function _resolveGeoKey(env, tenant) {
-  try {
-    const byok = await resolveEngineForTenant(env, tenant);
-    if (byok && byok.engine === 'gemini' && byok.apiKey) return { apiKey: byok.apiKey, source: 'byok' };
-  } catch (_) {}
-  if (env && env.GEMINI_API_KEY) return { apiKey: String(env.GEMINI_API_KEY), source: 'server' };
+// Moteurs GEO web-groundés (recherche web RÉELLE) : gemini = grounding Google,
+// perplexity = sonar, gpt = Responses API web_search.
+const GEO_ENGINES = ['gemini', 'perplexity', 'gpt'];
+const GEO_ENGINE_LABEL = { gemini: 'Gemini', perplexity: 'Perplexity', gpt: 'ChatGPT' };
+function _geoServerKey(env, engine) {
+  if (!env) return null;
+  if (engine === 'gemini') return env.GEMINI_API_KEY ? String(env.GEMINI_API_KEY) : null;
+  if (engine === 'perplexity') return env.PERPLEXITY_API_KEY ? String(env.PERPLEXITY_API_KEY) : null;
+  if (engine === 'gpt') return env.OPENAI_API_KEY ? String(env.OPENAI_API_KEY) : null;
   return null;
+}
+function _geoEnabled(env) { return !!(env && (env.GEMINI_API_KEY || env.PERPLEXITY_API_KEY || env.OPENAI_API_KEY)); }
+
+// Moteurs interrogeables : pour chacun, clé du propriétaire (BYOK si moteur
+// actif compatible, respecte le flag) sinon clé serveur. Dédupe par moteur.
+async function _resolveGeoEngines(env, tenant) {
+  let byok = null;
+  try { byok = await resolveEngineForTenant(env, tenant); } catch (_) {}
+  const out = [];
+  for (const engine of GEO_ENGINES) {
+    if (byok && byok.engine === engine && byok.apiKey) out.push({ engine, apiKey: byok.apiKey, source: 'byok' });
+    else { const k = _geoServerKey(env, engine); if (k) out.push({ engine, apiKey: k, source: 'server' }); }
+  }
+  return out;
 }
 
 // Prompts par défaut façon « prospect » à partir de l'activité + la ville.
@@ -940,6 +957,79 @@ async function _geminiGrounded(apiKey, prompt) {
   } finally { clearTimeout(timer); }
 }
 
+// Perplexity (sonar) — web-grounded nativement (OpenAI-compat). Sources = citations/search_results.
+async function _perplexityGrounded(apiKey, prompt) {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const res = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'sonar', messages: [{ role: 'user', content: prompt }] }), signal: ctrl.signal,
+    });
+    let data = {}; try { data = await res.json(); } catch (_) {}
+    if (!res.ok) return { ok: false, status: res.status, msg: String((data && data.error && (data.error.message || data.error)) || `HTTP ${res.status}`) };
+    const text = String((data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '').replace(/\s+/g, ' ').trim();
+    let sources = [];
+    if (Array.isArray(data.search_results)) sources = data.search_results.map((s) => ({ title: s.title || '', uri: s.url || '' }));
+    else if (Array.isArray(data.citations)) sources = data.citations.map((u) => ({ title: '', uri: String(u) }));
+    return { ok: true, text, sources: sources.filter((s) => s.uri).slice(0, 8) };
+  } catch (e) {
+    return { ok: false, status: 0, msg: (e && e.name === 'AbortError') ? 'délai dépassé' : ((e && e.message) || 'réseau') };
+  } finally { clearTimeout(timer); }
+}
+
+// ChatGPT — Responses API + outil web_search (voie pérenne ; gpt-4o-search-preview
+// est déprécié 2026-07-23). Best-effort : si le format évolue, l'échec dégrade par-moteur.
+async function _chatgptGrounded(apiKey, prompt) {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 35000);
+  try {
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', tools: [{ type: 'web_search' }], input: prompt }), signal: ctrl.signal,
+    });
+    let data = {}; try { data = await res.json(); } catch (_) {}
+    if (!res.ok) return { ok: false, status: res.status, msg: String((data && data.error && (data.error.message || data.error)) || `HTTP ${res.status}`) };
+    let text = String(data.output_text || '');
+    const sources = [];
+    const items = Array.isArray(data.output) ? data.output : [];
+    for (const it of items) {
+      const parts = (it && Array.isArray(it.content)) ? it.content : [];
+      for (const p of parts) {
+        if (!data.output_text && p && typeof p.text === 'string') text += ' ' + p.text;
+        const anns = (p && Array.isArray(p.annotations)) ? p.annotations : [];
+        for (const a of anns) {
+          const uc = (a && a.url_citation) ? a.url_citation : (a && a.type === 'url_citation' ? a : null);
+          if (uc && uc.url) sources.push({ title: uc.title || '', uri: uc.url });
+        }
+      }
+    }
+    return { ok: true, text: text.replace(/\s+/g, ' ').trim(), sources: sources.filter((s) => s.uri).slice(0, 8) };
+  } catch (e) {
+    return { ok: false, status: 0, msg: (e && e.name === 'AbortError') ? 'délai dépassé' : ((e && e.message) || 'réseau') };
+  } finally { clearTimeout(timer); }
+}
+
+function _engineGrounded(engine, apiKey, prompt) {
+  if (engine === 'perplexity') return _perplexityGrounded(apiKey, prompt);
+  if (engine === 'gpt') return _chatgptGrounded(apiKey, prompt);
+  return _geminiGrounded(apiKey, prompt);
+}
+
+// Sentiment indicatif (heuristique lexicale FR, autour de la mention). Best-effort.
+const _GEO_POS = ['recommand', 'excellent', 'meilleur', 'réputé', 'repute', 'incontournable', 'qualité', 'qualite', 'prisé', 'prise', 'populaire', 'apprécié', 'apprecie', 'idéal', 'ideal', 'référence', 'reference', 'renommé', 'renomme'];
+const _GEO_NEG = ['éviter', 'eviter', 'déçu', 'decu', 'mauvais', 'plainte', 'décevant', 'decevant', 'médiocre', 'mediocre', 'arnaque', 'fermé définitivement', 'ferme definitivement'];
+function _sentiment(text, name) {
+  const t = String(text || '').toLowerCase();
+  const n = String(name || '').toLowerCase();
+  const i = n ? t.indexOf(n) : -1;
+  const win = i >= 0 ? t.slice(Math.max(0, i - 160), i + n.length + 160) : t.slice(0, 320);
+  let pos = 0, neg = 0;
+  for (const w of _GEO_POS) if (win.includes(w)) pos++;
+  for (const w of _GEO_NEG) if (win.includes(w)) neg++;
+  if (pos > neg) return 'positive';
+  if (neg > pos) return 'negative';
+  return 'neutral';
+}
+
 // L'établissement est-il cité dans la réponse de l'IA ? (nommé / sourcé / rang approx.)
 function _detectCitation(text, sources, businessName, host) {
   const t = String(text || '').toLowerCase();
@@ -959,20 +1049,64 @@ function _detectCitation(text, sources, businessName, host) {
   return { cited, sourced, rank };
 }
 
-// Score de citabilité (0-100) : cité #1 = 100, cité = 65-85, sourcé seul = 25, absent = 0.
+// Score d'une cellule (1 question × 1 moteur) : cité #1 = 100, cité = 65-85, sourcé seul = 25.
+function _cellScore(c) {
+  if (c.cited) { if (c.rank === 1) return 100; if (c.rank && c.rank <= 3) return 85; if (c.rank && c.rank <= 6) return 65; return 75; }
+  return c.sourced ? 25 : 0;
+}
+// Score de citabilité global (0-100) sur toutes les cellules réussies.
 function _geoScore(results) {
-  const scored = (results || []).filter((r) => !r.error);
-  if (!scored.length) return null;
-  let sum = 0;
-  for (const r of scored) {
-    if (r.cited) {
-      if (r.rank === 1) sum += 100;
-      else if (r.rank && r.rank <= 3) sum += 85;
-      else if (r.rank && r.rank <= 6) sum += 65;
-      else sum += 75;
-    } else if (r.sourced) sum += 25;
+  const cells = [];
+  for (const r of (results || [])) for (const c of ((r && r.engines) || [])) if (!c.error) cells.push(c);
+  if (!cells.length) return null;
+  return Math.round(cells.reduce((a, c) => a + _cellScore(c), 0) / cells.length);
+}
+
+// Cœur d'un run GEO : interroge tous les moteurs × toutes les questions (en
+// parallèle), détecte citation + sentiment, score, persiste, fixe next_geo_at.
+// Métré : 1 crédit si une clé SERVEUR est utilisée (BYOK = hors compteur).
+// Partagé par la route on-demand et le cron hebdo.
+async function _executeGeoRun(env, { id, tenant, site, businessName, city, activity, prompts, plan, lookupHmac }) {
+  const engines = await _resolveGeoEngines(env, tenant);
+  if (!engines.length) return { error: 'no-key' };
+
+  const usedServer = engines.some((e) => e.source === 'server');
+  let creditsEnforced = false, creditResult = null;
+  if (usedServer && lookupHmac) {
+    creditsEnforced = await isEnforceEnabled(env, lookupHmac);
+    if (creditsEnforced) {
+      creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'sentinel' });
+      if (!creditResult.ok && creditResult.blocked) return { blocked: true };
+    }
   }
-  return Math.round(sum / scored.length);
+
+  const host = _hostOf(site.url);
+  const tasks = [];
+  for (const prompt of prompts) for (const e of engines) tasks.push({ prompt, engine: e.engine, apiKey: e.apiKey });
+  const cells = await Promise.all(tasks.map(async (t) => {
+    const r = await _engineGrounded(t.engine, t.apiKey, t.prompt);
+    if (!r.ok) return { prompt: t.prompt, cell: { engine: t.engine, error: r.msg || 'échec', cited: false, sourced: false, rank: null } };
+    const det = _detectCitation(r.text, r.sources, businessName, host);
+    return { prompt: t.prompt, cell: { engine: t.engine, cited: det.cited, sourced: det.sourced, rank: det.rank, sentiment: det.cited ? _sentiment(r.text, businessName) : null, snippet: String(r.text || '').slice(0, 280), sources: (r.sources || []).slice(0, 4) } };
+  }));
+  const anyOk = cells.some((c) => !c.cell.error);
+  if (!anyOk) {
+    if (creditsEnforced && creditResult && creditResult.ok) {
+      await refundCredits(env, { bucketKey: lookupHmac, tool: 'sentinel', cost: creditResult.cost, packsDrawn: creditResult.packsDrawn }).catch(() => {});
+    }
+    const firstErr = (cells[0] && cells[0].cell && cells[0].cell.error) || 'service indisponible';
+    return { error: 'all-failed', detail: firstErr };
+  }
+
+  const byPrompt = new Map(prompts.map((p) => [p, []]));
+  for (const c of cells) { (byPrompt.get(c.prompt) || []).push(c.cell); }
+  const results = prompts.map((p) => ({ prompt: p, engines: byPrompt.get(p) || [] }));
+  const score = _geoScore(results);
+
+  await env.DB.prepare("UPDATE sentinel_geo SET last_score = ?, last_results = ?, last_run_at = datetime('now'), next_geo_at = datetime('now', '+7 days'), updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
+    .bind(score, JSON.stringify(results), id, tenant).run();
+
+  return { score, results, engines: engines.map((e) => e.engine) };
 }
 
 async function _geoConfigRow(env, id, tenant) {
@@ -1022,16 +1156,14 @@ export async function handleSiteGeoSave(request, env, id) {
   return json({ ok: true, geo: { business_name: businessName, city, activity, prompts } }, 200, origin);
 }
 
-// POST /sites/:id/geo/run — interroge les IA, détecte la citation, score. Métré.
+// POST /sites/:id/geo/run — interroge les moteurs (Gemini/Perplexity/ChatGPT),
+// détecte citation + sentiment, score. Métré. Parallélise les cellules.
 export async function handleSiteGeoRun(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
   const site = await env.DB.prepare("SELECT id, url, label FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
-
-  const geoKey = await _resolveGeoKey(env, g.tenant);
-  if (!geoKey) return err("La mesure de visibilité IA n'est pas encore activée (clé Gemini manquante côté serveur). Le reste de l'audit fonctionne.", 503, origin);
 
   // Config = body (le front sauvegarde + lance) sinon ligne existante.
   const b = await parseBody(request);
@@ -1051,44 +1183,12 @@ export async function handleSiteGeoRun(request, env, id) {
     ON CONFLICT(site_id) DO UPDATE SET business_name=excluded.business_name, city=excluded.city, activity=excluded.activity, prompts=excluded.prompts, updated_at=datetime('now')
   `).bind(id, g.tenant, businessName, city, activity, JSON.stringify(prompts)).run();
 
-  // Métrage : clé serveur → 1 crédit (anti-abus) ; BYOK (clé du client) → hors compteur.
-  const useByok = geoKey.source === 'byok';
-  const lookupHmac = g.claims && g.claims.sub;
-  let creditsEnforced = false, creditResult = null;
-  if (!useByok && lookupHmac) {
-    creditsEnforced = await isEnforceEnabled(env, lookupHmac);
-    if (creditsEnforced) {
-      creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan: g.plan, tool: 'sentinel' });
-      if (!creditResult.ok && creditResult.blocked) {
-        return json({ error: `Crédits IA épuisés ce mois sur le plan ${g.plan}. Ajoutez un pack ou attendez le 1er du mois.`, code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
-      }
-    }
-  }
+  const out = await _executeGeoRun(env, { id, tenant: g.tenant, site, businessName, city, activity, prompts, plan: g.plan, lookupHmac: g.claims && g.claims.sub });
+  if (out.blocked) return json({ error: `Crédits IA épuisés ce mois sur le plan ${g.plan}. Ajoutez un pack ou attendez le 1er du mois.`, code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+  if (out.error === 'no-key') return err("La mesure de visibilité IA n'est pas activée (aucune clé moteur configurée côté serveur). Le reste de l'audit fonctionne.", 503, origin);
+  if (out.error) return err(`La mesure de visibilité IA a échoué (${out.detail || 'service indisponible'}). Réessayez plus tard.`, 502, origin);
 
-  const host = _hostOf(site.url);
-  const results = [];
-  let anyOk = false;
-  for (const prompt of prompts) {
-    const r = await _geminiGrounded(geoKey.apiKey, prompt);
-    if (!r.ok) { results.push({ prompt, error: r.msg || 'échec', cited: false, sourced: false, rank: null }); continue; }
-    anyOk = true;
-    const det = _detectCitation(r.text, r.sources, businessName, host);
-    results.push({ prompt, cited: det.cited, sourced: det.sourced, rank: det.rank, snippet: String(r.text || '').slice(0, 280), sources: (r.sources || []).slice(0, 4) });
-  }
-
-  if (!anyOk) {
-    if (creditsEnforced && creditResult && creditResult.ok) {
-      await refundCredits(env, { bucketKey: lookupHmac, tool: 'sentinel', cost: creditResult.cost, packsDrawn: creditResult.packsDrawn }).catch(() => {});
-    }
-    const firstErr = (results[0] && results[0].error) || 'service indisponible';
-    return err(`La mesure de visibilité IA a échoué (${firstErr}). Réessayez plus tard.`, 502, origin);
-  }
-
-  const score = _geoScore(results);
-  await env.DB.prepare("UPDATE sentinel_geo SET last_score = ?, last_results = ?, last_run_at = datetime('now'), updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
-    .bind(score, JSON.stringify(results), id, g.tenant).run();
-
-  return json({ geo: { score, results, run_at: new Date().toISOString(), business_name: businessName, city, activity, prompts, via: geoKey.source } }, 200, origin);
+  return json({ geo: { score: out.score, results: out.results, run_at: new Date().toISOString(), business_name: businessName, city, activity, prompts, engines: out.engines } }, 200, origin);
 }
 
 // ── Web push : abonnement (S1.5, patron keynapse) ───────────────
@@ -1134,4 +1234,43 @@ export async function sweepDueChecks(env) {
     } catch (_) {}
   }
   return { due: due.length, checked, alerts };
+}
+
+// ── Cron — mesure GEO hebdomadaire (file lissée, S5.1) ──────────
+// Tourne sur le cron quotidien : ne traite que les sites GEO échus (next_geo_at
+// posé au 1er run manuel → +7 j), petit lot. Idempotent. Métré sur le portefeuille
+// du propriétaire (plan résolu via licences). Skip si aucune clé serveur (BYOK seul
+// = on-demand). next_geo_at est reposé par _executeGeoRun (+7 j) ; échec → +1 j.
+const GEO_SWEEP_BATCH = 15;
+export async function sweepDueGeo(env) {
+  if (!env || !env.DB) return { skipped: 'no-db' };
+  if (!_geoEnabled(env)) return { skipped: 'no-geo-key' };
+  try { await _ensureSchema(env); } catch (_) { return { skipped: 'no-schema' }; }
+  const due = (await env.DB.prepare(
+    `SELECT g.site_id AS id, g.tenant_id AS tenant, g.business_name AS business_name, g.city AS city,
+            g.activity AS activity, g.prompts AS prompts, s.url AS url, s.label AS label, l.plan AS plan
+       FROM sentinel_geo g
+       JOIN sentinel_sites s ON s.id = g.site_id AND s.tenant_id = g.tenant_id
+       LEFT JOIN licences l ON l.lookup_hmac = g.tenant_id
+      WHERE g.business_name IS NOT NULL AND g.business_name <> ''
+        AND g.next_geo_at IS NOT NULL AND g.next_geo_at <= datetime('now')
+      ORDER BY g.next_geo_at ASC LIMIT ${GEO_SWEEP_BATCH}`
+  ).all()).results || [];
+  let ran = 0, failed = 0;
+  for (const d of due) {
+    try {
+      let prompts = []; try { prompts = JSON.parse(d.prompts || '[]'); } catch (_) {}
+      prompts = _normalizePrompts(prompts, d.activity, d.city);
+      const out = await _executeGeoRun(env, {
+        id: d.id, tenant: d.tenant, site: { url: d.url, label: d.label },
+        businessName: d.business_name, city: d.city || '', activity: d.activity || '',
+        prompts, plan: d.plan || null, lookupHmac: d.tenant,
+      });
+      if (out && out.score != null) { ran++; continue; }
+      failed++;
+      // échec / bloqué → repousser d'1 j (évite de reboucler quotidiennement sur une clé KO).
+      await env.DB.prepare("UPDATE sentinel_geo SET next_geo_at = datetime('now','+1 day') WHERE site_id = ? AND tenant_id = ?").bind(d.id, d.tenant).run().catch(() => {});
+    } catch (_) { failed++; }
+  }
+  return { due: due.length, ran, failed };
 }

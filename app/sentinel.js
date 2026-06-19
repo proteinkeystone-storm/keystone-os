@@ -353,7 +353,7 @@ function _geoSectionHTML() {
   return `<div class="snt-geo" id="snt-geo-sec">${_geoBody(g)}</div>`;
 }
 function _geoBody(g) {
-  const head = `<div class="snt-aeo-head">${icon('compass', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA (GEO)</div><div class="snt-aeo-d">Quand un prospect interroge une IA, votre établissement ressort-il ? On pose la question à une IA connectée au web.</div></div></div>`;
+  const head = `<div class="snt-aeo-head">${icon('compass', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA (GEO)</div><div class="snt-aeo-d">Quand un prospect interroge une IA, votre établissement ressort-il ? On pose la question à plusieurs IA connectées au web (Gemini, Perplexity, ChatGPT) et on mesure si vous êtes cité.</div></div></div>`;
   const hasResults = g && g.results && g.results.length;
   if (hasResults) {
     return head + _geoResultsHTML(g)
@@ -362,17 +362,34 @@ function _geoBody(g) {
   }
   return head + _geoFormHTML(g);
 }
+const _GEO_ENGINE_LABEL = { gemini: 'Gemini', perplexity: 'Perplexity', gpt: 'ChatGPT' };
+// Normalise une ligne de résultat → tableau de cellules par moteur (tolère l'ancien format mono-moteur).
+function _geoCells(r) {
+  if (r && Array.isArray(r.engines)) return r.engines;
+  if (r && (r.cited !== undefined || r.error !== undefined)) return [{ engine: 'gemini', cited: r.cited, rank: r.rank, sourced: r.sourced, snippet: r.snippet, error: r.error }];
+  return [];
+}
+function _geoCellBadge(c) {
+  const name = _GEO_ENGINE_LABEL[c.engine] || c.engine || 'IA';
+  if (c.error) return `<span class="snt-geo-b x">${_esc(name)} · échec</span>`;
+  if (c.cited) {
+    const sent = c.sentiment === 'positive' ? ' · positif' : (c.sentiment === 'negative' ? ' · négatif' : '');
+    return `<span class="snt-geo-b ok">${icon('check', 11)} ${_esc(name)}${c.rank ? ' · n°' + c.rank : ''}${sent}</span>`;
+  }
+  if (c.sourced) return `<span class="snt-geo-b mid">${_esc(name)} · source citée</span>`;
+  return `<span class="snt-geo-b no">${_esc(name)} · non cité</span>`;
+}
 function _geoResultsHTML(g) {
   const sc = g.score;
+  const enginesUsed = (Array.isArray(g.engines) && g.engines.length) ? g.engines : null;
+  const legend = enginesUsed ? `<div class="snt-geo-legend">Moteurs interrogés : ${enginesUsed.map((e) => _esc(_GEO_ENGINE_LABEL[e] || e)).join(' · ')}</div>` : '';
   const rows = (g.results || []).map((r) => {
-    const badge = r.error
-      ? `<span class="snt-geo-b x">${icon('x', 12)} échec</span>`
-      : (r.cited
-          ? `<span class="snt-geo-b ok">${icon('check', 12)} cité${r.rank ? ' · position ' + r.rank : ''}</span>`
-          : (r.sourced ? `<span class="snt-geo-b mid">site cité en source</span>` : `<span class="snt-geo-b no">non cité</span>`));
-    return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-badge">${badge}</div>${r.snippet ? `<div class="snt-geo-snip">${_esc(r.snippet)}</div>` : ''}</div>`;
+    const cells = _geoCells(r);
+    const badges = cells.map(_geoCellBadge).join('');
+    const repr = cells.find((c) => c.cited && c.snippet) || cells.find((c) => c.snippet && !c.error);
+    return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-engines">${badges}</div>${(repr && repr.snippet) ? `<div class="snt-geo-snip">${_esc(repr.snippet)}</div>` : ''}</div>`;
   }).join('');
-  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div><div class="snt-geo-rows">${rows}</div>`;
+  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div>${legend}<div class="snt-geo-rows">${rows}</div>`;
 }
 function _geoFormHTML(g) {
   const prompts = (g.prompts || []).join('\n');
