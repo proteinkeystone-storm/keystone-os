@@ -115,3 +115,35 @@
 .snt-copy:hover { background: var(--ws-accent-soft); }
 .snt-code { margin: 0; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; color: var(--ws-text); overflow-x: auto; white-space: pre; }
 .snt-okmsg { display: flex; align-items: center; gap: 8px; color: var(--green); margin-top: 16px; font-size: 14px; }
+
+/* ── S4.1 · IA rédactionnel (méta / FAQ AEO) + envoi webmaster ─── */
+.snt-ai { margin-top: 12px; }
+.snt-ai-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ws-text-on-accent); background: var(--ws-accent); border: 0; border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.snt-ai-btn:hover { filter: brightness(1.06); }
+.snt-ai-load { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ws-accent); padding: 6px 0; }
+.snt-ai-load svg { animation: snt-spin 1s linear infinite; }
+@keyframes snt-spin { to { transform: rotate(360deg); } }
+.snt-ai-err { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--danger); margin-bottom: 8px; }
+.snt-ai-meta { font-size: 14px; color: var(--ws-text); background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 10px 12px; line-height: 1.5; }
+.snt-ai-len { font-size: 12px; color: var(--ws-text-muted); margin: 5px 0 4px; }
+.snt-ai-faq { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+.snt-ai-qa { background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 10px 12px; }
+.snt-ai-q { font-weight: 700; font-size: 13px; color: var(--ws-text); }
+.snt-ai-a { font-size: 13px; color: var(--ws-text-soft); margin-top: 3px; line-height: 1.5; }
+.snt-ai-regen { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ws-accent); background: transparent; border: 1px solid var(--ws-border); border-radius: 999px; padding: 4px 11px; cursor: pointer; margin-top: 10px; }
+.snt-ai-regen:hover { background: var(--ws-accent-soft); }
+
+.snt-aeo { margin-top: 20px; padding: 16px; background: var(--ws-accent-soft); border-radius: var(--ws-radius); }
+.snt-aeo-head { display: flex; align-items: flex-start; gap: 10px; color: var(--ws-accent); margin-bottom: 10px; }
+.snt-aeo-t { font-weight: 800; font-size: 14px; color: var(--ws-text); }
+.snt-aeo-d { font-size: 13px; color: var(--ws-text-soft); margin-top: 2px; line-height: 1.45; }
+
+.snt-email { margin-top: 16px; padding: 14px; background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); }
+.snt-email-top { font-size: 13px; color: var(--ws-text-soft); display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+.snt-email-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.snt-email-form .snt-input { height: 40px; font-size: 15px; }
+.snt-btn-sm { height: 40px; padding: 0 14px; font-size: 14px; white-space: nowrap; }
+.snt-email-msg { font-size: 13px; margin-top: 8px; }
+.snt-email-msg:empty { margin-top: 0; }
+.snt-email-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--green); }
+.snt-email-err { color: var(--danger); }

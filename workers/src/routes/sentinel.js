@@ -30,8 +30,13 @@ import { requireJWT } from '../lib/jwt.js';
 import { validateImportUrl } from './smart-agent.js';
 import { sendPush } from '../lib/webpush.js';
 import puppeteer from '@cloudflare/puppeteer';
+// S4.1 — clé en main augmenté : génération IA du texte (méta / FAQ AEO),
+// métrée comme toutes les surfaces IA (cf MANIFESTE §10).
+import { KS_AI_MODEL } from '../lib/ai-model.js';
+import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
+import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
-const SENTINEL_ENGINE_VERSION = 'S4';
+const SENTINEL_ENGINE_VERSION = 'S4.1';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -84,6 +89,10 @@ async function _ensureSchema(env) {
        created_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
     `CREATE INDEX IF NOT EXISTS idx_sentinel_audits_site ON sentinel_audits(site_id, created_at)`,
+    // S4.1 — journal d'envois d'e-mail (rate-limit léger par tenant/jour).
+    `CREATE TABLE IF NOT EXISTS sentinel_email_log (
+       tenant_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+       PRIMARY KEY (tenant_id, day))`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
   for (const col of [
@@ -351,6 +360,178 @@ function _fixFor(key, ctx) {
 }
 function _attachFixes(findings, ctx) { for (const f of findings) { try { f.fix = _fixFor(f.key, ctx); } catch (_) { f.fix = null; } } return findings; }
 
+// ── S4.1 · A) IA rédactionnel : génère le texte à la place du client ─────
+// Pour les correctifs « texte » (méta description, FAQ AEO), un appel IA
+// métré produit un VRAI contenu personnalisé (pas le gabarit déterministe).
+// L'IA n'écrit que le CONTENU ; la STRUCTURE (balise meta, JSON-LD FAQPage)
+// est assemblée ici, déterministe → toujours valide à coller.
+
+// Extrait la 1re STRING non vide des formes de réponse Workers AI connues
+// (motif _aiText de ghostwriter.js : Mistral expose un champ `response` non
+// textuel → on filtre sur le type pour ne jamais renvoyer un objet).
+function _aiText(aiResponse) {
+  const candidates = [
+    aiResponse?.choices?.[0]?.message?.content,
+    aiResponse?.response,
+    aiResponse?.result?.response,
+    aiResponse?.output?.[0]?.content?.[0]?.text,
+    aiResponse?.message?.content,
+    aiResponse?.text,
+    aiResponse?.completion,
+  ];
+  for (const c of candidates) { if (typeof c === 'string' && c.trim()) return c; }
+  return '';
+}
+
+// Contexte réel de la page (titre, H1, méta existante, extrait de texte) pour
+// ancrer la génération sur le site réel. Best-effort, borné.
+async function _pageContext(url) {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), SUB_TIMEOUT_MS);
+  let html = '';
+  try {
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
+    html = (await res.text()).slice(0, 200000);
+  } catch (_) { /* injoignable → contexte minimal */ } finally { clearTimeout(timer); }
+  const title = _between(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
+  const metaDesc = _between(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
+                || _between(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+  const h1 = _between(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1800);
+  return { title, metaDesc, h1, text };
+}
+
+const PLAT_LABEL = { wix: 'Wix', wordpress: 'WordPress', custom: 'Sur-mesure', unknown: 'inconnue' };
+
+function _suggestSystem(kind) {
+  if (kind === 'faq') {
+    return [
+      'Tu es un expert SEO et AEO (optimisation pour les moteurs de réponse : ChatGPT, Perplexity, Google AI Overviews).',
+      'À partir du contexte du site, rédige 4 questions que de VRAIS clients posent, avec une réponse courte (1 à 3 phrases), factuelle et utile, en français.',
+      'N\'invente jamais de prix, d\'horaires ou de coordonnées précises : reste général si l\'info n\'est pas dans le contexte.',
+      'FORMAT STRICT — réponds UNIQUEMENT par des blocs, séparés par une ligne contenant seulement « --- » :',
+      'Q : la question',
+      'R : la réponse',
+      'Aucune numérotation, aucun markdown, aucune phrase d\'introduction ou de conclusion.',
+    ].join('\n');
+  }
+  return [
+    'Tu es un expert SEO. À partir du contexte du site, rédige UNE méta description en français.',
+    'Contraintes : 130 à 155 caractères, attractive, qui donne envie de cliquer, intègre l\'activité et le lieu si on les connaît, et finit idéalement par une incitation à l\'action.',
+    'N\'invente aucun chiffre ni coordonnée non présents dans le contexte.',
+    'Réponds UNIQUEMENT par la méta description, sur une seule ligne, sans guillemets, sans préfixe, sans markdown.',
+  ].join('\n');
+}
+
+function _suggestUser(kind, site, ctx) {
+  const host = _hostOf(site.url);
+  const lines = [
+    `Site : ${host}`,
+    `Plateforme : ${PLAT_LABEL[site.platform] || site.platform || 'inconnue'}`,
+    ctx.title ? `Titre actuel de la page : ${ctx.title}` : '',
+    ctx.h1 ? `Titre principal (H1) : ${ctx.h1}` : '',
+    ctx.metaDesc ? `Méta description actuelle (à améliorer) : ${ctx.metaDesc}` : '',
+    ctx.text ? `Extrait du contenu de la page :\n${ctx.text}` : '',
+  ].filter(Boolean);
+  lines.push('');
+  lines.push(kind === 'faq'
+    ? 'Rédige les questions/réponses les plus utiles pour les visiteurs et les IA, selon les règles ci-dessus.'
+    : 'Rédige la méta description de la page d\'accueil, selon les règles ci-dessus.');
+  return lines.join('\n');
+}
+
+// Méta description : nettoie la sortie, garde-fou de longueur, assemble la balise.
+function _buildMeta(raw) {
+  let t = String(raw || '').replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+  t = (t.split('\n').map((s) => s.trim()).filter(Boolean)[0]) || '';
+  t = t.replace(/^(méta\s*description|description|meta)\s*[:\-–—]\s*/i, '').trim();
+  t = t.replace(/^["'«»“”]+|["'«»“”]+$/g, '').trim();
+  if (!t) return null;
+  if (t.length > 165) t = t.slice(0, 162).replace(/\s+\S*$/, '') + '…';
+  const code = `<meta name="description" content="${t.replace(/"/g, '&quot;')}">`;
+  return { kind: 'meta', text: t, length: t.length, codeLabel: 'Méta description rédigée pour votre site', code };
+}
+
+// FAQ AEO : parse les paires Q/R (robuste aux séparateurs), assemble un JSON-LD
+// FAQPage déterministe (donc toujours valide) + un texte lisible.
+function _buildFaq(raw) {
+  const s = String(raw || '').replace(/```[a-z]*/gi, '').replace(/\r/g, '').trim();
+  const pairs = [];
+  const re = /Q\s*\d*\s*[:.)\-–—]\s*([\s\S]*?)\n\s*R\s*\d*\s*[:.)\-–—]\s*([\s\S]*?)(?=\n\s*(?:-{3,}|Q\s*\d*\s*[:.)\-–—])|$)/gi;
+  let m;
+  while ((m = re.exec(s)) && pairs.length < 6) {
+    const q = m[1].trim().replace(/\s+/g, ' ').replace(/^["'«»“”]+|["'«»“”]+$/g, '');
+    const a = m[2].trim().replace(/\s+/g, ' ').replace(/^["'«»“”]+|["'«»“”]+$/g, '');
+    if (q && a) pairs.push({ q, a });
+  }
+  if (!pairs.length) return null;
+  const jsonld = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: pairs.map((p) => ({
+      '@type': 'Question', name: p.q,
+      acceptedAnswer: { '@type': 'Answer', text: p.a },
+    })),
+  };
+  const code = `<script type="application/ld+json">\n${JSON.stringify(jsonld, null, 2)}\n</script>`;
+  const text = pairs.map((p) => `Q : ${p.q}\nR : ${p.a}`).join('\n\n');
+  return { kind: 'faq', pairs, text, codeLabel: 'FAQ structurée (Schema.org FAQPage — pour Google et les IA)', code };
+}
+
+// ── S4.1 · B) Envoi du rapport au webmaster (Cloudflare Email) ──────────
+function _validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim()) && String(e).length <= 254; }
+
+// Construit le rapport e-mail (HTML + texte) depuis l'audit stocké.
+function _reportEmail({ name, url, score, scores, findings, date, platform }) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const sevLabel = { high: 'Priorité haute', medium: 'Priorité moyenne', low: 'À optimiser' };
+  const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité', accessibilite: 'Accessibilité' };
+  const order = { high: 0, medium: 1, low: 2 };
+  const sorted = [...(findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
+  const platTxt = PLAT_LABEL[platform] || platform || '';
+
+  const axisRowsHtml = Object.keys(scores || {}).map((k) => {
+    const v = scores[k];
+    return `<tr><td style="padding:4px 0;color:#475569;font-size:14px">${esc(axisLabel[k] || k)}</td><td style="padding:4px 0;text-align:right;font-weight:600;font-size:14px">${v == null ? 'n/a' : v + ' / 100'}</td></tr>`;
+  }).join('');
+
+  const findHtml = sorted.map((f) => {
+    const steps = (f.fix && f.fix.steps && f.fix.steps.length)
+      ? `<ol style="margin:6px 0;padding-left:20px;color:#334155;font-size:13px">${f.fix.steps.map((st) => `<li style="margin:2px 0">${esc(st)}</li>`).join('')}</ol>` : '';
+    const code = (f.fix && f.fix.code)
+      ? `<div style="font-size:12px;color:#64748b;margin:6px 0 2px">${esc(f.fix.codeLabel || 'Code à coller')}</div><pre style="background:#f1f5f9;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;color:#0f172a">${esc(f.fix.code)}</pre>` : '';
+    return `<div style="border-top:1px solid #e2e8f0;padding:12px 0">
+      <div style="font-size:14px;color:#0f172a"><strong>[${esc(sevLabel[f.sev] || '')}]</strong> ${esc(f.title)}</div>
+      ${f.detail ? `<div style="color:#64748b;font-size:13px;margin:3px 0">${esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
+  }).join('') || '<p style="color:#16a34a;font-size:14px">Aucun problème détecté sur les axes audités. 👍</p>';
+
+  const html = `<!doctype html><html lang="fr"><body style="margin:0;background:#f8fafc;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;color:#0f172a">
+    <div style="max-width:640px;margin:0 auto;padding:24px">
+      <div style="font-size:13px;color:#6366f1;font-weight:700;letter-spacing:.03em">KEYSTONE SENTINEL</div>
+      <h1 style="font-size:22px;margin:6px 0 2px">Rapport d'audit — ${esc(name)}</h1>
+      <div style="color:#64748b;font-size:13px">${esc(url)}${platTxt ? ' · ' + esc(platTxt) : ''}</div>
+      <div style="margin:18px 0;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:12px">
+        <div style="font-size:13px;color:#64748b">Score global</div>
+        <div style="font-size:40px;font-weight:800;line-height:1.1">${score != null ? score : '—'}<span style="font-size:16px;color:#94a3b8"> / 100</span></div>
+        <table style="width:100%;border-collapse:collapse;margin-top:10px">${axisRowsHtml}</table>
+      </div>
+      <h2 style="font-size:16px;margin:18px 0 4px">À corriger en priorité — solutions clé en main</h2>
+      ${findHtml}
+      <p style="color:#94a3b8;font-size:12px;margin-top:24px">Rapport généré automatiquement par Keystone Sentinel. Chaque correctif inclut les étapes et le code prêt à coller.</p>
+    </div></body></html>`;
+
+  const findText = sorted.map((f) => {
+    const steps = (f.fix && f.fix.steps && f.fix.steps.length) ? '\n' + f.fix.steps.map((st, i) => `   ${i + 1}. ${st}`).join('\n') : '';
+    const code = (f.fix && f.fix.code) ? `\n   [${f.fix.codeLabel || 'Code'}]\n${f.fix.code.split('\n').map((l) => '   ' + l).join('\n')}` : '';
+    return `• [${sevLabel[f.sev] || ''}] ${f.title}${f.detail ? '\n   ' + f.detail : ''}${steps}${code}`;
+  }).join('\n\n') || 'Aucun problème détecté sur les axes audités.';
+  const axisText = Object.keys(scores || {}).map((k) => `- ${axisLabel[k] || k} : ${scores[k] == null ? 'n/a' : scores[k] + '/100'}`).join('\n');
+  const text = `KEYSTONE SENTINEL — Rapport d'audit\n${name} (${url})${platTxt ? ' · ' + platTxt : ''}\n\nScore global : ${score != null ? score + '/100' : '—'}\n${axisText}\n\nÀ CORRIGER EN PRIORITÉ — solutions clé en main\n\n${findText}\n\n—\nRapport généré par Keystone Sentinel.`;
+
+  return { subject: `Audit web de ${name} — score ${score != null ? score + '/100' : 'disponible'}`, html, text };
+}
+
 export async function handleSentinelHealth(request, env) {
   const origin = getAllowedOrigin(env, request);
   let schema = 'ok';
@@ -373,7 +554,10 @@ export async function handleSitesList(request, env) {
     s.spark = sp.reverse().map(x => ({ ms: x.ms, ok: x.ok }));
     if (s.last_scores) { try { s.last_scores = JSON.parse(s.last_scores); } catch (_) { s.last_scores = null; } }
   }
-  return json({ sites: rows, count: rows.length, limit: _siteLimit(g.plan), plan: g.plan }, 200, origin);
+  // email_enabled : le front n'affiche le bouton « Envoyer au webmaster » que si
+  // l'envoi est réellement câblé (clé Resend présente) → pas d'UI morte avant l'activation.
+  const emailEnabled = !!(env && env.RESEND_API_KEY);
+  return json({ sites: rows, count: rows.length, limit: _siteLimit(g.plan), plan: g.plan, email_enabled: emailEnabled }, 200, origin);
 }
 
 export async function handleSiteCreate(request, env) {
@@ -538,6 +722,152 @@ export async function handleSiteAuditGet(request, env, id) {
   if (!row) return json({ audit: null }, 200, origin);
   let scores = null, findings = []; try { scores = JSON.parse(row.scores); } catch (_) {} try { findings = JSON.parse(row.findings); } catch (_) {}
   return json({ audit: { score: row.score, scores, findings, created_at: row.created_at } }, 200, origin);
+}
+
+// ── S4.1 · A) POST /sites/:id/suggest { kind:'meta'|'faq' } — IA rédactionnel ──
+// Génère le VRAI texte (méta description ou FAQ AEO) à partir du contenu réel
+// du site. Métré comme toute surface IA : budgetGuard + consumeCredits (si
+// enforcement actif) + recordUsage, refund si l'appel échoue après débit.
+// Best-effort : IA indisponible → message clair, le gabarit déterministe (S4) reste.
+export async function handleSiteSuggest(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+
+  const body = await parseBody(request);
+  const kind = (body && body.kind === 'faq') ? 'faq' : 'meta';
+
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return err('Génération IA indisponible sur ce serveur. Le modèle prêt-à-coller reste utilisable.', 503, origin);
+  }
+
+  // Bridage budget IA (admin) AVANT toute consommation.
+  const _throttled = await budgetGuard(env, origin);
+  if (_throttled) return _throttled;
+
+  // Métrage crédits : bucket = lookup_hmac (claims.sub). ADMIN via header → claims
+  // null → pas d'enforcement (illimité), cohérent avec le reste de l'écosystème.
+  const lookupHmac = g.claims && g.claims.sub;
+  const creditsEnforced = lookupHmac ? await isEnforceEnabled(env, lookupHmac) : false;
+  let creditResult = null;
+  if (creditsEnforced) {
+    creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan: g.plan, tool: 'sentinel' });
+    if (!creditResult.ok && creditResult.blocked) {
+      return json({ error: `Crédits IA épuisés ce mois sur le plan ${g.plan}. Ajoutez un pack ou attendez le 1er du mois.`, code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+    }
+  }
+
+  let committed = false;
+  try {
+    const ctx = await _pageContext(site.url);
+    const sys = _suggestSystem(kind);
+    const usr = _suggestUser(kind, site, ctx);
+    let aiResp = null;
+    try {
+      aiResp = await env.AI.run(KS_AI_MODEL, {
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+        max_tokens: kind === 'faq' ? 1200 : 320,
+      });
+    } catch (e) {
+      const m = String(e?.message || e || '');
+      if (/\b4006\b|daily free allocation|neurons|workers paid/i.test(m)) {
+        return json({ error: 'Limite IA quotidienne atteinte — ça repart à 00h00 UTC.', code: 'AI_BUDGET_EXHAUSTED' }, 429, origin);
+      }
+      return err('Le service IA est momentanément indisponible. Réessayez, ou utilisez le modèle prêt-à-coller.', 502, origin);
+    }
+    const raw = _aiText(aiResp).trim();
+    if (!raw) return err('Le modèle n\'a pas renvoyé de texte. Réessayez.', 502, origin);
+    const suggestion = (kind === 'faq') ? _buildFaq(raw) : _buildMeta(raw);
+    if (!suggestion) return err('Réponse IA inexploitable. Réessayez.', 502, origin);
+
+    await recordUsage(env, 'sentinel', { usage: aiResp?.usage, inText: sys + usr, outText: raw });
+    committed = true;
+    return json({ suggestion }, 200, origin);
+  } finally {
+    if (!committed && creditsEnforced && creditResult && creditResult.ok) {
+      await refundCredits(env, { bucketKey: lookupHmac, tool: 'sentinel', cost: creditResult.cost, packsDrawn: creditResult.packsDrawn }).catch(() => {});
+    }
+  }
+}
+
+// ── S4.1 · B) POST /sites/:id/send-report { email } — envoi au webmaster ──
+// Construit le rapport depuis le dernier audit stocké et l'envoie via Resend
+// (API REST, compatible DNS Vercel — décision 2026-06-19). Rate-limit léger
+// par tenant/jour. Dégrade proprement si la clé d'envoi n'est pas configurée.
+// Activation = secret RESEND_API_KEY + domaine vérifié chez Resend (DKIM Vercel).
+const EMAIL_DAILY_LIMIT = 20;
+async function _revertEmailLog(env, tenant, day) {
+  await env.DB.prepare("UPDATE sentinel_email_log SET count = MAX(count - 1, 0) WHERE tenant_id = ? AND day = ?").bind(tenant, day).run().catch(() => {});
+}
+// Envoi via l'API Resend. Retour { ok, status, msg, id }. Ne lève jamais.
+async function _sendViaResend(env, { from, fromName, to, subject, html, text, replyTo }) {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const payload = { from: fromName ? `${fromName} <${from}>` : from, to: [to], subject, html, text };
+    if (replyTo) payload.reply_to = replyTo;
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: ctrl.signal,
+    });
+    let data = {}; try { data = await res.json(); } catch (_) {}
+    if (!res.ok) return { ok: false, status: res.status, msg: String((data && (data.message || data.name)) || `HTTP ${res.status}`) };
+    return { ok: true, status: res.status, id: data && data.id };
+  } catch (e) {
+    return { ok: false, status: 0, msg: (e && e.name === 'AbortError') ? 'délai dépassé' : ((e && e.message) || 'réseau') };
+  } finally { clearTimeout(timer); }
+}
+export async function handleSiteSendReport(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+
+  const body = await parseBody(request);
+  const email = String((body && body.email) || '').trim();
+  if (!_validEmail(email)) return err('Adresse e-mail invalide.', 400, origin);
+  const replyTo = _validEmail(body && body.replyTo) ? String(body.replyTo).trim() : null;
+
+  // Envoi configuré ? (clé Resend présente). Sinon message clair, le PDF reste dispo.
+  if (!env.RESEND_API_KEY) {
+    return err("L'envoi par e-mail n'est pas encore activé sur ce serveur. En attendant, exportez le rapport en PDF puis transmettez-le.", 503, origin);
+  }
+
+  // Dernier audit stocké (réutilise findings + fixes déjà calculés).
+  const row = await env.DB.prepare("SELECT score, scores, findings, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  if (!row) return err('Aucun audit disponible. Lancez d\'abord un audit du site.', 409, origin);
+  let scores = null, findings = []; try { scores = JSON.parse(row.scores); } catch (_) {} try { findings = JSON.parse(row.findings); } catch (_) {}
+
+  // Rate-limit léger : pre-bump puis revert si dépassement ou échec d'envoi.
+  const day = new Date().toISOString().slice(0, 10);
+  await env.DB.prepare(`INSERT INTO sentinel_email_log (tenant_id, day, count) VALUES (?, ?, 1) ON CONFLICT(tenant_id, day) DO UPDATE SET count = count + 1`).bind(g.tenant, day).run().catch(() => {});
+  const usedRow = await env.DB.prepare("SELECT count FROM sentinel_email_log WHERE tenant_id = ? AND day = ?").bind(g.tenant, day).first();
+  if (usedRow && usedRow.count > EMAIL_DAILY_LIMIT) {
+    await _revertEmailLog(env, g.tenant, day);
+    return json({ error: `Limite de ${EMAIL_DAILY_LIMIT} envois par jour atteinte. Réessayez demain.`, code: 'SENTINEL_EMAIL_LIMIT' }, 429, origin);
+  }
+
+  const name = site.label || _hostOf(site.url);
+  const { subject, html, text } = _reportEmail({ name, url: site.url, score: row.score, scores, findings, date: row.created_at, platform: site.platform });
+  const from = (env.SENTINEL_FROM_EMAIL && String(env.SENTINEL_FROM_EMAIL)) || 'sentinel@protein-keystone.com';
+  const sent = await _sendViaResend(env, { from, fromName: 'Keystone Sentinel', to: email, subject, html, text, replyTo });
+  if (!sent.ok) {
+    await _revertEmailLog(env, g.tenant, day);
+    if (/domain|verif|not verified|\bdns\b/i.test(sent.msg)) {
+      return err("Le domaine d'envoi n'est pas encore vérifié chez Resend. Terminez la vérification DNS, puis réessayez. (Le rapport reste exportable en PDF.)", 503, origin);
+    }
+    if (sent.status === 401 || sent.status === 403) {
+      return err("Configuration d'envoi e-mail incomplète côté serveur. Réessayez plus tard.", 503, origin);
+    }
+    if (sent.status === 422) {
+      return err('Cette adresse e-mail a été refusée par le service d\'envoi.', 422, origin);
+    }
+    return err('Envoi impossible pour le moment. Réessayez plus tard.', 502, origin);
+  }
+  return json({ ok: true, sent_to: email, id: sent.id || null }, 200, origin);
 }
 
 // ── Web push : abonnement (S1.5, patron keynapse) ───────────────

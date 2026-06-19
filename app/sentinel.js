@@ -46,6 +46,7 @@ let _poll = null;
 let _alerts = false;
 let _alertsSupported = false;
 let _panel = null;
+let _emailEnabled = false;   // S4.1 — l'envoi webmaster n'est exposé que si le serveur l'a câblé
 
 // ── API ─────────────────────────────────────────────────────────
 function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
@@ -133,7 +134,7 @@ async function _load(silent) {
   if (!silent) { _loading = true; _error = null; _render(); }
   try {
     const d = await _api('/sites');
-    _sites = d.sites || []; _limit = d.limit || 1; _plan = d.plan || ''; _error = null;
+    _sites = d.sites || []; _limit = d.limit || 1; _plan = d.plan || ''; _emailEnabled = !!d.email_enabled; _error = null;
   } catch (e) {
     if (!silent) _error = e.message || 'Chargement impossible.';
   }
@@ -299,7 +300,9 @@ function _findingsHTML(list) {
     const steps = (fix && fix.steps && fix.steps.length) ? `<ol class="snt-fix-steps">${fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
     const codeId = `snt-code-${i}`;
     const code = (fix && fix.code) ? `<div class="snt-fix-codehead"><span>${_esc(fix.codeLabel || 'Code à coller')}</span><button class="snt-copy" data-act="copy" data-target="${codeId}">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="${codeId}">${_esc(fix.code)}</pre>` : '';
-    const body = (steps || code) ? `<div class="snt-fix">${steps}${code}</div>` : '';
+    // S4.1 — sur la méta description, l'IA peut rédiger le VRAI texte (pas le gabarit).
+    const ai = (f.key === 'meta_missing') ? `<div class="snt-ai" id="snt-ai-meta-${i}"><button class="snt-ai-btn" data-act="suggest" data-kind="meta" data-slot="snt-ai-meta-${i}">${icon('sparkles', 14)} Rédiger avec l'IA</button></div>` : '';
+    const body = (steps || code || ai) ? `<div class="snt-fix">${steps}${code}${ai}</div>` : '';
     return `<details class="snt-find">
       <summary><span class="snt-sev ${_esc(f.sev)}">${SEV_LABEL[f.sev] || ''}</span><span class="snt-find-t">${_esc(f.title)}</span><span class="snt-find-chev">${icon('chevron-down', 16)}</span></summary>
       ${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}
@@ -322,6 +325,7 @@ function _renderPanel() {
       <div class="snt-modal-head">
         <div><div class="snt-modal-title">${_esc(p.name || 'Audit')}</div><div class="snt-modal-sub">Audit on-page${p.reachable === false ? ' · site injoignable' : ''}</div></div>
         <div class="snt-modal-actions">
+          ${_emailEnabled ? `<button class="snt-mini" data-act="email-toggle">${icon('mail', 13)} Webmaster</button>` : ''}
           <button class="snt-mini" data-act="pdf">${icon('download', 13)} PDF</button>
           <button class="snt-icon" data-act="panel-close" aria-label="Fermer">${icon('x', 18)}</button>
         </div>
@@ -329,8 +333,28 @@ function _renderPanel() {
       <div class="snt-modal-score ${g != null ? _scoreClass(g) : ''}">${g != null ? g : '—'}<span>/100</span></div>
       <div class="snt-bars">${bars}</div>
       ${_findingsHTML(p.findings)}
+      ${_aeoCardHTML()}
+      ${_emailEnabled ? _emailRowHTML() : ''}
     </div>
   `;
+}
+// S4.1 — carte « opportunité » AEO : générer une FAQ structurée (pilier GEO).
+function _aeoCardHTML() {
+  return `<div class="snt-aeo">
+    <div class="snt-aeo-head">${icon('sparkles', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA — FAQ structurée</div><div class="snt-aeo-d">Une FAQ Schema.org aide Google et les assistants IA (ChatGPT, Perplexity) à comprendre et citer votre site.</div></div></div>
+    <div class="snt-ai" id="snt-ai-faq"><button class="snt-ai-btn" data-act="suggest" data-kind="faq" data-slot="snt-ai-faq">${icon('sparkles', 14)} Rédiger avec l'IA</button></div>
+  </div>`;
+}
+// S4.1 — envoi du rapport au webmaster (replié par défaut).
+function _emailRowHTML() {
+  return `<div class="snt-email" id="snt-email-row" hidden>
+    <div class="snt-email-top">${icon('mail', 15)} Envoyer ce rapport (étapes + code à coller) au webmaster du site.</div>
+    <div class="snt-email-form">
+      <input class="snt-input" id="snt-email-input" type="email" inputmode="email" autocomplete="off" placeholder="email@du-webmaster.com" aria-label="E-mail du webmaster">
+      <button class="snt-btn snt-btn-sm" data-act="send-report">${icon('send', 14)} Envoyer</button>
+    </div>
+    <div class="snt-email-msg" id="snt-email-msg"></div>
+  </div>`;
 }
 function _copyCode(targetId, btn) {
   const el = _root && _root.querySelector('#' + (targetId || '')); if (!el) return;
@@ -366,16 +390,65 @@ function _exportPdf() {
   w.document.write(html); w.document.close();
   setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 400);
 }
+
+// ── S4.1 · IA rédactionnel (méta / FAQ AEO) ─────────────────────
+function _aiOutHTML(s, slot) {
+  if (!s) return `<div class="snt-ai-err">${icon('x', 13)} Réponse vide. Réessayez.</div><button class="snt-ai-regen" data-act="suggest" data-kind="meta" data-slot="${_esc(slot)}">${icon('refresh', 12)} Réessayer</button>`;
+  const codeId = `${slot}-code`;
+  let preview = '';
+  if (s.kind === 'meta') {
+    const ideal = s.length >= 130 && s.length <= 160;
+    preview = `<div class="snt-ai-meta">${_esc(s.text)}</div><div class="snt-ai-len">${s.length} caractères${ideal ? ' · longueur idéale' : ''}</div>`;
+  } else if (s.kind === 'faq' && s.pairs) {
+    preview = `<div class="snt-ai-faq">${s.pairs.map((p) => `<div class="snt-ai-qa"><div class="snt-ai-q">${_esc(p.q)}</div><div class="snt-ai-a">${_esc(p.a)}</div></div>`).join('')}</div>`;
+  }
+  const code = s.code ? `<div class="snt-fix-codehead"><span>${_esc(s.codeLabel || 'Code à coller')}</span><button class="snt-copy" data-act="copy" data-target="${codeId}">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="${codeId}">${_esc(s.code)}</pre>` : '';
+  return `${preview}${code}<button class="snt-ai-regen" data-act="suggest" data-kind="${_esc(s.kind)}" data-slot="${_esc(slot)}">${icon('refresh', 12)} Régénérer</button>`;
+}
+async function _suggestAI(kind, slot) {
+  const box = _root && _root.querySelector('#' + (slot || ''));
+  if (!_panel || !_panel.id || !box) return;
+  box.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} L'IA rédige ${kind === 'faq' ? 'votre FAQ' : 'votre méta description'}…</div>`;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/suggest`, { method: 'POST', body: { kind }, timeout: 45000 });
+    box.innerHTML = _aiOutHTML(d.suggestion, slot);
+  } catch (e) {
+    box.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Génération impossible.')}</div><button class="snt-ai-regen" data-act="suggest" data-kind="${_esc(kind)}" data-slot="${_esc(slot)}">${icon('refresh', 12)} Réessayer</button>`;
+  }
+}
+
+// ── S4.1 · Envoi au webmaster ───────────────────────────────────
+function _toggleEmailForm() {
+  const row = _root && _root.querySelector('#snt-email-row');
+  if (!row) return;
+  row.hidden = !row.hidden;
+  if (!row.hidden) { const i = row.querySelector('#snt-email-input'); if (i) i.focus(); }
+}
+async function _sendReport() {
+  if (!_panel || !_panel.id) return;
+  const input = _root && _root.querySelector('#snt-email-input');
+  const msg = _root && _root.querySelector('#snt-email-msg');
+  const email = ((input && input.value) || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { if (msg) msg.innerHTML = `<span class="snt-email-err">Adresse e-mail invalide.</span>`; return; }
+  if (msg) msg.innerHTML = `<span class="snt-dim">Envoi…</span>`;
+  try {
+    await _api(`/sites/${encodeURIComponent(_panel.id)}/send-report`, { method: 'POST', body: { email }, timeout: 30000 });
+    if (msg) msg.innerHTML = `<span class="snt-email-ok">${icon('check', 13)} Rapport envoyé à ${_esc(email)}.</span>`;
+    if (input) input.value = '';
+  } catch (e) {
+    if (msg) msg.innerHTML = `<span class="snt-email-err">${_esc(e.message || 'Envoi impossible.')}</span>`;
+  }
+}
 async function _auditNow(id) {
   if (_auditing.has(id)) return; _auditing.add(id); _render();
   const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); _openPanel({ name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`, { method: 'POST', timeout: 70000 }); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
   catch (e) { alert(e.message || 'Audit impossible.'); }
   _auditing.delete(id); await _load(true);
 }
 async function _viewAudit(id) {
   const site = _sites.find((s) => s.id === id);
-  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`); if (!d.audit) return _auditNow(id); _openPanel({ name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
+  try { const d = await _api(`/sites/${encodeURIComponent(id)}/audit`); if (!d.audit) return _auditNow(id); _openPanel({ id, name: site ? (site.label || _hostOf(site.url)) : 'Audit', ...d.audit }); }
   catch (e) { alert(e.message || 'Audit indisponible.'); }
 }
 
@@ -393,6 +466,9 @@ function _onClick(e) {
   if (a === 'panel-close') return _closePanel();
   if (a === 'pdf')         return _exportPdf();
   if (a === 'copy')        return _copyCode(act.dataset.target, act);
+  if (a === 'suggest')     return _suggestAI(act.dataset.kind, act.dataset.slot);
+  if (a === 'email-toggle') return _toggleEmailForm();
+  if (a === 'send-report') return _sendReport();
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;
