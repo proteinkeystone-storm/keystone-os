@@ -1378,7 +1378,7 @@ function _sandboxHTML() {
         ${_chat.messages.length
             ? _chat.messages.map(_msgHTML).join('')
             : `<div class="sa-sandbox-empty">${icon('smart-agent', 22)}<span>Posez une première question à « ${_esc(_chat.agentName)} »…</span></div>`}
-        ${_chat.busy ? `<div class="sa-msg is-agent"><div class="sa-bubble sa-bubble-typing">${icon('smart-agent', 14)} <span class="sa-dots"><i></i><i></i><i></i></span></div></div>` : ''}
+        ${_chat.busy && !_chat.streaming ? `<div class="sa-msg is-agent"><div class="sa-bubble sa-bubble-typing">${icon('smart-agent', 14)} <span class="sa-dots"><i></i><i></i><i></i></span></div></div>` : ''}
       </div>
       <div class="sa-chat-input">
         <textarea class="sa-textarea" data-slot="chat-text" rows="1" maxlength="1000" placeholder="Posez une question…" ${_chat.busy ? 'disabled' : ''}></textarea>
@@ -1815,6 +1815,14 @@ function _msgHTML(m) {
     if (m.role === 'user') {
         return `<div class="sa-msg is-user"><div class="sa-bubble">${_esc(m.content)}</div></div>`;
     }
+    // SA-10.1 — bulle agent EN COURS de streaming : texte qui s'écrit, mis à
+    // jour en place (data-slot="chat-live"), citations posées au `done`.
+    if (m.streaming) {
+        return `
+    <div class="sa-msg is-agent">
+      <div class="sa-bubble" data-slot="chat-live" data-act="chat-say" title="Toucher pour écouter">${_renderReply(m.content || '', [])}</div>
+    </div>`;
+    }
     // Agent : repli honnête mis en évidence, sinon réponse + citations.
     // SA-8.4 — toute bulle de l'agent se LIT AU TOUCHER (accueil compris).
     if (m.gapped) {
@@ -2036,12 +2044,111 @@ async function _sendChat() {
     }
 
     _chat.messages.push({ role: 'user', content: message });
-    _chat.busy = true;
+    _chat.busy = true; _chat.streaming = false;
     _renderMain();
     // SA-9.2 — la réponse IA prend quelques secondes : on en profite pour
     // chauffer le moteur vocal (téléchargement/amorçage faits AVANT la voix).
     if (_voice.on) _piperWarmUp();
 
+    // SA-10.1 — STREAMING SSE : le texte s'écrit au fil de l'eau et Siwis lit
+    // dès la 1ʳᵉ phrase. Repli JSON si le flux est indisponible (jamais de
+    // régression du bac à sable).
+    const ctrl = new AbortController();
+    let timer = setTimeout(() => ctrl.abort(), 45000);
+    const bump = () => { clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), 45000); };
+    let speech = null, acc = '', gotChunk = false, live = null;
+    const startSpeech = async () => {
+        if (!_voice.on) return null;
+        try {
+            if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
+            if (_piper.mod.isSupported && _piper.mod.isSupported() && _piper.mod.createSpeechStream) {
+                return _piper.mod.createSpeechStream({
+                    onState: (st) => { const b = _root && _root.querySelector('[data-act="chat-voice"]'); if (b) b.classList.toggle('is-loading', st === 'loading'); },
+                });
+            }
+        } catch (_) {}
+        return null;
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/api/smart-agent/agents/${_chat.agentId}/chat`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, session_id: _chat.sessionId, ...byokRequestFields(), stream: true }),
+            signal: ctrl.signal,
+        });
+        if (!res.ok) {
+            let data = {}; try { data = await res.json(); } catch (_) {}
+            const msg = (data.code === 'AI_CREDITS_EXHAUSTED')
+                ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+                : `Erreur : ${data.error || ('HTTP ' + res.status)}`;
+            _chat.messages.push({ role: 'agent', content: msg, citations: [], gapped: false, error: true });
+            return;
+        }
+        if (!res.body) { await _sendChatJSON(message); return; }   // navigateur sans flux → JSON
+
+        speech = await startSpeech();
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '', gapped = false, citations = [], finalReply = '';
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bump();
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload) continue;
+                let ev; try { ev = JSON.parse(payload); } catch (_) { continue; }
+                if ((ev.type === 'meta' || ev.type === 'done') && ev.session_id) _chat.sessionId = ev.session_id;
+                if (ev.type === 'chunk') {
+                    if (!gotChunk) {
+                        gotChunk = true;
+                        _chat.messages.push({ role: 'agent', content: '', citations: [], gapped: false, streaming: true });
+                        _chat.streaming = true;
+                        _renderMain();
+                        live = _root && _root.querySelector('[data-slot="chat-live"]');
+                    }
+                    acc += ev.text || '';
+                    if (live) { live.innerHTML = _renderReply(acc, []); _scrollChatBottom(); }
+                    if (speech) speech.push(acc);
+                } else if (ev.type === 'done') {
+                    gapped = !!ev.gapped; citations = ev.citations || [];
+                    finalReply = (ev.reply != null) ? ev.reply : acc;
+                } else if (ev.type === 'error') {
+                    throw new Error(ev.error || 'Dialogue impossible');
+                }
+            }
+        }
+        const reply = finalReply || acc;
+        if (gotChunk) {
+            const last = _chat.messages[_chat.messages.length - 1];
+            last.content = reply; last.citations = citations; last.gapped = gapped; last.streaming = false;
+        } else {
+            _chat.messages.push({ role: 'agent', content: reply, citations, gapped });
+        }
+        if (speech) speech.end(reply);
+    } catch (e) {
+        if (speech) { try { speech.cancel(); } catch (_) {} }
+        if (gotChunk) {
+            const last = _chat.messages[_chat.messages.length - 1];
+            last.streaming = false;
+            if (!last.content) { last.content = 'Réponse interrompue — réessayez.'; last.error = true; }
+        } else {
+            await _sendChatJSON(message);   // réseau/SSE KO → repli JSON
+        }
+    } finally {
+        clearTimeout(timer);
+        _chat.streaming = false; _chat.busy = false;
+        _renderMain();
+    }
+}
+
+// Repli non-streaming (worker sans SSE / flux KO) — ancien chemin JSON via _api.
+async function _sendChatJSON(message) {
     try {
         const res = await _api(`/agents/${_chat.agentId}/chat`, {
             method: 'POST',
@@ -2059,8 +2166,6 @@ async function _sendChat() {
             : `Erreur : ${e.message}`;
         _chat.messages.push({ role: 'agent', content: msg, citations: [], gapped: false, error: true });
     }
-    _chat.busy = false;
-    _renderMain();
 }
 
 // Clic sur une citation (depuis le bac à sable) → bascule sur l'onglet

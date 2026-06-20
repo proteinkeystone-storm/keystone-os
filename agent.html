@@ -793,6 +793,48 @@
       requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; });
     }
 
+    /* ── SA-10.1 — affichage progressif pendant le streaming SSE ──
+       streamStart/Update/Final s'abstraient de l'UI (v2 réponse unique OU
+       thread legacy). Le texte canonique du `done` remplace l'aperçu. */
+    let _streamBubble = null;   // legacy : bulle agent en cours de remplissage
+    function setAnswerStreamingV2(text) {
+      const a = document.getElementById('sav2-answer');
+      const t = document.getElementById('sav2-answer-text');
+      if (!t) return;
+      if (a) a.classList.remove('is-thinking');
+      t.classList.remove('is-fallback');
+      t.innerHTML = mdToHtml(text);     // rendu léger au fil de l'eau (pas d'animation = pas de flicker)
+      t.dataset.text = text;
+      if (a) a.scrollTop = 0;
+    }
+    function streamStart() {
+      hideTyping();
+      if (NEW_UI) { setAnswerStreamingV2(''); return; }
+      const inner = document.getElementById('sa-thread-inner');
+      _streamBubble = document.createElement('div');
+      _streamBubble.className = 'sa-msg agent';
+      _streamBubble.innerHTML = '<div class="sa-msg-bubble"></div>';
+      inner.appendChild(_streamBubble);
+      scrollDown();
+    }
+    function streamUpdate(acc) {
+      if (NEW_UI) { setAnswerStreamingV2(acc); return; }
+      if (_streamBubble) { _streamBubble.querySelector('.sa-msg-bubble').innerHTML = mdToHtml(acc); scrollDown(); }
+    }
+    function streamFinal(reply, gapped) {
+      if (NEW_UI) { setAnswerV2(reply, gapped); _streamBubble = null; return; }
+      if (_streamBubble) {
+        const b = _streamBubble.querySelector('.sa-msg-bubble');
+        b.innerHTML = mdToHtml(reply);
+        _streamBubble.classList.toggle('is-fallback', !!gapped);
+        b.title = 'Toucher pour écouter';
+        b.addEventListener('click', () => speakTap(reply));
+        _streamBubble = null;
+      } else {
+        addBubble('agent', reply, gapped);
+      }
+    }
+
     async function submit() {
       if (_busy) return;
       const input = document.getElementById('sa-input');
@@ -813,40 +855,105 @@
     }
 
     // Envoi proprement dit — séparé de submit() pour le bouton « Réessayer ».
+    // SA-10.1 — STREAMING SSE : le texte s'écrit au fil de l'eau et la voix
+    // Siwis lit dès la 1ʳᵉ phrase (1er son après ~1 phrase, plus toute la
+    // réponse). Le `done` porte le texte canonique (anti-radotage). Repli JSON
+    // si le flux n'est pas disponible — le visiteur n'est jamais sans réponse.
     async function sendMessage(message) {
       if (_busy) return;
       if (IS_PREVIEW) { previewReply(message); return; }   // démo : réponse simulée, pas d'appel worker
       _busy = true;
       document.getElementById('sa-send').disabled = true;
       showTyping();
-      // SA-9.2 — la réponse prend quelques secondes : le moteur vocal
-      // chauffe pendant ce temps (téléchargement/amorçage hors du chemin).
+      // SA-9.2 — la réponse prend quelques secondes : le moteur vocal chauffe
+      // pendant ce temps (téléchargement/amorçage hors du chemin).
       if (_voiceOn) _warmPiper();
 
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 45000);
+      let timer = setTimeout(() => ctrl.abort(), 45000);
+      const bump = () => { clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), 45000); };   // garde d'INACTIVITÉ (un flux vivant n'est pas tué)
+      let speech = null, acc = '', gotChunk = false;
       try {
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: _sessionId }),
+          body: JSON.stringify({ message, session_id: _sessionId, stream: true }),
           signal: ctrl.signal,
         });
-        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          hideTyping();
           addBubble('agent', data.error || 'Une erreur est survenue. Réessayez.', true);
-        } else {
-          if (data.session_id) {
-            _sessionId = data.session_id;
-            // La conversation survit à un rafraîchissement PENDANT la visite
-            // (sessionStorage : rien ne persiste après fermeture — RGPD).
-            try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
-          }
-          addBubble('agent', data.reply || '', !!data.gapped);
-          speak(data.reply || '');
+          return;
         }
-      } catch (_) {
-        addRetryBubble(message);   // réseau coupé ou délai dépassé → réessai en un geste
+        if (!res.body) {                       // navigateur sans ReadableStream → JSON
+          hideTyping();
+          if (!await sendMessageJSON(message)) addRetryBubble(message);
+          return;
+        }
+
+        // Voix : file incrémentale (alimentée au fil des chunks) si activée.
+        if (_voiceOn) {
+          try {
+            if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
+            if (_piperMod.isSupported && _piperMod.isSupported() && _piperMod.createSpeechStream) {
+              speech = _piperMod.createSpeechStream({ onState: (st) => setVoiceLoading(st === 'loading') });
+            }
+          } catch (_) { speech = null; }
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '', gapped = false, finalReply = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bump();
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            let ev; try { ev = JSON.parse(payload); } catch (_) { continue; }
+            if (ev.type === 'meta' || ev.type === 'done') {
+              if (ev.session_id) {
+                _sessionId = ev.session_id;
+                // La conversation survit à un rafraîchissement PENDANT la visite
+                // (sessionStorage : rien ne persiste après fermeture — RGPD).
+                try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
+              }
+            }
+            if (ev.type === 'chunk') {
+              if (!gotChunk) { gotChunk = true; streamStart(); }
+              acc += ev.text || '';
+              streamUpdate(acc);
+              if (speech) speech.push(acc);
+            } else if (ev.type === 'done') {
+              gapped = !!ev.gapped;
+              finalReply = (ev.reply != null) ? ev.reply : acc;
+            } else if (ev.type === 'error') {
+              throw Object.assign(new Error(ev.error || 'Une erreur est survenue. Réessayez.'), { _server: true });
+            }
+          }
+        }
+        const reply = finalReply || acc;
+        if (!gotChunk) hideTyping();
+        streamFinal(reply, gapped);
+        if (speech) speech.end(reply);
+        else if (_voiceOn) speak(reply);   // voix ON mais flux voix indispo → lecture classique
+      } catch (e) {
+        if (speech) { try { speech.cancel(); } catch (_) {} }
+        if (gotChunk) {
+          addRetryBubble(message);                         // coupure après des chunks → réessai
+        } else if (e && e._server) {
+          hideTyping();
+          addBubble('agent', e.message, true);             // erreur serveur explicite (pas de boucle)
+        } else {
+          hideTyping();
+          if (!await sendMessageJSON(message)) addRetryBubble(message);   // réseau/SSE KO → repli JSON
+        }
       } finally {
         clearTimeout(timer);
         hideTyping();
@@ -854,6 +961,27 @@
         document.getElementById('sa-send').disabled = false;
         document.getElementById('sa-input')?.focus();
       }
+    }
+
+    // Repli non-streaming (worker sans SSE ou flux indisponible). Renvoie true
+    // si une réponse a été affichée. Réutilise l'ancien chemin JSON.
+    async function sendMessageJSON(message) {
+      try {
+        const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, session_id: _sessionId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { addBubble('agent', data.error || 'Une erreur est survenue. Réessayez.', true); return true; }
+        if (data.session_id) {
+          _sessionId = data.session_id;
+          try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
+        }
+        addBubble('agent', data.reply || '', !!data.gapped);
+        speak(data.reply || '');
+        return true;
+      } catch (_) { return false; }
     }
 
     /* ═══════════════════════════════════════════════════════════════

@@ -445,3 +445,75 @@ export async function speakText(text, { voiceId = DEFAULT_VOICE, onProgress, onS
     if (_current === me) { _current = null; onState && onState('idle'); }
   }
 }
+
+// SA-10.1 — Lecture INCRÉMENTALE pour le chat en streaming. Contrairement à
+// speakText (texte complet d'un coup), on POUSSE le texte cumulé au fil de son
+// arrivée du LLM : les phrases COMPLÈTES sont lues dans l'ordre, sans jamais
+// couper la lecture en cours, et la synthèse de la suivante se fait PENDANT la
+// lecture (pipeline, comme speakText). La dernière phrase (encore en train de
+// grossir) est retenue jusqu'à end(finalText) — auquel on passe le texte
+// CANONIQUE (anti-radotage déjà appliqué côté serveur) : une relance que le
+// worker a coupée n'est donc jamais prononcée. stopSpeaking()/cancel() annulent.
+export function createSpeechStream({ voiceId = DEFAULT_VOICE, onState } = {}) {
+  stopSpeaking();
+  const me = { cancelled: false };
+  _current = me;
+  const queue = [];
+  let consumed = 0, ended = false, started = false, wake = null;
+  const strip = (t) => String(t || '').replace(/\[\d{1,2}\]/g, '');
+
+  function feed(fullText, isFinal) {
+    if (me.cancelled) return;
+    const S = splitSentences(strip(fullText));
+    const ready = isFinal ? S.length : Math.max(0, S.length - 1);   // dernière phrase retenue tant que le flux coule
+    for (let i = consumed; i < ready; i++) {
+      const piece = S[i];
+      if (!piece) continue;
+      if (i === 0) { for (const h of shortenFirst([piece])) { if (h) queue.push(h); } }   // 1er son plus tôt
+      else queue.push(piece);
+    }
+    consumed = Math.max(consumed, ready);
+    if (wake) { const w = wake; wake = null; w(); }
+  }
+
+  (async () => {
+    onState && onState('loading');
+    let nextWav = null;
+    try {
+      while (!me.cancelled) {
+        if (!nextWav) {
+          if (!queue.length) {
+            if (ended) break;
+            await new Promise((r) => { wake = r; });   // file vide : attendre la prochaine phrase
+            continue;
+          }
+          nextWav = synthToWav(queue.shift(), voiceId);
+        }
+        let wav;
+        try { wav = await nextWav; } catch (_) { nextWav = null; continue; }   // une phrase qui rate ne casse pas la suite
+        nextWav = null;
+        if (me.cancelled) break;
+        if (queue.length) nextWav = synthToWav(queue.shift(), voiceId);        // pipeline : synthèse de la suivante pendant la lecture
+        if (!started) { started = true; onState && onState('speaking'); }
+        await _playBlob(wav, me);
+      }
+    } finally {
+      if (nextWav) nextWav.catch(() => {});
+      if (_current === me) { _current = null; onState && onState('idle'); }
+    }
+  })();
+
+  return {
+    push(fullText) { feed(fullText, false); },
+    end(finalText) {
+      ended = true;
+      if (finalText != null) feed(finalText, true);
+      else if (wake) { const w = wake; wake = null; w(); }
+    },
+    cancel() {
+      me.cancelled = true;
+      if (wake) { const w = wake; wake = null; w(); }
+      stopSpeaking();
+    },
+  };
+}
