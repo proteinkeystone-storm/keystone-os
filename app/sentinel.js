@@ -634,29 +634,84 @@ function _copyCode(targetId, btn) {
   if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {});
   if (btn) btn.innerHTML = `${icon('check', 13)} Copié`;
 }
+// S7.2 — rapport PDF complet, aligné sur le cockpit (KPI + profil + GEO + correctifs).
 function _exportPdf() {
   const p = _panel; if (!p) return;
-  const d = new Date();
-  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-  const scores = p.scores || {}; const g = p.score;
-  const axisRows = AXES.map((a) => `<tr><td>${a.label}</td><td style="text-align:right">${scores[a.k] == null ? 'n/a' : scores[a.k] + ' / 100'}</td></tr>`).join('');
+  const site = p.site || {}; const scores = p.scores || {}; const g = p.score;
+  const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const col = (v) => v == null ? '#94a3b8' : (v >= 80 ? '#16a34a' : (v >= 50 ? '#d97706' : '#dc2626'));
+  const host = _hostOf(site.url || ''); const plat = PLATFORM_LABEL[site.platform] || '';
+
+  // ── KPI ──
+  const lcp = p.cwv && p.cwv.lcp;
+  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1) + ' s' : 'n/a';
+  const up = p.uptime30d != null ? String(p.uptime30d).replace('.', ',') + ' %' : 'n/a';
+  const scTrend = p.scoreTrend == null ? 'première mesure' : (p.scoreTrend > 0 ? `+${p.scoreTrend} cette semaine` : (p.scoreTrend < 0 ? `${p.scoreTrend} cette semaine` : 'stable'));
+  const sslTxt = p.ssl && p.ssl.valid ? 'Valide' : (p.ssl && p.ssl.https ? 'À vérifier' : 'HTTP');
+  const kpi = (l, v, s, c) => `<td style="padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;vertical-align:top"><div style="font-size:11px;color:#64748b">${l}</div><div style="font-size:22px;font-weight:800;color:${c || '#0f172a'};margin-top:3px">${v}</div><div style="font-size:11px;color:#64748b;margin-top:3px">${s}</div></td>`;
+  const kpis = `<table style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:14px 0 4px"><tr>
+    ${kpi('Disponibilité · 30 j', up, p.uptimeTrend === 'down' ? 'en baisse' : (p.uptimeTrend === 'up' ? 'en hausse' : 'stable'))}
+    ${kpi('Score global', `${g != null ? g : '—'}<span style="font-size:12px;color:#94a3b8">/100</span>`, scTrend, col(g))}
+    ${kpi('Chargement (LCP)', lcpTxt, lcp == null ? 'relancer l\'audit' : (lcp <= 2500 ? 'bon' : 'à améliorer'))}
+    ${kpi('Certificat SSL', sslTxt, p.ssl && p.ssl.valid ? 'vérifié à l\'instant' : '')}
+  </tr></table>`;
+
+  // ── Profil (axes + mini-barres) ──
+  const RADAR_AXES = [
+    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Sécurité', scores.securite],
+    ['Accessibilité', scores.accessibilite], ['Présence locale', scores.presence],
+    ['Visibilité IA (GEO)', (p.geo && p.geo.score != null) ? p.geo.score : null], ['Disponibilité', p.uptime30d != null ? Math.round(p.uptime30d) : scores.disponibilite],
+  ];
+  const axisRows = RADAR_AXES.map(([label, v]) => `<tr>
+    <td style="padding:5px 0;font-size:13px;color:#334155;width:150px">${label}</td>
+    <td style="padding:5px 8px;width:100%"><div style="background:#eef1f5;border-radius:99px;height:7px"><div style="background:${col(v)};height:7px;border-radius:99px;width:${v == null ? 0 : Math.max(2, Math.min(100, v))}%"></div></div></td>
+    <td style="padding:5px 0;text-align:right;font-size:13px;font-weight:700;color:${col(v)};width:48px">${v == null ? 'n/a' : v}</td></tr>`).join('');
+
+  // ── Visibilité IA (GEO) ──
+  let geoHtml = '';
+  const geo = p.geo;
+  if (geo && geo.results && geo.results.length) {
+    const engines = [...new Set(geo.results.flatMap((r) => (r.engines || []).map((c) => c.engine)))].map((e) => _GEO_ENGINE_LABEL[e] || e);
+    const rows = geo.results.map((r) => {
+      const cells = r.engines || [];
+      const cited = cells.some((c) => c.cited);
+      const detail = cells.map((c) => `${_GEO_ENGINE_LABEL[c.engine] || c.engine} : ${c.error ? 'échec' : (c.cited ? ('cité' + (c.rank ? ' n°' + c.rank : '')) : (c.sourced ? 'source citée' : 'non cité'))}`).join(' · ');
+      return `<div class="f"><div class="ft"><b style="color:${cited ? '#16a34a' : '#dc2626'}">${cited ? 'Cité' : 'Non cité'}</b> — ${_esc(r.prompt)}</div><div class="fd">${_esc(detail)}</div></div>`;
+    }).join('');
+    geoHtml = `<h2>Visibilité dans les IA (GEO) — score ${geo.score != null ? geo.score : '—'}/100</h2><div class="sub2">Moteurs interrogés : ${engines.join(', ') || 'Gemini'}</div>${rows}`;
+  }
+
+  // ── À corriger en priorité ──
   const order = { high: 0, medium: 1, low: 2 };
-  const finds = [...(p.findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3)).map((f) => {
+  const sorted = [...(p.findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
+  const totalGain = sorted.reduce((s, f) => s + ((_SEV_PRIO[f.sev] || {}).gain || 0), 0);
+  const finds = sorted.map((f) => {
+    const prio = _SEV_PRIO[f.sev] || _SEV_PRIO.low;
+    const pc = f.sev === 'high' ? '#dc2626' : (f.sev === 'medium' ? '#d97706' : '#64748b');
     const steps = (f.fix && f.fix.steps) ? `<ol>${f.fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
     const code = (f.fix && f.fix.code) ? `<div class="cl">${_esc(f.fix.codeLabel || 'Code')}</div><pre>${_esc(f.fix.code)}</pre>` : '';
-    return `<div class="f"><div class="ft"><b>[${SEV_LABEL[f.sev] || ''}]</b> ${_esc(f.title)}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
+    const tag = (plat && f.fix) ? ` · <span style="color:#6366f1">${_esc(plat)}</span>` : '';
+    return `<div class="f"><div class="ft"><b style="color:${pc}">[${prio.label}]</b> ${_esc(f.title)}${tag}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
   }).join('');
+
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sentinel — ${_esc(p.name || 'Audit')}</title>
-  <style>body{font-family:-apple-system,system-ui,sans-serif;color:#0f172a;max-width:760px;margin:32px auto;padding:0 24px;line-height:1.5}
-  h1{font-size:24px;margin:0 0 2px}.sub{color:#64748b;font-size:13px;margin-bottom:18px}.score{font-size:52px;font-weight:800;margin:6px 0}
-  table{width:100%;border-collapse:collapse;margin:6px 0 18px}td{padding:6px 0;border-bottom:1px solid #eee;font-size:14px}
-  h2{font-size:16px;margin:16px 0 6px}.f{border-top:1px solid #eee;padding:10px 0}.ft{font-size:14px}.fd{color:#64748b;font-size:13px;margin:2px 0 6px}
+  <style>body{font-family:-apple-system,system-ui,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 24px;line-height:1.5}
+  h1{font-size:24px;margin:0 0 2px}.sub{color:#64748b;font-size:13px}.sub2{color:#64748b;font-size:12px;margin:-2px 0 8px}
+  h2{font-size:16px;margin:22px 0 6px;border-top:2px solid #0f172a;padding-top:10px}
+  .f{border-top:1px solid #eee;padding:10px 0}.ft{font-size:14px}.fd{color:#64748b;font-size:13px;margin:2px 0 6px}
   .cl{font-size:12px;color:#64748b;margin:6px 0 2px}ol{margin:6px 0;padding-left:20px;font-size:13px;color:#334155}
-  pre{background:#f6f7f9;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word}.foot{margin-top:24px;color:#94a3b8;font-size:11px}</style></head><body>
-  <h1>Rapport Sentinel — ${_esc(p.name || 'Audit')}</h1><div class="sub">Audit web · ${date}</div>
-  <div class="score">${g != null ? g : '—'}<span style="font-size:18px;color:#94a3b8">/100</span></div>
-  <table>${axisRows}</table><h2>À corriger en priorité — solutions clé en main</h2>${finds || '<p>Aucun problème détecté.</p>'}
-  <div class="foot">Généré par Keystone Sentinel</div></body></html>`;
+  pre{background:#f6f7f9;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word}
+  .foot{margin-top:24px;color:#94a3b8;font-size:11px;border-top:1px solid #eee;padding-top:12px}
+  @media print{.f,h2{page-break-inside:avoid}}</style></head><body>
+  <div style="font-size:12px;color:#6366f1;font-weight:700;letter-spacing:.04em">KEYSTONE SENTINEL</div>
+  <h1>Rapport d'audit — ${_esc(p.name || host || 'site')}</h1>
+  <div class="sub">${_esc(host)}${plat ? ' · ' + _esc(plat) : ''} · ${date}${site.last_ok ? ' · en ligne' : ''}</div>
+  ${kpis}
+  <h2>Profil du site</h2><table style="width:100%;border-collapse:collapse">${axisRows}</table>
+  ${geoHtml}
+  <h2>À corriger en priorité — solutions clé en main <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></h2>
+  ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
+  <div class="foot">Généré par Keystone Sentinel — chaque correctif inclut les étapes et le code prêt à coller.</div></body></html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
   w.document.write(html); w.document.close();
