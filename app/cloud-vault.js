@@ -15,7 +15,13 @@ const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 // PROVIDERS (les 7 provider-ids, incl. legacy meta/perplexity) vient
 // désormais de la source unique app/lib/engines.js — sync clés inchangée.
 export const PREFS_KEYS = [
-    'ks_active_engine','ks_user_name','ks_user_photo',
+    'ks_active_engine','ks_user_name',
+    // ⚠ ks_user_photo VOLONTAIREMENT ABSENT (2026-06-21). L'avatar est stocké en
+    // base64 et peut peser >1 Mo ; le synchroniser faisait dépasser la limite du
+    // coffre (64 Ko) → TOUTE sauvegarde échouait en 413, donc plus AUCUN réglage
+    // ne se sauvait (clés effacées qui « revenaient », préférences perdues). La
+    // photo reste donc LOCALE par appareil (même logique que ks_living_layer_on).
+    // Avatar cross-device = à refaire via une vignette redimensionnée (~15 Ko).
     'ks_lock_style','ks_lock_enabled','ks_lock_delay',
     'ks_pad_order',
     // Sprint Kodex-3.3 : brouillons d'artefacts à workspace fullscreen
