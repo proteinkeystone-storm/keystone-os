@@ -4,12 +4,74 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Keystone OS — Tous vos outils métier, un seul OS.</title>
-<meta name="description" content="Keystone réunit vos outils métier — annonces immo, QR interactifs, formulaires intelligents, table ronde créative — dans un seul OS modulaire et souverain, hébergé en Europe. Vous activez ce dont vous avez besoin.">
+<meta name="description" content="Keystone réunit vos outils métier — annonces, QR interactifs, formulaires intelligents, agent IA — dans un seul OS modulaire et souverain, hébergé en Europe.">
+<link rel="canonical" href="https://protein-keystone.com/">
+<meta name="robots" content="index, follow">
+<!-- Open Graph -->
 <meta property="og:title" content="Keystone OS — Tous vos outils métier, un seul OS.">
 <meta property="og:description" content="Un OS modulaire pour vos outils métier. Souverain, hébergé en Europe. Vous activez ce dont vous avez besoin.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://protein-keystone.com/">
+<meta property="og:site_name" content="Keystone OS">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:image" content="https://protein-keystone.com/og-cover.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="Keystone OS — Tous vos outils métier, un seul OS. Modulaire, souverain, hébergé en Europe.">
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Keystone OS — Tous vos outils métier, un seul OS.">
+<meta name="twitter:description" content="Un OS modulaire pour vos outils métier. Souverain, hébergé en Europe.">
+<meta name="twitter:image" content="https://protein-keystone.com/og-cover.png">
 <meta name="theme-color" content="#020617">
 <link rel="icon" href="/keystone-puce.svg" type="image/svg+xml">
+<!-- Données structurées (Schema.org) — Organization · WebSite · SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://protein-keystone.com/#organization",
+      "name": "Keystone OS",
+      "legalName": "Protein Keystone OS",
+      "url": "https://protein-keystone.com/",
+      "logo": "https://protein-keystone.com/keystone-logo.svg",
+      "image": "https://protein-keystone.com/og-cover.png",
+      "email": "protein.keystone@gmail.com",
+      "description": "OS modulaire qui réunit les outils métier des TPE et des indépendants. Souverain, hébergé en Europe, conforme RGPD.",
+      "areaServed": "FR"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://protein-keystone.com/#website",
+      "name": "Keystone OS",
+      "url": "https://protein-keystone.com/",
+      "inLanguage": "fr-FR",
+      "publisher": { "@id": "https://protein-keystone.com/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://protein-keystone.com/#app",
+      "name": "Keystone OS",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://protein-keystone.com/",
+      "inLanguage": "fr-FR",
+      "description": "Un seul OS pour tous vos outils métier : annonces, QR interactifs, formulaires intelligents, agent IA et table ronde créative. Vous activez ce dont vous avez besoin.",
+      "featureList": [
+        "Annonces immobilières assistées par IA",
+        "Smart QR — QR codes interactifs pilotés par template métier",
+        "Formulaires intelligents",
+        "Smart Agent — agent IA qui répond à vos clients",
+        "Table ronde créative (brainstorming assisté par IA)",
+        "Publication sur les réseaux sociaux"
+      ],
+      "publisher": { "@id": "https://protein-keystone.com/#organization" }
+    }
+  ]
+}
+</script>
 <script>
 /* AUTO-REDIRECT : déjà connecté → /app ; retour de Stripe (?ks_key) → page d'activation. */
 (function(){
@@ -407,6 +469,20 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .plan li svg{width:15px; height:15px; color:var(--accent-2); flex:0 0 auto; margin-top:1px}
 .plan .btn{width:100%; justify-content:center; margin-top:auto}
 
+/* 6.5 · FAQ (AEO — questions/réponses structurées) */
+.faq{max-width:760px; margin:0 auto; padding:24px}
+.faq-head{text-align:center; margin-bottom:34px}
+.faq-list{display:flex; flex-direction:column; gap:12px}
+.faq-item{border:1px solid var(--border-strong); border-radius:16px; background:linear-gradient(160deg,var(--bg-2),var(--bg-3)); overflow:hidden}
+.faq-item[open]{border-color:var(--accent-bd)}
+.faq-q{list-style:none; cursor:pointer; padding:20px 22px; font-size:16px; font-weight:700; letter-spacing:-.01em; color:var(--text);
+  display:flex; align-items:center; justify-content:space-between; gap:16px}
+.faq-q::-webkit-details-marker{display:none}
+.faq-q::after{content:''; width:10px; height:10px; flex:0 0 auto; border-right:2px solid var(--text-3); border-bottom:2px solid var(--text-3);
+  transform:rotate(45deg); transition:transform .25s ease; margin-right:4px}
+.faq-item[open] .faq-q::after{transform:rotate(-135deg)}
+.faq-a{padding:0 22px 20px; font-size:14.5px; line-height:1.62; color:var(--text-2)}
+
 /* 7 · cta final + footer */
 .cta-final{text-align:center; padding:110px 24px}
 .cta-final .h2{margin-bottom:26px}
@@ -737,6 +813,68 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   <div class="plans" id="plansGrid"></div>
   <p class="plans-trust reveal">Données hébergées en Europe · Conforme RGPD · Activation sans carte bancaire</p>
 </section>
+
+<!-- 6.5 · FAQ (AEO — visible + JSON-LD FAQPage ci-dessous) -->
+<section class="sec faq reveal" id="faq">
+  <div class="faq-head">
+    <span class="eyebrow">FAQ</span>
+    <h2 class="h2">Questions fréquentes.</h2>
+  </div>
+  <div class="faq-list">
+    <details class="faq-item"><summary class="faq-q">Qu'est-ce que Keystone OS ?</summary>
+      <div class="faq-a">Keystone OS est un système d'exploitation modulaire qui réunit vos outils métier — annonces, QR interactifs, formulaires intelligents, agent IA et table ronde créative — dans une seule interface. Vous n'activez que les outils dont vous avez besoin.</div></details>
+    <details class="faq-item"><summary class="faq-q">Où mes données sont-elles hébergées ?</summary>
+      <div class="faq-a">Vos données sont hébergées en Europe et le service est conforme au RGPD.</div></details>
+    <details class="faq-item"><summary class="faq-q">Comment fonctionne la tarification ?</summary>
+      <div class="faq-a">Les outils sont inclus dans votre abonnement, sans surcoût à l'usage : vous choisissez un plan selon les outils que vous activez. L'activation se fait sans carte bancaire.</div></details>
+    <details class="faq-item"><summary class="faq-q">Dois-je installer un logiciel ?</summary>
+      <div class="faq-a">Non. Keystone fonctionne dans votre navigateur et peut s'installer comme application (PWA) sur mobile et ordinateur.</div></details>
+    <details class="faq-item"><summary class="faq-q">Qu'est-ce que le Smart QR ?</summary>
+      <div class="faq-a">Le Smart QR est un QR code qui ouvre une expérience pilotée par template métier — compte à rebours, jeu à gratter, carte de fidélité, quiz — et pas seulement un lien.</div></details>
+    <details class="faq-item"><summary class="faq-q">Puis-je essayer gratuitement ?</summary>
+      <div class="faq-a">Oui. Une démo gratuite est disponible sans carte bancaire, et votre accès s'active en quelques minutes.</div></details>
+  </div>
+</section>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://protein-keystone.com/#faq",
+  "inLanguage": "fr-FR",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce que Keystone OS ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Keystone OS est un système d'exploitation modulaire qui réunit vos outils métier — annonces, QR interactifs, formulaires intelligents, agent IA et table ronde créative — dans une seule interface. Vous n'activez que les outils dont vous avez besoin." }
+    },
+    {
+      "@type": "Question",
+      "name": "Où mes données sont-elles hébergées ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Vos données sont hébergées en Europe et le service est conforme au RGPD." }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment fonctionne la tarification ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Les outils sont inclus dans votre abonnement, sans surcoût à l'usage : vous choisissez un plan selon les outils que vous activez. L'activation se fait sans carte bancaire." }
+    },
+    {
+      "@type": "Question",
+      "name": "Dois-je installer un logiciel ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Non. Keystone fonctionne dans votre navigateur et peut s'installer comme application (PWA) sur mobile et ordinateur." }
+    },
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce que le Smart QR ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Le Smart QR est un QR code qui ouvre une expérience pilotée par template métier — compte à rebours, jeu à gratter, carte de fidélité, quiz — et pas seulement un lien." }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je essayer gratuitement ?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Oui. Une démo gratuite est disponible sans carte bancaire, et votre accès s'active en quelques minutes." }
+    }
+  ]
+}
+</script>
 
 <!-- 7 · CTA FINAL -->
 <section class="cta-final reveal">

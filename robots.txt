@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Surfaces applicatives privées — inutiles à indexer
+Disallow: /app
+Disallow: /admin
+Disallow: /auth/
+
+Sitemap: https://protein-keystone.com/sitemap.xml
