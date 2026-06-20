@@ -248,7 +248,8 @@ function _render() {
   if (_loading) { _teardownEngine(); c.innerHTML = `<div class="kyn-state"><div class="kyn-spin"></div><p>Chargement de votre constellation…</p></div>`; return; }
   if (_error) { _teardownEngine(); c.innerHTML = `<div class="kyn-state"><p class="kyn-err">${_esc(_error)}</p><button class="kyn-btn" data-act="kyn-retry">Réessayer</button></div>`; return; }
   if (!_state.bubbles.length) { _teardownEngine(); c.innerHTML = _emptyHTML(); _focusComposer(); return; }
-  if (!_engine) {
+  const _freshEngine = !_engine;
+  if (_freshEngine) {
     c.innerHTML = `
       <div class="kyn-stage" data-slot="stage"></div>
       <div class="kyn-toolbar">
@@ -263,6 +264,10 @@ function _render() {
     _engine = createConstellation({ container: stage, onBubbleMoved: _persistMove, onBubbleClick: _onBubbleClick, motion: _motionOn() });
   }
   _pushEngine();
+  // Au tout premier rendu, cadrer l'ensemble de la constellation. Sans ça, la vue
+  // reste à l'origine (zoom 1, centrée sur 0,0) et toutes les bulles posées au-delà
+  // du viewport tombent hors champ — d'où l'empilement au centre au démarrage.
+  if (_freshEngine) _engine.fitAll();
 }
 async function _persistMove(id, x, y) {
   const b = _state.bubbles.find((bb) => bb.id === id);

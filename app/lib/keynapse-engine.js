@@ -95,6 +95,11 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved, m
   function applyTransform() {
     viewport.setAttribute('transform', `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${k.toFixed(4)})`);
     svg.dataset.zoom = k < Z_FAR ? 'far' : (k > Z_NEAR ? 'near' : 'mid');
+    // Un changement de vue (pan / zoom / cadrage) fait entrer ou sortir des bulles
+    // du champ : on réveille la boucle pour au moins une passe de rendu, qui
+    // ré-applique le masquage hors-champ. Indispensable animation FIGÉE (boucle à
+    // l'arrêt), sinon le masquage ne se mettrait jamais à jour. No-op si déjà en cours.
+    ensureRunning();
   }
   applyTransform();
   function toWorld(px, py) { return { x: (px - tx) / k, y: (py - ty) / k }; }
@@ -276,7 +281,15 @@ export function createConstellation({ container, onBubbleClick, onBubbleMoved, m
       if (!n.el) continue;
       const sx = n.x * k + tx, sy = n.y * k + ty;
       n._sx = sx; n._sy = sy;
-      if (sx < xMin || sx > xMax || sy < yMin || sy > yMax) continue;     // hors champ
+      if (sx < xMin || sx > xMax || sy < yMin || sy > yMax) {
+        // Hors champ → on MASQUE la bulle. Sinon un <g> fraîchement (re)créé par
+        // build() — donc SANS transform — s'afficherait à l'origine monde (0,0),
+        // c.-à-d. au centre exact de l'écran : c'était l'empilement des bulles au
+        // démarrage (toutes celles posées au-delà du viewport tombaient au centre).
+        if (!n._off) { n._off = true; n.el.style.display = 'none'; }
+        continue;
+      }
+      if (n._off) { n._off = false; n.el.style.display = ''; }
       n.el.setAttribute('transform', `translate(${n.x.toFixed(2)},${n.y.toFixed(2)})`);
     }
     for (const l of links) {
