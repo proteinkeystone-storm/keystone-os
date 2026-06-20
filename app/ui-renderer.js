@@ -169,6 +169,47 @@ const LS_PREFIX     = 'ks_api_';
 const LS_ENGINE     = 'ks_active_engine';
 const LS_USER_NAME  = 'ks_user_name';
 const LS_USER_PHOTO = 'ks_user_photo';
+
+// Redimensionne une image base64 en vignette (max ~256 px, JPEG) pour que
+// l'avatar tienne dans le Cloud Vault (<64 Ko) au lieu de >1 Mo brut.
+// Best-effort : en cas d'échec, renvoie l'original inchangé.
+function _downscalePhoto(dataUrl, maxPx = 256, quality = 0.82) {
+    return new Promise((resolve) => {
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) { resolve(dataUrl); return; }
+        try {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+                    if (!w || !h) { resolve(dataUrl); return; }
+                    const scale = Math.min(maxPx / w, maxPx / h, 1);
+                    if (scale === 1 && dataUrl.length < 60000) { resolve(dataUrl); return; }
+                    w = Math.round(w * scale); h = Math.round(h * scale);
+                    const c = document.createElement('canvas');
+                    c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    resolve(c.toDataURL('image/jpeg', quality));
+                } catch (_) { resolve(dataUrl); }
+            };
+            img.onerror = () => resolve(dataUrl);
+            img.src = dataUrl;
+        } catch (_) { resolve(dataUrl); }
+    });
+}
+
+// Migration unique (2026-06-21) : l'ancien avatar était stocké BRUT (>1 Mo) →
+// faisait échouer la sauvegarde Cloud Vault (413). On le réduit en vignette et
+// on supprime l'orphelin legacy `ks_avatar` (plus référencé). Idempotent.
+(async function _migrateAvatarStorage() {
+    try {
+        localStorage.removeItem('ks_avatar');
+        const p = localStorage.getItem(LS_USER_PHOTO);
+        if (p && p.startsWith('data:image') && p.length > 60000) {
+            const small = await _downscalePhoto(p);
+            if (small && small.length < p.length) localStorage.setItem(LS_USER_PHOTO, small);
+        }
+    } catch (_) {}
+})();
 // Living Layer (2026-05-24)
 const LS_LIVING_ON    = 'ks_living_layer_on';
 const LS_LIVING_CACHE = 'ks_living_cache';
@@ -4528,8 +4569,8 @@ function _renderSettingsBody() {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = ev => {
-            const dataUrl = ev.target.result;
+        reader.onload = async ev => {
+            const dataUrl = await _downscalePhoto(ev.target.result);   // vignette ~256px → léger + synchronisable
             localStorage.setItem(LS_USER_PHOTO, dataUrl);
             _updateIdentityZone();
             _refreshPhotoPreview();
