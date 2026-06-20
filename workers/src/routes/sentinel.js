@@ -39,7 +39,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credi
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 
-const SENTINEL_ENGINE_VERSION = 'S7.1';
+const SENTINEL_ENGINE_VERSION = 'S7.3';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -794,8 +794,19 @@ export async function handleSiteCockpit(request, env, id) {
     if (prev && prev.score != null) scoreTrend = audit.score - prev.score;
   }
 
-  // SSL : souverain — un HTTPS joignable = certificat valide à l'instant (pas de J-XX).
-  let https = false; try { https = new URL(site.url).protocol === 'https:'; } catch (_) {}
+  // SSL : on suit les redirections pour juger le schéma RÉEL (un site surveillé via
+  // une URL http:// qui redirige vers https n'est PAS « non sécurisé »). Best-effort :
+  // en cas d'échec, on retombe sur le schéma de l'URL enregistrée. Pas de J-XX (souverain).
+  let https = false;
+  try { https = new URL(site.url).protocol === 'https:'; } catch (_) {}
+  try {
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), SUB_TIMEOUT_MS);
+    try {
+      const r = await fetch(site.url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
+      try { await r.body?.cancel?.(); } catch (_) {}
+      if (r && r.url) https = /^https:/i.test(r.url);
+    } finally { clearTimeout(timer); }
+  } catch (_) { /* garde le schéma de l'URL enregistrée */ }
   const ssl = { https, valid: !!(https && site.last_ok) };
 
   // GEO (config + dernier relevé).
