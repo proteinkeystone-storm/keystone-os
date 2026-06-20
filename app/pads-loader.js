@@ -187,12 +187,12 @@ async function _refreshCatalogFromD1() {
 }
 
 // ── Liste dynamique des outils ──────────────────────────────────
-// Les pads avec `replacedBy` sont conservés dans PADS_DATA (compat
-// utilisateurs ayant déjà acheté / brouillons) mais filtrés du
-// dashboard. Sprint VEFA-Studio-1 : A1 et A9 → O-IMM-010.
+// Filtrés du dashboard : les pads `replacedBy` (compat anciens achats /
+// brouillons, ex. A1/A9 → O-IMM-010) ET les pads `published:false`
+// (retirés du catalogue, ex. VEFA Studio / Annonces Immo). Réversible.
 export function getToolList() {
     return Object.values(_padsCache)
-        .filter(pad => !pad.replacedBy)
+        .filter(pad => !pad.replacedBy && pad.published !== false)
         .map(pad => ({
             id:     pad.id,
             padKey: pad.padKey || pad.id,
@@ -210,7 +210,7 @@ export function getToolList() {
 // O-IMM-010 mais reste un artefact fullscreen.
 export function getArtefactList() {
     return _catalogCache.tools
-        .filter(t => t.padKey === null || t.padKey === undefined)
+        .filter(t => (t.padKey === null || t.padKey === undefined) && !t.replacedBy && t.published !== false)
         .map(t => ({
             id:     t.id,
             name:   t.title || t.id,
