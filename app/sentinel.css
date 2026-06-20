@@ -275,3 +275,10 @@
 .snt-geo-mq { font-size: 13px; color: var(--ws-text); }
 .snt-geo-mta { height: auto; min-height: 56px; padding: 8px 12px; font-size: 13.5px; line-height: 1.5; resize: vertical; font-family: inherit; }
 .snt-geo-mmsg:empty { display: none; }
+/* Neutralise le flex horizontal de .snt-input dans ce panneau vertical
+   (sinon flex-basis 220px devient une HAUTEUR → champs/select géants). */
+.snt-geo .snt-input { flex: none; width: 100%; }
+/* Sélecteur d'IA : retire le chrome natif (énorme boîte grise) + chevron custom. */
+.snt-geo select.snt-input { appearance: none; -webkit-appearance: none; height: 44px; padding: 0 38px 0 14px; cursor: pointer; color-scheme: dark; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
+/* Bloc-prompt : on revient à la ligne au lieu de scroller horizontalement. */
+#snt-geo-block { white-space: pre-wrap; word-break: break-word; overflow-x: hidden; max-height: 220px; overflow-y: auto; }
