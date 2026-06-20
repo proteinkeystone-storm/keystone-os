@@ -58,9 +58,10 @@ import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
 import { budgetGuard }                            from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-router.js';
+import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-9.6';
+const SA_ENGINE_VERSION = 'SA-10.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1084,6 +1085,135 @@ async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, fa
   const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
   const res = await env.AI.run(KS_AI_MODEL, { messages: msgs, max_tokens, stream: false });
   return (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SA-10.0 — Chat en STREAMING (SSE), additif et opt-in (body.stream)
+   ─────────────────────────────────────────────────────────────
+   Le chemin JSON ci-dessus reste INCHANGÉ. Quand le client demande
+   `stream:true`, le handler renvoie un text/event-stream :
+     · { type:'meta',  session_id }                — d'emblée
+     · { type:'chunk', text }                      — deltas au fil de l'eau
+     · { type:'done',  reply, citations?, gapped, grounding } — CANONIQUE
+       (texte post-traité : [GAP] retiré, anti-radotage, citations) ; le
+        front remplace l'aperçu progressif par ce `reply` à la clôture.
+     · { type:'error', error }
+   La VOIX (SA-10.1, front) pourra lire phrase par phrase dès les chunks
+   → premier son après ~1 phrase au lieu de la réponse entière.
+   ═══════════════════════════════════════════════════════════════ */
+
+// Nettoie le texte AFFICHÉ pendant le stream (aperçu). Masque toujours le
+// marqueur [GAP] (jamais montré) ; en canal public, masque aussi les
+// citations [n] (le coffre n'est jamais exposé). Le `done` porte de toute
+// façon le texte canonique. Pur → testé.
+export function cleanForChannel(text, channel) {
+  let t = String(text || '').replace(/\[\s*GAP\s*\]/gi, '');
+  if (channel === 'public') t = t.replace(/\[\d{1,2}\]/g, '');
+  return t;
+}
+
+// Émetteur de chunks « propres », anti-doublon ET anti-fuite de marqueur.
+// Accumule le brut, recalcule l'aperçu nettoyé, et n'émet QUE le suffixe
+// nouveau — en RETENANT toute fin qui ressemble à un marqueur EN COURS
+// (« [ », « [GA », « [1 » non encore fermé) tant que son « ] » n'est pas
+// arrivé : sinon « [GAP] » fragmenté en deux deltas laisserait fuiter « [GA ».
+// flush() émet le reste sûr à la clôture. Pur → testé.
+export function makeStreamEmitter(channel, send) {
+  let acc = '', sent = '';
+  const emitUpTo = (emittable) => {
+    if (emittable.length > sent.length && emittable.startsWith(sent)) {
+      send(emittable.slice(sent.length));
+      sent = emittable;
+    } else if (emittable !== sent && !emittable.startsWith(sent)) {
+      sent = emittable;   // resync défensif (le done réconcilie l'affichage)
+    }
+  };
+  return {
+    push(rawDelta) {
+      acc += String(rawDelta || '');
+      const clean = cleanForChannel(acc, channel);
+      // Retiens le crochet ouvrant final non refermé (marqueur en formation).
+      const open = clean.lastIndexOf('[');
+      const safe = (open !== -1 && !clean.slice(open).includes(']')) ? clean.slice(0, open) : clean;
+      emitUpTo(safe);
+    },
+    flush() { emitUpTo(cleanForChannel(acc, channel)); },
+    get sent() { return sent; },
+    get raw()  { return acc; },
+  };
+}
+
+// Streaming du chemin par défaut (Mistral / Workers AI) — pendant streaming
+// de _agentLLM non-BYOK. Parse le ReadableStream SSE de env.AI.run({stream:true})
+// (chunks {response:"…"}), appelle onChunk et RENVOIE le texte complet.
+export async function streamMistralReply(env, { system, messages, max_tokens, onChunk }) {
+  if (!env?.AI || typeof env.AI.run !== 'function') {
+    throw new Error('Moteur IA indisponible (env.AI)');
+  }
+  const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+  const aiStream = await env.AI.run(KS_AI_MODEL, { messages: msgs, max_tokens, stream: true });
+  const reader = aiStream.getReader();
+  const decoder = new TextDecoder('utf-8');
+  const cb = typeof onChunk === 'function' ? onChunk : () => {};
+  let buffer = '', full = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let p; try { p = JSON.parse(data); } catch { continue; }
+      const chunk = p?.response ?? p?.choices?.[0]?.delta?.content ?? '';
+      if (chunk) { full += chunk; cb(chunk); }
+    }
+  }
+  return full;
+}
+
+// Dispatch streaming : BYOK (vendor via streamLLM) sinon Mistral. Pendant
+// streaming de _agentLLM. fallbackOnError (public) : si le vendor échoue
+// AVANT le 1er chunk, repli Mistral transparent ; owner ⇒ on remonte
+// l'erreur. Coupure APRÈS le 1er chunk : streamLLM rend le partiel (jamais
+// de re-stream = zéro doublon, cf. contrat llm-stream.js).
+async function _streamAgentReply(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError = false, onChunk }) {
+  if (_agentUseByok(env, engine, apiKey)) {
+    try {
+      return await streamLLM(env, { engine, apiKey, system, messages, max_tokens, onChunk });
+    } catch (e) {
+      if (!fallbackOnError) throw e;   // owner : « clé X invalide » remontée
+      // public : rien d'émis (throw = pré-1er-chunk) → repli Mistral.
+    }
+  }
+  return await streamMistralReply(env, { system, messages, max_tokens, onChunk });
+}
+
+// Enveloppe SSE commune : exécute run(send) et garantit la clôture + un
+// event d'erreur propre. Mêmes en-têtes que le débat live (brainstorming).
+function _sseChatResponse(origin, run) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch (_) { /* closed */ }
+      };
+      try { await run(send); }
+      catch (e) { send({ type: 'error', error: e?.message || 'Dialogue impossible' }); }
+      finally { try { controller.close(); } catch (_) { /* already closed */ } }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'Content-Type':                'text/event-stream; charset=utf-8',
+      'Cache-Control':               'no-cache',
+      'Connection':                  'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'X-Accel-Buffering':           'no',
+    },
+  });
 }
 
 async function _aiExtract(env, gate, systemPrompt, userContent, byok = null) {
@@ -2325,6 +2455,8 @@ export async function handleAgentChat(request, env, agentId) {
   // BYOK (D1/D3) : moteur du proprio (bac à sable « Tester ») → HORS compteur.
   const byok = _byokFromBody(b);
   const useByok = _agentUseByok(env, byok.engine, byok.apiKey);
+  // SA-10.0 — streaming opt-in (le front l'active en SA-10.1). Absent ⇒ JSON.
+  const wantStream = b?.stream === true;
 
   // ── Session (créée au premier message, vérifiée ensuite) ──
   let sessionId = (typeof b.session_id === 'string' && b.session_id) ? b.session_id : null;
@@ -2414,6 +2546,13 @@ export async function handleAgentChat(request, env, agentId) {
     await _logGap(env, gate.tenant, agentId, message);
     const replyText = pickFallback(agent.config?.scope);   // SA-8.0 — repli varié
     await _persist(replyText, [], true);
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'chunk', text: replyText });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, citations: [], grounding: 0, gapped: true });
+      });
+    }
     return json({
       session_id: sessionId, reply: replyText, citations: [],
       grounding: 0, gapped: true,
@@ -2446,6 +2585,43 @@ export async function handleAgentChat(request, env, agentId) {
     // exige le system en top-level (cf. _agentLLM). Mistral le ré-assemble.
     const sysMsg   = messages.find(m => m.role === 'system');
     const convMsgs = messages.filter(m => m.role !== 'system');
+
+    // ── SA-10.0 — variante STREAMING (même post-traitement d'ancrage) ──
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta', session_id: sessionId });
+        const emit = makeStreamEmitter('internal', (text) => send({ type: 'chunk', text }));
+        let rawFull;
+        try {
+          rawFull = await _streamAgentReply(env, {
+            engine: byok.engine, apiKey: byok.apiKey,
+            system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+            fallbackOnError: false, onChunk: (t) => emit.push(t),
+          });
+        } catch (e) {
+          await _refund();
+          send({ type: 'error', error: `Dialogue impossible : ${e.message || 'erreur IA'}` });
+          return;
+        }
+        emit.flush();
+        const raw = String(rawFull || '').trim();
+        if (!raw) { await _refund(); send({ type: 'error', error: 'Réponse IA vide — réessayez.' }); return; }
+        const { gapped: gapMarked, text: cleanText } = splitGapReply(raw, fallbackText);
+        const replyText = stripRepeatedFollowup(cleanText, history);
+        const ns = extractCitations(replyText, hits.length);
+        const citations = ns.map(n => ({
+          n, unit_id: hits[n - 1].row.id, title: hits[n - 1].row.title, type: hits[n - 1].row.type,
+        }));
+        const gapped = gapMarked && citations.length === 0;
+        if (gapped) await _logGap(env, gate.tenant, agentId, message);
+        await _persist(replyText, citations, gapped);
+        send({
+          type: 'done', session_id: sessionId, reply: replyText, citations,
+          grounding: gapped ? 0 : grounding, gapped, credits: credit?.payload || null,
+        });
+      });
+    }
+
     const raw = (await _agentLLM(env, {
       engine: byok.engine, apiKey: byok.apiKey,
       system: sysMsg?.content,
@@ -2638,6 +2814,8 @@ export async function handlePublicAgentChat(request, env, slug) {
   // (chat public INCHANGÉ). La clé n'est jamais exposée au visiteur.
   const byok = await resolveEngineForTenant(env, tenant);
   const useByok = !!byok;
+  // SA-10.0 — streaming opt-in (le front l'active en SA-10.1). Absent ⇒ JSON.
+  const wantStream = b?.stream === true;
 
   // Crédits débités sur le PROPRIÉTAIRE (lookup_hmac = tenant du lien), pas le
   // visiteur. Flag dormant : aucun blocage tant que enforce non activé.
@@ -2688,6 +2866,13 @@ export async function handlePublicAgentChat(request, env, slug) {
     await _logGap(env, tenant, link.agent_id, message);
     const replyText = pickFallback(agent.config?.scope);   // SA-8.0 — repli varié
     await _persist(replyText, true);
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'chunk', text: replyText });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: true });
+      });
+    }
     return json({ session_id: sessionId, reply: replyText, gapped: true }, 200, origin);
   }
 
@@ -2715,6 +2900,36 @@ export async function handlePublicAgentChat(request, env, slug) {
     // visiteur, D4). system isolé pour Anthropic.
     const sysMsg   = messages.find(m => m.role === 'system');
     const convMsgs = messages.filter(m => m.role !== 'system');
+
+    // ── SA-10.0 — variante STREAMING (canal public : zéro [n] exposé) ──
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta', session_id: sessionId });
+        const emit = makeStreamEmitter('public', (text) => send({ type: 'chunk', text }));
+        let rawFull;
+        try {
+          rawFull = await _streamAgentReply(env, {
+            engine: byok?.engine, apiKey: byok?.apiKey,
+            system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+            fallbackOnError: true, onChunk: (t) => emit.push(t),
+          });
+        } catch (e) {
+          await _refund();
+          send({ type: 'error', error: 'Dialogue impossible — réessayez.' });
+          return;
+        }
+        emit.flush();
+        const raw = String(rawFull || '').trim();
+        if (!raw) { await _refund(); send({ type: 'error', error: 'Réponse indisponible — réessayez.' }); return; }
+        const { gapped, text } = splitGapReply(raw, fallbackText);
+        if (gapped) await _logGap(env, tenant, link.agent_id, message);
+        // Le coffre n'est JAMAIS exposé au public (défense en profondeur).
+        const publicReply = stripCitations(stripRepeatedFollowup(text, history));
+        await _persist(publicReply, gapped);
+        send({ type: 'done', session_id: sessionId, reply: publicReply, gapped });
+      });
+    }
+
     const raw = (await _agentLLM(env, {
       engine: byok?.engine, apiKey: byok?.apiKey,
       system: sysMsg?.content, messages: convMsgs, max_tokens: 900,

@@ -13,7 +13,8 @@
   },
   "main": "sw.js",
   "scripts": {
-    "test": "node scripts/test-templates.mjs && node scripts/test-concierge-endpoint.mjs && node scripts/test-qr-convert.mjs && node scripts/test-asset-transfer.mjs && node scripts/test-concierge-downgrade.mjs && node scripts/test-webpush.mjs && node scripts/test-sentinel-geo-manual.mjs",
+    "test": "node scripts/test-templates.mjs && node scripts/test-concierge-endpoint.mjs && node scripts/test-qr-convert.mjs && node scripts/test-asset-transfer.mjs && node scripts/test-concierge-downgrade.mjs && node scripts/test-webpush.mjs && node scripts/test-sentinel-geo-manual.mjs && node scripts/test-smart-agent-stream.mjs",
+    "test:sa-stream": "node scripts/test-smart-agent-stream.mjs",
     "test:geo-manual": "node scripts/test-sentinel-geo-manual.mjs",
     "test:webpush": "node scripts/test-webpush.mjs",
     "test:templates": "node scripts/test-templates.mjs",
