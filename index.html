@@ -370,6 +370,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .tcard-more svg{transition:transform .2s}
 .tcard:hover .tcard-more svg{transform:translateX(3px)}
 /* Modale notice (gabarit Modal Master : centré haut, 90vh) */
+.tnmodal[hidden]{display:none!important}   /* sinon le calque inset:0 capte TOUS les clics de la page */
 .tnmodal{position:fixed; inset:0; z-index:200; display:flex; justify-content:center; align-items:flex-start; padding:5vh 16px; opacity:0; transition:opacity .22s ease}
 .tnmodal.is-on{opacity:1}
 .tnmodal-backdrop{position:absolute; inset:0; background:rgba(2,6,23,.72); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
