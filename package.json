@@ -20,7 +20,8 @@
     "test:qr-convert": "node scripts/test-qr-convert.mjs",
     "test:asset-transfer": "node scripts/test-asset-transfer.mjs",
     "test:concierge-downgrade": "node scripts/test-concierge-downgrade.mjs",
-    "bump-sw": "node scripts/bump-sw-version.js"
+    "bump-sw": "node scripts/bump-sw-version.js",
+    "gen-notices": "node scripts/gen-tool-notices.mjs"
   },
   "repository": {
     "type": "git",

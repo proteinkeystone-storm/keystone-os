@@ -35,6 +35,7 @@
       "@id": "https://protein-keystone.com/#organization",
       "name": "Keystone OS",
       "legalName": "Protein Keystone OS",
+      "identifier": { "@type": "PropertyValue", "propertyID": "SIRET", "value": "52072185300023" },
       "url": "https://protein-keystone.com/",
       "logo": "https://protein-keystone.com/keystone-logo.svg",
       "image": "https://protein-keystone.com/og-cover.png",
@@ -362,6 +363,34 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .tcard .ic svg{width:21px; height:21px}
 .tcard h3{font-size:15px; font-weight:700; letter-spacing:-.01em}
 .tcard p{font-size:13px; color:var(--text-2); line-height:1.45; margin-top:6px}
+/* cartes cliquables → modale notice */
+.tcard{cursor:pointer}
+.tcard:focus-visible{outline:2px solid var(--fam,var(--accent)); outline-offset:3px}
+.tcard-more{display:inline-flex; align-items:center; gap:5px; margin-top:13px; font-size:12.5px; font-weight:600; color:var(--fam,var(--accent-3)); opacity:.9}
+.tcard-more svg{transition:transform .2s}
+.tcard:hover .tcard-more svg{transform:translateX(3px)}
+/* Modale notice (gabarit Modal Master : centré haut, 90vh) */
+.tnmodal{position:fixed; inset:0; z-index:200; display:flex; justify-content:center; align-items:flex-start; padding:5vh 16px; opacity:0; transition:opacity .22s ease}
+.tnmodal.is-on{opacity:1}
+.tnmodal-backdrop{position:absolute; inset:0; background:rgba(2,6,23,.72); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
+.tnmodal-panel{position:relative; z-index:1; width:min(720px,100%); max-height:90vh; overflow-y:auto; background:linear-gradient(160deg,var(--bg-2),var(--bg)); border:1px solid var(--border-strong); border-radius:22px; padding:clamp(24px,4vw,40px); box-shadow:0 40px 90px -30px #000; transform:translateY(12px) scale(.99); transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.tnmodal.is-on .tnmodal-panel{transform:none}
+.tnmodal-close{position:absolute; top:14px; right:14px; width:38px; height:38px; display:grid; place-items:center; border-radius:50%; background:rgba(255,255,255,.05); border:1px solid var(--border-strong); color:var(--text-2); cursor:pointer; transition:background .2s,color .2s}
+.tnmodal-close:hover{background:rgba(255,255,255,.1); color:var(--text)}
+/* contenu notice (statique + rendu modale) */
+.tn-title{font-size:clamp(22px,3vw,28px); font-weight:900; letter-spacing:-.02em; padding-right:40px}
+.tn-tldr{margin-top:12px; font-size:15px; line-height:1.6; color:var(--text-2)}
+.tn-h{margin-top:26px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-3)}
+.tn-steps{margin:14px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:10px}
+.tn-steps li{font-size:14px; line-height:1.55; color:var(--text-2)}
+.tn-steps li::marker{color:var(--accent-3); font-weight:700}
+.tn-faq{margin-top:14px; display:flex; flex-direction:column; gap:10px}
+.tn-faq details{border:1px solid var(--border-strong); border-radius:13px; background:rgba(255,255,255,.02); overflow:hidden}
+.tn-faq summary{list-style:none; cursor:pointer; padding:14px 16px; font-size:14.5px; font-weight:600; color:var(--text); display:flex; justify-content:space-between; gap:12px; align-items:center}
+.tn-faq summary::-webkit-details-marker{display:none}
+.tn-faq summary::after{content:''; width:9px; height:9px; flex:0 0 auto; border-right:2px solid var(--text-3); border-bottom:2px solid var(--text-3); transform:rotate(45deg); transition:transform .22s}
+.tn-faq details[open] summary::after{transform:rotate(-135deg)}
+.tn-faq .tn-a{padding:0 16px 14px; font-size:13.5px; line-height:1.6; color:var(--text-2)}
 .tools-more{text-align:center; margin-top:38px; font-size:14px; color:var(--text-3)}
 .tools-more b{color:var(--accent-3); font-weight:600}
 .tools-rise{transform-origin:center center}   /* zoom « depuis le fond » piloté au scroll (desktop) — voir JS */
@@ -809,6 +838,649 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <p class="lead" style="margin:14px auto 0">9 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
     </div>
     <div id="toolsGrid"></div>
+    <!-- Notices outils : contenu STATIQUE (crawlable par Google et les IA) affiché en
+         modale au clic sur une carte. Généré depuis /K_STORE_ASSETS/HELP/*.json par
+         scripts/gen-tool-notices.mjs — NE PAS éditer à la main entre les marqueurs. -->
+    <div id="toolNotices" hidden>
+<!-- TOOL-NOTICES:START -->
+    <article class="tn" id="tn-A-COM-001">
+      <h3 class="tn-title">Smart Dynamic QR</h3>
+      <p class="tn-tldr">Smart Dynamic QR crée des QR codes souverains avec tracking RGPD natif. Statiques ou dynamiques (modifiables après impression), brandés à votre charte, sans dépendance Google.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Choisissez le type de QR (URL, VCard, Wi-Fi, iCal, texte libre)</li>
+        <li>Statique ou dynamique : dynamique = modifiable après impression (parfait pour bâche chantier ou flyer en réimpression)</li>
+        <li>Studio design : ajustez la forme, la couleur, ajoutez votre logo central</li>
+        <li>Chaque scan est tracké côté Keystone, jamais Google ou GAFAM</li>
+        <li>Dashboard statistiques avec export CSV brut RGPD-safe</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Quelle est la différence entre QR statique et dynamique ?</summary><div class="tn-a">Un QR statique encode directement l'URL — impossible à modifier après impression. Un QR dynamique pointe vers une redirection Keystone que vous pouvez changer à tout moment (idéal pour les bâches chantier ou flyers réutilisés).</div></details>
+        <details><summary>Combien de temps les scans sont-ils stockés ?</summary><div class="tn-a">90 jours en détail (date, heure, pays). Au-delà, agrégation anonymisée. Conformité RGPD Art. 5 par design.</div></details>
+        <details><summary>Le tracking respecte-t-il le RGPD ?</summary><div class="tn-a">Oui, natif. Aucune donnée envoyée à Google. Pas de cookie. Pas de fingerprint. Une page de transparence publique est disponible à /sdqr-privacy.</div></details>
+        <details><summary>Puis-je personnaliser le design du QR ?</summary><div class="tn-a">Oui : couleur, forme des modules, logo central, pattern personnalisé. Tous les QR conservent le niveau de correction d'erreurs ECC nécessaire pour rester scannables.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-A-COM-002">
+      <h3 class="tn-title">Brief Prod</h3>
+      <p class="tn-tldr">Brief Prod transforme votre intention créative en cahier des charges technique infaillible pour votre graphiste ou votre imprimeur. Évite l'erreur d'impression à 800 €.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Le support : choisissez votre destination (imprimeur, réseau social, presse). 31 supports × 4 vendors (Exaprint, Vistaprint, Pixartprinting, ou « autre imprimeur ») = 42 specs précises.</li>
+        <li>Le message : renseignez votre projet (nom, lieu, échéance, argumentaire, mentions légales). Brief Prod est universel — aucune segmentation métier.</li>
+        <li>Les visuels : déposez logo, charte graphique, photos dans le coffre-fort assets (jusqu'à 10 Mo par fichier).</li>
+        <li>Le brief : récupérez un PDF prêt à envoyer. Téléchargement instantané sans IA, enrichissement créatif optionnel avec votre clé API personnelle.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Faut-il une clé API IA pour utiliser Brief Prod ?</summary><div class="tn-a">Non. Le brief technique est généré mécaniquement à partir de vos saisies et téléchargeable instantanément en PDF, sans la moindre clé. L'IA n'est qu'un bonus optionnel pour ajouter 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en page 2 du PDF. Si vous configurez une clé Claude, GPT, Gemini, Mistral ou xAI dans le Vault, vous pouvez l'activer ; sinon le plan B « copier le Code Maître + coller dans une AI web gratuite » est toujours disponible.</div></details>
+        <details><summary>Que faire si mon imprimeur n'est pas Exaprint, Vistaprint ou Pixartprinting ?</summary><div class="tn-a">Choisissez « Autre imprimeur » dans le sélecteur vendor à l'étape 1 : Brief Prod applique des standards génériques cohérents (bleed 3-5 mm, CMJN FOGRA39, 300 DPI) et débloque deux champs supplémentaires : URL de la fiche technique officielle + PDF de specs à joindre directement au brief. Votre graphiste suivra ces specs comme référence absolue plutôt que celles d'un vendor par défaut.</div></details>
+        <details><summary>Quelle taille maximum pour mes uploads d'assets ?</summary><div class="tn-a">10 Mo par fichier (encodage base64 inclus, soit environ 7 Mo de binaire réel). Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS, GIF, WebP. Si votre fichier dépasse la limite, utilisez plutôt un lien externe WeTransfer ou Google Drive dans le champ « Brand book complet » des assets.</div></details>
+        <details><summary>Comment fonctionne le calculateur d'échelle pour les grands formats ?</summary><div class="tn-a">Sur un panneau 4×3 m ou une bâche, travailler à l'échelle 1:1 produit des fichiers à 5 Go intraitables. Brief Prod calcule automatiquement le facteur de réduction (typiquement 1/10) et le DPI de sortie nécessaire en fonction de la distance de vue (autoroute = 50 m, métro = 2 m). Vous obtenez le format de travail exact (mm) + le nombre de pixels finaux + la hauteur minimum lisible des titres + une alerte si un visuel uploadé est sous-résolu pour ce contexte.</div></details>
+        <details><summary>Mon brief n'a pas la qualité attendue, que faire ?</summary><div class="tn-a">Trois leviers : 1) basculez sur un autre moteur IA via le menu « Switch engine » dans la card d'enrichissement — chaque modèle a son style propre, et l'argumentaire peut mieux passer chez Claude que chez GPT (ou inversement) ; 2) enrichissez votre argumentaire à l'étape 2 (plus la promesse est précise, meilleure est la sortie) ; 3) utilisez le « Plan B humain » en bas de l'étape 4 : copiez le Code Maître et collez-le dans une AI web gratuite (Claude.ai, ChatGPT, etc.) pour comparer plusieurs réponses.</div></details>
+        <details><summary>Quels imprimeurs et plateformes sont supportés ?</summary><div class="tn-a">4 vendors × 31 supports = 42 specs précises. Imprimeurs : Exaprint (référence print FR), Vistaprint, Pixartprinting, ou « Autre imprimeur » (saisie libre). Catégories couvertes : print papier (cartes, flyers, dépliants, brochures), grand format (bâches, panneaux, roll-up), digital (réseaux sociaux), presse / édition (encarts magazine).</div></details>
+        <details><summary>Mes visuels sont-ils stockés en sécurité ?</summary><div class="tn-a">Oui : ils sont stockés en base64 dans D1 (Cloudflare EU), accessibles uniquement par vous via JWT. Chaque asset a une URL souveraine (`/api/kodex/asset/UUID`) qui apparaît dans le PDF du brief — votre graphiste peut télécharger directement les bons fichiers sans manipulations parallèles.</div></details>
+        <details><summary>Le PDF généré est-il prêt à imprimer directement ?</summary><div class="tn-a">Pas l'impression elle-même : c'est un BRIEF technique. Vous le donnez à votre graphiste qui produit le visuel final selon les spécifications, ou à l'imprimeur pour validation des contraintes.</div></details>
+        <details><summary>Comment envoyer le brief à mon graphiste ?</summary><div class="tn-a">Étape 4, en dessous du téléchargement du PDF, deux options : « Envoyer par mail » ouvre votre client mail avec un sujet et un résumé pré-remplis (pensez à joindre le PDF), ou « Copier le résumé » place le texte dans le presse-papier. Si vous avez la licence Pulsa, un bouton supplémentaire crée une page partageable avec suivi des consultations et relances automatiques.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-A-COM-003">
+      <h3 class="tn-title">Brainstorming</h3>
+      <p class="tn-tldr">9 personnalités IA spécialisées dialoguent en direct autour de votre brief créatif. Vous orientez la conversation à la volée, le Synthesizer livre une synthèse structurée à la fin.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Brief : posez votre sujet de réflexion (lancement, repositionnement, idéation…)</li>
+        <li>Mode : choisissez un angle de réflexion (Exploration, Lancement, Branding…)</li>
+        <li>Allumage : les 9 personnalités s'allument progressivement et ouvrent la discussion</li>
+        <li>Dialogue : Strategic Lead, Creative Director, Devil's Advocate et 6 autres échangent en direct</li>
+        <li>Intervention : tapez « Plus premium », « Plus disruptif » pour réorienter la conversation</li>
+        <li>Synthèse : le Synthesizer condense l'échange en plan d'actions structuré</li>
+        <li>Export PDF : récupérez la note de synthèse complète</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Quelle est la différence avec ChatGPT ou Claude ?</summary><div class="tn-a">ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif.</div></details>
+        <details><summary>Quels moteurs IA sont utilisés ?</summary><div class="tn-a">Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite.</div></details>
+        <details><summary>Combien de temps dure une session ?</summary><div class="tn-a">8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure.</div></details>
+        <details><summary>Mes sessions sont-elles sauvegardées ?</summary><div class="tn-a">Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF.</div></details>
+        <details><summary>Pourquoi Devil's Advocate est-il intégré comme rôle système ?</summary><div class="tn-a">Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-A-COM-004">
+      <h3 class="tn-title">Key Form</h3>
+      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 16 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Structure : ajoutez vos sections et vos champs (16 types, du texte simple à la signature manuscrite)</li>
+        <li>Apparence : choisissez vos couleurs (10 palettes dégradés webgradients) et votre logo</li>
+        <li>Livraison : définissez l'URL courte, vos destinataires mail et la durée de conservation (30 à 365 jours)</li>
+        <li>Publication : vérifiez le récap et publiez à keystone.app/f/{votre-slug}</li>
+        <li>Réponses : consultez les réponses reçues depuis la bibliothèque (bouton œil), exportez en CSV</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Combien de temps les réponses sont-elles conservées ?</summary><div class="tn-a">Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment.</div></details>
+        <details><summary>Mes répondants doivent-ils créer un compte ?</summary><div class="tn-a">Non, le formulaire est ouvert et anonyme par défaut. Vous pouvez activer un code d'accès optionnel dans l'étape Apparence pour les questionnaires confidentiels.</div></details>
+        <details><summary>Comment partager le formulaire avec mes répondants ?</summary><div class="tn-a">Une fois publié, copiez l'URL keystone.app/f/{votre-slug} et envoyez-la par mail, SMS, Slack ou QR code. Aucune installation nécessaire pour le répondant.</div></details>
+        <details><summary>Puis-je dupliquer un formulaire existant ?</summary><div class="tn-a">Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs.</div></details>
+        <details><summary>Comment fonctionne la logique conditionnelle ?</summary><div class="tn-a">Sélectionnez un champ dans le builder, puis dans l'éditeur de droite ouvrez 'Visibilité conditionnelle' ou 'Obligatoire conditionnel'. Vous pouvez aussi configurer une somme automatique entre champs Montant.</div></details>
+        <details><summary>Puis-je pré-remplir des champs via l'URL ?</summary><div class="tn-a">Oui : chaque champ a un ID technique (visible dans son éditeur) qui peut être utilisé en query param. Exemple : keystone.app/f/biennale?fld_nom=Marie+Durand.</div></details>
+        <details><summary>Quels types de fichiers les répondants peuvent-ils joindre ?</summary><div class="tn-a">Pas d'upload direct (pour limiter les coûts et la complexité RGPD). À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-A-COM-005">
+      <h3 class="tn-title">Ghost Writer</h3>
+      <p class="tn-tldr">Deux outils en un. Réécriture : transformez un texte en 3 variantes calibrées (email, comm interne, marketing, texte long). Correcteur : orthographe, grammaire, accords et conjugaison vérifiés en local — sur du texte collé ou directement sur un PDF, sans rien envoyer en ligne.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Réécriture : choisissez un contexte (Email pro / Comm interne / Marketing / Texte long), ajustez les critères, puis « Réécrire en 3 variantes ».</li>
+        <li>Correcteur (bouton « Correcteur orthographe &amp; PDF ») → mode Texte : collez votre texte et cliquez « Corriger ». Les fautes sont surlignées ; cliquez-en une pour voir la correction et l'appliquer.</li>
+        <li>Correcteur → mode PDF : chargez un PDF « texte ». Les fautes sont surlignées directement sur les pages ; cliquez une faute pour la correction.</li>
+        <li>Exports PDF : « Rapport » (liste page + faute + suggestion) et « PDF annoté » (fautes surlignées sur le document + page récapitulative).</li>
+        <li>✦ Passe IA approfondie : une fois l'orthographe corrigée, demandez à l'IA d'améliorer le style et les tournures (consomme votre quota Ghost Writer).</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Mon texte ou mon PDF sont-ils envoyés sur Internet ?</summary><div class="tn-a">Non. La détection des fautes tourne à 100 % dans votre navigateur (moteur Grammalecte, hors-ligne). Votre PDF ne quitte jamais votre machine. Seule la « Passe IA approfondie » optionnelle envoie le texte à l'IA, et uniquement quand vous cliquez dessus.</div></details>
+        <details><summary>Quel moteur corrige l'orthographe et la grammaire ?</summary><div class="tn-a">Grammalecte, un correcteur grammatical français open source (licence GPL v3), exécuté localement. Keystone l'utilise tel quel, sans le modifier. Crédit et lien vers la source sont affichés en bas du correcteur (grammalecte.net).</div></details>
+        <details><summary>Les PDF scannés (photos) sont-ils gérés ?</summary><div class="tn-a">Pas encore. Le correcteur a besoin d'une couche texte (PDF « texte », sélectionnable). Une page scannée (image) est détectée et signalée comme non supportée. La reconnaissance de texte (OCR) viendra plus tard.</div></details>
+        <details><summary>Pourquoi le correcteur est-il gratuit mais pas la passe IA ?</summary><div class="tn-a">La détection Grammalecte est locale et gratuite, sans limite. Seule la « Passe IA approfondie » (style, reformulation) consomme votre quota Ghost Writer, car elle fait appel à un modèle IA.</div></details>
+        <details><summary>Le « PDF annoté » modifie-t-il mon document d'origine ?</summary><div class="tn-a">Non. Il crée une copie : vos fautes sont surlignées par-dessus sans toucher la mise en page, et une page récapitulative est ajoutée à la fin. Le texte du PDF n'est jamais réécrit à votre place.</div></details>
+        <details><summary>Le premier lancement du correcteur est un peu long, normal ?</summary><div class="tn-a">Oui : le dictionnaire français (~9 Mo) se charge au premier usage, puis il est gardé en cache pour les fois suivantes (y compris hors-ligne). Les analyses suivantes sont quasi instantanées.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-AGT-001">
+      <h3 class="tn-title">Smart Agent</h3>
+      <p class="tn-tldr">Votre jumeau numérique de savoir-faire. Un agent qui répond à vos clients UNIQUEMENT depuis le savoir que vous avez validé — jamais d'invention : s'il ne sait pas, il le dit, et la question rejoint sa liste de travail. Vous le nourrissez (texte, page web, fichier, interview guidée), vous le testez, puis vous le publiez par lien ou QR code : vos visiteurs lui parlent sans compte, à l'écrit ou à la voix.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Créer l'agent : « Nouvel agent » → partez d'un gabarit métier (vendeur, agent immobilier, gardien de musée, concierge, guide, SAV…) qui pré-remplit son rôle, son style et son objectif. Tout reste modifiable dans Réglages.</li>
+        <li>Le nourrir : onglet Savoir → « Démarrer avec un pack métier » installe des fiches de savoir-faire prêtes à relire, et « Répondre aux questions du métier » lance l'interview guidée : vous répondez à l'oral ou au clavier, l'IA structure en fiches. « Nourrir le coffre » accepte aussi un texte collé, une page de votre site ou un fichier (PDF, Word, Excel…).</li>
+        <li>Valider : une fiche ne sert l'agent que si VOUS l'avez validée. Les fiches en brouillon (dont celles des packs, à personnaliser : remplacez les [crochets]) sont inactives tant qu'elles ne sont pas validées.</li>
+        <li>Tester : l'onglet Tester est votre bac à sable — chaque réponse cite ses fiches sources, et le haut-parleur lit les réponses avec la voix neuronale Siwis. Les « Tests étalons » vérifient en un clic que l'agent répond là où il doit, et se tait là où il faut.</li>
+        <li>Combler les trous : quand l'agent sèche (chez vous ou face à un visiteur), la question atterrit dans l'onglet Trous, les reformulations d'une même question se cumulent. « Démarrer l'interview » les comble une par une, les plus demandées d'abord.</li>
+        <li>Publier : Réglages → « Publier cet agent » → lien public + QR code à imprimer. Vos visiteurs lui parlent sans compte ; vous suivez le nombre de questions, le plafond par jour et l'expiration du lien.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>L'agent peut-il inventer une réponse ?</summary><div class="tn-a">Non, c'est le principe fondateur : il ne répond que depuis vos fiches validées, en les citant (dans le bac à sable). Hors de son savoir, il le dit avec ses mots — sans rien inventer — et la question rejoint ses Trous pour que vous puissiez la combler.</div></details>
+        <details><summary>Qu'est-ce qui consomme mes crédits IA ?</summary><div class="tn-a">Une question posée à l'agent (par vous ou un visiteur public) et une extraction de fiches (coller un texte, lire une page web ou un fichier, structurer une réponse d'interview) : 1 crédit chacune. Quand l'agent ne sait pas répondre sans génération, le crédit est rendu. La lecture vocale, la dictée et le correcteur de trous sont gratuits.</div></details>
+        <details><summary>Que voient mes visiteurs sur la page publique ?</summary><div class="tn-a">Le nom de l'agent, son métier, son message d'accueil et ses réponses — jamais vos fiches, vos sources ni votre coffre. Leurs questions ne sont pas rattachées à leur identité et sont effacées après 90 jours.</div></details>
+        <details><summary>Un visiteur peut-il épuiser mes crédits ?</summary><div class="tn-a">Des garde-fous limitent chaque appareil (50 questions/jour) et chaque lien (plafond quotidien réglable dans Réglages → Publier, 500 par défaut). Vous pouvez aussi fixer une date d'expiration ou dépublier à tout moment — le lien et le QR cessent immédiatement de fonctionner.</div></details>
+        <details><summary>À quoi servent le coffre partagé et les dossiers ?</summary><div class="tn-a">Un dossier regroupe des agents (par établissement, par équipe…). Son coffre partagé contient le savoir commun à tous ses agents (horaires, règles maison) : chaque agent lit son coffre privé ET le coffre partagé de son dossier.</div></details>
+        <details><summary>La voix et la dictée sont-elles payantes ?</summary><div class="tn-a">Non. La dictée utilise la reconnaissance vocale de votre navigateur, et la lecture utilise Siwis, une voix neuronale française hébergée par Keystone, exécutée dans votre navigateur (premier chargement d'environ 60 Mo, puis en cache). Aucun coût IA récurrent.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-SOC-001">
+      <h3 class="tn-title">Social Manager</h3>
+      <p class="tn-tldr">Votre régie de publication. Écrivez une fois, publiez sur Facebook, Instagram, Threads et Telegram — tout de suite ou à l'heure programmée. Le composer vérifie les contraintes de chaque réseau avant l'envoi, la file de publication montre ce qui part et ce qui est parti, et en cas de pépin réseau l'envoi se retente tout seul, uniquement sur les réseaux qui ont échoué.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Connecter vos comptes : « Connecter un réseau » → Telegram se branche en quelques minutes (assistant pas à pas), Facebook, Instagram et Threads passent par une connexion officielle en deux clics (aucun mot de passe à confier à Keystone).</li>
+        <li>Composer : écrivez votre texte, ajoutez une image, cochez les réseaux de destination. L'aperçu signale en rouge ce qu'un réseau n'acceptera pas (longueur, image manquante…) avant même d'envoyer.</li>
+        <li>« Publier maintenant » ou « Programmer… » : choisissez le jour et l'heure — le post part tout seul, même dashboard fermé.</li>
+        <li>La file de publication : posts programmés (annulables), posts envoyés avec lien « voir le post », et bouton « Renvoyer » si un réseau a échoué après les réessais automatiques.</li>
+        <li>Santé des connexions : si un compte expire (mot de passe changé, autorisation révoquée), un bandeau vous prévient — un clic pour reconnecter, sans rien perdre.</li>
+        <li>Besoin d'inspiration ? « Trouver des idées » ouvre le Brainstorming (mode Idées de posts), et Ghost Writer peut envoyer ses textes directement dans le composer : la chaîne de contenu est branchée dans les deux sens.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Quels réseaux sont gérés aujourd'hui ?</summary><div class="tn-a">Facebook (pages), Instagram (comptes professionnels liés à une page), Threads et Telegram (canaux et groupes). D'autres viendront selon la demande — X a été volontairement écarté (accès payant imposé par la plateforme, contraire à notre formule tout compris).</div></details>
+        <details><summary>Keystone connaît-il mes mots de passe ?</summary><div class="tn-a">Jamais. Facebook, Instagram et Threads utilisent leur connexion officielle (vous autorisez Keystone depuis VOTRE session, et pouvez révoquer à tout moment depuis le réseau). Telegram utilise un jeton de bot que vous créez vous-même.</div></details>
+        <details><summary>Que se passe-t-il si un envoi échoue ?</summary><div class="tn-a">L'envoi se retente automatiquement (jusqu'à 4 tentatives espacées de 5, 15 puis 60 minutes), et UNIQUEMENT sur les réseaux qui ont échoué — jamais de double publication sur ceux qui ont réussi. Au-delà, le post passe en erreur avec un bouton « Renvoyer ».</div></details>
+        <details><summary>Un post programmé part-il si je ferme mon navigateur ?</summary><div class="tn-a">Oui. La programmation vit côté serveur : le post part à l'heure dite (à 5 minutes près), dashboard ouvert ou non, ordinateur éteint ou non.</div></details>
+        <details><summary>Puis-je voir les performances de mes posts ?</summary><div class="tn-a">Oui, à la demande : les statistiques (vues, réactions) sont relevées depuis les réseaux qui les fournissent gratuitement — Facebook, Instagram et Threads. Telegram ne fournit pas de statistiques aux bots, ce réseau reste donc sans chiffres.</div></details>
+        <details><summary>Pourquoi mon Instagram n'apparaît-il pas après la connexion Facebook ?</summary><div class="tn-a">Instagram exige un compte professionnel LIÉ à une page Facebook, et c'est cette page qui doit être choisie pendant la connexion. Si votre Instagram est lié à une autre page (ou à aucune), reliez-le d'abord dans les paramètres Meta, puis reconnectez.</div></details>
+        <details><summary>Plusieurs images dans un même post ?</summary><div class="tn-a">Pas encore : un post = un texte + une image au maximum, sur tous les réseaux. Le carrousel est à l'étude.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-GEO-001">
+      <h3 class="tn-title">Sentinel</h3>
+      <p class="tn-tldr">Votre centre de contrôle d'audit web AVEC suivi dans le temps. Sentinel surveille vos sites en continu (en ligne / hors ligne, temps de réponse), les note sur un radar à plusieurs axes (disponibilité, performance, SEO, sécurité, accessibilité, présence locale, visibilité dans les IA), et livre des correctifs clé en main : les étapes exactes pour votre plateforme et le code prêt à coller. Sa fonction phare : savoir si les IA (ChatGPT, Perplexity, Gemini) citent votre établissement quand un prospect les interroge.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Ajouter un site : saisissez son adresse — Sentinel détecte la plateforme (Wix, WordPress, sur-mesure) et lance la surveillance aussitôt. Le nombre de sites dépend de votre plan (Starter 1, Pro 3, Max 5).</li>
+        <li>Veille en direct : chaque carte montre l'état (en ligne / hors ligne), la disponibilité sur 24 h et une courbe des temps de réponse. « Vérifier » relance un contrôle immédiat. Activez les alertes (cloche) pour être prévenu si un site tombe ou revient.</li>
+        <li>Auditer : le bouton « Auditer » note le site et ouvre un radar par axe avec les problèmes priorisés (du plus grave au moins grave). La pastille de score sur la carte rouvre le dernier audit.</li>
+        <li>Correctifs clé en main : chaque problème se déplie avec les étapes pas-à-pas adaptées à votre plateforme + le code prêt à coller (bouton Copier). Pour les textes (méta description, FAQ), « Rédiger avec l'IA » génère le contenu réel, pas un gabarit.</li>
+        <li>Visibilité IA (GEO) : renseignez le nom, la ville et l'activité de l'établissement, puis « Mesurer ma visibilité IA » interroge plusieurs IA connectées au web et vous dit si vous êtes cité, à quelle position, avec quel score de citabilité.</li>
+        <li>Transmettre &amp; archiver : « Envoyer au webmaster » expédie le rapport (étapes + code) par e-mail ; « PDF » l'exporte. Le prochain audit vérifie ce qui a été corrigé → le score remonte, la progression est prouvée.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?</summary><div class="tn-a">La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur.</div></details>
+        <details><summary>Pourquoi l'axe « Visibilité IA (GEO) » n'apparaît-il pas ?</summary><div class="tn-a">Le GEO s'active dès qu'une clé moteur est configurée côté serveur (une clé Gemini gratuite suffit pour démarrer). Tant qu'aucune clé n'est posée, l'axe et le bouton « Mesurer » restent masqués — le reste de l'audit fonctionne normalement.</div></details>
+        <details><summary>Sentinel fonctionne-t-il avec Wix, WordPress et un site sur-mesure ?</summary><div class="tn-a">Oui. Sentinel détecte la plateforme à partir du site et adapte les instructions de chaque correctif : où cliquer dans votre éditeur, ou bien le bloc de code exact à coller dans l'en-tête. C'est pensé pour un utilisateur non technique.</div></details>
+        <details><summary>Pourquoi je ne vois pas le nombre de jours avant l'expiration du certificat SSL ?</summary><div class="tn-a">Un site en HTTPS qui répond a un certificat valide à l'instant de la vérification. Le compte à rebours précis (J-14) n'est pas lisible de manière souveraine par notre sonde ; il sera ajouté via une vérification dédiée. En attendant, une chute du HTTPS est détectée par la veille.</div></details>
+        <details><summary>Que reçoit mon webmaster par e-mail ?</summary><div class="tn-a">Le rapport complet : le score, les problèmes classés par priorité, les étapes adaptées à la plateforme et le code prêt à coller. L'envoi e-mail s'active côté serveur ; tant qu'il ne l'est pas, le bouton reste masqué et l'export PDF prend le relais.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-Keyn-001">
+      <h3 class="tn-title">Keynapse</h3>
+      <p class="tn-tldr">Votre espace personnel de connaissances. Des bulles de notes qui respirent sur un canevas infini, regroupées en zones de couleur et reliées par des traits. Chaque bulle s'ouvre dans un panneau où vous écrivez, cochez des tâches, attachez des photos, des croquis et des mémos vocaux (que l'IA transcrit et transforme en tâches ou rappels), et posez des rappels qui vous préviennent à l'heure dite. Vos notes restent privées : rien n'est publié.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Créer une bulle : le bouton « + » crée une bulle dans la vue courante. Un clic sur une bulle ouvre son panneau (à droite sur ordinateur, en bas sur mobile). Glissez une bulle pour la déplacer, sa position est mémorisée.</li>
+        <li>Naviguer le canevas : molette ou pincement pour zoomer, glisser le fond pour vous déplacer. « Tout voir » recadre sur l'ensemble de vos bulles. De loin vous voyez les zones, de près le détail.</li>
+        <li>Ranger en zones : le bouton Zones ouvre le gestionnaire (créer, renommer, recolorer, aller à une zone). Les bulles d'une même zone partagent sa couleur et se regroupent doucement. Une bulle peut rester libre.</li>
+        <li>Tisser des liens : dans le panneau d'une bulle, section « Liens » → « Relier à… ». Cliquez une bulle reliée pour que la caméra y vole. Le « × » à droite d'un lien le retire.</li>
+        <li>Captures : ajoutez une photo, un croquis dessiné, ou un mémo vocal. La note vocale est transcrite et l'IA vous propose des tâches et des rappels à cocher avant de les créer. Tout est consultable en plein écran.</li>
+        <li>Rappels : posez une date, une heure (à la molette) et une répétition. Tant que Keynapse est ouvert, un bandeau et une sonnerie vous préviennent à l'échéance ; sur ordinateur, une notification système peut aussi s'afficher.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Où sont stockées mes notes ? Sont-elles privées ?</summary><div class="tn-a">Tout est rangé dans votre espace Keystone (base de données et stockage de fichiers), rattaché à votre compte. Vos bulles, photos, croquis et mémos vocaux ne sont jamais publics ni partagés : Keynapse est un outil personnel.</div></details>
+        <details><summary>La note vocale consomme-t-elle des crédits IA ?</summary><div class="tn-a">Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo.</div></details>
+        <details><summary>Serai-je prévenu d'un rappel si Keynapse est fermé ?</summary><div class="tn-a">Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard.</div></details>
+        <details><summary>Comment supprimer un lien, une capture ou un rappel ?</summary><div class="tn-a">Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation).</div></details>
+        <details><summary>L'animation des bulles me gêne (mal de mer).</summary><div class="tn-a">Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil.</div></details>
+      </div>
+    </article>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://protein-keystone.com/#faq-outils",
+  "inLanguage": "fr-FR",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Quelle est la différence entre QR statique et dynamique ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un QR statique encode directement l'URL — impossible à modifier après impression. Un QR dynamique pointe vers une redirection Keystone que vous pouvez changer à tout moment (idéal pour les bâches chantier ou flyers réutilisés)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Combien de temps les scans sont-ils stockés ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "90 jours en détail (date, heure, pays). Au-delà, agrégation anonymisée. Conformité RGPD Art. 5 par design."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Le tracking respecte-t-il le RGPD ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, natif. Aucune donnée envoyée à Google. Pas de cookie. Pas de fingerprint. Une page de transparence publique est disponible à /sdqr-privacy."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je personnaliser le design du QR ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : couleur, forme des modules, logo central, pattern personnalisé. Tous les QR conservent le niveau de correction d'erreurs ECC nécessaire pour rester scannables."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Faut-il une clé API IA pour utiliser Brief Prod ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Le brief technique est généré mécaniquement à partir de vos saisies et téléchargeable instantanément en PDF, sans la moindre clé. L'IA n'est qu'un bonus optionnel pour ajouter 5 punchlines marketing + 3 angles de direction artistique + alertes d'incohérence en page 2 du PDF. Si vous configurez une clé Claude, GPT, Gemini, Mistral ou xAI dans le Vault, vous pouvez l'activer ; sinon le plan B « copier le Code Maître + coller dans une AI web gratuite » est toujours disponible."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que faire si mon imprimeur n'est pas Exaprint, Vistaprint ou Pixartprinting ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choisissez « Autre imprimeur » dans le sélecteur vendor à l'étape 1 : Brief Prod applique des standards génériques cohérents (bleed 3-5 mm, CMJN FOGRA39, 300 DPI) et débloque deux champs supplémentaires : URL de la fiche technique officielle + PDF de specs à joindre directement au brief. Votre graphiste suivra ces specs comme référence absolue plutôt que celles d'un vendor par défaut."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quelle taille maximum pour mes uploads d'assets ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "10 Mo par fichier (encodage base64 inclus, soit environ 7 Mo de binaire réel). Formats acceptés : PNG, JPG, SVG, PDF, AI, EPS, GIF, WebP. Si votre fichier dépasse la limite, utilisez plutôt un lien externe WeTransfer ou Google Drive dans le champ « Brand book complet » des assets."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment fonctionne le calculateur d'échelle pour les grands formats ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sur un panneau 4×3 m ou une bâche, travailler à l'échelle 1:1 produit des fichiers à 5 Go intraitables. Brief Prod calcule automatiquement le facteur de réduction (typiquement 1/10) et le DPI de sortie nécessaire en fonction de la distance de vue (autoroute = 50 m, métro = 2 m). Vous obtenez le format de travail exact (mm) + le nombre de pixels finaux + la hauteur minimum lisible des titres + une alerte si un visuel uploadé est sous-résolu pour ce contexte."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mon brief n'a pas la qualité attendue, que faire ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Trois leviers : 1) basculez sur un autre moteur IA via le menu « Switch engine » dans la card d'enrichissement — chaque modèle a son style propre, et l'argumentaire peut mieux passer chez Claude que chez GPT (ou inversement) ; 2) enrichissez votre argumentaire à l'étape 2 (plus la promesse est précise, meilleure est la sortie) ; 3) utilisez le « Plan B humain » en bas de l'étape 4 : copiez le Code Maître et collez-le dans une AI web gratuite (Claude.ai, ChatGPT, etc.) pour comparer plusieurs réponses."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quels imprimeurs et plateformes sont supportés ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "4 vendors × 31 supports = 42 specs précises. Imprimeurs : Exaprint (référence print FR), Vistaprint, Pixartprinting, ou « Autre imprimeur » (saisie libre). Catégories couvertes : print papier (cartes, flyers, dépliants, brochures), grand format (bâches, panneaux, roll-up), digital (réseaux sociaux), presse / édition (encarts magazine)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mes visuels sont-ils stockés en sécurité ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : ils sont stockés en base64 dans D1 (Cloudflare EU), accessibles uniquement par vous via JWT. Chaque asset a une URL souveraine (`/api/kodex/asset/UUID`) qui apparaît dans le PDF du brief — votre graphiste peut télécharger directement les bons fichiers sans manipulations parallèles."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Le PDF généré est-il prêt à imprimer directement ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pas l'impression elle-même : c'est un BRIEF technique. Vous le donnez à votre graphiste qui produit le visuel final selon les spécifications, ou à l'imprimeur pour validation des contraintes."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment envoyer le brief à mon graphiste ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Étape 4, en dessous du téléchargement du PDF, deux options : « Envoyer par mail » ouvre votre client mail avec un sujet et un résumé pré-remplis (pensez à joindre le PDF), ou « Copier le résumé » place le texte dans le presse-papier. Si vous avez la licence Pulsa, un bouton supplémentaire crée une page partageable avec suivi des consultations et relances automatiques."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quelle est la différence avec ChatGPT ou Claude ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quels moteurs IA sont utilisés ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Combien de temps dure une session ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mes sessions sont-elles sauvegardées ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi Devil's Advocate est-il intégré comme rôle système ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Combien de temps les réponses sont-elles conservées ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mes répondants doivent-ils créer un compte ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non, le formulaire est ouvert et anonyme par défaut. Vous pouvez activer un code d'accès optionnel dans l'étape Apparence pour les questionnaires confidentiels."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment partager le formulaire avec mes répondants ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Une fois publié, copiez l'URL keystone.app/f/{votre-slug} et envoyez-la par mail, SMS, Slack ou QR code. Aucune installation nécessaire pour le répondant."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je dupliquer un formulaire existant ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment fonctionne la logique conditionnelle ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sélectionnez un champ dans le builder, puis dans l'éditeur de droite ouvrez 'Visibilité conditionnelle' ou 'Obligatoire conditionnel'. Vous pouvez aussi configurer une somme automatique entre champs Montant."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je pré-remplir des champs via l'URL ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : chaque champ a un ID technique (visible dans son éditeur) qui peut être utilisé en query param. Exemple : keystone.app/f/biennale?fld_nom=Marie+Durand."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quels types de fichiers les répondants peuvent-ils joindre ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pas d'upload direct (pour limiter les coûts et la complexité RGPD). À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mon texte ou mon PDF sont-ils envoyés sur Internet ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. La détection des fautes tourne à 100 % dans votre navigateur (moteur Grammalecte, hors-ligne). Votre PDF ne quitte jamais votre machine. Seule la « Passe IA approfondie » optionnelle envoie le texte à l'IA, et uniquement quand vous cliquez dessus."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quel moteur corrige l'orthographe et la grammaire ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Grammalecte, un correcteur grammatical français open source (licence GPL v3), exécuté localement. Keystone l'utilise tel quel, sans le modifier. Crédit et lien vers la source sont affichés en bas du correcteur (grammalecte.net)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Les PDF scannés (photos) sont-ils gérés ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pas encore. Le correcteur a besoin d'une couche texte (PDF « texte », sélectionnable). Une page scannée (image) est détectée et signalée comme non supportée. La reconnaissance de texte (OCR) viendra plus tard."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi le correcteur est-il gratuit mais pas la passe IA ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "La détection Grammalecte est locale et gratuite, sans limite. Seule la « Passe IA approfondie » (style, reformulation) consomme votre quota Ghost Writer, car elle fait appel à un modèle IA."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Le « PDF annoté » modifie-t-il mon document d'origine ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Il crée une copie : vos fautes sont surlignées par-dessus sans toucher la mise en page, et une page récapitulative est ajoutée à la fin. Le texte du PDF n'est jamais réécrit à votre place."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Le premier lancement du correcteur est un peu long, normal ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : le dictionnaire français (~9 Mo) se charge au premier usage, puis il est gardé en cache pour les fois suivantes (y compris hors-ligne). Les analyses suivantes sont quasi instantanées."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "L'agent peut-il inventer une réponse ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non, c'est le principe fondateur : il ne répond que depuis vos fiches validées, en les citant (dans le bac à sable). Hors de son savoir, il le dit avec ses mots — sans rien inventer — et la question rejoint ses Trous pour que vous puissiez la combler."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce qui consomme mes crédits IA ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Une question posée à l'agent (par vous ou un visiteur public) et une extraction de fiches (coller un texte, lire une page web ou un fichier, structurer une réponse d'interview) : 1 crédit chacune. Quand l'agent ne sait pas répondre sans génération, le crédit est rendu. La lecture vocale, la dictée et le correcteur de trous sont gratuits."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que voient mes visiteurs sur la page publique ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le nom de l'agent, son métier, son message d'accueil et ses réponses — jamais vos fiches, vos sources ni votre coffre. Leurs questions ne sont pas rattachées à leur identité et sont effacées après 90 jours."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Un visiteur peut-il épuiser mes crédits ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Des garde-fous limitent chaque appareil (50 questions/jour) et chaque lien (plafond quotidien réglable dans Réglages → Publier, 500 par défaut). Vous pouvez aussi fixer une date d'expiration ou dépublier à tout moment — le lien et le QR cessent immédiatement de fonctionner."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "À quoi servent le coffre partagé et les dossiers ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un dossier regroupe des agents (par établissement, par équipe…). Son coffre partagé contient le savoir commun à tous ses agents (horaires, règles maison) : chaque agent lit son coffre privé ET le coffre partagé de son dossier."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "La voix et la dictée sont-elles payantes ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. La dictée utilise la reconnaissance vocale de votre navigateur, et la lecture utilise Siwis, une voix neuronale française hébergée par Keystone, exécutée dans votre navigateur (premier chargement d'environ 60 Mo, puis en cache). Aucun coût IA récurrent."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quels réseaux sont gérés aujourd'hui ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Facebook (pages), Instagram (comptes professionnels liés à une page), Threads et Telegram (canaux et groupes). D'autres viendront selon la demande — X a été volontairement écarté (accès payant imposé par la plateforme, contraire à notre formule tout compris)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Keystone connaît-il mes mots de passe ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Jamais. Facebook, Instagram et Threads utilisent leur connexion officielle (vous autorisez Keystone depuis VOTRE session, et pouvez révoquer à tout moment depuis le réseau). Telegram utilise un jeton de bot que vous créez vous-même."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que se passe-t-il si un envoi échoue ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "L'envoi se retente automatiquement (jusqu'à 4 tentatives espacées de 5, 15 puis 60 minutes), et UNIQUEMENT sur les réseaux qui ont échoué — jamais de double publication sur ceux qui ont réussi. Au-delà, le post passe en erreur avec un bouton « Renvoyer »."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Un post programmé part-il si je ferme mon navigateur ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui. La programmation vit côté serveur : le post part à l'heure dite (à 5 minutes près), dashboard ouvert ou non, ordinateur éteint ou non."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je voir les performances de mes posts ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, à la demande : les statistiques (vues, réactions) sont relevées depuis les réseaux qui les fournissent gratuitement — Facebook, Instagram et Threads. Telegram ne fournit pas de statistiques aux bots, ce réseau reste donc sans chiffres."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi mon Instagram n'apparaît-il pas après la connexion Facebook ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Instagram exige un compte professionnel LIÉ à une page Facebook, et c'est cette page qui doit être choisie pendant la connexion. Si votre Instagram est lié à une autre page (ou à aucune), reliez-le d'abord dans les paramètres Meta, puis reconnectez."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Plusieurs images dans un même post ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pas encore : un post = un texte + une image au maximum, sur tous les réseaux. Le carrousel est à l'étude."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi l'axe « Visibilité IA (GEO) » n'apparaît-il pas ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le GEO s'active dès qu'une clé moteur est configurée côté serveur (une clé Gemini gratuite suffit pour démarrer). Tant qu'aucune clé n'est posée, l'axe et le bouton « Mesurer » restent masqués — le reste de l'audit fonctionne normalement."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Sentinel fonctionne-t-il avec Wix, WordPress et un site sur-mesure ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui. Sentinel détecte la plateforme à partir du site et adapte les instructions de chaque correctif : où cliquer dans votre éditeur, ou bien le bloc de code exact à coller dans l'en-tête. C'est pensé pour un utilisateur non technique."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi je ne vois pas le nombre de jours avant l'expiration du certificat SSL ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un site en HTTPS qui répond a un certificat valide à l'instant de la vérification. Le compte à rebours précis (J-14) n'est pas lisible de manière souveraine par notre sonde ; il sera ajouté via une vérification dédiée. En attendant, une chute du HTTPS est détectée par la veille."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que reçoit mon webmaster par e-mail ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le rapport complet : le score, les problèmes classés par priorité, les étapes adaptées à la plateforme et le code prêt à coller. L'envoi e-mail s'active côté serveur ; tant qu'il ne l'est pas, le bouton reste masqué et l'export PDF prend le relais."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Où sont stockées mes notes ? Sont-elles privées ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Tout est rangé dans votre espace Keystone (base de données et stockage de fichiers), rattaché à votre compte. Vos bulles, photos, croquis et mémos vocaux ne sont jamais publics ni partagés : Keynapse est un outil personnel."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "La note vocale consomme-t-elle des crédits IA ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Serai-je prévenu d'un rappel si Keynapse est fermé ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment supprimer un lien, une capture ou un rappel ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "L'animation des bulles me gêne (mal de mer).",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil."
+      }
+    }
+  ]
+}
+    </script>
+<!-- TOOL-NOTICES:END -->
+    </div>
     <p class="tools-more reveal">… et <b>de nouveaux outils chaque mois</b> dans le Key-Store.</p>
   </div>
 </section>
@@ -967,17 +1639,17 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <script>
 /* ── Données : branché sur les vrais outils (à terme lu du Key-Store) ── */
 const TOOLS = [
-  { name:"Smart Dynamic QR", fam:"Communication", tag:"Des QR qui s'adaptent et se mettent à jour.", icon:'<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>' },
-  { name:"Brief Prod", fam:"Communication", tag:"Le brief créatif parfait, en 2 minutes.", icon:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>' },
-  { name:"Brainstorming", fam:"Communication", tag:"Une table ronde d'IA qui débat vos idées.", icon:'<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14 7a2 2 0 0 0 1.44 1.44L21.6 10a.5.5 0 0 1 0 .96L15.5 12.6A2 2 0 0 0 14 14.06L12.46 20a.5.5 0 0 1-.96 0Z"/><path d="M20 3v4"/><path d="M22 5h-4"/>' },
-  { name:"Key Form", fam:"Communication", tag:"Des formulaires intelligents, sans code.", icon:'<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
-  { name:"Ghost Writer", fam:"Communication", tag:"Vos textes réécrits, dans votre ton.", icon:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
-  { name:"Annonces Immo", fam:"Immobilier", tag:"L'annonce qui vend, générée pour vous.", icon:'<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M8 10h.01"/>' },
-  { name:"VEFA Studio", fam:"Immobilier", tag:"Toute la VEFA, pilotée d'un seul endroit.", icon:'<path d="M21.3 8.7 8.7 21.3a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4L15.3 2.7a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 0 1 0 1.4Z"/><path d="m7.5 10.5 2 2"/><path d="m10.5 7.5 2 2"/><path d="m13.5 4.5 2 2"/>' },
-  { name:"Smart Agent", fam:"Communication", tag:"L'IA qui répond avec votre savoir, 24/7.", icon:'<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/><path d="M19 1.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/>' },
-  { name:"Social Manager", fam:"Communication", tag:"Un post, tous vos réseaux, en un clic.", icon:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>' },
+  { name:"Smart Dynamic QR", app:"A-COM-001", fam:"Communication", tag:"Des QR qui s'adaptent et se mettent à jour.", icon:'<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>' },
+  { name:"Brief Prod", app:"A-COM-002", fam:"Communication", tag:"Le brief créatif parfait, en 2 minutes.", icon:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>' },
+  { name:"Brainstorming", app:"A-COM-003", fam:"Communication", tag:"Une table ronde d'IA qui débat vos idées.", icon:'<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14 7a2 2 0 0 0 1.44 1.44L21.6 10a.5.5 0 0 1 0 .96L15.5 12.6A2 2 0 0 0 14 14.06L12.46 20a.5.5 0 0 1-.96 0Z"/><path d="M20 3v4"/><path d="M22 5h-4"/>' },
+  { name:"Key Form", app:"A-COM-004", fam:"Communication", tag:"Des formulaires intelligents, sans code.", icon:'<path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
+  { name:"Ghost Writer", app:"A-COM-005", fam:"Communication", tag:"Vos textes réécrits, dans votre ton.", icon:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
+  { name:"Smart Agent", app:"O-AGT-001", fam:"Communication", tag:"L'IA qui répond avec votre savoir, 24/7.", icon:'<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/><path d="M19 1.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/>' },
+  { name:"Social Manager", app:"O-SOC-001", fam:"Communication", tag:"Un post, tous vos réseaux, en un clic.", icon:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>' },
+  { name:"Sentinel", app:"O-GEO-001", fam:"Web", tag:"Audit web + suivi : SEO, sécurité, visibilité IA.", icon:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>' },
+  { name:"Keynapse", app:"O-Keyn-001", fam:"Idéation", tag:"Vos idées en constellation, reliées et vivantes.", icon:'<circle cx="12" cy="4.5" r="2.5"/><path d="m10.2 6.3-3.9 3.9"/><circle cx="4.5" cy="12" r="2.5"/><path d="M7 12h10"/><circle cx="19.5" cy="12" r="2.5"/><path d="m13.8 17.7 3.9-3.9"/><circle cx="12" cy="19.5" r="2.5"/>' },
 ];
-const FAM_COLOR = { "Communication":"var(--accent)", "Immobilier":"var(--p-starter)" };
+const FAM_COLOR = { "Communication":"var(--accent)", "Web":"var(--green)", "Idéation":"var(--p-starter)" };
 
 const N = TOOLS.length;
 const cz = document.getElementById('cz');
@@ -1169,7 +1841,9 @@ if('IntersectionObserver' in window){
   const grid=document.getElementById('toolsGrid');
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
-    grid.innerHTML=TOOLS.map(t=>'<div class="tcard" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p></div>').join('');
+    grid.innerHTML=TOOLS.map(t=>'<div class="tcard" data-app="'+t.app+'" role="button" tabindex="0" aria-haspopup="dialog" aria-label="En savoir plus sur '+t.name+'" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p><span class="tcard-more">Découvrir <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></div>').join('');
+    grid.addEventListener('click', e=>{ const c=e.target.closest('.tcard[data-app]'); if(c) openToolNotice(c.dataset.app); });
+    grid.addEventListener('keydown', e=>{ if(e.key!=='Enter'&&e.key!==' ')return; const c=e.target.closest('.tcard[data-app]'); if(c){ e.preventDefault(); openToolNotice(c.dataset.app); } });
   }
 })();
 
@@ -1494,6 +2168,44 @@ function cascadeItems(items, delay){
     el.textContent = Math.round(easeOut(t)*N);
     if(t<1) requestAnimationFrame(tick);
   })(t1);
+})();
+</script>
+<!-- Modale notice outil (Modal Master) — affiche le bloc statique #tn-<appId> -->
+<div class="tnmodal" id="tnModal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+  <div class="tnmodal-backdrop" data-close></div>
+  <div class="tnmodal-panel">
+    <button class="tnmodal-close" data-close type="button" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    <div class="tnmodal-body" id="tnModalBody"></div>
+  </div>
+</div>
+<script>
+(function(){
+  const modal=document.getElementById('tnModal');
+  const body=document.getElementById('tnModalBody');
+  let lastFocus=null;
+  window.openToolNotice=function(appId){
+    const src=document.getElementById('tn-'+appId);
+    if(!src||!modal||!body) return;
+    body.innerHTML=src.innerHTML;
+    body.scrollTop=0;
+    lastFocus=document.activeElement;
+    modal.hidden=false; modal.setAttribute('aria-hidden','false');
+    requestAnimationFrame(()=>modal.classList.add('is-on'));
+    document.body.style.overflow='hidden';
+    const cb=modal.querySelector('.tnmodal-close'); if(cb) cb.focus();
+  };
+  function close(){
+    if(!modal||modal.hidden) return;
+    modal.classList.remove('is-on'); modal.setAttribute('aria-hidden','true');
+    document.body.style.overflow='';
+    setTimeout(()=>{ modal.hidden=true; body.innerHTML=''; }, 220);
+    if(lastFocus&&lastFocus.focus) lastFocus.focus();
+  }
+  window.closeToolNotice=close;
+  if(modal) modal.addEventListener('click', e=>{ if(e.target.closest('[data-close]')) close(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&modal&&!modal.hidden) close(); });
 })();
 </script>
 </body>
