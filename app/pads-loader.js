@@ -160,7 +160,10 @@ async function _refreshCatalogFromD1() {
     // version D1 obsolète. Ajouté title/subtitle 2026-05-22 après le
     // rename "Sovereign Dynamic QR" → "Dynamic QR" : le code source
     // est désormais aussi canonique pour le wording UI des tools.
-    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved', 'title', 'subtitle'];
+    // `published` + `replacedBy` = VISIBILITÉ : le code local est canonique
+    // (sinon un D1 obsolète qui garde published:true re-publie une app qu'on a
+    // masquée localement — ex. VEFA Studio / Annonces Immo, 2026-06-20).
+    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved', 'title', 'subtitle', 'published', 'replacedBy'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {
