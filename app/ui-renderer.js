@@ -888,7 +888,7 @@ window.addEventListener('ks-catalog-loaded', () => {
 // Le préfixe garantit qu'aucun code D1 legacy ne matche ici → le mock
 // (kstore-mock-catalog.js) reste seul maître du rangement des apps.
 const _KSTORE_CAT_CODES = new Set([
-    'KS_IMM', 'KS_COM', 'KS_PRD',
+    'KS_CREER', 'KS_ORGANISER', 'KS_DIFFUSER', 'KS_INTERAGIR', 'KS_ANALYSER',
 ]);
 
 // Normalise une entrée D1 catalog vers le shape attendu côté front

@@ -19,9 +19,11 @@
 // ça, le catalog D1 écraserait le rangement (cf. _ksNormalizeD1).
 // On rouvrira d'autres univers quand des apps seront produites.
 export const KSTORE_CATEGORIES = [
-    { id: 'KS_IMM', label: 'Immobilier' },
-    { id: 'KS_COM', label: 'Communication' },
-    { id: 'KS_PRD', label: 'Productivité' },
+    { id: 'KS_CREER',     label: 'Créer' },
+    { id: 'KS_ORGANISER', label: 'Organiser' },
+    { id: 'KS_DIFFUSER',  label: 'Diffuser' },
+    { id: 'KS_INTERAGIR', label: 'Interagir' },
+    { id: 'KS_ANALYSER',  label: 'Analyser' },
 ];
 
 // ── Apps du Key-Store ─────────────────────────────────────────
@@ -65,7 +67,7 @@ export const KSTORE_MOCK_APPS = [
     // Le rangement réel suit le champ `category` de chaque app (pas l'ordre).
     {
         id: 'A-COM-001',
-        category: 'KS_COM',
+        category: 'KS_DIFFUSER',
         title: 'Smart Dynamic QR',
         punchline: 'QR codes souverains · sans GAFAM',
         shortDesc: 'Statiques + Dynamiques · stats RGPD · studio design',
@@ -78,7 +80,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-002',
-        category: 'KS_COM',
+        category: 'KS_ORGANISER',
         title: 'Brief Prod',
         punchline: 'Le brief print/digital infaillible',
         shortDesc: 'Cahier des charges technique · calculateur d\'échelle pour grands formats',
@@ -91,7 +93,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-003',
-        category: 'KS_PRD',
+        category: 'KS_CREER',
         title: 'Brainstorming',
         punchline: '9 personnalités IA dialoguent pour enrichir votre réflexion',
         shortDesc: 'Atelier de brainstorming créatif · 9 personnalités IA en direct · synthèse + plan d\'actions PDF',
@@ -104,7 +106,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-004',
-        category: 'KS_COM',
+        category: 'KS_ORGANISER',
         title: 'Key Form',
         punchline: 'Le formulaire intelligent qui collecte sans friction',
         shortDesc: 'Builder de questionnaires · URL partageable · notification mail direction',
@@ -117,7 +119,7 @@ export const KSTORE_MOCK_APPS = [
     },
     {
         id: 'A-COM-005',
-        category: 'KS_PRD',
+        category: 'KS_CREER',
         title: 'Ghost Writer',
         punchline: 'Vos emails et textes, réécrits en 3 variantes',
         shortDesc: '4 contextes · 5 critères · backend Gemma 4 quasi-gratuit · raccourci global',
@@ -131,7 +133,7 @@ export const KSTORE_MOCK_APPS = [
     // ── Sprint SA-0 — Smart Agent (jumeau numérique de savoir-faire, plan MAX)
     {
         id: 'O-AGT-001',
-        category: 'KS_PRD',
+        category: 'KS_INTERAGIR',
         title: 'Smart Agent',
         punchline: 'Votre savoir-faire devient un expert numérique',
         shortDesc: 'Coffre de savoir Kortex · réponses ancrées avec sources · « je ne sais pas » plutôt qu\'inventer',
@@ -145,7 +147,7 @@ export const KSTORE_MOCK_APPS = [
     // ── Sprint Keynapse — espace de connaissances en bulles (constellation perso) ──
     {
         id: 'O-Keyn-001',
-        category: 'KS_PRD',
+        category: 'KS_ORGANISER',
         title: 'Keynapse',
         punchline: 'Vos idées en bulles vivantes',
         shortDesc: 'Constellation de notes sur canevas infini · zones, liens, photos, croquis, mémos vocaux transcrits, rappels',
@@ -156,16 +158,42 @@ export const KSTORE_MOCK_APPS = [
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },
+    // ── Social Manager — diffusion multi-réseaux (KS_DIFFUSER) ──
+    {
+        id: 'O-SOC-001',
+        category: 'KS_DIFFUSER',
+        title: 'Social Manager',
+        punchline: 'Un post, tous vos réseaux, en un clic',
+        shortDesc: 'Composez une fois · publiez sur Facebook, Instagram, LinkedIn, Threads, Telegram · file de publication + reprise auto',
+        price: 49,
+        icon: 'user',
+        ai_optimized: 'Claude',
+        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    // ── Sentinel — audit web avec suivi (KS_ANALYSER) ──
+    {
+        id: 'O-GEO-001',
+        category: 'KS_ANALYSER',
+        title: 'Sentinel',
+        punchline: 'Auditez et surveillez vos sites web',
+        shortDesc: 'Disponibilité, performance, SEO, sécurité, présence locale, visibilité IA (GEO) · correctifs clé en main',
+        price: 49,
+        icon: 'sentinel',
+        ai_optimized: 'Mistral',
+        ai_compatible: ['Mistral', 'Gemini', 'Claude'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
 ];
 
 // ── "À la une pour vous" — apps mises en avant (rail du haut) ──
 export const KSTORE_FEATURED_IDS = [
     'A-COM-005',  // Ghost Writer (NEW Sprint GW-2) — mis en featured pour visibilité
-    'O-IMM-010',  // VEFA Studio — remplace O-IMM-001 + O-IMM-009
     'A-COM-002',
     'A-COM-004',
     'A-COM-001',
-    'O-IMM-002',
 ];
 
 // ── Header promo "À la une" — bandeaux publicitaires du Key-Store ──
