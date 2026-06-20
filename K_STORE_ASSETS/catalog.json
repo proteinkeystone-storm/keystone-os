@@ -1,6 +1,6 @@
 {
-  "version": "1.7",
-  "updatedAt": "2026-06-16",
+  "version": "1.8",
+  "updatedAt": "2026-06-21",
   "tools": [
     {
       "id": "O-IMM-001",
@@ -37,7 +37,7 @@
       "icon": "multiportails",
       "ai_optimized": "ChatGPT",
       "isNew": true,
-      "published": true,
+      "published": false,
       "lifetimePrice": 149,
       "tags": [
         "immobilier",
@@ -112,7 +112,7 @@
       "icon": "vefa",
       "ai_optimized": "Claude",
       "isNew": true,
-      "published": true,
+      "published": false,
       "lifetimePrice": 199,
       "tags": [
         "artefact",
