@@ -125,7 +125,7 @@ COMMENT GÉRER L'IMPRESSION MULTI-PAGES (instructions à inclure en commentaire 
     },
 
     A2: {
-        id: 'O-IMM-002', padKey: 'A2',
+        id: 'O-IMM-002', padKey: 'A2', published: false,
         title: 'Annonces Immo',
         subtitle: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
         ai_optimized: 'ChatGPT', icon: 'multiportails',
