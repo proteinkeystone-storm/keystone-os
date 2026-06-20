@@ -517,21 +517,26 @@ function _geoDefault() {
   return { business_name: name, city: '', activity: '', prompts: [], score: null, results: null };
 }
 function _geoSectionHTML() {
-  if (!_geoEnabled) return '';
+  // Toujours rendu : le mode MANUEL (copier-coller) est gratuit et marche sans
+  // clé. Le mode AUTO (un clic) n'apparaît que si une clé moteur est câblée.
   const g = (_panel && _panel.geo) || _geoDefault();
   return `<div class="snt-geo" id="snt-geo-sec">${_geoBody(g)}</div>`;
 }
 function _geoBody(g) {
-  const head = `<div class="snt-aeo-head">${icon('compass', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA (GEO)</div><div class="snt-aeo-d">Quand un prospect interroge une IA, votre établissement ressort-il ? On pose la question à plusieurs IA connectées au web (Gemini, Perplexity, ChatGPT) et on mesure si vous êtes cité.</div></div></div>`;
+  const head = `<div class="snt-aeo-head">${icon('compass', 18)}<div><div class="snt-aeo-t">Visibilité dans les IA (GEO)</div><div class="snt-aeo-d">Quand un prospect interroge une IA, votre établissement ressort-il ? Mesurez-le ${_geoEnabled ? 'en un clic (auto) ou ' : ''}gratuitement à la main : on analyse si vous êtes cité, et à quel rang.</div></div></div>`;
+  const manualBtn = `<button class="snt-ai-regen" data-act="geo-manual-toggle">${icon('compass', 12)} Tester à la main (gratuit)</button>`;
+  const manualPanel = `<div id="snt-geo-manual" hidden>${_geoManualHTML(g)}</div>`;
   const hasResults = g && g.results && g.results.length;
   if (hasResults) {
+    const auto = _geoEnabled ? `<button class="snt-ai-btn" data-act="geo-run">${icon('refresh', 13)} Relancer (auto)</button>` : '';
     return head + _geoResultsHTML(g)
-      + `<div class="snt-geo-actions"><button class="snt-ai-btn" data-act="geo-run">${icon('refresh', 13)} Relancer la mesure</button><button class="snt-ai-regen" data-act="geo-edit">${icon('edit', 12)} Modifier</button></div>`
-      + `<div id="snt-geo-form" hidden>${_geoFormHTML(g)}</div>`;
+      + `<div class="snt-geo-actions">${auto}${manualBtn}<button class="snt-ai-regen" data-act="geo-edit">${icon('edit', 12)} Modifier</button></div>`
+      + `<div id="snt-geo-form" hidden>${_geoFormHTML(g)}</div>`
+      + manualPanel;
   }
-  return head + _geoFormHTML(g);
+  return head + _geoFormHTML(g) + manualPanel;
 }
-const _GEO_ENGINE_LABEL = { gemini: 'Gemini', perplexity: 'Perplexity', gpt: 'ChatGPT' };
+const _GEO_ENGINE_LABEL = { gemini: 'Gemini', perplexity: 'Perplexity', gpt: 'ChatGPT', autre: 'IA' };
 // Normalise une ligne de résultat → tableau de cellules par moteur (tolère l'ancien format mono-moteur).
 function _geoCells(r) {
   if (r && Array.isArray(r.engines)) return r.engines;
@@ -584,7 +589,28 @@ function _geoFormHTML(g) {
       <label class="snt-geo-l">Activité<input class="snt-input" id="snt-geo-act" type="text" value="${_esc(g.activity || '')}" placeholder="Ex. boulangerie artisanale"></label>
     </div>
     <label class="snt-geo-l">Questions testées <span class="snt-geo-hint">(une par ligne · max 5)</span><textarea class="snt-input snt-geo-ta" id="snt-geo-prompts" rows="3" placeholder="Une question de prospect par ligne">${_esc(prompts)}</textarea></label>
-    <button class="snt-btn snt-btn-sm" data-act="geo-run">${icon('compass', 14)} Mesurer ma visibilité IA</button>
+    <div class="snt-geo-formbtns">
+      <button class="snt-btn snt-btn-sm snt-btn-ghost" data-act="geo-save">${icon('check', 14)} Enregistrer</button>
+      ${_geoEnabled ? `<button class="snt-btn snt-btn-sm" data-act="geo-run">${icon('compass', 14)} Mesurer (auto)</button>` : ''}
+      <button class="snt-ai-regen" data-act="geo-manual-toggle">${icon('compass', 12)} Tester à la main (gratuit)</button>
+    </div>
+  </div>`;
+}
+// ── Mode MANUEL (gratuit) : bloc-prompt à coller dans une IA web → réponses recollées ──
+function _geoPromptBlock(g) {
+  const lines = (g.prompts || []).map((p, i) => `${i + 1}. ${p}`).join('\n');
+  return `Pour chacune des questions ci-dessous, réponds comme tu le ferais pour un utilisateur, en listant tes recommandations (noms d'entreprises, de marques ou de produits) sous forme de liste numérotée, de la plus pertinente à la moins pertinente. Indique une source web quand c'est possible.\n\n${lines}`;
+}
+function _geoManualHTML(g) {
+  const prompts = (g.prompts && g.prompts.length) ? g.prompts : [];
+  const rows = prompts.map((p, i) => `<div class="snt-geo-mrow"><div class="snt-geo-mq"><b>${i + 1}.</b> ${_esc(p)}</div><textarea class="snt-input snt-geo-mta" data-geo-ans="${i}" rows="3" placeholder="Colle ici la réponse de l'IA à cette question…"></textarea></div>`).join('');
+  return `<div class="snt-geo-manual-in">
+    <div class="snt-geo-steps">${icon('sparkles', 15)}<div><b>100 % gratuit, sans clé.</b> ① Copie le bloc · ② colle-le dans une IA gratuite (Gemini, Perplexity, ChatGPT…) · ③ recolle chaque réponse ci-dessous · ④ Analyser.<br><span class="snt-geo-hint">Pour adapter les questions (activité, ville), utilise « Modifier » puis « Enregistrer ».</span></div></div>
+    <div class="snt-geo-copyblock"><div class="snt-fix-codehead"><span>Bloc à coller dans l'IA</span><button class="snt-copy" data-act="copy" data-target="snt-geo-block">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="snt-geo-block">${_esc(_geoPromptBlock(g))}</pre></div>
+    <label class="snt-geo-l">Quelle IA as-tu utilisée ?<select class="snt-input" id="snt-geo-engine"><option value="gemini">Gemini</option><option value="perplexity">Perplexity</option><option value="gpt">ChatGPT</option><option value="autre">Autre IA</option></select></label>
+    ${rows || '<div class="snt-geo-hint">Aucune question configurée — utilise « Modifier » pour en ajouter.</div>'}
+    <div class="snt-geo-mmsg" id="snt-geo-manual-msg"></div>
+    <button class="snt-btn snt-btn-sm" data-act="geo-manual-run">${icon('compass', 14)} Analyser (gratuit)</button>
   </div>`;
 }
 function _geoEditToggle() { const f = _root && _root.querySelector('#snt-geo-form'); if (f) f.hidden = !f.hidden; }
@@ -608,6 +634,55 @@ async function _geoRun() {
     const s2 = _root && _root.querySelector('#snt-geo-sec'); if (s2 && s2.scrollIntoView) try { s2.scrollIntoView({ block: 'nearest' }); } catch (_) {}
   } catch (e) {
     if (sec) sec.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Mesure impossible.')}</div><button class="snt-ai-regen" data-act="geo-run">${icon('refresh', 12)} Réessayer</button>`;
+  }
+}
+// Mode manuel : ouvrir/fermer le panneau.
+function _geoManualToggle() {
+  const m = _root && _root.querySelector('#snt-geo-manual');
+  if (!m) return;
+  m.hidden = !m.hidden;
+  if (!m.hidden && m.scrollIntoView) try { m.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+}
+// Lit les champs du formulaire GEO (null si absent / nom manquant).
+function _geoReadForm() {
+  const nameEl = _root && _root.querySelector('#snt-geo-name');
+  if (!nameEl) return null;
+  const body = { business_name: (nameEl.value || '').trim() };
+  const cityEl = _root.querySelector('#snt-geo-city'); body.city = cityEl ? cityEl.value.trim() : '';
+  const actEl = _root.querySelector('#snt-geo-act'); body.activity = actEl ? actEl.value.trim() : '';
+  const pEl = _root.querySelector('#snt-geo-prompts'); if (pEl) body.prompts = pEl.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!body.business_name) { alert("Indiquez le nom de l'établissement."); return null; }
+  return body;
+}
+// Enregistre la config GEO (sans lancer de mesure) → POST /geo. Ouvre le manuel.
+async function _geoSave() {
+  if (!_panel || !_panel.id) return;
+  const body = _geoReadForm(); if (!body) return;
+  try {
+    await _api(`/sites/${encodeURIComponent(_panel.id)}/geo`, { method: 'POST', body });
+    _panel.geo = Object.assign({}, _panel.geo || {}, { configured: true, business_name: body.business_name, city: body.city, activity: body.activity, prompts: body.prompts });
+    _renderCockpit();
+    const m = _root && _root.querySelector('#snt-geo-manual'); if (m) m.hidden = false;
+  } catch (e) { alert(e.message || 'Enregistrement impossible.'); }
+}
+// Analyse les réponses collées (gratuit, zéro clé) → POST /geo/manual.
+async function _geoManualRun() {
+  if (!_panel || !_panel.id) return;
+  const g = _panel.geo || _geoDefault();
+  const prompts = g.prompts || [];
+  const engineEl = _root && _root.querySelector('#snt-geo-engine');
+  const engine = engineEl ? engineEl.value : 'autre';
+  const entries = prompts.map((p, i) => { const ta = _root && _root.querySelector(`[data-geo-ans="${i}"]`); return { prompt: p, text: ta ? ta.value : '' }; });
+  if (!entries.some((e) => (e.text || '').trim())) { alert("Colle au moins une réponse d'IA avant d'analyser."); return; }
+  const msg = _root && _root.querySelector('#snt-geo-manual-msg');
+  if (msg) msg.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} Analyse de tes réponses…</div>`;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/geo/manual`, { method: 'POST', body: { business_name: g.business_name, city: g.city, activity: g.activity, engine, entries }, timeout: 30000 });
+    _panel.geo = Object.assign({}, _panel.geo, d.geo);
+    _renderCockpit();
+    const s2 = _root && _root.querySelector('#snt-geo-sec'); if (s2 && s2.scrollIntoView) try { s2.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+  } catch (e) {
+    if (msg) msg.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Analyse impossible.')}</div>`;
   }
 }
 // S4.1 — carte « opportunité » AEO : générer une FAQ structurée (pilier GEO).
@@ -788,6 +863,9 @@ function _onClick(e) {
   if (a === 'send-report') return _sendReport();
   if (a === 'geo-run')     return _geoRun();
   if (a === 'geo-edit')    return _geoEditToggle();
+  if (a === 'geo-save')          return _geoSave();
+  if (a === 'geo-manual-toggle') return _geoManualToggle();
+  if (a === 'geo-manual-run')    return _geoManualRun();
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;

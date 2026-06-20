@@ -35,6 +35,8 @@ import puppeteer from '@cloudflare/puppeteer';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
+// Analyse GEO pure (citation/rang/sentiment/score), partagée run auto + mode manuel.
+import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as _geoScore, analyzeManual as _analyzeManualGeo } from '../lib/geo-analyze.js';
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
@@ -1107,53 +1109,8 @@ function _engineGrounded(engine, apiKey, prompt) {
   return _geminiGrounded(apiKey, prompt);
 }
 
-// Sentiment indicatif (heuristique lexicale FR, autour de la mention). Best-effort.
-const _GEO_POS = ['recommand', 'excellent', 'meilleur', 'réputé', 'repute', 'incontournable', 'qualité', 'qualite', 'prisé', 'prise', 'populaire', 'apprécié', 'apprecie', 'idéal', 'ideal', 'référence', 'reference', 'renommé', 'renomme'];
-const _GEO_NEG = ['éviter', 'eviter', 'déçu', 'decu', 'mauvais', 'plainte', 'décevant', 'decevant', 'médiocre', 'mediocre', 'arnaque', 'fermé définitivement', 'ferme definitivement'];
-function _sentiment(text, name) {
-  const t = String(text || '').toLowerCase();
-  const n = String(name || '').toLowerCase();
-  const i = n ? t.indexOf(n) : -1;
-  const win = i >= 0 ? t.slice(Math.max(0, i - 160), i + n.length + 160) : t.slice(0, 320);
-  let pos = 0, neg = 0;
-  for (const w of _GEO_POS) if (win.includes(w)) pos++;
-  for (const w of _GEO_NEG) if (win.includes(w)) neg++;
-  if (pos > neg) return 'positive';
-  if (neg > pos) return 'negative';
-  return 'neutral';
-}
-
-// L'établissement est-il cité dans la réponse de l'IA ? (nommé / sourcé / rang approx.)
-function _detectCitation(text, sources, businessName, host) {
-  const t = String(text || '').toLowerCase();
-  const name = String(businessName || '').trim().toLowerCase();
-  const hostBare = String(host || '').replace(/^www\./, '').toLowerCase();
-  let cited = false;
-  if (name && name.length >= 2 && t.includes(name)) cited = true;
-  if (!cited && hostBare && t.includes(hostBare)) cited = true;
-  let sourced = false;
-  if (hostBare) { for (const s of (sources || [])) { if (String(s.uri || '').toLowerCase().includes(hostBare)) { sourced = true; break; } } }
-  let rank = null;
-  if (cited && name) {
-    const segs = String(text || '').split(/\n+|(?:\d+[.)]\s)|(?:[•\-]\s)/).map((l) => l.trim()).filter(Boolean);
-    for (let i = 0; i < segs.length; i++) { if (segs[i].toLowerCase().includes(name)) { rank = i + 1; break; } }
-    if (rank && rank > 10) rank = null;
-  }
-  return { cited, sourced, rank };
-}
-
-// Score d'une cellule (1 question × 1 moteur) : cité #1 = 100, cité = 65-85, sourcé seul = 25.
-function _cellScore(c) {
-  if (c.cited) { if (c.rank === 1) return 100; if (c.rank && c.rank <= 3) return 85; if (c.rank && c.rank <= 6) return 65; return 75; }
-  return c.sourced ? 25 : 0;
-}
-// Score de citabilité global (0-100) sur toutes les cellules réussies.
-function _geoScore(results) {
-  const cells = [];
-  for (const r of (results || [])) for (const c of ((r && r.engines) || [])) if (!c.error) cells.push(c);
-  if (!cells.length) return null;
-  return Math.round(cells.reduce((a, c) => a + _cellScore(c), 0) / cells.length);
-}
+// _sentiment / _detectCitation / _geoScore (+ _cellScore, extractUrls, analyzeManual)
+// vivent désormais dans ../lib/geo-analyze.js (pur, testable, partagé auto+manuel).
 
 // Cœur d'un run GEO : interroge tous les moteurs × toutes les questions (en
 // parallèle), détecte citation + sentiment, score, persiste, fixe next_geo_at.
@@ -1282,6 +1239,48 @@ export async function handleSiteGeoRun(request, env, id) {
   if (out.error) return err(`La mesure de visibilité IA a échoué (${out.detail || 'service indisponible'}). Réessayez plus tard.`, 502, origin);
 
   return json({ geo: { score: out.score, results: out.results, run_at: new Date().toISOString(), business_name: businessName, city, activity, prompts, engines: out.engines } }, 200, origin);
+}
+
+// POST /sites/:id/geo/manual — mode GRATUIT (copier-coller). L'utilisateur a
+// interrogé lui-même une IA web (Gemini/Perplexity/ChatGPT…) et recolle les
+// réponses ; on les analyse (cité ? rang ? sentiment ?) SANS aucune clé ni
+// crédit, et on NE pose PAS next_geo_at (manuel = pas de mesure auto par le cron).
+export async function handleSiteGeoManual(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id, url, label FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+
+  const b = await parseBody(request);
+  const row = await _geoConfigRow(env, id, g.tenant);
+  const businessName = String((b && b.business_name) || (row && row.business_name) || site.label || _hostOf(site.url)).trim().slice(0, 160);
+  if (!businessName) return err("Le nom de l'établissement est requis.", 400, origin);
+  const city = String((b && b.city) || (row && row.city) || '').trim().slice(0, 120);
+  const activity = String((b && b.activity) || (row && row.activity) || '').trim().slice(0, 120);
+  const engineRaw = String((b && b.engine) || 'autre').toLowerCase();
+  const engine = ['gemini', 'perplexity', 'gpt'].includes(engineRaw) ? engineRaw : 'autre';
+
+  let entries = Array.isArray(b && b.entries) ? b.entries : [];
+  entries = entries.map((e) => ({ prompt: String((e && e.prompt) || '').trim().slice(0, 200), text: String((e && e.text) || '').slice(0, 8000) })).filter((e) => e.prompt);
+  if (!entries.some((e) => e.text.trim())) return err("Collez au moins une réponse d'IA à analyser.", 400, origin);
+
+  const prompts = _normalizePrompts(entries.map((e) => e.prompt), activity, city);
+  // Sauvegarde la config (1 geste), comme le run auto.
+  await env.DB.prepare(`
+    INSERT INTO sentinel_geo (site_id, tenant_id, business_name, city, activity, prompts, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(site_id) DO UPDATE SET business_name=excluded.business_name, city=excluded.city, activity=excluded.activity, prompts=excluded.prompts, updated_at=datetime('now')
+  `).bind(id, g.tenant, businessName, city, activity, JSON.stringify(prompts)).run();
+
+  const host = _hostOf(site.url);
+  const results = _analyzeManualGeo(entries, { engine, businessName, host });
+  const score = _geoScore(results);
+  // Relevé stocké SANS next_geo_at (le cron ne rejoue pas un run manuel).
+  await env.DB.prepare("UPDATE sentinel_geo SET last_score = ?, last_results = ?, last_run_at = datetime('now'), updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
+    .bind(score, JSON.stringify(results), id, g.tenant).run();
+
+  return json({ geo: { score, results, run_at: new Date().toISOString(), business_name: businessName, city, activity, prompts, engines: [engine], mode: 'manual' } }, 200, origin);
 }
 
 // ── Web push : abonnement (S1.5, patron keynapse) ───────────────

@@ -141,7 +141,7 @@ import { handleKeynapseHealth, handleKeynapseState,
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
          handleSiteCheck, handleSiteHistory, handleSiteAudit, handleSiteAuditGet,
          handleSiteSuggest, handleSiteSendReport, handleSiteCockpit,
-         handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun,
+         handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun, handleSiteGeoManual,
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
          sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
 
@@ -227,6 +227,8 @@ export default {
       if (sntReport && method === 'POST') return handleSiteSendReport(request, env, sntReport[1]);
       const sntGeoRun = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/geo\/run$/);
       if (sntGeoRun && method === 'POST') return handleSiteGeoRun(request, env, sntGeoRun[1]);
+      const sntGeoManual = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/geo\/manual$/);
+      if (sntGeoManual && method === 'POST') return handleSiteGeoManual(request, env, sntGeoManual[1]);
       const sntGeo = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/geo$/);
       if (sntGeo && method === 'GET')  return handleSiteGeoGet(request, env, sntGeo[1]);
       if (sntGeo && method === 'POST') return handleSiteGeoSave(request, env, sntGeo[1]);
