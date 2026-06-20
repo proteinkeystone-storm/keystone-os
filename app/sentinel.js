@@ -410,17 +410,58 @@ function _responseChartSVG(series) {
   </svg>`;
 }
 
+// Date « JJ/MM » à partir d'un datetime SQLite (browser → new Date OK).
+function _fmtDay(at) {
+  const s = String(at || '');
+  try { const d = new Date(s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z')); if (!isNaN(d)) return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }); } catch (_) {}
+  const m = s.slice(0, 10).split('-'); return m.length === 3 ? `${m[2]}/${m[1]}` : s.slice(0, 10);
+}
+const _HIST_AXES = [
+  { key: 'performance', label: 'Performance' }, { key: 'seo', label: 'SEO technique' },
+  { key: 'securite', label: 'Sécurité' }, { key: 'accessibilite', label: 'Accessibilité' },
+  { key: 'presence', label: 'Présence locale' },
+];
+// Mini-graphe gradué (repère 50) d'une jauge dans le temps.
+function _miniGauge(series) {
+  const W = 140, H = 42, padL = 4, padR = 4, padT = 5, padB = 5, n = series.length;
+  const x = (i) => padL + (n <= 1 ? (W - padL - padR) / 2 : i * (W - padL - padR) / (n - 1));
+  const y = (v) => padT + (1 - v / 100) * (H - padT - padB);
+  const grid = [0, 50, 100].map((g) => `<line x1="${padL}" y1="${y(g).toFixed(1)}" x2="${W - padR}" y2="${y(g).toFixed(1)}" class="snt-mg-grid"/>`).join('');
+  const line = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const dot = n ? `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(series[n - 1]).toFixed(1)}" r="2.6" class="snt-radar-dot"/>` : '';
+  return `<svg class="snt-mg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${grid}<polyline points="${line}" class="snt-ch-line"/>${dot}</svg>`;
+}
 function _historyHTML(hist) {
-  if (!hist || hist.length < 2) return `<div class="snt-dim" style="padding:10px 2px">Pas encore d'historique — relancez l'audit régulièrement pour suivre la progression du score.</div>`;
-  const W = 320, H = 56, pad = 4;
-  const vals = hist.map((h) => (h.score == null ? 0 : h.score));
-  const n = vals.length, x = (i) => pad + (n === 1 ? 0 : i * (W - 2 * pad) / (n - 1)), y = (v) => H - pad - (v / 100) * (H - 2 * pad);
-  const line = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const dots = vals.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.4" class="snt-radar-dot"/>`).join('');
-  const last = hist[hist.length - 1], first = hist[0];
-  return `<div class="snt-hist"><div class="snt-hist-h">Historique du score · ${hist.length} audits</div>
-    <svg class="snt-hist-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${line}" class="snt-ch-line"/>${dots}</svg>
-    <div class="snt-hist-foot">${_esc((first.at || '').slice(0, 10))} : ${first.score ?? '—'} → ${_esc((last.at || '').slice(0, 10))} : ${last.score ?? '—'}</div></div>`;
+  if (!hist || !hist.length) return `<div class="snt-dim" style="padding:10px 2px">Aucun audit encore. Lancez un audit pour démarrer l'historique.</div>`;
+  const pts = hist.map((h) => ({ at: h.at, v: (h.score == null ? null : h.score) })).filter((p) => p.v != null);
+  const n = pts.length;
+  // — Graphe gradué du score global —
+  const W = 720, H = 200, padL = 30, padR = 14, padT = 14, padB = 24;
+  const x = (i) => padL + (n <= 1 ? (W - padL - padR) / 2 : i * (W - padL - padR) / (n - 1));
+  const y = (v) => padT + (1 - v / 100) * (H - padT - padB);
+  let gl = '';
+  for (const gv of [0, 25, 50, 75, 100]) gl += `<line x1="${padL}" y1="${y(gv).toFixed(1)}" x2="${W - padR}" y2="${y(gv).toFixed(1)}" class="snt-ch-grid"/><text x="${padL - 7}" y="${(y(gv) + 4).toFixed(1)}" text-anchor="end" class="snt-ch-axis">${gv}</text>`;
+  const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+  const area = n > 1 ? `${x(0).toFixed(1)},${y(0).toFixed(1)} ${line} ${x(n - 1).toFixed(1)},${y(0).toFixed(1)}` : '';
+  const dots = pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3" class="snt-radar-dot"/>`).join('');
+  const ticks = [...new Set([0, Math.floor((n - 1) / 2), n - 1])].filter((i) => i >= 0 && i < n);
+  let xl = ''; for (const ti of ticks) xl += `<text x="${x(ti).toFixed(1)}" y="${H - 6}" text-anchor="${ti === 0 ? 'start' : ti === n - 1 ? 'end' : 'middle'}" class="snt-ch-axis">${_esc(_fmtDay(pts[ti].at))}</text>`;
+  const delta = n > 1 ? pts[n - 1].v - pts[0].v : 0;
+  const deltaBadge = n > 1 ? `<span class="snt-hist-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '+' : ''}${delta} pts</span>` : '';
+  const chart = n ? `<svg class="snt-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Historique du score global">${gl}${area ? `<polygon points="${area}" class="snt-ch-area"/>` : ''}<polyline points="${line}" class="snt-ch-line"/>${dots}${xl}</svg>` : '';
+  // — Mini-historique par axe (jauges) —
+  const cards = _HIST_AXES.map((ax) => {
+    const s = hist.map((h) => (h.scores && typeof h.scores[ax.key] === 'number') ? h.scores[ax.key] : null).filter((v) => v != null);
+    if (!s.length) return '';
+    const cur = s[s.length - 1], d = s.length > 1 ? cur - s[0] : 0;
+    return `<div class="snt-axhist"><div class="snt-axhist-top">${icon(_AXIS_ICON[ax.key] || 'circle', 13)}<span class="snt-axhist-l">${ax.label}</span><span class="snt-axhist-v">${cur}</span>${s.length > 1 ? `<span class="snt-axhist-d ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${d > 0 ? '+' : ''}${d}</span>` : ''}</div>${_miniGauge(s)}</div>`;
+  }).filter(Boolean).join('');
+  return `<div class="snt-hist">
+    <div class="snt-hist-h">Score global · ${hist.length} audit${hist.length > 1 ? 's' : ''} ${deltaBadge}</div>
+    ${chart}
+    ${n < 2 ? `<div class="snt-dim" style="margin-top:4px">Relancez l'audit régulièrement pour voir la tendance.</div>` : ''}
+    ${cards ? `<div class="snt-axhist-h">Historique par axe</div><div class="snt-axhist-grid">${cards}</div>` : ''}
+  </div>`;
 }
 function _historyToggle() { const h = _root && _root.querySelector('#snt-ck-history'); if (h) h.hidden = !h.hidden; }
 

@@ -788,8 +788,8 @@ export async function handleSiteCockpit(request, env, id) {
   const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   let audit = null;
   if (auditRow) { let sc = null, fd = [], cw = null; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, created_at: auditRow.created_at }; }
-  const histRows = (await env.DB.prepare("SELECT created_at, score FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 12").bind(id).all()).results || [];
-  const scoreHistory = histRows.reverse().map((r) => ({ at: r.created_at, score: r.score }));
+  const histRows = (await env.DB.prepare("SELECT created_at, score, scores FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all()).results || [];
+  const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;
   if (audit && audit.score != null) {
     const prev = await env.DB.prepare("SELECT score FROM sentinel_audits WHERE site_id = ? AND created_at <= datetime('now','-7 day') ORDER BY created_at DESC LIMIT 1").bind(id).first();
