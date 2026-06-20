@@ -146,9 +146,18 @@ async function _load(silent) {
 // ── Helpers ─────────────────────────────────────────────────────
 function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function _hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return u; } }
+// Parse robuste : accepte le format SQLite ("YYYY-MM-DD HH:MM:SS", UTC sans zone)
+// ET l'ISO complet ("…T…Z") — sans rajouter un Z en trop (bug d'horodatage vide).
+function _parseTs(iso) {
+  if (!iso) return NaN;
+  let s = String(iso).trim();
+  if (s.indexOf('T') === -1) s = s.replace(' ', 'T');
+  if (!/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s)) s += 'Z';
+  return Date.parse(s);
+}
 function _ago(iso) {
   if (!iso) return '';
-  const t = Date.parse(String(iso).replace(' ', 'T') + 'Z'); if (isNaN(t)) return '';
+  const t = _parseTs(iso); if (isNaN(t)) return '';
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
   if (s < 60) return `il y a ${s} s`;
   const m = Math.round(s / 60); if (m < 60) return `il y a ${m} min`;
@@ -292,7 +301,7 @@ const _AXIS_ICON = { performance: 'zap', seo: 'search', securite: 'shield-check'
 const _SEV_PRIO = { high: { label: 'Priorité élevée', cls: 'high', gain: 5 }, medium: { label: 'Priorité moyenne', cls: 'medium', gain: 3 }, low: { label: 'À optimiser', cls: 'low', gain: 1 } };
 function _until(iso) {
   if (!iso) return '';
-  const t = Date.parse(String(iso).replace(' ', 'T') + 'Z'); if (isNaN(t)) return '';
+  const t = _parseTs(iso); if (isNaN(t)) return '';
   const s = Math.round((t - Date.now()) / 1000);
   if (s <= 0) return 'imminente'; if (s < 60) return `dans ${s} s`;
   const m = Math.floor(s / 60); return `dans ${m} min`;
@@ -539,6 +548,16 @@ function _geoCellBadge(c) {
   if (c.sourced) return `<span class="snt-geo-b mid">${_esc(name)} · source citée</span>`;
   return `<span class="snt-geo-b no">${_esc(name)} · non cité</span>`;
 }
+// Nettoie un extrait de réponse IA : retire le markdown brut (###, **, `, puces).
+function _cleanSnippet(s) {
+  return String(s || '')
+    .replace(/```[a-z]*/gi, '')
+    .replace(/^\s*#{1,6}\s*/gm, '').replace(/#{1,6}\s+/g, ' ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/\s+/g, ' ').trim();
+}
 function _geoResultsHTML(g) {
   const sc = g.score;
   const enginesUsed = (Array.isArray(g.engines) && g.engines.length) ? g.engines : null;
@@ -547,7 +566,9 @@ function _geoResultsHTML(g) {
     const cells = _geoCells(r);
     const badges = cells.map(_geoCellBadge).join('');
     const repr = cells.find((c) => c.cited && c.snippet) || cells.find((c) => c.snippet && !c.error);
-    return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-engines">${badges}</div>${(repr && repr.snippet) ? `<div class="snt-geo-snip">${_esc(repr.snippet)}</div>` : ''}</div>`;
+    let snip = '';
+    if (repr && repr.snippet) { snip = _cleanSnippet(repr.snippet); if (String(repr.snippet).length >= 278 && snip) snip += '…'; }
+    return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-engines">${badges}</div>${snip ? `<div class="snt-geo-snip">${_esc(snip)}</div>` : ''}</div>`;
   }).join('');
   // Pont AEO→GEO : citabilité faible → proposer la génération FAQ (générateur S4.1, carte ci-dessous).
   const weak = (sc != null && sc < 70) || (g.results || []).some((r) => _geoCells(r).some((c) => !c.error && !c.cited));
