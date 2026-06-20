@@ -39,7 +39,7 @@ import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credi
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 
-const SENTINEL_ENGINE_VERSION = 'S7.0';
+const SENTINEL_ENGINE_VERSION = 'S7.1';
 const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
@@ -588,7 +588,7 @@ export async function handleSitesList(request, env) {
   }
   // email_enabled / geo_enabled : le front n'affiche ces surfaces que si elles
   // sont réellement câblées (clé Resend / clé Gemini) → pas d'UI morte avant activation.
-  const emailEnabled = !!(env && env.RESEND_API_KEY);
+  const emailEnabled = !!(env && (env.KS_RESEND_KEY || env.RESEND_API_KEY));
   return json({ sites: rows, count: rows.length, limit: _siteLimit(g.plan), plan: g.plan, email_enabled: emailEnabled, geo_enabled: _geoEnabled(env) }, 200, origin);
 }
 
@@ -809,7 +809,7 @@ export async function handleSiteCockpit(request, env, id) {
   return json({ cockpit: {
     site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
     uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo,
-    email_enabled: !!(env && env.RESEND_API_KEY),
+    email_enabled: !!(env && (env.KS_RESEND_KEY || env.RESEND_API_KEY)),
   } }, 200, origin);
 }
 
@@ -890,15 +890,18 @@ const EMAIL_DAILY_LIMIT = 20;
 async function _revertEmailLog(env, tenant, day) {
   await env.DB.prepare("UPDATE sentinel_email_log SET count = MAX(count - 1, 0) WHERE tenant_id = ? AND day = ?").bind(tenant, day).run().catch(() => {});
 }
-// Envoi via l'API Resend. Retour { ok, status, msg, id }. Ne lève jamais.
-async function _sendViaResend(env, { from, fromName, to, subject, html, text, replyTo }) {
+// Envoi via Resend. Réutilise la clé Resend EXISTANTE de Keystone (KS_RESEND_KEY,
+// domaine déjà vérifié — sert aux e-mails de licence) ; repli sur RESEND_API_KEY
+// dédié si un jour posé. `from` = chaîne prête (« Nom <email> »). Ne lève jamais.
+async function _sendViaResend(env, { from, to, subject, html, text, replyTo }) {
+  const key = env.KS_RESEND_KEY || env.RESEND_API_KEY;
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const payload = { from: fromName ? `${fromName} <${from}>` : from, to: [to], subject, html, text };
+    const payload = { from, to: [to], subject, html, text };
     if (replyTo) payload.reply_to = replyTo;
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: ctrl.signal,
     });
     let data = {}; try { data = await res.json(); } catch (_) {}
@@ -920,8 +923,8 @@ export async function handleSiteSendReport(request, env, id) {
   if (!_validEmail(email)) return err('Adresse e-mail invalide.', 400, origin);
   const replyTo = _validEmail(body && body.replyTo) ? String(body.replyTo).trim() : null;
 
-  // Envoi configuré ? (clé Resend présente). Sinon message clair, le PDF reste dispo.
-  if (!env.RESEND_API_KEY) {
+  // Envoi configuré ? (clé Resend présente — partagée avec Keystone). Sinon PDF.
+  if (!(env.KS_RESEND_KEY || env.RESEND_API_KEY)) {
     return err("L'envoi par e-mail n'est pas encore activé sur ce serveur. En attendant, exportez le rapport en PDF puis transmettez-le.", 503, origin);
   }
 
@@ -941,8 +944,11 @@ export async function handleSiteSendReport(request, env, id) {
 
   const name = site.label || _hostOf(site.url);
   const { subject, html, text } = _reportEmail({ name, url: site.url, score: row.score, scores, findings, date: row.created_at, platform: site.platform });
-  const from = (env.SENTINEL_FROM_EMAIL && String(env.SENTINEL_FROM_EMAIL)) || 'sentinel@protein-keystone.com';
-  const sent = await _sendViaResend(env, { from, fromName: 'Keystone Sentinel', to: email, subject, html, text, replyTo });
+  // Expéditeur : on réutilise tel quel l'adresse vérifiée de Keystone (KS_RESEND_FROM,
+  // déjà au format « Nom <email> ») ; sinon repli sur une adresse Sentinel.
+  const from = env.KS_RESEND_FROM ? String(env.KS_RESEND_FROM)
+    : `Keystone Sentinel <${env.SENTINEL_FROM_EMAIL || 'sentinel@protein-keystone.com'}>`;
+  const sent = await _sendViaResend(env, { from, to: email, subject, html, text, replyTo });
   if (!sent.ok) {
     await _revertEmailLog(env, g.tenant, day);
     if (/domain|verif|not verified|\bdns\b/i.test(sent.msg)) {
