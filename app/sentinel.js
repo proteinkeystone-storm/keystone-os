@@ -599,18 +599,21 @@ function _geoFormHTML(g) {
 // ── Mode MANUEL (gratuit) : bloc-prompt à coller dans une IA web → réponses recollées ──
 function _geoPromptBlock(g) {
   const lines = (g.prompts || []).map((p, i) => `${i + 1}. ${p}`).join('\n');
-  return `Pour chacune des questions ci-dessous, réponds comme tu le ferais pour un utilisateur, en listant tes recommandations (noms d'entreprises, de marques ou de produits) sous forme de liste numérotée, de la plus pertinente à la moins pertinente. Indique une source web quand c'est possible.\n\n${lines}`;
+  return `Réponds à chacune des questions ci-dessous comme tu le ferais pour un utilisateur qui te demande conseil.
+Pour CHAQUE question : commence par une ligne « ### QUESTION N » (N = son numéro), puis donne tes recommandations sous forme de liste numérotée (noms d'entreprises, de marques ou de produits), du plus pertinent au moins pertinent. Cite une source web quand c'est possible.
+
+${lines}`;
 }
 function _geoManualHTML(g) {
-  const prompts = (g.prompts && g.prompts.length) ? g.prompts : [];
-  const rows = prompts.map((p, i) => `<div class="snt-geo-mrow"><div class="snt-geo-mq"><b>${i + 1}.</b> ${_esc(p)}</div><textarea class="snt-input snt-geo-mta" data-geo-ans="${i}" rows="3" placeholder="Colle ici la réponse de l'IA à cette question…"></textarea></div>`).join('');
+  const has = !!(g.prompts && g.prompts.length);
   return `<div class="snt-geo-manual-in">
-    <div class="snt-geo-steps">${icon('sparkles', 15)}<div><b>100 % gratuit, sans clé.</b> ① Copie le bloc · ② colle-le dans une IA gratuite (Gemini, Perplexity, ChatGPT…) · ③ recolle chaque réponse ci-dessous · ④ Analyser.<br><span class="snt-geo-hint">Pour adapter les questions (activité, ville), utilise « Modifier » puis « Enregistrer ».</span></div></div>
-    <div class="snt-geo-copyblock"><div class="snt-fix-codehead"><span>Bloc à coller dans l'IA</span><button class="snt-copy" data-act="copy" data-target="snt-geo-block">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="snt-geo-block">${_esc(_geoPromptBlock(g))}</pre></div>
-    <label class="snt-geo-l">Quelle IA as-tu utilisée ?<select class="snt-input" id="snt-geo-engine"><option value="gemini">Gemini</option><option value="perplexity">Perplexity</option><option value="gpt">ChatGPT</option><option value="autre">Autre IA</option></select></label>
-    ${rows || '<div class="snt-geo-hint">Aucune question configurée — utilise « Modifier » pour en ajouter.</div>'}
+    <div class="snt-geo-steps">${icon('sparkles', 15)}<div><b>100 % gratuit, sans clé.</b> ① Copie le bloc · ② colle-le dans l'IA de ton choix (Gemini, Perplexity, ChatGPT…) · ③ recolle SA réponse entière dans le cadre · ④ Analyser.<br><span class="snt-geo-hint">Pour adapter les questions (activité, ville), utilise « Modifier » puis « Enregistrer ».</span></div></div>
+    <div class="snt-geo-copyblock"><div class="snt-fix-codehead"><span>1 · Bloc à coller dans l'IA</span><button class="snt-copy" data-act="copy" data-target="snt-geo-block">${icon('copy', 13)} Copier</button></div><pre class="snt-code" id="snt-geo-block">${_esc(_geoPromptBlock(g))}</pre></div>
+    <label class="snt-geo-l">2 · Quelle IA as-tu utilisée ?<select class="snt-input" id="snt-geo-engine"><option value="gemini">Gemini</option><option value="perplexity">Perplexity</option><option value="gpt">ChatGPT</option><option value="autre">Autre IA</option></select></label>
+    <label class="snt-geo-l">3 · Colle ici la réponse complète de l'IA<textarea class="snt-input snt-geo-mta snt-geo-answer" id="snt-geo-manual-answer" rows="8" placeholder="Colle toute la réponse de l'IA (les sections ### QUESTION 1, 2, 3… avec leurs listes)"></textarea></label>
     <div class="snt-geo-mmsg" id="snt-geo-manual-msg"></div>
-    <button class="snt-btn snt-btn-sm" data-act="geo-manual-run">${icon('compass', 14)} Analyser (gratuit)</button>
+    <button class="snt-btn snt-btn-sm" data-act="geo-manual-run"${has ? '' : ' disabled'}>${icon('compass', 14)} Analyser (gratuit)</button>
+    ${has ? '' : '<div class="snt-geo-hint">Configure d\'abord tes questions via « Modifier » puis « Enregistrer ».</div>'}
   </div>`;
 }
 function _geoEditToggle() { const f = _root && _root.querySelector('#snt-geo-form'); if (f) f.hidden = !f.hidden; }
@@ -669,15 +672,15 @@ async function _geoSave() {
 async function _geoManualRun() {
   if (!_panel || !_panel.id) return;
   const g = _panel.geo || _geoDefault();
-  const prompts = g.prompts || [];
+  const ansEl = _root && _root.querySelector('#snt-geo-manual-answer');
+  const answer = ansEl ? ansEl.value : '';
+  if (!answer.trim()) { alert("Colle la réponse de l'IA avant d'analyser."); return; }
   const engineEl = _root && _root.querySelector('#snt-geo-engine');
   const engine = engineEl ? engineEl.value : 'autre';
-  const entries = prompts.map((p, i) => { const ta = _root && _root.querySelector(`[data-geo-ans="${i}"]`); return { prompt: p, text: ta ? ta.value : '' }; });
-  if (!entries.some((e) => (e.text || '').trim())) { alert("Colle au moins une réponse d'IA avant d'analyser."); return; }
   const msg = _root && _root.querySelector('#snt-geo-manual-msg');
-  if (msg) msg.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} Analyse de tes réponses…</div>`;
+  if (msg) msg.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} Analyse de la réponse…</div>`;
   try {
-    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/geo/manual`, { method: 'POST', body: { business_name: g.business_name, city: g.city, activity: g.activity, engine, entries }, timeout: 30000 });
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/geo/manual`, { method: 'POST', body: { business_name: g.business_name, city: g.city, activity: g.activity, engine, prompts: g.prompts, answer }, timeout: 30000 });
     _panel.geo = Object.assign({}, _panel.geo, d.geo);
     _renderCockpit();
     const s2 = _root && _root.querySelector('#snt-geo-sec'); if (s2 && s2.scrollIntoView) try { s2.scrollIntoView({ block: 'nearest' }); } catch (_) {}

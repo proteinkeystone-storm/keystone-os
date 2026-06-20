@@ -36,7 +36,7 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 // Analyse GEO pure (citation/rang/sentiment/score), partagée run auto + mode manuel.
-import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as _geoScore, analyzeManual as _analyzeManualGeo } from '../lib/geo-analyze.js';
+import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as _geoScore, analyzeManual as _analyzeManualGeo, splitManualAnswer as _splitManualAnswer } from '../lib/geo-analyze.js';
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
@@ -1261,11 +1261,23 @@ export async function handleSiteGeoManual(request, env, id) {
   const engineRaw = String((b && b.engine) || 'autre').toLowerCase();
   const engine = ['gemini', 'perplexity', 'gpt'].includes(engineRaw) ? engineRaw : 'autre';
 
-  let entries = Array.isArray(b && b.entries) ? b.entries : [];
-  entries = entries.map((e) => ({ prompt: String((e && e.prompt) || '').trim().slice(0, 200), text: String((e && e.text) || '').slice(0, 8000) })).filter((e) => e.prompt);
-  if (!entries.some((e) => e.text.trim())) return err("Collez au moins une réponse d'IA à analyser.", 400, origin);
+  // Prompts de référence (corps > config sauvegardée > défaut) pour mapper la découpe.
+  let savedPrompts = []; try { savedPrompts = JSON.parse((row && row.prompts) || '[]'); } catch (_) {}
+  const prompts = _normalizePrompts((b && Array.isArray(b.prompts)) ? b.prompts : savedPrompts, activity, city);
 
-  const prompts = _normalizePrompts(entries.map((e) => e.prompt), activity, city);
+  // Mode « un seul bloc » : l'utilisateur recolle TOUTE la réponse de l'IA ; on la
+  // découpe par question (### QUESTION N) — repli sur l'analyse globale sinon.
+  const answer = String((b && b.answer) || '').slice(0, 20000);
+  let entries;
+  if (answer.trim()) {
+    entries = _splitManualAnswer(answer, prompts) || [{ prompt: "Recommandations de l'IA", text: answer }];
+  } else {
+    // Rétro-compat : réponses fournies une par question.
+    entries = (Array.isArray(b && b.entries) ? b.entries : [])
+      .map((e) => ({ prompt: String((e && e.prompt) || '').trim().slice(0, 200), text: String((e && e.text) || '').slice(0, 8000) }))
+      .filter((e) => e.prompt);
+  }
+  if (!entries.some((e) => (e.text || '').trim())) return err("Collez la réponse de l'IA à analyser.", 400, origin);
   // Sauvegarde la config (1 geste), comme le run auto.
   await env.DB.prepare(`
     INSERT INTO sentinel_geo (site_id, tenant_id, business_name, city, activity, prompts, updated_at)

@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.27.33-geo-manuel-gratuit';
+const VERSION       = 'ks-os-v5.27.34-geo-manuel-1bloc';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 

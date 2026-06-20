@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Test : analyse GEO mode manuel (workers/src/lib/geo-analyze.js).
    Pur, sans dépendance Cloudflare → importable sous Node. */
-import { detectCitation, geoScore, extractUrls, analyzeManual, sentiment } from '../workers/src/lib/geo-analyze.js';
+import { detectCitation, geoScore, extractUrls, analyzeManual, sentiment, splitManualAnswer } from '../workers/src/lib/geo-analyze.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('✗ ' + msg); } };
@@ -51,6 +51,30 @@ eq(r[0].engines, [], 'question sans texte → aucune cellule');
 ok(geoScore(r) > 0, 'score basé uniquement sur la question répondue');
 
 eq(geoScore([]), null, 'score null si aucune cellule');
+
+// — splitManualAnswer (mode « un seul bloc » : 1 réponse collée → segments par question) —
+const P3 = ['Quel logiciel TPE ?', 'Meilleur outil QR ?', 'Agent IA pour PME ?'];
+let s = splitManualAnswer('### QUESTION 1\n1. Keystone OS\n2. X\n### QUESTION 2\n1. Y\n### QUESTION 3\n1. Z', P3);
+eq(s.length, 3, 'découpe 3 sections ### QUESTION N');
+eq(s[0].prompt, P3[0], 'section 1 mappée sur le prompt 1');
+ok(/Keystone OS/.test(s[0].text), 'texte de la section 1 capturé');
+ok(!/QUESTION 2/.test(s[0].text), 'la section 1 ne déborde pas sur la 2');
+
+eq(splitManualAnswer('[Q1] foo\nbar\n[Q2] baz', ['A', 'B']).length, 2, 'marqueurs [Qn] lenient');
+eq(splitManualAnswer('## Question 1\nx\n## Question 2\ny', ['A', 'B']).length, 2, 'marqueurs « ## Question N » lenient');
+
+s = splitManualAnswer('Question 2 : seulement la deux', ['A', 'B', 'C']);
+eq(s.length, 1, 'section partielle (une seule question répondue)');
+eq(s[0].prompt, 'B', 'section partielle mappée sur le bon prompt (n=2)');
+
+ok(splitManualAnswer('aucun marqueur ici, juste du texte', P3) === null, 'aucun marqueur → null (repli analyse globale)');
+ok(splitManualAnswer('1. Keystone\n2. Autre', P3) === null, 'liste numérotée simple ≠ marqueur de question');
+
+// bout en bout : un seul bloc collé → découpe → analyse → score
+s = splitManualAnswer('### QUESTION 1\n1. Keystone OS, le meilleur\n### QUESTION 2\n1. Une autre marque', P3);
+const rr = analyzeManual(s, { engine: 'gemini', businessName: 'Keystone OS', host: 'protein-keystone.com' });
+eq(rr.length, 2, 'un bloc découpé → 2 résultats');
+ok(rr[0].engines[0].cited === true && rr[1].engines[0].cited === false, 'cité en Q1, absent en Q2');
 
 console.log(`\n${fail ? '❌' : '✅'} GEO manuel : ${pass} ok, ${fail} échec(s)`);
 process.exit(fail ? 1 : 0);

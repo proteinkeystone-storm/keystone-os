@@ -68,6 +68,27 @@ export function extractUrls(text) {
   return out;
 }
 
+// Découpe UNE réponse d'IA collée (mode manuel « un seul bloc ») en segments par
+// question, via les marqueurs « ### QUESTION N » (lenient : #, *, [, Q/Question,
+// numéro). Renvoie [{prompt, text}] mappé sur `prompts`, ou null si aucun
+// marqueur exploitable (l'appelant analyse alors le bloc entier en un seul tenant).
+export function splitManualAnswer(answer, prompts) {
+  const text = String(answer || '');
+  const re = /^[ \t>*#[]*q(?:uestion)?[ \t]*#?[ \t]*(\d+)\b[ \t:.)\-\]*]*/gim;
+  const marks = []; let m;
+  while ((m = re.exec(text))) { marks.push({ n: parseInt(m[1], 10), contentStart: re.lastIndex, lineStart: m.index }); if (re.lastIndex === m.index) re.lastIndex++; }
+  if (!marks.length) return null;
+  const entries = [];
+  for (let i = 0; i < marks.length; i++) {
+    const end = (i + 1 < marks.length) ? marks[i + 1].lineStart : text.length;
+    const seg = text.slice(marks[i].contentStart, end).trim();
+    const idx = marks[i].n - 1;
+    const prompt = (idx >= 0 && idx < (prompts || []).length) ? prompts[idx] : `Question ${marks[i].n}`;
+    if (seg) entries.push({ prompt, text: seg });
+  }
+  return entries.length ? entries : null;
+}
+
 // Mode MANUEL : à partir des réponses collées (1 par question), construit la
 // structure `results` (compatible cockpit) en réutilisant detectCitation/sentiment.
 // Aucune clé, aucun crédit — l'utilisateur a interrogé l'IA lui-même.
