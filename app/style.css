@@ -7393,11 +7393,26 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 
 /* Cartes de type (URL/Texte/vCard/Wi-Fi/iCal) */
 .sdqr-type-cards {
+  margin-top: 18px;     /* sépare des champs au-dessus (ex: Couleur d'accent en mode Smart) */
+  margin-bottom: 18px;
+}
+/* Accordéon de familles (SDQR S2) — pictos-chapitres repliables */
+.sdqr-fam-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 14px;
+}
+.sdqr-fam-pill {
+  padding: 8px 16px; border-radius: 9px;
+  border: 1px solid var(--bd); background: transparent;
+  color: var(--tx2); font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.sdqr-fam-pill:hover { border-color: var(--gold); color: var(--text); }
+.sdqr-fam-pill.is-active { background: var(--gold3); border-color: var(--gold); color: var(--gold); }
+.sdqr-type-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 10px;
-  margin-top: 18px;     /* sépare des champs au-dessus (ex: Couleur d'accent en mode Smart) */
-  margin-bottom: 18px;
 }
 .sdqr-type-card {
   position: relative;

@@ -897,12 +897,32 @@ function _openCreateForm(panel, opts = {}) {
   content.querySelector('#sdqr-save')?.addEventListener('click', () => _handleCreate(panel));
 }
 
-// Rend les cartes de type cliquables. La carte active reflète _creating.type.
-// Si on bascule sur un type static-only, force _creating.mode = 'static'.
+// SDQR S2 — types groupés en FAMILLES (accordéon) : un seul chapitre déplié.
+// On ne montre que les familles ayant au moins un type présent dans QR_TYPES.
+const _TYPE_FAMILIES = [
+  { id: 'liens',    label: 'Liens',    types: ['url', 'text'] },
+  { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'tel'] },
+  { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'] },
+];
+function _familyOfType(typeId) {
+  const f = _TYPE_FAMILIES.find(fam => fam.types.includes(typeId));
+  return f ? f.id : _TYPE_FAMILIES[0].id;
+}
+
+// Rend l'accordéon de familles + les cartes de type du chapitre actif.
+// La carte active reflète _creating.type ; un type static-only force le mode static.
 function _renderTypeCards(root) {
   const wrap = root.querySelector('#sdqr-type-cards');
   if (!wrap) return;
-  wrap.innerHTML = Object.entries(QR_TYPES).map(([id, def]) => {
+  if (!_creating.family) _creating.family = _familyOfType(_creating.type);
+  const fams = _TYPE_FAMILIES.filter(f => f.types.some(t => QR_TYPES[t]));
+  const active = fams.find(f => f.id === _creating.family) || fams[0];
+
+  const pills = fams.map(f =>
+    `<button class="sdqr-fam-pill ${f.id === active.id ? 'is-active' : ''}" data-fam="${f.id}">${f.label}</button>`
+  ).join('');
+  const cards = active.types.filter(t => QR_TYPES[t]).map(id => {
+    const def = QR_TYPES[id];
     const isActive   = _creating.type === id;
     const staticOnly = !def.supports.dynamic;
     return `
@@ -914,6 +934,11 @@ function _renderTypeCards(root) {
       </button>
     `;
   }).join('');
+  wrap.innerHTML = `<div class="sdqr-fam-row">${pills}</div><div class="sdqr-type-cards-grid">${cards}</div>`;
+
+  wrap.querySelectorAll('.sdqr-fam-pill').forEach(p => {
+    p.addEventListener('click', () => { _creating.family = p.dataset.fam; _renderTypeCards(root); });
+  });
   wrap.querySelectorAll('.sdqr-type-card').forEach(card => {
     card.addEventListener('click', () => {
       const newType = card.dataset.type;
