@@ -208,6 +208,14 @@ export function openSDQR(opts = {}) {
   panel.classList.add('open');
   document.body.style.overflow = 'hidden';
 
+  // SDQR S2 — le pad applique le design fixe (clair + accent or), indépendamment
+  // de la préférence clair/sombre globale. On force le mode clair le temps de
+  // l'ouverture (réutilise le thème clair complet déjà fiabilisé), et on restaure
+  // l'état antérieur à la fermeture (cf. closeSDQR) → aucun effet de bord persistant.
+  document.documentElement.dataset.sdqrPrevLight =
+    document.documentElement.classList.contains('light-mode') ? '1' : '0';
+  document.documentElement.classList.add('light-mode');
+
   _wireShell(panel);
   bindRatingButton(panel, 'A-COM-001');
   bindHelpButton(panel, 'A-COM-001');
@@ -258,6 +266,11 @@ function _maybeAutoOpenVefaConcierge(panel) {
 export function closeSDQR() {
   document.getElementById('sdqr-fullscreen')?.classList.remove('open');
   document.body.style.overflow = '';
+  // Restaure la préférence clair/sombre antérieure (cf. openSDQR).
+  if (document.documentElement.dataset.sdqrPrevLight === '0') {
+    document.documentElement.classList.remove('light-mode');
+  }
+  delete document.documentElement.dataset.sdqrPrevLight;
 }
 
 function _renderShell() {
