@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — panneau Design tab-ifié (vrai CSS)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>
+  body { margin:0; background:#0f1d3a; padding:28px; }
+  .wrap { max-width: 720px; margin:0 auto; }
+  .sdqr-design-panel { background:#fff; border-radius:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <details class="sdqr-design-panel" id="sdqr-design-panel" open>
+    <summary class="sdqr-design-summary">Personnaliser le design <span class="sdqr-design-arrow">▾</span></summary>
+    <div class="sdqr-design-body">
+      <div class="sdqr-dtabs" id="sdqr-dtabs">
+        <button class="sdqr-dtab is-active" data-dtab="modules">Modules</button>
+        <button class="sdqr-dtab" data-dtab="yeux">Yeux</button>
+        <button class="sdqr-dtab" data-dtab="logo">Logo</button>
+        <button class="sdqr-dtab" data-dtab="couleurs">Couleurs</button>
+        <button class="sdqr-dtab" data-dtab="cadre">Cadre</button>
+        <button class="sdqr-dtab" data-dtab="modeles">Modèles</button>
+      </div>
+
+      <div class="sdqr-dtab-panel is-active" data-dtab-panel="modules">
+        <div class="sdqr-shape-pills">
+          ${''}
+          <button class="sdqr-shape-pill sdqr-shape-pill--visual is-active"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="4" y="4" width="14" height="14"/></svg><span class="sdqr-shape-pill-lbl">Carré</span></button>
+          <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><circle cx="11" cy="11" r="7"/></svg><span class="sdqr-shape-pill-lbl">Point</span></button>
+          <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><path d="M11 3 L19 11 L11 19 L3 11 Z"/></svg><span class="sdqr-shape-pill-lbl">Losange</span></button>
+          <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="8" y="3" width="6" height="16"/><rect x="3" y="8" width="16" height="6"/></svg><span class="sdqr-shape-pill-lbl">Croix</span></button>
+        </div>
+        <div class="sdqr-design-hint">Le motif du corps du QR. Un motif trop clairsemé fragilise le scan — le garde-fou veille.</div>
+      </div>
+
+      <div class="sdqr-dtab-panel" data-dtab-panel="yeux">
+        <div class="sdqr-design-row"><span class="sdqr-design-lbl">Anneau</span>
+          <div class="sdqr-shape-pills">
+            <button class="sdqr-shape-pill sdqr-shape-pill--visual is-active"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="3" y="3" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"/></svg><span class="sdqr-shape-pill-lbl">Carré</span></button>
+            <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="2.4"/></svg><span class="sdqr-shape-pill-lbl">Point</span></button>
+          </div></div>
+        <div class="sdqr-design-hint">Les yeux = ce que la caméra verrouille en premier. Leur couleur se règle dans l'onglet Couleurs.</div>
+      </div>
+
+      <div class="sdqr-dtab-panel" data-dtab-panel="logo">
+        <div class="sdqr-design-section-title">Logo central</div>
+        <div class="sdqr-logo-zone"><label class="sdqr-logo-zone-empty"><span class="sdqr-logo-zone-text"><strong>Glisse une image ici</strong> ou clique</span></label></div>
+      </div>
+
+      <div class="sdqr-dtab-panel" data-dtab-panel="couleurs">
+        <div class="sdqr-design-hint">Le dégradé colore les modules &middot; la pastille d'accent colore les yeux.</div>
+        <div class="sdqr-amb-groups">
+          <div class="sdqr-amb-group"><div class="sdqr-amb-label">Sobres</div><div class="sdqr-amb-row">
+            <button class="sdqr-amb-card is-on"><span class="sdqr-amb-top"><span class="sdqr-amb-bar" style="background:linear-gradient(90deg,#0a2741,#22406e)"></span><span class="sdqr-amb-accent" style="background:#b08d2e"></span></span><span class="sdqr-amb-name">Navy & Or</span></button>
+            <button class="sdqr-amb-card"><span class="sdqr-amb-top"><span class="sdqr-amb-bar" style="background:linear-gradient(90deg,#312e81,#4f46e5)"></span><span class="sdqr-amb-accent" style="background:#7c3aed"></span></span><span class="sdqr-amb-name">Indigo Pulsa</span></button>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="sdqr-dtab-panel" data-dtab-panel="cadre">
+        <div class="sdqr-design-hint">Un cadre + une accroche autour du QR — le code reste intact, donc scannable.</div>
+        <div class="sdqr-shape-pills">
+          <button class="sdqr-shape-pill">Aucun</button>
+          <button class="sdqr-shape-pill is-active">Bandeau</button>
+          <button class="sdqr-shape-pill">Encadré</button>
+          <button class="sdqr-shape-pill">Pastille</button>
+        </div>
+      </div>
+
+      <div class="sdqr-dtab-panel" data-dtab-panel="modeles">
+        <div class="sdqr-design-section-head"><span class="sdqr-design-section-title">Thèmes prêts à l'emploi</span></div>
+        <div class="sdqr-design-hint">5 thèmes 1-clic (par intention = à venir).</div>
+      </div>
+
+      <div class="sdqr-design-foot">
+        <div class="sdqr-contrast sdqr-contrast--ok">Contraste excellent — scannabilité optimale</div>
+        <button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs">Sauvegarder le design</button>
+      </div>
+    </div>
+  </details>
+</div>
+<script>
+  document.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(tab => tab.addEventListener('click', () => {
+    const t = tab.dataset.dtab;
+    document.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(b => b.classList.toggle('is-active', b === tab));
+    document.querySelectorAll('[data-dtab-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.dtabPanel === t));
+  }));
+</script>
+</body>
+</html>

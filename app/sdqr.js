@@ -4095,8 +4095,18 @@ function _renderDesignPanel(qr) {
       </summary>
       <div class="sdqr-design-body">
 
-        <!-- THÈMES prêts à l'emploi (1-clic) + Surprise -->
-        <div class="sdqr-design-section">
+        <!-- Onglets (maquette : Modules / Yeux / Logo / Couleurs / Cadre / Modèles) -->
+        <div class="sdqr-dtabs" id="sdqr-dtabs">
+          <button class="sdqr-dtab is-active" data-dtab="modules">Modules</button>
+          <button class="sdqr-dtab" data-dtab="yeux">Yeux</button>
+          <button class="sdqr-dtab" data-dtab="logo">Logo</button>
+          <button class="sdqr-dtab" data-dtab="couleurs">Couleurs</button>
+          <button class="sdqr-dtab" data-dtab="cadre">Cadre</button>
+          <button class="sdqr-dtab" data-dtab="modeles">Modèles</button>
+        </div>
+
+        <!-- MODÈLES (thèmes prêts à l'emploi + Surprise) -->
+        <div class="sdqr-dtab-panel" data-dtab-panel="modeles">
           <div class="sdqr-design-section-head">
             <span class="sdqr-design-section-title">Thèmes prêts à l'emploi</span>
             <button class="sdqr-surprise-btn" data-action="surprise" title="Génère un design aléatoire">
@@ -4109,32 +4119,33 @@ function _renderDesignPanel(qr) {
           </div>
         </div>
 
-        <!-- FORMES (modules + ancres) avec mini-aperçus visuels -->
-        <div class="sdqr-design-section">
-          <div class="sdqr-design-section-title">Formes</div>
-          <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Modules</span>
-            <div class="sdqr-shape-pills" data-shape-target="module">
-              ${SHAPE_OPTS.map(s => _renderShapePill(s, d.module.shape === s.id)).join('')}
-            </div>
+        <!-- MODULES (motif du corps) — panneau actif par défaut -->
+        <div class="sdqr-dtab-panel is-active" data-dtab-panel="modules">
+          <div class="sdqr-shape-pills" data-shape-target="module">
+            ${SHAPE_OPTS.map(s => _renderShapePill(s, d.module.shape === s.id)).join('')}
           </div>
+          <div class="sdqr-design-hint">Le motif du corps du QR. Un motif trop clairsemé fragilise le scan — le garde-fou veille.</div>
+        </div>
+
+        <!-- YEUX (formes des 3 repères de calage) -->
+        <div class="sdqr-dtab-panel" data-dtab-panel="yeux">
           <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Ancres · anneau</span>
+            <span class="sdqr-design-lbl">Anneau</span>
             <div class="sdqr-shape-pills" data-shape-target="anchor-outer">
               ${ANCHOR_OUTER_OPTS.map(s => _renderShapePill(s, d.anchor.outer.shape === s.id)).join('')}
             </div>
           </div>
           <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Ancres · centre</span>
+            <span class="sdqr-design-lbl">Centre</span>
             <div class="sdqr-shape-pills" data-shape-target="anchor-inner">
               ${ANCHOR_INNER_OPTS.map(s => _renderShapePill(s, d.anchor.inner.shape === s.id)).join('')}
             </div>
           </div>
+          <div class="sdqr-design-hint">Les yeux = ce que la caméra verrouille en premier. Leur couleur se règle dans l'onglet Couleurs.</div>
         </div>
 
-        <!-- COULEURS : palettes + custom -->
-        <div class="sdqr-design-section">
-          <div class="sdqr-design-section-title">Couleurs</div>
+        <!-- COULEURS : palettes par ambiance + custom -->
+        <div class="sdqr-dtab-panel" data-dtab-panel="couleurs">
           <div class="sdqr-design-hint">Le dégradé colore les modules &middot; la pastille d'accent colore les yeux.</div>
           <div class="sdqr-amb-groups">
             ${COLOR_AMBIANCES.map(g => `
@@ -4193,7 +4204,7 @@ function _renderDesignPanel(qr) {
         </div>
 
         <!-- LOGO central avec zone drop visible -->
-        <div class="sdqr-design-section">
+        <div class="sdqr-dtab-panel" data-dtab-panel="logo">
           <div class="sdqr-design-section-title">Logo central</div>
           <div class="sdqr-logo-zone ${d.logo.dataUrl ? 'has-logo' : ''}" id="sdqr-logo-zone">
             ${d.logo.dataUrl ? `
@@ -4226,8 +4237,8 @@ function _renderDesignPanel(qr) {
         </div>
 
         <!-- CADRE + accroche (autour du QR — scannabilité préservée) -->
-        <div class="sdqr-design-section">
-          <div class="sdqr-design-section-title">Cadre &amp; accroche</div>
+        <div class="sdqr-dtab-panel" data-dtab-panel="cadre">
+          <div class="sdqr-design-hint">Un cadre + une accroche autour du QR — le code reste intact, donc scannable.</div>
           <div class="sdqr-shape-pills" data-frame-style>
             ${FRAME_OPTS.map(f => `<button class="sdqr-shape-pill ${d.frame.style === f.id ? 'is-active' : ''}" data-frame="${f.id}">${_esc(f.label)}</button>`).join('')}
           </div>
@@ -4330,6 +4341,17 @@ function _designHasUnsavedChanges(editing, saved) {
 function _wireDesignPanel(root, qr, encodedForQr) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
+
+  // Onglets du panneau Design (Modules/Yeux/Logo/Couleurs/Cadre/Modèles).
+  // Tous les panneaux restent dans le DOM (le câblage querySelectorAll les
+  // trouve même masqués) ; on ne fait qu'afficher l'onglet actif.
+  panel.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const t = tab.dataset.dtab;
+      panel.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(b => b.classList.toggle('is-active', b === tab));
+      panel.querySelectorAll('[data-dtab-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.dtabPanel === t));
+    });
+  });
   // Si _editingDesign existe deja (cas refresh DOM apres upload/retrait
   // logo), on le PRESERVE. Sinon (1ere ouverture du detail), on init.
   // Le reset a null est fait par _openQrDetail au switch de QR.

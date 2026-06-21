@@ -8597,6 +8597,28 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   display: flex; flex-direction: column; gap: 12px;
 }
 
+/* SDQR-3.5 — Onglets du panneau Design (maquette : Modules/Yeux/Logo/
+   Couleurs/Cadre/Modèles). Panneau toujours en light-mode → couleurs claires.
+   Onglet actif souligné en OR. Seul le panneau actif s'affiche. */
+.sdqr-dtabs {
+  display: flex; flex-wrap: wrap; gap: 1px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(27,42,74,.1);
+}
+.sdqr-dtab {
+  padding: 8px 13px;
+  border: none; background: transparent;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.sdqr-dtab:hover { color: #1b2a4a; }
+.sdqr-dtab.is-active { color: #1b2a4a; border-bottom-color: var(--gold, #c9a84c); }
+.sdqr-dtab-panel { display: none; flex-direction: column; gap: 12px; }
+.sdqr-dtab-panel.is-active { display: flex; }
+
 .sdqr-design-row {
   display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap;
