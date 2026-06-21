@@ -97,6 +97,27 @@ const DESIGNS = window.__SCAN_DESIGNS || [
     d: { module:{shape:'rounded'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, bg:'#ffffff',
          gradient:{ enabled:true, from, to, angle:45 }, eye:{ distinct:true, color:accent } },
   })),
+  // — 16 YEUX nommés (presets outer/inner). Les yeux sont des finder
+  //   patterns → détection critique. On garde ce qui décode aux 2 tailles. —
+  ...[
+    ['Carré',         'square',  'square'],
+    ['Carré·point',   'square',  'dot'],
+    ['Arrondi·point', 'rounded', 'dot'],
+    ['Arrondi',       'rounded', 'rounded'],
+    ['Arrondi·carré', 'rounded', 'square'],
+    ['Doux',          'squircle','rounded'],
+    ['Doux plein',    'squircle','square'],
+    ['Cercle',        'dot',     'dot'],
+    ['Cercle·carré',  'dot',     'square'],
+    ['Feuille',       'leaf',    'dot'],
+    ['Feuille pleine','leaf',    'square'],
+    ['Losange',       'rounded', 'diamond'],
+    ['Feuille·feuille','leaf',   'leaf'],
+    ['Cercle·losange','dot',     'diamond'],
+  ].map(([label, outer, inner]) => ({
+    label: 'YEUX ' + label + ' (' + outer + '/' + inner + ')',
+    d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:outer},inner:{shape:inner}} },
+  })),
 ];
 
 const tbody = document.querySelector('#results tbody');

@@ -23,7 +23,7 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { getTemplateIconSvg } from './sdqr-template-icons.js';
-import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS } from './sdqr-render.js';
+import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
@@ -3994,6 +3994,27 @@ const ANCHOR_INNER_OPTS = [
   { id: 'rounded', label: 'Arrondi', svg: `<rect x="7" y="7" width="8" height="8" rx="2.5" ry="2.5"/>` },
 ];
 
+// SDQR-3.6 — YEUX nommés (combos anneau/centre), maquette « Yeux ». 10 styles
+// TOUS prouvés scannables au jsQR (banc scan-test.html, PASS aux 2 tailles).
+// Étoile / Pointillé / Cible = R&D scannabilité (finder patterns trop déviants
+// pour la détection) → à venir.
+const EYE_PRESETS = [
+  { id: 'carre',      label: 'Carré',         outer: 'square',   inner: 'square'  },
+  { id: 'arrondi',    label: 'Arrondi',       outer: 'rounded',  inner: 'rounded' },
+  { id: 'arrondi-pt', label: 'Arrondi · point', outer: 'rounded',inner: 'dot'     },
+  { id: 'arrondi-ca', label: 'Arrondi · carré', outer: 'rounded',inner: 'square'  },
+  { id: 'doux',       label: 'Doux',          outer: 'squircle', inner: 'rounded' },
+  { id: 'doux-plein', label: 'Doux plein',    outer: 'squircle', inner: 'square'  },
+  { id: 'cercle',     label: 'Cercle',        outer: 'dot',      inner: 'dot'     },
+  { id: 'cercle-ca',  label: 'Cercle · carré', outer: 'dot',     inner: 'square'  },
+  { id: 'feuille',    label: 'Feuille',       outer: 'leaf',     inner: 'square'  },
+  { id: 'losange',    label: 'Losange',       outer: 'dot',      inner: 'diamond' },
+];
+
+function _eyePresetActive(p, d) {
+  return d.anchor.outer.shape === p.outer && d.anchor.inner.shape === p.inner;
+}
+
 // Palette de couleurs prédéfinies (swatches cliquables en un coup)
 const COLOR_PRESETS = [
   { id: 'mono',      label: 'Sobre',     fg: '#000000', bg: '#ffffff', gradient: null },
@@ -4127,19 +4148,14 @@ function _renderDesignPanel(qr) {
           <div class="sdqr-design-hint">Le motif du corps du QR. Un motif trop clairsemé fragilise le scan — le garde-fou veille.</div>
         </div>
 
-        <!-- YEUX (formes des 3 repères de calage) -->
+        <!-- YEUX (styles nommés = combos anneau/centre, jsQR-vérifiés) -->
         <div class="sdqr-dtab-panel" data-dtab-panel="yeux">
-          <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Anneau</span>
-            <div class="sdqr-shape-pills" data-shape-target="anchor-outer">
-              ${ANCHOR_OUTER_OPTS.map(s => _renderShapePill(s, d.anchor.outer.shape === s.id)).join('')}
-            </div>
-          </div>
-          <div class="sdqr-design-row">
-            <span class="sdqr-design-lbl">Centre</span>
-            <div class="sdqr-shape-pills" data-shape-target="anchor-inner">
-              ${ANCHOR_INNER_OPTS.map(s => _renderShapePill(s, d.anchor.inner.shape === s.id)).join('')}
-            </div>
+          <div class="sdqr-eye-grid">
+            ${EYE_PRESETS.map(p => `
+              <button class="sdqr-eye-card ${_eyePresetActive(p, d) ? 'is-on' : ''}" data-eye-preset="${p.id}" title="${_esc(p.label)}">
+                <span class="sdqr-eye-prev">${anchorPreviewSvg(p.outer, p.inner, 40)}</span>
+                <span class="sdqr-eye-name">${_esc(p.label)}</span>
+              </button>`).join('')}
           </div>
           <div class="sdqr-design-hint">Les yeux = ce que la caméra verrouille en premier. Leur couleur se règle dans l'onglet Couleurs.</div>
         </div>
@@ -4384,6 +4400,18 @@ function _wireDesignPanel(root, qr, encodedForQr) {
         group.querySelectorAll('.sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
         _liveRerender();
       });
+    });
+  });
+
+  // Yeux : styles nommés (combos anneau/centre prouvés scannables)
+  panel.querySelectorAll('[data-eye-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = EYE_PRESETS.find(x => x.id === btn.dataset.eyePreset);
+      if (!p) return;
+      _editingDesign.anchor.outer.shape = p.outer;
+      _editingDesign.anchor.inner.shape = p.inner;
+      panel.querySelectorAll('[data-eye-preset]').forEach(b => b.classList.toggle('is-on', b === btn));
+      _liveRerender();
     });
   });
 

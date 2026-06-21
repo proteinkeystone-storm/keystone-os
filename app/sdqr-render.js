@@ -251,6 +251,20 @@ function _anchorShape(outerShape, innerShape, ox, oy, cell) {
     const oRect = `M ${ox.toFixed(2)},${(oy + rr).toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} -${rr.toFixed(2)} h ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} ${rr.toFixed(2)} v ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} ${rr.toFixed(2)} h -${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} -${rr.toFixed(2)} z`;
     const iRect = `M ${(ox + cell).toFixed(2)},${(oy + cell + iRr).toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} -${iRr.toFixed(2)} h ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} ${iRr.toFixed(2)} v ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} ${iRr.toFixed(2)} h -${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} -${iRr.toFixed(2)} z`;
     ring = `<path d="${oRect} ${iRect}" fill-rule="evenodd"/>`;
+  } else if (outerShape === 'squircle') {
+    // SDQR-3.6 — anneau très doux (« Doux ») = rounded à grand rayon.
+    const rr = cell * 1.95, oSide = size - 2 * rr;
+    const iRr = cell * 1.15, iSize = size - 2 * cell, iSide = iSize - 2 * iRr;
+    const oRect = `M ${ox.toFixed(2)},${(oy + rr).toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} -${rr.toFixed(2)} h ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} ${rr.toFixed(2)} v ${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} ${rr.toFixed(2)} h -${oSide.toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 -${rr.toFixed(2)} -${rr.toFixed(2)} z`;
+    const iRect = `M ${(ox + cell).toFixed(2)},${(oy + cell + iRr).toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} -${iRr.toFixed(2)} h ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 ${iRr.toFixed(2)} ${iRr.toFixed(2)} v ${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} ${iRr.toFixed(2)} h -${iSide.toFixed(2)} a ${iRr.toFixed(2)} ${iRr.toFixed(2)} 0 0 1 -${iRr.toFixed(2)} -${iRr.toFixed(2)} z`;
+    ring = `<path d="${oRect} ${iRect}" fill-rule="evenodd"/>`;
+  } else if (outerShape === 'leaf') {
+    // SDQR-3.6 — anneau « Feuille » : 2 coins opposés vifs (TL, BR), 2 arrondis (TR, BL).
+    const rr = cell * 1.8;
+    const oPath = `M ${ox.toFixed(2)},${oy.toFixed(2)} h ${(size - rr).toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} ${rr.toFixed(2)} v ${(size - rr).toFixed(2)} h ${(-(size - rr)).toFixed(2)} a ${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${(-rr).toFixed(2)} ${(-rr).toFixed(2)} z`;
+    const m = cell, irr = cell * 1.05, isz = size - 2 * m;
+    const iPath = `M ${(ox + m).toFixed(2)},${(oy + m).toFixed(2)} h ${(isz - irr).toFixed(2)} a ${irr.toFixed(2)} ${irr.toFixed(2)} 0 0 1 ${irr.toFixed(2)} ${irr.toFixed(2)} v ${(isz - irr).toFixed(2)} h ${(-(isz - irr)).toFixed(2)} a ${irr.toFixed(2)} ${irr.toFixed(2)} 0 0 1 ${(-irr).toFixed(2)} ${(-irr).toFixed(2)} z`;
+    ring = `<path d="${oPath} ${iPath}" fill-rule="evenodd"/>`;
   } else {
     // square (défaut)
     ring = `<path d="M ${ox.toFixed(2)},${oy.toFixed(2)} h ${size.toFixed(2)} v ${size.toFixed(2)} h ${(-size).toFixed(2)} z M ${(ox + cell).toFixed(2)},${(oy + cell).toFixed(2)} v ${(5 * cell).toFixed(2)} h ${(5 * cell).toFixed(2)} v ${(-5 * cell).toFixed(2)} z" fill-rule="evenodd"/>`;
@@ -263,11 +277,23 @@ function _anchorShape(outerShape, innerShape, ox, oy, cell) {
   } else if (innerShape === 'rounded') {
     const rr = (cell * 0.55).toFixed(2);
     inner = `<rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}" rx="${rr}" ry="${rr}"/>`;
+  } else if (innerShape === 'diamond') {
+    const r = innerSize / 2;
+    inner = `<path d="M ${cx.toFixed(2)} ${(cy - r).toFixed(2)} L ${(cx + r).toFixed(2)} ${cy.toFixed(2)} L ${cx.toFixed(2)} ${(cy + r).toFixed(2)} L ${(cx - r).toFixed(2)} ${cy.toFixed(2)} Z"/>`;
+  } else if (innerShape === 'leaf') {
+    const r = innerSize * 0.5;
+    inner = `<path d="M ${(innerX + r).toFixed(2)} ${innerY.toFixed(2)} H ${(innerX + innerSize).toFixed(2)} V ${(innerY + innerSize - r).toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 0 1 ${(innerX + innerSize - r).toFixed(2)} ${(innerY + innerSize).toFixed(2)} H ${innerX.toFixed(2)} V ${(innerY + r).toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 0 1 ${(innerX + r).toFixed(2)} ${innerY.toFixed(2)} Z"/>`;
   } else {
     inner = `<rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}"/>`;
   }
 
   return ring + inner;
+}
+
+// Mini-aperçu SVG d'un œil (1 finder pattern) pour les cartes du sélecteur.
+export function anchorPreviewSvg(outer, inner, size = 44, color = '#1b2a4a') {
+  const cell = size / 8;
+  return `<svg viewBox="0 0 ${size} ${size}" aria-hidden="true"><g fill="${color}">${_anchorShape(outer, inner, cell, cell, cell)}</g></svg>`;
 }
 
 // ── Rendu principal ────────────────────────────────────────────

@@ -9080,6 +9080,22 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-amb-accent { width: 22px; height: 22px; flex: none; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); }
 .sdqr-amb-name { font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; color: #1b2a4a; }
 
+/* SDQR-3.6 — Onglet Yeux : grille de styles nommés (carte = aperçu + nom). */
+.sdqr-eye-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 8px; }
+.sdqr-eye-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 6px;
+  background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 11px;
+  color: #1b2a4a; font: inherit; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.sdqr-eye-card:hover { border-color: rgba(201,168,76,.5); }
+.sdqr-eye-card.is-on { border-color: #c9a84c; box-shadow: 0 0 0 2px rgba(201,168,76,.2); }
+.sdqr-eye-prev { width: 40px; height: 40px; flex: none; }
+.sdqr-eye-prev svg { width: 100%; height: 100%; display: block; }
+.sdqr-eye-name { font-size: 11px; font-weight: 600; color: #475569; text-align: center; line-height: 1.2; }
+.sdqr-eye-card.is-on .sdqr-eye-name { color: #1b2a4a; }
+
 /* Réglages couleur custom — color-picker + hex en grille (façon KeyForm) */
 .sdqr-color-grid {
   display: grid;
