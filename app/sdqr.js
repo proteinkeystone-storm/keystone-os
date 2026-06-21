@@ -170,6 +170,13 @@ async function _apiStats(id, period = '30d') {
   return r.json();
 }
 
+// Sprint SDQR-S1.3 — vue d'ensemble « tous mes QR » (lecture seule)
+async function _apiOverview(period = '30d') {
+  const r = await fetch(`${CF_API}/api/qr/overview?period=${period}`, { headers: _headers() });
+  if (!r.ok) throw new Error('API overview error ' + r.status);
+  return r.json();
+}
+
 function _apiScansCsvUrl(id) {
   // Worker accepte X-Tenant-Id en query string aussi pour download direct
   return `${CF_API}/api/qr/${encodeURIComponent(id)}/scans.csv`;
@@ -294,6 +301,10 @@ function _renderShell() {
             Nouveau
           </button>
         </div>
+        <button class="sdqr-overview-btn" id="sdqr-overview-btn" title="Statistiques de tous tes QR" style="display:flex;align-items:center;gap:8px;width:100%;margin:0 12px 10px;width:calc(100% - 24px);padding:9px 11px;border:1px solid rgba(108,108,245,.45);background:rgba(108,108,245,.13);color:#c9cdf7;border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>
+          Vue d'ensemble
+        </button>
         <div class="sdqr-sidebar-filters">
           <div class="sdqr-search-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="sdqr-search-ico"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -347,10 +358,121 @@ function _renderEmptyStudio() {
   `;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Vue d'ensemble « tous mes QR » (SDQR S1.3) — lecture seule, thème sombre
+// Rend dans #sdqr-content depuis GET /api/qr/overview. Aucune écriture.
+// ══════════════════════════════════════════════════════════════════
+async function _openOverview(panel, period = '30d') {
+  _selectedId = null;
+  panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.remove('active'));
+  panel.querySelector('#sdqr-overview-btn')?.classList.add('is-active');
+  _renderList(panel);  // dé-sélectionne visuellement la liste
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+  content.innerHTML = `<div style="padding:48px;text-align:center;color:#8a96ad;font-size:13px">Chargement de la vue d'ensemble…</div>`;
+  try {
+    const data = await _apiOverview(period);
+    content.innerHTML = _renderOverviewHtml(data, period);
+    content.querySelectorAll('[data-ovperiod]').forEach(b =>
+      b.addEventListener('click', () => _openOverview(panel, b.dataset.ovperiod)));
+  } catch (e) {
+    console.error('[sdqr-overview]', e);
+    content.innerHTML = `<div style="padding:48px;text-align:center;color:#e0667a;font-size:13px">Impossible de charger la vue d'ensemble. Réessaie dans un instant.</div>`;
+  }
+}
+
+function _ovNum(n) { return Number(n || 0).toLocaleString('fr-FR'); }
+
+function _ovChart(byDay) {
+  const v = (byDay || []).map(r => r.cnt);
+  if (!v.length) return `<div style="height:140px;display:flex;align-items:center;justify-content:center;color:#6f7c93;font-size:12px">Pas encore de scans sur la période</div>`;
+  const w = 600, h = 150, pad = 12, mx = Math.max(...v) || 1;
+  let line = '', area = 'M0,' + h;
+  v.forEach((val, i) => {
+    const x = v.length > 1 ? (i / (v.length - 1) * w) : w / 2;
+    const y = h - pad - (val / mx) * (h - 2 * pad);
+    line += x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    area += ' L' + x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  area += ' L' + w + ',' + h + ' Z';
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block;height:140px"><defs><linearGradient id="sdqrOvG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6c6cf5" stop-opacity="0.32"/><stop offset="1" stop-color="#6c6cf5" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#sdqrOvG)"/><polyline points="${line}" fill="none" stroke="#6c6cf5" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+}
+
+function _ovBars(items) {
+  if (!items || !items.length) return `<div style="color:#6f7c93;font-size:12px;padding:6px 0">Aucune donnée</div>`;
+  const max = Math.max(...items.map(i => i.scans), 1);
+  return items.map(i => `<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:12.5px;color:#cfd6e6;margin-bottom:5px"><span>${_esc(i.key)}</span><span style="color:#fff;font-weight:600">${_ovNum(i.scans)}</span></div><div style="height:7px;border-radius:4px;background:#283250"><div style="height:7px;border-radius:4px;width:${Math.round(i.scans / max * 100)}%;background:#6c6cf5"></div></div></div>`).join('');
+}
+
+function _ovLeader(lb) {
+  if (!lb || !lb.length) return `<div style="color:#6f7c93;font-size:12px;padding:6px 0">Aucun scan pour l'instant</div>`;
+  const max = Math.max(...lb.map(i => i.scans), 1);
+  const arrow = t => t === 'up' ? '▲' : (t === 'down' ? '▼' : '■');
+  const acol  = t => t === 'up' ? '#2bbf80' : (t === 'down' ? '#e0667a' : '#8a96ad');
+  return lb.map((i, idx) => `<div style="display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:0.5px solid #ffffff0f"><span style="width:16px;font-size:13px;font-weight:700;color:${idx === 0 ? '#c9a84c' : '#6f7c93'}">${idx + 1}</span><div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#eef1f8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px">${_esc(i.name)}</div><div style="height:6px;border-radius:3px;background:#283250"><div style="height:6px;border-radius:3px;width:${Math.round(i.scans / max * 100)}%;background:#6c6cf5"></div></div></div><span style="font-size:12.5px;font-weight:600;color:#fff;width:46px;text-align:right">${_ovNum(i.scans)}</span><span style="font-size:13px;color:${acol(i.trend)}">${arrow(i.trend)}</span></div>`).join('');
+}
+
+function _ovWatch(watch) {
+  if (!watch || !watch.length) return `<div style="color:#6f7c93;font-size:12px;padding:6px 0">Rien à signaler — tout va bien.</div>`;
+  return watch.map(w => `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:0.5px solid #ffffff0f"><span style="width:8px;height:8px;border-radius:50%;margin-top:3px;background:${w.kind === 'warn' ? '#e0a23a' : '#6c6cf5'};flex:none"></span><div style="flex:1"><div style="font-size:12.5px;color:#eef1f8">${_esc(w.name)}</div><div style="font-size:11px;color:#8a96ad;margin-top:1px">${_esc(w.note)}</div></div></div>`).join('');
+}
+
+function _renderOverviewHtml(d, period) {
+  const t = d.totals || {};
+  const pill = (p, lbl) => `<span data-ovperiod="${p}" style="font-size:11.5px;padding:6px 11px;cursor:pointer;border-radius:0;${p === period ? 'color:#fff;background:#6c6cf5' : 'color:#8a96ad'}">${lbl}</span>`;
+  const delta = t.week_delta || 0;
+  const deltaColor = delta > 0 ? '#2bbf80' : (delta < 0 ? '#e0667a' : '#8a96ad');
+  const deltaTxt = (delta > 0 ? '+' : '') + delta + ' %';
+  const kpi = (label, val, sub, extra = '') => `<div style="background:#18223a;border:0.5px solid #ffffff12;border-radius:12px;padding:14px 16px"><div style="font-size:10.5px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:7px">${label}</div><div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:27px;font-weight:800;color:#f3f5fb;line-height:1">${val}</div>${extra}</div><div style="font-size:11px;color:#8a96ad;margin-top:5px">${sub}</div></div>`;
+  return `
+  <div style="background:#0e1626;border-radius:14px;padding:18px;font-family:inherit">
+    <div style="display:flex;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div>
+        <div style="font-size:19px;font-weight:700;color:#f3f5fb;letter-spacing:-0.01em">Vue d'ensemble</div>
+        <div style="font-size:12.5px;color:#8a96ad;margin-top:2px">Tous tes QR · données souveraines, aucune donnée tierce</div>
+      </div>
+      <div style="margin-left:auto;display:flex;background:#18223a;border:0.5px solid #ffffff14;border-radius:9px;overflow:hidden">
+        ${pill('7d', '7j')}${pill('30d', '30j')}${pill('90d', '90j')}${pill('all', 'Tout')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:13px">
+      ${kpi('SCANS TOTAUX', _ovNum(t.scans_total), 'sur la période')}
+      ${kpi('VISITEURS UNIQUES', _ovNum(t.unique), 'empreintes anonymes')}
+      ${kpi('QR ACTIFS', _ovNum(t.qr_active) + `<span style="font-size:15px;color:#8a96ad;font-weight:600"> / ${_ovNum(t.qr_total)}</span>`, 'au total')}
+      ${kpi('CETTE SEMAINE', _ovNum(t.week), 'vs semaine précédente', `<span style="font-size:11.5px;font-weight:700;color:${deltaColor}">${deltaTxt}</span>`)}
+    </div>
+    <div style="background:#141d31;border:0.5px solid #ffffff10;border-radius:14px;padding:15px 16px;margin-bottom:13px">
+      <div style="font-size:11px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:10px">ÉVOLUTION DES SCANS · TOUS QR</div>
+      ${_ovChart(d.byDay)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:13px;margin-bottom:13px">
+      <div style="background:#141d31;border:0.5px solid #ffffff10;border-radius:14px;padding:15px 16px">
+        <div style="font-size:11px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:6px">CLASSEMENT DES QR</div>
+        ${_ovLeader(d.leaderboard)}
+      </div>
+      <div style="background:#141d31;border:0.5px solid #ffffff10;border-radius:14px;padding:15px 16px">
+        <div style="font-size:11px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:12px">SCANS PAR DOSSIER</div>
+        ${_ovBars(d.byFolder)}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:13px">
+      <div style="background:#141d31;border:0.5px solid #ffffff10;border-radius:14px;padding:15px 16px">
+        <div style="font-size:11px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:12px">PAR TYPE</div>
+        ${_ovBars((d.byType || []).map(x => ({ key: x.key, scans: x.scans })))}
+      </div>
+      <div style="background:#141d31;border:0.5px solid #ffffff10;border-radius:14px;padding:15px 16px">
+        <div style="font-size:11px;letter-spacing:0.06em;color:#8a96ad;margin-bottom:6px">À SURVEILLER</div>
+        ${_ovWatch(d.watch)}
+      </div>
+    </div>
+  </div>`;
+}
+
 function _wireShell(panel) {
   panel.querySelector('#sdqr-close-btn')?.addEventListener('click', closeSDQR);
   panel.querySelector('#sdqr-new-btn')?.addEventListener('click', () => _openCreateForm(panel));
   panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
+  panel.querySelector('#sdqr-overview-btn')?.addEventListener('click', () => _openOverview(panel));
   panel.querySelectorAll('.sdqr-tab').forEach(t => {
     t.addEventListener('click', () => {
       if (t.disabled) return;
