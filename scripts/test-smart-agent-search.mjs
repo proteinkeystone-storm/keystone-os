@@ -581,9 +581,9 @@ console.log('── publicAgentMeta (SA-5 — config publique strippée) ──'
   check('expose name', meta.name === 'Guide du Musée');
   check('expose opening (trimmé)', meta.opening === 'Bonjour !');
   check('expose tone', meta.tone === 'chaleureux');
-  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/tone/role/lang/url/url_label/phone/theme/cards)',
+  check('n\'expose NI tenant NI mission NI coffre (liste blanche : name/opening/opening_i18n/tone/role/lang/url/url_label/phone/theme/cards)',
     meta.tenant_id === undefined && meta.mission === undefined &&
-    meta.config === undefined && Object.keys(meta).sort().join(',') === 'cards,lang,name,opening,phone,role,theme,tone,url,url_label');
+    meta.config === undefined && Object.keys(meta).sort().join(',') === 'cards,lang,name,opening,opening_i18n,phone,role,theme,tone,url,url_label');
   check('agent sans nom → « Assistant »', publicAgentMeta({ config: {} }).name === 'Assistant');
   check('opening absent → ""', publicAgentMeta({ name: 'X', config: { identity: {} } }).opening === '');
 }

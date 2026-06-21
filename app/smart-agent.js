@@ -803,6 +803,8 @@ function _openForm(agent) {
         objective: agent?.config?.identity?.objective || 'informer',
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
+        // SA-11.3 — accueil traduit (optionnel) : { en, es, de }, repli sur natif.
+        openingI18n: (agent?.config?.identity?.opening_i18n && typeof agent.config.identity.opening_i18n === 'object') ? { ...agent.config.identity.opening_i18n } : {},
         // SA-11.2 — langue native de l'agent (persona/fiches/accueil).
         lang:     agent?.config?.identity?.lang || 'fr',
         // Lot 2 — contact public (boutons du header de la page v2).
@@ -816,7 +818,7 @@ function _openForm(agent) {
         themeWmOpacity: (typeof agent?.config?.theme?.watermark_opacity === 'number') ? agent.config.theme.watermark_opacity : 0.15,
         // Lot 3 — cartes-photos cliquables (copie éditable).
         cards: Array.isArray(agent?.config?.cards)
-            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '', title: c.title || '' })) : [],
+            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? { ...c.title_i18n } : {} })) : [],
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
         fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
             ? agent.config.scope.fallback_variants.slice(0, 4) : [],
@@ -870,6 +872,7 @@ function _agentFormHTML() {
             <img class="sa-cardcfg-img" src="${API_BASE}/api/smart-agent/card-img/${_escAttr(c.img)}" alt="" loading="lazy">
             <div class="sa-cardcfg-fields">
               <input class="sa-input sa-cardcfg-title" data-card-title="${i}" value="${_escAttr(c.title || '')}" maxlength="60" placeholder="Titre affiché en pill au bas de la carte (optionnel)">
+              <div class="sa-tr-row">${[['en', 'EN'], ['es', 'ES'], ['de', 'DE']].map(([lg, lbl]) => `<input class="sa-input sa-tr-in" data-card-title-i18n="${i}:${lg}" value="${_escAttr((c.title_i18n && c.title_i18n[lg]) || '')}" maxlength="60" placeholder="Titre ${lbl}">`).join('')}</div>
               <input class="sa-input sa-cardcfg-q" data-card-q="${i}" value="${_escAttr(c.q)}" maxlength="200" placeholder="Question posée au clic (ex. : Parlez-moi de cet objet)">
             </div>
             <div class="sa-cardcfg-ops">
@@ -954,6 +957,10 @@ function _agentFormHTML() {
       <label class="sa-field" style="margin-top:14px;">
         <span class="sa-field-label">Accueil — l'agent parle en premier (terminé par une question)</span>
         <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
+      </label>
+      <label class="sa-field" style="margin-top:8px;">
+        <span class="sa-field-label">Accueil traduit (optionnel) — sinon, accueil générique dans la langue du visiteur</span>
+        <div class="sa-tr-col">${[['en', 'anglais'], ['es', 'espagnol'], ['de', 'allemand']].map(([lg, lbl]) => `<input class="sa-input" data-field="opening-i18n-${lg}" value="${_escAttr((d.openingI18n && d.openingI18n[lg]) || '')}" maxlength="300" placeholder="Accueil en ${lbl}">`).join('')}</div>
       </label>
       <button class="sa-btn sa-suggest-btn" data-act="form-suggest" ${_ag.suggestBusy ? 'disabled' : ''}>
         ${icon('sparkles', 14)} ${_ag.suggestBusy ? 'Génération…' : 'Proposer un accueil avec l\'IA'}
@@ -1216,6 +1223,9 @@ function _readAgentForm() {
     const lg = get('[data-field="lang"]');     if (lg) d.lang = lg.value;
     const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
+    // SA-11.3 — accueil traduit (optionnel) par langue.
+    d.openingI18n = d.openingI18n || {};
+    ['en', 'es', 'de'].forEach(lg => { const el = get(`[data-field="opening-i18n-${lg}"]`); if (el) { const v = el.value.trim(); if (v) d.openingI18n[lg] = v; else delete d.openingI18n[lg]; } });
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
     const wl = get('[data-field="websiteLabel"]'); if (wl) d.websiteLabel = wl.value.trim();
     const tb = get('[data-field="themeBgBottom"]'); if (tb) d.themeBgBottom = tb.value.trim().replace(/^#/, '').toLowerCase();
@@ -1225,6 +1235,15 @@ function _readAgentForm() {
     // Lot 3 — questions des cartes (l'image est déjà en mémoire dans d.cards)
     main.querySelectorAll('[data-card-q]').forEach(inp => { const i = +inp.dataset.cardQ; if (d.cards && d.cards[i]) d.cards[i].q = inp.value.trim(); });
     main.querySelectorAll('[data-card-title]').forEach(inp => { const i = +inp.dataset.cardTitle; if (d.cards && d.cards[i]) d.cards[i].title = inp.value.trim(); });
+    // SA-11.3 — traductions du titre de carte (data-card-title-i18n="i:lang").
+    main.querySelectorAll('[data-card-title-i18n]').forEach(inp => {
+      const [i, lg] = (inp.dataset.cardTitleI18n || '').split(':');
+      const card = d.cards && d.cards[+i];
+      if (!card) return;
+      card.title_i18n = card.title_i18n || {};
+      const v = inp.value.trim();
+      if (v) card.title_i18n[lg] = v; else delete card.title_i18n[lg];
+    });
     // SA-8.0 — variantes de repli (inputs indexés)
     const fbvs = main.querySelectorAll('[data-field="fbv"]');
     if (fbvs.length) d.fallbackVariants = Array.from(fbvs).map(i => i.value.trim()).filter(Boolean);
@@ -1332,12 +1351,13 @@ function _agentPayload() {
         folder_id: d.folderId ?? null,
         config: {
             identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening,
-                        role: d.role, style: d.style, avoid: d.avoid, objective: d.objective, lang: d.lang || 'fr' },
+                        role: d.role, style: d.style, avoid: d.avoid, objective: d.objective, lang: d.lang || 'fr',
+                        opening_i18n: d.openingI18n || {} },
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
             theme:    { bg_bottom: d.themeBgBottom || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
-            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '' })),
+            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && Object.keys(c.title_i18n).length) ? c.title_i18n : {} })),
         },
     };
 }

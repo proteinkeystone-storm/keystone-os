@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-11.0';
+const SA_ENGINE_VERSION = 'SA-11.3';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1474,6 +1474,21 @@ export function normLang(v, fallback = 'fr') {
   return SA_LANGS.includes(v) ? v : (SA_LANGS.includes(fallback) ? fallback : 'fr');
 }
 
+// SA-11.3 — valide une map de TRADUCTIONS d'un libellé propriétaire (accueil,
+// titre de carte) : { en, es, de }. Le français n'y figure jamais (= le champ
+// natif de base ; le repli se fait dessus). Chaînes non vides, bornées. Renvoie
+// {} si aucune traduction. Pur → testé.
+const SA_TR_LANGS = ['en', 'es', 'de'];
+export function sanitizeI18nMap(raw, maxLen = 300) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const l of SA_TR_LANGS) {
+    const v = raw[l];
+    if (typeof v === 'string' && v.trim()) out[l] = v.trim().slice(0, maxLen);
+  }
+  return out;
+}
+
 const GROUND_MIN_VEC   = 0.42;  // cosinus bge-m3 minimal sans accroche lexicale
                                 // (calibrage fin au golden set, SA-4)
 const CHAT_TOPK        = 6;     // fiches injectées dans le contexte de génération
@@ -1530,12 +1545,18 @@ export function validateCards(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(c => c && typeof c === 'object')
-    .map(c => ({
-      img:   (typeof c.img === 'string' && SA_CARD_KEY_RE.test(c.img)) ? c.img : '',
-      q:     (typeof c.q === 'string') ? c.q.trim().slice(0, 200) : '',
-      alt:   (typeof c.alt === 'string') ? c.alt.trim().slice(0, 120) : '',
-      title: (typeof c.title === 'string') ? c.title.trim().slice(0, 60) : '',
-    }))
+    .map(c => {
+      const card = {
+        img:   (typeof c.img === 'string' && SA_CARD_KEY_RE.test(c.img)) ? c.img : '',
+        q:     (typeof c.q === 'string') ? c.q.trim().slice(0, 200) : '',
+        alt:   (typeof c.alt === 'string') ? c.alt.trim().slice(0, 120) : '',
+        title: (typeof c.title === 'string') ? c.title.trim().slice(0, 60) : '',
+      };
+      // SA-11.3 — traductions optionnelles du titre (pill visible). Repli natif.
+      const ti = sanitizeI18nMap(c.title_i18n, 60);
+      if (Object.keys(ti).length) card.title_i18n = ti;
+      return card;
+    })
     .filter(c => c.img && c.q)
     .slice(0, SA_CARDS_MAX);
 }
@@ -1594,6 +1615,8 @@ export function publicAgentMeta(agent, apiOrigin = '') {
   return {
     name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
     opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
+    // SA-11.3 — accueil traduit (le front résout selon la langue du visiteur, repli natif).
+    opening_i18n: sanitizeI18nMap(idn.opening_i18n, 300),
     tone:    (typeof idn.tone === 'string') ? idn.tone : '',
     // SA-8.0 — le rôle (métier) est public par nature : affiché sous le nom.
     role:    (typeof idn.role === 'string' && idn.role.trim()) ? idn.role.trim() : '',
@@ -1614,7 +1637,7 @@ export function publicAgentMeta(agent, apiOrigin = '') {
     // Lot 3 — cartes : image (URL absolue servie par le worker) + question cachée + alt.
     cards: cds
       .filter(c => c && typeof c.img === 'string' && c.img && typeof c.q === 'string' && c.q)
-      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '', title: (typeof c.title === 'string') ? c.title : '' })),
+      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '', title: (typeof c.title === 'string') ? c.title : '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? c.title_i18n : {} })),
   };
 }
 
@@ -1961,6 +1984,8 @@ function validateAgentPayload(b, { partial = false } = {}) {
       // (message où l'agent parle en premier, terminé par une question).
       posture: ['informatif', 'equilibre', 'proactif'].includes(idn.posture) ? idn.posture : 'equilibre',
       opening: (typeof idn.opening === 'string') ? idn.opening.trim().slice(0, 300) : '',
+      // SA-11.3 — accueil traduit (optionnel) : map {en,es,de}, repli sur natif.
+      opening_i18n: sanitizeI18nMap(idn.opening_i18n, 300),
       // SA-11.0 — langue native de l'agent (persona/fiches/accueil). Défaut fr.
       // Une requête de chat peut demander une autre langue (visiteur).
       lang: normLang(idn.lang),

@@ -17,7 +17,8 @@
 import { execSync }      from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { normLang, buildChatMessages, pickFallback, validateAgentPayload }
+import { normLang, buildChatMessages, pickFallback, validateAgentPayload,
+  sanitizeI18nMap, validateCards, publicAgentMeta }
   from '../workers/src/routes/smart-agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -99,7 +100,33 @@ console.log('\n\x1b[1m▶ Suite 5 — Voix Piper par langue (SA-11.1)\x1b[0m');
 }
 
 // ════════════════════════════════════════════════════════════════
-console.log('\n\x1b[1m▶ Suite 6 — Syntaxe (node --check)\x1b[0m');
+console.log('\n\x1b[1m▶ Suite 6 — Contenu propriétaire multilingue (SA-11.3)\x1b[0m');
+{
+  // sanitizeI18nMap : garde en/es/de non vides, ignore fr + clés inconnues, borne.
+  const m = sanitizeI18nMap({ en: ' Hi ', es: '', de: 'Hallo', fr: 'Salut', xx: 'y' }, 60);
+  check('garde en/de non vides, trim', m.en === 'Hi' && m.de === 'Hallo');
+  check('es vide écarté, fr/inconnu ignorés', !('es' in m) && !('fr' in m) && !('xx' in m));
+  check('borne maxLen', sanitizeI18nMap({ en: 'x'.repeat(100) }, 10).en.length === 10);
+  check('non-objet → {}', JSON.stringify(sanitizeI18nMap(null)) === '{}' && JSON.stringify(sanitizeI18nMap('a')) === '{}');
+
+  // validateCards : title_i18n conservé si non vide, omis sinon.
+  const key = 'sa-cards/ag1/abc.jpg';
+  const cv = validateCards([{ img: key, q: 'Quoi ?', title: 'Objet', title_i18n: { en: 'Item', es: '' } }]);
+  check('carte : title_i18n nettoyé conservé', cv[0].title_i18n && cv[0].title_i18n.en === 'Item' && !('es' in cv[0].title_i18n));
+  const cv2 = validateCards([{ img: key, q: 'Quoi ?', title: 'Objet' }]);
+  check('carte sans traduction : pas de title_i18n', !('title_i18n' in cv2[0]));
+
+  // publicAgentMeta : expose opening_i18n + title_i18n des cartes.
+  const meta = publicAgentMeta({
+    name: 'A', config: { identity: { opening: 'Bonjour', opening_i18n: { en: 'Hello', de: 'Hallo' } },
+      cards: [{ img: key, q: 'Quoi ?', title: 'Objet', title_i18n: { en: 'Item' } }] },
+  }, 'https://x');
+  check('meta expose opening_i18n', meta.opening_i18n && meta.opening_i18n.en === 'Hello' && meta.opening_i18n.de === 'Hallo');
+  check('meta carte expose title_i18n', meta.cards[0].title_i18n && meta.cards[0].title_i18n.en === 'Item');
+}
+
+// ════════════════════════════════════════════════════════════════
+console.log('\n\x1b[1m▶ Suite 7 — Syntaxe (node --check)\x1b[0m');
 try { execSync(`node --check "${join(ROOT, 'workers/src/routes/smart-agent.js')}"`, { stdio: 'pipe' }); check('smart-agent.js — syntaxe OK', true); }
 catch (e) { check('smart-agent.js — syntaxe OK', false); console.error(String(e.stdout || e.stderr || e.message)); }
 

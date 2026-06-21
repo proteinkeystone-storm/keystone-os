@@ -490,9 +490,18 @@
     // sinon un accueil générique localisé (le contenu propriétaire multilingue
     // viendra en SA-11.3). Évite « UI en anglais + accueil en français ».
     function greetingText() {
-      if (_meta && _meta.opening && _lang === _meta.lang) return _meta.opening;
-      return t('greeting');
+      if (!_meta) return t('greeting');
+      if (_lang === _meta.lang) return _meta.opening || t('greeting');                 // langue native → accueil de l'agent
+      const tr = _meta.opening_i18n && _meta.opening_i18n[_lang];                       // SA-11.3 — accueil traduit par le propriétaire
+      return tr || t('greeting');                                                       // sinon accueil générique localisé
     }
+    // SA-11.3 — titre de carte dans la langue active (repli sur le titre natif).
+    function cardTitle(c) {
+      if (!c) return '';
+      if (_meta && _lang === _meta.lang) return c.title || '';
+      return (c.title_i18n && c.title_i18n[_lang]) || c.title || '';
+    }
+    function hasAnyTitle(c) { return !!(c && (c.title || (c.title_i18n && Object.keys(c.title_i18n).length))); }
     // Réapplique les libellés UI après un changement de langue, sans re-render.
     function applyI18n() {
       const input = document.getElementById('sa-input');
@@ -508,6 +517,16 @@
       const langBtn = document.getElementById('sa-lang');
       if (langBtn) { langBtn.setAttribute('aria-label', t('lang')); langBtn.title = t('lang'); langBtn.innerHTML = langGlyph(_lang.toUpperCase()); }
       if (_showingGreeting) setAnswerV2(greetingText());
+      // SA-11.3 — titres des cartes (pills) dans la langue active.
+      const cards = (_meta && Array.isArray(_meta.cards)) ? _meta.cards.filter(c => c && c.image) : [];
+      document.querySelectorAll('.sav2-card').forEach(btn => {
+        const c = cards[+btn.dataset.i];
+        if (!c) return;
+        const tt = cardTitle(c);
+        btn.setAttribute('aria-label', tt || t('suggested'));
+        const pill = btn.querySelector('.sav2-card-pill');
+        if (pill) { pill.textContent = tt; pill.style.display = tt ? '' : 'none'; }
+      });
     }
 
     /* ── Vocal — dictée (micro) + lecture à voix haute (API navigateur, gratuites).
@@ -1149,7 +1168,7 @@
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? escape(t('voiceOn')) : escape(t('voiceOff'))}">${SVG_V2.voice}</button>` : ''}
         </header>
         ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
-            `<button class="sav2-card" type="button" data-i="${i}" aria-label="${escape(c.title || t('suggested'))}"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy">${c.title ? `<span class="sav2-card-pill">${escape(c.title)}</span>` : ''}</button>`).join('')}</div>` : ''}
+            `<button class="sav2-card" type="button" data-i="${i}" aria-label="${escape(cardTitle(c) || t('suggested'))}"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy">${hasAnyTitle(c) ? `<span class="sav2-card-pill"${cardTitle(c) ? '' : ' style="display:none"'}>${escape(cardTitle(c))}</span>` : ''}</button>`).join('')}</div>` : ''}
         <main class="sav2-answer" id="sav2-answer">
           <div class="sav2-answer-scroll"><div class="sav2-answer-text" id="sav2-answer-text"></div></div>
           <div class="sav2-thinking" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -1257,11 +1276,12 @@
     const DEMO_META = {
       lang: 'fr',
       role: 'Conseiller', opening: 'Bienvenue !\nJe suis votre conseiller,\ncomment puis-je vous aider ?',
+      opening_i18n: { en: 'Welcome!\nI am your guide,\nhow may I help you today?', es: '¡Bienvenido!\nSoy su guía,\n¿en qué puedo ayudarle?', de: 'Willkommen!\nIch bin Ihr Berater,\nwie kann ich helfen?' },
       url: 'www.musee-copte.eg', phone: '+20 2 2362 8766',
       cards: [
-        { image: demoImg('#a87b3a'), question: 'Parlez-moi de cet objet',          answer: 'Cet encensoir en argent ciselé date du XVIIIᵉ siècle ; la fumée de l\'encens y symbolise les prières qui montent vers le ciel.' },
-        { image: demoImg('#5d6b86'), question: 'Qu\'est-ce que cette fontaine ?',    answer: 'Une fontaine d\'ablutions du XIᵉ siècle, en marbre incrusté, qui ornait la cour d\'une maison copte.' },
-        { image: demoImg('#9a7a3a'), question: 'Racontez-moi cette icône',          answer: 'Une icône de la Fuite en Égypte : la Sainte Famille accueillie sur la terre d\'Égypte, épisode cher aux coptes.' }
+        { image: demoImg('#a87b3a'), question: 'Parlez-moi de cet objet',          answer: 'Cet encensoir en argent ciselé date du XVIIIᵉ siècle ; la fumée de l\'encens y symbolise les prières qui montent vers le ciel.', title: 'L\'encensoir', title_i18n: { en: 'The censer', es: 'El incensario', de: 'Das Räuchergefäß' } },
+        { image: demoImg('#5d6b86'), question: 'Qu\'est-ce que cette fontaine ?',    answer: 'Une fontaine d\'ablutions du XIᵉ siècle, en marbre incrusté, qui ornait la cour d\'une maison copte.', title: 'La fontaine', title_i18n: { en: 'The fountain', es: 'La fuente', de: 'Der Brunnen' } },
+        { image: demoImg('#9a7a3a'), question: 'Racontez-moi cette icône',          answer: 'Une icône de la Fuite en Égypte : la Sainte Famille accueillie sur la terre d\'Égypte, épisode cher aux coptes.', title: 'L\'icône', title_i18n: { en: 'The icon', es: 'El icono', de: 'Die Ikone' } }
       ]
     };
     const DEMO_DEFAULT = 'Le Musée Copte est ouvert du lundi au samedi de 9h00 à 12h00 et de 14h00 à 18h00. Il est fermé le dimanche. Avez-vous besoin d\'autres informations pour préparer votre visite ?';
