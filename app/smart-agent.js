@@ -144,7 +144,7 @@ const _ag = { loaded: false, loading: false, error: null, agents: [], mode: 'lis
 // SA-4.3 — SILO : agent courant + onglet actif. _cur.id null = liste d'agents.
 const _cur = { id: null, name: '', tab: 'savoir' };  // tab : savoir | tester | trous | reglages
 // Conversation en cours avec un agent (SA-3) — sert aussi de bac à sable (SA-4)
-const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false };
+const _chat = { agentId: null, agentName: '', sessionId: null, messages: [], busy: false, lang: 'fr' };
 // Vocal — dictée (micro) + lecture à voix haute (interrupteur mémorisé).
 const _voice = { on: (() => { try { return localStorage.getItem('sa_voice_on') === '1'; } catch (_) { return false; } })(), rec: null, listening: false, voices: [] };
 // Voix neuronale « Piper » (moteur maison auto-hébergé) — option spéciale du
@@ -444,6 +444,7 @@ function _enterAgent(id, tab = 'savoir') {
     // bac à sable : amorce l'accueil de cet agent
     const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} ». Comment puis-je vous aider ?`;
     _chat.agentId = a.id; _chat.agentName = a.name; _chat.sessionId = null; _chat.busy = false;
+    _chat.lang = a.config?.identity?.lang || 'fr';   // SA-11.2 — langue de test par défaut = langue native de l'agent
     _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
     _ag.gaps = []; _ag.gapsCount = 0;
     _renderRail(); _renderAside();
@@ -802,6 +803,8 @@ function _openForm(agent) {
         objective: agent?.config?.identity?.objective || 'informer',
         posture:  agent?.config?.identity?.posture || 'equilibre',
         opening:  agent?.config?.identity?.opening || '',
+        // SA-11.2 — langue native de l'agent (persona/fiches/accueil).
+        lang:     agent?.config?.identity?.lang || 'fr',
         // Lot 2 — contact public (boutons du header de la page v2).
         websiteUrl:   agent?.config?.contact?.website_url || '',
         websiteLabel: agent?.config?.contact?.website_label || '',
@@ -927,6 +930,10 @@ function _agentFormHTML() {
         <textarea class="sa-textarea" data-field="mission" rows="3" placeholder="Ex. : Renseigner les visiteurs du musée sur les œuvres, les horaires et le parcours, avec chaleur et pédagogie.">${_esc(d.mission)}</textarea></label>
       <label class="sa-field"><span class="sa-field-label">Ton</span>
         <input class="sa-input" data-field="tone" value="${_escAttr(d.tone)}" placeholder="professionnel et chaleureux"></label>
+      <label class="sa-field"><span class="sa-field-label">Langue — celle dans laquelle il s'exprime par défaut</span>
+        <select class="sa-input sa-select" data-field="lang">
+          ${[['fr', 'Français'], ['en', 'English'], ['es', 'Español'], ['de', 'Deutsch']].map(([v, lbl]) => `<option value="${v}"${(d.lang || 'fr') === v ? ' selected' : ''}>${lbl}</option>`).join('')}
+        </select></label>
       <label class="sa-field"><span class="sa-field-label">Style — sa manière de parler (tournures, vocabulaire, rhétorique)</span>
         <textarea class="sa-textarea" data-field="style" rows="3" maxlength="500" placeholder="Ex. : Phrases courtes et concrètes. Reformule le besoin avant de proposer (« Si je comprends bien… »). Met le bénéfice avant la caractéristique.">${_esc(d.style)}</textarea></label>
       <label class="sa-field"><span class="sa-field-label">À éviter — ce qu'il ne doit jamais dire ou faire</span>
@@ -1206,6 +1213,7 @@ function _readAgentForm() {
     const ro = get('[data-field="role"]');     if (ro) d.role  = ro.value.trim();
     const st = get('[data-field="style"]');    if (st) d.style = st.value.trim();
     const av = get('[data-field="avoid"]');    if (av) d.avoid = av.value.trim();
+    const lg = get('[data-field="lang"]');     if (lg) d.lang = lg.value;
     const fo = get('[data-field="folder"]');   if (fo) d.folderId = fo.value || null;
     const op = get('[data-field="opening"]');  if (op) d.opening = op.value.trim();
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
@@ -1324,7 +1332,7 @@ function _agentPayload() {
         folder_id: d.folderId ?? null,
         config: {
             identity: { mission: d.mission, tone: d.tone, posture: d.posture, opening: d.opening,
-                        role: d.role, style: d.style, avoid: d.avoid, objective: d.objective },
+                        role: d.role, style: d.style, avoid: d.avoid, objective: d.objective, lang: d.lang || 'fr' },
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
@@ -1382,6 +1390,9 @@ function _sandboxHTML() {
       </div>
       <div class="sa-chat-input">
         <textarea class="sa-textarea" data-slot="chat-text" rows="1" maxlength="1000" placeholder="Posez une question…" ${_chat.busy ? 'disabled' : ''}></textarea>
+        <select class="sa-input sa-select" data-slot="chat-lang" title="Langue de la réponse (test)" aria-label="Langue de test" style="width:auto;min-width:62px;flex:0 0 auto;" ${_chat.busy ? 'disabled' : ''}>
+          ${[['fr', 'FR'], ['en', 'EN'], ['es', 'ES'], ['de', 'DE']].map(([v, lbl]) => `<option value="${v}"${_chat.lang === v ? ' selected' : ''}>${lbl}</option>`).join('')}
+        </select>
         ${_speechSupported() ? `<button class="sa-iconbtn sa-mic-btn" data-act="chat-mic" title="Dicter votre question" aria-label="Dicter votre question" ${_chat.busy ? 'disabled' : ''}>${icon('mic', 18)}</button>` : ''}
         <button class="sa-btn is-primary" data-act="chat-send" ${_chat.busy ? 'disabled' : ''}>${icon('send', 16)}</button>
       </div>
@@ -2035,6 +2046,9 @@ async function _sendChat() {
     const ta = main.querySelector('[data-slot="chat-text"]');
     const message = (ta?.value || '').trim();
     if (!message) return;
+    // SA-11.2 — langue de test choisie dans la barre (sinon langue native).
+    const langSel = main.querySelector('[data-slot="chat-lang"]');
+    if (langSel && langSel.value) _chat.lang = langSel.value;
 
     // SA-8.3 — une dictée encore active re-remplirait le champ après l'envoi
     // (résultat final tardif) : on la coupe net, sans résultat.
@@ -2074,7 +2088,7 @@ async function _sendChat() {
         const res = await fetch(`${API_BASE}/api/smart-agent/agents/${_chat.agentId}/chat`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, session_id: _chat.sessionId, ...byokRequestFields(), stream: true }),
+            body: JSON.stringify({ message, session_id: _chat.sessionId, ...byokRequestFields(), stream: true, lang: _chat.lang }),
             signal: ctrl.signal,
         });
         if (!res.ok) {
@@ -2152,7 +2166,7 @@ async function _sendChatJSON(message) {
     try {
         const res = await _api(`/agents/${_chat.agentId}/chat`, {
             method: 'POST',
-            body: { message, session_id: _chat.sessionId, ...byokRequestFields() },
+            body: { message, session_id: _chat.sessionId, ...byokRequestFields(), lang: _chat.lang },
         });
         _chat.sessionId = res.session_id || _chat.sessionId;
         _chat.messages.push({
