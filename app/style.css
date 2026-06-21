@@ -97,9 +97,23 @@ html.light-mode {
 
 /* ══ SMART DYNAMIC QR — thème fixe « design Keystone » (refonte S2) ══════
    Le pad SDQR n'utilise plus la bascule clair/sombre : il applique le
-   design validé. Scopé à .sdqr-fullscreen → les autres pads gardent
-   l'accent indigo global. Étape 1/n : accent OR Keystone. */
+   design validé, via une surcharge de TOKENS scopée à .sdqr-fullscreen
+   (les autres pads gardent leur thème global). Les règles sdqr-* qui
+   consomment les variables suivent automatiquement. Les rares couleurs
+   EN DUR (texte clair hérité du thème sombre) seront reprises ensuite,
+   au vu des previews. */
 .sdqr-fullscreen {
+  /* Surfaces claires (panneaux blancs du design) */
+  --navy:  #ffffff;
+  --navy2: #ffffff;
+  --navy3: #f5f7fa;
+  --bg-secondary: #f5f7fa;
+  /* Texte foncé sur clair */
+  --text:  #1b2a4a;
+  --tx2:   rgba(27,42,74,.62);
+  --tx3:   rgba(27,42,74,.42);
+  --bd:    rgba(27,42,74,.12);
+  /* Accent OR Keystone (au lieu de l'indigo) */
   --gold:  #c9a84c;
   --gold2: #d8c074;
   --gold3: rgba(201,168,76,.14);
