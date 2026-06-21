@@ -9096,6 +9096,34 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-eye-name { font-size: 11px; font-weight: 600; color: #475569; text-align: center; line-height: 1.2; }
 .sdqr-eye-card.is-on .sdqr-eye-name { color: #1b2a4a; }
 
+/* SDQR-3.7 — Onglet Logo : bibliothèque d'icônes + « Vos logos ». */
+.sdqr-logo-lib-head, .sdqr-saved-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #94a3b8; margin: 14px 0 8px; }
+.sdqr-logo-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 7px; }
+.sdqr-logo-lib-btn {
+  aspect-ratio: 1; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(27,42,74,.12); border-radius: 10px; background: #fff; color: #1b2a4a;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.sdqr-logo-lib-btn svg { width: 20px; height: 20px; }
+.sdqr-logo-lib-btn:hover { border-color: rgba(201,168,76,.5); background: rgba(201,168,76,.06); }
+.sdqr-saved-logos { display: flex; flex-wrap: wrap; gap: 9px; }
+.sdqr-saved-logo { position: relative; }
+.sdqr-saved-logo-btn {
+  width: 42px; height: 42px; padding: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(27,42,74,.12); border-radius: 10px; background: #fff; cursor: pointer;
+}
+.sdqr-saved-logo-btn img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.sdqr-saved-logo-btn:hover { border-color: rgba(201,168,76,.5); }
+.sdqr-saved-logo-x {
+  position: absolute; top: -6px; right: -6px;
+  width: 17px; height: 17px; padding: 0; border-radius: 50%;
+  border: 1px solid rgba(27,42,74,.15); background: #fff; color: #64748b;
+  font-size: 12px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sdqr-saved-logo-x:hover { background: #fee2e2; color: #dc2626; border-color: rgba(220,38,38,.3); }
+
 /* Réglages couleur custom — color-picker + hex en grille (façon KeyForm) */
 .sdqr-color-grid {
   display: grid;
