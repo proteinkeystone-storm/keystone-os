@@ -295,13 +295,26 @@
     .sav2-voice.is-loading { animation: sav2-pulse 1s ease-in-out infinite; }
     @keyframes sav2-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
     /* SA-11.2 — sélecteur de langue (pilule compacte, accordé au header) */
-    .sav2-lang { width: auto; min-width: 44px; height: 38px; align-self: center; display: inline-block;
-      padding: 0 6px; border-radius: 14px; -webkit-appearance: none; appearance: none;
-      font: 700 12px/36px -apple-system, system-ui, sans-serif; letter-spacing: .05em; color: #c2c0ff;
-      background: rgba(164,162,255,.10); border: 1px solid rgba(164,162,255,.28);
-      text-align: center; text-align-last: center; cursor: pointer; }
-    .sav2-lang:focus { outline: none; border-color: rgba(164,162,255,.55); }
-    .sav2-lang option { color: #111; background: #fff; }
+    /* SA-11.2/11.3 — sélecteur de langue : bouton ROND BORDÉ (cohérent avec les
+       autres CTA du header) + menu déroulant CUSTOM (sombre, blur, aligné). */
+    .sav2-langwrap { position: relative; flex-shrink: 0; }
+    .sav2-lang { border: 1.5px solid rgba(164,162,255,.42); color: #c2c0ff;
+      font: 800 13px/1 -apple-system, system-ui, sans-serif; letter-spacing: .03em; }
+    .sav2-lang.is-open { color: #fff; border-color: rgba(164,162,255,.85); }
+    .sav2-langmenu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+      min-width: 170px; padding: 6px; display: none; flex-direction: column; gap: 2px;
+      background: rgba(16,16,32,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+      border: 1px solid rgba(164,162,255,.22); border-radius: 16px; box-shadow: 0 16px 44px rgba(0,0,0,.55); }
+    .sav2-langmenu.is-open { display: flex; animation: sav2-langpop .14s ease-out; }
+    @keyframes sav2-langpop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .sav2-langopt { appearance: none; border: none; cursor: pointer; text-align: left; white-space: nowrap;
+      background: transparent; color: #d7d6ff; border-radius: 11px; padding: 11px 14px;
+      font: 600 15px/1 -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: space-between; gap: 18px;
+      -webkit-tap-highlight-color: transparent; transition: background .12s; }
+    .sav2-langopt:hover { background: rgba(164,162,255,.12); }
+    .sav2-langopt.is-active { background: rgba(164,162,255,.18); color: #fff; }
+    .sav2-langtick { opacity: 0; color: #a8a6ff; font-weight: 700; }
+    .sav2-langopt.is-active .sav2-langtick { opacity: 1; }
 
     /* Carrousel de cartes (slide latéral, nombre illimité) */
     .sav2-cards { display: flex; gap: 10px; padding: 12px 16px 6px; overflow-x: auto; scroll-snap-type: x proximity;
@@ -484,8 +497,8 @@
       if (voice) voice.title = _voiceOn ? t('voiceOn') : t('voiceOff');
       const rgpd = document.querySelector('.sav2-rgpd');
       if (rgpd) rgpd.textContent = t('rgpd');
-      const langSel = document.getElementById('sa-lang');
-      if (langSel) { langSel.setAttribute('aria-label', t('lang')); langSel.title = t('lang'); }
+      const langBtn = document.getElementById('sa-lang');
+      if (langBtn) { langBtn.setAttribute('aria-label', t('lang')); langBtn.title = t('lang'); langBtn.textContent = _lang.toUpperCase(); }
       if (_showingGreeting) setAnswerV2(greetingText());
     }
 
@@ -1121,7 +1134,10 @@
             ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape((meta.url_label || '').trim() || prettyUrl(url))}</span></a>`
             : `<div class="sav2-top-spacer"></div>`}
           ${phone ? `<a class="sav2-top-btn" href="tel:${escape(phone.replace(/[^0-9+]/g, ''))}" aria-label="${escape(t('call'))}">${SVG_V2.phone}</a>` : ''}
-          <select class="sav2-top-btn sav2-lang" id="sa-lang" aria-label="${escape(t('lang'))}" title="${escape(t('lang'))}">${SA_LANGS.map(l => `<option value="${l}"${l === _lang ? ' selected' : ''}>${l.toUpperCase()}</option>`).join('')}</select>
+          <div class="sav2-langwrap">
+            <button class="sav2-top-btn sav2-lang" id="sa-lang" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${escape(t('lang'))}" title="${escape(t('lang'))}">${_lang.toUpperCase()}</button>
+            <div class="sav2-langmenu" id="sa-langmenu" role="menu">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español'], ['de', 'Deutsch']].map(([v, lbl]) => `<button class="sav2-langopt${v === _lang ? ' is-active' : ''}" type="button" role="menuitemradio" aria-checked="${v === _lang ? 'true' : 'false'}" data-l="${v}">${lbl}<span class="sav2-langtick" aria-hidden="true">✓</span></button>`).join('')}</div>
+          </div>
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? escape(t('voiceOn')) : escape(t('voiceOff'))}">${SVG_V2.voice}</button>` : ''}
         </header>
         ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
@@ -1154,8 +1170,35 @@
       const micBtn = document.getElementById('sa-mic');
       if (micBtn) micBtn.addEventListener('click', startDictation);
       // SA-11.2 — changement de langue : libellés + réponses + dictée suivent.
-      const langSel = document.getElementById('sa-lang');
-      if (langSel) langSel.addEventListener('change', () => { setLang(langSel.value); applyI18n(); if (_voiceOn && HAS_WASM) _warmPiper(); });   // SA-11.1 — pré-chauffe la voix de la nouvelle langue
+      // SA-11.3 — sélecteur de langue : menu custom (bouton rond + liste sombre).
+      const langBtn = document.getElementById('sa-lang');
+      const langMenu = document.getElementById('sa-langmenu');
+      if (langBtn && langMenu) {
+        const closeLangMenu = () => { langMenu.classList.remove('is-open'); langBtn.classList.remove('is-open'); langBtn.setAttribute('aria-expanded', 'false'); };
+        langBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const open = !langMenu.classList.contains('is-open');
+          langMenu.classList.toggle('is-open', open);
+          langBtn.classList.toggle('is-open', open);
+          langBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        langMenu.querySelectorAll('.sav2-langopt').forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const l = opt.dataset.l;
+            setLang(l);
+            langMenu.querySelectorAll('.sav2-langopt').forEach(o => {
+              const on = o.dataset.l === l;
+              o.classList.toggle('is-active', on);
+              o.setAttribute('aria-checked', on ? 'true' : 'false');
+            });
+            closeLangMenu();
+            applyI18n();
+            if (_voiceOn && HAS_WASM) _warmPiper();   // pré-chauffe la voix de la nouvelle langue
+          });
+        });
+        document.addEventListener('click', (e) => { if (!e.target.closest('.sav2-langwrap')) closeLangMenu(); });
+      }
 
       if (cards.length) {
         document.querySelectorAll('.sav2-card').forEach(btn => {
