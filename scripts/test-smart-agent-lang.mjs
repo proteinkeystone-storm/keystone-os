@@ -82,7 +82,24 @@ console.log('\n\x1b[1m▶ Suite 4 — validateAgentPayload : identity.lang\x1b[0
 }
 
 // ════════════════════════════════════════════════════════════════
-console.log('\n\x1b[1m▶ Suite 5 — Syntaxe (node --check)\x1b[0m');
+console.log('\n\x1b[1m▶ Suite 5 — Voix Piper par langue (SA-11.1)\x1b[0m');
+{
+  const piper = await import('../app/lib/piper-tts.js');
+  check('4 voix déclarées (fr/en/es/de)', Object.keys(piper.VOICES).length === 4);
+  check('voiceForLang fr → siwis', piper.voiceForLang('fr') === 'fr_FR-siwis-medium');
+  check('voiceForLang en → amy', piper.voiceForLang('en') === 'en_US-amy-medium');
+  check('voiceForLang es → davefx', piper.voiceForLang('es') === 'es_ES-davefx-medium');
+  check('voiceForLang de → thorsten', piper.voiceForLang('de') === 'de_DE-thorsten-medium');
+  check('voiceForLang inconnue → défaut fr', piper.voiceForLang('zz') === piper.DEFAULT_VOICE);
+  // normalizeForSpeech : règles FR seulement en fr ; Markdown nettoyé partout.
+  check('fr : heures + sigle épelés', piper.normalizeForSpeech('Ouvert 20h30, voir OS', 'fr') === 'Ouvert 20 heures 30, voir o-èsse');
+  check('en : règles FR NON appliquées', piper.normalizeForSpeech('Open 20h30, see OS', 'en') === 'Open 20h30, see OS');
+  check('de : règles FR NON appliquées', piper.normalizeForSpeech('Das OS', 'de') === 'Das OS');
+  check('Markdown nettoyé quelle que soit la langue', piper.normalizeForSpeech('**Bold** text', 'en') === 'Bold text');
+}
+
+// ════════════════════════════════════════════════════════════════
+console.log('\n\x1b[1m▶ Suite 6 — Syntaxe (node --check)\x1b[0m');
 try { execSync(`node --check "${join(ROOT, 'workers/src/routes/smart-agent.js')}"`, { stdio: 'pipe' }); check('smart-agent.js — syntaxe OK', true); }
 catch (e) { check('smart-agent.js — syntaxe OK', false); console.error(String(e.stdout || e.stderr || e.message)); }
 

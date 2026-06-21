@@ -536,9 +536,10 @@
         if (!_piperMod.isSupported()) { _piperMod = { unsupported: true }; return; }
         // SA-9.2 — idempotent et quasi gratuit une fois chaud (phonémiseur
         // monté + tir d'amorçage inclus) : rappelable à chaque envoi.
-        const cold = !_piperMod.isVoiceReady();
+        const voiceId = _piperMod.voiceForLang(_lang);   // SA-11.1 — voix de la langue active
+        const cold = !_piperMod.isVoiceReady(voiceId);
         if (cold) setVoiceLoading(true);
-        await _piperMod.warmUp();
+        await _piperMod.warmUp(voiceId);
         if (cold) setVoiceLoading(false);
       } catch (_) { setVoiceLoading(false); }
     }
@@ -550,7 +551,7 @@
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (_piperMod.unsupported || !_piperMod.isSupported()) throw new Error('wasm');
         if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
-        await _piperMod.speakText(clean, { onState: (st) => setVoiceLoading(st === 'loading') });
+        await _piperMod.speakText(clean, { voiceId: _piperMod.voiceForLang(_lang), onState: (st) => setVoiceLoading(st === 'loading') });
       } catch (_) {
         setVoiceLoading(false);
         _speakRaw(clean);   // repli : voix système — mieux que le silence
@@ -975,7 +976,7 @@
           try {
             if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
             if (_piperMod.isSupported && _piperMod.isSupported() && _piperMod.createSpeechStream) {
-              speech = _piperMod.createSpeechStream({ onState: (st) => setVoiceLoading(st === 'loading') });
+              speech = _piperMod.createSpeechStream({ voiceId: _piperMod.voiceForLang(_lang), onState: (st) => setVoiceLoading(st === 'loading') });
             }
           } catch (_) { speech = null; }
         }
@@ -1154,7 +1155,7 @@
       if (micBtn) micBtn.addEventListener('click', startDictation);
       // SA-11.2 — changement de langue : libellés + réponses + dictée suivent.
       const langSel = document.getElementById('sa-lang');
-      if (langSel) langSel.addEventListener('change', () => { setLang(langSel.value); applyI18n(); });
+      if (langSel) langSel.addEventListener('change', () => { setLang(langSel.value); applyI18n(); if (_voiceOn && HAS_WASM) _warmPiper(); });   // SA-11.1 — pré-chauffe la voix de la nouvelle langue
 
       if (cards.length) {
         document.querySelectorAll('.sav2-card').forEach(btn => {

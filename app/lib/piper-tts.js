@@ -18,11 +18,25 @@ const ORT_BASE    = '/app/vendor/onnx/';
 const PHON_BASE   = '/app/vendor/piper/';
 const VOICES_BASE = '/app/vendor/piper-voices';
 
-// Voix disponibles en local. Clé UI → chemin du modèle sous VOICES_BASE.
+// Voix disponibles en local (auto-hébergées sous VOICES_BASE). Clé UI → fichier.
+// SA-11.1 — voix neuronales medium par langue (toutes 22050 Hz, num_symbols 256,
+// même moteur Piper maison). espeak.voice vient du .onnx.json de CHAQUE modèle
+// (en-us / es / de) → phonémisation correcte par langue sans code spécifique.
 export const VOICES = {
-  'fr_FR-siwis-medium': 'fr_FR-siwis-medium.onnx',
+  'fr_FR-siwis-medium':    'fr_FR-siwis-medium.onnx',
+  'en_US-amy-medium':      'en_US-amy-medium.onnx',
+  'es_ES-davefx-medium':   'es_ES-davefx-medium.onnx',
+  'de_DE-thorsten-medium': 'de_DE-thorsten-medium.onnx',
 };
 export const DEFAULT_VOICE = 'fr_FR-siwis-medium';
+// Langue active → voix. Le préfixe du voiceId EST le code langue (fr_/en_/es_/de_).
+const VOICE_BY_LANG = {
+  fr: 'fr_FR-siwis-medium',
+  en: 'en_US-amy-medium',
+  es: 'es_ES-davefx-medium',
+  de: 'de_DE-thorsten-medium',
+};
+export function voiceForLang(lang) { return VOICE_BY_LANG[lang] || DEFAULT_VOICE; }
 
 let _ort = null, _phonLoaded = false;
 const _sessions = {}, _configs = {};
@@ -240,9 +254,15 @@ function stripMarkdownForSpeech(s) {
     .replace(/~~/g, '');                     // ~~barré~~
 }
 
-export function normalizeForSpeech(text) {
+// SA-11.1 — les SPEECH_RULES sont propres au FRANÇAIS (heures « heures »,
+// sigles épelés « o-èsse », noms francisés). On ne les applique QUE pour la
+// voix française : appliquées à une réponse anglaise/espagnole/allemande, elles
+// produiraient du charabia (« OS » → « o-èsse » lu par une voix anglaise). Le
+// nettoyage Markdown, lui, est universel. (Des règles par langue pourront être
+// ajoutées plus tard ; pour l'instant : FR enrichi, autres = Markdown seul.)
+export function normalizeForSpeech(text, lang = 'fr') {
   let s = stripMarkdownForSpeech(text);
-  for (const [re, rep] of SPEECH_RULES) s = s.replace(re, rep);
+  if (lang === 'fr') { for (const [re, rep] of SPEECH_RULES) s = s.replace(re, rep); }
   return s;
 }
 
@@ -269,7 +289,8 @@ export async function synthToWav(text, voiceId = DEFAULT_VOICE, onProgress) {
   const cfg = await getConfig(voiceId);
   const ort = await ensureOrt();
   const session = await getSession(voiceId, onProgress);
-  const ids = await phonemize(normalizeForSpeech(text), (cfg.espeak && cfg.espeak.voice) || 'fr');
+  const lang = String(voiceId || '').slice(0, 2);   // SA-11.1 — préfixe = code langue (fr/en/es/de)
+  const ids = await phonemize(normalizeForSpeech(text, lang), (cfg.espeak && cfg.espeak.voice) || 'fr');
   const inf = cfg.inference || {};
   const input = new ort.Tensor('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]);
   const input_lengths = new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]);

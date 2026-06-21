@@ -266,10 +266,10 @@ console.log('── SA-9.4 — trimSilence (pauses raccourcies entre les phrases
   const brut = concat(sil(400), ton(1000), sil(500));
   const net = trimSilence(brut, sr);
   const dureeMs = Math.round(net.length / sr * 1000);
-  check('silences tête/queue taillés (1,9 s → ~1,2 s : signal + marges)',
-    dureeMs >= 1150 && dureeMs <= 1260);
+  check('silences tête/queue taillés (1,9 s → ~1,08 s : signal + marges 30/50 ms)',
+    dureeMs >= 1040 && dureeMs <= 1120);
   check('le signal utile est intégralement conservé',
-    net.some(v => Math.abs(v) > 0.4) && Math.abs(net.length - (sil(60).length + ton(1000).length + sil(140).length)) < sr * 0.02);
+    net.some(v => Math.abs(v) > 0.4) && Math.abs(net.length - (sil(30).length + ton(1000).length + sil(50).length)) < sr * 0.02);
   const sansSilence = ton(800);
   check('signal sans silence → intact', trimSilence(sansSilence, sr).length === sansSilence.length);
   check('tout-silence → intact (rien à tailler proprement)',

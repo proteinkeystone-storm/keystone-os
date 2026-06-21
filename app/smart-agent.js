@@ -1994,13 +1994,14 @@ async function _piperWarmUp() {
     try {
         if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
         if (!_piper.mod.isSupported()) return;
-        const cold = !_piper.mod.isVoiceReady();   // voyant uniquement au vrai 1er chargement
+        const voiceId = _piper.mod.voiceForLang(_chat.lang);   // SA-11.1 — voix de la langue de test
+        const cold = !_piper.mod.isVoiceReady(voiceId);   // voyant uniquement au vrai 1er chargement
         const setLoad = (on) => {
             const b = _root && _root.querySelector('[data-act="chat-voice"]');
             if (b) b.classList.toggle('is-loading', on);
         };
         if (cold) setLoad(true);
-        await _piper.mod.warmUp();
+        await _piper.mod.warmUp(voiceId);
         if (cold) setLoad(false);
     } catch (_) {}
 }
@@ -2028,6 +2029,7 @@ async function _piperSpeak(text) {
         // 1re phrase est prête, la suite se génère pendant la lecture. Toute
         // nouvelle lecture interrompt la précédente (géré par le module).
         await _piper.mod.speakText(clean, {
+            voiceId: _piper.mod.voiceForLang(_chat.lang),   // SA-11.1 — voix de la langue de test
             onState: (st) => {
                 const b = _root && _root.querySelector('[data-act="chat-voice"]');
                 if (b) b.classList.toggle('is-loading', st === 'loading');
@@ -2077,6 +2079,7 @@ async function _sendChat() {
             if (!_piper.mod) _piper.mod = await import('./lib/piper-tts.js');
             if (_piper.mod.isSupported && _piper.mod.isSupported() && _piper.mod.createSpeechStream) {
                 return _piper.mod.createSpeechStream({
+                    voiceId: _piper.mod.voiceForLang(_chat.lang),   // SA-11.1 — voix de la langue de test
                     onState: (st) => { const b = _root && _root.querySelector('[data-act="chat-voice"]'); if (b) b.classList.toggle('is-loading', st === 'loading'); },
                 });
             }
