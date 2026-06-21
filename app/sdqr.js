@@ -2672,6 +2672,7 @@ async function _openQrDetail(panel, qr) {
               <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="png-1024" title="Web, document A4">PNG 1024px</button>
               <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="png-2048" title="Impression standard, bâche moyenne">PNG 2048px</button>
               <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="svg" title="Vectoriel illimité — impression haut de gamme, bâche grand format">SVG</button>
+              <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" data-export="pdf" title="PDF prêt à imprimer — A4, QR centré + légende">PDF</button>
             </div>
             <span class="sdqr-svg-hint" data-svg-hint hidden>SVG verrouillé — logo non vectoriel</span>
           </div>
@@ -2819,6 +2820,8 @@ async function _openQrDetail(panel, qr) {
           await _exportQrPng(qr, encodedForQr, design, 1024);
         } else if (kind === 'png-2048') {
           await _exportQrPng(qr, encodedForQr, design, 2048);
+        } else if (kind === 'pdf') {
+          await _exportQrPdf(qr, encodedForQr, design);
         }
         btn.textContent = '✓';
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
@@ -3410,6 +3413,66 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
   } finally {
     URL.revokeObjectURL(svgUrl);
   }
+}
+
+// ── PDF prêt à imprimer (SDQR S1) ─────────────────────────────────
+// QR haute résolution centré sur une page A4 + légende (nom + URL courte).
+// Auto-suffisant : ne touche pas _exportQrPng. jsPDF importé à la demande
+// (pas de coût au chargement du pad ; échec géré par le dispatcher → '✗').
+async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
+  const svg = await renderQrCustom(encodedForQr, design, sizePx);
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  let dataUrl;
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('Image load failed'));
+      i.src = svgUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = sizePx; canvas.height = sizePx;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';                       // PDF imprimé = toujours fond blanc
+    ctx.fillRect(0, 0, sizePx, sizePx);
+    ctx.drawImage(img, 0, 0, sizePx, sizePx);
+    const logoUrl = design?.logo?.dataUrl;            // logo recomposé (comme le PNG)
+    if (logoUrl) {
+      try {
+        const li = await new Promise((res, rej) => {
+          const x = new Image();
+          x.onload = () => res(x);
+          x.onerror = () => rej(new Error('logo load failed'));
+          x.src = logoUrl;
+        });
+        const ratio = Math.min(0.30, Math.max(0.10, design.logo.size || 0.20));
+        const box = sizePx * ratio;
+        const fit = Math.min(box / li.width, box / li.height) || 0;
+        const w = li.width * fit, h = li.height * fit;
+        ctx.drawImage(li, (sizePx - w) / 2, (sizePx - h) / 2, w, h);
+      } catch (e) {
+        console.warn('[sdqr] logo non composé sur le PDF :', e.message);
+      }
+    }
+    dataUrl = canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+
+  const { jsPDF } = await import('https://esm.sh/jspdf@2.5.2');
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageW = 210, qrMM = 120, x = (pageW - qrMM) / 2, y = 48;
+  pdf.addImage(dataUrl, 'PNG', x, y, qrMM, qrMM);
+  pdf.setTextColor('#1B2A4A');
+  pdf.setFontSize(20);
+  pdf.text(String(qr.name || 'QR Keystone'), pageW / 2, y + qrMM + 20, { align: 'center' });
+  if (qr.short_id) {
+    pdf.setTextColor('#8a8f99');
+    pdf.setFontSize(11);
+    pdf.text(`${CF_API.replace(/^https?:\/\//, '')}/r/${qr.short_id}`, pageW / 2, y + qrMM + 29, { align: 'center' });
+  }
+  pdf.save(`${_slug(qr.name)}-${qr.short_id || qr.id.slice(0, 8)}.pdf`);
 }
 
 // ══════════════════════════════════════════════════════════════════
