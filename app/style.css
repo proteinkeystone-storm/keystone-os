@@ -9044,6 +9044,20 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-pal-name { font-size: 12px; font-weight: 700; letter-spacing: -.01em; color: rgba(220,225,240,.9); text-align: left; }
 .sdqr-pal-card.is-on .sdqr-pal-name { color: #fff; }
 
+/* SDQR-3.4 — Palettes PAR AMBIANCE (panneau Design, toujours en light-mode) :
+   groupes + cartes (barre dégradé = modules · pastille = accent yeux). */
+.sdqr-design-hint { font-size: 11.5px; color: #64748b; margin: 2px 0 12px; line-height: 1.45; }
+.sdqr-amb-groups { display: flex; flex-direction: column; gap: 13px; margin-bottom: 6px; }
+.sdqr-amb-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #94a3b8; margin-bottom: 7px; }
+.sdqr-amb-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sdqr-amb-card { display: flex; flex-direction: column; gap: 7px; padding: 9px; background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 11px; cursor: pointer; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s; }
+.sdqr-amb-card:hover { border-color: rgba(201,168,76,.5); }
+.sdqr-amb-card.is-on { border-color: #c9a84c; box-shadow: 0 0 0 2px rgba(201,168,76,.2); }
+.sdqr-amb-top { display: flex; align-items: center; gap: 7px; }
+.sdqr-amb-bar { flex: 1; height: 22px; border-radius: 6px; min-width: 0; }
+.sdqr-amb-accent { width: 22px; height: 22px; flex: none; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); }
+.sdqr-amb-name { font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; color: #1b2a4a; }
+
 /* Réglages couleur custom — color-picker + hex en grille (façon KeyForm) */
 .sdqr-color-grid {
   display: grid;
@@ -9973,3 +9987,422 @@ html.light-mode .sdqr-cta,
 html.light-mode .sdqr-btn--primary,
 html.light-mode .ts-period-toggle button.active,
 html.light-mode .btn-save-vault { color: #fff; }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR — RÉALIGNEMENT MAQUETTES (_design-lab/sdqr/generateur.html) :
+   CADRE NAVY autour des PANNEAUX BLANCS.
+
+   Le pad force html.light-mode (contenu clair via les 276 règles
+   ci-dessus). Ce bloc RE-HABILLE uniquement le CHROME en navy #1B2A4A
+   — topbar + sidebar + barre d'onglets (toujours), et le PUITS de
+   contenu seulement sur l'écran de création (.sdqr-content--create) —
+   pour redonner aux panneaux blancs leur écrin et à l'or rare son
+   cadre. Les vues détail / vue d'ensemble / stats gardent leur puits
+   clair (zéro régression). Vient APRÈS la couche light-mode pour
+   gagner la cascade à spécificité égale.
+═══════════════════════════════════════════════════════════════ */
+.sdqr-fullscreen {
+  --sdqr-navy:      #1b2a4a;          /* surface du chrome (topbar, cercles) */
+  --sdqr-navy-deep: #0f1d3a;          /* fond du puits (coque + création) */
+  --sdqr-navy-side: #16243f;          /* sidebar, légèrement distincte */
+  --sdqr-line:      rgba(255,255,255,.08);
+  --sdqr-ink1:      #ffffff;          /* texte fort sur navy */
+  --sdqr-ink2:      rgba(221,228,243,.74);
+  --sdqr-ink3:      rgba(221,228,243,.5);
+}
+
+/* — Coque navy (base) — */
+html.light-mode .sdqr-fullscreen { background: var(--sdqr-navy-deep); }
+html.light-mode .sdqr-main       { background: var(--sdqr-navy-deep); }
+/* puits clair PAR DÉFAUT (détail / vue d'ensemble / stats / vide) */
+html.light-mode .sdqr-content    { background: #f3f5f9; }
+/* puits NAVY sur la création ET la bibliothèque (panneaux blancs en relief) */
+html.light-mode .sdqr-content.sdqr-content--create,
+html.light-mode .sdqr-content.sdqr-content--lib { background: var(--sdqr-navy-deep); }
+
+/* — Topbar (header du cadre) — */
+html.light-mode .sdqr-topbar {
+  background: var(--sdqr-navy);
+  border-bottom-color: var(--sdqr-line);
+}
+html.light-mode .sdqr-topbar .sdqr-title { color: var(--sdqr-ink1); }
+html.light-mode .sdqr-topbar .ws-topbar-app-picto,
+html.light-mode .sdqr-topbar .ws-topbar-back,
+html.light-mode .sdqr-topbar .ws-iconbtn,
+html.light-mode .sdqr-topbar .ws-topbar-burger { color: var(--sdqr-ink2); }
+html.light-mode .sdqr-topbar .ws-topbar-back:hover,
+html.light-mode .sdqr-topbar .ws-iconbtn:hover { color: #fff; background: rgba(255,255,255,.08); }
+html.light-mode .sdqr-topbar .ws-logo-light { display: none; }
+html.light-mode .sdqr-topbar .ws-logo-dark  { display: block; }
+html.light-mode .sdqr-pill {
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.14);
+  color: var(--sdqr-ink2);
+}
+html.light-mode .sdqr-pill--ok {
+  background: rgba(46,179,124,.12);
+  border-color: rgba(46,179,124,.4);
+  color: #7ee0b5;
+}
+
+/* — Sidebar (flanc du cadre) — */
+html.light-mode .sdqr-sidebar {
+  background: var(--sdqr-navy-side);
+  border-right-color: var(--sdqr-line);
+}
+html.light-mode .sdqr-sidebar-head    { border-bottom-color: var(--sdqr-line); }
+html.light-mode .sdqr-sidebar-title   { color: var(--sdqr-ink3); }
+html.light-mode .sdqr-sidebar-filters { border-bottom-color: var(--sdqr-line); }
+html.light-mode .sdqr-new-btn {
+  background: rgba(201,168,76,.14);
+  border-color: rgba(201,168,76,.5);
+  color: var(--gold2);
+}
+html.light-mode .sdqr-new-btn:hover { background: rgba(201,168,76,.24); color: #fff; }
+/* Bouton « Vue d'ensemble » (style inline dans sdqr.js → on re-teinte ici) */
+html.light-mode .sdqr-overview-btn {
+  background: rgba(255,255,255,.04) !important;
+  border-color: rgba(255,255,255,.14) !important;
+  color: var(--sdqr-ink2) !important;
+}
+html.light-mode .sdqr-overview-btn.is-active,
+html.light-mode .sdqr-overview-btn:hover {
+  background: rgba(201,168,76,.14) !important;
+  border-color: rgba(201,168,76,.45) !important;
+  color: #fff !important;
+}
+/* Recherche + filtres */
+html.light-mode .sdqr-search-input {
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.12);
+  color: #fff;
+}
+html.light-mode .sdqr-search-input::placeholder { color: rgba(221,228,243,.4); }
+html.light-mode .sdqr-search-ico { color: rgba(221,228,243,.5); }
+html.light-mode .sdqr-search-kbd {
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.12);
+  color: rgba(221,228,243,.55);
+}
+html.light-mode .sdqr-filter-pill { color: var(--sdqr-ink3); }
+html.light-mode .sdqr-filter-pill:hover { color: #fff; }
+html.light-mode .sdqr-filter-pill.is-active {
+  background: rgba(201,168,76,.16);
+  border-color: rgba(201,168,76,.45);
+  color: var(--gold2);
+}
+/* Liste des QR */
+html.light-mode .sdqr-li {
+  background: rgba(255,255,255,.02);
+  border-color: rgba(255,255,255,.07);
+  color: var(--sdqr-ink2);
+}
+html.light-mode .sdqr-li:hover {
+  background: rgba(201,168,76,.06);
+  border-color: rgba(201,168,76,.22);
+}
+html.light-mode .sdqr-li.is-selected {
+  background: rgba(201,168,76,.1);
+  border-color: rgba(201,168,76,.4);
+}
+html.light-mode .sdqr-li-name  { color: #fff; }
+html.light-mode .sdqr-li-scans { color: var(--gold2); }
+html.light-mode .sdqr-li-type  { color: var(--sdqr-ink3); }
+html.light-mode .sdqr-li-tag   { background: rgba(255,255,255,.06); color: rgba(221,228,243,.7); }
+html.light-mode .sdqr-empty-mini  { color: rgba(221,228,243,.4); }
+html.light-mode .sdqr-folder-bar-head { color: var(--sdqr-ink3); }
+html.light-mode .sdqr-folder-chip { color: var(--sdqr-ink2); }
+html.light-mode .sdqr-folder-chip:hover { background: rgba(255,255,255,.05); }
+html.light-mode .sdqr-folder-chip.is-active {
+  background: rgba(201,168,76,.14);
+  border-color: rgba(201,168,76,.4);
+  color: #fff;
+}
+
+/* — Barre d'onglets (sous-header du cadre) — */
+html.light-mode .sdqr-tabs { border-bottom-color: var(--sdqr-line); }
+html.light-mode .sdqr-tab  { color: var(--sdqr-ink3); }
+html.light-mode .sdqr-tab:hover:not(:disabled) { color: #fff; }
+html.light-mode .sdqr-tab.active { color: #fff; border-bottom-color: var(--gold2); }
+
+/* — CTA OR : texte NAVY (maquette), pas blanc — */
+html.light-mode .sdqr-fullscreen .sdqr-cta,
+html.light-mode .sdqr-fullscreen .sdqr-btn--primary,
+html.light-mode .sdqr-fullscreen .sdqr-save { color: var(--sdqr-navy); }
+
+/* ── Écran de CRÉATION sur puits navy : titre clair + panneaux blancs ── */
+html.light-mode .sdqr-content--create .sdqr-form-title { color: #fff; }
+html.light-mode .sdqr-content--create .sdqr-form-sub   { color: rgba(221,228,243,.6); }
+html.light-mode .sdqr-content--create .sdqr-type-heading { color: rgba(221,228,243,.55) !important; }
+/* « Annuler » (ghost) posé sur le puits navy */
+html.light-mode .sdqr-content--create .sdqr-btn--ghost {
+  border-color: rgba(255,255,255,.16);
+  color: rgba(221,228,243,.85);
+}
+html.light-mode .sdqr-content--create .sdqr-btn--ghost:hover {
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.28);
+  color: #fff;
+}
+
+/* SÉLECTION = OR (maquette) : mode + type passent de l'indigo à l'or, comme
+   les pills de famille et le CTA. Or = uniquement l'élément choisi → rare. */
+html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active {
+  background: rgba(201,168,76,.1);
+  border-color: rgba(201,168,76,.55);
+}
+html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active .sdqr-mode-txt strong { color: #8a6d1f; }
+html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active .sdqr-mode-dot {
+  border-color: var(--gold, #c9a84c);
+  background: var(--gold, #c9a84c);
+  box-shadow: inset 0 0 0 2px #fff;
+}
+html.light-mode .sdqr-content--create .sdqr-type-card.is-active {
+  background: rgba(201,168,76,.1);
+  border-color: rgba(201,168,76,.5);
+}
+html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-label { color: #8a6d1f; }
+html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico   { color: var(--gold, #c9a84c); }
+
+/* — PANNEAUX BLANCS « Étape » (cartes du formulaire) — */
+.sdqr-step {
+  background: #fff;
+  border: 1px solid rgba(27,42,74,.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 10px rgba(8,15,35,.22);
+}
+.sdqr-step-hd {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px;
+}
+.sdqr-step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex: none;
+  border-radius: 50%;
+  background: var(--sdqr-navy, #1b2a4a);
+  color: var(--gold, #c9a84c);
+  font-size: 12px; font-weight: 700;
+}
+.sdqr-step-title {
+  font-size: 15px; font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--sdqr-navy, #1b2a4a);
+}
+.sdqr-step-opt {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(27,42,74,.4);
+}
+/* Dans une carte blanche, le dernier élément ne pousse pas de marge basse. */
+.sdqr-step > .sdqr-form-grid:last-child,
+.sdqr-step > .sdqr-type-cards:last-child { margin-bottom: 0; }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR — BIBLIOTHÈQUE « Mes QR » (maquettes 13-14) : vues GRILLE &
+   TABLEAU, sur le puits navy (.sdqr-content--lib). Cartes / table
+   blanches, or rare (sélection + actions). Même langage que la
+   création.
+═══════════════════════════════════════════════════════════════ */
+/* — En-tête de bibliothèque + bascule Grille / Tableau — */
+.sdqr-lib-head {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+.sdqr-lib-title {
+  font-size: 22px; font-weight: 800; letter-spacing: -.02em;
+  color: #fff;
+}
+.sdqr-lib-count { font-size: 13px; color: rgba(221,228,243,.55); }
+.sdqr-lib-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.sdqr-lib-toggle {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 9px;
+}
+.sdqr-lib-seg {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: none; border-radius: 7px;
+  background: transparent; color: rgba(221,228,243,.62);
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.sdqr-lib-seg svg { width: 15px; height: 15px; }
+.sdqr-lib-seg:hover { color: #fff; }
+.sdqr-lib-seg.is-active { background: var(--gold, #c9a84c); color: #1b2a4a; }
+
+/* — Vue GRILLE : cartes blanches — */
+.sdqr-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 14px;
+}
+.sdqr-qr-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 11px;
+  min-height: 150px;
+  padding: 16px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid rgba(27,42,74,.08);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(8,15,35,.22);
+  cursor: pointer;
+  transition: transform .12s, box-shadow .15s, border-color .15s;
+}
+.sdqr-qr-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(8,15,35,.32);
+  border-color: rgba(201,168,76,.45);
+}
+.sdqr-qr-card-top { display: flex; align-items: flex-start; gap: 11px; padding-right: 30px; }
+.sdqr-qr-card-ico {
+  width: 36px; height: 36px; flex: none;
+  border-radius: 9px;
+  background: rgba(27,42,74,.06);
+  color: #1b2a4a;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sdqr-qr-card-ico svg { width: 19px; height: 19px; }
+.sdqr-qr-card-name {
+  font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+  color: #1b2a4a; line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sdqr-qr-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.sdqr-qr-badge {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+  padding: 2px 8px; border-radius: 5px; white-space: nowrap;
+}
+.sdqr-qr-badge--type { background: rgba(27,42,74,.06); color: #475569; }
+.sdqr-qr-badge--dyn  { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-qr-badge--stat { background: rgba(27,42,74,.06); color: #64748b; }
+.sdqr-qr-badge--cg   { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-qr-badge--arch { background: rgba(100,116,139,.16); color: #64748b; }
+.sdqr-qr-card-foot {
+  margin-top: auto;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 8px;
+}
+.sdqr-qr-scans {
+  font-size: 25px; font-weight: 800; letter-spacing: -.02em;
+  color: #1b2a4a; line-height: 1;
+}
+.sdqr-qr-scans small {
+  font-size: 11px; font-weight: 600; letter-spacing: 0;
+  color: #94a3b8; margin-left: 5px;
+}
+.sdqr-qr-scans--stat { color: #94a3b8; }
+.sdqr-qr-card-folder {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: #94a3b8; max-width: 110px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sdqr-qr-card-folder svg { width: 12px; height: 12px; flex: none; }
+
+/* — Menu ⋯ par carte (popover) — */
+.sdqr-qr-menu-btn {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid transparent; background: transparent;
+  color: #94a3b8; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sdqr-qr-menu-btn svg { width: 17px; height: 17px; }
+.sdqr-qr-menu-btn:hover { background: rgba(27,42,74,.06); color: #1b2a4a; }
+.sdqr-qr-pop {
+  position: absolute; top: 40px; right: 12px; z-index: 30;
+  min-width: 168px; padding: 5px;
+  background: #fff; border: 1px solid rgba(27,42,74,.1);
+  border-radius: 10px; box-shadow: 0 14px 34px rgba(8,15,35,.28);
+}
+.sdqr-qr-pop button {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 10px; border: none; border-radius: 7px;
+  background: transparent; color: #1b2a4a;
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  text-align: left; cursor: pointer;
+}
+.sdqr-qr-pop button svg { width: 15px; height: 15px; color: #64748b; }
+.sdqr-qr-pop button:hover { background: rgba(27,42,74,.05); }
+.sdqr-qr-pop button.is-danger,
+.sdqr-qr-pop button.is-danger svg { color: #dc2626; }
+.sdqr-qr-pop button.is-danger:hover { background: rgba(220,38,38,.08); }
+
+/* — Vue TABLEAU : feuille blanche, lignes denses — */
+.sdqr-tbl-wrap {
+  background: #fff;
+  border: 1px solid rgba(27,42,74,.08);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(8,15,35,.22);
+  overflow: hidden;
+}
+.sdqr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sdqr-tbl thead th {
+  text-align: left; padding: 11px 14px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: #64748b; white-space: nowrap;
+  border-bottom: 1px solid rgba(27,42,74,.1);
+  cursor: pointer; user-select: none;
+}
+.sdqr-tbl thead th.is-static { cursor: default; }
+.sdqr-tbl thead th.is-sorted { color: #8a6d1f; }
+.sdqr-th-arrow { font-size: 9px; margin-left: 4px; opacity: .8; }
+.sdqr-tbl tbody td {
+  padding: 10px 14px; vertical-align: middle;
+  color: #334155; border-bottom: 1px solid rgba(27,42,74,.06);
+}
+.sdqr-tbl tbody tr:last-child td { border-bottom: none; }
+.sdqr-tbl tbody tr { cursor: pointer; transition: background .12s; }
+.sdqr-tbl tbody tr:hover { background: rgba(201,168,76,.05); }
+.sdqr-tbl tbody tr.is-checked { background: rgba(201,168,76,.09); }
+.sdqr-tbl-name { font-weight: 700; color: #1b2a4a; }
+.sdqr-tbl-type { display: inline-flex; align-items: center; gap: 6px; color: #475569; white-space: nowrap; }
+.sdqr-tbl-type svg { width: 14px; height: 14px; flex: none; }
+.sdqr-tbl-scans { font-weight: 700; color: #1b2a4a; font-variant-numeric: tabular-nums; }
+.sdqr-tbl-mode { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
+.sdqr-tbl-mode--dyn  { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-tbl-mode--stat { background: rgba(27,42,74,.06); color: #64748b; }
+.sdqr-tbl-st { font-size: 11px; color: #64748b; }
+.sdqr-tbl-col-check { width: 40px; text-align: center; }
+.sdqr-tbl-col-act   { width: 46px; text-align: center; }
+.sdqr-tbl input[type="checkbox"] {
+  accent-color: #c9a84c; width: 15px; height: 15px; cursor: pointer; vertical-align: middle;
+}
+.sdqr-tbl .sdqr-qr-menu-btn { position: static; }
+
+/* — Barre d'actions groupées (multi-sélection) — sur le puits navy — */
+.sdqr-bulk {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; padding: 9px 10px 9px 15px;
+  background: rgba(201,168,76,.12);
+  border: 1px solid rgba(201,168,76,.35);
+  border-radius: 11px;
+}
+.sdqr-bulk-count { font-size: 13px; font-weight: 700; color: #fff; }
+.sdqr-bulk-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sdqr-bulk-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04);
+  color: rgba(221,228,243,.9); font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.sdqr-bulk-btn svg { width: 14px; height: 14px; }
+.sdqr-bulk-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+.sdqr-bulk-btn--danger { border-color: rgba(239,68,68,.4); color: #fda4a4; }
+.sdqr-bulk-btn--danger:hover { background: rgba(239,68,68,.16); color: #fff; }
+.sdqr-bulk-btn--ghost { border-color: transparent; background: transparent; }
+
+/* — Responsive bibliothèque — */
+@media (max-width: 720px) {
+  .sdqr-lib-head { gap: 8px; }
+  .sdqr-lib-tools { margin-left: 0; width: 100%; }
+  .sdqr-qr-grid { grid-template-columns: 1fr 1fr; }
+  .sdqr-tbl-col-hide { display: none; }
+}
+@media (max-width: 460px) {
+  .sdqr-qr-grid { grid-template-columns: 1fr; }
+}

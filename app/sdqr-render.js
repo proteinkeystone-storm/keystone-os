@@ -52,6 +52,16 @@ export const DEFAULT_DESIGN = {
   bg     : '#ffffff',
   gradient: { enabled: false, from: '#1B2A4A', to: '#6366f1', angle: 45 },
   logo   : { dataUrl: '', size: 0.20 },
+  // SDQR-3.3 — cadre/accroche AUTOUR du QR (le code reste intact, zone de
+  // silence préservée → aucune incidence sur la scannabilité).
+  frame  : { style: 'none', text: 'Scannez-moi', color: '#1B2A4A' },
+  // SDQR-3.4 — couleur d'ACCENT des yeux (finder patterns), distincte des
+  // modules. distinct=false → les yeux héritent de la couleur des modules.
+  // La signature Keystone = modules navy + yeux or. NB : l'or de marque vif
+  // (#c9a84c, ~2:1 sur blanc) casse la détection en petit format (mesuré jsQR
+  // à 170px) → on prend un or plus PROFOND #b08d2e qui lit « or » ET décode
+  // partout. Le garde-fou de contraste avertit si l'accent choisi est trop clair.
+  eye    : { distinct: false, color: '#b08d2e' },
 };
 
 // Merge sûr : si design est partial (depuis D1), on complète avec DEFAULT.
@@ -71,7 +81,75 @@ export function mergeDesign(design) {
     bg      : d.bg || DEFAULT_DESIGN.bg,
     gradient: { ...DEFAULT_DESIGN.gradient, ...(d.gradient || {}) },
     logo    : { ...DEFAULT_DESIGN.logo,     ...(d.logo     || {}) },
+    frame   : { ...DEFAULT_DESIGN.frame,    ...(d.frame    || {}) },
+    eye     : { ...DEFAULT_DESIGN.eye,      ...(d.eye      || {}) },
   };
+}
+
+// ── Cadres (frame + accroche) — dessinés AUTOUR du QR ──────────
+// Catalogue des styles : chacun déclare l'espace réservé (pad autour,
+// bandeau haut/bas) puis dessine bord + accroche. Le QR garde sa zone de
+// silence intégrale → la scannabilité n'est pas affectée (prouvé jsQR).
+// 5 styles, tous prouvés scannables (jsQR, banc _design-lab/sdqr/frames.html).
+// Le « ticket » (bord pointillé) a été ÉCARTÉ : les tirets perturbent la
+// détection jsQR malgré une zone de silence généreuse → non garanti.
+export const FRAME_OPTS = [
+  { id: 'none',    label: 'Aucun' },
+  { id: 'label',   label: 'Bandeau' },
+  { id: 'border',  label: 'Encadré' },
+  { id: 'badge',   label: 'Pastille' },
+  { id: 'header',  label: 'Bandeau haut' },
+];
+
+// Renvoie { padX, padTop, padBottom, deco(boxX,boxY,qrSize) } pour un style.
+// deco() reçoit la position du QR dans le canevas final et rend le décor SVG.
+function _frameGeometry(style, qrSize, color, text) {
+  const esc = _esc;
+  const band = Math.round(qrSize * 0.17);          // hauteur du bandeau d'accroche
+  const gap  = Math.round(qrSize * 0.05);          // marge blanche autour du QR
+  const fs   = Math.max(11, Math.round(qrSize * 0.072));
+  const label = esc((text || '').trim() || 'Scannez-moi');
+  const tw = n => n.toFixed(2);
+
+  // bandeau plein (texte clair sur couleur) — bas ou haut
+  const banner = (x, y, w, h, radiusTop, radiusBottom) => {
+    const r = Math.min(h / 2, qrSize * 0.06);
+    const rt = radiusTop ? r : 0, rb = radiusBottom ? r : 0;
+    return `<path d="M ${tw(x)} ${tw(y + rt)} a ${tw(rt)} ${tw(rt)} 0 0 1 ${tw(rt)} ${tw(-rt)} h ${tw(w - 2*rt)} a ${tw(rt)} ${tw(rt)} 0 0 1 ${tw(rt)} ${tw(rt)} v ${tw(h - rt - rb)} a ${tw(rb)} ${tw(rb)} 0 0 1 ${tw(-rb)} ${tw(rb)} h ${tw(-(w - 2*rb))} a ${tw(rb)} ${tw(rb)} 0 0 1 ${tw(-rb)} ${tw(-rb)} z" fill="${esc(color)}"/>`
+         + `<text x="${tw(x + w/2)}" y="${tw(y + h/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="700" fill="#ffffff" letter-spacing="0.5">${label}</text>`;
+  };
+
+  switch (style) {
+    case 'label':   // QR + bandeau plein dessous (arrondi en bas)
+      return { padX: gap, padTop: gap, padBottom: band,
+        deco: (bx, by, s, W, H) => banner(bx - gap, by + s + gap*0.4, s + 2*gap, band - gap*0.4, false, true) };
+    case 'header':  // bandeau plein au-dessus
+      return { padX: gap, padTop: band, padBottom: gap,
+        deco: (bx, by, s, W, H) => banner(bx - gap, gap*0.0, s + 2*gap, band - gap*0.4, true, false) };
+    case 'border': { // bord arrondi autour + bandeau plein en bas
+      return { padX: gap*1.6, padTop: gap*1.6, padBottom: band,
+        deco: (bx, by, s, W, H) => {
+          const m = gap*0.6, r = qrSize*0.08;
+          const bw = s + 2*(gap*1.6) - 2*m, bh = s + (gap*1.6) + band - 2*m;
+          return `<rect x="${tw(m)}" y="${tw(m)}" width="${tw(bw)}" height="${tw(bh)}" rx="${tw(r)}" ry="${tw(r)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(qrSize*0.018)}"/>`
+               + banner(bx - gap*0.5, by + s + gap*0.5, s + gap, band - gap*0.9, true, true);
+        } };
+    }
+    case 'badge': { // accroche dans une pastille avec flèche vers le QR
+      return { padX: gap, padTop: gap, padBottom: band,
+        deco: (bx, by, s, W, H) => {
+          const pw = Math.min(s, qrSize*0.66), ph = band*0.82;
+          const px = bx + (s - pw)/2, py = by + s + gap*0.9;
+          const r = ph/2;
+          const ar = qrSize*0.035;   // flèche
+          return `<path d="M ${tw(bx + s/2 - ar)} ${tw(py)} L ${tw(bx + s/2)} ${tw(py - ar)} L ${tw(bx + s/2 + ar)} ${tw(py)} z" fill="${esc(color)}"/>`
+               + `<rect x="${tw(px)}" y="${tw(py)}" width="${tw(pw)}" height="${tw(ph)}" rx="${tw(r)}" ry="${tw(r)}" fill="${esc(color)}"/>`
+               + `<text x="${tw(px + pw/2)}" y="${tw(py + ph/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="700" fill="#ffffff" letter-spacing="0.5">${label}</text>`;
+        } };
+    }
+    default:
+      return null;
+  }
 }
 
 // ── Détection des 3 finder patterns (ancres) ───────────────────
@@ -95,21 +173,50 @@ function _anchorOrigins(count) {
 }
 
 // Cellule = un module standard. Retourne le path SVG selon la forme.
+// Toutes les formes COUVRENT le centre de la cellule (les scanners
+// échantillonnent le centre) → scannabilité préservée (prouvée via jsQR,
+// banc _design-lab/sdqr/scan-test.html).
 function _moduleShape(shape, x, y, cell) {
+  const f = n => n.toFixed(2);
+  const cx = x + cell / 2;
+  const cy = y + cell / 2;
   switch (shape) {
-    case 'dot':
+    case 'dot': {
       // cercle inscrit avec léger inset pour aération
-      const cx = x + cell / 2;
-      const cy = y + cell / 2;
-      const r  = cell * 0.42;
-      return `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}"/>`;
-    case 'rounded':
+      const r = cell * 0.42;
+      return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/>`;
+    }
+    case 'circle': {
+      // point plein, plus généreux (touche les bords) — couverture max
+      const r = cell * 0.5;
+      return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/>`;
+    }
+    case 'rounded': {
       // arrondi modéré : rx = cell * 0.30
-      const rr = (cell * 0.30).toFixed(2);
-      return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${cell.toFixed(2)}" height="${cell.toFixed(2)}" rx="${rr}" ry="${rr}"/>`;
+      const rr = f(cell * 0.30);
+      return `<rect x="${f(x)}" y="${f(y)}" width="${f(cell)}" height="${f(cell)}" rx="${rr}" ry="${rr}"/>`;
+    }
+    case 'diamond': {
+      // losange inscrit (sommets aux milieux des bords)
+      return `<path d="M ${f(cx)} ${f(y)} L ${f(x + cell)} ${f(cy)} L ${f(cx)} ${f(y + cell)} L ${f(x)} ${f(cy)} Z"/>`;
+    }
+    case 'cross': {
+      // croix pleine (deux barres au centre) — centre couvert
+      const aw  = cell * 0.52;
+      const off = (cell - aw) / 2;
+      return `<rect x="${f(x + off)}" y="${f(y)}" width="${f(aw)}" height="${f(cell)}"/>`
+           + `<rect x="${f(x)}" y="${f(y + off)}" width="${f(cell)}" height="${f(aw)}"/>`;
+    }
+    case 'classy': {
+      // carré « élégant » : 2 coins opposés vifs, 2 arrondis (look feuille)
+      const r = cell * 0.5;
+      return `<path d="M ${f(x + r)} ${f(y)} H ${f(x + cell)} V ${f(y + cell - r)} `
+           + `A ${f(r)} ${f(r)} 0 0 1 ${f(x + cell - r)} ${f(y + cell)} H ${f(x)} V ${f(y + r)} `
+           + `A ${f(r)} ${f(r)} 0 0 1 ${f(x + r)} ${f(y)} Z"/>`;
+    }
     case 'square':
     default:
-      return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${cell.toFixed(2)}" height="${cell.toFixed(2)}"/>`;
+      return `<rect x="${f(x)}" y="${f(y)}" width="${f(cell)}" height="${f(cell)}"/>`;
   }
 }
 
@@ -186,6 +293,8 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   const useGradient = d.gradient?.enabled;
   const gradientId  = 'qrgrad_' + Math.random().toString(36).slice(2, 8);
   const fgFill = useGradient ? `url(#${gradientId})` : d.fg;
+  // Yeux (finder patterns) : couleur d'accent distincte ou héritée des modules.
+  const eyeFill = d.eye?.distinct ? _esc(d.eye.color || d.fg) : fgFill;
 
   // 1. Background
   let bg = '';
@@ -246,15 +355,29 @@ export async function renderQrCustom(text, design, sizePx = 280) {
     `;
   }
 
+  // 6. Cadre / accroche AUTOUR du QR. Le QR (bg + modules + ancres + logo)
+  // est placé dans un groupe translaté, sur un canevas agrandi. Sa zone de
+  // silence reste intacte → scannabilité préservée (vérifiée jsQR).
+  const fr = (d.frame && d.frame.style && d.frame.style !== 'none')
+    ? _frameGeometry(d.frame.style, sizePx, d.frame.color || '#1B2A4A', d.frame.text)
+    : null;
+  const padX      = fr ? fr.padX      : 0;
+  const padTop    = fr ? fr.padTop    : 0;
+  const padBottom = fr ? fr.padBottom : 0;
+  const W = sizePx + 2 * padX;
+  const H = sizePx + padTop + padBottom;
+
+  const qrInner = `${bg}<g fill="${fgFill}">${modules}</g><g fill="${eyeFill}">${anchors}</g>${logoBlock}`;
+  const body = fr
+    ? `<rect width="${W.toFixed(2)}" height="${H.toFixed(2)}" fill="#ffffff"/>`
+      + `<g transform="translate(${padX.toFixed(2)}, ${padTop.toFixed(2)})">${qrInner}</g>`
+      + fr.deco(padX, padTop, sizePx, W, H)
+    : qrInner;
+
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${sizePx}" height="${sizePx}" viewBox="0 0 ${sizePx} ${sizePx}">
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W.toFixed(2)}" height="${H.toFixed(2)}" viewBox="0 0 ${W.toFixed(2)} ${H.toFixed(2)}">
       ${defs ? `<defs>${defs}</defs>` : ''}
-      ${bg}
-      <g fill="${fgFill}">
-        ${modules}
-        ${anchors}
-      </g>
-      ${logoBlock}
+      ${body}
     </svg>
   `;
 }

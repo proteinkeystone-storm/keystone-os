@@ -23,7 +23,7 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { getTemplateIconSvg } from './sdqr-template-icons.js';
-import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel } from './sdqr-render.js';
+import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
@@ -47,6 +47,13 @@ let _cachedQrs   = [];         // dernière liste reçue
 let _currentView = 'studio';   // 'studio' | 'stats'
 let _selectedId  = null;       // QR sélectionné dans la sidebar
 let _busy        = false;      // anti-double-click
+
+// Bibliothèque « Mes QR » (maquettes 13-14) — vue par défaut du Studio quand
+// des QR existent et qu'aucun n'est sélectionné.
+let _libView = 'grid';                       // 'grid' | 'table'
+let _libSort = { key: 'scans', dir: 'desc' }; // tri du tableau
+let _libSel  = new Set();                    // ids sélectionnés (multi-sélection tableau)
+try { const v = localStorage.getItem('sdqr_lib_view'); if (v === 'grid' || v === 'table') _libView = v; } catch (e) {}
 
 // Filtres sidebar (Sprint final)
 let _filter = {
@@ -222,7 +229,12 @@ export function openSDQR(opts = {}) {
   bindBurger(panel);
   // CG-13 — ouverture directe d'un QR existant (bibliothèque VEFA Studio).
   if (opts && opts.editId) { _openExistingQrById(panel, opts.editId); return; }
-  _refreshList(panel);
+  // Charge la flotte puis affiche la bibliothèque « Mes QR » par défaut (sauf
+  // si un deep-link a ouvert le formulaire de création -> classe --create posée).
+  _refreshList(panel).then(() => {
+    const c = panel.querySelector('#sdqr-content');
+    if (!_selectedId && c && !c.classList.contains('sdqr-content--create')) _renderCurrentView(panel);
+  });
   // Deep-link : ouverture directe du formulaire de création sur Concierge
   // (depuis le CTA VEFA Studio). 'immo' | 'general'.
   if (opts && opts.createConcierge) { _openCreateForm(panel, { presetConcierge: opts.createConcierge }); return; }
@@ -372,6 +384,272 @@ function _renderEmptyStudio() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Bibliothèque « Mes QR » (maquettes 13-14) — vue par défaut du Studio
+// quand des QR existent. Deux présentations : GRILLE (cartes) et TABLEAU
+// (lignes denses, colonnes triables, multi-sélection -> actions groupées).
+// Sur le puits navy (.sdqr-content--lib), panneaux blancs, or rare.
+// ══════════════════════════════════════════════════════════════════
+let _libMenuBound = false;
+
+const _LIBICO = {
+  grid:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  rows:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  dots:  '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  arch:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+};
+
+// Groupe les milliers avec une espace ASCII (jamais U+202F/U+00A0).
+function _fmtNum(n) { return String(n ?? 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+// Liste filtrée (mêmes filtres que la sidebar) puis triée (vue tableau).
+function _libQrs() {
+  const list = _applyFilters(_cachedQrs);
+  const { key, dir } = _libSort;
+  const m = dir === 'asc' ? 1 : -1;
+  const val = q => {
+    switch (key) {
+      case 'name':   return (q.name || '').toLowerCase();
+      case 'type':   return (QR_TYPES[q.qr_type]?.label || q.qr_type || '').toLowerCase();
+      case 'mode':   return (q.mode || 'dynamic');
+      case 'status': return (q.status || 'active');
+      default:       return (q.mode || 'dynamic') === 'dynamic' ? (q.scans_total || 0) : -1;
+    }
+  };
+  return list.slice().sort((a, b) => {
+    const va = val(a), vb = val(b);
+    if (va < vb) return -1 * m;
+    if (va > vb) return  1 * m;
+    return 0;
+  });
+}
+
+function _qrCardHtml(q) {
+  const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
+  const isDyn = (q.mode || 'dynamic') === 'dynamic';
+  const isCg  = q.template_id === 'concierge';
+  const isArch = q.status === 'archived';
+  return `
+    <div class="sdqr-qr-card" role="button" tabindex="0" data-qr-id="${_esc(q.id)}">
+      <button class="sdqr-qr-menu-btn" data-menu="${_esc(q.id)}" title="Actions" aria-label="Actions">${_LIBICO.dots}</button>
+      <div class="sdqr-qr-card-top">
+        <span class="sdqr-qr-card-ico">${typeDef.icon}</span>
+        <span class="sdqr-qr-card-name">${_esc(q.name || '(sans nom)')}</span>
+      </div>
+      <div class="sdqr-qr-badges">
+        <span class="sdqr-qr-badge sdqr-qr-badge--type">${_esc(typeDef.label)}</span>
+        <span class="sdqr-qr-badge sdqr-qr-badge--${isDyn ? 'dyn' : 'stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
+        ${isCg   ? '<span class="sdqr-qr-badge sdqr-qr-badge--cg">Concierge</span>' : ''}
+        ${isArch ? '<span class="sdqr-qr-badge sdqr-qr-badge--arch">Archivé</span>' : ''}
+      </div>
+      <div class="sdqr-qr-card-foot">
+        ${isDyn
+          ? `<span class="sdqr-qr-scans">${_fmtNum(q.scans_total || 0)}<small>scans</small></span>`
+          : `<span class="sdqr-qr-scans sdqr-qr-scans--stat">&#8734;<small>hors-ligne</small></span>`}
+        ${q.folder ? `<span class="sdqr-qr-card-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
+      </div>
+    </div>`;
+}
+
+function _qrRowHtml(q) {
+  const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
+  const isDyn = (q.mode || 'dynamic') === 'dynamic';
+  const isArch = q.status === 'archived';
+  const checked = _libSel.has(q.id);
+  return `
+    <tr class="${checked ? 'is-checked' : ''}" data-qr-id="${_esc(q.id)}">
+      <td class="sdqr-tbl-col-check"><input type="checkbox" data-check="${_esc(q.id)}" ${checked ? 'checked' : ''} aria-label="Sélectionner"></td>
+      <td><span class="sdqr-tbl-name">${_esc(q.name || '(sans nom)')}</span></td>
+      <td><span class="sdqr-tbl-type">${typeDef.icon}${_esc(typeDef.label)}</span></td>
+      <td><span class="sdqr-tbl-mode sdqr-tbl-mode--${isDyn ? 'dyn' : 'stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span></td>
+      <td class="sdqr-tbl-scans">${isDyn ? _fmtNum(q.scans_total || 0) : '&#8734;'}</td>
+      <td class="sdqr-tbl-col-hide"><span class="sdqr-tbl-st">${q.folder ? _esc(q.folder) : '&mdash;'}</span></td>
+      <td><span class="sdqr-tbl-st">${isArch ? 'Archivé' : 'Actif'}</span></td>
+      <td class="sdqr-tbl-col-act"><button class="sdqr-qr-menu-btn" data-menu="${_esc(q.id)}" title="Actions" aria-label="Actions">${_LIBICO.dots}</button></td>
+    </tr>`;
+}
+
+function _libCloseMenu() { document.querySelectorAll('.sdqr-qr-pop').forEach(p => p.remove()); }
+
+function _libToggleMenu(panel, q, btn) {
+  const existing = document.querySelector('.sdqr-qr-pop');
+  const wasMine = existing && existing.dataset.for === q.id;
+  _libCloseMenu();
+  if (wasMine) return;
+  const isArch = q.status === 'archived';
+  const pop = document.createElement('div');
+  pop.className = 'sdqr-qr-pop';
+  pop.dataset.for = q.id;
+  pop.style.position = 'fixed';
+  pop.innerHTML = `
+    <button data-act="open">${_LIBICO.eye}Ouvrir</button>
+    <button data-act="archive">${_LIBICO.arch}${isArch ? 'Réactiver' : 'Archiver'}</button>
+    ${isArch ? `<button data-act="delete" class="is-danger">${_LIBICO.trash}Supprimer</button>` : ''}`;
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  const w = pop.offsetWidth || 168;
+  pop.style.top  = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, r.right - w) + 'px';
+  pop.querySelector('[data-act="open"]').onclick    = () => { _libCloseMenu(); _selectFromLib(panel, q.id); };
+  pop.querySelector('[data-act="archive"]').onclick = () => { _libCloseMenu(); _libArchive(panel, [q.id], isArch ? 'active' : 'archived'); };
+  const del = pop.querySelector('[data-act="delete"]');
+  if (del) del.onclick = () => {
+    _libCloseMenu();
+    if (confirm(`Supprimer définitivement « ${q.name || 'ce QR'} » ? Les scans historiques sont conservés.`)) _libDelete(panel, [q.id]);
+  };
+}
+
+function _selectFromLib(panel, id) {
+  _selectedId = id;
+  _renderList(panel);
+  _renderCurrentView(panel);
+}
+
+async function _libArchive(panel, ids, status) {
+  if (!ids.length) return;
+  try {
+    await Promise.all(ids.map(id => _apiUpdate(id, { status })));
+    _libSel.clear();
+    await _refreshList(panel);
+  } catch (e) { console.error('[sdqr-lib] archive', e); }
+  _renderLibrary(panel);
+}
+
+async function _libDelete(panel, ids) {
+  if (!ids.length) return;
+  try {
+    await Promise.all(ids.map(id => _apiDelete(id)));
+    _libSel.clear();
+    await _refreshList(panel);
+  } catch (e) { console.error('[sdqr-lib] delete', e); }
+  _renderLibrary(panel);
+}
+
+function _renderLibrary(panel) {
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+  content.classList.remove('sdqr-content--create');
+  content.classList.add('sdqr-content--lib');
+
+  const qrs = _libQrs();
+  // Purge la sélection des ids qui ne sont plus visibles (filtre/suppression).
+  const visible = new Set(qrs.map(q => q.id));
+  for (const id of [..._libSel]) if (!visible.has(id)) _libSel.delete(id);
+
+  const total = _applyFilters(_cachedQrs).length;
+  const head = `
+    <div class="sdqr-lib-head">
+      <span class="sdqr-lib-title">Mes QR</span>
+      <span class="sdqr-lib-count">${total} code${total > 1 ? 's' : ''}</span>
+      <div class="sdqr-lib-tools">
+        <div class="sdqr-lib-toggle" id="sdqr-lib-toggle">
+          <button class="sdqr-lib-seg ${_libView === 'grid'  ? 'is-active' : ''}" data-libview="grid">${_LIBICO.grid}Grille</button>
+          <button class="sdqr-lib-seg ${_libView === 'table' ? 'is-active' : ''}" data-libview="table">${_LIBICO.rows}Tableau</button>
+        </div>
+      </div>
+    </div>`;
+
+  let body;
+  if (_libView === 'table') {
+    const th = (key, label) =>
+      `<th data-sort="${key}" class="${_libSort.key === key ? 'is-sorted' : ''}">${label}${_libSort.key === key ? ` <span class="sdqr-th-arrow">${_libSort.dir === 'asc' ? '&#9650;' : '&#9660;'}</span>` : ''}</th>`;
+    const allChecked = qrs.length > 0 && qrs.every(q => _libSel.has(q.id));
+    const n = _libSel.size;
+    const selQrs = qrs.filter(q => _libSel.has(q.id));
+    const allArch = n > 0 && selQrs.every(q => q.status === 'archived');
+    const bulk = n > 0 ? `
+      <div class="sdqr-bulk">
+        <span class="sdqr-bulk-count">${n} sélectionné${n > 1 ? 's' : ''}</span>
+        <div class="sdqr-bulk-tools">
+          <button class="sdqr-bulk-btn" data-bulk="archive">${_LIBICO.arch}Archiver</button>
+          ${allArch ? `<button class="sdqr-bulk-btn sdqr-bulk-btn--danger" data-bulk="delete">${_LIBICO.trash}Supprimer</button>` : ''}
+          <button class="sdqr-bulk-btn sdqr-bulk-btn--ghost" data-bulk="clear">Désélectionner</button>
+        </div>
+      </div>` : '';
+    body = bulk + `
+      <div class="sdqr-tbl-wrap">
+        <table class="sdqr-tbl">
+          <thead><tr>
+            <th class="sdqr-tbl-col-check is-static"><input type="checkbox" id="sdqr-tbl-all" ${allChecked ? 'checked' : ''} aria-label="Tout sélectionner"></th>
+            ${th('name', 'Nom')}${th('type', 'Type')}${th('mode', 'Mode')}${th('scans', 'Scans')}
+            <th class="sdqr-tbl-col-hide is-static">Dossier</th>
+            ${th('status', 'Statut')}
+            <th class="sdqr-tbl-col-act is-static"></th>
+          </tr></thead>
+          <tbody>${qrs.map(_qrRowHtml).join('')}</tbody>
+        </table>
+      </div>`;
+  } else {
+    body = `<div class="sdqr-qr-grid">${qrs.map(_qrCardHtml).join('')}</div>`;
+  }
+
+  content.innerHTML = head + body;
+
+  // — Bascule Grille / Tableau —
+  content.querySelectorAll('[data-libview]').forEach(b => b.addEventListener('click', () => {
+    _libView = b.dataset.libview;
+    try { localStorage.setItem('sdqr_lib_view', _libView); } catch (e) {}
+    _renderLibrary(panel);
+  }));
+
+  // — Menus ⋯ (grille + tableau) —
+  content.querySelectorAll('[data-menu]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const q = _cachedQrs.find(x => x.id === btn.dataset.menu);
+    if (q) _libToggleMenu(panel, q, btn);
+  }));
+
+  if (_libView === 'grid') {
+    content.querySelectorAll('.sdqr-qr-card').forEach(card => {
+      const go = () => _selectFromLib(panel, card.dataset.qrId);
+      card.addEventListener('click', go);
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+  } else {
+    // Tri des colonnes
+    content.querySelectorAll('th[data-sort]').forEach(thEl => thEl.addEventListener('click', () => {
+      const key = thEl.dataset.sort;
+      if (_libSort.key === key) _libSort.dir = _libSort.dir === 'asc' ? 'desc' : 'asc';
+      else _libSort = { key, dir: key === 'scans' ? 'desc' : 'asc' };
+      _renderLibrary(panel);
+    }));
+    // Ligne cliquable -> détail (hors case + menu)
+    content.querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', e => {
+      if (e.target.closest('input,button')) return;
+      _selectFromLib(panel, tr.dataset.qrId);
+    }));
+    // Cases à cocher
+    content.querySelectorAll('[data-check]').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) _libSel.add(cb.dataset.check); else _libSel.delete(cb.dataset.check);
+      _renderLibrary(panel);
+    }));
+    const all = content.querySelector('#sdqr-tbl-all');
+    if (all) all.addEventListener('change', () => {
+      if (all.checked) qrs.forEach(q => _libSel.add(q.id)); else _libSel.clear();
+      _renderLibrary(panel);
+    });
+    // Actions groupées
+    content.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => {
+      const ids = [..._libSel];
+      if (b.dataset.bulk === 'clear') { _libSel.clear(); _renderLibrary(panel); }
+      else if (b.dataset.bulk === 'archive') { _libArchive(panel, ids, 'archived'); }
+      else if (b.dataset.bulk === 'delete') {
+        if (confirm(`Supprimer définitivement ${ids.length} QR ? Les scans historiques sont conservés.`)) _libDelete(panel, ids);
+      }
+    }));
+  }
+
+  // Ferme les menus ⋯ au clic extérieur (lié une seule fois).
+  if (!_libMenuBound) {
+    _libMenuBound = true;
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.sdqr-qr-pop') && !e.target.closest('[data-menu]')) _libCloseMenu();
+    }, true);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Vue d'ensemble « tous mes QR » (SDQR S1.3) — lecture seule, thème sombre
 // Rend dans #sdqr-content depuis GET /api/qr/overview. Aucune écriture.
 // ══════════════════════════════════════════════════════════════════
@@ -382,6 +660,7 @@ async function _openOverview(panel, period = '30d') {
   _renderList(panel);  // dé-sélectionne visuellement la liste
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');   // vue d'ensemble = puits clair
   content.innerHTML = `<div style="padding:48px;text-align:center;color:#8a96ad;font-size:13px">Chargement de la vue d'ensemble…</div>`;
   try {
     const data = await _apiOverview(period);
@@ -492,6 +771,9 @@ function _wireShell(panel) {
       panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       _currentView = t.dataset.view;
+      // Studio = accueil « Mes QR » : un clic sur l'onglet revient à la
+      // bibliothèque (désélection du QR courant).
+      if (_currentView === 'studio' && _selectedId) { _selectedId = null; _renderList(panel); }
       _renderCurrentView(panel);
     });
   });
@@ -532,6 +814,7 @@ function _wireShell(panel) {
 function _renderCurrentView(panel) {
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');   // quitte création / bibliothèque
   const qr = _selectedId ? _cachedQrs.find(q => q.id === _selectedId) : null;
 
   if (_currentView === 'stats') {
@@ -551,8 +834,10 @@ function _renderCurrentView(panel) {
     return;
   }
 
-  // Vue Studio (par défaut)
+  // Vue Studio (par défaut) : bibliothèque « Mes QR » si des QR existent,
+  // sinon écran d'accueil (onboarding du premier QR).
   if (!qr) {
+    if (_cachedQrs.length > 0) { _renderLibrary(panel); return; }
     content.innerHTML = _renderEmptyStudio();
     panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
     return;
@@ -720,6 +1005,12 @@ function _renderList(panel) {
       _renderCurrentView(panel);
     });
   });
+
+  // Si la bibliothèque « Mes QR » est la vue active, la re-filtrer en miroir
+  // de la sidebar (recherche / statut / dossier). _renderLibrary n'appelle PAS
+  // _renderList -> pas de récursion.
+  const _c = panel.querySelector('#sdqr-content');
+  if (_c && _c.classList.contains('sdqr-content--lib') && !_selectedId) _renderLibrary(panel);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -783,9 +1074,16 @@ function _openCreateForm(panel, opts = {}) {
   content.innerHTML = `
     <div class="sdqr-form-wrap">
       <div class="sdqr-form-head">
-        <h2 class="sdqr-form-title">Nouveau QR code</h2>
-        <p class="sdqr-form-sub">Choisis le mode et le type, puis remplis les champs. Le QR sera prévisualisé après création.</p>
+        <h2 class="sdqr-form-title">Créer un QR code</h2>
+        <p class="sdqr-form-sub">Choisissez ce qu'il doit faire — on s'occupe du reste.</p>
       </div>
+
+      <!-- ÉTAPE 1 — Contenu (panneau blanc, cadre navy autour) -->
+      <section class="sdqr-step">
+      <header class="sdqr-step-hd">
+        <span class="sdqr-step-num">1</span>
+        <span class="sdqr-step-title">Contenu</span>
+      </header>
 
       <!-- Mode toggle (Statique / Dynamique / Smart) -->
       <div class="sdqr-mode-toggle" id="sdqr-mode-toggle">
@@ -852,18 +1150,26 @@ function _openCreateForm(panel, opts = {}) {
 
       <!-- Form contextuel selon le type -->
       <div class="sdqr-form-grid" id="sdqr-form-fields"></div>
+      </section>
 
-      <!-- Méta commune (nom + tags) -->
-      <div class="sdqr-form-grid" style="margin-top:14px">
-        <label class="sdqr-field sdqr-field--full">
-          <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
-          <input type="text" id="sdqr-f-name" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
-        </label>
-        <label class="sdqr-field sdqr-field--full">
-          <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
-          <input type="text" id="sdqr-f-tags" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
-        </label>
-      </div>
+      <!-- ÉTAPE 2 — Détails (panneau blanc) -->
+      <section class="sdqr-step">
+        <header class="sdqr-step-hd">
+          <span class="sdqr-step-num">2</span>
+          <span class="sdqr-step-title">Détails</span>
+          <span class="sdqr-step-opt">repérage interne</span>
+        </header>
+        <div class="sdqr-form-grid">
+          <label class="sdqr-field sdqr-field--full">
+            <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
+            <input type="text" id="sdqr-f-name" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
+          </label>
+          <label class="sdqr-field sdqr-field--full">
+            <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
+            <input type="text" id="sdqr-f-tags" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
+          </label>
+        </div>
+      </section>
 
       <div class="sdqr-form-actions">
         <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-cancel">Annuler</button>
@@ -875,6 +1181,10 @@ function _openCreateForm(panel, opts = {}) {
       <div class="sdqr-form-msg" id="sdqr-msg" hidden></div>
     </div>
   `;
+
+  // Puits NAVY + panneaux blancs (réalignement maquettes) — uniquement sur
+  // l'écran de création ; retiré dès qu'on revient aux autres vues.
+  content.classList.add('sdqr-content--create');
 
   _renderTypeCards(content);
   _renderModeToggle(content);
@@ -891,8 +1201,9 @@ function _openCreateForm(panel, opts = {}) {
   if (_nameEl && _creating.name) _nameEl.value = _creating.name;
 
   content.querySelector('#sdqr-cancel')?.addEventListener('click', () => {
-    content.innerHTML = _renderEmptyStudio();
-    panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
+    // Annuler -> retour à la bibliothèque « Mes QR » (ou accueil si aucun QR).
+    // _renderCurrentView purge la classe --create et choisit la bonne vue.
+    _renderCurrentView(panel);
   });
   content.querySelector('#sdqr-save')?.addEventListener('click', () => _handleCreate(panel));
 }
@@ -2796,6 +3107,10 @@ function _showMsg(msgEl, text, kind = 'ok') {
 async function _openQrDetail(panel, qr) {
   const content = panel.querySelector('#sdqr-content');
   if (!content || !qr) return;
+  // Le détail vit sur le puits CLAIR : retire les classes de puits navy
+  // (création / bibliothèque), quel que soit l'appelant (_handleCreate y
+  // arrive sans passer par _renderCurrentView).
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');
 
   // Reset l'etat d edition du design quand on switche de QR.
   // _wireDesignPanel le ré-initialisera depuis qr.design lors du premier
@@ -3215,8 +3530,8 @@ async function _openQrDetail(panel, qr) {
       await _apiDelete(qr.id);
       _selectedId = null;
       await _refreshList(panel);
-      panel.querySelector('#sdqr-content').innerHTML = _renderEmptyStudio();
-      panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
+      // Retour à la bibliothèque « Mes QR » (ou accueil si plus aucun QR).
+      _renderCurrentView(panel);
     } catch (e) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
@@ -3651,10 +3966,16 @@ async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
 
 // Mini-aperçus SVG des formes — bien plus ludique que des labels texte.
 // On affiche la forme à 22x22, currentColor, dans la pill.
+// SDQR-3.2 — 7 formes de modules, toutes prouvées scannables (jsQR, banc
+// _design-lab/sdqr/scan-test.html : 10/10 PASS à 300px ET 170px).
 const SHAPE_OPTS = [
   { id: 'square',  label: 'Carré',   svg: `<rect x="4" y="4" width="14" height="14"/>` },
   { id: 'dot',     label: 'Point',   svg: `<circle cx="11" cy="11" r="7"/>` },
   { id: 'rounded', label: 'Arrondi', svg: `<rect x="4" y="4" width="14" height="14" rx="4" ry="4"/>` },
+  { id: 'circle',  label: 'Plein',   svg: `<circle cx="11" cy="11" r="8.5"/>` },
+  { id: 'diamond', label: 'Losange', svg: `<path d="M11 3 L19 11 L11 19 L3 11 Z"/>` },
+  { id: 'cross',   label: 'Croix',   svg: `<rect x="8" y="3" width="6" height="16"/><rect x="3" y="8" width="16" height="6"/>` },
+  { id: 'classy',  label: 'Feuille', svg: `<path d="M8 4 H18 V14 A4 4 0 0 1 14 18 H4 V8 A4 4 0 0 1 8 4 Z"/>` },
 ];
 
 // Mini-aperçus dédiés pour les ancres (anneau + centre composés)
@@ -3698,6 +4019,48 @@ const THEME_PRESETS = [
   { id: 'synthwave', label: 'Synthwave',
     module: 'dot',     outer: 'dot',     inner: 'dot',     color: 'synthwave' },
 ];
+
+// SDQR-3.4 — Palettes PAR AMBIANCE (maquette « Couleurs »). Chaque palette =
+// dégradé (modules) + accent (yeux distincts) + fond. Couleurs CALÉES sur la
+// scannabilité : toutes décodent aux 2 tailles via jsQR (banc scan-test.html).
+// 2 candidates bleu/teal (Malibu, Profondeur) écartées — artefact jsQR au
+// raster élevé. La signature Keystone = Navy & Or (modules navy + yeux or).
+const COLOR_AMBIANCES = [
+  { group: 'Sobres', items: [
+    { id: 'navy-or',      label: 'Navy & Or',         from: '#0a2741', to: '#22406e', angle: 45, accent: '#b08d2e', bg: '#ffffff' },
+    { id: 'indigo-pulsa', label: 'Indigo Pulsa',      from: '#312e81', to: '#4f46e5', angle: 45, accent: '#7c3aed', bg: '#ffffff' },
+    { id: 'aurore',       label: 'Aurore',            from: '#4c1d95', to: '#7c3aed', angle: 45, accent: '#b08d2e', bg: '#ffffff' },
+  ]},
+  { group: 'Chaleureux', items: [
+    { id: 'sunset',       label: 'Coucher de soleil', from: '#7c2d12', to: '#c2410c', angle: 45, accent: '#5b1e0a', bg: '#ffffff' },
+    { id: 'orange',       label: "Jus d'orange",      from: '#7c2d12', to: '#b45309', angle: 45, accent: '#1e293b', bg: '#ffffff' },
+  ]},
+  { group: 'Frais', items: [
+    { id: 'pousse',       label: 'Jeune pousse',      from: '#166534', to: '#15803d', angle: 45, accent: '#7f1d1d', bg: '#ffffff' },
+  ]},
+  { group: 'Bold', items: [
+    { id: 'violet',       label: 'Violet pop',        from: '#6b21a8', to: '#9333ea', angle: 45, accent: '#0e7490', bg: '#ffffff' },
+  ]},
+  { group: 'Néon', items: [
+    { id: 'miracle',      label: 'Miracle',           from: '#0e7490', to: '#a21caf', angle: 45, accent: '#a16207', bg: '#ffffff' },
+  ]},
+];
+
+function _applyAmbiance(pal) {
+  _editingDesign.gradient = { enabled: true, from: pal.from, to: pal.to, angle: pal.angle ?? 45 };
+  _editingDesign.bg = pal.bg || '#ffffff';
+  if (!_editingDesign.eye) _editingDesign.eye = {};
+  _editingDesign.eye.distinct = true;
+  _editingDesign.eye.color = pal.accent;
+}
+
+function _ambianceActive(pal, d) {
+  const lc = v => String(v || '').toLowerCase();
+  return !!(d.gradient && d.gradient.enabled)
+    && lc(d.gradient.from) === lc(pal.from) && lc(d.gradient.to) === lc(pal.to)
+    && lc(d.bg) === lc(pal.bg)
+    && !!d.eye?.distinct && lc(d.eye.color) === lc(pal.accent);
+}
 
 // Une carte de palette couleur est active si le design courant lui correspond.
 function _colorPresetActive(p, d) {
@@ -3772,17 +4135,22 @@ function _renderDesignPanel(qr) {
         <!-- COULEURS : palettes + custom -->
         <div class="sdqr-design-section">
           <div class="sdqr-design-section-title">Couleurs</div>
-          <div class="sdqr-pal-grid">
-            ${COLOR_PRESETS.map(p => {
-              const bg = p.gradient
-                ? `linear-gradient(${p.gradient.angle}deg, ${p.gradient.from}, ${p.gradient.to})`
-                : p.fg;
-              return `
-                <button class="sdqr-pal-card ${_colorPresetActive(p, d) ? 'is-on' : ''}" data-color-preset="${p.id}" title="${_esc(p.label)}">
-                  <span class="sdqr-pal-swatch" style="background:${bg}"></span>
-                  <span class="sdqr-pal-name">${_esc(p.label)}</span>
-                </button>`;
-            }).join('')}
+          <div class="sdqr-design-hint">Le dégradé colore les modules &middot; la pastille d'accent colore les yeux.</div>
+          <div class="sdqr-amb-groups">
+            ${COLOR_AMBIANCES.map(g => `
+              <div class="sdqr-amb-group">
+                <div class="sdqr-amb-label">${_esc(g.group)}</div>
+                <div class="sdqr-amb-row">
+                  ${g.items.map(pal => `
+                    <button class="sdqr-amb-card ${_ambianceActive(pal, d) ? 'is-on' : ''}" data-ambiance="${pal.id}" title="${_esc(pal.label)}">
+                      <span class="sdqr-amb-top">
+                        <span class="sdqr-amb-bar" style="background:linear-gradient(90deg, ${pal.from}, ${pal.to})"></span>
+                        <span class="sdqr-amb-accent" style="background:${pal.accent}" title="Couleur des yeux"></span>
+                      </span>
+                      <span class="sdqr-amb-name">${_esc(pal.label)}</span>
+                    </button>`).join('')}
+                </div>
+              </div>`).join('')}
           </div>
 
           <div class="sdqr-design-row">
@@ -3810,6 +4178,17 @@ function _renderDesignPanel(qr) {
               <input type="range" id="sdqr-grad-angle" min="0" max="360" step="5" value="${d.gradient.angle}">
               <span class="sdqr-slider-val" id="sdqr-grad-angle-val">${d.gradient.angle}°</span>
             </div>
+          </div>
+
+          <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Yeux</span>
+            <div class="sdqr-shape-pills" data-eye-mode>
+              <button class="sdqr-shape-pill ${!d.eye.distinct ? 'is-active' : ''}" data-eye="inherit">Comme modules</button>
+              <button class="sdqr-shape-pill ${d.eye.distinct ? 'is-active' : ''}" data-eye="distinct">Distincte</button>
+            </div>
+          </div>
+          <div class="sdqr-color-grid" data-when-eye ${d.eye.distinct ? '' : 'hidden'}>
+            ${_colorField('Couleur des yeux', 'sdqr-eye-color', d.eye.color)}
           </div>
         </div>
 
@@ -3844,6 +4223,23 @@ function _renderDesignPanel(qr) {
               </div>
             </div>
           ` : ''}
+        </div>
+
+        <!-- CADRE + accroche (autour du QR — scannabilité préservée) -->
+        <div class="sdqr-design-section">
+          <div class="sdqr-design-section-title">Cadre &amp; accroche</div>
+          <div class="sdqr-shape-pills" data-frame-style>
+            ${FRAME_OPTS.map(f => `<button class="sdqr-shape-pill ${d.frame.style === f.id ? 'is-active' : ''}" data-frame="${f.id}">${_esc(f.label)}</button>`).join('')}
+          </div>
+          <div data-when-frame ${d.frame.style === 'none' ? 'hidden' : ''}>
+            <label class="sdqr-field sdqr-field--full" style="margin-top:12px">
+              <span class="sdqr-field-lbl">Accroche</span>
+              <input type="text" id="sdqr-frame-text" class="sdqr-input" maxlength="28" value="${_esc(d.frame.text)}" placeholder="Scannez-moi">
+            </label>
+            <div class="sdqr-color-grid" style="margin-top:10px">
+              ${_colorField('Couleur du cadre', 'sdqr-frame-color', d.frame.color)}
+            </div>
+          </div>
         </div>
 
         <!-- Contrast checker + actions -->
@@ -4061,6 +4457,46 @@ function _wireDesignPanel(root, qr, encodedForQr) {
     _liveRerender();
   });
 
+  // Cadre & accroche (dessiné AUTOUR du QR → n'affecte pas la scannabilité)
+  if (!_editingDesign.frame) _editingDesign.frame = { ...DEFAULT_DESIGN.frame };
+  panel.querySelectorAll('[data-frame-style] .sdqr-shape-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _editingDesign.frame.style = btn.dataset.frame;
+      panel.querySelectorAll('[data-frame-style] .sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+      panel.querySelectorAll('[data-when-frame]').forEach(el => el.hidden = btn.dataset.frame === 'none');
+      _liveRerender();
+    });
+  });
+  panel.querySelector('#sdqr-frame-text')?.addEventListener('input', e => {
+    _editingDesign.frame.text = e.target.value;
+    _liveRerender();
+  });
+  _bindColor('sdqr-frame-color', v => { _editingDesign.frame.color = v; });
+
+  // Palettes PAR AMBIANCE (dégradé modules + accent yeux, en 1 clic)
+  panel.querySelectorAll('[data-ambiance]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      let pal = null;
+      for (const g of COLOR_AMBIANCES) { const f = g.items.find(p => p.id === btn.dataset.ambiance); if (f) { pal = f; break; } }
+      if (!pal) return;
+      _applyAmbiance(pal);
+      _refreshDesignPanelDom(root, qr, encodedForQr);
+    });
+  });
+
+  // Couleur des YEUX : héritée (comme modules) / distincte (accent)
+  if (!_editingDesign.eye) _editingDesign.eye = { distinct: false, color: '#b08d2e' };
+  panel.querySelectorAll('[data-eye-mode] .sdqr-shape-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _editingDesign.eye.distinct = btn.dataset.eye === 'distinct';
+      panel.querySelectorAll('[data-eye-mode] .sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
+      panel.querySelectorAll('[data-when-eye]').forEach(el => el.hidden = !_editingDesign.eye.distinct);
+      _updateContrastBadge(root);
+      _liveRerender();
+    });
+  });
+  _bindColor('sdqr-eye-color', v => { _editingDesign.eye.color = v; });
+
   // Logo upload (via input file click)
   panel.querySelector('#sdqr-logo-input')?.addEventListener('change', async e => {
     const file = e.target.files?.[0];
@@ -4087,6 +4523,15 @@ function _wireDesignPanel(root, qr, encodedForQr) {
   panel.querySelector('#sdqr-save-design')?.addEventListener('click', async () => {
     const btn = panel.querySelector('#sdqr-save-design');
     if (!btn) return;
+    // Garde-fou contraste à l'enregistrement : en dégradé, on évalue la
+    // PIRE borne (from/to). Sous 3:1, on prévient avant de figer un design
+    // que les lecteurs pourront refuser de scanner.
+    const c = _designContrast(_editingDesign);
+    if (c && c.level !== 'ok' && !confirm(
+      `⚠️ Contraste ${c.level === 'bad' ? 'insuffisant' : 'limite'} (${c.ratio.toFixed(1)}:1).\n\n` +
+      `La couleur la plus claire du QR passe sous le seuil de 3:1 recommandé : ` +
+      `certains lecteurs peineront à le scanner.\n\nEnregistrer quand même ?`
+    )) return;
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = '⏳ …';
     try {
@@ -4134,18 +4579,47 @@ function _refreshDesignPanelDom(root, qr, encodedForQr) {
   if (newPanel && wasOpen) newPanel.open = true;
 }
 
+// Évalue le contraste réel d'un design. CLÉ : en dégradé, les DEUX bornes
+// (from ET to) peignent des modules → on retient la PIRE (ratio minimal).
+// Sinon une borne claire (ex. l'or Keystone #c9a84c ~2.3:1 sur blanc)
+// passait le garde-fou alors que la moitié dorée des modules tombe sous le
+// seuil pratique de 3:1 et casse la scannabilité. Renvoie { fg, bg, ratio,
+// level } de la pire borne, ou null si non évaluable (pas de fg / fond
+// transparent).
+function _designContrast(design) {
+  if (!design) return null;
+  const bg = design.bg;
+  if (!bg || bg === 'transparent') return null;
+  const fgs = design.gradient?.enabled
+    ? [design.gradient.from, design.gradient.to]
+    : [design.fg];
+  // Les YEUX (couleur d'accent distincte) sont des finder patterns critiques :
+  // un accent trop clair (ex: or vif sur blanc) casse la détection. On l'inclut
+  // dans le pire-cas du contraste pour que le garde-fou le signale.
+  if (design.eye?.distinct && design.eye.color) fgs.push(design.eye.color);
+  if (fgs.some(c => !c)) return null;
+  let worst = null;
+  for (const fg of fgs) {
+    const ratio = contrastRatio(fg, bg);
+    if (!worst || ratio < worst.ratio) worst = { fg, bg, ratio, level: contrastLevel(fg, bg) };
+  }
+  return worst;
+}
+
 function _updateContrastBadge(root) {
   const el = root.querySelector('#sdqr-contrast');
   if (!el || !_editingDesign) return;
-  const fg = _editingDesign.gradient.enabled ? _editingDesign.gradient.from : _editingDesign.fg;
-  const bg = _editingDesign.bg;
-  if (!fg || !bg || bg === 'transparent') { el.innerHTML = ''; return; }
-  const ratio = contrastRatio(fg, bg);
-  const level = contrastLevel(fg, bg);
+  const c = _designContrast(_editingDesign);
+  if (!c) { el.innerHTML = ''; return; }
+  const { ratio, level } = c;
+  // En dégradé, c'est la borne la plus claire qui pèche → on le précise
+  // pour que l'utilisateur comprenne pourquoi un QR « navy » est signalé.
+  const grad = (_editingDesign.gradient?.enabled && level !== 'ok')
+    ? ' (borne claire du dégradé)' : '';
   const labels = {
     ok  : `Contraste excellent (${ratio.toFixed(1)}:1) — scannabilité optimale`,
-    warn: `Contraste limite (${ratio.toFixed(1)}:1) — certains scanners pourront peiner`,
-    bad : `Contraste insuffisant (${ratio.toFixed(1)}:1) — le QR risque d'être illisible`,
+    warn: `Contraste limite (${ratio.toFixed(1)}:1)${grad} — certains scanners pourront peiner`,
+    bad : `Contraste insuffisant (${ratio.toFixed(1)}:1)${grad} — le QR risque d'être illisible`,
   };
   el.className = `sdqr-contrast sdqr-contrast--${level}`;
   el.innerHTML = `
