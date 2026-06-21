@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc de scannabilité (jsQR sur le vrai moteur)</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0f1d3a; color:#e8edf8; margin:0; padding:24px; }
+  h1 { font-size:18px; }
+  .sub { color:#9fb0cc; font-size:13px; margin-bottom:18px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; background:#16243f; border-radius:10px; overflow:hidden; }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.08); }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9fb0cc; }
+  .ok { color:#7ee0b5; font-weight:700; }
+  .ko { color:#ff9a9a; font-weight:700; }
+  .samples { display:flex; flex-wrap:wrap; gap:14px; margin-top:22px; }
+  .samp { background:#fff; border-radius:8px; padding:8px; }
+  .samp div { text-align:center; font-size:10px; color:#1b2a4a; margin-top:4px; }
+  #summary { font-size:15px; font-weight:700; margin:14px 0; }
+</style>
+</head>
+<body>
+<h1>Banc de scannabilité SDQR — jsQR sur le VRAI moteur (<code>renderQrCustom</code>)</h1>
+<p class="sub">Chaque design est rendu par le moteur de prod, rasterisé puis décodé par jsQR à 300px ET 170px (pire cas). PASS = le texte décodé == l'URL attendue aux deux tailles.</p>
+<div id="summary">Chargement…</div>
+<table id="results"><thead><tr><th>Design (module / anneau / centre / couleur)</th><th>300px</th><th>170px</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+<div class="samples" id="samples"></div>
+
+<script type="module">
+// Cache-bust : force un fetch frais du module à chaque chargement.
+const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+
+const TXT = 'https://protein-keystone.com/r/AB12CD34';
+
+async function svgToImageData(svg, size) {
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);   // fond blanc si bg transparent
+  ctx.drawImage(img, 0, 0, size, size);
+  return { id: ctx.getImageData(0, 0, size, size), canvas: c };
+}
+
+async function decodeAt(design, size) {
+  const svg = await renderQrCustom(TXT, design, size);
+  const { id, canvas } = await svgToImageData(svg, size);
+  const res = jsQR(id.data, size, size);
+  return { ok: !!res && res.data === TXT, got: res ? res.data : null, canvas };
+}
+
+// Batterie — modules x ancres x couleur. window.__SCAN_DESIGNS peut être
+// surchargé avant le chargement pour tester d'autres formes.
+const sq = { outer:{shape:'square'}, inner:{shape:'square'} };
+const DESIGNS = window.__SCAN_DESIGNS || [
+  { label: 'square / square / square (défaut)', d: { module:{shape:'square'}, anchor:sq } },
+  { label: 'dot / dot / dot',                   d: { module:{shape:'dot'},    anchor:{outer:{shape:'dot'},   inner:{shape:'dot'}} } },
+  { label: 'rounded / rounded / rounded',       d: { module:{shape:'rounded'},anchor:{outer:{shape:'rounded'},inner:{shape:'rounded'}} } },
+  // — NOUVELLES formes de modules (couleur pleine, ancres carrées) —
+  { label: 'diamond (losange) / square',        d: { module:{shape:'diamond'},anchor:sq } },
+  { label: 'circle (point plein) / square',     d: { module:{shape:'circle'}, anchor:sq } },
+  { label: 'cross (croix) / square',            d: { module:{shape:'cross'},  anchor:sq } },
+  { label: 'classy (feuille) / square',         d: { module:{shape:'classy'}, anchor:sq } },
+  // combinaisons réalistes des nouvelles formes avec ancres stylées
+  { label: 'diamond / rounded / dot',           d: { module:{shape:'diamond'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}} } },
+  { label: 'classy / rounded / rounded',        d: { module:{shape:'classy'}, anchor:{outer:{shape:'rounded'},inner:{shape:'rounded'}} } },
+  { label: 'circle / dot / dot (full rond)',    d: { module:{shape:'circle'}, anchor:{outer:{shape:'dot'},   inner:{shape:'dot'}} } },
+  // — DÉGRADÉ : témoin de régression. La borne claire (or #c9a84c ~2.3:1
+  //   sur blanc) tombe sous le seuil pratique de 3:1 → ce design DOIT
+  //   échouer, et le garde-fou _updateContrastBadge (sdqr.js) doit le
+  //   signaler en « warn » (il évalue from ET to, pas seulement from). —
+  { label: 'dot / gradient navy→or 45° (Keystone) — borne claire <3:1, DOIT échouer', d: { module:{shape:'dot'}, anchor:sq, gradient:{ enabled:true, from:'#1B2A4A', to:'#c9a84c', angle:45 } } },
+  // — COULEUR D'ACCENT DES YEUX (signature navy + yeux or) : l'or sur blanc
+  //   est ~2:1 → les yeux dorés risquent de casser la détection. À mesurer. —
+  { label: 'ACCENT yeux OR clair #c9a84c sur navy (signature ?)', d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, eye:{ distinct:true, color:'#c9a84c' } } },
+  { label: 'ACCENT yeux OR moyen #b08d2e sur navy',               d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, eye:{ distinct:true, color:'#b08d2e' } } },
+  { label: 'ACCENT yeux OR foncé #8a6d1f sur navy',               d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, eye:{ distinct:true, color:'#8a6d1f' } } },
+  { label: 'ACCENT yeux indigo #4338ca sur navy (contraste OK)',  d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, eye:{ distinct:true, color:'#4338ca' } } },
+  // — PALETTES PAR AMBIANCE (candidates) : main = dégradé sur les modules,
+  //   accent = yeux distincts. Toutes doivent décoder aux 2 tailles. —
+  ...[
+    ['Navy & Or',        '#0a2741','#22406e','#b08d2e'],
+    ['Indigo Pulsa',     '#312e81','#4f46e5','#7c3aed'],
+    ['Aurore',           '#4c1d95','#7c3aed','#b08d2e'],
+    ['Coucher de soleil','#7c2d12','#c2410c','#5b1e0a'],
+    ['Jus d_orange',     '#7c2d12','#b45309','#1e293b'],
+    ['Malibu',           '#134e5e','#155e75','#1e293b'],
+    ['Jeune pousse',     '#166534','#15803d','#7f1d1d'],
+    ['Profondeur',       '#1e3a8a','#3730a3','#854d0e'],
+    ['Violet pop',       '#6b21a8','#9333ea','#0e7490'],
+    ['Miracle',          '#0e7490','#a21caf','#a16207'],
+  ].map(([label, from, to, accent]) => ({
+    label: 'PALETTE ' + label + ' (main ' + from + '→' + to + ' · yeux ' + accent + ')',
+    d: { module:{shape:'rounded'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, bg:'#ffffff',
+         gradient:{ enabled:true, from, to, angle:45 }, eye:{ distinct:true, color:accent } },
+  })),
+];
+
+const tbody = document.querySelector('#results tbody');
+const samples = document.getElementById('samples');
+let passed = 0;
+
+for (const { label, d } of DESIGNS) {
+  let r300, r170;
+  try { r300 = await decodeAt(d, 300); } catch (e) { r300 = { ok:false, got:'ERR '+e.message }; }
+  try { r170 = await decodeAt(d, 170); } catch (e) { r170 = { ok:false, got:'ERR '+e.message }; }
+  const pass = r300.ok && r170.ok;
+  if (pass) passed++;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${label}</td>
+    <td class="${r300.ok?'ok':'ko'}">${r300.ok?'PASS':'FAIL'}</td>
+    <td class="${r170.ok?'ok':'ko'}">${r170.ok?'PASS':'FAIL'}</td>
+    <td class="${pass?'ok':'ko'}">${pass?'✓ scannable':'✗ ' + (r300.got||r170.got||'illisible')}</td>`;
+  tbody.appendChild(tr);
+  if (r300.canvas) {
+    const wrap = document.createElement('div'); wrap.className='samp';
+    r300.canvas.style.width='120px'; r300.canvas.style.height='120px';
+    wrap.appendChild(r300.canvas);
+    const cap = document.createElement('div'); cap.textContent = label.split(' (')[0]; wrap.appendChild(cap);
+    samples.appendChild(wrap);
+  }
+}
+
+const sum = document.getElementById('summary');
+sum.textContent = `${passed}/${DESIGNS.length} designs scannables aux 2 tailles`;
+sum.className = passed === DESIGNS.length ? 'ok' : 'ko';
+window.__SCAN_RESULT = { passed, total: DESIGNS.length };
+</script>
+</body>
+</html>

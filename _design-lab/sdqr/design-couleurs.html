@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — section Couleurs (ambiances + yeux distincts)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>
+  body { margin:0; background:#f3f5f9; padding:28px; }
+  .wrap { max-width: 640px; margin:0 auto; background:#fff; border:1px solid rgba(27,42,74,.1); border-radius:14px; padding:20px; box-shadow:0 2px 12px rgba(8,15,35,.08); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sdqr-design-section">
+    <div class="sdqr-design-section-title">Couleurs</div>
+    <div class="sdqr-design-hint">Le dégradé colore les modules &middot; la pastille d'accent colore les yeux.</div>
+    <div class="sdqr-amb-groups" id="groups"></div>
+
+    <div class="sdqr-design-row" style="margin-top:14px">
+      <span class="sdqr-design-lbl">Yeux</span>
+      <div class="sdqr-shape-pills" data-eye-mode>
+        <button class="sdqr-shape-pill">Comme modules</button>
+        <button class="sdqr-shape-pill is-active">Distincte</button>
+      </div>
+    </div>
+    <div class="sdqr-color-grid" data-when-eye>
+      <label class="sdqr-color-field">
+        <span class="sdqr-design-lbl-sm">Couleur des yeux</span>
+        <span class="sdqr-color-row">
+          <input type="color" id="sdqr-eye-color" value="#b08d2e">
+          <input type="text" class="sdqr-hex" value="#b08d2e" maxlength="7">
+        </span>
+      </label>
+    </div>
+  </div>
+</div>
+<script>
+const AMB = [
+  { group:'Sobres', items:[
+    ['Navy & Or','#0a2741','#22406e','#b08d2e',true],
+    ['Indigo Pulsa','#312e81','#4f46e5','#7c3aed',false],
+    ['Aurore','#4c1d95','#7c3aed','#b08d2e',false] ]},
+  { group:'Chaleureux', items:[
+    ['Coucher de soleil','#7c2d12','#c2410c','#5b1e0a',false],
+    ["Jus d'orange",'#7c2d12','#b45309','#1e293b',false] ]},
+  { group:'Frais', items:[ ['Jeune pousse','#166534','#15803d','#7f1d1d',false] ]},
+  { group:'Bold', items:[ ['Violet pop','#6b21a8','#9333ea','#0e7490',false] ]},
+  { group:'Néon', items:[ ['Miracle','#0e7490','#a21caf','#a16207',false] ]},
+];
+document.getElementById('groups').innerHTML = AMB.map(g => `
+  <div class="sdqr-amb-group">
+    <div class="sdqr-amb-label">${g.group}</div>
+    <div class="sdqr-amb-row">
+      ${g.items.map(([label,from,to,accent,on]) => `
+        <button class="sdqr-amb-card ${on?'is-on':''}">
+          <span class="sdqr-amb-top">
+            <span class="sdqr-amb-bar" style="background:linear-gradient(90deg, ${from}, ${to})"></span>
+            <span class="sdqr-amb-accent" style="background:${accent}"></span>
+          </span>
+          <span class="sdqr-amb-name">${label}</span>
+        </button>`).join('')}
+    </div>
+  </div>`).join('');
+</script>
+</body>
+</html>

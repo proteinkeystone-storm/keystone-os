@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — sections Formes + Cadre (vrai CSS)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>
+  body { margin:0; background:#f3f5f9; padding:28px; }
+  .wrap { max-width: 560px; margin:0 auto; background:#fff; border:1px solid rgba(27,42,74,.1); border-radius:14px; padding:20px; box-shadow:0 2px 12px rgba(8,15,35,.08); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="sdqr-design-section">
+    <div class="sdqr-design-section-title">Formes</div>
+    <div class="sdqr-design-row"><span class="sdqr-design-lbl">Modules</span></div>
+    <div class="sdqr-shape-pills">
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="4" y="4" width="14" height="14"/></svg><span class="sdqr-shape-pill-lbl">Carré</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><circle cx="11" cy="11" r="7"/></svg><span class="sdqr-shape-pill-lbl">Point</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="4" y="4" width="14" height="14" rx="4" ry="4"/></svg><span class="sdqr-shape-pill-lbl">Arrondi</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><circle cx="11" cy="11" r="8.5"/></svg><span class="sdqr-shape-pill-lbl">Plein</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual is-active"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><path d="M11 3 L19 11 L11 19 L3 11 Z"/></svg><span class="sdqr-shape-pill-lbl">Losange</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><rect x="8" y="3" width="6" height="16"/><rect x="3" y="8" width="16" height="6"/></svg><span class="sdqr-shape-pill-lbl">Croix</span></button>
+      <button class="sdqr-shape-pill sdqr-shape-pill--visual"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg"><path d="M8 4 H18 V14 A4 4 0 0 1 14 18 H4 V8 A4 4 0 0 1 8 4 Z"/></svg><span class="sdqr-shape-pill-lbl">Feuille</span></button>
+    </div>
+  </div>
+
+  <div class="sdqr-design-section">
+    <div class="sdqr-design-section-title">Cadre &amp; accroche</div>
+    <div class="sdqr-shape-pills" data-frame-style>
+      <button class="sdqr-shape-pill">Aucun</button>
+      <button class="sdqr-shape-pill is-active">Bandeau</button>
+      <button class="sdqr-shape-pill">Encadré</button>
+      <button class="sdqr-shape-pill">Pastille</button>
+      <button class="sdqr-shape-pill">Bandeau haut</button>
+    </div>
+    <div data-when-frame>
+      <label class="sdqr-field sdqr-field--full" style="margin-top:12px">
+        <span class="sdqr-field-lbl">Accroche</span>
+        <input type="text" id="sdqr-frame-text" class="sdqr-input" maxlength="28" value="Scannez-moi" placeholder="Scannez-moi">
+      </label>
+      <div class="sdqr-color-grid" style="margin-top:10px">
+        <label class="sdqr-color-field">
+          <span class="sdqr-design-lbl-sm">Couleur du cadre</span>
+          <span class="sdqr-color-row">
+            <input type="color" id="sdqr-frame-color" value="#1B2A4A">
+            <input type="text" class="sdqr-hex" id="sdqr-frame-color-hex" value="#1B2A4A" maxlength="7" spellcheck="false" autocomplete="off">
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
