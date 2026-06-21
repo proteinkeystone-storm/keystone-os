@@ -7416,11 +7416,14 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   margin-bottom: 14px;
 }
 .sdqr-fam-pill {
-  padding: 8px 16px; border-radius: 9px;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 15px; border-radius: 9px;
   border: 1px solid var(--bd); background: transparent;
   color: var(--tx2); font-family: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: background .15s, border-color .15s, color .15s;
 }
+.sdqr-fam-ico { display: inline-flex; width: 17px; height: 17px; flex: none; }
+.sdqr-fam-ico svg { width: 100%; height: 100%; }
 .sdqr-fam-pill:hover { border-color: var(--gold); color: var(--text); }
 .sdqr-fam-pill.is-active { background: var(--gold3); border-color: var(--gold); color: var(--gold); }
 .sdqr-type-cards-grid {

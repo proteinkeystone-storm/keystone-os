@@ -900,9 +900,12 @@ function _openCreateForm(panel, opts = {}) {
 // SDQR S2 — types groupés en FAMILLES (accordéon) : un seul chapitre déplié.
 // On ne montre que les familles ayant au moins un type présent dans QR_TYPES.
 const _TYPE_FAMILIES = [
-  { id: 'liens',    label: 'Liens',    types: ['url', 'text'] },
-  { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'tel'] },
-  { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'] },
+  { id: 'liens',    label: 'Liens',    types: ['url', 'text'],
+    ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
+  { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'tel'],
+    ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+  { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'],
+    ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' },
 ];
 function _familyOfType(typeId) {
   const f = _TYPE_FAMILIES.find(fam => fam.types.includes(typeId));
@@ -919,7 +922,7 @@ function _renderTypeCards(root) {
   const active = fams.find(f => f.id === _creating.family) || fams[0];
 
   const pills = fams.map(f =>
-    `<button class="sdqr-fam-pill ${f.id === active.id ? 'is-active' : ''}" data-fam="${f.id}">${f.label}</button>`
+    `<button class="sdqr-fam-pill ${f.id === active.id ? 'is-active' : ''}" data-fam="${f.id}"><span class="sdqr-fam-ico">${f.ico}</span>${f.label}</button>`
   ).join('');
   const cards = active.types.filter(t => QR_TYPES[t]).map(id => {
     const def = QR_TYPES[id];
