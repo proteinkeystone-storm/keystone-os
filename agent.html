@@ -298,9 +298,10 @@
     /* SA-11.2/11.3 — sélecteur de langue : bouton ROND BORDÉ (cohérent avec les
        autres CTA du header) + menu déroulant CUSTOM (sombre, blur, aligné). */
     .sav2-langwrap { position: relative; flex-shrink: 0; }
-    .sav2-lang { border: 1.5px solid rgba(164,162,255,.42); color: #c2c0ff;
-      font: 800 13px/1 -apple-system, system-ui, sans-serif; letter-spacing: .03em; }
-    .sav2-lang.is-open { color: #fff; border-color: rgba(164,162,255,.85); }
+    /* Anneau = cercle SVG en currentColor (IDENTIQUE aux boutons voix/téléphone),
+       pas une bordure CSS → même couleur, même épaisseur, même diamètre. */
+    .sav2-lang.is-open { color: #fff; }
+    .sav2-lang.is-open svg { filter: drop-shadow(0 0 6px rgba(160,160,255,.6)); }
     .sav2-langmenu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
       min-width: 170px; padding: 6px; display: none; flex-direction: column; gap: 2px;
       background: rgba(16,16,32,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
@@ -478,6 +479,13 @@
       _lang = l;
       try { sessionStorage.setItem('sa_lang_' + _slug, l); } catch (_) {}
     }
+    // Pastille de langue : MÊME anneau que les boutons voix/téléphone (cercle
+    // SVG en currentColor, viewBox 24, r=10, stroke 1.5) + le code au centre.
+    function langGlyph(code) {
+      return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+        + '<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>'
+        + '<text x="12" y="12" dy=".34em" text-anchor="middle" font-size="9" font-weight="700" font-family="-apple-system, system-ui, sans-serif" fill="currentColor">' + code + '</text></svg>';
+    }
     // Accueil : message personnalisé de l'agent SI on est dans sa langue native ;
     // sinon un accueil générique localisé (le contenu propriétaire multilingue
     // viendra en SA-11.3). Évite « UI en anglais + accueil en français ».
@@ -498,7 +506,7 @@
       const rgpd = document.querySelector('.sav2-rgpd');
       if (rgpd) rgpd.textContent = t('rgpd');
       const langBtn = document.getElementById('sa-lang');
-      if (langBtn) { langBtn.setAttribute('aria-label', t('lang')); langBtn.title = t('lang'); langBtn.textContent = _lang.toUpperCase(); }
+      if (langBtn) { langBtn.setAttribute('aria-label', t('lang')); langBtn.title = t('lang'); langBtn.innerHTML = langGlyph(_lang.toUpperCase()); }
       if (_showingGreeting) setAnswerV2(greetingText());
     }
 
@@ -1135,7 +1143,7 @@
             : `<div class="sav2-top-spacer"></div>`}
           ${phone ? `<a class="sav2-top-btn" href="tel:${escape(phone.replace(/[^0-9+]/g, ''))}" aria-label="${escape(t('call'))}">${SVG_V2.phone}</a>` : ''}
           <div class="sav2-langwrap">
-            <button class="sav2-top-btn sav2-lang" id="sa-lang" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${escape(t('lang'))}" title="${escape(t('lang'))}">${_lang.toUpperCase()}</button>
+            <button class="sav2-top-btn sav2-lang" id="sa-lang" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${escape(t('lang'))}" title="${escape(t('lang'))}">${langGlyph(_lang.toUpperCase())}</button>
             <div class="sav2-langmenu" id="sa-langmenu" role="menu">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español'], ['de', 'Deutsch']].map(([v, lbl]) => `<button class="sav2-langopt${v === _lang ? ' is-active' : ''}" type="button" role="menuitemradio" aria-checked="${v === _lang ? 'true' : 'false'}" data-l="${v}">${lbl}<span class="sav2-langtick" aria-hidden="true">✓</span></button>`).join('')}</div>
           </div>
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? escape(t('voiceOn')) : escape(t('voiceOff'))}">${SVG_V2.voice}</button>` : ''}
