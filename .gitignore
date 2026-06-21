@@ -24,3 +24,6 @@ workers/package-lock.json
 
 # Smart QR templates : dossier éphémère pour preview locale (scripts/preview-*.mjs)
 _preview/
+
+# Sauvegardes/exports de la base PROD (données — jamais dans git)
+_backups/
