@@ -524,6 +524,120 @@ export async function handleListQr(request, env) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// GET /api/qr/overview — agrégats « tous mes QR » du tenant (SDQR S1.3)
+// Query : period=7d|30d|90d|all (défaut 30d). 100 % LECTURE SEULE.
+// Retour : { totals, byDay[], leaderboard[], byFolder[], byType[], watch[] }
+// RGPD-safe : aucune PII, uniquement des agrégats. Aucune écriture base.
+// ══════════════════════════════════════════════════════════════════
+export async function handleQrOverview(request, env) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
+  const url    = new URL(request.url);
+  const period = url.searchParams.get('period') || '30d';
+  const days   = PERIOD_DAYS[period] ?? 30;
+
+  const { results: rows } = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND deleted_at IS NULL`)
+    .bind(tenantId).all();
+  const qrs = (rows || []).map(r => { try { return JSON.parse(r.data); } catch { return null; } }).filter(Boolean);
+  const qrActive = qrs.filter(q => (q.status || 'active') === 'active').length;
+  const shortIds = qrs.map(q => q.short_id).filter(Boolean);
+
+  if (!shortIds.length) {
+    return json({
+      totals: { scans_total: 0, unique: 0, qr_total: qrs.length, qr_active: qrActive, week: 0, week_delta: 0 },
+      byDay: [], leaderboard: [], byFolder: [], byType: [], watch: [],
+    }, 200, origin);
+  }
+
+  const ph = shortIds.map(() => '?').join(',');
+  const periodWhere = days ? `AND ts >= datetime('now', '-${days} days')` : '';
+
+  const totals = await env.DB.prepare(`
+    SELECT COUNT(*) AS total, COUNT(DISTINCT ua_hash) AS uniq_count,
+      SUM(CASE WHEN ts >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS week,
+      SUM(CASE WHEN ts >= datetime('now','-14 days') AND ts < datetime('now','-7 days') THEN 1 ELSE 0 END) AS prev_week
+    FROM qr_scans WHERE short_id IN (${ph}) ${periodWhere}
+  `).bind(...shortIds).first() || { total: 0, uniq_count: 0, week: 0, prev_week: 0 };
+
+  const { results: byDay } = await env.DB.prepare(`
+    SELECT date(ts) AS day, COUNT(*) AS cnt FROM qr_scans
+    WHERE short_id IN (${ph}) ${periodWhere} GROUP BY day ORDER BY day ASC
+  `).bind(...shortIds).all();
+
+  const { results: perPeriod } = await env.DB.prepare(`
+    SELECT short_id, COUNT(*) AS cnt FROM qr_scans
+    WHERE short_id IN (${ph}) ${periodWhere} GROUP BY short_id
+  `).bind(...shortIds).all();
+  const cntMap = new Map((perPeriod || []).map(r => [r.short_id, r.cnt]));
+
+  const { results: perMeta } = await env.DB.prepare(`
+    SELECT short_id, MAX(ts) AS last_ts,
+      SUM(CASE WHEN ts >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS w,
+      SUM(CASE WHEN ts >= datetime('now','-14 days') AND ts < datetime('now','-7 days') THEN 1 ELSE 0 END) AS pw
+    FROM qr_scans WHERE short_id IN (${ph}) GROUP BY short_id
+  `).bind(...shortIds).all();
+  const metaMap = new Map((perMeta || []).map(r => [r.short_id, r]));
+
+  // ── Synthèse JS (aucune écriture) ──────────────────────────────
+  const trendOf = (m) => !m ? 'flat' : (m.w > m.pw ? 'up' : (m.w < m.pw ? 'down' : 'flat'));
+  const leaderboard = qrs
+    .filter(q => q.short_id)
+    .map(q => ({ name: q.name || '(sans nom)', short_id: q.short_id,
+                 scans: cntMap.get(q.short_id) || 0, trend: trendOf(metaMap.get(q.short_id)) }))
+    .sort((a, b) => b.scans - a.scans).slice(0, 8);
+
+  const accum = (keyFn) => {
+    const map = new Map();
+    for (const q of qrs) {
+      if (!q.short_id) continue;
+      const k = keyFn(q); const c = cntMap.get(q.short_id) || 0;
+      map.set(k, (map.get(k) || 0) + c);
+    }
+    return [...map.entries()].map(([k, v]) => ({ key: k, scans: v }))
+      .sort((a, b) => b.scans - a.scans);
+  };
+  const byFolder = accum(q => (q.folder || '').trim() || 'Sans dossier').filter(x => x.scans > 0);
+  const byType   = accum(q => q.qr_type || 'url').filter(x => x.scans > 0);
+
+  const watch = [];
+  const nowMs = Date.now();
+  for (const q of qrs) {
+    if (!q.short_id || (q.status && q.status !== 'active')) continue;
+    const m = metaMap.get(q.short_id);
+    const lastMs = m?.last_ts ? Date.parse(String(m.last_ts).replace(' ', 'T') + 'Z') : null;
+    const daysAgo = lastMs ? Math.floor((nowMs - lastMs) / 86400000) : null;
+    if (daysAgo === null) {
+      watch.push({ name: q.name || '(sans nom)', note: 'aucun scan à ce jour', kind: 'warn' });
+    } else if (daysAgo >= 21) {
+      watch.push({ name: q.name || '(sans nom)', note: `0 scan depuis ${daysAgo} jours`, kind: 'warn' });
+    } else if (m && m.w >= 5 && m.w >= 3 * Math.max(m.pw, 1)) {
+      watch.push({ name: q.name || '(sans nom)', note: `pic inhabituel cette semaine (+${m.w - m.pw})`, kind: 'info' });
+    }
+  }
+
+  const week = totals.week || 0, prevWeek = totals.prev_week || 0;
+  const weekDelta = prevWeek > 0 ? Math.round((week - prevWeek) / prevWeek * 100) : (week > 0 ? 100 : 0);
+
+  return json({
+    totals: {
+      scans_total: totals.total || 0,
+      unique: totals.uniq_count || 0,
+      qr_total: qrs.length,
+      qr_active: qrActive,
+      week, week_delta: weekDelta,
+    },
+    byDay: byDay || [],
+    leaderboard,
+    byFolder: byFolder.slice(0, 8),
+    byType,
+    watch: watch.slice(0, 6),
+  }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════════
 // PATCH /api/qr/:id — modifie cible / nom / tags / status
 // ══════════════════════════════════════════════════════════════════
 export async function handleUpdateQr(request, env, qrId) {

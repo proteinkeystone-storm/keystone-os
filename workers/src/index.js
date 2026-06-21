@@ -68,7 +68,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
@@ -579,6 +579,7 @@ export default {
       // CRUD QR — tenant authentifié via X-Tenant-Id (à durcir si besoin)
       if (path === '/api/qr' && method === 'POST') return handleCreateQr(request, env);
       if (path === '/api/qr' && method === 'GET')  return handleListQr(request, env);
+      if (path === '/api/qr/overview' && method === 'GET') return handleQrOverview(request, env);
       // Smart QR V4.3 (2026-05-26) — endpoint authoritative jeux (machine
       // à sous + carte à gratter). Tire l'aléatoire serveur, anti-rejouage
       // par device_hash, gère le stock de lots_disponibles.
