@@ -996,7 +996,8 @@ function _openCreateForm(panel, opts = {}) {
 
   // Concierge VEFA (S7) — auto-ouverture depuis le relai VEFA Studio :
   // bascule directement en concierge/smart, source « vefa », programme chargé,
-  // nom interne pré-rempli. _renderModeToggle ci-dessous rendra l'aperçu.
+  // nom interne pré-rempli. La famille « exp » + _renderTypeCards/_renderModePick
+  // ci-dessous afficheront le sélecteur d'expérience et l'aperçu.
   if (opts && opts.conciergeVefa && opts.conciergeVefa.program) {
     const prog = opts.conciergeVefa.program;
     _creating.mode              = 'smart';
@@ -1022,114 +1023,123 @@ function _openCreateForm(panel, opts = {}) {
     if (opts.presetName) _creating.name = opts.presetName;
   }
 
+  // SDQR création v2 (3 étapes + aperçu live) — famille déduite du mode/type ;
+  // design initialisé pour l'aperçu live ET le panneau « Apparence » (étape 3).
+  _creating.family = _creating.mode === 'smart' ? 'exp' : _familyOfType(_creating.type);
+  _creView = 'qr';
+  _editingDesign = mergeDesign(_creating.design || {});
+
   content.innerHTML = `
-    <div class="sdqr-form-wrap">
+    <div class="sdqr-form-wrap sdqr-form-wrap--v2">
       <div class="sdqr-form-head">
         <h2 class="sdqr-form-title">Créer un QR code</h2>
         <p class="sdqr-form-sub">Choisissez ce qu'il doit faire — on s'occupe du reste.</p>
       </div>
 
-      <!-- ÉTAPE 1 — Contenu (panneau blanc, cadre navy autour) -->
-      <section class="sdqr-step">
-      <header class="sdqr-step-hd">
-        <span class="sdqr-step-num">1</span>
-        <span class="sdqr-step-title">Contenu</span>
-      </header>
+      <div class="sdqr-create-split">
+        <!-- ─── COLONNE GAUCHE : 3 étapes ─── -->
+        <div class="sdqr-create-main">
 
-      <!-- Mode toggle (Statique / Dynamique / Smart) -->
-      <div class="sdqr-mode-toggle" id="sdqr-mode-toggle">
-        <button class="sdqr-mode-btn" data-mode="static">
-          <span class="sdqr-mode-dot"></span>
-          <div class="sdqr-mode-txt">
-            <strong>Standard</strong>
-            <small>Données dans les pixels · offline · non modifiable</small>
-          </div>
-        </button>
-        <button class="sdqr-mode-btn" data-mode="dynamic">
-          <span class="sdqr-mode-dot"></span>
-          <div class="sdqr-mode-txt">
-            <strong>Dynamique</strong>
-            <small>URL modifiable · stats trackées · nécessite connexion</small>
-          </div>
-        </button>
-        <button class="sdqr-mode-btn" data-mode="smart">
-          <span class="sdqr-mode-dot"></span>
-          <div class="sdqr-mode-txt">
-            <strong>Smart ✦</strong>
-            <small>Interstitiel personnalisé · titre + message · dynamique +</small>
-          </div>
-        </button>
-      </div>
+          <!-- ÉTAPE 1 — Type d'abord (familles + Expériences valorisées) -->
+          <section class="sdqr-step">
+            <header class="sdqr-step-hd">
+              <span class="sdqr-step-num">1</span>
+              <span class="sdqr-step-title">Que voulez-vous créer&nbsp;?</span>
+            </header>
+            <div class="sdqr-type-cards" id="sdqr-type-cards"></div>
 
-      <!-- Sélecteur de template (visible uniquement si mode === 'smart') V2
-           Volontairement PAS dans un <label> : les <button> à l'intérieur d'un
-           label voient leur click parasité par le re-focus du label sur certains
-           navigateurs (bug observé 24/05). Le titre est juste un <div> stylé. -->
-      <div id="sdqr-smart-template-wrap" hidden style="margin:14px 0 0">
-        <div class="sdqr-field sdqr-field--full">
-          <div class="sdqr-field-lbl">Template d'interstitiel <small style="opacity:.7">— choisis le scénario d'expérience qui s'affiche au scan</small></div>
-          <div class="sdqr-template-cards" id="sdqr-template-cards"></div>
+            <!-- Sélecteur d'expérience (famille « Expériences » = templates Smart) -->
+            <div id="sdqr-smart-template-wrap" hidden style="margin:14px 0 0">
+              <div class="sdqr-field sdqr-field--full">
+                <div class="sdqr-field-lbl">Choisissez votre expérience <small style="opacity:.7">— le scénario qui s'affiche au scan</small></div>
+                <div class="sdqr-template-cards" id="sdqr-template-cards"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ÉTAPE 2 — Son contenu -->
+          <section class="sdqr-step">
+            <header class="sdqr-step-hd">
+              <span class="sdqr-step-num">2</span>
+              <span class="sdqr-step-title">Son contenu</span>
+              <span class="sdqr-step-opt" id="sdqr-step2-tag"></span>
+            </header>
+
+            <!-- Permanent / Modifiable (langage humain) OU note (statique / expérience) -->
+            <div id="sdqr-mode-pick"></div>
+
+            <!-- Titre + message statiques (Smart) -->
+            <div id="sdqr-smart-text-wrap" hidden style="margin:4px 0 0">
+              <label class="sdqr-field sdqr-field--full">
+                <span class="sdqr-field-lbl">Titre <small style="opacity:.7">— le titre affiché sur la page d'attente au scan</small></span>
+                <input id="sdqr-f-smart-title" class="sdqr-input" type="text" maxlength="80"
+                  placeholder="Ex : Bienvenue chez nous !" />
+              </label>
+              <label class="sdqr-field sdqr-field--full" style="margin-top:10px">
+                <span class="sdqr-field-lbl">Message <small style="opacity:.7">— le texte affiché sous le titre</small></span>
+                <textarea id="sdqr-f-smart-message" class="sdqr-input" rows="3" maxlength="400"
+                  placeholder="Ex : Merci de votre visite. Un instant, on vous redirige vers notre site."
+                  style="min-height:80px;font-family:inherit"></textarea>
+              </label>
+            </div>
+
+            <!-- Champs spécifiques au template (rendus par master-renderer.renderField) V2 -->
+            <div id="sdqr-smart-template-fields-wrap" hidden style="margin:14px 0 0">
+              <div class="sdqr-form-grid" id="sdqr-smart-template-fields"></div>
+            </div>
+
+            <!-- Heading destination (Smart) + champs contextuels selon le type -->
+            <div class="sdqr-type-heading" id="sdqr-type-heading"
+                 style="font-size:13px;font-weight:600;margin:8px 0 8px"></div>
+            <div class="sdqr-form-grid" id="sdqr-form-fields"></div>
+
+            <div class="sdqr-form-grid" style="margin-top:12px">
+              <label class="sdqr-field sdqr-field--full">
+                <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
+                <input type="text" id="sdqr-f-name" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
+              </label>
+              <label class="sdqr-field sdqr-field--full">
+                <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
+                <input type="text" id="sdqr-f-tags" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
+              </label>
+            </div>
+          </section>
+
+          <!-- ÉTAPE 3 — Son apparence (panneau Design réutilisé dans le flux) -->
+          <section class="sdqr-step">
+            <header class="sdqr-step-hd">
+              <span class="sdqr-step-num">3</span>
+              <span class="sdqr-step-title">Son apparence</span>
+              <span class="sdqr-step-opt">optionnel</span>
+            </header>
+            <div id="sdqr-design-host"></div>
+          </section>
         </div>
+
+        <!-- ─── COLONNE DROITE : aperçu live (sticky) ─── -->
+        <aside class="sdqr-create-aside">
+          <div class="sdqr-preview-card">
+            <div class="sdqr-preview-head">
+              <span class="sdqr-preview-live"><span class="sdqr-preview-dot"></span>Aperçu live</span>
+              <span class="sdqr-preview-switch" id="sdqr-view-switch"></span>
+            </div>
+            <div class="sdqr-preview-stage">
+              <div id="sdqr-svg-wrap" class="sdqr-preview-qr"></div>
+              <div id="sdqr-cre-phone" class="sdqr-preview-phone" hidden></div>
+            </div>
+            <div class="sdqr-preview-cap" id="sdqr-preview-cap"></div>
+            <div class="sdqr-preview-exports" title="Téléchargeable après création (PNG, SVG, PDF)">
+              <span>PNG</span><span>SVG</span><span>PDF</span>
+            </div>
+            <button class="sdqr-btn sdqr-btn--primary" id="sdqr-save" style="width:100%;justify-content:center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Créer le QR
+            </button>
+            <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-cancel" style="width:100%;justify-content:center;margin-top:8px">Annuler</button>
+            <div class="sdqr-form-msg" id="sdqr-msg" hidden></div>
+          </div>
+        </aside>
       </div>
-
-      <!-- Titre + message statiques (visibles uniquement si mode === 'smart') -->
-      <div id="sdqr-smart-text-wrap" hidden style="margin:14px 0 0">
-        <label class="sdqr-field sdqr-field--full">
-          <span class="sdqr-field-lbl">Titre <small style="opacity:.7">— le titre affiché sur la page d'attente au scan</small></span>
-          <input id="sdqr-f-smart-title" class="sdqr-input" type="text" maxlength="80"
-            placeholder="Ex : Bienvenue chez nous !" />
-        </label>
-        <label class="sdqr-field sdqr-field--full" style="margin-top:10px">
-          <span class="sdqr-field-lbl">Message <small style="opacity:.7">— le texte affiché sous le titre</small></span>
-          <textarea id="sdqr-f-smart-message" class="sdqr-input" rows="3" maxlength="400"
-            placeholder="Ex : Merci de votre visite. Un instant, on vous redirige vers notre site."
-            style="min-height:80px;font-family:inherit"></textarea>
-        </label>
-      </div>
-
-      <!-- Champs spécifiques au template (rendus par master-renderer.renderField) V2 -->
-      <div id="sdqr-smart-template-fields-wrap" hidden style="margin:14px 0 0">
-        <div class="sdqr-form-grid" id="sdqr-smart-template-fields"></div>
-      </div>
-
-      <!-- Cartes de type — titre clarificateur (texte selon le mode, posé par
-           _toggleSmartBriefVisibility). En smart, ces cartes = la destination
-           APRÈS l'interstitiel (confusion levée le 2026-06-03). -->
-      <div class="sdqr-type-heading" id="sdqr-type-heading"
-           style="font-size:13px;font-weight:600;color:var(--text-secondary,#9aa4b2);margin:8px 0 8px"></div>
-      <div class="sdqr-type-cards" id="sdqr-type-cards"></div>
-
-      <!-- Form contextuel selon le type -->
-      <div class="sdqr-form-grid" id="sdqr-form-fields"></div>
-      </section>
-
-      <!-- ÉTAPE 2 — Détails (panneau blanc) -->
-      <section class="sdqr-step">
-        <header class="sdqr-step-hd">
-          <span class="sdqr-step-num">2</span>
-          <span class="sdqr-step-title">Détails</span>
-          <span class="sdqr-step-opt">repérage interne</span>
-        </header>
-        <div class="sdqr-form-grid">
-          <label class="sdqr-field sdqr-field--full">
-            <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
-            <input type="text" id="sdqr-f-name" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
-          </label>
-          <label class="sdqr-field sdqr-field--full">
-            <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
-            <input type="text" id="sdqr-f-tags" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
-          </label>
-        </div>
-      </section>
-
-      <div class="sdqr-form-actions">
-        <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-cancel">Annuler</button>
-        <button class="sdqr-btn sdqr-btn--primary" id="sdqr-save">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Créer le QR
-        </button>
-      </div>
-      <div class="sdqr-form-msg" id="sdqr-msg" hidden></div>
     </div>
   `;
 
@@ -1139,14 +1149,32 @@ function _openCreateForm(panel, opts = {}) {
   content.classList.add('sdqr-content--create');
 
   _renderTypeCards(content);
-  _renderModeToggle(content);
+  _renderModePick(content);
   _renderFormFields(content);
+
+  // Panneau Design réutilisé DANS le flux (étape 3) — partage #sdqr-svg-wrap et
+  // _editingDesign avec l'aperçu live ; la persistance passe par « Créer le QR »
+  // (pas de bouton « Sauvegarder le design » en création). encodedForQr = fonction
+  // « vivante » qui re-encode le contenu courant à chaque rendu.
+  const _designHost = content.querySelector('#sdqr-design-host');
+  if (_designHost) _designHost.innerHTML = _renderDesignPanel({ design: _editingDesign }, { create: true });
+  _wireDesignPanel(content, { id: null, design: _editingDesign }, () => _creEncodedText(), { create: true, initial: true });
 
   // Bindings persistants (nom + tags + titre/message Smart)
   content.querySelector('#sdqr-f-name')?.addEventListener('input', e => { _creating.name = e.target.value; });
   content.querySelector('#sdqr-f-tags')?.addEventListener('input', e => { _creating.tags = e.target.value; });
   content.querySelector('#sdqr-f-smart-title')?.addEventListener('input', e => { _creating.smart_title = e.target.value; });
   content.querySelector('#sdqr-f-smart-message')?.addEventListener('input', e => { _creating.smart_message = e.target.value; });
+
+  // Aperçu live : se met à jour à chaque saisie de contenu.
+  content.querySelector('#sdqr-form-fields')?.addEventListener('input', () => _creRenderPreview(content));
+
+  // Bascule QR / Page de l'aperçu (visible uniquement pour les expériences).
+  content.querySelector('#sdqr-view-switch')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-cre-view]'); if (!b) return;
+    _creView = b.dataset.creView;
+    _creRenderPreview(content);
+  });
 
   // Reflète un nom interne pré-rempli (auto-ouverture VEFA) dans le champ.
   const _nameEl = content.querySelector('#sdqr-f-name');
@@ -1158,6 +1186,9 @@ function _openCreateForm(panel, opts = {}) {
     _renderCurrentView(panel);
   });
   content.querySelector('#sdqr-save')?.addEventListener('click', () => _handleCreate(panel));
+
+  // Premier rendu de l'aperçu live.
+  _creRenderPreview(content);
 }
 
 // SDQR S2 — types groupés en FAMILLES (accordéon) : un seul chapitre déplié.
@@ -1169,6 +1200,11 @@ const _TYPE_FAMILIES = [
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
   { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' },
+  // Famille « Expériences » = nos templates Smart (Concierge, jeux, fidélité…).
+  // Pas de types QR : on bascule en mode 'smart' et on montre le sélecteur de
+  // templates. C'est le différenciateur (page hébergée) que les autres n'ont pas.
+  { id: 'exp', label: 'Expériences', smart: true, types: [],
+    ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4L12 3z"/><path d="M19 14l.7 2.1L22 17l-2.3.7L19 20l-.7-2.3L16 17l2.3-.9L19 14z"/></svg>' },
 ];
 function _familyOfType(typeId) {
   const f = _TYPE_FAMILIES.find(fam => fam.types.includes(typeId));
@@ -1177,74 +1213,135 @@ function _familyOfType(typeId) {
 
 // Rend l'accordéon de familles + les cartes de type du chapitre actif.
 // La carte active reflète _creating.type ; un type static-only force le mode static.
+// SDQR création v2 — « le TYPE d'abord » : grille de familles (Liens / Contact /
+// Pratique = types QR) + « Expériences » (= nos templates Smart, page hébergée).
+// Le « mode » n'est plus la 1re question : il DÉCOULE du choix (Wi-Fi → permanent,
+// Expérience → smart) ; le réglage humain Permanent/Modifiable vit à l'étape 2.
 function _renderTypeCards(root) {
   const wrap = root.querySelector('#sdqr-type-cards');
   if (!wrap) return;
-  if (!_creating.family) _creating.family = _familyOfType(_creating.type);
-  const fams = _TYPE_FAMILIES.filter(f => f.types.some(t => QR_TYPES[t]));
-  const active = fams.find(f => f.id === _creating.family) || fams[0];
+  if (!_creating.family) _creating.family = _creating.mode === 'smart' ? 'exp' : _familyOfType(_creating.type);
 
-  const pills = fams.map(f =>
-    `<button class="sdqr-fam-pill ${f.id === active.id ? 'is-active' : ''}" data-fam="${f.id}"><span class="sdqr-fam-ico">${f.ico}</span>${f.label}</button>`
-  ).join('');
-  const cards = active.types.filter(t => QR_TYPES[t]).map(id => {
-    const def = QR_TYPES[id];
-    const isActive   = _creating.type === id;
-    const staticOnly = !def.supports.dynamic;
-    return `
-      <button class="sdqr-type-card ${isActive ? 'is-active' : ''}" data-type="${id}">
-        <span class="sdqr-type-ico">${def.icon}</span>
-        <span class="sdqr-type-label">${def.label}</span>
-        <span class="sdqr-type-desc">${def.desc}</span>
-        ${staticOnly ? '<span class="sdqr-type-badge">Statique only</span>' : ''}
-      </button>
-    `;
+  // Familles réelles : celles qui ont au moins un type présent, + Expériences.
+  const fams = _TYPE_FAMILIES.filter(f => f.id === 'exp' || f.types.some(t => QR_TYPES[t]));
+  const active = fams.find(f => f.id === _creating.family) || fams[0];
+  _creating.family = active.id;
+  const isExp = active.id === 'exp';
+
+  const pills = fams.map(f => {
+    const exp = f.id === 'exp';
+    return `<button class="sdqr-fam-pill ${exp ? 'sdqr-fam-pill--exp' : ''} ${f.id === active.id ? 'is-active' : ''}" data-fam="${f.id}"><span class="sdqr-fam-ico">${f.ico}</span>${f.label}${exp ? ' ✦' : ''}</button>`;
   }).join('');
-  wrap.innerHTML = `<div class="sdqr-fam-row">${pills}</div><div class="sdqr-type-cards-grid">${cards}</div>`;
+
+  let body;
+  if (isExp) {
+    body = `<div class="sdqr-fam-tag">Le rayon que les autres n'ont pas — concierge, jeux, fidélité, boîte cadeau.</div>`;
+  } else {
+    const cards = active.types.filter(t => QR_TYPES[t]).map(id => {
+      const def = QR_TYPES[id];
+      // En mode smart, aucune carte de type QR n'est « active » (on est sur Expériences).
+      const isActive   = _creating.type === id && _creating.mode !== 'smart';
+      const staticOnly = !def.supports.dynamic;
+      return `
+        <button class="sdqr-type-card ${isActive ? 'is-active' : ''}" data-type="${id}">
+          <span class="sdqr-type-ico">${def.icon}</span>
+          <span class="sdqr-type-label">${def.label}</span>
+          <span class="sdqr-type-desc">${def.desc}</span>
+          ${staticOnly ? '<span class="sdqr-type-badge">Permanent</span>' : ''}
+        </button>
+      `;
+    }).join('');
+    body = `<div class="sdqr-type-cards-grid">${cards}</div>`;
+  }
+  wrap.innerHTML = `<div class="sdqr-fam-row">${pills}</div>${body}`;
+
+  // Le sélecteur d'expérience (#sdqr-smart-template-wrap, étape 1) suit la famille.
+  const expWrap = root.querySelector('#sdqr-smart-template-wrap');
+  if (expWrap) expWrap.hidden = !isExp;
 
   wrap.querySelectorAll('.sdqr-fam-pill').forEach(p => {
-    p.addEventListener('click', () => { _creating.family = p.dataset.fam; _renderTypeCards(root); });
-  });
-  wrap.querySelectorAll('.sdqr-type-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const newType = card.dataset.type;
-      _creating.type = newType;
-      _creating.payload = {};                       // reset payload (champs ≠)
-      const def = QR_TYPES[newType];
-      // Smart partage les contraintes de Dynamic → auto-bascule en static
-      // si on choisit un type static-only (Wi-Fi).
-      if (!def.supports.dynamic && (_creating.mode === 'dynamic' || _creating.mode === 'smart')) {
-        _creating.mode = 'static';                  // auto-bascule
+    p.addEventListener('click', () => {
+      const fam = p.dataset.fam;
+      _creating.family = fam;
+      if (fam === 'exp') {
+        _creating.mode = 'smart';                   // Expériences = mode Smart
+        _creView = 'phone';                         // montre la page hébergée d'emblée (showcase)
+      } else {
+        // Si le type courant n'appartient pas à la famille cliquée (ou on vient
+        // de Smart), on bascule sur le 1er type de cette famille. Mode dérivé.
+        const fdef = _TYPE_FAMILIES.find(f => f.id === fam);
+        if (!fdef?.types.includes(_creating.type)) {
+          const firstType = fdef?.types.find(t => QR_TYPES[t]);
+          if (firstType) { _creating.type = firstType; _creating.payload = {}; }
+        }
+        const def = QR_TYPES[_creating.type];
+        _creating.mode = def?.supports?.dynamic ? 'dynamic' : 'static';
+        _creView = 'qr';
       }
       _renderTypeCards(root);
-      _renderModeToggle(root);
+      _renderModePick(root);
       _renderFormFields(root);
+      _creRenderPreview(root);
     });
   });
+
+  if (isExp) {
+    _renderTemplateCards(root);                      // sélecteur de templates Smart
+  } else {
+    wrap.querySelectorAll('.sdqr-type-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const newType = card.dataset.type;
+        _creating.type = newType;
+        _creating.payload = {};                      // reset payload (champs ≠)
+        const def = QR_TYPES[newType];
+        // Mode dérivé du type : modifiable (dynamique) par défaut si supporté,
+        // sinon permanent (statique) forcé. Plus de « mode » à choisir avant.
+        _creating.mode = def.supports.dynamic ? 'dynamic' : 'static';
+        _renderTypeCards(root);
+        _renderModePick(root);
+        _renderFormFields(root);
+        _creRenderPreview(root);
+      });
+    });
+  }
 }
 
-function _renderModeToggle(root) {
-  const wrap = root.querySelector('#sdqr-mode-toggle');
-  if (!wrap) return;
-  const def = QR_TYPES[_creating.type];
-  // Smart partage les contraintes de Dynamic (besoin de short_id, donc
-  // pas pour Wi-Fi qui est static-only).
-  const dynDisabled = !def?.supports?.dynamic;
-  wrap.querySelectorAll('.sdqr-mode-btn').forEach(btn => {
-    const mode = btn.dataset.mode;
-    btn.classList.toggle('is-active', _creating.mode === mode);
-    if (mode === 'dynamic' || mode === 'smart') {
-      btn.disabled = dynDisabled;
-      btn.title    = dynDisabled ? `Le type ${def?.label} n'existe qu'en mode statique.` : '';
+// SDQR création v2 — réglage du « mode » en langage HUMAIN, à l'étape 2.
+// Type modifiable-capable -> toggle Permanent / Modifiable (défaut Modifiable).
+// Type statique-only (Wi-Fi, tél…) -> note « toujours permanent ».
+// Expérience (smart) -> note « page hébergée, modifiable et suivie ».
+function _renderModePick(root) {
+  const zone = root.querySelector('#sdqr-mode-pick');
+  const tag  = root.querySelector('#sdqr-step2-tag');
+  const def  = QR_TYPES[_creating.type];
+  const isSmart = _creating.mode === 'smart';
+
+  if (zone) {
+    if (isSmart) {
+      zone.innerHTML = `<div class="sdqr-modenote sdqr-modenote--smart">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4L12 3z"/></svg>
+        Expérience interactive — page hébergée, modifiable et suivie.</div>`;
+    } else if (def?.supports?.dynamic) {
+      zone.innerHTML = `<div class="sdqr-modepick">
+        <button type="button" class="sdqr-modepick-btn ${_creating.mode === 'static' ? 'is-active' : ''}" data-mode="static">
+          <strong>Permanent</strong><small>gratuit · non modifiable</small></button>
+        <button type="button" class="sdqr-modepick-btn ${_creating.mode === 'dynamic' ? 'is-active' : ''}" data-mode="dynamic">
+          <strong>Modifiable</strong><small>change après impression · suivi</small></button>
+      </div>`;
+    } else {
+      zone.innerHTML = `<div class="sdqr-modenote sdqr-modenote--stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 4v5c0 4.5-3 8-8 9-5-1-8-4.5-8-9V7z"/></svg>
+        Ce type est toujours permanent — encodé directement, gratuit, sans connexion.</div>`;
     }
-    btn.onclick = () => {
-      if (btn.disabled) return;
-      _creating.mode = mode;
-      _renderModeToggle(root);
-      _toggleSmartBriefVisibility(root);
-    };
-  });
-  // Premier render : aligne la visibilité des champs Smart avec le mode courant
+    zone.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+      _creating.mode = b.dataset.mode;
+      _renderModePick(root);
+      _creRenderPreview(root);
+    }));
+  }
+  if (tag) tag.textContent = isSmart ? 'expérience' : (def?.supports?.dynamic ? '' : 'permanent');
+
+  // Aligne la visibilité des blocs Smart (titre/message + champs template).
   _toggleSmartBriefVisibility(root);
 }
 
@@ -1258,29 +1355,101 @@ function _toggleSmartBriefVisibility(root) {
   const fieldsWrap   = root.querySelector('#sdqr-smart-template-fields-wrap');
 
   if (textWrap)     textWrap.hidden     = !isSmart;
-  if (templateWrap) templateWrap.hidden = !isSmart;
+  if (templateWrap) templateWrap.hidden = !isSmart;   // sélecteur d'expérience (étape 1)
   if (fieldsWrap)   fieldsWrap.hidden   = !isSmart;
 
-  // NB (2026-06-03) : on NE masque PAS les cartes de type (#sdqr-type-cards)
-  // ni le formulaire statique (#sdqr-form-fields) en mode Smart : elles
-  // définissent la DESTINATION du QR Smart (target_url / encoded_payload),
-  // qui est REQUISE côté Worker (qr.js handleCreateQr). Les cacher casse la
-  // création de QR Smart. (Un masquage tenté puis reverté ce jour.)
-
-  // À la place : un titre clarificateur au-dessus des cartes, adapté au mode —
-  // lève l'ambiguïté « ces cartes servent à quoi ? » sans rien cacher.
+  // Smart : le champ #sdqr-form-fields porte la DESTINATION (target_url /
+  // encoded_payload), REQUISE côté Worker (qr.js handleCreateQr) — on garde donc
+  // le type 'url' par défaut et on l'affiche avec un petit titre. Hors smart,
+  // l'étape 1 dit déjà le type → pas de heading redondant.
   const typeHeading = root.querySelector('#sdqr-type-heading');
   if (typeHeading) {
-    typeHeading.textContent =
-        isSmart                      ? "Destination après l'interstitiel — où le visiteur est envoyé après l'écran d'attente"
-      : _creating.mode === 'dynamic' ? "Destination du QR — l'URL/le contenu vers lequel il pointe (modifiable)"
-      :                                "Type de QR — le contenu encodé directement dans les pixels";
+    typeHeading.textContent = isSmart
+      ? "Destination après l'expérience — où le visiteur est envoyé ensuite"
+      : '';
   }
 
-  if (isSmart) {
-    _renderTemplateCards(root);
-    _renderTemplateFields(root);
+  // Les CARTES d'expérience sont rendues par _renderTypeCards (famille « exp ») ;
+  // ici on ne (re)rend que les CHAMPS du template choisi.
+  if (isSmart) _renderTemplateFields(root);
+}
+
+// SDQR création v2 — état de l'aperçu live (QR ou « Page » téléphone).
+let _creView = 'qr';
+
+// Contenu encodé représentatif pour l'APERÇU live (le vrai QR est généré au
+// save côté Worker). Dynamique/smart : URL de redirection d'exemple (le short_id
+// n'existe pas encore). Statique : encodage RÉEL du payload courant.
+function _creEncodedText() {
+  try {
+    if (_creating.mode === 'dynamic' || _creating.mode === 'smart') {
+      return (_creating.payload?.url || '').trim() || 'https://protein-keystone.com/r/apercu';
+    }
+    return encodePayload(_creating.type, _creating.payload || {}) || 'https://protein-keystone.com';
+  } catch (e) {
+    return 'https://protein-keystone.com';
   }
+}
+
+// Aperçu « Page » (téléphone) pour les expériences (page hébergée).
+function _crePhoneHtml() {
+  const tpl   = getTemplate(_creating.template_id);
+  const label = _esc(tpl?.label || _creating.smart_title || 'Expérience');
+  const acc   = (_editingDesign?.eye?.distinct && _editingDesign.eye.color)
+    ? _editingDesign.eye.color : (_editingDesign?.fg || '#6c6cf5');
+  let body;
+  if (_creating.template_id === 'concierge') {
+    body = `<div class="sdqr-cph-text">${_esc(_creating.smart_message || 'Bonjour, posez-moi votre question.')}</div>`
+      + `<div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div>`
+      + `<div class="sdqr-cph-input">Écrire…<svg viewBox="0 0 24 24" fill="none" stroke="${acc}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>`;
+  } else {
+    body = `<div class="sdqr-cph-text">${_esc(_creating.smart_message || 'Un instant…')}</div>`
+      + `<div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div>`
+      + `<div class="sdqr-cph-chip" style="background:${acc}">Découvrir</div>`;
+  }
+  return `<div class="sdqr-phone"><div class="sdqr-phone-bar"></div>`
+    + `<div class="sdqr-phone-head" style="background:${acc}"><span class="sdqr-phone-title">${label}</span></div>`
+    + `<div class="sdqr-phone-body">${body}</div></div>`;
+}
+
+// Bascule QR / Page dans l'en-tête de l'aperçu — visible seulement en smart.
+function _renderCreViewSwitch(root) {
+  const sw = root.querySelector('#sdqr-view-switch');
+  if (!sw) return;
+  if (_creating.mode !== 'smart') { sw.innerHTML = ''; return; }
+  const seg = (v, l) => `<button type="button" class="sdqr-preview-seg ${_creView === v ? 'is-active' : ''}" data-cre-view="${v}">${l}</button>`;
+  sw.innerHTML = seg('qr', 'QR') + seg('phone', 'Page');
+}
+
+// Rend l'aperçu live : QR via renderQrCustom (partage #sdqr-svg-wrap avec le
+// panneau Design), ou maquette téléphone pour une expérience hébergée.
+async function _creRenderPreview(root) {
+  const isSmart = _creating.mode === 'smart';
+  if (!isSmart && _creView === 'phone') _creView = 'qr';
+  _renderCreViewSwitch(root);
+
+  const svgWrap = root.querySelector('#sdqr-svg-wrap');
+  const phone   = root.querySelector('#sdqr-cre-phone');
+  const showPhone = isSmart && _creView === 'phone';
+  if (svgWrap) svgWrap.hidden = showPhone;
+  if (phone)   phone.hidden   = !showPhone;
+
+  if (showPhone) {
+    if (phone) phone.innerHTML = _crePhoneHtml();
+  } else if (svgWrap) {
+    try { svgWrap.innerHTML = await renderQrCustom(_creEncodedText(), _editingDesign, 240); }
+    catch (e) { svgWrap.innerHTML = ''; }
+  }
+
+  const cap = root.querySelector('#sdqr-preview-cap');
+  if (cap) {
+    const def = QR_TYPES[_creating.type];
+    const label = isSmart ? (getTemplate(_creating.template_id)?.label || 'Expérience') : (def?.label || '');
+    const modeTxt = isSmart ? 'expérience, suivie'
+      : (_creating.mode === 'dynamic' ? 'modifiable, suivi' : 'permanent');
+    cap.innerHTML = `<b>${_esc(label)}</b><br>${modeTxt}${isSmart ? ' · page hébergée + QR' : ''}`;
+  }
+  _updateContrastBadge(root);
 }
 
 // SDQR Smart V2 — Rend les cards des templates disponibles (sélecteur).
@@ -2990,6 +3159,12 @@ async function _handleCreate(panel) {
     if (needsRedirect && _creating.type !== 'url') {
       body.encoded_payload = encodePayload(_creating.type, _creating.payload);
     }
+    // Design custom (étape 3, réutilise le moteur de la fiche) — envoyé seulement
+    // s'il diffère du défaut, pour ne pas stocker un blob redondant. Le Worker
+    // accepte déjà body.design (handleCreateQr) → additif, zéro modif backend.
+    if (_editingDesign && JSON.stringify(mergeDesign(_editingDesign)) !== JSON.stringify(mergeDesign({}))) {
+      body.design = mergeDesign(_editingDesign);
+    }
     const qr = await _apiCreate(body);
     _selectedId = qr.id;
     await _refreshList(panel);
@@ -4404,10 +4579,11 @@ function _colorField(label, id, value) {
     </label>`;
 }
 
-function _renderDesignPanel(qr) {
+function _renderDesignPanel(qr, opts = {}) {
   const d = mergeDesign(qr.design);
+  const create = !!opts.create;   // création : pas de bouton « Sauvegarder le design »
   return `
-    <details class="sdqr-design-panel" id="sdqr-design-panel" open>
+    <details class="sdqr-design-panel${create ? ' sdqr-design-panel--create' : ''}" id="sdqr-design-panel" open>
       <summary class="sdqr-design-summary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2a10 10 0 1 0 10 10c0-2.74-2.84-3.18-5-3.5"/></svg>
         Personnaliser le design
@@ -4589,7 +4765,7 @@ function _renderDesignPanel(qr) {
         <!-- Contrast checker + actions -->
         <div class="sdqr-design-foot">
           <div class="sdqr-contrast" id="sdqr-contrast"></div>
-          <button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs" id="sdqr-save-design">Sauvegarder le design</button>
+          ${create ? '' : '<button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs" id="sdqr-save-design">Sauvegarder le design</button>'}
         </div>
       </div>
     </details>
@@ -4661,6 +4837,13 @@ function _renderShapePill(opt, isActive) {
 // ouverture de panel.
 let _editingDesign = null;
 
+// Contexte du panneau Design actif (partagé fiche / création). _designEncoded
+// résout le contenu encodé courant (string en fiche ; FONCTION « vivante » en
+// création → re-encode le contenu saisi). _designCreate = mode création (pas de
+// bouton « Sauvegarder le design », persistance via « Créer le QR »).
+let _designEncoded = null;
+let _designCreate  = false;
+
 // Détecte si _editingDesign contient des modifs non sauvegardées par
 // rapport au design persisté. Utilisé par les save handlers (rename,
 // archive, target_url, payload) pour PRESERVER le design en cours
@@ -4671,9 +4854,14 @@ function _designHasUnsavedChanges(editing, saved) {
   return JSON.stringify(editing) !== JSON.stringify(mergeDesign(saved));
 }
 
-function _wireDesignPanel(root, qr, encodedForQr) {
+function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
+
+  // Contexte module (résolveur de contenu encodé + mode création) — relu par
+  // _liveRerender et _refreshDesignPanelDom sans avoir à fileter opts partout.
+  _designEncoded = encodedForQr;
+  _designCreate  = !!opts.create;
 
   // Onglets du panneau Design (Modules/Yeux/Logo/Couleurs/Cadre/Modèles).
   // Tous les panneaux restent dans le DOM (le câblage querySelectorAll les
@@ -4694,7 +4882,10 @@ function _wireDesignPanel(root, qr, encodedForQr) {
 
   const _liveRerender = async () => {
     try {
-      const svg = await renderQrCustom(encodedForQr, _editingDesign, 280);
+      // encodedForQr peut être une FONCTION (création : contenu vivant) ou une
+      // string (fiche). On résout à chaque rendu.
+      const enc = (typeof encodedForQr === 'function') ? encodedForQr() : encodedForQr;
+      const svg = await renderQrCustom(enc, _editingDesign, 280);
       const wrap = root.querySelector('#sdqr-svg-wrap');
       if (wrap) wrap.innerHTML = svg;
     } catch (e) { console.error('[sdqr-design] render', e); }
@@ -4968,6 +5159,13 @@ function _wireDesignPanel(root, qr, encodedForQr) {
   // Initial contrast badge
   _updateContrastBadge(root);
 
+  // Création : onglet « Modèles » actif d'emblée (chemin rapide 1-clic), mais
+  // SEULEMENT au 1er rendu (opts.initial) — pas à chaque refresh, sinon on
+  // rebondirait hors de l'onglet en cours après l'application d'un modèle.
+  if (opts.initial && _designCreate) {
+    panel.querySelector('#sdqr-dtabs .sdqr-dtab[data-dtab="modeles"]')?.click();
+  }
+
   // Sync initial du QR avec l'état _editingDesign courant. Crucial après
   // un _refreshDesignPanelDom (theme / palette / surprise) : sinon les
   // controles affichent le nouveau preset mais le QR reste sur l'ancien
@@ -4981,10 +5179,11 @@ function _refreshDesignPanelDom(root, qr, encodedForQr) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
   const wasOpen = panel.open;
-  // On stocke le design en cours sur l'entité temporairement, puis re-render
+  // On stocke le design en cours sur l'entité temporairement, puis re-render.
+  // On PRÉSERVE le mode création (_designCreate) à travers le refresh.
   const merged = { ..._editingDesign };
-  panel.outerHTML = _renderDesignPanel({ ...qr, design: merged });
-  _wireDesignPanel(root, qr, encodedForQr);
+  panel.outerHTML = _renderDesignPanel({ ...qr, design: merged }, { create: _designCreate });
+  _wireDesignPanel(root, qr, encodedForQr, { create: _designCreate });
   const newPanel = root.querySelector('#sdqr-design-panel');
   if (newPanel && wasOpen) newPanel.open = true;
 }

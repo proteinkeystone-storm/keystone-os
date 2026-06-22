@@ -10291,6 +10291,108 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 .sdqr-step > .sdqr-type-cards:last-child { margin-bottom: 0; }
 
 /* ════════════════════════════════════════════════════════════════
+   SDQR — CRÉATION v2 : « 3 étapes + aperçu live »
+   (HANDOFF_SDQR_CREATION_3ETAPES). Saisie à GAUCHE (3 panneaux blancs
+   « Que voulez-vous créer ? / Son contenu / Son apparence »), APERÇU
+   LIVE sticky à DROITE (QR via renderQrCustom, ou maquette téléphone
+   pour les expériences). Le « mode » devient un toggle humain à
+   l'étape 2 ; les Expériences (templates Smart) = famille valorisée.
+   Tout sur le puits navy .sdqr-content--create ; cartes blanches.
+═══════════════════════════════════════════════════════════════ */
+/* — Split saisie / aperçu — */
+.sdqr-create-split { display: flex; gap: 18px; align-items: flex-start; }
+.sdqr-create-main  { flex: 1 1 0; min-width: 0; }
+.sdqr-create-aside { flex: 0 0 322px; width: 322px; position: sticky; top: 6px; }
+
+/* — Carte d'aperçu (colonne droite, BLANCHE) — */
+.sdqr-preview-card {
+  background: #fff; border: 1px solid rgba(27,42,74,.08); border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(8,15,35,.22); padding: 16px 16px 18px;
+}
+.sdqr-preview-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; font-size: 11.5px; color: rgba(27,42,74,.5); }
+.sdqr-preview-live { display: inline-flex; align-items: center; gap: 6px; }
+.sdqr-preview-dot  { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+.sdqr-preview-switch { margin-left: auto; display: inline-flex; gap: 3px; }
+.sdqr-preview-seg {
+  font-family: inherit; font-size: 11px; padding: 4px 10px; border-radius: 7px;
+  border: 1px solid rgba(27,42,74,.12); background: #fff; color: #64748b; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.sdqr-preview-seg:hover { color: #1b2a4a; }
+.sdqr-preview-seg.is-active { background: rgba(108,108,245,.12); border-color: #6c6cf5; color: #4338ca; }
+
+.sdqr-preview-stage {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 248px; padding: 10px;
+  background: #f6f8fc; border-radius: 12px; margin-bottom: 13px;
+}
+.sdqr-preview-qr { width: 100%; display: flex; align-items: center; justify-content: center; }
+.sdqr-preview-qr svg { width: 100%; height: auto; max-width: 232px; display: block; }
+
+.sdqr-preview-cap { text-align: center; font-size: 11.5px; color: rgba(27,42,74,.55); line-height: 1.5; margin-bottom: 13px; }
+.sdqr-preview-cap b { color: #1b2a4a; font-weight: 700; }
+
+.sdqr-preview-exports { display: flex; gap: 6px; justify-content: center; margin-bottom: 13px; }
+.sdqr-preview-exports span {
+  font-size: 11px; padding: 3px 11px; border-radius: 7px; color: #94a3b8;
+  border: 1px solid rgba(27,42,74,.1); background: #fff;
+}
+
+/* CTA + Annuler DANS la carte blanche : forcer les couleurs (les règles de
+   .sdqr-content--create visent le PUITS navy → ici on est sur du blanc). */
+html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--primary { color: #fff; }
+.sdqr-preview-card .sdqr-btn--primary { background: var(--gold, #6c6cf5); border-color: var(--gold, #6c6cf5); }
+html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--ghost {
+  border-color: rgba(27,42,74,.18); color: rgba(27,42,74,.7);
+}
+html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--ghost:hover {
+  background: rgba(27,42,74,.04); border-color: rgba(27,42,74,.3); color: #1b2a4a;
+}
+
+/* — Maquette téléphone (aperçu « Page » d'une expérience hébergée) — */
+.sdqr-preview-phone { display: flex; align-items: center; justify-content: center; }
+.sdqr-phone { width: 168px; border: 7px solid #1b2a4a; border-radius: 26px; overflow: hidden; background: #fff; box-shadow: 0 6px 18px rgba(8,15,35,.28); }
+.sdqr-phone-bar { height: 16px; background: #1b2a4a; position: relative; }
+.sdqr-phone-bar::after { content: ""; position: absolute; left: 50%; top: 6px; transform: translateX(-50%); width: 42px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35); }
+.sdqr-phone-head { padding: 10px 12px; color: #fff; }
+.sdqr-phone-title { font-size: 12px; font-weight: 600; }
+.sdqr-phone-body { padding: 11px 12px 14px; }
+.sdqr-cph-text { font-size: 10px; color: #5a6b86; margin-bottom: 7px; line-height: 1.4; }
+.sdqr-cph-line { height: 9px; border-radius: 4px; background: #eef1f6; margin-bottom: 6px; }
+.sdqr-cph-line.s { width: 64%; }
+.sdqr-cph-input { display: flex; align-items: center; gap: 6px; border: 1px solid #e6e9f0; border-radius: 14px; padding: 6px 10px; font-size: 10px; color: #aab2c0; margin-top: 8px; }
+.sdqr-cph-input svg { width: 13px; height: 13px; margin-left: auto; }
+.sdqr-cph-chip { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; padding: 7px 10px; border-radius: 8px; width: 100%; box-sizing: border-box; font-weight: 600; margin-top: 8px; }
+
+/* — Étape 1 : famille « Expériences » valorisée (indigo) + sous-titre — */
+.sdqr-fam-pill.sdqr-fam-pill--exp { box-shadow: 0 0 0 1px rgba(108,108,245,.22) inset; }
+.sdqr-fam-tag { font-size: 11px; color: rgba(27,42,74,.55); margin: 10px 0 2px; line-height: 1.4; }
+
+/* — Étape 2 : « mode » en langage humain — */
+.sdqr-modepick { display: flex; gap: 9px; margin-bottom: 12px; }
+.sdqr-modepick-btn { flex: 1; text-align: left; padding: 10px 12px; border-radius: 11px; cursor: pointer; border: 1px solid rgba(27,42,74,.12); background: #fff; font-family: inherit; transition: border-color .15s, background .15s; }
+.sdqr-modepick-btn:hover { border-color: rgba(108,108,245,.45); }
+.sdqr-modepick-btn.is-active { border: 1.5px solid #6c6cf5; background: rgba(108,108,245,.08); }
+.sdqr-modepick-btn strong { display: block; font-size: 13px; font-weight: 600; color: #1b2a4a; }
+.sdqr-modepick-btn small { font-size: 11px; color: #8a97ad; }
+.sdqr-modenote { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; font-size: 11.5px; margin-bottom: 12px; line-height: 1.4; }
+.sdqr-modenote svg { width: 16px; height: 16px; flex: none; }
+.sdqr-modenote--stat { background: #f5f7fa; border: 1px solid #e6e9f0; color: #6b7790; }
+.sdqr-modenote--stat svg { color: #6c6cf5; }
+.sdqr-modenote--smart { background: rgba(108,108,245,.07); border: 1px solid rgba(108,108,245,.28); color: #4338ca; }
+
+/* — Étape 3 : panneau Design réutilisé, fondu dans le panneau blanc — */
+.sdqr-design-panel--create { background: transparent; border: 0; box-shadow: none; padding: 0; margin: 0; }
+.sdqr-design-panel--create > .sdqr-design-summary { display: none; }
+
+/* — Responsive : aperçu épinglé en haut, blocs empilés — */
+@media (max-width: 900px) {
+  .sdqr-create-split { flex-direction: column; }
+  .sdqr-create-aside { position: static; width: 100%; order: -1; }
+  .sdqr-preview-stage { min-height: 200px; }
+}
+
+/* ════════════════════════════════════════════════════════════════
    SDQR — BIBLIOTHÈQUE « Mes QR » (maquettes 13-14) : vues GRILLE &
    TABLEAU, sur le puits navy (.sdqr-content--lib). Cartes / table
    blanches, or rare (sélection + actions). Même langage que la

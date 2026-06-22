@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc d'essai : création 3 étapes (CSS LIVRÉ app/style.css)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css">
+<style>
+  /* Banc-only : la mise en page (split/aperçu/étapes/téléphone/mode) vient
+     désormais du VRAI app/style.css. Ici on ne garde QUE : l'ouverture de
+     l'overlay (le pad l'affiche en JS), la note de banc, et un step 3 FAKÉ
+     (.sdqr-d3-*) qui représente le panneau Design réutilisé (non runnable hors pad). */
+  body { margin: 0; }
+  .sdqr-fullscreen { display: flex !important; flex-direction: column; position: static !important; min-height: 100vh; }
+  .lab-note { font-family: -apple-system, sans-serif; font-size: 12px; color: #6b7790; padding: 8px 14px; background: #fff7e6; border-bottom: 1px solid #f0e2bf; }
+  .sdqr-d3-sub { font-size: 11.5px; color: #8a97ad; margin: 4px 0 8px; }
+  .sdqr-d3-models { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .sdqr-d3-model { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 9px; border: 1px solid rgba(27,42,74,.12); border-radius: 10px; background: #fff; cursor: pointer; }
+  .sdqr-d3-model.is-on { border-color: #6c6cf5; background: rgba(108,108,245,.08); }
+  .sdqr-d3-swatch { display: flex; gap: 3px; }
+  .sdqr-d3-swatch i { width: 11px; height: 11px; display: inline-block; }
+  .sdqr-d3-swatch .m { border-radius: 2px; }
+  .sdqr-d3-swatch .e { border-radius: 50%; }
+  .sdqr-d3-model span { font-size: 10.5px; color: #5a6b86; }
+  .sdqr-d3-colors { display: flex; gap: 8px; margin-bottom: 16px; }
+  .sdqr-d3-color { width: 36px; height: 28px; border-radius: 8px; border: 1px solid rgba(27,42,74,.12); cursor: pointer; }
+  .sdqr-d3-color.is-on { border: 2px solid #6c6cf5; }
+  .sdqr-d3-more { display: flex; align-items: center; gap: 9px; padding: 11px 13px; cursor: pointer; border: 1px dashed rgba(27,42,74,.2); border-radius: 11px; color: #6b7790; font-size: 12.5px; }
+  .sdqr-d3-more .ti { font-size: 17px; color: #6c6cf5; }
+  .sdqr-d3-more .ti-chevron-down { margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="lab-note">Banc d'essai SDQR — création 3 étapes. Mise en page = VRAI <code>app/style.css</code> (classes du pad) + vrai <code>renderQrCustom</code>. Étape 3 = représentation (le panneau Design réel est branché dans le pad).</div>
+
+<div class="sdqr-fullscreen">
+  <header class="sdqr-topbar" style="display:flex;align-items:center;gap:10px;padding:11px 18px">
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;border-radius:8px;background:#6c6cf5"><i class="ti ti-qrcode" style="font-size:16px;color:#fff"></i></span>
+    <span class="sdqr-title" style="font-size:15px;font-weight:700">Smart Dynamic QR</span>
+    <span style="margin-left:auto;display:flex;gap:14px;color:rgba(221,228,243,.6);font-size:16px"><i class="ti ti-sun"></i><i class="ti ti-device-desktop"></i><i class="ti ti-settings"></i></span>
+  </header>
+
+  <main class="sdqr-main">
+    <div class="sdqr-content sdqr-content--create" style="padding:22px 22px 30px">
+      <div class="sdqr-form-wrap sdqr-form-wrap--v2">
+        <div class="sdqr-form-head">
+          <h2 class="sdqr-form-title">Créer un QR code</h2>
+          <p class="sdqr-form-sub">Choisissez ce qu'il doit faire — on s'occupe du reste.</p>
+        </div>
+
+        <div class="sdqr-create-split">
+          <div class="sdqr-create-main">
+
+            <section class="sdqr-step">
+              <header class="sdqr-step-hd">
+                <span class="sdqr-step-num">1</span>
+                <span class="sdqr-step-title">Que voulez-vous créer&nbsp;?</span>
+              </header>
+              <div class="sdqr-type-cards" id="sdqr-type-cards"></div>
+              <div id="sdqr-smart-template-wrap" hidden style="margin:14px 0 0">
+                <div class="sdqr-field sdqr-field--full">
+                  <div class="sdqr-field-lbl">Choisissez votre expérience <small style="opacity:.7">— le scénario qui s'affiche au scan</small></div>
+                  <div class="sdqr-template-cards" id="sdqr-template-cards"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="sdqr-step">
+              <header class="sdqr-step-hd">
+                <span class="sdqr-step-num">2</span>
+                <span class="sdqr-step-title">Son contenu</span>
+                <span class="sdqr-step-opt" id="sdqr-step2-tag"></span>
+              </header>
+              <div id="sdqr-mode-pick"></div>
+              <div class="sdqr-type-heading" id="sdqr-type-heading" style="font-size:13px;font-weight:600;margin:8px 0 8px"></div>
+              <div class="sdqr-form-grid" id="sdqr-form-fields"></div>
+              <div class="sdqr-form-grid" style="margin-top:12px">
+                <label class="sdqr-field sdqr-field--full">
+                  <span class="sdqr-field-lbl">Nom interne <span class="sdqr-req">*</span></span>
+                  <input type="text" class="sdqr-input" placeholder="ex: Bâche chantier Azur — Avancement">
+                </label>
+                <label class="sdqr-field sdqr-field--full">
+                  <span class="sdqr-field-lbl">Tags (séparés par virgule)</span>
+                  <input type="text" class="sdqr-input" placeholder="ex: chantier, azur, 2027">
+                </label>
+              </div>
+            </section>
+
+            <section class="sdqr-step">
+              <header class="sdqr-step-hd">
+                <span class="sdqr-step-num">3</span>
+                <span class="sdqr-step-title">Son apparence</span>
+                <span class="sdqr-step-opt">optionnel</span>
+              </header>
+              <div class="sdqr-d3-sub">Modèles — 1 clic = design complet (couleur, yeux, accroche)</div>
+              <div class="sdqr-d3-models" id="model-row"></div>
+              <div class="sdqr-d3-sub">Couleurs</div>
+              <div class="sdqr-d3-colors" id="color-row"></div>
+              <div class="sdqr-d3-more"><i class="ti ti-adjustments"></i>Modules · Yeux · Logo · Cadre — Personnaliser en détail<i class="ti ti-chevron-down"></i></div>
+            </section>
+          </div>
+
+          <aside class="sdqr-create-aside">
+            <div class="sdqr-preview-card">
+              <div class="sdqr-preview-head">
+                <span class="sdqr-preview-live"><span class="sdqr-preview-dot"></span>Aperçu live</span>
+                <span class="sdqr-preview-switch" id="sdqr-view-switch"></span>
+              </div>
+              <div class="sdqr-preview-stage">
+                <div id="sdqr-svg-wrap" class="sdqr-preview-qr"></div>
+                <div id="sdqr-cre-phone" class="sdqr-preview-phone" hidden></div>
+              </div>
+              <div class="sdqr-preview-cap" id="sdqr-preview-cap"></div>
+              <div class="sdqr-preview-exports"><span>PNG</span><span>SVG</span><span>PDF</span></div>
+              <button class="sdqr-btn sdqr-btn--primary" style="width:100%;justify-content:center"><i class="ti ti-check" style="font-size:16px"></i> Créer le QR</button>
+              <button class="sdqr-btn sdqr-btn--ghost" style="width:100%;justify-content:center;margin-top:8px">Annuler</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { renderQrCustom } from '../../app/sdqr-render.js';
+
+const FAMS = [
+  { id:'liens', label:'Liens', ico:'link' },
+  { id:'contact', label:'Contact', ico:'user' },
+  { id:'pratique', label:'Pratique', ico:'compass' },
+  { id:'exp', label:'Expériences', ico:'sparkles', star:true },
+];
+const FAM_TAG = { exp: 'Le rayon que les autres n’ont pas — concierge, jeux, fidélité, boîte cadeau.' };
+const TYPES = {
+  liens:[{id:'url',label:'URL',ico:'link',desc:'Lien web direct',mode:'dyn'},{id:'text',label:'Texte',ico:'align-left',desc:'Note, message, clé',mode:'dyn'}],
+  contact:[{id:'vcard',label:'vCard',ico:'user',desc:'Carte de contact',mode:'dyn'},{id:'email',label:'Email',ico:'mail',desc:'Email pré-rempli',mode:'stat'},{id:'sms',label:'SMS',ico:'message',desc:'SMS pré-rempli',mode:'stat'},{id:'whatsapp',label:'WhatsApp',ico:'brand-whatsapp',desc:'Conversation',mode:'stat'},{id:'tel',label:'Téléphone',ico:'phone',desc:'Appel direct',mode:'stat'}],
+  pratique:[{id:'wifi',label:'Wi-Fi',ico:'wifi',desc:'SSID + mot de passe',mode:'stat'},{id:'geo',label:'Localisation',ico:'map-pin',desc:'Point sur la carte',mode:'stat'},{id:'ical',label:'Événement',ico:'calendar-event',desc:'Date + lieu + titre',mode:'dyn'}],
+  exp:[{id:'concierge',label:'Concierge IA',ico:'robot',desc:'Mini-site qui répond',mode:'smart',hosted:true},{id:'jeu',label:'Jeu',ico:'device-gamepad-2',desc:'Roue, quiz, défi',mode:'smart',hosted:true},{id:'fidelite',label:'Fidélité',ico:'stamp',desc:'Carte à tampons',mode:'smart',hosted:true},{id:'cadeau',label:'Boîte cadeau',ico:'gift',desc:'Surprise au scan',mode:'smart',hosted:true},{id:'gratter',label:'Carte à gratter',ico:'ticket',desc:'Gain instantané',mode:'smart',hosted:true}],
+};
+const MODELS = [
+  { id:'sobre', label:'Sobre', fg:'#1B2A4A', eye:'#6c6cf5' },
+  { id:'insta', label:'Instagram', fg:'#9d2f6e', eye:'#d6376a' },
+  { id:'menu', label:'Menu', fg:'#7a3b14', eye:'#c2691f' },
+  { id:'avis', label:'Avis', fg:'#185a3c', eye:'#1f9d57' },
+  { id:'neon', label:'Néon', fg:'#1B2A4A', eye:'#7c3aed' },
+];
+const COLORS = [['#1B2A4A','#6c6cf5'],['#0f1d3a','#818cf8'],['#26215C','#7F77DD'],['#3B6D11','#97C459'],['#993C1D','#D85A30']];
+const S = { fam:'liens', type:'url', mode:'dyn', fg:'#1B2A4A', eye:'#6c6cf5', view:'qr' };
+const $ = s => document.querySelector(s);
+function curType(){ return (TYPES[S.fam]||[]).find(t=>t.id===S.type) || TYPES[S.fam][0]; }
+
+function renderFams(){
+  $('#sdqr-type-cards').innerHTML = `<div class="sdqr-fam-row">${FAMS.map(f=>{
+    const on=f.id===S.fam, exp=f.star?' sdqr-fam-pill--exp':'';
+    return `<button class="sdqr-fam-pill${exp} ${on?'is-active':''}" data-fam="${f.id}"><span class="sdqr-fam-ico"><i class="ti ti-${f.ico}"></i></span>${f.label}${f.star?' ✦':''}</button>`;
+  }).join('')}</div>` + (S.fam==='exp'
+    ? `<div class="sdqr-fam-tag">${FAM_TAG.exp}</div>`
+    : `<div class="sdqr-type-cards-grid">${(TYPES[S.fam]||[]).map(t=>{
+        const on=t.id===S.type;
+        return `<button class="sdqr-type-card ${on?'is-active':''}" data-type="${t.id}"><span class="sdqr-type-ico"><i class="ti ti-${t.ico}" style="font-size:19px"></i></span><span class="sdqr-type-label">${t.label}</span><span class="sdqr-type-desc">${t.desc}</span>${t.mode==='stat'?'<span class="sdqr-type-badge">Permanent</span>':''}</button>`;
+      }).join('')}</div>`);
+  $('#sdqr-smart-template-wrap').hidden = S.fam!=='exp';
+  if (S.fam==='exp') $('#sdqr-template-cards').innerHTML = `<div class="sdqr-type-cards-grid">${TYPES.exp.map(t=>{
+      const on=t.id===S.type;
+      return `<button class="sdqr-type-card ${on?'is-active':''}" data-type="${t.id}"><span class="sdqr-type-ico"><i class="ti ti-${t.ico}" style="font-size:19px;color:#6c6cf5"></i></span><span class="sdqr-type-label">${t.label}</span><span class="sdqr-type-desc">${t.desc}</span></button>`;
+    }).join('')}</div>`;
+}
+function renderModePick(){
+  const t=curType(); const isSmart=t.mode==='smart';
+  $('#sdqr-step2-tag').textContent = isSmart?'expérience':(t.mode==='stat'?'permanent':'');
+  const z=$('#sdqr-mode-pick');
+  if (isSmart) z.innerHTML = `<div class="sdqr-modenote sdqr-modenote--smart"><i class="ti ti-sparkles"></i>Expérience interactive — page hébergée, modifiable et suivie.</div>`;
+  else if (t.mode==='dyn') z.innerHTML = `<div class="sdqr-modepick"><button class="sdqr-modepick-btn ${S.mode==='stat'?'is-active':''}" data-mode="stat"><strong>Permanent</strong><small>gratuit · non modifiable</small></button><button class="sdqr-modepick-btn ${S.mode==='dyn'?'is-active':''}" data-mode="dyn"><strong>Modifiable</strong><small>change après impression · suivi</small></button></div>`;
+  else z.innerHTML = `<div class="sdqr-modenote sdqr-modenote--stat"><i class="ti ti-shield-check"></i>Ce type est toujours permanent — encodé directement, gratuit, sans connexion.</div>`;
+  $('#sdqr-type-heading').textContent = isSmart ? "Destination après l'expérience — où le visiteur est envoyé ensuite" : '';
+  const ph={url:'https://votre-site.com',vcard:'Prénom Nom, société…',wifi:'Nom du réseau (SSID)',concierge:'Nom du lieu',email:'destinataire@exemple.com'};
+  $('#sdqr-form-fields').innerHTML = `<label class="sdqr-field sdqr-field--full"><span class="sdqr-field-lbl">${isSmart?'Destination (URL)':t.label}</span><div style="display:flex;align-items:center;gap:8px;border:1px solid rgba(27,42,74,.12);border-radius:10px;padding:10px 12px;background:#fff"><i class="ti ti-${t.ico}" style="font-size:16px;color:#9aa6b8"></i><span style="font-size:13px;color:#aab2c0">${ph[t.id]||t.label}</span></div></label>`;
+}
+function renderModels(){ $('#model-row').innerHTML = MODELS.map(m=>{const on=m.fg===S.fg&&m.eye===S.eye;return `<button class="sdqr-d3-model ${on?'is-on':''}" data-fg="${m.fg}" data-eye="${m.eye}"><span class="sdqr-d3-swatch"><i class="m" style="background:${m.fg}"></i><i class="e" style="background:${m.eye}"></i></span><span>${m.label}</span></button>`;}).join(''); }
+function renderColors(){ $('#color-row').innerHTML = COLORS.map(c=>{const on=c[0]===S.fg&&c[1]===S.eye;return `<button class="sdqr-d3-color ${on?'is-on':''}" data-fg="${c[0]}" data-eye="${c[1]}" style="background:linear-gradient(135deg,${c[0]} 60%,${c[1]} 60%)" aria-label="palette"></button>`;}).join(''); }
+function renderSwitch(){ const sw=$('#sdqr-view-switch'); if(curType().mode!=='smart'){sw.innerHTML='';return;} const seg=(v,l)=>`<button class="sdqr-preview-seg ${S.view===v?'is-active':''}" data-view="${v}">${l}</button>`; sw.innerHTML=seg('qr','QR')+seg('phone','Page'); }
+function phoneHtml(t){ const acc=S.eye; let body=`<div class="sdqr-cph-text">Bonjour, posez-moi votre question.</div><div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div><div class="sdqr-cph-input">Écrire…<svg viewBox="0 0 24 24" fill="none" stroke="${acc}" stroke-width="1.8"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>`; if(t.id!=='concierge') body=`<div class="sdqr-cph-text">Un instant…</div><div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div><div class="sdqr-cph-chip" style="background:${acc}">Découvrir</div>`; return `<div class="sdqr-phone"><div class="sdqr-phone-bar"></div><div class="sdqr-phone-head" style="background:${acc}"><span class="sdqr-phone-title">${t.label}</span></div><div class="sdqr-phone-body">${body}</div></div>`; }
+async function paint(){
+  const t=curType(); const showPhone=t.hosted&&S.view==='phone';
+  $('#sdqr-svg-wrap').hidden=showPhone; $('#sdqr-cre-phone').hidden=!showPhone;
+  if(showPhone) $('#sdqr-cre-phone').innerHTML=phoneHtml(t);
+  else { const design={fg:S.fg,bg:'#ffffff',eye:{distinct:true,color:S.eye}}; const text=(t.mode==='dyn'||t.mode==='smart')?'https://protein-keystone.com/r/apercu':'https://votre-site.com'; try{$('#sdqr-svg-wrap').innerHTML=await renderQrCustom(text,design,232);}catch(e){$('#sdqr-svg-wrap').textContent=e.message;} }
+  const modeTxt=t.mode==='dyn'?(S.mode==='stat'?'permanent':'modifiable, suivi'):(t.mode==='smart'?'expérience, suivie':'permanent');
+  $('#sdqr-preview-cap').innerHTML=`<b>${t.label}</b><br>${modeTxt}${t.hosted?' · page hébergée + QR':''}`;
+}
+function all(){ renderFams(); renderModePick(); renderModels(); renderColors(); renderSwitch(); paint(); }
+document.body.addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.fam){ S.fam=b.dataset.fam; const a=TYPES[S.fam]; S.type=a[0].id; S.mode=a[0].mode; S.view=a[0].hosted?'phone':'qr'; all(); return; }
+  if(b.dataset.type){ S.type=b.dataset.type; const t=curType(); S.mode=t.mode; S.view=t.hosted?'phone':'qr'; renderFams(); renderModePick(); renderSwitch(); paint(); return; }
+  if(b.dataset.mode){ S.mode=b.dataset.mode; renderModePick(); paint(); return; }
+  if(b.dataset.view){ S.view=b.dataset.view; renderSwitch(); paint(); return; }
+  if(b.dataset.fg){ S.fg=b.dataset.fg; S.eye=b.dataset.eye; renderModels(); renderColors(); paint(); return; }
+});
+all();
+</script>
+</body>
+</html>
