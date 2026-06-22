@@ -113,11 +113,13 @@ html.light-mode {
   --tx2:   rgba(27,42,74,.62);
   --tx3:   rgba(27,42,74,.42);
   --bd:    rgba(27,42,74,.12);
-  /* Accent OR Keystone — RARE : seuls les états sélectionnés (via var(--gold)) virent à l'or.
-     Les fonds/survols/tints restent en indigo discret (couleurs en dur, non touchées). */
-  --gold:  #c9a84c;
-  --gold2: #d8c074;
-  --gold3: rgba(201,168,76,.14);
+  /* Accent INDIGO Keystone (choix Stephane : tout le chrome SDQR sur l'indigo
+     des stats #6c6cf5 — fini le dore, juge « vieillot »). Pilote tous les etats
+     selectionnes / CTA via var(--gold). Les palettes de DESIGN des QR (sdqr.js :
+     « Or royal », « Navy & Or »…) restent inchangees = contenu utilisateur. */
+  --gold:  #6c6cf5;
+  --gold2: #818cf8;
+  --gold3: rgba(108,108,245,.14);
 }
 
 /* CTA PRINCIPAUX en OR (création) — le doré rare, réservé aux actions fortes ;
@@ -125,12 +127,12 @@ html.light-mode {
 .sdqr-fullscreen .sdqr-cta,
 .sdqr-fullscreen .sdqr-save,
 .sdqr-fullscreen .sdqr-new-btn {
-  background: var(--gold); border-color: var(--gold); color: #1b2a4a;
+  background: var(--gold); border-color: var(--gold); color: #fff;
 }
 .sdqr-fullscreen .sdqr-cta:hover,
 .sdqr-fullscreen .sdqr-save:hover,
 .sdqr-fullscreen .sdqr-new-btn:hover {
-  background: var(--gold2); border-color: var(--gold2); color: #1b2a4a;
+  background: var(--gold2); border-color: var(--gold2); color: #fff;
 }
 
 html.light-mode body {
@@ -8615,7 +8617,7 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   transition: color .15s, border-color .15s;
 }
 .sdqr-dtab:hover { color: #1b2a4a; }
-.sdqr-dtab.is-active { color: #1b2a4a; border-bottom-color: var(--gold, #c9a84c); }
+.sdqr-dtab.is-active { color: #1b2a4a; border-bottom-color: var(--gold, #6c6cf5); }
 .sdqr-dtab-panel { display: none; flex-direction: column; gap: 12px; }
 .sdqr-dtab-panel.is-active { display: flex; }
 
@@ -9073,8 +9075,8 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-amb-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #94a3b8; margin-bottom: 7px; }
 .sdqr-amb-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .sdqr-amb-card { display: flex; flex-direction: column; gap: 7px; padding: 9px; background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 11px; cursor: pointer; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s; }
-.sdqr-amb-card:hover { border-color: rgba(201,168,76,.5); }
-.sdqr-amb-card.is-on { border-color: #c9a84c; box-shadow: 0 0 0 2px rgba(201,168,76,.2); }
+.sdqr-amb-card:hover { border-color: rgba(108,108,245,.5); }
+.sdqr-amb-card.is-on { border-color: #6c6cf5; box-shadow: 0 0 0 2px rgba(108,108,245,.2); }
 .sdqr-amb-top { display: flex; align-items: center; gap: 7px; }
 .sdqr-amb-bar { flex: 1; height: 22px; border-radius: 6px; min-width: 0; }
 .sdqr-amb-accent { width: 22px; height: 22px; flex: none; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); }
@@ -9089,8 +9091,8 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   color: #1b2a4a; font: inherit; cursor: pointer;
   transition: border-color .15s, box-shadow .15s;
 }
-.sdqr-eye-card:hover { border-color: rgba(201,168,76,.5); }
-.sdqr-eye-card.is-on { border-color: #c9a84c; box-shadow: 0 0 0 2px rgba(201,168,76,.2); }
+.sdqr-eye-card:hover { border-color: rgba(108,108,245,.5); }
+.sdqr-eye-card.is-on { border-color: #6c6cf5; box-shadow: 0 0 0 2px rgba(108,108,245,.2); }
 .sdqr-eye-prev { width: 40px; height: 40px; flex: none; }
 .sdqr-eye-prev svg { width: 100%; height: 100%; display: block; }
 .sdqr-eye-name { font-size: 11px; font-weight: 600; color: #475569; text-align: center; line-height: 1.2; }
@@ -9105,7 +9107,7 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   cursor: pointer; transition: border-color .15s, background .15s;
 }
 .sdqr-logo-lib-btn svg { width: 20px; height: 20px; }
-.sdqr-logo-lib-btn:hover { border-color: rgba(201,168,76,.5); background: rgba(201,168,76,.06); }
+.sdqr-logo-lib-btn:hover { border-color: rgba(108,108,245,.5); background: rgba(108,108,245,.06); }
 .sdqr-saved-logos { display: flex; flex-wrap: wrap; gap: 9px; }
 .sdqr-saved-logo { position: relative; }
 .sdqr-saved-logo-btn {
@@ -9114,7 +9116,7 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   border: 1px solid rgba(27,42,74,.12); border-radius: 10px; background: #fff; cursor: pointer;
 }
 .sdqr-saved-logo-btn img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.sdqr-saved-logo-btn:hover { border-color: rgba(201,168,76,.5); }
+.sdqr-saved-logo-btn:hover { border-color: rgba(108,108,245,.5); }
 .sdqr-saved-logo-x {
   position: absolute; top: -6px; right: -6px;
   width: 17px; height: 17px; padding: 0; border-radius: 50%;
@@ -9131,7 +9133,7 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   padding: 8px; background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 11px;
   cursor: pointer; font: inherit; transition: border-color .15s, box-shadow .15s;
 }
-.sdqr-model-card:hover { border-color: rgba(201,168,76,.5); box-shadow: 0 2px 10px rgba(8,15,35,.1); }
+.sdqr-model-card:hover { border-color: rgba(108,108,245,.5); box-shadow: 0 2px 10px rgba(8,15,35,.1); }
 .sdqr-model-prev { width: 54px; height: 66px; flex: none; }
 .sdqr-model-svg { width: 100%; height: 100%; display: block; }
 .sdqr-model-name { font-size: 11px; font-weight: 600; color: #1b2a4a; text-align: center; line-height: 1.2; }
@@ -10137,11 +10139,11 @@ html.light-mode .sdqr-sidebar-head    { border-bottom-color: var(--sdqr-line); }
 html.light-mode .sdqr-sidebar-title   { color: var(--sdqr-ink3); }
 html.light-mode .sdqr-sidebar-filters { border-bottom-color: var(--sdqr-line); }
 html.light-mode .sdqr-new-btn {
-  background: rgba(201,168,76,.14);
-  border-color: rgba(201,168,76,.5);
+  background: rgba(108,108,245,.14);
+  border-color: rgba(108,108,245,.5);
   color: var(--gold2);
 }
-html.light-mode .sdqr-new-btn:hover { background: rgba(201,168,76,.24); color: #fff; }
+html.light-mode .sdqr-new-btn:hover { background: rgba(108,108,245,.24); color: #fff; }
 /* Bouton « Vue d'ensemble » (style inline dans sdqr.js → on re-teinte ici) */
 html.light-mode .sdqr-overview-btn {
   background: rgba(255,255,255,.04) !important;
@@ -10150,8 +10152,8 @@ html.light-mode .sdqr-overview-btn {
 }
 html.light-mode .sdqr-overview-btn.is-active,
 html.light-mode .sdqr-overview-btn:hover {
-  background: rgba(201,168,76,.14) !important;
-  border-color: rgba(201,168,76,.45) !important;
+  background: rgba(108,108,245,.14) !important;
+  border-color: rgba(108,108,245,.45) !important;
   color: #fff !important;
 }
 /* Recherche + filtres */
@@ -10170,8 +10172,8 @@ html.light-mode .sdqr-search-kbd {
 html.light-mode .sdqr-filter-pill { color: var(--sdqr-ink3); }
 html.light-mode .sdqr-filter-pill:hover { color: #fff; }
 html.light-mode .sdqr-filter-pill.is-active {
-  background: rgba(201,168,76,.16);
-  border-color: rgba(201,168,76,.45);
+  background: rgba(108,108,245,.16);
+  border-color: rgba(108,108,245,.45);
   color: var(--gold2);
 }
 /* Liste des QR */
@@ -10181,12 +10183,12 @@ html.light-mode .sdqr-li {
   color: var(--sdqr-ink2);
 }
 html.light-mode .sdqr-li:hover {
-  background: rgba(201,168,76,.06);
-  border-color: rgba(201,168,76,.22);
+  background: rgba(108,108,245,.06);
+  border-color: rgba(108,108,245,.22);
 }
 html.light-mode .sdqr-li.is-selected {
-  background: rgba(201,168,76,.1);
-  border-color: rgba(201,168,76,.4);
+  background: rgba(108,108,245,.1);
+  border-color: rgba(108,108,245,.4);
 }
 html.light-mode .sdqr-li-name  { color: #fff; }
 html.light-mode .sdqr-li-scans { color: var(--gold2); }
@@ -10197,8 +10199,8 @@ html.light-mode .sdqr-folder-bar-head { color: var(--sdqr-ink3); }
 html.light-mode .sdqr-folder-chip { color: var(--sdqr-ink2); }
 html.light-mode .sdqr-folder-chip:hover { background: rgba(255,255,255,.05); }
 html.light-mode .sdqr-folder-chip.is-active {
-  background: rgba(201,168,76,.14);
-  border-color: rgba(201,168,76,.4);
+  background: rgba(108,108,245,.14);
+  border-color: rgba(108,108,245,.4);
   color: #fff;
 }
 
@@ -10231,21 +10233,21 @@ html.light-mode .sdqr-content--create .sdqr-btn--ghost:hover {
 /* SÉLECTION = OR (maquette) : mode + type passent de l'indigo à l'or, comme
    les pills de famille et le CTA. Or = uniquement l'élément choisi → rare. */
 html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active {
-  background: rgba(201,168,76,.1);
-  border-color: rgba(201,168,76,.55);
+  background: rgba(108,108,245,.1);
+  border-color: rgba(108,108,245,.55);
 }
-html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active .sdqr-mode-txt strong { color: #8a6d1f; }
+html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active .sdqr-mode-txt strong { color: #4338ca; }
 html.light-mode .sdqr-content--create .sdqr-mode-btn.is-active .sdqr-mode-dot {
-  border-color: var(--gold, #c9a84c);
-  background: var(--gold, #c9a84c);
+  border-color: var(--gold, #6c6cf5);
+  background: var(--gold, #6c6cf5);
   box-shadow: inset 0 0 0 2px #fff;
 }
 html.light-mode .sdqr-content--create .sdqr-type-card.is-active {
-  background: rgba(201,168,76,.1);
-  border-color: rgba(201,168,76,.5);
+  background: rgba(108,108,245,.1);
+  border-color: rgba(108,108,245,.5);
 }
-html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-label { color: #8a6d1f; }
-html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico   { color: var(--gold, #c9a84c); }
+html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-label { color: #4338ca; }
+html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico   { color: var(--gold, #6c6cf5); }
 
 /* — PANNEAUX BLANCS « Étape » (cartes du formulaire) — */
 .sdqr-step {
@@ -10265,7 +10267,7 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
   width: 22px; height: 22px; flex: none;
   border-radius: 50%;
   background: var(--sdqr-navy, #1b2a4a);
-  color: var(--gold, #c9a84c);
+  color: var(--gold, #6c6cf5);
   font-size: 12px; font-weight: 700;
 }
 .sdqr-step-title {
@@ -10314,7 +10316,7 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 }
 .sdqr-lib-seg svg { width: 15px; height: 15px; }
 .sdqr-lib-seg:hover { color: #fff; }
-.sdqr-lib-seg.is-active { background: var(--gold, #c9a84c); color: #1b2a4a; }
+.sdqr-lib-seg.is-active { background: var(--gold, #6c6cf5); color: #fff; }
 
 /* — Vue GRILLE : cartes blanches — */
 .sdqr-qr-grid {
@@ -10338,7 +10340,7 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 .sdqr-qr-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 26px rgba(8,15,35,.32);
-  border-color: rgba(201,168,76,.45);
+  border-color: rgba(108,108,245,.45);
 }
 .sdqr-qr-card-top { display: flex; align-items: flex-start; gap: 11px; padding-right: 30px; }
 .sdqr-qr-card-ico {
@@ -10361,9 +10363,9 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
   padding: 2px 8px; border-radius: 5px; white-space: nowrap;
 }
 .sdqr-qr-badge--type { background: rgba(27,42,74,.06); color: #475569; }
-.sdqr-qr-badge--dyn  { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-qr-badge--dyn  { background: rgba(108,108,245,.16); color: #4338ca; }
 .sdqr-qr-badge--stat { background: rgba(27,42,74,.06); color: #64748b; }
-.sdqr-qr-badge--cg   { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-qr-badge--cg   { background: rgba(108,108,245,.16); color: #4338ca; }
 .sdqr-qr-badge--arch { background: rgba(100,116,139,.16); color: #64748b; }
 .sdqr-qr-card-foot {
   margin-top: auto;
@@ -10431,7 +10433,7 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
   cursor: pointer; user-select: none;
 }
 .sdqr-tbl thead th.is-static { cursor: default; }
-.sdqr-tbl thead th.is-sorted { color: #8a6d1f; }
+.sdqr-tbl thead th.is-sorted { color: #4338ca; }
 .sdqr-th-arrow { font-size: 9px; margin-left: 4px; opacity: .8; }
 .sdqr-tbl tbody td {
   padding: 10px 14px; vertical-align: middle;
@@ -10439,20 +10441,20 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 }
 .sdqr-tbl tbody tr:last-child td { border-bottom: none; }
 .sdqr-tbl tbody tr { cursor: pointer; transition: background .12s; }
-.sdqr-tbl tbody tr:hover { background: rgba(201,168,76,.05); }
-.sdqr-tbl tbody tr.is-checked { background: rgba(201,168,76,.09); }
+.sdqr-tbl tbody tr:hover { background: rgba(108,108,245,.05); }
+.sdqr-tbl tbody tr.is-checked { background: rgba(108,108,245,.09); }
 .sdqr-tbl-name { font-weight: 700; color: #1b2a4a; }
 .sdqr-tbl-type { display: inline-flex; align-items: center; gap: 6px; color: #475569; white-space: nowrap; }
 .sdqr-tbl-type svg { width: 14px; height: 14px; flex: none; }
 .sdqr-tbl-scans { font-weight: 700; color: #1b2a4a; font-variant-numeric: tabular-nums; }
 .sdqr-tbl-mode { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
-.sdqr-tbl-mode--dyn  { background: rgba(201,168,76,.16); color: #8a6d1f; }
+.sdqr-tbl-mode--dyn  { background: rgba(108,108,245,.16); color: #4338ca; }
 .sdqr-tbl-mode--stat { background: rgba(27,42,74,.06); color: #64748b; }
 .sdqr-tbl-st { font-size: 11px; color: #64748b; }
 .sdqr-tbl-col-check { width: 40px; text-align: center; }
 .sdqr-tbl-col-act   { width: 46px; text-align: center; }
 .sdqr-tbl input[type="checkbox"] {
-  accent-color: #c9a84c; width: 15px; height: 15px; cursor: pointer; vertical-align: middle;
+  accent-color: #6c6cf5; width: 15px; height: 15px; cursor: pointer; vertical-align: middle;
 }
 .sdqr-tbl .sdqr-qr-menu-btn { position: static; }
 
@@ -10460,8 +10462,8 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 .sdqr-bulk {
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 14px; padding: 9px 10px 9px 15px;
-  background: rgba(201,168,76,.12);
-  border: 1px solid rgba(201,168,76,.35);
+  background: rgba(108,108,245,.12);
+  border: 1px solid rgba(108,108,245,.35);
   border-radius: 11px;
 }
 .sdqr-bulk-count { font-size: 13px; font-weight: 700; color: #fff; }
@@ -10555,3 +10557,7 @@ html.light-mode .sdqr-content--stats .sdqr-empty-mini { color: rgba(220,225,240,
 .sdqr-hm-scale { display: flex; align-items: center; gap: 5px; margin-top: 11px; font-size: 10px; color: rgba(220,225,240,.4); }
 .sdqr-hm-sw { width: 16px; height: 11px; border-radius: 2px; }
 .sdqr-hm-tz { margin-left: auto; font-style: italic; }
+
+/* Bibliotheque « Mes QR » — etat « aucun resultat » (la sidebar n'a plus de
+   liste ni de bouton reset ; on guide vers la recherche / le filtre Tous). */
+.sdqr-lib-empty { padding: 54px 24px; text-align: center; color: rgba(221,228,243,.6); font-size: 13px; line-height: 1.7; }

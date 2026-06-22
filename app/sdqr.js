@@ -343,9 +343,6 @@ function _renderShell() {
           </div>
         </div>
         <div class="sdqr-folder-bar" id="sdqr-folders"></div>
-        <div class="sdqr-sidebar-list" id="sdqr-list">
-          <div class="sdqr-empty-mini">Chargement…</div>
-        </div>
       </aside>
 
       <main class="sdqr-main">
@@ -551,7 +548,11 @@ function _renderLibrary(panel) {
     </div>`;
 
   let body;
-  if (_libView === 'table') {
+  if (qrs.length === 0) {
+    // Filtre (recherche / statut / dossier) sans resultat. Le reset se fait en
+    // vidant la recherche ou en cliquant « Tous » (la sidebar n'a plus de liste).
+    body = `<div class="sdqr-lib-empty">Aucun QR ne correspond a ce filtre.<br>Vide la recherche ou choisis « Tous ».</div>`;
+  } else if (_libView === 'table') {
     const th = (key, label) =>
       `<th data-sort="${key}" class="${_libSort.key === key ? 'is-sorted' : ''}">${label}${_libSort.key === key ? ` <span class="sdqr-th-arrow">${_libSort.dir === 'asc' ? '&#9650;' : '&#9660;'}</span>` : ''}</th>`;
     const allChecked = qrs.length > 0 && qrs.every(q => _libSel.has(q.id));
@@ -818,19 +819,14 @@ function _renderCurrentView(panel) {
   const qr = _selectedId ? _cachedQrs.find(q => q.id === _selectedId) : null;
 
   if (_currentView === 'stats') {
-    content.classList.add('sdqr-content--stats');   // puits sombre/indigo (skin analytique, maquette 16)
     if (!qr) {
-      content.innerHTML = `
-        <div class="sdqr-empty-state">
-          <div class="sdqr-empty-ico">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:56px;height:56px;opacity:.45"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          </div>
-          <h2 class="sdqr-empty-title">Statistiques souveraines</h2>
-          <p class="sdqr-empty-text">Sélectionne un QR dans la barre latérale pour voir ses scans, sa géographie, ses appareils.<br>Aucune donnée tierce — tout est aggrégé chez toi (RGPD natif).</p>
-        </div>
-      `;
+      // Plus de liste dans la sidebar : on montre la grille « Mes QR » pour
+      // choisir le QR a analyser. Le clic d'une carte respecte _currentView
+      // (stats) via _selectFromLib -> ouvre directement ses statistiques.
+      _renderLibrary(panel);
       return;
     }
+    content.classList.add('sdqr-content--stats');   // puits sombre/indigo (maquette 16)
     _openQrStats(panel, qr);
     return;
   }
@@ -952,64 +948,11 @@ function _renderFolders(panel) {
 
 // Render seul depuis _cachedQrs (appelé par les filter handlers — no fetch)
 function _renderList(panel) {
-  const listEl = panel.querySelector('#sdqr-list');
-  if (!listEl) return;
+  // La sidebar n'affiche PLUS la liste des QR (redondante avec la grille de
+  // droite — demande Stephane) : seuls les DOSSIERS y vivent. La recherche, les
+  // filtres de statut et les dossiers pilotent la GRILLE (bibliotheque) via le
+  // miroir ci-dessous. _renderLibrary n'appelle PAS _renderList -> pas de recursion.
   _renderFolders(panel);
-
-  // Filtrage local (recherche + status)
-  const filtered = _applyFilters(_cachedQrs);
-
-  if (_cachedQrs.length === 0) {
-    listEl.innerHTML = `<div class="sdqr-empty-mini">Aucun QR pour l'instant.</div>`;
-    return;
-  }
-  if (filtered.length === 0) {
-    listEl.innerHTML = `<div class="sdqr-empty-mini">Aucun résultat pour ce filtre.<br><button class="sdqr-empty-reset" id="sdqr-filter-reset">Réinitialiser</button></div>`;
-    listEl.querySelector('#sdqr-filter-reset')?.addEventListener('click', () => {
-      _filter = { search: '', status: 'all', type: 'all', folder: 'all' };
-      const searchInput = panel.querySelector('#sdqr-search');
-      if (searchInput) searchInput.value = '';
-      panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(b => {
-        b.classList.toggle('is-active', b.dataset.status === 'all');
-      });
-      _renderList(panel);
-    });
-    return;
-  }
-  listEl.innerHTML = filtered.map(q => {
-    const tags = (q.tags || []).slice(0, 3).map(t => `<span class="sdqr-li-tag">${_esc(t)}</span>`).join('');
-    const isSel = q.id === _selectedId;
-    const isDyn = (q.mode || 'dynamic') === 'dynamic';
-    const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
-    return `
-      <button class="sdqr-li ${isSel ? 'is-selected' : ''}" data-qr-id="${_esc(q.id)}">
-        <div class="sdqr-li-hd">
-          <span class="sdqr-li-name">${_esc(q.name || '(sans nom)')}</span>
-          ${isDyn ? `<span class="sdqr-li-scans" title="Scans totaux">${q.scans_total || 0}</span>` : `<span class="sdqr-li-scans sdqr-li-scans--stat" title="QR statique — pas de tracking">∞</span>`}
-        </div>
-        <div class="sdqr-li-meta">
-          <span class="sdqr-li-type">${typeDef.icon} ${_esc(typeDef.label)}</span>
-          <span class="sdqr-li-mode ${isDyn ? 'sdqr-li-mode--dyn' : 'sdqr-li-mode--stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
-          ${q.template_id === 'concierge' ? '<span class="sdqr-li-concierge" title="QR Concierge VEFA">Concierge</span>' : ''}
-          ${q.status === 'archived' ? '<span class="sdqr-li-status">Archivé</span>' : ''}
-          ${q.folder ? `<span class="sdqr-li-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
-        </div>
-        ${tags ? `<div class="sdqr-li-tags">${tags}</div>` : ''}
-      </button>
-    `;
-  }).join('');
-  listEl.querySelectorAll('[data-qr-id]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _selectedId = btn.dataset.qrId;
-      _renderList(panel);   // re-render seul, no refetch
-      // Dispatch selon la vue courante (Studio ou Stats)
-      _renderCurrentView(panel);
-    });
-  });
-
-  // Si la bibliothèque « Mes QR » est la vue active, la re-filtrer en miroir
-  // de la sidebar (recherche / statut / dossier). _renderLibrary n'appelle PAS
-  // _renderList -> pas de récursion.
   const _c = panel.querySelector('#sdqr-content');
   if (_c && _c.classList.contains('sdqr-content--lib') && !_selectedId) _renderLibrary(panel);
 }
@@ -3765,7 +3708,7 @@ function _renderLineChart(byDay, meta) {
   const events = [];
   if (cr) events.push({ day: cr, label: 'Créé',     color: '#8a93a9' });
   if (pr) events.push({ day: pr, label: 'Imprimé',  color: '#aeb6c9' });
-  if (up && up !== cr) events.push({ day: up, label: 'Modifié', color: '#c9a84c' });
+  if (up && up !== cr) events.push({ day: up, label: 'Modifié', color: '#fb923c' });
   const evMarks = events.map(ev => {
     const x = _xForDay(ev.day, byDay, g);
     if (x == null) return '';
@@ -3809,7 +3752,7 @@ function _renderTimelineLegend(byDay, meta) {
   const items = [];
   if (_dayInRange(cr, byDay)) items.push(['#8a93a9', 'Créé']);
   if (_dayInRange(pr, byDay)) items.push(['#aeb6c9', 'Imprimé']);
-  if (up && up !== cr && _dayInRange(up, byDay)) items.push(['#c9a84c', 'Modifié']);
+  if (up && up !== cr && _dayInRange(up, byDay)) items.push(['#fb923c', 'Modifié']);
   items.push(['#a3a3ff', 'Pic']);
   return `<div class="sdqr-tl-legend">${items.map(([c,l]) =>
     `<span class="sdqr-tl-leg"><span class="sdqr-tl-dot" style="background:${c}"></span>${l}</span>`).join('')}</div>`;
@@ -3836,7 +3779,7 @@ function _renderTimelineInsight(byDay, meta) {
     const pct = Math.round((after - before) / before * 100);
     phrase = `<strong>${pct >= 0 ? '+' : ''}${pct} %</strong> de scans sur les 7 jours suivants (${after} vs ${before} avant).`;
   }
-  return `<div class="sdqr-tl-insight"><span class="sdqr-tl-insight-ico" style="color:#c9a84c">&#9679;</span> Modifié le ${_frDate(up)} &rarr; ${phrase}</div>`;
+  return `<div class="sdqr-tl-insight"><span class="sdqr-tl-insight-ico" style="color:#fb923c">&#9679;</span> Modifié le ${_frDate(up)} &rarr; ${phrase}</div>`;
 }
 
 // Contrôle « marquer comme imprimé » (jalon déclaré, persisté via PATCH printed_at).
