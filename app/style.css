@@ -10567,3 +10567,7 @@ html.light-mode .sdqr-content--stats .sdqr-empty-mini { color: rgba(220,225,240,
 /* Bibliotheque « Mes QR » — etat « aucun resultat » (la sidebar n'a plus de
    liste ni de bouton reset ; on guide vers la recherche / le filtre Tous). */
 .sdqr-lib-empty { padding: 54px 24px; text-align: center; color: rgba(221,228,243,.6); font-size: 13px; line-height: 1.7; }
+
+/* Retour « Tous les QR » dans l'entete des stats par-QR (sur le puits sombre). */
+.sdqr-stats-back { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; padding: 0; margin-bottom: 8px; font: inherit; font-size: 12px; font-weight: 600; color: #a3a3ff; cursor: pointer; }
+.sdqr-stats-back:hover { color: #c4c4ff; }

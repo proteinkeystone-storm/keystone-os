@@ -326,10 +326,6 @@ function _renderShell() {
             Nouveau
           </button>
         </div>
-        <button class="sdqr-overview-btn" id="sdqr-overview-btn" title="Statistiques de tous tes QR" style="display:flex;align-items:center;gap:8px;margin:0 12px 10px;width:calc(100% - 24px);padding:9px 11px;border:1px solid rgba(99,102,241,.4);background:rgba(99,102,241,.12);color:#1b2a4a;border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>
-          Vue d'ensemble
-        </button>
         <div class="sdqr-sidebar-filters">
           <div class="sdqr-search-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="sdqr-search-ico"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -481,6 +477,7 @@ function _libToggleMenu(panel, q, btn) {
   pop.style.position = 'fixed';
   pop.innerHTML = `
     <button data-act="open">${_LIBICO.eye}Ouvrir</button>
+    <button data-act="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>Statistiques</button>
     <button data-act="archive">${_LIBICO.arch}${isArch ? 'Réactiver' : 'Archiver'}</button>
     ${isArch ? `<button data-act="delete" class="is-danger">${_LIBICO.trash}Supprimer</button>` : ''}`;
   document.body.appendChild(pop);
@@ -489,6 +486,13 @@ function _libToggleMenu(panel, q, btn) {
   pop.style.top  = (r.bottom + 6) + 'px';
   pop.style.left = Math.max(8, r.right - w) + 'px';
   pop.querySelector('[data-act="open"]').onclick    = () => { _libCloseMenu(); _selectFromLib(panel, q.id); };
+  pop.querySelector('[data-act="stats"]').onclick   = () => {
+    _libCloseMenu();
+    _selectedId = q.id;
+    _currentView = 'stats';
+    panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.toggle('active', x.dataset.view === 'stats'));
+    _renderCurrentView(panel);   // QR selectionne + vue stats -> _openQrStats
+  };
   pop.querySelector('[data-act="archive"]').onclick = () => { _libCloseMenu(); _libArchive(panel, [q.id], isArch ? 'active' : 'archived'); };
   const del = pop.querySelector('[data-act="delete"]');
   if (del) del.onclick = () => {
@@ -656,9 +660,10 @@ function _renderLibrary(panel) {
 // ══════════════════════════════════════════════════════════════════
 async function _openOverview(panel, period = '30d') {
   _selectedId = null;
-  panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.remove('active'));
-  panel.querySelector('#sdqr-overview-btn')?.classList.add('is-active');
-  _renderList(panel);  // dé-sélectionne visuellement la liste
+  _currentView = 'stats';
+  // L'onglet « Statistiques » ouvre sur la vue d'ensemble (tous les QR).
+  panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.toggle('active', x.dataset.view === 'stats'));
+  _renderList(panel);  // rafraichit les dossiers (plus de liste sidebar)
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
   content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');   // vue d'ensemble = puits clair
@@ -765,7 +770,6 @@ function _wireShell(panel) {
   panel.querySelector('#sdqr-close-btn')?.addEventListener('click', closeSDQR);
   panel.querySelector('#sdqr-new-btn')?.addEventListener('click', () => _openCreateForm(panel));
   panel.querySelector('#sdqr-cta-new')?.addEventListener('click', () => _openCreateForm(panel));
-  panel.querySelector('#sdqr-overview-btn')?.addEventListener('click', () => _openOverview(panel));
   panel.querySelectorAll('.sdqr-tab').forEach(t => {
     t.addEventListener('click', () => {
       if (t.disabled) return;
@@ -820,10 +824,10 @@ function _renderCurrentView(panel) {
 
   if (_currentView === 'stats') {
     if (!qr) {
-      // Plus de liste dans la sidebar : on montre la grille « Mes QR » pour
-      // choisir le QR a analyser. Le clic d'une carte respecte _currentView
-      // (stats) via _selectFromLib -> ouvre directement ses statistiques.
-      _renderLibrary(panel);
+      // Onglet « Statistiques » = vue d'ensemble (tous les QR) par defaut.
+      // Stats d'un QR precis : l'ouvrir (carte / menu ⋯ Statistiques) -> _openQrStats,
+      // avec un retour « Tous les QR » dans l'entete.
+      _openOverview(panel);
       return;
     }
     content.classList.add('sdqr-content--stats');   // puits sombre/indigo (maquette 16)
@@ -3504,6 +3508,7 @@ async function _openQrStats(panel, qr) {
     <div class="sdqr-stats-wrap">
       <div class="sdqr-stats-head">
         <div class="sdqr-stats-head-left">
+          <button class="sdqr-stats-back" id="sdqr-stats-back" title="Revenir a la vue d'ensemble">&larr; Tous les QR</button>
           <h2 class="sdqr-stats-title">${_esc(qr.name || '(sans nom)')}</h2>
           <div class="sdqr-stats-subtitle">Statistiques souveraines — aucune donnée tierce</div>
         </div>
@@ -3536,6 +3541,12 @@ async function _openQrStats(panel, qr) {
 
   // Wire CSV export
   content.querySelector('#sdqr-export-csv')?.addEventListener('click', () => _exportScansCsv(qr));
+
+  // Retour a la vue d'ensemble (deselection -> onglet Statistiques = vue d'ensemble)
+  content.querySelector('#sdqr-stats-back')?.addEventListener('click', () => {
+    _selectedId = null;
+    _renderCurrentView(panel);
+  });
 
   await _loadStats(content, qr);
 }
