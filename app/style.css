@@ -10484,3 +10484,69 @@ html.light-mode .sdqr-content--create .sdqr-type-card.is-active .sdqr-type-ico  
 @media (max-width: 460px) {
   .sdqr-qr-grid { grid-template-columns: 1fr; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   SDQR — STATS SOMBRE / INDIGO (maquette 16)
+   Decision Stephane : « analyser = sombre/indigo » (vs « creer = clair/or »).
+   Le pad force html.light-mode → ce bloc re-sombre UNIQUEMENT la vue stats
+   (.sdqr-content--stats, posee par _renderCurrentView), additif et scope,
+   comme --create/--lib re-navy-isent creation/bibliotheque. Specificite
+   +1 classe → gagne sur les regles « html.light-mode .sdqr-* » stats.
+═══════════════════════════════════════════════════════════════ */
+html.light-mode .sdqr-content--stats { background: #0f1629; }
+html.light-mode .sdqr-content--stats .sdqr-stats-title { color: #fff; }
+html.light-mode .sdqr-content--stats .sdqr-stats-subtitle { color: rgba(220,225,240,.55); }
+html.light-mode .sdqr-content--stats .sdqr-period-pills { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08); }
+html.light-mode .sdqr-content--stats .sdqr-period-pill { color: rgba(220,225,240,.6); }
+html.light-mode .sdqr-content--stats .sdqr-period-pill:hover { color: #fff; }
+html.light-mode .sdqr-content--stats .sdqr-period-pill.is-active { background: rgba(108,108,245,.20); color: #a3a3ff; }
+html.light-mode .sdqr-content--stats .sdqr-btn--ghost { color: rgba(220,225,240,.7); border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.03); }
+html.light-mode .sdqr-content--stats .sdqr-btn--ghost:hover { color: #fff; background: rgba(255,255,255,.07); }
+html.light-mode .sdqr-content--stats .sdqr-kpi-card,
+html.light-mode .sdqr-content--stats .sdqr-chart-card { background: rgba(255,255,255,.025); border-color: rgba(255,255,255,.07); }
+html.light-mode .sdqr-content--stats .sdqr-kpi-label { color: rgba(220,225,240,.55); }
+html.light-mode .sdqr-content--stats .sdqr-kpi-value { color: #fff; }
+html.light-mode .sdqr-content--stats .sdqr-kpi-hint { color: rgba(220,225,240,.4); }
+html.light-mode .sdqr-content--stats .sdqr-chart-title { color: rgba(220,225,240,.55); }
+html.light-mode .sdqr-content--stats .sdqr-line-chart line { stroke: rgba(255,255,255,.07); }
+html.light-mode .sdqr-content--stats .sdqr-line-chart text { fill: rgba(220,225,240,.45); }
+html.light-mode .sdqr-content--stats .sdqr-bar-label { color: rgba(220,225,240,.85); }
+html.light-mode .sdqr-content--stats .sdqr-bar-track { background: rgba(255,255,255,.07); }
+html.light-mode .sdqr-content--stats .sdqr-bar-fill { background: linear-gradient(90deg, rgba(108,108,245,.45), #6c6cf5); }
+html.light-mode .sdqr-content--stats .sdqr-bar-value { color: rgba(220,225,240,.75); }
+html.light-mode .sdqr-content--stats .sdqr-stats-static-title,
+html.light-mode .sdqr-content--stats .sdqr-empty-title { color: #fff; }
+html.light-mode .sdqr-content--stats .sdqr-stats-static-text,
+html.light-mode .sdqr-content--stats .sdqr-empty-text { color: rgba(220,225,240,.6); }
+html.light-mode .sdqr-content--stats .sdqr-empty-mini { color: rgba(220,225,240,.5); }
+
+/* — Timeline d'evenements (sous la courbe) — */
+.sdqr-tl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,.06); }
+.sdqr-tl-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(220,225,240,.7); white-space: nowrap; }
+.sdqr-tl-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.sdqr-tl-insight { margin-top: 11px; padding: 10px 13px; border-radius: 8px; background: rgba(108,108,245,.10); border: 1px solid rgba(108,108,245,.22); font-size: 12px; line-height: 1.5; color: rgba(225,228,240,.9); }
+.sdqr-tl-insight strong { color: #fff; font-weight: 700; }
+.sdqr-tl-insight-ico { font-size: 9px; vertical-align: middle; }
+
+/* — Controle « marquer comme imprime » — */
+.sdqr-printed-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 11px; font-size: 12px; color: rgba(220,225,240,.7); }
+.sdqr-printed-state { color: rgba(220,225,240,.85); }
+.sdqr-printed-hint { color: rgba(220,225,240,.4); font-size: 11px; }
+.sdqr-printed-link { background: none; border: none; padding: 0; font: inherit; font-size: 11.5px; color: #a3a3ff; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.sdqr-printed-link:hover { color: #c4c4ff; }
+.sdqr-printed-btn { background: rgba(108,108,245,.16); border: 1px solid rgba(108,108,245,.32); color: #c4c4ff; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.sdqr-printed-btn:hover { background: rgba(108,108,245,.26); }
+.sdqr-printed-input { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); color: #fff; border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 12px; color-scheme: dark; }
+
+/* — Heatmap jour x heure — */
+.sdqr-heatmap { margin-top: 4px; }
+.sdqr-hm-grid { display: flex; flex-direction: column; gap: 3px; }
+.sdqr-hm-row { display: grid; grid-template-columns: 30px repeat(24, 1fr); gap: 3px; align-items: center; }
+.sdqr-hm-rowlab { font-size: 10px; font-weight: 600; color: rgba(220,225,240,.55); }
+.sdqr-hm-cell { height: 15px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.04); }
+.sdqr-hm-xaxis { display: grid; grid-template-columns: 30px repeat(24, 1fr); margin-top: 6px; }
+.sdqr-hm-xlab { font-size: 9px; color: rgba(220,225,240,.4); justify-self: center; }
+.sdqr-hm-insight { margin-top: 12px; padding: 10px 13px; border-radius: 8px; background: rgba(108,108,245,.10); border: 1px solid rgba(108,108,245,.22); font-size: 12px; color: rgba(225,228,240,.9); }
+.sdqr-hm-scale { display: flex; align-items: center; gap: 5px; margin-top: 11px; font-size: 10px; color: rgba(220,225,240,.4); }
+.sdqr-hm-sw { width: 16px; height: 11px; border-radius: 2px; }
+.sdqr-hm-tz { margin-left: auto; font-style: italic; }

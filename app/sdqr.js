@@ -529,7 +529,7 @@ async function _libDelete(panel, ids) {
 function _renderLibrary(panel) {
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
-  content.classList.remove('sdqr-content--create');
+  content.classList.remove('sdqr-content--create', 'sdqr-content--stats');
   content.classList.add('sdqr-content--lib');
 
   const qrs = _libQrs();
@@ -660,7 +660,7 @@ async function _openOverview(panel, period = '30d') {
   _renderList(panel);  // dé-sélectionne visuellement la liste
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
-  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');   // vue d'ensemble = puits clair
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');   // vue d'ensemble = puits clair
   content.innerHTML = `<div style="padding:48px;text-align:center;color:#8a96ad;font-size:13px">Chargement de la vue d'ensemble…</div>`;
   try {
     const data = await _apiOverview(period);
@@ -814,10 +814,11 @@ function _wireShell(panel) {
 function _renderCurrentView(panel) {
   const content = panel.querySelector('#sdqr-content');
   if (!content) return;
-  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');   // quitte création / bibliothèque
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');   // quitte création / bibliothèque / stats
   const qr = _selectedId ? _cachedQrs.find(q => q.id === _selectedId) : null;
 
   if (_currentView === 'stats') {
+    content.classList.add('sdqr-content--stats');   // puits sombre/indigo (skin analytique, maquette 16)
     if (!qr) {
       content.innerHTML = `
         <div class="sdqr-empty-state">
@@ -1184,6 +1185,7 @@ function _openCreateForm(panel, opts = {}) {
 
   // Puits NAVY + panneaux blancs (réalignement maquettes) — uniquement sur
   // l'écran de création ; retiré dès qu'on revient aux autres vues.
+  content.classList.remove('sdqr-content--lib', 'sdqr-content--stats');
   content.classList.add('sdqr-content--create');
 
   _renderTypeCards(content);
@@ -3108,9 +3110,9 @@ async function _openQrDetail(panel, qr) {
   const content = panel.querySelector('#sdqr-content');
   if (!content || !qr) return;
   // Le détail vit sur le puits CLAIR : retire les classes de puits navy
-  // (création / bibliothèque), quel que soit l'appelant (_handleCreate y
+  // (création / bibliothèque / stats), quel que soit l'appelant (_handleCreate y
   // arrive sans passer par _renderCurrentView).
-  content.classList.remove('sdqr-content--create', 'sdqr-content--lib');
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');
 
   // Reset l'etat d edition du design quand on switche de QR.
   // _wireDesignPanel le ré-initialisera depuis qr.design lors du premier
@@ -3599,6 +3601,7 @@ async function _loadStats(content, qr) {
   try {
     const data = await _apiStats(qr.id, _statsPeriod);
     body.innerHTML = _renderStatsBody(data, qr);
+    _wireStatsBody(content, qr);
   } catch (e) {
     body.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur : ${_esc(e.message)}</div>`;
   }
@@ -3632,10 +3635,19 @@ function _renderStatsBody(data, qr) {
     </div>
 
     ${hasData ? `
-      <!-- Line chart : scans par jour -->
+      <!-- Évolution des scans + timeline d'événements (maquette 16) -->
       <div class="sdqr-chart-card">
-        <div class="sdqr-chart-title">Évolution des scans</div>
-        ${_renderLineChart(data.byDay)}
+        <div class="sdqr-chart-title">Évolution des scans · avec événements</div>
+        ${_renderLineChart(data.byDay, data.meta)}
+        ${_renderTimelineLegend(data.byDay, data.meta)}
+        ${_renderTimelineInsight(data.byDay, data.meta)}
+        ${_renderPrintedControl(data.meta)}
+      </div>
+
+      <!-- Heatmap jour × heure (maquette 16) -->
+      <div class="sdqr-chart-card">
+        <div class="sdqr-chart-title">Quand on te scanne · jour × heure</div>
+        ${_renderHeatmap(data.heatmap)}
       </div>
 
       <div class="sdqr-chart-grid">
@@ -3670,18 +3682,56 @@ function _kpiCard(label, value, hint) {
   `;
 }
 
-// Line chart custom SVG. Points = byDay [{day:'2026-05-12', cnt:7}, ...]
-function _renderLineChart(byDay) {
+// ── Timeline / heatmap — helpers de dates ──────────────────────────
+const _FR_MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const _FR_DOW      = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const _FR_DOW_FULL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+
+// 'YYYY-MM-DD' → numéro de jour absolu (entier), pour comparer/interpoler.
+function _dayNum(d) { return Math.round(Date.parse(d.slice(0,10) + 'T00:00:00Z') / 86400000); }
+function _frDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.slice(0,10).split('-').map(Number);
+  if (!y || !m || !day) return d;
+  return `${day} ${_FR_MONTHS[m-1]} ${y}`;
+}
+function _dayInRange(day, byDay) {
+  if (!day || !byDay?.length) return false;
+  const t = _dayNum(day), a = _dayNum(byDay[0].day), b = _dayNum(byDay[byDay.length-1].day);
+  return t >= a && t <= b;
+}
+// Position X (px) d'une date sur la courbe : index fractionnaire dans byDay
+// (qui ne contient que les jours AVEC scans) → aligné sur les segments tracés.
+function _xForDay(target, byDay, g) {
+  if (!_dayInRange(target, byDay)) return null;
+  if (byDay.length === 1) return g.padL;
+  const t = _dayNum(target);
+  for (let i = 0; i < byDay.length - 1; i++) {
+    const a = _dayNum(byDay[i].day), b = _dayNum(byDay[i+1].day);
+    if (t >= a && t <= b) {
+      const frac = i + (b > a ? (t - a) / (b - a) : 0);
+      return g.padL + frac * g.stepX;
+    }
+  }
+  return g.padL + (byDay.length - 1) * g.stepX;
+}
+
+// Line chart custom SVG, ENRICHI de repères d'événements (maquette 16).
+// byDay = [{day:'2026-05-12', cnt:7}, ...] ; meta = {created_at, updated_at, printed_at}.
+// Skin sombre/indigo : courbe indigo, repères Créé/Imprimé (gris), Modifié (or),
+// Pic (anneau indigo sur le point le plus haut).
+function _renderLineChart(byDay, meta) {
   if (!byDay?.length) {
     return `<div class="sdqr-empty-mini">Pas de scans sur la période.</div>`;
   }
-  const W = 720, H = 180;
-  const padL = 36, padR = 16, padT = 14, padB = 28;
+  const W = 720, H = 196;
+  const padL = 36, padR = 16, padT = 22, padB = 30;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
   const maxV = Math.max(...byDay.map(p => p.cnt), 1);
   const stepX = byDay.length === 1 ? 0 : innerW / (byDay.length - 1);
+  const g = { padL, stepX };
 
   const points = byDay.map((p, i) => {
     const x = padL + i * stepX;
@@ -3708,9 +3758,31 @@ function _renderLineChart(byDay) {
     return `<text x="${p.x}" y="${H-8}" text-anchor="middle" fill="rgba(220,225,240,.4)" font-size="9">${dateLabel}</text>`;
   }).join('');
 
-  // Hover dots
-  const dots = points.map(p => `
-    <circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--gold, #6366f1)">
+  // ── Repères d'événements verticaux ──
+  const cr = meta?.created_at?.slice(0,10);
+  const up = meta?.updated_at?.slice(0,10);
+  const pr = meta?.printed_at?.slice(0,10);
+  const events = [];
+  if (cr) events.push({ day: cr, label: 'Créé',     color: '#8a93a9' });
+  if (pr) events.push({ day: pr, label: 'Imprimé',  color: '#aeb6c9' });
+  if (up && up !== cr) events.push({ day: up, label: 'Modifié', color: '#c9a84c' });
+  const evMarks = events.map(ev => {
+    const x = _xForDay(ev.day, byDay, g);
+    if (x == null) return '';
+    const xs = x.toFixed(1);
+    return `<line x1="${xs}" y1="${padT}" x2="${xs}" y2="${padT+innerH}" stroke="${ev.color}" stroke-width="1.2" stroke-dasharray="3 3" opacity=".75"/>
+            <circle cx="${xs}" cy="${padT}" r="3.4" fill="${ev.color}"><title>${ev.label} : ${ev.day}</title></circle>`;
+  }).join('');
+
+  // ── Pic (point le plus haut) ──
+  let peakIdx = 0;
+  points.forEach((p, i) => { if (p.cnt > points[peakIdx].cnt) peakIdx = i; });
+  const pk = points[peakIdx];
+  const peakMark = `<circle cx="${pk.x.toFixed(1)}" cy="${pk.y.toFixed(1)}" r="5.5" fill="none" stroke="#a3a3ff" stroke-width="1.6"/>
+                    <circle cx="${pk.x.toFixed(1)}" cy="${pk.y.toFixed(1)}" r="2.6" fill="#a3a3ff"><title>Pic : ${pk.day} (${pk.cnt} scans)</title></circle>`;
+
+  const dots = points.map((p, i) => i === peakIdx ? '' : `
+    <circle cx="${p.x}" cy="${p.y}" r="2.6" fill="#6c6cf5">
       <title>${p.day} : ${p.cnt} scan(s)</title>
     </circle>
   `).join('');
@@ -3718,12 +3790,174 @@ function _renderLineChart(byDay) {
   return `
     <svg viewBox="0 0 ${W} ${H}" class="sdqr-line-chart">
       ${yTickLines}
-      <path d="${area}" fill="rgba(99,102,241,.10)" stroke="none"/>
-      <path d="${path}" fill="none" stroke="var(--gold, #6366f1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${evMarks}
+      <path d="${area}" fill="rgba(108,108,245,.12)" stroke="none"/>
+      <path d="${path}" fill="none" stroke="#6c6cf5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
+      ${peakMark}
       ${xLabels}
     </svg>
   `;
+}
+
+// Légende de la timeline : seulement les repères présents ET dans la période.
+function _renderTimelineLegend(byDay, meta) {
+  if (!byDay?.length) return '';
+  const cr = meta?.created_at?.slice(0,10);
+  const pr = meta?.printed_at?.slice(0,10);
+  const up = meta?.updated_at?.slice(0,10);
+  const items = [];
+  if (_dayInRange(cr, byDay)) items.push(['#8a93a9', 'Créé']);
+  if (_dayInRange(pr, byDay)) items.push(['#aeb6c9', 'Imprimé']);
+  if (up && up !== cr && _dayInRange(up, byDay)) items.push(['#c9a84c', 'Modifié']);
+  items.push(['#a3a3ff', 'Pic']);
+  return `<div class="sdqr-tl-legend">${items.map(([c,l]) =>
+    `<span class="sdqr-tl-leg"><span class="sdqr-tl-dot" style="background:${c}"></span>${l}</span>`).join('')}</div>`;
+}
+
+// Encart insight « +X % » : scans des 7 jours après une modif de cible vs avant.
+// N'apparaît que si une modif a eu lieu ET tombe dans la fenêtre de période.
+function _renderTimelineInsight(byDay, meta) {
+  const up = meta?.updated_at?.slice(0,10);
+  const cr = meta?.created_at?.slice(0,10);
+  if (!up || up === cr || !_dayInRange(up, byDay)) return '';
+  const u = _dayNum(up);
+  let before = 0, after = 0;
+  for (const p of byDay) {
+    const d = _dayNum(p.day);
+    if (d >= u - 7 && d < u) before += p.cnt;
+    if (d >= u && d < u + 7)  after  += p.cnt;
+  }
+  if (before === 0 && after === 0) return '';
+  let phrase;
+  if (before === 0) {
+    phrase = `<strong>${after}</strong> scans dans les 7 jours suivants (aucun les 7 jours avant).`;
+  } else {
+    const pct = Math.round((after - before) / before * 100);
+    phrase = `<strong>${pct >= 0 ? '+' : ''}${pct} %</strong> de scans sur les 7 jours suivants (${after} vs ${before} avant).`;
+  }
+  return `<div class="sdqr-tl-insight"><span class="sdqr-tl-insight-ico" style="color:#c9a84c">&#9679;</span> Modifié le ${_frDate(up)} &rarr; ${phrase}</div>`;
+}
+
+// Contrôle « marquer comme imprimé » (jalon déclaré, persisté via PATCH printed_at).
+function _renderPrintedControl(meta) {
+  const p = meta?.printed_at ? meta.printed_at.slice(0,10) : '';
+  if (p) {
+    return `<div class="sdqr-printed-row" data-printed="${_esc(p)}">
+      <span class="sdqr-printed-state">Imprimé le ${_frDate(p)}</span>
+      <button class="sdqr-printed-link" data-act="edit">modifier</button>
+      <button class="sdqr-printed-link" data-act="clear">retirer</button>
+    </div>`;
+  }
+  return `<div class="sdqr-printed-row">
+    <button class="sdqr-printed-btn" data-act="set">+ Marquer comme imprimé</button>
+    <span class="sdqr-printed-hint">situe l'impression sur la courbe</span>
+  </div>`;
+}
+
+// Wiring du contrôle « imprimé » : édition inline (input date) → PATCH → reload.
+function _wireStatsBody(content, qr) {
+  const row = content.querySelector('.sdqr-printed-row');
+  if (!row || row._wired) return;
+  row._wired = true;
+  row.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const today = new Date().toISOString().slice(0,10);
+    if (act === 'set' || act === 'edit') {
+      const cur = row.dataset.printed || today;
+      row.innerHTML = `
+        <input type="date" class="sdqr-printed-input" value="${_esc(cur)}" max="${today}">
+        <button class="sdqr-printed-btn" data-act="save">Valider</button>
+        <button class="sdqr-printed-link" data-act="cancel">annuler</button>`;
+      row.querySelector('.sdqr-printed-input')?.focus();
+    } else if (act === 'cancel') {
+      _loadStats(content, qr);
+    } else if (act === 'clear' || act === 'save') {
+      const val = act === 'save' ? (row.querySelector('.sdqr-printed-input')?.value || null) : null;
+      btn.disabled = true;
+      try { await _apiUpdate(qr.id, { printed_at: val }); }
+      catch (err) { alert('Erreur : ' + err.message); }
+      _loadStats(content, qr);
+    }
+  });
+}
+
+// Heatmap jour × heure (maquette 16). heatmap = [{dow,hour,cnt}] en UTC.
+// Converti en heure de Paris via le décalage du navigateur (auto-saisonnier).
+function _renderHeatmap(heatmap) {
+  if (!heatmap?.length) {
+    return `<div class="sdqr-empty-mini">Pas assez de scans pour la heatmap.</div>`;
+  }
+  // ts est UTC → Paris : +2 en été, +1 en hiver (décalage du navigateur).
+  // Données traversant un changement d'heure : ~1h d'écart assumé (cf handoff).
+  const offsetH = -Math.round(new Date().getTimezoneOffset() / 60);
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));   // [lun..dim][0..23]
+  for (const c of heatmap) {
+    let h = (c.hour || 0) + offsetH;
+    let roll = 0;
+    if (h >= 24) { h -= 24; roll = 1; } else if (h < 0) { h += 24; roll = -1; }
+    const sdow = (((c.dow || 0) + roll) % 7 + 7) % 7;   // 0=dim..6=sam
+    const row  = (sdow + 6) % 7;                         // lun=0..dim=6
+    grid[row][h] += (c.cnt || 0);
+  }
+  const max = Math.max(1, ...grid.flat());
+  const ALPHA = [0, .16, .32, .50, .70, .95];
+  const tier = (v) => v === 0 ? 0 : Math.min(5, Math.ceil(v / max * 5));
+
+  const rows = grid.map((cells, r) => {
+    const lab = `<span class="sdqr-hm-rowlab">${_FR_DOW[r]}</span>`;
+    const cs = cells.map((v, h) => {
+      const t  = tier(v);
+      const bg = t === 0 ? 'transparent' : `rgba(108,108,245,${ALPHA[t]})`;
+      return `<span class="sdqr-hm-cell" style="background:${bg}" title="${_FR_DOW_FULL[r]} ${h}h : ${v} scan${v > 1 ? 's' : ''}"></span>`;
+    }).join('');
+    return `<div class="sdqr-hm-row">${lab}${cs}</div>`;
+  }).join('');
+
+  const xaxis = [0,6,12,18,23].map(h =>
+    `<span class="sdqr-hm-xlab" style="grid-column:${h + 2}">${h}h</span>`).join('');
+  const scale = [.16,.32,.50,.70,.95].map(a =>
+    `<span class="sdqr-hm-sw" style="background:rgba(108,108,245,${a})"></span>`).join('');
+
+  return `
+    <div class="sdqr-heatmap">
+      <div class="sdqr-hm-grid">${rows}</div>
+      <div class="sdqr-hm-xaxis">${xaxis}</div>
+      ${_heatmapInsight(grid)}
+      <div class="sdqr-hm-scale"><span>moins</span>${scale}<span>plus</span><span class="sdqr-hm-tz">heure de Paris</span></div>
+    </div>`;
+}
+
+// Insight heatmap : jour(s) + plage(s) horaire(s) les plus actifs.
+function _heatmapInsight(grid) {
+  const dayTot = grid.map((cells, r) => ({ r, sum: cells.reduce((a,b) => a+b, 0) }));
+  const maxDay = Math.max(...dayTot.map(d => d.sum));
+  if (maxDay === 0) return '';
+  const topDays = dayTot.filter(d => d.sum >= maxDay * 0.7)
+    .sort((a,b) => b.sum - a.sum).slice(0,2).map(d => _FR_DOW_FULL[d.r]);
+
+  const hourTot = new Array(24).fill(0);
+  grid.forEach(cells => cells.forEach((v,h) => hourTot[h] += v));
+  const maxHour = Math.max(...hourTot);
+  const hot = hourTot.map(v => v > 0 && v >= maxHour * 0.6);
+  const bands = [];
+  let start = -1;
+  for (let h = 0; h <= 24; h++) {
+    if (h < 24 && hot[h]) { if (start < 0) start = h; }
+    else if (start >= 0) { bands.push([start, h - 1]); start = -1; }
+  }
+  bands.sort((a,b) => {
+    const sa = hourTot.slice(a[0], a[1]+1).reduce((x,y) => x+y, 0);
+    const sb = hourTot.slice(b[0], b[1]+1).reduce((x,y) => x+y, 0);
+    return sb - sa;
+  });
+  const topBands = bands.slice(0,2).map(([s,e]) => s === e ? `${s}h` : `${s}h-${e+1}h`);
+  const dayStr  = topDays.join(' & ');
+  const hourStr = topBands.join(' et ');
+  if (!dayStr && !hourStr) return '';
+  return `<div class="sdqr-hm-insight"><span class="sdqr-tl-insight-ico" style="color:#a3a3ff">&#9679;</span> Pics : ${dayStr}${hourStr ? `, ${hourStr}` : ''}.</div>`;
 }
 
 // Horizontal bar chart custom SVG. items = [{label, value}, ...]

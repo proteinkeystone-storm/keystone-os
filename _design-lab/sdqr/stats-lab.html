@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc d'essai STATS (heatmap + timeline, skin sombre)</title>
+<!-- Lie le VRAI style.css du pad (anti-aveugle) -->
+<link rel="stylesheet" href="../../app/style.css">
+<style>
+  body { margin: 0; }
+  .lab-note { font: 600 12px/1.4 -apple-system, system-ui, sans-serif; color: #fff; background: #1b2a4a; padding: 10px 16px; }
+  /* .sdqr-fullscreen est un overlay display:none/fixed : on le force visible. */
+  .sdqr-fullscreen { display: block !important; position: static !important; min-height: 100vh; }
+  .sdqr-main { padding: 0; }
+  .sdqr-content { padding: 26px 30px; min-height: 100vh; }
+</style>
+</head>
+<body>
+  <div class="lab-note">BANC D'ESSAI — page stats SOMBRE/INDIGO (.sdqr-content--stats) : heatmap + timeline. Modules injectes par les VRAIS algos de rendu (copie), donnees mock.</div>
+  <div class="sdqr-fullscreen">
+    <div class="sdqr-main">
+      <!-- skin analytique sombre : .sdqr-content--stats -->
+      <div class="sdqr-content sdqr-content--stats">
+        <div class="sdqr-stats-wrap">
+          <div class="sdqr-stats-head">
+            <div class="sdqr-stats-head-left">
+              <h2 class="sdqr-stats-title">Bache Azur — Salon 2026</h2>
+              <div class="sdqr-stats-subtitle">Statistiques souveraines — aucune donnee tierce</div>
+            </div>
+            <div class="sdqr-stats-head-right">
+              <div class="sdqr-period-pills">
+                <button class="sdqr-period-pill">7 jours</button>
+                <button class="sdqr-period-pill is-active">30 jours</button>
+                <button class="sdqr-period-pill">90 jours</button>
+                <button class="sdqr-period-pill">Tout</button>
+              </div>
+              <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-export-csv">CSV</button>
+            </div>
+          </div>
+
+          <div class="sdqr-kpi-grid">
+            <div class="sdqr-kpi-card"><div class="sdqr-kpi-label">Scans totaux</div><div class="sdqr-kpi-value">1 284</div><div class="sdqr-kpi-hint">Sur la periode</div></div>
+            <div class="sdqr-kpi-card"><div class="sdqr-kpi-label">Visiteurs uniques</div><div class="sdqr-kpi-value">947</div><div class="sdqr-kpi-hint">Empreintes UA distinctes</div></div>
+            <div class="sdqr-kpi-card"><div class="sdqr-kpi-label">Aujourd'hui</div><div class="sdqr-kpi-value">38</div><div class="sdqr-kpi-hint">Depuis minuit</div></div>
+            <div class="sdqr-kpi-card"><div class="sdqr-kpi-label">7 derniers jours</div><div class="sdqr-kpi-value">512</div><div class="sdqr-kpi-hint">Glissants</div></div>
+          </div>
+
+          <!-- injecte par script : courbe+timeline puis heatmap -->
+          <div id="lab-inject"></div>
+
+          <div class="sdqr-chart-grid">
+            <div class="sdqr-chart-card">
+              <div class="sdqr-chart-title">Pays (top 10)</div>
+              <ul class="sdqr-bar-list">
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">France</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:100%"></span></span><span class="sdqr-bar-value">1 102</span></li>
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">Belgique</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:18%"></span></span><span class="sdqr-bar-value">124</span></li>
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">Suisse</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:9%"></span></span><span class="sdqr-bar-value">58</span></li>
+              </ul>
+            </div>
+            <div class="sdqr-chart-card">
+              <div class="sdqr-chart-title">Appareils</div>
+              <ul class="sdqr-bar-list">
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">Mobile</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:100%"></span></span><span class="sdqr-bar-value">1 088</span></li>
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">Desktop</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:14%"></span></span><span class="sdqr-bar-value">152</span></li>
+              </ul>
+            </div>
+            <div class="sdqr-chart-card">
+              <div class="sdqr-chart-title">Systemes</div>
+              <ul class="sdqr-bar-list">
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">iOS</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:100%"></span></span><span class="sdqr-bar-value">712</span></li>
+                <li class="sdqr-bar-row"><span class="sdqr-bar-label">Android</span><span class="sdqr-bar-track"><span class="sdqr-bar-fill" style="width:52%"></span></span><span class="sdqr-bar-value">372</span></li>
+              </ul>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ====== COPIE des helpers de rendu de app/sdqr.js (banc d'essai uniquement) ======
+function _esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+const _FR_MONTHS = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
+const _FR_DOW      = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const _FR_DOW_FULL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+function _dayNum(d){ return Math.round(Date.parse(d.slice(0,10)+'T00:00:00Z')/86400000); }
+function _frDate(d){ if(!d) return ''; const [y,m,day]=d.slice(0,10).split('-').map(Number); if(!y||!m||!day) return d; return `${day} ${_FR_MONTHS[m-1]} ${y}`; }
+function _dayInRange(day,byDay){ if(!day||!byDay?.length) return false; const t=_dayNum(day),a=_dayNum(byDay[0].day),b=_dayNum(byDay[byDay.length-1].day); return t>=a&&t<=b; }
+function _xForDay(target,byDay,g){ if(!_dayInRange(target,byDay)) return null; if(byDay.length===1) return g.padL; const t=_dayNum(target);
+  for(let i=0;i<byDay.length-1;i++){ const a=_dayNum(byDay[i].day),b=_dayNum(byDay[i+1].day); if(t>=a&&t<=b){ const frac=i+(b>a?(t-a)/(b-a):0); return g.padL+frac*g.stepX; } }
+  return g.padL+(byDay.length-1)*g.stepX; }
+
+function _renderLineChart(byDay,meta){
+  if(!byDay?.length) return `<div class="sdqr-empty-mini">Pas de scans sur la periode.</div>`;
+  const W=720,H=196,padL=36,padR=16,padT=22,padB=30,innerW=W-padL-padR,innerH=H-padT-padB;
+  const maxV=Math.max(...byDay.map(p=>p.cnt),1); const stepX=byDay.length===1?0:innerW/(byDay.length-1); const g={padL,stepX};
+  const points=byDay.map((p,i)=>({x:padL+i*stepX,y:padT+innerH-(p.cnt/maxV)*innerH,day:p.day,cnt:p.cnt}));
+  const path=points.map((p,i)=>`${i===0?'M':'L'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area=`${path} L ${points[points.length-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L ${points[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+  const yTicks=[0,Math.ceil(maxV/2),maxV];
+  const yTickLines=yTicks.map(v=>{const y=padT+innerH-(v/maxV)*innerH; return `<line x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="1"/><text x="${padL-6}" y="${y+3}" text-anchor="end" fill="rgba(220,225,240,.4)" font-size="9">${v}</text>`;}).join('');
+  const xIdx=byDay.length===1?[0]:[0,Math.floor(byDay.length/2),byDay.length-1];
+  const xLabels=xIdx.map(i=>{const p=points[i]; const dateLabel=byDay[i].day.slice(5); return `<text x="${p.x}" y="${H-8}" text-anchor="middle" fill="rgba(220,225,240,.4)" font-size="9">${dateLabel}</text>`;}).join('');
+  const cr=meta?.created_at?.slice(0,10),up=meta?.updated_at?.slice(0,10),pr=meta?.printed_at?.slice(0,10);
+  const events=[]; if(cr)events.push({day:cr,label:'Cree',color:'#8a93a9'}); if(pr)events.push({day:pr,label:'Imprime',color:'#aeb6c9'}); if(up&&up!==cr)events.push({day:up,label:'Modifie',color:'#c9a84c'});
+  const evMarks=events.map(ev=>{const x=_xForDay(ev.day,byDay,g); if(x==null) return ''; const xs=x.toFixed(1);
+    return `<line x1="${xs}" y1="${padT}" x2="${xs}" y2="${padT+innerH}" stroke="${ev.color}" stroke-width="1.2" stroke-dasharray="3 3" opacity=".75"/><circle cx="${xs}" cy="${padT}" r="3.4" fill="${ev.color}"><title>${ev.label} : ${ev.day}</title></circle>`;}).join('');
+  let peakIdx=0; points.forEach((p,i)=>{if(p.cnt>points[peakIdx].cnt)peakIdx=i;}); const pk=points[peakIdx];
+  const peakMark=`<circle cx="${pk.x.toFixed(1)}" cy="${pk.y.toFixed(1)}" r="5.5" fill="none" stroke="#a3a3ff" stroke-width="1.6"/><circle cx="${pk.x.toFixed(1)}" cy="${pk.y.toFixed(1)}" r="2.6" fill="#a3a3ff"><title>Pic : ${pk.day} (${pk.cnt} scans)</title></circle>`;
+  const dots=points.map((p,i)=>i===peakIdx?'':`<circle cx="${p.x}" cy="${p.y}" r="2.6" fill="#6c6cf5"><title>${p.day} : ${p.cnt} scan(s)</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="sdqr-line-chart">${yTickLines}${evMarks}<path d="${area}" fill="rgba(108,108,245,.12)" stroke="none"/><path d="${path}" fill="none" stroke="#6c6cf5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${peakMark}${xLabels}</svg>`;
+}
+function _renderTimelineLegend(byDay,meta){ if(!byDay?.length) return '';
+  const cr=meta?.created_at?.slice(0,10),pr=meta?.printed_at?.slice(0,10),up=meta?.updated_at?.slice(0,10); const items=[];
+  if(_dayInRange(cr,byDay))items.push(['#8a93a9','Cree']); if(_dayInRange(pr,byDay))items.push(['#aeb6c9','Imprime']); if(up&&up!==cr&&_dayInRange(up,byDay))items.push(['#c9a84c','Modifie']); items.push(['#a3a3ff','Pic']);
+  return `<div class="sdqr-tl-legend">${items.map(([c,l])=>`<span class="sdqr-tl-leg"><span class="sdqr-tl-dot" style="background:${c}"></span>${l}</span>`).join('')}</div>`;}
+function _renderTimelineInsight(byDay,meta){ const up=meta?.updated_at?.slice(0,10),cr=meta?.created_at?.slice(0,10);
+  if(!up||up===cr||!_dayInRange(up,byDay)) return ''; const u=_dayNum(up); let before=0,after=0;
+  for(const p of byDay){const d=_dayNum(p.day); if(d>=u-7&&d<u)before+=p.cnt; if(d>=u&&d<u+7)after+=p.cnt;}
+  if(before===0&&after===0) return ''; let phrase;
+  if(before===0) phrase=`<strong>${after}</strong> scans dans les 7 jours suivants (aucun les 7 jours avant).`;
+  else { const pct=Math.round((after-before)/before*100); phrase=`<strong>${pct>=0?'+':''}${pct} %</strong> de scans sur les 7 jours suivants (${after} vs ${before} avant).`; }
+  return `<div class="sdqr-tl-insight"><span class="sdqr-tl-insight-ico" style="color:#c9a84c">&#9679;</span> Modifie le ${_frDate(up)} &rarr; ${phrase}</div>`;}
+function _renderPrintedControl(meta){ const p=meta?.printed_at?meta.printed_at.slice(0,10):'';
+  if(p) return `<div class="sdqr-printed-row" data-printed="${_esc(p)}"><span class="sdqr-printed-state">Imprime le ${_frDate(p)}</span><button class="sdqr-printed-link" data-act="edit">modifier</button><button class="sdqr-printed-link" data-act="clear">retirer</button></div>`;
+  return `<div class="sdqr-printed-row"><button class="sdqr-printed-btn" data-act="set">+ Marquer comme imprime</button><span class="sdqr-printed-hint">situe l'impression sur la courbe</span></div>`;}
+function _renderHeatmap(heatmap){ if(!heatmap?.length) return `<div class="sdqr-empty-mini">Pas assez de scans pour la heatmap.</div>`;
+  const offsetH=-Math.round(new Date().getTimezoneOffset()/60); const grid=Array.from({length:7},()=>new Array(24).fill(0));
+  for(const c of heatmap){ let h=(c.hour||0)+offsetH; let roll=0; if(h>=24){h-=24;roll=1;}else if(h<0){h+=24;roll=-1;} const sdow=(((c.dow||0)+roll)%7+7)%7; const row=(sdow+6)%7; grid[row][h]+=(c.cnt||0); }
+  const max=Math.max(1,...grid.flat()); const ALPHA=[0,.16,.32,.50,.70,.95]; const tier=v=>v===0?0:Math.min(5,Math.ceil(v/max*5));
+  const rows=grid.map((cells,r)=>{ const lab=`<span class="sdqr-hm-rowlab">${_FR_DOW[r]}</span>`;
+    const cs=cells.map((v,h)=>{const t=tier(v); const bg=t===0?'transparent':`rgba(108,108,245,${ALPHA[t]})`; return `<span class="sdqr-hm-cell" style="background:${bg}" title="${_FR_DOW_FULL[r]} ${h}h : ${v} scan${v>1?'s':''}"></span>`;}).join('');
+    return `<div class="sdqr-hm-row">${lab}${cs}</div>`;}).join('');
+  const xaxis=[0,6,12,18,23].map(h=>`<span class="sdqr-hm-xlab" style="grid-column:${h+2}">${h}h</span>`).join('');
+  const scale=[.16,.32,.50,.70,.95].map(a=>`<span class="sdqr-hm-sw" style="background:rgba(108,108,245,${a})"></span>`).join('');
+  return `<div class="sdqr-heatmap"><div class="sdqr-hm-grid">${rows}</div><div class="sdqr-hm-xaxis">${xaxis}</div>${_heatmapInsight(grid)}<div class="sdqr-hm-scale"><span>moins</span>${scale}<span>plus</span><span class="sdqr-hm-tz">heure de Paris</span></div></div>`;}
+function _heatmapInsight(grid){ const dayTot=grid.map((cells,r)=>({r,sum:cells.reduce((a,b)=>a+b,0)})); const maxDay=Math.max(...dayTot.map(d=>d.sum)); if(maxDay===0) return '';
+  const topDays=dayTot.filter(d=>d.sum>=maxDay*0.7).sort((a,b)=>b.sum-a.sum).slice(0,2).map(d=>_FR_DOW_FULL[d.r]);
+  const hourTot=new Array(24).fill(0); grid.forEach(cells=>cells.forEach((v,h)=>hourTot[h]+=v)); const maxHour=Math.max(...hourTot);
+  const hot=hourTot.map(v=>v>0&&v>=maxHour*0.6); const bands=[]; let start=-1;
+  for(let h=0;h<=24;h++){ if(h<24&&hot[h]){if(start<0)start=h;} else if(start>=0){bands.push([start,h-1]);start=-1;} }
+  bands.sort((a,b)=>{const sa=hourTot.slice(a[0],a[1]+1).reduce((x,y)=>x+y,0);const sb=hourTot.slice(b[0],b[1]+1).reduce((x,y)=>x+y,0);return sb-sa;});
+  const topBands=bands.slice(0,2).map(([s,e])=>s===e?`${s}h`:`${s}h-${e+1}h`); const dayStr=topDays.join(' & '),hourStr=topBands.join(' et ');
+  if(!dayStr&&!hourStr) return ''; return `<div class="sdqr-hm-insight"><span class="sdqr-tl-insight-ico" style="color:#a3a3ff">&#9679;</span> Pics : ${dayStr}${hourStr?`, ${hourStr}`:''}.</div>`;}
+
+// ====== Donnees mock realistes ======
+const byDay = [
+  ['05-25',4],['05-26',6],['05-27',5],['05-28',8],['05-29',7],['05-30',9],['05-31',6],
+  ['06-01',8],['06-02',7],['06-03',5],['06-04',6],['06-05',9],['06-06',7],['06-07',8],
+  ['06-08',12],['06-09',28],['06-10',35],['06-11',42],['06-12',38],['06-13',31],['06-14',26],['06-15',22],['06-16',19]
+].map(([d,c])=>({day:'2026-'+d,cnt:c}));
+const meta = { created_at:'2026-05-25T09:00:00Z', updated_at:'2026-06-08T14:00:00Z', printed_at:'2026-05-28' };
+const heatmap = [];
+for(let dow=0;dow<7;dow++){ for(let hour=0;hour<24;hour++){
+  let base=0; if(hour>=8&&hour<=21)base=3; if(hour>=11&&hour<=13)base+=6; if(hour>=17&&hour<=19)base+=7;
+  let mult=1; if(dow===4||dow===5)mult=2.2; if(dow===0||dow===6)mult=0.6;
+  const cnt=Math.round(base*mult); if(cnt>0)heatmap.push({dow,hour,cnt});
+}}
+
+document.getElementById('lab-inject').innerHTML = `
+  <div class="sdqr-chart-card">
+    <div class="sdqr-chart-title">Evolution des scans &middot; avec evenements</div>
+    ${_renderLineChart(byDay,meta)}
+    ${_renderTimelineLegend(byDay,meta)}
+    ${_renderTimelineInsight(byDay,meta)}
+    ${_renderPrintedControl(meta)}
+  </div>
+  <div class="sdqr-chart-card">
+    <div class="sdqr-chart-title">Quand on te scanne &middot; jour x heure</div>
+    ${_renderHeatmap(heatmap)}
+  </div>`;
+</script>
+</body>
+</html>
