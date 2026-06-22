@@ -6998,7 +6998,9 @@ html.light-mode .ksfs-detail-related-h { color: #0f172a; }
 }
 
 /* ── Form (création QR) ───────────────────────────────────── */
-.sdqr-form-wrap { max-width: 680px; }
+/* Les panneaux blancs occupent toute la largeur dispo (plus de bande navy vide
+   a droite) — cap large pour rester aere sur tres grand ecran. */
+.sdqr-form-wrap { max-width: 1180px; }
 .sdqr-form-head { margin-bottom: 24px; }
 .sdqr-form-title {
   font-family: 'Cormorant Garamond', serif;
@@ -7349,12 +7351,16 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
    SDQR-2 — Mode toggle, type cards, form contextuel
 ═══════════════════════════════════════════════════════════════ */
 
-/* Mode toggle (Statique / Dynamique) */
+/* Mode toggle (Standard / Dynamique / Smart) — 3 colonnes pour remplir le
+   panneau elargi (les 3 modes alignes), repli en 1 colonne sur petit ecran. */
 .sdqr-mode-toggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 18px;
+}
+@media (max-width: 760px) {
+  .sdqr-mode-toggle { grid-template-columns: 1fr; }
 }
 .sdqr-mode-btn {
   display: flex; align-items: flex-start; gap: 12px;
