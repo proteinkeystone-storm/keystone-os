@@ -321,10 +321,6 @@ function _renderShell() {
       <aside class="sdqr-sidebar">
         <div class="sdqr-sidebar-head">
           <span class="sdqr-sidebar-title">Mes QRs</span>
-          <button class="sdqr-new-btn" id="sdqr-new-btn" title="Nouveau QR">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Nouveau
-          </button>
         </div>
         <div class="sdqr-sidebar-filters">
           <div class="sdqr-search-wrap">
@@ -343,6 +339,10 @@ function _renderShell() {
 
       <main class="sdqr-main">
         <div class="sdqr-tabs">
+          <button class="sdqr-new-btn sdqr-new-btn--cta" id="sdqr-new-btn" title="Créer un nouveau QR">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:15px;height:15px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nouveau
+          </button>
           <button class="sdqr-tab active" data-view="studio">Studio</button>
           <button class="sdqr-tab" data-view="stats">Statistiques</button>
         </div>
