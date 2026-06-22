@@ -871,12 +871,15 @@ function _applyFilters(qrs) {
 
 // Fetch + render (appelé après les mutations create/update/delete)
 async function _refreshList(panel) {
-  const listEl = panel.querySelector('#sdqr-list');
-  if (!listEl) return;
+  // La sidebar n'a PLUS de liste de QR : on charge la flotte puis on rend les
+  // dossiers + la grille. NE JAMAIS garder un « if (!#sdqr-list) return » ici —
+  // sinon le fetch _apiList() ne part plus et les QR semblent « disparus »
+  // (ils sont bien en base, c'est l'affichage qui ne se chargeait pas).
   try {
     _cachedQrs = await _apiList();
   } catch (e) {
-    listEl.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Erreur : ${_esc(e.message)}</div>`;
+    const content = panel.querySelector('#sdqr-content');
+    if (content) content.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err" style="padding:40px;text-align:center">Erreur de chargement : ${_esc(e.message)}</div>`;
     return;
   }
   _renderList(panel);
