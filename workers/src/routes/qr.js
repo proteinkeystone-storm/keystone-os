@@ -666,6 +666,13 @@ export async function handleUpdateQr(request, env, qrId) {
   if (body.folder !== undefined)  entity.folder = body.folder ? String(body.folder).trim().slice(0, 80) : null;
   if (body.design !== undefined)  entity.design = body.design;
   if (body.payload !== undefined) entity.payload = body.payload;
+  // Jalon « imprimé » déclaré par l'utilisateur (date AAAA-MM-JJ) pour la
+  // timeline des stats. Additif : stocké dans le blob entity, ne touche
+  // JAMAIS qr_redirects / short_id / qr_scans. null = retire le jalon.
+  if (body.printed_at !== undefined) {
+    const p = body.printed_at ? String(body.printed_at).slice(0, 10) : null;
+    entity.printed_at = (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) ? p : null;
+  }
   // Smart QR — titre + message statiques de l'interstitiel, éditables après
   // création (comme la cible d'un QR dynamique). null = champ vidé.
   if (body.smart_title !== undefined) {
@@ -971,6 +978,28 @@ export async function handleStatsQr(request, env, qrId) {
     ORDER BY cnt DESC
   `).bind(shortId).all();
 
+  // ── Heatmap jour × heure (maquette 16) ─────────────────────
+  // dow : 0=dimanche .. 6=samedi (strftime %w) ; hour : 0..23.
+  // ts est stocké en UTC (datetime('now')) → la conversion en heure
+  // de Paris se fait CÔTÉ CLIENT (décalage navigateur, cf _renderHeatmap).
+  // SELECT pur, aucune écriture, aucun impact sur /r/<short_id>.
+  const { results: heatmap } = await env.DB.prepare(`
+    SELECT CAST(strftime('%w', ts) AS INTEGER) AS dow,
+           CAST(strftime('%H', ts) AS INTEGER) AS hour,
+           COUNT(*) AS cnt
+    FROM qr_scans
+    WHERE short_id = ? ${periodWhere}
+    GROUP BY dow, hour
+  `).bind(shortId).all();
+
+  // ── Méta pour la timeline d'événements (lecture seule) ─────
+  // created_at / updated_at depuis qr_redirects (updated_at = dernière
+  // modif de cible / contenu / statut). printed_at = jalon déclaré par
+  // l'utilisateur, stocké dans le blob entity (cf PATCH printed_at).
+  const redirect = await env.DB
+    .prepare(`SELECT created_at, updated_at FROM qr_redirects WHERE short_id = ?`)
+    .bind(shortId).first();
+
     return json({
       mode: 'dynamic',
       period,
@@ -984,6 +1013,12 @@ export async function handleStatsQr(request, env, qrId) {
       byCountry : (byCountry || []).map(r => ({ country: r.country, cnt: r.cnt })),
       byDevice  : (byDevice  || []).map(r => ({ device: r.device_kind || 'other', cnt: r.cnt })),
       byOs      : (byOs      || []).map(r => ({ os: r.os_kind || 'other', cnt: r.cnt })),
+      heatmap   : (heatmap   || []).map(r => ({ dow: r.dow, hour: r.hour, cnt: r.cnt })),
+      meta      : {
+        created_at: redirect?.created_at || null,
+        updated_at: redirect?.updated_at || null,
+        printed_at: entity.printed_at     || null,
+      },
     }, 200, origin);
   } catch (e) {
     console.error('[qr-stats]', e);
