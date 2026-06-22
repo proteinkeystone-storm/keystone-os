@@ -10110,8 +10110,13 @@ html.light-mode .sdqr-topbar .ws-iconbtn,
 html.light-mode .sdqr-topbar .ws-topbar-burger { color: var(--sdqr-ink2); }
 html.light-mode .sdqr-topbar .ws-topbar-back:hover,
 html.light-mode .sdqr-topbar .ws-iconbtn:hover { color: #fff; background: rgba(255,255,255,.08); }
-html.light-mode .sdqr-topbar .ws-logo-light { display: none; }
-html.light-mode .sdqr-topbar .ws-logo-dark  { display: block; }
+/* La topbar SDQR reste navy meme en light-mode → logo blanc+or (ws-logo-dark =
+   « Logo KEYSTONE dark-gold.svg »). On ajoute .ws-topbar-logo (+1 classe →
+   specificite 0,4,1) pour BATTRE la bascule de base de workspace.css
+   (« html.light-mode .ws-topbar-logo .ws-logo-dark{display:none} », meme
+   specificite 0,3,1 mais chargee APRES style.css). Sinon = logo sombre sur navy. */
+html.light-mode .sdqr-topbar .ws-topbar-logo .ws-logo-light { display: none; }
+html.light-mode .sdqr-topbar .ws-topbar-logo .ws-logo-dark  { display: block; }
 html.light-mode .sdqr-pill {
   background: rgba(255,255,255,.04);
   border-color: rgba(255,255,255,.14);

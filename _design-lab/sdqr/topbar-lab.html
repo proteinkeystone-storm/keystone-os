@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc d'essai TOPBAR (logo sur navy)</title>
+<!-- ORDRE EXACT d'app.html : style.css PUIS workspace.css (le conflit de
+     specificite logo se joue sur cet ordre). -->
+<link rel="stylesheet" href="../../app/style.css">
+<link rel="stylesheet" href="../../app/workspace.css">
+<style>
+  body { margin: 0; background: #0f1d3a; }
+  .lab-note { font: 600 12px/1.4 -apple-system, system-ui, sans-serif; color: #fff; background: #11203f; padding: 10px 16px; }
+  .sdqr-fullscreen { display: block !important; position: static !important; }
+</style>
+</head>
+<body>
+  <div class="lab-note">BANC D'ESSAI — topbar SDQR navy (html.light-mode force). Le logo doit etre BLANC+OR (lisible), pas l'encre navy.</div>
+  <div class="sdqr-fullscreen">
+    <div class="sdqr-topbar">
+      <div class="sdqr-topbar-left">
+        <div class="ws-topbar-brand">
+          <a class="ws-topbar-logo" href="#" title="Retour au Dashboard">
+            <img src="../../LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark">
+            <img src="../../LOGOS/Logo KEYSTONE fond clair.svg" alt="Keystone" class="ws-logo-light">
+          </a>
+          <button class="ws-topbar-back" title="Retour" aria-label="Retour">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+        </div>
+        <div class="sdqr-title-zone">
+          <span class="ws-topbar-app-picto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg>
+          </span>
+          <div class="sdqr-title">Smart Dynamic QR</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
