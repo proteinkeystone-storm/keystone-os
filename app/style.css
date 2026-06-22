@@ -9124,6 +9124,18 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 }
 .sdqr-saved-logo-x:hover { background: #fee2e2; color: #dc2626; border-color: rgba(220,38,38,.3); }
 
+/* SDQR-3.8 — Onglet Modèles par intention : cartes (aperçu QR + accroche). */
+.sdqr-model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 9px; }
+.sdqr-model-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 8px; background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 11px;
+  cursor: pointer; font: inherit; transition: border-color .15s, box-shadow .15s;
+}
+.sdqr-model-card:hover { border-color: rgba(201,168,76,.5); box-shadow: 0 2px 10px rgba(8,15,35,.1); }
+.sdqr-model-prev { width: 54px; height: 66px; flex: none; }
+.sdqr-model-svg { width: 100%; height: 100%; display: block; }
+.sdqr-model-name { font-size: 11px; font-weight: 600; color: #1b2a4a; text-align: center; line-height: 1.2; }
+
 /* Réglages couleur custom — color-picker + hex en grille (façon KeyForm) */
 .sdqr-color-grid {
   display: grid;

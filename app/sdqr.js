@@ -4033,6 +4033,10 @@ const LOGO_ICONS = [
   { id: 'cart',     svg: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>' },
   { id: 'star',     svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>' },
   { id: 'heart',    svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>' },
+  { id: 'user',     svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
+  { id: 'utensils', svg: '<path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z"/>' },
+  { id: 'play',     svg: '<polygon points="6 3 20 12 6 21 6 3"/>' },
+  { id: 'camera',   svg: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' },
 ];
 
 // Glyphe -> data URL SVG (logo central). Trait navy, lisible dans le masque blanc.
@@ -4055,6 +4059,68 @@ function _pushSavedLogo(url) {
 }
 function _removeSavedLogo(url) {
   try { localStorage.setItem('sdqr_saved_logos', JSON.stringify(_savedLogos().filter(u => u !== url))); } catch (e) {}
+}
+
+// SDQR-3.8 — MODÈLES PAR INTENTION (maquette 12). Un modèle = un design complet
+// en 1 clic (modules + accent yeux + logo + cadre/accroche). Pensés par usage et
+// par réseau, PAS comme des nuanciers abstraits. Couleurs CALÉES sur la
+// scannabilité (modules assez foncés, accent contrasté ; vérifiées jsQR).
+// Le « par contour » (cercle/galet/badge/fanion) = R&D (cadres non rectangulaires).
+const INTENT_MODELS = [
+  { group: 'Par usage', items: [
+    { id: 'pdf',     label: 'Fichier PDF', cta: 'Télécharger',    fg: '#b91c1c', accent: '#7f1d1d', icon: 'file',     frameColor: '#b91c1c' },
+    { id: 'contact', label: 'Contact',     cta: 'Enregistrer',    fg: '#0a2741', accent: '#b08d2e', icon: 'user',     frameColor: '#0a2741' },
+    { id: 'menu',    label: 'Menu',        cta: 'Le menu',        fg: '#92400e', accent: '#78350f', icon: 'utensils', frameColor: '#92400e' },
+    { id: 'avis',    label: 'Avis',        cta: 'Donner un avis', fg: '#b45309', accent: '#78350f', icon: 'star',     frameColor: '#b45309' },
+    { id: 'wifi',    label: 'Wi-Fi',       cta: 'Se connecter',   fg: '#0e7490', accent: '#155e75', icon: 'wifi',     frameColor: '#0e7490' },
+    { id: 'event',   label: 'Événement',   cta: "S'inscrire",     fg: '#5b21b6', accent: '#4c1d95', icon: 'calendar', frameColor: '#5b21b6' },
+  ]},
+  { group: 'Réseaux · couleurs de marque', items: [
+    { id: 'instagram', label: 'Instagram', cta: 'Suivre',    gradient: { from: '#7c2d92', to: '#c026d3', angle: 45 }, accent: '#831843', icon: 'camera',  frameColor: '#a21caf' },
+    { id: 'facebook',  label: 'Facebook',  cta: 'Suivre',    fg: '#1d4ed8', accent: '#1e3a8a', icon: 'globe',   frameColor: '#1d4ed8' },
+    { id: 'youtube',   label: 'YouTube',   cta: "S'abonner", fg: '#b91c1c', accent: '#7f1d1d', icon: 'play',    frameColor: '#b91c1c' },
+    { id: 'whatsapp',  label: 'WhatsApp',  cta: 'Écrire',    fg: '#15803d', accent: '#166534', icon: 'message', frameColor: '#15803d' },
+    { id: 'tiktok',    label: 'TikTok',    cta: 'Suivre',    fg: '#0f172a', accent: '#b08d2e', icon: 'music',   frameColor: '#0f172a' },
+    { id: 'spotify',   label: 'Spotify',   cta: 'Écouter',   fg: '#15803d', accent: '#166534', icon: 'music',   frameColor: '#166534' },
+  ]},
+];
+
+function _applyModel(m) {
+  if (m.gradient) {
+    _editingDesign.gradient = { enabled: true, ...m.gradient };
+  } else {
+    _editingDesign.gradient = { ..._editingDesign.gradient, enabled: false };
+    _editingDesign.fg = m.fg;
+  }
+  _editingDesign.bg = '#ffffff';
+  if (!_editingDesign.eye) _editingDesign.eye = {};
+  _editingDesign.eye.distinct = true;
+  _editingDesign.eye.color = m.accent;
+  const ic = LOGO_ICONS.find(x => x.id === m.icon);
+  if (ic) {
+    _editingDesign.logo = { dataUrl: _iconToDataUrl(ic.svg), size: _editingDesign.logo?.size || 0.20 };
+  }
+  _editingDesign.frame = { style: 'label', text: m.cta, color: m.frameColor || (m.gradient ? m.gradient.from : m.fg) };
+}
+
+// Aperçu stylé d'un modèle : trame QR (couleur du modèle) + bandeau d'accroche.
+function _modelPreviewSvg(m) {
+  const gid = 'mdlg_' + m.id;
+  let fill = m.fg, defs = '';
+  if (m.gradient) {
+    fill = `url(#${gid})`;
+    defs = `<linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${m.gradient.from}"/><stop offset="100%" stop-color="${m.gradient.to}"/></linearGradient>`;
+  }
+  const bar = m.frameColor || fill;
+  return `<svg viewBox="0 0 44 54" class="sdqr-model-svg" aria-hidden="true">${defs}`
+    + `<g fill="${fill}">`
+    + `<rect x="2" y="2" width="12" height="12" rx="3"/><rect x="5" y="5" width="6" height="6" rx="1.5" fill="#fff"/><rect x="6.5" y="6.5" width="3" height="3" rx="1"/>`
+    + `<rect x="30" y="2" width="12" height="12" rx="3"/><rect x="33" y="5" width="6" height="6" rx="1.5" fill="#fff"/><rect x="34.5" y="6.5" width="3" height="3" rx="1"/>`
+    + `<rect x="2" y="30" width="12" height="12" rx="3"/><rect x="5" y="33" width="6" height="6" rx="1.5" fill="#fff"/><rect x="6.5" y="34.5" width="3" height="3" rx="1"/>`
+    + [[19,4],[24,5],[34,19],[39,24],[19,34],[24,39],[33,33],[20,20],[26,25],[31,20]].map(([x,y]) => `<rect x="${x}" y="${y}" width="3.2" height="3.2" rx="1"/>`).join('')
+    + `</g>`
+    + `<rect x="2" y="45" width="40" height="8" rx="2.5" fill="${bar}"/>`
+    + `</svg>`;
 }
 
 // Palette de couleurs prédéfinies (swatches cliquables en un coup)
@@ -4168,18 +4234,26 @@ function _renderDesignPanel(qr) {
           <button class="sdqr-dtab" data-dtab="modeles">Modèles</button>
         </div>
 
-        <!-- MODÈLES (thèmes prêts à l'emploi + Surprise) -->
+        <!-- MODÈLES PAR INTENTION (par usage / par réseau) + Surprise -->
         <div class="sdqr-dtab-panel" data-dtab-panel="modeles">
           <div class="sdqr-design-section-head">
-            <span class="sdqr-design-section-title">Thèmes prêts à l'emploi</span>
+            <span class="sdqr-design-hint" style="margin:0">Des modèles pensés par intention &mdash; couleur, accroche et logo posés d'un clic.</span>
             <button class="sdqr-surprise-btn" data-action="surprise" title="Génère un design aléatoire">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M5 3v4"/><path d="M3 5h4"/><path d="M6 17v4"/><path d="M4 19h4"/><path d="M13 3l1.5 4.5L19 9l-4.5 1.5L13 15l-1.5-4.5L7 9l4.5-1.5L13 3z"/></svg>
               Surprends-moi
             </button>
           </div>
-          <div class="sdqr-theme-cards">
-            ${THEME_PRESETS.map(t => _renderThemeCard(t, d)).join('')}
-          </div>
+          ${INTENT_MODELS.map(g => `
+            <div class="sdqr-amb-group">
+              <div class="sdqr-amb-label">${_esc(g.group)}</div>
+              <div class="sdqr-model-grid">
+                ${g.items.map(m => `
+                  <button class="sdqr-model-card" data-model="${m.id}" title="${_esc(m.label)} &middot; ${_esc(m.cta)}">
+                    <span class="sdqr-model-prev">${_modelPreviewSvg(m)}</span>
+                    <span class="sdqr-model-name">${_esc(m.label)}</span>
+                  </button>`).join('')}
+              </div>
+            </div>`).join('')}
         </div>
 
         <!-- MODULES (motif du corps) — panneau actif par défaut -->
@@ -4473,6 +4547,17 @@ function _wireDesignPanel(root, qr, encodedForQr) {
       const theme = THEME_PRESETS.find(t => t.id === btn.dataset.theme);
       if (!theme) return;
       _applyTheme(theme);
+      _refreshDesignPanelDom(root, qr, encodedForQr);
+    });
+  });
+
+  // Modèles PAR INTENTION (1-clic = couleur + accent yeux + logo + accroche)
+  panel.querySelectorAll('[data-model]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      let m = null;
+      for (const g of INTENT_MODELS) { const f = g.items.find(x => x.id === btn.dataset.model); if (f) { m = f; break; } }
+      if (!m) return;
+      _applyModel(m);
       _refreshDesignPanelDom(root, qr, encodedForQr);
     });
   });
