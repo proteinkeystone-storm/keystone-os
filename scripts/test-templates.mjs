@@ -62,12 +62,12 @@ const MOCK_DATA = {
   'carte-visite': {
     layout:        '2',
     photo_url:     'https://example.com/p.jpg',
-    full_name:     'Sophie Martin',
-    position:      'Responsable commercial',
-    company:       'Prométhée Immobilier',
-    phone_work:    '+33612345678',
-    email:         'sophie@promethee.fr',
-    website:       'https://promethee.fr',
+    full_name:     'Prénom Nom',
+    position:      'Votre fonction',
+    company:       'Votre société',
+    phone_work:    '+33600000000',
+    email:         'vous@exemple.fr',
+    website:       'https://votre-site.fr',
     accent_color:  '#4a90d9',
   },
   // V4.1 livré 2026-05-26
@@ -298,7 +298,7 @@ async function testFrontend() {
     for (const f of tpl.fields) {
       assert(typeof f.id === 'string' && f.id,                                       `${tpl.id} : field.${f.id || '?'} id présent`);
       assert(typeof f.label === 'string' && f.label,                                 `${tpl.id}.${f.id} : label présent`);
-      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local','image','lots'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
+      assert(typeof f.type === 'string' && ['text','textarea','select','url','tel','email','number','password','checkbox','color','datetime-local','image','lots','cards'].includes(f.type), `${tpl.id}.${f.id} : type valide (${f.type})`);
       if (f.type === 'select') {
         assert(Array.isArray(f.options) && f.options.length > 0,                     `${tpl.id}.${f.id} : options select présentes`);
       }

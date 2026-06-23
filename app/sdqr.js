@@ -1206,6 +1206,12 @@ function _openCreateForm(panel, opts = {}) {
 
   // Aperçu live : se met à jour à chaque saisie de contenu.
   content.querySelector('#sdqr-form-fields')?.addEventListener('input', () => _creRenderPreview(content));
+  // Champs Smart (template) : l'aperçu « Au scan » suit aussi la saisie — clic
+  // sur une vignette de design, photo, nom… Concierge exclu (éditeur nesté
+  // lourd → comportement inchangé pour ne pas recharger son iframe par frappe).
+  content.querySelector('#sdqr-smart-template-fields')?.addEventListener('input', () => {
+    if (_creating.template_id !== 'concierge') _creRenderPreview(content);
+  });
 
   // Bascule QR / Page de l'aperçu (visible uniquement pour les expériences).
   content.querySelector('#sdqr-view-switch')?.addEventListener('click', e => {
@@ -1684,6 +1690,7 @@ function _renderTemplateFields(root) {
   _bindColorWidgets(wrap);
   _bindLotsWidgets(wrap, _creating.template_data);
   _bindIconPickers(wrap);
+  _bindCardPickers(wrap, _creating.template_data);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2949,6 +2956,25 @@ function _lotRowHtml(lot = {}) {
   </div>`;
 }
 
+// Sélecteur de design par vignettes (champ type 'cards') : clic = écrit la
+// valeur dans le hidden + état actif, et dispatch un 'input' bubblant pour
+// rafraîchir l'aperçu (même chemin que les autres champs).
+function _bindCardPickers(wrap, store) {
+  if (!wrap) return;
+  wrap.querySelectorAll('.sdqr-field[data-cardpick]').forEach(field => {
+    const key    = field.dataset.cardpick;
+    const hidden = field.querySelector('input[type="hidden"][data-payload-key]');
+    field.querySelectorAll('.sdqr-cardpick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.cardpickVal;
+        if (store) store[key] = val;
+        field.querySelectorAll('.sdqr-cardpick').forEach(b => b.classList.toggle('is-active', b === btn));
+        if (hidden) { hidden.value = val; hidden.dispatchEvent(new Event('input', { bubbles: true })); }
+      });
+    });
+  });
+}
+
 function _bindLotsWidgets(wrap, store) {
   if (!wrap || !store) return;
   wrap.querySelectorAll('[data-lots-key]').forEach(field => {
@@ -3044,6 +3070,20 @@ function _renderField(f, store) {
     return `<div class="sdqr-field${span}">
       <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
       ${input}
+    </div>`;
+  } else if (f.type === 'cards') {
+    // Sélecteur de design par VIGNETTES cliquables (on voit le gabarit) —
+    // remplace un <select> peu ergonomique. Options : {value, label, thumb(HTML)}.
+    // Valeur écrite dans un hidden data-payload-key, bind via _bindCardPickers.
+    const cur = String(rawVal || ((f.options && f.options[0]) ? f.options[0].value : ''));
+    const cards = (f.options || []).map(o => `
+        <button type="button" class="sdqr-cardpick${String(o.value) === cur ? ' is-active' : ''}" data-cardpick-val="${_esc(o.value)}">
+          ${o.thumb || ''}<span class="sdqr-cardpick-lbl">${_esc(o.label)}</span>
+        </button>`).join('');
+    return `<div class="sdqr-field${span}" data-cardpick="${f.id}">
+      <span class="sdqr-field-lbl">${_esc(f.label)}${req}</span>
+      <div class="sdqr-cardpick-grid">${cards}</div>
+      <input type="hidden" data-payload-key="${f.id}" value="${_esc(cur)}">
     </div>`;
   } else if (f.type === 'select') {
     // V4.4 (2026-05-26) : on supporte 2 formats d'options pour les select :

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — sélecteur de design (vignettes)</title>
+<style>
+  body { margin:0; padding:28px; background:#f5f7fa; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  h1 { font-size:15px; color:#1b2a4a; margin:0 0 4px; }
+  p.sub { font-size:12px; color:#6b7790; margin:0 0 18px; }
+  .panel { max-width:520px; background:#fff; border:1px solid rgba(27,42,74,.1); border-radius:14px; padding:18px 20px; box-shadow:0 2px 10px rgba(8,15,35,.08); }
+  .sdqr-field-lbl { display:block; font-size:13px; font-weight:600; color:#1b2a4a; margin-bottom:2px; }
+  /* CSS copié de app/style.css (sélecteur de design + mini-rendus) */
+  .sdqr-cardpick-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:10px; margin-top:6px; }
+  .sdqr-cardpick { cursor:pointer; border:2px solid rgba(27,42,74,.12); border-radius:11px; background:#fff; padding:6px 6px 7px; display:flex; flex-direction:column; align-items:center; gap:6px; font-family:inherit; transition:border-color .15s, box-shadow .15s; }
+  .sdqr-cardpick:hover { border-color:rgba(108,108,245,.5); }
+  .sdqr-cardpick.is-active { border-color:#6c6cf5; box-shadow:0 0 0 1px #6c6cf5; }
+  .sdqr-cardpick-lbl { font-size:10px; line-height:1.25; color:#3a4b6b; text-align:center; }
+  .cvt { width:100%; aspect-ratio:62 / 108; background:#eef2f7; border-radius:6px; overflow:hidden; position:relative; }
+  .cvt-blue { background:#4a90d9; }
+  .cvt-circ { position:absolute; left:50%; transform:translateX(-50%); border-radius:50%; background:#dbe7f5; border:2px solid #fff; }
+  .cvt-rows { display:flex; flex-direction:column; gap:4px; padding:6px 7px 0; }
+  .cvt-rows > i { height:5px; border-radius:2px; background:#d8dfe8; display:block; }
+  .cvt-acts { display:flex; gap:3px; padding:0 7px; }
+  .cvt-acts > i { flex:1; display:block; }
+</style></head>
+<body>
+  <h1>Carte de visite — choix du design par vignettes (remplace le menu déroulant)</h1>
+  <p class="sub">Les 5 gabarits sont visibles et cliquables. Clic = design sélectionné (bordure indigo).</p>
+  <div class="panel">
+    <span class="sdqr-field-lbl">Design de la carte</span>
+    <div class="sdqr-cardpick-grid" id="grid"></div>
+  </div>
+<script type="module">
+  const { default: TPL } = await import('../../app/sdqr-templates/carte-visite.js?v=cp1');
+  const field = TPL.fields.find(f => f.id === 'layout');
+  const cur = field.default;
+  document.getElementById('grid').innerHTML = field.options.map(o =>
+    `<button type="button" class="sdqr-cardpick${o.value === cur ? ' is-active' : ''}" data-v="${o.value}">${o.thumb}<span class="sdqr-cardpick-lbl">${o.label}</span></button>`
+  ).join('');
+  document.querySelectorAll('.sdqr-cardpick').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.sdqr-cardpick').forEach(x => x.classList.toggle('is-active', x === b));
+  }));
+  window.__SCAN_DONE = true;
+</script>
+</body></html>
