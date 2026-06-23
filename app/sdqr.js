@@ -4804,6 +4804,14 @@ function _renderDesignPanel(qr, opts = {}) {
           </div>
 
           <div class="sdqr-design-row">
+            <span class="sdqr-design-lbl">Fond</span>
+            <label class="sdqr-check">
+              <input type="checkbox" id="sdqr-bg-transparent" ${d.bg === 'transparent' ? 'checked' : ''}>
+              <span>Transparent <small>(PNG/SVG sans fond)</small></span>
+            </label>
+          </div>
+
+          <div class="sdqr-design-row">
             <span class="sdqr-design-lbl">Yeux</span>
             <div class="sdqr-shape-pills" data-eye-mode>
               <button class="sdqr-shape-pill ${!d.eye.distinct ? 'is-active' : ''}" data-eye="inherit">Comme modules</button>
@@ -5162,6 +5170,29 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   _bindColor('sdqr-grad-from',     v => { _editingDesign.gradient.from = v; });
   _bindColor('sdqr-grad-to',       v => { _editingDesign.gradient.to = v; });
   _bindColor('sdqr-color-bg-grad', v => { _editingDesign.bg = v; });
+
+  // SDQR-3.11 — Fond transparent : masque les champs Fond, met bg='transparent'.
+  const _bgFields = ['sdqr-color-bg', 'sdqr-color-bg-grad']
+    .map(id => panel.querySelector('#' + id)?.closest('.sdqr-color-field')).filter(Boolean);
+  const _applyBgTransparent = (on) => {
+    _bgFields.forEach(el => { el.hidden = on; });
+    if (on) {
+      _editingDesign.bg = 'transparent';
+    } else {
+      const pickId = _editingDesign.gradient?.enabled ? 'sdqr-color-bg-grad' : 'sdqr-color-bg';
+      const pick = panel.querySelector('#' + pickId);
+      _editingDesign.bg = (pick && /^#[0-9a-fA-F]{6}$/.test(pick.value)) ? pick.value : '#ffffff';
+    }
+  };
+  const _bgTransEl = panel.querySelector('#sdqr-bg-transparent');
+  if (_bgTransEl) {
+    if (_editingDesign.bg === 'transparent') _bgFields.forEach(el => { el.hidden = true; });
+    _bgTransEl.addEventListener('change', e => {
+      _applyBgTransparent(e.target.checked);
+      _updateContrastBadge(root);
+      _liveRerender();
+    });
+  }
 
   // Angle dégradé
   panel.querySelector('#sdqr-grad-angle')?.addEventListener('input', e => {

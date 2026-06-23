@@ -9172,6 +9172,9 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-swatch.is-on { border-color: #6c6cf5; box-shadow: 0 0 0 2px rgba(108,108,245,.2); }
 .sdqr-swatch-dot { width: 20px; height: 20px; border-radius: 6px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
 .sdqr-swatch-name { font-size: 12px; font-weight: 600; }
+.sdqr-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #334155; cursor: pointer; }
+.sdqr-check input { width: 16px; height: 16px; accent-color: var(--gold, #6c6cf5); cursor: pointer; }
+.sdqr-check small { color: #94a3b8; }
 
 /* SDQR-3.11 — Boutons Remplacer/Retirer (lisibles) + logos de marque */
 .sdqr-logo-action {
