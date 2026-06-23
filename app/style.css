@@ -8124,6 +8124,12 @@ html.light-mode .sdqr-type-badge--smart { color: #4338ca; }
   background: rgba(7,9,13,.55);
   padding: 6px;
 }
+/* Glisser-déposer : surbrillance pendant le survol d'un fichier. */
+.sdqr-image-preview.is-dragover {
+  border-style: solid;
+  border-color: rgba(108,108,245,.9);
+  background: rgba(108,108,245,.14);
+}
 .sdqr-image-preview img {
   max-width: 100%; max-height: 184px;
   display: block; object-fit: contain;
@@ -9852,6 +9858,11 @@ html.light-mode .sdqr-image-preview {
 html.light-mode .sdqr-image-preview.has-image {
   border-color: rgba(108,108,245,.45);
   background: rgba(0,0,0,.03);
+}
+/* Surbrillance glisser-déposer en clair (spécificité > la règle de base ci-dessus). */
+html.light-mode .sdqr-image-preview.is-dragover {
+  border-color: rgba(108,108,245,.9);
+  background: rgba(108,108,245,.12);
 }
 html.light-mode .sdqr-image-placeholder { color: #94a3b8; }
 html.light-mode .sdqr-image-btn {

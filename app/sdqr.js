@@ -1819,7 +1819,7 @@ function _cgLogoWidget(key, label, opts) {
     <span class="sdqr-field-lbl">${label}</span>
     <div class="sdqr-image-widget" data-maxbytes="${maxBytes}" data-maxdim="${maxDim}">
       <input type="hidden" data-payload-key="${key}" value="">
-      <div class="sdqr-image-preview${opts.wide ? ' sdqr-image-preview--wide' : ''}"><span class="sdqr-image-placeholder">Aucune image</span></div>
+      <div class="sdqr-image-preview${opts.wide ? ' sdqr-image-preview--wide' : ''}"><span class="sdqr-image-placeholder">Glissez une image ici</span></div>
       <div class="sdqr-image-actions">
         <label class="sdqr-image-btn"><input type="file" accept="image/*" hidden class="sdqr-image-file"><span class="sdqr-image-btn-lbl">Choisir une image…</span></label>
         <button type="button" class="sdqr-image-btn sdqr-image-btn--ghost sdqr-image-clear" hidden>Effacer</button>
@@ -2821,8 +2821,9 @@ function _bindImageWidgets(wrap, store) {
       _updateImageWidgetPreview(widget, v);
     }
 
-    fileIn?.addEventListener('change', async (e) => {
-      const f = e.target.files?.[0];
+    // Traitement partagé par l'input fichier ET le glisser-déposer : valide
+    // que c'est une image, compresse, stocke. Messages d'erreur via setError.
+    async function handleFile(f) {
       if (!f) return;
       setError('');
       try {
@@ -2833,15 +2834,34 @@ function _bindImageWidgets(wrap, store) {
         const maxD = parseInt(widget.dataset.maxdim, 10)   || 800;
         const compressed = await _compressImageToDataUri(f, maxB, maxD);
         setValue(compressed);
-        // Reset URL field pour ne pas garder une URL périmée
-        if (urlIn) urlIn.value = '';
+        if (urlIn) urlIn.value = '';   // évite une URL externe périmée
       } catch (err) {
         setError(err.message || 'Erreur inattendue.');
-      } finally {
-        // Permet de re-sélectionner le même fichier après une erreur
-        e.target.value = '';
       }
+    }
+
+    fileIn?.addEventListener('change', async (e) => {
+      await handleFile(e.target.files?.[0]);
+      e.target.value = '';   // permet de re-choisir le même fichier après erreur
     });
+
+    // Glisser-déposer sur l'aperçu (fonctionne aussi quand vide). Surbrillance
+    // pendant le survol, puis traitement du 1er fichier image lâché.
+    const dropZone = widget.querySelector('.sdqr-image-preview');
+    if (dropZone) {
+      const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+      ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, (e) => {
+        stop(e);
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        dropZone.classList.add('is-dragover');
+      }));
+      ['dragleave', 'dragend'].forEach(ev => dropZone.addEventListener(ev, () => dropZone.classList.remove('is-dragover')));
+      dropZone.addEventListener('drop', async (e) => {
+        stop(e);
+        dropZone.classList.remove('is-dragover');
+        await handleFile(e.dataTransfer?.files?.[0]);
+      });
+    }
 
     clearBt?.addEventListener('click', () => {
       setValue('');
@@ -2885,7 +2905,7 @@ function _updateImageWidgetPreview(widget, val) {
   } else {
     if (preview) {
       preview.classList.remove('has-image');
-      preview.innerHTML = '<span class="sdqr-image-placeholder">Aucune image</span>';
+      preview.innerHTML = '<span class="sdqr-image-placeholder">Glissez une image ici</span>';
     }
     if (lblSpan) lblSpan.textContent = 'Choisir une image…';
     if (clearBt) clearBt.hidden = true;
@@ -3029,7 +3049,11 @@ function _renderField(f, store) {
   const src  = store || _creating.payload;
   const span = f.span === 'full' ? ' sdqr-field--full' : '';
   const req  = f.required ? ' <span class="sdqr-req">*</span>' : '';
-  const rawVal = src[f.id] ?? f.default ?? '';
+  // Pré-remplit « https:// » dans TOUT champ URL vide (le type url natif a déjà
+  // son default ; ceci couvre aussi les champs url des vCard et des gabarits).
+  // Affichage seulement : le payload n'est écrit qu'à la frappe → un champ non
+  // touché reste vide (pas de « URL:https:// » parasite).
+  const rawVal = src[f.id] ?? f.default ?? (f.type === 'url' ? 'https://' : '');
   const val  = _esc(rawVal);
   const ph   = _esc(f.placeholder || '');
 
@@ -3051,7 +3075,7 @@ function _renderField(f, store) {
     input = `<div class="sdqr-image-widget" data-maxbytes="${imgMaxB}" data-maxdim="${imgMaxD}">
       <input type="hidden" data-payload-key="${f.id}" value="${previewSrc}">
       <div class="sdqr-image-preview${hasVal ? ' has-image' : ''}">
-        ${hasVal ? `<img alt="" src="${previewSrc}">` : `<span class="sdqr-image-placeholder">Aucune image</span>`}
+        ${hasVal ? `<img alt="" src="${previewSrc}">` : `<span class="sdqr-image-placeholder">Glissez une image ici</span>`}
       </div>
       <div class="sdqr-image-actions">
         <label class="sdqr-image-btn">
