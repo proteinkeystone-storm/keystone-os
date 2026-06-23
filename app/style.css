@@ -9147,6 +9147,45 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-eye-name { font-size: 11px; font-weight: 600; color: #475569; text-align: center; line-height: 1.2; }
 .sdqr-eye-card.is-on .sdqr-eye-name { color: #1b2a4a; }
 
+/* SDQR-3.11 — Modules en cartes-aperçu QR (vraie mini-QR par forme) */
+.sdqr-module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+.sdqr-module-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px;
+  background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 12px;
+  color: #1b2a4a; font: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.sdqr-module-card:hover { border-color: rgba(108,108,245,.5); }
+.sdqr-module-card.is-on { border-color: #6c6cf5; box-shadow: 0 0 0 2px rgba(108,108,245,.2); background: #f5f6ff; }
+.sdqr-module-prev { width: 62px; height: 62px; flex: none; display: flex; align-items: center; justify-content: center; }
+.sdqr-module-prev svg { width: 100%; height: 100%; display: block; }
+.sdqr-module-name { font-size: 11px; font-weight: 600; color: #475569; text-align: center; line-height: 1.2; }
+.sdqr-module-card.is-on .sdqr-module-name { color: #1b2a4a; }
+
+/* SDQR-3.11 — Nuancier compact moderne (couleurs unies) */
+.sdqr-swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(94px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.sdqr-swatch {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  background: #fff; border: 1px solid rgba(27,42,74,.12); border-radius: 10px;
+  color: #1b2a4a; font: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.sdqr-swatch:hover { border-color: rgba(108,108,245,.5); }
+.sdqr-swatch.is-on { border-color: #6c6cf5; box-shadow: 0 0 0 2px rgba(108,108,245,.2); }
+.sdqr-swatch-dot { width: 20px; height: 20px; border-radius: 6px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
+.sdqr-swatch-name { font-size: 12px; font-weight: 600; }
+
+/* SDQR-3.11 — Boutons Remplacer/Retirer (lisibles) + logos de marque */
+.sdqr-logo-action {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px;
+  border-radius: 9px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  border: 1px solid rgba(27,42,74,.16); background: #fff; color: #1b2a4a;
+  transition: filter .15s, background .15s, border-color .15s;
+}
+.sdqr-logo-action--primary { background: var(--gold, #6c6cf5); border-color: var(--gold, #6c6cf5); color: #fff; }
+.sdqr-logo-action--primary:hover { filter: brightness(1.08); }
+.sdqr-logo-action--danger { color: #dc2626; border-color: rgba(220,38,38,.35); }
+.sdqr-logo-action--danger:hover { background: rgba(220,38,38,.08); }
+.sdqr-logo-lib-btn--brand svg { width: 23px; height: 23px; }
+
 /* SDQR-3.7 — Onglet Logo : bibliothèque d'icônes + « Vos logos ». */
 .sdqr-logo-lib-head, .sdqr-saved-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #94a3b8; margin: 14px 0 8px; }
 .sdqr-logo-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 7px; }

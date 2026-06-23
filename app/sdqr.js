@@ -4465,6 +4465,55 @@ function _iconToDataUrl(svg) {
   return 'data:image/svg+xml,' + encodeURIComponent(full);
 }
 
+// SDQR-3.11 — LOGOS DE MARQUE (réseaux sociaux). Marques monochromes navy,
+// reconnaissables, dessinées maison (chaque entrée porte ses propres fill/
+// stroke). Posées au centre du QR via le chemin logo existant.
+const LOGO_BRANDS = [
+  { id: 'instagram', label: 'Instagram', svg: '<rect x="3" y="3" width="18" height="18" rx="5.2" fill="none" stroke="#1b2a4a" stroke-width="2"/><circle cx="12" cy="12" r="4.1" fill="none" stroke="#1b2a4a" stroke-width="2"/><circle cx="17" cy="7" r="1.25" fill="#1b2a4a"/>' },
+  { id: 'facebook', label: 'Facebook', svg: '<rect x="3" y="3" width="18" height="18" rx="5" fill="#1b2a4a"/><path d="M13.3 21v-6.6h2.2l.33-2.6h-2.53V10.1c0-.75.21-1.26 1.28-1.26h1.37V6.52a18 18 0 0 0-2-.1c-1.98 0-3.33 1.2-3.33 3.42v1.96H8.4v2.6h2.19V21z" fill="#fff"/>' },
+  { id: 'youtube', label: 'YouTube', svg: '<rect x="2.3" y="6.2" width="19.4" height="11.6" rx="3.6" fill="#1b2a4a"/><path d="M10.2 9.3 15.2 12l-5 2.7z" fill="#fff"/>' },
+  { id: 'whatsapp', label: 'WhatsApp', svg: '<path d="M12 3a9 9 0 0 0-7.74 13.6L3 21l4.5-1.18A9 9 0 1 0 12 3z" fill="#1b2a4a"/><path d="M9.32 8.1c-.17-.4-.31-.38-.5-.39l-.42-.01c-.15 0-.39.05-.59.28-.2.22-.77.75-.77 1.83s.79 2.12.9 2.27c.11.15 1.55 2.48 3.83 3.38 1.9.75 2.29.6 2.7.56.41-.04 1.32-.54 1.5-1.06.19-.52.19-.96.13-1.06-.06-.1-.21-.15-.44-.27-.23-.11-1.36-.67-1.57-.75-.21-.08-.36-.11-.52.11-.15.23-.59.75-.72.9-.13.15-.27.17-.5.06-.23-.12-.97-.36-1.85-1.14-.68-.61-1.14-1.36-1.28-1.59-.13-.23-.01-.35.1-.46.1-.1.23-.27.34-.4.11-.14.15-.23.23-.39.08-.15.04-.29-.02-.4-.06-.12-.5-1.27-.7-1.73z" fill="#fff"/>' },
+  { id: 'x', label: 'X', svg: '<path d="M4 4h3.6l4.2 5.7L16.4 4h3.1l-5.9 7.4L20 20h-3.6l-4.5-6.1L7 20H3.9l6.3-7.9z" fill="#1b2a4a"/>' },
+  { id: 'tiktok', label: 'TikTok', svg: '<path d="M14 3c.3 1.9 1.55 3.4 3.45 3.78v2.5a6.2 6.2 0 0 1-3.45-1.06v5.55A4.9 4.9 0 1 1 9.1 8.9c.28 0 .55.03.82.08v2.62a2.32 2.32 0 1 0 1.63 2.22V3z" fill="#1b2a4a"/>' },
+  { id: 'linkedin', label: 'LinkedIn', svg: '<rect x="3" y="3" width="18" height="18" rx="3.2" fill="#1b2a4a"/><circle cx="7.1" cy="7.3" r="1.5" fill="#fff"/><rect x="5.8" y="10" width="2.6" height="7.4" fill="#fff"/><path d="M10.6 10h2.5v1.05a2.8 2.8 0 0 1 2.45-1.25c1.85 0 2.65 1.15 2.65 3.25v4.35h-2.6v-3.85c0-1-.4-1.55-1.25-1.55s-1.45.6-1.45 1.6v3.8h-2.5z" fill="#fff"/>' },
+  { id: 'spotify', label: 'Spotify', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M7.4 10.4c3.1-1 6.8-.7 9.3.85" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M8 13.2c2.5-.8 5.3-.5 7.3.75" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.6 15.7c1.9-.55 3.9-.4 5.5.55" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round"/>' },
+  { id: 'snapchat', label: 'Snapchat', svg: '<path d="M12 3.4c2.35 0 3.78 1.7 3.85 4.05.03.9-.04 1.45.08 1.7.13.27.55.36.95.2.45-.18.92.04 1.02.36.1.34-.16.62-.74.86-.5.2-1.02.32-1.02.74 0 .5 1.05 1.3 2.06 1.7.4.16.3.66-.1.78-.5.15-1.02.05-1.2.5-.13.33.02.74-.46.86-.55.13-1.2-.4-2.07-.16-.78.22-1.32 1-2.83 1s-2.05-.78-2.83-1c-.87-.24-1.52.29-2.07.16-.48-.12-.33-.53-.46-.86-.18-.45-.7-.35-1.2-.5-.4-.12-.5-.62-.1-.78 1.01-.4 2.06-1.2 2.06-1.7 0-.42-.52-.54-1.02-.74-.58-.24-.84-.52-.74-.86.1-.32.57-.54 1.02-.36.4.16.82.07.95-.2.12-.25.05-.8.08-1.7C8.22 5.1 9.65 3.4 12 3.4z" fill="#1b2a4a"/>' },
+  { id: 'telegram', label: 'Telegram', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M6.5 11.9 16 8.2c.5-.18.92.12.76.85l-1.62 7.62c-.12.55-.46.68-.93.42l-2.55-1.88-1.23 1.18c-.14.14-.25.25-.5.25l.18-2.56 4.65-4.2c.2-.18-.04-.28-.32-.1l-5.74 3.6-2.47-.77c-.54-.17-.55-.54.12-.8z" fill="#fff"/>' },
+  { id: 'pinterest', label: 'Pinterest', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M12.1 6.4c-3 0-4.6 2-4.6 3.95 0 .9.5 2.02 1.3 2.37.13.06.2.03.23-.1l.18-.73c.03-.1.01-.14-.06-.23-.36-.43-.5-1.18-.5-1.7 0-1.65 1.25-3.25 3.4-3.25 1.85 0 3.15 1.26 3.15 3.07 0 2.05-1.03 3.46-2.38 3.46-.74 0-1.3-.6-1.12-1.36.21-.9.62-1.86.62-2.51 0-.58-.31-1.06-.96-1.06-.76 0-1.37.78-1.37 1.83 0 .67.22 1.12.22 1.12l-.9 3.8c-.27 1.13-.04 2.5-.02 2.65 0 .08.11.1.16.04.07-.09.97-1.2 1.27-2.3l.49-1.9c.24.46.95.86 1.7.86 2.25 0 3.77-2.05 3.77-4.79 0-2.07-1.76-4-4.42-4z" fill="#fff"/>' },
+];
+function _brandToDataUrl(svg) {
+  const full = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${svg}</svg>`;
+  return 'data:image/svg+xml,' + encodeURIComponent(full);
+}
+
+// SDQR-3.11 — NUANCIER COMPACT MODERNE (couleurs unies foncées = scannables sur
+// blanc, garde-fou couvre les marges). Remplace les grandes cartes « ambiance »
+// vieillottes. Couple optionnel d'accent yeux dans le même esprit.
+const COLOR_SWATCHES = [
+  { id: 'noir',     label: 'Noir',     fg: '#111111', accent: '#111111' },
+  { id: 'navy',     label: 'Navy',     fg: '#0a2741', accent: '#0a2741' },
+  { id: 'indigo',   label: 'Indigo',   fg: '#4338ca', accent: '#312e81' },
+  { id: 'violet',   label: 'Violet',   fg: '#6d28d9', accent: '#4c1d95' },
+  { id: 'ocean',    label: 'Océan',    fg: '#0e7490', accent: '#155e75' },
+  { id: 'emeraude', label: 'Émeraude', fg: '#047857', accent: '#065f46' },
+  { id: 'framboise',label: 'Framboise',fg: '#be123c', accent: '#881337' },
+  { id: 'ardoise',  label: 'Ardoise',  fg: '#334155', accent: '#1e293b' },
+];
+
+// SDQR-3.11 — aperçu module = vraie mini-QR rendue avec la forme (cache par
+// forme : fixe, ne dépend que du `shape`). On voit le VRAI motif, pas un picto.
+const _moduleCardCache = {};
+async function _moduleCardSvg(shape) {
+  if (_moduleCardCache[shape]) return _moduleCardCache[shape];
+  try {
+    const svg = await renderQrCustom('https://protein-keystone.com', {
+      module: { shape }, anchor: { outer: { shape: 'rounded' }, inner: { shape: 'dot' } }, fg: '#1b2a4a',
+    }, 88);
+    _moduleCardCache[shape] = svg;
+    return svg;
+  } catch (e) { return ''; }
+}
+
 // « Vos logos » — derniers logos utilisés (upload + icônes), localStorage, cap 8.
 function _savedLogos() {
   try { const a = JSON.parse(localStorage.getItem('sdqr_saved_logos') || '[]'); return Array.isArray(a) ? a.slice(0, 8) : []; }
@@ -4635,6 +4684,20 @@ function _colorField(label, id, value) {
     </label>`;
 }
 
+// SDQR-3.11 — nuancier compact : applique une couleur unie moderne (modules) sur
+// fond blanc, dégradé OFF, yeux non distincts (look propre 1 couleur).
+function _swatchActive(sw, d) {
+  return !(d.gradient && d.gradient.enabled) && String(d.fg || '').toLowerCase() === sw.fg.toLowerCase();
+}
+function _applySwatch(sw) {
+  _editingDesign.gradient = { ..._editingDesign.gradient, enabled: false };
+  _editingDesign.fg = sw.fg;
+  _editingDesign.bg = '#ffffff';
+  if (!_editingDesign.eye) _editingDesign.eye = {};
+  _editingDesign.eye.distinct = false;
+  _editingDesign.eye.innerColor = '';
+}
+
 // SDQR-3.10 — gabarit de cadre sur-mesure téléchargeable : un SVG prêt, avec
 // le repère « qr-slot » déjà placé. L'utilisateur décore autour, garde le slot,
 // réexporte. Démystifie l'instruction technique « doit réserver qr-slot ».
@@ -4677,37 +4740,18 @@ function _renderDesignPanel(qr, opts = {}) {
           <button class="sdqr-dtab" data-dtab="logo">Logo</button>
           <button class="sdqr-dtab" data-dtab="couleurs">Couleurs</button>
           <button class="sdqr-dtab" data-dtab="cadre">Cadre</button>
-          <button class="sdqr-dtab" data-dtab="modeles">Modèles</button>
         </div>
 
-        <!-- MODÈLES PAR INTENTION (par usage / par réseau) + Surprise -->
-        <div class="sdqr-dtab-panel" data-dtab-panel="modeles">
-          <div class="sdqr-design-section-head">
-            <span class="sdqr-design-hint" style="margin:0">Des modèles pensés par intention &mdash; couleur, accroche et logo posés d'un clic.</span>
-            <button class="sdqr-surprise-btn" data-action="surprise" title="Génère un design aléatoire">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M5 3v4"/><path d="M3 5h4"/><path d="M6 17v4"/><path d="M4 19h4"/><path d="M13 3l1.5 4.5L19 9l-4.5 1.5L13 15l-1.5-4.5L7 9l4.5-1.5L13 3z"/></svg>
-              Surprends-moi
-            </button>
-          </div>
-          ${INTENT_MODELS.map(g => `
-            <div class="sdqr-amb-group">
-              <div class="sdqr-amb-label">${_esc(g.group)}</div>
-              <div class="sdqr-model-grid">
-                ${g.items.map(m => `
-                  <button class="sdqr-model-card" data-model="${m.id}" title="${_esc(m.label)} &middot; ${_esc(m.cta)}">
-                    <span class="sdqr-model-prev">${_modelPreviewSvg(m)}</span>
-                    <span class="sdqr-model-name">${_esc(m.label)}</span>
-                  </button>`).join('')}
-              </div>
-            </div>`).join('')}
-        </div>
-
-        <!-- MODULES (motif du corps) — panneau actif par défaut -->
+        <!-- MODULES (motif du corps) — cartes-aperçu QR (panneau actif par défaut) -->
         <div class="sdqr-dtab-panel is-active" data-dtab-panel="modules">
-          <div class="sdqr-shape-pills" data-shape-target="module">
-            ${SHAPE_OPTS.map(s => _renderShapePill(s, d.module.shape === s.id)).join('')}
+          <div class="sdqr-module-grid" data-shape-target="module">
+            ${SHAPE_OPTS.map(s => `
+              <button class="sdqr-module-card ${d.module.shape === s.id ? 'is-on' : ''}" data-shape="${s.id}" title="${_esc(s.label)}">
+                <span class="sdqr-module-prev" data-module-prev="${s.id}"></span>
+                <span class="sdqr-module-name">${_esc(s.label)}</span>
+              </button>`).join('')}
           </div>
-          <div class="sdqr-design-hint">Le motif du corps du QR. Un motif trop clairsemé fragilise le scan — le garde-fou veille.</div>
+          <div class="sdqr-design-hint"><svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Un motif trop clairsemé fragilise le scan — le garde-fou prévient et corrige.</div>
         </div>
 
         <!-- YEUX (styles nommés = combos anneau/centre, jsQR-vérifiés) -->
@@ -4722,24 +4766,14 @@ function _renderDesignPanel(qr, opts = {}) {
           <div class="sdqr-design-hint">Les yeux = ce que la caméra verrouille en premier. Leur couleur se règle dans l'onglet Couleurs.</div>
         </div>
 
-        <!-- COULEURS : palettes par ambiance + custom -->
+        <!-- COULEURS : nuancier compact moderne + réglages -->
         <div class="sdqr-dtab-panel" data-dtab-panel="couleurs">
-          <div class="sdqr-design-hint">Le dégradé colore les modules &middot; la pastille d'accent colore les yeux.</div>
-          <div class="sdqr-amb-groups">
-            ${COLOR_AMBIANCES.map(g => `
-              <div class="sdqr-amb-group">
-                <div class="sdqr-amb-label">${_esc(g.group)}</div>
-                <div class="sdqr-amb-row">
-                  ${g.items.map(pal => `
-                    <button class="sdqr-amb-card ${_ambianceActive(pal, d) ? 'is-on' : ''}" data-ambiance="${pal.id}" title="${_esc(pal.label)}">
-                      <span class="sdqr-amb-top">
-                        <span class="sdqr-amb-bar" style="background:linear-gradient(90deg, ${pal.from}, ${pal.to})"></span>
-                        <span class="sdqr-amb-accent" style="background:${pal.accent}" title="Couleur des yeux"></span>
-                      </span>
-                      <span class="sdqr-amb-name">${_esc(pal.label)}</span>
-                    </button>`).join('')}
-                </div>
-              </div>`).join('')}
+          <div class="sdqr-swatch-grid">
+            ${COLOR_SWATCHES.map(sw => `
+              <button class="sdqr-swatch ${_swatchActive(sw, d) ? 'is-on' : ''}" data-swatch="${sw.id}" title="${_esc(sw.label)}">
+                <span class="sdqr-swatch-dot" style="background:${sw.fg}"></span>
+                <span class="sdqr-swatch-name">${_esc(sw.label)}</span>
+              </button>`).join('')}
           </div>
 
           <div class="sdqr-design-row">
@@ -4793,11 +4827,15 @@ function _renderDesignPanel(qr, opts = {}) {
             ${d.logo.dataUrl ? `
               <div class="sdqr-logo-zone-preview"><img src="${_esc(d.logo.dataUrl)}" alt=""></div>
               <div class="sdqr-logo-zone-actions">
-                <label class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" style="cursor:pointer">
+                <label class="sdqr-logo-action sdqr-logo-action--primary" style="cursor:pointer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                   Remplacer
                   <input type="file" id="sdqr-logo-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
                 </label>
-                <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-logo-remove">Retirer</button>
+                <button class="sdqr-logo-action sdqr-logo-action--danger" id="sdqr-logo-remove" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                  Retirer
+                </button>
               </div>
             ` : `
               <label class="sdqr-logo-zone-empty" for="sdqr-logo-input">
@@ -4818,7 +4856,11 @@ function _renderDesignPanel(qr, opts = {}) {
             </div>
           ` : ''}
 
-          <div class="sdqr-logo-lib-head">Ou une icône de la bibliothèque</div>
+          <div class="sdqr-logo-lib-head">Réseaux sociaux</div>
+          <div class="sdqr-logo-lib">
+            ${LOGO_BRANDS.map(b => `<button class="sdqr-logo-lib-btn sdqr-logo-lib-btn--brand" data-logo-brand="${b.id}" title="${_esc(b.label)}"><svg viewBox="0 0 24 24">${b.svg}</svg></button>`).join('')}
+          </div>
+          <div class="sdqr-logo-lib-head">Icônes utiles</div>
           <div class="sdqr-logo-lib">
             ${LOGO_ICONS.map(ic => `<button class="sdqr-logo-lib-btn" data-logo-icon="${ic.id}" title="Icône"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg></button>`).join('')}
           </div>
@@ -5000,22 +5042,18 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     _updateSvgExportState(root, _editingDesign);
   };
 
-  // Pills formes (modules / anchor-outer / anchor-inner)
-  panel.querySelectorAll('[data-shape-target]').forEach(group => {
-    const target = group.dataset.shapeTarget;
-    group.querySelectorAll('.sdqr-shape-pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (target === 'module') {
-          _editingDesign.module.shape = btn.dataset.shape;
-        } else if (target === 'anchor-outer') {
-          _editingDesign.anchor.outer.shape = btn.dataset.shape;
-        } else if (target === 'anchor-inner') {
-          _editingDesign.anchor.inner.shape = btn.dataset.shape;
-        }
-        group.querySelectorAll('.sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
-        _liveRerender();
-      });
+  // Modules : cartes-aperçu QR (1 clic = forme du motif)
+  panel.querySelectorAll('.sdqr-module-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _editingDesign.module.shape = btn.dataset.shape;
+      panel.querySelectorAll('.sdqr-module-card').forEach(b => b.classList.toggle('is-on', b === btn));
+      _liveRerender();
     });
+  });
+  // Remplit les aperçus (vraie mini-QR par forme, mises en cache).
+  panel.querySelectorAll('[data-module-prev]').forEach(async (el) => {
+    const svg = await _moduleCardSvg(el.dataset.modulePrev);
+    if (svg && el.isConnected) el.innerHTML = svg;
   });
 
   // Yeux : styles nommés (combos anneau/centre prouvés scannables)
@@ -5190,13 +5228,12 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
-  // Palettes PAR AMBIANCE (dégradé modules + accent yeux, en 1 clic)
-  panel.querySelectorAll('[data-ambiance]').forEach(btn => {
+  // Nuancier compact moderne (couleur unie, 1 clic)
+  panel.querySelectorAll('[data-swatch]').forEach(btn => {
     btn.addEventListener('click', () => {
-      let pal = null;
-      for (const g of COLOR_AMBIANCES) { const f = g.items.find(p => p.id === btn.dataset.ambiance); if (f) { pal = f; break; } }
-      if (!pal) return;
-      _applyAmbiance(pal);
+      const sw = COLOR_SWATCHES.find(x => x.id === btn.dataset.swatch);
+      if (!sw) return;
+      _applySwatch(sw);
       _refreshDesignPanelDom(root, qr, encodedForQr);
     });
   });
@@ -5244,6 +5281,19 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     const valEl = panel.querySelector('#sdqr-logo-size-val');
     if (valEl) valEl.textContent = e.target.value + '%';
     _liveRerender();
+  });
+
+  // Logos de marque (réseaux sociaux) -> logo central
+  panel.querySelectorAll('[data-logo-brand]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const b = LOGO_BRANDS.find(x => x.id === btn.dataset.logoBrand);
+      if (!b) return;
+      const url = _brandToDataUrl(b.svg);
+      _editingDesign.logo.dataUrl = url;
+      if (!_editingDesign.logo.size) _editingDesign.logo.size = 0.20;
+      _pushSavedLogo(url);
+      _refreshDesignPanelDom(root, qr, encodedForQr);
+    });
   });
 
   // Bibliothèque d'icônes -> logo central
@@ -5317,11 +5367,10 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   // Initial contrast badge
   _updateContrastBadge(root);
 
-  // Création : onglet « Modèles » actif d'emblée (chemin rapide 1-clic), mais
-  // SEULEMENT au 1er rendu (opts.initial) — pas à chaque refresh, sinon on
-  // rebondirait hors de l'onglet en cours après l'application d'un modèle.
+  // Création : onglet « Couleurs » actif d'emblée (choix le plus impactant),
+  // SEULEMENT au 1er rendu (opts.initial) — pas à chaque refresh.
   if (opts.initial && _designCreate) {
-    panel.querySelector('#sdqr-dtabs .sdqr-dtab[data-dtab="modeles"]')?.click();
+    panel.querySelector('#sdqr-dtabs .sdqr-dtab[data-dtab="couleurs"]')?.click();
   }
 
   // Sync initial du QR avec l'état _editingDesign courant. Crucial après

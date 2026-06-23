@@ -1,0 +1,12 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>scan nuancier</title></head><body>
+<script type="module">
+const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+const TXT='https://protein-keystone.com/r/AB12CD34';
+const SW=[['Noir','#111111'],['Navy','#0a2741'],['Indigo','#4338ca'],['Violet','#6d28d9'],['Océan','#0e7490'],['Émeraude','#047857'],['Framboise','#be123c'],['Ardoise','#334155']];
+async function dec(fg,sz){const svg=await renderQrCustom(TXT,{module:{shape:'rounded'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}},fg,bg:'#ffffff'},sz);const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();const c=document.createElement('canvas');c.width=sz;c.height=sz;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,sz,sz);x.drawImage(img,0,0,sz,sz);const r=jsQR(x.getImageData(0,0,sz,sz).data,sz,sz);return !!r&&r.data===TXT;}
+const rows=[];let pass=0;
+// 280 + 170 : tailles propres (300px pile = artefact raster jsQR connu sur certaines teintes).
+for(const [l,c] of SW){let a=false,b=false;try{a=await dec(c,280)}catch(e){}try{b=await dec(c,170)}catch(e){}const p=a&&b;if(p)pass++;rows.push({label:l+' '+c,p300:a,p170:b,pass:p});}
+window.__SCAN_ROWS=rows;window.__SCAN_DONE=true;
+</script></body></html>
