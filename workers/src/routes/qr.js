@@ -476,6 +476,27 @@ export async function handleCreateQr(request, env) {
 // ══════════════════════════════════════════════════════════════════
 // GET /api/qr — liste les QRs du tenant (avec stats sommaires)
 // ══════════════════════════════════════════════════════════════════
+// Bucketise l'historique de scans d'un QR (lignes {day,cnt} triées asc) en N
+// points couvrant [1er scan .. aujourd'hui] -> courbe d'utilisation des cartes.
+// Couvre TOUTE l'histoire (pas une fenêtre) : un QR avec >=1 scan a une courbe.
+// Renvoie [] si aucun scan (la carte n'affiche alors pas de courbe). UTC.
+function _bucketScanSeries(rows, n = 14) {
+  if (!rows || !rows.length) return [];
+  const DAY = 86400000;
+  const first = Date.parse(rows[0].day + 'T00:00:00Z');
+  const today = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const span = Math.max(1, Math.round((today - first) / DAY) + 1);   // jours inclus
+  const out = new Array(n).fill(0);
+  for (const r of rows) {
+    const pos = Math.round((Date.parse(r.day + 'T00:00:00Z') - first) / DAY);
+    let idx = span <= 1 ? n - 1 : Math.floor((pos / span) * n);
+    if (idx < 0) idx = 0;
+    if (idx > n - 1) idx = n - 1;
+    out[idx] += r.cnt;
+  }
+  return out;
+}
+
 export async function handleListQr(request, env) {
   const origin   = getAllowedOrigin(env, request);
   const tenantId = await _authTenant(request, env);
@@ -501,7 +522,7 @@ export async function handleListQr(request, env) {
 
   let scansMap = new Map();
   let targetsMap = new Map();
-  let seriesMap = new Map();   // short_id -> { 'YYYY-MM-DD': cnt }
+  let seriesMap = new Map();   // short_id -> [{ day, cnt }] (asc)
   if (shortIds.length) {
     const scans = await env.DB
       .prepare(`SELECT short_id, COUNT(*) AS total FROM qr_scans
@@ -514,38 +535,27 @@ export async function handleListQr(request, env) {
       .bind(...shortIds).all();
     targets.results?.forEach(r => targetsMap.set(r.short_id, r.target_url));
 
-    // Mini-série d'activité (14 derniers jours, par QR) pour la courbe des
-    // cartes. ADDITIF, lecture seule — aucune écriture, /r/ et qr_redirects
-    // intacts. Une seule requête groupée short_id × jour.
+    // Historique de scans par QR pour la courbe d'utilisation des cartes : TOUTE
+    // l'histoire du QR (agrégée par jour), bucketisée ensuite à 14 points. Pas de
+    // fenêtre glissante -> un QR scanné il y a >X jours garde sa courbe. ADDITIF,
+    // lecture seule — /r/, qr_redirects, écritures : intacts.
     const series = await env.DB
       .prepare(`SELECT short_id, date(ts) AS day, COUNT(*) AS cnt FROM qr_scans
-                WHERE short_id IN (${placeholders}) AND ts >= date('now','-13 days')
-                GROUP BY short_id, day`)
+                WHERE short_id IN (${placeholders})
+                GROUP BY short_id, day ORDER BY day ASC`)
       .bind(...shortIds).all();
     series.results?.forEach(r => {
-      if (!seriesMap.has(r.short_id)) seriesMap.set(r.short_id, {});
-      seriesMap.get(r.short_id)[r.day] = r.cnt;
+      if (!seriesMap.has(r.short_id)) seriesMap.set(r.short_id, []);
+      seriesMap.get(r.short_id).push({ day: r.day, cnt: r.cnt });
     });
   }
 
-  // 14 clés de jour (UTC) du plus ancien au plus récent.
-  const days = [];
-  const today = new Date();
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - i);
-    days.push(d.toISOString().slice(0, 10));
-  }
-
-  const enriched = qrs.map(q => {
-    const perDay = seriesMap.get(q.short_id) || {};
-    return {
-      ...q,
-      target_url   : targetsMap.get(q.short_id) || null,
-      scans_total  : scansMap.get(q.short_id) || 0,
-      scans_series : days.map(day => perDay[day] || 0),   // 14 points, 0 comblés
-    };
-  });
+  const enriched = qrs.map(q => ({
+    ...q,
+    target_url   : targetsMap.get(q.short_id) || null,
+    scans_total  : scansMap.get(q.short_id) || 0,
+    scans_series : _bucketScanSeries(seriesMap.get(q.short_id), 14),
+  }));
 
   return json({ qrs: enriched }, 200, origin);
 }
