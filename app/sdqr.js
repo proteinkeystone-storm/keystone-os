@@ -407,7 +407,7 @@ function _libQrs() {
       case 'type':   return (QR_TYPES[q.qr_type]?.label || q.qr_type || '').toLowerCase();
       case 'mode':   return (q.mode || 'dynamic');
       case 'status': return (q.status || 'active');
-      default:       return (q.mode || 'dynamic') === 'dynamic' ? (q.scans_total || 0) : -1;
+      default:       return (q.mode || 'dynamic') !== 'static' ? (q.scans_total || 0) : -1;   // smart suivi comme dynamique
     }
   };
   return list.slice().sort((a, b) => {
@@ -435,7 +435,12 @@ function _sparklineSvg(series) {
 
 function _qrCardHtml(q) {
   const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
-  const isDyn = (q.mode || 'dynamic') === 'dynamic';
+  // Dynamique ET Smart sont SUIVIS (short_id + scans trackés) → courbe + scans.
+  // Seul Statique est hors-ligne (encodé dans les pixels). Le gating sur
+  // mode==='dynamic' excluait les Smart QR à tort (affichés « Statique »).
+  const mode = q.mode || 'dynamic';
+  const isTracked = mode !== 'static';
+  const modeLabel = mode === 'smart' ? 'Smart' : (mode === 'dynamic' ? 'Dynamique' : 'Statique');
   const isCg  = q.template_id === 'concierge';
   const isArch = q.status === 'archived';
   return `
@@ -447,16 +452,16 @@ function _qrCardHtml(q) {
       </div>
       <div class="sdqr-qr-badges">
         <span class="sdqr-qr-badge sdqr-qr-badge--type">${_esc(typeDef.label)}</span>
-        <span class="sdqr-qr-badge sdqr-qr-badge--${isDyn ? 'dyn' : 'stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span>
+        <span class="sdqr-qr-badge sdqr-qr-badge--${isTracked ? 'dyn' : 'stat'}">${modeLabel}</span>
         ${isCg   ? '<span class="sdqr-qr-badge sdqr-qr-badge--cg">Concierge</span>' : ''}
         ${isArch ? '<span class="sdqr-qr-badge sdqr-qr-badge--arch">Archivé</span>' : ''}
       </div>
       <div class="sdqr-qr-card-foot">
         <div class="sdqr-qr-foot-main">
-          ${isDyn
+          ${isTracked
             ? `<span class="sdqr-qr-scans">${_fmtNum(q.scans_total || 0)}<small>scans</small></span>`
             : `<span class="sdqr-qr-scans sdqr-qr-scans--stat">&#8734;<small>hors-ligne</small></span>`}
-          ${isDyn ? _sparklineSvg(q.scans_series) : ''}
+          ${isTracked ? _sparklineSvg(q.scans_series) : ''}
         </div>
         ${q.folder ? `<span class="sdqr-qr-card-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
       </div>
@@ -465,7 +470,9 @@ function _qrCardHtml(q) {
 
 function _qrRowHtml(q) {
   const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
-  const isDyn = (q.mode || 'dynamic') === 'dynamic';
+  const mode = q.mode || 'dynamic';
+  const isTracked = mode !== 'static';   // dynamique + smart = suivis
+  const modeLabel = mode === 'smart' ? 'Smart' : (mode === 'dynamic' ? 'Dynamique' : 'Statique');
   const isArch = q.status === 'archived';
   const checked = _libSel.has(q.id);
   return `
@@ -473,8 +480,8 @@ function _qrRowHtml(q) {
       <td class="sdqr-tbl-col-check"><input type="checkbox" data-check="${_esc(q.id)}" ${checked ? 'checked' : ''} aria-label="Sélectionner"></td>
       <td><span class="sdqr-tbl-name">${_esc(q.name || '(sans nom)')}</span></td>
       <td><span class="sdqr-tbl-type">${typeDef.icon}${_esc(typeDef.label)}</span></td>
-      <td><span class="sdqr-tbl-mode sdqr-tbl-mode--${isDyn ? 'dyn' : 'stat'}">${isDyn ? 'Dynamique' : 'Statique'}</span></td>
-      <td class="sdqr-tbl-scans">${isDyn ? _fmtNum(q.scans_total || 0) : '&#8734;'}</td>
+      <td><span class="sdqr-tbl-mode sdqr-tbl-mode--${isTracked ? 'dyn' : 'stat'}">${modeLabel}</span></td>
+      <td class="sdqr-tbl-scans">${isTracked ? _fmtNum(q.scans_total || 0) : '&#8734;'}</td>
       <td class="sdqr-tbl-col-hide"><span class="sdqr-tbl-st">${q.folder ? _esc(q.folder) : '&mdash;'}</span></td>
       <td><span class="sdqr-tbl-st">${isArch ? 'Archivé' : 'Actif'}</span></td>
       <td class="sdqr-tbl-col-act"><button class="sdqr-qr-menu-btn" data-menu="${_esc(q.id)}" title="Actions" aria-label="Actions">${_LIBICO.dots}</button></td>
