@@ -150,7 +150,8 @@ function _frameGeometry(style, qrSize, color, text) {
         } };
     }
     case 'badge': { // accroche dans une pastille avec flèche vers le QR
-      return { padX: gap, padTop: gap, padBottom: band,
+      // padBottom élargi : la pastille (flèche + corps) tient sans être rognée.
+      return { padX: gap, padTop: gap, padBottom: Math.round(band * 1.35),
         deco: (bx, by, s, W, H) => {
           const pw = Math.min(s, qrSize*0.66), ph = band*0.82;
           const px = bx + (s - pw)/2, py = by + s + gap*0.9;
@@ -186,42 +187,50 @@ function _frameGeometry(style, qrSize, color, text) {
           return `<text x="${tw(W/2)}" y="${tw(ty)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="800" fill="#ffffff" letter-spacing="1">${label}</text>`;
         } };
     }
-    case 'corners': {  // disque plein + crochets viseur blancs + accroche en cartouche haut (réf. cap4)
-      const padX = Math.round(qrSize*0.36), padTop = Math.round(qrSize*0.46), padBottom = Math.round(qrSize*0.32);
+    case 'corners': {  // cercle FIN contour + crochets viseur ARRONDIS + « SCAN ME » courbe bas + arcs (réf. Modèle Cadre)
+      const padX = Math.round(qrSize*0.40), padTop = Math.round(qrSize*0.40), padBottom = Math.round(qrSize*0.40);
+      const pid = 'fr_arc_' + Math.random().toString(36).slice(2, 8);
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
-          const R = Math.max(W, H)/2;
-          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="${esc(color)}"/>` + whitePlaque(bx, by, s, gap);
+          const R = qrSize*0.82;
+          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(qrSize*0.012)}"/>`;
         },
         deco: (bx, by, s, W, H) => {
-          // crochets blancs en VISEUR autour du QR (L ouverts, peu finder-like).
-          const sw = qrSize*0.016, arm = qrSize*0.08, m = gap*1.7;
+          const cx = W/2, cy = H/2;
+          // crochets viseur à coins ARRONDIS autour du QR (couleur du cadre, sur blanc).
+          const sw = qrSize*0.018, arm = qrSize*0.10, rad = qrSize*0.045, m = gap*1.3;
           const x0 = bx - m, y0 = by - m, x1 = bx + s + m, y1 = by + s + m;
-          const L = (px, py, dx, dy) => `<path d="M ${tw(px)} ${tw(py + dy*arm)} L ${tw(px)} ${tw(py)} L ${tw(px + dx*arm)} ${tw(py)}" fill="none" stroke="#ffffff" stroke-width="${tw(sw)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-          // cartouche « SCAN ME » en haut (cadre blanc fin)
-          const bw = Math.max(qrSize*0.46, fs * (label.length*0.62 + 2)), bh = fs*1.7;
-          const bxp = W/2 - bw/2, byp = padTop/2 - bh/2;
-          const box = `<rect x="${tw(bxp)}" y="${tw(byp)}" width="${tw(bw)}" height="${tw(bh)}" rx="${tw(bh/2)}" fill="none" stroke="#ffffff" stroke-width="${tw(qrSize*0.008)}"/>`
-            + `<text x="${tw(W/2)}" y="${tw(byp + bh/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="800" fill="#ffffff" letter-spacing="1.5">${label}</text>`;
-          return L(x0,y0,1,1) + L(x1,y0,-1,1) + L(x0,y1,1,-1) + L(x1,y1,-1,-1) + box;
+          const L = (px, py, dx, dy) => `<path d="M ${tw(px)} ${tw(py + dy*arm)} L ${tw(px)} ${tw(py + dy*rad)} Q ${tw(px)} ${tw(py)} ${tw(px + dx*rad)} ${tw(py)} L ${tw(px + dx*arm)} ${tw(py)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}" stroke-linecap="round"/>`;
+          const brackets = L(x0,y0,1,1) + L(x1,y0,-1,1) + L(x0,y1,1,-1) + L(x1,y1,-1,-1);
+          // 2 arcs « cible » sur les diagonales du HAUT (le bas est réservé au texte).
+          const Ra = qrSize*0.70;
+          const arcSeg = (a) => { const a1=a-0.34, a2=a+0.34; return `<path d="M ${tw(cx+Ra*Math.cos(a1))} ${tw(cy+Ra*Math.sin(a1))} A ${tw(Ra)} ${tw(Ra)} 0 0 1 ${tw(cx+Ra*Math.cos(a2))} ${tw(cy+Ra*Math.sin(a2))}" fill="none" stroke="${esc(color)}" stroke-width="${tw(qrSize*0.013)}" stroke-linecap="round"/>`; };
+          const arcs = arcSeg(5*Math.PI/4) + arcSeg(7*Math.PI/4);
+          // « SCAN ME » courbe en bas (arc, sweep=0).
+          const Rt = qrSize*0.755;
+          const arc = `M ${tw(cx - Rt)} ${tw(cy)} A ${tw(Rt)} ${tw(Rt)} 0 0 0 ${tw(cx + Rt)} ${tw(cy)}`;
+          const txt = `<path id="${pid}" d="${arc}" fill="none"/><text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*0.9)}" font-weight="700" fill="${esc(color)}" letter-spacing="3"><textPath href="#${pid}" xlink:href="#${pid}" startOffset="50%" text-anchor="middle">${label}</textPath></text>`;
+          return brackets + arcs + txt;
         } };
     }
     case 'ring': {     // double anneau FIN (sans remplissage) + accroche COURBE dans la gouttière (réf. cap5)
       const padX = Math.round(qrSize*0.40), padTop = Math.round(qrSize*0.40), padBottom = Math.round(qrSize*0.40);
       const pid = 'fr_arc_' + Math.random().toString(36).slice(2, 8);
-      const ringGeom = (W, H) => {
-        const R1 = Math.max(W, H)/2 - qrSize*0.012;
-        const R2 = R1 - qrSize*0.11;          // gouttière fine → anneau intérieur dégage le QR
+      // R2 (anneau intérieur) ≈ coins du carré blanc du QR (0.707) → ils le TOUCHENT.
+      // R1 (anneau extérieur) laisse une marge depuis le bord du canevas → pas rogné.
+      const ringGeom = () => {
+        const R2 = qrSize * 0.71;
+        const R1 = qrSize * 0.82;
         return { R1, R2, Rt: (R1 + R2)/2 };
       };
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
-          const { R1, R2 } = ringGeom(W, H), sw = qrSize*0.013;
+          const { R1, R2 } = ringGeom(), sw = qrSize*0.013;
           return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R1)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`
             + `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R2)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`;
         },
         deco: (bx, by, s, W, H) => {
-          const { Rt } = ringGeom(W, H);
+          const { Rt } = ringGeom();
           // arc BAS (sweep=0), texte sombre dans la gouttière entre les 2 anneaux.
           const arc = `M ${tw(W/2 - Rt)} ${tw(H/2)} A ${tw(Rt)} ${tw(Rt)} 0 0 0 ${tw(W/2 + Rt)} ${tw(H/2)}`;
           return `<path id="${pid}" d="${arc}" fill="none"/>`

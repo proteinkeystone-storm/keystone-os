@@ -9,7 +9,7 @@ const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.no
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
 const TXT='https://protein-keystone.com/r/AB12CD34', navy='#11203f';
 const base={module:{shape:'rounded'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}},fg:navy};
-const FR=[['Cercle (cap3)','circle'],['Crochets viseur (cap4)','corners'],['Anneau double + courbe (cap5)','ring'],['Plaque','plaque']];
+const FR=[['Cercle (cap3)','circle'],['Crochets viseur (cap4)','corners'],['Anneau double + courbe (cap5)','ring'],['Plaque','plaque'],['Pastille','badge']];
 const g=document.getElementById('g');const cards=[];
 for(const [nm,style] of FR){
   let svg=''; try{ svg=await renderQrCustom(TXT,{...base,frame:{style,text:'SCANNEZ-MOI',color:navy}},300);}catch(e){svg='ERR '+e.message;}
