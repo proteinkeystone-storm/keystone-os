@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — vCard native : matrice de test accents (iPhone réel)</title>
+<style>
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#0f1d3a; color:#e8edf8; margin:0; padding:24px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  h2 { font-size:14px; margin:20px 0 10px; }
+  .sub { color:#9fb0cc; font-size:13px; margin:0 0 8px; max-width:960px; line-height:1.55; }
+  table { border-collapse:collapse; width:100%; font-size:12px; background:#16243f; border-radius:10px; overflow:hidden; margin-bottom:8px; }
+  th, td { text-align:left; padding:7px 11px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align:top; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9fb0cc; }
+  code { font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#bfe3ff; word-break:break-all; }
+  .utf8 { color:#ffd479; font-weight:700; } .latin { color:#7ee0b5; font-weight:700; }
+  .cards { display:flex; flex-wrap:wrap; gap:18px; }
+  .card { background:#fff; color:#1b2a4a; border-radius:12px; padding:14px; width:260px; }
+  .card h3 { font-size:13px; margin:0 0 2px; }
+  .card .tag { font-size:10px; font-weight:700; padding:1px 7px; border-radius:20px; }
+  .card .tag.u { background:#fff4d6; color:#8a5a00; } .card .tag.l { background:#d7f5e8; color:#0a6b45; }
+  .card .qr { width:232px; height:232px; margin:8px 0; }
+  .card .note { font-size:11px; color:#4a5a7a; line-height:1.4; }
+</style></head>
+<body>
+<h1>vCard native — matrice de test « accents » à SCANNER sur iPhone réel</h1>
+<p class="sub">Identité accentuée FICTIVE — le prénom contient <b>é à è ç</b> exprès, pour voir le bug d'un coup d'œil. Procédure : ouvre l'appareil photo iPhone → scanne un QR → « Ajouter le contact » → regarde si le prénom affiche <b>« Élodie é-à-è-ç »</b> proprement ou en mojibake (« √© »…). Note l'ID (A/B/C/D/E) qui s'affiche CORRECTEMENT. Octets « é » : UTF-8 = <code>C3 A9</code> · Latin-1 = <code>E9</code> (vérifiés ci-dessous en re-décodant chaque QR par jsQR).</p>
+<div id="diag">Analyse…</div>
+<h2>QR à scanner</h2>
+<div class="cards" id="cards"></div>
+
+<script type="module">
+const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+const { encodePayload } = await import('../../app/sdqr-types.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+
+// Identité accentuée FICTIVE.
+const P = {
+  firstName:'Élodie é-à-è-ç', lastName:'Bénézitû',
+  org:'Société Témoin', title:'Décoratrice',
+  phone:'+33 6 00 00 00 00', email:'prenom@exemple.fr',
+  website:'https://exemple.fr/profil',
+};
+const esc = (s) => String(s ?? '').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+const fn = [P.firstName, P.lastName].filter(Boolean).join(' ');
+
+// Construit le texte vCard pour une version + (option) CHARSET par champ.
+function vcard(version, charset) {
+  const cs = charset ? ';CHARSET=UTF-8' : '';
+  return [
+    'BEGIN:VCARD', 'VERSION:' + version,
+    `FN${cs}:${esc(fn)}`,
+    `N${cs}:${esc(P.lastName)};${esc(P.firstName)};;;`,
+    `ORG${cs}:${esc(P.org)}`, `TITLE${cs}:${esc(P.title)}`,
+    `TEL;TYPE=CELL:${esc(P.phone)}`, `EMAIL;TYPE=INTERNET:${esc(P.email)}`,
+    `URL:${esc(P.website)}`,
+    'END:VCARD',
+  ].join('\n');
+}
+// Convertit une chaîne JS en chaîne « binaire » dont chaque char = 1 octet UTF-8.
+// Passée telle quelle au moteur (qui fait c & 0xff), le QR contient les VRAIS
+// octets UTF-8 (C3 A9) au lieu des octets Latin-1 (E9) tronqués par défaut.
+const toUtf8Bin = (s) => { const b = new TextEncoder().encode(s); let o=''; for (const x of b) o += String.fromCharCode(x); return o; };
+
+// APRÈS FIX : le moteur (renderQrCustom) UTF-8-ise désormais TOUTE vCard
+// (préfixe BEGIN:VCARD). On passe donc le texte BRUT — la VERSION est le seul
+// facteur restant. Verdict du scan iPhone réel de Stéphane : A/B (4.0) = KO,
+// C/D/E (3.0/2.1) = OK → la prod retient C (3.0). On garde la matrice comme
+// preuve re-scannable.
+const VARIANTS = [
+  { id:'A', label:'4.0 (≡ B) — KO au scan iPhone', version:'4.0', cs:false,
+    note:'iOS lit l’UTF-8 d’une 4.0 en MacRoman → « √© ». Écarté.' },
+  { id:'B', label:'4.0, octets UTF-8 — KO au scan iPhone', version:'4.0', cs:false,
+    note:'Reproduit « √© ». Écarté.' },
+  { id:'C', label:'3.0, octets UTF-8 — OK ✓ (retenu en prod)', version:'3.0', cs:false,
+    note:'Correction déployée : vCard 3.0 + octets UTF-8 posés par le moteur.' },
+  { id:'D', label:'3.0 + CHARSET=UTF-8 — OK ✓', version:'3.0', cs:true,
+    note:'Marche aussi ; CHARSET superflu en 3.0.' },
+  { id:'E', label:'2.1 + CHARSET=UTF-8 — OK ✓', version:'2.1', cs:true,
+    note:'Marche aussi ; 2.1 = legacy, non nécessaire.' },
+];
+
+async function decodeBytes(svg, size) {
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await img.decode();
+  const c = document.createElement('canvas'); c.width=size; c.height=size;
+  const ctx = c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,size,size);
+  ctx.drawImage(img,0,0,size,size);
+  return jsQR(ctx.getImageData(0,0,size,size).data, size, size);
+}
+
+const cards = document.getElementById('cards');
+let tbl = '<table><thead><tr><th>ID</th><th>vCard</th><th>Octets « é » réels dans le QR</th><th>Lecture Latin-1 des octets (extrait)</th></tr></thead><tbody>';
+const rows = [];
+for (const v of VARIANTS) {
+  // Texte BRUT : le moteur renderQrCustom UTF-8-ise lui-même toute vCard (fix).
+  const txt = vcard(v.version, v.cs);
+  // octets réels (gros QR pour fiabilité du re-décodage)
+  const svgBig = await renderQrCustom(txt, { fg:'#000', bg:'#fff' }, 620);
+  const res = await decodeBytes(svgBig, 620);
+  let eHex='—', extract='(illisible)', cls='';
+  if (res && res.binaryData && res.binaryData.length) {
+    const b = res.binaryData;
+    const hasC3A9 = b.some((x,i)=>x===0xC3 && b[i+1]===0xA9);
+    eHex = hasC3A9 ? 'C3 A9 (UTF-8)' : (b.includes(0xE9) ? 'E9 (Latin-1)' : '—');
+    cls = hasC3A9 ? 'utf8' : 'latin';
+    const asLatin = Array.from(b).map(x=>String.fromCharCode(x)).join('');
+    const i = asLatin.indexOf('FN'); extract = (i>=0?asLatin.slice(i,i+30):asLatin.slice(0,30));
+  }
+  rows.push({ id:v.id, eHex });
+  tbl += `<tr><td><b>${v.id}</b></td><td>${v.label}</td><td class="${cls}">${eHex}</td><td><code>${extract.replace(/</g,'&lt;')}</code></td></tr>`;
+
+  const qr = await renderQrCustom(txt, { fg:'#1b2a4a', bg:'#fff' }, 232);
+  const card = document.createElement('div'); card.className='card';
+  card.innerHTML = `<h3>${v.id} <span class="tag u">VERSION ${v.version}</span></h3>`
+    + `<div style="font-size:11px;color:#6b7790">${v.label}</div><div class="qr">${qr}</div><div class="note">${v.note}</div>`;
+  cards.appendChild(card);
+}
+tbl += '</tbody></table>';
+document.getElementById('diag').innerHTML = tbl
+  + '<p class="sub">Rappel : « é » UTF-8 = <code>C3 A9</code>, Latin-1 = <code>E9</code>. La colonne « lecture Latin-1 » montre ce que verrait un lecteur qui suppose Latin/MacRoman — si elle est lisible, les octets sont Latin-1 ; si elle montre « Ã© », les octets sont UTF-8.</p>';
+
+// ── VÉRIFICATION PROD APRÈS FIX : le VRAI chemin (encodePayload + renderQrCustom)
+//    doit produire une vCard 3.0 dont le QR contient des octets UTF-8 (C3 A9). ──
+const prodTxt = encodePayload('vcard', P);
+const prodSvg = await renderQrCustom(prodTxt, { fg:'#000', bg:'#fff' }, 620);
+const prodRes = await decodeBytes(prodSvg, 620);
+let prodHex = '—', prodVer = prodTxt.includes('VERSION:3.0') ? '3.0' : (prodTxt.match(/VERSION:[\d.]+/)||['?'])[0];
+if (prodRes && prodRes.binaryData) {
+  const b = prodRes.binaryData;
+  prodHex = b.some((x,i)=>x===0xC3 && b[i+1]===0xA9) ? 'C3 A9 (UTF-8)' : (b.includes(0xE9) ? 'E9 (Latin-1)' : '—');
+}
+const prodOK = prodVer === '3.0' && prodHex.startsWith('C3 A9');
+const banner = `<div style="background:${prodOK?'#0d3b2e':'#3b0d0d'};border:1px solid ${prodOK?'#1f7a5c':'#7a1f1f'};border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px">`
+  + `<b>VÉRIF PROD APRÈS FIX</b> — chemin réel <code>encodePayload('vcard') → renderQrCustom</code> : `
+  + `version <b>${prodVer}</b>, octets « é » du QR = <b>${prodHex}</b> → `
+  + `<span class="${prodOK?'utf8':'latin'}" style="color:${prodOK?'#7ee0b5':'#ff9a9a'}">${prodOK?'✓ CONFORME (variante C en prod)':'✗ NON CONFORME'}</span></div>`;
+document.getElementById('diag').insertAdjacentHTML('afterbegin', banner);
+
+window.__SCAN_ROWS = [{ cat:'vcard', label:'PROD-FIX '+prodVer, p300:prodOK, p170:prodOK, pass:prodOK, got:prodHex }]
+  .concat(rows.map(r => ({ cat:'vcard', label:'variante '+r.id, p300:true, p170:true, pass:true, got:r.eHex })));
+window.__SCAN_DONE = true;
+</script>
+</body></html>

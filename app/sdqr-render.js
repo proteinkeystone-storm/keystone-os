@@ -507,7 +507,18 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   // même si 20% des modules sont occlus.
   const ecc = (d.logo?.dataUrl) ? 'H' : 'M';
   const qr = qrcode(0, ecc);
-  qr.addData(text || ' ');
+  // vCard : iOS Contacts attend des octets UTF-8. Or qrcode-generator tronque
+  // par défaut en Latin-1 (c & 0xff), ce qui casse les accents au scan. On
+  // pré-encode donc la vCard en octets UTF-8 (chaque char = 1 octet). Scopé au
+  // préfixe BEGIN:VCARD → aucun autre type de QR n'est modifié. Validé par scan
+  // iPhone réel (vCard 3.0 + octets UTF-8 = accents corrects).
+  let data = text || ' ';
+  if (/^BEGIN:VCARD/i.test(data)) {
+    let bin = '';
+    for (const b of new TextEncoder().encode(data)) bin += String.fromCharCode(b);
+    data = bin;
+  }
+  qr.addData(data);
   qr.make();
 
   const count   = qr.getModuleCount();

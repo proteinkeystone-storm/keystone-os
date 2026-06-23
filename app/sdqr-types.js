@@ -72,7 +72,11 @@ function _encodeWifi(payload) {
 }
 
 function _encodeVcard(payload) {
-  const lines = ['BEGIN:VCARD', 'VERSION:4.0'];
+  // VERSION 3.0 (et NON 4.0) : iOS Contacts lit alors le segment « octets » du
+  // QR en UTF-8. En 4.0 il le lit en MacRoman → accents cassés au scan.
+  // Validé par scan iPhone réel (3.0=OK ; 4.0=KO). Les octets UTF-8 eux-mêmes
+  // sont posés par renderQrCustom (sdqr-render.js, scopé BEGIN:VCARD).
+  const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
 
   const first = (payload?.firstName || '').trim();
   const last  = (payload?.lastName || '').trim();
@@ -82,14 +86,14 @@ function _encodeVcard(payload) {
 
   if (payload?.org)     lines.push(`ORG:${_escIcs(payload.org)}`);
   if (payload?.title)   lines.push(`TITLE:${_escIcs(payload.title)}`);
-  if (payload?.phone)   lines.push(`TEL;TYPE=cell:${_escIcs(payload.phone)}`);
-  if (payload?.email)   lines.push(`EMAIL:${_escIcs(payload.email)}`);
-  if (payload?.address) lines.push(`ADR;TYPE=work:;;${_escIcs(payload.address)};;;;`);
+  if (payload?.phone)   lines.push(`TEL;TYPE=CELL:${_escIcs(payload.phone)}`);
+  if (payload?.email)   lines.push(`EMAIL;TYPE=INTERNET:${_escIcs(payload.email)}`);
+  if (payload?.address) lines.push(`ADR;TYPE=WORK:;;${_escIcs(payload.address)};;;;`);
 
   // Site web + réseaux sociaux (Sprint SDQR-2, demande Stéphane)
   if (payload?.website)   lines.push(`URL:${_escIcs(payload.website)}`);
-  if (payload?.linkedin)  lines.push(`URL;TYPE=linkedin:${_escIcs(payload.linkedin)}`);
-  if (payload?.instagram) lines.push(`URL;TYPE=instagram:${_escIcs(payload.instagram)}`);
+  if (payload?.linkedin)  lines.push(`URL:${_escIcs(payload.linkedin)}`);
+  if (payload?.instagram) lines.push(`URL:${_escIcs(payload.instagram)}`);
 
   lines.push('END:VCARD');
   return lines.join('\n');
