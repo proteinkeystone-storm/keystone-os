@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — aperçu « Au scan » (banc)</title>
+<style>
+  body { margin:0; padding:24px; background:#eef1f6; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  h1 { font-size:16px; color:#1b2a4a; margin:0 0 4px; }
+  p.sub { font-size:12px; color:#6b7790; margin:0 0 20px; }
+  #grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px 16px; max-width:1120px; }
+  .cell { display:flex; flex-direction:column; align-items:center; }
+  .cell .lab { font-size:11px; font-weight:600; color:#3a4b6b; margin-bottom:9px; text-align:center; }
+
+  /* — iPhone d'aperçu (copie de app/style.css pour le banc autonome) — */
+  .sdqr-iph { width:208px; height:432px; background:#1b2a4a; border-radius:38px; padding:9px; box-sizing:border-box; box-shadow:0 8px 22px rgba(8,15,35,.30); }
+  .sdqr-iph-scr { width:100%; height:100%; border-radius:30px; overflow:hidden; position:relative; display:flex; flex-direction:column; background:#fff; }
+  .sdqr-iph-island { position:absolute; top:8px; left:50%; transform:translateX(-50%); width:74px; height:19px; background:#000; border-radius:11px; z-index:6; }
+  .sdqr-iph-home { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:3px; background:rgba(0,0,0,.28); z-index:6; }
+  .sdqr-iph-frame { position:absolute; inset:0; border:0; width:380px; height:828px; transform:scale(0.5); transform-origin:top left; background:#fff; }
+  .sdqr-sp-sb { display:flex; justify-content:space-between; align-items:center; padding:10px 17px 4px; font-size:11px; font-weight:600; flex:0 0 auto; }
+  .sdqr-sp-sbr { display:inline-flex; align-items:center; gap:5px; }
+  .sdqr-sp-batt { width:19px; height:10px; border:1px solid currentColor; border-radius:2px; position:relative; display:inline-block; opacity:.85; }
+  .sdqr-sp-batt::after { content:""; position:absolute; right:-3px; top:2.5px; width:2px; height:4px; background:currentColor; border-radius:0 1px 1px 0; }
+  .sdqr-sp-battf { position:absolute; left:1px; top:1px; bottom:1px; width:68%; background:currentColor; border-radius:1px; }
+  .sdqr-sp-body { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  .sdqr-sp-nav { display:flex; justify-content:space-between; align-items:center; gap:6px; padding:6px 12px; font-size:11px; color:#007AFF; flex:0 0 auto; }
+  .sdqr-sp-nav > span { flex:0 0 auto; white-space:nowrap; }
+  .sdqr-sp-nav b { flex:1 1 auto; min-width:0; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#1c1c1e; font-weight:600; }
+  .sdqr-sp-omni { margin:5px 12px 0; background:#f1f1f4; border-radius:13px; padding:7px 11px; font-size:11px; color:#3c3c43; display:flex; align-items:center; gap:6px; justify-content:center; flex:0 0 auto; }
+  .sdqr-sp-row { display:flex; justify-content:space-between; gap:10px; padding:8px 15px; border-bottom:.5px solid #ececef; font-size:11px; color:#1c1c1e; }
+  .sdqr-sp-row .l { color:#8a8a8e; flex:0 0 auto; }
+  .sdqr-sp-row .v { text-align:right; word-break:break-word; }
+  .sdqr-sp-mut { color:#aab2c0; }
+  .sdqr-sp-avatar { width:56px; height:56px; border-radius:50%; background:#e7ecf5; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:600; color:#4a5a7a; }
+  .sdqr-sp-cta { font-size:11px; font-weight:600; color:#fff; padding:8px 16px; border-radius:9px; display:inline-block; }
+  .sdqr-sp-bubble { font-size:11px; padding:7px 10px; border-radius:10px; max-width:82%; line-height:1.42; }
+</style></head>
+<body>
+  <h1>Aperçu « Au scan » — types natifs (module front) + expériences (VRAI renderHTML worker en iframe)</h1>
+  <p class="sub">Types natifs = écrans OS fidèles. Expériences = la vraie page hébergée (rendu worker, statique sandbox). Données d'exemple.</p>
+  <div id="grid"></div>
+  <script type="module">
+    import { scanPreviewHtml, renderExperiencePreview } from '../../app/lib/sdqr-scan-preview.js';
+
+    const INDIGO = { fg:'#6c6cf5' };
+
+    // Types natifs : écran OS fidèle (module front).
+    const NATIVE = [
+      { lab:'URL — lien web',     cre:{ mode:'dynamic', type:'url',  payload:{ url:'https://promethee-immobilier.fr/azur' } } },
+      { lab:'Texte — note',       cre:{ mode:'static',  type:'text', payload:{ text:'Code Wi-Fi invité : LUMIERE-2026\nMerci de votre visite !' } } },
+      { lab:'vCard — contact',    cre:{ mode:'static',  type:'vcard',payload:{ firstName:'Sophie', lastName:'Martin', org:'Prométhée Immobilier', title:'Responsable commercial', phone:'+33 6 12 34 56 78', email:'sophie@promethee.fr', website:'https://promethee.fr' } } },
+      { lab:'Wi-Fi',              cre:{ mode:'static',  type:'wifi', payload:{ ssid:'Lumiere-Café', security:'WPA2' } } },
+      { lab:'Événement (iCal)',   cre:{ mode:'static',  type:'ical', payload:{ title:'Visite chantier Programme Azur', location:'12 av. des Lauriers, Sanary', start:'2026-07-02T18:00' } } },
+      { lab:'Email pré-rempli',   cre:{ mode:'static',  type:'email',payload:{ email:'contact@promethee.fr', subject:'Demande d\'information', body:'Bonjour,\nje souhaite des informations sur le programme Azur…' } } },
+      { lab:'SMS pré-rempli',     cre:{ mode:'static',  type:'sms',  payload:{ phone:'+33 6 12 34 56 78', message:'Bonjour, je vous contacte au sujet du programme Azur.' } } },
+      { lab:'WhatsApp',           cre:{ mode:'static',  type:'whatsapp', payload:{ phone:'33612345678', message:'Bonjour, une question sur le programme Azur ?' } } },
+      { lab:'Téléphone — appel',  cre:{ mode:'static',  type:'tel',  payload:{ phone:'+33 4 94 00 00 00' } } },
+      { lab:'Localisation',       cre:{ mode:'static',  type:'geo',  payload:{ query:'12 rue Hoche, 83000 Toulon' } } },
+    ];
+
+    // Expériences : VRAI renderHTML du worker, rendu statique dans une iframe sandbox.
+    const EXP = [
+      { lab:'Concierge (VEFA)', id:'concierge', smart_title:'Concierge — Les Terrasses', smart_message:'Bonjour, posez-moi votre question.',
+        template_data:{ programme:{ nom:'Les Terrasses' }, branding:{ nom_agence:'Agence Azur', couleur_primaire:'#1b2a4a' }, configurations:[{ reference:'T3 — 4e étage', prix_ttc:352000, surface:68 }] } },
+      { lab:'Carte de fidélité', id:'carte-fidelite', smart_title:'Café Lumière', smart_message:'Vos cafés cumulés',
+        template_data:{ nom_marque:'Café Lumière', nom_recompense:'Café offert', nb_tampons_total:10, accent_color:'#c9a96e' } },
+      { lab:'Compte à rebours', id:'countdown-produit', smart_title:'Drop été 2026', smart_message:'La nouvelle collection arrive…',
+        template_data:{ nom_marque:'Maison Lumière', nom_produit:'Collection été', date_sortie:'2026-08-01T10:00', accent_color:'#6c6cf5' } },
+      { lab:'Machine à sous', id:'machine-a-sous', smart_title:'Roue Café Lumière', smart_message:'Tentez votre boisson offerte !',
+        template_data:{ nom_marque:'Café Lumière', taux_de_gain:30, message_gain:'Boisson offerte !' } },
+      { lab:'Boîte cadeau', id:'boite-cadeau', smart_title:'Votre cadeau', smart_message:'Un code promo vous attend.',
+        template_data:{ nom_marque:'Café Lumière', code_promo:'LUMIERE10', valeur_offre:'-10%' } },
+      { lab:'Carte à gratter', id:'carte-a-gratter', smart_title:'Grattez & gagnez', smart_message:'Découvrez votre lot.',
+        template_data:{ nom_marque:'Café Lumière', message_gain:'Café offert !' } },
+      { lab:'Storytelling', id:'storytelling-brand', smart_title:'Maison Lumière', smart_message:'L\'artisanat depuis 1987.',
+        template_data:{ nom_marque:'Maison Lumière', slogan:'L\'artisanat depuis 1987', accent_color:'#6c6cf5' } },
+    ];
+
+    const grid = document.getElementById('grid');
+    for (const s of NATIVE) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.innerHTML = `<div class="lab">${s.lab}</div>${scanPreviewHtml(s.cre, INDIGO)}`;
+      grid.appendChild(cell);
+    }
+    // Expériences : VIA LE VRAI CHEMIN DE PROD (renderExperiencePreview).
+    (async () => {
+      for (const e of EXP) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.innerHTML = `<div class="lab">${e.lab} — vraie page</div><div class="exp-host"></div>`;
+        grid.appendChild(cell);
+        const cre = { mode:'smart', template_id:e.id, smart_title:e.smart_title, smart_message:e.smart_message, template_data:e.template_data };
+        await renderExperiencePreview(cell.querySelector('.exp-host'), cre, INDIGO);
+      }
+      window.__SCAN_DONE = true;
+    })();
+  </script>
+</body></html>

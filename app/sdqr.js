@@ -39,6 +39,10 @@ import {
 // infalsifiable, lien prêt à partager en 1 clic).
 import { buildConciergeFicheGabarit, isConciergeGabarit, gabaritResponseToSubmission } from './lib/concierge-keyform-gabarit.js';
 import { saveForm } from './lib/pulsa-library.js';
+// Aperçu « Au scan » : iPhone fidèle (un écran par type) — module réutilisable.
+// Types natifs = écran OS (scanPreviewHtml) ; expériences = VRAIE page hébergée
+// (renderExperiencePreview, réutilise le renderHTML worker en iframe).
+import { scanPreviewHtml, renderExperiencePreview } from './lib/sdqr-scan-preview.js';
 
 const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
 
@@ -1425,51 +1429,34 @@ function _creEncodedText() {
   }
 }
 
-// Aperçu « Page » (téléphone) pour les expériences (page hébergée).
-function _crePhoneHtml() {
-  const tpl   = getTemplate(_creating.template_id);
-  const label = _esc(tpl?.label || _creating.smart_title || 'Expérience');
-  const acc   = (_editingDesign?.eye?.distinct && _editingDesign.eye.color)
-    ? _editingDesign.eye.color : (_editingDesign?.fg || '#6c6cf5');
-  let body;
-  if (_creating.template_id === 'concierge') {
-    body = `<div class="sdqr-cph-text">${_esc(_creating.smart_message || 'Bonjour, posez-moi votre question.')}</div>`
-      + `<div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div>`
-      + `<div class="sdqr-cph-input">Écrire…<svg viewBox="0 0 24 24" fill="none" stroke="${acc}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>`;
-  } else {
-    body = `<div class="sdqr-cph-text">${_esc(_creating.smart_message || 'Un instant…')}</div>`
-      + `<div class="sdqr-cph-line"></div><div class="sdqr-cph-line s"></div>`
-      + `<div class="sdqr-cph-chip" style="background:${acc}">Découvrir</div>`;
-  }
-  return `<div class="sdqr-phone"><div class="sdqr-phone-bar"></div>`
-    + `<div class="sdqr-phone-head" style="background:${acc}"><span class="sdqr-phone-title">${label}</span></div>`
-    + `<div class="sdqr-phone-body">${body}</div></div>`;
-}
-
-// Bascule QR / Page dans l'en-tête de l'aperçu — visible seulement en smart.
+// Bascule QR / « Au scan » dans l'en-tête de l'aperçu — pour TOUS les types :
+// « QR » = le code imprimé, « Au scan » = ce que voit le visiteur (iPhone fidèle).
 function _renderCreViewSwitch(root) {
   const sw = root.querySelector('#sdqr-view-switch');
   if (!sw) return;
-  if (_creating.mode !== 'smart') { sw.innerHTML = ''; return; }
   const seg = (v, l) => `<button type="button" class="sdqr-preview-seg ${_creView === v ? 'is-active' : ''}" data-cre-view="${v}">${l}</button>`;
-  sw.innerHTML = seg('qr', 'QR') + seg('phone', 'Page');
+  sw.innerHTML = seg('qr', 'QR') + seg('phone', 'Au scan');
 }
 
 // Rend l'aperçu live : QR via renderQrCustom (partage #sdqr-svg-wrap avec le
-// panneau Design), ou maquette téléphone pour une expérience hébergée.
+// panneau Design), ou iPhone fidèle « au scan » (cf. scanPreviewHtml).
 async function _creRenderPreview(root) {
   const isSmart = _creating.mode === 'smart';
-  if (!isSmart && _creView === 'phone') _creView = 'qr';
   _renderCreViewSwitch(root);
 
   const svgWrap = root.querySelector('#sdqr-svg-wrap');
   const phone   = root.querySelector('#sdqr-cre-phone');
-  const showPhone = isSmart && _creView === 'phone';
-  if (svgWrap) svgWrap.hidden = showPhone;
-  if (phone)   phone.hidden   = !showPhone;
+  const showPhone = _creView === 'phone';
+  // NB : l'attribut [hidden] ne masque PAS un élément dont une classe pose
+  // display:flex (.sdqr-preview-phone / .sdqr-preview-qr) → on force display.
+  if (svgWrap) svgWrap.style.display = showPhone ? 'none' : '';
+  if (phone)   phone.style.display   = showPhone ? '' : 'none';
 
   if (showPhone) {
-    if (phone) phone.innerHTML = _crePhoneHtml();
+    if (phone) {
+      if (_creating.mode === 'smart') await renderExperiencePreview(phone, _creating, _editingDesign);
+      else phone.innerHTML = scanPreviewHtml(_creating, _editingDesign);
+    }
   } else if (svgWrap) {
     try { svgWrap.innerHTML = await renderQrCustom(_creEncodedText(), _editingDesign, 240); }
     catch (e) { svgWrap.innerHTML = ''; }
