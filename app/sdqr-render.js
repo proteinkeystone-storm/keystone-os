@@ -162,16 +162,16 @@ function _frameGeometry(style, qrSize, color, text) {
         } };
     }
     // SDQR-3.9 — cadres pleins (plaque blanche = zone de silence préservée).
-    case 'circle': {   // disque plein, QR remonté sur plaque blanche, « Scannez-moi » dessous
-      const padX = Math.round(qrSize*0.30), padTop = Math.round(qrSize*0.18), padBottom = Math.round(qrSize*0.42);
+    case 'circle': {   // disque plein, QR COMPACT + respiration, accroche dessous (réf. cap3)
+      const padX = Math.round(qrSize*0.44), padTop = Math.round(qrSize*0.32), padBottom = Math.round(qrSize*0.58);
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
           const R = Math.max(W, H)/2;
-          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="${esc(color)}"/>` + whitePlaque(bx, by, s, gap);
+          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="${esc(color)}"/>` + whitePlaque(bx, by, s, gap*0.7);
         },
         deco: (bx, by, s, W, H) => {
           const ty = by + s + (H - (by + s))/2;
-          return `<text x="${tw(W/2)}" y="${tw(ty)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*1.05)}" font-weight="800" fill="#ffffff" letter-spacing="1.5">${label}</text>`;
+          return `<text x="${tw(W/2)}" y="${tw(ty)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*1.2)}" font-weight="800" fill="#ffffff" letter-spacing="2">${label}</text>`;
         } };
     }
     case 'plaque': {   // plaque arrondie foncée + QR sur plaque blanche + bandeau bas
@@ -186,39 +186,46 @@ function _frameGeometry(style, qrSize, color, text) {
           return `<text x="${tw(W/2)}" y="${tw(ty)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="800" fill="#ffffff" letter-spacing="1">${label}</text>`;
         } };
     }
-    case 'corners': {  // plaque foncée + crochets d'angle (loin du QR) + « Scannez-moi » haut
-      const padX = Math.round(qrSize*0.16), padTop = band, padBottom = Math.round(qrSize*0.16);
+    case 'corners': {  // disque plein + crochets viseur blancs + accroche en cartouche haut (réf. cap4)
+      const padX = Math.round(qrSize*0.36), padTop = Math.round(qrSize*0.46), padBottom = Math.round(qrSize*0.32);
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
-          const r = qrSize*0.10;
-          return `<rect x="0" y="0" width="${tw(W)}" height="${tw(H)}" rx="${tw(r)}" ry="${tw(r)}" fill="${esc(color)}"/>` + whitePlaque(bx, by, s, gap);
+          const R = Math.max(W, H)/2;
+          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="${esc(color)}"/>` + whitePlaque(bx, by, s, gap);
         },
         deco: (bx, by, s, W, H) => {
-          // crochets sur le bord de la PLAQUE FONCÉE (loin du QR → pas de
-          // confusion avec les finder patterns), en blanc.
-          const sw = qrSize*0.02, arm = qrSize*0.085, mm = qrSize*0.055;
-          const x0 = mm, y0 = mm, x1 = W - mm, y1 = H - mm;
+          // crochets blancs en VISEUR autour du QR (L ouverts, peu finder-like).
+          const sw = qrSize*0.016, arm = qrSize*0.08, m = gap*1.7;
+          const x0 = bx - m, y0 = by - m, x1 = bx + s + m, y1 = by + s + m;
           const L = (px, py, dx, dy) => `<path d="M ${tw(px)} ${tw(py + dy*arm)} L ${tw(px)} ${tw(py)} L ${tw(px + dx*arm)} ${tw(py)}" fill="none" stroke="#ffffff" stroke-width="${tw(sw)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-          return L(x0,y0,1,1) + L(x1,y0,-1,1) + L(x0,y1,1,-1) + L(x1,y1,-1,-1)
-            + `<text x="${tw(W/2)}" y="${tw(padTop/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="800" fill="#ffffff" letter-spacing="1">${label}</text>`;
+          // cartouche « SCAN ME » en haut (cadre blanc fin)
+          const bw = Math.max(qrSize*0.46, fs * (label.length*0.62 + 2)), bh = fs*1.7;
+          const bxp = W/2 - bw/2, byp = padTop/2 - bh/2;
+          const box = `<rect x="${tw(bxp)}" y="${tw(byp)}" width="${tw(bw)}" height="${tw(bh)}" rx="${tw(bh/2)}" fill="none" stroke="#ffffff" stroke-width="${tw(qrSize*0.008)}"/>`
+            + `<text x="${tw(W/2)}" y="${tw(byp + bh/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="800" fill="#ffffff" letter-spacing="1.5">${label}</text>`;
+          return L(x0,y0,1,1) + L(x1,y0,-1,1) + L(x0,y1,1,-1) + L(x1,y1,-1,-1) + box;
         } };
     }
-    case 'ring': {     // disque foncé + anneau pointillé + texte COURBE en bas (textPath)
-      const padX = Math.round(qrSize*0.30), padTop = Math.round(qrSize*0.20), padBottom = Math.round(qrSize*0.40);
+    case 'ring': {     // double anneau FIN (sans remplissage) + accroche COURBE dans la gouttière (réf. cap5)
+      const padX = Math.round(qrSize*0.40), padTop = Math.round(qrSize*0.40), padBottom = Math.round(qrSize*0.40);
       const pid = 'fr_arc_' + Math.random().toString(36).slice(2, 8);
+      const ringGeom = (W, H) => {
+        const R1 = Math.max(W, H)/2 - qrSize*0.012;
+        const R2 = R1 - qrSize*0.11;          // gouttière fine → anneau intérieur dégage le QR
+        return { R1, R2, Rt: (R1 + R2)/2 };
+      };
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
-          const R = Math.max(W, H)/2, Rd = R - qrSize*0.05;
-          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R)}" fill="${esc(color)}"/>`
-            + `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(Rd)}" fill="none" stroke="#ffffff" stroke-width="${tw(qrSize*0.018)}" stroke-dasharray="${tw(qrSize*0.016)} ${tw(qrSize*0.03)}" stroke-linecap="round" opacity="0.85"/>`
-            + whitePlaque(bx, by, s, gap);
+          const { R1, R2 } = ringGeom(W, H), sw = qrSize*0.013;
+          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R1)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`
+            + `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R2)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`;
         },
         deco: (bx, by, s, W, H) => {
-          const R = Math.max(W, H)/2, Rt = R*0.78;
-          // arc BAS (sweep=0 → l'arc passe sous le centre), texte centré à 50%.
+          const { Rt } = ringGeom(W, H);
+          // arc BAS (sweep=0), texte sombre dans la gouttière entre les 2 anneaux.
           const arc = `M ${tw(W/2 - Rt)} ${tw(H/2)} A ${tw(Rt)} ${tw(Rt)} 0 0 0 ${tw(W/2 + Rt)} ${tw(H/2)}`;
           return `<path id="${pid}" d="${arc}" fill="none"/>`
-            + `<text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*0.95)}" font-weight="800" fill="#ffffff" letter-spacing="3"><textPath href="#${pid}" xlink:href="#${pid}" startOffset="50%" text-anchor="middle">${label}</textPath></text>`;
+            + `<text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*0.92)}" font-weight="700" fill="${esc(color)}" letter-spacing="4"><textPath href="#${pid}" xlink:href="#${pid}" startOffset="50%" text-anchor="middle">${label}</textPath></text>`;
         } };
     }
     default:

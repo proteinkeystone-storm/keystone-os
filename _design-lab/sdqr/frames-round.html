@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — cadres ronds refaits (réf. QR Tiger)</title>
+<style>body{font-family:-apple-system,sans-serif;background:#eef1f6;margin:0;padding:26px}h1{font-size:17px;color:#1b2a4a}.grid{display:flex;flex-wrap:wrap;gap:22px}.card{background:#fff;border-radius:18px;padding:16px;width:280px;box-shadow:0 10px 30px rgba(20,30,60,.12)}.card .qr{display:flex;justify-content:center;align-items:center;min-height:250px}.card .qr svg{width:240px;height:auto}.meta{margin-top:10px;display:flex;align-items:center;justify-content:space-between}.nm{font-weight:800;color:#1b2a4a;font-size:14px}.b{font-size:11px;font-weight:800;padding:3px 9px;border-radius:7px}.b.ok{background:rgba(46,179,124,.16);color:#0f9d6b}.b.ko{background:rgba(239,68,68,.16);color:#dc2626}#s{font-weight:800;margin:8px 0 18px;color:#1b2a4a}</style></head>
+<body><h1>Cadres ronds refaits — disque compact (cap3) · viseur (cap4) · double anneau courbe (cap5)</h1>
+<div id="s">…</div><div class="grid" id="g"></div>
+<script type="module">
+const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+const TXT='https://protein-keystone.com/r/AB12CD34', navy='#11203f';
+const base={module:{shape:'rounded'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}},fg:navy};
+const FR=[['Cercle (cap3)','circle'],['Crochets viseur (cap4)','corners'],['Anneau double + courbe (cap5)','ring'],['Plaque','plaque']];
+const g=document.getElementById('g');const cards=[];
+for(const [nm,style] of FR){
+  let svg=''; try{ svg=await renderQrCustom(TXT,{...base,frame:{style,text:'SCANNEZ-MOI',color:navy}},300);}catch(e){svg='ERR '+e.message;}
+  const c=document.createElement('div');c.className='card';
+  c.innerHTML=`<div class="qr">${svg}</div><div class="meta"><span class="nm">${nm}</span><span class="b" id="b-${style}">…</span></div>`;
+  g.appendChild(c);cards.push({style,svg});
+}
+let pass=0;const rows=[];
+for(const c of cards){
+  let a=false,b=false;
+  for(const sz of [300,170]){
+    try{const svg=await renderQrCustom(TXT,{...base,frame:{style:c.style,text:'SCANNEZ-MOI',color:navy}},sz);
+      const m=svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);const W=Math.round(+m[1]),H=Math.round(+m[2]);
+      const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();
+      const cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);x.drawImage(img,0,0,W,H);
+      const r=jsQR(x.getImageData(0,0,W,H).data,W,H);const ok=!!r&&r.data===TXT; if(sz===300)a=ok;else b=ok;
+    }catch(e){}
+  }
+  const p=a&&b;if(p)pass++;rows.push({style:c.style,p300:a,p170:b,pass:p});
+  const bd=document.getElementById('b-'+c.style);if(bd){bd.textContent=p?'scan OK':'✗';bd.className='b '+(p?'ok':'ko');}
+}
+const s=document.getElementById('s');s.textContent=`${pass}/${cards.length} cadres ronds scannables (300+170)`;
+window.__SCAN_ROWS=rows;window.__SCAN_DONE=true;
+</script></body></html>
