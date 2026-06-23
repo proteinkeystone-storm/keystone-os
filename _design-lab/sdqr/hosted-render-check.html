@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — vérif rendu WORKER (réseaux + carte de visite)</title>
+<style>
+  body { margin:0; padding:24px; background:#dfe5ec; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  h1 { font-size:15px; color:#1b2a4a; margin:0 0 4px; }
+  p.sub { font-size:12px; color:#6b7790; margin:0 0 18px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px 16px; max-width:780px; }
+  .cell { display:flex; flex-direction:column; align-items:center; }
+  .lab { font-size:11px; font-weight:600; color:#3a4b6b; margin-bottom:8px; text-align:center; }
+  .iph { width:236px; height:494px; background:#10182b; border-radius:42px; padding:9px; box-shadow:0 10px 26px rgba(8,15,35,.3); }
+  .scr { width:100%; height:100%; border-radius:34px; overflow:hidden; position:relative; background:#fff; }
+  .island { position:absolute; top:9px; left:50%; transform:translateX(-50%); width:84px; height:22px; background:#000; border-radius:13px; z-index:9; }
+  .frame { position:absolute; top:0; left:0; width:390px; height:794px; border:0; transform:scale(0.5589); transform-origin:top left; background:#fff; }
+</style></head>
+<body>
+  <h1>Vérification du VRAI rendu worker (renderHTML) — réseaux sociaux + carte de visite (5 designs)</h1>
+  <p class="sub">Chaque iPhone affiche la page réellement servie au scan (sandbox statique). Données d'exemple.</p>
+  <div class="grid" id="grid"></div>
+<script type="module">
+  // Cache-bust du module (le navigateur garde l'ancien index.js en cache ES).
+  const { getTemplate } = await import('../../workers/src/routes/smart-templates/index.js?v=hrc2');
+
+  const CV = {
+    full_name:'Sophie Martin', position:'Responsable commercial', company:'Prométhée Immobilier',
+    description:'À votre écoute pour vos projets sur la Côte.',
+    phone_work:'+33 6 12 34 56 78', phone:'+33 4 94 00 00 00', mobile:'+33 7 88 99 00 11',
+    fax:'+33 4 94 00 00 01', email:'sophie@promethee.fr', website:'https://promethee.fr',
+    accent_color:'#4a90d9',
+  };
+  const CELLS = [
+    ['Réseaux sociaux', 'reseaux-sociaux',
+      { smart_title:'Suivez moi sur les réseaux',
+        template_data:{ facebook_url:'https://facebook.com/x', instagram_url:'https://instagram.com/x', x_url:'https://x.com/x', linkedin_url:'https://linkedin.com/in/x' } }],
+    ['Carte de visite — design 1', 'carte-visite', { template_data:{ ...CV, layout:'1' } }],
+    ['Carte de visite — design 2', 'carte-visite', { template_data:{ ...CV, layout:'2' } }],
+    ['Carte de visite — design 3', 'carte-visite', { template_data:{ ...CV, layout:'3' } }],
+    ['Carte de visite — design 4', 'carte-visite', { template_data:{ ...CV, layout:'4' } }],
+    ['Carte de visite — design 5', 'carte-visite', { template_data:{ ...CV, layout:'5' } }],
+  ];
+  const grid = document.getElementById('grid');
+  for (const [lab, id, extra] of CELLS) {
+    const tpl = getTemplate(id);
+    const qrData = { short_id:'PREVIEW', template_id:id, smart_title:extra.smart_title||'', smart_message:'', name:lab, template_data:extra.template_data||{} };
+    let html = '';
+    try { html = tpl.renderHTML(qrData, {}); } catch (e) { html = '<p style="color:#b00;font:13px sans-serif;padding:16px">KO: '+e.message+'</p>'; }
+    const srcdoc = html.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML = `<div class="lab">${lab}</div><div class="iph"><div class="scr"><div class="island"></div><iframe class="frame" sandbox="" srcdoc="${srcdoc}"></iframe></div></div>`;
+    grid.appendChild(cell);
+  }
+  window.__SCAN_DONE = true;
+</script>
+</body></html>

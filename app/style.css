@@ -7501,6 +7501,9 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   letter-spacing: .04em;
   text-transform: uppercase;
 }
+/* Badge « Page ✦ » des cartes Smart (pages hébergées) sous une famille native. */
+.sdqr-type-badge--smart { background: rgba(108,108,245,.14); color: #4338ca; }
+html.light-mode .sdqr-type-badge--smart { color: #4338ca; }
 
 /* Smart QR V2 — sélecteur de templates d'interstitiel.
    Visuellement aligné sur .sdqr-type-card, avec une teinte or-indigo

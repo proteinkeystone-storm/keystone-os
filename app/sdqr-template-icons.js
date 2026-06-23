@@ -88,6 +88,24 @@ export const TEMPLATE_ICONS = {
     <path d="M12 4v4"/>
     <path d="M10 4h4"/>
   `),
+
+  // Réseaux sociaux : 3 nœuds reliés (share-2 Lucide)
+  'reseaux-sociaux': _svg(`
+    <circle cx="18" cy="5"  r="3"/>
+    <circle cx="6"  cy="12" r="3"/>
+    <circle cx="18" cy="19" r="3"/>
+    <line x1="8.59" y1="10.51" x2="15.42" y2="6.49"/>
+    <line x1="8.59" y1="13.49" x2="15.42" y2="17.51"/>
+  `),
+
+  // Carte de visite : carte avec avatar (contact / id-card)
+  'carte-visite': _svg(`
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <circle cx="8" cy="10" r="2.2"/>
+    <path d="M4.5 16.5c0-1.9 1.6-3 3.5-3s3.5 1.1 3.5 3"/>
+    <line x1="14.5" y1="9.5"  x2="19" y2="9.5"/>
+    <line x1="14.5" y1="13.5" x2="19" y2="13.5"/>
+  `),
 };
 
 /**

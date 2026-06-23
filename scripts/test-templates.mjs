@@ -53,6 +53,23 @@ const MOCK_SCAN = {
 };
 
 const MOCK_DATA = {
+  // Pages hébergées « Contact » (2026-06-23) — pages terminales.
+  'reseaux-sociaux': {
+    photo_url:     'https://example.com/p.jpg',
+    facebook_url:  'https://facebook.com/test',
+    instagram_url: 'https://instagram.com/test',
+  },
+  'carte-visite': {
+    layout:        '2',
+    photo_url:     'https://example.com/p.jpg',
+    full_name:     'Sophie Martin',
+    position:      'Responsable commercial',
+    company:       'Prométhée Immobilier',
+    phone_work:    '+33612345678',
+    email:         'sophie@promethee.fr',
+    website:       'https://promethee.fr',
+    accent_color:  '#4a90d9',
+  },
   // V4.1 livré 2026-05-26
   'storytelling-brand': {
     nom_marque:   'Maison Lumière',
@@ -224,7 +241,11 @@ async function testBackend() {
     assert(html.includes('<!DOCTYPE html>'),                                         `${tpl.id} : HTML5 doctype`);
     assert(html.includes('</html>'),                                                  `${tpl.id} : HTML fermé`);
     assert(html.includes('viewport'),                                                 `${tpl.id} : viewport meta présent`);
-    assert(html.includes('/r/MOCKABCD?direct=1'),                                    `${tpl.id} : CTA continuer (/r/SHORT?direct=1)`);
+    // Pages terminales (noDestination : réseaux, carte de visite) = pas de
+    // redirection → pas de CTA « continuer ». Les autres DOIVENT l'avoir.
+    if (!tpl.noDestination) {
+      assert(html.includes('/r/MOCKABCD?direct=1'),                                  `${tpl.id} : CTA continuer (/r/SHORT?direct=1)`);
+    }
     assert(!html.includes('/api/smartqr/generate-interstitial'),                     `${tpl.id} : plus de fetch IA (endpoint supprimé)`);
     assert(html.includes('Keystone'),                                                 `${tpl.id} : branding Keystone`);
     // Les 4 cartes "texte" rendent le titre + message saisis en direct.

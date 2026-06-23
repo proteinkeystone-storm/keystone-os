@@ -1235,6 +1235,8 @@ const _TYPE_FAMILIES = [
   { id: 'liens',    label: 'Liens',    types: ['url', 'text'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
   { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'tel'],
+    // Pages hébergées « Contact » (templates Smart) à côté des types natifs.
+    smartTypes: ['carte-visite', 'reseaux-sociaux'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
   { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' },
@@ -1289,7 +1291,21 @@ function _renderTypeCards(root) {
         </button>
       `;
     }).join('');
-    body = `<div class="sdqr-type-cards-grid">${cards}</div>`;
+    // Cartes Smart de la famille (pages hébergées) — ex : Contact → Carte de
+    // visite + Réseaux sociaux. Sélection = bascule en mode 'smart' + template.
+    const smartCards = (active.smartTypes || []).filter(id => isKnownTemplate(id)).map(id => {
+      const tpl = getTemplate(id);
+      const isActive = _creating.mode === 'smart' && _creating.template_id === id;
+      return `
+        <button class="sdqr-type-card sdqr-type-card--smart ${isActive ? 'is-active' : ''}" data-smarttype="${id}">
+          <span class="sdqr-type-ico">${getTemplateIconSvg(id) || tpl.icon || '✦'}</span>
+          <span class="sdqr-type-label">${_esc(tpl.label)}</span>
+          <span class="sdqr-type-desc">${_esc((tpl.description || '').slice(0, 64))}</span>
+          <span class="sdqr-type-badge sdqr-type-badge--smart">Page ✦</span>
+        </button>
+      `;
+    }).join('');
+    body = `<div class="sdqr-type-cards-grid">${cards}${smartCards}</div>`;
   }
   wrap.innerHTML = `<div class="sdqr-fam-row">${pills}</div>${body}`;
 
@@ -1326,7 +1342,7 @@ function _renderTypeCards(root) {
   if (isExp) {
     _renderTemplateCards(root);                      // sélecteur de templates Smart
   } else {
-    wrap.querySelectorAll('.sdqr-type-card').forEach(card => {
+    wrap.querySelectorAll('.sdqr-type-card[data-type]').forEach(card => {
       card.addEventListener('click', () => {
         const newType = card.dataset.type;
         _creating.type = newType;
@@ -1335,6 +1351,29 @@ function _renderTypeCards(root) {
         // Mode dérivé du type : modifiable (dynamique) par défaut si supporté,
         // sinon permanent (statique) forcé. Plus de « mode » à choisir avant.
         _creating.mode = def.supports.dynamic ? 'dynamic' : 'static';
+        _creating._templatePicked = false;
+        _renderTypeCards(root);
+        _renderModePick(root);
+        _renderFormFields(root);
+        _creRenderPreview(root);
+      });
+    });
+    // Cartes Smart d'une famille native (Contact → carte de visite / réseaux) :
+    // bascule en mode 'smart' avec le template choisi (même machinerie que les
+    // Expériences, mais l'entrée vit sous Contact).
+    wrap.querySelectorAll('.sdqr-type-card[data-smarttype]').forEach(card => {
+      card.addEventListener('click', () => {
+        _creating.template_id     = card.dataset.smarttype;
+        _creating.mode            = 'smart';
+        _creating.type            = 'url';   // #sdqr-form-fields = destination (masquée si page terminale)
+        _creating.template_data   = {};
+        _creating._templatePicked = true;
+        // Page terminale (réseaux / carte de visite) : pas de redirection. Le
+        // Worker exige quand même un target_url valide -> URL neutre jamais
+        // affichée ni utilisée par le rendu (cf. noDestination).
+        _creating.payload = getTemplate(_creating.template_id)?.noDestination
+          ? { url: 'https://protein-keystone.com' } : {};
+        _creView = 'phone';
         _renderTypeCards(root);
         _renderModePick(root);
         _renderFormFields(root);
@@ -1387,25 +1426,32 @@ function _renderModePick(root) {
 // de template + ses fields uniquement en mode 'smart'.
 function _toggleSmartBriefVisibility(root) {
   const isSmart = _creating.mode === 'smart';
+  // Page terminale (réseaux sociaux / carte de visite) : pas de « destination ».
+  const noDest  = isSmart && !!getTemplate(_creating.template_id)?.noDestination;
 
   const textWrap     = root.querySelector('#sdqr-smart-text-wrap');
   const templateWrap = root.querySelector('#sdqr-smart-template-wrap');
   const fieldsWrap   = root.querySelector('#sdqr-smart-template-fields-wrap');
 
   if (textWrap)     textWrap.hidden     = !isSmart;
-  if (templateWrap) templateWrap.hidden = !isSmart;   // sélecteur d'expérience (étape 1)
+  // La GALERIE d'expériences (étape 1) ne s'affiche que pour la famille
+  // « Expériences ». Un template Smart entré via Contact garde ses CHAMPS
+  // (fieldsWrap) mais pas la galerie.
+  if (templateWrap) templateWrap.hidden = _creating.family !== 'exp';
   if (fieldsWrap)   fieldsWrap.hidden   = !isSmart;
 
-  // Smart : le champ #sdqr-form-fields porte la DESTINATION (target_url /
-  // encoded_payload), REQUISE côté Worker (qr.js handleCreateQr) — on garde donc
-  // le type 'url' par défaut et on l'affiche avec un petit titre. Hors smart,
-  // l'étape 1 dit déjà le type → pas de heading redondant.
+  // Smart : #sdqr-form-fields porte la DESTINATION (target_url), REQUISE côté
+  // Worker (qr.js handleCreateQr) — SAUF pages terminales (noDestination) où on
+  // masque ce champ (une URL neutre est déjà posée dans le payload au choix du
+  // template pour satisfaire le Worker, jamais affichée au visiteur).
   const typeHeading = root.querySelector('#sdqr-type-heading');
   if (typeHeading) {
-    typeHeading.textContent = isSmart
+    typeHeading.textContent = (isSmart && !noDest)
       ? "Destination après l'expérience — où le visiteur est envoyé ensuite"
       : '';
   }
+  const formFields = root.querySelector('#sdqr-form-fields');
+  if (formFields) formFields.style.display = noDest ? 'none' : '';
 
   // Les CARTES d'expérience sont rendues par _renderTypeCards (famille « exp ») ;
   // ici on ne (re)rend que les CHAMPS du template choisi.
@@ -2972,7 +3018,11 @@ function _renderField(f, store) {
     const hasVal   = !!rawVal;
     const urlVal   = (typeof rawVal === 'string' && rawVal.startsWith('http')) ? val : '';
     const previewSrc = hasVal ? val : '';
-    input = `<div class="sdqr-image-widget">
+    // Qualité réglable par le field (défaut 12 Ko/800px) — une photo de profil
+    // (carte de visite) a besoin de plus qu'un logo. Lu par _bindImageWidgets.
+    const imgMaxB  = f.maxBytes || 12000;
+    const imgMaxD  = f.maxDim   || 800;
+    input = `<div class="sdqr-image-widget" data-maxbytes="${imgMaxB}" data-maxdim="${imgMaxD}">
       <input type="hidden" data-payload-key="${f.id}" value="${previewSrc}">
       <div class="sdqr-image-preview${hasVal ? ' has-image' : ''}">
         ${hasVal ? `<img alt="" src="${previewSrc}">` : `<span class="sdqr-image-placeholder">Aucune image</span>`}
@@ -2988,7 +3038,7 @@ function _renderField(f, store) {
         <summary>ou utiliser une URL externe</summary>
         <input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value="${urlVal}">
       </details>
-      <p class="sdqr-image-help">Compressée auto à 12 Ko (PNG/JPEG redimensionnés à 800px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-help">Compressée auto à ${Math.round(imgMaxB / 1024)} Ko (PNG/JPEG redimensionnés à ${imgMaxD}px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
       <p class="sdqr-image-err" hidden></p>
     </div>`;
     return `<div class="sdqr-field${span}">
