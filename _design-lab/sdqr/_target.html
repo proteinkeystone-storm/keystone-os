@@ -1,0 +1,42 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff;padding:20px;display:flex;gap:30px;align-items:flex-start}.box{width:340px}.cap{font:600 12px sans-serif;color:#333;margin-bottom:6px}</style></head>
+<body>
+<div class="box"><div class="cap">MA REPRODUCTION</div><div id="out"></div></div>
+<script type="module">
+const { renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+const T = 'https://protein-keystone.com/r/AB12CD34';
+// ── PARAMS (à tuner pour matcher la réf) ──
+const VB = 380;                  // viewBox carré
+const C = VB/2;                  // centre
+const QS = 212;                  // taille du QR
+const R_OUT = 171;               // rayon anneau extérieur (épais)
+const W_OUT = 10.5;              // épaisseur anneau extérieur
+const R_IN = 150;                // rayon anneau intérieur (arcs fins)
+const W_IN = 5.5;                // épaisseur arcs
+const SPAN = 0.74;               // demi-span des arcs (rad)
+const TXT_R = 150;               // rayon du texte courbe
+const TXT_SIZE = 17;
+const LABEL = 'SCAN ME';
+const fmt = n => n.toFixed(2);
+const pt = (r,a) => [C + r*Math.cos(a), C + r*Math.sin(a)];
+function arcSeg(r, aCenter, half, w){ const [x1,y1]=pt(r,aCenter-half),[x2,y2]=pt(r,aCenter+half); return `<path d="M ${fmt(x1)} ${fmt(y1)} A ${fmt(r)} ${fmt(r)} 0 0 1 ${fmt(x2)} ${fmt(y2)}" fill="none" stroke="#11151f" stroke-width="${w}" stroke-linecap="round"/>`; }
+// QR rendu (sans cadre), placé au centre
+const qrRaw = await renderQrCustom(T, { module:{shape:'square'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, fg:'#11151f', bg:'#ffffff' }, QS);
+const qrInner = qrRaw.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+// arcs : haut, gauche, droite (bas = texte). angles SVG: -PI/2=haut, PI=gauche, 0=droite, PI/2=bas
+const top = arcSeg(R_IN, -Math.PI/2, SPAN, W_IN);
+const left = arcSeg(R_IN, Math.PI, SPAN, W_IN);
+const right = arcSeg(R_IN, 0, SPAN, W_IN);
+// texte courbe en bas (arc de gauche à droite par le bas, sweep 0)
+const [tx1,ty1]=pt(TXT_R, Math.PI - 0.7), [tx2,ty2]=pt(TXT_R, 0.7);
+const tArc = `M ${fmt(C - TXT_R)} ${fmt(C)} A ${fmt(TXT_R)} ${fmt(TXT_R)} 0 0 0 ${fmt(C + TXT_R)} ${fmt(C)}`;
+const svg = `<svg viewBox="0 0 ${VB} ${VB}" xmlns="http://www.w3.org/2000/svg" style="width:340px">
+  <rect width="${VB}" height="${VB}" fill="#fff"/>
+  <circle cx="${C}" cy="${C}" r="${R_OUT}" fill="none" stroke="#11151f" stroke-width="${W_OUT}"/>
+  ${top}${left}${right}
+  <path id="tp" d="${tArc}" fill="none"/>
+  <text font-family="Arial, sans-serif" font-size="${TXT_SIZE}" font-weight="700" letter-spacing="3" fill="#11151f"><textPath href="#tp" startOffset="50%" text-anchor="middle">${LABEL}</textPath></text>
+  <g transform="translate(${C - QS/2}, ${C - QS/2})">${qrInner}</g>
+</svg>`;
+document.getElementById('out').innerHTML = svg;
+window.__GALLERY_DONE = true;
+</script></body></html>

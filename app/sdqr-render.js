@@ -101,12 +101,11 @@ export const FRAME_OPTS = [
   { id: 'border',  label: 'Encadré' },
   { id: 'badge',   label: 'Pastille' },
   { id: 'header',  label: 'Bandeau haut' },
-  // SDQR-3.9 — cadres « pleins » : une PLAQUE BLANCHE sous le QR conserve la
-  // zone de silence → le QR reste foncé sur blanc, scannable, même cerné de
-  // foncé (prouvé jsQR aux 2 tailles, banc scan-candidates.html).
-  { id: 'circle',  label: 'Cercle' },
+  // SDQR-3.9 — cadres « pleins » (plaque blanche = zone de silence préservée).
   { id: 'plaque',  label: 'Plaque' },
-  { id: 'corners', label: 'Crochets' },
+  // SDQR-3.12 — seul cadre ROND retenu (design validé par Stéphane « Modèle Cadre » :
+  // anneau épais + 3 arcs + accroche courbe). Cercle/Crochets retirés du sélecteur
+  // (cases de rendu conservées pour compat d'un éventuel QR déjà créé).
   { id: 'ring',    label: 'Anneau' },
 ];
 
@@ -213,28 +212,23 @@ function _frameGeometry(style, qrSize, color, text) {
           return brackets + arcs + txt;
         } };
     }
-    case 'ring': {     // double anneau FIN (sans remplissage) + accroche COURBE dans la gouttière (réf. cap5)
+    case 'ring': {     // anneau ÉPAIS + 3 arcs fins (haut/gauche/droite) + accroche COURBE bas (réf. « Modèle Cadre » validée par Stéphane)
       const padX = Math.round(qrSize*0.40), padTop = Math.round(qrSize*0.40), padBottom = Math.round(qrSize*0.40);
       const pid = 'fr_arc_' + Math.random().toString(36).slice(2, 8);
-      // R2 (anneau intérieur) ≈ coins du carré blanc du QR (0.707) → ils le TOUCHENT.
-      // R1 (anneau extérieur) laisse une marge depuis le bord du canevas → pas rogné.
-      const ringGeom = () => {
-        const R2 = qrSize * 0.71;
-        const R1 = qrSize * 0.82;
-        return { R1, R2, Rt: (R1 + R2)/2 };
-      };
       return { padX, padTop, padBottom,
-        back: (bx, by, s, W, H) => {
-          const { R1, R2 } = ringGeom(), sw = qrSize*0.013;
-          return `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R1)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`
-            + `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(R2)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(sw)}"/>`;
-        },
+        back: (bx, by, s, W, H) =>
+          `<circle cx="${tw(W/2)}" cy="${tw(H/2)}" r="${tw(qrSize*0.81)}" fill="none" stroke="${esc(color)}" stroke-width="${tw(qrSize*0.05)}"/>`,
         deco: (bx, by, s, W, H) => {
-          const { Rt } = ringGeom();
-          // arc BAS (sweep=0), texte sombre dans la gouttière entre les 2 anneaux.
-          const arc = `M ${tw(W/2 - Rt)} ${tw(H/2)} A ${tw(Rt)} ${tw(Rt)} 0 0 0 ${tw(W/2 + Rt)} ${tw(H/2)}`;
-          return `<path id="${pid}" d="${arc}" fill="none"/>`
-            + `<text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*0.92)}" font-weight="700" fill="${esc(color)}" letter-spacing="4"><textPath href="#${pid}" xlink:href="#${pid}" startOffset="50%" text-anchor="middle">${label}</textPath></text>`;
+          const cx = W/2, cy = H/2;
+          const Rin = qrSize*0.71, win = qrSize*0.026, half = 0.74;
+          // 3 arcs fins de l'anneau intérieur brisé (haut, gauche, droite ; bas = texte).
+          const seg = (ac) => { const a1 = ac - half, a2 = ac + half;
+            return `<path d="M ${tw(cx + Rin*Math.cos(a1))} ${tw(cy + Rin*Math.sin(a1))} A ${tw(Rin)} ${tw(Rin)} 0 0 1 ${tw(cx + Rin*Math.cos(a2))} ${tw(cy + Rin*Math.sin(a2))}" fill="none" stroke="${esc(color)}" stroke-width="${tw(win)}" stroke-linecap="round"/>`; };
+          const arcs = seg(-Math.PI/2) + seg(Math.PI) + seg(0);
+          // accroche COURBE en bas (même rayon, arc sweep=0).
+          const Rt = qrSize*0.71;
+          const tArc = `M ${tw(cx - Rt)} ${tw(cy)} A ${tw(Rt)} ${tw(Rt)} 0 0 0 ${tw(cx + Rt)} ${tw(cy)}`;
+          return `${arcs}<path id="${pid}" d="${tArc}" fill="none"/><text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${tw(fs*1.1)}" font-weight="700" fill="${esc(color)}" letter-spacing="${tw(qrSize*0.014)}"><textPath href="#${pid}" xlink:href="#${pid}" startOffset="50%" text-anchor="middle">${label}</textPath></text>`;
         } };
     }
     default:
