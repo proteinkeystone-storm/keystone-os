@@ -8723,6 +8723,12 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 .sdqr-customframe-prev svg { width: 100%; height: 100%; display: block; }
 .sdqr-customframe-info { flex: 1; font-size: 12.5px; line-height: 1.4; }
 .sdqr-customframe-info small { opacity: .72; }
+.sdqr-customframe-tpl {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+  background: none; border: none; cursor: pointer; padding: 4px 2px;
+  color: var(--gold, #6c6cf5); font-size: 12px; font-weight: 700;
+}
+.sdqr-customframe-tpl:hover { text-decoration: underline; }
 .sdqr-hex {
   flex: 1; min-width: 0;
   height: 36px; padding: 0 10px;

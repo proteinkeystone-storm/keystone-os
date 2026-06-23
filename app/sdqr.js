@@ -4635,6 +4635,29 @@ function _colorField(label, id, value) {
     </label>`;
 }
 
+// SDQR-3.10 — gabarit de cadre sur-mesure téléchargeable : un SVG prêt, avec
+// le repère « qr-slot » déjà placé. L'utilisateur décore autour, garde le slot,
+// réexporte. Démystifie l'instruction technique « doit réserver qr-slot ».
+function _customFrameTemplate() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 640" width="560" height="640">
+  <!-- ============================================================= -->
+  <!--  GABARIT DE CADRE QR — KEYSTONE                                -->
+  <!--  1. Decore librement AUTOUR du carre blanc « qr-slot ».        -->
+  <!--  2. Garde le rectangle id="qr-slot" : il marque ou le QR ira   -->
+  <!--     (tu peux le deplacer / le redimensionner, mais GARDE-le).  -->
+  <!--  3. Reexporte en SVG (Illustrator : Fichier > Exporter > SVG). -->
+  <!--  4. Importe-le ici via « Importer votre cadre ».               -->
+  <!-- ============================================================= -->
+
+  <!-- Ton decor (exemple : plaque arrondie + accroche). Modifie a volonte. -->
+  <rect x="20" y="20" width="520" height="600" rx="48" fill="#11203f"/>
+  <text x="280" y="548" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="3" fill="#ffffff">SCANNEZ-MOI</text>
+
+  <!-- ▼ EMPLACEMENT DU QR — ne pas supprimer ▼ -->
+  <rect id="qr-slot" x="120" y="108" width="320" height="320" rx="24" fill="#ffffff"/>
+</svg>`;
+}
+
 function _renderDesignPanel(qr, opts = {}) {
   const d = mergeDesign(qr.design);
   const create = !!opts.create;   // création : pas de bouton « Sauvegarder le design »
@@ -4835,9 +4858,13 @@ function _renderDesignPanel(qr, opts = {}) {
             ` : `
               <label class="sdqr-customframe-drop" for="sdqr-customframe-input">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span class="sdqr-customframe-text"><strong>Importer un SVG</strong> (cadre Illustrator)<br><small>doit réserver <code>&lt;rect id="qr-slot"&gt;</code> · max 32 Ko</small></span>
+                <span class="sdqr-customframe-text"><strong>Importer votre cadre (SVG)</strong><br><small>Dessiné sur Illustrator, avec un carré nommé « qr-slot » à l'emplacement du QR. · SVG ≤ 32 Ko</small></span>
                 <input type="file" id="sdqr-customframe-input" accept="image/svg+xml,.svg" hidden>
               </label>
+              <button class="sdqr-customframe-tpl" id="sdqr-customframe-template" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Télécharger un gabarit prêt à décorer
+              </button>
             `}
           </div>
         </div>
@@ -5152,6 +5179,15 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     _editingDesign.frame.customSlot = null;
     _editingDesign.frame.customVB = null;
     _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
+  // Télécharger le gabarit de cadre (SVG prêt avec le repère « qr-slot »).
+  panel.querySelector('#sdqr-customframe-template')?.addEventListener('click', () => {
+    const blob = new Blob([_customFrameTemplate()], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'gabarit-cadre-qr.svg';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
   // Palettes PAR AMBIANCE (dégradé modules + accent yeux, en 1 clic)

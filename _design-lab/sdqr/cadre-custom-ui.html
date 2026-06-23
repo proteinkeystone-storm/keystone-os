@@ -16,8 +16,12 @@ document.getElementById('empty').innerHTML = `
     <div class="sdqr-customframe-head">Cadre sur-mesure (SVG)</div>
     <label class="sdqr-customframe-drop">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <span class="sdqr-customframe-text"><strong>Importer un SVG</strong> (cadre Illustrator)<br><small>doit réserver <code>&lt;rect id="qr-slot"&gt;</code> · max 32 Ko</small></span>
+      <span class="sdqr-customframe-text"><strong>Importer votre cadre (SVG)</strong><br><small>Dessiné sur Illustrator, avec un carré nommé « qr-slot » à l'emplacement du QR. · SVG ≤ 32 Ko</small></span>
     </label>
+    <button class="sdqr-customframe-tpl" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Télécharger un gabarit prêt à décorer
+    </button>
   </div>`;
 const CLEAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360"><rect x="8" y="8" width="304" height="344" rx="26" fill="#1b2a4a"/><rect x="56" y="70" width="208" height="208" rx="14" fill="#fff"/><path d="M40 300 H280 L300 332 H20 Z" fill="#6c6cf5"/><text x="160" y="324" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="800" fill="#fff">SCANNEZ-MOI</text><rect id="qr-slot" x="62" y="76" width="196" height="196" fill="#fff"/></svg>`;
 const r = sanitizeFrameSvg(CLEAN);

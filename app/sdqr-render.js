@@ -289,13 +289,19 @@ export function sanitizeFrameSvg(svgText) {
   else { vbW = parseFloat(svg.getAttribute('width')); vbH = parseFloat(svg.getAttribute('height')); }
   if (!(vbW > 0) || !(vbH > 0)) return fail('Le SVG doit déclarer un viewBox (ou width/height).');
 
-  // slot QR : <... id="qr-slot"> avec x/y/width
-  const slotEl = svg.querySelector('#qr-slot, [id="qr-slot"]');
-  if (!slotEl) return fail('Le SVG doit contenir un repère <rect id="qr-slot"> (zone du QR).');
+  // slot QR : élément dont l'id (normalisé) vaut/contient « qr-slot ». Tolérant
+  // aux variantes d'export Illustrator (qr_slot, qrslot, « QR Slot », qr-slot_1…).
+  const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  let slotEl = null;
+  for (const el of svg.querySelectorAll('rect, [id]')) {
+    const id = norm(el.getAttribute('id'));
+    if (id.includes('qrslot') || id === 'qr' || id === 'slot') { slotEl = el; break; }
+  }
+  if (!slotEl) return fail('Aucun emplacement trouvé : ajoute un carré nommé « qr-slot » à l\'endroit du QR.');
   const sx = parseFloat(slotEl.getAttribute('x')), sy = parseFloat(slotEl.getAttribute('y'));
   const sw = parseFloat(slotEl.getAttribute('width')), sh = parseFloat(slotEl.getAttribute('height'));
   const w = Math.min(sw || 0, sh || sw || 0);
-  if (!(sx >= 0) || !(sy >= 0) || !(w > 0)) return fail('Le repère #qr-slot doit avoir x, y, width (et height).');
+  if (!(sx >= 0) || !(sy >= 0) || !(w > 0)) return fail('Le carré « qr-slot » doit avoir une position et une taille (rectangle simple).');
 
   // S'assurer d'un viewBox explicite pour le rendu final.
   if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);

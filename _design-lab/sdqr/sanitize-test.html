@@ -7,6 +7,7 @@
 <script type="module">
 const { sanitizeFrameSvg, renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
+const TXT = 'https://protein-keystone.com/r/AB12CD34';
 const tb = document.querySelector('#r tbody'); const checks = [];
 const row = (name, pass, detail) => { checks.push(pass); const tr=document.createElement('tr'); tr.innerHTML=`<td>${name}</td><td>${detail}</td><td class="${pass?'ok':'ko'}">${pass?'✓ OK':'✗ ÉCHEC'}</td>`; tb.appendChild(tr); };
 
@@ -66,6 +67,30 @@ if (cl.ok) {
   const res=jsQR(x.getImageData(0,0,W,H).data,W,H); scanOK = !!res && res.data===TXT;
 }
 row('QR cadre sur-mesure SCANNABLE (jsQR)', scanOK, 'décodé == URL');
+
+// 6) GABARIT téléchargeable (copie exacte de _customFrameTemplate) → sanitize + scan
+const TEMPLATE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 640" width="560" height="640">
+  <rect x="20" y="20" width="520" height="600" rx="48" fill="#11203f"/>
+  <text x="280" y="548" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="3" fill="#ffffff">SCANNEZ-MOI</text>
+  <rect id="qr-slot" x="120" y="108" width="320" height="320" rx="24" fill="#ffffff"/>
+</svg>`;
+const tpl = sanitizeFrameSvg(TEMPLATE);
+row('Gabarit fourni accepté', tpl.ok && tpl.slot && tpl.slot.w===320, 'slot 320 détecté');
+let tplScan = false;
+if (tpl.ok) {
+  const svg = await renderQrCustom(TXT, { module:{shape:'rounded'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, fg:'#11203f', frame:{ style:'custom', customSvg:tpl.svg, customSlot:tpl.slot, customVB:tpl.vb } }, 280);
+  const m = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); const W=Math.round(+m[1]),H=Math.round(+m[2]);
+  const img=new Image(); img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); await img.decode();
+  const c=document.createElement('canvas'); c.width=W;c.height=H; const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,W,H); x.drawImage(img,0,0,W,H);
+  const res=jsQR(x.getImageData(0,0,W,H).data,W,H); tplScan = !!res && res.data===TXT;
+}
+row('QR du gabarit SCANNABLE', tplScan, 'décodé == URL');
+
+// 7) Détection tolérante des variantes Illustrator
+const variant = (id) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect x="10" y="10" width="180" height="180" fill="#11203f"/><rect id="${id}" x="30" y="30" width="140" height="140" fill="#fff"/></svg>`;
+row('Variante id="qr-slot_1" (dedup Illustrator)', sanitizeFrameSvg(variant('qr-slot_1')).ok, 'tolérée');
+row('Variante id="QR Slot"', sanitizeFrameSvg(variant('QR Slot')).ok, 'tolérée');
+row('Variante id="qr_slot"', sanitizeFrameSvg(variant('qr_slot')).ok, 'tolérée');
 
 const s=document.getElementById('s'); const passed=checks.filter(Boolean).length;
 s.textContent = `${passed}/${checks.length} vérifications OK`; s.className = passed===checks.length?'ok':'ko';
