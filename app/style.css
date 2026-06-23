@@ -10416,23 +10416,27 @@ html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--ghost:hover 
    horizontales sidebar-head / tabs (les traits doivent coïncider).
 ═══════════════════════════════════════════════════════════════ */
 .sdqr-sidebar-head { height: 52px; padding: 0 18px; box-sizing: border-box; }
-.sdqr-tabs { height: 52px; padding: 0 24px; box-sizing: border-box; align-items: flex-end; gap: 6px; }
+/* Barre d'onglets : contenu CENTRÉ verticalement, « + Nouveau » + Studio +
+   Statistiques sur la MÊME ligne ; padding-gauche = 32px (= padding du contenu)
+   pour que « + Nouveau » s'aligne PILE avec « Mes QR » dessous. */
+.sdqr-tabs { height: 52px; padding: 0 32px; box-sizing: border-box; align-items: stretch; gap: 2px; }
+/* Onglets : texte centré verticalement, soulignement actif AU BAS de la barre. */
+.sdqr-tabs .sdqr-tab { display: inline-flex; align-items: center; padding: 0 14px; }
 .sdqr-new-btn.sdqr-new-btn--cta {
-  align-self: center; margin: 0 16px 7px 0;
-  padding: 8px 15px; border-radius: 9px; font-size: 12.5px; font-weight: 700;
+  align-self: center; margin: 0 14px 0 0;
+  padding: 8px 16px; border-radius: 9px; font-size: 13px; font-weight: 700;
   animation: sdqrNewPulse 2.6s ease-in-out infinite;
 }
 html.light-mode .sdqr-new-btn.sdqr-new-btn--cta {
-  background: var(--gold, #6c6cf5); border: 1px solid var(--gold, #6c6cf5);
-  color: #fff; box-shadow: 0 2px 10px rgba(108,108,245,.35);
+  background: var(--gold, #6c6cf5); border: 1px solid var(--gold, #6c6cf5); color: #fff;
 }
 html.light-mode .sdqr-new-btn.sdqr-new-btn--cta:hover {
   background: #5a5af0; border-color: #5a5af0; color: #fff;
-  box-shadow: 0 4px 16px rgba(108,108,245,.5);
 }
+/* Repos = plat (comme la maquette) ; le halo n'apparaît que par pulsation. */
 @keyframes sdqrNewPulse {
-  0%, 100% { box-shadow: 0 2px 10px rgba(108,108,245,.32); }
-  50%      { box-shadow: 0 2px 10px rgba(108,108,245,.32), 0 0 0 4px rgba(108,108,245,.16); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(108,108,245,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(108,108,245,.20); }
 }
 @media (prefers-reduced-motion: reduce) { .sdqr-new-btn.sdqr-new-btn--cta { animation: none; } }
 
