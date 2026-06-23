@@ -43,7 +43,7 @@ function _spStatus(light) {
 }
 function _spDevice(inner, bg) {
   return `<div class="sdqr-iph"><div class="sdqr-iph-scr" style="background:${bg || '#fff'}">`
-    + `<div class="sdqr-iph-island"></div>${inner}<div class="sdqr-iph-home"></div></div></div>`;
+    + `${inner}<div class="sdqr-iph-home"></div></div></div>`;
 }
 // Valeur saisie, ou placeholder grisé si vide (l'aperçu n'est jamais vide).
 function _spVal(v, ph) {
@@ -105,7 +105,7 @@ function _qrDataFromCre(cre) {
 }
 function _expIframe(html) {
   const srcdoc = String(html).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  return `<div class="sdqr-iph"><div class="sdqr-iph-scr"><div class="sdqr-iph-island"></div>`
+  return `<div class="sdqr-iph"><div class="sdqr-iph-scr">`
     + `<iframe class="sdqr-iph-frame" sandbox="" title="Aperçu de la page" srcdoc="${srcdoc}"></iframe>`
     + `<div class="sdqr-iph-home"></div></div></div>`;
 }

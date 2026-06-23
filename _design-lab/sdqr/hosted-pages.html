@@ -10,7 +10,6 @@
   .lab { font-size:12px; font-weight:600; color:#3a4b6b; margin-bottom:9px; }
   .iph { width:378px; height:812px; background:#10182b; border-radius:56px; padding:12px; box-shadow:0 12px 30px rgba(8,15,35,.32); }
   .scr { width:100%; height:100%; border-radius:42px; overflow:hidden; position:relative; background:#fff; }
-  .island { position:absolute; top:12px; left:50%; transform:translateX(-50%); width:112px; height:30px; background:#000; border-radius:16px; z-index:9; }
   .page { position:absolute; inset:0; overflow:hidden; }
   .safe { height:38px; }
 
@@ -156,7 +155,7 @@ const CELLS=[
 const grid=document.getElementById('grid');
 for(const [lab,html] of CELLS){
   const c=document.createElement('div');c.className='cell';
-  c.innerHTML=`<div class="lab">${lab}</div><div class="iph"><div class="scr"><div class="island"></div><div class="page">${html}</div></div></div>`;
+  c.innerHTML=`<div class="lab">${lab}</div><div class="iph"><div class="scr"><div class="page">${html}</div></div></div>`;
   grid.appendChild(c);
 }
 window.__SCAN_DONE=true;

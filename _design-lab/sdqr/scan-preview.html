@@ -11,7 +11,6 @@
   /* — iPhone d'aperçu (copie de app/style.css pour le banc autonome) — */
   .sdqr-iph { width:208px; height:432px; background:#1b2a4a; border-radius:38px; padding:9px; box-sizing:border-box; box-shadow:0 8px 22px rgba(8,15,35,.30); }
   .sdqr-iph-scr { width:100%; height:100%; border-radius:30px; overflow:hidden; position:relative; display:flex; flex-direction:column; background:#fff; }
-  .sdqr-iph-island { position:absolute; top:8px; left:50%; transform:translateX(-50%); width:74px; height:19px; background:#000; border-radius:11px; z-index:6; }
   .sdqr-iph-home { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:3px; background:rgba(0,0,0,.28); z-index:6; }
   .sdqr-iph-frame { position:absolute; inset:0; border:0; width:380px; height:828px; transform:scale(0.5); transform-origin:top left; background:#fff; }
   .sdqr-sp-sb { display:flex; justify-content:space-between; align-items:center; padding:10px 17px 4px; font-size:11px; font-weight:600; flex:0 0 auto; }
@@ -43,16 +42,16 @@
 
     // Types natifs : écran OS fidèle (module front).
     const NATIVE = [
-      { lab:'URL — lien web',     cre:{ mode:'dynamic', type:'url',  payload:{ url:'https://promethee-immobilier.fr/azur' } } },
-      { lab:'Texte — note',       cre:{ mode:'static',  type:'text', payload:{ text:'Code Wi-Fi invité : LUMIERE-2026\nMerci de votre visite !' } } },
-      { lab:'vCard — contact',    cre:{ mode:'static',  type:'vcard',payload:{ firstName:'Sophie', lastName:'Martin', org:'Prométhée Immobilier', title:'Responsable commercial', phone:'+33 6 12 34 56 78', email:'sophie@promethee.fr', website:'https://promethee.fr' } } },
-      { lab:'Wi-Fi',              cre:{ mode:'static',  type:'wifi', payload:{ ssid:'Lumiere-Café', security:'WPA2' } } },
-      { lab:'Événement (iCal)',   cre:{ mode:'static',  type:'ical', payload:{ title:'Visite chantier Programme Azur', location:'12 av. des Lauriers, Sanary', start:'2026-07-02T18:00' } } },
-      { lab:'Email pré-rempli',   cre:{ mode:'static',  type:'email',payload:{ email:'contact@promethee.fr', subject:'Demande d\'information', body:'Bonjour,\nje souhaite des informations sur le programme Azur…' } } },
-      { lab:'SMS pré-rempli',     cre:{ mode:'static',  type:'sms',  payload:{ phone:'+33 6 12 34 56 78', message:'Bonjour, je vous contacte au sujet du programme Azur.' } } },
-      { lab:'WhatsApp',           cre:{ mode:'static',  type:'whatsapp', payload:{ phone:'33612345678', message:'Bonjour, une question sur le programme Azur ?' } } },
-      { lab:'Téléphone — appel',  cre:{ mode:'static',  type:'tel',  payload:{ phone:'+33 4 94 00 00 00' } } },
-      { lab:'Localisation',       cre:{ mode:'static',  type:'geo',  payload:{ query:'12 rue Hoche, 83000 Toulon' } } },
+      { lab:'URL — lien web',     cre:{ mode:'dynamic', type:'url',  payload:{ url:'https://votre-site.fr' } } },
+      { lab:'Texte — note',       cre:{ mode:'static',  type:'text', payload:{ text:'Code Wi-Fi invité : EXEMPLE-2026\nMerci de votre visite !' } } },
+      { lab:'vCard — contact',    cre:{ mode:'static',  type:'vcard',payload:{ firstName:'Prénom', lastName:'Nom', org:'Votre société', title:'Votre fonction', phone:'+33 6 00 00 00 00', email:'vous@exemple.fr', website:'https://votre-site.fr' } } },
+      { lab:'Wi-Fi',              cre:{ mode:'static',  type:'wifi', payload:{ ssid:'Bureau-WiFi', security:'WPA2' } } },
+      { lab:'Événement (iCal)',   cre:{ mode:'static',  type:'ical', payload:{ title:'Votre événement', location:'1 rue de l\'Exemple, Ville', start:'2026-07-02T18:00' } } },
+      { lab:'Email pré-rempli',   cre:{ mode:'static',  type:'email',payload:{ email:'contact@exemple.fr', subject:'Demande d\'information', body:'Bonjour,\nje souhaite des informations…' } } },
+      { lab:'SMS pré-rempli',     cre:{ mode:'static',  type:'sms',  payload:{ phone:'+33 6 00 00 00 00', message:'Bonjour, je vous contacte au sujet de…' } } },
+      { lab:'WhatsApp',           cre:{ mode:'static',  type:'whatsapp', payload:{ phone:'33600000000', message:'Bonjour, une question ?' } } },
+      { lab:'Téléphone — appel',  cre:{ mode:'static',  type:'tel',  payload:{ phone:'+33 6 00 00 00 00' } } },
+      { lab:'Localisation',       cre:{ mode:'static',  type:'geo',  payload:{ query:'1 rue de l\'Exemple, 00000 Ville' } } },
     ];
 
     // Expériences : VRAI renderHTML du worker, rendu statique dans une iframe sandbox.
@@ -90,6 +89,8 @@
         const cre = { mode:'smart', template_id:e.id, smart_title:e.smart_title, smart_message:e.smart_message, template_data:e.template_data };
         await renderExperiencePreview(cell.querySelector('.exp-host'), cre, INDIGO);
       }
+      // Laisse les iframes sandbox peindre avant la capture headless.
+      await new Promise(r => setTimeout(r, 600));
       window.__SCAN_DONE = true;
     })();
   </script>
