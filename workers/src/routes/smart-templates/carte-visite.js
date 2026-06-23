@@ -173,10 +173,12 @@ const TEMPLATE = {
   .ph-top .ph, .card4 + * .ph { width:128px; height:128px; }
   .ph-top > svg { display:none; }
   .ph-hero { height:208px; background:linear-gradient(150deg,#c3d4e8,#9fb8d6); position:relative; overflow:hidden;
-    display:flex; align-items:flex-end; justify-content:center;
+    display:flex; align-items:center; justify-content:center;
     padding-top: env(safe-area-inset-top,0px); }
-  .ph-hero > svg.wave { position:absolute; bottom:-1px; left:0; width:100%; height:34px; }
-  .ph-hero img { width:140px; height:170px; object-fit:cover; }
+  .ph-hero > svg.wave { position:absolute; bottom:-1px; left:0; width:100%; height:34px; z-index:1; }
+  /* Photo plein cadre : couvre toute la zone haute, le wave courbe le bas. */
+  .ph-hero img { width:100%; height:100%; object-fit:cover; }
+  /* Sans photo : la silhouette garde sa taille, centrée sur le dégradé. */
   /* Boutons d'action */
   .acts { display:flex; gap:10px; padding:0 0 4px; }
   .act-sq { flex:1; background:var(--acc); color:#fff; border-radius:12px; padding:11px 0; text-align:center; }

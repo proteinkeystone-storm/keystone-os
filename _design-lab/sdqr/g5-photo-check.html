@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — carte de visite design 5 : photo plein cadre</title>
+<style>
+  body { margin:0; padding:24px; background:#dfe5ec; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  h1 { font-size:15px; color:#1b2a4a; margin:0 0 4px; }
+  p.sub { font-size:12px; color:#6b7790; margin:0 0 18px; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:24px; max-width:540px; }
+  .cell { display:flex; flex-direction:column; align-items:center; }
+  .lab { font-size:11px; font-weight:600; color:#3a4b6b; margin-bottom:8px; text-align:center; }
+  .iph { width:236px; height:494px; background:#10182b; border-radius:42px; padding:9px; box-shadow:0 10px 26px rgba(8,15,35,.3); }
+  .scr { width:100%; height:100%; border-radius:34px; overflow:hidden; position:relative; background:#fff; }
+  .frame { position:absolute; top:0; left:0; width:390px; height:794px; border:0; transform:scale(0.5589); transform-origin:top left; background:#fff; }
+</style></head>
+<body>
+  <h1>Carte de visite — design 5 « plein cadre » (VRAI rendu worker renderHTML)</h1>
+  <p class="sub">À gauche : photo plein cadre (couvre toute la zone haute, bord courbe). À droite : sans photo, la silhouette reste centrée et non étirée (garde-fou). Données d'exemple.</p>
+  <div class="grid" id="grid"></div>
+<script type="module">
+  const { getTemplate } = await import('../../workers/src/routes/smart-templates/index.js?v=g5a');
+
+  // Photo PORTRAIT ostensiblement fictive (label « Exemple »), data-URI base64
+  // (seul format accepté par safeUrl). 380×480 → on voit le recadrage cover.
+  const PHOTO_SVG = `<svg xmlns='http://www.w3.org/2000/svg' width='380' height='480' viewBox='0 0 380 480'>`
+    + `<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#7d97d6'/><stop offset='1' stop-color='#385399'/></linearGradient></defs>`
+    + `<rect width='380' height='480' fill='url(#g)'/>`
+    + `<circle cx='190' cy='176' r='84' fill='#eaf0fb'/>`
+    + `<path d='M52 480 C52 358 128 296 190 296 C252 296 328 358 328 480 Z' fill='#eaf0fb'/>`
+    + `<text x='190' y='250' font-family='sans-serif' font-size='22' font-weight='700' fill='#385399' text-anchor='middle' opacity='.55'>Exemple</text>`
+    + `</svg>`;
+  const PHOTO = 'data:image/svg+xml;base64,' + btoa(PHOTO_SVG);
+
+  const CV = {
+    full_name:'Prénom Nom', position:'Votre fonction', company:'Votre société',
+    description:'Quelques mots de présentation.',
+    phone_work:'06 00 00 00 00', email:'vous@exemple.fr', website:'https://votre-site.fr',
+    accent_color:'#4a90d9',
+  };
+  const CELLS = [
+    ['Design 5 — AVEC photo (plein cadre)', { ...CV, layout:'5', photo_url:PHOTO }],
+    ['Design 5 — SANS photo (garde-fou silhouette)', { ...CV, layout:'5' }],
+  ];
+  const grid = document.getElementById('grid');
+  const tpl = getTemplate('carte-visite');
+  for (const [lab, td] of CELLS) {
+    const qrData = { short_id:'PREVIEW', template_id:'carte-visite', name:lab, template_data:td };
+    let html = '';
+    try { html = tpl.renderHTML(qrData, {}); } catch (e) { html = '<p style="color:#b00;font:13px sans-serif;padding:16px">KO: '+e.message+'</p>'; }
+    const srcdoc = html.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML = `<div class="lab">${lab}</div><div class="iph"><div class="scr"><iframe class="frame" sandbox="" srcdoc="${srcdoc}"></iframe></div></div>`;
+    grid.appendChild(cell);
+  }
+  await new Promise(r => setTimeout(r, 600));
+  window.__SCAN_DONE = true;
+</script>
+</body></html>
