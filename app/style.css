@@ -10527,6 +10527,9 @@ html.light-mode .sdqr-new-btn.sdqr-new-btn--cta:hover {
   margin-top: auto;
   display: flex; align-items: flex-end; justify-content: space-between; gap: 8px;
 }
+/* Bloc gauche du pied : gros chiffre de scans + mini-courbe d'activite (violet). */
+.sdqr-qr-foot-main { display: flex; align-items: flex-end; gap: 10px; min-width: 0; }
+.sdqr-qr-spark { flex: none; opacity: .92; margin-bottom: 3px; }
 .sdqr-qr-scans {
   font-size: 25px; font-weight: 800; letter-spacing: -.02em;
   color: #1b2a4a; line-height: 1;

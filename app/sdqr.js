@@ -418,6 +418,21 @@ function _libQrs() {
   });
 }
 
+// Mini-courbe d'activité (14 derniers jours, q.scans_series) pour les cartes QR.
+// Violet/indigo comme la courbe d'ensemble (#6c6cf5). Polyline simple (pas de
+// <defs> -> aucun conflit d'id entre cartes). '' si série vide / sans activité.
+function _sparklineSvg(series) {
+  const v = Array.isArray(series) ? series : [];
+  if (v.length < 2 || !v.some(n => n > 0)) return '';
+  const W = 66, H = 22, pad = 3, mx = Math.max(...v) || 1;
+  const pts = v.map((val, i) => {
+    const x = i / (v.length - 1) * W;
+    const y = H - pad - (val / mx) * (H - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="sdqr-qr-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="#6c6cf5" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 function _qrCardHtml(q) {
   const typeDef = QR_TYPES[q.qr_type] || QR_TYPES.url;
   const isDyn = (q.mode || 'dynamic') === 'dynamic';
@@ -437,9 +452,12 @@ function _qrCardHtml(q) {
         ${isArch ? '<span class="sdqr-qr-badge sdqr-qr-badge--arch">Archivé</span>' : ''}
       </div>
       <div class="sdqr-qr-card-foot">
-        ${isDyn
-          ? `<span class="sdqr-qr-scans">${_fmtNum(q.scans_total || 0)}<small>scans</small></span>`
-          : `<span class="sdqr-qr-scans sdqr-qr-scans--stat">&#8734;<small>hors-ligne</small></span>`}
+        <div class="sdqr-qr-foot-main">
+          ${isDyn
+            ? `<span class="sdqr-qr-scans">${_fmtNum(q.scans_total || 0)}<small>scans</small></span>`
+            : `<span class="sdqr-qr-scans sdqr-qr-scans--stat">&#8734;<small>hors-ligne</small></span>`}
+          ${isDyn ? _sparklineSvg(q.scans_series) : ''}
+        </div>
         ${q.folder ? `<span class="sdqr-qr-card-folder">${_ICO.folder}${_esc(q.folder)}</span>` : ''}
       </div>
     </div>`;
@@ -788,7 +806,7 @@ function _wireShell(panel) {
   const searchInput = panel.querySelector('#sdqr-search');
   searchInput?.addEventListener('input', e => {
     _filter.search = e.target.value.trim().toLowerCase();
-    _renderList(panel);
+    _gotoStudioFiltered(panel);   // rechercher = parcourir la flotte -> grille filtrée
   });
 
   // Pills filter status (Tous / Actifs / Archivés)
@@ -796,7 +814,7 @@ function _wireShell(panel) {
     btn.addEventListener('click', () => {
       _filter.status = btn.dataset.status;
       panel.querySelectorAll('#sdqr-filter-status .sdqr-filter-pill').forEach(b => b.classList.toggle('is-active', b === btn));
-      _renderList(panel);
+      _gotoStudioFiltered(panel);   // afficher la grille filtrée (même hors Studio)
     });
   });
 
@@ -844,6 +862,16 @@ function _renderCurrentView(panel) {
     return;
   }
   _openQrDetail(panel, qr);
+}
+
+// Agir sur un FILTRE de la sidebar (dossier / statut / recherche) doit afficher
+// la bibliothèque filtrée, depuis N'IMPORTE QUELLE vue (Stats, détail…) — sinon
+// cliquer un dossier en étant sur « Statistiques » n'avait aucun effet visible.
+function _gotoStudioFiltered(panel) {
+  _selectedId = null;
+  _currentView = 'studio';
+  panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.toggle('active', x.dataset.view === 'studio'));
+  _renderCurrentView(panel);   // studio + aucun QR sélectionné -> _renderLibrary (filtres appliqués)
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -934,7 +962,8 @@ function _renderFolders(panel) {
     btn.addEventListener('click', (e) => {
       if (e.target.closest('.sdqr-folder-rename')) return;   // ✎ géré séparément
       _filter.folder = btn.dataset.folder;
-      _renderList(panel);
+      _renderFolders(panel);          // reflète le dossier actif
+      _gotoStudioFiltered(panel);     // affiche la grille filtrée (même hors Studio)
     });
   });
   bar.querySelectorAll('.sdqr-folder-rename').forEach(el => {

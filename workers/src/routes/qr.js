@@ -501,6 +501,7 @@ export async function handleListQr(request, env) {
 
   let scansMap = new Map();
   let targetsMap = new Map();
+  let seriesMap = new Map();   // short_id -> { 'YYYY-MM-DD': cnt }
   if (shortIds.length) {
     const scans = await env.DB
       .prepare(`SELECT short_id, COUNT(*) AS total FROM qr_scans
@@ -512,13 +513,39 @@ export async function handleListQr(request, env) {
       .prepare(`SELECT short_id, target_url FROM qr_redirects WHERE short_id IN (${placeholders})`)
       .bind(...shortIds).all();
     targets.results?.forEach(r => targetsMap.set(r.short_id, r.target_url));
+
+    // Mini-série d'activité (14 derniers jours, par QR) pour la courbe des
+    // cartes. ADDITIF, lecture seule — aucune écriture, /r/ et qr_redirects
+    // intacts. Une seule requête groupée short_id × jour.
+    const series = await env.DB
+      .prepare(`SELECT short_id, date(ts) AS day, COUNT(*) AS cnt FROM qr_scans
+                WHERE short_id IN (${placeholders}) AND ts >= date('now','-13 days')
+                GROUP BY short_id, day`)
+      .bind(...shortIds).all();
+    series.results?.forEach(r => {
+      if (!seriesMap.has(r.short_id)) seriesMap.set(r.short_id, {});
+      seriesMap.get(r.short_id)[r.day] = r.cnt;
+    });
   }
 
-  const enriched = qrs.map(q => ({
-    ...q,
-    target_url   : targetsMap.get(q.short_id) || null,
-    scans_total  : scansMap.get(q.short_id) || 0,
-  }));
+  // 14 clés de jour (UTC) du plus ancien au plus récent.
+  const days = [];
+  const today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(today.getUTCDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const enriched = qrs.map(q => {
+    const perDay = seriesMap.get(q.short_id) || {};
+    return {
+      ...q,
+      target_url   : targetsMap.get(q.short_id) || null,
+      scans_total  : scansMap.get(q.short_id) || 0,
+      scans_series : days.map(day => perDay[day] || 0),   // 14 points, 0 comblés
+    };
+  });
 
   return json({ qrs: enriched }, 200, origin);
 }
