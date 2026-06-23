@@ -504,7 +504,7 @@ function _libToggleMenu(panel, q, btn) {
     <button data-act="open">${_LIBICO.eye}Ouvrir</button>
     <button data-act="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>Statistiques</button>
     <button data-act="archive">${_LIBICO.arch}${isArch ? 'Réactiver' : 'Archiver'}</button>
-    ${isArch ? `<button data-act="delete" class="is-danger">${_LIBICO.trash}Supprimer</button>` : ''}`;
+    <button data-act="delete" class="is-danger">${_LIBICO.trash}Supprimer</button>`;
   document.body.appendChild(pop);
   const r = btn.getBoundingClientRect();
   const w = pop.offsetWidth || 168;
@@ -522,7 +522,7 @@ function _libToggleMenu(panel, q, btn) {
   const del = pop.querySelector('[data-act="delete"]');
   if (del) del.onclick = () => {
     _libCloseMenu();
-    if (confirm(`Supprimer définitivement « ${q.name || 'ce QR'} » ? Les scans historiques sont conservés.`)) _libDelete(panel, [q.id]);
+    if (confirm(`Supprimer définitivement « ${q.name || 'ce QR'} » ?\n\n• Le QR ne pourra plus rediriger (un QR déjà imprimé cesserait de fonctionner).\n• Les scans historiques sont conservés.\n• Action irréversible.`)) _libDelete(panel, [q.id]);
   };
 }
 
@@ -586,14 +586,12 @@ function _renderLibrary(panel) {
       `<th data-sort="${key}" class="${_libSort.key === key ? 'is-sorted' : ''}">${label}${_libSort.key === key ? ` <span class="sdqr-th-arrow">${_libSort.dir === 'asc' ? '&#9650;' : '&#9660;'}</span>` : ''}</th>`;
     const allChecked = qrs.length > 0 && qrs.every(q => _libSel.has(q.id));
     const n = _libSel.size;
-    const selQrs = qrs.filter(q => _libSel.has(q.id));
-    const allArch = n > 0 && selQrs.every(q => q.status === 'archived');
     const bulk = n > 0 ? `
       <div class="sdqr-bulk">
         <span class="sdqr-bulk-count">${n} sélectionné${n > 1 ? 's' : ''}</span>
         <div class="sdqr-bulk-tools">
           <button class="sdqr-bulk-btn" data-bulk="archive">${_LIBICO.arch}Archiver</button>
-          ${allArch ? `<button class="sdqr-bulk-btn sdqr-bulk-btn--danger" data-bulk="delete">${_LIBICO.trash}Supprimer</button>` : ''}
+          <button class="sdqr-bulk-btn sdqr-bulk-btn--danger" data-bulk="delete">${_LIBICO.trash}Supprimer</button>
           <button class="sdqr-bulk-btn sdqr-bulk-btn--ghost" data-bulk="clear">Désélectionner</button>
         </div>
       </div>` : '';
@@ -665,7 +663,7 @@ function _renderLibrary(panel) {
       if (b.dataset.bulk === 'clear') { _libSel.clear(); _renderLibrary(panel); }
       else if (b.dataset.bulk === 'archive') { _libArchive(panel, ids, 'archived'); }
       else if (b.dataset.bulk === 'delete') {
-        if (confirm(`Supprimer définitivement ${ids.length} QR ? Les scans historiques sont conservés.`)) _libDelete(panel, ids);
+        if (confirm(`Supprimer définitivement ${ids.length} QR ?\n\n• Ils ne pourront plus rediriger (les QR déjà imprimés cesseraient de fonctionner).\n• Les scans historiques sont conservés.\n• Action irréversible.`)) _libDelete(panel, ids);
       }
     }));
   }
@@ -2688,6 +2686,14 @@ function _renderFormFields(root) {
       _creating.payload[k] = el.type === 'checkbox' ? el.checked : el.value;
     });
   });
+  // Seed le payload depuis les valeurs par défaut affichées (ex : url = "https://")
+  // → l'aperçu et la validation restent cohérents avec ce que l'utilisateur voit.
+  wrap.querySelectorAll('[data-payload-key]:not(.sdqr-image-widget input[type="hidden"])').forEach(el => {
+    const k = el.dataset.payloadKey;
+    if (el.type !== 'checkbox' && el.value && (_creating.payload[k] == null || _creating.payload[k] === '')) {
+      _creating.payload[k] = el.value;
+    }
+  });
   _bindImageWidgets(wrap, _creating.payload);
   _bindColorWidgets(wrap);
   _bindIconPickers(wrap);
@@ -3109,6 +3115,11 @@ async function _handleCreate(panel) {
       return _showMsg(msg, `Champ obligatoire : ${f.label}`, 'err');
     }
   }
+  // URL : « https:// » est pré-rempli pour gagner du temps — on refuse un
+  // schéma SEUL (sinon le Worker renvoie « target_url invalide » plus tard).
+  if (_creating.type === 'url' && /^https?:\/\/$/i.test((_creating.payload.url || '').trim())) {
+    return _showMsg(msg, "Complétez l'adresse après « https:// ».", 'err');
+  }
 
   // V2 — Validation des fields du template Smart (en plus du type QR)
   if (_creating.mode === 'smart') {
@@ -3320,7 +3331,7 @@ async function _openQrDetail(panel, qr) {
           <div class="sdqr-detail-actions sdqr-detail-actions--incard">
             <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
             ${isRedirected ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
-            ${qr.status === 'archived' ? `<button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>` : ''}
+            <button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>
           </div>
         </div>
       </div>
@@ -3685,7 +3696,7 @@ async function _openQrDetail(panel, qr) {
     }
   });
 
-  // Supprimer définitivement (uniquement si archivé — verrou côté API aussi)
+  // Supprimer définitivement (possible sans archivage prealable — confirmation forte)
   content.querySelector('#sdqr-delete')?.addEventListener('click', async () => {
     if (!confirm(`Supprimer définitivement "${qr.name}" ?\n\n• Le QR ne pourra plus rediriger.\n• Les statistiques historiques (scans) sont conservées pour audit.\n• Cette action est irréversible.`)) return;
     const msg = content.querySelector('#sdqr-detail-msg');

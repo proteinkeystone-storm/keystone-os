@@ -10120,6 +10120,10 @@ html.light-mode .sdqr-topbar .ws-iconbtn,
 html.light-mode .sdqr-topbar .ws-topbar-burger { color: var(--sdqr-ink2); }
 html.light-mode .sdqr-topbar .ws-topbar-back:hover,
 html.light-mode .sdqr-topbar .ws-iconbtn:hover { color: #fff; background: rgba(255,255,255,.08); }
+/* La note (★ N/5) : le libellé hérite de --ws-text-soft (sombre, pour topbar
+   claire) → illisible sur le navy SDQR. On l'éclaircit ici. */
+html.light-mode .sdqr-topbar .ws-rating-label { color: var(--sdqr-ink2); }
+html.light-mode .sdqr-topbar .ws-rating-trigger:hover .ws-rating-label { color: #fff; }
 /* La topbar SDQR reste navy meme en light-mode → logo blanc+or (ws-logo-dark =
    « Logo KEYSTONE dark-gold.svg »). On ajoute .ws-topbar-logo (+1 classe →
    specificite 0,4,1) pour BATTRE la bascule de base de workspace.css

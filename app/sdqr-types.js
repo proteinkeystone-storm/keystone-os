@@ -178,7 +178,7 @@ export const QR_TYPES = {
     desc   : 'Lien web direct',
     supports : { static: true, dynamic: true },
     fields : [
-      { id: 'url', type: 'url', label: 'URL', required: true, placeholder: 'https://…' },
+      { id: 'url', type: 'url', label: 'URL', required: true, placeholder: 'https://votre-site.com', default: 'https://' },
     ],
     encode : _encodeUrl,
     preview: (p) => p?.url || '',

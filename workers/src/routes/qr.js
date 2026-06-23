@@ -891,12 +891,10 @@ export async function handleDeleteQr(request, env, qrId) {
   let entity;
   try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
 
-  // Double securite : on n autorise la suppression definitive QUE pour
-  // les QR deja archives. Force un archivage explicite d abord.
-  if (entity.status !== 'archived') {
-    return err('Archivez le QR avant de le supprimer définitivement.', 409, origin);
-  }
-
+  // Suppression definitive possible SANS archivage prealable (demande Stephane :
+  // l'etape « archiver d'abord » etait jugee illogique). La confirmation forte
+  // cote front previent l'accident ; l'action reste irreversible (soft-delete
+  // entity + hard-delete redirect). Les scans historiques sont conserves.
   try {
     // 1. Soft-delete entity (preserve l audit / data fabric history)
     await env.DB
