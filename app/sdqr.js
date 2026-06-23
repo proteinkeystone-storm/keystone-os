@@ -23,7 +23,7 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { getTemplateIconSvg } from './sdqr-template-icons.js';
-import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg } from './sdqr-render.js';
+import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg, sanitizeFrameSvg } from './sdqr-render.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
@@ -4812,7 +4812,8 @@ function _renderDesignPanel(qr, opts = {}) {
           <div class="sdqr-shape-pills" data-frame-style>
             ${FRAME_OPTS.map(f => `<button class="sdqr-shape-pill ${d.frame.style === f.id ? 'is-active' : ''}" data-frame="${f.id}">${_esc(f.label)}</button>`).join('')}
           </div>
-          <div data-when-frame ${d.frame.style === 'none' ? 'hidden' : ''}>
+          <!-- Accroche + couleur : seulement pour les cadres maison (ni Aucun, ni sur-mesure). -->
+          <div data-when-maisonframe ${(d.frame.style === 'none' || d.frame.style === 'custom') ? 'hidden' : ''}>
             <label class="sdqr-field sdqr-field--full" style="margin-top:12px">
               <span class="sdqr-field-lbl">Accroche</span>
               <input type="text" id="sdqr-frame-text" class="sdqr-input" maxlength="28" value="${_esc(d.frame.text)}" placeholder="Scannez-moi">
@@ -4820,6 +4821,24 @@ function _renderDesignPanel(qr, opts = {}) {
             <div class="sdqr-color-grid" style="margin-top:10px">
               ${_colorField('Couleur du cadre', 'sdqr-frame-color', d.frame.color)}
             </div>
+          </div>
+
+          <!-- SDQR-3.10 — Cadre SUR-MESURE (SVG importé, sanitizé) -->
+          <div class="sdqr-customframe">
+            <div class="sdqr-customframe-head">Cadre sur-mesure (SVG)</div>
+            ${d.frame.style === 'custom' && d.frame.customSvg ? `
+              <div class="sdqr-customframe-loaded">
+                <span class="sdqr-customframe-prev">${d.frame.customSvg}</span>
+                <span class="sdqr-customframe-info"><strong>Cadre importé chargé</strong><br><small>Le QR est inséré dans son repère</small></span>
+                <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" id="sdqr-customframe-remove" type="button">Retirer</button>
+              </div>
+            ` : `
+              <label class="sdqr-customframe-drop" for="sdqr-customframe-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span class="sdqr-customframe-text"><strong>Importer un SVG</strong> (cadre Illustrator)<br><small>doit réserver <code>&lt;rect id="qr-slot"&gt;</code> · max 32 Ko</small></span>
+                <input type="file" id="sdqr-customframe-input" accept="image/svg+xml,.svg" hidden>
+              </label>
+            `}
           </div>
         </div>
 
@@ -5091,9 +5110,18 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   if (!_editingDesign.frame) _editingDesign.frame = { ...DEFAULT_DESIGN.frame };
   panel.querySelectorAll('[data-frame-style] .sdqr-shape-pill').forEach(btn => {
     btn.addEventListener('click', () => {
+      // Choisir un cadre maison écarte un éventuel cadre sur-mesure chargé.
+      if (_editingDesign.frame.customSvg) {
+        _editingDesign.frame.style = btn.dataset.frame;
+        _editingDesign.frame.customSvg = '';
+        _editingDesign.frame.customSlot = null;
+        _editingDesign.frame.customVB = null;
+        _refreshDesignPanelDom(root, qr, encodedForQr);
+        return;
+      }
       _editingDesign.frame.style = btn.dataset.frame;
       panel.querySelectorAll('[data-frame-style] .sdqr-shape-pill').forEach(b => b.classList.toggle('is-active', b === btn));
-      panel.querySelectorAll('[data-when-frame]').forEach(el => el.hidden = btn.dataset.frame === 'none');
+      panel.querySelectorAll('[data-when-maisonframe]').forEach(el => el.hidden = (btn.dataset.frame === 'none' || btn.dataset.frame === 'custom'));
       _liveRerender();
     });
   });
@@ -5102,6 +5130,29 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     _liveRerender();
   });
   _bindColor('sdqr-frame-color', v => { _editingDesign.frame.color = v; });
+
+  // SDQR-3.10 — Cadre sur-mesure : import d'un SVG (sanitizé avant stockage).
+  panel.querySelector('#sdqr-customframe-input')?.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 64 * 1024) { alert('SVG trop lourd — max 32 Ko.'); return; }
+    let text = '';
+    try { text = await file.text(); } catch (_) { alert('Lecture du fichier impossible.'); return; }
+    const res = sanitizeFrameSvg(text);
+    if (!res.ok) { alert('Cadre SVG refusé : ' + res.error); return; }
+    _editingDesign.frame.style = 'custom';
+    _editingDesign.frame.customSvg = res.svg;
+    _editingDesign.frame.customSlot = res.slot;
+    _editingDesign.frame.customVB = res.vb;
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
+  panel.querySelector('#sdqr-customframe-remove')?.addEventListener('click', () => {
+    _editingDesign.frame.style = 'none';
+    _editingDesign.frame.customSvg = '';
+    _editingDesign.frame.customSlot = null;
+    _editingDesign.frame.customVB = null;
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
 
   // Palettes PAR AMBIANCE (dégradé modules + accent yeux, en 1 clic)
   panel.querySelectorAll('[data-ambiance]').forEach(btn => {

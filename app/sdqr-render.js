@@ -226,6 +226,84 @@ function _frameGeometry(style, qrSize, color, text) {
   }
 }
 
+// ── SDQR-3.10 — CADRES SUR-MESURE (SVG importé) ────────────────
+// Un SVG uploadé = du code. On le NETTOIE (DOMParser) avant tout stockage :
+// suppression de <script>, gestionnaires on*, <foreignObject>, <use>, <image>
+// externe, <style>, balises d'animation, références externes (http///),
+// URI javascript:. Le SVG doit réserver un <rect id="qr-slot"> où le QR
+// (foncé sur plaque blanche) sera inséré. Renvoie { ok, svg, slot, vb, error }.
+export const CUSTOM_FRAME_MAX_BYTES = 32 * 1024;
+const _FRAME_DROP_TAGS = new Set([
+  'script', 'foreignobject', 'use', 'image', 'style', 'a', 'iframe', 'object',
+  'embed', 'audio', 'video', 'link', 'meta', 'animate', 'animatetransform',
+  'animatemotion', 'set', 'handler', 'listener', 'filter',
+]);
+export function sanitizeFrameSvg(svgText) {
+  const fail = (error) => ({ ok: false, error });
+  if (typeof svgText !== 'string' || !svgText.trim()) return fail('Fichier vide.');
+  if (svgText.length > CUSTOM_FRAME_MAX_BYTES * 2) return fail('SVG trop lourd (max 32 Ko).');
+  if (typeof DOMParser === 'undefined') return fail('Environnement sans DOMParser.');
+  let doc;
+  try { doc = new DOMParser().parseFromString(svgText, 'image/svg+xml'); }
+  catch (e) { return fail('SVG illisible.'); }
+  if (doc.querySelector('parsererror')) return fail('SVG invalide (erreur de parsing).');
+  const svg = doc.documentElement;
+  if (!svg || svg.tagName.toLowerCase() !== 'svg') return fail('Le fichier n\'est pas un SVG.');
+
+  // Nettoie les attributs dangereux d'UN élément (gestionnaires on*, refs
+  // externes, URI actives). Appliqué à la racine ET à tous les descendants.
+  const cleanAttrs = (el) => {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const val = (attr.value || '').trim();
+      if (name.startsWith('on')) { el.removeAttribute(attr.name); continue; }
+      if (name === 'href' || name === 'xlink:href' || name === 'src') {
+        // autorise seulement les ancres internes (#id) et data:image
+        if (!/^#/.test(val) && !/^data:image\//i.test(val)) el.removeAttribute(attr.name);
+        continue;
+      }
+      if (/javascript:|data:text\/html|expression\s*\(/i.test(val)) el.removeAttribute(attr.name);
+    }
+  };
+  // Parcours : retire les balises dangereuses, nettoie les attributs (racine incluse).
+  const walk = (el) => {
+    cleanAttrs(el);
+    for (const child of Array.from(el.children)) {
+      if (_FRAME_DROP_TAGS.has(child.tagName.toLowerCase())) { child.remove(); continue; }
+      walk(child);
+    }
+  };
+  walk(svg);
+
+  // viewBox (sinon width/height)
+  let vbW, vbH;
+  const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  if (vb.length === 4 && vb.every(n => isFinite(n))) { vbW = vb[2]; vbH = vb[3]; }
+  else { vbW = parseFloat(svg.getAttribute('width')); vbH = parseFloat(svg.getAttribute('height')); }
+  if (!(vbW > 0) || !(vbH > 0)) return fail('Le SVG doit déclarer un viewBox (ou width/height).');
+
+  // slot QR : <... id="qr-slot"> avec x/y/width
+  const slotEl = svg.querySelector('#qr-slot, [id="qr-slot"]');
+  if (!slotEl) return fail('Le SVG doit contenir un repère <rect id="qr-slot"> (zone du QR).');
+  const sx = parseFloat(slotEl.getAttribute('x')), sy = parseFloat(slotEl.getAttribute('y'));
+  const sw = parseFloat(slotEl.getAttribute('width')), sh = parseFloat(slotEl.getAttribute('height'));
+  const w = Math.min(sw || 0, sh || sw || 0);
+  if (!(sx >= 0) || !(sy >= 0) || !(w > 0)) return fail('Le repère #qr-slot doit avoir x, y, width (et height).');
+
+  // S'assurer d'un viewBox explicite pour le rendu final.
+  if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+  const out = svg.outerHTML;
+  if (out.length > CUSTOM_FRAME_MAX_BYTES) return fail('SVG trop lourd après nettoyage (max 32 Ko).');
+  // Garde-fou ultime : aucun script/handler ne doit subsister.
+  if (/<script|\son\w+\s*=/i.test(out)) return fail('Contenu actif détecté.');
+  return { ok: true, svg: out, slot: { x: sx, y: sy, w }, vb: { w: vbW, h: vbH } };
+}
+
+// Retire la balise <svg> englobante pour ne garder que le décor intérieur.
+function _stripSvgTag(svg) {
+  return String(svg || '').replace(/^[\s\S]*?<svg[^>]*>/i, '').replace(/<\/svg>\s*$/i, '');
+}
+
 // ── Détection des 3 finder patterns (ancres) ───────────────────
 // Les finder patterns occupent 8x8 modules dans les 3 coins (TL, TR, BL).
 // On les identifie par coordonnées pour les exclure du rendu standard
@@ -512,6 +590,26 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   const H = sizePx + padTop + padBottom;
 
   const qrInner = `${bg}<g fill="${fgFill}">${modules}</g><g fill="${eyeOuterFill}">${eyeRings}</g><g fill="${eyeInnerFill}">${eyeInners}</g>${logoBlock}`;
+
+  // SDQR-3.10 — CADRE SUR-MESURE : le SVG importé (déjà sanitizé au stockage)
+  // définit le canevas ; on insère le QR (foncé sur plaque blanche) dans son
+  // slot. Le QR construit en `sizePx` est mis à l'échelle vers la largeur du slot.
+  if (d.frame?.style === 'custom' && d.frame.customSvg && d.frame.customVB && d.frame.customSlot) {
+    const vbW = d.frame.customVB.w, vbH = d.frame.customVB.h;
+    const slot = d.frame.customSlot;
+    const scale = slot.w / sizePx;
+    const m = slot.w * 0.05;                         // marge blanche (zone de silence)
+    const inner = _stripSvgTag(d.frame.customSvg);
+    const plaque = `<rect x="${(slot.x - m).toFixed(2)}" y="${(slot.y - m).toFixed(2)}" width="${(slot.w + 2*m).toFixed(2)}" height="${(slot.w + 2*m).toFixed(2)}" rx="${(slot.w*0.05).toFixed(2)}" ry="${(slot.w*0.05).toFixed(2)}" fill="#ffffff"/>`;
+    return `
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${vbW}" height="${vbH}" viewBox="0 0 ${vbW} ${vbH}">
+      ${defs ? `<defs>${defs}</defs>` : ''}
+      ${inner}
+      ${plaque}
+      <g transform="translate(${slot.x.toFixed(2)}, ${slot.y.toFixed(2)}) scale(${scale.toFixed(4)})">${qrInner}</g>
+    </svg>`;
+  }
+
   // back() = couche DERRIÈRE le QR (fond foncé + plaque blanche), deco() = devant.
   const back = (fr && fr.back) ? fr.back(padX, padTop, sizePx, W, H) : '';
   const body = fr

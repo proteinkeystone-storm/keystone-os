@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc UI cadre sur-mesure</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>html,body{margin:0;background:#0f1d3a !important}.pad{max-width:430px;margin:0 auto;padding:22px;--gold:#6c6cf5}.wrap{background:#fff;border-radius:14px;padding:16px;margin-bottom:18px}.hd{color:#fff;font:800 13px -apple-system;margin:6px 0 8px}</style></head>
+<body><div class="pad">
+  <div class="hd">État vide (zone d'import)</div>
+  <div class="wrap" id="empty"></div>
+  <div class="hd">État chargé (cadre importé)</div>
+  <div class="wrap" id="loaded"></div>
+</div>
+<script type="module">
+const { sanitizeFrameSvg } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+document.getElementById('empty').innerHTML = `
+  <div class="sdqr-customframe" style="border-top:none;margin:0;padding-top:0">
+    <div class="sdqr-customframe-head">Cadre sur-mesure (SVG)</div>
+    <label class="sdqr-customframe-drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;opacity:.55"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span class="sdqr-customframe-text"><strong>Importer un SVG</strong> (cadre Illustrator)<br><small>doit réserver <code>&lt;rect id="qr-slot"&gt;</code> · max 32 Ko</small></span>
+    </label>
+  </div>`;
+const CLEAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360"><rect x="8" y="8" width="304" height="344" rx="26" fill="#1b2a4a"/><rect x="56" y="70" width="208" height="208" rx="14" fill="#fff"/><path d="M40 300 H280 L300 332 H20 Z" fill="#6c6cf5"/><text x="160" y="324" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="800" fill="#fff">SCANNEZ-MOI</text><rect id="qr-slot" x="62" y="76" width="196" height="196" fill="#fff"/></svg>`;
+const r = sanitizeFrameSvg(CLEAN);
+document.getElementById('loaded').innerHTML = `
+  <div class="sdqr-customframe" style="border-top:none;margin:0;padding-top:0">
+    <div class="sdqr-customframe-head">Cadre sur-mesure (SVG)</div>
+    <div class="sdqr-customframe-loaded">
+      <span class="sdqr-customframe-prev">${r.svg}</span>
+      <span class="sdqr-customframe-info"><strong>Cadre importé chargé</strong><br><small>Le QR est inséré dans son repère</small></span>
+      <button class="sdqr-btn sdqr-btn--ghost sdqr-btn--xs" type="button">Retirer</button>
+    </div>
+  </div>`;
+window.__GALLERY_DONE = true;
+</script></body></html>

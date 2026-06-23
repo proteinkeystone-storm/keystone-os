@@ -8700,6 +8700,29 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 }
 .sdqr-eye-swap:hover { filter: brightness(1.1); }
 .sdqr-eye-swap:active { filter: brightness(.95); }
+/* SDQR-3.10 — cadre sur-mesure (import SVG) */
+.sdqr-customframe { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(108,108,245,.18); }
+.sdqr-customframe-head { font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px; }
+.sdqr-customframe-drop {
+  display: flex; align-items: center; gap: 12px; padding: 14px;
+  border: 1.5px dashed rgba(108,108,245,.4); border-radius: 12px; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease; color: #334155;
+}
+.sdqr-customframe-drop:hover { border-color: var(--gold, #6c6cf5); background: rgba(108,108,245,.07); }
+.sdqr-customframe-text { font-size: 12.5px; line-height: 1.4; }
+.sdqr-customframe-text small { opacity: .72; }
+.sdqr-customframe-text code { font-size: 11px; background: rgba(108,108,245,.14); padding: 1px 4px; border-radius: 4px; }
+.sdqr-customframe-loaded {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(108,108,245,.1); border: 1px solid var(--gold, #6c6cf5); color: #334155;
+}
+.sdqr-customframe-prev {
+  flex: 0 0 auto; width: 52px; height: 52px; border-radius: 8px; overflow: hidden;
+  background: #fff; display: flex; align-items: center; justify-content: center;
+}
+.sdqr-customframe-prev svg { width: 100%; height: 100%; display: block; }
+.sdqr-customframe-info { flex: 1; font-size: 12.5px; line-height: 1.4; }
+.sdqr-customframe-info small { opacity: .72; }
 .sdqr-hex {
   flex: 1; min-width: 0;
   height: 36px; padding: 0 10px;
