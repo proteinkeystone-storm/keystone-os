@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc scan CANDIDATS (jsQR sur render-lab.js)</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0f1d3a; color:#e8edf8; margin:0; padding:24px; }
+  h1 { font-size:18px; } .sub { color:#9fb0cc; font-size:13px; margin-bottom:14px; }
+  #summary { font-size:15px; font-weight:700; margin:10px 0 18px; }
+  .ok { color:#7ee0b5; } .ko { color:#ff9a9a; }
+  table { border-collapse:collapse; width:100%; font-size:13px; background:#16243f; border-radius:10px; overflow:hidden; }
+  th, td { text-align:left; padding:7px 12px; border-bottom:1px solid rgba(255,255,255,.08); }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9fb0cc; }
+  td.v { font-weight:700; } .cat { color:#9fb0cc; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .samples { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
+  .samp { background:#fff; border-radius:8px; padding:8px; width:130px; }
+  .samp .c { display:flex; justify-content:center; }
+  .samp canvas { width:114px; height:auto; }
+  .samp div.cap { text-align:center; font-size:10px; color:#1b2a4a; margin-top:4px; }
+  .samp.ko { outline:2px solid #ff5a5a; }
+</style>
+</head>
+<body>
+<h1>Banc scan CANDIDATS — jsQR sur le moteur lab (<code>render-lab.js</code>)</h1>
+<p class="sub">Chaque candidat (nouveau module / œil / cadre / yeux 2-tons) est rendu par le moteur lab, rasterisé, décodé par jsQR à 300px ET 170px. PASS = décodé == URL aux deux tailles. Les cadres n'altèrent pas le QR (plaque blanche) mais sont testés quand même.</p>
+<div id="summary">Chargement…</div>
+<table id="results"><thead><tr><th>Catégorie</th><th>Candidat</th><th>300px</th><th>170px</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+<div class="samples" id="samples"></div>
+
+<script type="module">
+const { renderQrCustom } = await import('./render-lab.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+
+const TXT = 'https://protein-keystone.com/r/AB12CD34';
+const navy = '#0a2741';
+
+// Rasterise un SVG (carré OU cadré) : on lit son viewBox pour la taille réelle.
+async function rasterAndDecode(svg) {
+  const m = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+  const W = m ? Math.round(+m[1]) : 300, H = m ? Math.round(+m[2]) : 300;
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await img.decode();
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, 0, 0, W, H);
+  const res = jsQR(ctx.getImageData(0, 0, W, H).data, W, H);
+  return { ok: !!res && res.data === TXT, got: res ? res.data : null, canvas: c };
+}
+async function decodeAt(design, qrSize) {
+  const svg = await renderQrCustom(TXT, design, qrSize);
+  return rasterAndDecode(svg);
+}
+
+const sq = { outer:{shape:'square'}, inner:{shape:'square'} };
+const rdDot = { outer:{shape:'rounded'}, inner:{shape:'dot'} };
+
+const DESIGNS = [
+  // ───────── NOUVEAUX MODULES (corps du QR) ─────────
+  ...['vbars','hbars','fluid','star','vdots','petal'].map(s => ({
+    cat:'Module', label:s, d:{ module:{shape:s}, anchor:sq, fg:navy } })),
+  // un module fluide sur palette dégradée (cas réaliste)
+  { cat:'Module', label:'fluid + dégradé navy→indigo', d:{ module:{shape:'fluid'}, anchor:rdDot, gradient:{enabled:true, from:'#1e1b4b', to:'#4f46e5', angle:45} } },
+
+  // ───────── NOUVEAUX YEUX (combos sûrs + risqués) ─────────
+  ...[
+    ['squircle·point','squircle','dot'], ['squircle·losange','squircle','diamond'],
+    ['feuille·point','leaf','dot'], ['feuille·feuille','leaf','leaf'],
+    ['cercle·arrondi','dot','rounded'], ['arrondi·feuille','rounded','leaf'],
+    ['doux·losange','squircle','diamond'],
+    // risqués (déjà écartés autrefois — re-test borné)
+    ['POINTILLÉ·point (risqué)','dring','dot'], ['POINTILLÉ·carré (risqué)','dring','square'],
+    ['ÉTOILE·point (risqué)','spike','dot'], ['ÉTOILE·carré (risqué)','spike','square'],
+  ].map(([label,outer,inner]) => ({
+    cat:'Œil', label, d:{ module:{shape:'rounded'}, fg:navy, anchor:{outer:{shape:outer}, inner:{shape:inner}} } })),
+
+  // ───────── YEUX 2-TONS (anneau vs pupille) ─────────
+  { cat:'Yeux 2-tons', label:'anneau or profond / pupille navy', d:{ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:'#b08d2e', innerColor:'#0a2741'} } },
+  { cat:'Yeux 2-tons', label:'anneau navy / pupille or (interversion)', d:{ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:'#0a2741', innerColor:'#b08d2e'} } },
+  { cat:'Yeux 2-tons', label:'anneau indigo / pupille rose', d:{ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:'#4338ca', innerColor:'#be123c'} } },
+  { cat:'Yeux 2-tons', label:'2 tons CLAIRS (or vif/or vif) — DOIT alerter', d:{ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:'#c9a84c', innerColor:'#d4b15a'} } },
+
+  // ───────── NOUVEAUX CADRES (autour du QR) ─────────
+  ...['circle','plaque','corners','ring'].map(s => ({
+    cat:'Cadre', label:s, d:{ module:{shape:'rounded'}, anchor:rdDot, fg:navy, frame:{style:s, text:'Scannez-moi', color:'#1B2A4A'} } })),
+  // cadre plein + couleur de QR claire (le plus dur) : plaque blanche doit sauver
+  { cat:'Cadre', label:'plaque + QR indigo', d:{ module:{shape:'rounded'}, anchor:rdDot, fg:'#4338ca', frame:{style:'plaque', text:'Scannez-moi', color:'#0f172a'} } },
+];
+
+const tbody = document.querySelector('#results tbody');
+const samples = document.getElementById('samples');
+const rows = [];
+let passed = 0;
+
+for (const { cat, label, d } of DESIGNS) {
+  let r300, r170;
+  try { r300 = await decodeAt(d, 300); } catch (e) { r300 = { ok:false, got:'ERR '+e.message }; }
+  try { r170 = await decodeAt(d, 170); } catch (e) { r170 = { ok:false, got:'ERR '+e.message }; }
+  const pass = r300.ok && r170.ok;
+  if (pass) passed++;
+  rows.push({ cat, label, p300:r300.ok, p170:r170.ok, pass, got:r300.got||r170.got||null });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="cat">${cat}</td><td>${label}</td>
+    <td class="v ${r300.ok?'ok':'ko'}">${r300.ok?'PASS':'FAIL'}</td>
+    <td class="v ${r170.ok?'ok':'ko'}">${r170.ok?'PASS':'FAIL'}</td>
+    <td class="v ${pass?'ok':'ko'}">${pass?'✓ scannable':'✗ '+(r300.got||r170.got||'illisible')}</td>`;
+  tbody.appendChild(tr);
+  if (r300.canvas) {
+    const wrap = document.createElement('div'); wrap.className = 'samp' + (pass?'':' ko');
+    const cw = document.createElement('div'); cw.className='c'; cw.appendChild(r300.canvas); wrap.appendChild(cw);
+    const cap = document.createElement('div'); cap.className='cap'; cap.textContent = label; wrap.appendChild(cap);
+    samples.appendChild(wrap);
+  }
+}
+
+const sum = document.getElementById('summary');
+sum.textContent = `${passed}/${DESIGNS.length} candidats scannables aux 2 tailles`;
+sum.className = passed === DESIGNS.length ? 'ok' : 'ko';
+window.__SCAN_ROWS = rows;
+window.__SCAN_DONE = true;
+</script>
+</body>
+</html>

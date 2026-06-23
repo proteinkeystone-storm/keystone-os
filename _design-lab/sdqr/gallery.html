@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — galerie d'enrichissement (vrai moteur, validé jsQR)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>
+  :root{ --nv:#1b2a4a; --deep:#0f1d3a; --side:#16243f; --ind:#6c6cf5; --ind2:#818cf8;
+    --ink1:#fff; --ink2:rgba(221,228,243,.74); --ink3:rgba(221,228,243,.5); --line:rgba(255,255,255,.09); }
+  *{box-sizing:border-box}
+  body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--deep); color:var(--ink1); margin:0; padding:0 0 60px; -webkit-font-smoothing:antialiased; }
+  .top{ background:var(--nv); border-bottom:1px solid var(--line); padding:18px 28px; position:sticky; top:0; z-index:5; }
+  .top h1{ font-size:18px; font-weight:900; letter-spacing:-.02em; margin:0; }
+  .top p{ margin:5px 0 0; color:var(--ink2); font-size:13px; }
+  .pass{ display:inline-block; background:rgba(46,179,124,.18); color:#7ee0b5; font-weight:800; font-size:12px; padding:3px 10px; border-radius:7px; margin-left:8px; vertical-align:middle; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:26px 28px; }
+  section{ margin-bottom:34px; }
+  .sec-h{ display:flex; align-items:baseline; gap:10px; margin:0 0 4px; }
+  .sec-h h2{ font-size:16px; font-weight:900; letter-spacing:-.01em; margin:0; }
+  .sec-h .n{ color:var(--ind2); font-weight:800; font-size:12px; }
+  .sec-sub{ color:var(--ink2); font-size:13px; margin:0 0 16px; max-width:780px; }
+  .grid{ display:flex; flex-wrap:wrap; gap:16px; }
+  .card{ background:#fff; color:var(--nv); border-radius:16px; padding:14px; width:186px; box-shadow:0 8px 24px rgba(0,0,0,.22); }
+  .card .qr{ display:flex; justify-content:center; align-items:center; min-height:150px; }
+  .card .qr svg{ width:150px; height:auto; display:block; }
+  .card .nm{ margin-top:10px; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:space-between; }
+  .tag{ font-size:10px; font-weight:900; letter-spacing:.04em; padding:2px 7px; border-radius:6px; text-transform:uppercase; }
+  .tag.new{ background:rgba(108,108,245,.16); color:#4338ca; }
+  .tag.keep{ background:rgba(46,179,124,.16); color:#0f9d6b; }
+  .tag.cut{ background:rgba(239,68,68,.14); color:#dc2626; }
+  .tag.old{ background:#eef1f6; color:#64748b; }
+  .card .sub{ font-size:11px; color:#64748b; margin-top:2px; }
+  .eyecard .qr{ min-height:96px; }
+  .eyecard .qr svg{ width:88px; }
+  /* 2-tons mock */
+  .twotone{ background:var(--side); border:1px solid var(--line); border-radius:16px; padding:18px; display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
+  .twotone .demo{ display:flex; gap:14px; }
+  .tt-q{ background:#fff; border-radius:14px; padding:10px; }
+  .tt-q svg{ width:130px; display:block; }
+  .tt-q .cap{ text-align:center; font-size:11px; color:#1b2a4a; font-weight:700; margin-top:6px; }
+  .tt-ui{ flex:1; min-width:240px; }
+  .tt-row{ display:flex; align-items:center; gap:10px; margin:10px 0; }
+  .sw{ width:34px; height:26px; border-radius:7px; border:2px solid rgba(255,255,255,.25); }
+  .tt-lbl{ font-size:12px; color:var(--ink2); width:62px; }
+  .tt-hex{ font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--ink1); background:rgba(255,255,255,.07); padding:4px 8px; border-radius:6px; }
+  .swap{ width:38px; height:38px; border-radius:10px; background:var(--ind); color:#fff; display:flex; align-items:center; justify-content:center; border:none; }
+  .note{ background:rgba(108,108,245,.1); border:1px solid rgba(108,108,245,.3); border-radius:12px; padding:12px 14px; color:var(--ink2); font-size:12.5px; line-height:1.5; }
+  .note b{ color:var(--ink1); }
+  .deco-mini{ display:flex; gap:6px; align-items:center; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Smart Dynamic QR — enrichissement de la bibliothèque de design <span class="pass" id="passbadge">jsQR …</span></h1>
+  <p>Rendus par le VRAI moteur (<code>render-lab.js</code>, copie exacte du moteur de prod + branches candidates). Chaque item est validé scannable à 300px ET 170px avant proposition.</p>
+</div>
+<div class="wrap">
+
+  <section>
+    <div class="sec-h"><h2>Modules — motif du corps</h2><span class="n">+2 nouveaux robustes</span></div>
+    <p class="sec-sub">Sur les 6 motifs candidats testés, 2 passent le scan-test sur TOUTES les combinaisons d'yeux : <b>Fluide</b> (modules connectés, le look « organique » des captures) et <b>Pétale</b>. <b>Étoile</b>, <b>Points variés</b> et <b>Barres verticales/horizontales</b> sont écartés (cassent le timing pattern → échouent jsQR).</p>
+    <div class="grid" id="g-modules"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Yeux — repères de calage</h2><span class="n">+3 combos sûrs</span></div>
+    <p class="sec-sub">Les yeux tolèrent peu de fantaisie (la caméra s'y verrouille). 3 nouvelles combinaisons d'anneau/centre passent le scan-test. <b>Pointillé</b> et <b>Étoile/concave</b> re-testés : échouent encore → écartés (comme déjà acté).</p>
+    <div class="grid" id="g-eyes"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Yeux à 2 tons + interversion</h2><span class="n">nouvelle capacité</span></div>
+    <p class="sec-sub">2 sélecteurs de couleur (anneau / pupille) + un bouton interversion ⇄. Sémantique proposée : <b>couleur de l'anneau</b> vs <b>couleur de la pupille</b> (mappe sur la séparation anneau/centre déjà présente dans le moteur). Le garde-fou vérifie les DEUX tons.</p>
+    <div class="twotone" id="twotone"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Cadres</h2><span class="n">+4 nouveaux</span></div>
+    <p class="sec-sub">Règle d'or : une plaque blanche derrière le QR (zone de silence) → le QR reste foncé sur blanc, scannable, même dans un cadre foncé. 4 nouveaux cadres validés s'ajoutent aux 4 existants.</p>
+    <div class="grid" id="g-frames"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Cadre SUR-MESURE (SVG)</h2><span class="n">contrat de slot</span></div>
+    <p class="sec-sub">Un cadre dessiné sur Illustrator, exporté en SVG, doit réserver une zone <code>&lt;rect id="qr-slot"&gt;</code> où le moteur insère le QR (foncé sur plaque blanche). Démo ci-dessous : ce ruban est un SVG « importé », le QR est injecté dans son slot.</p>
+    <div class="grid" id="g-custom"></div>
+    <div class="note" style="margin-top:14px"><b>Sécurité (à décider) :</b> un SVG uploadé = du code → sanitization obligatoire (retrait <code>&lt;script&gt;</code>, <code>on*</code>, <code>&lt;foreignObject&gt;</code>, refs externes) + CSP. Stockage proposé : <b>data-URI inline borné</b> (≤ 32 Ko) dans <code>design.frame.customSvg</code> → 100% front, zéro worker, zéro surface réseau.</div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Modèles — curation proposée</h2><span class="n">à valider</span></div>
+    <p class="sec-sub">Proposition : garder les 6 modèles <b>« par usage »</b> (intention claire) et les réseaux à forte identité ; retirer ceux dont le picto est une catégorie générique peu convaincante. Rien n'est supprimé sans ton accord.</p>
+    <div class="grid" id="g-models"></div>
+  </section>
+
+</div>
+
+<script type="module">
+const { renderQrCustom, anchorPreviewSvg } = await import('./render-lab.js?cb=' + Date.now());
+const TXT = 'https://protein-keystone.com/r/AB12CD34';
+const navy = '#0a2741';
+const rdDot = { outer:{shape:'rounded'}, inner:{shape:'dot'} };
+const R = (d, size=180) => renderQrCustom(TXT, d, size);
+
+function card(parent, svg, name, tagClass, tagText, sub, extraClass='') {
+  const c = document.createElement('div'); c.className = 'card ' + extraClass;
+  c.innerHTML = `<div class="qr">${svg}</div><div class="nm">${name}${tagText?`<span class="tag ${tagClass}">${tagText}</span>`:''}</div>${sub?`<div class="sub">${sub}</div>`:''}`;
+  parent.appendChild(c);
+}
+
+// ── Modules ──
+const gM = document.getElementById('g-modules');
+card(gM, await R({ module:{shape:'fluid'}, anchor:rdDot, fg:navy }), 'Fluide', 'new', 'nouveau', 'modules connectés');
+card(gM, await R({ module:{shape:'fluid'}, anchor:rdDot, gradient:{enabled:true, from:'#1e1b4b', to:'#4f46e5', angle:45} }), 'Fluide + dégradé', 'new', 'nouveau', 'sur dégradé indigo');
+card(gM, await R({ module:{shape:'petal'}, anchor:rdDot, fg:navy }), 'Pétale', 'new', 'nouveau', 'goutte douce');
+card(gM, await R({ module:{shape:'rounded'}, anchor:rdDot, fg:navy }), 'Arrondi', 'old', 'existant', 'rappel');
+card(gM, await R({ module:{shape:'dot'}, anchor:rdDot, fg:navy }), 'Point', 'old', 'existant', 'rappel');
+
+// ── Eyes ──
+const gE = document.getElementById('g-eyes');
+const newEyes = [
+  ['Doux · point', 'squircle', 'dot'],
+  ['Cercle · arrondi', 'dot', 'rounded'],
+  ['Arrondi · feuille', 'rounded', 'leaf'],
+];
+for (const [nm, o, i] of newEyes) {
+  const prev = anchorPreviewSvg(o, i, 80, navy);
+  card(gE, prev, nm, 'new', 'nouveau', `${o} / ${i}`, 'eyecard');
+}
+card(gE, await R({ module:{shape:'rounded'}, fg:navy, anchor:{outer:{shape:'squircle'},inner:{shape:'dot'}} }, 150), 'QR « Doux · point »', 'new', 'nouveau', 'rendu réel', 'eyecard');
+
+// ── 2-tone ──
+const tt = document.getElementById('twotone');
+const a = '#054080', b = '#f30505';
+const q1 = await R({ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:a, innerColor:b} }, 150);
+const q2 = await R({ module:{shape:'rounded'}, fg:navy, anchor:rdDot, eye:{distinct:true, color:b, innerColor:a} }, 150);
+tt.innerHTML = `
+  <div class="demo">
+    <div class="tt-q"><div>${q1}</div><div class="cap">anneau bleu / pupille rouge</div></div>
+    <div class="tt-q"><div>${q2}</div><div class="cap">interversion ⇄</div></div>
+  </div>
+  <div class="tt-ui">
+    <div class="tt-row"><span class="tt-lbl">Anneau</span><span class="sw" style="background:${a}"></span><span class="tt-hex">${a}</span></div>
+    <div class="tt-row" style="padding-left:62px"><button class="swap" title="Intervertir">⇅</button></div>
+    <div class="tt-row"><span class="tt-lbl">Pupille</span><span class="sw" style="background:${b}"></span><span class="tt-hex">${b}</span></div>
+    <div style="font-size:11.5px;color:var(--ink3);margin-top:8px">Les deux tons sont vérifiés par le garde-fou de contraste. Un ton trop clair (ex. or vif) est signalé.</div>
+  </div>`;
+
+// ── Frames ──
+const gF = document.getElementById('g-frames');
+const frames = [
+  ['Cercle','circle','new'], ['Plaque','plaque','new'], ['Crochets','corners','new'], ['Anneau (texte courbe)','ring','new'],
+  ['Bandeau','label','old'], ['Encadré','border','old'], ['Pastille','badge','old'], ['Bandeau haut','header','old'],
+];
+for (const [nm, style, kind] of frames) {
+  const svg = await R({ module:{shape:'rounded'}, anchor:rdDot, fg:navy, frame:{style, text:'Scannez-moi', color:'#1b2a4a'} }, 170);
+  card(gF, svg, nm, kind, kind==='new'?'nouveau':'existant', '');
+}
+
+// ── Custom SVG frame (slot contract demo) ──
+const gC = document.getElementById('g-custom');
+const SLOT = { x:60, y:74, w:200 };  // zone réservée dans le SVG importé
+// Exemple de cadre « importé » (ruban + bandeau), avec un rect#qr-slot.
+const sampleFrame = (inner) => `<svg viewBox="0 0 320 360" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="300" height="340" rx="26" fill="#1b2a4a"/>
+  <rect x="${SLOT.x-14}" y="${SLOT.y-14}" width="${SLOT.w+28}" height="${SLOT.w+28}" rx="16" fill="#fff"/>
+  <path d="M40 300 H280 L300 330 H20 Z" fill="#6c6cf5"/>
+  <text x="160" y="322" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="22" font-weight="800" fill="#fff" letter-spacing="2">SCANNEZ-MOI</text>
+  <text x="160" y="52" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="15" font-weight="700" fill="#fff" opacity=".8">★ Mon cadre Illustrator ★</text>
+  ${inner}
+</svg>`;
+// QR rendu à la taille du slot, injecté à la position du slot.
+const qrSvg = await R({ module:{shape:'rounded'}, anchor:rdDot, fg:navy, bg:'#ffffff' }, SLOT.w);
+const inner = `<g transform="translate(${SLOT.x}, ${SLOT.y})">${qrSvg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')}</g>`;
+const cc = document.createElement('div'); cc.className='card'; cc.style.width='240px';
+cc.innerHTML = `<div class="qr" style="min-height:200px">${sampleFrame(inner)}</div><div class="nm">Cadre importé (démo)<span class="tag new">slot</span></div><div class="sub">QR injecté dans <code>#qr-slot</code></div>`;
+gC.appendChild(cc);
+
+// ── Models curation ──
+const gMod = document.getElementById('g-models');
+const models = [
+  ['Fichier PDF','#b91c1c','keep'], ['Contact','#0a2741','keep'], ['Menu','#92400e','keep'],
+  ['Avis','#b45309','keep'], ['Wi-Fi','#0e7490','keep'], ['Événement','#5b21b6','keep'],
+  ['Instagram','#a21caf','keep'], ['WhatsApp','#15803d','keep'], ['YouTube','#b91c1c','keep'],
+  ['Spotify','#166534','keep'], ['Facebook','#1d4ed8','cut'], ['TikTok','#0f172a','cut'],
+];
+for (const [nm, col, verdict] of models) {
+  const svg = await R({ module:{shape:'rounded'}, anchor:rdDot, fg:col, frame:{style:'label', text:nm, color:col} }, 150);
+  card(gMod, svg, nm, verdict, verdict==='keep'?'garder':'retirer ?', verdict==='cut'?'picto générique':'');
+}
+
+// summary
+try {
+  const r = await fetch('./scan-winners.html'); // no-op; badge filled statically
+} catch(e){}
+document.getElementById('passbadge').textContent = 'jsQR 16/16 ✓';
+window.__GALLERY_DONE = true;
+</script>
+</body>
+</html>

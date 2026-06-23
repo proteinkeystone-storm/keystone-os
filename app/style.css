@@ -8688,6 +8688,18 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
 }
 .sdqr-color-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .sdqr-color-field input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+/* SDQR-3.9 — yeux 2-tons : anneau · interversion · pupille */
+.sdqr-eye-2tone { display: flex; align-items: flex-end; gap: 10px; margin-top: 4px; }
+.sdqr-eye-2tone .sdqr-color-field { flex: 1; min-width: 0; }
+.sdqr-eye-swap {
+  flex: 0 0 auto; width: 34px; height: 36px; margin-bottom: 0;
+  border-radius: 8px; border: none; cursor: pointer;
+  background: var(--gold, #6c6cf5); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: filter .15s ease;
+}
+.sdqr-eye-swap:hover { filter: brightness(1.1); }
+.sdqr-eye-swap:active { filter: brightness(.95); }
 .sdqr-hex {
   flex: 1; min-width: 0;
   height: 36px; padding: 0 10px;

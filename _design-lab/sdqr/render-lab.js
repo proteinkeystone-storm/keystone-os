@@ -61,9 +61,7 @@ export const DEFAULT_DESIGN = {
   // (#c9a84c, ~2:1 sur blanc) casse la détection en petit format (mesuré jsQR
   // à 170px) → on prend un or plus PROFOND #b08d2e qui lit « or » ET décode
   // partout. Le garde-fou de contraste avertit si l'accent choisi est trop clair.
-  // SDQR-3.9 — innerColor = pupille (2-tons). Vide → la pupille hérite de color
-  // (mono-ton), donc les anciens QR restent identiques.
-  eye    : { distinct: false, color: '#b08d2e', innerColor: '' },
+  eye    : { distinct: false, color: '#b08d2e' },
 };
 
 // Merge sûr : si design est partial (depuis D1), on complète avec DEFAULT.
@@ -101,9 +99,8 @@ export const FRAME_OPTS = [
   { id: 'border',  label: 'Encadré' },
   { id: 'badge',   label: 'Pastille' },
   { id: 'header',  label: 'Bandeau haut' },
-  // SDQR-3.9 — cadres « pleins » : une PLAQUE BLANCHE sous le QR conserve la
-  // zone de silence → le QR reste foncé sur blanc, scannable, même cerné de
-  // foncé (prouvé jsQR aux 2 tailles, banc scan-candidates.html).
+  // CANDIDATS (lab) — cadres « pleins » (plaque blanche derrière le QR =
+  // zone de silence préservée) + crochets + cercle pointillé texte courbe.
   { id: 'circle',  label: 'Cercle' },
   { id: 'plaque',  label: 'Plaque' },
   { id: 'corners', label: 'Crochets' },
@@ -120,7 +117,7 @@ function _frameGeometry(style, qrSize, color, text) {
   const label = esc((text || '').trim() || 'Scannez-moi');
   const tw = n => n.toFixed(2);
 
-  // SDQR-3.9 — plaque blanche (zone de silence) sous le QR, indispensable aux
+  // Plaque blanche (zone de silence) sous le QR — indispensable pour les
   // cadres à fond foncé : le QR reste « foncé sur blanc » donc scannable.
   const whitePlaque = (bx, by, s, m) =>
     `<rect x="${tw(bx - m)}" y="${tw(by - m)}" width="${tw(s + 2*m)}" height="${tw(s + 2*m)}" rx="${tw(qrSize*0.05)}" ry="${tw(qrSize*0.05)}" fill="#ffffff"/>`;
@@ -161,8 +158,13 @@ function _frameGeometry(style, qrSize, color, text) {
                + `<text x="${tw(px + pw/2)}" y="${tw(py + ph/2)}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="${fs}" font-weight="700" fill="#ffffff" letter-spacing="0.5">${label}</text>`;
         } };
     }
-    // SDQR-3.9 — cadres pleins (plaque blanche = zone de silence préservée).
+
+    // ───────── CANDIDATS (lab) — cadres pleins. Règle d'or : une PLAQUE
+    // BLANCHE (whitePlaque) sous le QR conserve la zone de silence → le QR
+    // reste « foncé sur blanc » même au cœur d'un cadre foncé (scannable). ──
     case 'circle': {   // disque plein, QR remonté sur plaque blanche, « Scannez-moi » dessous
+      // canevas carré (W==H) → le disque le remplit ; QR poussé vers le haut
+      // (padTop<padBottom) pour dégager une bande de texte en bas.
       const padX = Math.round(qrSize*0.30), padTop = Math.round(qrSize*0.18), padBottom = Math.round(qrSize*0.42);
       return { padX, padTop, padBottom,
         back: (bx, by, s, W, H) => {
@@ -250,8 +252,6 @@ function _anchorOrigins(count) {
 // Toutes les formes COUVRENT le centre de la cellule (les scanners
 // échantillonnent le centre) → scannabilité préservée (prouvée via jsQR,
 // banc _design-lab/sdqr/scan-test.html).
-// SDQR-3.9 — `ctx` (optionnel) = voisinage sombre {up,down,left,right} pour les
-// formes connectées. Les formes existantes l'ignorent (rétro-compatible).
 function _moduleShape(shape, x, y, cell, ctx) {
   const f = n => n.toFixed(2);
   const cx = x + cell / 2;
@@ -265,10 +265,26 @@ function _moduleShape(shape, x, y, cell, ctx) {
       const r = cell * 0.42;
       return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/>`;
     }
+    // ───────── CANDIDATS (lab) — à valider jsQR avant tout port prod ─────────
+    case 'vbars': {
+      // CANDIDAT ÉCARTÉ (instable jsQR) — barres verticales connectées. La
+      // meilleure variante (passe 300 avec yeux carrés/ronds) mais ÉCHOUE à
+      // 300 avec yeux arrondis → fragile selon la combinaison. Conservé pour
+      // mémoire ; NON porté en prod (cf. star/vdots). « Fluide » le remplace.
+      const w = cell * 0.64, ox = x + (cell - w) / 2, r = w / 2;
+      const rt0 = up ? 0 : r, rb0 = dn ? 0 : r;
+      return `<path d="M ${f(ox)} ${f(y + rt0)} ${rt0 ? `a ${f(r)} ${f(r)} 0 0 1 ${f(r)} ${f(-rt0)}` : ''} h ${f(w - rt0 - rb0)} ${rt0 || rb0 ? `a ${f(r)} ${f(r)} 0 0 1 ${f(rb0)} ${f(rt0)}` : ''} v ${f(cell - rt0 - rb0)} ${rb0 ? `a ${f(r)} ${f(r)} 0 0 1 ${f(-r)} ${f(rb0)}` : ''} h ${f(-(w - rt0 - rb0))} ${rt0 || rb0 ? `a ${f(r)} ${f(r)} 0 0 1 ${f(-rb0)} ${f(-rt0)}` : ''} z"/>`;
+    }
+    case 'hbars': {
+      // CANDIDAT ÉCARTÉ (instable jsQR) — barres horizontales (miroir).
+      const h = cell * 0.64, oy = y + (cell - h) / 2, r = h / 2;
+      const rl = lf ? 0 : r, rr = rt ? 0 : r;
+      return `<path d="M ${f(x + rl)} ${f(oy)} h ${f(cell - rl - rr)} ${rr ? `a ${f(r)} ${f(r)} 0 0 1 ${f(rr)} ${f(r)}` : ''} v ${f(h - rl - rr)} ${rl || rr ? `a ${f(r)} ${f(r)} 0 0 1 ${f(-rr)} ${f(rl)}` : ''} h ${f(-(cell - rl - rr))} ${rl ? `a ${f(r)} ${f(r)} 0 0 1 ${f(-rl)} ${f(-r)}` : ''} v ${f(-(h - rl - rr))} ${rl || rr ? `a ${f(r)} ${f(r)} 0 0 1 ${f(rl)} ${f(-rl)}` : ''} z"/>`;
+    }
     case 'fluid': {
-      // SDQR-3.9 — modules CONNECTÉS : carré plein, coins arrondis SEULEMENT
-      // là où les deux bords sont libres → couverture >= carré, jamais moins
-      // scannable que le défaut (prouvé jsQR aux 2 tailles, 3 styles d'yeux).
+      // CANDIDAT — modules connectés : carré plein, coins arrondis SEULEMENT
+      // là où les deux bords sont libres (pas de voisin sombre). Couverture
+      // >= carré → jamais moins scannable que le défaut.
       const r = cell * 0.46;
       const rTL = (!up && !lf) ? r : 0, rTR = (!up && !rt) ? r : 0;
       const rBR = (!dn && !rt) ? r : 0, rBL = (!dn && !lf) ? r : 0;
@@ -282,8 +298,27 @@ function _moduleShape(shape, x, y, cell, ctx) {
         + (rTL ? `A ${f(rTL)} ${f(rTL)} 0 0 1 ${f(x + rTL)} ${f(y)} ` : `L ${f(x)} ${f(y)} `)
         + `Z"/>`;
     }
+    case 'star': {
+      // CANDIDAT (risqué) — étincelle 4 branches. Cœur plein (rayon interne
+      // ir) → centre couvert, mais les coins évidés peuvent gêner jsQR.
+      const ro = cell * 0.52, ir = cell * 0.22;
+      let pts = '';
+      for (let i = 0; i < 8; i++) {
+        const ang = (Math.PI / 4) * i - Math.PI / 2;
+        const r = (i % 2 === 0) ? ro : ir;
+        pts += `${f(cx + r * Math.cos(ang))} ${f(cy + r * Math.sin(ang))} `;
+      }
+      return `<polygon points="${pts.trim()}"/>`;
+    }
+    case 'vdots': {
+      // CANDIDAT (risqué) — points de tailles variées (déterministe par
+      // position). Rayon mini 0.30 (diamètre 0.60) → centre couvert.
+      const seed = (((ctx && ctx.row) || 0) * 31 + ((ctx && ctx.col) || 0) * 17) % 3;
+      const r = cell * (seed === 0 ? 0.40 : seed === 1 ? 0.46 : 0.50);
+      return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/>`;
+    }
     case 'petal': {
-      // SDQR-3.9 — pétale : carré à 2 coins opposés très arrondis (TR + BL),
+      // CANDIDAT — pétale : carré à 2 coins opposés très arrondis (TR + BL),
       // les 2 autres vifs → goutte douce. Couvre le centre.
       const r = cell * 0.62;
       return `<path d="M ${f(x)} ${f(y)} H ${f(x2 - r)} A ${f(r)} ${f(r)} 0 0 1 ${f(x2)} ${f(y + r)} V ${f(y2)} H ${f(x + r)} A ${f(r)} ${f(r)} 0 0 1 ${f(x)} ${f(y2 - r)} Z"/>`;
@@ -367,6 +402,28 @@ function _anchorShape(outerShape, innerShape, ox, oy, cell) {
     const m = cell, irr = cell * 1.05, isz = size - 2 * m;
     const iPath = `M ${(ox + m).toFixed(2)},${(oy + m).toFixed(2)} h ${(isz - irr).toFixed(2)} a ${irr.toFixed(2)} ${irr.toFixed(2)} 0 0 1 ${irr.toFixed(2)} ${irr.toFixed(2)} v ${(isz - irr).toFixed(2)} h ${(-(isz - irr)).toFixed(2)} a ${irr.toFixed(2)} ${irr.toFixed(2)} 0 0 1 ${(-irr).toFixed(2)} ${(-irr).toFixed(2)} z`;
     ring = `<path d="${oPath} ${iPath}" fill-rule="evenodd"/>`;
+  } else if (outerShape === 'dring') {
+    // CANDIDAT (risqué) — anneau POINTILLÉ : 12 points sur le cercle du finder.
+    // Déjà écarté une fois (Pointillé) ; re-test borné.
+    const R = size / 2 - cell * 0.6, dr = cell * 0.5;
+    let s = '';
+    for (let i = 0; i < 12; i++) {
+      const a = (Math.PI * 2 / 12) * i - Math.PI / 2;
+      s += `<circle cx="${(cx + R * Math.cos(a)).toFixed(2)}" cy="${(cy + R * Math.sin(a)).toFixed(2)}" r="${dr.toFixed(2)}"/>`;
+    }
+    ring = s;
+  } else if (outerShape === 'spike') {
+    // CANDIDAT (risqué) — couronne en ÉTOILE concave (anneau étoilé évidé).
+    const starPath = (rr, kf) => {
+      let p = '';
+      for (let i = 0; i < 16; i++) {
+        const a = (Math.PI / 8) * i - Math.PI / 2;
+        const r = (i % 2 === 0) ? rr : rr * kf;
+        p += (i === 0 ? 'M ' : 'L ') + (cx + r * Math.cos(a)).toFixed(2) + ' ' + (cy + r * Math.sin(a)).toFixed(2) + ' ';
+      }
+      return p + 'Z';
+    };
+    ring = `<path d="${starPath(size / 2, 0.62)} ${starPath(size / 2 - cell * 1.05, 0.62)}" fill-rule="evenodd"/>`;
   } else {
     // square (défaut)
     ring = `<path d="M ${ox.toFixed(2)},${oy.toFixed(2)} h ${size.toFixed(2)} v ${size.toFixed(2)} h ${(-size).toFixed(2)} z M ${(ox + cell).toFixed(2)},${(oy + cell).toFixed(2)} v ${(5 * cell).toFixed(2)} h ${(5 * cell).toFixed(2)} v ${(-5 * cell).toFixed(2)} z" fill-rule="evenodd"/>`;
@@ -389,13 +446,14 @@ function _anchorShape(outerShape, innerShape, ox, oy, cell) {
     inner = `<rect x="${innerX.toFixed(2)}" y="${innerY.toFixed(2)}" width="${innerSize.toFixed(2)}" height="${innerSize.toFixed(2)}"/>`;
   }
 
-  // SDQR-3.9 — anneau et centre renvoyés SÉPARÉMENT pour la couleur 2-tons
-  // (anneau vs pupille). Compat mono-ton : les appelants concatènent ring+inner.
+  // CANDIDAT 2-tons — on renvoie anneau et centre SÉPARÉMENT pour permettre
+  // deux couleurs (anneau vs pupille). Compat : les appelants mono-ton
+  // concatènent simplement ring+inner.
   return { ring, inner };
 }
 
 // Mini-aperçu SVG d'un œil (1 finder pattern) pour les cartes du sélecteur.
-// SDQR-3.9 — innerColor optionnel (pupille) sinon hérite de color.
+// CANDIDAT 2-tons : innerColor optionnel (pupille) sinon hérite de color.
 export function anchorPreviewSvg(outer, inner, size = 44, color = '#1b2a4a', innerColor) {
   const cell = size / 8;
   const a = _anchorShape(outer, inner, cell, cell, cell);
@@ -427,7 +485,7 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   const gradientId  = 'qrgrad_' + Math.random().toString(36).slice(2, 8);
   const fgFill = useGradient ? `url(#${gradientId})` : d.fg;
   // Yeux (finder patterns) : couleur d'accent distincte ou héritée des modules.
-  // SDQR-3.9 — 2-tons : anneau = color, pupille = innerColor (sinon hérite de color).
+  // CANDIDAT 2-tons : anneau = color, pupille = innerColor (sinon hérite).
   const eyeOuterFill = d.eye?.distinct ? _esc(d.eye.color || d.fg) : fgFill;
   const eyeInnerFill = d.eye?.distinct ? _esc(d.eye.innerColor || d.eye.color || d.fg) : fgFill;
 
@@ -455,8 +513,8 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   }
 
   // 3. Modules standards (hors zones d'ancres)
-  // Voisinage (forme « fluid ») : un module ne connecte qu'à un AUTRE module
-  // standard sombre (jamais vers les ancres, dessinées séparément en yeux).
+  // Voisinage : un module ne « connecte » qu'à un AUTRE module standard
+  // sombre (jamais vers les zones d'ancres, dessinées séparément en yeux).
   const isMod = (r, c) => r >= 0 && c >= 0 && r < count && c < count
     && !_isAnchorArea(r, c, count) && qr.isDark(r, c);
   let modules = '';
@@ -469,12 +527,14 @@ export async function renderQrCustom(text, design, sizePx = 280) {
       const ctx = {
         up: isMod(row - 1, col), down: isMod(row + 1, col),
         left: isMod(row, col - 1), right: isMod(row, col + 1),
+        row, col,
       };
       modules += _moduleShape(d.module.shape, x, y, cell, ctx);
     }
   }
 
-  // 4. Ancres (3 finder patterns) — anneau/pupille en groupes SÉPARÉS (2-tons)
+  // 4. Ancres (3 finder patterns) — outer + inner indépendants, anneau/pupille
+  // dans des groupes SÉPARÉS pour la couleur 2-tons.
   let eyeRings = '', eyeInners = '';
   for (const o of _anchorOrigins(count)) {
     const ox = offset + o.col * cell;
@@ -512,7 +572,7 @@ export async function renderQrCustom(text, design, sizePx = 280) {
   const H = sizePx + padTop + padBottom;
 
   const qrInner = `${bg}<g fill="${fgFill}">${modules}</g><g fill="${eyeOuterFill}">${eyeRings}</g><g fill="${eyeInnerFill}">${eyeInners}</g>${logoBlock}`;
-  // back() = couche DERRIÈRE le QR (fond foncé + plaque blanche), deco() = devant.
+  // back() = couche derrière le QR (fond foncé + plaque blanche), deco() = devant.
   const back = (fr && fr.back) ? fr.back(padX, padTop, sizePx, W, H) : '';
   const body = fr
     ? `<rect width="${W.toFixed(2)}" height="${H.toFixed(2)}" fill="#ffffff"/>`

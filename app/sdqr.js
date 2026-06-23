@@ -4389,6 +4389,9 @@ const SHAPE_OPTS = [
   { id: 'diamond', label: 'Losange', svg: `<path d="M11 3 L19 11 L11 19 L3 11 Z"/>` },
   { id: 'cross',   label: 'Croix',   svg: `<rect x="8" y="3" width="6" height="16"/><rect x="3" y="8" width="16" height="6"/>` },
   { id: 'classy',  label: 'Feuille', svg: `<path d="M8 4 H18 V14 A4 4 0 0 1 14 18 H4 V8 A4 4 0 0 1 8 4 Z"/>` },
+  // SDQR-3.9 — modules connectés (fluide) + pétale, prouvés jsQR aux 2 tailles.
+  { id: 'fluid',   label: 'Fluide',  svg: `<path d="M4 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2H6a2 2 0 0 1-2-2z"/>` },
+  { id: 'petal',   label: 'Pétale',  svg: `<path d="M4 4 H14 A4 4 0 0 1 18 8 V18 H8 A4 4 0 0 1 4 14 Z"/>` },
 ];
 
 // Mini-aperçus dédiés pour les ancres (anneau + centre composés)
@@ -4422,6 +4425,10 @@ const EYE_PRESETS = [
   { id: 'cercle-ca',  label: 'Cercle · carré', outer: 'dot',     inner: 'square'  },
   { id: 'feuille',    label: 'Feuille',       outer: 'leaf',     inner: 'square'  },
   { id: 'losange',    label: 'Losange',       outer: 'dot',      inner: 'diamond' },
+  // SDQR-3.9 — 3 nouveaux combos, prouvés jsQR aux 2 tailles (3 styles testés).
+  { id: 'doux-pt',    label: 'Doux · point',     outer: 'squircle', inner: 'dot'     },
+  { id: 'cercle-ar',  label: 'Cercle · arrondi', outer: 'dot',      inner: 'rounded' },
+  { id: 'arrondi-fe', label: 'Arrondi · feuille',outer: 'rounded',  inner: 'leaf'    },
 ];
 
 function _eyePresetActive(p, d) {
@@ -4509,6 +4516,7 @@ function _applyModel(m) {
   if (!_editingDesign.eye) _editingDesign.eye = {};
   _editingDesign.eye.distinct = true;
   _editingDesign.eye.color = m.accent;
+  _editingDesign.eye.innerColor = '';   // SDQR-3.9 — modèle = mono-ton (pupille hérite)
   const ic = LOGO_ICONS.find(x => x.id === m.icon);
   if (ic) {
     _editingDesign.logo = { dataUrl: _iconToDataUrl(ic.svg), size: _editingDesign.logo?.size || 0.20 };
@@ -4594,6 +4602,7 @@ function _applyAmbiance(pal) {
   if (!_editingDesign.eye) _editingDesign.eye = {};
   _editingDesign.eye.distinct = true;
   _editingDesign.eye.color = pal.accent;
+  _editingDesign.eye.innerColor = '';   // SDQR-3.9 — palette = mono-ton (pupille hérite)
 }
 
 function _ambianceActive(pal, d) {
@@ -4741,12 +4750,17 @@ function _renderDesignPanel(qr, opts = {}) {
             <span class="sdqr-design-lbl">Yeux</span>
             <div class="sdqr-shape-pills" data-eye-mode>
               <button class="sdqr-shape-pill ${!d.eye.distinct ? 'is-active' : ''}" data-eye="inherit">Comme modules</button>
-              <button class="sdqr-shape-pill ${d.eye.distinct ? 'is-active' : ''}" data-eye="distinct">Distincte</button>
+              <button class="sdqr-shape-pill ${d.eye.distinct ? 'is-active' : ''}" data-eye="distinct">Couleur dédiée</button>
             </div>
           </div>
-          <div class="sdqr-color-grid" data-when-eye ${d.eye.distinct ? '' : 'hidden'}>
-            ${_colorField('Couleur des yeux', 'sdqr-eye-color', d.eye.color)}
+          <div class="sdqr-eye-2tone" data-when-eye ${d.eye.distinct ? '' : 'hidden'}>
+            ${_colorField('Anneau', 'sdqr-eye-color', d.eye.color)}
+            <button class="sdqr-eye-swap" id="sdqr-eye-swap" type="button" title="Intervertir anneau et pupille" aria-label="Intervertir anneau et pupille">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><polyline points="7 4 7 20"/><polyline points="4 7 7 4 10 7"/><polyline points="17 20 17 4"/><polyline points="14 17 17 20 20 17"/></svg>
+            </button>
+            ${_colorField('Pupille', 'sdqr-eye-inner', d.eye.innerColor || d.eye.color)}
           </div>
+          <div class="sdqr-design-hint" data-when-eye ${d.eye.distinct ? '' : 'hidden'} style="margin-top:6px">Anneau extérieur &middot; pupille centrale. Le garde-fou vérifie les deux tons.</div>
         </div>
 
         <!-- LOGO central avec zone drop visible -->
@@ -5111,7 +5125,17 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
       _liveRerender();
     });
   });
-  _bindColor('sdqr-eye-color', v => { _editingDesign.eye.color = v; });
+  _bindColor('sdqr-eye-color',  v => { _editingDesign.eye.color = v; });
+  // SDQR-3.9 — pupille (2-tons) : si vide, hérite de l'anneau (mono-ton).
+  _bindColor('sdqr-eye-inner',  v => { _editingDesign.eye.innerColor = v; _updateContrastBadge(root); });
+  // Interversion anneau ⇄ pupille
+  panel.querySelector('#sdqr-eye-swap')?.addEventListener('click', () => {
+    const ring = _editingDesign.eye.color;
+    const pup  = _editingDesign.eye.innerColor || _editingDesign.eye.color;
+    _editingDesign.eye.color = pup;
+    _editingDesign.eye.innerColor = ring;
+    _refreshDesignPanelDom(root, qr, encodedForQr);
+  });
 
   // Logo upload (via input file click)
   panel.querySelector('#sdqr-logo-input')?.addEventListener('change', async e => {
@@ -5253,6 +5277,8 @@ function _designContrast(design) {
   // un accent trop clair (ex: or vif sur blanc) casse la détection. On l'inclut
   // dans le pire-cas du contraste pour que le garde-fou le signale.
   if (design.eye?.distinct && design.eye.color) fgs.push(design.eye.color);
+  // SDQR-3.9 — la pupille (2-tons) est aussi un finder pattern critique.
+  if (design.eye?.distinct && design.eye.innerColor) fgs.push(design.eye.innerColor);
   if (fgs.some(c => !c)) return null;
   let worst = null;
   for (const fg of fgs) {

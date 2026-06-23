@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr" class="light-mode">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDQR — banc UI Lot A (vrai style.css)</title>
+<link rel="stylesheet" href="../../app/style.css">
+<style>html,body{margin:0;background:#0f1d3a !important}.pad{max-width:430px;margin:0 auto;padding:22px;--gold:#6c6cf5;--gold2:#818cf8;--sdqr-line:rgba(255,255,255,.12)}.hd{color:#fff;font:800 13px -apple-system;margin:18px 0 8px;letter-spacing:-.01em}</style>
+</head>
+<body>
+<div class="pad sdqr-design-body">
+
+  <div class="hd">Modules (pills) — Fluide / Pétale ajoutés</div>
+  <div class="sdqr-shape-pills" id="pills"></div>
+
+  <div class="hd">Yeux — 3 nouveaux combos</div>
+  <div class="sdqr-eye-grid" id="eyes"></div>
+
+  <div class="hd">Couleurs — yeux 2 tons (anneau · ⇄ · pupille)</div>
+  <div class="sdqr-design-row">
+    <span class="sdqr-design-lbl">Yeux</span>
+    <div class="sdqr-shape-pills" data-eye-mode>
+      <button class="sdqr-shape-pill" data-eye="inherit">Comme modules</button>
+      <button class="sdqr-shape-pill is-active" data-eye="distinct">Couleur dédiée</button>
+    </div>
+  </div>
+  <div class="sdqr-eye-2tone">
+    <label class="sdqr-color-field"><span class="sdqr-design-lbl-sm">Anneau</span>
+      <span class="sdqr-color-row"><input type="color" value="#054080"><input type="text" class="sdqr-hex" value="#054080"></span></label>
+    <button class="sdqr-eye-swap" type="button" title="Intervertir">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><polyline points="7 4 7 20"/><polyline points="4 7 7 4 10 7"/><polyline points="17 20 17 4"/><polyline points="14 17 17 20 20 17"/></svg>
+    </button>
+    <label class="sdqr-color-field"><span class="sdqr-design-lbl-sm">Pupille</span>
+      <span class="sdqr-color-row"><input type="color" value="#f30505"><input type="text" class="sdqr-hex" value="#f30505"></span></label>
+  </div>
+  <div class="sdqr-design-hint" style="margin-top:6px">Anneau extérieur &middot; pupille centrale. Le garde-fou vérifie les deux tons.</div>
+
+  <div class="hd">Rendu réel — 2 tons + cadre Cercle</div>
+  <div style="background:#fff;border-radius:14px;padding:14px;display:flex;gap:14px;justify-content:center" id="render"></div>
+</div>
+
+<script type="module">
+const { renderQrCustom, anchorPreviewSvg } = await import('../../app/sdqr-render.js?cb=' + Date.now());
+const navy = '#0a2741';
+// pills modules (réplique du markup _renderShapePill)
+const SHAPES = [['square','Carré','<rect x="4" y="4" width="14" height="14"/>'],['dot','Point','<circle cx="11" cy="11" r="7"/>'],['fluid','Fluide','<path d="M4 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2H6a2 2 0 0 1-2-2z"/>'],['petal','Pétale','<path d="M4 4 H14 A4 4 0 0 1 18 8 V18 H8 A4 4 0 0 1 4 14 Z"/>']];
+document.getElementById('pills').innerHTML = SHAPES.map(([id,l,svg],i)=>`<button class="sdqr-shape-pill sdqr-shape-pill--visual ${id==='fluid'?'is-active':''}"><svg viewBox="0 0 22 22" class="sdqr-shape-pill-svg">${svg}</svg><span class="sdqr-shape-pill-lbl">${l}</span></button>`).join('');
+// eye cards (3 nouveaux)
+const EYES=[['Doux · point','squircle','dot'],['Cercle · arrondi','dot','rounded'],['Arrondi · feuille','rounded','leaf']];
+document.getElementById('eyes').innerHTML = EYES.map(([l,o,i])=>`<button class="sdqr-eye-card is-on"><span class="sdqr-eye-prev">${anchorPreviewSvg(o,i,40)}</span><span class="sdqr-eye-name">${l}</span></button>`).join('');
+// rendu réel
+const r = document.getElementById('render');
+r.innerHTML = (await renderQrCustom('https://protein-keystone.com/r/AB12CD34',{module:{shape:'fluid'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}},fg:navy,eye:{distinct:true,color:'#054080',innerColor:'#f30505'}},150))
+  + (await renderQrCustom('https://protein-keystone.com/r/AB12CD34',{module:{shape:'petal'},anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}},fg:navy,frame:{style:'circle',text:'Scannez-moi',color:'#1b2a4a'}},150));
+r.querySelectorAll('svg').forEach(s=>{s.style.width='150px';s.style.height='auto'});
+window.__GALLERY_DONE = true;
+</script>
+</body>
+</html>

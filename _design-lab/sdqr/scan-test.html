@@ -118,11 +118,20 @@ const DESIGNS = window.__SCAN_DESIGNS || [
     label: 'YEUX ' + label + ' (' + outer + '/' + inner + ')',
     d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:outer},inner:{shape:inner}} },
   })),
+  // — SDQR-3.9 : nouveaux items NON-cadrés (cadres testés dans scan-winners.html,
+  //   raster viewBox-aware). Modules Fluide/Pétale, 3 yeux, yeux 2-tons. —
+  { label: 'NOUVEAU module Fluide',  d: { module:{shape:'fluid'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, fg:'#0a2741' } },
+  { label: 'NOUVEAU module Pétale',  d: { module:{shape:'petal'}, anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, fg:'#0a2741' } },
+  { label: 'NOUVEAU œil Doux·point',  d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'squircle'},inner:{shape:'dot'}} } },
+  { label: 'NOUVEAU œil Cercle·arrondi', d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'dot'},inner:{shape:'rounded'}} } },
+  { label: 'NOUVEAU œil Arrondi·feuille', d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'leaf'}} } },
+  { label: 'NOUVEAU yeux 2-tons bleu/rouge', d: { module:{shape:'rounded'}, fg:'#0a2741', anchor:{outer:{shape:'rounded'},inner:{shape:'dot'}}, eye:{distinct:true, color:'#054080', innerColor:'#f30505'} } },
 ];
 
 const tbody = document.querySelector('#results tbody');
 const samples = document.getElementById('samples');
 let passed = 0;
+const rows = [];
 
 for (const { label, d } of DESIGNS) {
   let r300, r170;
@@ -130,6 +139,7 @@ for (const { label, d } of DESIGNS) {
   try { r170 = await decodeAt(d, 170); } catch (e) { r170 = { ok:false, got:'ERR '+e.message }; }
   const pass = r300.ok && r170.ok;
   if (pass) passed++;
+  rows.push({ label, p300: r300.ok, p170: r170.ok, pass });
   const tr = document.createElement('tr');
   tr.innerHTML = `<td>${label}</td>
     <td class="${r300.ok?'ok':'ko'}">${r300.ok?'PASS':'FAIL'}</td>
@@ -149,6 +159,8 @@ const sum = document.getElementById('summary');
 sum.textContent = `${passed}/${DESIGNS.length} designs scannables aux 2 tailles`;
 sum.className = passed === DESIGNS.length ? 'ok' : 'ko';
 window.__SCAN_RESULT = { passed, total: DESIGNS.length };
+window.__SCAN_ROWS = rows;
+window.__SCAN_DONE = true;
 </script>
 </body>
 </html>

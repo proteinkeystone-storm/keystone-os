@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>SDQR — scan WINNERS (set final à porter)</title>
+<style>body{font-family:-apple-system,sans-serif;background:#0f1d3a;color:#e8edf8;padding:24px}.ok{color:#7ee0b5}.ko{color:#ff9a9a}#s{font-weight:700;font-size:15px;margin:10px 0}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:6px 12px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}</style></head>
+<body><h1>Scan WINNERS — le set EXACT à porter en prod (doit être 100% PASS)</h1>
+<div id="s">…</div>
+<table id="r"><thead><tr><th>Cat</th><th>Item (config d'expédition)</th><th>300</th><th>170</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+<script type="module">
+const { renderQrCustom } = await import('./render-lab.js?cb=' + Date.now());
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
+const TXT='https://protein-keystone.com/r/AB12CD34', navy='#0a2741';
+async function dec(d,sz){const svg=await renderQrCustom(TXT,d,sz);const m=svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);const W=m?Math.round(+m[1]):sz,H=m?Math.round(+m[2]):sz;const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);x.drawImage(img,0,0,W,H);const res=jsQR(x.getImageData(0,0,W,H).data,W,H);return !!res&&res.data===TXT;}
+const rdDot={outer:{shape:'rounded'},inner:{shape:'dot'}};
+const sq={outer:{shape:'square'},inner:{shape:'square'}};
+const dd={outer:{shape:'dot'},inner:{shape:'dot'}};
+// Modules : test de ROBUSTESSE sur 3 styles d'yeux (un module n'est retenu
+// que s'il passe avec TOUS) — exposé en 3 lignes par module.
+const MODS=[['Fluide (connecté)','fluid'],['Pétale','petal']];
+const EYES=[['yeux carrés',sq],['yeux arrondis',rdDot],['yeux ronds',dd]];
+const ITEMS=[
+  ...MODS.flatMap(([lbl,sh])=>EYES.map(([elbl,a])=>['Module',`${lbl} · ${elbl}`,{module:{shape:sh},anchor:a,fg:navy}])),
+  // Yeux combos retenus
+  ['Œil','Doux · point (squircle/dot)',{module:{shape:'rounded'},fg:navy,anchor:{outer:{shape:'squircle'},inner:{shape:'dot'}}}],
+  ['Œil','Cercle · arrondi (dot/rounded)',{module:{shape:'rounded'},fg:navy,anchor:{outer:{shape:'dot'},inner:{shape:'rounded'}}}],
+  ['Œil','Arrondi · feuille (rounded/leaf)',{module:{shape:'rounded'},fg:navy,anchor:{outer:{shape:'rounded'},inner:{shape:'leaf'}}}],
+  // Yeux 2-tons (couleurs saturées proposées par défaut)
+  ['2-tons','Bleu/Rouge #054080 / #f30505',{module:{shape:'rounded'},fg:navy,anchor:rdDot,eye:{distinct:true,color:'#054080',innerColor:'#f30505'}}],
+  ['2-tons','Indigo/Rose #4338ca / #be123c',{module:{shape:'rounded'},fg:navy,anchor:rdDot,eye:{distinct:true,color:'#4338ca',innerColor:'#be123c'}}],
+  ['2-tons','Interversion Rouge/Bleu #f30505 / #054080',{module:{shape:'rounded'},fg:navy,anchor:rdDot,eye:{distinct:true,color:'#f30505',innerColor:'#054080'}}],
+  // Cadres retenus
+  ['Cadre','Cercle',{module:{shape:'rounded'},anchor:rdDot,fg:navy,frame:{style:'circle',text:'Scannez-moi',color:'#1B2A4A'}}],
+  ['Cadre','Plaque',{module:{shape:'rounded'},anchor:rdDot,fg:navy,frame:{style:'plaque',text:'Scannez-moi',color:'#1B2A4A'}}],
+  ['Cadre','Crochets',{module:{shape:'rounded'},anchor:rdDot,fg:navy,frame:{style:'corners',text:'Scannez-moi',color:'#1B2A4A'}}],
+  ['Cadre','Anneau (texte courbe)',{module:{shape:'rounded'},anchor:rdDot,fg:navy,frame:{style:'ring',text:'Scannez-moi',color:'#1B2A4A'}}],
+];
+const tb=document.querySelector('#r tbody');let pass=0;const rows=[];
+for(const [cat,label,d] of ITEMS){let a=false,b=false;try{a=await dec(d,300)}catch(e){}try{b=await dec(d,170)}catch(e){}const p=a&&b;if(p)pass++;rows.push({cat,label,p300:a,p170:b,pass:p});const tr=document.createElement('tr');tr.innerHTML=`<td>${cat}</td><td>${label}</td><td class="${a?'ok':'ko'}">${a?'OK':'XX'}</td><td class="${b?'ok':'ko'}">${b?'OK':'XX'}</td><td class="${p?'ok':'ko'}">${p?'✓':'✗'}</td>`;tb.appendChild(tr);}
+const s=document.getElementById('s');s.textContent=`${pass}/${ITEMS.length} winners scannables aux 2 tailles`;s.className=pass===ITEMS.length?'ok':'ko';
+window.__SCAN_ROWS=rows;window.__SCAN_DONE=true;
+</script></body></html>
