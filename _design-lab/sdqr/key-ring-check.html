@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — verif rendu WORKER (key-ring / Sonnette)</title>
+<style>
+  body { margin:0; padding:24px; background:#dfe5ec; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  h1 { font-size:15px; color:#1b2a4a; margin:0 0 4px; }
+  p.sub { font-size:12px; color:#6b7790; margin:0 0 18px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px 16px; max-width:780px; }
+  .cell { display:flex; flex-direction:column; align-items:center; }
+  .lab { font-size:11px; font-weight:600; color:#3a4b6b; margin-bottom:8px; text-align:center; }
+  .iph { width:236px; height:494px; background:#10182b; border-radius:42px; padding:9px; box-shadow:0 10px 26px rgba(8,15,35,.3); }
+  .scr { width:100%; height:100%; border-radius:34px; overflow:hidden; position:relative; background:#fff; }
+  .frame { position:absolute; top:0; left:0; width:390px; height:794px; border:0; transform:scale(0.5589); transform-origin:top left; background:#fff; }
+</style></head>
+<body>
+  <h1>Verification du VRAI rendu worker (renderHTML) — key-ring / Sonnette (ORDRE 1, skin neutre)</h1>
+  <p class="sub">Chaque iPhone affiche la page reellement servie au scan (sandbox statique). Donnees d'exemple fictives. Le bouton principal est auto-promu (Appeler en tete s'il y a un numero).</p>
+  <div class="grid" id="grid"></div>
+<script type="module">
+  // Cache-bust du module (le navigateur garde l'ancien index.js en cache ES).
+  const { getTemplate } = await import('../../workers/src/routes/smart-templates/index.js?v=kr1');
+
+  // Donnees fictives (cf no-real-data-in-examples) : placeholders inventes.
+  const MSG = 'Bonjour, je suis au portail.';
+  const CELLS = [
+    ['Complet — Appeler en tete',
+      { place_name:'Le Portail', subtitle:'Entrée principale',
+        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', email:'vous@exemple.fr',
+        message:MSG, accent_color:'#7c8af9' }],
+    ['Sans telephone — WhatsApp promu',
+      { place_name:'Gîte des Lauriers', subtitle:'Accueil',
+        whatsapp:'33 6 00 00 00 00', email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
+    ['E-mail seul',
+      { place_name:'Atelier', subtitle:'Sur rendez-vous',
+        email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
+    ['Telephone seul (pas de secondaires)',
+      { place_name:'Le Portail', subtitle:'',
+        phone:'06 00 00 00 00', accent_color:'#7c8af9' }],
+    ['Accent vert « appel »',
+      { place_name:'Refuge du Col', subtitle:'Entree',
+        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', message:MSG, accent_color:'#2bb673' }],
+    ['Nom long (garde-fou troncature)',
+      { place_name:'Chambre d\'hôtes des Quatre Vents et du Grand Large', subtitle:'Portail du fond',
+        phone:'06 00 00 00 00', email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
+  ];
+
+  const grid = document.getElementById('grid');
+  const tpl = getTemplate('key-ring');
+  for (const [lab, data] of CELLS) {
+    const qrData = { short_id:'PREVIEW', template_id:'key-ring', smart_title:'', smart_message:'', name:lab, template_data:data };
+    let html = '';
+    try { html = tpl.renderHTML(qrData, {}); } catch (e) { html = '<p style="color:#b00;font:13px sans-serif;padding:16px">KO: '+e.message+'</p>'; }
+    const srcdoc = html.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML = `<div class="lab">${lab}</div><div class="iph"><div class="scr"><iframe class="frame" sandbox="" srcdoc="${srcdoc}"></iframe></div></div>`;
+    grid.appendChild(cell);
+  }
+  // Laisse les iframes sandbox peindre avant la capture headless.
+  await new Promise(r => setTimeout(r, 600));
+  window.__SCAN_DONE = true;
+</script>
+</body></html>

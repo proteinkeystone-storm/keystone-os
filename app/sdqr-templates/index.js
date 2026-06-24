@@ -24,6 +24,8 @@ import concierge       from './concierge.js';
 // Pages hébergées « Contact » (2026-06-23) : link-hub réseaux + carte de visite.
 import reseauxSociaux  from './reseaux-sociaux.js';
 import carteVisite     from './carte-visite.js';
+// Page hébergée « Pratique » (2026-06-24) : sonnette / interphone par QR.
+import keyRing         from './key-ring.js';
 // V4 (brief BRIEF_SMART_QR_V4_TEMPLATES_INTERACTIFS.md) :
 // V4.1 livré 2026-05-26 (storytelling-brand + countdown-produit).
 // V4.3 livré 2026-05-26 (machine-a-sous + carte-a-gratter).
@@ -44,6 +46,7 @@ const TEMPLATES = {
   [concierge.id]:         concierge,
   [reseauxSociaux.id]:    reseauxSociaux,
   [carteVisite.id]:       carteVisite,
+  [keyRing.id]:           keyRing,
 };
 
 export function getTemplate(id) {

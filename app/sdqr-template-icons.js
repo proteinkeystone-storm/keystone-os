@@ -106,6 +106,12 @@ export const TEMPLATE_ICONS = {
     <line x1="14.5" y1="9.5"  x2="19" y2="9.5"/>
     <line x1="14.5" y1="13.5" x2="19" y2="13.5"/>
   `),
+
+  // Sonnette / interphone par QR : cloche (bell Lucide)
+  'key-ring': _svg(`
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+  `),
 };
 
 /**

@@ -70,6 +70,16 @@ const MOCK_DATA = {
     website:       'https://votre-site.fr',
     accent_color:  '#4a90d9',
   },
+  // Page hébergée « Pratique » (2026-06-24) — sonnette / interphone (terminale).
+  'key-ring': {
+    place_name:    'Le Portail',
+    subtitle:      'Entrée principale',
+    phone:         '06 00 00 00 00',
+    whatsapp:      '33 6 00 00 00 00',
+    email:         'vous@exemple.fr',
+    message:       'Bonjour, je suis au portail.',
+    accent_color:  '#7c8af9',
+  },
   // V4.1 livré 2026-05-26
   'storytelling-brand': {
     nom_marque:   'Maison Lumière',

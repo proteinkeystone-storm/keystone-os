@@ -1245,6 +1245,8 @@ const _TYPE_FAMILIES = [
     smartTypes: ['carte-visite', 'reseaux-sociaux'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
   { id: 'pratique', label: 'Pratique', types: ['wifi', 'geo', 'ical'],
+    // Page hébergée « Pratique » : sonnette / interphone par QR (1re de la famille).
+    smartTypes: ['key-ring'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' },
   // Famille « Expériences » = nos templates Smart (Concierge, jeux, fidélité…).
   // Pas de types QR : on bascule en mode 'smart' et on montre le sélecteur de
