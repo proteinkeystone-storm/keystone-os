@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.28.38-keyring-o2';
+const VERSION       = 'ks-os-v5.28.39-keyring-o3';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -233,6 +233,24 @@ self.addEventListener('push', (event) => {
     }));
     return;
   }
+  // Key-Ring (Sonnette) — quelqu'un sonne. Notif avec boutons de réponse 1-tap.
+  if (data.kind === 'keyring-ring') {
+    const who   = data.name ? data.name : 'Quelqu\'un';
+    const body  = data.motif ? (who + ' : ' + data.motif) : (who + ' est à la porte.');
+    event.waitUntil(self.registration.showNotification('Sonnette — ' + (data.place || ''), {
+      body,
+      tag:  'kr-' + (data.ring_id || ''),
+      requireInteraction: true,
+      data: { kind: 'keyring-ring', ring_id: data.ring_id, token: data.token, api: data.api },
+      actions: [
+        { action: 'arrive', title: "J'arrive" },
+        { action: '5min',   title: '5 min' },
+        { action: 'open',   title: "C'est ouvert" },
+        { action: 'busy',   title: 'Pas dispo' },
+      ],
+    }));
+    return;
+  }
 });
 
 // ── Clic sur une notification de rappel Keynapse (Sprint 7) ────
@@ -260,6 +278,31 @@ self.addEventListener('notificationclick', (event) => {
       const client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
       if (client) { try { await client.focus(); } catch (_) {} }
       else { try { await self.clients.openWindow(data.url || './app'); } catch (_) {} }
+    })());
+    return;
+  }
+  // Key-Ring (Sonnette) — réponse 1-tap depuis la notif : POST /respond avec le
+  // respond_token (présent dans la charge chiffrée, donc secret au propriétaire).
+  if (data.kind === 'keyring-ring') {
+    event.notification.close();
+    const VALID = ['arrive', '5min', 'open', 'busy'];
+    event.waitUntil((async () => {
+      if (event.action && VALID.includes(event.action) && data.api && data.ring_id && data.token) {
+        try {
+          await fetch(data.api + '/api/keyring/respond', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ring_id: data.ring_id, response: event.action, token: data.token }),
+          });
+        } catch (_) {}
+        return;
+      }
+      // Tap sur le corps (sans bouton) : ouvre/focalise l'app.
+      try {
+        const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
+        if (client) { await client.focus(); } else { await self.clients.openWindow('./app'); }
+      } catch (_) {}
     })());
     return;
   }

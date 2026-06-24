@@ -1693,6 +1693,106 @@ function _renderTemplateFields(root) {
   _bindLotsWidgets(wrap, _creating.template_data);
   _bindIconPickers(wrap);
   _bindCardPickers(wrap, _creating.template_data);
+  // Key-Ring (Sonnette) — section « Alertes & destinataires » (abonnement Web
+  // Push de cet appareil + e-mail de repli). Hors schema declaratif.
+  if (_creating.template_id === 'key-ring') _renderKeyringAlerts(wrap);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KEY-RING (Sonnette) — Alertes & destinataires (ORDRE 3)
+// ───────────────────────────────────────────────────────────────────
+// L'occupant (proprietaire) abonne ses appareils au Web Push pour entendre
+// la sonnette meme app fermee. Meme flux que Keynapse (VAPID + pushManager).
+// La cle VAPID publique doit correspondre au worker (env VAPID_PUBLIC).
+// ══════════════════════════════════════════════════════════════════
+const KR_VAPID_PUBLIC = 'BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUqmP8Vvg30v-9067t9X5HTlEc';
+function _krVapidBytes() {
+  const s = KR_VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(s + '='.repeat((4 - s.length % 4) % 4));
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+async function _krGetSubscription() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); }
+  catch (_) { return null; }
+}
+async function _krSubscribeDevice() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Notifications non supportées sur cet appareil.');
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Notifications refusées (réglages du navigateur).');
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _krVapidBytes() });
+  const j = sub.toJSON();
+  if (!j || !j.keys) throw new Error('Abonnement impossible.');
+  const label = (navigator.userAgent.includes('Mobile') ? 'Téléphone' : 'Ordinateur');
+  const r = await fetch(CF_API + '/api/keyring/push/subscribe', {
+    method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, label }),
+  });
+  if (!r.ok) throw new Error('Enregistrement refusé (' + r.status + ').');
+}
+async function _krUnsubscribeDevice() {
+  const sub = await _krGetSubscription();
+  if (!sub) return;
+  await fetch(CF_API + '/api/keyring/push/unsubscribe', {
+    method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ endpoint: sub.endpoint }),
+  });
+}
+async function _krStatus() {
+  const sub = await _krGetSubscription();
+  const ep = sub ? sub.endpoint : '';
+  try {
+    const r = await fetch(CF_API + '/api/keyring/push/status?endpoint=' + encodeURIComponent(ep), { headers: _headers() });
+    return r.ok ? await r.json() : null;
+  } catch (_) { return null; }
+}
+function _renderKeyringAlerts(wrap) {
+  const box = document.createElement('div');
+  box.style.cssText = 'margin-top:18px;padding:16px;border-radius:14px;border:1px solid rgba(124,138,249,.28);background:rgba(124,138,249,.07)';
+  const alertEmail = _esc(_creating.template_data.alert_email || '');
+  box.innerHTML = `
+    <div style="font-weight:700;font-size:14px;margin-bottom:3px">Alertes &amp; destinataires</div>
+    <div style="font-size:12px;color:var(--text-muted,#8a93a5);margin-bottom:12px">Abonnez vos appareils pour entendre la sonnette, même l'application fermée. Sur iPhone : installez d'abord la PWA.</div>
+    <button type="button" id="kr-sub-btn" style="width:100%;min-height:44px;border:0;border-radius:11px;background:#7c8af9;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Recevoir les alertes sur cet appareil</button>
+    <div id="kr-sub-state" style="font-size:12.5px;margin-top:9px;line-height:1.5"></div>
+    <label style="display:block;font-size:12px;color:var(--text-muted,#8a93a5);margin:13px 0 5px">E-mail d'alerte (repli, optionnel)</label>
+    <input id="kr-alert-email" type="email" value="${alertEmail}" placeholder="vous@exemple.fr" autocomplete="email"
+      style="width:100%;height:42px;border-radius:10px;border:1px solid rgba(140,150,170,.3);background:transparent;color:inherit;font-size:15px;font-family:inherit;padding:0 12px;outline:none">`;
+  wrap.appendChild(box);
+
+  const emailEl = box.querySelector('#kr-alert-email');
+  emailEl.addEventListener('input', () => { _creating.template_data.alert_email = emailEl.value; });
+
+  const btn = box.querySelector('#kr-sub-btn');
+  const state = box.querySelector('#kr-sub-state');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; state.textContent = 'Activation…';
+    try { await _krSubscribeDevice(); }
+    catch (e) { state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
+    await _krRefreshAlerts(state, btn);
+  });
+  _krRefreshAlerts(state, btn);
+}
+async function _krRefreshAlerts(state, btn) {
+  const s = await _krStatus();
+  if (!s) { btn.hidden = false; btn.disabled = false; state.textContent = ''; return; }
+  const n = s.count || 0;
+  if (s.subscribed) {
+    btn.hidden = true;
+    state.innerHTML = `✓ Cet appareil reçoit les alertes · ${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''}. <a href="#" id="kr-unsub" style="color:#7c8af9">Ne plus recevoir ici</a>`;
+    state.querySelector('#kr-unsub')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await _krUnsubscribeDevice();
+      await _krRefreshAlerts(state, btn);
+    });
+  } else {
+    btn.hidden = false; btn.disabled = false;
+    state.textContent = n ? `${n} appareil${n > 1 ? 's' : ''} déjà abonné${n > 1 ? 's' : ''} (pas celui-ci).` : '';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════

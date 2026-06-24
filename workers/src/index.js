@@ -136,6 +136,9 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleVoiceUpload, handleReminderCreate,
          handleRemindersList, handleReminderUpdate, handleReminderDelete,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
+// Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
+import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond,
+         handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus } from './routes/keyring.js';
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
@@ -195,6 +198,13 @@ export default {
       if (knReminder && method === 'DELETE') return handleReminderDelete(request, env, knReminder[1]);
       if (path === '/api/keynapse/push/subscribe'   && method === 'POST') return handlePushSubscribe(request, env);
       if (path === '/api/keynapse/push/unsubscribe' && method === 'POST') return handlePushUnsubscribe(request, env);
+      // Key-Ring (Sonnette) — ORDRE 3 : sonner (public) + boucle retour + abonnement (JWT).
+      if (path === '/api/keyring/ring'             && method === 'POST') return handleKeyringRing(request, env);
+      if (path === '/api/keyring/ring-status'      && method === 'GET')  return handleKeyringRingStatus(request, env);
+      if (path === '/api/keyring/respond'          && method === 'POST') return handleKeyringRespond(request, env);
+      if (path === '/api/keyring/push/subscribe'   && method === 'POST') return handleKeyringPushSubscribe(request, env);
+      if (path === '/api/keyring/push/unsubscribe' && method === 'POST') return handleKeyringPushUnsubscribe(request, env);
+      if (path === '/api/keyring/push/status'      && method === 'GET')  return handleKeyringPushStatus(request, env);
       const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
       if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
       if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);
