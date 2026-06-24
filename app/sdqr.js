@@ -1788,7 +1788,37 @@ function _renderKeyringAlerts(wrap) {
     catch (e) { state.style.color = '#e0556b'; state.style.fontWeight = '600'; state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
     await _krRefreshAlerts(state, btn);
   });
-  _krRefreshAlerts(state, btn);
+  // Semi-auto : si les notifications sont DEJA autorisees sur cet appareil, on
+  // abonne sans rien demander (zero clic). Sinon, le bouton fait le 1 clic.
+  (async () => {
+    state.style.color = ''; state.style.fontWeight = '500'; state.textContent = 'Vérification…';
+    await _krAutoSubscribeIfGranted();
+    await _krRefreshAlerts(state, btn);
+  })();
+}
+// Abonne SILENCIEUSEMENT cet appareil si la permission notif est deja accordee
+// (zero clic). Ne demande JAMAIS la permission ici (sans geste utilisateur ->
+// rejetee par le navigateur) : c'est le bouton qui fait le 1er clic.
+async function _krAutoSubscribeIfGranted() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return false;
+    if (Notification.permission !== 'granted') return false;
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('sw')), 5000)),
+    ]);
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _krVapidBytes() });
+    const j = sub.toJSON();
+    if (!j || !j.keys) return false;
+    const ua = navigator.userAgent || '';
+    const label = (/iP(hone|ad|od)|Android|Mobile/.test(ua)) ? 'Téléphone' : 'Ordinateur';
+    const r = await fetch(CF_API + '/api/keyring/push/subscribe', {
+      method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, label }),
+    });
+    return r.ok;
+  } catch (_) { return false; }
 }
 async function _krRefreshAlerts(state, btn) {
   const s = await _krStatus();
