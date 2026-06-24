@@ -1719,20 +1719,31 @@ async function _krGetSubscription() {
   catch (_) { return null; }
 }
 async function _krSubscribeDevice() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Notifications non supportées sur cet appareil.');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window))
+    throw new Error('Notifications non supportées par ce navigateur.');
+  const ua = navigator.userAgent || '';
+  const isIOS = /iP(hone|ad|od)/.test(ua);
+  // iOS : le Web Push n'existe QUE dans la PWA installée, ouverte depuis l'icône.
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  if (isIOS && !standalone)
+    throw new Error('Sur iPhone : installez l\'app (Partager → Sur l\'écran d\'accueil), ouvrez-la depuis l\'icône, puis réessayez ici.');
   const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error('Notifications refusées (réglages du navigateur).');
-  const reg = await navigator.serviceWorker.ready;
+  if (perm !== 'granted') throw new Error('Notifications refusées — autorisez-les pour cet appareil.');
+  // Garde-fou : si le SW ne prend jamais le contrôle, ne pas rester bloqué.
+  const reg = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('Service worker indisponible — rechargez la page et réessayez.')), 6000)),
+  ]);
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _krVapidBytes() });
   const j = sub.toJSON();
-  if (!j || !j.keys) throw new Error('Abonnement impossible.');
-  const label = (navigator.userAgent.includes('Mobile') ? 'Téléphone' : 'Ordinateur');
+  if (!j || !j.keys) throw new Error('Abonnement impossible (clés manquantes).');
+  const label = (isIOS || /Android|Mobile/.test(ua)) ? 'Téléphone' : 'Ordinateur';
   const r = await fetch(CF_API + '/api/keyring/push/subscribe', {
     method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, label }),
   });
-  if (!r.ok) throw new Error('Enregistrement refusé (' + r.status + ').');
+  if (!r.ok) { let t = ''; try { t = await r.text(); } catch (_) {} throw new Error('Enregistrement refusé (' + r.status + ') ' + t.slice(0, 80)); }
 }
 async function _krUnsubscribeDevice() {
   const sub = await _krGetSubscription();
@@ -1756,10 +1767,12 @@ function _renderKeyringAlerts(wrap) {
   const alertEmail = _esc(_creating.template_data.alert_email || '');
   box.innerHTML = `
     <div style="font-weight:700;font-size:14px;margin-bottom:3px">Alertes &amp; destinataires</div>
-    <div style="font-size:12px;color:var(--text-muted,#8a93a5);margin-bottom:12px">Abonnez vos appareils pour entendre la sonnette, même l'application fermée. Sur iPhone : installez d'abord la PWA.</div>
-    <button type="button" id="kr-sub-btn" style="width:100%;min-height:44px;border:0;border-radius:11px;background:#7c8af9;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Recevoir les alertes sur cet appareil</button>
+    <div style="font-size:12px;color:var(--text-muted,#8a93a5);margin-bottom:12px">Abonnez chaque appareil sur lequel vous voulez <b>entendre la sonnette</b>, même l'application fermée. Sur iPhone : installez d'abord la PWA (Partager &rarr; Sur l'écran d'accueil).</div>
+    <button type="button" id="kr-sub-btn" style="width:100%;min-height:44px;border:0;border-radius:11px;background:#7c8af9;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Recevoir les sonneries sur cet appareil</button>
     <div id="kr-sub-state" style="font-size:12.5px;margin-top:9px;line-height:1.5"></div>
-    <label style="display:block;font-size:12px;color:var(--text-muted,#8a93a5);margin:13px 0 5px">E-mail d'alerte (repli, optionnel)</label>
+    <div style="margin:14px 0 10px;border-top:1px solid rgba(140,150,170,.18)"></div>
+    <div style="font-size:12.5px;font-weight:600;margin-bottom:3px">Filet de sécurité <span style="color:var(--text-muted,#8a93a5);font-weight:400">(optionnel)</span></div>
+    <div style="font-size:11.5px;color:var(--text-muted,#8a93a5);margin-bottom:7px">Recevez <b>aussi</b> un e-mail à chaque sonnerie — au cas où une notification se perde (le push iPhone peut être bridé en arrière-plan).</div>
     <input id="kr-alert-email" type="email" value="${alertEmail}" placeholder="vous@exemple.fr" autocomplete="email"
       style="width:100%;height:42px;border-radius:10px;border:1px solid rgba(140,150,170,.3);background:transparent;color:inherit;font-size:15px;font-family:inherit;padding:0 12px;outline:none">`;
   wrap.appendChild(box);
@@ -1770,9 +1783,9 @@ function _renderKeyringAlerts(wrap) {
   const btn = box.querySelector('#kr-sub-btn');
   const state = box.querySelector('#kr-sub-state');
   btn.addEventListener('click', async () => {
-    btn.disabled = true; state.textContent = 'Activation…';
+    btn.disabled = true; state.style.color = ''; state.style.fontWeight = '500'; state.textContent = 'Activation…';
     try { await _krSubscribeDevice(); }
-    catch (e) { state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
+    catch (e) { state.style.color = '#e0556b'; state.style.fontWeight = '600'; state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
     await _krRefreshAlerts(state, btn);
   });
   _krRefreshAlerts(state, btn);
@@ -1783,7 +1796,8 @@ async function _krRefreshAlerts(state, btn) {
   const n = s.count || 0;
   if (s.subscribed) {
     btn.hidden = true;
-    state.innerHTML = `✓ Cet appareil reçoit les alertes · ${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''}. <a href="#" id="kr-unsub" style="color:#7c8af9">Ne plus recevoir ici</a>`;
+    state.style.color = '#16a34a'; state.style.fontWeight = '600';
+    state.innerHTML = `✓ Cet appareil reçoit les sonneries · ${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''}. <a href="#" id="kr-unsub" style="color:#7c8af9;font-weight:400">Ne plus recevoir ici</a>`;
     state.querySelector('#kr-unsub')?.addEventListener('click', async (e) => {
       e.preventDefault();
       await _krUnsubscribeDevice();
@@ -1791,7 +1805,8 @@ async function _krRefreshAlerts(state, btn) {
     });
   } else {
     btn.hidden = false; btn.disabled = false;
-    state.textContent = n ? `${n} appareil${n > 1 ? 's' : ''} déjà abonné${n > 1 ? 's' : ''} (pas celui-ci).` : '';
+    state.style.color = ''; state.style.fontWeight = '500';
+    state.textContent = n ? `${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''} ailleurs (pas celui-ci).` : '';
   }
 }
 

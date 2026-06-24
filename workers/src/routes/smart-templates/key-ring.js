@@ -111,19 +111,11 @@ const TEMPLATE = {
       heroEl = `<div class="notice-solo">${notice}</div>`;
     }
 
-    // « Sonner maintenant » (Web Push, ORDRE 3) : tap -> form nom/motif -> POST
-    // /ring -> push aux appareils du proprio -> poll de l'etat (Sonnerie -> Reponse).
+    // « Sonner maintenant » (Web Push, ORDRE 3) : UN tap -> POST /ring -> push aux
+    // appareils du proprio -> poll de l'etat (Sonnerie -> Reponse). Pas de form.
     const shortId = String(qrData?.short_id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
     const ringEl = `<div class="ring">
-        <button class="sonner" type="button" id="ks-sonner"><span class="sonner-ic">${ICON.bell}</span><span>Sonner maintenant</span></button>
-        <div class="ring-form" id="ks-form" hidden>
-          <input class="ring-in" id="ks-name" type="text" autocomplete="name" maxlength="40" placeholder="Votre nom (optionnel)">
-          <input class="ring-in" id="ks-motif" type="text" maxlength="140" placeholder="Motif (optionnel)">
-          <div class="ring-row">
-            <button class="ring-cancel" type="button" id="ks-cancel">Annuler</button>
-            <button class="ring-go" type="button" id="ks-go">Sonner</button>
-          </div>
-        </div>
+        <button class="sonner" type="button" id="ks-sonner"><span class="sonner-ic">${ICON.bell}</span><span id="ks-sonner-label">Sonner maintenant</span></button>
         <div class="ring-status" id="ks-status" hidden></div>
       </div>`;
 
@@ -171,30 +163,19 @@ const TEMPLATE = {
   .card-ic { width:78px; height:78px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
   .card-t { font-size:clamp(15px, 4.2vw, 17px); font-weight:700; letter-spacing:-0.02em; color:#fff; white-space:nowrap; }
   .card-s { margin-top:5px; font-size:13px; line-height:1.4; color:#8b94a8; }
-  /* Bouton primaire « Sonner maintenant » (push, ORDRE 3) */
+  /* Bouton primaire « Sonner maintenant » (push, ORDRE 3) — rectangle arrondi
+     comme les cartes (PAS un pill). */
   .sonner { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; margin:16px 0 0;
-    min-height:62px; border:0; border-radius:999px; cursor:pointer; color:#fff; font-family:inherit;
+    min-height:62px; border:0; border-radius:18px; cursor:pointer; color:#fff; font-family:inherit;
     font-size:17px; font-weight:800; letter-spacing:-0.01em;
     background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)), var(--acc);
     box-shadow:0 12px 30px rgba(0,0,0,.4), 0 6px 20px rgba(70,86,230,.4); }
   .sonner:active { transform:translateY(1px); }
+  .sonner:disabled { opacity:.72; cursor:default; }
   .sonner-ic { display:flex; }
-  /* Formulaire « Sonner » (nom/motif) + zone de statut (ORDRE 3) */
+  /* Zone de statut de la sonnerie (ORDRE 3) */
   .ring { margin-top:16px; }
   .ring .sonner { margin-top:0; }
-  .ring-form { margin-top:12px; display:flex; flex-direction:column; gap:10px;
-    background:linear-gradient(180deg,#161b27,#11151e); border:1px solid rgba(255,255,255,.08);
-    border-radius:18px; padding:14px; }
-  .ring-in { width:100%; height:48px; border-radius:12px; border:1px solid rgba(255,255,255,.12);
-    background:#0c1019; color:#eef1f7; font-size:16px; font-family:inherit; padding:0 14px; outline:none; }
-  .ring-in::placeholder { color:#6b7488; }
-  .ring-in:focus { border-color:var(--acc); }
-  .ring-row { display:flex; gap:10px; }
-  .ring-cancel, .ring-go { flex:1; height:50px; border-radius:12px; border:0; font-family:inherit;
-    font-size:15px; font-weight:700; cursor:pointer; }
-  .ring-cancel { background:rgba(255,255,255,.08); color:#c7cede; }
-  .ring-go { background:var(--acc); color:#fff; }
-  .ring-go:disabled { opacity:.6; }
   .ring-status { margin-top:12px; border-radius:14px; padding:14px 16px; font-size:14px; line-height:1.4;
     background:linear-gradient(180deg,#161b27,#11151e); border:1px solid rgba(255,255,255,.08);
     color:#c7cede; text-align:center; }
@@ -218,10 +199,6 @@ const TEMPLATE = {
     .disclaimer { color:#9aa3b2; }
     .sq-foot { color:#9aa7b8; }
     .sq-foot a { color:#6b7790; }
-    .ring-form { background:#fff; border-color:rgba(20,30,60,.10); box-shadow:0 6px 16px rgba(20,30,60,.07); }
-    .ring-in { background:#f4f6fb; color:#1c2230; border-color:rgba(20,30,60,.14); }
-    .ring-in::placeholder { color:#9aa3b2; }
-    .ring-cancel { background:#eef1f7; color:#52607a; }
     .ring-status { background:#fff; border-color:rgba(20,30,60,.10); color:#52607a; box-shadow:0 6px 16px rgba(20,30,60,.07); }
     .ring-status.st-answered { background:#e7f9ef; border-color:rgba(34,180,110,.45); color:#11623a; }
   }
@@ -242,42 +219,34 @@ const TEMPLATE = {
     var SHORT = ${JSON.stringify(shortId)};
     var API = "https://keystone-os-api.keystone-os.workers.dev";
     var btn = document.getElementById("ks-sonner");
-    var form = document.getElementById("ks-form");
-    var go = document.getElementById("ks-go");
-    var cancel = document.getElementById("ks-cancel");
+    var label = document.getElementById("ks-sonner-label");
     var statusEl = document.getElementById("ks-status");
-    var nameEl = document.getElementById("ks-name");
-    var motifEl = document.getElementById("ks-motif");
     if (!btn || !SHORT) return;
     var poller = null;
     function setStatus(state, text){ statusEl.hidden=false; statusEl.className="ring-status st-"+state; statusEl.textContent=text; }
-    function showButton(){ btn.hidden=false; form.hidden=true; go.disabled=false; }
-    btn.addEventListener("click", function(){ btn.hidden=true; form.hidden=false; statusEl.hidden=true; try{nameEl.focus();}catch(e){} });
-    cancel.addEventListener("click", showButton);
-    go.addEventListener("click", ring);
-    function ring(){
-      go.disabled=true;
-      var name=(nameEl.value||""), motif=(motifEl.value||"");
-      form.hidden=true; btn.hidden=true;
-      setStatus("ringing", "Sonnerie envoyée — on prévient l'occupant…");
-      fetch(API+"/api/keyring/ring",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({short_id:SHORT,name:name,motif:motif})})
+    function resetBtn(t){ btn.disabled=false; if(label) label.textContent=t||"Sonner maintenant"; }
+    btn.addEventListener("click", function(){
+      if(poller){ clearInterval(poller); poller=null; }
+      btn.disabled=true; if(label) label.textContent="Sonnerie en cours…";
+      setStatus("ringing","Sonnerie envoyée — on prévient l'occupant…");
+      fetch(API+"/api/keyring/ring",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({short_id:SHORT})})
         .then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }, function(){ return {s:r.status,j:{}}; }); })
         .then(function(res){
-          if(res.s===429){ setStatus("idle", (res.j&&res.j.error==="cooldown") ? "Vous venez de sonner, patientez un instant." : "Trop de sonneries pour aujourd'hui."); showButton(); return; }
-          if(!res.j||!res.j.ok||!res.j.ring_id){ setStatus("idle","Sonnerie indisponible. Utilisez un moyen de contact ci-dessus."); showButton(); return; }
+          if(res.s===429){ setStatus("idle", (res.j&&res.j.error==="cooldown") ? "Vous venez de sonner, patientez un instant." : "Trop de sonneries pour aujourd'hui."); resetBtn(); return; }
+          if(!res.j||!res.j.ok||!res.j.ring_id){ setStatus("idle","Sonnerie indisponible. Utilisez un moyen de contact ci-dessus."); resetBtn(); return; }
           setStatus("ringing","Sonnerie envoyée — en attente d'une réponse…");
           poll(res.j.ring_id);
         })
-        .catch(function(){ setStatus("idle","Réseau indisponible. Utilisez un moyen de contact ci-dessus."); showButton(); });
-    }
+        .catch(function(){ setStatus("idle","Réseau indisponible. Utilisez un moyen de contact ci-dessus."); resetBtn(); });
+    });
     function poll(id){
       var tries=0, MAX=40;
       poller=setInterval(function(){
         tries++;
         fetch(API+"/api/keyring/ring-status?id="+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(j){
-          if(j&&j.status==="answered"&&j.response){ clearInterval(poller); setStatus("answered","✓ "+j.response); }
-          else if(tries>=MAX){ clearInterval(poller); setStatus("timeout","Pas de réponse pour l'instant. Vous pouvez appeler ou écrire ci-dessus."); }
-        }).catch(function(){ if(tries>=MAX){ clearInterval(poller); setStatus("timeout","Pas de réponse pour l'instant."); } });
+          if(j&&j.status==="answered"&&j.response){ clearInterval(poller); poller=null; setStatus("answered","✓ "+j.response); resetBtn("Sonner à nouveau"); }
+          else if(tries>=MAX){ clearInterval(poller); poller=null; setStatus("timeout","Pas de réponse pour l'instant. Vous pouvez appeler ou écrire ci-dessus."); resetBtn("Sonner à nouveau"); }
+        }).catch(function(){ if(tries>=MAX){ clearInterval(poller); poller=null; setStatus("timeout","Pas de réponse pour l'instant."); resetBtn("Sonner à nouveau"); } });
       },3000);
     }
   })();
