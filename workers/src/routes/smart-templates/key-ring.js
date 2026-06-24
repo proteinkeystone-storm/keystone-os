@@ -211,7 +211,6 @@ const TEMPLATE = {
     ${heroEl}
     ${cards ? `<div class="cards">${cards}</div>` : ''}
     ${ringEl}
-    <p class="disclaimer">Sonnette de confort &mdash; ce n'est pas un dispositif de sécurité ni de secours.</p>
     ${renderKeystoneFoot()}
   </div>
   <script>

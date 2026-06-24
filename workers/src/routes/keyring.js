@@ -162,6 +162,9 @@ export async function handleKeyringRing(request, env) {
      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
   ).bind(ringId, shortId, target.tenant_id, name || null, motif || null, token, dh).run();
 
+  const apiBase = new URL(request.url).origin;
+  const place   = String(target.td.place_name || 'Sonnette').slice(0, 60);
+
   // Fan-out Web Push vers les appareils du proprietaire.
   let sent = 0;
   const vapid = _vapid(env);
@@ -169,8 +172,6 @@ export async function handleKeyringRing(request, env) {
     const subs = (await env.DB.prepare(
       'SELECT endpoint, p256dh, auth FROM kr_push_subs WHERE tenant_id = ?'
     ).bind(target.tenant_id).all()).results || [];
-    const apiBase = new URL(request.url).origin;
-    const place = String(target.td.place_name || 'Sonnette').slice(0, 60);
     const payload = { kind: 'keyring-ring', ring_id: ringId, token, place, name, motif, api: apiBase };
     for (const s of subs) {
       let st = 0;
@@ -188,14 +189,19 @@ export async function handleKeyringRing(request, env) {
   const ae = String(target.td.alert_email || '').trim();
   const alertEmail = (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ae) && !/[<>"'\\]/.test(ae)) ? ae : '';
   if (alertEmail && env.KS_RESEND_KEY) {
-    const place = String(target.td.place_name || 'Sonnette').slice(0, 60);
-    const who   = name || 'Quelqu\'un';
-    const line  = motif ? (who + ' : ' + motif) : (who + ' est a votre porte.');
-    const html  = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:24px">`
+    const who  = name || 'Quelqu\'un';
+    const line = motif ? (who + ' : ' + motif) : (who + ' est a votre porte.');
+    // Boutons de reponse 1-clic : chaque lien repond pour CE ring (autorise par
+    // le respond_token, present dans le lien). Le visiteur voit la reponse.
+    const btns = Object.keys(RING_RESPONSES).map(k =>
+      `<a href="${apiBase}/api/keyring/respond?ring_id=${ringId}&response=${k}&token=${token}" style="display:inline-block;margin:0 8px 8px 0;padding:11px 18px;border-radius:10px;background:#5b6cf5;color:#fff;text-decoration:none;font-weight:600;font-size:15px">${escHtml(RING_RESPONSES[k])}</a>`
+    ).join('');
+    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:24px">`
       + `<div style="font-size:12px;letter-spacing:1.5px;color:#7c8af9;text-transform:uppercase">Sonnette</div>`
       + `<h1 style="font-size:22px;margin:6px 0 14px;color:#111">${escHtml(place)}</h1>`
       + `<p style="font-size:16px;color:#222;line-height:1.5">${escHtml(line)}</p>`
-      + `<p style="font-size:12.5px;color:#888;margin-top:22px;line-height:1.5">Sonnette de confort Keystone &mdash; ouvrez l'application pour repondre. Ce n'est pas un dispositif de securite ni de secours.</p>`
+      + `<p style="font-size:13px;color:#666;margin:18px 0 10px">Repondre en un clic :</p>`
+      + `<div>${btns}</div>`
       + `</div>`;
     try { await sendEmail(env, { to: alertEmail, subject: 'Sonnette — ' + place, html }); } catch (_) {}
   }
@@ -233,6 +239,36 @@ export async function handleKeyringRespond(request, env) {
     "UPDATE kr_rings SET response = ?, status = 'answered', answered_at = datetime('now') WHERE id = ?"
   ).bind(RING_RESPONSES[key], ringId).run();
   return json({ ok: true }, 200, origin);
+}
+
+// L'occupant repond depuis l'E-MAIL (clic sur un bouton = lien GET). Meme
+// autorisation par respond_token. Repond a CE ring puis affiche une page de
+// confirmation. GET /api/keyring/respond?ring_id=&response=&token=
+function _krRespondPage(msg, ok) {
+  return new Response(
+    `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">`
+    + `<meta name="viewport" content="width=device-width, initial-scale=1">`
+    + `<meta name="color-scheme" content="dark light"><title>Reponse</title></head>`
+    + `<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;`
+    + `background:#0b1019;color:#eef1f7;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px">`
+    + `<div><div style="font-size:44px;line-height:1;margin-bottom:12px">${ok ? '&#10003;' : '&#8226;'}</div>`
+    + `<div style="font-size:18px;font-weight:700;max-width:340px;line-height:1.45">${msg}</div></div>`
+    + `</body></html>`,
+    { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+export async function handleKeyringRespondGet(request, env) {
+  await _ensureSchema(env);
+  const u = new URL(request.url);
+  const ringId = String(u.searchParams.get('ring_id') || '').trim();
+  const key    = String(u.searchParams.get('response') || '').trim();
+  const token  = String(u.searchParams.get('token') || '').trim();
+  if (!ringId || !token || !RING_RESPONSES[key]) return _krRespondPage('Lien invalide.', false);
+  const r = await env.DB.prepare('SELECT respond_token FROM kr_rings WHERE id = ?').bind(ringId).first();
+  if (!r || r.respond_token !== token) return _krRespondPage('Lien expire ou invalide.', false);
+  await env.DB.prepare(
+    "UPDATE kr_rings SET response = ?, status = 'answered', answered_at = datetime('now') WHERE id = ?"
+  ).bind(RING_RESPONSES[key], ringId).run();
+  return _krRespondPage('Reponse envoyee : &laquo; ' + escHtml(RING_RESPONSES[key]) + ' &raquo;. Le visiteur la voit maintenant.', true);
 }
 
 // ════════════════════════════════════════════════════════════════════

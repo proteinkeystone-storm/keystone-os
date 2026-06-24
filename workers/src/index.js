@@ -137,7 +137,7 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleRemindersList, handleReminderUpdate, handleReminderDelete,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
-import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond,
+import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus } from './routes/keyring.js';
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
@@ -202,6 +202,7 @@ export default {
       if (path === '/api/keyring/ring'             && method === 'POST') return handleKeyringRing(request, env);
       if (path === '/api/keyring/ring-status'      && method === 'GET')  return handleKeyringRingStatus(request, env);
       if (path === '/api/keyring/respond'          && method === 'POST') return handleKeyringRespond(request, env);
+      if (path === '/api/keyring/respond'          && method === 'GET')  return handleKeyringRespondGet(request, env);
       if (path === '/api/keyring/push/subscribe'   && method === 'POST') return handleKeyringPushSubscribe(request, env);
       if (path === '/api/keyring/push/unsubscribe' && method === 'POST') return handleKeyringPushUnsubscribe(request, env);
       if (path === '/api/keyring/push/status'      && method === 'GET')  return handleKeyringPushStatus(request, env);
