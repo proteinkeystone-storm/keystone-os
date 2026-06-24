@@ -7,8 +7,9 @@
 // depuis SON telephone (Appeler / SMS / WhatsApp / E-mail). Apparait sous
 // « Pratique » (1re page hebergee de cette famille).
 //
-// ORDRE 1 = champs + structure, SKIN NEUTRE. Le « Sonner » (Web Push) + la
-// boucle retour + les destinataires arrivent a l'ORDRE 3.
+// ORDRE 2 = skin interphone sombre + image haute (WebP) avec message en
+// surimpression. Le « Sonner » (Web Push) + la boucle retour + les
+// destinataires arrivent a l'ORDRE 3.
 // ══════════════════════════════════════════════════════════════════
 
 const TEMPLATE = {
@@ -21,12 +22,14 @@ const TEMPLATE = {
 
   fields: [
     { id: 'place_name', type: 'text',     label: 'Nom du lieu', required: true, placeholder: 'Le Portail', span: 'full' },
-    { id: 'subtitle',   type: 'text',     label: 'Sous-titre', placeholder: 'Entrée principale', span: 'full' },
+    { id: 'subtitle',   type: 'text',     label: 'Sous-titre', placeholder: 'Comment souhaitez-vous prévenir ?', span: 'full' },
+    { id: 'hero_url',   type: 'image',    label: 'Image (haut de page) — WebP, PNG ou JPG', maxBytes: 90000, maxDim: 1100, span: 'full' },
+    { id: 'notice',     type: 'text',     label: 'Message sur l\'image (optionnel)', placeholder: 'Attention au chien', span: 'full' },
     { id: 'phone',      type: 'tel',      label: 'Téléphone (Appeler / SMS)', placeholder: '06 00 00 00 00' },
     { id: 'whatsapp',   type: 'tel',      label: 'WhatsApp (format international)', placeholder: '33 6 00 00 00 00' },
     { id: 'email',      type: 'email',    label: 'E-mail', placeholder: 'vous@exemple.fr' },
     { id: 'message',    type: 'textarea', label: 'Message pré-rempli (SMS, WhatsApp, e-mail)', placeholder: 'Bonjour, je suis au portail.', span: 'full' },
-    { id: 'accent_color', type: 'color',  label: 'Couleur d\'accent', default: '#7c8af9' },
+    { id: 'accent_color', type: 'color',  label: 'Couleur du bouton « Sonner »', default: '#5b6cf5' },
   ],
 
   validate(template_data) {
@@ -47,12 +50,14 @@ const TEMPLATE = {
     return `Sonnette — ${lieu}${n ? ` · ${n} moyen${n > 1 ? 's' : ''} de contact` : ''}`;
   },
 
-  // Mini-apercu (inline, autonome) : plaque + gros bouton + 2 pastilles.
+  // Mini-apercu (inline, autonome) : interphone sombre (titre + image + 2
+  // cartes + bouton Sonner).
   previewMini() {
-    return `<div style="padding:8px 10px">
-      <div style="height:18px;border-radius:6px;background:#fff;border:1px solid #e2e7ef;margin-bottom:6px"></div>
-      <div style="height:16px;border-radius:6px;background:#7c8af9;margin-bottom:6px"></div>
-      <div style="display:flex;gap:5px"><div style="flex:1;height:12px;border-radius:4px;background:#eef1f8;border:1px solid #e2e7ef"></div><div style="flex:1;height:12px;border-radius:4px;background:#eef1f8;border:1px solid #e2e7ef"></div></div>
+    return `<div style="padding:8px 9px;background:#0b1019;border-radius:8px">
+      <div style="height:7px;width:58%;margin:1px auto 5px;border-radius:4px;background:#fff;opacity:.85"></div>
+      <div style="height:24px;border-radius:7px;background:linear-gradient(180deg,#1a2130,#121722);border:1px solid rgba(255,255,255,.08);margin-bottom:5px"></div>
+      <div style="display:flex;gap:5px;margin-bottom:5px"><div style="flex:1;height:19px;border-radius:7px;background:#171c28;border:1px solid rgba(255,255,255,.07)"></div><div style="flex:1;height:19px;border-radius:7px;background:#171c28;border:1px solid rgba(255,255,255,.07)"></div></div>
+      <div style="height:11px;border-radius:6px;background:#5b6cf5"></div>
     </div>`;
   },
 };

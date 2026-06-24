@@ -7,10 +7,13 @@
 // (Appeler / SMS / WhatsApp / E-mail) que le visiteur declenche depuis SON
 // telephone (fiable, dans son forfait, zero cout serveur).
 //
-// ORDRE 1 (cette version) = structure + logique, SKIN NEUTRE (pas le design
-// final). 100% statique, AUCUNE IA, AUCUN push (renderHTML est PUR). La zone
-// de statut est un emplacement neutre que l'ORDRE 3 (Web Push + boucle retour)
-// animera. Le « Sonner discrètement » (push) arrive a l'ORDRE 3.
+// ORDRE 2 (cette version) = SKIN « interphone premium sombre » (ref Stephane).
+// Titre + sous-titre, image haute (WebP) avec message en surimpression
+// optionnel, cartes d'action (Appeler / SMS / WhatsApp / E-mail), bouton
+// primaire « Sonner maintenant » = le Web Push de l'ORDRE 3 (rendu seulement
+// si push_enabled ; masque par defaut tant que l'ORDRE 3 n'est pas cable ->
+// pas de bouton mort). 100% statique, AUCUNE IA, renderHTML PUR (aucun push
+// ici). Le « Sonner » + la boucle retour + les destinataires = ORDRE 3.
 //
 // Garde-fou cardinal : CONFORT, PAS SECURITE. Jamais positionnee urgence /
 // secours — c'est ecrit noir sur blanc sur la page.
@@ -18,18 +21,27 @@
 // Pendant frontend : app/sdqr-templates/key-ring.js.
 // ══════════════════════════════════════════════════════════════════
 
-import { escHtml, safeColor, renderKeystoneFoot } from './_shared.js';
+import { escHtml, safeUrl, safeColor, renderKeystoneFoot } from './_shared.js';
 
-// Icones outline (style Lucide, currentColor) — alignees sur les encodeurs
-// contact de app/sdqr-types.js (tel / sms / whatsapp / email) + une cloche
-// pour la plaque-nom (metaphore interphone).
+// Glyphes blancs (pleins) pour les pastilles colorees des cartes + cloche
+// pour le bouton « Sonner maintenant ».
 const ICON = {
-  phone:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
-  sms:      '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-  whatsapp: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>',
-  mail:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
-  bell:     '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  phone:    '<svg viewBox="0 0 24 24" width="30" height="30" fill="#fff" aria-hidden="true"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .7-.2 1l-2.3 2.2z"/></svg>',
+  chat:     '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="8.5" cy="10" r="1.05" fill="#fff" stroke="none"/><circle cx="12" cy="10" r="1.05" fill="#fff" stroke="none"/><circle cx="15.5" cy="10" r="1.05" fill="#fff" stroke="none"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24" width="29" height="29" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.4a8.6 8.6 0 0 0-7.4 13l-1 3.6 3.7-1a8.6 8.6 0 1 0 4.7-15.6z"/><path d="M9.5 8.3c-.15-.35-.3-.33-.44-.34h-.37c-.13 0-.34.05-.52.25s-.68.66-.68 1.6.7 1.86.8 2 1.36 2.18 3.36 2.96c1.66.66 2 .53 2.37.5.36-.04 1.16-.48 1.32-.94.16-.46.16-.85.11-.93-.05-.08-.18-.13-.38-.23s-1.2-.59-1.38-.66-.32-.1-.46.1-.52.66-.64.8-.24.15-.44.05-.85-.31-1.62-1-.84-1.2-1.12-1.4-.01-.31.09-.4z" fill="#fff" stroke="none"/></svg>',
+  mail:     '<svg viewBox="0 0 24 24" width="29" height="29" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2.4"/><path d="m3 6.5 9 6 9-6"/></svg>',
+  bell:     '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
 };
+
+// Metadonnees par canal : titre, sous-titre HONNETE (pas de sur-promesse),
+// glyphe et degrade de la pastille. tel: = audio seul ; la video vit sur
+// la carte WhatsApp. L'ordre du tableau = l'ordre d'affichage des cartes.
+const CHANNELS = [
+  { k: 'tel',      t: 'Appeler',        s: 'Appel direct, depuis votre telephone.', ic: 'phone',    g1: '#2fd36b', g2: '#1eb257' },
+  { k: 'sms',      t: 'Envoyer un SMS', s: 'Message pre-rempli, pret a envoyer.',    ic: 'chat',     g1: '#8a6bff', g2: '#6b4ef0' },
+  { k: 'whatsapp', t: 'WhatsApp',       s: 'Message ou appel, audio et video.',      ic: 'whatsapp', g1: '#37d780', g2: '#1faa52' },
+  { k: 'email',    t: 'E-mail',         s: 'Ecrivez-nous, on vous repond.',          ic: 'mail',     g1: '#5b8def', g2: '#3f6fd6' },
+];
 
 // ── Composition des liens (memes schemas URI que les encodeurs SDQR) ──
 // tel:  — garde chiffres + « + »  ·  wa.me — chiffres seuls.
@@ -58,11 +70,13 @@ const TEMPLATE = {
 
   renderHTML(qrData, scanCtx) {
     const d     = qrData?.template_data || {};
-    const acc   = safeColor(d.accent_color, '#7c8af9');
+    const acc   = safeColor(d.accent_color, '#5b6cf5');
     const place = escHtml((d.place_name || 'Nom du lieu').toString().slice(0, 60));
-    const sub   = escHtml((d.subtitle || '').toString().slice(0, 48));
+    const sub   = escHtml((d.subtitle || 'Comment souhaitez-vous prévenir ?').toString().slice(0, 70));
     const msg   = (d.message || '').toString().slice(0, 280);
     const encMsg = encodeURIComponent(msg);
+    const hero   = safeUrl(d.hero_url);
+    const notice = escHtml((d.notice || '').toString().slice(0, 90));
 
     const phone = telDigits(d.phone);
     const wa    = waDigits(d.whatsapp);
@@ -70,37 +84,37 @@ const TEMPLATE = {
 
     // Liens de contact — composes serveur, declenches sur le tel du visiteur.
     // sms: « ?&body= » couvre iOS (&body) ET Android (?body) en un seul href.
-    const telH  = phone ? 'tel:' + phone : '';
-    const smsH  = phone ? 'sms:' + phone + (msg ? '?&body=' + encMsg : '') : '';
-    const waH   = wa    ? 'https://wa.me/' + wa + (msg ? '?text=' + encMsg : '') : '';
     const subj  = encodeURIComponent('Sonnette — ' + (d.place_name || '').toString().slice(0, 60).trim());
-    const mailH = email ? 'mailto:' + email + (msg ? '?subject=' + subj + '&body=' + encMsg : '') : '';
+    const HREF = {
+      tel:      phone ? 'tel:' + phone : '',
+      sms:      phone ? 'sms:' + phone + (msg ? '?&body=' + encMsg : '') : '',
+      whatsapp: wa    ? 'https://wa.me/' + wa + (msg ? '?text=' + encMsg : '') : '',
+      email:    email ? 'mailto:' + email + (msg ? '?subject=' + subj + '&body=' + encMsg : '') : '',
+    };
 
-    // Canaux dans l'ordre canonique (un canal n'apparait que s'il est renseigne).
-    const CH = [
-      telH && { href: telH, ic: 'phone',    l: 'Appeler' },
-      smsH && { href: smsH, ic: 'sms',      l: 'Envoyer un SMS' },
-      waH  && { href: waH,  ic: 'whatsapp', l: 'WhatsApp', blank: true },
-      mailH&& { href: mailH,ic: 'mail',     l: 'E-mail' },
-    ].filter(Boolean);
+    // Cartes d'action : un canal n'apparait que s'il est renseigne.
+    const cards = CHANNELS.filter(c => HREF[c.k]).map(c => {
+      const blank = c.k === 'whatsapp' ? ' target="_blank" rel="noopener"' : '';
+      return `<a class="card" href="${escHtml(HREF[c.k])}"${blank}>
+          <span class="card-ic" style="background:linear-gradient(180deg,${c.g1},${c.g2});box-shadow:0 12px 26px ${c.g1}59">${ICON[c.ic]}</span>
+          <span class="card-t">${c.t}</span>
+          <span class="card-s">${c.s}</span>
+        </a>`;
+    }).join('');
 
-    // Bouton principal = 1er canal disponible (Appeler en tete = le plus fiable).
-    // L'« action primaire configurable » + le « Sonner (push) » arrivent a l'ORDRE 3.
-    const primary = CH[0] || null;
-    const rest    = CH.slice(1);
+    // Image haute (WebP/PNG/JPG) avec message en surimpression optionnel.
+    // Sans image mais avec message -> bandeau de consigne autonome.
+    let heroEl = '';
+    if (hero) {
+      heroEl = `<div class="hero"><img src="${hero}" alt="${notice}" referrerpolicy="no-referrer">${notice ? `<div class="hero-notice">${notice}</div>` : ''}</div>`;
+    } else if (notice) {
+      heroEl = `<div class="notice-solo">${notice}</div>`;
+    }
 
-    const primaryBtn = primary
-      ? `<a class="prim" href="${escHtml(primary.href)}"${primary.blank ? ' target="_blank" rel="noopener"' : ''}>
-           <span class="prim-ic">${ICON[primary.ic]}</span><span class="prim-l">${primary.l}</span>
-         </a>`
-      : `<div class="prim prim-empty"><span class="prim-l">Aucun moyen de contact</span></div>`;
-
-    const restBtns = rest.length
-      ? `<div class="acts">${rest.map(a =>
-          `<a class="act" href="${escHtml(a.href)}"${a.blank ? ' target="_blank" rel="noopener"' : ''}>
-             <span class="act-ic">${ICON[a.ic]}</span><span class="act-l">${a.l}</span>
-           </a>`).join('')}</div>`
-      : '';
+    // « Sonner maintenant » = bouton primaire (Web Push de l'ORDRE 3). Toujours
+    // affiche (choix Stephane « visible de suite ») ; l'ORDRE 3 cable le push,
+    // le rend fonctionnel et gere son etat (Au repos -> Sonnerie... -> Recu).
+    const sonnerEl = `<button class="sonner" type="button" id="ks-sonner"><span class="sonner-ic">${ICON.bell}</span><span>Sonner maintenant</span></button>`;
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -108,66 +122,81 @@ const TEMPLATE = {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#070a11" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
 <title>${place} · Sonnette</title>
 <style>
   :root { --acc:${acc}; }
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin:0; padding:0; min-height:100vh; }
   body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; letter-spacing:-0.01em;
-    background:#eef1f5; color:#1c2230;
-    min-height:100vh; display:flex; flex-direction:column; align-items:center;
-    padding: calc(34px + env(safe-area-inset-top,0px)) 20px calc(28px + env(safe-area-inset-bottom,0px)); }
+    color:#eef1f7;
+    background:radial-gradient(135% 95% at 50% -8%, #171f31 0%, #0b1019 46%, #070a11 100%);
+    background-attachment:fixed; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding: calc(34px + env(safe-area-inset-top,0px)) 20px calc(30px + env(safe-area-inset-bottom,0px)); }
   a { text-decoration:none; color:inherit; -webkit-tap-highlight-color:transparent; }
   .panel { width:100%; max-width:430px; }
-  /* Plaque-nom */
-  .plaque { background:#fff; border-radius:22px; padding:26px 22px; text-align:center;
-    box-shadow:0 2px 14px rgba(28,40,80,.07); }
-  .plaque-ic { width:54px; height:54px; border-radius:16px; margin:0 auto 14px;
-    display:flex; align-items:center; justify-content:center;
-    background:#eff2f7; color:var(--acc); }
-  .place { font-weight:800; letter-spacing:-0.02em; font-size:23px; line-height:1.15; }
-  .sub { margin-top:5px; font-size:13px; font-weight:500; color:#8a93a5; }
-  /* Bouton principal */
-  .prim { display:flex; align-items:center; justify-content:center; gap:11px;
-    margin-top:18px; min-height:64px; border-radius:18px; background:var(--acc); color:#fff;
-    font-size:17px; font-weight:700; letter-spacing:-0.01em;
-    box-shadow:0 6px 18px rgba(28,40,80,.18); }
-  .prim:active { transform:translateY(1px); }
-  .prim-empty { background:#dfe4ec; color:#8a93a5; box-shadow:none; }
-  .prim-ic { display:flex; }
-  /* Boutons secondaires */
-  .acts { display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:10px; margin-top:10px; }
-  .act { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-    min-height:64px; border-radius:15px; background:#fff; color:#2b3650;
-    box-shadow:0 1px 7px rgba(28,40,80,.06); padding:8px 6px; }
-  .act:active { transform:translateY(1px); }
-  .act-ic { color:var(--acc); display:flex; }
-  .act-l { font-size:12px; font-weight:600; }
-  /* Zone de statut (neutre en ORDRE 1 ; animee a l'ORDRE 3) */
-  .status { margin-top:18px; background:#fff; border-radius:15px; padding:13px 16px;
-    display:flex; align-items:center; gap:10px; box-shadow:0 1px 7px rgba(28,40,80,.06); }
-  .status .dot { width:9px; height:9px; border-radius:50%; background:#c2cad8; flex:0 0 auto; }
-  .status .st-txt { font-size:12.5px; color:#6b7488; font-weight:500; }
+  .title { margin:0; text-align:center; font-weight:900; letter-spacing:-0.03em; line-height:1.05;
+    font-size:clamp(27px, 7.5vw, 37px); color:#fff; }
+  .subtitle { margin:9px 0 0; text-align:center; font-size:16px; font-weight:500; color:#8b94a8; }
+  /* Image haute + message en surimpression */
+  .hero { position:relative; margin:24px 0 0; border-radius:22px; overflow:hidden; aspect-ratio:5/4;
+    background:#10151f; border:1px solid rgba(255,255,255,.07); box-shadow:0 18px 40px rgba(0,0,0,.45); }
+  .hero img { width:100%; height:100%; object-fit:cover; display:block; }
+  .hero-notice { position:absolute; left:0; right:0; bottom:0; padding:18px 16px 14px;
+    background:linear-gradient(transparent, rgba(4,7,12,.92)); color:#fff; font-size:15px; font-weight:600; }
+  .notice-solo { margin:24px 0 0; padding:15px 16px; border-radius:16px;
+    background:linear-gradient(180deg,#1b2130,#141923); border:1px solid rgba(255,255,255,.07);
+    color:#fff; font-size:15px; font-weight:600; text-align:center; }
+  /* Cartes d'action */
+  .cards { margin:18px 0 0; display:grid; grid-template-columns:repeat(2,1fr); gap:13px; }
+  .card { display:flex; flex-direction:column; align-items:center; text-align:center; padding:24px 16px 20px;
+    border-radius:24px; background:linear-gradient(180deg,#1a2130,#121722); border:1px solid rgba(255,255,255,.07);
+    box-shadow:0 10px 28px rgba(0,0,0,.32); transition:transform .12s ease; }
+  .card:active { transform:translateY(1px) scale(.99); }
+  .card:last-child:nth-child(odd) { grid-column:1 / -1; }
+  .card-ic { width:78px; height:78px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
+  .card-t { font-size:clamp(15px, 4.2vw, 17px); font-weight:700; letter-spacing:-0.02em; color:#fff; white-space:nowrap; }
+  .card-s { margin-top:5px; font-size:13px; line-height:1.4; color:#8b94a8; }
+  /* Bouton primaire « Sonner maintenant » (push, ORDRE 3) */
+  .sonner { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; margin:16px 0 0;
+    min-height:62px; border:0; border-radius:999px; cursor:pointer; color:#fff; font-family:inherit;
+    font-size:17px; font-weight:800; letter-spacing:-0.01em;
+    background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)), var(--acc);
+    box-shadow:0 12px 30px rgba(0,0,0,.4), 0 6px 20px rgba(70,86,230,.4); }
+  .sonner:active { transform:translateY(1px); }
+  .sonner-ic { display:flex; }
   /* Disclaimer : confort, pas securite (garde-fou cardinal) */
-  .note { margin:14px 4px 0; font-size:11px; line-height:1.45; color:#9aa3b2; text-align:center; }
-  .sq-foot { margin:18px 0 0; font-size:11px; color:#9aa7b8; text-align:center; }
-  .sq-foot a { color:#6b7790; }
+  .disclaimer { margin:16px 8px 0; text-align:center; font-size:11.5px; line-height:1.45; color:#626c84; }
+  .sq-foot { margin:18px 0 0; text-align:center; font-size:11px; color:rgba(255,255,255,.4); }
+  .sq-foot a { color:rgba(255,255,255,.6); }
+  /* Mode clair auto (journee / appareil en clair) : meme structure, peau claire.
+     Les pastilles colorees + le bouton accent restent vifs sur fond clair. */
+  @media (prefers-color-scheme: light) {
+    body { color:#1c2230; background:radial-gradient(135% 95% at 50% -8%, #ffffff 0%, #eef1f6 48%, #e4e9f1 100%); }
+    .title { color:#0e1422; }
+    .subtitle { color:#6b7488; }
+    .hero { background:#e7ebf2; border-color:rgba(20,30,60,.08); box-shadow:0 14px 34px rgba(20,30,60,.14); }
+    .notice-solo { background:#fff; border-color:rgba(20,30,60,.08); color:#1c2230; box-shadow:0 6px 16px rgba(20,30,60,.08); }
+    .card { background:#fff; border-color:rgba(20,30,60,.08); box-shadow:0 8px 22px rgba(20,30,60,.10); }
+    .card-t { color:#1c2230; }
+    .card-s { color:#7a8396; }
+    .disclaimer { color:#9aa3b2; }
+    .sq-foot { color:#9aa7b8; }
+    .sq-foot a { color:#6b7790; }
+  }
 </style>
 </head>
 <body>
   <div class="panel">
-    <div class="plaque">
-      <div class="plaque-ic">${ICON.bell}</div>
-      <div class="place">${place}</div>
-      ${sub ? `<div class="sub">${sub}</div>` : ''}
-    </div>
-    ${primaryBtn}
-    ${restBtns}
-    <div class="status">
-      <span class="dot"></span>
-      <span class="st-txt">Vous contactez l'occupant depuis votre téléphone.</span>
-    </div>
-    <p class="note">Sonnette de confort &mdash; ce n'est pas un dispositif de sécurité ni de secours.</p>
+    <h1 class="title">${place}</h1>
+    <p class="subtitle">${sub}</p>
+    ${heroEl}
+    ${cards ? `<div class="cards">${cards}</div>` : ''}
+    ${sonnerEl}
+    <p class="disclaimer">Sonnette de confort &mdash; ce n'est pas un dispositif de sécurité ni de secours.</p>
     ${renderKeystoneFoot()}
   </div>
 </body>

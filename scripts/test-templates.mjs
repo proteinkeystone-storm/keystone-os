@@ -73,12 +73,14 @@ const MOCK_DATA = {
   // Page hébergée « Pratique » (2026-06-24) — sonnette / interphone (terminale).
   'key-ring': {
     place_name:    'Le Portail',
-    subtitle:      'Entrée principale',
+    subtitle:      'Comment souhaitez-vous prévenir ?',
+    hero_url:      'https://example.com/portail.webp',
+    notice:        'Attention au chien',
     phone:         '06 00 00 00 00',
     whatsapp:      '33 6 00 00 00 00',
     email:         'vous@exemple.fr',
     message:       'Bonjour, je suis au portail.',
-    accent_color:  '#7c8af9',
+    accent_color:  '#5b6cf5',
   },
   // V4.1 livré 2026-05-26
   'storytelling-brand': {

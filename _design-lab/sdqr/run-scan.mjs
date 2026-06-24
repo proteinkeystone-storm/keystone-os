@@ -33,6 +33,10 @@ const target = `http://127.0.0.1:${port}/_design-lab/sdqr/${page}`;
 
 const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
 const pg = await browser.newPage();
+// --dark / --light : force prefers-color-scheme (le headless recent est en dark
+// par defaut). Permet de capturer les deux peaux d'une page auto clair/sombre.
+if (args.includes('--dark'))  await pg.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+if (args.includes('--light')) await pg.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
 await pg.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
 const errs = [];
 pg.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });

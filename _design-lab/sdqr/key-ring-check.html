@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>SDQR — verif rendu WORKER (key-ring / Sonnette)</title>
+<html lang="fr"><head><meta charset="utf-8"><title>SDQR — verif rendu WORKER (key-ring / Sonnette, ORDRE 2 skin sombre)</title>
 <style>
   body { margin:0; padding:24px; background:#dfe5ec; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
   h1 { font-size:15px; color:#1b2a4a; margin:0 0 4px; }
@@ -8,39 +8,60 @@
   .cell { display:flex; flex-direction:column; align-items:center; }
   .lab { font-size:11px; font-weight:600; color:#3a4b6b; margin-bottom:8px; text-align:center; }
   .iph { width:236px; height:494px; background:#10182b; border-radius:42px; padding:9px; box-shadow:0 10px 26px rgba(8,15,35,.3); }
-  .scr { width:100%; height:100%; border-radius:34px; overflow:hidden; position:relative; background:#fff; }
-  .frame { position:absolute; top:0; left:0; width:390px; height:794px; border:0; transform:scale(0.5589); transform-origin:top left; background:#fff; }
+  .scr { width:100%; height:100%; border-radius:34px; overflow:hidden; position:relative; background:#070a11; }
+  .frame { position:absolute; top:0; left:0; width:390px; height:794px; border:0; transform:scale(0.5589); transform-origin:top left; background:#070a11; }
 </style></head>
 <body>
-  <h1>Verification du VRAI rendu worker (renderHTML) — key-ring / Sonnette (ORDRE 1, skin neutre)</h1>
-  <p class="sub">Chaque iPhone affiche la page reellement servie au scan (sandbox statique). Donnees d'exemple fictives. Le bouton principal est auto-promu (Appeler en tete s'il y a un numero).</p>
+  <h1>Verification du VRAI rendu worker (renderHTML) — key-ring / Sonnette (ORDRE 2, skin interphone sombre)</h1>
+  <p class="sub">Pages reellement servies au scan (sandbox statique). Donnees + image d'exemple FICTIVES. « Sonner maintenant » est toujours affiche (cable a l'ORDRE 3). Sombre par defaut ; mode clair auto via prefers-color-scheme (lancer run-scan.mjs avec --dark pour forcer le sombre en headless).</p>
   <div class="grid" id="grid"></div>
 <script type="module">
-  // Cache-bust du module (le navigateur garde l'ancien index.js en cache ES).
-  const { getTemplate } = await import('../../workers/src/routes/smart-templates/index.js?v=kr1');
+  const { getTemplate } = await import('../../workers/src/routes/smart-templates/index.js?v=kr2');
 
-  // Donnees fictives (cf no-real-data-in-examples) : placeholders inventes.
+  // Image d'exemple FICTIVE (label « Exemple ») : portail de nuit stylise, en
+  // data-URI base64 (seul format accepte par safeUrl du worker).
+  const HERO_SVG = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='480' viewBox='0 0 600 480'>`
+    + `<defs><linearGradient id='sky' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#10203a'/><stop offset='1' stop-color='#0a1420'/></linearGradient>`
+    + `<radialGradient id='glow' cx='0.5' cy='0.5' r='0.5'><stop offset='0' stop-color='#ffd9a0' stop-opacity='.85'/><stop offset='1' stop-color='#ffd9a0' stop-opacity='0'/></radialGradient></defs>`
+    + `<rect width='600' height='480' fill='url(#sky)'/>`
+    + `<rect y='300' width='600' height='180' fill='#0c1622'/>`
+    + `<rect x='70'  y='120' width='90' height='250' rx='6' fill='#1c2a3c'/>`
+    + `<rect x='440' y='120' width='90' height='250' rx='6' fill='#1c2a3c'/>`
+    + `<ellipse cx='115' cy='250' rx='120' ry='90' fill='url(#glow)'/>`
+    + `<ellipse cx='485' cy='250' rx='120' ry='90' fill='url(#glow)'/>`
+    + `<g stroke='#24364c' stroke-width='7'>`
+    + `<line x1='185' y1='150' x2='185' y2='360'/><line x1='225' y1='150' x2='225' y2='360'/>`
+    + `<line x1='265' y1='150' x2='265' y2='360'/><line x1='335' y1='150' x2='335' y2='360'/>`
+    + `<line x1='375' y1='150' x2='375' y2='360'/><line x1='415' y1='150' x2='415' y2='360'/></g>`
+    + `<polygon points='250,480 350,480 320,360 280,360' fill='#16202e'/>`
+    + `<text x='300' y='445' font-family='sans-serif' font-size='20' font-weight='700' fill='#7d97d6' text-anchor='middle' opacity='.5'>Exemple</text>`
+    + `</svg>`;
+  const HERO = 'data:image/svg+xml;base64,' + btoa(HERO_SVG);
   const MSG = 'Bonjour, je suis au portail.';
+
   const CELLS = [
-    ['Complet — Appeler en tete',
-      { place_name:'Le Portail', subtitle:'Entrée principale',
-        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', email:'vous@exemple.fr',
-        message:MSG, accent_color:'#7c8af9' }],
-    ['Sans telephone — WhatsApp promu',
-      { place_name:'Gîte des Lauriers', subtitle:'Accueil',
-        whatsapp:'33 6 00 00 00 00', email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
-    ['E-mail seul',
-      { place_name:'Atelier', subtitle:'Sur rendez-vous',
-        email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
-    ['Telephone seul (pas de secondaires)',
-      { place_name:'Le Portail', subtitle:'',
-        phone:'06 00 00 00 00', accent_color:'#7c8af9' }],
-    ['Accent vert « appel »',
-      { place_name:'Refuge du Col', subtitle:'Entree',
-        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', message:MSG, accent_color:'#2bb673' }],
-    ['Nom long (garde-fou troncature)',
-      { place_name:'Chambre d\'hôtes des Quatre Vents et du Grand Large', subtitle:'Portail du fond',
-        phone:'06 00 00 00 00', email:'vous@exemple.fr', message:MSG, accent_color:'#7c8af9' }],
+    ['Complet — image + message + Appeler/SMS',
+      { place_name:'Propriété (nom)', subtitle:'Comment souhaitez-vous prévenir ?',
+        hero_url:HERO, notice:'Attention au chien',
+        phone:'06 00 00 00 00', message:MSG, accent_color:'#5b6cf5' }],
+    ['4 canaux (Appeler / SMS / WhatsApp / E-mail)',
+      { place_name:'Gîte des Lauriers', subtitle:'Comment souhaitez-vous prévenir ?',
+        hero_url:HERO, phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00',
+        email:'vous@exemple.fr', message:MSG, accent_color:'#5b6cf5' }],
+    ['Sans image — message en bandeau autonome',
+      { place_name:'Atelier', subtitle:'Sur rendez-vous', notice:'Livreurs : déposer à gauche',
+        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', message:MSG }],
+    ['1 canal seul (carte pleine largeur)',
+      { place_name:'Refuge du Col', subtitle:'Comment souhaitez-vous prévenir ?',
+        hero_url:HERO, phone:'06 00 00 00 00', accent_color:'#5b6cf5' }],
+    ['Accent personnalisé (bouton Sonner)',
+      { place_name:'Villa des Pins', subtitle:'Comment souhaitez-vous prévenir ?',
+        hero_url:HERO, phone:'06 00 00 00 00', email:'vous@exemple.fr', message:MSG,
+        accent_color:'#2bb673' }],
+    ['Nom long (titre 900 + clamp)',
+      { place_name:'Chambre d\'hôtes des Quatre Vents', subtitle:'Comment souhaitez-vous prévenir ?',
+        hero_url:HERO, notice:'Attention au chien',
+        phone:'06 00 00 00 00', whatsapp:'33 6 00 00 00 00', message:MSG }],
   ];
 
   const grid = document.getElementById('grid');
@@ -55,7 +76,6 @@
     cell.innerHTML = `<div class="lab">${lab}</div><div class="iph"><div class="scr"><iframe class="frame" sandbox="" srcdoc="${srcdoc}"></iframe></div></div>`;
     grid.appendChild(cell);
   }
-  // Laisse les iframes sandbox peindre avant la capture headless.
   await new Promise(r => setTimeout(r, 600));
   window.__SCAN_DONE = true;
 </script>
