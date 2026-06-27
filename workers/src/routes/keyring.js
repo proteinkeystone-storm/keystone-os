@@ -314,3 +314,14 @@ export async function handleKeyringPushStatus(request, env) {
   }
   return json({ ok: true, subscribed, count: n }, 200, origin);
 }
+
+// GET /api/keyring/push/list -> { devices: [{ endpoint, label, created_at }] }
+// (JWT). Pour l'onglet « Sonneries » : lister / ajouter / retirer les appareils.
+export async function handleKeyringPushList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const rows = (await env.DB.prepare(
+    'SELECT endpoint, label, created_at FROM kr_push_subs WHERE tenant_id = ? ORDER BY created_at DESC'
+  ).bind(gate.tenant).all()).results || [];
+  return json({ ok: true, devices: rows }, 200, origin);
+}

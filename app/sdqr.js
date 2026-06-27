@@ -349,6 +349,7 @@ function _renderShell() {
           </button>
           <button class="sdqr-tab active" data-view="studio">Studio</button>
           <button class="sdqr-tab" data-view="stats">Statistiques</button>
+          <button class="sdqr-tab" data-view="sonneries" id="sdqr-tab-sonneries" hidden>Sonneries</button>
         </div>
         <div class="sdqr-content" id="sdqr-content">
           ${_renderEmptyStudio()}
@@ -616,12 +617,7 @@ function _renderLibrary(panel) {
     body = `<div class="sdqr-qr-grid">${qrs.map(_qrCardHtml).join('')}</div>`;
   }
 
-  // Bandeau « Activer les sonneries sur cet appareil » : visible quand le tenant
-  // possede au moins une Sonnette (key-ring), pour abonner cet appareil au Web
-  // Push SANS passer par l'editeur (auto-silencieux si notifs deja autorisees).
-  const hasKeyring = (_cachedQrs || []).some(q => q.template_id === 'key-ring');
-  content.innerHTML = (hasKeyring ? '<div id="kr-alert-banner"></div>' : '') + head + body;
-  if (hasKeyring) _krRenderBanner(panel);
+  content.innerHTML = head + body;
 
   // — Bascule Grille / Tableau —
   content.querySelectorAll('[data-libview]').forEach(b => b.addEventListener('click', () => {
@@ -867,6 +863,8 @@ function _renderCurrentView(panel) {
     return;
   }
 
+  if (_currentView === 'sonneries') { _renderKeyringTab(panel); return; }
+
   // Vue Studio (par défaut) : bibliothèque « Mes QR » si des QR existent,
   // sinon écran d'accueil (onboarding du premier QR).
   if (!qr) {
@@ -928,6 +926,8 @@ async function _refreshList(panel) {
     if (content) content.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err" style="padding:40px;text-align:center">Erreur de chargement : ${_esc(e.message)}</div>`;
     return;
   }
+  // Onglet « Sonneries » : visible seulement si le tenant a au moins une Sonnette.
+  panel.querySelector('#sdqr-tab-sonneries')?.toggleAttribute('hidden', !(_cachedQrs || []).some(q => q.template_id === 'key-ring'));
   _renderList(panel);
 }
 
@@ -1724,6 +1724,7 @@ async function _krGetSubscription() {
   catch (_) { return null; }
 }
 async function _krSubscribeDevice() {
+  try { localStorage.removeItem('kr_push_optout'); } catch (_) {}   // ajout explicite -> reprend l'auto-abonnement
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window))
     throw new Error('Notifications non supportées par ce navigateur.');
   const ua = navigator.userAgent || '';
@@ -1771,41 +1772,20 @@ function _renderKeyringAlerts(wrap) {
   box.style.cssText = 'margin-top:18px;padding:16px;border-radius:14px;border:1px solid rgba(124,138,249,.28);background:rgba(124,138,249,.07)';
   const alertEmail = _esc(_creating.template_data.alert_email || '');
   box.innerHTML = `
-    <div style="font-weight:700;font-size:14px;margin-bottom:3px">Alertes &amp; destinataires</div>
-    <div style="font-size:12px;color:var(--text-muted,#8a93a5);margin-bottom:12px">Abonnez chaque appareil sur lequel vous voulez <b>entendre la sonnette</b>, même l'application fermée. Sur iPhone : installez d'abord la PWA (Partager &rarr; Sur l'écran d'accueil).</div>
-    <button type="button" id="kr-sub-btn" style="width:100%;min-height:44px;border:0;border-radius:11px;background:#7c8af9;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Recevoir les sonneries sur cet appareil</button>
-    <div id="kr-sub-state" style="font-size:12.5px;margin-top:9px;line-height:1.5"></div>
-    <div style="margin:14px 0 10px;border-top:1px solid rgba(140,150,170,.18)"></div>
-    <div style="font-size:12.5px;font-weight:600;margin-bottom:3px">Filet de sécurité <span style="color:var(--text-muted,#8a93a5);font-weight:400">(optionnel)</span></div>
-    <div style="font-size:11.5px;color:var(--text-muted,#8a93a5);margin-bottom:7px">Recevez <b>aussi</b> un e-mail à chaque sonnerie — au cas où une notification se perde (le push iPhone peut être bridé en arrière-plan).</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:3px">Filet de sécurité (e-mail)</div>
+    <div style="font-size:11.5px;color:var(--text-muted,#8a93a5);margin-bottom:9px">Recevez <b>aussi</b> un e-mail à chaque sonnerie — au cas où une notification se perde (le push iPhone peut être bridé). Les <b>appareils notifiés</b> se gèrent dans l'onglet <b>« Sonneries »</b>.</div>
     <input id="kr-alert-email" type="email" value="${alertEmail}" placeholder="vous@exemple.fr" autocomplete="email"
       style="width:100%;height:42px;border-radius:10px;border:1px solid rgba(140,150,170,.3);background:transparent;color:inherit;font-size:15px;font-family:inherit;padding:0 12px;outline:none">`;
   wrap.appendChild(box);
-
   const emailEl = box.querySelector('#kr-alert-email');
   emailEl.addEventListener('input', () => { _creating.template_data.alert_email = emailEl.value; });
-
-  const btn = box.querySelector('#kr-sub-btn');
-  const state = box.querySelector('#kr-sub-state');
-  btn.addEventListener('click', async () => {
-    btn.disabled = true; state.style.color = ''; state.style.fontWeight = '500'; state.textContent = 'Activation…';
-    try { await _krSubscribeDevice(); }
-    catch (e) { state.style.color = '#e0556b'; state.style.fontWeight = '600'; state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
-    await _krRefreshAlerts(state, btn);
-  });
-  // Semi-auto : si les notifications sont DEJA autorisees sur cet appareil, on
-  // abonne sans rien demander (zero clic). Sinon, le bouton fait le 1 clic.
-  (async () => {
-    state.style.color = ''; state.style.fontWeight = '500'; state.textContent = 'Vérification…';
-    await _krAutoSubscribeIfGranted();
-    await _krRefreshAlerts(state, btn);
-  })();
 }
 // Abonne SILENCIEUSEMENT cet appareil si la permission notif est deja accordee
 // (zero clic). Ne demande JAMAIS la permission ici (sans geste utilisateur ->
 // rejetee par le navigateur) : c'est le bouton qui fait le 1er clic.
 async function _krAutoSubscribeIfGranted() {
   try {
+    if (localStorage.getItem('kr_push_optout') === '1') return false;   // retrait explicite respecte
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return false;
     if (Notification.permission !== 'granted') return false;
     const reg = await Promise.race([
@@ -1825,53 +1805,88 @@ async function _krAutoSubscribeIfGranted() {
     return r.ok;
   } catch (_) { return false; }
 }
-// Bandeau persistant en haut du pad (reachable sans l'editeur). Auto-abonne en
-// silence si possible ; sinon bouton « Activer » (1 clic) ; sinon confirme l'etat.
-async function _krRenderBanner(panel) {
-  const host = panel.querySelector('#kr-alert-banner');
-  if (!host) return;
-  await _krAutoSubscribeIfGranted();
-  let s = null;
-  try { s = await _krStatus(); } catch (_) {}
-  if (!panel.querySelector('#kr-alert-banner')) return;   // pad re-rendu entre-temps
-  if (s && s.subscribed) {
-    host.innerHTML = `<div style="margin:0 0 14px;padding:11px 14px;border-radius:12px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.32);font-size:13px;color:#16a34a;font-weight:600;display:flex;align-items:center;gap:8px">`
-      + `<span>🔔 Cet appareil reçoit les sonneries · ${s.count} appareil${s.count > 1 ? 's' : ''} abonné${s.count > 1 ? 's' : ''}.</span>`
-      + `<a href="#" id="kr-ban-unsub" style="margin-left:auto;color:#7c8af9">Ne plus recevoir ici</a></div>`;
-    host.querySelector('#kr-ban-unsub')?.addEventListener('click', async (e) => { e.preventDefault(); await _krUnsubscribeDevice(); _krRenderBanner(panel); });
-    return;
-  }
-  host.innerHTML = `<div style="margin:0 0 14px;padding:13px 15px;border-radius:13px;background:rgba(124,138,249,.10);border:1px solid rgba(124,138,249,.32);display:flex;align-items:center;gap:12px;flex-wrap:wrap">`
-    + `<span style="font-size:13.5px;flex:1;min-width:170px">🔔 <b>Activez les sonneries sur cet appareil</b> pour recevoir une notification quand on sonne à votre Sonnette.</span>`
-    + `<button id="kr-ban-btn" type="button" style="border:0;border-radius:10px;background:#7c8af9;color:#fff;font-weight:600;font-size:13.5px;padding:10px 18px;cursor:pointer;white-space:nowrap">Activer</button>`
-    + `<div id="kr-ban-state" style="flex-basis:100%;font-size:12.5px;margin-top:2px"></div></div>`;
-  const btn = host.querySelector('#kr-ban-btn');
-  const state = host.querySelector('#kr-ban-state');
-  btn.addEventListener('click', async () => {
-    btn.disabled = true; state.style.color = ''; state.style.fontWeight = '500'; state.textContent = 'Activation…';
-    try { await _krSubscribeDevice(); }
-    catch (e) { state.style.color = '#e0556b'; state.style.fontWeight = '600'; state.textContent = e.message || 'Activation impossible.'; btn.disabled = false; return; }
-    _krRenderBanner(panel);
+// ── Onglet « Sonneries » : gestion des appareils notifies (ajouter / retirer) ──
+// Charte studio : icones SVG (jamais d'emoji).
+const _KR_BELL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
+function _krDevIcon(label) {
+  const phone = /phone|t[ée]l|mobile/i.test(label || '');
+  return phone
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
+}
+async function _krListDevices() {
+  const r = await fetch(CF_API + '/api/keyring/push/list', { headers: _headers() });
+  if (!r.ok) return [];
+  const j = await r.json().catch(() => ({}));
+  return Array.isArray(j.devices) ? j.devices : [];
+}
+async function _krUnsubscribeByEndpoint(endpoint) {
+  await fetch(CF_API + '/api/keyring/push/unsubscribe', {
+    method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ endpoint }),
   });
 }
-async function _krRefreshAlerts(state, btn) {
-  const s = await _krStatus();
-  if (!s) { btn.hidden = false; btn.disabled = false; state.textContent = ''; return; }
-  const n = s.count || 0;
-  if (s.subscribed) {
-    btn.hidden = true;
-    state.style.color = '#16a34a'; state.style.fontWeight = '600';
-    state.innerHTML = `✓ Cet appareil reçoit les sonneries · ${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''}. <a href="#" id="kr-unsub" style="color:#7c8af9;font-weight:400">Ne plus recevoir ici</a>`;
-    state.querySelector('#kr-unsub')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await _krUnsubscribeDevice();
-      await _krRefreshAlerts(state, btn);
-    });
+function _renderKeyringTab(panel) {
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+  content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');
+  content.innerHTML = `<div style="max-width:660px;margin:0 auto;padding:6px 2px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;color:var(--accent,#7c8af9)">${_KR_BELL}<h2 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-0.02em;color:inherit">Sonneries</h2></div>
+    <p style="margin:0 0 18px;font-size:13px;color:var(--text-muted,#8a93a5)">Les appareils ci-dessous reçoivent une notification quand on sonne à vos Sonnettes. Ajoutez chaque téléphone ou ordinateur sur lequel vous voulez être prévenu.</p>
+    <div id="kr-tab-action" style="margin-bottom:22px"></div>
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted,#8a93a5);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px">Appareils abonnés</div>
+    <div id="kr-tab-list"></div>
+  </div>`;
+  _krRefreshTab(panel);
+}
+async function _krRefreshTab(panel) {
+  const actionEl = panel.querySelector('#kr-tab-action');
+  const listEl = panel.querySelector('#kr-tab-list');
+  if (!actionEl || !listEl) return;
+  await _krAutoSubscribeIfGranted();
+  let myEp = '';
+  try { const sub = await _krGetSubscription(); myEp = sub ? sub.endpoint : ''; } catch (_) {}
+  let devices = [];
+  try { devices = await _krListDevices(); } catch (_) {}
+  if (!panel.querySelector('#kr-tab-list')) return;   // vue quittee entre-temps
+  const subscribed = !!myEp && devices.some(d => d.endpoint === myEp);
+  if (subscribed) {
+    actionEl.innerHTML = `<div style="padding:12px 15px;border-radius:12px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.32);font-size:13px;color:#16a34a;font-weight:600">✓ Cet appareil reçoit les sonneries.</div>`;
   } else {
-    btn.hidden = false; btn.disabled = false;
-    state.style.color = ''; state.style.fontWeight = '500';
-    state.textContent = n ? `${n} appareil${n > 1 ? 's' : ''} abonné${n > 1 ? 's' : ''} ailleurs (pas celui-ci).` : '';
+    actionEl.innerHTML = `<button id="kr-tab-add" type="button" style="border:0;border-radius:11px;background:#7c8af9;color:#fff;font-weight:600;font-size:14px;padding:12px 20px;cursor:pointer">Recevoir les sonneries sur cet appareil</button><div id="kr-tab-state" style="font-size:12.5px;margin-top:9px;line-height:1.5"></div>`;
+    const addBtn = actionEl.querySelector('#kr-tab-add');
+    const stateEl = actionEl.querySelector('#kr-tab-state');
+    addBtn.addEventListener('click', async () => {
+      addBtn.disabled = true; stateEl.style.color = ''; stateEl.style.fontWeight = '500'; stateEl.textContent = 'Activation…';
+      try { await _krSubscribeDevice(); }
+      catch (e) { stateEl.style.color = '#e0556b'; stateEl.style.fontWeight = '600'; stateEl.textContent = e.message || 'Activation impossible.'; addBtn.disabled = false; return; }
+      _krRefreshTab(panel);
+    });
   }
+  if (!devices.length) {
+    listEl.innerHTML = `<div style="padding:14px;border-radius:12px;border:1px dashed rgba(140,150,170,.35);font-size:13px;color:var(--text-muted,#8a93a5);text-align:center">Aucun appareil abonné pour l'instant.</div>`;
+    return;
+  }
+  listEl.innerHTML = devices.map(d => {
+    const isMe = !!myEp && d.endpoint === myEp;
+    const when = (d.created_at || '').slice(0, 10);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(140,150,170,.18);margin-bottom:8px">
+      <span style="color:var(--accent,#7c8af9);flex:0 0 auto;display:flex">${_krDevIcon(d.label)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600">${_esc(d.label || 'Appareil')}${isMe ? ' <span style="color:#16a34a;font-weight:600;font-size:12px">· cet appareil</span>' : ''}</div>
+        <div style="font-size:11.5px;color:var(--text-muted,#8a93a5)">${when ? 'Ajouté le ' + when : ''}</div>
+      </div>
+      <button class="kr-dev-rm" data-ep="${_esc(d.endpoint)}" type="button" style="border:1px solid rgba(224,85,107,.4);background:transparent;color:#e0556b;border-radius:9px;font-size:12.5px;font-weight:600;padding:7px 12px;cursor:pointer;flex:0 0 auto">Retirer</button>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.kr-dev-rm').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = '…';
+    const ep = b.dataset.ep;
+    // Retrait explicite de CET appareil -> memoriser pour ne pas le re-abonner en silence.
+    if (ep === myEp) { try { localStorage.setItem('kr_push_optout', '1'); } catch (_) {} }
+    try { await _krUnsubscribeByEndpoint(ep); } catch (_) {}
+    _krRefreshTab(panel);
+  }));
 }
 
 // ══════════════════════════════════════════════════════════════════
