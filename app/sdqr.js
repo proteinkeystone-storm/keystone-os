@@ -1833,11 +1833,52 @@ function _renderKeyringTab(panel) {
   content.innerHTML = `<div style="max-width:660px;margin:0 auto;padding:6px 2px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;color:var(--accent,#7c8af9)">${_KR_BELL}<h2 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-0.02em;color:inherit">Sonneries</h2></div>
     <p style="margin:0 0 18px;font-size:13px;color:var(--text-muted,#8a93a5)">Les appareils ci-dessous reçoivent une notification quand on sonne à vos Sonnettes. Ajoutez chaque téléphone ou ordinateur sur lequel vous voulez être prévenu.</p>
-    <div id="kr-tab-action" style="margin-bottom:22px"></div>
-    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted,#8a93a5);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px">Appareils abonnés</div>
+    <div id="kr-tab-action" style="margin-bottom:12px"></div>
+    <button id="kr-invite-btn" type="button" style="width:100%;border:1px solid rgba(124,138,249,.45);background:transparent;color:#7c8af9;border-radius:11px;font-weight:600;font-size:13.5px;padding:11px;cursor:pointer">+ Ajouter un autre appareil (conjoint, gardien…)</button>
+    <div id="kr-invite-panel" style="margin-top:13px"></div>
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted,#8a93a5);text-transform:uppercase;letter-spacing:.05em;margin:24px 0 9px">Appareils abonnés</div>
     <div id="kr-tab-list"></div>
   </div>`;
+  panel.querySelector('#kr-invite-btn')?.addEventListener('click', () => _krShowInvite(panel));
   _krRefreshTab(panel);
+}
+// « Ajouter un autre appareil » : cree une invitation (jeton) puis affiche le
+// lien + un QR a ouvrir/scanner SUR l'autre appareil (il s'abonne en 1 tap).
+async function _krShowInvite(panel) {
+  const host = panel.querySelector('#kr-invite-panel');
+  const btn = panel.querySelector('#kr-invite-btn');
+  if (!host) return;
+  btn.disabled = true;
+  host.innerHTML = `<div style="font-size:12.5px;color:var(--text-muted,#8a93a5)">Génération du lien…</div>`;
+  let token = '';
+  try {
+    const r = await fetch(CF_API + '/api/keyring/push/invite', { method: 'POST', headers: _headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ hours: 24 }) });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok || !j.token) throw new Error('x');
+    token = j.token;
+  } catch (_) {
+    host.innerHTML = `<div style="font-size:12.5px;color:#e0556b;font-weight:600">Impossible de générer l'invitation. Réessayez.</div>`;
+    btn.disabled = false; return;
+  }
+  const url = 'https://protein-keystone.com/sonnette-invite?token=' + encodeURIComponent(token);
+  let qrSvg = '';
+  try { qrSvg = await _renderQrSvg(url, 188); } catch (_) {}
+  host.innerHTML = `<div style="padding:16px;border-radius:14px;border:1px solid rgba(124,138,249,.3);background:rgba(124,138,249,.06)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px">À ouvrir SUR l'autre appareil</div>
+    <div style="font-size:12px;color:var(--text-muted,#8a93a5);margin-bottom:13px">Ouvrez ce lien (ou scannez le QR) sur le téléphone/ordinateur à prévenir, puis touchez « Activer ». Valable 24 h.</div>
+    ${qrSvg ? `<div style="background:#fff;border-radius:12px;padding:10px;width:max-content;margin:0 auto 13px">${qrSvg}</div>` : ''}
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="kr-invite-url" readonly value="${_esc(url)}" style="flex:1;min-width:0;height:38px;border-radius:9px;border:1px solid rgba(140,150,170,.3);background:transparent;color:inherit;font-size:12px;padding:0 10px">
+      <button id="kr-invite-copy" type="button" style="border:0;border-radius:9px;background:#7c8af9;color:#fff;font-weight:600;font-size:13px;padding:9px 15px;cursor:pointer;white-space:nowrap">Copier</button>
+    </div>
+  </div>`;
+  btn.disabled = false;
+  const urlEl = host.querySelector('#kr-invite-url');
+  host.querySelector('#kr-invite-copy')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(url); }
+    catch (_) { try { urlEl.select(); document.execCommand('copy'); } catch (e2) {} }
+    const c = host.querySelector('#kr-invite-copy'); if (c) { c.textContent = 'Copié ✓'; setTimeout(() => { c.textContent = 'Copier'; }, 1500); }
+  });
 }
 async function _krRefreshTab(panel) {
   const actionEl = panel.querySelector('#kr-tab-action');

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070a11">
+<title>Activer les sonneries</title>
+<style>
+  *,*::before,*::after { box-sizing:border-box; }
+  html,body { margin:0; padding:0; min-height:100vh; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; letter-spacing:-0.01em;
+    color:#eef1f7; background:radial-gradient(135% 95% at 50% -8%,#171f31 0%,#0b1019 46%,#070a11 100%);
+    background-attachment:fixed; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:24px calc(20px + env(safe-area-inset-left,0)) 24px calc(20px + env(safe-area-inset-right,0)); }
+  .card { width:100%; max-width:400px; text-align:center; }
+  .bell { width:64px; height:64px; border-radius:20px; margin:0 auto 20px; display:flex; align-items:center; justify-content:center;
+    background:#171c28; border:1px solid rgba(255,255,255,.08); color:#7c8af9; }
+  h1 { font-size:24px; font-weight:900; letter-spacing:-0.03em; margin:0 0 8px; }
+  p.sub { font-size:14.5px; line-height:1.5; color:#8b94a8; margin:0 0 26px; }
+  button.act { width:100%; min-height:60px; border:0; border-radius:16px; cursor:pointer; color:#fff; font-family:inherit;
+    font-size:16px; font-weight:800; letter-spacing:-0.01em;
+    background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0)),#5b6cf5;
+    box-shadow:0 12px 30px rgba(0,0,0,.4),0 6px 20px rgba(70,86,230,.4); }
+  button.act:active { transform:translateY(1px); }
+  button.act:disabled { opacity:.7; }
+  .state { margin-top:16px; font-size:14px; line-height:1.5; border-radius:14px; padding:14px 16px;
+    background:#161b27; border:1px solid rgba(255,255,255,.08); color:#c7cede; }
+  .state.ok { background:linear-gradient(180deg,#13301f,#0f2618); border-color:rgba(64,220,140,.4); color:#d6ffe6; font-weight:700; }
+  .state.err { border-color:rgba(224,85,107,.4); color:#ffd6dd; }
+  .hide { display:none; }
+  .foot { margin-top:22px; font-size:11px; color:rgba(255,255,255,.4); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="bell"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+    <h1>Sonneries</h1>
+    <p class="sub">Activez les notifications sur cet appareil pour être prévenu quand on sonne.</p>
+    <button class="act" id="act" type="button">Activer sur cet appareil</button>
+    <div class="state hide" id="state"></div>
+    <p class="foot">Propulsé par Keystone Smart QR</p>
+  </div>
+<script>
+(function(){
+  var API = "https://keystone-os-api.keystone-os.workers.dev";
+  var VAPID = "BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUqmP8Vvg30v-9067t9X5HTlEc";
+  var token = new URLSearchParams(location.search).get("token") || "";
+  var actBtn = document.getElementById("act");
+  var stateEl = document.getElementById("state");
+  function setState(cls, text){ stateEl.className = "state " + cls; stateEl.textContent = text; }
+  function vapidBytes(){
+    var s = VAPID.replace(/-/g,"+").replace(/_/g,"/");
+    var bin = atob(s + "=".repeat((4 - s.length % 4) % 4));
+    var u = new Uint8Array(bin.length);
+    for (var i=0;i<bin.length;i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  if (!token) { actBtn.disabled = true; setState("err", "Lien d'invitation invalide ou incomplet."); }
+
+  actBtn.addEventListener("click", async function(){
+    actBtn.disabled = true; setState("", "Activation…");
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+        throw new Error("Cet appareil ou navigateur ne gère pas les notifications.");
+      var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+      var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+      if (isIOS && !standalone)
+        throw new Error("Sur iPhone : touchez Partager → « Sur l'écran d'accueil », ouvrez l'icône, puis réessayez ici.");
+      var perm = await Notification.requestPermission();
+      if (perm !== "granted") throw new Error("Notifications refusées. Autorisez-les pour recevoir les sonneries.");
+      await navigator.serviceWorker.register("/sw.js").catch(function(){});
+      var reg = await navigator.serviceWorker.ready;
+      var sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidBytes() });
+      var j = sub.toJSON();
+      if (!j || !j.keys) throw new Error("Abonnement impossible (clés manquantes).");
+      var label = (isIOS || /Android|Mobile/.test(navigator.userAgent)) ? "Téléphone" : "Ordinateur";
+      var r = await fetch(API + "/api/keyring/push/subscribe-invite", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token, endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, label: label }),
+      });
+      if (r.status === 410) throw new Error("Cette invitation a expiré. Demandez-en une nouvelle.");
+      if (r.status === 404) throw new Error("Invitation introuvable. Demandez-en une nouvelle.");
+      if (!r.ok) throw new Error("Activation refusée (" + r.status + ").");
+      setState("ok", "✓ C'est fait ! Cet appareil recevra les sonneries.");
+    } catch (e) {
+      setState("err", e.message || "Activation impossible.");
+      actBtn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

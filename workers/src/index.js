@@ -138,7 +138,8 @@ import { handleKeynapseHealth, handleKeynapseState,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
-         handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList } from './routes/keyring.js';
+         handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
+         handleKeyringInviteCreate, handleKeyringSubscribeInvite } from './routes/keyring.js';
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
@@ -207,6 +208,8 @@ export default {
       if (path === '/api/keyring/push/unsubscribe' && method === 'POST') return handleKeyringPushUnsubscribe(request, env);
       if (path === '/api/keyring/push/status'      && method === 'GET')  return handleKeyringPushStatus(request, env);
       if (path === '/api/keyring/push/list'        && method === 'GET')  return handleKeyringPushList(request, env);
+      if (path === '/api/keyring/push/invite'      && method === 'POST') return handleKeyringInviteCreate(request, env);
+      if (path === '/api/keyring/push/subscribe-invite' && method === 'POST') return handleKeyringSubscribeInvite(request, env);
       const knMedia = path.match(/^\/api\/keynapse\/media\/([A-Za-z0-9-]+)$/);
       if (knMedia && method === 'GET')    return handleMediaServe(request, env, knMedia[1]);
       if (knMedia && method === 'DELETE') return handleMediaDelete(request, env, knMedia[1]);

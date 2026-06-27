@@ -8,7 +8,8 @@
     { "source": "/admin",       "destination": "/admin.html"       },
     { "source": "/auth/magic",  "destination": "/auth-magic"       },
     { "source": "/f/(.*)",      "destination": "/form?s=$1"        },
-    { "source": "/a/(.*)",      "destination": "/agent?s=$1"       }
+    { "source": "/a/(.*)",      "destination": "/agent?s=$1"       },
+    { "source": "/sonnette-invite", "destination": "/sonnette-invite.html" }
   ],
 
   "headers": [

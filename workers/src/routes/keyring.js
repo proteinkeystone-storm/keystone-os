@@ -74,6 +74,11 @@ async function _ensureSchema(env) {
        short_id TEXT NOT NULL, day TEXT NOT NULL, device_hash TEXT NOT NULL,
        count INTEGER NOT NULL DEFAULT 0, last_ts INTEGER NOT NULL DEFAULT 0,
        PRIMARY KEY (short_id, day, device_hash))`,
+    // Invitations « ajouter un autre appareil » : un jeton porte le tenant + une
+    // expiration ; ouvert sur l'autre appareil, il l'abonne sans JWT proprio.
+    `CREATE TABLE IF NOT EXISTS kr_invites (
+       token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+       expires_at TEXT, created_at TEXT DEFAULT (datetime('now')))`,
   ];
   for (const sql of stmts) await env.DB.prepare(sql).run();
   _schemaReady = true;
@@ -324,4 +329,42 @@ export async function handleKeyringPushList(request, env) {
     'SELECT endpoint, label, created_at FROM kr_push_subs WHERE tenant_id = ? ORDER BY created_at DESC'
   ).bind(gate.tenant).all()).results || [];
   return json({ ok: true, devices: rows }, 200, origin);
+}
+
+// ── Multi-destinataires : inviter un AUTRE appareil (lien / QR) ──────────
+// L'occupant cree une invitation (JWT) ; le lien/QR, ouvert sur l'autre appareil
+// (conjoint, gardien, iPad...), l'abonne via le jeton SANS JWT proprio. Le geste
+// reste sur CET appareil (le navigateur fabrique l'abonnement avec ses cles).
+const INVITE_HOURS = { 24: 24, 168: 168, 720: 720 };
+export async function handleKeyringInviteCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const b = await parseBody(request);
+  const hours = INVITE_HOURS[parseInt(b.hours, 10)] || 24;
+  const token = (generateId() + generateId()).replace(/-/g, '');
+  const expISO = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+  await env.DB.prepare('INSERT INTO kr_invites (token, tenant_id, expires_at) VALUES (?, ?, ?)')
+    .bind(token, gate.tenant, expISO).run();
+  return json({ ok: true, token, expires_at: expISO }, 200, origin);
+}
+// PUBLIC — l'autre appareil s'abonne via le jeton d'invitation (pas de JWT).
+// POST /api/keyring/push/subscribe-invite { token, endpoint, p256dh, auth, label? }
+export async function handleKeyringSubscribeInvite(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  await _ensureSchema(env);
+  const b = await parseBody(request);
+  const token = String(b.token || '').trim();
+  const endpoint = String(b.endpoint || '').trim();
+  const p256dh = String(b.p256dh || '').trim();
+  const auth = String(b.auth || '').trim();
+  const label = (String(b.label || '').trim().slice(0, 60)) || 'Appareil invité';
+  if (!token || !/^https:\/\//i.test(endpoint) || endpoint.length > 1024 || !p256dh || !auth) return err('Requete invalide', 400, origin);
+  const inv = await env.DB.prepare('SELECT tenant_id, expires_at FROM kr_invites WHERE token = ?').bind(token).first();
+  if (!inv) return err('Invitation invalide', 404, origin);
+  if (inv.expires_at && new Date(inv.expires_at).getTime() < Date.now()) return err('Invitation expiree', 410, origin);
+  await env.DB.prepare(
+    `INSERT INTO kr_push_subs (endpoint, tenant_id, p256dh, auth, label) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET tenant_id = excluded.tenant_id, p256dh = excluded.p256dh, auth = excluded.auth, label = excluded.label`
+  ).bind(endpoint, inv.tenant_id, p256dh, auth, label).run();
+  return json({ ok: true }, 200, origin);
 }
