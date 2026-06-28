@@ -6960,6 +6960,11 @@ html.light-mode .ksfs-detail-related-h { color: #0f172a; }
 .sdqr-content {
   flex: 1; overflow-y: auto;
   padding: 28px 32px;
+  /* Conteneur de requete : les mises en page 2 colonnes (split creation,
+     fiche detail, grilles de champs) refluent sur la VRAIE largeur dispo
+     (sidebar 280px comprise), pas sur le viewport. Corrige l'overlap de
+     l'apercu en fenetre etroite ~901-1180px. cf. blocs @container plus bas. */
+  container: sdqr-content / inline-size;
 }
 
 /* ── Empty state grand format ─────────────────────────────── */
@@ -7322,11 +7327,10 @@ html.light-mode .sdqr-convert-hint { color: #64748b; }
   .sdqr-sidebar-filters { flex-shrink: 0; }                       /* recherche + filtres restent visibles en haut */
   .sdqr-folder-bar  { flex: 0 1 auto; max-height: 40%; min-height: 0; overflow-y: auto; }  /* dossiers scrollent si nombreux */
   .sdqr-sidebar-list { flex: 1 1 0; min-height: 0; }              /* la liste prend le reste et scrolle (jamais de débordement) */
-  .sdqr-detail { grid-template-columns: 1fr; }
-  /* Empilé : on remet l'aperçu QR au-dessus des réglages (ordre source). */
-  .sdqr-detail-left  { order: 0; }
-  .sdqr-detail-right { order: 0; }
-  .sdqr-form-grid { grid-template-columns: 1fr; }
+  /* NB : l'empilement du SPLIT creation, de la FICHE detail et des GRILLES de
+     champs ne depend PLUS du viewport mais de la largeur reelle du contenu
+     -> voir les blocs @container (sdqr-content) plus bas. La sidebar, elle,
+     reste pilotee par le viewport (sa largeur EST le viewport sur mobile). */
 }
 
 /* ── Sprint SDQR-1 quick wins : rename + delete ────────────── */
@@ -10548,12 +10552,39 @@ html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--ghost:hover 
 .sdqr-design-panel--create { background: transparent; border: 0; box-shadow: none; padding: 0; margin: 0; }
 .sdqr-design-panel--create > .sdqr-design-summary { display: none; }
 
-/* — Responsive : aperçu épinglé en haut, blocs empilés — */
-@media (max-width: 900px) {
+/* ════════════════════════════════════════════════════════════════
+   SDQR — RESPONSIVE PAR CONTENEUR (et non par viewport)
+   Le pad a une sidebar fixe de 280px : la largeur reellement disponible
+   pour le contenu est bien plus petite que le viewport. On declenche donc
+   le repli des layouts 2 colonnes sur la largeur de .sdqr-content
+   (container: sdqr-content / inline-size), pas sur le viewport. Corrige
+   l'overlap de l'apercu live et la troncature des champs en fenetre
+   etroite (~901-1180px) ainsi que la fiche detail. FRONT-only, scope .sdqr-*.
+═══════════════════════════════════════════════════════════════ */
+/* — Split creation : apercu empile SOUS le formulaire (saisie d'abord,
+     CTA « Creer le QR » en bas), quand le contenu devient trop etroit. — */
+@container sdqr-content (max-width: 720px) {
   .sdqr-create-split { flex-direction: column; }
-  .sdqr-create-aside { position: static; width: 100%; order: -1; }
+  .sdqr-create-aside { position: static; width: 100%; order: 1; }
   .sdqr-preview-stage { min-height: 200px; }
 }
+/* — Fiche detail d'un QR : reglages + apercu empiles (apercu au-dessus,
+     ordre source) quand le contenu est etroit. — */
+@container sdqr-content (max-width: 740px) {
+  .sdqr-detail { grid-template-columns: 1fr; }
+  .sdqr-detail-left  { order: 0; }
+  .sdqr-detail-right { order: 0; }
+}
+/* — Grilles de champs (paires Telephone | WhatsApp, etc.) : une seule
+     colonne quand la largeur disponible ne tient plus deux champs. — */
+@container sdqr-content (max-width: 460px) {
+  .sdqr-form-grid { grid-template-columns: 1fr; }
+}
+/* — Filet anti-debordement : les champs peuvent retrecir sous leur largeur
+     intrinseque pour que les pistes 1fr ne poussent jamais la colonne
+     au-dela du conteneur (plus de troncature derriere l'apercu). — */
+.sdqr-form-grid .sdqr-field,
+.sdqr-form-grid .sdqr-input { min-width: 0; }
 
 /* ════════════════════════════════════════════════════════════════
    SDQR — RETOUR PROD : « + Nouveau » PROMU dans la barre d'onglets
