@@ -360,13 +360,13 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .fam-title{display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--text-2); margin-bottom:18px}
 .fam-title::before{content:''; width:8px; height:8px; border-radius:50%; background:var(--fam,var(--accent))}
 .tgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
-.tcard{border:1px solid var(--border-strong); border-radius:16px; padding:20px; background:linear-gradient(158deg,var(--bg-2),var(--bg-3)); transition:transform .2s, border-color .2s}
+.tcard{display:block; color:inherit; text-decoration:none; border:1px solid var(--border-strong); border-radius:16px; padding:20px; background:linear-gradient(158deg,var(--bg-2),var(--bg-3)); transition:transform .2s, border-color .2s}
 .tcard:hover{transform:translateY(-4px); border-color:var(--fam,var(--accent-bd)); box-shadow:0 22px 46px -22px var(--fam,var(--accent))}
 .tcard .ic{width:40px; height:40px; border-radius:11px; display:grid; place-items:center; color:var(--fam,var(--accent)); background:var(--bg); border:1px solid var(--border); margin-bottom:14px}
 .tcard .ic svg{width:21px; height:21px}
 .tcard h3{font-size:15px; font-weight:700; letter-spacing:-.01em}
 .tcard p{font-size:13px; color:var(--text-2); line-height:1.45; margin-top:6px}
-/* cartes cliquables → modale notice */
+/* cartes = liens vers la page dediee de l'outil */
 .tcard{cursor:pointer}
 .tcard:focus-visible{outline:2px solid var(--fam,var(--accent)); outline-offset:3px}
 .tcard-more{display:inline-flex; align-items:center; gap:5px; margin-top:13px; font-size:12.5px; font-weight:600; color:var(--fam,var(--accent-3)); opacity:.9}
@@ -1850,9 +1850,8 @@ function __keystonePostHero(){
   const grid=document.getElementById('toolsGrid');
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
-    grid.innerHTML=TOOLS.map(t=>'<div class="tcard" data-app="'+t.app+'" role="button" tabindex="0" aria-haspopup="dialog" aria-label="En savoir plus sur '+t.name+'" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p><span class="tcard-more">Découvrir <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></div>').join('');
-    grid.addEventListener('click', e=>{ const c=e.target.closest('.tcard[data-app]'); if(c) openToolNotice(c.dataset.app); });
-    grid.addEventListener('keydown', e=>{ if(e.key!=='Enter'&&e.key!==' ')return; const c=e.target.closest('.tcard[data-app]'); if(c){ e.preventDefault(); openToolNotice(c.dataset.app); } });
+    const SLUG={'A-COM-001':'smart-qr','A-COM-002':'brief-prod','A-COM-003':'brainstorming','A-COM-004':'key-form','A-COM-005':'ghost-writer','O-AGT-001':'smart-agent','O-SOC-001':'social-manager','O-GEO-001':'sentinel','O-Keyn-001':'keynapse'};
+    grid.innerHTML=TOOLS.map(t=>'<a class="tcard" href="/outils/'+SLUG[t.app]+'" aria-label="En savoir plus sur '+t.name+'" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p><span class="tcard-more">Découvrir <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>').join('');
   }
 })();
 
