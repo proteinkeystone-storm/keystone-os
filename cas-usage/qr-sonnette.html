@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QR Ring — sonnette par QR Code, sans electricite | Keystone OS</title>
-<meta name="description" content="Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application.">
+<meta name="description" content="Un QR pose sur un portail ou une porte, sans electricite : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — etes prevenu par notification push, meme application fermee. Repli e-mail et contacts directs inclus.">
 <link rel="canonical" href="https://protein-keystone.com/cas-usage/qr-sonnette">
 <meta name="robots" content="index, follow">
 <meta property="og:title" content="QR Ring — sonnette par QR Code, sans electricite | Keystone OS">
-<meta property="og:description" content="Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application.">
+<meta property="og:description" content="Un QR pose sur un portail ou une porte, sans electricite : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — etes prevenu par notification push, meme application fermee. Repli e-mail et contacts directs inclus.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://protein-keystone.com/cas-usage/qr-sonnette">
 <meta property="og:site_name" content="Keystone OS">
@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="1260">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QR Ring — sonnette par QR Code, sans electricite | Keystone OS">
-<meta name="twitter:description" content="Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application.">
+<meta name="twitter:description" content="Un QR pose sur un portail ou une porte, sans electricite : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — etes prevenu par notification push, meme application fermee. Repli e-mail et contacts directs inclus.">
 <meta name="twitter:image" content="https://protein-keystone.com/og-cover.png">
 <meta name="theme-color" content="#020617">
 <link rel="icon" href="/keystone-puce.svg" type="image/svg+xml">
@@ -61,33 +61,41 @@
       "about": {
         "@id": "https://protein-keystone.com/#organization"
       },
-      "description": "Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application."
+      "description": "Un QR pose sur un portail ou une porte, sans electricite : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — etes prevenu par notification push, meme application fermee. Repli e-mail et contacts directs inclus."
     },
     {
       "@type": "FAQPage",
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Faut-il de l’electricite ou une application ?",
+          "name": "Comment suis-je prevenu quand on sonne ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Ni l’une ni l’autre. C’est un QR imprime qui ouvre une page hebergee ; le visiteur utilise son propre telephone (appel, SMS, WhatsApp, e-mail)."
+            "text": "Par notification push sur tous les appareils que vous avez abonnes — votre telephone, votre ordinateur, et ceux des proches que vous ajoutez — meme application fermee. Un e-mail de secours peut aussi etre envoye au cas ou une notification se perde."
           }
         },
         {
           "@type": "Question",
-          "name": "Est-ce un systeme d’alarme ou de teleassistance ?",
+          "name": "Puis-je alerter plusieurs proches a la fois ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Non. C’est un raccourci de contact, pratique pour joindre un proche ou un occupant en un geste — mais ce n’est pas un dispositif d’urgence surveille, ne le presentez pas comme tel."
+            "text": "Oui. Dans l’onglet Sonneries, vous ajoutez autant d’appareils que vous voulez (conjoint, gardien, voisin…) ; tous recoivent l’alerte quand on sonne, et chacun peut repondre."
           }
         },
         {
           "@type": "Question",
-          "name": "Puis-je pre-remplir le message ?",
+          "name": "Est-ce un dispositif d’urgence ou de teleassistance medicale ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Oui : « Je suis au portail », « J’ai besoin d’aide », « Livraison »… Vous choisissez aussi quels moyens de contact afficher (appel, SMS, WhatsApp, e-mail)."
+            "text": "Non. C’est un systeme de notification (push, avec repli e-mail), tres pratique pour prevenir vite un cercle de proches — mais la reception n’est pas garantie comme une teleassistance medicale surveillee ; ne le presentez pas comme tel."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Faut-il de l’electricite ou une application cote visiteur ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Non. Le visiteur scanne un QR imprime et tape « Sonner » depuis son propre telephone, sans rien installer."
           }
         }
       ]
@@ -178,7 +186,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <header class="hero">
     <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg> Expérience Smart QR</span>
     <h1>Un QR. Un geste.<br><em>On vous joint, même sans sonnette ni électricité.</em></h1>
-    <p class="lead">Un portail sans interphone, un acces sans electricite, ou simplement l’envie qu’un proche puisse vous joindre en un geste : le QR Ring transforme un autocollant en point de contact instantane.</p>
+    <p class="lead">Un portail sans interphone, un acces sans electricite, ou l’envie qu’un cercle de proches soit prevenu en un instant : on tape « Sonner » sur le QR Ring, et vous — avec les proches que vous avez ajoutes — recevez une notification, meme application fermee.</p>
     <div class="ctas">
       <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       <a class="btn btn-ghost" href="/outils/smart-qr">Découvrir Smart QR</a>
@@ -189,17 +197,17 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <section class="block" aria-labelledby="cest">
     <span class="eyebrow-l">Le principe</span>
     <h2 id="cest">Ce que c'est, concrètement</h2>
-    <p class="sub">C’est une page hebergee derriere un QR a imprimer. La personne tape une fois et vous contacte depuis SON telephone — appel, SMS, WhatsApp ou e-mail — avec un message pre-rempli que vous avez prepare. Aucune electricite, aucune application a installer, aucun abonnement cote visiteur. Vous choisissez les moyens de contact proposes.</p>
+    <p class="sub">Une page hebergee derriere un QR a imprimer, sans electricite. Le visiteur tape « Sonner » et, en un instant, une notification push part vers TOUS les appareils que vous avez abonnes — le votre et ceux des proches ajoutes (conjoint, gardien, voisin…), meme application fermee — avec un repli par e-mail si une notification se perd. Vous pouvez meme repondre : le visiteur voit votre reponse. Et si vous preferez, les contacts directs (appel, SMS, WhatsApp, e-mail) avec message pre-rempli restent disponibles.</p>
   </section>
 
   <section class="block" aria-labelledby="cas">
     <span class="eyebrow-l">Cas concrets</span>
     <h2 id="cas">Quelques façons de s'en servir</h2>
     <div class="uses">
-      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Portail ou accès sans interphone</h3><p>Maison, local, residence : un QR sur le portail, le visiteur vous appelle ou vous ecrit a l’instant. Pas de cablage, pas de boitier.</p></div>
-      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Joindre un proche en un geste</h3><p>Un QR pres de la porte d’un parent age ou isole : il joint un proche d’un seul tap (appel, SMS ou WhatsApp, message pre-rempli). Un raccourci de contact rassurant — pas un dispositif d’urgence surveille.</p></div>
-      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Chantier ou lieu sans courant</h3><p>Sur un acces de chantier, un depot, un local en travaux : client, livreur ou riverain vous joint sans chercher un numero.</p></div>
-      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Accueil quand c’est ferme</h3><p>Boutique fermee, gite, cabinet : le QR sur la vitre permet de laisser un message ou de vous joindre directement.</p></div>
+      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Alerter un cercle de proches</h3><p>Un QR pres de la porte d’un parent age ou isole : il tape « Sonner », et tous les proches ajoutes (vous, un frere, un voisin de confiance) sont prevenus par notification au meme moment. Un point d’appel partage et rassurant.</p></div>
+      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Portail ou accès sans interphone</h3><p>Un QR sur le portail : le visiteur tape « Sonner », vous etes prevenu a l’instant sur votre telephone — meme appli fermee. Pas de cablage, pas de boitier, pas d’electricite.</p></div>
+      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Chantier ou lieu sans courant</h3><p>Sur un acces de chantier, un depot, un local en travaux : client, livreur ou riverain vous joint d’un tap, et vous pouvez meme repondre depuis la notification.</p></div>
+      <div class="ucard"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><h3>Accueil quand c’est ferme</h3><p>Boutique fermee, gite, cabinet : on sonne, l’equipe est prevenue ; sinon, contact direct (appel, SMS, WhatsApp) avec message pre-rempli.</p></div>
     </div>
   </section>
 
@@ -207,9 +215,10 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <span class="eyebrow-l">Bon a savoir</span>
     <h2 id="faq">Questions frequentes</h2>
     <div class="faq">
-      <details><summary>Faut-il de l’electricite ou une application ?</summary><div class="a">Ni l’une ni l’autre. C’est un QR imprime qui ouvre une page hebergee ; le visiteur utilise son propre telephone (appel, SMS, WhatsApp, e-mail).</div></details>
-      <details><summary>Est-ce un systeme d’alarme ou de teleassistance ?</summary><div class="a">Non. C’est un raccourci de contact, pratique pour joindre un proche ou un occupant en un geste — mais ce n’est pas un dispositif d’urgence surveille, ne le presentez pas comme tel.</div></details>
-      <details><summary>Puis-je pre-remplir le message ?</summary><div class="a">Oui : « Je suis au portail », « J’ai besoin d’aide », « Livraison »… Vous choisissez aussi quels moyens de contact afficher (appel, SMS, WhatsApp, e-mail).</div></details>
+      <details><summary>Comment suis-je prevenu quand on sonne ?</summary><div class="a">Par notification push sur tous les appareils que vous avez abonnes — votre telephone, votre ordinateur, et ceux des proches que vous ajoutez — meme application fermee. Un e-mail de secours peut aussi etre envoye au cas ou une notification se perde.</div></details>
+      <details><summary>Puis-je alerter plusieurs proches a la fois ?</summary><div class="a">Oui. Dans l’onglet Sonneries, vous ajoutez autant d’appareils que vous voulez (conjoint, gardien, voisin…) ; tous recoivent l’alerte quand on sonne, et chacun peut repondre.</div></details>
+      <details><summary>Est-ce un dispositif d’urgence ou de teleassistance medicale ?</summary><div class="a">Non. C’est un systeme de notification (push, avec repli e-mail), tres pratique pour prevenir vite un cercle de proches — mais la reception n’est pas garantie comme une teleassistance medicale surveillee ; ne le presentez pas comme tel.</div></details>
+      <details><summary>Faut-il de l’electricite ou une application cote visiteur ?</summary><div class="a">Non. Le visiteur scanne un QR imprime et tape « Sonner » depuis son propre telephone, sans rien installer.</div></details>
     </div>
   </section>
 

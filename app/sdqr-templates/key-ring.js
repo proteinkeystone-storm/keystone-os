@@ -8,8 +8,9 @@
 // « Pratique » (1re page hebergee de cette famille).
 //
 // ORDRE 2 = skin interphone sombre + image haute (WebP) avec message en
-// surimpression. Le « Sonner » (Web Push) + la boucle retour + les
-// destinataires arrivent a l'ORDRE 3.
+// surimpression. ORDRE 3 = LIVRE : bouton « Sonner » (Web Push) + boucle
+// retour (reponse) + destinataires multiples (onglet Sonneries, sdqr.js ;
+// routes /api/keyring/* dans le worker). [Ce commentaire etait perime.]
 // ══════════════════════════════════════════════════════════════════
 
 const TEMPLATE = {
