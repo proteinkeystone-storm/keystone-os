@@ -373,14 +373,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .tcard-more svg{transition:transform .2s}
 .tcard:hover .tcard-more svg{transform:translateX(3px)}
 /* Modale notice (gabarit Modal Master : centré haut, 90vh) */
-.tnmodal[hidden]{display:none!important}   /* sinon le calque inset:0 capte TOUS les clics de la page */
-.tnmodal{position:fixed; inset:0; z-index:200; display:flex; justify-content:center; align-items:flex-start; padding:5vh 16px; opacity:0; transition:opacity .22s ease}
-.tnmodal.is-on{opacity:1}
-.tnmodal-backdrop{position:absolute; inset:0; background:rgba(2,6,23,.72); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
-.tnmodal-panel{position:relative; z-index:1; width:min(720px,100%); max-height:90vh; overflow-y:auto; background:linear-gradient(160deg,var(--bg-2),var(--bg)); border:1px solid var(--border-strong); border-radius:22px; padding:clamp(24px,4vw,40px); box-shadow:0 40px 90px -30px #000; transform:translateY(12px) scale(.99); transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.tnmodal.is-on .tnmodal-panel{transform:none}
-.tnmodal-close{position:absolute; top:14px; right:14px; width:38px; height:38px; display:grid; place-items:center; border-radius:50%; background:rgba(255,255,255,.05); border:1px solid var(--border-strong); color:var(--text-2); cursor:pointer; transition:background .2s,color .2s}
-.tnmodal-close:hover{background:rgba(255,255,255,.1); color:var(--text)}
+/* modale notice outil retiree — les cartes du catalogue pointent desormais vers /outils/<slug> */
 /* contenu notice (statique + rendu modale) */
 .tn-title{font-size:clamp(22px,3vw,28px); font-weight:900; letter-spacing:-.02em; padding-right:40px}
 .tn-tldr{margin-top:12px; font-size:15px; line-height:1.6; color:var(--text-2)}
@@ -2201,44 +2194,6 @@ function cascadeItems(items, delay){
 }
 /* lance le bloc post-hero juste apres le premier paint (1 frame) : le hero peint d'abord */
 requestAnimationFrame(function(){ setTimeout(__keystonePostHero, 0); });
-</script>
-<!-- Modale notice outil (Modal Master) — affiche le bloc statique #tn-<appId> -->
-<div class="tnmodal" id="tnModal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
-  <div class="tnmodal-backdrop" data-close></div>
-  <div class="tnmodal-panel">
-    <button class="tnmodal-close" data-close type="button" aria-label="Fermer">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-    </button>
-    <div class="tnmodal-body" id="tnModalBody"></div>
-  </div>
-</div>
-<script>
-(function(){
-  const modal=document.getElementById('tnModal');
-  const body=document.getElementById('tnModalBody');
-  let lastFocus=null;
-  window.openToolNotice=function(appId){
-    const src=document.getElementById('tn-'+appId);
-    if(!src||!modal||!body) return;
-    body.innerHTML=src.innerHTML;
-    body.scrollTop=0;
-    lastFocus=document.activeElement;
-    modal.hidden=false; modal.setAttribute('aria-hidden','false');
-    requestAnimationFrame(()=>modal.classList.add('is-on'));
-    document.body.style.overflow='hidden';
-    const cb=modal.querySelector('.tnmodal-close'); if(cb) cb.focus();
-  };
-  function close(){
-    if(!modal||modal.hidden) return;
-    modal.classList.remove('is-on'); modal.setAttribute('aria-hidden','true');
-    document.body.style.overflow='';
-    setTimeout(()=>{ modal.hidden=true; body.innerHTML=''; }, 220);
-    if(lastFocus&&lastFocus.focus) lastFocus.focus();
-  }
-  window.closeToolNotice=close;
-  if(modal) modal.addEventListener('click', e=>{ if(e.target.closest('[data-close]')) close(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&modal&&!modal.hidden) close(); });
-})();
 </script>
 </body>
 </html>
