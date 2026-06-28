@@ -3,6 +3,15 @@
 
   "version": 2,
 
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.protein-keystone.com" }],
+      "destination": "https://protein-keystone.com/:path*",
+      "permanent": true
+    }
+  ],
+
   "rewrites": [
     { "source": "/app",         "destination": "/app.html"         },
     { "source": "/admin",       "destination": "/admin.html"       },
