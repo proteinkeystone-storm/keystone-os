@@ -433,6 +433,41 @@ async function _sensorSocial(env, tenantId) {
   } catch (e) { return { failed24h: 0, published24h: 0 }; }
 }
 
+// Smart QR : suivi du TOP 5 des QR par activité (7 j) + tendance vs semaine
+// précédente. Les noms vivent dans entities.data (JSON) → on les résout en JS.
+// Reproduit la logique du leaderboard du pad (handleQrOverview), version légère.
+async function _sensorQrTop(env, tenantId, limit = 5) {
+  if (!tenantId) return { top: [] };
+  try {
+    const { results: rows } = await env.DB.prepare(
+      `SELECT data FROM entities WHERE tenant_id = ? AND type = 'qr_codes' AND deleted_at IS NULL`
+    ).bind(tenantId).all();
+    const qrs = (rows || []).map(r => { try { return JSON.parse(r.data); } catch { return null; } })
+      .filter(q => q && q.short_id);
+    if (!qrs.length) return { top: [] };
+    const ids = qrs.map(q => q.short_id);
+    const ph  = ids.map(() => '?').join(',');
+    const { results: meta } = await env.DB.prepare(
+      `SELECT short_id,
+              SUM(CASE WHEN ts >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS w,
+              SUM(CASE WHEN ts >= datetime('now','-14 days') AND ts < datetime('now','-7 days') THEN 1 ELSE 0 END) AS pw
+       FROM qr_scans WHERE short_id IN (${ph}) GROUP BY short_id`
+    ).bind(...ids).all();
+    const m = new Map((meta || []).map(r => [r.short_id, r]));
+    const top = qrs.map(q => {
+      const x = m.get(q.short_id) || { w: 0, pw: 0 };
+      return {
+        name: (q.name || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 40) || 'QR sans nom',
+        scans7d: x.w || 0,
+        trend: x.w > x.pw ? 'up' : (x.w < x.pw ? 'down' : 'flat'),
+      };
+    }).filter(t => t.scans7d > 0)
+      .sort((a, b) => b.scans7d - a.scans7d)
+      .slice(0, limit);
+    return { top };
+  } catch (e) { return { top: [] }; }
+}
+
 // ── Récupération du Pilotable actif le plus prioritaire ───────────
 async function _fetchActivePilotable(env, audience) {
   await ensureLivingSchema(env);
@@ -466,7 +501,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -515,10 +550,20 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
       score: 78 + Math.min(pulsa.responses24h * 3, 18), topic: 'pulsa',
     });
   }
+  // Suivi du TOP 5 des QR : chaque QR performant devient une phrase nommée
+  // (rotation via variantIndex). Plus parlant qu'un « 14 scans » anonyme.
+  const _qrTrend = { up: ' — en hausse', down: ' — en repli', flat: '' };
+  (Array.isArray(qrtop.top) ? qrtop.top : []).slice(0, 5).forEach((q, i) => {
+    candidates.push({
+      text:  `${q.name} : ${q.scans7d} scan${q.scans7d > 1 ? 's' : ''} cette semaine${_qrTrend[q.trend] || ''}.`,
+      score: 74 - i * 2, topic: 'smartqr',
+    });
+  });
+  // Total 24 h générique : secondaire (les QR nommés passent devant).
   if (smartqr.scans24h > 0) {
     candidates.push({
-      text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} ces dernières 24 h.`,
-      score: 70 + Math.min(smartqr.scans24h, 18), topic: 'smartqr',
+      text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} au total ces dernières 24 h.`,
+      score: 54, topic: 'smartqr',
     });
   }
 
@@ -595,15 +640,17 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
+  const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
     sentinel.down > 0 ? { t: `Sentinel : ${sentinel.down} site(s) hors ligne${sentinel.downLabel ? ' (' + sentinel.downLabel + ')' : ''}`, topic: 'sentinel' } : null,
     smartagent.recent24h > 0 ? { t: `Smart Agent : ${smartagent.recent24h} question(s) restée(s) sans réponse, un trou à combler`, topic: 'smartagent' } : null,
     keynapse.soonLabel ? { t: `Rappel imminent : ${keynapse.soonLabel}`, topic: 'keynapse' } : null,
     social.failed24h > 0 ? { t: `Social Manager : ${social.failed24h} publication(s) non abouties à reprendre`, topic: 'social' } : null,
     pulsa.responses24h > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' } : null,
-    smartqr.scans24h   > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h`, topic: 'smartqr' } : null,
+    _topQr ? { t: `Smart QR top : ${_topQr.name}, ${_topQr.scans7d} scans sur 7j (${_topQr.trend === 'up' ? 'en hausse' : _topQr.trend === 'down' ? 'en repli' : 'stable'})`, topic: 'smartqr' } : null,
+    smartqr.scans24h   > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h au total`, topic: 'smartqr' } : null,
     smartagent.open > 0 ? { t: `Smart Agent : ${smartagent.open} question(s) à combler`, topic: 'smartagent' } : null,
     (sentinel.total > 0 && sentinel.down === 0) ? { t: `Sentinel : ${sentinel.total} site(s) surveillé(s), tous en ligne`, topic: 'sentinel' } : null,
     ghostwriter.usedToday > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
@@ -896,8 +943,9 @@ export async function handleLivingBoard(request, env) {
   const padTenant    = isAdminClaim ? 'default' : lookupHmac;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable] = await Promise.all([
     _sensorSmartQR(env, padTenant),
+    _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
     _sensorGhostWriter(env, lookupHmac, claims?.plan),
     _sensorKodex(env, lookupHmac),
@@ -908,7 +956,7 @@ export async function handleLivingBoard(request, env) {
     _fetchActivePilotable(env, plan),
   ]);
 
-  const sensors = { smartqr, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
