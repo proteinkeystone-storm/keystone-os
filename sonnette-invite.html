@@ -29,6 +29,8 @@
     background:#161b27; border:1px solid rgba(255,255,255,.08); color:#c7cede; }
   .state.ok { background:linear-gradient(180deg,#13301f,#0f2618); border-color:rgba(64,220,140,.4); color:#d6ffe6; font-weight:700; }
   .state.err { border-color:rgba(224,85,107,.4); color:#ffd6dd; }
+  .state.info { border-color:rgba(124,138,249,.45); color:#dfe3ff; text-align:left; }
+  .state.info b { color:#fff; }
   .hide { display:none; }
   .foot { margin-top:22px; font-size:11px; color:rgba(255,255,255,.4); }
 </style>
@@ -49,7 +51,11 @@
   var token = new URLSearchParams(location.search).get("token") || "";
   var actBtn = document.getElementById("act");
   var stateEl = document.getElementById("state");
-  function setState(cls, text){ stateEl.className = "state " + cls; stateEl.textContent = text; }
+  var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+  var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  // Sur iPhone, le Web Push n'existe QUE dans l'app installee (jamais dans Safari).
+  var IOS_HELP = "Sur iPhone, il faut d'abord installer l'app :<br>1. Touchez <b>Partager</b> (le carré avec une flèche ↑, en bas de Safari).<br>2. <b>« Sur l'écran d'accueil »</b>.<br>3. Ouvrez l'app depuis la <b>nouvelle icône</b>, puis touchez « Activer ».";
+  function show(cls, html){ stateEl.className = "state " + cls; stateEl.innerHTML = html; }
   function vapidBytes(){
     var s = VAPID.replace(/-/g,"+").replace(/_/g,"/");
     var bin = atob(s + "=".repeat((4 - s.length % 4) % 4));
@@ -57,17 +63,16 @@
     for (var i=0;i<bin.length;i++) u[i] = bin.charCodeAt(i);
     return u;
   }
-  if (!token) { actBtn.disabled = true; setState("err", "Lien d'invitation invalide ou incomplet."); }
+  if (!token) { actBtn.disabled = true; show("err", "Lien d'invitation invalide ou incomplet."); return; }
+  // iPhone hors app installee : on guide DES l'arrivee (le bouton ne peut pas marcher en Safari).
+  if (isIOS && !standalone) show("info", IOS_HELP);
 
   actBtn.addEventListener("click", async function(){
-    actBtn.disabled = true; setState("", "Activation…");
+    if (isIOS && !standalone) { show("info", IOS_HELP); return; }
+    actBtn.disabled = true; show("", "Activation…");
     try {
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
-        throw new Error("Cet appareil ou navigateur ne gère pas les notifications.");
-      var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-      var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
-      if (isIOS && !standalone)
-        throw new Error("Sur iPhone : touchez Partager → « Sur l'écran d'accueil », ouvrez l'icône, puis réessayez ici.");
+        throw new Error("Ce navigateur ne gère pas les notifications. Essayez Chrome, Edge ou Firefox.");
       var perm = await Notification.requestPermission();
       if (perm !== "granted") throw new Error("Notifications refusées. Autorisez-les pour recevoir les sonneries.");
       await navigator.serviceWorker.register("/sw.js").catch(function(){});
@@ -84,9 +89,9 @@
       if (r.status === 410) throw new Error("Cette invitation a expiré. Demandez-en une nouvelle.");
       if (r.status === 404) throw new Error("Invitation introuvable. Demandez-en une nouvelle.");
       if (!r.ok) throw new Error("Activation refusée (" + r.status + ").");
-      setState("ok", "✓ C'est fait ! Cet appareil recevra les sonneries.");
+      show("ok", "✓ C'est fait ! Cet appareil recevra les sonneries.");
     } catch (e) {
-      setState("err", e.message || "Activation impossible.");
+      show("err", e.message || "Activation impossible.");
       actBtn.disabled = false;
     }
   });
