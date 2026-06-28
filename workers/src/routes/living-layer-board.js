@@ -819,6 +819,31 @@ async function _buildAiPhraseVendor(env, engine, apiKey, systemPrompt, userPromp
   return _parseAiPhrase(out.text || '');
 }
 
+// ── V1.1 « Alerte collante » ──────────────────────────────────────
+// Un incident CASSÉ (site hors ligne, publication non aboutie) reste ÉPINGLÉ
+// tant qu'il n'est pas résolu : il court-circuite la rotation (renvoyé quel
+// que soit le preferMode) et se libère SEUL quand la condition disparaît
+// (site rétabli, échec purgé). Ne couvre QUE les états « à réparer » — les
+// trous/rappels/scans restent en rotation normale (ce ne sont pas des pannes).
+function _buildAlert(sensors) {
+  const { sentinel = {}, social = {} } = sensors;
+  if (sentinel.down > 0) {
+    return {
+      key: `sentinel-down:${sentinel.down}`,
+      text: (sentinel.down === 1 && sentinel.downLabel)
+        ? `${sentinel.downLabel} est hors ligne — à vérifier.`
+        : `${sentinel.down} site${sentinel.down > 1 ? 's' : ''} hors ligne — à vérifier.`,
+    };
+  }
+  if (social.failed24h > 0) {
+    return {
+      key: `social-failed:${social.failed24h}`,
+      text: `${social.failed24h} publication${social.failed24h > 1 ? 's' : ''} non aboutie${social.failed24h > 1 ? 's' : ''} — à reprendre dans Social Manager.`,
+    };
+  }
+  return null;
+}
+
 // ── Endpoint principal ────────────────────────────────────────────
 export async function handleLivingBoard(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -940,6 +965,19 @@ export async function handleLivingBoard(request, env) {
       priority: pilotable.priority,
       expiresAt: pilotable.end_at,
       metrics,
+    }, 200, origin);
+  }
+
+  // 1.b ALERTE COLLANTE (V1.1) : un incident « à réparer » (site hors ligne,
+  //     publication non aboutie) reste ÉPINGLÉ jusqu'à résolution. Court-circuite
+  //     la rotation (renvoyé quel que soit le preferMode) ; ne cède qu'au
+  //     Pilotable URGENT admin (≥80, traité juste au-dessus). Se libère seul
+  //     quand la condition disparaît (le capteur repasse à 0).
+  const alert = _buildAlert(sensors);
+  if (alert) {
+    return json({
+      mode: 'alert', text: alert.text, icon: 'alert-triangle',
+      alertKey: alert.key, sticky: true, ttl: 45, metrics,
     }, 200, origin);
   }
 

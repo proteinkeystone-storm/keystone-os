@@ -689,6 +689,10 @@ html.light-mode .engine-logo-light { display: block !important; }
 .ks-living .ks-living-icon[data-mode="calculator"] { color: var(--tx3); }     /* stats → discret */
 .ks-living .ks-living-icon[data-mode="ai"]         { color: var(--gold); }    /* IA → or Keystone */
 .ks-living .ks-living-icon[data-mode="pilotable"]  { color: #ff9b3d; }        /* annonce admin → ambre */
+/* Alerte collante (V1.1) — incident à réparer, épinglé : rouge, plein, pulsé. */
+.ks-living .ks-living-icon[data-mode="alert"]      { color: #ef4444; opacity: 1; animation: ksLivingAlertPulse 1.8s ease-in-out infinite; }
+@keyframes ksLivingAlertPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .ks-living .ks-living-icon[data-mode="alert"] { animation: none; } }
 .ks-living .ks-living-text {
   flex: 1;
   overflow: hidden;

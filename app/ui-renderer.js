@@ -5488,9 +5488,12 @@ function _typeLivingText(container, textEl, text) {
 }
 
 function _paintLivingState(el, data) {
-    // URGENT lock : un Pilotable priorité ≥ 80 monopolise l'affichage
-    // (pas de rotation) tant qu'il est actif côté serveur.
-    _livingUrgentLock = (data.mode === 'pilotable' && (+data.priority || 0) >= 80);
+    // URGENT lock : un Pilotable priorité ≥ 80 OU une ALERTE collante (V1.1 —
+    // incident à réparer) monopolise l'affichage (pas de rotation) tant qu'il
+    // est actif côté serveur. Le lock se libère seul dès que le serveur cesse
+    // de renvoyer ce mode (incident résolu → le capteur repasse à 0).
+    _livingUrgentLock = (data.mode === 'alert')
+        || (data.mode === 'pilotable' && (+data.priority || 0) >= 80);
 
     // Feedback loop : mémorise le topic affiché + impression throttlée.
     if (data.topic) {
