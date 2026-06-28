@@ -46,15 +46,23 @@ function whiteToNavy(s) {
     .replace(/fill="white"/gi, `fill="${NAVY}"`);
 }
 
+// logo « pastille » (Wi-Fi) : la forme de fond n'a pas de fill (-> noir par
+// defaut, invisible/illisible) tandis que le texte est blanc. On colore le
+// fond en navy et on GARDE le texte blanc -> lisible sur le masque blanc du QR.
+function blobToNavy(s) {
+  return s.replace(/<path d=/, `<path fill="${NAVY}" d=`);
+}
+
 function toDataUrl(svg) {
   // garde-fou : racine svg avec xmlns
   if (!/xmlns=/.test(svg)) svg = svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
   return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
-function fileToEntry({ file, id, label, recolor }) {
+function fileToEntry({ file, id, label, recolor, recolorMode }) {
   let svg = cleanSvg(readFileSync(path.join(FOLDER, file), 'latin1'));
-  if (recolor) svg = whiteToNavy(svg);
+  if (recolorMode === 'blob') svg = blobToNavy(svg);
+  else if (recolor) svg = whiteToNavy(svg);
   return { id, label, dataUrl: toDataUrl(svg) };
 }
 
@@ -81,7 +89,7 @@ const SERVUTILS = [
   { file: 'paypal-icon-logo-svgrepo-com.svg',   id: 'paypal',  label: 'PayPal' },
   { file: 'stripe-v2-svgrepo-com.svg',          id: 'stripe',  label: 'Stripe' },
   { file: 'acrobat-pro-cc-logo-svgrepo-com.svg', id: 'pdf',    label: 'PDF / Acrobat' },
-  { file: 'wifi-logo-svgrepo-com.svg',          id: 'wifi',    label: 'Wi-Fi', recolor: true },
+  { file: 'wifi-logo-svgrepo-com.svg',          id: 'wifi',    label: 'Wi-Fi', recolorMode: 'blob' },
   { file: 'reception-ring-svgrepo-com.svg',     id: 'sonnette', label: 'Sonnette' },
 ];
 
