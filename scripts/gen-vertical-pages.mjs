@@ -56,8 +56,8 @@ const VERTICALS = [
       uf('VEFA Studio', 'Notice descriptive conforme RE 2020 et contrat de reservation generes en un seul outil.'),
       u('smart-agent', 'Un agent IA qui repond aux acquereurs (dispo du bien, charges, DPE, financement) derriere un QR sur la vitrine ou la bache chantier — sans inventer.'),
       u('sentinel', 'Surveillez votre visibilite en ligne et dans les IA : quand un prospect demande « agence a [ville] » a ChatGPT, etes-vous cite ?'),
-      ue('concierge', 'QR Concierge', 'Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
-      ue('qr-sonnette', 'QR Sonnette', 'Un QR sur le portail d’un bien a visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans electricite.'),
+      ue('concierge', 'QR Concierge virtuel','Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
+      ue('qr-sonnette', 'QR Ring','Un QR sur le portail d’un bien a visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans electricite.'),
     ],
     scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les modalites VEFA, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — pendant que l’annonce tournait deja sur les cinq portails.',
     faq: [
@@ -77,7 +77,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond 24/7 aux questions recurrentes : horaires, allergenes, menu enfant, reservation de groupe.'),
       u('social-manager', 'Le plat du jour publie d’un coup sur Facebook, Instagram et Threads — ou programme pour 11h pile.'),
       u('sentinel', 'Suivez vos avis et votre presence locale, et voyez si les IA vous recommandent quand on cherche « ou manger a [ville] ».'),
-      ue('carte-fidelite', 'Carte de fidelite', 'La fidelite sans carte plastique : le client cumule des tampons en scannant, la recompense se debloque toute seule (le 10e cafe offert, par ex.).'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La fidelite sans carte plastique : le client cumule des tampons en scannant, la recompense se debloque toute seule (le 10e cafe offert, par ex.).'),
     ],
     scenario: 'Vendredi, vous changez l’ardoise du midi : deux clics, le menu QR est a jour et le plat du jour part sur tous vos reseaux. A 19h, un client demande au QR s’il y a une option sans gluten — l’agent repond instantanement, table reservee, sans interrompre le service.',
     faq: [
@@ -97,7 +97,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond hors horaires : stock, tailles, click-and-collect, retours.'),
       u('key-form', 'Un formulaire d’inscription au programme de fidelite ou a la liste des arrivages, partageable par lien ou QR.'),
       u('social-manager', 'Vos nouveautes publiees sur tous vos reseaux en un clic, ou programmees pour le matin.'),
-      ue('carte-fidelite', 'Carte de fidelite', 'Un programme de fidelite dematerialise : tampons cumules par scan, recompense automatique au Ne passage, zero carte a imprimer ni a perdre.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Un programme de fidelite dematerialise : tampons cumules par scan, recompense automatique au Ne passage, zero carte a imprimer ni a perdre.'),
     ],
     scenario: 'Le dimanche, boutique fermee : un passant scanne la vitrine, decouvre la promo en cours, pose une question sur une taille a l’agent IA, et s’inscrit a votre liste d’arrivages via un mini-formulaire. Lundi, vous avez un nouveau client fidele sans avoir leve le petit doigt.',
     faq: [
@@ -117,7 +117,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond aux questions recurrentes (zone d’intervention, delais, types de prestations) et qualifie avant de vous deranger.'),
       u('smart-qr', 'Un QR sur le vehicule et la carte de visite qui mene direct au formulaire de demande.'),
       u('ghost-writer', 'Vos mails et relances de devis reecrits dans un ton pro et clair, sans y passer la soiree.'),
-      ue('qr-sonnette', 'QR Sonnette', 'Un QR sur un acces de chantier sans electricite ni interphone : client, livreur ou riverain vous joint d’un geste (appel, SMS, WhatsApp).'),
+      ue('qr-sonnette', 'QR Ring','Un QR sur un acces de chantier sans electricite ni interphone : client, livreur ou riverain vous joint d’un geste (appel, SMS, WhatsApp).'),
     ],
     scenario: 'Un particulier voit votre camion, scanne le QR a un feu rouge, decrit sa fuite et joint une photo via le formulaire. L’agent confirme votre zone d’intervention et le delai indicatif. Le soir, vous traitez une demande deja qualifiee au lieu d’un appel manque.',
     faq: [
@@ -137,7 +137,7 @@ const VERTICALS = [
       u('smart-agent', 'Un concierge IA qui repond aux voyageurs (check-in, equipements, recommandations locales) en plusieurs langues, par lien ou QR.'),
       u('key-form', 'Un formulaire d’arrivee (heure d’arrivee, demandes speciales) ou un mini etat des lieux, sans paperasse.'),
       u('sentinel', 'Gardez un oeil sur votre reputation et votre visibilite, y compris quand un voyageur demande conseil a une IA.'),
-      ue('qr-sonnette', 'QR Sonnette', 'Un QR a l’entree d’un gite sans interphone : le voyageur vous joint d’un geste a l’arrivee (appel, SMS, WhatsApp), sans electricite.'),
+      ue('qr-sonnette', 'QR Ring','Un QR a l’entree d’un gite sans interphone : le voyageur vous joint d’un geste a l’arrivee (appel, SMS, WhatsApp), sans electricite.'),
     ],
     scenario: 'Un voyageur arrive a 23h, scanne le QR de l’entree : code d’acces, Wi-Fi, fonctionnement du chauffage. Il demande au concierge IA un bon restaurant ouvert — reponse immediate. Vous n’avez pas eu a decrocher, et son sejour commence sans accroc.',
     faq: [
@@ -157,7 +157,7 @@ const VERTICALS = [
       u('smart-qr', 'Un QR a l’accueil et sur le miroir vers vos prestations, votre lien d’avis ou de prise de contact.'),
       u('social-manager', 'Vos avant/apres et offres publies d’un clic sur Instagram, Facebook et Threads.'),
       u('key-form', 'Un formulaire de diagnostic capillaire ou de demande de RDV, rempli par la cliente avant de venir.'),
-      ue('carte-fidelite', 'Carte de fidelite', 'La carte de fidelite sans carte : la cliente cumule ses passages en scannant, la prestation offerte se debloque toute seule.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La carte de fidelite sans carte : la cliente cumule ses passages en scannant, la prestation offerte se debloque toute seule.'),
     ],
     scenario: 'En plein shampoing, une cliente potentielle ecrit a l’agent depuis votre lien Instagram : prix d’un balayage, duree. Reponse immediate, formulaire de contact rempli. Le soir, vous publiez l’avant/apres du jour sur trois reseaux en un clic.',
     faq: [
@@ -291,7 +291,7 @@ const VERTICALS = [
       u('key-form', 'Inscriptions, questionnaire sante/objectifs, reservation d’un cours d’essai — remplis en amont.'),
       u('smart-qr', 'Un QR a l’accueil et sur les machines vers le planning, une video d’exercice ou le lien d’avis.'),
       u('social-manager', 'Vos seances, defis et resultats publies sur tous vos reseaux pour entretenir la communaute.'),
-      ue('carte-fidelite', 'Carte de fidelite', 'Recompensez l’assiduite sans carte plastique : vos adherents cumulent leurs venues par scan, la seance offerte se debloque automatiquement.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Recompensez l’assiduite sans carte plastique : vos adherents cumulent leurs venues par scan, la seance offerte se debloque automatiquement.'),
     ],
     scenario: 'Un curieux passe devant le studio, scanne le QR : tarifs, planning, et il reserve un cours d’essai via le formulaire apres avoir pose deux questions a l’agent. Pendant votre cours, tout s’est fait sans vous, et le defi de la semaine est deja parti sur les reseaux.',
     faq: [
@@ -328,11 +328,11 @@ const VERTICALS = [
 // ─────────────────────────────────────────────────────────────
 const EXPERIENCES = [
   {
-    slug: 'qr-sonnette', label: 'QR Sonnette',
+    slug: 'qr-sonnette', label: 'QR Ring',
     h1a: 'Un QR. Un geste.', h1b: 'On vous joint, même sans sonnette ni électricité.',
-    title: 'QR Sonnette — interphone et contact instantané par QR | Keystone OS',
+    title: 'QR Ring — sonnette par QR Code, sans electricite | Keystone OS',
     desc: 'Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application.',
-    intro: 'Un portail sans interphone, un acces sans electricite, ou simplement l’envie qu’un proche puisse vous joindre en un geste : le QR Sonnette transforme un autocollant en point de contact instantane.',
+    intro: 'Un portail sans interphone, un acces sans electricite, ou simplement l’envie qu’un proche puisse vous joindre en un geste : le QR Ring transforme un autocollant en point de contact instantane.',
     what: 'C’est une page hebergee derriere un QR a imprimer. La personne tape une fois et vous contacte depuis SON telephone — appel, SMS, WhatsApp ou e-mail — avec un message pre-rempli que vous avez prepare. Aucune electricite, aucune application a installer, aucun abonnement cote visiteur. Vous choisissez les moyens de contact proposes.',
     scenarios: [
       ['Portail ou accès sans interphone', 'Maison, local, residence : un QR sur le portail, le visiteur vous appelle ou vous ecrit a l’instant. Pas de cablage, pas de boitier.'],
@@ -348,7 +348,7 @@ const EXPERIENCES = [
     ],
   },
   {
-    slug: 'carte-fidelite', label: 'Carte de fidélité',
+    slug: 'carte-fidelite', label: 'Carte de fidélité dématérialisée',
     h1a: 'La carte de fidélité,', h1b: 'sans la carte.',
     title: 'Carte de fidelite par QR, sans support physique | Keystone OS',
     desc: 'Une carte de fidelite dematerialisee : vos clients cumulent des tampons en scannant un QR, la recompense se debloque toute seule au Ne passage. Zero carte plastique a imprimer ni a perdre.',
@@ -369,9 +369,9 @@ const EXPERIENCES = [
     ],
   },
   {
-    slug: 'concierge', label: 'Concierge',
+    slug: 'concierge', label: 'QR Concierge virtuel',
     h1a: 'Un QR.', h1b: 'Un programme entier qui se présente et répond tout seul.',
-    title: 'QR Concierge — un programme qui se presente et repond, en marque blanche | Keystone OS',
+    title: 'QR Concierge virtuel — un programme qui se presente et repond, en marque blanche | Keystone OS',
     desc: 'Un QR concierge white-label : page d’accueil a votre marque, cartes de comparaison et chat qui repond depuis un bloc de connaissance valide. 1 QR = 1 programme complet. Pense d’abord pour l’immobilier neuf.',
     intro: 'Vos prospects veulent tout savoir, tout de suite, a toute heure. Le QR Concierge met un point d’information complet derriere un seul code, a votre marque.',
     what: 'Derriere un seul QR : une page d’accueil a votre marque, des cartes de comparaison deterministes (lots, prestations, options…) et un chat qui repond UNIQUEMENT depuis un bloc de connaissance que vous avez valide — jamais d’invention. Pense d’abord pour les programmes immobiliers neufs (VEFA) : 1 QR = 1 programme complet, en marque blanche.',
