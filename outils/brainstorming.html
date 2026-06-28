@@ -79,7 +79,7 @@
           "name": "Quels moteurs IA sont utilisés ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
+            "text": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Mistral Small 3.1 24B sur Cloudflare Workers AI (gratuit, souverain). Si aucune clé BYOK n'est configurée, tous tournent en Mistral avec une bannière subtile signalant la finesse réduite."
           }
         },
         {
@@ -219,7 +219,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <h2 id="faq">Questions fréquentes</h2>
     <div class="faq">
       <details><summary>Quelle est la différence avec ChatGPT ou Claude ?</summary><div class="a">ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif.</div></details>
-      <details><summary>Quels moteurs IA sont utilisés ?</summary><div class="a">Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite.</div></details>
+      <details><summary>Quels moteurs IA sont utilisés ?</summary><div class="a">Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Mistral Small 3.1 24B sur Cloudflare Workers AI (gratuit, souverain). Si aucune clé BYOK n'est configurée, tous tournent en Mistral avec une bannière subtile signalant la finesse réduite.</div></details>
       <details><summary>Combien de temps dure une session ?</summary><div class="a">8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure.</div></details>
       <details><summary>Mes sessions sont-elles sauvegardées ?</summary><div class="a">Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF.</div></details>
       <details><summary>Pourquoi Devil's Advocate est-il intégré comme rôle système ?</summary><div class="a">Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique.</div></details>

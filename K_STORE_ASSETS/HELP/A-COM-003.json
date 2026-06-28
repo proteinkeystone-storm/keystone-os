@@ -17,7 +17,7 @@
     },
     {
       "q": "Quels moteurs IA sont utilisés ?",
-      "a": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
+      "a": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Mistral Small 3.1 24B sur Cloudflare Workers AI (gratuit, souverain). Si aucune clé BYOK n'est configurée, tous tournent en Mistral avec une bannière subtile signalant la finesse réduite."
     },
     {
       "q": "Combien de temps dure une session ?",

@@ -905,7 +905,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <h4 class="tn-h">Questions fréquentes</h4>
       <div class="tn-faq">
         <details><summary>Quelle est la différence avec ChatGPT ou Claude ?</summary><div class="tn-a">ChatGPT et Claude vous donnent UNE réponse. Brainstorming simule un atelier collectif où 9 personnalités spécialisées dialoguent — vous voyez émerger les idées, les frictions productives, les angles non-évidents. Le livrable n'est pas une réponse, c'est une réflexion enrichie par un collectif.</div></details>
-        <details><summary>Quels moteurs IA sont utilisés ?</summary><div class="tn-a">Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite.</div></details>
+        <details><summary>Quels moteurs IA sont utilisés ?</summary><div class="tn-a">Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Mistral Small 3.1 24B sur Cloudflare Workers AI (gratuit, souverain). Si aucune clé BYOK n'est configurée, tous tournent en Mistral avec une bannière subtile signalant la finesse réduite.</div></details>
         <details><summary>Combien de temps dure une session ?</summary><div class="tn-a">8 à 15 minutes selon la profondeur souhaitée. Vous pouvez interrompre à tout moment et solliciter directement le Synthesizer pour conclure.</div></details>
         <details><summary>Mes sessions sont-elles sauvegardées ?</summary><div class="tn-a">Oui, les 20 dernières sessions restent en bibliothèque locale dans la sidebar Sessions. Vous pouvez les rouvrir, archiver, ou exporter la synthèse en PDF.</div></details>
         <details><summary>Pourquoi Devil's Advocate est-il intégré comme rôle système ?</summary><div class="tn-a">Pour casser le consensus-bias inhérent aux LLM. Les autres personnalités tendent naturellement vers l'accord poli ; Devil's Advocate a pour mission de remettre en question les hypothèses faibles et les clichés. Sans lui, vous obtiendriez du « shallow output » — c'est notre garde-fou méthodologique.</div></details>
@@ -930,7 +930,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         <details><summary>Puis-je dupliquer un formulaire existant ?</summary><div class="tn-a">Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs.</div></details>
         <details><summary>Comment fonctionne la logique conditionnelle ?</summary><div class="tn-a">Sélectionnez un champ dans le builder, puis dans l'éditeur de droite ouvrez 'Visibilité conditionnelle' ou 'Obligatoire conditionnel'. Vous pouvez aussi configurer une somme automatique entre champs Montant.</div></details>
         <details><summary>Puis-je pré-remplir des champs via l'URL ?</summary><div class="tn-a">Oui : chaque champ a un ID technique (visible dans son éditeur) qui peut être utilisé en query param. Exemple : keystone.app/f/biennale?fld_nom=Marie+Durand.</div></details>
-        <details><summary>Quels types de fichiers les répondants peuvent-ils joindre ?</summary><div class="tn-a">Pas d'upload direct (pour limiter les coûts et la complexité RGPD). À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo.</div></details>
+        <details><summary>Quels types de fichiers les répondants peuvent-ils joindre ?</summary><div class="tn-a">Pas d'upload direct. À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo.</div></details>
       </div>
     </article>
     <article class="tn" id="tn-A-COM-005">
@@ -1165,7 +1165,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       "name": "Quels moteurs IA sont utilisés ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Gemma 4 Cloudflare Workers AI (gratuit). Si aucune clé BYOK n'est configurée, tous tournent en Gemma 4 avec une bannière subtile signalant la finesse réduite."
+        "text": "Stratégie hybride : Synthesizer et Strategic Lead via Claude BYOK (finesse maximale sur les rôles centraux), les 7 autres via Mistral Small 3.1 24B sur Cloudflare Workers AI (gratuit, souverain). Si aucune clé BYOK n'est configurée, tous tournent en Mistral avec une bannière subtile signalant la finesse réduite."
       }
     },
     {
@@ -1245,7 +1245,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       "name": "Quels types de fichiers les répondants peuvent-ils joindre ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Pas d'upload direct (pour limiter les coûts et la complexité RGPD). À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo."
+        "text": "Pas d'upload direct. À la place, utilisez le type 'Lien externe' : le répondant colle un lien WeTransfer, Drive, Dropbox ou Vimeo."
       }
     },
     {
