@@ -21,6 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const INDEX = resolve(ROOT, 'index.html');
 const POUR = resolve(ROOT, 'pour');
+const CASUSAGE = resolve(ROOT, 'cas-usage');
 const ORIGIN = 'https://protein-keystone.com';
 const TODAY = '2026-06-29';
 
@@ -41,6 +42,7 @@ const TOOL_APP = { // pour relire l'icone depuis TOOLS d'index.html
 // ─────────────────────────────────────────────────────────────
 const u = (tool, line) => ({ tool, line });
 const uf = (name, line) => ({ name, line });
+const ue = (exp, name, line) => ({ exp, name, line }); // usage relie a une page cas d'usage /cas-usage/<exp>
 
 const VERTICALS = [
   {
@@ -54,6 +56,8 @@ const VERTICALS = [
       uf('VEFA Studio', 'Notice descriptive conforme RE 2020 et contrat de reservation generes en un seul outil.'),
       u('smart-agent', 'Un agent IA qui repond aux acquereurs (dispo du bien, charges, DPE, financement) derriere un QR sur la vitrine ou la bache chantier — sans inventer.'),
       u('sentinel', 'Surveillez votre visibilite en ligne et dans les IA : quand un prospect demande « agence a [ville] » a ChatGPT, etes-vous cite ?'),
+      ue('concierge', 'QR Concierge', 'Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
+      ue('qr-sonnette', 'QR Sonnette', 'Un QR sur le portail d’un bien a visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans electricite.'),
     ],
     scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les modalites VEFA, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — pendant que l’annonce tournait deja sur les cinq portails.',
     faq: [
@@ -73,6 +77,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond 24/7 aux questions recurrentes : horaires, allergenes, menu enfant, reservation de groupe.'),
       u('social-manager', 'Le plat du jour publie d’un coup sur Facebook, Instagram et Threads — ou programme pour 11h pile.'),
       u('sentinel', 'Suivez vos avis et votre presence locale, et voyez si les IA vous recommandent quand on cherche « ou manger a [ville] ».'),
+      ue('carte-fidelite', 'Carte de fidelite', 'La fidelite sans carte plastique : le client cumule des tampons en scannant, la recompense se debloque toute seule (le 10e cafe offert, par ex.).'),
     ],
     scenario: 'Vendredi, vous changez l’ardoise du midi : deux clics, le menu QR est a jour et le plat du jour part sur tous vos reseaux. A 19h, un client demande au QR s’il y a une option sans gluten — l’agent repond instantanement, table reservee, sans interrompre le service.',
     faq: [
@@ -92,6 +97,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond hors horaires : stock, tailles, click-and-collect, retours.'),
       u('key-form', 'Un formulaire d’inscription au programme de fidelite ou a la liste des arrivages, partageable par lien ou QR.'),
       u('social-manager', 'Vos nouveautes publiees sur tous vos reseaux en un clic, ou programmees pour le matin.'),
+      ue('carte-fidelite', 'Carte de fidelite', 'Un programme de fidelite dematerialise : tampons cumules par scan, recompense automatique au Ne passage, zero carte a imprimer ni a perdre.'),
     ],
     scenario: 'Le dimanche, boutique fermee : un passant scanne la vitrine, decouvre la promo en cours, pose une question sur une taille a l’agent IA, et s’inscrit a votre liste d’arrivages via un mini-formulaire. Lundi, vous avez un nouveau client fidele sans avoir leve le petit doigt.',
     faq: [
@@ -111,6 +117,7 @@ const VERTICALS = [
       u('smart-agent', 'Un agent IA qui repond aux questions recurrentes (zone d’intervention, delais, types de prestations) et qualifie avant de vous deranger.'),
       u('smart-qr', 'Un QR sur le vehicule et la carte de visite qui mene direct au formulaire de demande.'),
       u('ghost-writer', 'Vos mails et relances de devis reecrits dans un ton pro et clair, sans y passer la soiree.'),
+      ue('qr-sonnette', 'QR Sonnette', 'Un QR sur un acces de chantier sans electricite ni interphone : client, livreur ou riverain vous joint d’un geste (appel, SMS, WhatsApp).'),
     ],
     scenario: 'Un particulier voit votre camion, scanne le QR a un feu rouge, decrit sa fuite et joint une photo via le formulaire. L’agent confirme votre zone d’intervention et le delai indicatif. Le soir, vous traitez une demande deja qualifiee au lieu d’un appel manque.',
     faq: [
@@ -130,6 +137,7 @@ const VERTICALS = [
       u('smart-agent', 'Un concierge IA qui repond aux voyageurs (check-in, equipements, recommandations locales) en plusieurs langues, par lien ou QR.'),
       u('key-form', 'Un formulaire d’arrivee (heure d’arrivee, demandes speciales) ou un mini etat des lieux, sans paperasse.'),
       u('sentinel', 'Gardez un oeil sur votre reputation et votre visibilite, y compris quand un voyageur demande conseil a une IA.'),
+      ue('qr-sonnette', 'QR Sonnette', 'Un QR a l’entree d’un gite sans interphone : le voyageur vous joint d’un geste a l’arrivee (appel, SMS, WhatsApp), sans electricite.'),
     ],
     scenario: 'Un voyageur arrive a 23h, scanne le QR de l’entree : code d’acces, Wi-Fi, fonctionnement du chauffage. Il demande au concierge IA un bon restaurant ouvert — reponse immediate. Vous n’avez pas eu a decrocher, et son sejour commence sans accroc.',
     faq: [
@@ -149,6 +157,7 @@ const VERTICALS = [
       u('smart-qr', 'Un QR a l’accueil et sur le miroir vers vos prestations, votre lien d’avis ou de prise de contact.'),
       u('social-manager', 'Vos avant/apres et offres publies d’un clic sur Instagram, Facebook et Threads.'),
       u('key-form', 'Un formulaire de diagnostic capillaire ou de demande de RDV, rempli par la cliente avant de venir.'),
+      ue('carte-fidelite', 'Carte de fidelite', 'La carte de fidelite sans carte : la cliente cumule ses passages en scannant, la prestation offerte se debloque toute seule.'),
     ],
     scenario: 'En plein shampoing, une cliente potentielle ecrit a l’agent depuis votre lien Instagram : prix d’un balayage, duree. Reponse immediate, formulaire de contact rempli. Le soir, vous publiez l’avant/apres du jour sur trois reseaux en un clic.',
     faq: [
@@ -282,6 +291,7 @@ const VERTICALS = [
       u('key-form', 'Inscriptions, questionnaire sante/objectifs, reservation d’un cours d’essai — remplis en amont.'),
       u('smart-qr', 'Un QR a l’accueil et sur les machines vers le planning, une video d’exercice ou le lien d’avis.'),
       u('social-manager', 'Vos seances, defis et resultats publies sur tous vos reseaux pour entretenir la communaute.'),
+      ue('carte-fidelite', 'Carte de fidelite', 'Recompensez l’assiduite sans carte plastique : vos adherents cumulent leurs venues par scan, la seance offerte se debloque automatiquement.'),
     ],
     scenario: 'Un curieux passe devant le studio, scanne le QR : tarifs, planning, et il reserve un cours d’essai via le formulaire apres avoir pose deux questions a l’agent. Pendant votre cours, tout s’est fait sans vous, et le defi de la semaine est deja parti sur les reseaux.',
     faq: [
@@ -307,6 +317,74 @@ const VERTICALS = [
       ['L’agent va-t-il annoncer un prix de reparation ?', 'Non. Il informe (prestations, horaires, delais indicatifs) et collecte la demande ; le devis reste de votre ressort apres diagnostic.'],
       ['Comment recevoir les demandes d’intervention ?', 'Par e-mail des qu’un formulaire est rempli, avec les photos et infos du vehicule.'],
       ['Les avis comptent-ils vraiment pour un garage ?', 'Beaucoup : la presence locale et les avis pesent fort dans le choix. Sentinel vous aide a les suivre et a vous ameliorer.'],
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────────────────────
+// CAS D'USAGE DIFFERENCIANTS — experiences Smart QR, transverses aux metiers.
+//   what  = description fidele a la capacite REELLE (pas de sur-promesse)
+//   scenarios = [titre, ligne] ; metiers = slugs des pages /pour/<slug>
+// ─────────────────────────────────────────────────────────────
+const EXPERIENCES = [
+  {
+    slug: 'qr-sonnette', label: 'QR Sonnette',
+    h1a: 'Un QR. Un geste.', h1b: 'On vous joint, même sans sonnette ni électricité.',
+    title: 'QR Sonnette — interphone et contact instantané par QR | Keystone OS',
+    desc: 'Un QR pose sur un portail, une porte ou un frigo : le visiteur — ou un proche — vous joint d’un geste (appel, SMS, WhatsApp, e-mail), sans electricite ni application.',
+    intro: 'Un portail sans interphone, un acces sans electricite, ou simplement l’envie qu’un proche puisse vous joindre en un geste : le QR Sonnette transforme un autocollant en point de contact instantane.',
+    what: 'C’est une page hebergee derriere un QR a imprimer. La personne tape une fois et vous contacte depuis SON telephone — appel, SMS, WhatsApp ou e-mail — avec un message pre-rempli que vous avez prepare. Aucune electricite, aucune application a installer, aucun abonnement cote visiteur. Vous choisissez les moyens de contact proposes.',
+    scenarios: [
+      ['Portail ou accès sans interphone', 'Maison, local, residence : un QR sur le portail, le visiteur vous appelle ou vous ecrit a l’instant. Pas de cablage, pas de boitier.'],
+      ['Joindre un proche en un geste', 'Un QR pres de la porte d’un parent age ou isole : il joint un proche d’un seul tap (appel, SMS ou WhatsApp, message pre-rempli). Un raccourci de contact rassurant — pas un dispositif d’urgence surveille.'],
+      ['Chantier ou lieu sans courant', 'Sur un acces de chantier, un depot, un local en travaux : client, livreur ou riverain vous joint sans chercher un numero.'],
+      ['Accueil quand c’est ferme', 'Boutique fermee, gite, cabinet : le QR sur la vitre permet de laisser un message ou de vous joindre directement.'],
+    ],
+    metiers: ['immobilier', 'hotellerie', 'artisans', 'commercants'],
+    faq: [
+      ['Faut-il de l’electricite ou une application ?', 'Ni l’une ni l’autre. C’est un QR imprime qui ouvre une page hebergee ; le visiteur utilise son propre telephone (appel, SMS, WhatsApp, e-mail).'],
+      ['Est-ce un systeme d’alarme ou de teleassistance ?', 'Non. C’est un raccourci de contact, pratique pour joindre un proche ou un occupant en un geste — mais ce n’est pas un dispositif d’urgence surveille, ne le presentez pas comme tel.'],
+      ['Puis-je pre-remplir le message ?', 'Oui : « Je suis au portail », « J’ai besoin d’aide », « Livraison »… Vous choisissez aussi quels moyens de contact afficher (appel, SMS, WhatsApp, e-mail).'],
+    ],
+  },
+  {
+    slug: 'carte-fidelite', label: 'Carte de fidélité',
+    h1a: 'La carte de fidélité,', h1b: 'sans la carte.',
+    title: 'Carte de fidelite par QR, sans support physique | Keystone OS',
+    desc: 'Une carte de fidelite dematerialisee : vos clients cumulent des tampons en scannant un QR, la recompense se debloque toute seule au Ne passage. Zero carte plastique a imprimer ni a perdre.',
+    intro: 'Les cartes a tampons en carton se perdent, s’oublient et coutent a imprimer. Le meme principe, en un QR : vos clients cumulent leurs passages sans rien sortir de leur poche.',
+    what: 'Vos clients scannent le QR a chaque passage ; les tampons se cumulent automatiquement, l’etat etant tenu cote serveur (pas sur un bout de carton). Au Ne tampon, la recompense se debloque avec un code a presenter en caisse. Vous fixez le nombre de tampons (de 3 a 30) et la duree de validite. Aucune carte physique, aucune application a installer.',
+    scenarios: [
+      ['Cafés & restaurants', 'Le 10e cafe offert, la formule midi fidelite : le compteur tourne tout seul a chaque scan en caisse.'],
+      ['Boutiques & commerces', 'Recompensez les passages reguliers sans gerer un fichier ni imprimer des cartes a perdre.'],
+      ['Coiffure & beauté', 'La prestation offerte au bout de N visites, debloquee automatiquement, code en caisse.'],
+      ['Sport & loisirs', 'Recompensez l’assiduite : la seance offerte se debloque apres N venues scannees.'],
+    ],
+    metiers: ['restaurants', 'commercants', 'beaute', 'sport'],
+    faq: [
+      ['Le client doit-il installer une application ?', 'Non. Il scanne le QR, c’est tout. Le cumul se fait automatiquement, sans compte ni appli.'],
+      ['Comment la recompense est-elle validee ?', 'Au Ne tampon, un code s’affiche cote client, a presenter ou saisir en caisse pour debloquer la recompense.'],
+      ['Combien de tampons puis-je demander ?', 'De 3 a 30, avec une duree de validite que vous fixez vous-meme.'],
+      ['Faut-il un site web ?', 'Non. Il suffit du QR : sur le comptoir, le ticket de caisse, la vitrine ou un flyer.'],
+    ],
+  },
+  {
+    slug: 'concierge', label: 'Concierge',
+    h1a: 'Un QR.', h1b: 'Un programme entier qui se présente et répond tout seul.',
+    title: 'QR Concierge — un programme qui se presente et repond, en marque blanche | Keystone OS',
+    desc: 'Un QR concierge white-label : page d’accueil a votre marque, cartes de comparaison et chat qui repond depuis un bloc de connaissance valide. 1 QR = 1 programme complet. Pense d’abord pour l’immobilier neuf.',
+    intro: 'Vos prospects veulent tout savoir, tout de suite, a toute heure. Le QR Concierge met un point d’information complet derriere un seul code, a votre marque.',
+    what: 'Derriere un seul QR : une page d’accueil a votre marque, des cartes de comparaison deterministes (lots, prestations, options…) et un chat qui repond UNIQUEMENT depuis un bloc de connaissance que vous avez valide — jamais d’invention. Pense d’abord pour les programmes immobiliers neufs (VEFA) : 1 QR = 1 programme complet, en marque blanche.',
+    scenarios: [
+      ['Programme immobilier neuf', 'Un QR sur la bache de chantier ou la bulle de vente : le prospect compare les lots et pose ses questions, jour et nuit, sans mobiliser un commercial.'],
+      ['Bulle de vente & salons', 'Un point d’information autonome, a votre marque, qui complete l’equipe sans la remplacer.'],
+      ['Residences & lieux a presenter', 'Tout ce qu’il faut savoir sur un lieu, structure et a jour, derriere un seul code.'],
+    ],
+    metiers: ['immobilier', 'hotellerie'],
+    faq: [
+      ['Le chat invente-t-il des reponses ?', 'Non. Il repond uniquement depuis le bloc de connaissance que vous avez valide. Hors de ce perimetre, il le dit plutot que d’inventer.'],
+      ['Pour quel secteur est-ce concu ?', 'D’abord pour l’immobilier neuf (VEFA) : un QR par programme. La logique « 1 QR = 1 lieu a presenter » s’etend a d’autres contextes.'],
+      ['Est-ce a ma marque ?', 'Oui, c’est du white-label : logo, couleurs et contenu sont les votres.'],
     ],
   },
 ];
@@ -424,9 +502,12 @@ function FOOT() {
 function page(v, idx) {
   const url = `${ORIGIN}/pour/${v.slug}`;
   const uses = v.uses.map(x => {
-    const slug = x.tool, name = slug ? TOOL_NAME[slug] : x.name, icon = slug ? toolIcon(slug) : GENERIC_ICON;
-    const head = slug
-      ? `<a class="ucard" href="/outils/${slug}"><span class="ic">${ICON_WRAP(icon)}</span><h3>${esc(name)} <span class="lnk">→</span></h3><p>${esc(x.line)}</p></a>`
+    let href = null, name, icon;
+    if (x.tool) { href = `/outils/${x.tool}`; name = TOOL_NAME[x.tool]; icon = toolIcon(x.tool); }
+    else if (x.exp) { href = `/cas-usage/${x.exp}`; name = x.name; icon = toolIcon('smart-qr'); }
+    else { name = x.name; icon = GENERIC_ICON; }
+    const head = href
+      ? `<a class="ucard" href="${href}"><span class="ic">${ICON_WRAP(icon)}</span><h3>${esc(name)} <span class="lnk">→</span></h3><p>${esc(x.line)}</p></a>`
       : `<div class="ucard"><span class="ic">${ICON_WRAP(icon)}</span><h3>${esc(name)}</h3><p>${esc(x.line)}</p></div>`;
     return '      ' + head;
   }).join('\n');
@@ -542,9 +623,129 @@ ${FOOT()}
 `;
 }
 
+function expPage(x) {
+  const url = `${ORIGIN}/cas-usage/${x.slug}`;
+  const qrIcon = toolIcon('smart-qr');
+  const scen = x.scenarios.map(([t, l]) =>
+    `      <div class="ucard"><span class="ic">${ICON_WRAP(qrIcon)}</span><h3>${esc(t)}</h3><p>${esc(l)}</p></div>`).join('\n');
+  const metiers = x.metiers.map(s => {
+    const v = VERTICALS.find(z => z.slug === s);
+    return v ? `      <a class="chip" href="/pour/${v.slug}">${esc(v.metier)}</a>` : '';
+  }).filter(Boolean).join('\n');
+  const graph = [
+    { '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: `${ORIGIN}/` },
+      { '@type': 'ListItem', position: 2, name: 'Cas d’usage', item: `${ORIGIN}/#metiers` },
+      { '@type': 'ListItem', position: 3, name: x.label, item: url },
+    ] },
+    { '@type': 'WebPage', '@id': `${url}#webpage`, url, name: x.title, inLanguage: 'fr-FR',
+      isPartOf: { '@id': `${ORIGIN}/#website` }, about: { '@id': `${ORIGIN}/#organization` }, description: x.desc },
+    { '@type': 'FAQPage', mainEntity: x.faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
+  ];
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(x.title)}</title>
+<meta name="description" content="${escAttr(x.desc)}">
+<link rel="canonical" href="${url}">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="${escAttr(x.title)}">
+<meta property="og:description" content="${escAttr(x.desc)}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${url}">
+<meta property="og:site_name" content="Keystone OS">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:image" content="${ORIGIN}/og-cover.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escAttr(x.title)}">
+<meta name="twitter:description" content="${escAttr(x.desc)}">
+<meta name="twitter:image" content="${ORIGIN}/og-cover.png">
+<meta name="theme-color" content="#020617">
+<link rel="icon" href="/keystone-puce.svg" type="image/svg+xml">
+<script type="application/ld+json">
+${jsonld({ '@context': 'https://schema.org', '@graph': graph })}
+</script>
+<style>
+${STYLE}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img src="/keystone-puce.svg" alt="">Keystone</a>
+  <a class="nav-cta" href="/activate">Se connecter</a>
+</nav>
+
+<div class="wrap">
+
+  <nav class="crumb" aria-label="Fil d'Ariane">
+    <a href="/">Accueil</a> &nbsp;/&nbsp; <a href="/#metiers">Cas d'usage</a> &nbsp;/&nbsp; <span>${esc(x.label)}</span>
+  </nav>
+
+  <header class="hero">
+    <span class="eyebrow">${ICON_WRAP(qrIcon)} Expérience Smart QR</span>
+    <h1>${esc(x.h1a)}<br><em>${esc(x.h1b)}</em></h1>
+    <p class="lead">${esc(x.intro)}</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
+      <a class="btn btn-ghost" href="/outils/smart-qr">Découvrir Smart QR</a>
+    </div>
+    <p class="trust">Sans carte bancaire · vos donnees restent a vous, hebergees en Europe</p>
+  </header>
+
+  <section class="block" aria-labelledby="cest">
+    <span class="eyebrow-l">Le principe</span>
+    <h2 id="cest">Ce que c'est, concrètement</h2>
+    <p class="sub">${esc(x.what)}</p>
+  </section>
+
+  <section class="block" aria-labelledby="cas">
+    <span class="eyebrow-l">Cas concrets</span>
+    <h2 id="cas">Quelques façons de s'en servir</h2>
+    <div class="uses">
+${scen}
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="faq">
+    <span class="eyebrow-l">Bon a savoir</span>
+    <h2 id="faq">Questions frequentes</h2>
+    <div class="faq">
+${x.faq.map(([q, a]) => `      <details><summary>${esc(q)}</summary><div class="a">${esc(a)}</div></details>`).join('\n')}
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="metiers">
+    <span class="eyebrow-l">Pour quels metiers</span>
+    <h2 id="metiers">Particulierement utile pour…</h2>
+    <div class="chips">
+${metiers}
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Envie d'essayer ?</h2>
+    <p>Cette experience fait partie de Smart QR, dans votre OS Keystone. Activez ce qu'il vous faut, demarrez en quelques minutes.</p>
+    <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
+  </section>
+
+${FOOT()}
+
+</div>
+</body>
+</html>
+`;
+}
+
 // ── ecriture pages ──────────────────────────────────────────────
 mkdirSync(POUR, { recursive: true });
 VERTICALS.forEach((v, i) => writeFileSync(resolve(POUR, `${v.slug}.html`), page(v, i), 'utf8'));
+mkdirSync(CASUSAGE, { recursive: true });
+EXPERIENCES.forEach(x => writeFileSync(resolve(CASUSAGE, `${x.slug}.html`), expPage(x), 'utf8'));
 
 // ── sitemap COMPLET (proprietaire unique) ───────────────────────
 const toolSlugs = Object.values(TOOL);
@@ -553,6 +754,7 @@ const urls = [
   { loc: `${ORIGIN}/faq`, pr: '0.7', cf: 'monthly' },
   ...toolSlugs.map(s => ({ loc: `${ORIGIN}/outils/${s}`, pr: '0.8', cf: 'monthly' })),
   ...VERTICALS.map(v => ({ loc: `${ORIGIN}/pour/${v.slug}`, pr: '0.7', cf: 'monthly' })),
+  ...EXPERIENCES.map(x => ({ loc: `${ORIGIN}/cas-usage/${x.slug}`, pr: '0.7', cf: 'monthly' })),
 ];
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -566,4 +768,4 @@ ${urls.map(u2 => `  <url>
 `;
 writeFileSync(resolve(ROOT, 'sitemap.xml'), sitemap, 'utf8');
 
-console.log(`OK -> ${VERTICALS.length} pages /pour/*.html + sitemap.xml complet (${urls.length} URLs).`);
+console.log(`OK -> ${VERTICALS.length} pages /pour/*.html + ${EXPERIENCES.length} pages /cas-usage/*.html + sitemap.xml complet (${urls.length} URLs).`);
