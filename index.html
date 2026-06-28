@@ -1639,7 +1639,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 
 <!-- Modale login retirée : « Se connecter » et les CTAs login pointent vers /activate (tunnel d'activation + onboarding intact). -->
 
-<script src="/lottie.min.js"></script>
+<!-- lottie.min.js (305 Ko) chargé paresseusement a l'approche du sablier — voir l'IIFE Sablier plus bas. Hors chemin critique. -->
 <script>
 /* ── Données : branché sur les vrais outils (à terme lu du Key-Store) ── */
 const TOOLS = [
@@ -1833,6 +1833,11 @@ if('IntersectionObserver' in window){
   new IntersectionObserver(es=>{ es[0].isIntersecting ? startHero() : stopHero(); }, {rootMargin:'200px 0px'}).observe(stage);
 }
 
+/* ── POST-HERO : tout ce qui suit (catalogue, plans, reveals, demo, scratch, sablier...)
+   est below-the-fold ou non critique. On l'execute APRES le premier paint du hero
+   pour scinder la longue tache de chargement (meilleurs LCP / TBT / INP).
+   L'ordre interne est preserve (le reveal-observer voit bien les .reveal crees avant lui). ── */
+function __keystonePostHero(){
 /* ── Mini-dashboard (sec 3) + grille d'outils par métier (sec 4), data-driven ── */
 (function(){
   const ag=document.getElementById('appgrid');
@@ -2084,18 +2089,33 @@ function cascadeItems(items, delay){
   apply();                                                        // état initial → pas de saut au 1er scroll
 })();
 
-/* ── Sablier Lottie (ton animation) ── */
+/* ── Sablier Lottie (ton animation) — lottie.min.js chargé paresseusement a l'approche du sablier ── */
 (function(){
   const el=document.getElementById('sablier');
-  if(!el || !window.lottie) return;
-  const anim=window.lottie.loadAnimation({container:el, renderer:'svg', loop:true, autoplay:false, path:'sablier.json'});
-  if(RM) return;                                              // reduced motion : sablier figé
-  const ts=el.closest('.ts-visual');
-  if(!('IntersectionObserver' in window)){ anim.play(); return; }
-  new IntersectionObserver(es=>{                              // ne tourne (et la lueur ne pulse) que visible
-    const v=es[0].isIntersecting; v?anim.play():anim.pause();
-    if(ts) ts.classList.toggle('is-paused', !v);
-  }, {threshold:0.1}).observe(el);
+  if(!el) return;
+  let booted=false;
+  function init(){
+    if(!window.lottie) return;
+    const anim=window.lottie.loadAnimation({container:el, renderer:'svg', loop:true, autoplay:false, path:'sablier.json'});
+    if(RM) return;                                            // reduced motion : sablier figé
+    const ts=el.closest('.ts-visual');
+    if(!('IntersectionObserver' in window)){ anim.play(); return; }
+    new IntersectionObserver(es=>{                            // ne tourne (et la lueur ne pulse) que visible
+      const v=es[0].isIntersecting; v?anim.play():anim.pause();
+      if(ts) ts.classList.toggle('is-paused', !v);
+    }, {threshold:0.1}).observe(el);
+  }
+  function boot(){
+    if(booted) return; booted=true;
+    if(window.lottie){ init(); return; }
+    const s=document.createElement('script');
+    s.src='/lottie.min.js'; s.async=true; s.onload=init;
+    document.head.appendChild(s);
+  }
+  if(!('IntersectionObserver' in window)){ boot(); return; }  // pas d'IO : on charge direct
+  new IntersectionObserver((es,obs)=>{                        // precharge un peu avant l'entree a l'ecran
+    if(es[0].isIntersecting){ obs.disconnect(); boot(); }
+  }, {rootMargin:'400px 0px'}).observe(el);
 })();
 
 /* ── Carte à gratter sur la section Smart QR (démo live du template) ── */
@@ -2142,7 +2162,13 @@ function cascadeItems(items, delay){
   cv.addEventListener('pointermove',move);
   cv.addEventListener('pointerup',()=>drawing=false);
   cv.addEventListener('pointercancel',()=>drawing=false);
-  size(); addEventListener('resize',size);
+  // init (sizing + 1er paint du canvas) seulement a l'approche de la carte (tres bas de page)
+  // → sort le travail canvas de la tache de chargement
+  let inited=false;
+  function initOnce(){ if(inited) return; inited=true; size(); addEventListener('resize',size); }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver((es,obs)=>{ if(es[0].isIntersecting){ obs.disconnect(); initOnce(); } },{rootMargin:'300px 0px'}).observe(card);
+  } else { initOnce(); }
 })();
 
 /* ── Connexion / activation (modale email + clé de licence) ── */
@@ -2173,6 +2199,9 @@ function cascadeItems(items, delay){
     if(t<1) requestAnimationFrame(tick);
   })(t1);
 })();
+}
+/* lance le bloc post-hero juste apres le premier paint (1 frame) : le hero peint d'abord */
+requestAnimationFrame(function(){ setTimeout(__keystonePostHero, 0); });
 </script>
 <!-- Modale notice outil (Modal Master) — affiche le bloc statique #tn-<appId> -->
 <div class="tnmodal" id="tnModal" role="dialog" aria-modal="true" aria-hidden="true" hidden>

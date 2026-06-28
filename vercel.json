@@ -38,6 +38,12 @@
       ]
     },
     {
+      "source": "/(lottie.min.js|sablier.json|keystone-logo.svg|keystone-puce.svg|keystone-puce-blanc.svg)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000" }
+      ]
+    },
+    {
       "source": "/LOGOS/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=86400" }
