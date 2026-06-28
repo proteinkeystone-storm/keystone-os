@@ -350,6 +350,89 @@ async function _sensorGhostWriter(env, lookupHmac, plan) {
   }
 }
 
+// Smart Agent : « trous » (questions restées sans réponse) — le signal le
+// PLUS actionnable (combler un trou améliore l'agent). tenant_id = claims.sub.
+async function _sensorSmartAgentGaps(env, tenantId) {
+  if (!tenantId) return { open: 0, recent24h: 0, topHits: 0, topQuestion: '' };
+  try {
+    const agg = await env.DB.prepare(
+      `SELECT COUNT(*) AS open,
+              SUM(CASE WHEN first_asked_at >= datetime('now','-1 day') THEN 1 ELSE 0 END) AS recent
+       FROM sa_gaps WHERE tenant_id = ? AND status = 'open'`
+    ).bind(tenantId).first().catch(() => null);
+    const top = await env.DB.prepare(
+      `SELECT question, hits FROM sa_gaps
+       WHERE tenant_id = ? AND status = 'open'
+       ORDER BY hits DESC, last_asked_at DESC LIMIT 1`
+    ).bind(tenantId).first().catch(() => null);
+    return {
+      open: agg?.open || 0,
+      recent24h: agg?.recent || 0,
+      topHits: top?.hits || 0,
+      topQuestion: (top?.question || '').toString().slice(0, 80),
+    };
+  } catch (e) { return { open: 0, recent24h: 0, topHits: 0, topQuestion: '' }; }
+}
+
+// Keynapse : rappel imminent (< 2 h, non encore notifié) + nombre du jour.
+// `at` est stocké en ISO (ex 2026-06-28T15:00:00.000Z) → on compare en ISO.
+async function _sensorKeynapse(env, tenantId) {
+  if (!tenantId) return { soonLabel: '', soonAt: '', todayCount: 0 };
+  try {
+    const nowIso   = new Date().toISOString();
+    const soonIso  = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+    const dayStart = nowIso.slice(0, 10) + 'T00:00:00.000Z';
+    const dayEnd   = new Date(Date.now() + 86400000).toISOString().slice(0, 10) + 'T00:00:00.000Z';
+    const soon = await env.DB.prepare(
+      `SELECT label, at FROM kn_reminders
+       WHERE tenant_id = ? AND notified_at IS NULL AND at >= ? AND at <= ?
+       ORDER BY at LIMIT 1`
+    ).bind(tenantId, nowIso, soonIso).first().catch(() => null);
+    const today = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM kn_reminders WHERE tenant_id = ? AND at >= ? AND at < ?`
+    ).bind(tenantId, dayStart, dayEnd).first().catch(() => null);
+    return {
+      soonLabel: (soon?.label || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 60),
+      soonAt: soon?.at || '',
+      todayCount: today?.n || 0,
+    };
+  } catch (e) { return { soonLabel: '', soonAt: '', todayCount: 0 }; }
+}
+
+// Sentinel : sites surveillés + combien hors ligne (last_ok = 0).
+async function _sensorSentinel(env, tenantId) {
+  if (!tenantId) return { total: 0, down: 0, downLabel: '' };
+  try {
+    const agg = await env.DB.prepare(
+      `SELECT COUNT(*) AS total, SUM(CASE WHEN last_ok = 0 THEN 1 ELSE 0 END) AS down
+       FROM sentinel_sites WHERE tenant_id = ?`
+    ).bind(tenantId).first().catch(() => null);
+    let downLabel = '';
+    if (agg && agg.down > 0) {
+      const d = await env.DB.prepare(
+        `SELECT label, url FROM sentinel_sites
+         WHERE tenant_id = ? AND last_ok = 0 ORDER BY consecutive_fails DESC LIMIT 1`
+      ).bind(tenantId).first().catch(() => null);
+      downLabel = (d?.label || d?.url || '').toString().replace(/^https?:\/\//, '').slice(0, 50);
+    }
+    return { total: agg?.total || 0, down: agg?.down || 0, downLabel };
+  } catch (e) { return { total: 0, down: 0, downLabel: '' }; }
+}
+
+// Social Manager : publications échouées/partielles vs réussies (24 h).
+async function _sensorSocial(env, tenantId) {
+  if (!tenantId) return { failed24h: 0, published24h: 0 };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT
+         SUM(CASE WHEN status IN ('failed','partial') THEN 1 ELSE 0 END) AS failed,
+         SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published
+       FROM social_posts WHERE tenant_id = ? AND updated_at >= datetime('now','-1 day')`
+    ).bind(tenantId).first().catch(() => null);
+    return { failed24h: row?.failed || 0, published24h: row?.published || 0 };
+  } catch (e) { return { failed24h: 0, published24h: 0 }; }
+}
+
 // ── Récupération du Pilotable actif le plus prioritaire ───────────
 async function _fetchActivePilotable(env, audience) {
   await ensureLivingSchema(env);
@@ -383,106 +466,107 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
-  const focus = (clientSensors && clientSensors.focus) || {};
+  const { smartqr, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
 
-  // ── Candidats basés sur signaux forts (chiffres réels) ──────────
-  if (smartqr.scans24h > 0) {
+  // ════ TIER 1 — À AGIR (rare, important, actionnable) : scores hauts ════
+  // Sentinel : un site hors ligne = priorité absolue.
+  if (sentinel.down > 0) {
     candidates.push({
-      text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} ces dernières 24 h.`,
-      score: 70 + Math.min(smartqr.scans24h, 20), topic: 'smartqr',
+      text: (sentinel.down === 1 && sentinel.downLabel)
+        ? `${sentinel.downLabel} est hors ligne — Sentinel surveille.`
+        : `${sentinel.down} site${sentinel.down > 1 ? 's' : ''} hors ligne — Sentinel surveille.`,
+      score: 95, topic: 'sentinel',
     });
   }
+  // Smart Agent : une question restée sans réponse = un trou à combler.
+  if (smartagent.recent24h > 0) {
+    candidates.push({
+      text: `Smart Agent : ${smartagent.recent24h} question${smartagent.recent24h > 1 ? 's' : ''} restée${smartagent.recent24h > 1 ? 's' : ''} sans réponse — un trou à combler.`,
+      score: 93, topic: 'smartagent',
+    });
+  } else if (smartagent.topHits >= 3) {
+    candidates.push({
+      text: `Une question revient (×${smartagent.topHits}) sans réponse dans Smart Agent.`,
+      score: 90, topic: 'smartagent',
+    });
+  }
+  // Keynapse : rappel imminent (< 2 h).
+  if (keynapse.soonLabel) {
+    candidates.push({
+      text: `Rappel bientôt : ${keynapse.soonLabel}.`,
+      score: 91, topic: 'keynapse',
+    });
+  }
+  // Social Manager : publication non aboutie.
+  if (social.failed24h > 0) {
+    candidates.push({
+      text: `${social.failed24h} publication${social.failed24h > 1 ? 's' : ''} non aboutie${social.failed24h > 1 ? 's' : ''} — à reprendre dans Social Manager.`,
+      score: 87, topic: 'social',
+    });
+  }
+
+  // ════ Signaux forts du jour (chiffres réels) ════
   if (pulsa.responses24h > 0) {
     candidates.push({
       text:  `${pulsa.responses24h} nouvelle${pulsa.responses24h > 1 ? 's' : ''} réponse${pulsa.responses24h > 1 ? 's' : ''} Key Form depuis hier.`,
-      score: 75 + Math.min(pulsa.responses24h * 3, 20), topic: 'pulsa',
+      score: 78 + Math.min(pulsa.responses24h * 3, 18), topic: 'pulsa',
     });
   }
-  // Annonces : la "bibliothèque" = annonces générées sauvegardées localement.
-  // PAS de notion de "brouillon à publier" → on dit "en bibliothèque" (exact).
-  if (clientSensors.annoncesLibrary > 0) {
+  if (smartqr.scans24h > 0) {
     candidates.push({
-      text:  `${clientSensors.annoncesLibrary} annonce${clientSensors.annoncesLibrary > 1 ? 's' : ''} immo dans votre bibliothèque.`,
-      score: 58, topic: 'annonces',
+      text:  `${smartqr.scans24h} scan${smartqr.scans24h > 1 ? 's' : ''} Smart QR ${smartqr.scans24h > 1 ? 'enregistrés' : 'enregistré'} ces dernières 24 h.`,
+      score: 70 + Math.min(smartqr.scans24h, 18), topic: 'smartqr',
+    });
+  }
+
+  // ════ TIER 2 — POULS (volume, ambiant, agrégé) ════
+  if (smartagent.open > 0 && smartagent.recent24h === 0) {
+    candidates.push({
+      text: `${smartagent.open} question${smartagent.open > 1 ? 's' : ''} à combler dans Smart Agent.`,
+      score: 56, topic: 'smartagent',
+    });
+  }
+  if (keynapse.todayCount > 0 && !keynapse.soonLabel) {
+    candidates.push({
+      text: `${keynapse.todayCount} rappel${keynapse.todayCount > 1 ? 's' : ''} Keynapse aujourd'hui.`,
+      score: 52, topic: 'keynapse',
+    });
+  }
+  if (social.published24h > 0) {
+    candidates.push({
+      text: `${social.published24h} publication${social.published24h > 1 ? 's' : ''} partie${social.published24h > 1 ? 's' : ''} aujourd'hui via Social Manager.`,
+      score: 50, topic: 'social',
+    });
+  }
+  if (sentinel.total > 0 && sentinel.down === 0) {
+    candidates.push({
+      text: `${sentinel.total} site${sentinel.total > 1 ? 's' : ''} surveillé${sentinel.total > 1 ? 's' : ''} par Sentinel — tous en ligne.`,
+      score: 47, topic: 'sentinel',
     });
   }
   if (ghostwriter.usedToday > 0 && ghostwriter.quotaToday != null) {
     const remaining = Math.max(0, ghostwriter.quotaToday - ghostwriter.usedToday);
     candidates.push({
       text:  `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday} aujourd'hui, ${remaining} restant${remaining > 1 ? 's' : ''}.`,
-      score: 52, topic: 'ghostwriter',
-    });
-  }
-  if (clientSensors.brainstormingSessions > 0) {
-    candidates.push({
-      text:  `${clientSensors.brainstormingSessions} session${clientSensors.brainstormingSessions > 1 ? 's' : ''} Brainstorming dans votre bibliothèque.`,
-      score: 48, topic: 'brainstorming',
-    });
-  }
-  if (pulsa.publishedForms > 0) {
-    candidates.push({
-      text:  `${pulsa.publishedForms} formulaire${pulsa.publishedForms > 1 ? 's' : ''} Key Form publié${pulsa.publishedForms > 1 ? 's' : ''} en ligne.`,
-      score: 42, topic: 'pulsa',
-    });
-  }
-  if (smartqr.scansTotal >= 50) {
-    candidates.push({
-      text:  `${smartqr.scansTotal} scans cumulés sur vos Smart QR.`,
-      score: 40, topic: 'smartqr',
-    });
-  }
-  // Kodex : chiffre serveur exact (data fabric codex_briefs).
-  if (kodex.briefs > 0) {
-    candidates.push({
-      text:  `${kodex.briefs} brief${kodex.briefs > 1 ? 's' : ''} Brief Prod dans votre bibliothèque.`,
-      score: 38, topic: 'kodex',
+      score: 40, topic: 'ghostwriter',
     });
   }
 
-  // ── Capteur Focus (#3) : focus continu / dispersion / session ─────
-  const _flbl = focus.focusToolLabel
-    ? String(focus.focusToolLabel).replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : '';
-  if (Number.isFinite(+focus.focusMin) && +focus.focusMin >= 5) {
-    candidates.push({
-      text:  `${+focus.focusMin} min de focus continu${_flbl ? ' sur ' + _flbl : ''}.`,
-      score: 80, topic: 'focus',
-    });
-  }
-  if (Number.isFinite(+focus.dispersionCount) && +focus.dispersionCount >= 6) {
-    candidates.push({
-      text:  `${+focus.dispersionCount} ateliers ouverts en quelques minutes.`,
-      score: 60, topic: 'focus',
-    });
-  }
-  if (Number.isFinite(+focus.sessionMin) && +focus.sessionMin >= 15) {
-    candidates.push({
-      text:  `Session en cours : ${+focus.sessionMin} min sur Keystone.`,
-      score: 44, topic: 'focus',
-    });
-  }
-
-  // ── Candidats d'ambiance (toujours présents → garantit la VARIÉTÉ
-  //    même quand un seul signal fort domine, ex: que des scans QR) ──
+  // ── Ambiance : PLANCHER seulement (n'apparaît que si rien de réel à dire) ──
   const toolsCount = Number.isFinite(+clientSensors.toolsCount) && +clientSensors.toolsCount > 0
     ? +clientSensors.toolsCount : 7;
   const { hour, weekday } = _parisNow();
   const moment  = hour < 6 ? 'nuit' : hour < 12 ? 'matinée' : hour < 18 ? 'après-midi' : 'soirée';
-
   candidates.push({
     text:  `${toolsCount} assistants IA prêts à travailler sur vos projets.`,
-    score: 25, topic: 'ambiance',
+    score: 22, topic: 'ambiance',
   });
   candidates.push({
     text:  `Belle ${moment} de ${weekday} — votre suite Keystone est à jour.`,
-    score: 20, topic: 'ambiance',
-  });
-  candidates.push({
-    text:  `Votre poste de commande Keystone est opérationnel.`,
-    score: 15, topic: 'ambiance',
+    score: 18, topic: 'ambiance',
   });
 
   // Pondération apprise : ajuste le score de chaque candidat selon
@@ -511,22 +595,18 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, pulsa, ghostwriter, kodex = {}, clientSensors = {} } = sensors;
+  const { smartqr, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
-  const _flbl = focus.focusToolLabel
-    ? String(focus.focusToolLabel).replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : '';
   let signals = [
-    (Number.isFinite(+focus.focusMin) && +focus.focusMin >= 5)
-      ? { t: `Focus : ${+focus.focusMin} min de travail continu${_flbl ? ' sur ' + _flbl : ''}`, topic: 'focus' } : null,
-    (Number.isFinite(+focus.dispersionCount) && +focus.dispersionCount >= 6)
-      ? { t: `Dispersion : ${+focus.dispersionCount} ateliers ouverts en quelques minutes`, topic: 'focus' } : null,
-    smartqr.scans24h        > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h`, topic: 'smartqr' }           : null,
-    pulsa.responses24h      > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' }         : null,
-    ghostwriter.usedToday   > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
-    clientSensors.brainstormingSessions > 0 ? { t: `${clientSensors.brainstormingSessions} sessions Brainstorming en bibliothèque`, topic: 'brainstorming' } : null,
-    clientSensors.annoncesLibrary > 0 ? { t: `${clientSensors.annoncesLibrary} annonces immo en bibliothèque`, topic: 'annonces' } : null,
-    kodex.briefs > 0 ? { t: `${kodex.briefs} briefs Brief Prod en bibliothèque`, topic: 'kodex' } : null,
-    kodex.lastBriefAgeDays > 7 ? { t: `Dernier brief Brief Prod il y a ${Math.round(kodex.lastBriefAgeDays)} jours`, topic: 'kodex' } : null,
+    sentinel.down > 0 ? { t: `Sentinel : ${sentinel.down} site(s) hors ligne${sentinel.downLabel ? ' (' + sentinel.downLabel + ')' : ''}`, topic: 'sentinel' } : null,
+    smartagent.recent24h > 0 ? { t: `Smart Agent : ${smartagent.recent24h} question(s) restée(s) sans réponse, un trou à combler`, topic: 'smartagent' } : null,
+    keynapse.soonLabel ? { t: `Rappel imminent : ${keynapse.soonLabel}`, topic: 'keynapse' } : null,
+    social.failed24h > 0 ? { t: `Social Manager : ${social.failed24h} publication(s) non abouties à reprendre`, topic: 'social' } : null,
+    pulsa.responses24h > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' } : null,
+    smartqr.scans24h   > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h`, topic: 'smartqr' } : null,
+    smartagent.open > 0 ? { t: `Smart Agent : ${smartagent.open} question(s) à combler`, topic: 'smartagent' } : null,
+    (sentinel.total > 0 && sentinel.down === 0) ? { t: `Sentinel : ${sentinel.total} site(s) surveillé(s), tous en ligne`, topic: 'sentinel' } : null,
+    ghostwriter.usedToday > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
   ].filter(Boolean);
 
   if (!signals.length) return null;
@@ -785,15 +865,19 @@ export async function handleLivingBoard(request, env) {
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
   // tenantId = lookupHmac (claims.sub) → filtre les chiffres sur TES données.
-  const [smartqr, pulsa, ghostwriter, kodex, pilotable] = await Promise.all([
+  const [smartqr, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable] = await Promise.all([
     _sensorSmartQR(env, lookupHmac),
     _sensorPulsa(env, lookupHmac),
     _sensorGhostWriter(env, lookupHmac, claims?.plan),
     _sensorKodex(env, lookupHmac),
+    _sensorSmartAgentGaps(env, lookupHmac),
+    _sensorKeynapse(env, lookupHmac),
+    _sensorSentinel(env, lookupHmac),
+    _sensorSocial(env, lookupHmac),
     _fetchActivePilotable(env, plan),
   ]);
 
-  const sensors = { smartqr, pulsa, ghostwriter, kodex, clientSensors };
+  const sensors = { smartqr, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
@@ -804,6 +888,10 @@ export async function handleLivingBoard(request, env) {
     formsPublished: pulsa.publishedForms  || 0,
     ghostUsed:      ghostwriter.usedToday || 0,
     ghostQuota:     (ghostwriter.quotaToday ?? null),
+    gapsOpen:       smartagent.open       || 0,
+    remindersToday: keynapse.todayCount   || 0,
+    sitesDown:      sentinel.down         || 0,
+    sitesTotal:     sentinel.total        || 0,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
@@ -908,7 +996,7 @@ export async function handleLivingBoard(request, env) {
 // Enregistre une impression (phrase affichée) ou un engagement (outil
 // ouvert après la phrase). Requiert JWT (tenant). Sans JWT → no-op.
 // Body : { topic, type: 'impression' | 'engagement' }
-const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus'];
+const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus', 'smartagent', 'keynapse', 'sentinel', 'social'];
 
 export async function handleLivingFeedback(request, env) {
   const origin = getAllowedOrigin(env, request);

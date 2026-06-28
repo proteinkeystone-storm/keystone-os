@@ -5546,23 +5546,23 @@ function _renderLivingReadout(metrics) {
     }
     if (metrics && typeof metrics === 'object') _livingMetrics = metrics;
     const m = _livingMetrics || {};
-    let focusMin = 0, sessionMin = 0;
-    try { const s = _focusSnapshot(); focusMin = +s.focusMin || 0; sessionMin = +s.sessionMin || 0; } catch (e) { /* no-op */ }
     const E = _escapeLivingText;
-    // Jauges = ACTIVITÉ DU JOUR, libellés explicites + unités. On ne mélange
-    // plus « 24h » et cumul sous un même mot (c'est ce qui rendait « Key Form 1 »
-    // illisible : tantôt réponses 24h, tantôt nombre de formulaires). Une jauge
-    // ne s'affiche que si elle a une vraie valeur du jour ; « Session » (durée
-    // de la visite en cours) reste l'ancre garantie. Cap à 4 segments.
+    // Jauges = de VRAIS KPI métier. Fini « Focus » / « Session » (= temps passé
+    // dans le dashboard, mauvaise métrique : on veut faire SORTIR vite, pas
+    // maximiser le temps écran). On montre d'abord ce qui appelle une action
+    // (sites hors ligne, trous à combler) puis le volume du jour. Chaque jauge
+    // n'apparaît qu'avec une vraie valeur ; barre MASQUÉE si rien (silence). Cap 4.
     const all = [];
+    if (+m.sitesDown > 0)  all.push({ k: 'Hors ligne', vHtml: E(String(+m.sitesDown)) });
+    if (+m.gapsOpen > 0)   all.push({ k: 'À combler', vHtml: E(String(+m.gapsOpen)) });
     if (+m.scans24h > 0) {
         const trend = (+m.scansDelta > 0) ? ` <span class="up">↑${(+m.scansDelta)}</span>` : '';
         all.push({ k: 'Scans 24h', vHtml: E(String(+m.scans24h)) + trend });
     }
-    if (+m.keyform24h > 0) all.push({ k: 'Réponses 24h', vHtml: E(String(+m.keyform24h)) });
-    if (focusMin >= 1)     all.push({ k: 'Focus', vHtml: E(focusMin + ' min') });
+    if (+m.keyform24h > 0)     all.push({ k: 'Réponses 24h', vHtml: E(String(+m.keyform24h)) });
+    if (+m.remindersToday > 0) all.push({ k: 'Rappels', vHtml: E(String(+m.remindersToday)) });
     if (+m.ghostUsed > 0 && m.ghostQuota != null) all.push({ k: 'Ghost 24h', vHtml: E((+m.ghostUsed) + '/' + (+m.ghostQuota)) });
-    all.push({ k: 'Session', vHtml: E(sessionMin >= 1 ? sessionMin + ' min' : '< 1 min') });  // ancre
+    if (!all.length) { host.hidden = true; host.innerHTML = ''; return; }
     host.innerHTML = all.slice(0, 4).map(s =>
         `<span class="seg"><span class="k">${E(s.k)}</span><span class="v">${s.vHtml}</span></span>`
     ).join('');
