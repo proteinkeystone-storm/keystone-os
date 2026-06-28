@@ -1835,7 +1835,7 @@ function _renderKeyringTab(panel) {
   content.classList.remove('sdqr-content--create', 'sdqr-content--lib', 'sdqr-content--stats');
   content.innerHTML = `<div style="max-width:660px;margin:0 auto;padding:6px 2px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;color:var(--accent,#7c8af9)">${_KR_BELL}<h2 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-0.02em;color:inherit">Sonneries</h2></div>
-    <p style="margin:0 0 18px;font-size:13px;color:var(--text-muted,#8a93a5)">Les appareils ci-dessous reçoivent une notification quand on sonne à vos Sonnettes. Ajoutez chaque téléphone ou ordinateur sur lequel vous voulez être prévenu.</p>
+    <p style="margin:0 0 18px;font-size:13px;color:var(--text-muted,#8a93a5)">Les appareils ci-dessous reçoivent une notification quand on sonne à vos QR Ring. Ajoutez chaque téléphone ou ordinateur sur lequel vous voulez être prévenu.</p>
     <div id="kr-tab-action" style="margin-bottom:12px"></div>
     <button id="kr-invite-btn" type="button" style="width:100%;border:1px solid rgba(124,138,249,.45);background:transparent;color:#7c8af9;border-radius:11px;font-weight:600;font-size:13.5px;padding:11px;cursor:pointer">+ Ajouter un autre appareil (conjoint, gardien…)</button>
     <div id="kr-invite-panel" style="margin-top:13px"></div>

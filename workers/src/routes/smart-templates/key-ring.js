@@ -54,7 +54,7 @@ function mailOk(v) {
 
 const TEMPLATE = {
   id:            'key-ring',
-  label:         'Sonnette',
+  label:         'QR Ring',
   description:   'Interphone par QR : le visiteur vous appelle, vous écrit (SMS, WhatsApp) ou vous envoie un e-mail depuis son téléphone. Idéal pour un portail ou un accès sans électricité.',
   tier_required: 'pro',
   noDestination: true,   // page terminale : pas de CTA « continuer » vers target_url
@@ -128,7 +128,7 @@ const TEMPLATE = {
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#070a11" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
-<title>${place} · Sonnette</title>
+<title>${place} · QR Ring</title>
 <style>
   :root { --acc:${acc}; }
   *, *::before, *::after { box-sizing: border-box; }

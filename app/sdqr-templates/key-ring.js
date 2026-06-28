@@ -14,7 +14,7 @@
 
 const TEMPLATE = {
   id:              'key-ring',
-  label:           'Sonnette',
+  label:           'QR Ring',
   description:     'Interphone par QR : le visiteur vous appelle, vous écrit (SMS, WhatsApp) ou vous envoie un e-mail depuis son téléphone. Idéal pour un portail ou un accès sans électricité.',
   icon:            '🔔',
   tier_required:   'pro',
@@ -45,9 +45,9 @@ const TEMPLATE = {
 
   summary(template_data) {
     const d = template_data || {};
-    const lieu = (d.place_name || 'Sonnette').toString().trim();
+    const lieu = (d.place_name || 'QR Ring').toString().trim();
     const n = [d.phone, d.whatsapp, d.email].filter(v => String(v || '').trim()).length;
-    return `Sonnette — ${lieu}${n ? ` · ${n} moyen${n > 1 ? 's' : ''} de contact` : ''}`;
+    return `QR Ring — ${lieu}${n ? ` · ${n} moyen${n > 1 ? 's' : ''} de contact` : ''}`;
   },
 
   // Mini-apercu (inline, autonome) : interphone sombre (titre + image + 2
