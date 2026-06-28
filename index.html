@@ -390,6 +390,13 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .tn-faq .tn-a{padding:0 16px 14px; font-size:13.5px; line-height:1.6; color:var(--text-2)}
 .tools-more{text-align:center; margin-top:38px; font-size:14px; color:var(--text-3)}
 .tools-more b{color:var(--accent-3); font-weight:600}
+/* Section « Keystone pour votre metier » (cas d'usage) */
+.metiers{text-align:center}
+.metiers-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; max-width:880px; margin:34px auto 0}
+.metier-card{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:16px 18px; border:1px solid var(--border-strong); border-radius:14px; background:linear-gradient(158deg,var(--bg-2),var(--bg-3)); color:var(--text); text-decoration:none; font-weight:600; font-size:14.5px; text-align:left; transition:transform .2s, border-color .2s}
+.metier-card span{color:var(--accent-3); transition:transform .2s}
+.metier-card:hover{transform:translateY(-3px); border-color:var(--accent-bd)}
+.metier-card:hover span{transform:translateX(3px)}
 .tools-rise{transform-origin:center center}   /* zoom « depuis le fond » piloté au scroll (desktop) — voir JS */
 
 /* KEYSTONE AU QUOTIDIEN : téléphone + chat concierge */
@@ -1492,6 +1499,29 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <div class="hl-cta reveal"><a class="btn btn-ghost" href="#plans">Voir les offres <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></div>
 </section>
 
+<!-- 5.7 · PAR METIER (cas d'usage) -->
+<section class="sec metiers reveal" id="metiers">
+  <span class="eyebrow">Cas d'usage</span>
+  <h2 class="h2">Keystone pour votre métier.</h2>
+  <p class="lead" style="margin:14px auto 0; max-width:560px">Les mêmes outils, pensés pour votre quotidien. Trouvez le vôtre :</p>
+  <div class="metiers-grid">
+    <a href="/pour/immobilier" class="metier-card">Immobilier <span>→</span></a>
+    <a href="/pour/restaurants" class="metier-card">Restaurants &amp; cafés <span>→</span></a>
+    <a href="/pour/commercants" class="metier-card">Commerçants <span>→</span></a>
+    <a href="/pour/artisans" class="metier-card">Artisans du bâtiment <span>→</span></a>
+    <a href="/pour/hotellerie" class="metier-card">Hôtellerie &amp; locations <span>→</span></a>
+    <a href="/pour/beaute" class="metier-card">Coiffure &amp; beauté <span>→</span></a>
+    <a href="/pour/sante" class="metier-card">Santé &amp; bien-être <span>→</span></a>
+    <a href="/pour/artistes" class="metier-card">Artistes &amp; créatifs <span>→</span></a>
+    <a href="/pour/associations" class="metier-card">Associations &amp; clubs <span>→</span></a>
+    <a href="/pour/evenementiel" class="metier-card">Événementiel &amp; mariage <span>→</span></a>
+    <a href="/pour/consultants" class="metier-card">Consultants &amp; formateurs <span>→</span></a>
+    <a href="/pour/culture" class="metier-card">Musées &amp; culture <span>→</span></a>
+    <a href="/pour/sport" class="metier-card">Sport &amp; remise en forme <span>→</span></a>
+    <a href="/pour/automobile" class="metier-card">Garages &amp; automobile <span>→</span></a>
+  </div>
+</section>
+
 <!-- 6 · PRIX -->
 <!-- 5.5 · CAPTURE EMAIL BETA -->
 <section class="sec beta-capture reveal" id="beta">
@@ -1589,6 +1619,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   </div>
   <div class="foot-cols">
     <div class="foot-col"><h4>Produit</h4><a href="#outils">Outils</a><a href="#plans">Tarifs</a><a href="#faq">FAQ</a><a href="/activate">Se connecter</a></div>
+    <div class="foot-col"><h4>Cas d'usage</h4><a href="/pour/immobilier">Immobilier</a><a href="/pour/restaurants">Restaurants</a><a href="/pour/commercants">Commerçants</a><a href="/pour/artisans">Artisans</a><a href="/#metiers">Tous les métiers →</a></div>
     <div class="foot-col"><h4>Contact</h4>
       <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a>
       <a href="tel:+33675590797">06 75 59 07 97</a>

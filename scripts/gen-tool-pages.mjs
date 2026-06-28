@@ -9,7 +9,7 @@
 
    Chaque page : metas propres + JSON-LD (BreadcrumbList + WebPage +
    FAQPage) + maillage interne (fil d'Ariane, 3 outils lies, CTA).
-   Genere aussi /faq.html (FAQ agregee) et regenere sitemap.xml.
+   Genere aussi /faq.html (FAQ agregee). Le sitemap.xml est ecrit par gen-vertical-pages.mjs.
 
    Les icones et tags des cartes sont relus depuis le tableau TOOLS
    d'index.html (source unique cote landing) — aucune duplication.
@@ -401,22 +401,8 @@ tools.forEach((t, i) => {
 });
 writeFileSync(resolve(ROOT, 'faq.html'), faqPage(), 'utf8');
 
-// ── sitemap.xml ─────────────────────────────────────────────────
-const urls = [
-  { loc: `${ORIGIN}/`, pr: '1.0', cf: 'weekly' },
-  { loc: `${ORIGIN}/faq`, pr: '0.7', cf: 'monthly' },
-  ...tools.map(t => ({ loc: `${ORIGIN}/outils/${t.slug}`, pr: '0.8', cf: 'monthly' })),
-];
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url>
-    <loc>${u.loc}</loc>
-    <lastmod>${TODAY}</lastmod>
-    <changefreq>${u.cf}</changefreq>
-    <priority>${u.pr}</priority>
-  </url>`).join('\n')}
-</urlset>
-`;
-writeFileSync(resolve(ROOT, 'sitemap.xml'), sitemap, 'utf8');
+// ── sitemap.xml : NON ecrit ici. Proprietaire unique = scripts/gen-vertical-pages.mjs
+//    (il couvre accueil + /faq + pages outils + pages metier). Lancer gen-verticals
+//    APRES gen-pages pour rafraichir le sitemap complet.
 
-console.log(`✓ ${tools.length} pages outils + /faq generees, sitemap.xml mis a jour (${urls.length} URLs).`);
+console.log(`✓ ${tools.length} pages outils + /faq generees. (sitemap : lancer gen-verticals)`);
