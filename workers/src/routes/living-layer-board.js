@@ -862,18 +862,24 @@ export async function handleLivingBoard(request, env) {
 
   const lookupHmac = claims?.sub  || null;
   const plan       = (claims?.plan || '').toLowerCase() || 'all';
+  // Résolution tenant alignée sur les PADS : un compte ADMIN range ses données
+  // sous 'default' (PAS sous claims.sub) côté QR/Sentinel/Smart Agent/Keynapse/
+  // Social. On reproduit cette règle pour que la barre voie EXACTEMENT ce que
+  // les pads voient (sinon 0 partout pour l'admin). Pulsa fait exception : il
+  // classe par owner_sub = sub → on garde lookupHmac. Anonyme → null (global).
+  const isAdminClaim = !!(claims && (claims.isAdmin === true || String(claims.plan || '').toUpperCase() === 'ADMIN'));
+  const padTenant    = isAdminClaim ? 'default' : lookupHmac;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  // tenantId = lookupHmac (claims.sub) → filtre les chiffres sur TES données.
   const [smartqr, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable] = await Promise.all([
-    _sensorSmartQR(env, lookupHmac),
+    _sensorSmartQR(env, padTenant),
     _sensorPulsa(env, lookupHmac),
     _sensorGhostWriter(env, lookupHmac, claims?.plan),
     _sensorKodex(env, lookupHmac),
-    _sensorSmartAgentGaps(env, lookupHmac),
-    _sensorKeynapse(env, lookupHmac),
-    _sensorSentinel(env, lookupHmac),
-    _sensorSocial(env, lookupHmac),
+    _sensorSmartAgentGaps(env, padTenant),
+    _sensorKeynapse(env, padTenant),
+    _sensorSentinel(env, padTenant),
+    _sensorSocial(env, padTenant),
     _fetchActivePilotable(env, plan),
   ]);
 
