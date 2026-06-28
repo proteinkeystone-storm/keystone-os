@@ -9217,7 +9217,10 @@ html.light-mode .sdqr-type-badge--smart { color: #4338ca; }
 .sdqr-logo-action--primary:hover { filter: brightness(1.08); }
 .sdqr-logo-action--danger { color: #dc2626; border-color: rgba(220,38,38,.35); }
 .sdqr-logo-action--danger:hover { background: rgba(220,38,38,.08); }
-.sdqr-logo-lib-btn--brand svg { width: 23px; height: 23px; }
+/* Boutons « logo pret » (marques couleur / services / apps Keystone) : l'image
+   SVG (data URL) remplit le bouton, contenue, sans deformation. */
+.sdqr-logo-lib-btn--img { padding: 5px; }
+.sdqr-logo-lib-btn--img img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 /* SDQR-3.7 — Onglet Logo : bibliothèque d'icônes + « Vos logos ». */
 .sdqr-logo-lib-head, .sdqr-saved-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #94a3b8; margin: 14px 0 8px; }

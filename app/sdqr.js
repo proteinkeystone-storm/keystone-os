@@ -24,6 +24,9 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { getTemplateIconSvg } from './sdqr-template-icons.js';
 import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg, sanitizeFrameSvg } from './sdqr-render.js';
+// Logos/pictos prets a poser comme logo central (marques couleur + services +
+// apps Keystone). Genere par scripts/gen-sdqr-logo-assets.mjs (data URLs SVG).
+import { LOGO_BRANDS, LOGO_SERVUTILS, LOGO_KEYSTONE } from './sdqr-logo-assets.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
@@ -4783,7 +4786,6 @@ const LOGO_ICONS = [
   { id: 'phone',    svg: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' },
   { id: 'message',  svg: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>' },
   { id: 'mappin',   svg: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>' },
-  { id: 'wifi',     svg: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>' },
   { id: 'calendar', svg: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
   { id: 'file',     svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>' },
   { id: 'image',    svg: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>' },
@@ -4792,7 +4794,6 @@ const LOGO_ICONS = [
   { id: 'star',     svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>' },
   { id: 'heart',    svg: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>' },
   { id: 'user',     svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
-  { id: 'utensils', svg: '<path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z"/>' },
   { id: 'play',     svg: '<polygon points="6 3 20 12 6 21 6 3"/>' },
   { id: 'camera',   svg: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' },
 ];
@@ -4803,26 +4804,11 @@ function _iconToDataUrl(svg) {
   return 'data:image/svg+xml,' + encodeURIComponent(full);
 }
 
-// SDQR-3.11 — LOGOS DE MARQUE (réseaux sociaux). Marques monochromes navy,
-// reconnaissables, dessinées maison (chaque entrée porte ses propres fill/
-// stroke). Posées au centre du QR via le chemin logo existant.
-const LOGO_BRANDS = [
-  { id: 'instagram', label: 'Instagram', svg: '<rect x="3" y="3" width="18" height="18" rx="5.2" fill="none" stroke="#1b2a4a" stroke-width="2"/><circle cx="12" cy="12" r="4.1" fill="none" stroke="#1b2a4a" stroke-width="2"/><circle cx="17" cy="7" r="1.25" fill="#1b2a4a"/>' },
-  { id: 'facebook', label: 'Facebook', svg: '<rect x="3" y="3" width="18" height="18" rx="5" fill="#1b2a4a"/><path d="M13.3 21v-6.6h2.2l.33-2.6h-2.53V10.1c0-.75.21-1.26 1.28-1.26h1.37V6.52a18 18 0 0 0-2-.1c-1.98 0-3.33 1.2-3.33 3.42v1.96H8.4v2.6h2.19V21z" fill="#fff"/>' },
-  { id: 'youtube', label: 'YouTube', svg: '<rect x="2.3" y="6.2" width="19.4" height="11.6" rx="3.6" fill="#1b2a4a"/><path d="M10.2 9.3 15.2 12l-5 2.7z" fill="#fff"/>' },
-  { id: 'whatsapp', label: 'WhatsApp', svg: '<path d="M12 3a9 9 0 0 0-7.74 13.6L3 21l4.5-1.18A9 9 0 1 0 12 3z" fill="#1b2a4a"/><path d="M9.32 8.1c-.17-.4-.31-.38-.5-.39l-.42-.01c-.15 0-.39.05-.59.28-.2.22-.77.75-.77 1.83s.79 2.12.9 2.27c.11.15 1.55 2.48 3.83 3.38 1.9.75 2.29.6 2.7.56.41-.04 1.32-.54 1.5-1.06.19-.52.19-.96.13-1.06-.06-.1-.21-.15-.44-.27-.23-.11-1.36-.67-1.57-.75-.21-.08-.36-.11-.52.11-.15.23-.59.75-.72.9-.13.15-.27.17-.5.06-.23-.12-.97-.36-1.85-1.14-.68-.61-1.14-1.36-1.28-1.59-.13-.23-.01-.35.1-.46.1-.1.23-.27.34-.4.11-.14.15-.23.23-.39.08-.15.04-.29-.02-.4-.06-.12-.5-1.27-.7-1.73z" fill="#fff"/>' },
-  { id: 'x', label: 'X', svg: '<path d="M4 4h3.6l4.2 5.7L16.4 4h3.1l-5.9 7.4L20 20h-3.6l-4.5-6.1L7 20H3.9l6.3-7.9z" fill="#1b2a4a"/>' },
-  { id: 'tiktok', label: 'TikTok', svg: '<path d="M14 3c.3 1.9 1.55 3.4 3.45 3.78v2.5a6.2 6.2 0 0 1-3.45-1.06v5.55A4.9 4.9 0 1 1 9.1 8.9c.28 0 .55.03.82.08v2.62a2.32 2.32 0 1 0 1.63 2.22V3z" fill="#1b2a4a"/>' },
-  { id: 'linkedin', label: 'LinkedIn', svg: '<rect x="3" y="3" width="18" height="18" rx="3.2" fill="#1b2a4a"/><circle cx="7.1" cy="7.3" r="1.5" fill="#fff"/><rect x="5.8" y="10" width="2.6" height="7.4" fill="#fff"/><path d="M10.6 10h2.5v1.05a2.8 2.8 0 0 1 2.45-1.25c1.85 0 2.65 1.15 2.65 3.25v4.35h-2.6v-3.85c0-1-.4-1.55-1.25-1.55s-1.45.6-1.45 1.6v3.8h-2.5z" fill="#fff"/>' },
-  { id: 'spotify', label: 'Spotify', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M7.4 10.4c3.1-1 6.8-.7 9.3.85" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M8 13.2c2.5-.8 5.3-.5 7.3.75" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.6 15.7c1.9-.55 3.9-.4 5.5.55" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round"/>' },
-  { id: 'snapchat', label: 'Snapchat', svg: '<path d="M12 3.4c2.35 0 3.78 1.7 3.85 4.05.03.9-.04 1.45.08 1.7.13.27.55.36.95.2.45-.18.92.04 1.02.36.1.34-.16.62-.74.86-.5.2-1.02.32-1.02.74 0 .5 1.05 1.3 2.06 1.7.4.16.3.66-.1.78-.5.15-1.02.05-1.2.5-.13.33.02.74-.46.86-.55.13-1.2-.4-2.07-.16-.78.22-1.32 1-2.83 1s-2.05-.78-2.83-1c-.87-.24-1.52.29-2.07.16-.48-.12-.33-.53-.46-.86-.18-.45-.7-.35-1.2-.5-.4-.12-.5-.62-.1-.78 1.01-.4 2.06-1.2 2.06-1.7 0-.42-.52-.54-1.02-.74-.58-.24-.84-.52-.74-.86.1-.32.57-.54 1.02-.36.4.16.82.07.95-.2.12-.25.05-.8.08-1.7C8.22 5.1 9.65 3.4 12 3.4z" fill="#1b2a4a"/>' },
-  { id: 'telegram', label: 'Telegram', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M6.5 11.9 16 8.2c.5-.18.92.12.76.85l-1.62 7.62c-.12.55-.46.68-.93.42l-2.55-1.88-1.23 1.18c-.14.14-.25.25-.5.25l.18-2.56 4.65-4.2c.2-.18-.04-.28-.32-.1l-5.74 3.6-2.47-.77c-.54-.17-.55-.54.12-.8z" fill="#fff"/>' },
-  { id: 'pinterest', label: 'Pinterest', svg: '<circle cx="12" cy="12" r="9" fill="#1b2a4a"/><path d="M12.1 6.4c-3 0-4.6 2-4.6 3.95 0 .9.5 2.02 1.3 2.37.13.06.2.03.23-.1l.18-.73c.03-.1.01-.14-.06-.23-.36-.43-.5-1.18-.5-1.7 0-1.65 1.25-3.25 3.4-3.25 1.85 0 3.15 1.26 3.15 3.07 0 2.05-1.03 3.46-2.38 3.46-.74 0-1.3-.6-1.12-1.36.21-.9.62-1.86.62-2.51 0-.58-.31-1.06-.96-1.06-.76 0-1.37.78-1.37 1.83 0 .67.22 1.12.22 1.12l-.9 3.8c-.27 1.13-.04 2.5-.02 2.65 0 .08.11.1.16.04.07-.09.97-1.2 1.27-2.3l.49-1.9c.24.46.95.86 1.7.86 2.25 0 3.77-2.05 3.77-4.79 0-2.07-1.76-4-4.42-4z" fill="#fff"/>' },
-];
-function _brandToDataUrl(svg) {
-  const full = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${svg}</svg>`;
-  return 'data:image/svg+xml,' + encodeURIComponent(full);
-}
+// SDQR — LOGOS DE MARQUE / SERVICES / APPS KEYSTONE : importes de
+// ./sdqr-logo-assets.js (LOGO_BRANDS, LOGO_SERVUTILS, LOGO_KEYSTONE).
+// Chaque entree = { id, label, dataUrl } prete a poser comme logo central.
+// (Anciennes marques monochromes dessinees main remplacees par les vrais
+// logos couleur du dossier « Picto SDQR ».)
 
 // SDQR-3.11 — NUANCIER COMPACT MODERNE (couleurs unies foncées = scannables sur
 // blanc, garde-fou couvre les marges). Remplace les grandes cartes « ambiance »
@@ -5202,9 +5188,17 @@ function _renderDesignPanel(qr, opts = {}) {
             </div>
           ` : ''}
 
+          <div class="sdqr-logo-lib-head">Vos apps Keystone</div>
+          <div class="sdqr-logo-lib">
+            ${LOGO_KEYSTONE.map(b => `<button class="sdqr-logo-lib-btn sdqr-logo-lib-btn--img" data-logo-asset="keystone:${b.id}" title="${_esc(b.label)}"><img src="${b.dataUrl}" alt="${_esc(b.label)}"></button>`).join('')}
+          </div>
           <div class="sdqr-logo-lib-head">Réseaux sociaux</div>
           <div class="sdqr-logo-lib">
-            ${LOGO_BRANDS.map(b => `<button class="sdqr-logo-lib-btn sdqr-logo-lib-btn--brand" data-logo-brand="${b.id}" title="${_esc(b.label)}"><svg viewBox="0 0 24 24">${b.svg}</svg></button>`).join('')}
+            ${LOGO_BRANDS.map(b => `<button class="sdqr-logo-lib-btn sdqr-logo-lib-btn--img" data-logo-asset="brand:${b.id}" title="${_esc(b.label)}"><img src="${b.dataUrl}" alt="${_esc(b.label)}"></button>`).join('')}
+          </div>
+          <div class="sdqr-logo-lib-head">Services &amp; utiles</div>
+          <div class="sdqr-logo-lib">
+            ${LOGO_SERVUTILS.map(b => `<button class="sdqr-logo-lib-btn sdqr-logo-lib-btn--img" data-logo-asset="serv:${b.id}" title="${_esc(b.label)}"><img src="${b.dataUrl}" alt="${_esc(b.label)}"></button>`).join('')}
           </div>
           <div class="sdqr-logo-lib-head">Icônes utiles</div>
           <div class="sdqr-logo-lib">
@@ -5652,15 +5646,17 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
     _liveRerender();
   });
 
-  // Logos de marque (réseaux sociaux) -> logo central
-  panel.querySelectorAll('[data-logo-brand]').forEach(btn => {
+  // Logos prets (marques couleur / services / apps Keystone) -> logo central.
+  // Chaque entree porte deja son dataUrl (genere) ; on le pose tel quel.
+  const _LOGO_ASSET_GROUPS = { brand: LOGO_BRANDS, serv: LOGO_SERVUTILS, keystone: LOGO_KEYSTONE };
+  panel.querySelectorAll('[data-logo-asset]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const b = LOGO_BRANDS.find(x => x.id === btn.dataset.logoBrand);
-      if (!b) return;
-      const url = _brandToDataUrl(b.svg);
-      _editingDesign.logo.dataUrl = url;
+      const [grp, id] = (btn.dataset.logoAsset || '').split(':');
+      const entry = (_LOGO_ASSET_GROUPS[grp] || []).find(x => x.id === id);
+      if (!entry) return;
+      _editingDesign.logo.dataUrl = entry.dataUrl;
       if (!_editingDesign.logo.size) _editingDesign.logo.size = 0.20;
-      _pushSavedLogo(url);
+      _pushSavedLogo(entry.dataUrl);
       _refreshDesignPanelDom(root, qr, encodedForQr);
     });
   });
