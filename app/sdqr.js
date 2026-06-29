@@ -498,12 +498,36 @@ function _qrRowHtml(q) {
 
 function _libCloseMenu() { document.querySelectorAll('.sdqr-qr-pop').forEach(p => p.remove()); }
 
+// Mini-toast local (confirmation suivi tableau de bord). Pilule sombre,
+// bas-centre, fondu auto. Inline-style → pas de dependance CSS.
+function _libToast(msg) {
+  try {
+    document.querySelectorAll('.sdqr-lib-toast').forEach(t => t.remove());
+    const t = document.createElement('div');
+    t.className = 'sdqr-lib-toast';
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:99999;'
+      + 'background:#1c2234;color:#f8fafc;border:1px solid rgba(255,255,255,.12);'
+      + 'padding:10px 18px;border-radius:12px;font-size:13px;font-weight:600;max-width:80vw;'
+      + 'box-shadow:0 8px 24px rgba(0,0,0,.32);opacity:0;transition:opacity .2s ease;';
+    document.body.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; });
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 250); }, 2400);
+  } catch (e) { /* no-op */ }
+}
+
 function _libToggleMenu(panel, q, btn) {
   const existing = document.querySelector('.sdqr-qr-pop');
   const wasMine = existing && existing.dataset.for === q.id;
   _libCloseMenu();
   if (wasMine) return;
   const isArch = q.status === 'archived';
+  // Suivi à l'unité (Living Layer) : seulement pour les QR suivis (short_id
+  // tracké ; un Statique n'a pas de scans). Toggle stocké par device.
+  const isTrackedQr = (q.mode || 'dynamic') !== 'static' && !!q.short_id;
+  let _flw = null; try { _flw = JSON.parse(localStorage.getItem('ks_sdqr_followed') || 'null'); } catch (e) { _flw = null; }
+  const isFollowed = !!(_flw && _flw.id && q.short_id && _flw.id === q.short_id);
+  const _pinIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M6 3h12v18l-6-4-6 4V3z"/></svg>';
   const pop = document.createElement('div');
   pop.className = 'sdqr-qr-pop';
   pop.dataset.for = q.id;
@@ -511,6 +535,7 @@ function _libToggleMenu(panel, q, btn) {
   pop.innerHTML = `
     <button data-act="open">${_LIBICO.eye}Ouvrir</button>
     <button data-act="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:15px;height:15px"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>Statistiques</button>
+    ${isTrackedQr ? `<button data-act="follow">${_pinIco}${isFollowed ? 'Ne plus suivre' : 'Suivre sur le tableau de bord'}</button>` : ''}
     <button data-act="archive">${_LIBICO.arch}${isArch ? 'Réactiver' : 'Archiver'}</button>
     <button data-act="delete" class="is-danger">${_LIBICO.trash}Supprimer</button>`;
   document.body.appendChild(pop);
@@ -525,6 +550,19 @@ function _libToggleMenu(panel, q, btn) {
     _currentView = 'stats';
     panel.querySelectorAll('.sdqr-tab').forEach(x => x.classList.toggle('active', x.dataset.view === 'stats'));
     _renderCurrentView(panel);   // QR selectionne + vue stats -> _openQrStats
+  };
+  const _flwBtn = pop.querySelector('[data-act="follow"]');
+  if (_flwBtn) _flwBtn.onclick = () => {
+    _libCloseMenu();
+    try {
+      if (isFollowed) {
+        localStorage.removeItem('ks_sdqr_followed');
+        _libToast('QR retiré du tableau de bord');
+      } else {
+        localStorage.setItem('ks_sdqr_followed', JSON.stringify({ id: q.short_id, name: q.name || '' }));
+        _libToast(`« ${q.name || 'QR'} » suivi sur le tableau de bord`);
+      }
+    } catch (e) { /* localStorage plein */ }
   };
   pop.querySelector('[data-act="archive"]').onclick = () => { _libCloseMenu(); _libArchive(panel, [q.id], isArch ? 'active' : 'archived'); };
   const del = pop.querySelector('[data-act="delete"]');

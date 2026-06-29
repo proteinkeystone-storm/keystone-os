@@ -278,6 +278,48 @@ async function _sensorSmartQR(env, tenantId) {
   }
 }
 
+// Suivi à l'unité (Living Layer) : stats d'UN QR epingle (short_id envoye
+// par le front via clientSensors.followedQr). SECURITE : on ne renvoie les
+// scans QUE si ce short_id appartient au tenant (verif via entities) — pas
+// de fuite cross-tenant. Renvoie nom + scans 7j + tendance (vs 7j precedents)
+// + serie journaliere 7j (sparkline). null si introuvable/pas au tenant.
+async function _sensorFollowedQr(env, tenantId, shortId) {
+  if (!tenantId || !shortId) return null;
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT data FROM entities WHERE tenant_id = ? AND type = 'qr_codes' AND deleted_at IS NULL`
+    ).bind(tenantId).all().catch(() => null);
+    let name = null;
+    for (const r of ((rows && rows.results) || [])) {
+      let q; try { q = JSON.parse(r.data); } catch (e) { continue; }
+      if (q && q.short_id === shortId) {
+        name = (q.name || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 40) || 'QR sans nom';
+        break;
+      }
+    }
+    if (name == null) return null;   // short_id pas au tenant → on n'expose rien
+    const agg = await env.DB.prepare(
+      `SELECT
+         SUM(CASE WHEN ts >= datetime('now','-7 day') THEN 1 ELSE 0 END) AS w,
+         SUM(CASE WHEN ts >= datetime('now','-14 day') AND ts < datetime('now','-7 day') THEN 1 ELSE 0 END) AS pw
+       FROM qr_scans WHERE short_id = ?`
+    ).bind(shortId).first().catch(() => null);
+    const dailyRes = await env.DB.prepare(
+      `SELECT date(ts) AS d, COUNT(*) AS n FROM qr_scans
+       WHERE short_id = ? AND ts >= datetime('now','-7 day') GROUP BY date(ts)`
+    ).bind(shortId).all().catch(() => null);
+    const byDay = {};
+    ((dailyRes && dailyRes.results) || []).forEach(r => { byDay[r.d] = r.n || 0; });
+    const daily7 = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      daily7.push(byDay[day] || 0);
+    }
+    const w = agg?.w || 0, pw = agg?.pw || 0;
+    return { name, scans7d: w, trend: w - pw, daily7 };
+  } catch (e) { return null; }
+}
+
 // Kodex (Brief Prod) : nombre de briefs en bibliothèque + âge du dernier.
 // La biblio Kodex vit côté SERVEUR (data fabric entities type=codex_briefs,
 // tenant_id = claims.sub) — surtout PAS en localStorage. Capteur serveur
@@ -969,8 +1011,12 @@ export async function handleLivingBoard(request, env) {
   const isAdminClaim = !!(claims && (claims.isAdmin === true || String(claims.plan || '').toUpperCase() === 'ADMIN'));
   const padTenant    = isAdminClaim ? 'default' : lookupHmac;
 
+  // Suivi à l'unité : short_id du QR epingle (envoye par le front).
+  const followedQrId = (clientSensors && typeof clientSensors.followedQr === 'string')
+    ? clientSensors.followedQr.slice(0, 64) : null;
+
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable, followedQr] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -981,6 +1027,7 @@ export async function handleLivingBoard(request, env) {
     _sensorSentinel(env, padTenant),
     _sensorSocial(env, padTenant),
     _fetchActivePilotable(env, plan),
+    _sensorFollowedQr(env, padTenant, followedQrId),
   ]);
 
   const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
@@ -1009,6 +1056,8 @@ export async function handleLivingBoard(request, env) {
     agentKnowledge:  smartagent.knowledge || 0,   // fiches de savoir validées
     keynapseNotes:   keynapse.notesCount  || 0,   // bulles/notes
     socialConnected: social.connected     || 0,   // réseaux connectés
+    // Suivi à l'unité : stats du QR epingle (null si aucun / pas au tenant).
+    followedQr:      followedQr || null,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────

@@ -5452,6 +5452,13 @@ function _collectClientSensors() {
         const sel = JSON.parse(localStorage.getItem('ks_user_selection') || '[]');
         if (Array.isArray(sel) && sel.length > 0) sensors.toolsCount = sel.length;
     } catch (e) { /* no-op */ }
+    // Suivi à l'unite : QR epingle depuis SDQR > Mes QR (cle ks_sdqr_followed
+    // = {id: short_id, name}). On envoie le short_id ; le worker calcule ses
+    // stats ET verifie qu'il appartient au tenant (anti-fuite).
+    try {
+        const f = JSON.parse(localStorage.getItem('ks_sdqr_followed') || 'null');
+        if (f && f.id) sensors.followedQr = String(f.id).slice(0, 64);
+    } catch (e) { /* no-op */ }
     // Capteur Focus (#3) — chiffres déterministes mesurés côté client.
     try { sensors.focus = _focusSnapshot(); } catch (e) { /* no-op */ }
     return sensors;
@@ -5635,6 +5642,15 @@ function _padReadoutData(id, m) {
             // Activite 24h avec VRAIE tendance (B1 : 24h vs 24h precedentes,
             // m.scansPrev24h — fenetres exactes worker, fini le delta snapshot).
             // Sinon repli sur le total cumule (informatif, sans halo).
+            // Suivi à l'unité : si un QR est épinglé (et appartient au tenant),
+            // le pad raconte CE QR (nom + scans 7j + son sparkline) au lieu de
+            // l'agrégat. Sinon, comportement agrégé classique.
+            const fq = (m.followedQr && typeof m.followedQr === 'object') ? m.followedQr : null;
+            if (fq && fq.name) {
+                return { label: fq.name, num: String(+fq.scans7d || 0), sub: 'scans 7j',
+                         signal: 0, quiet: true,
+                         spark: Array.isArray(fq.daily7) ? fq.daily7 : null };
+            }
             const spark = Array.isArray(m.scansDaily7) ? m.scansDaily7 : null;  // V2 serie 7j
             const v = +m.scans24h || 0;
             if (v > 0) {
