@@ -1003,6 +1003,8 @@ html.light-mode .pad-card[data-palette="green"]   { --tool-c:#16a34a; --tool-bg:
   display: block; height: 100%; border-radius: 2px;
   background: rgba(143,134,255,.6);
 }
+/* Sparkline 7 j (V2) — mini courbe sous le chiffre. */
+.pad-rd-spark { display: block; margin-top: 5px; width: 84px; height: 16px; }
 
 .pad-card.pad-new,
 .pad-card.pad-new:hover {

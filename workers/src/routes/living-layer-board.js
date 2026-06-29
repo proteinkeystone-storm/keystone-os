@@ -246,15 +246,35 @@ async function _sensorSmartQR(env, tenantId) {
       const row = await (tenantId ? stmt.bind(tenantId) : stmt).first().catch(() => null);
       return row?.n || 0;
     };
-    const [scans24h, scansPrev24h, scans7d, scansTotal] = await Promise.all([
+    // Série journalière 7 j (V2 sparkline) : un COUNT groupé par jour, puis on
+    // reconstruit un tableau dense de 7 valeurs (du plus ancien au plus recent,
+    // aujourd'hui en dernier), trous a 0. date(ts) = jour UTC, aligne sur le
+    // calcul JS ci-dessous.
+    const dailySql = tenantId
+      ? `SELECT date(s.ts) AS d, COUNT(*) AS n FROM qr_scans s
+           JOIN qr_redirects r ON r.short_id = s.short_id
+           WHERE r.tenant_id = ? AND s.ts >= datetime('now','-7 day')
+           GROUP BY date(s.ts)`
+      : `SELECT date(ts) AS d, COUNT(*) AS n FROM qr_scans
+           WHERE ts >= datetime('now','-7 day') GROUP BY date(ts)`;
+    const dailyStmt = env.DB.prepare(dailySql);
+    const [scans24h, scansPrev24h, scans7d, scansTotal, dailyRes] = await Promise.all([
       count(`ts >= datetime('now', '-1 day')`),
       count(`ts >= datetime('now', '-2 day') AND ts < datetime('now', '-1 day')`),
       count(`ts >= datetime('now', '-7 day')`),
       count(''),
+      (tenantId ? dailyStmt.bind(tenantId) : dailyStmt).all().catch(() => null),
     ]);
-    return { scans24h, scansPrev24h, scans7d, scansTotal };
+    const byDay = {};
+    ((dailyRes && dailyRes.results) || []).forEach(r => { byDay[r.d] = r.n || 0; });
+    const daily7 = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      daily7.push(byDay[day] || 0);
+    }
+    return { scans24h, scansPrev24h, scans7d, scansTotal, daily7 };
   } catch (e) {
-    return { scans24h: 0, scansPrev24h: 0, scans7d: 0, scansTotal: 0 };
+    return { scans24h: 0, scansPrev24h: 0, scans7d: 0, scansTotal: 0, daily7: [] };
   }
 }
 
@@ -971,6 +991,7 @@ export async function handleLivingBoard(request, env) {
     scans24h:       smartqr.scans24h      || 0,
     scansPrev24h:   smartqr.scansPrev24h  || 0,   // B1 : tendance 24h vs 24h
     scans7d:        smartqr.scans7d       || 0,   // B1 : vraie fenêtre 7 jours
+    scansDaily7:    smartqr.daily7        || [],  // V2 : serie 7j pour sparkline
     scansTotal:     smartqr.scansTotal    || 0,
     keyform24h:     pulsa.responses24h    || 0,
     formsPublished: pulsa.publishedForms  || 0,

@@ -5607,6 +5607,25 @@ function _renderLivingReadout(metrics) {
 // métriques arrivent DÉJÀ résolues par le worker (admin→'default'), on
 // ne refait aucune résolution de tenant côté front.
 
+// Sparkline SVG (V2) : mini courbe d'une serie numerique (ex. scans 7j).
+// Rien si serie absente / trop courte / tout a plat-zero. Couleur indigo
+// (cohérente avec halo/jauge). preserveAspectRatio=none → s'etire au cadre.
+function _sparklineSvg(vals) {
+    if (!Array.isArray(vals) || vals.length < 2) return '';
+    const max = Math.max(0, ...vals.map(v => +v || 0));
+    if (max <= 0) return '';
+    const W = 84, H = 16, pad = 1.5, n = vals.length;
+    const pts = vals.map((v, i) => {
+        const x = (i / (n - 1)) * W;
+        const y = H - pad - ((+v || 0) / max) * (H - 2 * pad);
+        return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return `<svg class="pad-rd-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" `
+         + `preserveAspectRatio="none" aria-hidden="true">`
+         + `<polyline points="${pts}" fill="none" stroke="rgba(143,134,255,.7)" `
+         + `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 // pad id → fonction de relevé. Chaque entrée renvoie l'objet d'affichage
 // (label + chiffre/pastille) ou null si rien à signaler pour ce pad.
 function _padReadoutData(id, m) {
@@ -5616,14 +5635,15 @@ function _padReadoutData(id, m) {
             // Activite 24h avec VRAIE tendance (B1 : 24h vs 24h precedentes,
             // m.scansPrev24h — fenetres exactes worker, fini le delta snapshot).
             // Sinon repli sur le total cumule (informatif, sans halo).
+            const spark = Array.isArray(m.scansDaily7) ? m.scansDaily7 : null;  // V2 serie 7j
             const v = +m.scans24h || 0;
             if (v > 0) {
                 const d = v - (+m.scansPrev24h || 0);
                 const sub = d > 0 ? ('+' + d) : (d < 0 ? ('-' + Math.abs(d)) : '');
-                return { label: 'Scans 24h', num: String(v), sub, subUp: d > 0, signal: v };
+                return { label: 'Scans 24h', num: String(v), sub, subUp: d > 0, signal: v, spark };
             }
             const total = +m.scansTotal || 0;
-            if (total > 0) return { label: 'Scans', num: String(total), sub: 'au total', signal: 0, quiet: true };
+            if (total > 0) return { label: 'Scans', num: String(total), sub: 'au total', signal: 0, quiet: true, spark };
             return null;
         }
         case 'O-AGT-001': {                       // Smart Agent — trous / savoir
@@ -5787,7 +5807,9 @@ function _paintPadReadouts(metrics) {
         const gaugeHtml = (rd.gauge != null)
             ? `<span class="pad-rd-bar"><span class="pad-rd-fill" style="width:${Math.round(Math.max(0, Math.min(1, rd.gauge)) * 100)}%"></span></span>`
             : '';
-        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>${pipSubHtml}${gaugeHtml}`;
+        // Sparkline optionnel (V2) : mini courbe 7 j (ex. scans QR par jour).
+        const sparkHtml = _sparklineSvg(rd.spark);
+        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>${pipSubHtml}${gaugeHtml}${sparkHtml}`;
 
         if (rd.incident) {
             card.classList.add('pad-alert');
