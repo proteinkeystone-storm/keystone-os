@@ -52,8 +52,6 @@ const VERTICALS = [
     desc: 'Agences, promoteurs, mandataires : diffusez vos annonces multi-portails, generez vos notices VEFA, faites repondre un agent IA a vos prospects 24/7 et suivez votre visibilite.',
     intro: 'Entre la redaction des annonces, les questions des acquereurs a toute heure, les notices techniques et la presence sur les portails, le metier deborde. Keystone automatise le repetitif pour vous garder sur le terrain.',
     uses: [
-      uf('Annonces Immo', 'Une fiche bien — des annonces calibrees pour SeLoger, LeBonCoin, Bien’ici, Logic-Immo et Figaro Immo, sans tout reecrire.'),
-      uf('VEFA Studio', 'Notice descriptive conforme RE 2020 et contrat de reservation generes en un seul outil.'),
       u('smart-agent', 'Un agent IA qui repond aux acquereurs (dispo du bien, charges, DPE, financement) derriere un QR sur la vitrine ou la bache chantier — sans inventer.'),
       u('sentinel', 'Surveillez votre visibilite en ligne et dans les IA : quand un prospect demande « agence a [ville] » a ChatGPT, etes-vous cite ?'),
       ue('concierge', 'QR Concierge virtuel','Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
@@ -62,8 +60,6 @@ const VERTICALS = [
     scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les modalites VEFA, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — pendant que l’annonce tournait deja sur les cinq portails.',
     faq: [
       ['L’agent IA peut-il inventer des informations sur un bien ?', 'Non. Il ne repond qu’a partir des fiches que vous avez validees (descriptif, charges, diagnostics). S’il ne sait pas, il le dit et la question remonte dans sa liste a completer.'],
-      ['Les annonces respectent-elles les formats des portails ?', 'Oui, le contenu est calibre pour les principaux portails (SeLoger, LeBonCoin, Bien’ici, Logic-Immo, Figaro Immo). Vous gardez la main sur le texte final.'],
-      ['Et la conformite des documents VEFA ?', 'VEFA Studio genere une notice descriptive alignee RE 2020 et un contrat de reservation (Art. L.261-15 CCH) que vous relisez et validez avant usage.'],
     ],
   },
   {
