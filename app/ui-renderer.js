@@ -5615,9 +5615,12 @@ function _padReadoutData(id, m) {
         case 'A-COM-001': {                       // Smart Dynamic QR
             const v = +m.scans24h || 0;
             if (v <= 0) return null;
-            const d = +m.scansDelta || 0;
-            return { label: 'Scans 24h', num: String(v),
-                     sub: d > 0 ? ('+' + d) : '', subUp: d > 0, signal: v };
+            // NB : on n'affiche PAS m.scansDelta ici. Ce delta = cumul depuis
+            // le dernier snapshot connu (souvent vieux de plusieurs jours, cf.
+            // _readSnapshotNear cote worker), PAS une vraie fenetre 24 h → il
+            // gonfle et contredit le "Scans 24h" (ex. 1 scan affiche "+374").
+            // Une vraie tendance 24h vs 24h precedentes = V2 worker.
+            return { label: 'Scans 24h', num: String(v), sub: '', signal: v };
         }
         case 'O-AGT-001': {                       // Smart Agent — trous à combler
             const v = +m.gapsOpen || 0;
