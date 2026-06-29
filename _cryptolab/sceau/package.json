@@ -1,0 +1,9 @@
+{
+  "name": "sceau-cryptolab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SCEAU S0 — harnais crypto JETABLE (hors prod). Prouve VOPRF + E2E + 3-strikes.",
+  "scripts": { "start": "node harness.mjs" },
+  "dependencies": { "@cloudflare/voprf-ts": "^1.0.0" }
+}

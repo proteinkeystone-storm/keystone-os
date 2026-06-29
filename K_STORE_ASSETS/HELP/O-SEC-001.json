@@ -1,0 +1,41 @@
+{
+  "title": "Sceau",
+  "tldr": "Sceau transmet un secret — mot de passe, code, information sensible — qui se lit une seule fois puis s'autodétruit. Le contenu est chiffré sur votre appareil : même nous ne pouvons pas le lire. Vous partagez un lien (ou un QR, ou une puce NFC) et, par un autre canal, un code de déverrouillage. Au-delà de quelques essais ratés, le sceau meurt définitivement.",
+  "key_points": [
+    "Créer un sceau : collez le secret, choisissez le nombre d'essais et l'expiration, puis « Sceller ». Tout est chiffré sur votre appareil — le serveur ne voit jamais le contenu en clair.",
+    "Deux éléments à transmettre, par deux canaux différents : le lien (ou le QR / la puce NFC) d'un côté, et le code de déverrouillage de l'autre. Le code n'est affiché qu'une fois et n'est pas récupérable — notez-le ou copiez-le avant de fermer.",
+    "Lecture unique : le destinataire ouvre le lien, saisit le code, lit le message — puis le sceau se referme. Vous êtes averti quand il a été ouvert (dans la barre d'ambiance du tableau de bord).",
+    "Autodestruction : après le nombre d'essais choisi (3 par défaut, ou 1 pour un usage strict), le sceau meurt — plus personne ne peut l'ouvrir, même avec le bon code. Si un sceau meurt sur des essais ratés sans avoir été lu, une alerte « possible interception » s'affiche.",
+    "Jetons réutilisables : créez un objet physique (puce NFC ou QR) que vous écrivez une seule fois, puis rechargez avec un nouveau secret autant de fois que vous voulez — sans jamais retoucher l'objet.",
+    "NFC : l'écriture d'une puce demande un téléphone Android avec Chrome. Sur iPhone et ordinateur, utilisez le QR ou le lien (toujours proposés). La lecture au contact fonctionne sur iPhone récent comme sur Android."
+  ],
+  "faq": [
+    {
+      "q": "Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?",
+      "a": "Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide."
+    },
+    {
+      "q": "Que se passe-t-il si je perds le code de déverrouillage ?",
+      "a": "Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien."
+    },
+    {
+      "q": "Par quel canal transmettre le code ?",
+      "a": "Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code."
+    },
+    {
+      "q": "« Lu une fois » : et si quelqu'un filme l'écran ?",
+      "a": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Sceau protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
+    },
+    {
+      "q": "Sceau consomme-t-il des crédits IA ?",
+      "a": "Non. Sceau n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Nouveau sceau", "desc": "Créer et sceller un secret" },
+    { "keys": "Jetons réutilisables", "desc": "Onglet des objets physiques rechargeables" },
+    { "keys": "Recharger", "desc": "Mettre un nouveau secret sur un jeton existant" },
+    { "keys": "Échap", "desc": "Revenir à la liste, puis fermer le workspace" }
+  ],
+  "updated_at": "2026-06-30"
+}

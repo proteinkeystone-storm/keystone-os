@@ -70,6 +70,13 @@ import {
 } from './routes/pulsa-responses.js';
 import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
+// ── Sceau — secret usage-unique scellé E2E+OPRF (Pad O-SEC-001 · S1) ──
+// Route publique /s/ DISTINCTE de /r/ (SDQR prod) — on ne touche pas le hot-path QR.
+import { handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauList, handleSceauDelete,
+         handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
+         handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
+         handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened } from './routes/sceau.js';
+import { handleSceauPage, handleSceauTokenPage, handleSceauAsset } from './routes/sceau-page.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
          handleAuditList, handleExpirationRemindersRunNow,
@@ -580,6 +587,54 @@ export default {
         return handleSdqrAsset(path);
       }
 
+      // ── Sceau — lecture publique au scan (Pad O-SEC-001 · S1/S2) ──
+      // Route /s/ DISTINCTE de /r/ (SDQR) : le hot-path QR de prod n'est pas touché.
+      // Bundle crypto auto-hébergé (SRI), même origine que la page → zéro CDN tiers.
+      if (path.startsWith('/s-assets/') && method === 'GET') return handleSceauAsset(path);
+      {
+        // Jetons réutilisables (S4) — pointeur stable /s/t/:tid (matché AVANT /s/:id).
+        const tkMeta = path.match(/^\/s\/t\/([A-Za-z0-9]{4,32})\/meta$/);
+        if (tkMeta && method === 'GET')  return handleTokenMeta(request, env, tkMeta[1]);
+        const tkEval = path.match(/^\/s\/t\/([A-Za-z0-9]{4,32})\/eval$/);
+        if (tkEval && method === 'POST') return handleTokenEval(request, env, tkEval[1]);
+        const tkBlob = path.match(/^\/s\/t\/([A-Za-z0-9]{4,32})\/blob$/);
+        if (tkBlob && method === 'GET')  return handleTokenBlob(request, env, tkBlob[1]);
+        const tkOpened = path.match(/^\/s\/t\/([A-Za-z0-9]{4,32})\/opened$/);
+        if (tkOpened && method === 'POST') return handleTokenOpened(request, env, tkOpened[1]);
+        const tkPage = path.match(/^\/s\/t\/([A-Za-z0-9]{4,32})$/);
+        if (tkPage && (method === 'GET' || method === 'HEAD')) return handleSceauTokenPage(request, env, tkPage[1]);
+
+        const secMeta = path.match(/^\/s\/([A-Za-z0-9]{4,32})\/meta$/);
+        if (secMeta && method === 'GET')  return handleSceauMeta(request, env, secMeta[1]);
+        const secEval = path.match(/^\/s\/([A-Za-z0-9]{4,32})\/eval$/);
+        if (secEval && method === 'POST') return handleSceauEval(request, env, secEval[1]);
+        const secBlob = path.match(/^\/s\/([A-Za-z0-9]{4,32})\/blob$/);
+        if (secBlob && method === 'GET')  return handleSceauBlob(request, env, secBlob[1]);
+        const secOpened = path.match(/^\/s\/([A-Za-z0-9]{4,32})\/opened$/);
+        if (secOpened && method === 'POST') return handleSceauOpened(request, env, secOpened[1]);
+        // Page de réclamation (bare /s/:id) — APRÈS les sous-routes (regex ancrée, pas de capture croisée).
+        const secPage = path.match(/^\/s\/([A-Za-z0-9]{4,32})$/);
+        if (secPage && (method === 'GET' || method === 'HEAD')) return handleSceauPage(request, env, secPage[1]);
+      }
+      // Sceau — jetons réutilisables, gestion privée (JWT). AVANT les routes /api/sceau/:id génériques.
+      if (path === '/api/sceau/token' && method === 'POST') return handleTokenCreate(request, env);
+      if (path === '/api/sceau/token' && method === 'GET')  return handleTokenList(request, env);
+      {
+        const tp = path.match(/^\/api\/sceau\/token\/([A-Za-z0-9]{4,32})\/point$/);
+        if (tp && method === 'POST') return handleTokenPoint(request, env, tp[1]);
+        const td = path.match(/^\/api\/sceau\/token\/([A-Za-z0-9]{4,32})$/);
+        if (td && method === 'DELETE') return handleTokenDelete(request, env, td[1]);
+      }
+      // Sceau — création/gestion privée (JWT)
+      if (path === '/api/sceau/init' && method === 'POST') return handleSceauInit(request, env);
+      if (path === '/api/sceau'      && method === 'GET')  return handleSceauList(request, env);
+      {
+        const m = path.match(/^\/api\/sceau\/([A-Za-z0-9]{4,32})\/(eval|seal)$/);
+        if (m && method === 'POST') return (m[2] === 'eval' ? handleSceauEvalCreate : handleSceauSeal)(request, env, m[1]);
+        const d = path.match(/^\/api\/sceau\/([A-Za-z0-9]{4,32})$/);
+        if (d && method === 'DELETE') return handleSceauDelete(request, env, d[1]);
+      }
+
       // ── SDQR — Sovereign Dynamic QR (Sprint SDQR-1) ──────────
       // Redirect public ultra-rapide (lookup PRIMARY KEY) + log RGPD-safe.
       if (path.startsWith('/r/') && method === 'GET') {
@@ -882,6 +937,12 @@ export default {
         pruneTrackEvents(env)
           .then(r => console.log('[track-prune]', JSON.stringify(r)))
           .catch(e => console.warn('[track-prune] failed', e?.message || e))
+      );
+      // Sceau — purge des secrets expirés (détruit chiffré + clé OPRF).
+      ctx.waitUntil(
+        sweepExpiredSecrets(env)
+          .then(r => console.log('[sceau-sweep]', JSON.stringify(r)))
+          .catch(e => console.warn('[sceau-sweep] failed', e?.message || e))
       );
     }
   },

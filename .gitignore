@@ -27,3 +27,7 @@ _preview/
 
 # Sauvegardes/exports de la base PROD (données — jamais dans git)
 _backups/
+
+# Secrets de dev local (jamais commit)
+workers/.dev.vars
+.dev.vars

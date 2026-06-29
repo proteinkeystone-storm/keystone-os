@@ -6,12 +6,14 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute keystone-os --file=./src/db/schema.sql",
-    "db:local": "wrangler d1 execute keystone-os --local --file=./src/db/schema.sql"
+    "db:local": "wrangler d1 execute keystone-os --local --file=./src/db/schema.sql",
+    "test": "node test/sceau.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.101.0"
   },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.1.0"
+    "@cloudflare/puppeteer": "^1.1.0",
+    "@cloudflare/voprf-ts": "^1.0.0"
   }
 }

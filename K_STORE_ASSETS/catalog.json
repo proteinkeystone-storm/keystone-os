@@ -331,6 +331,33 @@
         "wix",
         "wordpress"
       ]
+    },
+    {
+      "id": "O-SEC-001",
+      "padKey": null,
+      "title": "Sceau",
+      "subtitle": "Transmettez un secret qui se lit une fois, puis s’autodétruit",
+      "category": "SECURITE",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Sceau transmet un secret — mot de passe, code, information sensible — via un lien, un QR ou une puce NFC. Le contenu est chiffré de bout en bout sur votre appareil : même nous ne pouvons pas le lire. Le destinataire l'ouvre avec un code que vous lui transmettez par un autre canal, le message se lit une seule fois, puis s'autodétruit — et meurt définitivement après quelques essais ratés. Zéro stockage en clair, aucune dépendance tierce au moment de lire. Idéal pour partager un secret sans le laisser traîner dans une messagerie.",
+      "icon": "sceau",
+      "ai_optimized": null,
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "securite",
+        "secret",
+        "mot de passe",
+        "chiffrement",
+        "e2e",
+        "nfc",
+        "qr",
+        "ephemere",
+        "confidentiel"
+      ]
     }
   ]
 }

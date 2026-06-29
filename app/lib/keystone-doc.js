@@ -67,6 +67,7 @@ const DOC_SECTIONS = [
 // non technique — les versions internes ne regardent pas l'utilisateur.
 const DOC_CHANGELOG = [
   { date: 'Juin 2026', items: [
+    'Sceau : transmettez un secret (mot de passe, code, information sensible) qui se lit une seule fois puis s\'autodétruit. Chiffré sur votre appareil — même nous ne pouvons pas le lire. Partagez un lien, un QR ou une puce NFC, et le code de déverrouillage par un autre canal ; vous êtes averti quand le sceau a été ouvert.',
     'Keynapse : votre espace personnel de connaissances — des bulles de notes sur un canevas infini, rangées en zones de couleur et reliées entre elles. Attachez photos, croquis et mémos vocaux (transcrits et transformés en tâches ou rappels par l\'IA), et posez des rappels qui vous préviennent à l\'heure dite.',
     'Smart Agent : créez un assistant qui répond à vos clients depuis VOTRE savoir, sans rien inventer — packs métier prêts (vendeur, immobilier, musée, concierge, guide, SAV), interview à l\'oral, et publication par lien ou QR code.',
     'Voix neuronale française : vos agents lisent leurs réponses à voix haute, et vous pouvez leur dicter vos questions.',

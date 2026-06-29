@@ -1,0 +1,488 @@
+/* ═══════════════════════════════════════════════════════════════
+   KEYSTONE OS — Routes SCEAU · Pad O-SEC-001 (Sprint S1 — backend coffre)
+
+   Transmission de secret usage-unique, scellée, chiffrée de bout en bout,
+   gatée par un OPRF qui meurt au 3e essai. Le serveur est AVEUGLE.
+   Spec gelée : ../../SCEAU_CRYPTO_SPEC.md (S0). Cadrage : SCEAU_BRIEF.md.
+
+   Routes (privées, JWT) — création en 3 temps :
+     POST   /api/sceau/init        crée la coquille + paire OPRF → {short_id, oprf_pub}
+     POST   /api/sceau/:id/eval    eval OPRF de CRÉATION (NON comptée, status='init')
+     POST   /api/sceau/:id/seal    dépose le chiffré → status='scelle'
+     GET    /api/sceau             liste les secrets du tenant (zéro matériel sensible)
+     DELETE /api/sceau/:id         burn manuel (détruit chiffré + clé OPRF)
+
+   Routes (publiques) — lecture au scan de /s/<id> :
+     GET    /s/:id/meta            {status, oprf_pub, attempts_left} | 410 si mort
+     POST   /s/:id/eval            eval OPRF de LECTURE — COMPTÉE, tue la clé au max
+     GET    /s/:id/blob            {ciphertext, iv} (no-store) | 410 si mort
+
+   ⚠ Anti-fuite : on ne logue JAMAIS chiffré / clé / passphrase. Le serveur
+   ne voit jamais le clair ni la passphrase (aveuglée avant tout envoi).
+   ═══════════════════════════════════════════════════════════════ */
+
+import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } from '../lib/auth.js';
+import { requireJWT } from '../lib/jwt.js';
+import { encrypt as encAtRest, decrypt as decAtRest } from '../lib/crypto.js';
+import {
+  Oprf, VOPRFServer, EvaluationRequest, randomPrivateKey, generatePublicKey,
+} from '@cloudflare/voprf-ts';
+
+const SUITE = Oprf.Suite.P256_SHA256;
+
+// ── Helpers base64 <-> Uint8Array ─────────────────────────────
+function _b64e(u8)  { return btoa(String.fromCharCode(...u8)); }
+function _b64d(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+
+// ── short_id URL-safe (même alphabet que SDQR, 8 chars) ───────
+function _shortId(len = 8) {
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZabcdefghijkmnopqrstuvwxyz';
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
+// ── Auth & entitlement (manifeste §7/§8) ───────────────────────
+// Tenant : admin → 'default', sinon claims.sub. Entitlement (beta, modèle Smart
+// Agent) : la CRÉATION de secrets est réservée MAX/ADMIN/BETA (ne jamais brider
+// un testeur). La LECTURE publique reste ouverte (c'est le principe du sceau).
+async function _resolveAuth(request, env) {
+  if (requireAdmin(request, env)) return { tenant: 'default', entitled: true };
+  const claims = await requireJWT(request, env);
+  if (claims?.isAdmin) return { tenant: 'default', entitled: true };
+  if (claims?.sub) {
+    const p = String(claims.plan || '').toUpperCase();
+    return { tenant: claims.sub, entitled: p === 'MAX' || p === 'ADMIN' || p === 'BETA' };
+  }
+  const device = await requireDevice(request, env);
+  if (device?.tenant_id) return { tenant: device.tenant_id, entitled: true }; // appareil approuvé
+  return { tenant: null, entitled: false };
+}
+async function _secTenant(request, env) {
+  return (await _resolveAuth(request, env)).tenant;
+}
+
+// ── Clé OPRF au repos : chiffrée sous KS_ENCRYPTION_KEY ────────
+// Un dump D1 seul ne donne PAS la clé utilisable (cf. spec §4 breach).
+async function _wrapKey(privU8, env) {
+  return encAtRest(_b64e(privU8), env.KS_ENCRYPTION_KEY); // → {ciphertext, iv}
+}
+async function _unwrapKey(encB64, ivB64, env) {
+  const b64 = await decAtRest(encB64, ivB64, env.KS_ENCRYPTION_KEY);
+  return _b64d(b64);
+}
+
+function _now() { return new Date().toISOString(); }
+function _expired(row) {
+  return !!row.expires_at && new Date(row.expires_at).getTime() <= Date.now();
+}
+
+// Réponse publique no-store (jamais en cache : sinon le chiffré "ressuscite").
+function _publicJson(data, status, origin) {
+  const r = json(data, status, origin);
+  r.headers.set('Cache-Control', 'no-store');
+  r.headers.set('Referrer-Policy', 'no-referrer');
+  return r;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CRÉATION (privée, JWT) — 3 temps
+// ══════════════════════════════════════════════════════════════
+
+// POST /api/sceau/init → coquille + paire OPRF. La clé privée ne sort JAMAIS.
+export async function handleSceauInit(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const { tenant, entitled } = await _resolveAuth(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  if (!entitled) return err('Sceau est réservé aux formules Max pendant la beta.', 403, origin);
+
+  const body = await parseBody(request);
+  const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
+
+  const priv = await randomPrivateKey(SUITE);
+  const pub  = generatePublicKey(SUITE, priv);
+  const wrapped = await _wrapKey(priv, env);
+
+  // short_id unique (collision quasi nulle, on retente une fois par sûreté).
+  let shortId = _shortId();
+  for (let i = 0; i < 2; i++) {
+    const clash = await env.DB.prepare('SELECT 1 FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+    if (!clash) break;
+    shortId = _shortId();
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO sec_secrets (short_id, tenant_id, oprf_pub, oprf_key_enc, oprf_key_iv, status, label, created_at)
+     VALUES (?, ?, ?, ?, ?, 'init', ?, datetime('now'))`
+  ).bind(shortId, tenant, _b64e(pub), wrapped.ciphertext, wrapped.iv, label).run();
+
+  return json({ short_id: shortId, oprf_pub: _b64e(pub) }, 201, origin);
+}
+
+// POST /api/sceau/:id/eval → eval OPRF de CRÉATION. NON comptée (status='init').
+export async function handleSceauEvalCreate(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+
+  const row = await env.DB.prepare(
+    `SELECT tenant_id, status, oprf_key_enc, oprf_key_iv FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+  if (!row || row.tenant_id !== tenant) return err('Introuvable', 404, origin);
+  if (row.status !== 'init' || !row.oprf_key_enc) return err('Déjà scellé', 409, origin);
+
+  const body = await parseBody(request);
+  if (typeof body.blinded !== 'string' || body.blinded.length > 1024) return err('blinded invalide', 400, origin);
+
+  let evaluationB64;
+  try {
+    const priv = await _unwrapKey(row.oprf_key_enc, row.oprf_key_iv, env);
+    const evalReq = EvaluationRequest.deserialize(SUITE, _b64d(body.blinded));
+    const server  = new VOPRFServer(SUITE, priv);
+    const evalu   = await server.blindEvaluate(evalReq);
+    evaluationB64 = _b64e(evalu.serialize());
+  } catch {
+    return err('Évaluation impossible', 400, origin); // jamais de détail crypto
+  }
+  return json({ evaluation: evaluationB64 }, 200, origin);
+}
+
+// POST /api/sceau/:id/seal → dépose le chiffré E2E, arme le compteur.
+export async function handleSceauSeal(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+
+  const row = await env.DB.prepare(
+    `SELECT tenant_id, status FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+  if (!row || row.tenant_id !== tenant) return err('Introuvable', 404, origin);
+  if (row.status !== 'init') return err('Déjà scellé', 409, origin);
+
+  const body = await parseBody(request);
+  const { ciphertext, iv } = body;
+  if (typeof ciphertext !== 'string' || typeof iv !== 'string') return err('ciphertext/iv requis', 400, origin);
+  if (ciphertext.length > 200_000) return err('Secret trop volumineux', 413, origin); // ~150 Ko de clair
+
+  let max = parseInt(body.max_attempts, 10);
+  if (!Number.isInteger(max) || max < 1 || max > 10) max = 3;
+
+  let expiresAt = null;
+  if (body.expires_at) {
+    const t = new Date(body.expires_at);
+    if (!isNaN(t.getTime()) && t.getTime() > Date.now()) expiresAt = t.toISOString();
+  }
+  const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
+
+  await env.DB.prepare(
+    `UPDATE sec_secrets
+        SET ciphertext = ?, iv = ?, max_attempts = ?, attempts = 0,
+            expires_at = ?, label = COALESCE(?, label),
+            status = 'scelle', sealed_at = datetime('now')
+      WHERE short_id = ? AND status = 'init'`
+  ).bind(ciphertext, iv, max, expiresAt, label, shortId).run();
+
+  return json({ ok: true, short_id: shortId, status: 'scelle', max_attempts: max, expires_at: expiresAt }, 200, origin);
+}
+
+// GET /api/sceau → liste du tenant (AUCUN matériel sensible exposé).
+export async function handleSceauList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+
+  const { results } = await env.DB.prepare(
+    `SELECT short_id, label, status, attempts, max_attempts,
+            created_at, sealed_at, expires_at, read_at, destroyed_at
+       FROM sec_secrets
+      WHERE tenant_id = ?
+      ORDER BY created_at DESC
+      LIMIT 500`
+  ).bind(tenant).all();
+
+  const items = (results || []).map(r => ({
+    ...r,
+    attempts_left: r.status === 'scelle' ? Math.max(0, r.max_attempts - r.attempts) : 0,
+  }));
+  return json({ items }, 200, origin);
+}
+
+// DELETE /api/sceau/:id → burn manuel (détruit chiffré + clé OPRF).
+export async function handleSceauDelete(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+
+  const res = await env.DB.prepare(
+    `UPDATE sec_secrets
+        SET ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+            status = 'detruit', destroyed_at = datetime('now')
+      WHERE short_id = ? AND tenant_id = ? AND status != 'detruit'`
+  ).bind(shortId, tenant).run();
+
+  if (!res.meta?.changes) {
+    const exists = await env.DB.prepare('SELECT 1 FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).first();
+    if (!exists) return err('Introuvable', 404, origin);
+  }
+  return json({ ok: true, status: 'detruit' }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════
+// LECTURE PUBLIQUE — au scan de /s/<id>
+// ══════════════════════════════════════════════════════════════
+
+// GET /s/:id/meta → de quoi blinder côté client, ou 410 si mort.
+export async function handleSceauMeta(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const row = await env.DB.prepare(
+    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, expires_at
+       FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+
+  if (!row) return _publicJson({ error: 'Introuvable' }, 404, origin);
+  if (row.status === 'init') return _publicJson({ status: 'absent' }, 404, origin);
+
+  const dead = row.status !== 'scelle' || !row.oprf_key_enc || !row.ciphertext || _expired(row);
+  if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
+
+  return _publicJson({
+    status: 'scelle',
+    oprf_pub: row.oprf_pub,
+    attempts_left: Math.max(0, row.max_attempts - row.attempts),
+  }, 200, origin);
+}
+
+// POST /s/:id/eval → eval OPRF de LECTURE. COMPTÉE. Tue la clé au max.
+export async function handleSceauEval(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const body = await parseBody(request);
+  if (typeof body.blinded !== 'string' || body.blinded.length > 1024) return _publicJson({ error: 'blinded invalide' }, 400, origin);
+
+  // Expiration paresseuse : un secret échu est traité comme mort.
+  const pre = await env.DB.prepare('SELECT status, expires_at FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+  if (!pre) return _publicJson({ error: 'Introuvable' }, 404, origin);
+  if (pre.status === 'init') return _publicJson({ status: 'absent' }, 404, origin);
+  if (pre.status === 'scelle' && _expired({ expires_at: pre.expires_at })) {
+    await env.DB.prepare(
+      `UPDATE sec_secrets SET status='expire', ciphertext=NULL, oprf_key_enc=NULL, oprf_key_iv=NULL, destroyed_at=datetime('now')
+        WHERE short_id = ? AND status='scelle'`
+    ).bind(shortId).run();
+    return _publicJson({ status: 'detruit' }, 410, origin);
+  }
+
+  // Incrément ATOMIQUE et conditionnel : seul un secret vivant non épuisé passe.
+  // Évite la TOCTOU sur le compteur (deux scans simultanés ne doublent pas un essai).
+  const inc = await env.DB.prepare(
+    `UPDATE sec_secrets SET attempts = attempts + 1
+      WHERE short_id = ? AND status = 'scelle' AND oprf_key_enc IS NOT NULL AND attempts < max_attempts`
+  ).bind(shortId).run();
+  if (!inc.meta?.changes) return _publicJson({ status: 'detruit' }, 410, origin);
+
+  // Relit l'état post-incrément (clé + compteur consolidés).
+  const row = await env.DB.prepare(
+    `SELECT oprf_key_enc, oprf_key_iv, attempts, max_attempts FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+
+  let evaluationB64;
+  try {
+    const priv = await _unwrapKey(row.oprf_key_enc, row.oprf_key_iv, env);
+    const evalReq = EvaluationRequest.deserialize(SUITE, _b64d(body.blinded));
+    const server  = new VOPRFServer(SUITE, priv);
+    const evalu   = await server.blindEvaluate(evalReq);
+    evaluationB64 = _b64e(evalu.serialize());
+  } catch {
+    // Eval impossible (entrée malformée) : l'essai reste compté (pas de bypass du quota).
+    evaluationB64 = null;
+  }
+
+  // Au max-ème essai consommé → MORT CRYPTOGRAPHIQUE : on détruit la clé OPRF.
+  // (Cet essai-ci est tout de même servi : le bon code peut tomber au dernier essai.)
+  const reachedMax = row.attempts >= row.max_attempts;
+  if (reachedMax) {
+    await env.DB.prepare(
+      `UPDATE sec_secrets SET oprf_key_enc = NULL, oprf_key_iv = NULL, status = 'detruit', destroyed_at = datetime('now')
+        WHERE short_id = ?`
+    ).bind(shortId).run();
+  }
+
+  if (!evaluationB64) return _publicJson({ error: 'Évaluation impossible', attempts_left: Math.max(0, row.max_attempts - row.attempts) }, 400, origin);
+  return _publicJson({
+    evaluation: evaluationB64,
+    attempts_left: Math.max(0, row.max_attempts - row.attempts),
+  }, 200, origin);
+}
+
+// GET /s/:id/blob → le chiffré (opaque, inexploitable sans l'eval). no-store.
+export async function handleSceauBlob(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const row = await env.DB.prepare(
+    `SELECT status, ciphertext, iv, oprf_key_enc, expires_at FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+
+  if (!row) return _publicJson({ error: 'Introuvable' }, 404, origin);
+  const dead = row.status !== 'scelle' || !row.ciphertext || !row.oprf_key_enc || _expired(row);
+  if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
+
+  return _publicJson({ ciphertext: row.ciphertext, iv: row.iv }, 200, origin);
+}
+
+// POST /s/:id/opened — accusé de lecture (S5). Émis par la page APRÈS un
+// déchiffrement client réussi (« esprit Snap »). Sert aussi de burn happy-path :
+// un secret lu une fois est consommé (status 'lu' + matériel effacé). read_at est
+// posé même si déjà 'detruit' (lu au dernier essai) → distingue lecture vs interception.
+// RGPD : aucune PII, juste un horodatage. Best-effort (un attaquant ne l'émet pas).
+export async function handleSceauOpened(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  await env.DB.prepare(
+    `UPDATE sec_secrets
+        SET read_at = COALESCE(read_at, datetime('now')),
+            status = CASE WHEN status = 'scelle' THEN 'lu' ELSE status END,
+            ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+            destroyed_at = COALESCE(destroyed_at, datetime('now'))
+      WHERE short_id = ? AND status IN ('scelle','detruit')`
+  ).bind(shortId).run();
+  return _publicJson({ ok: true }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════
+// JETONS RÉUTILISABLES (S4) — pointeur stable /s/t/<token_id>
+// L'objet (NFC/QR) est écrit UNE fois ; on recharge le secret côté serveur.
+// ══════════════════════════════════════════════════════════════
+
+// POST /api/sceau/token — crée un jeton (pointeur stable, vide au départ).
+export async function handleTokenCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const { tenant, entitled } = await _resolveAuth(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  if (!entitled) return err('Sceau est réservé aux formules Max pendant la beta.', 403, origin);
+  const body = await parseBody(request);
+  const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
+
+  let tid = _shortId();
+  for (let i = 0; i < 2; i++) {
+    const clash = await env.DB.prepare('SELECT 1 FROM sec_tokens WHERE token_id = ?').bind(tid).first();
+    if (!clash) break;
+    tid = _shortId();
+  }
+  await env.DB.prepare(
+    `INSERT INTO sec_tokens (token_id, tenant_id, label, created_at) VALUES (?, ?, ?, datetime('now'))`
+  ).bind(tid, tenant, label).run();
+  return json({ token_id: tid }, 201, origin);
+}
+
+// GET /api/sceau/token — liste des jetons + statut du secret courant.
+export async function handleTokenList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  const { results } = await env.DB.prepare(
+    `SELECT t.token_id, t.label, t.created_at, t.updated_at, t.current_short_id,
+            s.status AS secret_status, s.attempts AS att, s.max_attempts AS maxa
+       FROM sec_tokens t
+       LEFT JOIN sec_secrets s ON s.short_id = t.current_short_id
+      WHERE t.tenant_id = ?
+      ORDER BY t.created_at DESC LIMIT 500`
+  ).bind(tenant).all();
+  const items = (results || []).map(r => {
+    const active = r.secret_status === 'scelle';
+    return {
+      token_id: r.token_id, label: r.label, created_at: r.created_at, updated_at: r.updated_at,
+      state: active ? 'actif' : 'vide',
+      attempts_left: active ? Math.max(0, r.maxa - r.att) : 0,
+    };
+  });
+  return json({ items }, 200, origin);
+}
+
+// POST /api/sceau/token/:tid/point — pointe le jeton vers un secret scellé (rechargement).
+export async function handleTokenPoint(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  const body = await parseBody(request);
+  const shortId = typeof body.short_id === 'string' ? body.short_id : '';
+  if (!shortId) return err('short_id requis', 400, origin);
+
+  const tok = await env.DB.prepare('SELECT tenant_id FROM sec_tokens WHERE token_id = ?').bind(tid).first();
+  if (!tok || tok.tenant_id !== tenant) return err('Jeton introuvable', 404, origin);
+  const sec = await env.DB.prepare('SELECT tenant_id, status FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+  if (!sec || sec.tenant_id !== tenant) return err('Secret introuvable', 404, origin);
+  if (sec.status !== 'scelle') return err('Le secret n’est pas scellé', 409, origin);
+
+  await env.DB.prepare(
+    `UPDATE sec_tokens SET current_short_id = ?, updated_at = datetime('now') WHERE token_id = ? AND tenant_id = ?`
+  ).bind(shortId, tid, tenant).run();
+  return json({ ok: true, token_id: tid, current_short_id: shortId }, 200, origin);
+}
+
+// DELETE /api/sceau/token/:tid — supprime le jeton + détruit le secret courant.
+export async function handleTokenDelete(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  const tok = await env.DB.prepare('SELECT current_short_id FROM sec_tokens WHERE token_id = ? AND tenant_id = ?').bind(tid, tenant).first();
+  if (!tok) return err('Jeton introuvable', 404, origin);
+  if (tok.current_short_id) {
+    await env.DB.prepare(
+      `UPDATE sec_secrets SET ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+              status = 'detruit', destroyed_at = datetime('now')
+        WHERE short_id = ? AND tenant_id = ? AND status != 'detruit'`
+    ).bind(tok.current_short_id, tenant).run();
+  }
+  await env.DB.prepare('DELETE FROM sec_tokens WHERE token_id = ? AND tenant_id = ?').bind(tid, tenant).run();
+  return json({ ok: true }, 200, origin);
+}
+
+// ── Résolution publique : /s/t/:tid/* → secret courant ─────────
+async function _resolveTokenSid(env, tid) {
+  const row = await env.DB.prepare('SELECT current_short_id FROM sec_tokens WHERE token_id = ?').bind(tid).first();
+  return row ? (row.current_short_id || null) : undefined; // undefined = jeton inexistant ; null = jeton vide
+}
+export async function handleTokenMeta(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const sid = await _resolveTokenSid(env, tid);
+  if (sid === undefined) return _publicJson({ error: 'Introuvable' }, 404, origin);
+  if (sid === null) return _publicJson({ status: 'vide' }, 404, origin);
+  return handleSceauMeta(request, env, sid);
+}
+export async function handleTokenEval(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const sid = await _resolveTokenSid(env, tid);
+  if (!sid) return _publicJson({ status: 'vide' }, 404, origin);
+  return handleSceauEval(request, env, sid);
+}
+export async function handleTokenBlob(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const sid = await _resolveTokenSid(env, tid);
+  if (!sid) return _publicJson({ status: 'vide' }, 404, origin);
+  return handleSceauBlob(request, env, sid);
+}
+export async function handleTokenOpened(request, env, tid) {
+  const origin = getAllowedOrigin(env, request);
+  const sid = await _resolveTokenSid(env, tid);
+  if (!sid) return _publicJson({ ok: true }, 200, origin);
+  return handleSceauOpened(request, env, sid);
+}
+
+// ── Cron : purge des secrets expirés (branché sur le daily 0 3 * * *) ──
+// ⚠ expires_at est stocké en ISO 8601 UTC (…T…Z). On NE compare PAS à
+// datetime('now') de SQLite (format espacé) : lexicalement 'T' > ' ' fausserait
+// le test. On binde un ISO « maintenant » → comparaison ISO↔ISO correcte.
+export async function sweepExpiredSecrets(env) {
+  const res = await env.DB.prepare(
+    `UPDATE sec_secrets
+        SET status = 'expire', ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+            destroyed_at = datetime('now')
+      WHERE status IN ('init','scelle') AND expires_at IS NOT NULL AND expires_at < ?`
+  ).bind(_now()).run();
+  // RGPD : purge des lignes mortes (lu/détruit/expiré) > 90 j — ne garde aucune
+  // métadonnée résiduelle au-delà de la fenêtre. Le matériel sensible est déjà
+  // NULL ; on supprime la trace. (Les jetons pointant vers elles sont déjà vides.)
+  const purge = await env.DB.prepare(
+    `DELETE FROM sec_secrets
+      WHERE status IN ('lu','detruit','expire')
+        AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-90 day')`
+  ).run();
+  return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0 };
+}

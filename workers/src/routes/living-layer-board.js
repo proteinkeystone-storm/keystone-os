@@ -527,6 +527,27 @@ async function _sensorSocial(env, tenantId) {
   } catch (e) { return { failed24h: 0, published24h: 0, connected: 0 }; }
 }
 
+// Sceau (S5) : accusé de lecture + alerte interception. RGPD : comptes seuls,
+// aucune PII (le secret est chiffré/aveugle, on ne lit que des horodatages/statuts).
+//   - opened7d      : sceaux ouverts (read_at) sur 7 j → signal positif (calculateur).
+//   - intercepted24h: sceaux morts par essais épuisés SANS lecture (read_at NULL)
+//                     sur 24 h → ALERTE collante (« possible interception »).
+//   - active        : sceaux scellés en attente (état permanent informatif).
+async function _sensorSceau(env, tenantId) {
+  if (!tenantId) return { opened7d: 0, intercepted24h: 0, active: 0 };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT
+         SUM(CASE WHEN read_at >= datetime('now','-7 day') THEN 1 ELSE 0 END) AS opened7d,
+         SUM(CASE WHEN status = 'detruit' AND read_at IS NULL AND attempts >= max_attempts
+                       AND destroyed_at >= datetime('now','-1 day') THEN 1 ELSE 0 END) AS intercepted24h,
+         SUM(CASE WHEN status = 'scelle' THEN 1 ELSE 0 END) AS active
+       FROM sec_secrets WHERE tenant_id = ?`
+    ).bind(tenantId).first().catch(() => null);
+    return { opened7d: row?.opened7d || 0, intercepted24h: row?.intercepted24h || 0, active: row?.active || 0 };
+  } catch (e) { return { opened7d: 0, intercepted24h: 0, active: 0 }; }
+}
+
 // Smart QR : suivi du TOP 5 des QR par activité (7 j) + tendance vs semaine
 // précédente. Les noms vivent dans entities.data (JSON) → on les résout en JS.
 // Reproduit la logique du leaderboard du pad (handleQrOverview), version légère.
@@ -595,7 +616,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -634,6 +655,19 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
     candidates.push({
       text: `${social.failed24h} publication${social.failed24h > 1 ? 's' : ''} non aboutie${social.failed24h > 1 ? 's' : ''} — à reprendre dans Social Manager.`,
       score: 87, topic: 'social',
+    });
+  }
+
+  // Sceau (S5) : accusé de lecture — un secret a été ouvert (esprit Snap).
+  if (sceau.opened7d > 0) {
+    candidates.push({
+      text:  `${sceau.opened7d} sceau${sceau.opened7d > 1 ? 'x' : ''} ouvert${sceau.opened7d > 1 ? 's' : ''} cette semaine.`,
+      score: 72, topic: 'sceau',
+    });
+  } else if (sceau.active > 0) {
+    candidates.push({
+      text:  `${sceau.active} sceau${sceau.active > 1 ? 'x' : ''} en attente d'ouverture.`,
+      score: 44, topic: 'sceau',
     });
   }
 
@@ -734,7 +768,7 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
   const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
@@ -967,7 +1001,14 @@ async function _buildAiPhraseVendor(env, engine, apiKey, systemPrompt, userPromp
 // (site rétabli, échec purgé). Ne couvre QUE les états « à réparer » — les
 // trous/rappels/scans restent en rotation normale (ce ne sont pas des pannes).
 function _buildAlert(sensors) {
-  const { sentinel = {}, social = {} } = sensors;
+  const { sentinel = {}, social = {}, sceau = {} } = sensors;
+  // Sécurité d'abord : un sceau mort par essais épuisés sans lecture = signal fort.
+  if (sceau.intercepted24h > 0) {
+    return {
+      key: `sceau-intercept:${sceau.intercepted24h}`,
+      text: `${sceau.intercepted24h} sceau${sceau.intercepted24h > 1 ? 'x' : ''} détruit${sceau.intercepted24h > 1 ? 's' : ''} après plusieurs essais ratés — possible interception.`,
+    };
+  }
   if (sentinel.down > 0) {
     return {
       key: `sentinel-down:${sentinel.down}`,
@@ -1043,7 +1084,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable, followedQr, followedSite] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, pilotable, followedQr, followedSite] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1053,12 +1094,13 @@ export async function handleLivingBoard(request, env) {
     _sensorKeynapse(env, padTenant),
     _sensorSentinel(env, padTenant),
     _sensorSocial(env, padTenant),
+    _sensorSceau(env, padTenant),
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
     _sensorFollowedSite(env, padTenant, followedSiteId),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
@@ -1088,6 +1130,9 @@ export async function handleLivingBoard(request, env) {
     // ou si l'entité n'appartient pas au tenant).
     followedQr:      followedQr || null,
     followedSite:    followedSite || null,
+    // Sceau (S5) : accusés de lecture + sceaux en attente.
+    sceauOpened7d:   sceau.opened7d  || 0,
+    sceauActive:     sceau.active    || 0,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
