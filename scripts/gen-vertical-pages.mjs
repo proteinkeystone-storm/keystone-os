@@ -48,16 +48,16 @@ const VERTICALS = [
   {
     slug: 'immobilier', metier: 'Immobilier',
     h1a: 'Vendez plus vite,', h1b: 'sans noyer vos journees dans l’administratif.',
-    title: 'Keystone pour l’immobilier — annonces, VEFA, agent IA, visibilite | Keystone OS',
-    desc: 'Agences, promoteurs, mandataires : diffusez vos annonces multi-portails, generez vos notices VEFA, faites repondre un agent IA a vos prospects 24/7 et suivez votre visibilite.',
-    intro: 'Entre la redaction des annonces, les questions des acquereurs a toute heure, les notices techniques et la presence sur les portails, le metier deborde. Keystone automatise le repetitif pour vous garder sur le terrain.',
+    title: 'Keystone pour l’immobilier — agent IA, QR, visibilite | Keystone OS',
+    desc: 'Agences, promoteurs, mandataires : un agent IA qui repond a vos acquereurs 24/7 derriere un QR, un concierge virtuel pour vos programmes neufs, et le suivi de votre visibilite web et IA.',
+    intro: 'Entre les questions des acquereurs a toute heure, les visites a organiser et la presence en ligne, le metier deborde. Keystone fait repondre un agent IA a votre place, accueille vos prospects par QR et surveille votre visibilite — pour vous garder sur le terrain.',
     uses: [
       u('smart-agent', 'Un agent IA qui repond aux acquereurs (dispo du bien, charges, DPE, financement) derriere un QR sur la vitrine ou la bache chantier — sans inventer.'),
       u('sentinel', 'Surveillez votre visibilite en ligne et dans les IA : quand un prospect demande « agence a [ville] » a ChatGPT, etes-vous cite ?'),
       ue('concierge', 'QR Concierge virtuel','Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
       ue('qr-sonnette', 'QR Ring','Un QR sur le portail d’un bien a visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans electricite.'),
     ],
-    scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les modalites VEFA, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — pendant que l’annonce tournait deja sur les cinq portails.',
+    scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les disponibilites, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — sans avoir decroche votre telephone.',
     faq: [
       ['L’agent IA peut-il inventer des informations sur un bien ?', 'Non. Il ne repond qu’a partir des fiches que vous avez validees (descriptif, charges, diagnostics). S’il ne sait pas, il le dit et la question remonte dans sa liste a completer.'],
     ],
