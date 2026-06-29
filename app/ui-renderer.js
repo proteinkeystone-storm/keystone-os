@@ -5634,6 +5634,23 @@ function _padReadoutData(id, m) {
             if (v <= 0) return null;
             return { label: 'Rappels', num: String(v), sub: '', signal: v };
         }
+        case 'A-COM-002': {                       // Brief Prod — briefs en biblio Kodex
+            // Inventaire (pas un signal d'action) → readout informatif quiet,
+            // sans halo nouveauté.
+            const v = +m.codexBriefs || 0;
+            if (v <= 0) return null;
+            return { label: 'Briefs', num: String(v),
+                     sub: v > 1 ? 'en biblio' : 'en biblio', signal: v, quiet: true };
+        }
+        case 'O-SOC-001': {                       // Social Manager — publi non aboutie
+            // Publication non aboutie = à reprendre → traité comme INCIDENT
+            // (halo rouge), cohérent avec l'alerte collante côté worker.
+            const v = +m.socialFailed24h || 0;
+            if (v <= 0) return null;
+            return { label: 'Diffusion', pip: true,
+                     pipText: v > 1 ? (v + ' à reprendre') : '1 à reprendre',
+                     incident: true, signal: v };
+        }
         case 'A-COM-005': {                       // Ghost Writer — conso vs quota
             // Conso PROPRE du jour (pas un signal externe) → readout informatif
             // SANS halo nouveauté (quiet) : on ne « réveille » pas le pad pour

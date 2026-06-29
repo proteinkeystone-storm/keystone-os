@@ -971,6 +971,10 @@ export async function handleLivingBoard(request, env) {
     remindersToday: keynapse.todayCount   || 0,
     sitesDown:      sentinel.down         || 0,
     sitesTotal:     sentinel.total        || 0,
+    // Reportés sur les pads (readout) : publications Social non abouties
+    // (incident à reprendre) + briefs en bibliothèque Kodex (informatif).
+    socialFailed24h: social.failed24h     || 0,
+    codexBriefs:     kodex.briefs         || 0,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
