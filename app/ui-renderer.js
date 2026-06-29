@@ -5613,14 +5613,15 @@ function _padReadoutData(id, m) {
     if (!m || typeof m !== 'object') return null;
     switch (id) {
         case 'A-COM-001': {                       // Smart Dynamic QR
+            // Etat permanent : activite 24h si elle existe (halo nouveaute),
+            // sinon repli sur le total cumule (informatif, pas de halo).
+            // NB : on n'affiche PAS m.scansDelta (cumul depuis le dernier
+            // snapshot, souvent vieux → gonfle, cf. _readSnapshotNear worker).
             const v = +m.scans24h || 0;
-            if (v <= 0) return null;
-            // NB : on n'affiche PAS m.scansDelta ici. Ce delta = cumul depuis
-            // le dernier snapshot connu (souvent vieux de plusieurs jours, cf.
-            // _readSnapshotNear cote worker), PAS une vraie fenetre 24 h → il
-            // gonfle et contredit le "Scans 24h" (ex. 1 scan affiche "+374").
-            // Une vraie tendance 24h vs 24h precedentes = V2 worker.
-            return { label: 'Scans 24h', num: String(v), sub: '', signal: v };
+            if (v > 0) return { label: 'Scans 24h', num: String(v), sub: '', signal: v };
+            const total = +m.scansTotal || 0;
+            if (total > 0) return { label: 'Scans', num: String(total), sub: 'au total', signal: 0, quiet: true };
+            return null;
         }
         case 'O-AGT-001': {                       // Smart Agent — trous à combler
             const v = +m.gapsOpen || 0;
@@ -5628,10 +5629,15 @@ function _padReadoutData(id, m) {
             return { label: 'À combler', num: String(v),
                      sub: v > 1 ? 'trous' : 'trou', signal: v };
         }
-        case 'A-COM-004': {                       // Key Form — réponses
+        case 'A-COM-004': {                       // Key Form — réponses / formulaires
+            // Activite 24h (halo nouveaute) sinon etat permanent : nombre de
+            // formulaires publies (informatif, sans halo).
             const v = +m.keyform24h || 0;
-            if (v <= 0) return null;
-            return { label: 'Réponses 24h', num: String(v), sub: '', signal: v };
+            if (v > 0) return { label: 'Réponses 24h', num: String(v), sub: '', signal: v };
+            const pub = +m.formsPublished || 0;
+            if (pub > 0) return { label: pub > 1 ? 'Formulaires' : 'Formulaire', num: String(pub),
+                                  sub: 'publié' + (pub > 1 ? 's' : ''), signal: 0, quiet: true };
+            return null;
         }
         case 'O-Keyn-001': {                      // Keynapse — rappels
             const v = +m.remindersToday || 0;
@@ -5666,14 +5672,23 @@ function _padReadoutData(id, m) {
             return { label: 'Ghost 24h', num, sub: '', signal: used, quiet: true };
         }
         case 'O-GEO-001': {                       // Sentinel — disponibilité
-            const down = +m.sitesDown || 0;
-            if (down <= 0) return null;            // tout en ligne → silence
-            const total  = +m.sitesTotal || 0;
-            const online = Math.max(0, total - down);
-            return { label: 'Disponibilité', pip: true,
-                     pipText: down > 1 ? (down + ' hors ligne') : '1 hors ligne',
-                     pipSub: total > 0 ? (online + '/' + total + ' en ligne') : '',
-                     incident: true, signal: down };
+            const total = +m.sitesTotal || 0;
+            const down  = +m.sitesDown  || 0;
+            if (down > 0) {                        // incident → halo rouge
+                const online = Math.max(0, total - down);
+                return { label: 'Disponibilité', pip: true,
+                         pipText: down > 1 ? (down + ' hors ligne') : '1 hors ligne',
+                         pipSub: total > 0 ? (online + '/' + total + ' en ligne') : '',
+                         incident: true, signal: down };
+            }
+            // Etat permanent sain : sites surveillés tous en ligne (pastille
+            // verte, pas de halo). N'apparait que si au moins un site suivi.
+            if (total > 0) {
+                return { label: 'Disponibilité', pip: true, pipOk: true,
+                         pipText: total > 1 ? (total + ' sites en ligne') : '1 site en ligne',
+                         signal: 0, quiet: true };
+            }
+            return null;
         }
     }
     return null;
@@ -5720,7 +5735,8 @@ function _paintPadReadouts(metrics) {
 
         let valHtml;
         if (rd.pip) {
-            valHtml = `<span class="pad-rd-pip"><span class="pad-rd-dot" style="background:var(--danger)"></span>${E(rd.pipText)}</span>`;
+            const dotColor = rd.pipOk ? 'var(--green)' : 'var(--danger)';
+            valHtml = `<span class="pad-rd-pip"><span class="pad-rd-dot" style="background:${dotColor}"></span>${E(rd.pipText)}</span>`;
         } else {
             const sub = rd.sub
                 ? ` <span class="pad-rd-sub${rd.subUp ? ' pad-rd-up' : ''}">${E(rd.sub)}</span>`
