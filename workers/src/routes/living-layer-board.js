@@ -320,6 +320,29 @@ async function _sensorFollowedQr(env, tenantId, shortId) {
   } catch (e) { return null; }
 }
 
+// Suivi à l'unité d'un SITE Sentinel : état d'UN site épinglé (id envoyé
+// par le front via clientSensors.followedSite). SECURITE : WHERE id ET
+// tenant_id → on ne renvoie l'état que si le site appartient au tenant.
+// Renvoie nom + ok (1/0/null) + latence + dernier contrôle. null si absent.
+async function _sensorFollowedSite(env, tenantId, siteId) {
+  if (!tenantId || !siteId) return null;
+  try {
+    const r = await env.DB.prepare(
+      `SELECT label, url, last_ok, last_ms, last_checked_at
+       FROM sentinel_sites WHERE tenant_id = ? AND id = ?`
+    ).bind(tenantId, siteId).first().catch(() => null);
+    if (!r) return null;   // id pas au tenant → on n'expose rien
+    const name = (r.label || r.url || '').toString()
+      .replace(/^https?:\/\//, '').replace(/[\r\n]+/g, ' ').trim().slice(0, 40) || 'Site';
+    return {
+      name,
+      ok: (r.last_ok == null ? null : (r.last_ok ? 1 : 0)),
+      lastMs: r.last_ms || null,
+      lastCheckedAt: r.last_checked_at || null,
+    };
+  } catch (e) { return null; }
+}
+
 // Kodex (Brief Prod) : nombre de briefs en bibliothèque + âge du dernier.
 // La biblio Kodex vit côté SERVEUR (data fabric entities type=codex_briefs,
 // tenant_id = claims.sub) — surtout PAS en localStorage. Capteur serveur
@@ -1011,12 +1034,14 @@ export async function handleLivingBoard(request, env) {
   const isAdminClaim = !!(claims && (claims.isAdmin === true || String(claims.plan || '').toUpperCase() === 'ADMIN'));
   const padTenant    = isAdminClaim ? 'default' : lookupHmac;
 
-  // Suivi à l'unité : short_id du QR epingle (envoye par le front).
+  // Suivi à l'unité : identifiants des entités épinglées (envoyés par le front).
   const followedQrId = (clientSensors && typeof clientSensors.followedQr === 'string')
     ? clientSensors.followedQr.slice(0, 64) : null;
+  const followedSiteId = (clientSensors && typeof clientSensors.followedSite === 'string')
+    ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable, followedQr] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, pilotable, followedQr, followedSite] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1028,6 +1053,7 @@ export async function handleLivingBoard(request, env) {
     _sensorSocial(env, padTenant),
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
+    _sensorFollowedSite(env, padTenant, followedSiteId),
   ]);
 
   const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, clientSensors };
@@ -1056,8 +1082,10 @@ export async function handleLivingBoard(request, env) {
     agentKnowledge:  smartagent.knowledge || 0,   // fiches de savoir validées
     keynapseNotes:   keynapse.notesCount  || 0,   // bulles/notes
     socialConnected: social.connected     || 0,   // réseaux connectés
-    // Suivi à l'unité : stats du QR epingle (null si aucun / pas au tenant).
+    // Suivi à l'unité : stats du QR / état du site épinglés (null si aucun
+    // ou si l'entité n'appartient pas au tenant).
     followedQr:      followedQr || null,
+    followedSite:    followedSite || null,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────

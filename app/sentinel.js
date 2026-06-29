@@ -216,12 +216,14 @@ function _siteCard(s) {
   const id = _esc(s.id);
   const checking = _checking.has(s.id);
   const auditing = _auditing.has(s.id);
+  const followed = _isFollowedSite(s.id);
   return `
     <div class="snt-card">
       <div class="snt-card-top">
         <span class="snt-dot ${st.cls}"></span>
         <span class="snt-host">${_esc(s.label || host)}</span>
         ${s.last_score != null ? `<button class="snt-score ${_scoreClass(s.last_score)}" data-act="score" data-id="${id}" title="Voir le dernier audit">${s.last_score}</button>` : ''}
+        <button class="snt-icon" data-act="follow" data-id="${id}" aria-label="${followed ? 'Ne plus suivre' : 'Suivre sur le tableau de bord'}" title="${followed ? 'Ne plus suivre sur le tableau de bord' : 'Suivre sur le tableau de bord'}"${followed ? ' style="color:#6c6cf5"' : ''}>${icon('pin', 16)}</button>
         <button class="snt-icon" data-act="del" data-id="${id}" aria-label="Retirer ce site" title="Retirer">${icon('trash-2', 16)}</button>
       </div>
       <a class="snt-url" href="${_esc(s.url)}" target="_blank" rel="noopener">${_esc(host)} ${icon('external-link', 13)}</a>
@@ -885,12 +887,52 @@ async function _sendReport() {
     if (msg) msg.innerHTML = `<span class="snt-email-err">${_esc(e.message || 'Envoi impossible.')}</span>`;
   }
 }
+// ── Suivi à l'unité (Living Layer) — épingler UN site au tableau de bord ──
+// Stockage par device (clé ks_sentinel_followed = {id, name}). Le pad
+// Sentinel racontera alors CE site (état en ligne / hors ligne) au lieu de
+// l'agrégat. Le worker vérifie que le site appartient au tenant (anti-fuite).
+function _isFollowedSite(id) {
+  try { const f = JSON.parse(localStorage.getItem('ks_sentinel_followed') || 'null'); return !!(f && f.id === id); }
+  catch (e) { return false; }
+}
+function _toggleFollowSite(id) {
+  const s = (_sites || []).find(x => x.id === id);
+  let cur = null; try { cur = JSON.parse(localStorage.getItem('ks_sentinel_followed') || 'null'); } catch (e) { cur = null; }
+  try {
+    if (cur && cur.id === id) {
+      localStorage.removeItem('ks_sentinel_followed');
+      _sntToast('Site retiré du tableau de bord');
+    } else if (s) {
+      const name = (s.label || _hostOf(s.url) || 'Site');
+      localStorage.setItem('ks_sentinel_followed', JSON.stringify({ id, name }));
+      _sntToast('« ' + name + ' » suivi sur le tableau de bord');
+    }
+  } catch (e) { /* localStorage plein */ }
+  _render();
+}
+function _sntToast(msg) {
+  try {
+    document.querySelectorAll('.snt-lib-toast').forEach(t => t.remove());
+    const t = document.createElement('div');
+    t.className = 'snt-lib-toast';
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:99999;'
+      + 'background:#1c2234;color:#f8fafc;border:1px solid rgba(255,255,255,.12);'
+      + 'padding:10px 18px;border-radius:12px;font-size:13px;font-weight:600;max-width:80vw;'
+      + 'box-shadow:0 8px 24px rgba(0,0,0,.32);opacity:0;transition:opacity .2s ease;';
+    document.body.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; });
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 250); }, 2400);
+  } catch (e) { /* no-op */ }
+}
+
 // ── Interactions ────────────────────────────────────────────────
 function _onClick(e) {
   const act = e.target.closest('[data-act]'); if (!act) return;
   const a = act.dataset.act;
   if (a === 'close')       return closeSentinel();
   if (a === 'reload')      return _load();
+  if (a === 'follow')      return _toggleFollowSite(act.dataset.id);
   if (a === 'del')         return _delSite(act.dataset.id);
   if (a === 'check')       return _checkNow(act.dataset.id);
   if (a === 'audit')       return _openCockpit(act.dataset.id);

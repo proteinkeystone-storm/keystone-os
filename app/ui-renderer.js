@@ -5459,6 +5459,11 @@ function _collectClientSensors() {
         const f = JSON.parse(localStorage.getItem('ks_sdqr_followed') || 'null');
         if (f && f.id) sensors.followedQr = String(f.id).slice(0, 64);
     } catch (e) { /* no-op */ }
+    // Suivi à l'unite d'un SITE Sentinel (cle ks_sentinel_followed = {id,name}).
+    try {
+        const f = JSON.parse(localStorage.getItem('ks_sentinel_followed') || 'null');
+        if (f && f.id) sensors.followedSite = String(f.id).slice(0, 64);
+    } catch (e) { /* no-op */ }
     // Capteur Focus (#3) — chiffres déterministes mesurés côté client.
     try { sensors.focus = _focusSnapshot(); } catch (e) { /* no-op */ }
     return sensors;
@@ -5743,6 +5748,18 @@ function _padReadoutData(id, m) {
             return { label: 'Ghost 24h', num, sub: '', signal: used, quiet: true, gauge };
         }
         case 'O-GEO-001': {                       // Sentinel — disponibilité
+            // Suivi à l'unité : si un site est épinglé (et appartient au tenant),
+            // le pad raconte CE site (en ligne / hors ligne) au lieu de l'agrégat.
+            const fs = (m.followedSite && typeof m.followedSite === 'object') ? m.followedSite : null;
+            if (fs && fs.name) {
+                if (fs.ok === 0) return { label: fs.name, pip: true, pipText: 'hors ligne',
+                                          incident: true, signal: 1 };
+                if (fs.ok === 1) return { label: fs.name, pip: true, pipOk: true,
+                                          pipText: fs.lastMs ? ('en ligne · ' + fs.lastMs + ' ms') : 'en ligne',
+                                          signal: 0, quiet: true };
+                return { label: fs.name, pip: true, pipMuted: true, pipText: 'en attente de contrôle',
+                         signal: 0, quiet: true };
+            }
             const total = +m.sitesTotal || 0;
             const down  = +m.sitesDown  || 0;
             if (down > 0) {                        // incident → halo rouge
@@ -5806,7 +5823,7 @@ function _paintPadReadouts(metrics) {
 
         let valHtml;
         if (rd.pip) {
-            const dotColor = rd.pipOk ? 'var(--green)' : 'var(--danger)';
+            const dotColor = rd.pipOk ? 'var(--green)' : (rd.pipMuted ? 'var(--tx2)' : 'var(--danger)');
             valHtml = `<span class="pad-rd-pip"><span class="pad-rd-dot" style="background:${dotColor}"></span>${E(rd.pipText)}</span>`;
         } else {
             const sub = rd.sub
