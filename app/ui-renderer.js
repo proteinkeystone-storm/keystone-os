@@ -5526,9 +5526,10 @@ function _paintLivingState(el, data) {
 
     // Living V2 affiche quelque chose → on masque la ligne DST d'ambiance
     _setHeroDstVisible(false);
-    // Ligne de jauges (Niveau 2, #6) — relevés certifiés sous la phrase.
-    _renderLivingReadout(data.metrics);
-    // Même source → reporte le relevé sur chaque pad concerné (halo inclus).
+    // La ligne de jauges sous la phrase est désormais REPORTÉE sur les pads
+    // (readout à droite du picto). La barre ne garde QUE la phrase : on masque
+    // l'ancienne ligne de relevés pour éviter la redondance bar / pad.
+    _renderLivingReadout(null);
     _paintPadReadouts(data.metrics);
 
     // Phrase déjà affichée en entier ET visible → ne pas la re-taper.
