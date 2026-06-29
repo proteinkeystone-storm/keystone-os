@@ -180,35 +180,20 @@ async function _readSnapshotNear(env, tenantId, targetDay) {
 }
 
 // Calcule des candidats "tendance" à partir de l'historique.
-// Compare les cumuls d'aujourd'hui avec hier (J-1) et la semaine passée (J-7).
-// Retourne des phrases factuelles à fort intérêt (deltas réels, zéro invention).
-async function _computeTrendCandidates(env, tenantId, current) {
-  if (!tenantId) return { candidates: [], scansDelta: 0 };
+// Scans (B1) : VRAIES fenêtres (smartqr.scans7d / scans24h vs scansPrev24h),
+// plus de delta de snapshot (qui gonflait sur les trous de connexion).
+// Key Form : delta depuis hier conservé via snapshot (pas de fenêtre exacte ici).
+// Phrases factuelles à fort intérêt, zéro invention.
+async function _computeTrendCandidates(env, tenantId, current, smartqr = {}) {
+  if (!tenantId) return { candidates: [] };
   await ensureMetricsSchema(env);
   const candidates = [];
-  let scansDelta = 0;
   const dayMs = 86400000;
   const fmtDay = (d) => new Date(d).toISOString().slice(0, 10);
   const yesterday = fmtDay(Date.now() - dayMs);
-  const weekAgo   = fmtDay(Date.now() - 7 * dayMs);
 
-  const [snapY, snapW] = await Promise.all([
-    _readSnapshotNear(env, tenantId, yesterday),
-    _readSnapshotNear(env, tenantId, weekAgo),
-  ]);
-
-  // Δ scans depuis hier (cumul total scans)
-  if (snapY?.metrics && Number.isFinite(snapY.metrics.scansTotal)) {
-    const delta = (current.scansTotal || 0) - snapY.metrics.scansTotal;
-    if (delta > 0) {
-      scansDelta = delta;
-      candidates.push({
-        text:  `${delta} nouveau${delta > 1 ? 'x' : ''} scan${delta > 1 ? 's' : ''} Smart QR depuis hier.`,
-        score: 82, topic: 'smartqr',
-      });
-    }
-  }
-  // Δ réponses Key Form depuis hier
+  // Δ réponses Key Form depuis hier (snapshot)
+  const snapY = await _readSnapshotNear(env, tenantId, yesterday);
   if (snapY?.metrics && Number.isFinite(snapY.metrics.pulsaResponsesTotal)) {
     const delta = (current.pulsaResponsesTotal || 0) - snapY.metrics.pulsaResponsesTotal;
     if (delta > 0) {
@@ -218,53 +203,58 @@ async function _computeTrendCandidates(env, tenantId, current) {
       });
     }
   }
-  // Tendance hebdo scans (semaine glissante)
-  if (snapW?.metrics && Number.isFinite(snapW.metrics.scansTotal)) {
-    const weekDelta = (current.scansTotal || 0) - snapW.metrics.scansTotal;
-    if (weekDelta > 0) {
-      candidates.push({
-        text:  `${weekDelta} scan${weekDelta > 1 ? 's' : ''} Smart QR sur les 7 derniers jours.`,
-        score: 68, topic: 'smartqr',
-      });
-    }
+  // Tendance scans : vraie progression 24h vs 24h précédentes
+  const d24 = (+smartqr.scans24h || 0) - (+smartqr.scansPrev24h || 0);
+  if (d24 > 0) {
+    candidates.push({
+      text:  `${d24} scan${d24 > 1 ? 's' : ''} Smart QR de plus qu'hier sur 24 h.`,
+      score: 82, topic: 'smartqr',
+    });
   }
-  return { candidates, scansDelta };
+  // Volume hebdo scans : VRAIE fenêtre 7 jours glissants (qr_scans.ts)
+  const w = +smartqr.scans7d || 0;
+  if (w > 0) {
+    candidates.push({
+      text:  `${w} scan${w > 1 ? 's' : ''} Smart QR sur les 7 derniers jours.`,
+      score: 68, topic: 'smartqr',
+    });
+  }
+  return { candidates };
 }
 
 // ── Helpers sensor (côté serveur) ─────────────────────────────────
 
-// Smart QR : nombre de scans des dernières 24h + total cumulé.
-// Si tenantId (= claims.sub) fourni → filtre les scans des QR appartenant
-// à ce propriétaire (JOIN qr_redirects.tenant_id). Sinon (anonyme/démo) →
-// agrégat global. Garantit l'EXACTITUDE : on ne compte que TES scans.
+// Smart QR : scans par VRAIES fenêtres (24h, 24h précédentes, 7j) + total.
+// Si tenantId (= padTenant) fourni → filtre les scans des QR appartenant à
+// ce propriétaire (JOIN qr_redirects.tenant_id). Sinon (anonyme/démo) →
+// agrégat global. Fenêtres exactes sur qr_scans.ts (B1) : remplacent les
+// anciens deltas de snapshot (biaisés, cf. _readSnapshotNear) → tendance
+// 24h vs 24h précédentes honnête, et "7 derniers jours" exact.
 async function _sensorSmartQR(env, tenantId) {
   try {
-    let scans24h, scansTotal;
-    if (tenantId) {
-      scans24h = await env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM qr_scans s
-         JOIN qr_redirects r ON r.short_id = s.short_id
-         WHERE r.tenant_id = ? AND s.ts >= datetime('now', '-1 day')`
-      ).bind(tenantId).first().catch(() => null);
-      scansTotal = await env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM qr_scans s
-         JOIN qr_redirects r ON r.short_id = s.short_id
-         WHERE r.tenant_id = ?`
-      ).bind(tenantId).first().catch(() => null);
-    } else {
-      scans24h = await env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM qr_scans WHERE ts >= datetime('now', '-1 day')`
-      ).first().catch(() => null);
-      scansTotal = await env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM qr_scans`
-      ).first().catch(() => null);
-    }
-    return {
-      scans24h:   scans24h?.n   || 0,
-      scansTotal: scansTotal?.n || 0,
+    // timeClause utilise « ts » ; en mode tenant (JOIN) la colonne est s.ts.
+    const count = async (timeClause) => {
+      const where = timeClause
+        ? (tenantId ? ' AND ' + timeClause.replace(/\bts\b/g, 's.ts') : ' WHERE ' + timeClause)
+        : '';
+      const sql = tenantId
+        ? `SELECT COUNT(*) AS n FROM qr_scans s
+             JOIN qr_redirects r ON r.short_id = s.short_id
+             WHERE r.tenant_id = ?${where}`
+        : `SELECT COUNT(*) AS n FROM qr_scans${where}`;
+      const stmt = env.DB.prepare(sql);
+      const row = await (tenantId ? stmt.bind(tenantId) : stmt).first().catch(() => null);
+      return row?.n || 0;
     };
+    const [scans24h, scansPrev24h, scans7d, scansTotal] = await Promise.all([
+      count(`ts >= datetime('now', '-1 day')`),
+      count(`ts >= datetime('now', '-2 day') AND ts < datetime('now', '-1 day')`),
+      count(`ts >= datetime('now', '-7 day')`),
+      count(''),
+    ]);
+    return { scans24h, scansPrev24h, scans7d, scansTotal };
   } catch (e) {
-    return { scans24h: 0, scansTotal: 0 };
+    return { scans24h: 0, scansPrev24h: 0, scans7d: 0, scansTotal: 0 };
   }
 }
 
@@ -365,13 +355,19 @@ async function _sensorSmartAgentGaps(env, tenantId) {
        WHERE tenant_id = ? AND status = 'open'
        ORDER BY hits DESC, last_asked_at DESC LIMIT 1`
     ).bind(tenantId).first().catch(() => null);
+    // État permanent (B2) : fiches de savoir VALIDÉES (ce dont l'agent
+    // répond réellement). Affiché quand il n'y a pas de trou à combler.
+    const know = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM kortex_units WHERE tenant_id = ? AND status = 'validated'`
+    ).bind(tenantId).first().catch(() => null);
     return {
       open: agg?.open || 0,
       recent24h: agg?.recent || 0,
       topHits: top?.hits || 0,
       topQuestion: (top?.question || '').toString().slice(0, 80),
+      knowledge: know?.n || 0,
     };
-  } catch (e) { return { open: 0, recent24h: 0, topHits: 0, topQuestion: '' }; }
+  } catch (e) { return { open: 0, recent24h: 0, topHits: 0, topQuestion: '', knowledge: 0 }; }
 }
 
 // Keynapse : rappel imminent (< 2 h, non encore notifié) + nombre du jour.
@@ -391,12 +387,18 @@ async function _sensorKeynapse(env, tenantId) {
     const today = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM kn_reminders WHERE tenant_id = ? AND at >= ? AND at < ?`
     ).bind(tenantId, dayStart, dayEnd).first().catch(() => null);
+    // État permanent (B2) : nombre de bulles/notes. Affiché quand aucun
+    // rappel n'est dû aujourd'hui.
+    const notes = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM kn_bubbles WHERE tenant_id = ?`
+    ).bind(tenantId).first().catch(() => null);
     return {
       soonLabel: (soon?.label || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 60),
       soonAt: soon?.at || '',
       todayCount: today?.n || 0,
+      notesCount: notes?.n || 0,
     };
-  } catch (e) { return { soonLabel: '', soonAt: '', todayCount: 0 }; }
+  } catch (e) { return { soonLabel: '', soonAt: '', todayCount: 0, notesCount: 0 }; }
 }
 
 // Sentinel : sites surveillés + combien hors ligne (last_ok = 0).
@@ -429,8 +431,13 @@ async function _sensorSocial(env, tenantId) {
          SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published
        FROM social_posts WHERE tenant_id = ? AND updated_at >= datetime('now','-1 day')`
     ).bind(tenantId).first().catch(() => null);
-    return { failed24h: row?.failed || 0, published24h: row?.published || 0 };
-  } catch (e) { return { failed24h: 0, published24h: 0 }; }
+    // État permanent (B2) : réseaux connectés. Affiché quand aucune publi
+    // n'est en échec.
+    const acc = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM social_accounts WHERE tenant_id = ? AND status = 'connected'`
+    ).bind(tenantId).first().catch(() => null);
+    return { failed24h: row?.failed || 0, published24h: row?.published || 0, connected: acc?.n || 0 };
+  } catch (e) { return { failed24h: 0, published24h: 0, connected: 0 }; }
 }
 
 // Smart QR : suivi du TOP 5 des QR par activité (7 j) + tendance vs semaine
@@ -962,6 +969,8 @@ export async function handleLivingBoard(request, env) {
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
   const metrics = {
     scans24h:       smartqr.scans24h      || 0,
+    scansPrev24h:   smartqr.scansPrev24h  || 0,   // B1 : tendance 24h vs 24h
+    scans7d:        smartqr.scans7d       || 0,   // B1 : vraie fenêtre 7 jours
     scansTotal:     smartqr.scansTotal    || 0,
     keyform24h:     pulsa.responses24h    || 0,
     formsPublished: pulsa.publishedForms  || 0,
@@ -975,6 +984,10 @@ export async function handleLivingBoard(request, env) {
     // (incident à reprendre) + briefs en bibliothèque Kodex (informatif).
     socialFailed24h: social.failed24h     || 0,
     codexBriefs:     kodex.briefs         || 0,
+    // États permanents (B2) : affichés sur le pad quand pas de signal d'action.
+    agentKnowledge:  smartagent.knowledge || 0,   // fiches de savoir validées
+    keynapseNotes:   keynapse.notesCount  || 0,   // bulles/notes
+    socialConnected: social.connected     || 0,   // réseaux connectés
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
@@ -991,11 +1004,10 @@ export async function handleLivingBoard(request, env) {
     // Snapshot + tendances + feedback en parallèle.
     const [, trends, fb] = await Promise.all([
       _recordDailySnapshot(env, lookupHmac, cumuls),
-      _computeTrendCandidates(env, lookupHmac, cumuls),
+      _computeTrendCandidates(env, lookupHmac, cumuls, smartqr),
       _readFeedback(env, lookupHmac),
     ]);
     trendCandidates = (trends && trends.candidates) || [];
-    if (trends && trends.scansDelta > 0) metrics.scansDelta = trends.scansDelta;
     feedback = fb || {};
   }
 

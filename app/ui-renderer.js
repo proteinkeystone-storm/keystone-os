@@ -5613,21 +5613,28 @@ function _padReadoutData(id, m) {
     if (!m || typeof m !== 'object') return null;
     switch (id) {
         case 'A-COM-001': {                       // Smart Dynamic QR
-            // Etat permanent : activite 24h si elle existe (halo nouveaute),
-            // sinon repli sur le total cumule (informatif, pas de halo).
-            // NB : on n'affiche PAS m.scansDelta (cumul depuis le dernier
-            // snapshot, souvent vieux → gonfle, cf. _readSnapshotNear worker).
+            // Activite 24h avec VRAIE tendance (B1 : 24h vs 24h precedentes,
+            // m.scansPrev24h — fenetres exactes worker, fini le delta snapshot).
+            // Sinon repli sur le total cumule (informatif, sans halo).
             const v = +m.scans24h || 0;
-            if (v > 0) return { label: 'Scans 24h', num: String(v), sub: '', signal: v };
+            if (v > 0) {
+                const d = v - (+m.scansPrev24h || 0);
+                const sub = d > 0 ? ('+' + d) : (d < 0 ? ('-' + Math.abs(d)) : '');
+                return { label: 'Scans 24h', num: String(v), sub, subUp: d > 0, signal: v };
+            }
             const total = +m.scansTotal || 0;
             if (total > 0) return { label: 'Scans', num: String(total), sub: 'au total', signal: 0, quiet: true };
             return null;
         }
-        case 'O-AGT-001': {                       // Smart Agent — trous à combler
+        case 'O-AGT-001': {                       // Smart Agent — trous / savoir
             const v = +m.gapsOpen || 0;
-            if (v <= 0) return null;
-            return { label: 'À combler', num: String(v),
-                     sub: v > 1 ? 'trous' : 'trou', signal: v };
+            if (v > 0) return { label: 'À combler', num: String(v),
+                                sub: v > 1 ? 'trous' : 'trou', signal: v };
+            // Etat permanent (B2) : fiches de savoir validees.
+            const know = +m.agentKnowledge || 0;
+            if (know > 0) return { label: 'Savoir', num: String(know),
+                                   sub: know > 1 ? 'fiches' : 'fiche', signal: 0, quiet: true };
+            return null;
         }
         case 'A-COM-004': {                       // Key Form — réponses / formulaires
             // Activite 24h (halo nouveaute) sinon etat permanent : nombre de
@@ -5639,10 +5646,14 @@ function _padReadoutData(id, m) {
                                   sub: 'publié' + (pub > 1 ? 's' : ''), signal: 0, quiet: true };
             return null;
         }
-        case 'O-Keyn-001': {                      // Keynapse — rappels
+        case 'O-Keyn-001': {                      // Keynapse — rappels / notes
             const v = +m.remindersToday || 0;
-            if (v <= 0) return null;
-            return { label: 'Rappels', num: String(v), sub: '', signal: v };
+            if (v > 0) return { label: 'Rappels', num: String(v), sub: '', signal: v };
+            // Etat permanent (B2) : nombre de bulles/notes.
+            const notes = +m.keynapseNotes || 0;
+            if (notes > 0) return { label: 'Notes', num: String(notes),
+                                    sub: notes > 1 ? 'bulles' : 'bulle', signal: 0, quiet: true };
+            return null;
         }
         case 'A-COM-002': {                       // Brief Prod — briefs en biblio Kodex
             // Inventaire (pas un signal d'action) → readout informatif quiet,
@@ -5652,14 +5663,18 @@ function _padReadoutData(id, m) {
             return { label: 'Briefs', num: String(v),
                      sub: v > 1 ? 'en biblio' : 'en biblio', signal: v, quiet: true };
         }
-        case 'O-SOC-001': {                       // Social Manager — publi non aboutie
+        case 'O-SOC-001': {                       // Social Manager — échecs / réseaux
             // Publication non aboutie = à reprendre → traité comme INCIDENT
             // (halo rouge), cohérent avec l'alerte collante côté worker.
             const v = +m.socialFailed24h || 0;
-            if (v <= 0) return null;
-            return { label: 'Diffusion', pip: true,
-                     pipText: v > 1 ? (v + ' à reprendre') : '1 à reprendre',
-                     incident: true, signal: v };
+            if (v > 0) return { label: 'Diffusion', pip: true,
+                                pipText: v > 1 ? (v + ' à reprendre') : '1 à reprendre',
+                                incident: true, signal: v };
+            // Etat permanent (B2) : réseaux connectés.
+            const conn = +m.socialConnected || 0;
+            if (conn > 0) return { label: 'Réseaux', num: String(conn),
+                                   sub: conn > 1 ? 'connectés' : 'connecté', signal: 0, quiet: true };
+            return null;
         }
         case 'A-COM-005': {                       // Ghost Writer — conso vs quota
             // Conso PROPRE du jour (pas un signal externe) → readout informatif
