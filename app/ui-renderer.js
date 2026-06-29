@@ -5701,7 +5701,10 @@ function _padReadoutData(id, m) {
             if (used <= 0) return null;
             const quota = (m.ghostQuota == null) ? null : (+m.ghostQuota || 0);
             const num = (quota && quota > 0) ? (used + '/' + quota) : String(used);
-            return { label: 'Ghost 24h', num, sub: '', signal: used, quiet: true };
+            // Seul pad avec un VRAI denominateur → jauge honnete used/quota
+            // (bornee a 100 %). Pas de quota connu (admin/anonyme) → pas de barre.
+            const gauge = (quota && quota > 0) ? Math.min(1, used / quota) : null;
+            return { label: 'Ghost 24h', num, sub: '', signal: used, quiet: true, gauge };
         }
         case 'O-GEO-001': {                       // Sentinel — disponibilité
             const total = +m.sitesTotal || 0;
@@ -5779,7 +5782,12 @@ function _paintPadReadouts(metrics) {
         const pipSubHtml = rd.pipSub
             ? `<span class="pad-rd-pip pad-rd-pipsub"><span class="pad-rd-dot" style="background:var(--green)"></span>${E(rd.pipSub)}</span>`
             : '';
-        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>${pipSubHtml}`;
+        // Jauge optionnelle (uniquement quand un vrai denominateur existe, ex.
+        // Ghost Writer used/quota). Largeur bornee a 100 %, % arrondi.
+        const gaugeHtml = (rd.gauge != null)
+            ? `<span class="pad-rd-bar"><span class="pad-rd-fill" style="width:${Math.round(Math.max(0, Math.min(1, rd.gauge)) * 100)}%"></span></span>`
+            : '';
+        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>${pipSubHtml}${gaugeHtml}`;
 
         if (rd.incident) {
             card.classList.add('pad-alert');
