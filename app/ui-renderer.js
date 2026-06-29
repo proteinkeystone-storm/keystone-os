@@ -213,6 +213,9 @@ function _downscalePhoto(dataUrl, maxPx = 256, quality = 0.82) {
 // Living Layer (2026-05-24)
 const LS_LIVING_ON    = 'ks_living_layer_on';
 const LS_LIVING_CACHE = 'ks_living_cache';
+// Living Layer sur les pads : baseline « déjà vu » par device (pad id →
+// dernière valeur de capteur vue). Sert à décider du halo « nouveauté ».
+const LS_PAD_SEEN     = 'ks_pad_seen';
 const LIVING_TTL_MS   = 30 * 60 * 1000;
 
 const saveKey       = (id, key) => key ? localStorage.setItem(LS_PREFIX + id, key) : localStorage.removeItem(LS_PREFIX + id);
@@ -686,7 +689,10 @@ export function renderDashboard() {
                         <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
                     </svg>
                 </button>
-                <div class="pad-icon">${ICONS[t.icon] || ICONS['package']}</div>
+                <div class="pad-head">
+                    <div class="pad-icon">${ICONS[t.icon] || ICONS['package']}</div>
+                    <div class="pad-readout"></div>
+                </div>
                 <div class="pad-name">${label}</div>
                 <div class="pad-desc">${t.desc}</div>
                 ${lt ? '<div class="pad-lifetime-badge">∞ À vie</div>' : ''}
@@ -709,7 +715,10 @@ export function renderDashboard() {
                         <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
                     </svg>
                 </button>
-                <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
+                <div class="pad-head">
+                    <div class="pad-icon">${ICONS[a.icon] || ICONS['zap']}</div>
+                    <div class="pad-readout"></div>
+                </div>
                 <div class="pad-name">${a.name}</div>
                 <div class="pad-desc">${desc}</div>
             </div>`;
@@ -728,6 +737,11 @@ export function renderDashboard() {
             () => _renderRestoreBtn(padsEl, ownedTools),
             () => renderDashboard()
         );
+
+        // Living Layer sur les pads : reporte le relevé (chiffre + tendance)
+        // à droite du picto et pose le halo nouveauté/incident. Front-only,
+        // sur les métriques déjà en cache ; rafraîchi quand /board répond.
+        _paintPadReadouts();
     }
 
     // ── BARRE KEY-STORE — Outils disponibles : nouveautés (NEW) ────────
@@ -2164,6 +2178,10 @@ export function openTool(padId, opts = {}) {
     // Living Layer feedback : si cet outil correspond au dernier topic
     // affiché récemment, c'est un signal d'intérêt (engagement).
     _livingTrackToolOpen(padId);
+    // Living Layer sur les pads : ouvrir l'outil = « vu » → éteint le halo
+    // nouveauté de ce pad (baseline « déjà vu » par device). L'incident
+    // (halo rouge) reste tant que le capteur ne repasse pas à 0.
+    try { _markPadSeen(padId); } catch (e) { /* readout best-effort */ }
     // Capteur Focus (#3) : journalise l'ouverture (focus/dispersion).
     try {
         const _focusLbl = (getUserLabel?.(padId)) || (getPad?.(padId)?.title) || padId;
@@ -5510,6 +5528,8 @@ function _paintLivingState(el, data) {
     _setHeroDstVisible(false);
     // Ligne de jauges (Niveau 2, #6) — relevés certifiés sous la phrase.
     _renderLivingReadout(data.metrics);
+    // Même source → reporte le relevé sur chaque pad concerné (halo inclus).
+    _paintPadReadouts(data.metrics);
 
     // Phrase déjà affichée en entier ET visible → ne pas la re-taper.
     if (el.dataset.livingText === text && !el.hidden) return;
@@ -5570,6 +5590,119 @@ function _renderLivingReadout(metrics) {
         `<span class="seg"><span class="k">${E(s.k)}</span><span class="v">${s.vHtml}</span></span>`
     ).join('');
     host.hidden = false;
+}
+
+// ── Living Layer sur les pads (V1, front-only) ─────────────────────
+// Reporte le relevé de la barre ambiante (mêmes métriques /board) à
+// droite du picto de CHAQUE pad concerné, et pose le halo de contour :
+//   • indigo doux  = du nouveau depuis la dernière visite (règle « déjà
+//     vu » par device : LS_PAD_SEEN) ; s'éteint quand on ouvre le pad ;
+//   • rouge pulsé  = incident à réparer (site Sentinel hors ligne) ;
+//     piloté par la valeur du capteur, reste tant qu'elle n'est pas 0 ;
+//   • rien         = silence (readout vide → masqué par CSS :empty).
+// AUCUN appel réseau ajouté : on lit _livingMetrics (déjà chargé) ou le
+// cache LS_LIVING_CACHE. Aucune jauge (les compteurs n'ont pas de
+// plafond → une barre aurait une largeur inventée). PIÈGE TENANT : les
+// métriques arrivent DÉJÀ résolues par le worker (admin→'default'), on
+// ne refait aucune résolution de tenant côté front.
+
+// pad id → fonction de relevé. Chaque entrée renvoie l'objet d'affichage
+// (label + chiffre/pastille) ou null si rien à signaler pour ce pad.
+function _padReadoutData(id, m) {
+    if (!m || typeof m !== 'object') return null;
+    switch (id) {
+        case 'A-COM-001': {                       // Smart Dynamic QR
+            const v = +m.scans24h || 0;
+            if (v <= 0) return null;
+            const d = +m.scansDelta || 0;
+            return { label: 'Scans 24h', num: String(v),
+                     sub: d > 0 ? ('+' + d) : '', subUp: d > 0, signal: v };
+        }
+        case 'O-AGT-001': {                       // Smart Agent — trous à combler
+            const v = +m.gapsOpen || 0;
+            if (v <= 0) return null;
+            return { label: 'À combler', num: String(v),
+                     sub: v > 1 ? 'trous' : 'trou', signal: v };
+        }
+        case 'A-COM-004': {                       // Key Form — réponses
+            const v = +m.keyform24h || 0;
+            if (v <= 0) return null;
+            return { label: 'Réponses 24h', num: String(v), sub: '', signal: v };
+        }
+        case 'O-Keyn-001': {                      // Keynapse — rappels
+            const v = +m.remindersToday || 0;
+            if (v <= 0) return null;
+            return { label: 'Rappels', num: String(v), sub: '', signal: v };
+        }
+        case 'O-GEO-001': {                       // Sentinel — disponibilité
+            const down = +m.sitesDown || 0;
+            if (down <= 0) return null;            // tout en ligne → silence
+            return { label: 'Disponibilité', pip: true,
+                     pipText: down > 1 ? (down + ' hors ligne') : '1 hors ligne',
+                     incident: true, signal: down };
+        }
+    }
+    return null;
+}
+
+// Dernières métriques connues : variable de module (set par /board) ou cache.
+function _latestMetrics() {
+    if (_livingMetrics) return _livingMetrics;
+    try {
+        const c = JSON.parse(localStorage.getItem(LS_LIVING_CACHE) || 'null');
+        return (c && c.data && c.data.metrics) || null;
+    } catch (e) { return null; }
+}
+
+function _padSeenMap() {
+    try { return JSON.parse(localStorage.getItem(LS_PAD_SEEN) || '{}') || {}; }
+    catch (e) { return {}; }
+}
+
+// Marque un pad comme « vu » (= valeur courante du capteur) → éteint son
+// halo nouveauté. Appelé à l'ouverture de l'outil (openTool).
+function _markPadSeen(id) {
+    const rd  = _padReadoutData(id, _latestMetrics());
+    const map = _padSeenMap();
+    map[id] = rd ? rd.signal : 0;
+    try { localStorage.setItem(LS_PAD_SEEN, JSON.stringify(map)); } catch (e) { /* plein */ }
+    const card = document.querySelector(`.pad-card[data-id="${id}"]`);
+    if (card) card.classList.remove('pad-new');
+}
+
+function _paintPadReadouts(metrics) {
+    // Living OFF (réglage utilisateur) → aucun readout sur les pads.
+    const m = (localStorage.getItem(LS_LIVING_ON) === '0')
+        ? null
+        : (metrics && typeof metrics === 'object' ? metrics : _latestMetrics());
+    const seen = _padSeenMap();
+    const E = _escapeLivingText;
+    document.querySelectorAll('.pad-card[data-id]').forEach(card => {
+        const host = card.querySelector('.pad-readout');
+        card.classList.remove('pad-new', 'pad-alert');
+        if (!host) return;
+        const rd = m ? _padReadoutData(card.getAttribute('data-id'), m) : null;
+        if (!rd) { host.innerHTML = ''; return; }
+
+        let valHtml;
+        if (rd.pip) {
+            valHtml = `<span class="pad-rd-pip"><span class="pad-rd-dot" style="background:var(--danger)"></span>${E(rd.pipText)}</span>`;
+        } else {
+            const sub = rd.sub
+                ? ` <span class="pad-rd-sub${rd.subUp ? ' pad-rd-up' : ''}">${E(rd.sub)}</span>`
+                : '';
+            valHtml = `<span class="pad-rd-num">${E(rd.num)}</span>${sub}`;
+        }
+        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>`;
+
+        if (rd.incident) {
+            card.classList.add('pad-alert');
+        } else {
+            const prev   = +seen[card.getAttribute('data-id')];
+            const isNew  = !Number.isFinite(prev) ? (rd.signal > 0) : (rd.signal > prev);
+            if (isNew) card.classList.add('pad-new');
+        }
+    });
 }
 
 async function _renderLivingLayer(preferMode = null, preferTopic = null) {
