@@ -10824,7 +10824,10 @@ html.light-mode .sdqr-new-btn.sdqr-new-btn--cta:hover {
 .sdqr-qr-menu-btn svg { width: 17px; height: 17px; }
 .sdqr-qr-menu-btn:hover { background: rgba(27,42,74,.06); color: #1b2a4a; }
 .sdqr-qr-pop {
-  position: absolute; top: 40px; right: 12px; z-index: 30;
+  /* Le popup est ajoute a document.body alors que le workspace SDQR est un
+     overlay plein ecran en z-index:9000 → il faut passer AU-DESSUS, sinon le
+     menu s'ouvre derriere et reste invisible (« rien ne se passe » au clic). */
+  position: absolute; top: 40px; right: 12px; z-index: 9500;
   min-width: 168px; padding: 5px;
   background: #fff; border: 1px solid rgba(27,42,74,.1);
   border-radius: 10px; box-shadow: 0 14px 34px rgba(8,15,35,.28);
