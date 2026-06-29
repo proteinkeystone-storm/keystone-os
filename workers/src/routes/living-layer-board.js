@@ -35,6 +35,7 @@ import { verifyJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { isThrottled, recordUsage } from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
+import { quotaForPlan } from '../lib/ghost-quota.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Remplace Llama 3.1 8B le 2026-05-29. (Mode IA premium Claude Haiku
@@ -412,9 +413,10 @@ async function _sensorGhostWriter(env, lookupHmac, plan) {
     const row = await env.DB.prepare(
       `SELECT count FROM ghostwriter_usage WHERE lookup_hmac = ? AND day = ?`
     ).bind(lookupHmac, today).first().catch(() => null);
-    const quotaTable = { DEMO: 1, STARTER: 3, PRO: 10, MAX: 50 };
+    // Quota = source partagee (lib/ghost-quota.js) = MEME que l'enforcement
+    // Ghost Writer → la jauge ne peut plus mentir sur le plan.
     const p = (plan || '').toUpperCase();
-    const quota = p === 'ADMIN' ? null : (quotaTable[p] ?? 0);
+    const quota = quotaForPlan(plan);
     return {
       usedToday: row?.count || 0,
       quotaToday: quota,

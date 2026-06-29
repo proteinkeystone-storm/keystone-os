@@ -49,6 +49,7 @@ import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
+import { quotaForPlan } from '../lib/ghost-quota.js';
 import {
   isEnforceEnabled, consumeCredits, refundCredits,
   ensureAiCreditsSchema, readMonthUsed, readPackBalance, creditsPayload,
@@ -63,17 +64,10 @@ const MAX_TEXT_LENGTH    = 5000;
 const MIN_TEXT_LENGTH    = 5;
 
 // ── Quota par plan (Phase 2 — 2026-05-23) ────────────────────────
-// Retourne le quota /jour pour un plan donné. null = illimité (ADMIN).
-// Ces valeurs sont la source de vérité — le frontend les lit via
-// GET /api/ghostwriter/quota et n'a aucune connaissance hardcodée.
+// Source de vérité = lib/ghost-quota.js (partagée avec la jauge Living Layer
+// pour éviter toute dérive). Le frontend les lit via GET /api/ghostwriter/quota.
 function _quotaForPlan(plan) {
-  const p = (plan || '').toUpperCase();
-  if (p === 'DEMO')    return 1;
-  if (p === 'STARTER') return 3;
-  if (p === 'PRO')     return 10;
-  if (p === 'MAX')     return 50;
-  if (p === 'ADMIN')   return null;   // illimité
-  return 0;  // plan inconnu → bloque par défaut (fail-closed)
+  return quotaForPlan(plan);
 }
 
 // Jour UTC YYYY-MM-DD. Important : UTC côté serveur, pas locale —
