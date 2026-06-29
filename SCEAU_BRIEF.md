@@ -115,7 +115,8 @@ Sceau transmet un **secret** (code, mot de passe, info sensible, texte) via un *
 - **RGPD-safe** : aucune PII, agrégats anonymes, purge 90 j (cron existant).
 **DoD :** ouvrir un sceau fait apparaître le signal ; 3 échecs déclenchent l'alerte.
 
-### 🛡 SPRINT 6 — Hardening, audit & lancement ⏳ CODE FAIT (2026-06-30), DEPLOY EN ATTENTE D'AUTORISATION
+### 🛡 SPRINT 6 — Hardening, audit & lancement ✅ DÉPLOYÉ EN PROD (2026-06-30)
+> **Lancé** : migrations 008+009 sur D1 prod ✅, worker déployé (version `a34e3eb0`) + smoke prod OK (routes `/s/` et `/s/t/` live, bundle voprf 200, SDQR `/r/` intact), front poussé sur `main` (commit `a4294ef`) → Vercel live (SW `v5.28.76-sceau`). **Reste 2 actions manuelles de Stéphane** : (1) **Admin → Catalogue → Synchroniser → Sauvegarder** (publie le pad dans le K-Store, sinon invisible) ; (2) **revue visuelle** + smoke fonctionnel (créer un sceau, l'ouvrir, vérifier l'autodestruction).
 > Fait : **gating serveur** (création réservée MAX/ADMIN/BETA, modèle Smart Agent ; lecture publique ouverte) sur `init`+`token`. **Audit anti-fuite** : zéro `console.*` de données sensibles, `no-store`+`no-referrer` sur tout endpoint public, pas de fragment d'URL exploité, CSP page stricte + SRI, **cap `blinded` 1024c** (anti-DoS), ciphertext capé 200k. **Notice help** `HELP/O-SEC-001.json` (gabarit GW). **Doc user** : entrée changelog `keystone-doc.js`. **Bump SW** `v5.28.76-sceau`. Pictos `sceau`+`radio`. **58/58 tests** (6 nouveaux gating). Reste **manuel/à autoriser** : (1) revue VISUELLE du pad (impossible ici, aucun navigateur connecté) ; (2) **migrations 008+009 sur D1 prod** ; (3) **push front** (Vercel) ; (4) **`wrangler deploy`** worker (autorisation explicite + stash Pulsa) ; (5) Admin → Catalogue → Synchroniser → Sauvegarder.
 
 **Objectif :** mériter le mot « sécurisé ».

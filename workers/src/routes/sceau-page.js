@@ -88,7 +88,7 @@ function _page(base, nonce, bundleHref, sri) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<title>Sceau</title>
+<title>Missive</title>
 <style nonce="${nonce}">
   :root{
     --bg:#0b0e14; --panel:#121826; --ink:#eef2f8; --muted:#8a94a6;
@@ -103,17 +103,19 @@ function _page(base, nonce, bundleHref, sri) {
     letter-spacing:-0.01em; display:flex; align-items:center; justify-content:center; padding:24px;
   }
   .card{
-    width:100%; max-width:440px; background:var(--panel); border:1px solid var(--line);
-    border-radius:var(--radius); padding:32px 28px; box-shadow:0 30px 80px rgba(0,0,0,.5);
-    text-align:center;
+    width:100%; max-width:460px; position:relative; background:
+      radial-gradient(120% 90% at 50% 0%, rgba(108,108,245,.10) 0%, transparent 55%), var(--panel);
+    border:1px solid var(--line); border-radius:24px; padding:42px 34px 34px;
+    box-shadow:0 40px 100px rgba(0,0,0,.55); text-align:center;
   }
   .seal{
-    width:84px; height:84px; margin:0 auto 22px; border-radius:50%;
-    background:linear-gradient(135deg,#7b7bff,#4f46e5); display:flex; align-items:center; justify-content:center;
-    box-shadow:0 8px 30px rgba(108,108,245,.45), inset 0 2px 8px rgba(255,255,255,.25);
+    width:92px; height:92px; margin:0 auto 24px; border-radius:50%;
+    background:linear-gradient(140deg,#8a8aff,#4f46e5); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 12px 36px rgba(108,108,245,.5), inset 0 2px 10px rgba(255,255,255,.3);
     position:relative; transition:transform .5s ease;
   }
-  .seal svg{width:40px;height:40px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .seal::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(108,108,245,.25)}
+  .seal svg{width:48px;height:48px;fill:#fff;stroke:none}
   .seal.cracked{animation:crack .7s ease forwards}
   @keyframes crack{40%{transform:scale(1.08) rotate(-3deg)}100%{transform:scale(.2) rotate(12deg);opacity:0}}
   h1{font:900 24px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif; letter-spacing:-0.03em; margin:0 0 8px}
@@ -134,12 +136,16 @@ function _page(base, nonce, bundleHref, sri) {
   .hint{margin-top:14px;font-size:12.5px;color:var(--muted)}
   .attempts{font-size:13px;margin-top:12px}
   .attempts.warn{color:var(--warn)} .err{color:var(--dead)}
+  .secret-wrap{position:relative;text-align:left}
   .secret{
     text-align:left; white-space:pre-wrap; word-break:break-word; background:#0d1320; border:1px solid var(--line);
-    border-radius:14px; padding:16px; font:500 15px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink);
+    border-radius:14px; padding:18px 52px 18px 18px; font:500 15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink);
     max-height:50vh; overflow:auto;
   }
-  .copy{margin-top:12px;background:#1b2335;color:var(--ink);border:1px solid var(--line)}
+  .copy-icon{position:absolute;top:10px;right:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+    background:#1b2335;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;padding:0}
+  .copy-icon:hover{color:var(--ink);border-color:var(--accent)}
+  .copy-icon.ok{color:var(--ok);border-color:var(--ok)}
   .foot{margin-top:22px;font-size:11.5px;color:#5a6478;line-height:1.5}
   .foot a{color:#7e88a0}
   .hidden{display:none}
@@ -150,7 +156,7 @@ function _page(base, nonce, bundleHref, sri) {
 <body>
   <main class="card" id="card" aria-live="polite">
     <div class="seal" id="seal" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      <svg viewBox="0 0 800 800"><path d="M344.9,229.5c-21.7,7-43.3,14.6-64.6,22.8c-4,1.5-6.9,5.5-7.5,10.4c-12.6,110.6,16.5,191.2,51.3,244.4 c14.7,22.7,32.3,42.7,52.1,59.4c7.9,6.5,14.9,11.2,20.3,14.2c2.7,1.5,5,2.5,6.7,3.1c0.7,0.3,1.5,0.5,2.3,0.7 c0.8-0.1,1.5-0.4,2.3-0.7c1.7-0.6,4-1.6,6.7-3.1c5.5-3,12.5-7.7,20.3-14.2c19.8-16.6,37.4-36.7,52.1-59.4 c34.8-53.1,64-133.8,51.3-244.4c-0.6-4.8-3.5-8.9-7.5-10.4c-14.8-5.7-39.9-14.9-64.6-22.7c-25.3-8-48.6-13.9-60.7-13.9 C393.5,215.6,370.2,221.5,344.9,229.5L344.9,229.5z M338.8,202.1c24.7-7.8,51-14.9,66.7-14.9s42,7,66.7,14.9 c25.3,8,50.8,17.4,65.8,23.1c12.8,4.9,22,18,23.8,33.6c13.6,119.1-17.9,207.3-56.2,265.7c-16.2,25-35.5,47-57.4,65.2 c-7.5,6.3-15.5,11.9-23.9,16.6c-6.4,3.5-13.2,6.4-18.9,6.4s-12.5-2.9-18.9-6.4c-8.4-4.7-16.3-10.3-23.9-16.6 c-21.8-18.3-41.1-40.3-57.4-65.2c-38.2-58.4-69.8-146.6-56.2-265.7c1.8-15.6,11-28.6,23.8-33.6 C294.8,216.9,316.7,209.2,338.8,202.1z"/><path d="M493.8,315.6c5.7,5.7,5.7,14.9,0,20.6c0,0,0,0,0,0l-87.5,87.5c-5.7,5.7-14.9,5.7-20.6,0c0,0,0,0,0,0L341.9,380 c-5.7-5.7-5.7-14.9,0-20.6s14.9-5.7,20.6,0l33.4,33.4l77.2-77.2C478.8,309.9,488,309.9,493.8,315.6 C493.8,315.6,493.8,315.6,493.8,315.6z"/><path d="M328,533.5c-22.8-11.6-36.7-32.4-38.7-51.9C278.4,377.5,104,370.3,11.7,269.3l0,0C21.1,401.9,166.9,396,255.1,459.4 c-56.4-22-147.3-13.4-214.8-53.8c34.4,98.8,142.9,61.9,224.4,86.1c-48.1-2.9-110.4,26.5-171,7.2c55.8,81.3,122.3,23.2,188.7,21.3 c-33.2,9.7-66.4,48.3-112.7,46.5c58.3,52.1,85.9-1.5,125.5-23.2c-3.9,5-6.2,11.3-6.3,18.1c-0.1,16.5,13.1,29.9,29.6,30 c16.5,0.1,29.9-13.1,30-29.6C348.7,548.7,340,537.4,328,533.5L328,533.5z"/><path d="M472,533.5c-12,3.9-20.7,15.3-20.6,28.6c0.1,16.5,13.6,29.7,30,29.6c16.5-0.1,29.7-13.6,29.6-30 c-0.1-6.8-2.4-13.1-6.3-18.1c39.6,21.6,67.2,75.3,125.5,23.2c-46.3,1.8-79.6-36.8-112.7-46.5c66.4,1.9,132.9,60,188.7-21.3 c-60.6,19.2-122.9-10.1-171-7.2c81.5-24.2,190,12.7,224.4-86.1c-67.5,40.4-158.3,31.7-214.8,53.8c88.3-63.4,234-57.5,243.4-190.1 l0,0c-92.3,101-266.7,108.2-277.5,212.3C508.7,501.1,494.9,521.9,472,533.5L472,533.5z"/></svg>
     </div>
     <div id="view"><div class="spin"></div><p>Ouverture…</p></div>
   </main>
@@ -176,21 +182,21 @@ function _page(base, nonce, bundleHref, sri) {
 
     function dead(msg){
       seal.classList.add('cracked');
-      $('<h1>Sceau introuvable</h1><p>'+msg+'</p>');
+      $('<h1>Missive introuvable</h1><p>'+msg+'</p>');
     }
-    function notFound(){ $('<h1>Sceau introuvable</h1><p>Ce lien ne correspond à aucun sceau.</p>'); }
-    function tokenEmpty(){ $('<h1>Aucun message</h1><p>Ce sceau n’a pas de message actif pour le moment.</p>'); }
+    function notFound(){ $('<h1>Missive introuvable</h1><p>Ce lien ne correspond à aucune missive.</p>'); }
+    function tokenEmpty(){ $('<h1>Aucun message</h1><p>Cette missive n’a pas de message actif pour le moment.</p>'); }
 
     function renderForm(attemptsLeft, oprfPub){
       $(
-        '<h1>Sceau scellé</h1>'+
+        '<h1>Missive scellée</h1>'+
         '<p>Un message vous attend. Entrez le code reçu pour l’ouvrir.</p>'+
         '<div class="field"><label for="pw">Code de déverrouillage</label>'+
         '<input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="••••••••"></div>'+
         '<button id="go">Ouvrir le sceau</button>'+
         '<div class="attempts" id="att">'+attemptsLeft+' essai'+(attemptsLeft>1?'s':'')+' restant'+(attemptsLeft>1?'s':'')+'</div>'+
         '<div class="foot">Chiffré de bout en bout : votre code n’est jamais transmis, et même nous ne pouvons pas lire ce message. '+
-        'Au-delà des essais autorisés, le sceau s’autodétruit définitivement.<br>'+
+        'Au-delà des essais autorisés, la missive s’autodétruit définitivement.<br>'+
         'Limite honnête : cette page est servie par notre serveur — la sécurité maximale suppose de nous faire confiance pour le code de cette page.</div>'
       );
       const pw = document.getElementById('pw'), go = document.getElementById('go'), att = document.getElementById('att');
@@ -204,15 +210,15 @@ function _page(base, nonce, bundleHref, sri) {
           const [fin, ereq] = await client.blind([enc.encode(code)]);
           // 1) blob (opaque, inoffensif) AVANT l'eval (cas one-shot).
           const blobRes = await fetch(BASE+'/blob', { cache:'no-store' });
-          if(blobRes.status===410){ return dead('Ce sceau s’est déjà autodétruit.'); }
-          if(!blobRes.ok){ return dead('Ce sceau n’est plus disponible.'); }
+          if(blobRes.status===410){ return dead('Cette missive s’est déjà autodétruite.'); }
+          if(!blobRes.ok){ return dead('Cette missive n’est plus disponible.'); }
           const blob = await blobRes.json();
           // 2) eval OPRF (COMPTÉE côté serveur).
           const evRes = await fetch(BASE+'/eval', {
             method:'POST', cache:'no-store', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ blinded: btoa(String.fromCharCode(...ereq.serialize())) })
           });
-          if(evRes.status===410){ return dead('Ce sceau s’est autodétruit (essais épuisés).'); }
+          if(evRes.status===410){ return dead('Cette missive s’est autodétruite (essais épuisés).'); }
           const ev = await evRes.json();
           if(!evRes.ok || !ev.evaluation){ throw new Error('eval'); }
           const [output] = await client.finalize(fin, SceauVOPRF.Evaluation.deserialize(SceauVOPRF.Oprf.Suite.P256_SHA256, b64d(ev.evaluation)));
@@ -224,7 +230,7 @@ function _page(base, nonce, bundleHref, sri) {
           }catch{
             // Mauvais code : le tag AES-GCM rejette. L'essai a été compté.
             const left = (ev.attempts_left ?? 0);
-            if(left<=0){ return dead('Code incorrect. Le sceau s’est autodétruit.'); }
+            if(left<=0){ return dead('Code incorrect. La missive s’est autodétruite.'); }
             att.className = 'attempts warn';
             att.textContent = 'Code incorrect — '+left+' essai'+(left>1?'s':'')+' restant'+(left>1?'s':'');
             pw.value=''; pw.focus(); go.disabled=false; go.textContent='Ouvrir le sceau';
@@ -245,17 +251,19 @@ function _page(base, nonce, bundleHref, sri) {
 
     function reveal(plain){
       seal.classList.add('cracked');
+      const copySvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      const checkSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
       setTimeout(()=>{
         $(
-          '<h1>Sceau ouvert</h1>'+
+          '<h1>Missive ouverte</h1>'+
           '<p>Lisez maintenant — ce message ne se rouvrira pas.</p>'+
-          '<div class="secret" id="sec"></div>'+
-          '<button class="copy" id="cp">Copier</button>'+
+          '<div class="secret-wrap"><div class="secret" id="sec"></div>'+
+          '<button class="copy-icon" id="cp" title="Copier" aria-label="Copier">'+copySvg+'</button></div>'+
           '<div class="foot">Une fois cette page fermée, le message n’est plus accessible par ce lien.</div>'
         );
         document.getElementById('sec').textContent = plain; // textContent : zéro injection
         const cp = document.getElementById('cp');
-        cp.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(plain); cp.textContent='Copié'; }catch{ cp.textContent='Copie indisponible'; } });
+        cp.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(plain); cp.innerHTML=checkSvg; cp.classList.add('ok'); setTimeout(()=>{cp.innerHTML=copySvg;cp.classList.remove('ok');},1500); }catch{ cp.title='Copie indisponible'; } });
       }, 650);
     }
 
@@ -263,8 +271,8 @@ function _page(base, nonce, bundleHref, sri) {
       try{
         const r = await fetch(BASE+'/meta', { cache:'no-store' });
         if(r.status===404){ const j=await r.json().catch(()=>({})); return j.status==='vide'?tokenEmpty():notFound(); }
-        if(r.status===410){ return dead('Ce sceau s’est autodétruit ou a expiré.'); }
-        if(!r.ok){ return dead('Ce sceau n’est pas disponible.'); }
+        if(r.status===410){ return dead('Cette missive s’est autodétruite ou a expiré.'); }
+        if(!r.ok){ return dead('Cette missive n’est pas disponible.'); }
         const m = await r.json();
         renderForm(m.attempts_left, m.oprf_pub);
       }catch{ dead('Connexion impossible.'); }

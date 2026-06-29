@@ -17,7 +17,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 
-const WORKSPACE_META = { id: 'O-SEC-001', name: 'Sceau' };
+const WORKSPACE_META = { id: 'O-SEC-001', name: 'Missive' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. brainstorming.js).
 const API_BASE = (typeof window !== 'undefined' && window.__KS_API_BASE__) || 'https://keystone-os-api.keystone-os.workers.dev';
 
@@ -152,17 +152,17 @@ function _render() {
 
 function _tabs(active) {
   return `<div class="sceau-tabs">
-    <button class="sceau-tab ${active === 'list' ? 'on' : ''}" data-act="tab-secrets">Sceaux</button>
+    <button class="sceau-tab ${active === 'list' ? 'on' : ''}" data-act="tab-secrets">Missives</button>
     <button class="sceau-tab ${active === 'tokens' ? 'on' : ''}" data-act="tab-tokens">Jetons réutilisables</button>
   </div>`;
 }
 
 const STATUS = {
-  scelle:  { label: 'Scellé',   cls: 'ok' },
-  detruit: { label: 'Détruit',  cls: 'dead' },
-  expire:  { label: 'Expiré',   cls: 'muted' },
+  scelle:  { label: 'Scellée',   cls: 'ok' },
+  detruit: { label: 'Détruite',  cls: 'dead' },
+  expire:  { label: 'Expirée',   cls: 'muted' },
   init:    { label: 'Brouillon', cls: 'muted' },
-  lu:      { label: 'Lu',       cls: 'muted' },
+  lu:      { label: 'Lue',       cls: 'muted' },
 };
 
 function _renderList(main) {
@@ -192,12 +192,12 @@ function _renderList(main) {
     ${_tabs('list')}
     <div class="sceau-head">
       <div>
-        <h1>Vos sceaux</h1>
-        <p class="sceau-sub">Un secret scellé se lit une fois, puis s'autodétruit. Même nous ne pouvons pas le lire.</p>
+        <h1>Vos missives</h1>
+        <p class="sceau-sub">Une missive scellée se lit une fois, puis s'autodétruit. Même nous ne pouvons pas la lire.</p>
       </div>
-      <button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Nouveau sceau</button>
+      <button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Nouvelle missive</button>
     </div>
-    ${_items.length ? `<div class="sceau-list">${rows}</div>` : `<div class="sceau-empty">${icon('shield-check', 40)}<p>Aucun sceau pour l'instant.</p><button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Créer le premier</button></div>`}
+    ${_items.length ? `<div class="sceau-list">${rows}</div>` : `<div class="sceau-empty">${icon('shield-check', 40)}<p>Aucune missive pour l'instant.</p><button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Créer la première</button></div>`}
     <div id="sceau-qrslot"></div>
   `;
 }
@@ -242,7 +242,7 @@ function _renderCreate(main) {
   main.innerHTML = `
     <div class="sceau-form-wrap">
       <button class="sceau-link-back" data-act="tolist">${icon('chevron-left', 18)} Retour</button>
-      <h1>${_tokenTarget ? 'Recharger le jeton' : 'Nouveau sceau'}</h1>
+      <h1>${_tokenTarget ? 'Recharger le jeton' : 'Nouvelle missive'}</h1>
       <p class="sceau-sub">${_tokenTarget ? 'Le nouveau secret remplacera l\'ancien sur ce jeton — le lien et la puce restent identiques.' : 'Collez le secret à transmettre. Il est chiffré sur votre appareil — il ne quitte jamais cette page en clair.'}</p>
       <form data-form="create">
         <label class="sceau-label" for="sceau-secret">Secret à transmettre</label>
@@ -293,7 +293,7 @@ function _renderResult(main) {
 
   main.innerHTML = `
     <div class="sceau-form-wrap">
-      <div class="sceau-success">${icon('shield-check', 44)}<h1>${r.empty ? 'Jeton créé' : 'Sceau créé'}</h1></div>
+      <div class="sceau-success">${icon('sceau', 44)}<h1>${r.empty ? 'Jeton créé' : 'Missive créée'}</h1></div>
       <p class="sceau-sub">${r.empty ? 'Votre jeton réutilisable est prêt.' : 'Transmettez ces deux éléments au destinataire — idéalement par deux canaux différents.'}</p>
 
       <div class="sceau-card">
@@ -307,7 +307,7 @@ function _renderResult(main) {
         ${emptyNote}
       </div>
       ${passCard}
-      <button class="sceau-btn primary" data-act="tolist">Terminé</button>
+      <button class="sceau-btn primary big" data-act="tolist">Terminé</button>
     </div>`;
   const qel = main.querySelector('#sceau-qr');
   if (qel && r.url) _renderQr(r.url, qel);
@@ -393,7 +393,7 @@ async function _create() {
 }
 
 async function _burn(id, btn) {
-  if (!confirm('Détruire ce sceau définitivement ? Le destinataire ne pourra plus l\'ouvrir.')) return;
+  if (!confirm('Détruire cette missive définitivement ? Le destinataire ne pourra plus l\'ouvrir.')) return;
   try { await _api(`/${id}`, { method: 'DELETE' }); _load(); }
   catch (e) { _toast(e.message); }
 }

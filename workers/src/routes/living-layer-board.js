@@ -661,12 +661,12 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
   // Sceau (S5) : accusé de lecture — un secret a été ouvert (esprit Snap).
   if (sceau.opened7d > 0) {
     candidates.push({
-      text:  `${sceau.opened7d} sceau${sceau.opened7d > 1 ? 'x' : ''} ouvert${sceau.opened7d > 1 ? 's' : ''} cette semaine.`,
+      text:  `${sceau.opened7d} missive${sceau.opened7d > 1 ? 's' : ''} ouverte${sceau.opened7d > 1 ? 's' : ''} cette semaine.`,
       score: 72, topic: 'sceau',
     });
   } else if (sceau.active > 0) {
     candidates.push({
-      text:  `${sceau.active} sceau${sceau.active > 1 ? 'x' : ''} en attente d'ouverture.`,
+      text:  `${sceau.active} missive${sceau.active > 1 ? 's' : ''} en attente d'ouverture.`,
       score: 44, topic: 'sceau',
     });
   }
@@ -1006,7 +1006,7 @@ function _buildAlert(sensors) {
   if (sceau.intercepted24h > 0) {
     return {
       key: `sceau-intercept:${sceau.intercepted24h}`,
-      text: `${sceau.intercepted24h} sceau${sceau.intercepted24h > 1 ? 'x' : ''} détruit${sceau.intercepted24h > 1 ? 's' : ''} après plusieurs essais ratés — possible interception.`,
+      text: `${sceau.intercepted24h} missive${sceau.intercepted24h > 1 ? 's' : ''} détruite${sceau.intercepted24h > 1 ? 's' : ''} après plusieurs essais ratés — possible interception.`,
     };
   }
   if (sentinel.down > 0) {

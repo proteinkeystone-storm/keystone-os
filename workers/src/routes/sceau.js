@@ -95,7 +95,7 @@ export async function handleSceauInit(request, env) {
   const origin = getAllowedOrigin(env, request);
   const { tenant, entitled } = await _resolveAuth(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
-  if (!entitled) return err('Sceau est réservé aux formules Max pendant la beta.', 403, origin);
+  if (!entitled) return err('Missive est réservée aux formules Max pendant la beta.', 403, origin);
 
   const body = await parseBody(request);
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
@@ -355,7 +355,7 @@ export async function handleTokenCreate(request, env) {
   const origin = getAllowedOrigin(env, request);
   const { tenant, entitled } = await _resolveAuth(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
-  if (!entitled) return err('Sceau est réservé aux formules Max pendant la beta.', 403, origin);
+  if (!entitled) return err('Missive est réservée aux formules Max pendant la beta.', 403, origin);
   const body = await parseBody(request);
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
 

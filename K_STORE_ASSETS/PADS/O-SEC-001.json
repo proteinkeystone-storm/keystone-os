@@ -3,7 +3,7 @@
   "padKey": null,
   "type": "artifact",
   "ui_kind": "fullscreen",
-  "title": "Sceau",
+  "title": "Missive",
   "subtitle": "Transmettez un secret qui se lit une fois, puis s’autodétruit",
   "category": "SECURITE",
   "icon": "sceau",
@@ -11,5 +11,5 @@
   "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nTransmission de secret usage-unique, scellée, chiffrée de bout en bout (E2E) et gatée par un OPRF qui meurt après quelques essais. Le serveur est AVEUGLE (ne stocke que du chiffré). Le moteur (app/sceau.js front, workers/src/routes/sceau.js + sceau-page.js backend) est isolé — préfixe sceau- / sec_, routes /api/sceau/ et pages publiques /s/:id (secret direct) et /s/t/:tid (jeton réutilisable). AUCUNE IA (zéro métrage). Crypto : @cloudflare/voprf-ts (VOPRF P-256) auto-hébergé + WebCrypto (HKDF + AES-256-GCM). Spec gelée : SCEAU_CRYPTO_SPEC.md.\nLimites NFC à connaître : l'ÉCRITURE d'une puce exige Android + Chrome (Web NFC) — sur iPhone/desktop, le bouton NFC est indisponible, utiliser le QR ou le lien (toujours proposés en repli). La LECTURE au tap fonctionne sur iPhone récent (lecture d'URL en arrière-plan) comme Android. Jeton réutilisable = on écrit la puce UNE fois (URL /s/t/:tid stable) puis on recharge le secret côté serveur sans la retoucher.\nPour modifier le comportement : éditer le code de l'artefact directement.",
   "fields": [],
   "system_prompt": "",
-  "longDesc": "Sceau transmet un secret — mot de passe, code, information sensible — via un lien, un QR ou une puce NFC. Le contenu est chiffré de bout en bout sur votre appareil : même nous ne pouvons pas le lire. Le destinataire l'ouvre avec un code que vous lui transmettez par un autre canal, le message se lit une seule fois, puis s'autodétruit — et meurt définitivement après quelques essais ratés. Zéro stockage en clair, aucune dépendance tierce au moment de lire. Idéal pour partager un secret sans le laisser traîner dans une messagerie."
+  "longDesc": "Missive transmet un secret — mot de passe, code, information sensible — via un lien, un QR ou une puce NFC. Le contenu est chiffré de bout en bout sur votre appareil : même nous ne pouvons pas le lire. Le destinataire l'ouvre avec un code que vous lui transmettez par un autre canal, le message se lit une seule fois, puis s'autodétruit — et meurt définitivement après quelques essais ratés. Zéro stockage en clair, aucune dépendance tierce au moment de lire. Idéal pour partager un secret sans le laisser traîner dans une messagerie."
 }

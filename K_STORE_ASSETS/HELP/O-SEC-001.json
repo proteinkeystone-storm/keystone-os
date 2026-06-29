@@ -1,11 +1,11 @@
 {
-  "title": "Sceau",
-  "tldr": "Sceau transmet un secret — mot de passe, code, information sensible — qui se lit une seule fois puis s'autodétruit. Le contenu est chiffré sur votre appareil : même nous ne pouvons pas le lire. Vous partagez un lien (ou un QR, ou une puce NFC) et, par un autre canal, un code de déverrouillage. Au-delà de quelques essais ratés, le sceau meurt définitivement.",
+  "title": "Missive",
+  "tldr": "Missive transmet un secret — mot de passe, code, information sensible — qui se lit une seule fois puis s'autodétruit. Le contenu est chiffré sur votre appareil : même nous ne pouvons pas le lire. Vous partagez un lien (ou un QR, ou une puce NFC) et, par un autre canal, un code de déverrouillage. Au-delà de quelques essais ratés, la missive meurt définitivement.",
   "key_points": [
-    "Créer un sceau : collez le secret, choisissez le nombre d'essais et l'expiration, puis « Sceller ». Tout est chiffré sur votre appareil — le serveur ne voit jamais le contenu en clair.",
+    "Créer une missive : collez le secret, choisissez le nombre d'essais et l'expiration, puis « Sceller ». Tout est chiffré sur votre appareil — le serveur ne voit jamais le contenu en clair.",
     "Deux éléments à transmettre, par deux canaux différents : le lien (ou le QR / la puce NFC) d'un côté, et le code de déverrouillage de l'autre. Le code n'est affiché qu'une fois et n'est pas récupérable — notez-le ou copiez-le avant de fermer.",
-    "Lecture unique : le destinataire ouvre le lien, saisit le code, lit le message — puis le sceau se referme. Vous êtes averti quand il a été ouvert (dans la barre d'ambiance du tableau de bord).",
-    "Autodestruction : après le nombre d'essais choisi (3 par défaut, ou 1 pour un usage strict), le sceau meurt — plus personne ne peut l'ouvrir, même avec le bon code. Si un sceau meurt sur des essais ratés sans avoir été lu, une alerte « possible interception » s'affiche.",
+    "Lecture unique : le destinataire ouvre le lien, saisit le code, lit le message — puis la missive se referme. Vous êtes averti quand elle a été ouverte (dans la barre d'ambiance du tableau de bord).",
+    "Autodestruction : après le nombre d'essais choisi (3 par défaut, ou 1 pour un usage strict), la missive meurt — plus personne ne peut l'ouvrir, même avec le bon code. Si une missive meurt sur des essais ratés sans avoir été lue, une alerte « possible interception » s'affiche.",
     "Jetons réutilisables : créez un objet physique (puce NFC ou QR) que vous écrivez une seule fois, puis rechargez avec un nouveau secret autant de fois que vous voulez — sans jamais retoucher l'objet.",
     "NFC : l'écriture d'une puce demande un téléphone Android avec Chrome. Sur iPhone et ordinateur, utilisez le QR ou le lien (toujours proposés). La lecture au contact fonctionne sur iPhone récent comme sur Android."
   ],
@@ -24,15 +24,15 @@
     },
     {
       "q": "« Lu une fois » : et si quelqu'un filme l'écran ?",
-      "a": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Sceau protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
+      "a": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
     },
     {
-      "q": "Sceau consomme-t-il des crédits IA ?",
-      "a": "Non. Sceau n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+      "q": "Missive consomme-t-elle des crédits IA ?",
+      "a": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
     }
   ],
   "shortcuts": [
-    { "keys": "Nouveau sceau", "desc": "Créer et sceller un secret" },
+    { "keys": "Nouvelle missive", "desc": "Créer et sceller un secret" },
     { "keys": "Jetons réutilisables", "desc": "Onglet des objets physiques rechargeables" },
     { "keys": "Recharger", "desc": "Mettre un nouveau secret sur un jeton existant" },
     { "keys": "Échap", "desc": "Revenir à la liste, puis fermer le workspace" }
