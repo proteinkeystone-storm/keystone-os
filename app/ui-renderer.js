@@ -5676,6 +5676,23 @@ function _padReadoutData(id, m) {
                                    sub: conn > 1 ? 'connectés' : 'connecté', signal: 0, quiet: true };
             return null;
         }
+        case 'A-COM-003': {                       // Brainstorming — bibliothèque locale
+            // Signal CLIENT (localStorage ks_brainstorming_sessions, max 20) :
+            // la biblio Brainstorming vit en local, AUCUN capteur worker. On
+            // surface d'abord les sessions a conclure (sans synthese), sinon
+            // le total. Quiet (travail local perso), pas de halo nouveaute.
+            let sessions = [];
+            try {
+                const a = JSON.parse(localStorage.getItem('ks_brainstorming_sessions') || '[]');
+                if (Array.isArray(a)) sessions = a;
+            } catch (e) { sessions = []; }
+            const total = sessions.length;
+            if (total <= 0) return null;
+            const draft = sessions.filter(s => s && !s.synthesis).length;
+            if (draft > 0) return { label: 'À conclure', num: String(draft),
+                                    sub: draft > 1 ? 'sessions' : 'session', signal: 0, quiet: true };
+            return { label: 'Sessions', num: String(total), sub: '', signal: 0, quiet: true };
+        }
         case 'A-COM-005': {                       // Ghost Writer — conso vs quota
             // Conso PROPRE du jour (pas un signal externe) → readout informatif
             // SANS halo nouveauté (quiet) : on ne « réveille » pas le pad pour
