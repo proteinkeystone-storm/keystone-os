@@ -5634,11 +5634,24 @@ function _padReadoutData(id, m) {
             if (v <= 0) return null;
             return { label: 'Rappels', num: String(v), sub: '', signal: v };
         }
+        case 'A-COM-005': {                       // Ghost Writer — conso vs quota
+            // Conso PROPRE du jour (pas un signal externe) → readout informatif
+            // SANS halo nouveauté (quiet) : on ne « réveille » pas le pad pour
+            // une action que l'utilisateur a faite lui-même.
+            const used = +m.ghostUsed || 0;
+            if (used <= 0) return null;
+            const quota = (m.ghostQuota == null) ? null : (+m.ghostQuota || 0);
+            const num = (quota && quota > 0) ? (used + '/' + quota) : String(used);
+            return { label: 'Ghost 24h', num, sub: '', signal: used, quiet: true };
+        }
         case 'O-GEO-001': {                       // Sentinel — disponibilité
             const down = +m.sitesDown || 0;
             if (down <= 0) return null;            // tout en ligne → silence
+            const total  = +m.sitesTotal || 0;
+            const online = Math.max(0, total - down);
             return { label: 'Disponibilité', pip: true,
                      pipText: down > 1 ? (down + ' hors ligne') : '1 hors ligne',
+                     pipSub: total > 0 ? (online + '/' + total + ' en ligne') : '',
                      incident: true, signal: down };
         }
     }
@@ -5693,11 +5706,15 @@ function _paintPadReadouts(metrics) {
                 : '';
             valHtml = `<span class="pad-rd-num">${E(rd.num)}</span>${sub}`;
         }
-        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>`;
+        // Ligne secondaire optionnelle (ex. Sentinel : « 2/3 en ligne »).
+        const pipSubHtml = rd.pipSub
+            ? `<span class="pad-rd-pip pad-rd-pipsub"><span class="pad-rd-dot" style="background:var(--green)"></span>${E(rd.pipSub)}</span>`
+            : '';
+        host.innerHTML = `<span class="pad-rd-label">${E(rd.label)}</span><span class="pad-rd-val">${valHtml}</span>${pipSubHtml}`;
 
         if (rd.incident) {
             card.classList.add('pad-alert');
-        } else {
+        } else if (!rd.quiet) {
             const prev   = +seen[card.getAttribute('data-id')];
             const isNew  = !Number.isFinite(prev) ? (rd.signal > 0) : (rd.signal > prev);
             if (isNew) card.classList.add('pad-new');
