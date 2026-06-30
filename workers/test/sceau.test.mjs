@@ -514,7 +514,7 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   ok(captured && captured.url.includes('api.resend.com'), 'appel Resend émis');
   ok(captured && captured.body.to.includes('dest@exemple.com'), 'destinataire correct');
   ok(captured && captured.body.html.includes(PASS), 'le code est dans l\'email');
-  ok(captured && captured.body.html.includes('/s/' + shortId), 'le lien (reconstruit serveur) est dans l\'email');
+  ok(captured && !captured.body.html.includes('/s/' + shortId) && !/href=/.test(captured.body.html), 'le LIEN n\'est PAS dans l\'email (séparation 2 canaux : code seul)');
   // Le code N'EST PAS stocké en base
   const raw = env.DB._db.prepare('SELECT * FROM sec_secrets WHERE short_id=?').get(shortId);
   ok(!Object.values(raw).some(v => typeof v === 'string' && v.includes(PASS)), 'le code n\'est JAMAIS stocké en base');

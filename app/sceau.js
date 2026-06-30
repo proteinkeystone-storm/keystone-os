@@ -303,7 +303,7 @@ function _renderCreate(main) {
         ${_unlockMode === 'email' ? `
           <label class="sceau-label" for="sceau-email">Email du destinataire</label>
           <input id="sceau-email" class="sceau-input" type="email" maxlength="200" autocomplete="off" placeholder="destinataire@exemple.com" inputmode="email">
-          <p class="sceau-note danger">${icon('alert-triangle', 14)} Mode <strong>plus faible</strong> : le code transite par notre serveur pour l'email — nous le voyons le temps de l'envoi (nous ne le stockons pas). À réserver aux destinataires sans autre canal. Les modes « Code généré » et « Question/réponse » gardent le serveur aveugle.</p>
+          <p class="sceau-note danger">${icon('alert-triangle', 14)} Mode <strong>plus faible</strong> : le code transite par notre serveur pour l'email — nous le voyons le temps de l'envoi (jamais stocké). <strong>Seul le code part par email</strong> ; partagez le lien (ou le QR) par un <strong>autre canal</strong> (SMS, messagerie…) pour garder les deux séparés. Les modes « Code généré » et « Question/réponse » gardent le serveur aveugle.</p>
         ` : ''}
 
         <div class="sceau-row2">
@@ -426,7 +426,7 @@ function _renderResult(main) {
   const emptyNote = r.empty ? `<p class="sceau-note">${icon('radio', 14)} Écrivez ce lien sur votre puce NFC (ou imprimez le QR) maintenant. Vous pourrez ensuite le <strong>recharger</strong> avec un nouveau secret autant de fois que vous voulez, sans retoucher l'objet.</p>` : '';
   const emailNote = r.emailTo
     ? (r.emailSent
-        ? `<div class="sceau-card"><p class="sceau-note">${icon('mail', 14)} Code envoyé à <strong>${_esc(r.emailTo)}</strong>. Le lien et le code sont aussi affichés ci-dessus en repli.</p></div>`
+        ? `<div class="sceau-card"><p class="sceau-note">${icon('mail', 14)} <strong>Code</strong> envoyé à <strong>${_esc(r.emailTo)}</strong>. Il reste à transmettre le <strong>lien</strong> ci-dessus (ou le QR) par un autre canal — SMS, messagerie… Le code est aussi affiché en repli si besoin.</p></div>`
         : `<div class="sceau-card warn"><p class="sceau-note danger">${icon('alert-triangle', 14)} L'email n'a pas pu partir (${_esc(r.emailErr || 'erreur')}). Transmettez le lien et le code ci-dessus manuellement.</p></div>`)
     : '';
 
@@ -439,8 +439,13 @@ function _renderResult(main) {
         <div class="sceau-card-lbl">${linkLbl}</div>
         <div class="sceau-linkrow"><code class="sceau-code">${_esc(r.url)}</code><button class="sceau-iconbtn" data-act="copyurl" title="Copier">${icon('copy', 17)}</button></div>
         <div class="sceau-qr" id="sceau-qr"></div>
+        <div class="sceau-qr-export">
+          <span class="sceau-qr-export-lbl">Exporter le QR</span>
+          <button class="sceau-btn" data-act="qr-export" data-fmt="png">${icon('download', 15)} PNG</button>
+          <button class="sceau-btn" data-act="qr-export" data-fmt="svg">${icon('download', 15)} SVG</button>
+          <button class="sceau-btn" data-act="qr-export" data-fmt="pdf">${icon('download', 15)} PDF</button>
+        </div>
         <div class="sceau-nfcrow">
-          <button class="sceau-btn" data-act="qr-dl">${icon('download', 16)} Télécharger le QR</button>
           ${(typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share">${icon('share', 16)} Partager</button>` : ''}
           <button class="sceau-btn" data-act="nfc">${icon('radio', 16)} Puce NFC</button>
         </div>
@@ -464,32 +469,73 @@ async function _renderQr(text, el) {
   } catch (_) { el.innerHTML = `<span class="sceau-nfc-msg">QR indisponible — utilisez le lien.</span>`; }
 }
 
-// Rasterise le QR en PNG (fond blanc) — réutilisable pour download + partage.
-async function _qrPngBlob(text) {
+// ── Moteur d'export QR (PNG / SVG / PDF) ────────────────────────
+async function _qrObj(text) {
   const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
   const qrcode = mod.default || mod;
   const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
-  const gifUrl = qr.createDataURL(10, 4); // GIF data-URI, net (pixel-art), même origine
+  return qr;
+}
+function _qrSvgString(qr) {
+  // SVG vectoriel autonome (impression nette à toute taille). createSvgTag
+  // inclut déjà xmlns ; on préfixe le prologue XML pour un .svg standalone.
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
+}
+async function _qrCanvas(qr) {
+  const gifUrl = qr.createDataURL(12, 4); // GIF net (pixel-art), même origine → canvas non « tainted »
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = gifUrl; });
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
   const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0);
-  return await new Promise(res => c.toBlob(res, 'image/png'));
+  return c;
 }
-async function _downloadQr(url, btn) {
-  if (!url) return;
+function _downloadBlob(blob, filename) {
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = u; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+const _QR_EXT = { png: 'png', svg: 'svg', pdf: 'pdf' };
+async function _exportQr(url, fmt, btn) {
+  if (!url || !_QR_EXT[fmt]) return;
+  const orig = btn ? btn.innerHTML : null;
+  if (btn) btn.innerHTML = `${icon('refresh', 15)} …`;
   try {
-    const blob = await _qrPngBlob(url);
-    const u = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = u; a.download = 'missive-qr.png';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 4000);
-    if (btn) { const o = btn.innerHTML; btn.innerHTML = `${icon('check', 16)} Téléchargé`; setTimeout(() => btn.innerHTML = o, 1600); }
-  } catch (_) { _toast('Téléchargement du QR impossible.'); }
+    const qr = await _qrObj(url);
+    let blob;
+    if (fmt === 'svg') {
+      blob = new Blob([_qrSvgString(qr)], { type: 'image/svg+xml' });
+    } else if (fmt === 'png') {
+      const c = await _qrCanvas(qr); blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    } else { // pdf
+      const c = await _qrCanvas(qr);
+      const png = c.toDataURL('image/png');
+      const jspdf = await import('https://esm.sh/jspdf@2.5.1');
+      const JsPDF = jspdf.jsPDF || jspdf.default || (jspdf.default && jspdf.default.jsPDF);
+      const doc = new JsPDF({ unit: 'pt', format: 'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+      const size = 280, x = (pw - size) / 2, y = 90;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(20);
+      doc.text('Missive sécurisée', pw / 2, 64, { align: 'center' });
+      doc.addImage(png, 'PNG', x, y, size, size);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90);
+      doc.text('Scannez ce code pour ouvrir la missive (lisible une seule fois).', pw / 2, y + size + 28, { align: 'center' });
+      doc.setFontSize(9);
+      doc.text(url, pw / 2, y + size + 46, { align: 'center', maxWidth: pw - 80 });
+      blob = doc.output('blob');
+    }
+    _downloadBlob(blob, `missive-qr.${_QR_EXT[fmt]}`);
+    if (btn) { btn.innerHTML = `${icon('check', 15)} ${fmt.toUpperCase()}`; setTimeout(() => { btn.innerHTML = orig; }, 1600); }
+  } catch (_) {
+    if (btn) btn.innerHTML = orig;
+    _toast(`Export ${fmt.toUpperCase()} impossible.`);
+  }
 }
 async function _shareQr(url, btn) {
   if (!url || typeof navigator === 'undefined' || !navigator.share) { return _copy(url, btn); }
   try {
-    const blob = await _qrPngBlob(url);
+    const qr = await _qrObj(url);
+    const c = await _qrCanvas(qr);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     const file = new File([blob], 'missive-qr.png', { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: 'Missive sécurisée', text: url });
@@ -521,8 +567,8 @@ function _onClick(e) {
   if (act === 'unlock-code')  { _unlockMode = 'code';  _render(); return; }
   if (act === 'unlock-qa')    { _unlockMode = 'qa';    _render(); return; }
   if (act === 'unlock-email') { _unlockMode = 'email'; _render(); return; }
-  if (act === 'qr-dl')    return _downloadQr(t.dataset.url || _result?.url, t);
-  if (act === 'qr-share') return _shareQr(t.dataset.url || _result?.url, t);
+  if (act === 'qr-export') return _exportQr(t.dataset.url || _result?.url, t.dataset.fmt, t);
+  if (act === 'qr-share')  return _shareQr(t.dataset.url || _result?.url, t);
   if (act === 'tolist') { _view = _tokenTarget ? 'tokens' : 'list'; _result = null; _tokenTarget = null; (_view === 'tokens' ? _loadTokens : _load)(); return; }
   if (act === 'link')   return _copyLink(id, t);
   if (act === 'qr')     return _toggleRowQr(`${API_BASE}/s/${id}`, id);
@@ -615,7 +661,7 @@ async function _create() {
     let emailSent = false, emailErr = null;
     if (emailTo) {
       try {
-        await _api(`/${init.short_id}/email`, { method: 'POST', body: { to: emailTo, code: passphrase, token_id: _tokenTarget || undefined } });
+        await _api(`/${init.short_id}/email`, { method: 'POST', body: { to: emailTo, code: passphrase } });
         emailSent = true;
       } catch (e) { emailErr = e.message || 'Envoi impossible'; }
     }
@@ -666,9 +712,16 @@ function _toggleRowQr(url, key) {
   if (!slot) return;
   if (slot.dataset.open === key) { slot.innerHTML = ''; slot.dataset.open = ''; return; }
   slot.dataset.open = key;
-  const nfc = ('NDEFReader' in window) ? `<button class="sceau-btn" data-act="nfc-url" data-url="${_esc(url)}">${icon('radio', 16)} Puce NFC</button>` : '';
-  const share = (typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share" data-url="${_esc(url)}">${icon('share', 16)} Partager</button>` : '';
-  slot.innerHTML = `<div class="sceau-qr-pop"><div class="sceau-qr" id="sceau-rowqr"></div><code class="sceau-code">${_esc(url)}</code><div class="sceau-nfcrow"><button class="sceau-btn" data-act="qr-dl" data-url="${_esc(url)}">${icon('download', 16)} Télécharger le QR</button>${share}${nfc}</div><span class="sceau-nfc-msg" id="sceau-rowqr-msg"></span></div>`;
+  const u = _esc(url);
+  const nfc = ('NDEFReader' in window) ? `<button class="sceau-btn" data-act="nfc-url" data-url="${u}">${icon('radio', 16)} Puce NFC</button>` : '';
+  const share = (typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share" data-url="${u}">${icon('share', 16)} Partager</button>` : '';
+  slot.innerHTML = `<div class="sceau-qr-pop"><div class="sceau-qr" id="sceau-rowqr"></div><code class="sceau-code">${u}</code>
+    <div class="sceau-qr-export"><span class="sceau-qr-export-lbl">Exporter le QR</span>
+      <button class="sceau-btn" data-act="qr-export" data-fmt="png" data-url="${u}">${icon('download', 15)} PNG</button>
+      <button class="sceau-btn" data-act="qr-export" data-fmt="svg" data-url="${u}">${icon('download', 15)} SVG</button>
+      <button class="sceau-btn" data-act="qr-export" data-fmt="pdf" data-url="${u}">${icon('download', 15)} PDF</button>
+    </div>
+    <div class="sceau-nfcrow">${share}${nfc}</div><span class="sceau-nfc-msg" id="sceau-rowqr-msg"></span></div>`;
   _renderQr(url, slot.querySelector('#sceau-rowqr'));
 }
 
