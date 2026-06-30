@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/web-manifest-combined.json",
   "name": "Keystone OS",
   "short_name": "Keystone",
-  "description": "Votre pôle d'intelligence artificielle pour la promotion immobilière.",
+  "description": "Vos outils métier — QR dynamiques, formulaires, agent IA, audit web, réseaux sociaux — dans un OS modulaire et souverain.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "/app?ks_launch=1",
