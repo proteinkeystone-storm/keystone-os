@@ -57,6 +57,17 @@
 .sceau-input,.sceau-textarea{width:100%;padding:12px 14px;border:1px solid var(--sc-line);border-radius:12px;background:#0d1320;color:var(--sc-ink);font-size:15px;outline:none;transition:border-color .15s;font-family:inherit}
 .sceau-textarea{resize:vertical;min-height:110px}
 .sceau-input:focus,.sceau-textarea:focus{border-color:var(--sc-accent)}
+/* ── Bascule Texte / Vocal + enregistreur ── */
+.sceau-modesw{display:inline-flex;gap:4px;background:#0d1320;border:1px solid var(--sc-line);border-radius:12px;padding:4px;margin-bottom:4px}
+.sceau-mode{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:0;border-radius:9px;background:none;color:var(--sc-muted);font:600 13.5px -apple-system,sans-serif;cursor:pointer}
+.sceau-mode.on{background:var(--sc-accent);color:#fff}
+.sceau-rec{display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:#0d1320;border:1px solid var(--sc-line);border-radius:12px;padding:16px}
+.sceau-rec-go{background:var(--sc-accent);border-color:transparent;color:#fff}
+.sceau-rec-live{display:flex;align-items:center;gap:10px;font:600 16px ui-monospace,Menlo,monospace;color:var(--sc-ink)}
+.sceau-rec-dot{width:12px;height:12px;border-radius:50%;background:var(--sc-dead);animation:sceau-pulse 1s ease-in-out infinite}
+@keyframes sceau-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sceau-rec-audio{width:100%}
+
 .sceau-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 /* display:block (PAS flex) : sinon chaque nœud texte/strong devient un flex-item
    et la phrase se disloque. L'icône reste inline au fil du texte. */

@@ -29,6 +29,7 @@ function makeD1() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(join(__dir, '../migrations/008_sceau.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/009_sceau_tokens.sql'), 'utf8'));
+  db.exec(readFileSync(join(__dir, '../migrations/010_sceau_blob.sql'), 'utf8'));
   return {
     _db: db,
     prepare(sql) {
@@ -44,7 +45,15 @@ function makeD1() {
 }
 
 const ADMIN = 'test-admin-secret';
-const env = { DB: null, KS_ADMIN_SECRET: ADMIN, KS_ENCRYPTION_KEY: 'unit-test-encryption-key-32bytes!!', KS_JWT_SECRET: 'unit-test-jwt-secret', KS_ALLOWED_ORIGIN: '*' };
+// Mock R2 (env.HELP_MEDIA) en mémoire pour les chiffrés audio/fichier (S8).
+function makeR2() {
+  const m = new Map();
+  return { _m: m,
+    async put(k, v) { m.set(k, typeof v === 'string' ? v : Buffer.from(v).toString()); },
+    async get(k) { return m.has(k) ? { text: async () => m.get(k) } : null; },
+    async delete(k) { m.delete(k); } };
+}
+const env = { DB: null, HELP_MEDIA: null, KS_ADMIN_SECRET: ADMIN, KS_ENCRYPTION_KEY: 'unit-test-encryption-key-32bytes!!', KS_JWT_SECRET: 'unit-test-jwt-secret', KS_ALLOWED_ORIGIN: '*' };
 const auth = { Authorization: 'Bearer ' + ADMIN, 'Content-Type': 'application/json' };
 const req = (method, body) => new Request('https://x.test/api', { method, headers: auth, body: body ? JSON.stringify(body) : undefined });
 const pubReq = (method, body) => new Request('https://x.test/s', { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -322,6 +331,43 @@ env.DB = makeD1();
   const s = await createSealed(SECRET, PASS);
   const r = await readSecret(s.shortId, s.oprfPub, PASS);
   ok(r.ok, 'lecture publique ouverte (aucune formule requise)');
+}
+
+console.log('\nK. Missive audio (chiffré binaire en R2, S8)');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  const init = await (await handleSceauInit(req('POST', { label: 'Vocal' }), env)).json();
+  const client = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+  const [fin, ereq] = await client.blind([enc.encode(PASS)]);
+  const ev = await (await callEval(handleSceauEvalCreate, init.short_id, b64e(ereq.serialize()), true)).json();
+  const [out] = await client.finalize(fin, Evaluation.deserialize(SUITE, b64d(ev.evaluation)));
+  const key = await aesKeyFromOprf(out);
+  const audioBytes = Uint8Array.from({ length: 1000 }, (_, i) => (i * 7) % 256); // faux vocal
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, audioBytes));
+  const seal = await handleSceauSeal(req('POST', { ciphertext: b64e(ct), iv: b64e(iv), kind: 'audio', mime: 'audio/mp4' }), env, init.short_id);
+  const sj = await seal.json();
+  ok(seal.status === 200 && sj.kind === 'audio', 'seal audio -> 200 kind=audio');
+  const raw = env.DB._db.prepare('SELECT ciphertext, blob_key, kind, mime FROM sec_secrets WHERE short_id=?').get(init.short_id);
+  ok(raw.ciphertext === null && raw.blob_key === 'sec/' + init.short_id && raw.kind === 'audio' && raw.mime === 'audio/mp4', 'chiffré en R2 (blob_key), pas inline');
+  ok(env.HELP_MEDIA._m.has('sec/' + init.short_id), 'objet présent dans R2');
+  const meta = await (await handleSceauMeta(pubReq('GET'), env, init.short_id)).json();
+  ok(meta.kind === 'audio' && meta.mime === 'audio/mp4', 'meta -> kind/mime audio');
+  // lecture : blob depuis R2 + déchiffrement -> octets exacts
+  const cl = new VOPRFClient(SUITE, b64d(meta.oprf_pub));
+  const [f2, r2e] = await cl.blind([enc.encode(PASS)]);
+  const blob = await (await handleSceauBlob(pubReq('GET'), env, init.short_id)).json();
+  const ev2 = await (await callEval(handleSceauEval, init.short_id, b64e(r2e.serialize()), false)).json();
+  const [o2] = await cl.finalize(f2, Evaluation.deserialize(SUITE, b64d(ev2.evaluation)));
+  const k2 = await aesKeyFromOprf(o2);
+  const dec2 = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, k2, b64d(blob.ciphertext)));
+  ok(blob.kind === 'audio' && dec2.length === 1000 && dec2[7] === 49, 'lecture R2 -> octets audio déchiffrés exacts');
+  await handleSceauDelete(req('DELETE'), env, init.short_id);
+  ok(!env.HELP_MEDIA._m.has('sec/' + init.short_id), 'burn -> objet R2 supprimé');
+  // un texte court reste inline (pas de R2)
+  const t = await createSealed('petit texte', PASS);
+  const tr = env.DB._db.prepare('SELECT ciphertext, blob_key, kind FROM sec_secrets WHERE short_id=?').get(t.shortId);
+  ok(tr.ciphertext && !tr.blob_key && tr.kind === 'text', 'texte court reste inline D1 (pas R2)');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

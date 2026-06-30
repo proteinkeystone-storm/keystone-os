@@ -86,6 +86,18 @@ function _publicJson(data, status, origin) {
   return r;
 }
 
+// ── Chiffré volumineux (audio/fichier) en R2 (S8) ──────────────
+// Le texte reste inline D1 (atomique). Au-delà du seuil OU pour un kind
+// non-text, le chiffré (base64, opaque) part en R2. La clé R2 = sec/<id>.
+const SEC_INLINE_MAX = 90_000;     // chars b64 → ~67 Ko de clair : au-delà, R2
+const SEC_SEAL_MAX   = 8_000_000;  // chars b64 → ~6 Mo : cap dur (vocal qqs min)
+function _blobKey(shortId) { return `sec/${shortId}`; }
+// Suppression best-effort de l'objet R2 (la sécurité repose sur la mort de la
+// clé OPRF en D1 ; un objet R2 résiduel reste chiffré et illisible).
+async function _destroyBlob(env, blobKey) {
+  if (blobKey) { try { await env.HELP_MEDIA.delete(blobKey); } catch (_) {} }
+}
+
 // ══════════════════════════════════════════════════════════════
 // CRÉATION (privée, JWT) — 3 temps
 // ══════════════════════════════════════════════════════════════
@@ -163,7 +175,11 @@ export async function handleSceauSeal(request, env, shortId) {
   const body = await parseBody(request);
   const { ciphertext, iv } = body;
   if (typeof ciphertext !== 'string' || typeof iv !== 'string') return err('ciphertext/iv requis', 400, origin);
-  if (ciphertext.length > 200_000) return err('Secret trop volumineux', 413, origin); // ~150 Ko de clair
+  if (ciphertext.length > SEC_SEAL_MAX) return err('Secret trop volumineux', 413, origin);
+
+  // kind : 'text' (défaut) | 'audio' | 'file' ; mime du contenu déchiffré.
+  const kind = ['text', 'audio', 'file'].includes(body.kind) ? body.kind : 'text';
+  const mime = typeof body.mime === 'string' ? body.mime.slice(0, 80) : null;
 
   let max = parseInt(body.max_attempts, 10);
   if (!Number.isInteger(max) || max < 1 || max > 10) max = 3;
@@ -175,15 +191,23 @@ export async function handleSceauSeal(request, env, shortId) {
   }
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
 
+  // Texte petit → inline D1 (atomique). Audio/fichier ou volumineux → R2.
+  let inlineCt = ciphertext, blobKey = null;
+  if (kind !== 'text' || ciphertext.length > SEC_INLINE_MAX) {
+    blobKey = _blobKey(shortId);
+    await env.HELP_MEDIA.put(blobKey, ciphertext, { httpMetadata: { contentType: 'text/plain' } });
+    inlineCt = null;
+  }
+
   await env.DB.prepare(
     `UPDATE sec_secrets
-        SET ciphertext = ?, iv = ?, max_attempts = ?, attempts = 0,
+        SET ciphertext = ?, blob_key = ?, iv = ?, kind = ?, mime = ?, max_attempts = ?, attempts = 0,
             expires_at = ?, label = COALESCE(?, label),
             status = 'scelle', sealed_at = datetime('now')
       WHERE short_id = ? AND status = 'init'`
-  ).bind(ciphertext, iv, max, expiresAt, label, shortId).run();
+  ).bind(inlineCt, blobKey, iv, kind, mime, max, expiresAt, label, shortId).run();
 
-  return json({ ok: true, short_id: shortId, status: 'scelle', max_attempts: max, expires_at: expiresAt }, 200, origin);
+  return json({ ok: true, short_id: shortId, status: 'scelle', kind, max_attempts: max, expires_at: expiresAt }, 200, origin);
 }
 
 // GET /api/sceau → liste du tenant (AUCUN matériel sensible exposé).
@@ -214,17 +238,16 @@ export async function handleSceauDelete(request, env, shortId) {
   const tenant = await _secTenant(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
 
+  const pre = await env.DB.prepare('SELECT blob_key FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).first();
   const res = await env.DB.prepare(
     `UPDATE sec_secrets
-        SET ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+        SET ciphertext = NULL, blob_key = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
             status = 'detruit', destroyed_at = datetime('now')
       WHERE short_id = ? AND tenant_id = ? AND status != 'detruit'`
   ).bind(shortId, tenant).run();
 
-  if (!res.meta?.changes) {
-    const exists = await env.DB.prepare('SELECT 1 FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).first();
-    if (!exists) return err('Introuvable', 404, origin);
-  }
+  if (!res.meta?.changes && !pre) return err('Introuvable', 404, origin);
+  if (pre) await _destroyBlob(env, pre.blob_key);
   return json({ ok: true, status: 'detruit' }, 200, origin);
 }
 
@@ -236,19 +259,22 @@ export async function handleSceauDelete(request, env, shortId) {
 export async function handleSceauMeta(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
   const row = await env.DB.prepare(
-    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, expires_at
+    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, blob_key, kind, mime, expires_at
        FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
 
   if (!row) return _publicJson({ error: 'Introuvable' }, 404, origin);
   if (row.status === 'init') return _publicJson({ status: 'absent' }, 404, origin);
 
-  const dead = row.status !== 'scelle' || !row.oprf_key_enc || !row.ciphertext || _expired(row);
+  const hasBlob = row.ciphertext || row.blob_key;
+  const dead = row.status !== 'scelle' || !row.oprf_key_enc || !hasBlob || _expired(row);
   if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
 
   return _publicJson({
     status: 'scelle',
     oprf_pub: row.oprf_pub,
+    kind: row.kind || 'text',
+    mime: row.mime || null,
     attempts_left: Math.max(0, row.max_attempts - row.attempts),
   }, 200, origin);
 }
@@ -260,14 +286,15 @@ export async function handleSceauEval(request, env, shortId) {
   if (typeof body.blinded !== 'string' || body.blinded.length > 1024) return _publicJson({ error: 'blinded invalide' }, 400, origin);
 
   // Expiration paresseuse : un secret échu est traité comme mort.
-  const pre = await env.DB.prepare('SELECT status, expires_at FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+  const pre = await env.DB.prepare('SELECT status, expires_at, blob_key FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
   if (!pre) return _publicJson({ error: 'Introuvable' }, 404, origin);
   if (pre.status === 'init') return _publicJson({ status: 'absent' }, 404, origin);
   if (pre.status === 'scelle' && _expired({ expires_at: pre.expires_at })) {
     await env.DB.prepare(
-      `UPDATE sec_secrets SET status='expire', ciphertext=NULL, oprf_key_enc=NULL, oprf_key_iv=NULL, destroyed_at=datetime('now')
+      `UPDATE sec_secrets SET status='expire', ciphertext=NULL, blob_key=NULL, oprf_key_enc=NULL, oprf_key_iv=NULL, destroyed_at=datetime('now')
         WHERE short_id = ? AND status='scelle'`
     ).bind(shortId).run();
+    await _destroyBlob(env, pre.blob_key);
     return _publicJson({ status: 'detruit' }, 410, origin);
   }
 
@@ -281,7 +308,7 @@ export async function handleSceauEval(request, env, shortId) {
 
   // Relit l'état post-incrément (clé + compteur consolidés).
   const row = await env.DB.prepare(
-    `SELECT oprf_key_enc, oprf_key_iv, attempts, max_attempts FROM sec_secrets WHERE short_id = ?`
+    `SELECT oprf_key_enc, oprf_key_iv, attempts, max_attempts, blob_key FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
 
   let evaluationB64;
@@ -301,9 +328,10 @@ export async function handleSceauEval(request, env, shortId) {
   const reachedMax = row.attempts >= row.max_attempts;
   if (reachedMax) {
     await env.DB.prepare(
-      `UPDATE sec_secrets SET oprf_key_enc = NULL, oprf_key_iv = NULL, status = 'detruit', destroyed_at = datetime('now')
+      `UPDATE sec_secrets SET oprf_key_enc = NULL, oprf_key_iv = NULL, ciphertext = NULL, blob_key = NULL, status = 'detruit', destroyed_at = datetime('now')
         WHERE short_id = ?`
     ).bind(shortId).run();
+    await _destroyBlob(env, row.blob_key);
   }
 
   if (!evaluationB64) return _publicJson({ error: 'Évaluation impossible', attempts_left: Math.max(0, row.max_attempts - row.attempts) }, 400, origin);
@@ -317,14 +345,22 @@ export async function handleSceauEval(request, env, shortId) {
 export async function handleSceauBlob(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
   const row = await env.DB.prepare(
-    `SELECT status, ciphertext, iv, oprf_key_enc, expires_at FROM sec_secrets WHERE short_id = ?`
+    `SELECT status, ciphertext, blob_key, iv, kind, mime, oprf_key_enc, expires_at FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
 
   if (!row) return _publicJson({ error: 'Introuvable' }, 404, origin);
-  const dead = row.status !== 'scelle' || !row.ciphertext || !row.oprf_key_enc || _expired(row);
+  const hasBlob = row.ciphertext || row.blob_key;
+  const dead = row.status !== 'scelle' || !hasBlob || !row.oprf_key_enc || _expired(row);
   if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
 
-  return _publicJson({ ciphertext: row.ciphertext, iv: row.iv }, 200, origin);
+  // Chiffré : inline D1, ou récupéré de R2 (audio/fichier).
+  let ct = row.ciphertext;
+  if (!ct && row.blob_key) {
+    const obj = await env.HELP_MEDIA.get(row.blob_key);
+    if (!obj) return _publicJson({ status: 'detruit' }, 410, origin);
+    ct = await obj.text();
+  }
+  return _publicJson({ ciphertext: ct, iv: row.iv, kind: row.kind || 'text', mime: row.mime || null }, 200, origin);
 }
 
 // POST /s/:id/opened — accusé de lecture (S5). Émis par la page APRÈS un
@@ -334,14 +370,16 @@ export async function handleSceauBlob(request, env, shortId) {
 // RGPD : aucune PII, juste un horodatage. Best-effort (un attaquant ne l'émet pas).
 export async function handleSceauOpened(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
+  const pre = await env.DB.prepare('SELECT blob_key FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
   await env.DB.prepare(
     `UPDATE sec_secrets
         SET read_at = COALESCE(read_at, datetime('now')),
             status = CASE WHEN status = 'scelle' THEN 'lu' ELSE status END,
-            ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+            ciphertext = NULL, blob_key = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
             destroyed_at = COALESCE(destroyed_at, datetime('now'))
       WHERE short_id = ? AND status IN ('scelle','detruit')`
   ).bind(shortId).run();
+  if (pre) await _destroyBlob(env, pre.blob_key);
   return _publicJson({ ok: true }, 200, origin);
 }
 
@@ -424,11 +462,13 @@ export async function handleTokenDelete(request, env, tid) {
   const tok = await env.DB.prepare('SELECT current_short_id FROM sec_tokens WHERE token_id = ? AND tenant_id = ?').bind(tid, tenant).first();
   if (!tok) return err('Jeton introuvable', 404, origin);
   if (tok.current_short_id) {
+    const cur = await env.DB.prepare('SELECT blob_key FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(tok.current_short_id, tenant).first();
     await env.DB.prepare(
-      `UPDATE sec_secrets SET ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+      `UPDATE sec_secrets SET ciphertext = NULL, blob_key = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
               status = 'detruit', destroyed_at = datetime('now')
         WHERE short_id = ? AND tenant_id = ? AND status != 'detruit'`
     ).bind(tok.current_short_id, tenant).run();
+    if (cur) await _destroyBlob(env, cur.blob_key);
   }
   await env.DB.prepare('DELETE FROM sec_tokens WHERE token_id = ? AND tenant_id = ?').bind(tid, tenant).run();
   return json({ ok: true }, 200, origin);
@@ -470,19 +510,27 @@ export async function handleTokenOpened(request, env, tid) {
 // datetime('now') de SQLite (format espacé) : lexicalement 'T' > ' ' fausserait
 // le test. On binde un ISO « maintenant » → comparaison ISO↔ISO correcte.
 export async function sweepExpiredSecrets(env) {
+  const now = _now();
+  // Objets R2 à supprimer (expirés + purgés) — récupérés AVANT les mutations.
+  const toFree = await env.DB.prepare(
+    `SELECT blob_key FROM sec_secrets WHERE blob_key IS NOT NULL AND (
+        (status IN ('init','scelle') AND expires_at IS NOT NULL AND expires_at < ?)
+        OR (status IN ('lu','detruit','expire') AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-90 day'))
+     )`
+  ).bind(now).all();
   const res = await env.DB.prepare(
     `UPDATE sec_secrets
-        SET status = 'expire', ciphertext = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
+        SET status = 'expire', ciphertext = NULL, blob_key = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
             destroyed_at = datetime('now')
       WHERE status IN ('init','scelle') AND expires_at IS NOT NULL AND expires_at < ?`
-  ).bind(_now()).run();
+  ).bind(now).run();
   // RGPD : purge des lignes mortes (lu/détruit/expiré) > 90 j — ne garde aucune
-  // métadonnée résiduelle au-delà de la fenêtre. Le matériel sensible est déjà
-  // NULL ; on supprime la trace. (Les jetons pointant vers elles sont déjà vides.)
+  // métadonnée résiduelle au-delà de la fenêtre. Le matériel sensible est déjà NULL.
   const purge = await env.DB.prepare(
     `DELETE FROM sec_secrets
       WHERE status IN ('lu','detruit','expire')
         AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-90 day')`
   ).run();
-  return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0 };
+  for (const r of (toFree.results || [])) await _destroyBlob(env, r.blob_key);
+  return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0, freed: (toFree.results || []).length };
 }

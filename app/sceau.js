@@ -35,6 +35,10 @@ let _error = null;
 let _busy = false;
 let _result = null;        // { passphrase, url } (secret direct ou jeton)
 let _tokenTarget = null;   // tid si la création recharge un jeton existant
+let _createMode = 'text';  // 'text' | 'vocal'
+let _recBlob = null;       // Blob audio enregistré (mode vocal)
+let _rec = null;           // session MediaRecorder en cours
+let _recTimer = null;
 
 // ── Crypto navigateur ───────────────────────────────────────────
 let _V = null;
@@ -245,8 +249,14 @@ function _renderCreate(main) {
       <h1>${_tokenTarget ? 'Recharger le jeton' : 'Nouvelle missive'}</h1>
       <p class="sceau-sub">${_tokenTarget ? 'Le nouveau secret remplacera l\'ancien sur ce jeton — le lien et la puce restent identiques.' : 'Collez le secret à transmettre. Il est chiffré sur votre appareil — il ne quitte jamais cette page en clair.'}</p>
       <form data-form="create">
-        <label class="sceau-label" for="sceau-secret">Secret à transmettre</label>
-        <textarea id="sceau-secret" class="sceau-textarea" rows="5" maxlength="20000" placeholder="Mot de passe, code, message confidentiel…" required></textarea>
+        <div class="sceau-modesw">
+          <button type="button" class="sceau-mode ${_createMode === 'text' ? 'on' : ''}" data-act="mode-text">${icon('file', 15)} Texte</button>
+          <button type="button" class="sceau-mode ${_createMode === 'vocal' ? 'on' : ''}" data-act="mode-vocal">${icon('radio', 15)} Vocal</button>
+        </div>
+        ${_createMode === 'text'
+          ? `<label class="sceau-label" for="sceau-secret">Secret à transmettre</label>
+             <textarea id="sceau-secret" class="sceau-textarea" rows="5" maxlength="20000" placeholder="Mot de passe, code, message confidentiel…"></textarea>`
+          : `<label class="sceau-label">Message vocal</label><div id="sceau-rec" class="sceau-rec"></div>`}
 
         <label class="sceau-label" for="sceau-name">Nom (pour vous, non transmis)</label>
         <input id="sceau-name" class="sceau-input" type="text" maxlength="120" placeholder="ex. Code coffre client X">
@@ -276,7 +286,59 @@ function _renderCreate(main) {
         <p class="sceau-note">${icon('shield-check', 14)} Un code de déverrouillage fort sera généré. Vous devrez le transmettre au destinataire <strong>par un autre canal</strong> — il n'est pas récupérable.</p>
       </form>
     </div>`;
+  if (_createMode === 'vocal') _paintRecorder();
 }
+
+// ── Enregistreur vocal (mode vocal) ─────────────────────────────
+function _pickRecMime() {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg']
+    .find(c => { try { return MediaRecorder.isTypeSupported(c); } catch (_) { return false; } }) || '';
+}
+function _paintRecorder() {
+  const el = _root && _root.querySelector('#sceau-rec'); if (!el) return;
+  if (_rec) {
+    el.innerHTML = `<div class="sceau-rec-live"><span class="sceau-rec-dot"></span><span id="sceau-rec-t">0:00</span></div>
+      <button type="button" class="sceau-btn" data-act="rec-stop">${icon('check', 16)} Arrêter</button>`;
+  } else if (_recBlob) {
+    const url = URL.createObjectURL(_recBlob);
+    el.innerHTML = `<audio class="sceau-rec-audio" controls src="${url}"></audio>
+      <button type="button" class="sceau-btn" data-act="rec-reset">${icon('refresh', 15)} Réenregistrer</button>`;
+  } else {
+    el.innerHTML = `<button type="button" class="sceau-btn sceau-rec-go" data-act="rec-start">${icon('radio', 18)} Enregistrer</button>
+      <span class="sceau-nfc-msg" id="sceau-rec-msg"></span>`;
+  }
+}
+async function _recStart() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    const m = _root.querySelector('#sceau-rec-msg'); if (m) m.textContent = 'Micro non disponible sur cet appareil.'; return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (_) { const m = _root.querySelector('#sceau-rec-msg'); if (m) m.textContent = 'Accès micro refusé.'; return; }
+  const mime = _pickRecMime();
+  let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch (_) { try { mr = new MediaRecorder(stream); } catch (_2) { stream.getTracks().forEach(t => t.stop()); return; } }
+  const chunks = [];
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = () => {
+    try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+    if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
+    _recBlob = new Blob(chunks, { type: mr.mimeType || mime || 'audio/webm' });
+    _rec = null; _paintRecorder();
+  };
+  _rec = { mr, t0: Date.now() };
+  try { mr.start(); } catch (_) { _rec = null; stream.getTracks().forEach(t => t.stop()); return; }
+  _paintRecorder();
+  _recTimer = setInterval(() => {
+    const t = _root && _root.querySelector('#sceau-rec-t'); if (!t) return;
+    const s = Math.floor((Date.now() - _rec.t0) / 1000);
+    t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (s >= 180) _recStop(); // cap 3 min
+  }, 500);
+}
+function _recStop() { if (_rec && _rec.mr && _rec.mr.state !== 'inactive') { try { _rec.mr.stop(); } catch (_) {} } }
+function _recReset() { _recBlob = null; _paintRecorder(); }
 
 function _renderResult(main) {
   const r = _result || {};
@@ -331,8 +393,13 @@ function _onClick(e) {
   if (act === 'reload-tok') return _loadTokens();
   if (act === 'tab-secrets') { _view = 'list'; _load(); return; }
   if (act === 'tab-tokens')  { _view = 'tokens'; _loadTokens(); return; }
-  if (act === 'new')    { _tokenTarget = null; _view = 'create'; _render(); return; }
+  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _view = 'create'; _render(); return; }
   if (act === 'newtoken') return _createToken();
+  if (act === 'mode-text')  { _createMode = 'text';  _recBlob = null; _render(); return; }
+  if (act === 'mode-vocal') { _createMode = 'vocal'; _render(); return; }
+  if (act === 'rec-start') return _recStart();
+  if (act === 'rec-stop')  return _recStop();
+  if (act === 'rec-reset') return _recReset();
   if (act === 'tolist') { _view = _tokenTarget ? 'tokens' : 'list'; _result = null; _tokenTarget = null; (_view === 'tokens' ? _loadTokens : _load)(); return; }
   if (act === 'link')   return _copyLink(id, t);
   if (act === 'qr')     return _toggleRowQr(`${API_BASE}/s/${id}`, id);
@@ -341,7 +408,7 @@ function _onClick(e) {
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
   if (act === 'nfc-url') return _writeNfcUrl(t.dataset.url, _root.querySelector('#sceau-rowqr-msg'));
-  if (act === 'tok-load') { _tokenTarget = tid; _view = 'create'; _render(); return; }
+  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _view = 'create'; _render(); return; }
   if (act === 'tok-link') return _copy(`${API_BASE}/s/t/${tid}`, t);
   if (act === 'tok-qr')   return _toggleRowQr(`${API_BASE}/s/t/${tid}`, tid);
   if (act === 'tok-burn') return _burnToken(tid);
@@ -353,8 +420,17 @@ function _onSubmit(e) {
 
 async function _create() {
   if (_busy) return;
-  const secret = _root.querySelector('#sceau-secret')?.value || '';
-  if (!secret.trim()) return;
+  // Charge utile : texte (UTF-8) ou octets du vocal enregistré.
+  let payload, kind, mime = null;
+  if (_createMode === 'vocal') {
+    if (!_recBlob) { _toast('Enregistrez un message vocal d\'abord.'); return; }
+    payload = new Uint8Array(await _recBlob.arrayBuffer());
+    kind = 'audio'; mime = _recBlob.type || 'audio/webm';
+  } else {
+    const secret = _root.querySelector('#sceau-secret')?.value || '';
+    if (!secret.trim()) { _toast('Saisissez un secret.'); return; }
+    payload = _enc.encode(secret); kind = 'text';
+  }
   const label = _root.querySelector('#sceau-name')?.value?.trim() || null;
   const max = parseInt(_root.querySelector('#sceau-max')?.value || '3', 10);
   const expSec = parseInt(_root.querySelector('#sceau-exp')?.value || '0', 10);
@@ -375,8 +451,8 @@ async function _create() {
     // 3) chiffrement E2E sur l'appareil, puis seal (le serveur ne voit que le chiffré).
     const key = await _aesKey(output);
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, _enc.encode(secret)));
-    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), max_attempts: max, expires_at, label } });
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload));
+    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), kind, mime, max_attempts: max, expires_at, label } });
 
     let url = `${API_BASE}/s/${init.short_id}`;
     if (_tokenTarget) {

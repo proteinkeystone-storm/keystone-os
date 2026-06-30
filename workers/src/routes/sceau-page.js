@@ -61,6 +61,7 @@ function _serve(base) {
     `style-src 'nonce-${nonce}'`,
     "connect-src 'self'",
     "img-src 'self' data:",
+    "media-src blob:",
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -146,6 +147,7 @@ function _page(base, nonce, bundleHref, sri) {
     background:#1b2335;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;padding:0}
   .copy-icon:hover{color:var(--ink);border-color:var(--accent)}
   .copy-icon.ok{color:var(--ok);border-color:var(--ok)}
+  .secret-audio{width:100%;margin-top:4px}
   .foot{margin-top:22px;font-size:11.5px;color:#5a6478;line-height:1.5}
   .foot a{color:#7e88a0}
   .hidden{display:none}
@@ -223,10 +225,9 @@ function _page(base, nonce, bundleHref, sri) {
           if(!evRes.ok || !ev.evaluation){ throw new Error('eval'); }
           const [output] = await client.finalize(fin, SceauVOPRF.Evaluation.deserialize(SceauVOPRF.Oprf.Suite.P256_SHA256, b64d(ev.evaluation)));
           const key = await aesKey(output);
-          let plain;
+          let buf;
           try{
-            const buf = await crypto.subtle.decrypt({ name:'AES-GCM', iv:b64d(blob.iv) }, key, b64d(blob.ciphertext));
-            plain = dec.decode(buf);
+            buf = await crypto.subtle.decrypt({ name:'AES-GCM', iv:b64d(blob.iv) }, key, b64d(blob.ciphertext));
           }catch{
             // Mauvais code : le tag AES-GCM rejette. L'essai a été compté.
             const left = (ev.attempts_left ?? 0);
@@ -239,7 +240,8 @@ function _page(base, nonce, bundleHref, sri) {
           // Accusé de lecture (S5) — best-effort, esprit Snap : informe le créateur
           // que le sceau a été ouvert, et consomme le secret (lu une fois).
           fetch(BASE+'/opened', { method:'POST', cache:'no-store' }).catch(()=>{});
-          reveal(plain);
+          if(blob.kind==='audio'){ revealAudio(URL.createObjectURL(new Blob([buf], { type: blob.mime || 'audio/webm' }))); }
+          else { reveal(dec.decode(buf)); }
         }catch(e){
           go.disabled=false; go.textContent='Ouvrir le sceau';
           att.className='attempts err'; att.textContent='Une erreur est survenue. Réessayez.';
@@ -264,6 +266,18 @@ function _page(base, nonce, bundleHref, sri) {
         document.getElementById('sec').textContent = plain; // textContent : zéro injection
         const cp = document.getElementById('cp');
         cp.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(plain); cp.innerHTML=checkSvg; cp.classList.add('ok'); setTimeout(()=>{cp.innerHTML=copySvg;cp.classList.remove('ok');},1500); }catch{ cp.title='Copie indisponible'; } });
+      }, 650);
+    }
+
+    function revealAudio(url){
+      seal.classList.add('cracked');
+      setTimeout(()=>{
+        $(
+          '<h1>Missive ouverte</h1>'+
+          '<p>Écoutez maintenant — ce message ne se rejouera pas après fermeture.</p>'+
+          '<audio class="secret-audio" controls autoplay src="'+url+'"></audio>'+
+          '<div class="foot">Une fois cette page fermée, le message n’est plus accessible par ce lien.</div>'
+        );
       }, 650);
     }
 

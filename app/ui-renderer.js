@@ -5699,6 +5699,15 @@ function _padReadoutData(id, m) {
                                     sub: notes > 1 ? 'bulles' : 'bulle', signal: 0, quiet: true };
             return null;
         }
+        case 'O-SEC-001': {                        // Missive — ouvertures / en attente
+            const v = +m.sceauOpened7d || 0;
+            if (v > 0) return { label: 'Ouvertes 7j', num: String(v), sub: '', signal: v };
+            // Etat permanent (B2) : missives scellées en attente d'ouverture.
+            const act = +m.sceauActive || 0;
+            if (act > 0) return { label: act > 1 ? 'Scellées' : 'Scellée', num: String(act),
+                                  sub: 'en attente', signal: 0, quiet: true };
+            return null;
+        }
         case 'A-COM-002': {                       // Brief Prod — briefs en biblio Kodex
             // Inventaire (pas un signal d'action) → readout informatif quiet,
             // sans halo nouveauté.

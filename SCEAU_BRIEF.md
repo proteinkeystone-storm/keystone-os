@@ -128,8 +128,15 @@ Sceau transmet un **secret** (code, mot de passe, info sensible, texte) via un *
 - **Bump SW** + smoke prod + deploy (worker = autorisation explicite + stash WIP Pulsa). **Admin → Catalogue → Synchroniser → Sauvegarder.**
 **DoD :** checklist §17 du manifeste cochée ; SDQR / Smart Agent / Key Form non impactés ; smoke prod vert.
 
-### ➕ SPRINT 7 (optionnel, post-lancement) — Modes & extensions
-- Secret = **fichier** (pas que texte) ; **secret audio** (reconvergence avec l'idée d'origine, mais sécurisé) ; variante **OTP** pour destinataire non technique ; multi-destinataires.
+### 🎙 SPRINT 8 — Missive VOCALE (audio chiffré, sans transcription) ⏳ EN COURS
+**Décision (2026-06-30) :** vocal **enregistré direct, sans transcription** (la transcription Whisper = serveur → casserait l'E2E ; écartée). TTS « texte lu par Piper » = bonus secondaire plus tard, pas le cœur. L'audio = un **fichier chiffré** → on construit l'infra « secret = fichier » : chiffré volumineux stocké en **R2** (au lieu d'inline D1, cap 200 Ko), `kind` (text/audio/file) + `mime`. Débloque fichiers ET audio d'un coup.
+- **Backend** : migration 010 (`kind`/`mime`/`blob_key`), seal route le chiffré >seuil ou non-text vers R2, blob sert depuis R2, meta expose `kind`/`mime`, burn/mort/expiry/sweep/token-delete suppriment l'objet R2 (best-effort ; la garantie reste la mort de la clé OPRF). Cap relevé (~8 Mo b64).
+- **Front** : mode « enregistrer un vocal » (MediaRecorder, savoir-faire iOS Keynapse), chiffrement des octets (AES-GCM sur ArrayBuffer), seal `kind:'audio'`.
+- **Page lecture** : si `kind==='audio'` → lecteur audio (décrypte → blob URL → play), même sémantique « lu une fois » + rappel honnête (on garantit la mort du lien, pas l'absence de ré-enregistrement pendant l'écoute).
+- OPRF / passphrase / burn / 3-essais : **inchangés**.
+
+### ➕ SPRINT 7/9 (optionnel) — Modes & extensions
+- Fichiers joints génériques (viennent gratuitement avec S8) ; variante **OTP** pour destinataire non technique ; multi-destinataires ; bouton « écouter » (Piper local) sur les missives texte.
 - (Plus tard, si vrai besoin « 3 strikes littéral » déjà couvert par OPRF → rien à ajouter.)
 
 ---
