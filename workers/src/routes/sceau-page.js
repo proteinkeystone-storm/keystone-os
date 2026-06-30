@@ -157,6 +157,15 @@ function _page(base, nonce, bundleHref, sri) {
   .hidden{display:none}
   .spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;margin:8px auto}
   @keyframes sp{to{transform:rotate(360deg)}}
+  @media (max-width:480px){
+    body{padding:16px}
+    .card{padding:34px 22px 26px;border-radius:20px}
+    h1{font-size:22px}
+    .seal{width:80px;height:80px;margin-bottom:20px}
+    .seal svg{width:42px;height:42px}
+    .secret{padding:16px 44px}
+    .secret-img{max-height:38vh}
+  }
 </style>
 </head>
 <body>
