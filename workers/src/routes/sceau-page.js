@@ -137,18 +137,18 @@ function _page(base, nonce, bundleHref, sri) {
   .hint{margin-top:14px;font-size:12.5px;color:var(--muted)}
   .attempts{font-size:13px;margin-top:12px}
   .attempts.warn{color:var(--warn)} .err{color:var(--dead)}
-  .secret-wrap{position:relative;text-align:left}
+  .secret-wrap{position:relative}
   .secret{
-    text-align:left; white-space:pre-wrap; word-break:break-word; background:#0d1320; border:1px solid var(--line);
-    border-radius:14px; padding:18px 52px 18px 18px; font:500 15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink);
+    text-align:center; white-space:pre-wrap; word-break:break-word; background:#0d1320; border:1px solid var(--line);
+    border-radius:14px; padding:18px 52px; font:500 15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink);
     max-height:50vh; overflow:auto;
   }
-  .copy-icon{position:absolute;top:10px;right:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  .copy-icon{position:absolute;top:50%;transform:translateY(-50%);right:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
     background:#1b2335;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;padding:0}
   .copy-icon:hover{color:var(--ink);border-color:var(--accent)}
   .copy-icon.ok{color:var(--ok);border-color:var(--ok)}
   .secret-audio{width:100%;margin-top:4px}
-  .secret-img{max-width:100%;max-height:42vh;border-radius:14px;border:1px solid var(--line);margin-bottom:12px;display:block}
+  .secret-img{max-width:100%;max-height:42vh;border-radius:14px;border:1px solid var(--line);margin:0 auto 12px;display:block}
   .dl-btn{display:block;width:100%;margin-top:16px;padding:14px 16px;border-radius:14px;text-decoration:none;text-align:center;
     background:var(--accent);color:#fff;font:700 16px -apple-system,sans-serif;letter-spacing:-0.01em;transition:filter .15s}
   .dl-btn:hover{filter:brightness(1.08)}
