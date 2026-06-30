@@ -1666,7 +1666,18 @@ export async function handleGscCallback(request, env) {
     if (!tok.refresh_token) return _gscHtml("❌ Google n'a pas renvoyé de jeton de rafraîchissement. Révoque l'accès « Sentinel » dans ton compte Google (myaccount.google.com → Sécurité), puis reconnecte.");
     const props = await _gscListProperties(tok.access_token);
     const property = _gscPickProperty(props, site.url);
-    if (!property) return _gscHtml(`❌ Aucune propriété Search Console ne correspond à ${_escHtml(site.url)}. Vérifie que ce site est validé dans ta Search Console, avec le même compte Google.`);
+    if (!property) {
+      const email = await _gscUserEmail(tok.access_token);
+      const list = props.length
+        ? `<br><br>Sites présents dans cette Search Console${email ? ` (${_escHtml(email)})` : ''} :<br><b>${props.map((p) => _escHtml(p.siteUrl)).join('<br>')}</b>`
+        : `<br><br>Ce compte Google${email ? ` (${_escHtml(email)})` : ''} n'a <b>aucun site</b> dans Search Console.`;
+      return _gscHtml(
+        `❌ <strong>Aucune propriété ne correspond à ${_escHtml(site.url)}.</strong>${list}` +
+        `<br><br><b>Que faire :</b><br>` +
+        `1) Si votre site n'est pas dans la liste, ajoutez-le sur <a href="https://search.google.com/search-console" target="_blank">Google Search Console</a> (« Ajouter une propriété » › « Préfixe de l'URL »), puis vérifiez-le.<br>` +
+        `2) Si la liste montre un autre compte que prévu, reconnectez-vous avec le <b>bon compte Google</b>.<br><br>` +
+        `Ensuite, revenez dans Sentinel et cliquez à nouveau « Connecter Search Console ».`);
+    }
     const email = await _gscUserEmail(tok.access_token);
     const enc = await encrypt(tok.refresh_token, env.KS_ENCRYPTION_KEY);
     await env.DB.prepare(`

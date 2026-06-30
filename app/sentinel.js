@@ -862,9 +862,23 @@ function _gscSectionHTML() {
   const head = `<div class="snt-aeo-head">${icon('bar-chart', 18)}<div><div class="snt-aeo-t">Mots-clés Google (Search Console)</div><div class="snt-aeo-d">Vos positions réelles dans Google : sur quelles requêtes vous apparaissez, à quel rang, et combien de clics. Connexion sécurisée en lecture seule.</div></div></div>`;
   if (!x.connected) {
     return `<div class="snt-geo" id="snt-gsc-sec">${head}
-      <div class="snt-gsc-connect">
+      <div class="snt-gsc-guide">
+        <p class="snt-gsc-lead">Pour afficher vos positions Google, il y a <b>2 étapes — une seule fois par site</b> :</p>
+        <ol class="snt-gsc-ol">
+          <li><b>Vérifiez le site dans Google Search Console.</b> C'est gratuit : ça prouve à Google que le site est bien à vous.
+            <details class="snt-gsc-det"><summary>Comment faire ? (environ 2 min)</summary>
+              <ol class="snt-gsc-sub">
+                <li>Ouvrez <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> et connectez-vous avec votre compte Google.</li>
+                <li>Cliquez « Ajouter une propriété », puis choisissez <b>« Préfixe de l'URL »</b>.</li>
+                <li>Collez l'adresse exacte du site (ex. <code>https://mon-site.com/</code>) et validez.</li>
+                <li>Choisissez la méthode <b>« Balise HTML »</b> : copiez la balise affichée, collez-la dans l'en-tête du site (sur Wix : Réglages › Code personnalisé › <code>&lt;head&gt;</code>), publiez, puis revenez sur Google et cliquez « Vérifier ».</li>
+              </ol>
+            </details>
+          </li>
+          <li><b>Revenez ici et cliquez « Connecter »</b>, avec le <b>même compte Google</b>. Sentinel lira alors vos données, en lecture seule.</li>
+        </ol>
         <button class="snt-ai-btn" data-act="gsc-connect">${icon('link', 14)} Connecter Search Console</button>
-        <div class="snt-geo-hint">Le site doit être validé dans votre Search Console, avec le même compte Google.</div>
+        <div class="snt-geo-hint">Si le message dit « aucune propriété ne correspond », c'est que l'étape 1 n'est pas encore faite, ou que vous n'êtes pas sur le bon compte Google.</div>
       </div></div>`;
   }
   return `<div class="snt-geo" id="snt-gsc-sec">${head}${_gscResultsHTML(x)}
