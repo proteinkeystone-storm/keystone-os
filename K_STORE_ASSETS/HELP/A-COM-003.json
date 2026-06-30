@@ -33,8 +33,18 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" },
-    { "keys": "Cmd+Enter", "desc": "Envoyer une intervention dans la discussion" }
+    {
+      "keys": "Échap",
+      "desc": "Fermer ce panneau d'aide"
+    },
+    {
+      "keys": "Cmd+Enter",
+      "desc": "Envoyer une intervention dans la discussion"
+    }
   ],
-  "updated_at": "2026-05-26"
+  "updated_at": "2026-05-26",
+  "guide": {
+    "title": "Trouver des idées quand on réfléchit seul",
+    "body": "<p>Le brainstorming a été pensé comme un exercice de groupe : on confronte des points de vue, quelqu'un objecte, un autre rebondit, et l'idée émerge du frottement. Seul devant une page blanche, ce mécanisme manque. On tourne en rond autour de ses propres réflexes, sans personne pour pousser dans une autre direction.</p>\n<h3>Pourquoi réfléchir seul plafonne</h3>\n<p>Un cerveau isolé suit ses ornières : les mêmes références, les mêmes angles, les mêmes prudences. Ce qui débloque un brainstorming, ce n'est pas plus d'efforts, c'est de la <b>diversité de regards</b> — un stratège, un créatif, un avocat du diable qui s'oppose, quelqu'un qui pense client.</p>\n<h3>Recréer le frottement, à plusieurs voix</h3>\n<ul>\n<li><b>Poser un brief clair</b> : un sujet précis (lancement, repositionnement, idéation) donne de la matière à challenger.</li>\n<li><b>Confronter les angles</b> : faire dialoguer plusieurs rôles distincts fait surgir des pistes qu'on n'aurait pas explorées seul.</li>\n<li><b>Orienter en cours de route</b> : « plus premium », « plus disruptif » — réagir à la discussion vaut mieux que tout cadrer d'avance.</li>\n<li><b>Conclure par une synthèse</b> : un échange foisonnant ne sert à rien sans un plan d'actions qui en extrait l'essentiel.</li>\n</ul>\n<h3>L'idée n'est pas de remplacer votre jugement</h3>\n<p>Ces voix ne décident pas à votre place : elles élargissent le champ avant que vous ne tranchiez. Vous restez l'arbitre, mais vous arbitrez entre plus d'options, et plus tôt : les angles morts apparaissent pendant la réflexion, pas une fois le projet lancé.</p>\n<p><a href=\"/activate\">Brainstorming</a> recrée exactement ce comité : neuf personnalités qui dialoguent autour de votre brief, que vous orientez en direct, et une synthèse structurée à la fin.</p>"
+  }
 }
