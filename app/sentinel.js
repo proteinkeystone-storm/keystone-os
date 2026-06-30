@@ -863,22 +863,32 @@ function _gscSectionHTML() {
   if (!x.connected) {
     return `<div class="snt-geo" id="snt-gsc-sec">${head}
       <div class="snt-gsc-guide">
-        <p class="snt-gsc-lead">Pour afficher vos positions Google, il y a <b>2 étapes — une seule fois par site</b> :</p>
-        <ol class="snt-gsc-ol">
-          <li><b>Vérifiez le site dans Google Search Console.</b> C'est gratuit : ça prouve à Google que le site est bien à vous.
-            <details class="snt-gsc-det"><summary>Comment faire ? (environ 2 min)</summary>
-              <ol class="snt-gsc-sub">
-                <li>Ouvrez <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> et connectez-vous avec votre compte Google.</li>
-                <li>Cliquez « Ajouter une propriété », puis choisissez <b>« Préfixe de l'URL »</b>.</li>
-                <li>Collez l'adresse exacte du site (ex. <code>https://mon-site.com/</code>) et validez.</li>
-                <li>Choisissez la méthode <b>« Balise HTML »</b> : copiez la balise affichée, collez-la dans l'en-tête du site (sur Wix : Réglages › Code personnalisé › <code>&lt;head&gt;</code>), publiez, puis revenez sur Google et cliquez « Vérifier ».</li>
-              </ol>
-            </details>
-          </li>
-          <li><b>Revenez ici et cliquez « Connecter »</b>, avec le <b>même compte Google</b>. Sentinel lira alors vos données, en lecture seule.</li>
-        </ol>
-        <button class="snt-ai-btn" data-act="gsc-connect">${icon('link', 14)} Connecter Search Console</button>
-        <div class="snt-geo-hint">Si le message dit « aucune propriété ne correspond », c'est que l'étape 1 n'est pas encore faite, ou que vous n'êtes pas sur le bon compte Google.</div>
+        <div class="snt-gsc-cards">
+          <div class="snt-gsc-card">
+            <span class="snt-gsc-badge">1</span>
+            <span class="snt-gsc-cic">${icon('shield-check', 24)}</span>
+            <span class="snt-gsc-ct">Validez le site sur Google</span>
+            <span class="snt-gsc-cd">Une fois. Ça prouve qu'il est à vous. Gratuit.</span>
+          </div>
+          <span class="snt-gsc-sep">${icon('arrow-right', 18)}</span>
+          <div class="snt-gsc-card">
+            <span class="snt-gsc-badge">2</span>
+            <span class="snt-gsc-cic">${icon('link', 24)}</span>
+            <span class="snt-gsc-ct">Cliquez « Connecter »</span>
+            <span class="snt-gsc-cd">Même compte Google. C'est tout.</span>
+          </div>
+        </div>
+        <button class="snt-ai-btn snt-gsc-cta" data-act="gsc-connect">${icon('link', 15)} Connecter Search Console</button>
+        <details class="snt-gsc-det">
+          <summary>${icon('help-circle', 14)} Étape 1 : comment valider mon site ? (2 min)</summary>
+          <ol class="snt-gsc-sub">
+            <li>Ouvrez <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Search Console</a> avec votre compte Google.</li>
+            <li>« Ajouter une propriété » → <b>« Préfixe de l'URL »</b> → collez l'adresse du site.</li>
+            <li>Méthode <b>« Balise HTML »</b> : copiez la balise, collez-la dans l'en-tête du site (Wix : Réglages › Code personnalisé › <code>head</code>), publiez.</li>
+            <li>Revenez sur Google → <b>« Vérifier »</b>. Terminé.</li>
+          </ol>
+        </details>
+        <div class="snt-geo-hint">« Aucune propriété ne correspond » ? L'étape 1 n'est pas faite, ou ce n'est pas le bon compte Google.</div>
       </div></div>`;
   }
   return `<div class="snt-geo" id="snt-gsc-sec">${head}${_gscResultsHTML(x)}

@@ -191,17 +191,26 @@
 .snt-page-score.bad  { color: var(--danger); }
 /* V2 — Search Console (axe Mots-clés) */
 .snt-gsc-connect { display: flex; flex-direction: column; gap: 8px; }
-/* Pas-à-pas didactique avant connexion Search Console */
-.snt-gsc-guide { display: flex; flex-direction: column; gap: 12px; }
-.snt-gsc-lead { margin: 0; font-size: 13.5px; color: var(--ws-text); }
-.snt-gsc-ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--ws-text-soft); line-height: 1.5; }
-.snt-gsc-ol > li::marker { color: var(--ws-accent); font-weight: 800; }
-.snt-gsc-ol b { color: var(--ws-text); }
-.snt-gsc-det { margin-top: 6px; }
-.snt-gsc-det summary { cursor: pointer; color: var(--ws-accent); font-size: 12.5px; font-weight: 600; }
-.snt-gsc-sub { margin: 8px 0 2px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ws-text-soft); }
+/* Pas-à-pas didactique avant connexion Search Console — cartes-étapes scannables */
+.snt-gsc-guide { display: flex; flex-direction: column; gap: 14px; }
+.snt-gsc-cards { display: flex; align-items: stretch; gap: 10px; }
+.snt-gsc-card { flex: 1; position: relative; display: flex; flex-direction: column; gap: 3px; padding: 18px 14px 14px; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 12px; }
+.snt-gsc-badge { position: absolute; top: -10px; left: 14px; width: 24px; height: 24px; border-radius: 50%; background: var(--ws-accent); color: #fff; font-size: 12.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.snt-gsc-cic { color: var(--ws-accent); margin-bottom: 5px; line-height: 0; }
+.snt-gsc-ct { font-size: 14px; font-weight: 800; color: var(--ws-text); letter-spacing: -0.01em; }
+.snt-gsc-cd { font-size: 12.5px; color: var(--ws-text-soft); line-height: 1.4; }
+.snt-gsc-sep { display: flex; align-items: center; color: var(--ws-text-muted); flex-shrink: 0; }
+.snt-gsc-cta { align-self: flex-start; font-size: 14px; padding: 11px 20px; }
+.snt-gsc-det { margin-top: -2px; }
+.snt-gsc-det summary { cursor: pointer; color: var(--ws-accent); font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; list-style: none; }
+.snt-gsc-det summary::-webkit-details-marker { display: none; }
+.snt-gsc-sub { margin: 10px 0 2px; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--ws-text-soft); line-height: 1.5; }
+.snt-gsc-sub b { color: var(--ws-text); }
 .snt-gsc-guide code { font-size: 11.5px; background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: 5px; padding: 1px 5px; color: var(--ws-text-soft); }
-.snt-gsc-guide .snt-ai-btn { align-self: flex-start; }
+@media (max-width: 560px) {
+  .snt-gsc-cards { flex-direction: column; }
+  .snt-gsc-sep { transform: rotate(90deg); align-self: center; }
+}
 .snt-gsc-totals { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; font-size: 12px; color: var(--ws-text-soft); margin-bottom: 10px; }
 .snt-gsc-m { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; font-size: 12px; color: var(--ws-text-muted); }
 .snt-gsc-m span:first-child { color: var(--ws-text-soft); font-weight: 700; }
