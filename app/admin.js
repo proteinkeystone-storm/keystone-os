@@ -337,7 +337,6 @@ logoutBtn.addEventListener('click', logout);
 const ADMIN_GROUPS = {
   contenu: [
     { id: 'pads',    label: '📐 Pads',        desc: 'Outils & artefacts du dashboard utilisateur', render: renderFabriquePads },
-    { id: 'clauses', label: '📚 Clauses',     desc: 'Bibliothèque de clauses partagées + locales',  render: renderFabriqueClauses },
     { id: 'catalog', label: 'Catalogue',      desc: 'Catalogue K-Store',                            render: renderCatalog },
     { id: 'promos',  label: '★ À la une',     desc: 'Bandeaux du hero Key-Store',                   render: renderPromos },
     { id: 'living',  label: '✦ Living Layer', desc: 'Barre ambiante (Ordinateur de bord)',          render: renderLivingLayer },
