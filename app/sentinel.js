@@ -310,6 +310,20 @@ function _until(iso) {
   const m = Math.floor(s / 60); return `dans ${m} min`;
 }
 
+// V2 crawl — pages concernées par un finding (masqué si seulement la home).
+function _findPages(f) {
+  if (!f.pages || !f.pages.length || (f.pages.length === 1 && f.pages[0] === '/')) return '';
+  const shown = f.pages.slice(0, 6).map((p) => `<code>${_esc(p)}</code>`).join(' ');
+  const more = f.pages.length > 6 ? ` +${f.pages.length - 6}` : '';
+  return `<div class="snt-find-pages">${f.pages.length} page${f.pages.length > 1 ? 's' : ''} concernée${f.pages.length > 1 ? 's' : ''} : ${shown}${more}</div>`;
+}
+// V2 crawl — bandeau « pages auditées » (score par page), masqué si une seule page.
+function _pagesAuditedHTML(c) {
+  const pages = c && c.audit && c.audit.pages;
+  if (!pages || pages.length <= 1) return '';
+  const chips = pages.map((p) => `<span class="snt-page-chip"><span class="snt-page-path">${_esc(p.path)}</span><span class="snt-page-score ${p.score != null ? _scoreClass(p.score) : ''}">${p.score != null ? p.score : '—'}</span></span>`).join('');
+  return `<div class="snt-pages"><div class="snt-pages-h">${icon('search', 14)} ${pages.length} pages auditées · score par page</div><div class="snt-pages-list">${chips}</div></div>`;
+}
 // Findings enrichis : icône d'axe + priorité + gain estimé + tag plateforme + total.
 function _findingsHTML(list, platform) {
   if (!list || !list.length) return `<div class="snt-okmsg">${icon('check', 16)} Aucun problème détecté sur les axes audités.</div>`;
@@ -335,6 +349,7 @@ function _findingsHTML(list, platform) {
         <span class="snt-find-chev">${icon('chevron-down', 16)}</span>
       </summary>
       ${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}
+      ${_findPages(f)}
       ${body}
     </details>`;
   }).join('') + `</div>`;
@@ -650,6 +665,7 @@ function _renderCockpit() {
           ${_responseChartSVG(c.series30d)}
         </div>
       </div>
+      ${_pagesAuditedHTML(c)}
       <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
       ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
       ${_geoSectionHTML()}
@@ -981,8 +997,13 @@ function _exportPdf() {
     const steps = (f.fix && f.fix.steps) ? `<ol>${f.fix.steps.map((s) => `<li>${_esc(s)}</li>`).join('')}</ol>` : '';
     const code = (f.fix && f.fix.code) ? `<div class="cl">${_esc(f.fix.codeLabel || 'Code')}</div><pre>${_esc(f.fix.code)}</pre>` : '';
     const tag = (plat && f.fix) ? ` · <span style="color:#6366f1">${_esc(plat)}</span>` : '';
-    return `<div class="f"><div class="ft"><b style="color:${pc}">[${prio.label}]</b> ${_esc(f.title)}${tag}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
+    const pages = (f.pages && f.pages.length && !(f.pages.length === 1 && f.pages[0] === '/'))
+      ? `<div class="fd" style="color:#94a3b8">${f.pages.length} page${f.pages.length > 1 ? 's' : ''} : ${_esc(f.pages.slice(0, 8).join(', '))}${f.pages.length > 8 ? '…' : ''}</div>` : '';
+    return `<div class="f"><div class="ft"><b style="color:${pc}">[${prio.label}]</b> ${_esc(f.title)}${tag}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${pages}${steps}${code}</div>`;
   }).join('');
+  // V2 crawl — note « pages auditées ».
+  const auditPages = (p.audit && p.audit.pages) || [];
+  const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${auditPages.length} pages : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}</div>` : '';
 
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sentinel — ${_esc(p.name || 'Audit')}</title>
   <style>body{font-family:-apple-system,system-ui,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 24px;line-height:1.5}
@@ -996,6 +1017,7 @@ function _exportPdf() {
   <div style="font-size:12px;color:#6366f1;font-weight:700;letter-spacing:.04em">KEYSTONE SENTINEL</div>
   <h1>Rapport d'audit — ${_esc(p.name || host || 'site')}</h1>
   <div class="sub">${_esc(host)}${plat ? ' · ' + _esc(plat) : ''} · ${date}${site.last_ok ? ' · en ligne' : ''}</div>
+  ${pagesNote}
   ${_summaryPdf(p)}
   ${kpis}
   <h2>Profil du site</h2><table style="width:100%;border-collapse:collapse">${axisRows}</table>

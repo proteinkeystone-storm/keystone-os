@@ -133,6 +133,8 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_geo ADD COLUMN next_geo_at TEXT").run(); } catch (_) { /* déjà présent */ }
   // S7 — Core Web Vitals stockés avec l'audit (pour le KPI « Chargement » du cockpit).
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN cwv TEXT").run(); } catch (_) { /* déjà présent */ }
+  // V2 — crawl multi-pages : liste des pages auditées + leur score (JSON).
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages TEXT").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -252,7 +254,11 @@ async function _exists(url, withText) {
 }
 function _between(html, re) { const m = html.match(re); return m ? (m[1] || '').trim() : ''; }
 
-async function _audit(url) {
+// opts.skipSite : audit ON-PAGE seul (pour les pages internes du crawl) —
+// saute robots/sitemap + les findings « site-level » (sitemap, sous-domaine Wix),
+// déjà émis une fois sur la page d'accueil. opts.sitemapKnown propage le crédit
+// SEO « sitemap présent » aux pages internes sans re-vérifier.
+async function _audit(url, opts = {}) {
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), CHECK_TIMEOUT_MS);
   let html = '', headers = null, reachable = false;
   try {
@@ -261,14 +267,18 @@ async function _audit(url) {
     html = (await res.text()).slice(0, 500000);
   } catch (_) { /* injoignable → audit minimal */ } finally { clearTimeout(timer); }
 
-  // robots.txt + sitemap (best effort)
+  // robots.txt + sitemap (best effort) — contrôle « site-level », fait sur la home.
   let robots = false, sitemap = false;
-  try {
-    const origin = new URL(url).origin;
-    const rb = await _exists(`${origin}/robots.txt`, true); robots = rb.ok;
-    if (rb.text && /sitemap:/i.test(rb.text)) sitemap = true;
-    if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, false); sitemap = sm.ok; }
-  } catch (_) {}
+  if (opts.skipSite) {
+    sitemap = !!opts.sitemapKnown;
+  } else {
+    try {
+      const origin = new URL(url).origin;
+      const rb = await _exists(`${origin}/robots.txt`, true); robots = rb.ok;
+      if (rb.text && /sitemap:/i.test(rb.text)) sitemap = true;
+      if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, false); sitemap = sm.ok; }
+    } catch (_) {}
+  }
 
   const lc = html.toLowerCase();
   const title = _between(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -309,10 +319,10 @@ async function _audit(url) {
   if (ogTitle) seo += 8; else add('seo', 'low', 'og_title', 'Open Graph titre absent', 'Améliore l\'aperçu lors des partages.');
   if (ogImage) seo += 7; else add('seo', 'low', 'og_image', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.');
   if (jsonld) seo += 10; else add('seo', 'medium', 'jsonld', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.');
-  if (sitemap) seo += 10; else add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
-  // Wix — sous-domaine gratuit (…wixsite.com) : pénalité SEO + crédibilité (détectable via l'URL).
+  if (sitemap) seo += 10; else if (!opts.skipSite) add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
+  // Wix — sous-domaine gratuit (…wixsite.com) : pénalité SEO + crédibilité (détectable via l'URL ; site-level).
   let _host = ''; try { _host = new URL(url).hostname; } catch (_) {}
-  if (/\.wixsite\.com$/i.test(_host)) add('seo', 'high', 'wix_subdomain', 'Site sur une adresse Wix gratuite', 'L\'adresse se termine par .wixsite.com : un domaine personnalisé améliorerait nettement le référencement et la crédibilité.');
+  if (!opts.skipSite && /\.wixsite\.com$/i.test(_host)) add('seo', 'high', 'wix_subdomain', 'Site sur une adresse Wix gratuite', 'L\'adresse se termine par .wixsite.com : un domaine personnalisé améliorerait nettement le référencement et la crédibilité.');
   seo = Math.min(100, seo);
 
   // ── Sécurité ──
@@ -339,7 +349,87 @@ async function _audit(url) {
   presence = Math.min(100, presence);
 
   const scores = { seo, securite, accessibilite, presence };
-  return { reachable, scores, findings };
+  return { reachable, scores, findings, sitemap };
+}
+
+// ── V2 · Crawl multi-pages — découverte + agrégation ────────────
+const MAX_AUDIT_PAGES = 5;   // home + 4 pages internes (coût borné)
+
+function _pathOf(u) { try { const p = new URL(u).pathname; return p && p !== '/' ? p.replace(/\/$/, '') : '/'; } catch (_) { return u; } }
+
+// Extrait les URLs de pages d'un sitemap (1 niveau d'index .xml toléré). Borné.
+async function _sitemapLocs(smUrl, norm, depth, budget) {
+  const out = [];
+  try {
+    const r = await _exists(smUrl, true);
+    if (!r.ok || !r.text) return out;
+    const locs = (r.text.match(/<loc>\s*([^<]+?)\s*<\/loc>/gi) || []).map((m) => m.replace(/<\/?loc>/gi, '').trim());
+    for (const loc of locs) {
+      if (out.length >= budget) break;
+      if (/\.xml(\?|$)/i.test(loc)) { if (depth > 0) out.push(...await _sitemapLocs(loc, norm, depth - 1, budget - out.length)); }
+      else { const u2 = norm(loc); if (u2) out.push(u2); }
+    }
+  } catch (_) {}
+  return out;
+}
+
+// Découvre jusqu'à `max` pages internes (hors home) : sitemap.xml puis liens de la home.
+async function _discoverPages(url, max) {
+  let origin = '', host = '';
+  try { const u = new URL(url); origin = u.origin; host = u.hostname.replace(/^www\./, ''); } catch (_) { return []; }
+  const ASSET = /\.(pdf|jpe?g|png|gif|svg|webp|ico|zip|mp4|mp3|css|js|json|xml)(\?|$)/i;
+  const norm = (h) => {
+    try { const x = new URL(h, origin); if (x.hostname.replace(/^www\./, '') !== host) return null; if (!/^https?:$/.test(x.protocol)) return null; x.hash = ''; x.search = ''; return x.href.replace(/\/$/, '') || x.href; } catch (_) { return null; }
+  };
+  const found = new Set();
+  for (const u2 of await _sitemapLocs(`${origin}/sitemap.xml`, norm, 1, max * 3)) { if (!ASSET.test(u2)) found.add(u2); }
+  if (found.size < max) {
+    try {
+      const r = await _exists(url, true);
+      if (r.ok && r.text) {
+        for (const h of (r.text.match(/href=["']([^"'#]+)["']/gi) || [])) {
+          const u2 = norm(h.replace(/^href=["']/i, '').replace(/["']$/, ''));
+          if (u2 && !ASSET.test(u2)) found.add(u2);
+        }
+      }
+    } catch (_) {}
+  }
+  const homeNorm = norm(url);
+  // Exclut la home et ses variantes (path « / », ex. www) → pas de doublon.
+  return [...found].filter((u2) => u2 !== homeNorm && _pathOf(u2) !== '/').slice(0, max);
+}
+
+// Audite la home + N pages internes en parallèle, agrège scores + findings.
+async function _auditSite(url) {
+  const home = await _audit(url);
+  let extraUrls = [];
+  try { extraUrls = await _discoverPages(url, MAX_AUDIT_PAGES - 1); } catch (_) {}
+  const extras = (await Promise.all(extraUrls.map((u) =>
+    _audit(u, { skipSite: true, sitemapKnown: home.sitemap }).then((r) => ({ url: u, ...r })).catch(() => null)
+  ))).filter((p) => p && p.reachable);
+  const pagesAudited = [{ url, ...home }].concat(extras);
+
+  // Scores = moyenne par axe sur les pages atteintes.
+  const scores = {};
+  for (const ax of ['seo', 'securite', 'accessibilite', 'presence']) {
+    const vals = pagesAudited.map((p) => p.scores && p.scores[ax]).filter((v) => typeof v === 'number');
+    scores[ax] = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  }
+
+  // Findings : site-level dédupliqués ; page-level taggés des pages concernées.
+  const SITE_LEVEL = new Set(['sitemap', 'wix_subdomain', 'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy']);
+  const byKey = new Map();
+  for (const p of pagesAudited) {
+    const path = _pathOf(p.url);
+    for (const f of (p.findings || [])) {
+      const ex = byKey.get(f.key);
+      if (ex) { if (ex.pages) ex.pages.push(path); }
+      else byKey.set(f.key, { axis: f.axis, sev: f.sev, key: f.key, title: f.title, detail: f.detail, pages: SITE_LEVEL.has(f.key) ? null : [path] });
+    }
+  }
+  const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
+  const pages = pagesAudited.map((p) => ({ path: _pathOf(p.url), score: _globalScore({ ...p.scores }) }));
+  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length };
 }
 
 // Disponibilité (axe S1) — % de relevés OK sur 24 h.
@@ -816,9 +906,9 @@ export async function handleSiteAudit(request, env, id) {
   const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
-  const a = await _audit(site.url);
+  const a = await _auditSite(site.url);   // V2 — crawl : home + pages internes, agrégé
   const dispo = await _uptime24(env, site.id);
-  const cwv = await _measurePerf(env, site.url);
+  const cwv = await _measurePerf(env, site.url);   // perf (CWV) = home seule (coût borné)
   const perf = _perfScore(cwv);
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
   const findings = a.findings.slice();
@@ -832,13 +922,14 @@ export async function handleSiteAudit(request, env, id) {
   const global = _globalScore(scores);
   const scoresJson = JSON.stringify(scores);
   const findingsJson = JSON.stringify(findings);
+  const pagesJson = JSON.stringify(a.pages || []);
 
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null).run();
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
 
-  return json({ audit: { score: global, scores, findings, cwv, reachable: a.reachable } }, 200, origin);
+  return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, reachable: a.reachable } }, 200, origin);
 }
 
 export async function handleSiteAuditGet(request, env, id) {
@@ -880,9 +971,9 @@ export async function handleSiteCockpit(request, env, id) {
   const series30d = seriesRows.map((r) => ({ d: r.d, ms: Math.round(r.ms || 0), up: r.up }));
 
   // Dernier audit + historique + tendance de score (vs ~7 j).
-  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   let audit = null;
-  if (auditRow) { let sc = null, fd = [], cw = null; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, created_at: auditRow.created_at }; }
+  if (auditRow) { let sc = null, fd = [], cw = null, pg = null; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, created_at: auditRow.created_at }; }
   const histRows = (await env.DB.prepare("SELECT created_at, score, scores FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all()).results || [];
   const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;
