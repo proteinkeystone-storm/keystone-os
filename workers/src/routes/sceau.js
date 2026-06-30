@@ -24,6 +24,7 @@
 import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { encrypt as encAtRest, decrypt as decAtRest } from '../lib/crypto.js';
+import { sendEmail } from '../lib/email-resend.js';
 import {
   Oprf, VOPRFServer, EvaluationRequest, randomPrivateKey, generatePublicKey,
 } from '@cloudflare/voprf-ts';
@@ -261,6 +262,75 @@ export async function handleSceauDelete(request, env, shortId) {
   await _destroyBlob(env, pre.blob_key);
   return json({ ok: true, status: 'detruit' }, 200, origin);
 }
+
+// POST /api/sceau/:id/email → MODE « SERVEUR DE CONFIANCE » (étiqueté faible).
+// Le code est généré sur l'appareil du créateur (chiffrement E2E inchangé) ;
+// ici le serveur RELAIE le code au destinataire par email. Il le VOIT donc le
+// temps de l'envoi → perte de l'aveuglement serveur, assumée et étiquetée.
+// Le code N'EST JAMAIS stocké ni logué.
+export async function handleSceauEmail(request, env, shortId) {
+  const origin = getAllowedOrigin(env, request);
+  const tenant = await _secTenant(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+
+  const row = await env.DB.prepare(
+    `SELECT tenant_id, status FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+  if (!row || row.tenant_id !== tenant) return err('Introuvable', 404, origin);
+  if (row.status !== 'scelle') return err('Missive non scellée', 409, origin);
+
+  const body = await parseBody(request);
+  const to = typeof body.to === 'string' ? body.to.trim().slice(0, 200) : '';
+  const code = typeof body.code === 'string' ? body.code.slice(0, 200) : '';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return err('Email invalide', 400, origin);
+  if (!code) return err('Code requis', 400, origin);
+  if (!env.KS_RESEND_KEY) return err('Service email non configuré', 503, origin);
+
+  // Le lien est reconstruit côté serveur (origine du Worker) — on ne fait pas
+  // confiance à un lien fourni par le client. Jeton ou secret direct.
+  const link = typeof body.token_id === 'string' && /^[A-Za-z0-9]{4,32}$/.test(body.token_id)
+    ? `${new URL(request.url).origin}/s/t/${body.token_id}`
+    : `${new URL(request.url).origin}/s/${shortId}`;
+
+  try {
+    await sendEmail(env, {
+      to,
+      subject: 'Vous avez reçu une missive sécurisée',
+      html: _emailHtml(link, code),
+    });
+  } catch (e) {
+    return err('Envoi email impossible', 502, origin);
+  }
+  return json({ ok: true }, 200, origin);
+}
+
+function _emailHtml(link, code) {
+  const L = _escHtml(link), C = _escHtml(code);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+  <body style="margin:0;padding:0;background:#0b0e14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0e14;padding:40px 16px">
+      <tr><td align="center">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#121826;border:1px solid #222b3d;border-radius:16px;overflow:hidden">
+          <tr><td style="padding:32px 32px 8px;text-align:center">
+            <div style="font:900 22px -apple-system,sans-serif;color:#eef2f8;letter-spacing:-0.02em">Missive sécurisée</div>
+            <p style="color:#8a94a6;font-size:14.5px;line-height:1.6;margin:14px 0 0">Une personne vous a transmis un message chiffré, à lire <strong style="color:#eef2f8">une seule fois</strong>. Ouvrez-le avec le code ci-dessous.</p>
+          </td></tr>
+          <tr><td style="padding:20px 32px">
+            <div style="background:#0d1320;border:1px solid #222b3d;border-radius:12px;padding:18px;text-align:center">
+              <div style="color:#8a94a6;font-size:12px;margin-bottom:8px">Votre code</div>
+              <div style="font:700 24px ui-monospace,Menlo,monospace;color:#fff;letter-spacing:2px">${C}</div>
+            </div>
+          </td></tr>
+          <tr><td style="padding:8px 32px 32px;text-align:center">
+            <a href="${L}" style="display:inline-block;background:#6c6cf5;color:#fff;text-decoration:none;font:700 16px -apple-system,sans-serif;padding:14px 28px;border-radius:12px">Ouvrir la missive</a>
+            <p style="color:#5a6478;font-size:12px;line-height:1.5;margin:18px 0 0">Au-delà des essais autorisés, la missive s'autodétruit définitivement. Si vous n'attendiez pas ce message, ignorez-le.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body></html>`;
+}
+function _escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 // ══════════════════════════════════════════════════════════════
 // LECTURE PUBLIQUE — au scan de /s/<id>

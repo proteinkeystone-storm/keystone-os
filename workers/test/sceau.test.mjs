@@ -12,7 +12,7 @@ import { Oprf, VOPRFClient, Evaluation } from '@cloudflare/voprf-ts';
 import { signJWT } from '../src/lib/jwt.js';
 import {
   handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauList,
-  handleSceauDelete, handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
+  handleSceauDelete, handleSceauEmail, handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
   handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
   handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened,
 } from '../src/routes/sceau.js';
@@ -477,6 +477,47 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   const plain = await createSealed('classique', PASS);
   const mp = await (await handleSceauMeta(pubReq('GET'), env, plain.shortId)).json();
   ok(mp.question === null, 'mode code -> meta.question = null (rétrocompat)');
+}
+
+console.log('\nN. Missive code par email (mode serveur de confiance, S9-T3)');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  const emailReq = (body) => new Request('https://keystone-os-api.keystone-os.workers.dev/api/sceau/x/email',
+    { method: 'POST', headers: auth, body: JSON.stringify(body) });
+  const { shortId } = await createSealed('msg email', PASS, { label: 'OTP' });
+
+  // Pas d'auth -> 401
+  const noAuth = await handleSceauEmail(pubReq('POST', { to: 'a@b.co', code: 'X' }), env, shortId);
+  ok(noAuth.status === 401, 'email sans auth -> 401');
+  // Email invalide -> 400
+  const badMail = await handleSceauEmail(emailReq({ to: 'pasunemail', code: 'X' }), env, shortId);
+  ok(badMail.status === 400, 'email invalide -> 400');
+  // Missive inexistante -> 404
+  const noSec = await handleSceauEmail(emailReq({ to: 'a@b.co', code: 'X' }), env, 'zzzznope');
+  ok(noSec.status === 404, 'missive inexistante -> 404');
+  // Pas de clé Resend -> 503 (et AUCUN envoi)
+  delete env.KS_RESEND_KEY;
+  const noKey = await handleSceauEmail(emailReq({ to: 'a@b.co', code: PASS }), env, shortId);
+  ok(noKey.status === 503, 'email non configuré -> 503');
+
+  // Succès : stub fetch pour intercepter Resend, vérifier code + lien dans le corps.
+  const realFetch = globalThis.fetch;
+  let captured = null;
+  globalThis.fetch = async (url, opts) => {
+    captured = { url: String(url), body: JSON.parse(opts.body) };
+    return new Response(JSON.stringify({ id: 'fake' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  env.KS_RESEND_KEY = 'fake-key';
+  const sent = await handleSceauEmail(emailReq({ to: 'dest@exemple.com', code: PASS }), env, shortId);
+  globalThis.fetch = realFetch; delete env.KS_RESEND_KEY;
+  ok(sent.status === 200, 'envoi email -> 200');
+  ok(captured && captured.url.includes('api.resend.com'), 'appel Resend émis');
+  ok(captured && captured.body.to.includes('dest@exemple.com'), 'destinataire correct');
+  ok(captured && captured.body.html.includes(PASS), 'le code est dans l\'email');
+  ok(captured && captured.body.html.includes('/s/' + shortId), 'le lien (reconstruit serveur) est dans l\'email');
+  // Le code N'EST PAS stocké en base
+  const raw = env.DB._db.prepare('SELECT * FROM sec_secrets WHERE short_id=?').get(shortId);
+  ok(!Object.values(raw).some(v => typeof v === 'string' && v.includes(PASS)), 'le code n\'est JAMAIS stocké en base');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

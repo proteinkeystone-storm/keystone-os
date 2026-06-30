@@ -72,7 +72,7 @@ import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handl
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
 // ── Sceau — secret usage-unique scellé E2E+OPRF (Pad O-SEC-001 · S1) ──
 // Route publique /s/ DISTINCTE de /r/ (SDQR prod) — on ne touche pas le hot-path QR.
-import { handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauList, handleSceauDelete,
+import { handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauList, handleSceauDelete, handleSceauEmail,
          handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
          handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
          handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened } from './routes/sceau.js';
@@ -629,8 +629,11 @@ export default {
       if (path === '/api/sceau/init' && method === 'POST') return handleSceauInit(request, env);
       if (path === '/api/sceau'      && method === 'GET')  return handleSceauList(request, env);
       {
-        const m = path.match(/^\/api\/sceau\/([A-Za-z0-9]{4,32})\/(eval|seal)$/);
-        if (m && method === 'POST') return (m[2] === 'eval' ? handleSceauEvalCreate : handleSceauSeal)(request, env, m[1]);
+        const m = path.match(/^\/api\/sceau\/([A-Za-z0-9]{4,32})\/(eval|seal|email)$/);
+        if (m && method === 'POST') {
+          const h = m[2] === 'eval' ? handleSceauEvalCreate : m[2] === 'seal' ? handleSceauSeal : handleSceauEmail;
+          return h(request, env, m[1]);
+        }
         const d = path.match(/^\/api\/sceau\/([A-Za-z0-9]{4,32})$/);
         if (d && method === 'DELETE') return handleSceauDelete(request, env, d[1]);
       }
