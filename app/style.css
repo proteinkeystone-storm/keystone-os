@@ -628,11 +628,16 @@ html.light-mode .engine-logo-light { display: block !important; }
   margin-bottom: 28px;
   overflow: hidden;
 }
-.hero-left { display: flex; align-items: center; gap: 16px; min-width: 0; flex: 1; }
+/* align-items:stretch → l'avatar épouse la hauteur du bloc texte (greeting + sous-titre)
+   pour un alignement haut/bas EXACT avec le texte (cf. demande d'alignement). */
+.hero-left { display: flex; align-items: stretch; gap: 16px; min-width: 0; flex: 1; }
 
-/* Identity slot — logo entreprise ou avatar */
+/* Identity slot — logo entreprise ou avatar.
+   width fixe + height:auto + align-self:stretch → l'avatar épouse EXACTEMENT
+   la hauteur du bloc texte (haut sur « Bonjour », bas sur le sous-titre). */
 .identity-slot {
-  width: 56px; height: 56px; flex-shrink: 0;
+  width: 56px; height: auto;
+  align-self: stretch; flex: 0 0 auto;
   border-radius: 14px;
   border: 1px solid rgba(99,102,241,.2);
   background: rgba(99,102,241,.06);
