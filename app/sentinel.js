@@ -549,8 +549,8 @@ function _renderCockpit() {
       <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
       ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
       ${_geoSectionHTML()}
-      ${_gscSectionHTML()}
       ${_aeoCardHTML()}
+      ${_gscSectionHTML()}
       ${_emailEnabled ? _emailRowHTML() : ''}
     </div>
   `;
