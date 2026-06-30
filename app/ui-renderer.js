@@ -6017,4 +6017,32 @@ function _updateIdentityZone() {
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke-linecap="round"/>
         </svg>`;
     }
+    _setupIdentitySlotSizing();
+}
+
+// Avatar carré dont le côté = hauteur du bloc texte (« Bonjour » + sous-titre),
+// pour aligner exactement le haut/bas de l'avatar avec le texte. Impossible en
+// CSS pur dans ce layout flex (la largeur d'un carré ne peut pas suivre une
+// hauteur étirée) → on mesure le bloc texte et on pose un carré à cette taille.
+let _identitySlotRO = null;
+function _sizeIdentitySlot() {
+    const slot = document.getElementById('identity-slot');
+    const txt  = slot && slot.nextElementSibling;
+    if (!slot || !txt) return;
+    const h = Math.round(txt.getBoundingClientRect().height);
+    if (h > 0) { slot.style.width = h + 'px'; slot.style.height = h + 'px'; }
+}
+function _setupIdentitySlotSizing() {
+    if (_identitySlotRO) { _sizeIdentitySlot(); return; }   // déjà installé
+    const slot = document.getElementById('identity-slot');
+    const txt  = slot && slot.nextElementSibling;
+    if (!txt) return;
+    // ResizeObserver sur le bloc texte → resize quand le Living Layer change /
+    // le prénom est posé / la ligne wrappe. Fallback : resize fenêtre.
+    if (typeof ResizeObserver !== 'undefined') {
+        _identitySlotRO = new ResizeObserver(() => _sizeIdentitySlot());
+        _identitySlotRO.observe(txt);
+    }
+    window.addEventListener('resize', _sizeIdentitySlot, { passive: true });
+    _sizeIdentitySlot();
 }
