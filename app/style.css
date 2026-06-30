@@ -671,7 +671,7 @@ html.light-mode .engine-logo-light { display: block !important; }
   letter-spacing: -0.01em;
   color: var(--text);
   opacity: .9;
-  margin: 4px 0 6px;
+  margin: 4px 0 0;
   max-width: 56ch;
   min-height: 1.6em;
   transition: opacity 300ms cubic-bezier(.18,.8,.3,1),
