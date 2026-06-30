@@ -60,7 +60,7 @@ function _serve(base) {
     `script-src 'self' 'nonce-${nonce}'`,
     `style-src 'nonce-${nonce}'`,
     "connect-src 'self'",
-    "img-src 'self' data:",
+    "img-src 'self' data: blob:",
     "media-src blob:",
     "base-uri 'none'",
     "form-action 'none'",
@@ -148,6 +148,10 @@ function _page(base, nonce, bundleHref, sri) {
   .copy-icon:hover{color:var(--ink);border-color:var(--accent)}
   .copy-icon.ok{color:var(--ok);border-color:var(--ok)}
   .secret-audio{width:100%;margin-top:4px}
+  .secret-img{max-width:100%;max-height:42vh;border-radius:14px;border:1px solid var(--line);margin-bottom:12px;display:block}
+  .dl-btn{display:block;width:100%;margin-top:16px;padding:14px 16px;border-radius:14px;text-decoration:none;text-align:center;
+    background:var(--accent);color:#fff;font:700 16px -apple-system,sans-serif;letter-spacing:-0.01em;transition:filter .15s}
+  .dl-btn:hover{filter:brightness(1.08)}
   .foot{margin-top:22px;font-size:11.5px;color:#5a6478;line-height:1.5}
   .foot a{color:#7e88a0}
   .hidden{display:none}
@@ -174,6 +178,10 @@ function _page(base, nonce, bundleHref, sri) {
     // Paramètres E2E CANONIQUES — DOIVENT être identiques côté création (S3).
     const HKDF_SALT = enc.encode('sceau/v1');
     const HKDF_INFO = enc.encode('aes-gcm-256');
+    // Normalisation de la réponse (mode question/réponse) — DOIT être IDENTIQUE
+    // côté création (app/sceau.js _normAnswer), sinon l'OPRF diverge.
+    const normAnswer = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
     async function aesKey(output){
       const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
@@ -189,12 +197,17 @@ function _page(base, nonce, bundleHref, sri) {
     function notFound(){ $('<h1>Missive introuvable</h1><p>Ce lien ne correspond à aucune missive.</p>'); }
     function tokenEmpty(){ $('<h1>Aucun message</h1><p>Cette missive n’a pas de message actif pour le moment.</p>'); }
 
-    function renderForm(attemptsLeft, oprfPub){
+    function renderForm(attemptsLeft, oprfPub, question){
+      const qa = !!question;
       $(
         '<h1>Missive scellée</h1>'+
-        '<p>Un message vous attend. Entrez le code reçu pour l’ouvrir.</p>'+
-        '<div class="field"><label for="pw">Code de déverrouillage</label>'+
-        '<input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="••••••••"></div>'+
+        (qa
+          ? '<p>Un message vous attend. Répondez à la question pour l’ouvrir.</p>'+
+            '<div class="field"><label for="pw">'+esc(question)+'</label>'+
+            '<input id="pw" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="Votre réponse"></div>'
+          : '<p>Un message vous attend. Entrez le code reçu pour l’ouvrir.</p>'+
+            '<div class="field"><label for="pw">Code de déverrouillage</label>'+
+            '<input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="••••••••"></div>')+
         '<button id="go">Ouvrir le sceau</button>'+
         '<div class="attempts" id="att">'+attemptsLeft+' essai'+(attemptsLeft>1?'s':'')+' restant'+(attemptsLeft>1?'s':'')+'</div>'+
         '<div class="foot">Chiffré de bout en bout : votre code n’est jamais transmis, et même nous ne pouvons pas lire ce message. '+
@@ -206,10 +219,14 @@ function _page(base, nonce, bundleHref, sri) {
       const attempt = async () => {
         const code = pw.value;
         if(!code){ pw.focus(); return; }
+        // En mode question/réponse, l'entrée OPRF est la réponse NORMALISÉE
+        // (casse/accents/espaces ignorés) — identique à la création.
+        const oprfInput = qa ? normAnswer(code) : code;
+        if(qa && !oprfInput){ pw.focus(); return; }
         go.disabled = true; go.textContent = 'Ouverture…';
         try{
           const client = new SceauVOPRF.VOPRFClient(SceauVOPRF.Oprf.Suite.P256_SHA256, b64d(oprfPub));
-          const [fin, ereq] = await client.blind([enc.encode(code)]);
+          const [fin, ereq] = await client.blind([enc.encode(oprfInput)]);
           // 1) blob (opaque, inoffensif) AVANT l'eval (cas one-shot).
           const blobRes = await fetch(BASE+'/blob', { cache:'no-store' });
           if(blobRes.status===410){ return dead('Cette missive s’est déjà autodétruite.'); }
@@ -231,9 +248,10 @@ function _page(base, nonce, bundleHref, sri) {
           }catch{
             // Mauvais code : le tag AES-GCM rejette. L'essai a été compté.
             const left = (ev.attempts_left ?? 0);
-            if(left<=0){ return dead('Code incorrect. La missive s’est autodétruite.'); }
+            const wrong = qa ? 'Réponse incorrecte' : 'Code incorrect';
+            if(left<=0){ return dead(wrong+'. La missive s’est autodétruite.'); }
             att.className = 'attempts warn';
-            att.textContent = 'Code incorrect — '+left+' essai'+(left>1?'s':'')+' restant'+(left>1?'s':'');
+            att.textContent = wrong+' — '+left+' essai'+(left>1?'s':'')+' restant'+(left>1?'s':'');
             pw.value=''; pw.focus(); go.disabled=false; go.textContent='Ouvrir le sceau';
             return;
           }
@@ -241,6 +259,7 @@ function _page(base, nonce, bundleHref, sri) {
           // que le sceau a été ouvert, et consomme le secret (lu une fois).
           fetch(BASE+'/opened', { method:'POST', cache:'no-store' }).catch(()=>{});
           if(blob.kind==='audio'){ revealAudio(URL.createObjectURL(new Blob([buf], { type: blob.mime || 'audio/webm' }))); }
+          else if(blob.kind==='file'){ revealFile(unpackFile(buf), blob.mime); }
           else { reveal(dec.decode(buf)); }
         }catch(e){
           go.disabled=false; go.textContent='Ouvrir le sceau';
@@ -281,6 +300,36 @@ function _page(base, nonce, bundleHref, sri) {
       }, 650);
     }
 
+    // Dépaquetage symétrique de _packFile (app/sceau.js) :
+    // [4 octets longueur LE][JSON {name,type}][octets fichier]. Le nom vit DANS le chiffré.
+    function unpackFile(buf){
+      const u8 = new Uint8Array(buf);
+      const n = new DataView(u8.buffer, u8.byteOffset, 4).getUint32(0, true);
+      let meta = {}; try{ meta = JSON.parse(dec.decode(u8.subarray(4, 4+n))); }catch{}
+      return { name: meta.name || 'fichier', type: meta.type || '', bytes: u8.subarray(4+n) };
+    }
+
+    function revealFile(f, mime){
+      seal.classList.add('cracked');
+      const type = mime || f.type || 'application/octet-stream';
+      const url = URL.createObjectURL(new Blob([f.bytes], { type }));
+      const isImg = /^image\//.test(type);
+      setTimeout(()=>{
+        $(
+          '<h1>Missive ouverte</h1>'+
+          '<p>Téléchargez maintenant — ce fichier ne se rouvrira pas après fermeture.</p>'+
+          (isImg ? '<img class="secret-img" id="img" alt="">' : '')+
+          '<div class="secret" id="fname"></div>'+
+          '<a class="dl-btn" id="dl" download>Télécharger le fichier</a>'+
+          '<div class="foot">Une fois cette page fermée, le fichier n’est plus accessible par ce lien.</div>'
+        );
+        document.getElementById('fname').textContent = f.name; // textContent : zéro injection
+        const dl = document.getElementById('dl');
+        dl.href = url; dl.setAttribute('download', f.name);
+        if(isImg){ document.getElementById('img').src = url; }
+      }, 650);
+    }
+
     (async function init(){
       try{
         const r = await fetch(BASE+'/meta', { cache:'no-store' });
@@ -288,7 +337,7 @@ function _page(base, nonce, bundleHref, sri) {
         if(r.status===410){ return dead('Cette missive s’est autodétruite ou a expiré.'); }
         if(!r.ok){ return dead('Cette missive n’est pas disponible.'); }
         const m = await r.json();
-        renderForm(m.attempts_left, m.oprf_pub);
+        renderForm(m.attempts_left, m.oprf_pub, m.question);
       }catch{ dead('Connexion impossible.'); }
     })();
   </script>

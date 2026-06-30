@@ -190,6 +190,10 @@ export async function handleSceauSeal(request, env, shortId) {
     if (!isNaN(t.getTime()) && t.getTime() > Date.now()) expiresAt = t.toISOString();
   }
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
+  // Mode question/réponse : l'indice (question) est NON secret et affiché avant
+  // déverrouillage. La réponse, elle, n'arrive jamais (aveuglée par l'OPRF).
+  const question = typeof body.question === 'string' && body.question.trim()
+    ? body.question.trim().slice(0, 200) : null;
 
   // Texte petit → inline D1 (atomique). Audio/fichier ou volumineux → R2.
   let inlineCt = ciphertext, blobKey = null;
@@ -201,11 +205,11 @@ export async function handleSceauSeal(request, env, shortId) {
 
   await env.DB.prepare(
     `UPDATE sec_secrets
-        SET ciphertext = ?, blob_key = ?, iv = ?, kind = ?, mime = ?, max_attempts = ?, attempts = 0,
+        SET ciphertext = ?, blob_key = ?, iv = ?, kind = ?, mime = ?, question = ?, max_attempts = ?, attempts = 0,
             expires_at = ?, label = COALESCE(?, label),
             status = 'scelle', sealed_at = datetime('now')
       WHERE short_id = ? AND status = 'init'`
-  ).bind(inlineCt, blobKey, iv, kind, mime, max, expiresAt, label, shortId).run();
+  ).bind(inlineCt, blobKey, iv, kind, mime, question, max, expiresAt, label, shortId).run();
 
   return json({ ok: true, short_id: shortId, status: 'scelle', kind, max_attempts: max, expires_at: expiresAt }, 200, origin);
 }
@@ -266,7 +270,7 @@ export async function handleSceauDelete(request, env, shortId) {
 export async function handleSceauMeta(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
   const row = await env.DB.prepare(
-    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, blob_key, kind, mime, expires_at
+    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, blob_key, kind, mime, question, expires_at
        FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
 
@@ -282,6 +286,7 @@ export async function handleSceauMeta(request, env, shortId) {
     oprf_pub: row.oprf_pub,
     kind: row.kind || 'text',
     mime: row.mime || null,
+    question: row.question || null,
     attempts_left: Math.max(0, row.max_attempts - row.attempts),
   }, 200, origin);
 }

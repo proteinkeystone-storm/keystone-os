@@ -30,6 +30,7 @@ function makeD1() {
   db.exec(readFileSync(join(__dir, '../migrations/008_sceau.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/009_sceau_tokens.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/010_sceau_blob.sql'), 'utf8'));
+  db.exec(readFileSync(join(__dir, '../migrations/011_sceau_question.sql'), 'utf8'));
   return {
     _db: db,
     prepare(sql) {
@@ -373,6 +374,109 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   const t = await createSealed('petit texte', PASS);
   const tr = env.DB._db.prepare('SELECT ciphertext, blob_key, kind FROM sec_secrets WHERE short_id=?').get(t.shortId);
   ok(tr.ciphertext && !tr.blob_key && tr.kind === 'text', 'texte court reste inline D1 (pas R2)');
+}
+
+console.log('\nL. Missive fichier (en-tête nom chiffré + octets en R2, S9)');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  // Pack/unpack symétriques de app/sceau.js + sceau-page.js (le nom vit DANS le chiffré).
+  const packFile = (name, type, bytes) => {
+    const meta = enc.encode(JSON.stringify({ name, type }));
+    const out = new Uint8Array(4 + meta.length + bytes.length);
+    new DataView(out.buffer).setUint32(0, meta.length, true);
+    out.set(meta, 4); out.set(bytes, 4 + meta.length);
+    return out;
+  };
+  const unpackFile = (buf) => {
+    const u8 = new Uint8Array(buf);
+    const n = new DataView(u8.buffer, u8.byteOffset, 4).getUint32(0, true);
+    const meta = JSON.parse(decd.decode(u8.subarray(4, 4 + n)));
+    return { name: meta.name, type: meta.type, bytes: u8.subarray(4 + n) };
+  };
+
+  const init = await (await handleSceauInit(req('POST', { label: 'Fichier' }), env)).json();
+  const client = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+  const [fin, ereq] = await client.blind([enc.encode(PASS)]);
+  const ev = await (await callEval(handleSceauEvalCreate, init.short_id, b64e(ereq.serialize()), true)).json();
+  const [out] = await client.finalize(fin, Evaluation.deserialize(SUITE, b64d(ev.evaluation)));
+  const key = await aesKeyFromOprf(out);
+
+  const fileBytes = Uint8Array.from({ length: 2048 }, (_, i) => (i * 13) % 256); // faux PDF
+  const payload = packFile('rapport secret.pdf', 'application/pdf', fileBytes);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, payload));
+  const seal = await handleSceauSeal(req('POST', { ciphertext: b64e(ct), iv: b64e(iv), kind: 'file', mime: 'application/pdf' }), env, init.short_id);
+  const sj = await seal.json();
+  ok(seal.status === 200 && sj.kind === 'file', 'seal file -> 200 kind=file');
+  const raw = env.DB._db.prepare('SELECT ciphertext, blob_key, kind, mime FROM sec_secrets WHERE short_id=?').get(init.short_id);
+  ok(raw.ciphertext === null && raw.blob_key === 'sec/' + init.short_id && raw.kind === 'file' && raw.mime === 'application/pdf', 'fichier chiffré en R2, le nom n\'est PAS en clair en base');
+  const metaCol = env.DB._db.prepare('SELECT * FROM sec_secrets WHERE short_id=?').get(init.short_id);
+  ok(!Object.values(metaCol).some(v => typeof v === 'string' && v.includes('rapport secret')), 'aucune colonne ne contient le nom de fichier en clair');
+
+  const meta = await (await handleSceauMeta(pubReq('GET'), env, init.short_id)).json();
+  ok(meta.kind === 'file' && meta.mime === 'application/pdf', 'meta -> kind/mime file');
+  // lecture : blob R2 + déchiffrement -> dépaquetage nom + octets exacts
+  const cl = new VOPRFClient(SUITE, b64d(meta.oprf_pub));
+  const [f2, r2e] = await cl.blind([enc.encode(PASS)]);
+  const blob = await (await handleSceauBlob(pubReq('GET'), env, init.short_id)).json();
+  const ev2 = await (await callEval(handleSceauEval, init.short_id, b64e(r2e.serialize()), false)).json();
+  const [o2] = await cl.finalize(f2, Evaluation.deserialize(SUITE, b64d(ev2.evaluation)));
+  const k2 = await aesKeyFromOprf(o2);
+  const dec2 = await subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, k2, b64d(blob.ciphertext));
+  const f = unpackFile(dec2);
+  ok(f.name === 'rapport secret.pdf' && f.type === 'application/pdf', 'lecture -> nom + type récupérés depuis l\'en-tête chiffré');
+  ok(f.bytes.length === 2048 && f.bytes[13] === ((13 * 13) % 256) && f.bytes[2047] === ((2047 * 13) % 256), 'lecture -> octets fichier exacts');
+  await handleSceauDelete(req('DELETE'), env, init.short_id);
+  ok(!env.HELP_MEDIA._m.has('sec/' + init.short_id), 'burn -> objet R2 fichier supprimé');
+}
+
+console.log('\nM. Missive question/réponse (E2E, la réponse remplace la passphrase, S9)');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  // Normalisation IDENTIQUE à app/sceau.js et sceau-page.js.
+  const normAnswer = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Scelle un secret en mode Q/R : l'entrée OPRF est la réponse normalisée.
+  const sealQA = async (plaintext, answer, question) => {
+    const init = await (await handleSceauInit(req('POST', {}), env)).json();
+    const client = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+    const [fin, ereq] = await client.blind([enc.encode(normAnswer(answer))]);
+    const ev = await (await callEval(handleSceauEvalCreate, init.short_id, b64e(ereq.serialize()), true)).json();
+    const [out] = await client.finalize(fin, Evaluation.deserialize(SUITE, b64d(ev.evaluation)));
+    const key = await aesKeyFromOprf(out);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext)));
+    await handleSceauSeal(req('POST', { ciphertext: b64e(ct), iv: b64e(iv), question, max_attempts: 3 }), env, init.short_id);
+    return { shortId: init.short_id, oprfPub: init.oprf_pub };
+  };
+
+  const { shortId, oprfPub } = await sealQA('Le secret du Procope', 'Café Lumière', 'Notre lieu de rendez-vous ?');
+  const raw = env.DB._db.prepare('SELECT question, ciphertext, blob_key FROM sec_secrets WHERE short_id=?').get(shortId);
+  ok(raw.question === 'Notre lieu de rendez-vous ?', 'question (indice) stockée en clair');
+  const full = env.DB._db.prepare('SELECT * FROM sec_secrets WHERE short_id=?').get(shortId);
+  ok(!Object.values(full).some(v => typeof v === 'string' && normAnswer(v).includes('cafelumiere')), 'la RÉPONSE n\'est jamais en base (E2E)');
+  const meta = await (await handleSceauMeta(pubReq('GET'), env, shortId)).json();
+  ok(meta.question === 'Notre lieu de rendez-vous ?', 'meta -> renvoie la question');
+
+  // Bonne réponse (normalisée) -> déchiffre.
+  const good = await readSecret(shortId, oprfPub, normAnswer('Café Lumière'));
+  ok(good.ok && good.plaintext === 'Le secret du Procope', 'bonne réponse -> déchiffre');
+
+  // Normalisation : casse/accents/espaces/ponctuation ignorés sur une NOUVELLE missive.
+  const q2 = await sealQA('msg', 'Café Lumière', 'Lieu ?');
+  const variant = await readSecret(q2.shortId, q2.oprfPub, normAnswer('  cafe LUMIERE !! '));
+  ok(variant.ok && variant.plaintext === 'msg', 'normalisation : « cafe LUMIERE !! » == « Café Lumière »');
+
+  // Mauvaise réponse -> GCM rejette + l'essai est compté.
+  const q3 = await sealQA('msg3', 'bonneReponse', 'Q ?');
+  const bad = await readSecret(q3.shortId, q3.oprfPub, normAnswer('mauvaise'));
+  ok(!bad.ok && bad.gcm === 'fail', 'mauvaise réponse -> GCM rejette');
+  const m3 = await (await handleSceauMeta(pubReq('GET'), env, q3.shortId)).json();
+  ok(m3.attempts_left === 2, 'mauvaise réponse -> essai compté (3 -> 2)');
+
+  // Sans question : mode code classique inchangé (meta.question = null).
+  const plain = await createSealed('classique', PASS);
+  const mp = await (await handleSceauMeta(pubReq('GET'), env, plain.shortId)).json();
+  ok(mp.question === null, 'mode code -> meta.question = null (rétrocompat)');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

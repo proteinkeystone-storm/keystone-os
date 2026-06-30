@@ -35,10 +35,12 @@ let _error = null;
 let _busy = false;
 let _result = null;        // { passphrase, url } (secret direct ou jeton)
 let _tokenTarget = null;   // tid si la création recharge un jeton existant
-let _createMode = 'text';  // 'text' | 'vocal'
+let _createMode = 'text';  // 'text' | 'vocal' | 'file'
 let _recBlob = null;       // Blob audio enregistré (mode vocal)
 let _rec = null;           // session MediaRecorder en cours
 let _recTimer = null;
+let _fileSel = null;       // File choisi (mode fichier)
+let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse)
 
 // ── Crypto navigateur ───────────────────────────────────────────
 let _V = null;
@@ -48,11 +50,31 @@ async function _voprf() {
 }
 function _b64e(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 function _b64d(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+// En-tête fichier E2E : [4 octets longueur LE][JSON {name,type} UTF-8][octets fichier].
+// Le nom vit DANS la charge chiffrée — le serveur ne le voit jamais. Doit rester
+// symétrique avec le dépaquetage de la page de lecture (sceau-page.js).
+function _packFile(name, type, bytes) {
+  const meta = _enc.encode(JSON.stringify({ name: String(name || 'fichier'), type: type || '' }));
+  const out = new Uint8Array(4 + meta.length + bytes.length);
+  new DataView(out.buffer).setUint32(0, meta.length, true);
+  out.set(meta, 4);
+  out.set(bytes, 4 + meta.length);
+  return out;
+}
+// Cap dur côté serveur = 8 Mo de b64 (SEC_SEAL_MAX). On garde une marge pour l'en-tête
+// nom + le tag AES-GCM : ~5,8 Mo de fichier brut.
+const SEC_FILE_MAX = 5_800_000;
 async function _aesKey(output) {
   const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'HKDF', hash: 'SHA-256', salt: HKDF_SALT, info: HKDF_INFO },
     ikm, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+// Normalisation de la réponse (mode question/réponse) — DOIT être IDENTIQUE
+// côté lecture (sceau-page.js), sinon le destinataire échoue au dernier essai.
+// NFD + suppression des diacritiques + minuscules + alphanumérique seul.
+function _normAnswer(s) {
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 // Passphrase forte GÉNÉRÉE (l'humain ne choisit jamais). 16 car. alphabet sans
 // ambiguïté (pas de O/0/I/1/L) = ~80 bits, dictables de vive voix en 4 groupes.
@@ -253,14 +275,30 @@ function _renderCreate(main) {
         <div class="sceau-modesw">
           <button type="button" class="sceau-mode ${_createMode === 'text' ? 'on' : ''}" data-act="mode-text">${icon('file', 15)} Texte</button>
           <button type="button" class="sceau-mode ${_createMode === 'vocal' ? 'on' : ''}" data-act="mode-vocal">${icon('radio', 15)} Vocal</button>
+          <button type="button" class="sceau-mode ${_createMode === 'file' ? 'on' : ''}" data-act="mode-file">${icon('paperclip', 15)} Fichier</button>
         </div>
         ${_createMode === 'text'
           ? `<label class="sceau-label" for="sceau-secret">Secret à transmettre</label>
              <textarea id="sceau-secret" class="sceau-textarea" rows="5" maxlength="20000" placeholder="Mot de passe, code, message confidentiel…"></textarea>`
-          : `<label class="sceau-label">Message vocal</label><div id="sceau-rec" class="sceau-rec"></div>`}
+          : _createMode === 'vocal'
+          ? `<label class="sceau-label">Message vocal</label><div id="sceau-rec" class="sceau-rec"></div>`
+          : `<label class="sceau-label">Fichier à transmettre</label><div id="sceau-file" class="sceau-rec"></div>`}
 
         <label class="sceau-label" for="sceau-name">Nom (pour vous, non transmis)</label>
         <input id="sceau-name" class="sceau-input" type="text" maxlength="120" placeholder="ex. Code coffre client X">
+
+        <label class="sceau-label">Déverrouillage</label>
+        <div class="sceau-modesw">
+          <button type="button" class="sceau-mode ${_unlockMode === 'code' ? 'on' : ''}" data-act="unlock-code">${icon('key', 15)} Code généré</button>
+          <button type="button" class="sceau-mode ${_unlockMode === 'qa' ? 'on' : ''}" data-act="unlock-qa">${icon('help-circle', 15)} Question / réponse</button>
+        </div>
+        ${_unlockMode === 'qa' ? `
+          <label class="sceau-label" for="sceau-q">Question (visible par le destinataire)</label>
+          <input id="sceau-q" class="sceau-input" type="text" maxlength="200" placeholder="ex. Le nom de notre premier client ?">
+          <label class="sceau-label" for="sceau-a">Réponse attendue (jamais transmise)</label>
+          <input id="sceau-a" class="sceau-input" type="text" maxlength="200" autocomplete="off" placeholder="ex. Dupont">
+          <p class="sceau-note">${icon('shield-check', 14)} La réponse <strong>n'est pas transmise</strong> : elle dérive la clé sur l'appareil du destinataire. Choisissez une réponse <strong>unique et non devinable</strong> par un tiers. La casse, les accents et les espaces sont ignorés.</p>
+        ` : ''}
 
         <div class="sceau-row2">
           <div>
@@ -288,6 +326,29 @@ function _renderCreate(main) {
       </form>
     </div>`;
   if (_createMode === 'vocal') _paintRecorder();
+  if (_createMode === 'file')  _paintFile();
+}
+
+// ── Sélecteur de fichier (mode fichier) ─────────────────────────
+function _fmtSize(n) {
+  if (n < 1024) return n + ' o';
+  if (n < 1048576) return (n / 1024).toFixed(0) + ' Ko';
+  return (n / 1048576).toFixed(1) + ' Mo';
+}
+function _paintFile() {
+  const el = _root && _root.querySelector('#sceau-file'); if (!el) return;
+  if (_fileSel) {
+    const over = _fileSel.size > SEC_FILE_MAX;
+    el.innerHTML = `<div class="sceau-file-pick">${icon('paperclip', 18)}<span class="sceau-file-name">${_esc(_fileSel.name)}</span><span class="sceau-nfc-msg">${_fmtSize(_fileSel.size)}</span></div>
+      ${over ? `<span class="sceau-nfc-msg" style="color:var(--sc-dead)">Fichier trop volumineux (max ${_fmtSize(SEC_FILE_MAX)}).</span>` : ''}
+      <button type="button" class="sceau-btn" data-act="file-reset">${icon('refresh', 15)} Changer de fichier</button>`;
+  } else {
+    el.innerHTML = `<button type="button" class="sceau-btn sceau-rec-go" data-act="file-pick">${icon('paperclip', 18)} Choisir un fichier</button>
+      <span class="sceau-nfc-msg">PDF, image, clé, .env… chiffré sur votre appareil. Max ${_fmtSize(SEC_FILE_MAX)}.</span>
+      <input id="sceau-file-input" type="file" hidden>`;
+    const inp = el.querySelector('#sceau-file-input');
+    if (inp) inp.addEventListener('change', () => { _fileSel = inp.files && inp.files[0] || null; _paintFile(); });
+  }
 }
 
 // ── Enregistreur vocal (mode vocal) ─────────────────────────────
@@ -346,18 +407,22 @@ function _renderResult(main) {
   const linkLbl = r.isToken
     ? (r.empty ? 'Le lien stable du jeton — écrivez-le sur la puce une seule fois' : 'Le lien stable du jeton (inchangé — la puce reste valable)')
     : '1. Le lien (ou le QR / la puce NFC)';
-  const passCard = r.empty ? '' : `
+  const passCard = r.empty ? '' : (r.qa ? `
+      <div class="sceau-card">
+        <div class="sceau-card-lbl">${r.isToken ? 'Le' : '2. Le'} déverrouillage — question / réponse</div>
+        <p class="sceau-note">${icon('help-circle', 14)} <strong>Rien à transmettre.</strong> Le destinataire ouvrira la missive en répondant à votre question — la réponse n'a jamais quitté votre appareil. Assurez-vous simplement qu'il connaît la réponse.</p>
+      </div>` : `
       <div class="sceau-card warn">
         <div class="sceau-card-lbl">${r.isToken ? 'Le' : '2. Le'} code de déverrouillage — affiché une seule fois</div>
         <div class="sceau-linkrow"><code class="sceau-code big">${_esc(r.passphrase)}</code><button class="sceau-iconbtn" data-act="copypass" title="Copier">${icon('copy', 17)}</button></div>
         <p class="sceau-note danger">${icon('alert-triangle', 14)} À transmettre par un <strong>autre canal</strong> que le lien (de vive voix, autre messagerie). Ni vous ni nous ne pourrons le retrouver. Évitez le SMS seul.</p>
-      </div>`;
+      </div>`);
   const emptyNote = r.empty ? `<p class="sceau-note">${icon('radio', 14)} Écrivez ce lien sur votre puce NFC (ou imprimez le QR) maintenant. Vous pourrez ensuite le <strong>recharger</strong> avec un nouveau secret autant de fois que vous voulez, sans retoucher l'objet.</p>` : '';
 
   main.innerHTML = `
     <div class="sceau-form-wrap">
       <div class="sceau-success">${icon('sceau', 44)}<h1>${r.empty ? 'Jeton créé' : 'Missive créée'}</h1></div>
-      <p class="sceau-sub">${r.empty ? 'Votre jeton réutilisable est prêt.' : 'Transmettez ces deux éléments au destinataire — idéalement par deux canaux différents.'}</p>
+      <p class="sceau-sub">${r.empty ? 'Votre jeton réutilisable est prêt.' : (r.qa ? 'Transmettez le lien au destinataire — il l\'ouvrira en répondant à votre question.' : 'Transmettez ces deux éléments au destinataire — idéalement par deux canaux différents.')}</p>
 
       <div class="sceau-card">
         <div class="sceau-card-lbl">${linkLbl}</div>
@@ -394,13 +459,18 @@ function _onClick(e) {
   if (act === 'reload-tok') return _loadTokens();
   if (act === 'tab-secrets') { _view = 'list'; _load(); return; }
   if (act === 'tab-tokens')  { _view = 'tokens'; _loadTokens(); return; }
-  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _view = 'create'; _render(); return; }
+  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _view = 'create'; _render(); return; }
   if (act === 'newtoken') return _createToken();
-  if (act === 'mode-text')  { _createMode = 'text';  _recBlob = null; _render(); return; }
-  if (act === 'mode-vocal') { _createMode = 'vocal'; _render(); return; }
+  if (act === 'mode-text')  { _createMode = 'text';  _recBlob = null; _fileSel = null; _render(); return; }
+  if (act === 'mode-vocal') { _createMode = 'vocal'; _fileSel = null; _render(); return; }
+  if (act === 'mode-file')  { _createMode = 'file';  _recBlob = null; _render(); return; }
   if (act === 'rec-start') return _recStart();
   if (act === 'rec-stop')  return _recStop();
   if (act === 'rec-reset') return _recReset();
+  if (act === 'file-pick') { const i = _root.querySelector('#sceau-file-input'); if (i) i.click(); return; }
+  if (act === 'file-reset') { _fileSel = null; _paintFile(); return; }
+  if (act === 'unlock-code') { _unlockMode = 'code'; _render(); return; }
+  if (act === 'unlock-qa')   { _unlockMode = 'qa';   _render(); return; }
   if (act === 'tolist') { _view = _tokenTarget ? 'tokens' : 'list'; _result = null; _tokenTarget = null; (_view === 'tokens' ? _loadTokens : _load)(); return; }
   if (act === 'link')   return _copyLink(id, t);
   if (act === 'qr')     return _toggleRowQr(`${API_BASE}/s/${id}`, id);
@@ -410,7 +480,7 @@ function _onClick(e) {
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
   if (act === 'nfc-url') return _writeNfcUrl(t.dataset.url, _root.querySelector('#sceau-rowqr-msg'));
-  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _view = 'create'; _render(); return; }
+  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _view = 'create'; _render(); return; }
   if (act === 'tok-link') return _copy(`${API_BASE}/s/t/${tid}`, t);
   if (act === 'tok-qr')   return _toggleRowQr(`${API_BASE}/s/t/${tid}`, tid);
   if (act === 'tok-burn') return _burnToken(tid);
@@ -428,6 +498,13 @@ async function _create() {
     if (!_recBlob) { _toast('Enregistrez un message vocal d\'abord.'); return; }
     payload = new Uint8Array(await _recBlob.arrayBuffer());
     kind = 'audio'; mime = _recBlob.type || 'audio/webm';
+  } else if (_createMode === 'file') {
+    if (!_fileSel) { _toast('Choisissez un fichier d\'abord.'); return; }
+    if (_fileSel.size > SEC_FILE_MAX) { _toast(`Fichier trop volumineux (max ${_fmtSize(SEC_FILE_MAX)}).`); return; }
+    const bytes = new Uint8Array(await _fileSel.arrayBuffer());
+    // Le nom est chiffré DANS la charge (en-tête) → le serveur ne le voit jamais.
+    payload = _packFile(_fileSel.name, _fileSel.type, bytes);
+    kind = 'file'; mime = _fileSel.type || 'application/octet-stream';
   } else {
     const secret = _root.querySelector('#sceau-secret')?.value || '';
     if (!secret.trim()) { _toast('Saisissez un secret.'); return; }
@@ -438,23 +515,37 @@ async function _create() {
   const expSec = parseInt(_root.querySelector('#sceau-exp')?.value || '0', 10);
   const expires_at = expSec > 0 ? new Date(Date.now() + expSec * 1000).toISOString() : null;
 
+  // Mode de déverrouillage : code généré (passphrase) OU question/réponse.
+  // En Q/R, la clé dérive de la réponse normalisée → rien à transmettre.
+  let question = null, oprfInput, passphrase = null;
+  if (_unlockMode === 'qa') {
+    question = _root.querySelector('#sceau-q')?.value?.trim() || '';
+    const answer = _root.querySelector('#sceau-a')?.value || '';
+    if (!question) { _toast('Saisissez une question.'); return; }
+    const normd = _normAnswer(answer);
+    if (!normd) { _toast('Saisissez une réponse (lettres ou chiffres).'); return; }
+    oprfInput = normd;
+  } else {
+    passphrase = _genPassphrase();
+    oprfInput = passphrase;
+  }
+
   _busy = true; _render();
   try {
-    const passphrase = _genPassphrase();
     const V = await _voprf();
     const SUITE = V.Oprf.Suite.P256_SHA256;
     // 1) init — le serveur crée la paire OPRF, renvoie la clé publique.
     const init = await _api('/init', { method: 'POST', body: { label } });
     // 2) eval de CRÉATION (non comptée) — dérive la sortie OPRF.
     const client = new V.VOPRFClient(SUITE, _b64d(init.oprf_pub));
-    const [fin, ereq] = await client.blind([_enc.encode(passphrase)]);
+    const [fin, ereq] = await client.blind([_enc.encode(oprfInput)]);
     const ev = await _api(`/${init.short_id}/eval`, { method: 'POST', body: { blinded: _b64e(ereq.serialize()) } });
     const [output] = await client.finalize(fin, V.Evaluation.deserialize(SUITE, _b64d(ev.evaluation)));
     // 3) chiffrement E2E sur l'appareil, puis seal (le serveur ne voit que le chiffré).
     const key = await _aesKey(output);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload));
-    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), kind, mime, max_attempts: max, expires_at, label } });
+    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), kind, mime, question, max_attempts: max, expires_at, label } });
 
     let url = `${API_BASE}/s/${init.short_id}`;
     if (_tokenTarget) {
@@ -462,7 +553,7 @@ async function _create() {
       await _api(`/token/${_tokenTarget}/point`, { method: 'POST', body: { short_id: init.short_id } });
       url = `${API_BASE}/s/t/${_tokenTarget}`;
     }
-    _result = { passphrase, url, isToken: !!_tokenTarget };
+    _result = { passphrase, url, isToken: !!_tokenTarget, qa: _unlockMode === 'qa' };
     _busy = false; _view = 'result'; _render();
   } catch (e) {
     _busy = false; _render();
