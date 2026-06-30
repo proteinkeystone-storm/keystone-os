@@ -30,8 +30,9 @@ const AXES = [
   { k: 'securite',      label: 'Sécurité' },
   { k: 'accessibilite', label: 'Accessibilité' },
   { k: 'presence',      label: 'Présence locale' },
+  { k: 'keywords',      label: 'Mots-clés' },   // V2 — Search Console (positions Google réelles)
 ];
-const SOON_AXES = ['Mots-clés'];
+const SOON_AXES = [];
 const SEV_LABEL = { high: 'Élevé', medium: 'Moyen', low: 'Faible' };
 
 let _root = null;
@@ -360,9 +361,9 @@ function _kpiCardsHTML(c) {
 }
 
 // Radar SVG — 7 axes qualité vs « Objectif » (85). Disponibilité = KPI, hors radar.
-function _radarSVG(scores, geoScore) {
+function _radarSVG(scores, geoScore, gscScore) {
   const axes = [
-    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Mots-clés', null],
+    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Mots-clés', (gscScore != null ? gscScore : null)],
     ['Visibilité IA', geoScore], ['Présence locale', scores.presence], ['Sécurité', scores.securite], ['Accessibilité', scores.accessibilite],
   ];
   const N = axes.length, W = 520, H = 380, cx = 260, cy = 188, R = 122, OBJ = 85;
@@ -538,7 +539,7 @@ function _renderCockpit() {
       <div class="snt-ck-grid">
         <div class="snt-ck-panel">
           <div class="snt-ck-panel-h"><span>Profil du site</span><span class="snt-radar-leg"><i class="snt-radar-leg-site"></i> Ton site${a.score != null ? ' · ' + a.score + '/100' : ''} &nbsp; <i class="snt-radar-leg-obj"></i> Objectif</span></div>
-          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null)}
+          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null, (c.gsc && c.gsc.connected && c.gsc.score != null) ? c.gsc.score : null)}
         </div>
         <div class="snt-ck-panel">
           <div class="snt-ck-panel-h"><span>Temps de réponse — 30 jours</span>${next}</div>
@@ -548,6 +549,7 @@ function _renderCockpit() {
       <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
       ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
       ${_geoSectionHTML()}
+      ${_gscSectionHTML()}
       ${_aeoCardHTML()}
       ${_emailEnabled ? _emailRowHTML() : ''}
     </div>
@@ -731,6 +733,68 @@ async function _geoManualRun() {
     if (msg) msg.innerHTML = `<div class="snt-ai-err">${icon('x', 13)} ${_esc(e.message || 'Analyse impossible.')}</div>`;
   }
 }
+// ── V2 · Search Console — section « Mots-clés » (positions Google réelles) ──
+// N'apparaît que si le serveur a câblé l'OAuth Google (gsc.available). Sinon
+// rien : l'axe « Mots-clés » du radar reste en pointillé (« à venir »).
+function _gscSectionHTML() {
+  const x = (_panel && _panel.gsc) || null;
+  if (!x || !x.available) return '';
+  const head = `<div class="snt-aeo-head">${icon('bar-chart', 18)}<div><div class="snt-aeo-t">Mots-clés Google (Search Console)</div><div class="snt-aeo-d">Vos positions réelles dans Google : sur quelles requêtes vous apparaissez, à quel rang, et combien de clics. Connexion sécurisée en lecture seule.</div></div></div>`;
+  if (!x.connected) {
+    return `<div class="snt-geo" id="snt-gsc-sec">${head}
+      <div class="snt-gsc-connect">
+        <button class="snt-ai-btn" data-act="gsc-connect">${icon('link', 14)} Connecter Search Console</button>
+        <div class="snt-geo-hint">Le site doit être validé dans votre Search Console, avec le même compte Google.</div>
+      </div></div>`;
+  }
+  return `<div class="snt-geo" id="snt-gsc-sec">${head}${_gscResultsHTML(x)}
+    <div class="snt-geo-actions">
+      <button class="snt-ai-btn" data-act="gsc-run">${icon('refresh', 13)} Rafraîchir</button>
+      <button class="snt-ai-regen" data-act="gsc-disconnect">${icon('x', 12)} Déconnecter</button>
+    </div></div>`;
+}
+function _gscResultsHTML(x) {
+  const sc = x.score, r = x.results || {}, t = r.totals || {};
+  const queries = (r.queries || []).slice(0, 10);
+  const propLine = x.property ? `<div class="snt-geo-legend">${_esc(x.property)}${x.account_email ? ' · ' + _esc(x.account_email) : ''}</div>` : '';
+  const pos = (v) => (v != null ? 'n°' + String(v).replace('.', ',') : '—');
+  const totalsLine = `<div class="snt-gsc-totals"><span>${t.clicks || 0} clic${(t.clicks || 0) > 1 ? 's' : ''}</span><span>${t.impressions || 0} impression${(t.impressions || 0) > 1 ? 's' : ''}</span>${t.position != null ? `<span>position moy. ${String(t.position).replace('.', ',')}</span>` : ''}<span class="snt-geo-hint">sur 28 jours</span></div>`;
+  const rows = queries.length
+    ? queries.map((q) => `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(q.query)}</div><div class="snt-gsc-m"><span>${pos(q.position)}</span><span>${q.clicks} clic${q.clicks > 1 ? 's' : ''}</span><span>${q.impressions} vue${q.impressions > 1 ? 's' : ''}</span></div></div>`).join('')
+    : `<div class="snt-geo-hint">Aucune requête sur la période (site récent, ou trop peu d'impressions pour figurer).</div>`;
+  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score Mots-clés${x.run_at ? ' · ' + _ago(x.run_at) : ''}</div></div>${propLine}${totalsLine}<div class="snt-geo-rows">${rows}</div>`;
+}
+// Démarre l'OAuth Google dans un nouvel onglet (le callback arrive sur le worker).
+async function _gscConnect() {
+  if (!_panel || !_panel.id) return;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/gsc/connect`);
+    if (d && d.authUrl) { window.open(d.authUrl, '_blank', 'noopener'); _sntToast('Autorise Google dans le nouvel onglet, reviens puis « Rafraîchir ».'); }
+  } catch (e) { alert(e.message || 'Connexion impossible.'); }
+}
+async function _gscRun() {
+  if (!_panel || !_panel.id) return;
+  const sec = _root && _root.querySelector('#snt-gsc-sec');
+  if (sec) sec.innerHTML = `<div class="snt-ai-load">${icon('refresh', 14)} Lecture de Search Console…</div>`;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/gsc/run`, { method: 'POST', timeout: 45000 });
+    _panel.gsc = Object.assign({}, _panel.gsc, d.gsc, { available: true, connected: true });
+    _renderCockpit();
+  } catch (e) {
+    _renderCockpit();
+    alert(e.message || 'Lecture impossible.');
+  }
+}
+async function _gscDisconnect() {
+  if (!_panel || !_panel.id) return;
+  if (!confirm('Déconnecter Search Console de ce site ?')) return;
+  try {
+    await _api(`/sites/${encodeURIComponent(_panel.id)}/gsc/disconnect`, { method: 'POST' });
+    _panel.gsc = Object.assign({}, _panel.gsc, { connected: false, score: null, results: null, property: null, account_email: null });
+    _renderCockpit();
+  } catch (e) { alert(e.message || 'Déconnexion impossible.'); }
+}
+
 // S4.1 — carte « opportunité » AEO : générer une FAQ structurée (pilier GEO).
 function _aeoCardHTML() {
   return `<div class="snt-aeo">
@@ -781,6 +845,7 @@ function _exportPdf() {
   const RADAR_AXES = [
     ['Performance', scores.performance], ['SEO technique', scores.seo], ['Sécurité', scores.securite],
     ['Accessibilité', scores.accessibilite], ['Présence locale', scores.presence],
+    ['Mots-clés (Google)', (p.gsc && p.gsc.connected && p.gsc.score != null) ? p.gsc.score : null],
     ['Visibilité IA (GEO)', (p.geo && p.geo.score != null) ? p.geo.score : null], ['Disponibilité', p.uptime30d != null ? Math.round(p.uptime30d) : scores.disponibilite],
   ];
   const axisRows = RADAR_AXES.map(([label, v]) => `<tr>
@@ -952,6 +1017,9 @@ function _onClick(e) {
   if (a === 'geo-save')          return _geoSave();
   if (a === 'geo-manual-toggle') return _geoManualToggle();
   if (a === 'geo-manual-run')    return _geoManualRun();
+  if (a === 'gsc-connect')       return _gscConnect();
+  if (a === 'gsc-run')           return _gscRun();
+  if (a === 'gsc-disconnect')    return _gscDisconnect();
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;

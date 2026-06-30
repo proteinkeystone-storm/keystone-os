@@ -116,6 +116,10 @@ crons = ["0 3 * * *", "* * * * *", "*/5 * * * *"]
 # ── Secrets à définir via `wrangler secret put` ───────────────
 # KS_ADMIN_SECRET   — même valeur que dans Vercel
 # KS_ENCRYPTION_KEY — clé 32+ chars pour chiffrer les clés API
+# KS_GSC_CLIENT_ID      — Client ID OAuth Google (Sentinel V2 · Search Console)
+# KS_GSC_CLIENT_SECRET  — Client Secret OAuth Google ; redirect URI à enregistrer
+#                         côté Google = <origine worker>/api/sentinel/gsc/callback
+#                         (scope demandé : webmasters.readonly, lecture seule)
 
 # ── Environnement de développement local ─────────────────────
 [dev]

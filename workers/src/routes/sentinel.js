@@ -26,7 +26,9 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
-import { requireJWT } from '../lib/jwt.js';
+import { requireJWT, signJWT, verifyJWT } from '../lib/jwt.js';
+// V2 — Search Console : refresh_token Google chiffré au repos (AES-256-GCM).
+import { encrypt, decrypt } from '../lib/crypto.js';
 import { validateImportUrl } from './smart-agent.js';
 import { sendPush } from '../lib/webpush.js';
 import puppeteer from '@cloudflare/puppeteer';
@@ -104,6 +106,18 @@ async function _ensureSchema(env) {
        site_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
        business_name TEXT, city TEXT, activity TEXT, prompts TEXT,
        last_score INTEGER, last_results TEXT, last_run_at TEXT, next_geo_at TEXT,
+       updated_at TEXT DEFAULT (datetime('now')),
+       FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
+    // V2 — Google Search Console (axe « Mots-clés » : positions Google réelles).
+    // OAuth par site : refresh_token chiffré (AES-GCM). last_* = dernier relevé.
+    // Multi-sites par construction ; en mode « Test » Google seuls les comptes
+    // testeurs peuvent autoriser (publier l'app OAuth ouvre aux clients, zéro code).
+    `CREATE TABLE IF NOT EXISTS sentinel_gsc (
+       site_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
+       property TEXT, account_email TEXT,
+       refresh_ciphertext TEXT, refresh_iv TEXT,
+       status TEXT NOT NULL DEFAULT 'disconnected',
+       last_score INTEGER, last_results TEXT, last_run_at TEXT, next_gsc_at TEXT,
        updated_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
   ];
@@ -819,9 +833,17 @@ export async function handleSiteCockpit(request, env, id) {
     geo = { enabled: _geoEnabled(env), configured: true, business_name: geoRow.business_name || (site.label || _hostOf(site.url)), city: geoRow.city || '', activity: geoRow.activity || '', prompts: prompts.length ? prompts : _defaultGeoPrompts(geoRow.activity || '', geoRow.city || ''), score: geoRow.last_score, results, run_at: geoRow.last_run_at };
   }
 
+  // V2 — Search Console (config + dernier relevé Mots-clés).
+  const gscRow = await _gscConfigRow(env, id, g.tenant);
+  let gsc = { available: _gscEnabled(env), connected: false, property: null, account_email: null, score: null, results: null, run_at: null };
+  if (gscRow) {
+    let gr = null; try { gr = gscRow.last_results ? JSON.parse(gscRow.last_results) : null; } catch (_) {}
+    gsc = { available: _gscEnabled(env), connected: gscRow.status === 'connected', property: gscRow.property, account_email: gscRow.account_email, score: gscRow.last_score, results: gr, run_at: gscRow.last_run_at };
+  }
+
   return json({ cockpit: {
     site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
-    uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo,
+    uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
     email_enabled: !!(env && (env.KS_RESEND_KEY || env.RESEND_API_KEY)),
   } }, 200, origin);
 }
@@ -1293,6 +1315,250 @@ export async function handleSiteGeoManual(request, env, id) {
     .bind(score, JSON.stringify(results), id, g.tenant).run();
 
   return json({ geo: { score, results, run_at: new Date().toISOString(), business_name: businessName, city, activity, prompts, engines: [engine], mode: 'manual' } }, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// V2 · GOOGLE SEARCH CONSOLE — axe « Mots-clés » (positions Google réelles)
+//
+// OAuth par site (scope webmasters.readonly, lecture seule). Le refresh_token
+// est chiffré au repos (AES-GCM, réutilise KS_ENCRYPTION_KEY). Le code reste
+// multi-sites : l'UI propose la connexion sur chaque site. En mode « Test »
+// Google, seuls les comptes ajoutés en testeurs autorisent ; publier l'app
+// OAuth ouvre la connexion aux clients sans aucune réécriture.
+//
+// Secrets Worker requis : KS_GSC_CLIENT_ID, KS_GSC_CLIENT_SECRET (+ l'URI de
+// redirection enregistrée côté Google = origine Worker + GSC_REDIRECT_PATH).
+// ═══════════════════════════════════════════════════════════════
+const GSC_REDIRECT_PATH = '/api/sentinel/gsc/callback';
+const GSC_SCOPE         = 'https://www.googleapis.com/auth/webmasters.readonly';
+const GSC_STATE_TTL     = 600;     // 10 min — le state signé expire vite
+const GSC_WINDOW_DAYS   = 28;      // fenêtre d'analyse
+const GSC_LATENCY_DAYS  = 2;       // les données GSC ont ~2 j de retard
+const GSC_ROW_LIMIT     = 25;      // top requêtes remontées
+
+function _gscEnabled(env) {
+  return !!(env && env.KS_GSC_CLIENT_ID && env.KS_GSC_CLIENT_SECRET && env.KS_ENCRYPTION_KEY);
+}
+function _gscRedirectUri(request) {
+  return new URL(request.url).origin + GSC_REDIRECT_PATH;
+}
+function _gscConfigRow(env, id, tenant) {
+  return env.DB.prepare("SELECT property, account_email, status, last_score, last_results, last_run_at FROM sentinel_gsc WHERE site_id = ? AND tenant_id = ?").bind(id, tenant).first();
+}
+function _gscDate(daysAgo) {
+  return new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
+}
+function _escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// Page de retour minimaliste (le callback Google arrive hors du front).
+function _gscHtml(msg) {
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<body style="font-family:system-ui,-apple-system,sans-serif;background:#0b1020;color:#e7e9ee;display:grid;place-items:center;min-height:100vh;margin:0">` +
+    `<div style="text-align:center;max-width:480px;padding:28px;font-size:16px;line-height:1.6">${msg}</div></body>`,
+    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+  );
+}
+
+// OAuth : échange du code → tokens (refresh_token inclus si access_type=offline+prompt=consent).
+async function _gscExchangeCode(env, code, redirectUri) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code, client_id: env.KS_GSC_CLIENT_ID, client_secret: env.KS_GSC_CLIENT_SECRET,
+      redirect_uri: redirectUri, grant_type: 'authorization_code',
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.error || `token ${res.status}`);
+  return data;
+}
+// OAuth : refresh_token → access_token frais (à chaque relevé).
+async function _gscAccessToken(env, refreshToken) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.KS_GSC_CLIENT_ID, client_secret: env.KS_GSC_CLIENT_SECRET,
+      refresh_token: refreshToken, grant_type: 'refresh_token',
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.error || `refresh ${res.status}`);
+  return data.access_token;
+}
+async function _gscUserEmail(accessToken) {
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${accessToken}` } });
+    const d = await r.json().catch(() => ({}));
+    return d && d.email ? String(d.email).slice(0, 160) : '';
+  } catch (_) { return ''; }
+}
+async function _gscListProperties(accessToken) {
+  const r = await fetch('https://www.googleapis.com/webmasters/v3/sites', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d && d.error && d.error.message) || `sites ${r.status}`);
+  return (d.siteEntry || []).map((s) => ({ siteUrl: s.siteUrl }));
+}
+// Choisit la meilleure propriété GSC pour l'URL du site : domaine (sc-domain:) > préfixe d'URL.
+function _gscPickProperty(props, siteUrl) {
+  let host = ''; try { host = new URL(siteUrl).host.replace(/^www\./, ''); } catch (_) {}
+  if (!host) return null;
+  const dom = props.find((p) => p.siteUrl === `sc-domain:${host}`);
+  if (dom) return dom.siteUrl;
+  const pref = props.find((p) => { try { return new URL(p.siteUrl).host.replace(/^www\./, '') === host; } catch (_) { return false; } });
+  return pref ? pref.siteUrl : null;
+}
+async function _gscQuery(accessToken, property, body) {
+  const r = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(property)}/searchAnalytics/query`, {
+    method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error((d && d.error && d.error.message) || `query ${r.status}`); e.httpStatus = r.status; throw e; }
+  return d.rows || [];
+}
+// Score « Mots-clés » 0-100 : position moyenne pondérée par les impressions.
+// position 1 → 100 ; 10 → ~64 ; 20 → ~24 ; ≥26 → 0. Pas d'impression = 0 (invisible).
+function _gscScore(rows) {
+  let imp = 0, wpos = 0;
+  for (const r of rows) { const i = r.impressions || 0; if (i > 0 && r.position) { imp += i; wpos += i * r.position; } }
+  if (!imp) return 0;
+  const avg = wpos / imp;
+  return Math.max(0, Math.min(100, Math.round(100 - (avg - 1) * 4)));
+}
+// Relevé complet : access token frais → top requêtes + totaux → score → persiste.
+async function _gscExecuteRun(env, { id, tenant, property, refreshToken }) {
+  const accessToken = await _gscAccessToken(env, refreshToken);
+  const startDate = _gscDate(GSC_WINDOW_DAYS + GSC_LATENCY_DAYS), endDate = _gscDate(GSC_LATENCY_DAYS);
+  const rows = await _gscQuery(accessToken, property, { startDate, endDate, dimensions: ['query'], rowLimit: GSC_ROW_LIMIT });
+  const queries = rows.map((r) => ({
+    query: (r.keys && r.keys[0]) || '', clicks: r.clicks || 0, impressions: r.impressions || 0,
+    ctr: Math.round((r.ctr || 0) * 1000) / 10, position: r.position ? Math.round(r.position * 10) / 10 : null,
+  })).filter((q) => q.query);
+  let totals = { clicks: 0, impressions: 0, position: null };
+  try {
+    const tr = await _gscQuery(accessToken, property, { startDate, endDate, dimensions: [], rowLimit: 1 });
+    if (tr && tr[0]) totals = { clicks: tr[0].clicks || 0, impressions: tr[0].impressions || 0, position: tr[0].position ? Math.round(tr[0].position * 10) / 10 : null };
+  } catch (_) { /* totaux best-effort */ }
+  const score = _gscScore(rows);
+  const results = { window: { startDate, endDate }, totals, queries };
+  await env.DB.prepare("UPDATE sentinel_gsc SET last_score = ?, last_results = ?, last_run_at = datetime('now'), next_gsc_at = datetime('now','+7 days'), status='connected', updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
+    .bind(score, JSON.stringify(results), id, tenant).run();
+  return { score, results };
+}
+
+// GET /sites/:id/gsc/connect — démarre l'OAuth Google (renvoie { authUrl }).
+export async function handleSiteGscConnect(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  if (!_gscEnabled(env)) return err("La connexion Search Console n'est pas activée côté serveur.", 503, origin);
+  const site = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+  const state = await signJWT({ purpose: 'gsc_oauth', tenant: g.tenant, site_id: id }, env, GSC_STATE_TTL);
+  const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  u.searchParams.set('client_id', env.KS_GSC_CLIENT_ID);
+  u.searchParams.set('redirect_uri', _gscRedirectUri(request));
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', GSC_SCOPE);
+  u.searchParams.set('access_type', 'offline');     // → refresh_token
+  u.searchParams.set('prompt', 'consent');          // force le refresh_token même au 2e passage
+  u.searchParams.set('include_granted_scopes', 'true');
+  u.searchParams.set('state', state);
+  return json({ authUrl: u.toString() }, 200, origin);
+}
+
+// GET /api/sentinel/gsc/callback — Google redirige ici (public ; tenant+site scellés dans le state signé).
+export async function handleGscCallback(request, env) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  const oErr = url.searchParams.get('error');
+  if (oErr) return _gscHtml(`❌ Autorisation refusée : ${_escHtml(oErr)}`);
+  if (!code || !state) return _gscHtml('❌ Paramètres manquants (code/state).');
+  let tenant, siteId;
+  try {
+    const claims = await verifyJWT(state, env);
+    if (claims.purpose !== 'gsc_oauth' || !claims.tenant || !claims.site_id) throw new Error('state');
+    tenant = claims.tenant; siteId = claims.site_id;
+  } catch (_) {
+    return _gscHtml('❌ Sécurité : lien de connexion invalide ou expiré. Relance depuis Sentinel.');
+  }
+  if (!_gscEnabled(env)) return _gscHtml('❌ Search Console non configuré sur le Worker.');
+  await _ensureSchema(env);
+  const site = await env.DB.prepare("SELECT id, url FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(siteId, tenant).first();
+  if (!site) return _gscHtml('❌ Site introuvable pour ce compte.');
+  try {
+    const tok = await _gscExchangeCode(env, code, _gscRedirectUri(request));
+    if (!tok.refresh_token) return _gscHtml("❌ Google n'a pas renvoyé de jeton de rafraîchissement. Révoque l'accès « Sentinel » dans ton compte Google (myaccount.google.com → Sécurité), puis reconnecte.");
+    const props = await _gscListProperties(tok.access_token);
+    const property = _gscPickProperty(props, site.url);
+    if (!property) return _gscHtml(`❌ Aucune propriété Search Console ne correspond à ${_escHtml(site.url)}. Vérifie que ce site est validé dans ta Search Console, avec le même compte Google.`);
+    const email = await _gscUserEmail(tok.access_token);
+    const enc = await encrypt(tok.refresh_token, env.KS_ENCRYPTION_KEY);
+    await env.DB.prepare(`
+      INSERT INTO sentinel_gsc (site_id, tenant_id, property, account_email, refresh_ciphertext, refresh_iv, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'connected', datetime('now'))
+      ON CONFLICT(site_id) DO UPDATE SET property=excluded.property, account_email=excluded.account_email, refresh_ciphertext=excluded.refresh_ciphertext, refresh_iv=excluded.refresh_iv, status='connected', updated_at=datetime('now')
+    `).bind(siteId, tenant, property, email, enc.ciphertext, enc.iv).run();
+    try { await _gscExecuteRun(env, { id: siteId, tenant, property, refreshToken: tok.refresh_token }); } catch (_) { /* 1er relevé best-effort */ }
+    return _gscHtml(`✅ <strong>Search Console connectée</strong> : ${_escHtml(property)}${email ? ` (${_escHtml(email)})` : ''}<br><br>Ferme cet onglet et recharge <strong>Sentinel</strong>.`);
+  } catch (e) {
+    return _gscHtml(`❌ Échec de connexion : ${_escHtml(e.message || 'erreur inconnue')}`);
+  }
+}
+
+// GET /sites/:id/gsc — config + dernier relevé (jamais de secret renvoyé).
+export async function handleSiteGscGet(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const row = await _gscConfigRow(env, id, g.tenant);
+  let results = null; if (row && row.last_results) { try { results = JSON.parse(row.last_results); } catch (_) {} }
+  return json({ gsc: {
+    available: _gscEnabled(env),
+    connected: !!(row && row.status === 'connected'),
+    property: row ? row.property : null,
+    account_email: row ? row.account_email : null,
+    score: row ? row.last_score : null,
+    results, run_at: row ? row.last_run_at : null,
+  } }, 200, origin);
+}
+
+// POST /sites/:id/gsc/run — rafraîchit le relevé Search Console.
+export async function handleSiteGscRun(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  if (!_gscEnabled(env)) return err("Search Console n'est pas activé côté serveur.", 503, origin);
+  const site = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+  const row = await env.DB.prepare("SELECT property, refresh_ciphertext, refresh_iv, status FROM sentinel_gsc WHERE site_id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!row || row.status !== 'connected' || !row.refresh_ciphertext) return err('Search Console non connectée pour ce site.', 409, origin);
+  let refreshToken;
+  try { refreshToken = await decrypt(row.refresh_ciphertext, row.refresh_iv, env.KS_ENCRYPTION_KEY); }
+  catch (_) { return err('Jeton illisible — reconnecte Search Console.', 500, origin); }
+  try {
+    const out = await _gscExecuteRun(env, { id, tenant: g.tenant, property: row.property, refreshToken });
+    return json({ gsc: { connected: true, property: row.property, score: out.score, results: out.results, run_at: new Date().toISOString() } }, 200, origin);
+  } catch (e) {
+    const m = String(e.message || '');
+    if (e.httpStatus === 401 || e.httpStatus === 403 || /invalid_grant|unauthorized/i.test(m)) {
+      await env.DB.prepare("UPDATE sentinel_gsc SET status='error', updated_at=datetime('now') WHERE site_id = ? AND tenant_id = ?").bind(id, g.tenant).run();
+      return err("L'accès Google a expiré ou a été révoqué. Reconnecte Search Console.", 401, origin);
+    }
+    return err(`Lecture Search Console impossible (${m || 'service indisponible'}).`, 502, origin);
+  }
+}
+
+// POST /sites/:id/gsc/disconnect — retire la connexion (efface le token chiffré).
+export async function handleSiteGscDisconnect(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  await env.DB.prepare("DELETE FROM sentinel_gsc WHERE site_id = ? AND tenant_id = ?").bind(id, g.tenant).run();
+  return json({ ok: true }, 200, origin);
 }
 
 // ── Web push : abonnement (S1.5, patron keynapse) ───────────────

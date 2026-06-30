@@ -154,6 +154,7 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
          handleSiteCheck, handleSiteHistory, handleSiteAudit, handleSiteAuditGet,
          handleSiteSuggest, handleSiteSendReport, handleSiteCockpit,
          handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun, handleSiteGeoManual,
+         handleSiteGscConnect, handleGscCallback, handleSiteGscGet, handleSiteGscRun, handleSiteGscDisconnect,
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
          sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
 
@@ -255,6 +256,16 @@ export default {
       const sntGeo = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/geo$/);
       if (sntGeo && method === 'GET')  return handleSiteGeoGet(request, env, sntGeo[1]);
       if (sntGeo && method === 'POST') return handleSiteGeoSave(request, env, sntGeo[1]);
+      // V2 — Search Console (OAuth Google). Callback PUBLIC (state signé) ; le reste est gated.
+      if (path === '/api/sentinel/gsc/callback' && method === 'GET') return handleGscCallback(request, env);
+      const sntGscConnect = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/gsc\/connect$/);
+      if (sntGscConnect && method === 'GET') return handleSiteGscConnect(request, env, sntGscConnect[1]);
+      const sntGscRun = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/gsc\/run$/);
+      if (sntGscRun && method === 'POST') return handleSiteGscRun(request, env, sntGscRun[1]);
+      const sntGscDisc = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/gsc\/disconnect$/);
+      if (sntGscDisc && method === 'POST') return handleSiteGscDisconnect(request, env, sntGscDisc[1]);
+      const sntGsc = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/gsc$/);
+      if (sntGsc && method === 'GET') return handleSiteGscGet(request, env, sntGsc[1]);
       if (path === '/api/sentinel/push/subscribe'   && method === 'POST') return handleSentinelPushSub(request, env);
       if (path === '/api/sentinel/push/unsubscribe' && method === 'POST') return handleSentinelPushUnsub(request, env);
       const sntSite = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)$/);
