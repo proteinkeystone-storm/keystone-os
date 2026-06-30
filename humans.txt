@@ -1,0 +1,11 @@
+/* TEAM */
+  Éditeur : Protein Studio (Entreprise individuelle)
+  Responsable : Stéphane Benedetti
+  Contact : protein.keystone@gmail.com
+  Lieu : Ollioules, France
+
+/* SITE */
+  Produit : Keystone OS
+  Souveraineté : hébergé en Europe (Cloudflare WEUR), conforme RGPD
+  Stack : Cloudflare Workers/KV/D1, Vercel, JavaScript
+  Registre : https://annuaire-entreprises.data.gouv.fr/entreprise/520721853

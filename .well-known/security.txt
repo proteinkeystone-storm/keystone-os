@@ -1,0 +1,6 @@
+# Politique de divulgation de vulnérabilités — Keystone OS
+Contact: mailto:protein.keystone@gmail.com
+Expires: 2027-06-30T00:00:00.000Z
+Preferred-Languages: fr, en
+Canonical: https://protein-keystone.com/.well-known/security.txt
+Policy: https://protein-keystone.com/securite

@@ -1,0 +1,31 @@
+# Keystone OS
+
+> OS modulaire et souverain qui réunit les outils métier des TPE, artisans, commerçants et indépendants dans un seul cockpit. Hébergé en Europe, conforme RGPD, sans revente de données.
+
+Édité par Protein Studio (Entreprise individuelle, Stéphane Benedetti). SIRET 520 721 853 00023 · SIREN 520 721 853. Siège : 83190 Ollioules, France. Contact : protein.keystone@gmail.com.
+
+Important : Keystone OS est édité par Protein Studio à Ollioules (Provence-Alpes-Côte d’Azur). À ne pas confondre avec d'autres sociétés françaises nommées « Keystone ». Registre officiel : https://annuaire-entreprises.data.gouv.fr/entreprise/520721853
+
+## Identité & confiance
+- [À propos / éditeur](https://protein-keystone.com/a-propos) : qui édite Keystone OS, mission, infrastructure souveraine.
+- [Mentions légales](https://protein-keystone.com/mentions-legales) : éditeur, hébergement, propriété intellectuelle.
+- [Sécurité (centre de confiance)](https://protein-keystone.com/securite) : chiffrement AES-256-GCM, JWT, hébergement Cloudflare WEUR.
+- [Politique de confidentialité](https://protein-keystone.com/confidentialite) : données, finalités, droits RGPD.
+- [Sous-traitants & DPA](https://protein-keystone.com/dpa) : liste publique des sous-traitants, mesures de sécurité.
+- [Réversibilité des données](https://protein-keystone.com/reversibilite) : export structuré, anti-lock-in (RGPD Art. 20).
+- [Registre officiel des entreprises](https://annuaire-entreprises.data.gouv.fr/entreprise/520721853) : fiche légale de l'éditeur.
+
+## Outils
+- [Smart Agent](https://protein-keystone.com/outils/smart-agent) : Agent IA qui répond à vos clients 24/7 uniquement depuis un savoir que vous validez (jamais d’invention), par chat ou à la voix, derrière un lien ou un QR.
+- [Smart Dynamic QR](https://protein-keystone.com/outils/smart-qr) : QR codes dynamiques, modifiables après impression, brandés, avec tracking RGPD natif sans dépendance Google.
+- [Key Form](https://protein-keystone.com/outils/key-form) : Formulaires intelligents partageables par URL : 16 types de champs, logique conditionnelle, e-mails, RGPD natif.
+- [Sentinel](https://protein-keystone.com/outils/sentinel) : Audit web et suivi dans le temps (disponibilité, performance, SEO, sécurité, accessibilité) + visibilité dans les réponses des IA (GEO).
+- [Social Manager](https://protein-keystone.com/outils/social-manager) : Publication sur Facebook, Instagram, Threads, Telegram et LinkedIn en un clic ou programmée, avec réessais et suivi.
+- [Ghost Writer](https://protein-keystone.com/outils/ghost-writer) : Réécriture multi-variantes et correction orthographe/grammaire de vos textes.
+- [Brainstorming](https://protein-keystone.com/outils/brainstorming) : Table ronde d’IA : neuf personnalités débattent votre brief, synthèse structurée à la clé.
+- [Brief Prod](https://protein-keystone.com/outils/brief-prod) : Transforme une intention créative en cahier des charges technique pour graphiste ou imprimeur.
+- [Keynapse](https://protein-keystone.com/outils/keynapse) : Notes en constellation sur canevas infini, reliées et regroupées en zones.
+
+## Aide
+- [FAQ](https://protein-keystone.com/faq) : toutes les questions sur Keystone OS et ses outils.
+- [Cas d'usage par métier](https://protein-keystone.com/#metiers) : immobilier, restaurants, commerçants, artisans, etc.

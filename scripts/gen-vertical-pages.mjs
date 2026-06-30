@@ -486,13 +486,16 @@ function FOOT() {
       <div class="foot-col"><h4>Cas d'usage</h4>
         ${casUsage}
       </div>
+      <div class="foot-col"><h4>Confiance</h4>
+        <a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA & sous-traitants</a><a href="/reversibilite">Réversibilité</a>
+      </div>
       <div class="foot-col"><h4>Contact</h4>
         <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a>
         <a href="tel:+33675590797">06 75 59 07 97</a>
         <span>SAV : lun.–sam. 10h–19h (hors jours feries)</span>
       </div>
     </div>
-    <div class="foot-copy">© 2026 Protein Keystone OS — Tous vos outils metier, un seul OS.</div>
+    <div class="foot-copy">© 2026 Keystone OS — édité par Protein Studio (EI, Stéphane Benedetti), SIRET 520 721 853 00023.</div>
   </footer>`;
 }
 
@@ -746,12 +749,16 @@ EXPERIENCES.forEach(x => writeFileSync(resolve(CASUSAGE, `${x.slug}.html`), expP
 
 // ── sitemap COMPLET (proprietaire unique) ───────────────────────
 const toolSlugs = Object.values(TOOL);
+// Pages de confiance (generees par gen-trust-pages.mjs ; le sitemap reste ici).
+const TRUST_PAGES = ['a-propos', 'securite', 'confidentialite', 'mentions-legales', 'cgu', 'cgv', 'dpa', 'reversibilite'];
 const urls = [
   { loc: `${ORIGIN}/`, pr: '1.0', cf: 'weekly' },
   { loc: `${ORIGIN}/faq`, pr: '0.7', cf: 'monthly' },
   ...toolSlugs.map(s => ({ loc: `${ORIGIN}/outils/${s}`, pr: '0.8', cf: 'monthly' })),
   ...VERTICALS.map(v => ({ loc: `${ORIGIN}/pour/${v.slug}`, pr: '0.7', cf: 'monthly' })),
   ...EXPERIENCES.map(x => ({ loc: `${ORIGIN}/cas-usage/${x.slug}`, pr: '0.7', cf: 'monthly' })),
+  { loc: `${ORIGIN}/a-propos`, pr: '0.6', cf: 'monthly' },
+  ...TRUST_PAGES.filter(s => s !== 'a-propos').map(s => ({ loc: `${ORIGIN}/${s}`, pr: '0.4', cf: 'yearly' })),
 ];
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
