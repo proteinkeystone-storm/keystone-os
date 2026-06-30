@@ -14,13 +14,13 @@
   "categories": ["productivity", "business"],
   "icons": [
     {
-      "src": "./LOGOS/Logo puce fond bleu.svg",
+      "src": "./favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "./LOGOS/Logo puce fond bleu.svg",
+      "src": "./favicon-maskable.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
@@ -32,7 +32,7 @@
       "short_name": "Dashboard",
       "description": "Accéder au dashboard Keystone OS",
       "url": "/app?ks_launch=1",
-      "icons": [{ "src": "./LOGOS/Logo puce fond bleu.svg", "sizes": "any" }]
+      "icons": [{ "src": "./favicon.svg", "sizes": "any" }]
     }
   ],
   "screenshots": [],
