@@ -65,7 +65,7 @@ const DOC_SECTIONS = [
 
 // Fil des nouveautés (user-facing, le plus récent en tête). Volontairement
 // non technique — les versions internes ne regardent pas l'utilisateur.
-const DOC_CHANGELOG = [
+export const DOC_CHANGELOG = [
   { date: 'Juin 2026', items: [
     'Missive : transmettez un secret (mot de passe, code, information sensible) qui se lit une seule fois puis s\'autodétruit. Chiffré sur votre appareil — même nous ne pouvons pas le lire. Partagez un lien, un QR ou une puce NFC, et le code de déverrouillage par un autre canal ; vous êtes averti quand le sceau a été ouvert.',
     'Keynapse : votre espace personnel de connaissances — des bulles de notes sur un canevas infini, rangées en zones de couleur et reliées entre elles. Attachez photos, croquis et mémos vocaux (transcrits et transformés en tâches ou rappels par l\'IA), et posez des rappels qui vous préviennent à l\'heure dite.',

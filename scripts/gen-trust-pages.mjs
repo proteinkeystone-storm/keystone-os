@@ -29,6 +29,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DOC_CHANGELOG } from '../app/lib/keystone-doc.js'; // source unique du fil des nouveautés
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -145,6 +146,8 @@ const TRUST_NAV = [
   ['/cgv', 'CGV'],
   ['/dpa', 'DPA & sous-traitants'],
   ['/reversibilite', 'Réversibilité'],
+  ['/changelog', 'Nouveautés'],
+  ['/roadmap', 'Feuille de route'],
 ];
 
 function FOOT() {
@@ -501,6 +504,55 @@ PAGES.push(trustPage({
   bandText: 'Demandez-le par e-mail, nous préparons votre archive.',
 }));
 
+// ── CHANGELOG (depuis DOC_CHANGELOG — source unique partagée avec l'app) ──
+const changelogBody = DOC_CHANGELOG.map(c =>
+  `      <h3>${esc(c.date)}</h3>\n      <ul>\n${c.items.map(i => `        <li>${esc(i)}</li>`).join('\n')}\n      </ul>`
+).join('\n');
+PAGES.push(trustPage({
+  slug: 'changelog', crumbLabel: 'Nouveautés',
+  eyebrow: 'Nouveautés',
+  title: 'Nouveautés & journal des mises à jour | Keystone OS',
+  desc: 'Le fil des nouveautés de Keystone OS : fonctionnalités ajoutées et améliorations, les plus récentes en tête. Un produit qui évolue chaque semaine.',
+  h1a: 'Ce qui change,', h1b: 'au fil des semaines.',
+  lead: 'Keystone évolue en continu. Voici les nouveautés visibles côté utilisateur, les plus récentes en tête.',
+  body: `${changelogBody}
+      <div class="note"><b>Un produit vivant.</b> Cette page reflète les évolutions côté utilisateur. Une idée, un besoin ? Vos retours orientent la suite — voir la <a href="/roadmap">feuille de route</a>.</div>`,
+  bandTitle: 'Une idée de fonctionnalité ?',
+  bandText: 'Dites-nous ce qui vous manque — beaucoup de nouveautés viennent de là.',
+}));
+
+// ── ROADMAP (éditoriale, volontairement haut-niveau) ──
+PAGES.push(trustPage({
+  slug: 'roadmap', crumbLabel: 'Feuille de route',
+  eyebrow: 'Feuille de route',
+  title: 'Feuille de route — où va Keystone OS | Keystone OS',
+  desc: 'La direction de Keystone OS : ce qui est disponible aujourd’hui, ce qui est en cours et ce que nous étudions. Un produit avec un cap, à l’écoute de ses utilisateurs.',
+  h1a: 'Où va', h1b: 'Keystone OS.',
+  lead: 'Keystone est en développement actif. Voici notre cap — volontairement transparent, sans dates fermes : la priorité suit vos retours.',
+  body: `      <h3>Disponible aujourd’hui</h3>
+      <ul>
+        <li>Agent IA qui répond depuis votre savoir validé (chat & voix), par lien ou QR.</li>
+        <li>QR dynamiques, formulaires intelligents, réécriture & correction de textes.</li>
+        <li>Audit web et visibilité dans les IA (GEO), publication multi-réseaux, notes en constellation.</li>
+        <li>Compte souverain : données en Europe, chiffrement, export et effacement.</li>
+      </ul>
+      <h3>En cours</h3>
+      <ul>
+        <li>Transparence & confiance : pages publiques, avis clients, journal des nouveautés.</li>
+        <li>Améliorations continues de performance, d’accessibilité et de fiabilité.</li>
+        <li>Affinage des moteurs IA et de la qualité des réponses.</li>
+      </ul>
+      <h3>À l’étude</h3>
+      <ul>
+        <li>Nouvelles expériences pilotées par QR et nouveaux packs métier.</li>
+        <li>Connecteurs et automatisations supplémentaires entre les outils.</li>
+        <li>Options d’équipe pour les structures à plusieurs mains.</li>
+      </ul>
+      <div class="note"><b>Vos retours décident.</b> Cette feuille de route n’est pas gravée dans le marbre : ce qui compte le plus pour vous passe devant. Écrivez-nous, et suivez les livraisons sur le <a href="/changelog">journal des nouveautés</a>.</div>`,
+  bandTitle: 'Une priorité à nous souffler ?',
+  bandText: 'Votre métier a des besoins précis — dites-nous, ça oriente vraiment la suite.',
+}));
+
 // ─────────────────────────────────────────────────────────────
 // FICHIERS LISIBLES PAR LES IA
 // ─────────────────────────────────────────────────────────────
@@ -594,7 +646,7 @@ const humansTxt = `/* TEAM */
 // ─────────────────────────────────────────────────────────────
 // ÉCRITURE
 // ─────────────────────────────────────────────────────────────
-const SLUGS = ['a-propos', 'mentions-legales', 'confidentialite', 'cgu', 'cgv', 'dpa', 'securite', 'reversibilite'];
+const SLUGS = ['a-propos', 'mentions-legales', 'confidentialite', 'cgu', 'cgv', 'dpa', 'securite', 'reversibilite', 'changelog', 'roadmap'];
 PAGES.forEach((html, i) => writeFileSync(resolve(ROOT, `${SLUGS[i]}.html`), html, 'utf8'));
 
 writeFileSync(resolve(ROOT, 'llms.txt'), llmsTxt, 'utf8');

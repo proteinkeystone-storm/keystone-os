@@ -487,7 +487,7 @@ function FOOT() {
         ${casUsage}
       </div>
       <div class="foot-col"><h4>Confiance</h4>
-        <a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA & sous-traitants</a><a href="/reversibilite">Réversibilité</a>
+        <a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA & sous-traitants</a><a href="/reversibilite">Réversibilité</a><a href="/changelog">Nouveautés</a><a href="/roadmap">Feuille de route</a>
       </div>
       <div class="foot-col"><h4>Contact</h4>
         <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a>
@@ -750,7 +750,7 @@ EXPERIENCES.forEach(x => writeFileSync(resolve(CASUSAGE, `${x.slug}.html`), expP
 // ── sitemap COMPLET (proprietaire unique) ───────────────────────
 const toolSlugs = Object.values(TOOL);
 // Pages de confiance (generees par gen-trust-pages.mjs ; le sitemap reste ici).
-const TRUST_PAGES = ['a-propos', 'securite', 'confidentialite', 'mentions-legales', 'cgu', 'cgv', 'dpa', 'reversibilite'];
+const TRUST_PAGES = ['a-propos', 'securite', 'confidentialite', 'mentions-legales', 'cgu', 'cgv', 'dpa', 'reversibilite', 'changelog', 'roadmap'];
 const urls = [
   { loc: `${ORIGIN}/`, pr: '1.0', cf: 'weekly' },
   { loc: `${ORIGIN}/faq`, pr: '0.7', cf: 'monthly' },
