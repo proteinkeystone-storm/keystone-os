@@ -1620,6 +1620,80 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 }
 </script>
 
+<!-- 6.5 · TÉMOIGNAGES — masqué tant qu'aucun avis publié (rempli depuis /api/testimonials/public) -->
+<style>
+.testimonials{display:none}
+.testi-head{text-align:center}
+.testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:38px}
+.testi-card{padding:24px;border:1px solid var(--border);border-radius:18px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;gap:14px}
+.testi-stars{display:flex;gap:3px;color:var(--accent-2)}
+.testi-stars svg{width:17px;height:17px}
+.testi-body{font-size:15px;line-height:1.62;color:var(--text);flex:1}
+.testi-who{font-size:13px;color:var(--text-2)}
+.testi-who b{color:var(--text);font-weight:600}
+.testi-google{text-align:center;margin-top:30px;font-size:13.5px;color:var(--text-3)}
+.testi-google a{color:var(--accent-3);border-bottom:1px solid var(--accent-bd);text-decoration:none}
+</style>
+<section class="sec testimonials" id="temoignages" aria-labelledby="testi-h2">
+  <div class="testi-head">
+    <span class="eyebrow">Ils nous font confiance</span>
+    <h2 class="h2" id="testi-h2">Ce qu'en disent nos clients.</h2>
+  </div>
+  <div class="testi-grid" id="testiGrid"></div>
+  <div class="testi-google" id="testiGoogle" hidden></div>
+</section>
+<script>
+/* Témoignages : rendu UNIQUEMENT s'il existe au moins un avis publié & consenti.
+   Cartes visibles (lues par les IA) + schema Review léger. Aucun aggregateRating
+   auto-promotionnel (politique Google sur les avis « self-serving »). */
+(function(){
+  var API = 'https://keystone-os-api.keystone-os.workers.dev';
+  var GOOGLE_REVIEW_URL = ''; // ← coller ici le lien « avis Google » une fois la fiche créée (ex. https://g.page/r/XXXX/review)
+  var esc = function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  function stars(n){
+    if(!(n>=1&&n<=5)) return '';
+    var out='';
+    for(var i=1;i<=5;i++){
+      var f=i<=n;
+      out+='<svg viewBox="0 0 24 24" fill="'+(f?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9"/></svg>';
+    }
+    return '<div class="testi-stars" aria-label="'+n+' sur 5">'+out+'</div>';
+  }
+  fetch(API+'/api/testimonials/public').then(function(r){return r.json();}).then(function(d){
+    var list=(d&&d.testimonials)||[];
+    if(!list.length) return;                       // aucun avis réel → section reste masquée
+    var grid=document.getElementById('testiGrid');
+    grid.innerHTML=list.map(function(t){
+      var who=[t.author_name?('<b>'+esc(t.author_name)+'</b>'):'', esc(t.author_role||'')].filter(Boolean).join(' · ');
+      return '<figure class="testi-card">'+stars(t.rating)+
+        '<blockquote class="testi-body">'+esc(t.body)+'</blockquote>'+
+        (who?'<figcaption class="testi-who">'+who+'</figcaption>':'')+'</figure>';
+    }).join('');
+    if(GOOGLE_REVIEW_URL){
+      var g=document.getElementById('testiGoogle');
+      g.innerHTML='Vous êtes client ? <a href="'+esc(GOOGLE_REVIEW_URL)+'" target="_blank" rel="noopener">Laissez-nous un avis sur Google</a>.';
+      g.hidden=false;
+    }
+    document.getElementById('temoignages').style.display='block';
+    // Schema Review (informatif, pas d'aggregateRating auto-promo).
+    var revs=list.filter(function(t){return t.body;}).slice(0,20).map(function(t){
+      var r={ "@type":"Review", "reviewBody":t.body,
+        "author":{"@type":"Person","name":t.author_name||"Client Keystone"},
+        "itemReviewed":{"@id":"https://protein-keystone.com/#organization"} };
+      if(t.rating>=1&&t.rating<=5) r.reviewRating={"@type":"Rating","ratingValue":t.rating,"bestRating":5,"worstRating":1};
+      if(t.published_at) r.datePublished=String(t.published_at).slice(0,10);
+      return r;
+    });
+    if(revs.length){
+      var s=document.createElement('script'); s.type='application/ld+json';
+      s.textContent=JSON.stringify({"@context":"https://schema.org","@type":"ItemList",
+        "name":"Avis clients Keystone OS","itemListElement":revs});
+      document.head.appendChild(s);
+    }
+  }).catch(function(){ /* silencieux : la section reste simplement masquée */ });
+})();
+</script>
+
 <!-- 7 · CTA FINAL -->
 <section class="cta-final reveal">
   <h2 class="h2">Vos outils métier, enfin réunis.</h2>

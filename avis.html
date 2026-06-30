@@ -121,6 +121,9 @@ textarea{min-height:130px;resize:vertical;line-height:1.6}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
     <h2>Merci infiniment.</h2>
     <p>Votre avis nous est bien parvenu. Il fait une vraie différence — merci pour votre confiance.</p>
+    <div id="googleCta" hidden style="margin-top:18px">
+      <a class="btn" id="googleLink" href="#" target="_blank" rel="noopener" style="width:auto;display:inline-flex;padding:12px 22px">Le partager aussi sur Google</a>
+    </div>
   </div>
 
 </div>
@@ -128,6 +131,10 @@ textarea{min-height:130px;resize:vertical;line-height:1.6}
 <script>
 (function(){
   var API = 'https://keystone-os-api.keystone-os.workers.dev';
+  // ← coller ici le lien « avis Google » une fois la fiche Protein Studio créée
+  //    (ex. https://g.page/r/XXXXXXXX/review). Proposé à TOUS (jamais filtré par
+  //    la note : router seulement les avis positifs vers Google = interdit par Google).
+  var GOOGLE_REVIEW_URL = '';
   var rating = 0;
   var stars = [].slice.call(document.querySelectorAll('#stars .star'));
   function paint(n){ stars.forEach(function(s,i){ s.classList.toggle('on', i < n); }); }
@@ -166,6 +173,10 @@ textarea{min-height:130px;resize:vertical;line-height:1.6}
         if (!res.ok) { errEl.textContent = (res.d && res.d.error) || 'Une erreur est survenue. Réessayez dans un instant.'; btn.disabled = false; btn.textContent = 'Envoyer mon avis'; return; }
         form.style.display = 'none';
         document.querySelector('.foot-note').style.display = 'none';
+        if (GOOGLE_REVIEW_URL) {
+          document.getElementById('googleLink').href = GOOGLE_REVIEW_URL;
+          document.getElementById('googleCta').hidden = false;
+        }
         document.getElementById('thanks').style.display = 'block';
         document.getElementById('thanks').scrollIntoView({ behavior: 'smooth', block: 'center' });
       })
