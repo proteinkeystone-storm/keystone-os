@@ -59,6 +59,7 @@ import {
 import { handleCspReport }                                              from './routes/csp-report.js';
 import { handleLeadCapture, handleLeadsList }                           from './routes/leads.js';
 import { handleRatingSubmit, handleRatingsAdmin }                       from './routes/ratings.js';
+import { handleTestimonialSubmit, handleTestimonialsPublic, handleTestimonialsAdmin, handleTestimonialModerate } from './routes/testimonials.js';
 import { handleTrack, handleFunnel, pruneTrackEvents }                  from './routes/track.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
@@ -519,6 +520,14 @@ export default {
       // ── Notes des apps (étoiles) — user pose sa note (JWT) + agrégat admin ──
       if (path === '/api/ratings'        && (method === 'POST' || method === 'OPTIONS')) return handleRatingSubmit(request, env);
       if (path === '/api/admin/ratings'  && method === 'GET')  return handleRatingsAdmin(request, env);
+
+      // ── Témoignages / avis clients (réservoir isolé, modéré) ──
+      if (path === '/api/testimonials'        && (method === 'POST' || method === 'OPTIONS')) return handleTestimonialSubmit(request, env);
+      if (path === '/api/testimonials/public' && method === 'GET')  return handleTestimonialsPublic(request, env);
+      if (path === '/api/admin/testimonials'  && method === 'GET')  return handleTestimonialsAdmin(request, env);
+      if (path.startsWith('/api/admin/testimonials/') && (method === 'POST' || method === 'OPTIONS')) {
+        return handleTestimonialModerate(request, env, path.slice('/api/admin/testimonials/'.length));
+      }
 
       // ── Kodex Assets (Sprint Kodex-3.1.5) — upload binaire ─────
       if (path === '/api/kodex/asset'   && method === 'POST')   return handleUploadAsset(request, env);

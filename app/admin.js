@@ -343,6 +343,7 @@ const TAB_RENDERERS = {
   monitoring: renderMonitoring,
   funnel:     renderFunnel,         // Funnel landing — mesure d'audience souveraine (2026-06-13)
   satisfaction: renderSatisfaction, // Notes étoiles des apps → agrégat anonyme (2026-06-17)
+  temoignages: renderTestimonials,  // Avis clients : modération + publication (2026-06-30)
   devices:    renderDevices,
   audit:      renderAuditLog,      // Sprint S5.4
   settings:   renderSettings,
@@ -3261,6 +3262,78 @@ async function renderSatisfaction(panel) {
       </div>`;
 
     panel.querySelector('#btn-refresh-sat')?.addEventListener('click', () => renderSatisfaction(panel));
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — TÉMOIGNAGES (avis clients : modération + publication) · 2026-06-30
+// ══════════════════════════════════════════════════════════════════
+async function renderTestimonials(panel) {
+  try {
+    const data   = await api('/api/admin/testimonials');
+    const items  = data.testimonials || [];
+    const counts = data.counts || {};
+    const stars  = n => (n >= 1 && n <= 5) ? '★'.repeat(n) + '☆'.repeat(5 - n) : '—';
+    const badge  = (s) => {
+      const map = { pending: ['En attente', 'var(--gold)'], published: ['Publié', '#4caf80'], rejected: ['Rejeté', 'var(--text-muted)'] };
+      const [lab, col] = map[s] || [s, 'var(--text-muted)'];
+      return `<span style="font-size:10px;font-weight:700;color:${col};border:1px solid ${col};border-radius:5px;padding:1px 7px">${lab}</span>`;
+    };
+
+    const card = (t) => {
+      const consent = t.consent_publish ? '' : `<span title="L'auteur n'a pas autorisé la publication" style="font-size:10px;color:var(--danger);border:1px solid var(--danger);border-radius:5px;padding:1px 7px">sans consentement</span>`;
+      const acts = [];
+      if (t.status !== 'published' && t.consent_publish) acts.push(`<button class="btn btn-secondary" data-pub="${esc(t.id)}" style="font-size:12px">Publier</button>`);
+      if (t.status === 'published') acts.push(`<button class="btn btn-secondary" data-rej="${esc(t.id)}" style="font-size:12px">Dépublier</button>`);
+      if (t.status === 'pending')  acts.push(`<button class="btn btn-secondary" data-rej="${esc(t.id)}" style="font-size:12px">Rejeter</button>`);
+      acts.push(`<button class="btn btn-secondary" data-del="${esc(t.id)}" style="font-size:12px;color:var(--danger)">Supprimer</button>`);
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--navy2)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:13.5px">${esc(t.author_name || 'Anonyme')}${t.author_role ? ` · <span style="color:var(--text-muted);font-weight:400">${esc(t.author_role)}</span>` : ''}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${esc((t.created_at || '').replace('T', ' ').slice(0, 16))} · ${esc(t.source || '')}${t.author_email ? ' · ' + esc(t.author_email) : ''}</div>
+          </div>
+          <div style="text-align:right;display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+            <div style="color:var(--gold);font-size:14px;letter-spacing:1px">${stars(t.rating)}</div>
+            <div style="display:flex;gap:6px;align-items:center">${consent} ${badge(t.status)}</div>
+          </div>
+        </div>
+        <p style="font-size:13.5px;line-height:1.6;color:var(--text);margin:8px 0 12px;white-space:pre-wrap">${esc(t.body || '')}</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${acts.join('')}</div>
+      </div>`;
+    };
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Témoignages</h2>
+        <button class="btn btn-secondary" id="btn-refresh-temo" style="font-size:12px">↻</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px">
+        Avis déposés via <strong>/avis</strong> et l'entonnoir in-app. Rien n'est public tant que vous n'avez pas
+        <strong>publié</strong> un avis dont l'auteur a donné son <strong>consentement</strong>.</p>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">En attente</div><div class="stat-value" style="color:var(--gold)">${counts.pending || 0}</div></div>
+        <div class="stat-card"><div class="stat-label">Publiés</div><div class="stat-value" style="color:#4caf80">${counts.published || 0}</div></div>
+        <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${items.length}</div></div>
+      </div>
+      <div style="margin-top:18px">
+        ${items.length === 0
+          ? `<div class="empty-state"><p>Aucun avis pour le moment.</p>
+             <p style="font-size:12px;color:var(--text-muted)">Partagez le lien <strong>/avis</strong> à vos clients : leurs retours arriveront ici pour modération.</p></div>`
+          : items.map(card).join('')}
+      </div>`;
+
+    const act = async (id, action) => {
+      if (action === 'delete' && !confirm('Supprimer définitivement cet avis ?')) return;
+      try { await api(`/api/admin/testimonials/${encodeURIComponent(id)}`, 'POST', { action }); renderTestimonials(panel); }
+      catch (e) { alert(e.message); }
+    };
+    panel.querySelector('#btn-refresh-temo')?.addEventListener('click', () => renderTestimonials(panel));
+    panel.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => act(b.dataset.pub, 'publish')));
+    panel.querySelectorAll('[data-rej]').forEach(b => b.addEventListener('click', () => act(b.dataset.rej, 'reject')));
+    panel.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => act(b.dataset.del, 'delete')));
   } catch (err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
   }

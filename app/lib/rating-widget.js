@@ -138,6 +138,9 @@ export function bindRatingButton(rootEl, appId) {
       _rerender(wrap, appId);
       // Auto-close après 600ms pour feedback visuel
       setTimeout(() => { pop.hidden = true; }, 600);
+      // Entonnoir d'avis : une note haute (4-5★) → invitation à laisser un
+      // avis PUBLIC sur /avis. Une seule fois par appareil (jamais relancer).
+      if (v >= 4) setTimeout(() => _inviteToReview(), 800);
       return;
     }
     const clrBtn = e.target.closest('[data-act="rating-clear"]');
@@ -153,6 +156,64 @@ export function bindRatingButton(rootEl, appId) {
   document.addEventListener('click', e => {
     if (!wrap.contains(e.target)) pop.hidden = true;
   });
+}
+
+// ── Entonnoir d'avis public ────────────────────────────────────
+// Affiche un toast discret invitant à laisser un avis sur /avis, après une
+// note haute. Anti-nag : une seule fois par appareil (localStorage). Aucun
+// emoji (charte) — picto outline inline cohérent avec le reste du widget.
+const _INVITED_KEY = 'ks_avis_invited';
+function _inviteToReview() {
+  try {
+    if (localStorage.getItem(_INVITED_KEY)) return;   // déjà invité → jamais relancer
+    localStorage.setItem(_INVITED_KEY, '1');
+  } catch (_) { return; }
+  if (document.getElementById('ks-avis-toast')) return;
+
+  if (!document.getElementById('ks-avis-toast-css')) {
+    const st = document.createElement('style');
+    st.id = 'ks-avis-toast-css';
+    st.textContent = `
+      #ks-avis-toast{position:fixed;right:20px;bottom:20px;z-index:99999;max-width:340px;
+        background:rgba(15,23,42,.96);backdrop-filter:blur(12px);border:1px solid rgba(129,140,248,.34);
+        border-radius:16px;padding:16px 18px;box-shadow:0 18px 50px -12px rgba(0,0,0,.6);
+        color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",sans-serif;
+        letter-spacing:-.02em;animation:ksAvisIn .35s cubic-bezier(.16,1,.3,1)}
+      @keyframes ksAvisIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+      #ks-avis-toast .row{display:flex;align-items:flex-start;gap:11px}
+      #ks-avis-toast .ic{flex-shrink:0;width:32px;height:32px;border-radius:9px;display:flex;align-items:center;
+        justify-content:center;background:rgba(99,102,241,.16);border:1px solid rgba(129,140,248,.34);color:#a5b4fc}
+      #ks-avis-toast .ic svg{width:18px;height:18px}
+      #ks-avis-toast p{font-size:13.5px;line-height:1.5;color:rgba(248,250,252,.72);margin:0 0 12px}
+      #ks-avis-toast strong{color:#fff;font-weight:600}
+      #ks-avis-toast .acts{display:flex;gap:8px}
+      #ks-avis-toast a.go{font-size:13px;font-weight:600;text-decoration:none;color:#fff;padding:9px 15px;border-radius:999px;
+        background:linear-gradient(120deg,#6366f1,#818cf8);box-shadow:0 6px 18px rgba(99,102,241,.34)}
+      #ks-avis-toast button.no{font-size:13px;font-weight:600;color:rgba(248,250,252,.55);background:none;border:none;cursor:pointer;padding:9px 10px}
+      @media(max-width:520px){#ks-avis-toast{left:16px;right:16px;max-width:none}}`;
+    document.head.appendChild(st);
+  }
+
+  const toast = document.createElement('div');
+  toast.id = 'ks-avis-toast';
+  toast.setAttribute('role', 'dialog');
+  toast.innerHTML = `
+    <div class="row">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></span>
+      <div>
+        <p>Ravi que ça vous plaise&nbsp;! <strong>Un avis public</strong> nous aiderait beaucoup — deux minutes.</p>
+        <div class="acts">
+          <a class="go" href="/avis" target="_blank" rel="noopener">Laisser un avis</a>
+          <button class="no" type="button" data-close>Plus tard</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(toast);
+  const close = () => { toast.style.transition = 'opacity .25s'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 250); };
+  toast.querySelector('[data-close]').addEventListener('click', close);
+  toast.querySelector('a.go').addEventListener('click', close);
+  setTimeout(close, 14000);
 }
 
 // ── Re-render local après changement ───────────────────────────

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Votre avis — Keystone OS</title>
+<meta name="description" content="Partagez votre avis sur Keystone OS / Protein Studio. Quelques mots suffisent — merci de votre confiance.">
+<link rel="canonical" href="https://protein-keystone.com/avis">
+<meta name="robots" content="noindex, follow">
+<meta property="og:title" content="Votre avis — Keystone OS">
+<meta property="og:description" content="Partagez votre avis en deux minutes. Merci de votre confiance.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://protein-keystone.com/avis">
+<meta property="og:site_name" content="Keystone OS">
+<meta property="og:locale" content="fr_FR">
+<meta name="theme-color" content="#020617">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#020617;--accent:#6366f1;--accent-2:#818cf8;--accent-3:#a5b4fc;--accent-bg:rgba(99,102,241,.12);--accent-bd:rgba(99,102,241,.28);--text:#f8fafc;--text-2:rgba(248,250,252,.6);--text-3:rgba(248,250,252,.32);--border:rgba(255,255,255,.1);--border-strong:rgba(255,255,255,.16);--green:#34d399;--r-md:16px;--r-lg:24px}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;letter-spacing:-.02em;-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 50% at 50% -8%,rgba(99,102,241,.18),transparent 70%)}
+a{color:var(--accent-3);text-decoration:none}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:rgba(2,6,23,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.nav-logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px;color:var(--text)}
+.nav-logo img{width:26px;height:26px}
+.wrap{max-width:620px;margin:0 auto;padding:0 22px}
+.hero{padding:40px 0 14px;text-align:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--accent-3);padding:6px 14px;border-radius:999px;margin-bottom:18px;background:var(--accent-bg);border:1px solid var(--accent-bd)}
+h1{font-size:clamp(26px,5vw,38px);font-weight:900;letter-spacing:-.035em;line-height:1.08}
+h1 em{font-style:normal;background:linear-gradient(120deg,var(--accent-3),var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lead{max-width:480px;margin:16px auto 0;font-size:15.5px;color:var(--text-2)}
+form{margin:30px 0 24px;display:grid;gap:18px}
+.field label{display:block;font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:7px}
+.field .hint{font-weight:400;color:var(--text-3);font-size:12.5px}
+input[type=text],input[type=email],textarea{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--border-strong);border-radius:12px;color:var(--text);font:inherit;font-size:15px;padding:13px 15px;transition:border-color .2s,background .2s}
+input:focus,textarea:focus{outline:none;border-color:var(--accent-2);background:rgba(99,102,241,.06)}
+textarea{min-height:130px;resize:vertical;line-height:1.6}
+.stars{display:flex;gap:6px}
+.star{background:none;border:none;cursor:pointer;padding:3px;color:var(--text-3);transition:transform .12s}
+.star:hover{transform:scale(1.12)}
+.star svg{width:34px;height:34px;display:block}
+.star.on{color:var(--accent-2)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.consent{display:flex;gap:11px;align-items:flex-start;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02)}
+.consent input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent);flex-shrink:0}
+.consent label{font-size:13px;color:var(--text-2);line-height:1.5;font-weight:400}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;font-size:15px;font-weight:600;padding:15px 24px;border:none;border-radius:999px;cursor:pointer;background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 8px 26px rgba(99,102,241,.32);transition:transform .15s,box-shadow .2s,opacity .2s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(99,102,241,.42)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.foot-note{text-align:center;font-size:12px;color:var(--text-3);margin-bottom:40px;line-height:1.6}
+.thanks{display:none;text-align:center;padding:38px 24px;border-radius:var(--r-lg);background:linear-gradient(140deg,rgba(52,211,153,.12),rgba(99,102,241,.05));border:1px solid rgba(52,211,153,.3);margin:30px 0 40px}
+.thanks svg{width:48px;height:48px;color:var(--green);margin-bottom:14px}
+.thanks h2{font-size:23px;font-weight:900;letter-spacing:-.03em;margin-bottom:8px}
+.thanks p{color:var(--text-2);font-size:15px;max-width:400px;margin:0 auto}
+.err{color:#fca5a5;font-size:13.5px;text-align:center;min-height:18px}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img src="/keystone-puce.svg" alt="">Keystone</a>
+  <a href="/" style="font-size:13px;font-weight:600;color:var(--text-2)">Retour au site</a>
+</nav>
+
+<div class="wrap">
+
+  <header class="hero">
+    <span class="eyebrow">Votre avis</span>
+    <h1>Quelques mots,<br><em>et un grand merci.</em></h1>
+    <p class="lead">Votre retour aide d'autres personnes à nous faire confiance. Deux minutes suffisent — écrivez avec vos mots.</p>
+  </header>
+
+  <form id="avisForm" novalidate>
+    <div class="field">
+      <label>Votre note <span class="hint">(facultatif)</span></label>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Note de 1 à 5 étoiles">
+        <button type="button" class="star" data-v="1" aria-label="1 étoile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7 7 .5-5.5 5 1.5 7.5-6-4-6 4 1.5-7.5L2 9.5 9 9z"/></svg></button>
+        <button type="button" class="star" data-v="2" aria-label="2 étoiles"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7 7 .5-5.5 5 1.5 7.5-6-4-6 4 1.5-7.5L2 9.5 9 9z"/></svg></button>
+        <button type="button" class="star" data-v="3" aria-label="3 étoiles"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7 7 .5-5.5 5 1.5 7.5-6-4-6 4 1.5-7.5L2 9.5 9 9z"/></svg></button>
+        <button type="button" class="star" data-v="4" aria-label="4 étoiles"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7 7 .5-5.5 5 1.5 7.5-6-4-6 4 1.5-7.5L2 9.5 9 9z"/></svg></button>
+        <button type="button" class="star" data-v="5" aria-label="5 étoiles"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7 7 .5-5.5 5 1.5 7.5-6-4-6 4 1.5-7.5L2 9.5 9 9z"/></svg></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="body">Votre avis</label>
+      <textarea id="body" maxlength="2000" placeholder="Ce que vous avez apprécié, le résultat obtenu, ce que vous diriez à quelqu'un qui hésite…" required></textarea>
+    </div>
+
+    <div class="field">
+      <label for="name">Votre prénom / nom <span class="hint">(affiché avec l'avis si vous l'autorisez)</span></label>
+      <input type="text" id="name" maxlength="80" autocomplete="name" placeholder="Camille D.">
+    </div>
+
+    <div class="field">
+      <label for="role">Votre métier / entreprise <span class="hint">(facultatif)</span></label>
+      <input type="text" id="role" maxlength="80" placeholder="Restauratrice, Toulon">
+    </div>
+
+    <div class="field">
+      <label for="email">Votre e-mail <span class="hint">(jamais publié — pour vous remercier)</span></label>
+      <input type="email" id="email" maxlength="160" autocomplete="email" placeholder="vous@exemple.fr">
+    </div>
+
+    <!-- honeypot anti-bot : ne pas remplir -->
+    <div class="hp" aria-hidden="true"><label>Ne pas remplir<input type="text" id="website" tabindex="-1" autocomplete="off"></label></div>
+
+    <div class="consent">
+      <input type="checkbox" id="consent" checked>
+      <label for="consent">J'autorise <strong>Protein Studio</strong> à publier cet avis (avec mon prénom et mon métier) sur son site et ses pages. Je peux demander son retrait à tout moment.</label>
+    </div>
+
+    <div class="err" id="err"></div>
+    <button type="submit" class="btn" id="submitBtn">Envoyer mon avis</button>
+  </form>
+
+  <p class="foot-note">Vos données restent en Europe, jamais revendues. Voir la <a href="/confidentialite">politique de confidentialité</a>.</p>
+
+  <div class="thanks" id="thanks">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <h2>Merci infiniment.</h2>
+    <p>Votre avis nous est bien parvenu. Il fait une vraie différence — merci pour votre confiance.</p>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var API = 'https://keystone-os-api.keystone-os.workers.dev';
+  var rating = 0;
+  var stars = [].slice.call(document.querySelectorAll('#stars .star'));
+  function paint(n){ stars.forEach(function(s,i){ s.classList.toggle('on', i < n); }); }
+  stars.forEach(function(s){
+    s.addEventListener('click', function(){ rating = +s.dataset.v; paint(rating); });
+    s.addEventListener('mouseenter', function(){ paint(+s.dataset.v); });
+  });
+  document.getElementById('stars').addEventListener('mouseleave', function(){ paint(rating); });
+
+  var form = document.getElementById('avisForm');
+  var errEl = document.getElementById('err');
+  var btn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    errEl.textContent = '';
+    var body = document.getElementById('body').value.trim();
+    if (body.length < 10) { errEl.textContent = 'Merci d’écrire quelques mots de plus (10 caractères minimum).'; return; }
+    btn.disabled = true; btn.textContent = 'Envoi…';
+    var payload = {
+      body: body,
+      name: document.getElementById('name').value.trim(),
+      role: document.getElementById('role').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      rating: rating || null,
+      consent: document.getElementById('consent').checked,
+      website: document.getElementById('website').value,
+      source: 'avis-page'
+    };
+    fetch(API + '/api/testimonials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(res){
+        if (!res.ok) { errEl.textContent = (res.d && res.d.error) || 'Une erreur est survenue. Réessayez dans un instant.'; btn.disabled = false; btn.textContent = 'Envoyer mon avis'; return; }
+        form.style.display = 'none';
+        document.querySelector('.foot-note').style.display = 'none';
+        document.getElementById('thanks').style.display = 'block';
+        document.getElementById('thanks').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      })
+      .catch(function(){ errEl.textContent = 'Connexion impossible. Vérifiez votre réseau et réessayez.'; btn.disabled = false; btn.textContent = 'Envoyer mon avis'; });
+  });
+})();
+</script>
+</body>
+</html>
