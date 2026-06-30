@@ -3562,7 +3562,7 @@ function _paintBudget(panel, state) {
         : 'Bridage manuel activé depuis cet écran.';
       if (c.throttled_at) { try { sub += ' Depuis le ' + new Date(c.throttled_at).toLocaleString('fr-FR'); } catch (_) {} }
     } else if (c.near_threshold) {
-      bg = 'rgba(201,168,76,0.10)'; border = 'var(--border)'; color = 'var(--gold)';
+      bg = 'rgba(99,102,241,0.10)'; border = 'var(--border)'; color = 'var(--gold)';
       icon = _budgetSvg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', 18);
       title = `Proche du plafond (${c.pct}%)`;
       sub = `Estimation du mois : ${_fmtEur(month.eur_est)} sur un plafond de ${_fmtEur(c.threshold_eur)}.`;

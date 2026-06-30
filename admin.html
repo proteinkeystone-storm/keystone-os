@@ -8,16 +8,29 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --navy:       #07102a;
-      --navy-2:     #0d1b3e;
-      --navy-3:     #1a2850;
-      --gold:       #c9a84c;
-      --gold-dim:   rgba(201,168,76,0.12);
-      --text:       #e8eaf0;
-      --text-muted: rgba(232,234,240,0.45);
-      --danger:     #e05c5c;
-      --success:    #4caf80;
-      --border:     rgba(201,168,76,0.18);
+      /* Palette charte Keystone (indigo/violet sur slate sombre). Les NOMS
+         de tokens sont conservés pour compat ; seules les VALEURS changent.
+         + tokens charte/manquants ajoutés (--accent*, --white, --navy2…). */
+      --bg:         #020617;
+      --navy:       #020617;
+      --navy-2:     #0f172a;
+      --navy2:      #0f172a;
+      --navy-3:     #1e293b;
+      --accent:     #6366f1;
+      --accent-2:   #818cf8;
+      --accent-3:   #a5b4fc;
+      --accent-bg:  rgba(99,102,241,0.12);
+      --accent-bd:  rgba(99,102,241,0.28);
+      --gold:       #818cf8;
+      --gold-dim:   rgba(99,102,241,0.12);
+      --text:       #f8fafc;
+      --white:      #f8fafc;
+      --white-2:    rgba(248,250,252,0.72);
+      --text-muted: rgba(248,250,252,0.45);
+      --danger:     #f87171;
+      --success:    #34d399;
+      --border:     rgba(255,255,255,0.10);
+      --border-g:   rgba(255,255,255,0.10);
       --radius:     12px;
     }
 
@@ -170,8 +183,8 @@
     }
     .fabrique-sub-btn.active {
       color: var(--text);
-      background: rgba(212, 175, 55, 0.12);
-      box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.3);
+      background: rgba(99,102,241, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(99,102,241, 0.3);
     }
 
     /* ── CONTENT ───────────────────────────────────────────────── */
@@ -223,7 +236,7 @@
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .btn-primary { background: var(--gold); color: var(--navy); }
-    .btn-primary:hover:not(:disabled) { background: #d4b567; }
+    .btn-primary:hover:not(:disabled) { background: #6366f1; }
 
     .btn-secondary {
       background: var(--navy-3);
@@ -277,7 +290,7 @@
 
     .data-table td {
       padding: 12px 16px;
-      border-bottom: 1px solid rgba(201,168,76,0.07);
+      border-bottom: 1px solid rgba(99,102,241,0.07);
       vertical-align: middle;
     }
 
@@ -678,7 +691,7 @@
       margin-bottom: 10px;
       transition: border-color 0.15s;
     }
-    .field-row:hover { border-color: rgba(201,168,76,0.35); }
+    .field-row:hover { border-color: rgba(99,102,241,0.35); }
     .field-row-grid {
       display: grid;
       grid-template-columns: 1fr 1fr 120px 1fr;
@@ -874,13 +887,13 @@
       transition: box-shadow .2s, border-color .2s;
     }
     .artifact-card:hover {
-      border-color: rgba(201,168,76,.22);
+      border-color: rgba(99,102,241,.22);
       box-shadow: 0 4px 28px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.09);
     }
     .artifact-card--full { grid-column: 1 / -1; }
     .artifact-card-label {
       font-size: 9px; font-weight: 800; letter-spacing: .1em;
-      text-transform: uppercase; color: rgba(201,168,76,.55); margin-bottom: 11px;
+      text-transform: uppercase; color: rgba(99,102,241,.55); margin-bottom: 11px;
     }
     /* Gauge */
     .gauge-track {
@@ -913,7 +926,7 @@
     .dc-value { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
     .dc-number {
       font-size: 30px; font-weight: 900; letter-spacing: -.05em; line-height: 1;
-      background: linear-gradient(135deg,#e8cb82 0%,#c9a84c 55%,#a07828 100%);
+      background: linear-gradient(135deg,#a5b4fc 0%,#818cf8 50%,#6366f1 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip: text;
     }
@@ -956,7 +969,7 @@
     .rgpd-table {
       width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.5;
     }
-    .rgpd-table td { padding: 7px 10px; border-bottom: 1px solid rgba(201,168,76,.07); vertical-align: top; }
+    .rgpd-table td { padding: 7px 10px; border-bottom: 1px solid rgba(99,102,241,.07); vertical-align: top; }
     .rgpd-table tr:last-child td { border-bottom: none; }
     .rgpd-table td:first-child { color: var(--text-muted); font-weight: 700; width: 140px; white-space: nowrap; }
     .rgpd-table td:last-child  { color: var(--text); }
