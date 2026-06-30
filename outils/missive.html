@@ -107,6 +107,20 @@
           }
         }
       ]
+    },
+    {
+      "@type": "Article",
+      "headline": "Transmettre un mot de passe en toute sécurité",
+      "inLanguage": "fr-FR",
+      "articleBody": "Envoyer un mot de passe par e-mail, SMS ou messagerie d'équipe est une mauvaise habitude répandue : le message reste stocké indéfiniment , peut être transféré, et traîne dans des boîtes que vous ne contrôlez pas. Un seul accès à cette boîte, des mois plus tard, et le secret est exposé. Les bons réflexes Chiffrement de bout en bout : le secret est illisible, y compris pour le service qui le transmet. Lecture unique : le message s'autodétruit après avoir été lu une fois. Deux canaux séparés : le lien d'un côté, le code de déverrouillage de l'autre (de vive voix, autre messagerie). Une seule interception ne suffit alors jamais. Une expiration : si le destinataire ne lit pas à temps, le secret meurt. Ce que « sécurisé » veut dire (et ne veut pas dire) Un bon outil garantit qu'on ne peut plus accéder au message après lecture, et qu'il était illisible en transit. Il ne protège pas contre un destinataire qui photographie son propre écran : c'est de l'éphémère sécurisé, pas de l'anti-capture. Pour un mot de passe, un code ou une information sensible, c'est largement suffisant. Missive applique exactement ces principes : chiffré sur votre appareil, lu une seule fois, lien et code par deux canaux, expiration et autodestruction.",
+      "author": {
+        "@id": "https://protein-keystone.com/#organization"
+      },
+      "publisher": {
+        "@id": "https://protein-keystone.com/#organization"
+      },
+      "mainEntityOfPage": "https://protein-keystone.com/outils/missive",
+      "about": "Missive"
     }
   ]
 }
@@ -157,6 +171,14 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
 .faq summary::after{content:'+';font-size:20px;font-weight:400;color:var(--accent-3);transition:transform .2s}
 .faq details[open] summary::after{transform:rotate(45deg)}
 .faq .a{padding:0 18px 18px;font-size:14px;color:var(--text-2)}
+.guide-body{max-width:760px;margin-top:6px}
+.guide-body p{font-size:14.5px;color:var(--text-2);line-height:1.72;margin:11px 0}
+.guide-body h3{font-size:15.5px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin:20px 0 6px}
+.guide-body ul{margin:11px 0;padding-left:4px;list-style:none;display:grid;gap:7px}
+.guide-body li{position:relative;padding-left:20px;font-size:14.5px;color:var(--text-2);line-height:1.6}
+.guide-body li::before{content:'';position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:2px;background:var(--accent-2)}
+.guide-body b,.guide-body strong{color:var(--text);font-weight:600}
+.guide-body a{color:var(--accent-3);border-bottom:1px solid var(--accent-bd)}
 .related{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:24px}
 .rcard{display:block;padding:18px;border:1px solid var(--border);border-radius:var(--r-md);background:rgba(255,255,255,.02);transition:border-color .2s,transform .15s}
 .rcard:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
@@ -223,6 +245,22 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
       <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
       <details><summary>Missive consomme-t-elle des crédits IA ?</summary><div class="a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais.</div></details>
     </div>
+  </section>
+
+  <section class="block" aria-labelledby="guide">
+    <span class="eyebrow-l">Le guide</span>
+    <h2 id="guide">Transmettre un mot de passe en toute sécurité</h2>
+    <div class="guide-body"><p>Envoyer un mot de passe par e-mail, SMS ou messagerie d'équipe est une mauvaise habitude répandue : le message reste <b>stocké indéfiniment</b>, peut être transféré, et traîne dans des boîtes que vous ne contrôlez pas. Un seul accès à cette boîte, des mois plus tard, et le secret est exposé.</p>
+<h3>Les bons réflexes</h3>
+<ul>
+<li><b>Chiffrement de bout en bout</b> : le secret est illisible, y compris pour le service qui le transmet.</li>
+<li><b>Lecture unique</b> : le message s'autodétruit après avoir été lu une fois.</li>
+<li><b>Deux canaux séparés</b> : le lien d'un côté, le code de déverrouillage de l'autre (de vive voix, autre messagerie). Une seule interception ne suffit alors jamais.</li>
+<li><b>Une expiration</b> : si le destinataire ne lit pas à temps, le secret meurt.</li>
+</ul>
+<h3>Ce que « sécurisé » veut dire (et ne veut pas dire)</h3>
+<p>Un bon outil garantit qu'on ne peut plus accéder au message après lecture, et qu'il était illisible en transit. Il ne protège pas contre un destinataire qui <b>photographie son propre écran</b> : c'est de l'éphémère sécurisé, pas de l'anti-capture. Pour un mot de passe, un code ou une information sensible, c'est largement suffisant.</p>
+<p><a href="/activate">Missive</a> applique exactement ces principes : chiffré sur votre appareil, lu une seule fois, lien et code par deux canaux, expiration et autodestruction.</p></div>
   </section>
 
   <section class="block" aria-labelledby="more">

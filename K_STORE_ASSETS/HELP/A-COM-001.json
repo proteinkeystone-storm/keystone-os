@@ -27,7 +27,14 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+    {
+      "keys": "Échap",
+      "desc": "Fermer ce panneau d'aide"
+    }
   ],
-  "updated_at": "2026-05-14"
+  "updated_at": "2026-05-14",
+  "guide": {
+    "title": "QR dynamique ou statique : lequel choisir ?",
+    "body": "<p>Tous les QR codes se ressemblent, mais il en existe deux familles très différentes — et choisir la mauvaise peut vous coûter une réimpression complète.</p>\n<h3>Le QR statique</h3>\n<p>L'adresse (URL, texte, Wi-Fi…) est <b>encodée directement</b> dans le motif. Avantage : il fonctionne pour toujours, sans dépendre d'aucun service. Inconvénient : <b>impossible à modifier</b> une fois imprimé. Si l'adresse change, le QR est bon à jeter.</p>\n<h3>Le QR dynamique</h3>\n<p>Le motif pointe vers une <b>redirection</b> que vous contrôlez. Vous pouvez changer la destination <b>après impression</b>, autant de fois que vous voulez, sans réimprimer. Bonus : chaque scan peut être compté.</p>\n<h3>Lequel pour quel usage</h3>\n<ul>\n<li><b>Statique</b> : une information qui ne changera jamais (un accès Wi-Fi, une carte de visite simple).</li>\n<li><b>Dynamique</b> : tout ce qui est imprimé en quantité ou destiné à durer — bâche de chantier, flyer réutilisé, étiquette produit, menu, affiche d'événement.</li>\n</ul>\n<h3>Et le RGPD ?</h3>\n<p>Compter les scans implique un traitement de données. Méfiez-vous des générateurs gratuits qui revendent ces données ou passent par Google. Un bon QR dynamique trace les scans de façon <b>anonyme et conforme</b>, sans cookie ni revente — c'est l'approche de <a href=\"/activate\">Smart Dynamic QR</a>.</p>"
+  }
 }

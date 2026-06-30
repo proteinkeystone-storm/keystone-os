@@ -32,10 +32,26 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Auditer", "desc": "Lancer un audit complet du site" },
-    { "keys": "Vérifier", "desc": "Relancer un contrôle de disponibilité immédiat" },
-    { "keys": "Clic sur le score", "desc": "Rouvrir le dernier audit du site" },
-    { "keys": "Échap", "desc": "Fermer le panneau d'audit, puis le workspace" }
+    {
+      "keys": "Auditer",
+      "desc": "Lancer un audit complet du site"
+    },
+    {
+      "keys": "Vérifier",
+      "desc": "Relancer un contrôle de disponibilité immédiat"
+    },
+    {
+      "keys": "Clic sur le score",
+      "desc": "Rouvrir le dernier audit du site"
+    },
+    {
+      "keys": "Échap",
+      "desc": "Fermer le panneau d'audit, puis le workspace"
+    }
   ],
-  "updated_at": "2026-06-19"
+  "updated_at": "2026-06-19",
+  "guide": {
+    "title": "Être visible dans les réponses des IA (ChatGPT, Perplexity) : le guide GEO",
+    "body": "<p>De plus en plus de clients ne tapent plus leur question dans Google : ils la <b>posent à une IA</b> (ChatGPT, Perplexity, Gemini) et lisent la réponse. Si votre établissement n'y est pas cité, vous n'existez pas pour ce client. C'est tout l'enjeu du <b>GEO</b> (Generative Engine Optimization).</p>\n<h3>Comment une IA choisit qui citer</h3>\n<ul>\n<li><b>Une identité claire et cohérente</b> : même nom, adresse et téléphone partout (site, annuaires, fiche Google), reliés à votre fiche légale officielle.</li>\n<li><b>Des données structurées</b> (schema.org) qui disent qui vous êtes et ce que vous faites.</li>\n<li><b>Des sources tierces</b> qui parlent de vous — avis, annuaires, presse : les IA s'y fient plus qu'à votre propre site.</li>\n<li><b>Du contenu qui répond aux vraies questions</b> de vos clients, pas seulement des pages de vente.</li>\n<li><b>Des avis récents</b> et une présence locale soignée.</li>\n</ul>\n<h3>Par où commencer</h3>\n<p>Assurez-vous que le nom de votre entreprise renvoie sans ambiguïté à une seule entité, publiez vos mentions légales et votre politique de confidentialité, créez votre fiche d'établissement, et récoltez des avis authentiques. Puis écrivez quelques pages qui répondent aux questions que vos clients posent réellement.</p>\n<h3>Comment savoir si ça marche</h3>\n<p>La seule façon de le savoir, c'est de <b>mesurer</b> : poser la question à plusieurs IA et regarder si vous êtes cité, et sur quelles requêtes. C'est exactement ce que fait <a href=\"/activate\">Sentinel</a> — il suit votre visibilité dans les IA dans le temps, en plus de l'audit web classique (disponibilité, SEO, sécurité, accessibilité).</p>"
+  }
 }

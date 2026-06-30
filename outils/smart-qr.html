@@ -99,6 +99,20 @@
           }
         }
       ]
+    },
+    {
+      "@type": "Article",
+      "headline": "QR dynamique ou statique : lequel choisir ?",
+      "inLanguage": "fr-FR",
+      "articleBody": "Tous les QR codes se ressemblent, mais il en existe deux familles très différentes — et choisir la mauvaise peut vous coûter une réimpression complète. Le QR statique L'adresse (URL, texte, Wi-Fi…) est encodée directement dans le motif. Avantage : il fonctionne pour toujours, sans dépendre d'aucun service. Inconvénient : impossible à modifier une fois imprimé. Si l'adresse change, le QR est bon à jeter. Le QR dynamique Le motif pointe vers une redirection que vous contrôlez. Vous pouvez changer la destination après impression , autant de fois que vous voulez, sans réimprimer. Bonus : chaque scan peut être compté. Lequel pour quel usage Statique : une information qui ne changera jamais (un accès Wi-Fi, une carte de visite simple). Dynamique : tout ce qui est imprimé en quantité ou destiné à durer — bâche de chantier, flyer réutilisé, étiquette produit, menu, affiche d'événement. Et le RGPD ? Compter les scans implique un traitement de données. Méfiez-vous des générateurs gratuits qui revendent ces données ou passent par Google. Un bon QR dynamique trace les scans de façon anonyme et conforme , sans cookie ni revente — c'est l'approche de Smart Dynamic QR .",
+      "author": {
+        "@id": "https://protein-keystone.com/#organization"
+      },
+      "publisher": {
+        "@id": "https://protein-keystone.com/#organization"
+      },
+      "mainEntityOfPage": "https://protein-keystone.com/outils/smart-qr",
+      "about": "Smart Dynamic QR"
     }
   ]
 }
@@ -149,6 +163,14 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
 .faq summary::after{content:'+';font-size:20px;font-weight:400;color:var(--accent-3);transition:transform .2s}
 .faq details[open] summary::after{transform:rotate(45deg)}
 .faq .a{padding:0 18px 18px;font-size:14px;color:var(--text-2)}
+.guide-body{max-width:760px;margin-top:6px}
+.guide-body p{font-size:14.5px;color:var(--text-2);line-height:1.72;margin:11px 0}
+.guide-body h3{font-size:15.5px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin:20px 0 6px}
+.guide-body ul{margin:11px 0;padding-left:4px;list-style:none;display:grid;gap:7px}
+.guide-body li{position:relative;padding-left:20px;font-size:14.5px;color:var(--text-2);line-height:1.6}
+.guide-body li::before{content:'';position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:2px;background:var(--accent-2)}
+.guide-body b,.guide-body strong{color:var(--text);font-weight:600}
+.guide-body a{color:var(--accent-3);border-bottom:1px solid var(--accent-bd)}
 .related{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:24px}
 .rcard{display:block;padding:18px;border:1px solid var(--border);border-radius:var(--r-md);background:rgba(255,255,255,.02);transition:border-color .2s,transform .15s}
 .rcard:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
@@ -213,6 +235,23 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
       <details><summary>Le tracking respecte-t-il le RGPD ?</summary><div class="a">Oui, natif. Aucune donnée envoyée à Google. Pas de cookie. Pas de fingerprint. Une page de transparence publique est disponible à /sdqr-privacy.</div></details>
       <details><summary>Puis-je personnaliser le design du QR ?</summary><div class="a">Oui : couleur, forme des modules, logo central, pattern personnalisé. Tous les QR conservent le niveau de correction d'erreurs ECC nécessaire pour rester scannables.</div></details>
     </div>
+  </section>
+
+  <section class="block" aria-labelledby="guide">
+    <span class="eyebrow-l">Le guide</span>
+    <h2 id="guide">QR dynamique ou statique : lequel choisir ?</h2>
+    <div class="guide-body"><p>Tous les QR codes se ressemblent, mais il en existe deux familles très différentes — et choisir la mauvaise peut vous coûter une réimpression complète.</p>
+<h3>Le QR statique</h3>
+<p>L'adresse (URL, texte, Wi-Fi…) est <b>encodée directement</b> dans le motif. Avantage : il fonctionne pour toujours, sans dépendre d'aucun service. Inconvénient : <b>impossible à modifier</b> une fois imprimé. Si l'adresse change, le QR est bon à jeter.</p>
+<h3>Le QR dynamique</h3>
+<p>Le motif pointe vers une <b>redirection</b> que vous contrôlez. Vous pouvez changer la destination <b>après impression</b>, autant de fois que vous voulez, sans réimprimer. Bonus : chaque scan peut être compté.</p>
+<h3>Lequel pour quel usage</h3>
+<ul>
+<li><b>Statique</b> : une information qui ne changera jamais (un accès Wi-Fi, une carte de visite simple).</li>
+<li><b>Dynamique</b> : tout ce qui est imprimé en quantité ou destiné à durer — bâche de chantier, flyer réutilisé, étiquette produit, menu, affiche d'événement.</li>
+</ul>
+<h3>Et le RGPD ?</h3>
+<p>Compter les scans implique un traitement de données. Méfiez-vous des générateurs gratuits qui revendent ces données ou passent par Google. Un bon QR dynamique trace les scans de façon <b>anonyme et conforme</b>, sans cookie ni revente — c'est l'approche de <a href="/activate">Smart Dynamic QR</a>.</p></div>
   </section>
 
   <section class="block" aria-labelledby="more">

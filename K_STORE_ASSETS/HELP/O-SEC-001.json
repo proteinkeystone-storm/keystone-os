@@ -32,10 +32,26 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Nouvelle missive", "desc": "Créer et sceller un secret" },
-    { "keys": "Jetons réutilisables", "desc": "Onglet des objets physiques rechargeables" },
-    { "keys": "Recharger", "desc": "Mettre un nouveau secret sur un jeton existant" },
-    { "keys": "Échap", "desc": "Revenir à la liste, puis fermer le workspace" }
+    {
+      "keys": "Nouvelle missive",
+      "desc": "Créer et sceller un secret"
+    },
+    {
+      "keys": "Jetons réutilisables",
+      "desc": "Onglet des objets physiques rechargeables"
+    },
+    {
+      "keys": "Recharger",
+      "desc": "Mettre un nouveau secret sur un jeton existant"
+    },
+    {
+      "keys": "Échap",
+      "desc": "Revenir à la liste, puis fermer le workspace"
+    }
   ],
-  "updated_at": "2026-06-30"
+  "updated_at": "2026-06-30",
+  "guide": {
+    "title": "Transmettre un mot de passe en toute sécurité",
+    "body": "<p>Envoyer un mot de passe par e-mail, SMS ou messagerie d'équipe est une mauvaise habitude répandue : le message reste <b>stocké indéfiniment</b>, peut être transféré, et traîne dans des boîtes que vous ne contrôlez pas. Un seul accès à cette boîte, des mois plus tard, et le secret est exposé.</p>\n<h3>Les bons réflexes</h3>\n<ul>\n<li><b>Chiffrement de bout en bout</b> : le secret est illisible, y compris pour le service qui le transmet.</li>\n<li><b>Lecture unique</b> : le message s'autodétruit après avoir été lu une fois.</li>\n<li><b>Deux canaux séparés</b> : le lien d'un côté, le code de déverrouillage de l'autre (de vive voix, autre messagerie). Une seule interception ne suffit alors jamais.</li>\n<li><b>Une expiration</b> : si le destinataire ne lit pas à temps, le secret meurt.</li>\n</ul>\n<h3>Ce que « sécurisé » veut dire (et ne veut pas dire)</h3>\n<p>Un bon outil garantit qu'on ne peut plus accéder au message après lecture, et qu'il était illisible en transit. Il ne protège pas contre un destinataire qui <b>photographie son propre écran</b> : c'est de l'éphémère sécurisé, pas de l'anti-capture. Pour un mot de passe, un code ou une information sensible, c'est largement suffisant.</p>\n<p><a href=\"/activate\">Missive</a> applique exactement ces principes : chiffré sur votre appareil, lu une seule fois, lien et code par deux canaux, expiration et autodestruction.</p>"
+  }
 }
