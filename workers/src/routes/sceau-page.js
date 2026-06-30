@@ -313,6 +313,9 @@ function _page(base, nonce, bundleHref, sri) {
       seal.classList.add('cracked');
       const type = mime || f.type || 'application/octet-stream';
       const url = URL.createObjectURL(new Blob([f.bytes], { type }));
+      // On tente l'aperçu pour TOUTE image. Certains formats (HEIC/HEIF des
+      // iPhone) ne sont pas décodables par le navigateur → onerror masque
+      // l'aperçu et laisse le téléchargement comme repli propre.
       const isImg = /^image\//.test(type);
       setTimeout(()=>{
         $(
@@ -320,13 +323,18 @@ function _page(base, nonce, bundleHref, sri) {
           '<p>Téléchargez maintenant — ce fichier ne se rouvrira pas après fermeture.</p>'+
           (isImg ? '<img class="secret-img" id="img" alt="">' : '')+
           '<div class="secret" id="fname"></div>'+
+          '<div class="foot hidden" id="noprev">Aperçu indisponible pour ce format — utilisez Télécharger.</div>'+
           '<a class="dl-btn" id="dl" download>Télécharger le fichier</a>'+
           '<div class="foot">Une fois cette page fermée, le fichier n’est plus accessible par ce lien.</div>'
         );
         document.getElementById('fname').textContent = f.name; // textContent : zéro injection
         const dl = document.getElementById('dl');
         dl.href = url; dl.setAttribute('download', f.name);
-        if(isImg){ document.getElementById('img').src = url; }
+        if(isImg){
+          const img = document.getElementById('img');
+          img.addEventListener('error', ()=>{ img.classList.add('hidden'); document.getElementById('noprev').classList.remove('hidden'); });
+          img.src = url;
+        }
       }, 650);
     }
 
