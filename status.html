@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>État du service — Keystone OS</title>
+<meta name="description" content="État en temps réel des services Keystone OS : site, application et API souveraine hébergée en Europe. Vérifié en direct à chaque visite.">
+<link rel="canonical" href="https://protein-keystone.com/status">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="État du service — Keystone OS">
+<meta property="og:description" content="État en temps réel des services Keystone OS, vérifié en direct.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://protein-keystone.com/status">
+<meta property="og:site_name" content="Keystone OS">
+<meta property="og:locale" content="fr_FR">
+<meta name="theme-color" content="#020617">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#020617;--accent:#6366f1;--accent-2:#818cf8;--accent-3:#a5b4fc;--accent-bg:rgba(99,102,241,.12);--accent-bd:rgba(99,102,241,.28);--text:#f8fafc;--text-2:rgba(248,250,252,.6);--text-3:rgba(248,250,252,.32);--border:rgba(255,255,255,.1);--border-strong:rgba(255,255,255,.16);--green:#34d399;--amber:#fbbf24;--red:#f87171;--r-md:16px;--r-lg:24px}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;letter-spacing:-.02em;-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 50% at 50% -8%,rgba(99,102,241,.18),transparent 70%)}
+a{color:var(--accent-3);text-decoration:none}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:rgba(2,6,23,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.nav-logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px;color:var(--text)}
+.nav-logo img{width:26px;height:26px}
+.wrap{max-width:680px;margin:0 auto;padding:0 22px}
+.hero{padding:40px 0 8px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--accent-3);padding:6px 14px;border-radius:999px;margin-bottom:18px;background:var(--accent-bg);border:1px solid var(--accent-bd)}
+h1{font-size:clamp(26px,5vw,40px);font-weight:900;letter-spacing:-.035em;line-height:1.07}
+.banner{margin:28px 0 22px;padding:20px 22px;border-radius:var(--r-md);display:flex;align-items:center;gap:14px;border:1px solid var(--border-strong);background:rgba(255,255,255,.02)}
+.banner.ok{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
+.banner.ko{border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
+.bdot{width:14px;height:14px;border-radius:50%;background:var(--text-3);flex-shrink:0}
+.banner.ok .bdot{background:var(--green);box-shadow:0 0 0 4px rgba(52,211,153,.18)}
+.banner.ko .bdot{background:var(--red);box-shadow:0 0 0 4px rgba(248,113,113,.18)}
+.banner b{font-size:16.5px;font-weight:700;display:block}
+.banner span{font-size:13px;color:var(--text-2)}
+.comp{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;background:rgba(255,255,255,.02)}
+.comp .name{font-size:14.5px;font-weight:600}
+.comp .desc{font-size:12.5px;color:var(--text-3);margin-top:2px}
+.comp .st{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap}
+.cdot{width:9px;height:9px;border-radius:50%;background:var(--text-3)}
+.cdot.ok{background:var(--green)} .cdot.ko{background:var(--red)} .cdot.wait{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.4}}
+.foot-note{margin:26px 0 50px;font-size:12.5px;color:var(--text-3);line-height:1.7;border-top:1px solid var(--border);padding-top:20px}
+.foot-note a{color:var(--accent-3)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img src="/keystone-puce.svg" alt="">Keystone</a>
+  <a href="/" style="font-size:13px;font-weight:600;color:var(--text-2)">Retour au site</a>
+</nav>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">État du service</span>
+    <h1>Tout fonctionne ?<br>Vérifions en direct.</h1>
+  </header>
+
+  <div class="banner" id="banner">
+    <span class="bdot"></span>
+    <div><b id="bannerTitle">Vérification en cours…</b><span id="bannerSub">On teste les services à l'instant.</span></div>
+  </div>
+
+  <div id="components">
+    <div class="comp" data-comp="site">
+      <div><div class="name">Site & landing</div><div class="desc">Pages publiques (Vercel)</div></div>
+      <div class="st"><span class="cdot wait"></span><span class="lab">Test…</span></div>
+    </div>
+    <div class="comp" data-comp="api">
+      <div><div class="name">API & données souveraines</div><div class="desc">Cloudflare — région Europe (WEUR)</div></div>
+      <div class="st"><span class="cdot wait"></span><span class="lab">Test…</span></div>
+    </div>
+    <div class="comp" data-comp="forms">
+      <div><div class="name">Formulaires & avis</div><div class="desc">Collecte et dépôt (Key Form, /avis)</div></div>
+      <div class="st"><span class="cdot wait"></span><span class="lab">Test…</span></div>
+    </div>
+  </div>
+
+  <p class="foot-note">
+    Cet état est <strong>vérifié en direct</strong> à l'ouverture de cette page (il ne reste jamais figé sur une vieille valeur).
+    Aucun incident planifié. Un problème malgré tout&nbsp;? Écrivez-nous à
+    <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a> — voir aussi la
+    <a href="/securite">page Sécurité</a>.
+  </p>
+</div>
+
+<script>
+(function(){
+  var API = 'https://keystone-os-api.keystone-os.workers.dev';
+  function set(comp, ok){
+    var el = document.querySelector('.comp[data-comp="'+comp+'"] .st');
+    el.querySelector('.cdot').className = 'cdot ' + (ok ? 'ok' : 'ko');
+    el.querySelector('.lab').textContent = ok ? 'Opérationnel' : 'Perturbé';
+    return ok;
+  }
+  // Le site est servi puisque cette page s'affiche.
+  var siteOk = set('site', true);
+  // Ping de l'API souveraine : check de JOIGNABILITÉ (mode no-cors → la requête
+  // aboutit si le serveur répond, quelle que soit l'origine ; rejet = injoignable).
+  var ctrl = new AbortController();
+  var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+  fetch(API + '/api/testimonials/public', { signal: ctrl.signal, cache: 'no-store', mode: 'no-cors' })
+    .then(function(){ return true; })
+    .catch(function(){ return false; })
+    .then(function(apiOk){
+      clearTimeout(to);
+      set('api', apiOk);
+      set('forms', apiOk); // mêmes briques worker
+      var all = siteOk && apiOk;
+      var b = document.getElementById('banner');
+      b.className = 'banner ' + (all ? 'ok' : 'ko');
+      document.getElementById('bannerTitle').textContent = all ? 'Tous les systèmes sont opérationnels' : 'Un service est perturbé';
+      document.getElementById('bannerSub').textContent = all
+        ? 'Site, application et API souveraine répondent normalement.'
+        : 'Nous enquêtons. Réessayez dans quelques minutes.';
+    });
+})();
+</script>
+</body>
+</html>

@@ -750,7 +750,7 @@ EXPERIENCES.forEach(x => writeFileSync(resolve(CASUSAGE, `${x.slug}.html`), expP
 // ── sitemap COMPLET (proprietaire unique) ───────────────────────
 const toolSlugs = Object.values(TOOL);
 // Pages de confiance (generees par gen-trust-pages.mjs ; le sitemap reste ici).
-const TRUST_PAGES = ['a-propos', 'securite', 'confidentialite', 'mentions-legales', 'cgu', 'cgv', 'dpa', 'reversibilite', 'changelog', 'roadmap'];
+const TRUST_PAGES = ['a-propos', 'securite', 'confidentialite', 'mentions-legales', 'cgu', 'cgv', 'dpa', 'reversibilite', 'changelog', 'roadmap', 'status'];
 const urls = [
   { loc: `${ORIGIN}/`, pr: '1.0', cf: 'weekly' },
   { loc: `${ORIGIN}/faq`, pr: '0.7', cf: 'monthly' },

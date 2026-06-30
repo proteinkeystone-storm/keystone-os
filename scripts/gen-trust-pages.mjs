@@ -148,6 +148,7 @@ const TRUST_NAV = [
   ['/reversibilite', 'Réversibilité'],
   ['/changelog', 'Nouveautés'],
   ['/roadmap', 'Feuille de route'],
+  ['/status', 'État du service'],
 ];
 
 function FOOT() {

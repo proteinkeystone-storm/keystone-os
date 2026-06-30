@@ -28,7 +28,8 @@
     "gen-notices": "node scripts/gen-tool-notices.mjs",
     "gen-pages": "node scripts/gen-tool-pages.mjs",
     "gen-verticals": "node scripts/gen-vertical-pages.mjs",
-    "gen-trust": "node scripts/gen-trust-pages.mjs"
+    "gen-trust": "node scripts/gen-trust-pages.mjs",
+    "ping-indexnow": "node scripts/ping-indexnow.mjs"
   },
   "repository": {
     "type": "git",
