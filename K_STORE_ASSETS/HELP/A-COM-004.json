@@ -39,7 +39,14 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer le workspace, un modal ou ce panneau d'aide" }
+    {
+      "keys": "Échap",
+      "desc": "Fermer le workspace, un modal ou ce panneau d'aide"
+    }
   ],
-  "updated_at": "2026-05-14"
+  "updated_at": "2026-05-14",
+  "guide": {
+    "title": "Créer un formulaire sans coder (et conforme RGPD)",
+    "body": "<p>Recueillir une inscription, une demande de devis ou un avis ne devrait pas exiger un développeur. Mais les solutions grand public posent une question qu'on oublie souvent : <b>où partent les données</b> que vos répondants vous confient ?</p>\n<h3>L'alternative aux formulaires classiques</h3>\n<p>Construire un formulaire est aujourd'hui à la portée de tous : on choisit ses champs, on rédige ses questions, on partage un lien. Pas de code, pas d'hébergement à gérer. Le vrai sujet n'est plus technique, il est juridique.</p>\n<h3>Pourquoi le RGPD compte ici</h3>\n<p>Un formulaire collecte presque toujours des données personnelles — nom, e-mail, parfois plus. Beaucoup d'outils gratuits stockent ces réponses sur des serveurs hors d'Europe, les analysent, voire les monétisent. Vous restez pourtant responsable de ce que deviennent les données de vos répondants.</p>\n<ul>\n<li><b>Consentement clair</b> : la personne sait à quoi elle s'engage en répondant.</li>\n<li><b>Données maîtrisées</b> : pas de revente, pas de traceurs publicitaires greffés sur votre formulaire.</li>\n<li><b>Hébergement maîtrisé</b> : savoir où les réponses sont conservées, et pouvoir les supprimer.</li>\n<li><b>Minimisation</b> : ne demander que les champs réellement utiles. Moins vous collectez, moins vous portez de risque.</li>\n</ul>\n<p>Ces principes ne sont pas un luxe juridique : ils protègent vos répondants et vous évitent d'engager votre responsabilité sans le savoir, pour un simple formulaire de contact.</p>\n<h3>Partager simplement</h3>\n<p>Un bon formulaire se diffuse par un simple lien ou un QR code — sur une affiche, un e-mail, un comptoir. Le répondant ouvre, remplit, valide ; vous récupérez des réponses propres, sans friction.</p>\n<p><a href=\"/activate\">Key Form</a> réunit ces deux exigences : la simplicité d'un formulaire sans code et la conformité RGPD par défaut, partageable par lien ou QR.</p>"
+  }
 }

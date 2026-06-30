@@ -46,7 +46,14 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer ce panneau d'aide" }
+    {
+      "keys": "Échap",
+      "desc": "Fermer ce panneau d'aide"
+    }
   ],
-  "updated_at": "2026-05-21"
+  "updated_at": "2026-05-21",
+  "guide": {
+    "title": "Le brief d'impression qui évite l'erreur à 800 €",
+    "body": "<p>Un fichier accepté à l'écran peut virer à la catastrophe sur la presse : couleurs ternes, texte rogné, image floue. L'imprimeur imprime ce que vous lui donnez, pas ce que vous aviez en tête. Quelques notions suffisent à éviter une réimpression qui se chiffre vite en centaines d'euros.</p>\n<h3>Ce qu'un imprimeur attend vraiment</h3>\n<ul>\n<li><b>Le fond perdu</b> : prévoyez 3 à 5 mm de marge de débord autour du document. Sans lui, la découpe laisse un liseré blanc sur les bords.</li>\n<li><b>Le mode CMJN</b> : l'impression travaille en cyan, magenta, jaune, noir — pas en RVB comme votre écran. Un fichier RVB ressort souvent avec des couleurs éteintes ou décalées.</li>\n<li><b>La résolution</b> : 300 DPI à la taille réelle d'impression. Une image de 72 DPI, nette à l'écran, devient floue sur papier.</li>\n<li><b>Le bon format</b> : un PDF aux dimensions exactes, polices vectorisées ou incluses, repères de coupe si demandés.</li>\n</ul>\n<h3>Les pièges classiques</h3>\n<p>Texte trop près du bord (prévoir une marge de sécurité intérieure), noir composé au lieu d'un noir riche pour les aplats, image récupérée sur le web donc trop légère, oubli du fond perdu sur un visuel pleine page. Chacun de ces détails passe inaperçu jusqu'au moment où le carton de tirage arrive.</p>\n<h3>Le brief qui sécurise</h3>\n<p>Un bon brief réunit en un seul document le format, le fond perdu, le mode colorimétrique, la résolution et le type de papier attendus. L'imprimeur sait exactement quoi vérifier, vous évitez les allers-retours. <a href=\"/activate\">Brief Prod</a> génère ce document de cadrage pour que votre fichier parte juste du premier coup.</p>"
+  }
 }

@@ -36,8 +36,18 @@
     }
   ],
   "shortcuts": [
-    { "keys": "Échap", "desc": "Fermer le workspace ou ce panneau d'aide" },
-    { "keys": "Entrée", "desc": "Envoyer votre message dans le bac à sable (Maj + Entrée : nouvelle ligne)" }
+    {
+      "keys": "Échap",
+      "desc": "Fermer le workspace ou ce panneau d'aide"
+    },
+    {
+      "keys": "Entrée",
+      "desc": "Envoyer votre message dans le bac à sable (Maj + Entrée : nouvelle ligne)"
+    }
   ],
-  "updated_at": "2026-06-12"
+  "updated_at": "2026-06-12",
+  "guide": {
+    "title": "Faire répondre une IA à ses clients sans qu'elle invente",
+    "body": "<p>Un chatbot d'IA généraliste est conçu pour <b>toujours produire une réponse</b>, même quand il ne sait pas. Quand l'information lui manque, il la comble — avec un horaire faux, un tarif inventé, une politique de retour qui n'existe pas. C'est ce qu'on appelle une hallucination, et pour un commerçant qui laisse une IA parler à ses clients, c'est un risque direct : une réponse fausse engage votre image, parfois votre responsabilité.</p>\n<h3>Pourquoi une IA invente</h3>\n<p>Un modèle de langage ne consulte pas une base de vérité : il prédit la suite de mots la plus probable. Sans cadre, il puise dans des connaissances générales, périmées ou inadaptées à votre activité. Le problème n'est pas l'IA en soi, c'est de la laisser répondre <b>sans source</b>.</p>\n<h3>Ce qui change avec un agent ancré</h3>\n<ul>\n<li><b>Un savoir validé par vous</b> : l'agent ne répond qu'à partir d'un coffre de connaissances que vous avez écrit et approuvé (horaires, tarifs, conditions, FAQ).</li>\n<li><b>Le droit de dire « je ne sais pas »</b> : face à une question hors périmètre, un bon agent renvoie vers un humain plutôt que d'improviser.</li>\n<li><b>Une mise à jour instantanée</b> : un tarif change, vous corrigez le coffre, l'agent répond juste dès la seconde suivante.</li>\n</ul>\n<h3>Ce que ça apporte concrètement</h3>\n<p>Vos clients obtiennent une réponse fiable à toute heure, sans que vous ayez à surveiller chaque échange. Vous gardez la main sur ce qui est dit en votre nom, et vous repérez les questions sans réponse — celles qui révèlent un trou dans votre information.</p>\n<p><a href=\"/activate\">Smart Agent</a> repose exactement sur ce principe : un agent ancré sur votre savoir-faire, qui cite ses sources et préfère se taire plutôt qu'inventer.</p>"
+  }
 }
