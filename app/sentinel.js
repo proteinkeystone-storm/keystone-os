@@ -340,6 +340,86 @@ function _findingsHTML(list, platform) {
   }).join('') + `</div>`;
 }
 
+// Énumération « à la française » : « a, b et c ».
+function _joinFr(arr) {
+  if (arr.length <= 1) return arr.join('');
+  return arr.slice(0, -1).join(', ') + ' et ' + arr[arr.length - 1];
+}
+// ── Synthèse « En clair » — traduit les résultats en phrases simples ─────
+// Déterministe (aucune IA, aucun coût) : lit les données déjà calculées du
+// cockpit et les met en mots, pour les utilisateurs qui ne lisent pas les
+// scores. Priorisé, avec un code couleur vert / orange / rouge.
+function _summaryHTML(c) {
+  const a = c.audit || {};
+  const sc = a.scores || {};
+  const score = a.score;
+  if (score == null) return '';   // pas encore d'audit → le bouton « lancer le premier audit » suffit
+  const pts = [];
+  const ICO = { good: 'check', warn: 'alert-triangle', bad: 'x' };
+  const add = (cls, txt) => pts.push(`<li class="${cls}">${icon(ICO[cls], 14)}<span>${txt}</span></li>`);
+
+  // Verdict global (phrase + badge de score).
+  const vcls = score >= 70 ? 'good' : (score >= 50 ? 'warn' : 'bad');
+  const vtxt = score >= 85 ? 'Votre site est solide sur l\'ensemble des points vérifiés.'
+    : score >= 70 ? 'Bon ensemble — quelques améliorations sont possibles, rien d\'urgent.'
+    : score >= 50 ? 'Correct, mais plusieurs points méritent votre attention.'
+    : 'Plusieurs corrections sont à prévoir en priorité.';
+
+  // Disponibilité (le visiteur a-t-il pu accéder au site ?).
+  if (c.uptime30d != null) {
+    const u = String(c.uptime30d).replace('.', ',');
+    if (c.uptime30d >= 99.5) add('good', `Votre site a été accessible <b>${u} %</b> du temps sur 30 jours — excellent.`);
+    else if (c.uptime30d >= 98) add('warn', `Votre site a été accessible ${u} % du temps sur 30 jours — quelques interruptions.`);
+    else add('bad', `Votre site n'a été joignable que ${u} % du temps sur 30 jours — des coupures à investiguer.`);
+  }
+
+  // Sécurité (HTTPS).
+  if (c.ssl) {
+    if (c.ssl.valid || c.ssl.https) add('good', 'La connexion est <b>sécurisée</b> (HTTPS) : les échanges sont chiffrés.');
+    else add('bad', 'Votre site n\'est <b>pas en HTTPS</b> : à corriger en priorité (sécurité et confiance).');
+  }
+
+  // Vitesse d'affichage (LCP).
+  const lcp = a.cwv && a.cwv.lcp;
+  if (lcp != null && lcp > 0) {
+    const s = (lcp / 1000).toFixed(1).replace('.', ',');
+    if (lcp <= 2500) add('good', `Vos pages s'affichent vite (${s} s) — bonne expérience pour le visiteur.`);
+    else if (lcp <= 4000) add('warn', `Vos pages mettent ${s} s à s'afficher — un peu lent, à optimiser.`);
+    else add('bad', `Vos pages sont lentes à s'afficher (${s} s) — cela fait fuir des visiteurs.`);
+  }
+
+  // Forces / faiblesses sur les axes qualité.
+  const QUAL = [['performance', 'la vitesse'], ['seo', 'le référencement technique'], ['securite', 'la sécurité'], ['accessibilite', 'l\'accessibilité'], ['presence', 'la présence locale']];
+  const strong = QUAL.filter(([k]) => sc[k] != null && sc[k] >= 80).map(([, l]) => l);
+  const weak = QUAL.filter(([k]) => sc[k] != null && sc[k] < 60).map(([, l]) => l);
+  if (strong.length) add('good', `Points forts : ${_joinFr(strong)}.`);
+  if (weak.length) add('warn', `À renforcer : ${_joinFr(weak)}.`);
+
+  // Correctifs prioritaires (renvoie vers la liste clé en main ci-dessous).
+  const highN = (a.findings || []).filter((f) => f.sev === 'high').length;
+  if (highN) add('bad', `${highN} correctif${highN > 1 ? 's' : ''} prioritaire${highN > 1 ? 's' : ''} ${highN > 1 ? 'sont détaillés' : 'est détaillé'} plus bas, avec la marche à suivre prête à appliquer.`);
+
+  // Visibilité dans les IA (GEO).
+  if (c.geo && c.geo.score != null) {
+    const g = c.geo.score;
+    if (g >= 70) add('good', `Visibilité dans les IA : bonne (${g}/100) — vous êtes cité quand un prospect interroge une IA.`);
+    else add('warn', `Visibilité dans les IA faible (${g}/100) : vous êtes peu ou pas cité par les IA. La FAQ structurée ci-dessus aide à y remédier.`);
+  }
+
+  // Mots-clés Google (Search Console).
+  if (c.gsc && c.gsc.connected) {
+    const t = (c.gsc.results || {}).totals || {};
+    if (t.impressions > 0) add(c.gsc.score >= 60 ? 'good' : 'warn', `Sur Google : vous êtes apparu <b>${t.impressions}</b> fois${t.position != null ? ` (position moyenne ${String(t.position).replace('.', ',')})` : ''} ces 28 jours, pour ${t.clicks || 0} clic${(t.clicks || 0) > 1 ? 's' : ''}.`);
+    else add('warn', 'Search Console connectée : Google n\'a pas encore assez de données (revenez dans 1 à 2 jours).');
+  }
+
+  return `<div class="snt-summary">
+    <div class="snt-summary-head">${icon('sparkles', 16)} En clair — ce que disent ces résultats</div>
+    <div class="snt-summary-verdict"><span class="snt-summary-score ${_scoreClass(score)}">${score}<i>/100</i></span><span>${vtxt}</span></div>
+    <ul class="snt-summary-points">${pts.join('')}</ul>
+  </div>`;
+}
+
 // 4 cartes KPI : disponibilité 30 j, score (+ tendance), LCP, SSL.
 function _kpiCardsHTML(c) {
   const a = c.audit || {};
@@ -535,6 +615,7 @@ function _renderCockpit() {
           ${closeBtn}
         </div>
       </div>
+      ${_summaryHTML(c)}
       ${_kpiCardsHTML(c)}
       <div class="snt-ck-grid">
         <div class="snt-ck-panel">

@@ -162,6 +162,21 @@
 .snt-geo-rows { display: flex; flex-direction: column; gap: 8px; }
 .snt-geo-row { background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 9px 11px; }
 .snt-geo-q { font-size: 13px; font-weight: 600; color: var(--ws-text); }
+/* Synthèse « En clair » — résultats traduits en langage simple */
+.snt-summary { margin: 4px 0 16px; padding: 16px; background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); }
+.snt-summary-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; color: var(--ws-accent); margin-bottom: 10px; }
+.snt-summary-verdict { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--ws-text); line-height: 1.45; margin-bottom: 12px; }
+.snt-summary-score { font-size: 30px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; flex-shrink: 0; }
+.snt-summary-score i { font-size: 13px; font-weight: 700; color: var(--ws-text-muted); font-style: normal; }
+.snt-summary-score.good { color: var(--green); }
+.snt-summary-score.warn { color: var(--warn); }
+.snt-summary-score.bad  { color: var(--danger); }
+.snt-summary-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.snt-summary-points li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--ws-text-soft); }
+.snt-summary-points li > svg { flex-shrink: 0; margin-top: 1px; }
+.snt-summary-points li.good > svg { color: var(--green); }
+.snt-summary-points li.warn > svg { color: var(--warn); }
+.snt-summary-points li.bad  > svg { color: var(--danger); }
 /* V2 — Search Console (axe Mots-clés) */
 .snt-gsc-connect { display: flex; flex-direction: column; gap: 8px; }
 .snt-gsc-totals { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; font-size: 12px; color: var(--ws-text-soft); margin-bottom: 10px; }
