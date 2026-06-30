@@ -40,7 +40,19 @@ let _recBlob = null;       // Blob audio enregistré (mode vocal)
 let _rec = null;           // session MediaRecorder en cours
 let _recTimer = null;
 let _fileSel = null;       // File choisi (mode fichier)
-let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse)
+let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse) | 'email'
+let _draft = {};           // valeurs saisies, préservées entre les re-render (bascules de mode)
+
+// Capture les champs du formulaire de création AVANT un re-render (sinon une
+// bascule de mode efface le message/nom/etc. déjà saisis).
+function _captureDraft() {
+  if (!_root) return;
+  const g = sel => { const el = _root.querySelector(sel); return el ? el.value : undefined; };
+  const set = (k, v) => { if (v !== undefined) _draft[k] = v; };
+  set('secret', g('#sceau-secret')); set('name', g('#sceau-name'));
+  set('max', g('#sceau-max')); set('exp', g('#sceau-exp'));
+  set('question', g('#sceau-q')); set('answer', g('#sceau-a')); set('email', g('#sceau-email'));
+}
 
 // ── Crypto navigateur ───────────────────────────────────────────
 let _V = null;
@@ -266,6 +278,10 @@ function _renderTokens(main) {
 }
 
 function _renderCreate(main) {
+  // Valeurs préservées entre les bascules de mode (cf. _captureDraft).
+  const d = _draft;
+  const dmax = d.max ?? '3', dexp = d.exp ?? '86400';
+  const selOpt = (v, cur) => v === cur ? ' selected' : '';
   main.innerHTML = `
     <div class="sceau-form-wrap">
       <button class="sceau-link-back" data-act="tolist">${icon('chevron-left', 18)} Retour</button>
@@ -279,13 +295,13 @@ function _renderCreate(main) {
         </div>
         ${_createMode === 'text'
           ? `<label class="sceau-label" for="sceau-secret">Secret à transmettre</label>
-             <textarea id="sceau-secret" class="sceau-textarea" rows="5" maxlength="20000" placeholder="Mot de passe, code, message confidentiel…"></textarea>`
+             <textarea id="sceau-secret" class="sceau-textarea" rows="5" maxlength="20000" placeholder="Mot de passe, code, message confidentiel…">${_esc(d.secret || '')}</textarea>`
           : _createMode === 'vocal'
           ? `<label class="sceau-label">Message vocal</label><div id="sceau-rec" class="sceau-rec"></div>`
           : `<label class="sceau-label">Fichier à transmettre</label><div id="sceau-file" class="sceau-rec"></div>`}
 
         <label class="sceau-label" for="sceau-name">Nom (pour vous, non transmis)</label>
-        <input id="sceau-name" class="sceau-input" type="text" maxlength="120" placeholder="ex. Code coffre client X">
+        <input id="sceau-name" class="sceau-input" type="text" maxlength="120" placeholder="ex. Code coffre client X" value="${_esc(d.name || '')}">
 
         <label class="sceau-label">Déverrouillage</label>
         <div class="sceau-modesw">
@@ -295,14 +311,14 @@ function _renderCreate(main) {
         </div>
         ${_unlockMode === 'qa' ? `
           <label class="sceau-label" for="sceau-q">Question (visible par le destinataire)</label>
-          <input id="sceau-q" class="sceau-input" type="text" maxlength="200" placeholder="ex. Le nom de notre premier client ?">
+          <input id="sceau-q" class="sceau-input" type="text" maxlength="200" placeholder="ex. Le nom de notre premier client ?" value="${_esc(d.question || '')}">
           <label class="sceau-label" for="sceau-a">Réponse attendue (jamais transmise)</label>
-          <input id="sceau-a" class="sceau-input" type="text" maxlength="200" autocomplete="off" placeholder="ex. Dupont">
+          <input id="sceau-a" class="sceau-input" type="text" maxlength="200" autocomplete="off" placeholder="ex. Dupont" value="${_esc(d.answer || '')}">
           <p class="sceau-note">${icon('shield-check', 14)} La réponse <strong>n'est pas transmise</strong> : elle dérive la clé sur l'appareil du destinataire. Choisissez une réponse <strong>unique et non devinable</strong> par un tiers. La casse, les accents et les espaces sont ignorés.</p>
         ` : ''}
         ${_unlockMode === 'email' ? `
           <label class="sceau-label" for="sceau-email">Email du destinataire</label>
-          <input id="sceau-email" class="sceau-input" type="email" maxlength="200" autocomplete="off" placeholder="destinataire@exemple.com" inputmode="email">
+          <input id="sceau-email" class="sceau-input" type="email" maxlength="200" autocomplete="off" placeholder="destinataire@exemple.com" inputmode="email" value="${_esc(d.email || '')}">
           <p class="sceau-note danger">${icon('alert-triangle', 14)} Mode <strong>plus faible</strong> : le code transite par notre serveur pour l'email — nous le voyons le temps de l'envoi (jamais stocké). <strong>Seul le code part par email</strong> ; partagez le lien (ou le QR) par un <strong>autre canal</strong> (SMS, messagerie…) pour garder les deux séparés. Les modes « Code généré » et « Question/réponse » gardent le serveur aveugle.</p>
         ` : ''}
 
@@ -310,19 +326,19 @@ function _renderCreate(main) {
           <div>
             <label class="sceau-label" for="sceau-max">Essais avant autodestruction</label>
             <select id="sceau-max" class="sceau-input">
-              <option value="3" selected>3 essais (recommandé)</option>
-              <option value="1">1 seul essai (strict)</option>
-              <option value="5">5 essais</option>
+              <option value="3"${selOpt('3', dmax)}>3 essais (recommandé)</option>
+              <option value="1"${selOpt('1', dmax)}>1 seul essai (strict)</option>
+              <option value="5"${selOpt('5', dmax)}>5 essais</option>
             </select>
           </div>
           <div>
             <label class="sceau-label" for="sceau-exp">Expiration</label>
             <select id="sceau-exp" class="sceau-input">
-              <option value="">Aucune</option>
-              <option value="3600">1 heure</option>
-              <option value="86400" selected>24 heures</option>
-              <option value="604800">7 jours</option>
-              <option value="2592000">30 jours</option>
+              <option value=""${selOpt('', dexp)}>Aucune</option>
+              <option value="3600"${selOpt('3600', dexp)}>1 heure</option>
+              <option value="86400"${selOpt('86400', dexp)}>24 heures</option>
+              <option value="604800"${selOpt('604800', dexp)}>7 jours</option>
+              <option value="2592000"${selOpt('2592000', dexp)}>30 jours</option>
             </select>
           </div>
         </div>
@@ -554,19 +570,19 @@ function _onClick(e) {
   if (act === 'reload-tok') return _loadTokens();
   if (act === 'tab-secrets') { _view = 'list'; _load(); return; }
   if (act === 'tab-tokens')  { _view = 'tokens'; _loadTokens(); return; }
-  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _view = 'create'; _render(); return; }
+  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _draft = {}; _view = 'create'; _render(); return; }
   if (act === 'newtoken') return _createToken();
-  if (act === 'mode-text')  { _createMode = 'text';  _recBlob = null; _fileSel = null; _render(); return; }
-  if (act === 'mode-vocal') { _createMode = 'vocal'; _fileSel = null; _render(); return; }
-  if (act === 'mode-file')  { _createMode = 'file';  _recBlob = null; _render(); return; }
+  if (act === 'mode-text')  { _captureDraft(); _createMode = 'text';  _recBlob = null; _fileSel = null; _render(); return; }
+  if (act === 'mode-vocal') { _captureDraft(); _createMode = 'vocal'; _fileSel = null; _render(); return; }
+  if (act === 'mode-file')  { _captureDraft(); _createMode = 'file';  _recBlob = null; _render(); return; }
   if (act === 'rec-start') return _recStart();
   if (act === 'rec-stop')  return _recStop();
   if (act === 'rec-reset') return _recReset();
   if (act === 'file-pick') { const i = _root.querySelector('#sceau-file-input'); if (i) i.click(); return; }
   if (act === 'file-reset') { _fileSel = null; _paintFile(); return; }
-  if (act === 'unlock-code')  { _unlockMode = 'code';  _render(); return; }
-  if (act === 'unlock-qa')    { _unlockMode = 'qa';    _render(); return; }
-  if (act === 'unlock-email') { _unlockMode = 'email'; _render(); return; }
+  if (act === 'unlock-code')  { _captureDraft(); _unlockMode = 'code';  _render(); return; }
+  if (act === 'unlock-qa')    { _captureDraft(); _unlockMode = 'qa';    _render(); return; }
+  if (act === 'unlock-email') { _captureDraft(); _unlockMode = 'email'; _render(); return; }
   if (act === 'qr-export') return _exportQr(t.dataset.url || _result?.url, t.dataset.fmt, t);
   if (act === 'qr-share')  return _shareQr(t.dataset.url || _result?.url, t);
   if (act === 'tolist') { _view = _tokenTarget ? 'tokens' : 'list'; _result = null; _tokenTarget = null; (_view === 'tokens' ? _loadTokens : _load)(); return; }
@@ -578,7 +594,7 @@ function _onClick(e) {
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
   if (act === 'nfc-url') return _writeNfcUrl(t.dataset.url, _root.querySelector('#sceau-rowqr-msg'));
-  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _view = 'create'; _render(); return; }
+  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _draft = {}; _view = 'create'; _render(); return; }
   if (act === 'tok-link') return _copy(`${API_BASE}/s/t/${tid}`, t);
   if (act === 'tok-qr')   return _toggleRowQr(`${API_BASE}/s/t/${tid}`, tid);
   if (act === 'tok-burn') return _burnToken(tid);
