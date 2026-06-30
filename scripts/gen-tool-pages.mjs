@@ -67,6 +67,10 @@ const META = [
     h1a: 'Vos idées en constellation.', h1b: 'Reliées, vivantes, à vous.',
     title: 'Keynapse — notes en constellation sur canevas infini | Keystone OS',
     desc: 'Votre espace personnel de connaissances : des bulles de notes sur un canevas infini, regroupées en zones de couleur et reliées par des traits. Vos idées, vivantes.' },
+  { app: 'O-SEC-001', slug: 'missive',
+    h1a: 'Un secret.', h1b: 'Lu une seule fois, puis disparu.',
+    title: 'Missive — transmettre un secret en lecture unique, chiffré | Keystone OS',
+    desc: 'Transmettez un mot de passe, un code ou une information sensible qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil — même nous ne pouvons pas le lire. Par lien, QR ou puce NFC. Sans IA, souverain.' },
 ];
 
 // ── helpers ─────────────────────────────────────────────────────

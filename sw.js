@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.28.101-missive';
+const VERSION       = 'ks-os-v5.28.102-missive';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 

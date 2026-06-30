@@ -61,6 +61,10 @@ Page : https://protein-keystone.com/outils/brief-prod
 Notes en constellation sur canevas infini, reliées et regroupées en zones.
 Page : https://protein-keystone.com/outils/keynapse
 
+### Missive
+Transmettez un secret (mot de passe, code) qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil, par lien, QR ou puce NFC. Sans IA, souverain.
+Page : https://protein-keystone.com/outils/missive
+
 ## Pages de confiance
 - À propos : https://protein-keystone.com/a-propos
 - Mentions légales : https://protein-keystone.com/mentions-legales

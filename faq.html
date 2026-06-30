@@ -476,6 +476,46 @@
             "@type": "Answer",
             "text": "Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Que se passe-t-il si je perds le code de déverrouillage ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Par quel canal transmettre le code ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "« Lu une fois » : et si quelqu'un filme l'écran ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Missive consomme-t-elle des crédits IA ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+          }
         }
       ]
     }
@@ -676,6 +716,17 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
       <details><summary>Serai-je prévenu d'un rappel si Keynapse est fermé ?</summary><div class="a">Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard.</div></details>
       <details><summary>Comment supprimer un lien, une capture ou un rappel ?</summary><div class="a">Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation).</div></details>
       <details><summary>L'animation des bulles me gêne (mal de mer).</summary><div class="a">Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil.</div></details>
+    </div>
+  </section>
+  <section class="block">
+    <span class="eyebrow-l">Missive</span>
+    <h2><a href="/outils/missive" style="color:inherit">Missive</a></h2>
+    <div class="faq">
+      <details><summary>Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?</summary><div class="a">Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide.</div></details>
+      <details><summary>Que se passe-t-il si je perds le code de déverrouillage ?</summary><div class="a">Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien.</div></details>
+      <details><summary>Par quel canal transmettre le code ?</summary><div class="a">Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code.</div></details>
+      <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
+      <details><summary>Missive consomme-t-elle des crédits IA ?</summary><div class="a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais.</div></details>
     </div>
   </section>
 

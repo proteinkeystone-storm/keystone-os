@@ -39,6 +39,7 @@ const TOOLS = [
   'O-SOC-001', // Social Manager
   'O-GEO-001', // Sentinel
   'O-Keyn-001',// Keynapse
+  'O-SEC-001', // Missive
 ];
 
 const START = '<!-- TOOL-NOTICES:START -->';

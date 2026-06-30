@@ -28,11 +28,11 @@ const TODAY = '2026-06-29';
 // slugs des pages outils publiques (doit matcher gen-tool-pages.mjs)
 const TOOL = {
   qr: 'smart-qr', brief: 'brief-prod', brainstorming: 'brainstorming', keyform: 'key-form',
-  ghost: 'ghost-writer', agent: 'smart-agent', social: 'social-manager', sentinel: 'sentinel', keynapse: 'keynapse',
+  ghost: 'ghost-writer', agent: 'smart-agent', social: 'social-manager', sentinel: 'sentinel', keynapse: 'keynapse', missive: 'missive',
 };
 const TOOL_APP = { // pour relire l'icone depuis TOOLS d'index.html
   'smart-qr': 'A-COM-001', 'brief-prod': 'A-COM-002', 'brainstorming': 'A-COM-003', 'key-form': 'A-COM-004',
-  'ghost-writer': 'A-COM-005', 'smart-agent': 'O-AGT-001', 'social-manager': 'O-SOC-001', 'sentinel': 'O-GEO-001', 'keynapse': 'O-Keyn-001',
+  'ghost-writer': 'A-COM-005', 'smart-agent': 'O-AGT-001', 'social-manager': 'O-SOC-001', 'sentinel': 'O-GEO-001', 'keynapse': 'O-Keyn-001', 'missive': 'O-SEC-001',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -401,7 +401,7 @@ function toolIcon(slug) {
 const TOOL_NAME = {
   'smart-qr': 'Smart Dynamic QR', 'brief-prod': 'Brief Prod', 'brainstorming': 'Brainstorming',
   'key-form': 'Key Form', 'ghost-writer': 'Ghost Writer', 'smart-agent': 'Smart Agent',
-  'social-manager': 'Social Manager', 'sentinel': 'Sentinel', 'keynapse': 'Keynapse',
+  'social-manager': 'Social Manager', 'sentinel': 'Sentinel', 'keynapse': 'Keynapse', 'missive': 'Missive',
 };
 
 const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';

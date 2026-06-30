@@ -72,6 +72,7 @@ const TOOLS = [
   ['brainstorming', 'Brainstorming', 'Table ronde d’IA : neuf personnalités débattent votre brief, synthèse structurée à la clé.'],
   ['brief-prod', 'Brief Prod', 'Transforme une intention créative en cahier des charges technique pour graphiste ou imprimeur.'],
   ['keynapse', 'Keynapse', 'Notes en constellation sur canevas infini, reliées et regroupées en zones.'],
+  ['missive', 'Missive', 'Transmettez un secret (mot de passe, code) qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil, par lien, QR ou puce NFC. Sans IA, souverain.'],
 ];
 
 // ── helpers (alignes sur les autres generateurs) ────────────────

@@ -25,6 +25,7 @@ Important : Keystone OS est édité par Protein Studio à Ollioules (Provence-Al
 - [Brainstorming](https://protein-keystone.com/outils/brainstorming) : Table ronde d’IA : neuf personnalités débattent votre brief, synthèse structurée à la clé.
 - [Brief Prod](https://protein-keystone.com/outils/brief-prod) : Transforme une intention créative en cahier des charges technique pour graphiste ou imprimeur.
 - [Keynapse](https://protein-keystone.com/outils/keynapse) : Notes en constellation sur canevas infini, reliées et regroupées en zones.
+- [Missive](https://protein-keystone.com/outils/missive) : Transmettez un secret (mot de passe, code) qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil, par lien, QR ou puce NFC. Sans IA, souverain.
 
 ## Aide
 - [FAQ](https://protein-keystone.com/faq) : toutes les questions sur Keystone OS et ses outils.

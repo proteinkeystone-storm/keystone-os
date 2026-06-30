@@ -67,6 +67,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://protein-keystone.com/outils/missive</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://protein-keystone.com/pour/immobilier</loc>
     <lastmod>2026-06-29</lastmod>
     <changefreq>monthly</changefreq>

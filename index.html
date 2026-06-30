@@ -754,7 +754,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <div class="appwin">
         <div class="appwin-bar"><i></i><i></i><i></i></div>
         <div class="appwin-body">
-          <p class="appwin-hi">Bonjour, Stéphane — <b>9 outils actifs</b></p>
+          <p class="appwin-hi">Bonjour, Stéphane — <b>10 outils actifs</b></p>
           <div class="appgrid" id="appgrid"></div>
         </div>
       </div>
@@ -848,7 +848,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
     <div class="tools-head reveal">
       <span class="eyebrow">Le catalogue</span>
       <h2 class="h2">Vos outils.</h2>
-      <p class="lead" style="margin:14px auto 0">9 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
+      <p class="lead" style="margin:14px auto 0">10 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
     </div>
     <div id="toolsGrid"></div>
     <!-- Notices outils : contenu STATIQUE (crawlable par Google et les IA) affiché en
@@ -1048,6 +1048,27 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         <details><summary>Serai-je prévenu d'un rappel si Keynapse est fermé ?</summary><div class="tn-a">Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard.</div></details>
         <details><summary>Comment supprimer un lien, une capture ou un rappel ?</summary><div class="tn-a">Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation).</div></details>
         <details><summary>L'animation des bulles me gêne (mal de mer).</summary><div class="tn-a">Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-SEC-001">
+      <h3 class="tn-title">Missive</h3>
+      <p class="tn-tldr">Missive transmet un secret — mot de passe, code, information sensible — qui se lit une seule fois puis s'autodétruit. Le contenu est chiffré sur votre appareil : même nous ne pouvons pas le lire. Vous partagez un lien (ou un QR, ou une puce NFC) et, par un autre canal, un code de déverrouillage. Au-delà de quelques essais ratés, la missive meurt définitivement.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Créer une missive : collez le secret, choisissez le nombre d'essais et l'expiration, puis « Sceller ». Tout est chiffré sur votre appareil — le serveur ne voit jamais le contenu en clair.</li>
+        <li>Deux éléments à transmettre, par deux canaux différents : le lien (ou le QR / la puce NFC) d'un côté, et le code de déverrouillage de l'autre. Le code n'est affiché qu'une fois et n'est pas récupérable — notez-le ou copiez-le avant de fermer.</li>
+        <li>Lecture unique : le destinataire ouvre le lien, saisit le code, lit le message — puis la missive se referme. Vous êtes averti quand elle a été ouverte (dans la barre d'ambiance du tableau de bord).</li>
+        <li>Autodestruction : après le nombre d'essais choisi (3 par défaut, ou 1 pour un usage strict), la missive meurt — plus personne ne peut l'ouvrir, même avec le bon code. Si une missive meurt sur des essais ratés sans avoir été lue, une alerte « possible interception » s'affiche.</li>
+        <li>Jetons réutilisables : créez un objet physique (puce NFC ou QR) que vous écrivez une seule fois, puis rechargez avec un nouveau secret autant de fois que vous voulez — sans jamais retoucher l'objet.</li>
+        <li>NFC : l'écriture d'une puce demande un téléphone Android avec Chrome. Sur iPhone et ordinateur, utilisez le QR ou le lien (toujours proposés). La lecture au contact fonctionne sur iPhone récent comme sur Android.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?</summary><div class="tn-a">Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide.</div></details>
+        <details><summary>Que se passe-t-il si je perds le code de déverrouillage ?</summary><div class="tn-a">Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien.</div></details>
+        <details><summary>Par quel canal transmettre le code ?</summary><div class="tn-a">Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code.</div></details>
+        <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="tn-a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
+        <details><summary>Missive consomme-t-elle des crédits IA ?</summary><div class="tn-a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais.</div></details>
       </div>
     </article>
     <script type="application/ld+json">
@@ -1488,6 +1509,46 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         "@type": "Answer",
         "text": "Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que se passe-t-il si je perds le code de déverrouillage ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Par quel canal transmettre le code ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "« Lu une fois » : et si quelqu'un filme l'écran ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Missive consomme-t-elle des crédits IA ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+      }
     }
   ]
 }
@@ -1766,6 +1827,7 @@ const TOOLS = [
   { name:"Social Manager", app:"O-SOC-001", fam:"Communication", tag:"Un post, tous vos réseaux, en un clic.", icon:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
   { name:"Sentinel", app:"O-GEO-001", fam:"Web", tag:"Audit web + suivi : SEO, sécurité, visibilité IA.", icon:'<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>' },
   { name:"Keynapse", app:"O-Keyn-001", fam:"Idéation", tag:"Vos idées en constellation, reliées et vivantes.", icon:'<circle cx="6" cy="7" r="2.4"/><circle cx="17.5" cy="6" r="2"/><circle cx="13.5" cy="17" r="2.7"/><path d="M7.7 8.6l4.6 6.4"/><path d="M8.3 6.4l7.2-.2"/>' },
+  { name:"Missive", app:"O-SEC-001", fam:"Communication", tag:"Un secret transmis, lu une fois, puis détruit.", icon:'<rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.2" fill="currentColor"/>' },
 ];
 const FAM_COLOR = { "Communication":"var(--accent)", "Web":"var(--green)", "Idéation":"var(--p-starter)" };
 
