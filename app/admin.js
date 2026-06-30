@@ -330,23 +330,63 @@ logoutBtn.addEventListener('click', logout);
 // ── Tab routing — niveau 1 (top nav) ───────────────────────────
 // Clauses n'est plus un onglet top-level : c'est une sous-section
 // de La Fabrique (cf. FABRIQUE_SUB_TABS plus bas).
+// ── Regroupement des onglets (2026-06-30) ───────────────────────
+// 13 onglets → 5 groupes. Chaque groupe affiche une sous-nav (même pattern
+// que La Fabrique) qui délègue aux rendus EXISTANTS, inchangés. La Fabrique
+// est aplatie : ses Pads/Clauses deviennent des sous-onglets de « Contenu ».
+const ADMIN_GROUPS = {
+  contenu: [
+    { id: 'pads',    label: '📐 Pads',        desc: 'Outils & artefacts du dashboard utilisateur', render: renderFabriquePads },
+    { id: 'clauses', label: '📚 Clauses',     desc: 'Bibliothèque de clauses partagées + locales',  render: renderFabriqueClauses },
+    { id: 'catalog', label: 'Catalogue',      desc: 'Catalogue K-Store',                            render: renderCatalog },
+    { id: 'promos',  label: '★ À la une',     desc: 'Bandeaux du hero Key-Store',                   render: renderPromos },
+    { id: 'living',  label: '✦ Living Layer', desc: 'Barre ambiante (Ordinateur de bord)',          render: renderLivingLayer },
+  ],
+  avis: [
+    { id: 'satisfaction', label: '★ Satisfaction', desc: 'Notes étoiles des apps (agrégat anonyme)', render: renderSatisfaction },
+    { id: 'temoignages',  label: 'Témoignages',    desc: 'Avis clients : modération + publication',  render: renderTestimonials },
+  ],
+  mesures: [
+    { id: 'monitoring', label: 'Monitoring', desc: 'Supervision',                    render: renderMonitoring },
+    { id: 'funnel',     label: 'Funnel',     desc: 'Audience landing (souveraine)',  render: renderFunnel },
+    { id: 'budget',     label: 'Budget IA',  desc: 'Crédits neurones + bridage',     render: renderBudget },
+  ],
+  systeme: [
+    { id: 'devices',  label: '📱 Appareils',      desc: 'Appareils liés',  render: renderDevices },
+    { id: 'audit',    label: '📋 Audit Log',      desc: 'Journal d\'audit', render: renderAuditLog },
+    { id: 'settings', label: '⚙ Réglages · RGPD', desc: 'Réglages & RGPD', render: renderSettings },
+  ],
+};
+const _adminGroupActive = { contenu: 'pads', avis: 'satisfaction', mesures: 'monitoring', systeme: 'devices' };
+
+// Rendu générique d'un groupe : sous-nav + slot délégué au sous-renderer.
+async function renderGroup(panel, groupId) {
+  const subs   = ADMIN_GROUPS[groupId] || [];
+  const active = _adminGroupActive[groupId] || (subs[0] && subs[0].id);
+  panel.innerHTML = `
+    <div class="fabrique-sub-nav">
+      ${subs.map(t => `<button class="fabrique-sub-btn ${t.id === active ? 'active' : ''}" data-sub="${t.id}" title="${esc(t.desc)}">${t.label}</button>`).join('')}
+    </div>
+    <div id="admin-sub-content" style="margin-top:18px;"></div>`;
+  const slot = panel.querySelector('#admin-sub-content');
+  const renderSub = (id) => {
+    const def = subs.find(t => t.id === id) || subs[0];
+    if (!def) return;
+    _adminGroupActive[groupId] = def.id;
+    panel.querySelectorAll('.fabrique-sub-btn').forEach(b => b.classList.toggle('active', b.dataset.sub === def.id));
+    slot.innerHTML = '<div class="loading">Chargement…</div>';
+    def.render(slot);
+  };
+  panel.querySelectorAll('.fabrique-sub-btn').forEach(b => b.addEventListener('click', () => renderSub(b.dataset.sub)));
+  renderSub(active);
+}
+
 const TAB_RENDERERS = {
-  licences:   renderLicences,
-  tools:      renderTools,
-  catalog:    renderCatalog,
-  promos:     renderPromos,        // À la une — éditeur des bandeaux du hero Key-Store (2026-05-29)
-  // messaging : onglet retiré le 2026-06-01 — éclipsé par le Living Layer (même
-  // ligne #hero-dst, masquée quand le V2 est ON, càd par défaut). renderMessaging
-  // conservé (non câblé) pour réversibilité ; backend /api/admin/messages intact.
-  living:     renderLivingLayer,   // Living Layer V2 — Ordinateur de bord (2026-05-28)
-  budget:     renderBudget,        // Budget IA — compteur neurones + bridage (2026-05-29)
-  monitoring: renderMonitoring,
-  funnel:     renderFunnel,         // Funnel landing — mesure d'audience souveraine (2026-06-13)
-  satisfaction: renderSatisfaction, // Notes étoiles des apps → agrégat anonyme (2026-06-17)
-  temoignages: renderTestimonials,  // Avis clients : modération + publication (2026-06-30)
-  devices:    renderDevices,
-  audit:      renderAuditLog,      // Sprint S5.4
-  settings:   renderSettings,
+  licences: renderLicences,
+  contenu:  (p) => renderGroup(p, 'contenu'),
+  avis:     (p) => renderGroup(p, 'avis'),
+  mesures:  (p) => renderGroup(p, 'mesures'),
+  systeme:  (p) => renderGroup(p, 'systeme'),
 };
 
 // Mémoire de la sous-section active dans La Fabrique (persiste
@@ -1806,14 +1846,15 @@ async function saveFromEditor(editorContainer, originalId, isNew, padType) {
     editingPadId = pad.id;
     toast(`${pad.id}.json sauvegardé ✓`);
 
-    const panel = document.getElementById('tab-tools');
-    await renderTools(panel);
+    // Pads est désormais un sous-onglet de « Contenu » → on re-rend en place.
+    const panel = document.getElementById('admin-sub-content');
+    if (panel) await renderFabriquePads(panel);
 
-    // renderTools efface padsCache et re-charge depuis les fichiers JSON statiques,
+    // renderFabriquePads efface padsCache et re-charge depuis les fichiers JSON statiques,
     // lesquels ne contiennent pas les prompts des moteurs alternatifs (GPT-4o, Gemini…).
     // On restaure le pad fraîchement sauvegardé pour que l'éditeur affiche les bonnes données.
     padsCache[pad.id] = pad;
-    const editorSlot  = panel.querySelector('#pad-editor');
+    const editorSlot  = panel && panel.querySelector('#pad-editor');
     if (editorSlot) {
       renderEditor(editorSlot, pad, false);
       // Revenir sur l'onglet Moteurs (l'utilisateur venait de le modifier)
@@ -3492,8 +3533,8 @@ async function renderBudget(panel) {
 
   // ── Auto-refresh du compteur (read-only), s'auto-coupe hors onglet ─
   _budgetRefreshTimer = setInterval(async () => {
-    const p = document.getElementById('tab-budget');
-    if (!p || !p.classList.contains('active')) { clearInterval(_budgetRefreshTimer); return; }
+    const p = document.getElementById('tab-mesures');
+    if (!p || !p.classList.contains('active') || _adminGroupActive.mesures !== 'budget') { clearInterval(_budgetRefreshTimer); return; }
     try {
       const fresh = await api('/api/admin/ai-budget');
       _paintBudget(panel, fresh);
