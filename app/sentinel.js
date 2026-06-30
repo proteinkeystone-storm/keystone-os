@@ -348,15 +348,15 @@ function _joinFr(arr) {
 // ── Synthèse « En clair » — traduit les résultats en phrases simples ─────
 // Déterministe (aucune IA, aucun coût) : lit les données déjà calculées du
 // cockpit et les met en mots, pour les utilisateurs qui ne lisent pas les
-// scores. Priorisé, avec un code couleur vert / orange / rouge.
-function _summaryHTML(c) {
+// scores. Priorisé, avec un code couleur vert / orange / rouge. La LOGIQUE
+// est ici (`_summaryData`) ; deux rendus en dépendent (écran + PDF).
+function _summaryData(c) {
   const a = c.audit || {};
   const sc = a.scores || {};
   const score = a.score;
-  if (score == null) return '';   // pas encore d'audit → le bouton « lancer le premier audit » suffit
-  const pts = [];
-  const ICO = { good: 'check', warn: 'alert-triangle', bad: 'x' };
-  const add = (cls, txt) => pts.push(`<li class="${cls}">${icon(ICO[cls], 14)}<span>${txt}</span></li>`);
+  if (score == null) return null;   // pas encore d'audit → le bouton « lancer le premier audit » suffit
+  const points = [];
+  const add = (cls, html) => points.push({ cls, html });
 
   // Verdict global (phrase + badge de score).
   const vcls = score >= 70 ? 'good' : (score >= 50 ? 'warn' : 'bad');
@@ -413,10 +413,31 @@ function _summaryHTML(c) {
     else add('warn', 'Search Console connectée : Google n\'a pas encore assez de données (revenez dans 1 à 2 jours).');
   }
 
+  return { score, vtxt, points };
+}
+// Rendu ÉCRAN (classes CSS du cockpit, thème sombre).
+function _summaryHTML(c) {
+  const d = _summaryData(c);
+  if (!d) return '';
+  const ICO = { good: 'check', warn: 'alert-triangle', bad: 'x' };
+  const lis = d.points.map((p) => `<li class="${p.cls}">${icon(ICO[p.cls], 14)}<span>${p.html}</span></li>`).join('');
   return `<div class="snt-summary">
     <div class="snt-summary-head">${icon('sparkles', 16)} En clair — ce que disent ces résultats</div>
-    <div class="snt-summary-verdict"><span class="snt-summary-score ${_scoreClass(score)}">${score}<i>/100</i></span><span>${vtxt}</span></div>
-    <ul class="snt-summary-points">${pts.join('')}</ul>
+    <div class="snt-summary-verdict"><span class="snt-summary-score ${_scoreClass(d.score)}">${d.score}<i>/100</i></span><span>${_esc(d.vtxt)}</span></div>
+    <ul class="snt-summary-points">${lis}</ul>
+  </div>`;
+}
+// Rendu PDF (styles inline, thème clair) — même synthèse, en tête du rapport.
+function _summaryPdf(p) {
+  const d = _summaryData(p);
+  if (!d) return '';
+  const dot = { good: '#16a34a', warn: '#d97706', bad: '#dc2626' };
+  const scCol = d.score >= 80 ? '#16a34a' : (d.score >= 50 ? '#d97706' : '#dc2626');
+  const lis = d.points.map((pt) => `<tr><td style="vertical-align:top;padding:3px 8px 3px 0;color:${dot[pt.cls] || '#64748b'};font-weight:800;line-height:1.45">●</td><td style="padding:3px 0;font-size:13px;color:#334155;line-height:1.45">${pt.html}</td></tr>`).join('');
+  return `<div style="margin:14px 0 4px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+    <div style="font-size:12px;font-weight:800;color:#6366f1;letter-spacing:.04em;margin-bottom:8px">EN CLAIR — CE QUE DISENT CES RÉSULTATS</div>
+    <div style="font-size:14px;color:#0f172a;margin-bottom:10px"><b style="font-size:20px;color:${scCol}">${d.score}</b><span style="font-size:12px;color:#94a3b8">/100</span> &nbsp;${_esc(d.vtxt)}</div>
+    <table style="width:100%;border-collapse:collapse">${lis}</table>
   </div>`;
 }
 
@@ -973,6 +994,7 @@ function _exportPdf() {
   <div style="font-size:12px;color:#6366f1;font-weight:700;letter-spacing:.04em">KEYSTONE SENTINEL</div>
   <h1>Rapport d'audit — ${_esc(p.name || host || 'site')}</h1>
   <div class="sub">${_esc(host)}${plat ? ' · ' + _esc(plat) : ''} · ${date}${site.last_ok ? ' · en ligne' : ''}</div>
+  ${_summaryPdf(p)}
   ${kpis}
   <h2>Profil du site</h2><table style="width:100%;border-collapse:collapse">${axisRows}</table>
   ${geoHtml}
