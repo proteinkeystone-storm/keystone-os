@@ -316,7 +316,9 @@ function _page(base, nonce, bundleHref, sri) {
       // On tente l'aperçu pour TOUTE image. Certains formats (HEIC/HEIF des
       // iPhone) ne sont pas décodables par le navigateur → onerror masque
       // l'aperçu et laisse le téléchargement comme repli propre.
-      const isImg = /^image\//.test(type);
+      // ⚠ startsWith (et NON un /regex/) : ce code vit dans un template literal,
+      // un \/ y serait avalé → JS cassé dans la page servie.
+      const isImg = type.indexOf('image/') === 0;
       setTimeout(()=>{
         $(
           '<h1>Missive ouverte</h1>'+
