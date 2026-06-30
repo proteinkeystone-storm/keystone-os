@@ -398,6 +398,8 @@ function _summaryData(c) {
   // Correctifs prioritaires (renvoie vers la liste clé en main ci-dessous).
   const highN = (a.findings || []).filter((f) => f.sev === 'high').length;
   if (highN) add('bad', `${highN} correctif${highN > 1 ? 's' : ''} prioritaire${highN > 1 ? 's' : ''} ${highN > 1 ? 'sont détaillés' : 'est détaillé'} plus bas, avec la marche à suivre prête à appliquer.`);
+  // Wix — sous-domaine gratuit : call-out dédié (le piège SEO n°1 sur Wix).
+  if ((a.findings || []).some((f) => f.key === 'wix_subdomain')) add('bad', 'Votre site est sur une adresse Wix gratuite (…wixsite.com) : un nom de domaine personnalisé améliorerait nettement votre référencement et votre crédibilité.');
 
   // Visibilité dans les IA (GEO).
   if (c.geo && c.geo.score != null) {

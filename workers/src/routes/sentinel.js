@@ -310,6 +310,9 @@ async function _audit(url) {
   if (ogImage) seo += 7; else add('seo', 'low', 'og_image', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.');
   if (jsonld) seo += 10; else add('seo', 'medium', 'jsonld', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.');
   if (sitemap) seo += 10; else add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
+  // Wix — sous-domaine gratuit (…wixsite.com) : pénalité SEO + crédibilité (détectable via l'URL).
+  let _host = ''; try { _host = new URL(url).hostname; } catch (_) {}
+  if (/\.wixsite\.com$/i.test(_host)) add('seo', 'high', 'wix_subdomain', 'Site sur une adresse Wix gratuite', 'L\'adresse se termine par .wixsite.com : un domaine personnalisé améliorerait nettement le référencement et la crédibilité.');
   seo = Math.min(100, seo);
 
   // ── Sécurité ──
@@ -354,11 +357,89 @@ function _headSteps(platform) {
   if (platform === 'wix') return ['Dans Wix : Réglages › Code personnalisé (Custom Code) › + Ajouter.', 'Collez le code, placez-le dans le <head>, appliquez à « Toutes les pages ».', 'Enregistrez.'];
   return ['Collez le code ci-dessous dans la balise <head> de votre page (thème/gabarit).', 'Ou transmettez ce bloc à votre webmaster.'];
 }
+// ── Correctifs NATIFS Wix (V2 · intégration Wix) ────────────────
+// Pour un site Wix, on guide via l'UI Wix réelle (tableau de bord / éditeur)
+// plutôt que par injection de code <head> — c'est là qu'un utilisateur Wix
+// agit vraiment. Renvoie null pour les clés non couvertes (→ switch générique,
+// qui garde des branches Wix pour les en-têtes sécurité).
+function _wixFix(key, ctx) {
+  let origin = ctx.url || ''; try { origin = new URL(ctx.url).origin; } catch (_) {}
+  switch (key) {
+    case 'meta_missing': return { steps: [
+      'Tableau de bord Wix › Marketing et SEO › « Outils SEO » (ou, dans l\'éditeur, ouvrez la page et cliquez l\'icône SEO).',
+      'Section « Aperçu sur Google » › champ « Description » : rédigez 50 à 160 caractères qui donnent envie de cliquer.',
+      'Enregistrez, puis Publiez le site.'] };
+    case 'title_missing': case 'title_long': return { steps: [
+      'Dans l\'éditeur Wix : ouvrez la page › panneau SEO de la page › « Titre SEO (balise title) ».',
+      'Visez 50 à 60 caractères, format conseillé : [Activité] à [Ville] | [Nom].',
+      'Enregistrez et publiez.'] };
+    case 'og_title': case 'og_image': return { steps: [
+      'Éditeur Wix › ouvrez la page › panneau SEO › onglet « Partage sur les réseaux sociaux ».',
+      'Définissez le titre et surtout l\'IMAGE de partage (recommandé 1200 × 630 px).',
+      'Enregistrez et publiez.'] };
+    case 'img_alt': return { steps: [
+      'Éditeur Wix : cliquez l\'image › icône « Réglages » › champ « Texte alternatif ».',
+      'Décrivez l\'image en une courte phrase (utile pour Google Images et l\'accessibilité).',
+      'Répétez pour chaque image signalée, puis publiez.'] };
+    case 'lang': return { steps: [
+      'Tableau de bord Wix › Réglages › « Langues du site » : assurez-vous que le français est la langue principale.',
+      'Wix renseigne alors automatiquement lang="fr" ; republiez le site.'] };
+    case 'h1': return { steps: [
+      'Éditeur Wix : sélectionnez le titre principal de la page › dans la barre de texte, choisissez le style « Titre 1 ».',
+      'Gardez UN seul Titre 1 par page ; passez les sous-titres en « Titre 2 / 3 ».',
+      'Publiez.'] };
+    case 'canonical': return { steps: [
+      'Wix gère les balises canoniques automatiquement — en général, rien à faire.',
+      'Si vraiment nécessaire : éditeur › page › panneau SEO › « Avancé » › « Balise canonique ».'] };
+    case 'viewport': return { steps: [
+      'Les sites Wix sont responsives : la balise viewport est ajoutée automatiquement.',
+      'Si elle est signalée absente, vérifiez qu\'un code personnalisé injecté dans le <head> ne la supprime pas.'] };
+    case 'sitemap': return { steps: [
+      `Wix génère et met à jour votre sitemap automatiquement : ${origin}/sitemap.xml — rien à créer.`,
+      'Soumettez-le une seule fois dans Google Search Console › « Sitemaps ».'] };
+    case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours': return {
+      steps: [
+        'Tableau de bord Wix › Réglages › « Infos de l\'entreprise » : renseignez le nom, l\'adresse, le téléphone et les horaires.',
+        'Wix publie alors automatiquement votre fiche et vos données structurées (LocalBusiness).',
+        'Affichez aussi ces infos sur une page Contact (adresse complète, numéro en lien cliquable). Pour aller plus loin, le balisage ci-dessous peut être collé via Réglages › Code personnalisé (head).'],
+      codeLabel: 'Données structurées LocalBusiness (optionnel — avancé)',
+      code:
+`<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "Nom de votre établissement",
+  "url": "${origin}",
+  "telephone": "+33 1 23 45 67 89",
+  "address": { "@type": "PostalAddress", "streetAddress": "12 rue Exemple", "addressLocality": "Ville", "postalCode": "00000", "addressCountry": "FR" },
+  "openingHours": "Mo-Fr 09:00-18:00",
+  "priceRange": "€€"
+}
+</script>` };
+    case 'perf_lcp': return { steps: [
+      'Wix sert déjà vos images en format optimisé (WebP) — le levier principal est ailleurs.',
+      'Allégez la page d\'accueil : limitez les applications tierces, les vidéos d\'arrière-plan et les animations.',
+      'Éditeur › « Optimiser le site » (Site Speed) : suivez les recommandations Wix.'] };
+    case 'perf_cls': return { steps: [
+      'Évitez les bannières/pop-ups qui apparaissent après le chargement et décalent la page.',
+      'Éditeur Wix › « Optimiser le site » : appliquez les conseils de stabilité d\'affichage.'] };
+    case 'perf_weight': return { steps: [
+      'Réduisez le nombre d\'applications Wix (App Market) et de scripts tiers ajoutés à la page.',
+      'Remplacez les vidéos d\'arrière-plan lourdes par une image ; limitez les polices personnalisées.'] };
+  }
+  return null;
+}
 function _fixFor(key, ctx) {
   const url = ctx.url || '';
   let origin = url; try { origin = new URL(url).origin; } catch (_) {}
   const head = _headSteps(ctx.platform);
+  // Site Wix → privilégier le correctif natif Wix (sinon repli sur le générique).
+  if (ctx.platform === 'wix') { const wf = _wixFix(key, ctx); if (wf) return wf; }
   switch (key) {
+    case 'wix_subdomain': return { steps: [
+      'Votre site est publié sur une adresse Wix gratuite (terminant par .wixsite.com) : Google la classe moins bien et elle inspire moins confiance.',
+      'Tableau de bord Wix › Réglages › « Domaines » › « Connecter un domaine » : reliez un nom de domaine à votre marque (ex. votre-entreprise.fr).',
+      'Un domaine personnalisé améliore le référencement, la crédibilité et le rendu lors des partages.'] };
     case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours':
       return { steps: head, codeLabel: 'Fiche établissement (LocalBusiness — nom, adresse, téléphone, horaires)', code:
 `<script type="application/ld+json">
