@@ -238,16 +238,23 @@ export async function handleSceauDelete(request, env, shortId) {
   const tenant = await _secTenant(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
 
-  const pre = await env.DB.prepare('SELECT blob_key FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).first();
-  const res = await env.DB.prepare(
+  const pre = await env.DB.prepare('SELECT status, blob_key FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).first();
+  if (!pre) return err('Introuvable', 404, origin);
+
+  // Déjà morte (lu/détruite/expirée) → « Retirer » : on supprime la ligne (résidu).
+  // Vivante → burn : on détruit le matériel et on garde la trace (accusé) jusqu'au sweep 24 h.
+  if (['lu', 'detruit', 'expire'].includes(pre.status)) {
+    await env.DB.prepare('DELETE FROM sec_secrets WHERE short_id = ? AND tenant_id = ?').bind(shortId, tenant).run();
+    await _destroyBlob(env, pre.blob_key);
+    return json({ ok: true, removed: true }, 200, origin);
+  }
+  await env.DB.prepare(
     `UPDATE sec_secrets
         SET ciphertext = NULL, blob_key = NULL, oprf_key_enc = NULL, oprf_key_iv = NULL,
             status = 'detruit', destroyed_at = datetime('now')
-      WHERE short_id = ? AND tenant_id = ? AND status != 'detruit'`
+      WHERE short_id = ? AND tenant_id = ?`
   ).bind(shortId, tenant).run();
-
-  if (!res.meta?.changes && !pre) return err('Introuvable', 404, origin);
-  if (pre) await _destroyBlob(env, pre.blob_key);
+  await _destroyBlob(env, pre.blob_key);
   return json({ ok: true, status: 'detruit' }, 200, origin);
 }
 
@@ -515,7 +522,7 @@ export async function sweepExpiredSecrets(env) {
   const toFree = await env.DB.prepare(
     `SELECT blob_key FROM sec_secrets WHERE blob_key IS NOT NULL AND (
         (status IN ('init','scelle') AND expires_at IS NOT NULL AND expires_at < ?)
-        OR (status IN ('lu','detruit','expire') AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-90 day'))
+        OR (status IN ('lu','detruit','expire') AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-1 day'))
      )`
   ).bind(now).all();
   const res = await env.DB.prepare(
@@ -526,10 +533,12 @@ export async function sweepExpiredSecrets(env) {
   ).bind(now).run();
   // RGPD : purge des lignes mortes (lu/détruit/expiré) > 90 j — ne garde aucune
   // métadonnée résiduelle au-delà de la fenêtre. Le matériel sensible est déjà NULL.
+  // Trace courte : un secret mort (lu/détruit/expiré) sert d'accusé de réception
+  // ~24 h puis disparaît (liste propre + minimisation RGPD).
   const purge = await env.DB.prepare(
     `DELETE FROM sec_secrets
       WHERE status IN ('lu','detruit','expire')
-        AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-90 day')`
+        AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-1 day')`
   ).run();
   for (const r of (toFree.results || [])) await _destroyBlob(env, r.blob_key);
   return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0, freed: (toFree.results || []).length };

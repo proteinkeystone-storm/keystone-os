@@ -5,8 +5,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .sceau-main{
-  --sc-bg:#0b0e14; --sc-panel:#121826; --sc-ink:#eef2f8; --sc-muted:#8a94a6;
-  --sc-line:#222b3d; --sc-accent:#6c6cf5; --sc-ok:#34d399; --sc-warn:#f59e0b; --sc-dead:#ef4444;
+  /* Palette alignée sur la charte workspace (--ws-*) → navy #131826, indigo,
+     surfaces et bordures cohérentes + mode clair géré automatiquement. */
+  --sc-bg:var(--ws-bg); --sc-panel:var(--ws-surface); --sc-ink:var(--ws-text); --sc-muted:var(--ws-text-soft);
+  --sc-line:var(--ws-border); --sc-accent:var(--ws-accent); --sc-ok:var(--ws-success); --sc-warn:#f59e0b; --sc-dead:var(--ws-danger);
+  --sc-input:rgba(0,0,0,.18);  /* puits de saisie : légèrement plus sombre que la surface */
   background:var(--sc-bg); color:var(--sc-ink);
   overflow-y:auto; padding:32px clamp(16px,5vw,56px);
 }
@@ -23,12 +26,12 @@
 .sceau-sub{color:var(--sc-muted);margin:6px 0 0;font-size:14.5px;max-width:560px}
 
 /* ── Boutons ── */
-.sceau-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--sc-line);border-radius:12px;background:#1b2335;color:var(--sc-ink);font:600 14.5px -apple-system,sans-serif;letter-spacing:-0.01em;cursor:pointer;transition:filter .15s,border-color .15s}
+.sceau-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--sc-line);border-radius:12px;background:var(--sc-panel);color:var(--sc-ink);font:600 14.5px -apple-system,sans-serif;letter-spacing:-0.01em;cursor:pointer;transition:filter .15s,border-color .15s}
 .sceau-btn:hover{filter:brightness(1.12)}
 .sceau-btn.primary{background:var(--sc-accent);border-color:transparent;color:#fff}
 .sceau-btn.big{width:100%;justify-content:center;padding:14px;margin-top:18px;font-size:16px;font-weight:700}
 .sceau-btn:disabled{opacity:.55;cursor:default}
-.sceau-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--sc-line);border-radius:10px;background:#0d1320;color:var(--sc-ink);cursor:pointer;transition:filter .15s,border-color .15s}
+.sceau-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--sc-line);border-radius:10px;background:var(--sc-input);color:var(--sc-ink);cursor:pointer;transition:filter .15s,border-color .15s}
 .sceau-iconbtn:hover{border-color:var(--sc-accent)}
 .sceau-iconbtn.danger:hover{border-color:var(--sc-dead);color:var(--sc-dead)}
 
@@ -54,14 +57,14 @@
 .sceau-link-back{display:inline-flex;align-items:center;gap:4px;background:none;border:0;color:var(--sc-muted);cursor:pointer;font-size:14px;padding:0;margin-bottom:8px}
 .sceau-link-back:hover{color:var(--sc-ink)}
 .sceau-label{display:block;font-size:13px;color:var(--sc-muted);margin:16px 0 7px}
-.sceau-input,.sceau-textarea{width:100%;padding:12px 14px;border:1px solid var(--sc-line);border-radius:12px;background:#0d1320;color:var(--sc-ink);font-size:15px;outline:none;transition:border-color .15s;font-family:inherit}
+.sceau-input,.sceau-textarea{width:100%;padding:12px 14px;border:1px solid var(--sc-line);border-radius:12px;background:var(--sc-input);color:var(--sc-ink);font-size:15px;outline:none;transition:border-color .15s;font-family:inherit}
 .sceau-textarea{resize:vertical;min-height:110px}
 .sceau-input:focus,.sceau-textarea:focus{border-color:var(--sc-accent)}
 /* ── Bascule Texte / Vocal + enregistreur ── */
-.sceau-modesw{display:inline-flex;gap:4px;background:#0d1320;border:1px solid var(--sc-line);border-radius:12px;padding:4px;margin-bottom:4px}
+.sceau-modesw{display:inline-flex;gap:4px;background:var(--sc-input);border:1px solid var(--sc-line);border-radius:12px;padding:4px;margin-bottom:4px}
 .sceau-mode{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:0;border-radius:9px;background:none;color:var(--sc-muted);font:600 13.5px -apple-system,sans-serif;cursor:pointer}
 .sceau-mode.on{background:var(--sc-accent);color:#fff}
-.sceau-rec{display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:#0d1320;border:1px solid var(--sc-line);border-radius:12px;padding:16px}
+.sceau-rec{display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:var(--sc-input);border:1px solid var(--sc-line);border-radius:12px;padding:16px}
 .sceau-rec-go{background:var(--sc-accent);border-color:transparent;color:#fff}
 .sceau-rec-live{display:flex;align-items:center;gap:10px;font:600 16px ui-monospace,Menlo,monospace;color:var(--sc-ink)}
 .sceau-rec-dot{width:12px;height:12px;border-radius:50%;background:var(--sc-dead);animation:sceau-pulse 1s ease-in-out infinite}
@@ -82,7 +85,7 @@
 .sceau-card.warn{border-color:rgba(245,158,11,.35);background:linear-gradient(180deg,rgba(245,158,11,.06),transparent)}
 .sceau-card-lbl{font-size:12.5px;color:var(--sc-muted);margin-bottom:10px;font-weight:600}
 .sceau-linkrow{display:flex;align-items:center;gap:8px}
-.sceau-code{flex:1;min-width:0;overflow:auto;white-space:nowrap;background:#0d1320;border:1px solid var(--sc-line);border-radius:10px;padding:10px 12px;font:500 13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--sc-ink)}
+.sceau-code{flex:1;min-width:0;overflow:auto;white-space:nowrap;background:var(--sc-input);border:1px solid var(--sc-line);border-radius:10px;padding:10px 12px;font:500 13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--sc-ink)}
 .sceau-code.big{font-size:18px;letter-spacing:1px;text-align:center;white-space:normal;color:#fff}
 .sceau-qr{display:flex;justify-content:center;margin:16px auto 0;width:180px;height:180px;background:#fff;border-radius:12px;padding:10px}
 .sceau-qr svg{width:100%;height:100%}
@@ -91,7 +94,7 @@
 .sceau-qr-pop{max-width:920px;margin:12px auto 0;background:var(--sc-panel);border:1px solid var(--sc-line);border-radius:16px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px}
 
 /* ── Toast ── */
-.sceau-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#1b2335;color:var(--sc-ink);border:1px solid var(--sc-line);border-radius:12px;padding:12px 18px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:90vw}
+.sceau-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:var(--sc-panel);color:var(--sc-ink);border:1px solid var(--sc-line);border-radius:12px;padding:12px 18px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:90vw}
 .sceau-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 @media (max-width:560px){

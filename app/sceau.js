@@ -187,7 +187,8 @@ function _renderList(main) {
         <div class="sceau-row-acts">
           ${canAct ? `<button class="sceau-iconbtn" data-act="link" data-id="${_esc(it.short_id)}" title="Copier le lien">${icon('link', 17)}</button>` : ''}
           ${canAct ? `<button class="sceau-iconbtn" data-act="qr" data-id="${_esc(it.short_id)}" title="Afficher le QR">${icon('qr-code', 17)}</button>` : ''}
-          ${canAct ? `<button class="sceau-iconbtn danger" data-act="burn" data-id="${_esc(it.short_id)}" title="Détruire maintenant">${icon('trash-2', 17)}</button>` : ''}
+          ${canAct ? `<button class="sceau-iconbtn danger" data-act="burn" data-id="${_esc(it.short_id)}" title="Détruire maintenant">${icon('trash-2', 17)}</button>`
+                   : `<button class="sceau-iconbtn" data-act="remove" data-id="${_esc(it.short_id)}" title="Retirer de la liste">${icon('x', 17)}</button>`}
         </div>
       </div>`;
   }).join('');
@@ -404,6 +405,7 @@ function _onClick(e) {
   if (act === 'link')   return _copyLink(id, t);
   if (act === 'qr')     return _toggleRowQr(`${API_BASE}/s/${id}`, id);
   if (act === 'burn')   return _burn(id, t);
+  if (act === 'remove') return _remove(id);
   if (act === 'copyurl')  return _copy(_result?.url, t);
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
@@ -470,6 +472,12 @@ async function _create() {
 
 async function _burn(id, btn) {
   if (!confirm('Détruire cette missive définitivement ? Le destinataire ne pourra plus l\'ouvrir.')) return;
+  try { await _api(`/${id}`, { method: 'DELETE' }); _load(); }
+  catch (e) { _toast(e.message); }
+}
+
+// Retirer une missive déjà morte (résidu) — suppression directe, pas de confirmation.
+async function _remove(id) {
   try { await _api(`/${id}`, { method: 'DELETE' }); _load(); }
   catch (e) { _toast(e.message); }
 }

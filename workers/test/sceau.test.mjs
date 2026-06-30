@@ -175,6 +175,11 @@ env.DB = makeD1();
   ok(meta.status === 410, 'après burn -> meta 410');
   const rowRaw = env.DB._db.prepare('SELECT ciphertext, oprf_key_enc, status FROM sec_secrets WHERE short_id=?').get(shortId);
   ok(rowRaw.ciphertext === null && rowRaw.oprf_key_enc === null && rowRaw.status === 'detruit', 'chiffré + clé effacés, status détruit');
+  // « Retirer » : un 2e DELETE sur une missive DÉJÀ morte supprime la ligne (résidu).
+  const rm = await handleSceauDelete(req('DELETE'), env, shortId);
+  const rmj = await rm.json();
+  ok(rm.status === 200 && rmj.removed === true, 'Retirer (morte) -> removed:true');
+  ok(!env.DB._db.prepare('SELECT 1 FROM sec_secrets WHERE short_id=?').get(shortId), 'ligne supprimée de la base');
 }
 
 console.log('\nE. max_attempts=1 (one-shot strict)');
