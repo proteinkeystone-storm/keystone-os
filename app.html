@@ -2,7 +2,18 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- maximum-scale/user-scalable : bride le zoom (Android + PWA). iOS Safari
+       les ignore → complété par le blocage des gestes pinch dans le script ci-dessous. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script>
+  /* Anti pinch-zoom : sur iPhone un zoom accidentel fait "flotter" la page
+     horizontalement (mode portrait). iOS Safari ignore user-scalable=no, donc
+     on neutralise les gestes de zoom natifs (evenements WebKit gesture*).
+     Les zooms internes (SDQR, Keynapse) n'utilisent pas ces evenements. */
+  ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ e.preventDefault(); }, { passive:false });
+  });
+  </script>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
