@@ -20,6 +20,7 @@
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }         from './lib/topbar-burger.js';
 import { icon }                            from './lib/ui-icons.js';
+import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import {
   rewriteText, friendlyGhostwriterError, getGhostwriterQuotaMessage,
   getGhostwriterQuotaRemaining, refreshGhostwriterQuota,
@@ -101,6 +102,7 @@ export function openGhostwriterProof(initialMode) {
 export function closeGhostwriterProof() {
   if (!_root) return;
   _saveDraft();
+  closeSymbolsPanel();   // le panneau Ω vit sur body, pas dans _root
   document.removeEventListener('keydown', _handleKeyDown);
   document.removeEventListener('click', _handleDocClickForPopover, true);
   _root.remove();
@@ -328,7 +330,7 @@ function _renderTexte() {
   return `
     <div class="pf-grid">
       <section class="pf-pane">
-        <div class="pf-pane-label">Texte à corriger</div>
+        <div class="pf-pane-label" style="justify-content:space-between"><span>Texte à corriger</span>${symbolsButtonHTML()}</div>
         <textarea class="pf-source" data-field="text"
           placeholder="Collez ou tapez votre texte ici…">${_esc(_text)}</textarea>
       </section>
@@ -1002,6 +1004,7 @@ function _onClick(e) {
   if (!btn) return;
   switch (btn.dataset.act) {
     case 'close':          closeGhostwriterProof(); return;
+    case 'symbols':        openSymbolsPanel({ getTarget: () => _root && _root.querySelector('.pf-source') }); return;
     case 'back-to-rewrite':_backToRewrite(); return;
     case 'switch-mode':    _switchMode(btn.dataset.mode); return;
     case 'filter-all':     if (_grammarOnly)  { _grammarOnly = false; _saveGrammarOnly(); _afterFilterToggle(); } return;

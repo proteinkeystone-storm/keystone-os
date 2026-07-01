@@ -388,11 +388,14 @@ export async function handleGhostwriterRewrite(request, env) {
 
   // Sprint GW-2 — directives additionnelles depuis le workspace artefact.
   // Restent silencieuses si le client ne les envoie pas → 100% rétro-compat.
+  // GW-Symboles (2026-07) — palette de symboles TEXTE autorisée par contexte :
+  // l'IA peut structurer avec des caractères Unicode sobres (jamais d'emoji),
+  // calibrés sur le registre du contexte. « Quand c'est utile », pas un tic.
   const MODE_DIRECTIVES = {
-    email:     'Contexte : email professionnel. Structure attendue : ouverture brève, corps clair, clôture polie.',
-    internal:  'Contexte : communication interne d\'équipe. Ton direct, sans formules de politesse excessives, droit au but.',
-    marketing: 'Contexte : copywriting marketing court. Punchy, mémorable, orienté action. Privilégier verbes forts et bénéfices clients.',
-    long:      'Contexte : texte long (article, post LinkedIn, newsletter). Structuration claire, transitions soignées, ton engageant.',
+    email:     'Contexte : email professionnel. Structure attendue : ouverture brève, corps clair, clôture polie. Pour une énumération, tu peux utiliser sobrement « • » ou « – » ; aucun autre symbole, jamais d\'emoji.',
+    internal:  'Contexte : communication interne d\'équipe. Ton direct, sans formules de politesse excessives, droit au but. Tu peux structurer avec « • », « → » et « ✓ » quand c\'est utile ; jamais d\'emoji.',
+    marketing: 'Contexte : copywriting marketing court. Punchy, mémorable, orienté action. Privilégier verbes forts et bénéfices clients. Tu peux ponctuer avec des symboles texte sobres (→ ✓ ▸ •) quand ils renforcent le message — sans en abuser ; jamais d\'emoji.',
+    long:      'Contexte : texte long (article, post LinkedIn, newsletter). Structuration claire, transitions soignées, ton engageant. Tu peux structurer listes et étapes avec des symboles texte sobres : • – → ✓ ① ② ③ — avec parcimonie ; jamais d\'emoji.',
   };
   const modeDirective = MODE_DIRECTIVES[mode] || '';
 

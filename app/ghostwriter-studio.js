@@ -31,6 +31,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
+import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
   getGhostwriterPlan, refreshGhostwriterQuota,
@@ -196,6 +197,7 @@ export function openGhostwriterStudio() {
 export function closeGhostwriterStudio() {
   if (!_root) return;
   _saveDraft();
+  closeSymbolsPanel();   // le panneau Ω vit sur body, pas dans _root
   document.removeEventListener('keydown', _handleKeyDown);
   _root.remove();
   _root = null;
@@ -280,7 +282,7 @@ function _renderMain(scrollToTop) {
       ${_renderHero(mode)}
       <div class="gw-grid">
         <section class="gw-pane gw-pane-source">
-          <div class="gw-pane-label">Texte source</div>
+          <div class="gw-pane-label gw-pane-label-row"><span>Texte source</span>${symbolsButtonHTML()}</div>
           <textarea class="gw-source" data-field="text"
             placeholder="Collez ou tapez votre texte ici…"
             rows="10">${_esc(_formData.text || '')}</textarea>
@@ -468,6 +470,7 @@ function _onClick(e) {
 
   switch (act) {
     case 'close':       closeGhostwriterStudio(); return;
+    case 'symbols':     openSymbolsPanel({ getTarget: () => _root && _root.querySelector('.gw-source') }); return;
     case 'open-corrector': _openCorrector(); return;
     case 'switch-mode': _switchMode(btn.dataset.mode); return;
     case 'generate':    _handleGenerate(); return;
@@ -745,6 +748,7 @@ html.light-mode .gw-fam:hover:not(.is-active) { color: #334155; background: rgba
 
 .gw-pane { display: flex; flex-direction: column; gap: 12px; }
 .gw-pane-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted, #888); font-weight: 600; }
+.gw-pane-label-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .gw-source {
   width: 100%; box-sizing: border-box; height: 340px; resize: none;
   padding: 16px; border-radius: 14px;
