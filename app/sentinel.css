@@ -194,7 +194,7 @@
 /* Pas-à-pas didactique avant connexion Search Console — cartes-étapes scannables */
 .snt-gsc-guide { display: flex; flex-direction: column; gap: 14px; }
 .snt-gsc-cards { display: flex; align-items: stretch; gap: 10px; }
-.snt-gsc-card { flex: 1; position: relative; display: flex; flex-direction: column; gap: 3px; padding: 18px 14px 14px; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 12px; }
+.snt-gsc-card { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 22px 14px 16px; background: var(--ws-surface); border: 1px solid var(--ws-border); border-radius: 12px; }
 .snt-gsc-badge { position: absolute; top: -10px; left: 14px; width: 24px; height: 24px; border-radius: 50%; background: var(--ws-accent); color: #fff; font-size: 12.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .snt-gsc-cic { color: var(--ws-accent); margin-bottom: 5px; line-height: 0; }
 .snt-gsc-ct { font-size: 14px; font-weight: 800; color: var(--ws-text); letter-spacing: -0.01em; }
