@@ -4,10 +4,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { OledProtection } from './oled-protection.js';
+import { startHalftone, stopHalftone } from './screensaver-halftone.js';
 
 const LS_LOCK_ENABLED = 'ks_lock_enabled';
 const LS_LOCK_DELAY   = 'ks_lock_delay';    // ms  (0 = jamais)
-const LS_LOCK_STYLE   = 'ks_lock_style';    // 'abyss' | 'golden-flow' | 'nebula' | 'obsidian'
+const LS_LOCK_STYLE   = 'ks_lock_style';    // 'abyss' | 'golden-flow' | 'nebula' | 'obsidian' | 'halftone'
 
 let _overlay      = null;
 let _clockTimer   = null;
@@ -58,6 +59,11 @@ export function lock() {
     _overlay.classList.add('ls-visible');
     document.body.style.overflow = 'hidden';
     _startClock();
+    // Scène halftone (canvas animé) — uniquement pour ce style
+    if (_style === 'halftone') {
+        const cv = document.getElementById('ls-halftone');
+        if (cv) startHalftone(cv, { reduceMotion: localStorage.getItem('ks_reduce_motion') === '1' });
+    }
     OledProtection.start(_overlay); // protection OLED (décalage + maintenance)
     _resetIdleTimer(); // réarme pendant l'écran actif pour info
 }
@@ -65,6 +71,7 @@ export function lock() {
 export function unlock() {
     if (!_isLocked) return;
     _isLocked = false;
+    stopHalftone();        // coupe le canvas animé (RAF) s'il tournait
     OledProtection.stop(); // stoppe décalage + maintenance immédiatement
     _exitFullscreen();     // quitte le plein écran si on y était
     _overlay.classList.add('ls-leaving');
@@ -150,6 +157,9 @@ function _buildOverlay() {
             <div class="ls-blob ls-blob-4"></div>
             <div class="ls-blob ls-blob-5"></div>
         </div>
+
+        <!-- Scène « Trame ondoyante » (halftone) — visible si data-style="halftone" -->
+        <canvas class="ls-halftone" id="ls-halftone"></canvas>
 
         <!-- Vignette bords -->
         <div class="ls-vignette"></div>

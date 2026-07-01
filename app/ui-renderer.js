@@ -4319,6 +4319,10 @@ function _renderSettingsBody() {
                             <div class="sp-theme-preview sp-theme-obsidian"></div>
                             <div class="sp-theme-name">Obsidian</div>
                         </button>
+                        <button class="sp-theme-card${lockStyle === 'halftone'     ? ' active' : ''}" data-style="halftone">
+                            <div class="sp-theme-preview sp-theme-halftone"></div>
+                            <div class="sp-theme-name">Trame</div>
+                        </button>
                     </div>
                 </div>
                 <div class="sp-user-row">
