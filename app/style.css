@@ -68,6 +68,11 @@
   --bg-secondary: #16161a;
   --r:     10px;   /* petites cartes / chips (suggest-card, modales secondaires) */
   --r2:    20px;   /* grandes cartes (pad-card, restore-panel, art-card) — bump de 16 à 20px pour harmoniser le ressenti d'arrondi sur les grands Pads de la grille pleine largeur */
+  /* Dégradé violet du Dashboard (charte MAX #7c3aed) — voile ambiant qui monte
+     du bas de l'écran et remplit toute la moitié basse. Mode sombre = présence
+     franche ; mode clair = 20% (cf. html.light-mode). Appliqué UNIQUEMENT sur
+     body (= dashboard app.html). */
+  --dash-glow: rgba(124,58,237,.25);
 }
 
 /* ══ LIGHT MODE — surcharge variables ══════════════════════════ */
@@ -93,6 +98,8 @@ html.light-mode {
   --bd:    rgba(15,23,42,.1);
   /* surface claire pour les panneaux d'artefacts (cf. alias --bg-secondary) */
   --bg-secondary: #f1f5f9;
+  /* Même violet que le mode sombre, ramené à 7% d'opacité (voile très discret). */
+  --dash-glow: rgba(124,58,237,.07);
 }
 
 /* ══ SMART DYNAMIC QR — thème fixe « design Keystone » (refonte S2) ══════
@@ -613,7 +620,18 @@ html.light-mode .engine-logo-light { display: block !important; }
 .settings-btn svg { width: 15px; height: 15px; }
 
 /* ══ MAIN LAYOUT ════════════════════════════════════════════════ */
-.main { padding-top: 54px; min-height: 100vh; background: var(--navy); }
+/* Dashboard = conteneur .main. Fond navy + voile violet de la charte ancré au
+   bas du viewport (fixe au scroll), qui remplit toute la moitié basse. Mode
+   clair = même violet à 20% via --dash-glow. UNIQUEMENT ici → pas sur les
+   outils plein écran (overlays opaques par-dessus). */
+.main {
+  padding-top: 54px;
+  min-height: 100vh;
+  background-color: var(--navy);
+  background-image: linear-gradient(180deg, transparent 15%, var(--dash-glow) 100%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
 /* Pleine largeur edge-to-edge — le contenu occupe tout le viewport avec
    des marges latérales fixes. La topbar utilise le même padding (32px)
    pour que logo + CTA s'alignent sur le contenu du hero / de la grille. */
