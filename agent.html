@@ -392,6 +392,58 @@
       background: transparent; color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
     .sav2-rgpd { text-align: center; font-size: 11px; line-height: 1.45; color: rgba(196,194,255,.78); opacity: .82;
       padding: 8px 20px calc(env(safe-area-inset-bottom,0px) + 14px); }
+
+    /* ═══ SA-13 — MODE CONVERSATION VOCALE (plein écran, half-duplex) ═══
+       Orbe central = seul contrôle : son état (écoute / réfléchit / parle)
+       est porté par une classe sur l'overlay. Écran de préparation intégré
+       (1er téléchargement de la voix : progression réelle + conseils). */
+    .sav2-vm { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+      background:
+        radial-gradient(125% 78% at 50% 102%, rgba(96,74,206,.55) 0%, rgba(40,28,86,0) 58%),
+        linear-gradient(180deg,#05060f 0%,#0a0b1e 27%,#15123a 54%,#221a52 80%,#2c2160 100%);
+      animation: sav2-vm-in .22s ease-out; }
+    @keyframes sav2-vm-in { from { opacity: 0; } to { opacity: 1; } }
+    .sav2-vm-head { display: flex; justify-content: flex-end; padding: calc(env(safe-area-inset-top,0px) + 14px) 14px 0; }
+    .sav2-vm-close { width: 46px; height: 46px; border-radius: 50%; border: none; background: rgba(255,255,255,.08);
+      color: #c2c0ff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent; transition: transform .12s; }
+    .sav2-vm-close:active { transform: scale(.92); }
+    .sav2-vm-close svg { width: 20px; height: 20px; }
+    .sav2-vm-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 26px; padding: 0 28px calc(env(safe-area-inset-bottom,0px) + 46px); text-align: center; }
+    .sav2-vm-orb { position: relative; width: 148px; height: 148px; border-radius: 50%; border: none; cursor: pointer; flex-shrink: 0;
+      background: radial-gradient(circle at 32% 28%, #928fff 0%, #5c53e8 58%, #2c2160 100%);
+      box-shadow: 0 0 70px rgba(111,108,240,.45), inset 0 0 26px rgba(255,255,255,.14);
+      -webkit-tap-highlight-color: transparent; transition: transform .18s; }
+    .sav2-vm-orb:active { transform: scale(.95); }
+    .sav2-vm-orb::after { content: ''; position: absolute; inset: -12px; border-radius: 50%;
+      border: 2px solid rgba(160,158,255,.0); pointer-events: none; }
+    .sav2-vm.is-listening .sav2-vm-orb { animation: vm-breathe 1.7s ease-in-out infinite; }
+    .sav2-vm.is-listening .sav2-vm-orb::after { animation: vm-ring 1.7s ease-out infinite; }
+    @keyframes vm-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes vm-ring { 0% { border-color: rgba(160,158,255,.55); transform: scale(.92); opacity: 1; }
+      100% { border-color: rgba(160,158,255,0); transform: scale(1.22); opacity: 0; } }
+    .sav2-vm.is-thinking .sav2-vm-orb { animation: vm-think 1.5s ease-in-out infinite; }
+    @keyframes vm-think { 0%,100% { opacity: 1; box-shadow: 0 0 70px rgba(111,108,240,.45), inset 0 0 26px rgba(255,255,255,.14); }
+      50% { opacity: .62; box-shadow: 0 0 34px rgba(111,108,240,.28), inset 0 0 26px rgba(255,255,255,.14); } }
+    .sav2-vm.is-speaking .sav2-vm-orb { animation: vm-speak .95s ease-in-out infinite; }
+    @keyframes vm-speak { 0%,100% { transform: scale(1); } 30% { transform: scale(1.07); } 60% { transform: scale(1.02); } }
+    .sav2-vm-status { font-size: 17px; font-weight: 800; letter-spacing: -.01em; color: #fff; min-height: 22px; }
+    .sav2-vm-sub { font-size: 15px; line-height: 1.5; color: rgba(215,214,255,.85); max-width: 440px; min-height: 46px;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+    /* Écran de préparation (1er téléchargement — jamais revu ensuite) */
+    .sav2-vm.is-prep .sav2-vm-orb, .sav2-vm.is-prep .sav2-vm-status, .sav2-vm.is-prep .sav2-vm-sub { display: none; }
+    .sav2-vm-prep { display: none; flex-direction: column; align-items: center; gap: 18px; max-width: 420px; }
+    .sav2-vm.is-prep .sav2-vm-prep { display: flex; }
+    .sav2-vm-prep h2 { font-size: 21px; font-weight: 900; letter-spacing: -.02em; color: #fff; }
+    .sav2-vm-prep p { font-size: 14px; line-height: 1.55; color: rgba(215,214,255,.85); }
+    .sav2-vm-bar { width: 100%; max-width: 300px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+    .sav2-vm-bar span { display: block; height: 100%; width: 0%; border-radius: 999px;
+      background: linear-gradient(90deg,#6f6cf0,#a8a6ff); transition: width .25s ease; }
+    .sav2-vm-tips { list-style: none; display: flex; flex-direction: column; gap: 9px; text-align: left; }
+    .sav2-vm-tips li { font-size: 13.5px; line-height: 1.5; color: rgba(196,194,255,.85); padding-left: 20px; position: relative; }
+    .sav2-vm-tips li::before { content: ''; position: absolute; left: 2px; top: .52em; width: 7px; height: 7px; border-radius: 50%;
+      background: linear-gradient(135deg,#6f6cf0,#a8a6ff); }
   </style>
   <!-- Très tôt : thème sombre par défaut (public v2), ancien rendu clair pour l'embed. Évite le flash de fond. -->
   <script>(function(){ var e = new URLSearchParams(location.search).has('embed'); document.documentElement.classList.add(e ? 'sa-embed' : 'sa-v2'); })();</script>
@@ -445,25 +497,41 @@
             rgpd: 'Réponses issues du savoir de l\'assistant. Vos questions sont anonymes et effacées après 90 jours.',
             suggested: 'Question suggérée', greeting: 'Bonjour ! Comment puis-je vous aider ?', listen: 'Toucher pour écouter',
             err: 'Une erreur est survenue. Réessayez.', offline: 'Connexion impossible. ', retry: 'Réessayer',
-            micBlocked: 'Le micro est bloqué par votre navigateur — autorisez-le dans les réglages du site pour dicter votre question.' },
+            micBlocked: 'Le micro est bloqué par votre navigateur — autorisez-le dans les réglages du site pour dicter votre question.',
+            vmEnter: 'Converser de vive voix', vmClose: 'Quitter le mode vocal',
+            vmListening: 'Je vous écoute…', vmThinking: 'Un instant…', vmSpeaking: 'Touchez pour m\'interrompre', vmTap: 'Touchez pour parler',
+            vmPrepTitle: 'Je prépare ma voix', vmPrepBody: 'Première visite : je télécharge ma voix (une seule fois). Ensuite, tout sera instantané.',
+            vmTip1: 'Parlez naturellement — je détecte la fin de votre phrase.', vmTip2: 'Touchez le cercle pour m\'interrompre ou reprendre la parole.', vmTip3: 'Je réponds uniquement à partir du savoir de la maison.' },
       en: { ask: 'Ask us anything', yourQ: 'Your question', dictate: 'Dictate your question', send: 'Send', call: 'Call', lang: 'Language',
             voiceOn: 'Turn off voice', voiceOff: 'Read answers aloud', voicePrep: 'Preparing the voice (one time only)…',
             rgpd: 'Answers based on the assistant\'s knowledge. Your questions are anonymous and deleted after 90 days.',
             suggested: 'Suggested question', greeting: 'Hello! How can I help you?', listen: 'Tap to listen',
             err: 'Something went wrong. Please try again.', offline: 'Connection failed. ', retry: 'Retry',
-            micBlocked: 'The microphone is blocked by your browser — allow it in the site settings to dictate your question.' },
+            micBlocked: 'The microphone is blocked by your browser — allow it in the site settings to dictate your question.',
+            vmEnter: 'Talk with me', vmClose: 'Leave voice mode',
+            vmListening: 'I\'m listening…', vmThinking: 'One moment…', vmSpeaking: 'Tap to interrupt me', vmTap: 'Tap to speak',
+            vmPrepTitle: 'Preparing my voice', vmPrepBody: 'First visit: I\'m downloading my voice (one time only). Everything will be instant afterwards.',
+            vmTip1: 'Speak naturally — I detect the end of your sentence.', vmTip2: 'Tap the circle to interrupt me or speak again.', vmTip3: 'I only answer from the knowledge of the house.' },
       es: { ask: 'Pregúntenos lo que quiera', yourQ: 'Su pregunta', dictate: 'Dictar su pregunta', send: 'Enviar', call: 'Llamar', lang: 'Idioma',
             voiceOn: 'Desactivar la voz', voiceOff: 'Leer las respuestas en voz alta', voicePrep: 'Preparando la voz (solo una vez)…',
             rgpd: 'Respuestas basadas en el conocimiento del asistente. Sus preguntas son anónimas y se eliminan tras 90 días.',
             suggested: 'Pregunta sugerida', greeting: '¡Hola! ¿En qué puedo ayudarle?', listen: 'Toque para escuchar',
             err: 'Se produjo un error. Inténtelo de nuevo.', offline: 'Sin conexión. ', retry: 'Reintentar',
-            micBlocked: 'El micrófono está bloqueado por su navegador — permítalo en los ajustes del sitio para dictar su pregunta.' },
+            micBlocked: 'El micrófono está bloqueado por su navegador — permítalo en los ajustes del sitio para dictar su pregunta.',
+            vmEnter: 'Hablar de viva voz', vmClose: 'Salir del modo de voz',
+            vmListening: 'Le escucho…', vmThinking: 'Un momento…', vmSpeaking: 'Toque para interrumpirme', vmTap: 'Toque para hablar',
+            vmPrepTitle: 'Preparando mi voz', vmPrepBody: 'Primera visita: estoy descargando mi voz (solo una vez). Después todo será instantáneo.',
+            vmTip1: 'Hable con naturalidad — detecto el final de su frase.', vmTip2: 'Toque el círculo para interrumpirme o volver a hablar.', vmTip3: 'Solo respondo a partir del conocimiento de la casa.' },
       de: { ask: 'Stellen Sie uns Ihre Fragen', yourQ: 'Ihre Frage', dictate: 'Frage diktieren', send: 'Senden', call: 'Anrufen', lang: 'Sprache',
             voiceOn: 'Sprachausgabe ausschalten', voiceOff: 'Antworten vorlesen', voicePrep: 'Stimme wird vorbereitet (einmalig)…',
             rgpd: 'Antworten basierend auf dem Wissen des Assistenten. Ihre Fragen sind anonym und werden nach 90 Tagen gelöscht.',
             suggested: 'Vorgeschlagene Frage', greeting: 'Hallo! Wie kann ich Ihnen helfen?', listen: 'Zum Anhören tippen',
             err: 'Ein Fehler ist aufgetreten. Bitte erneut versuchen.', offline: 'Verbindung fehlgeschlagen. ', retry: 'Erneut',
-            micBlocked: 'Das Mikrofon ist von Ihrem Browser blockiert — erlauben Sie es in den Website-Einstellungen, um Ihre Frage zu diktieren.' },
+            micBlocked: 'Das Mikrofon ist von Ihrem Browser blockiert — erlauben Sie es in den Website-Einstellungen, um Ihre Frage zu diktieren.',
+            vmEnter: 'Mit mir sprechen', vmClose: 'Sprachmodus verlassen',
+            vmListening: 'Ich höre zu…', vmThinking: 'Einen Moment…', vmSpeaking: 'Zum Unterbrechen tippen', vmTap: 'Zum Sprechen tippen',
+            vmPrepTitle: 'Ich bereite meine Stimme vor', vmPrepBody: 'Erster Besuch: Ich lade meine Stimme herunter (nur einmal). Danach ist alles sofort verfügbar.',
+            vmTip1: 'Sprechen Sie natürlich — ich erkenne das Ende Ihres Satzes.', vmTip2: 'Tippen Sie auf den Kreis, um mich zu unterbrechen oder erneut zu sprechen.', vmTip3: 'Ich antworte nur aus dem Wissen des Hauses.' },
     };
     let _lang = 'fr', _meta = null, _showingGreeting = false;
     function t(k) { return (I18N[_lang] && I18N[_lang][k] != null) ? I18N[_lang][k] : (I18N.fr[k] || ''); }
@@ -509,7 +577,11 @@
       const mic = document.getElementById('sa-mic');
       if (mic) { mic.setAttribute('aria-label', t('dictate')); mic.title = t('dictate'); }
       const send = document.getElementById('sa-send');
-      if (send) send.setAttribute('aria-label', t('send'));
+      if (send) {   // SA-13.1 — le bouton d'envoi porte deux rôles (orbe vocal / envoi)
+        const vm = send.dataset.mode === 'vm';
+        send.setAttribute('aria-label', vm ? t('vmEnter') : t('send'));
+        send.title = vm ? t('vmEnter') : '';
+      }
       const voice = document.getElementById('sa-voice');
       if (voice) voice.title = _voiceOn ? t('voiceOn') : t('voiceOff');
       const rgpd = document.querySelector('.sav2-rgpd');
@@ -570,7 +642,9 @@
     }
     // Précharge le moteur dès l'activation : le modèle (~60 Mo, une fois,
     // puis cache navigateur) se télécharge PENDANT que le visiteur écrit.
-    async function _warmPiper() {
+    // SA-13.0 — `silent` : préchargement en tâche de fond (connexion correcte)
+    // sans faire pulser le bouton voix — le visiteur n'a rien demandé.
+    async function _warmPiper(silent) {
       try {
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (!_piperMod.isSupported()) { _piperMod = { unsupported: true }; return; }
@@ -578,10 +652,10 @@
         // monté + tir d'amorçage inclus) : rappelable à chaque envoi.
         const voiceId = _piperMod.voiceForLang(_lang);   // SA-11.1 — voix de la langue active
         const cold = !_piperMod.isVoiceReady(voiceId);
-        if (cold) setVoiceLoading(true);
+        if (cold && !silent) setVoiceLoading(true);
         await _piperMod.warmUp(voiceId);
-        if (cold) setVoiceLoading(false);
-      } catch (_) { setVoiceLoading(false); }
+        if (cold && !silent) setVoiceLoading(false);
+      } catch (_) { if (!silent) setVoiceLoading(false); }
     }
     // Lecture « intelligente » : Siwis phrase par phrase, voix système en repli.
     async function _speakSmart(text) {
@@ -591,7 +665,7 @@
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (_piperMod.unsupported || !_piperMod.isSupported()) throw new Error('wasm');
         if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
-        await _piperMod.speakText(clean, { voiceId: _piperMod.voiceForLang(_lang), onState: (st) => setVoiceLoading(st === 'loading') });
+        await _piperMod.speakText(clean, { voiceId: _piperMod.voiceForLang(_lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
       } catch (_) {
         setVoiceLoading(false);
         _speakRaw(clean);   // repli : voix système — mieux que le silence
@@ -691,7 +765,7 @@
       } catch (_) {}
     }
     function speak(text) {
-      if (!_voiceOn || !text) return;
+      if ((!_voiceOn && !_vmOn) || !text) return;   // SA-13.1 — le mode vocal parle même si la lecture n'est pas activée
       _speakSmart(text);
     }
     function toggleVoice() {
@@ -740,6 +814,126 @@
         _rec.onend = () => { _listening = false; mic && mic.classList.remove('is-listening'); input.focus(); };
         _rec.start();
       } catch (_) { _listening = false; }
+    }
+
+    /* ═══ SA-13.1 — MODE CONVERSATION VOCALE (half-duplex, type assistant) ═══
+       Boucle : écoute (SpeechRecognition) → fin de parole détectée → envoi via
+       le pipeline NORMAL (sendMessage : streaming SSE + Piper phrase par
+       phrase) → fin de lecture (onState 'idle') → ré-écoute automatique.
+       Half-duplex assumé : le micro ne s'ouvre JAMAIS pendant que l'agent
+       parle (sur haut-parleur il se transcrirait lui-même) ; toucher l'orbe
+       = interrompre la lecture ou reprendre la parole. v2 uniquement. */
+    let _vmOn = false, _vmRec = null, _vmState = 'idle';
+    function vmSet(state, statusText) {
+      if (!_vmOn) return;
+      _vmState = state;
+      const root = document.getElementById('sav2-vm');
+      if (!root) return;
+      root.classList.toggle('is-prep',      state === 'prep');
+      root.classList.toggle('is-listening', state === 'listening');
+      root.classList.toggle('is-thinking',  state === 'thinking');
+      root.classList.toggle('is-speaking',  state === 'speaking');
+      const lbl = document.getElementById('sav2-vm-status');
+      if (lbl) lbl.textContent = statusText != null ? statusText :
+        (state === 'listening' ? t('vmListening') : state === 'thinking' ? t('vmThinking')
+          : state === 'speaking' ? t('vmSpeaking') : t('vmTap'));
+    }
+    function vmSub(text) {
+      if (!_vmOn) return;
+      const el = document.getElementById('sav2-vm-sub');
+      if (el) el.textContent = String(text || '');
+    }
+    // Relais des états du moteur voix (createSpeechStream / speakText) vers
+    // l'orbe. Fin de lecture ('idle' depuis 'speaking') → le micro se rouvre
+    // tout seul : c'est LA boucle conversationnelle.
+    function vmOnSpeech(st) {
+      if (!_vmOn) return;
+      if (st === 'loading')       vmSet('thinking');
+      else if (st === 'speaking') vmSet('speaking');
+      else if (st === 'idle' && _vmState === 'speaking') { vmSet('idle'); vmListen(); }
+    }
+    function vmListen() {
+      if (!_vmOn || !SR_CLASS || _busy) return;
+      try {
+        _vmRec = new SR_CLASS();
+        _vmRec.lang = LANG_BCP[_lang] || 'fr-FR';
+        _vmRec.interimResults = true; _vmRec.continuous = false;
+        let finalTxt = '';
+        _vmRec.onstart  = () => { vmSet('listening'); vmSub(''); };
+        _vmRec.onresult = (e) => {
+          let txt = '';
+          for (let k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
+          vmSub(txt);   // ce que le visiteur dit, affiché en direct
+          if (e.results.length && e.results[e.results.length - 1].isFinal) finalTxt = txt.trim();
+        };
+        _vmRec.onerror = (e) => {
+          _vmRec = null;
+          if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) { vmSub(t('micBlocked')); vmSet('idle'); }
+        };
+        _vmRec.onend = () => {
+          _vmRec = null;
+          if (!_vmOn) return;
+          if (finalTxt && !_busy) { vmSet('thinking'); sendMessage(finalTxt); }
+          else if (_vmState === 'listening') vmSet('idle');   // silence → « touchez pour parler » (pas de micro qui tourne en boucle)
+        };
+        _vmRec.start();
+      } catch (_) { vmSet('idle'); }
+    }
+    function vmOrbTap() {
+      if (_vmState === 'speaking') {           // barge-in : couper la lecture → ré-écoute (via le relais 'idle')
+        if (_piperMod && _piperMod.stopSpeaking) { try { _piperMod.stopSpeaking(); } catch (_) {} }
+        if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+        return;
+      }
+      if (_vmState === 'listening') { try { _vmRec && _vmRec.abort(); } catch (_) {} _vmRec = null; vmSet('idle'); return; }
+      if (_vmState === 'idle') vmListen();     // 'thinking' / 'prep' : l'orbe est inerte
+    }
+    async function openVoiceMode() {
+      if (_vmOn || _busy) return;
+      _primeTtsAudio();                        // geste → élément audio béni (iOS)
+      if (_listening) { try { _rec && _rec.abort(); } catch (_) {} _listening = false; document.getElementById('sa-mic')?.classList.remove('is-listening'); }
+      _vmOn = true;
+      const div = document.createElement('div');
+      div.className = 'sav2-vm'; div.id = 'sav2-vm';
+      div.innerHTML = `
+        <div class="sav2-vm-head"><button class="sav2-vm-close" id="sav2-vm-close" type="button" aria-label="${escape(t('vmClose'))}">${SVG_V2.close}</button></div>
+        <div class="sav2-vm-center">
+          <button class="sav2-vm-orb" id="sav2-vm-orb" type="button" aria-label="${escape(t('vmTap'))}"></button>
+          <div class="sav2-vm-status" id="sav2-vm-status"></div>
+          <div class="sav2-vm-sub" id="sav2-vm-sub" aria-live="polite"></div>
+          <div class="sav2-vm-prep">
+            <h2>${escape(t('vmPrepTitle'))}</h2>
+            <p>${escape(t('vmPrepBody'))}</p>
+            <div class="sav2-vm-bar"><span id="sav2-vm-barfill"></span></div>
+            <ul class="sav2-vm-tips"><li>${escape(t('vmTip1'))}</li><li>${escape(t('vmTip2'))}</li><li>${escape(t('vmTip3'))}</li></ul>
+          </div>
+        </div>`;
+      document.body.appendChild(div);
+      document.getElementById('sav2-vm-close').addEventListener('click', closeVoiceMode);
+      document.getElementById('sav2-vm-orb').addEventListener('click', vmOrbTap);
+      try {
+        if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
+        if (!_piperMod.isSupported()) throw new Error('wasm');
+        const voiceId = _piperMod.voiceForLang(_lang);
+        if (!_piperMod.isVoiceReady(voiceId)) {
+          // SA-13.2 — écran de préparation : progression RÉELLE du premier
+          // téléchargement + conseils d'usage. Jamais revu une fois en cache
+          // (modèles servis immutable 1 an) — l'attente devient l'onboarding.
+          vmSet('prep');
+          const fill = document.getElementById('sav2-vm-barfill');
+          await _piperMod.warmUp(voiceId, (p) => { if (fill) fill.style.width = Math.round(p * 100) + '%'; });
+        }
+      } catch (_) { /* moteur voix KO → la lecture retombera sur la voix système */ }
+      if (!_vmOn) return;                      // fermé pendant la préparation
+      vmListen();
+    }
+    function closeVoiceMode() {
+      _vmOn = false;
+      try { _vmRec && _vmRec.abort(); } catch (_) {}
+      _vmRec = null;
+      if (_piperMod && _piperMod.stopSpeaking) { try { _piperMod.stopSpeaking(); } catch (_) {} }
+      if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+      document.getElementById('sav2-vm')?.remove();
     }
 
     function escape(s) {
@@ -968,6 +1162,7 @@
       }
 
       input.value = ''; input.style.height = 'auto';
+      input.dispatchEvent(new Event('input'));   // SA-13.1 — le bouton d'envoi redevient l'orbe (champ vide)
       addBubble('user', message);
       await sendMessage(message);
     }
@@ -986,7 +1181,7 @@
       _showingGreeting = false;   // SA-11.2 — l'accueil n'est plus à l'écran : un switch de langue ne l'écrase plus
       // SA-9.2 — la réponse prend quelques secondes : le moteur vocal chauffe
       // pendant ce temps (téléchargement/amorçage hors du chemin).
-      if (_voiceOn) _warmPiper();
+      if (_voiceOn || _vmOn) _warmPiper();
 
       const ctrl = new AbortController();
       let timer = setTimeout(() => ctrl.abort(), 45000);
@@ -1003,6 +1198,7 @@
           const data = await res.json().catch(() => ({}));
           hideTyping();
           addBubble('agent', data.error || t('err'), true);
+          if (_vmOn) { vmSub(data.error || t('err')); vmSet('idle'); }
           return;
         }
         if (!res.body) {                       // navigateur sans ReadableStream → JSON
@@ -1011,12 +1207,13 @@
           return;
         }
 
-        // Voix : file incrémentale (alimentée au fil des chunks) si activée.
-        if (_voiceOn) {
+        // Voix : file incrémentale (alimentée au fil des chunks) si activée
+        // — ou si le mode conversation vocale est ouvert (SA-13.1).
+        if (_voiceOn || _vmOn) {
           try {
             if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
             if (_piperMod.isSupported && _piperMod.isSupported() && _piperMod.createSpeechStream) {
-              speech = _piperMod.createSpeechStream({ voiceId: _piperMod.voiceForLang(_lang), onState: (st) => setVoiceLoading(st === 'loading') });
+              speech = _piperMod.createSpeechStream({ voiceId: _piperMod.voiceForLang(_lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
             }
           } catch (_) { speech = null; }
         }
@@ -1048,6 +1245,7 @@
               if (!gotChunk) { gotChunk = true; streamStart(); }
               acc += ev.text || '';
               streamUpdate(acc);
+              if (_vmOn) vmSub(acc);            // sous-titre du mode vocal
               if (speech) speech.push(acc);
             } else if (ev.type === 'done') {
               gapped = !!ev.gapped;
@@ -1060,8 +1258,9 @@
         const reply = finalReply || acc;
         if (!gotChunk) hideTyping();
         streamFinal(reply, gapped);
+        if (_vmOn) vmSub(reply);
         if (speech) speech.end(reply);
-        else if (_voiceOn) speak(reply);   // voix ON mais flux voix indispo → lecture classique
+        else if (_voiceOn || _vmOn) speak(reply);   // voix ON mais flux voix indispo → lecture classique
       } catch (e) {
         if (speech) { try { speech.cancel(); } catch (_) {} }
         if (gotChunk) {
@@ -1073,6 +1272,7 @@
           hideTyping();
           if (!await sendMessageJSON(message)) addRetryBubble(message);   // réseau/SSE KO → repli JSON
         }
+        if (_vmOn && _vmState === 'thinking') { vmSub(t('err')); vmSet('idle'); }   // l'orbe ne reste jamais bloqué
       } finally {
         clearTimeout(timer);
         hideTyping();
@@ -1098,6 +1298,7 @@
           try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
         }
         addBubble('agent', data.reply || '', !!data.gapped);
+        if (_vmOn) vmSub(data.reply || '');
         speak(data.reply || '');
         return true;
       } catch (_) { return false; }
@@ -1111,7 +1312,12 @@
     const SVG_V2 = {
       globe: '<svg viewBox="0 0 56 56" fill="currentColor" aria-hidden="true"><path d="M 28.0234 51.2734 C 40.7500 51.2734 51.2735 40.7266 51.2735 28 C 51.2735 15.2968 40.7265 4.7266 28.0000 4.7266 C 15.2734 4.7266 4.7265 15.2968 4.7265 28 C 4.7265 40.7266 15.2968 51.2734 28.0234 51.2734 Z M 21.2734 15.8594 C 22.6562 12.3672 24.5546 9.8594 26.6406 9.0859 L 26.6406 16.3984 C 24.7187 16.3516 22.9141 16.1641 21.2734 15.8594 Z M 29.3359 9.0859 C 31.4219 9.8594 33.3437 12.3672 34.7031 15.8594 C 33.0625 16.1641 31.2812 16.3516 29.3359 16.3984 Z M 34.2812 9.7422 C 36.7890 10.6094 39.0625 11.9453 40.9609 13.7031 C 39.9297 14.2890 38.7343 14.7812 37.3984 15.2031 C 36.5546 13.0234 35.4765 11.1719 34.2812 9.7422 Z M 15.0156 13.7031 C 16.9375 11.9688 19.2109 10.6094 21.7187 9.7422 C 20.5000 11.1719 19.4453 13.0234 18.5781 15.2031 C 17.2656 14.7812 16.0703 14.2890 15.0156 13.7031 Z M 39.6250 26.6406 C 39.5078 23.3828 39.0156 20.3594 38.2422 17.6875 C 40.0000 17.1484 41.5468 16.4688 42.8594 15.6719 C 45.3437 18.6719 46.9609 22.4688 47.2422 26.6406 Z M 8.7578 26.6406 C 9.0390 22.4688 10.6328 18.6719 13.1406 15.6719 C 14.4297 16.4688 16.0000 17.1484 17.7343 17.6875 C 16.9609 20.3594 16.4922 23.3828 16.3750 26.6406 Z M 29.3359 26.6406 L 29.3359 19.0937 C 31.5390 19.0234 33.6250 18.7656 35.5703 18.3672 C 36.2734 20.8750 36.7422 23.6875 36.8594 26.6406 Z M 19.1406 26.6406 C 19.2343 23.6875 19.7031 20.8750 20.4297 18.3672 C 22.3515 18.7656 24.4609 19.0234 26.6406 19.0937 L 26.6406 26.6406 Z M 8.7578 29.3359 L 16.3750 29.3359 C 16.4687 32.6406 16.9609 35.7344 17.7343 38.4297 C 16.0234 38.9688 14.4765 39.6250 13.1875 40.4219 C 10.6562 37.3750 9.0390 33.5547 8.7578 29.3359 Z M 19.1172 29.3359 L 26.6406 29.3359 L 26.6406 37.0234 C 24.4609 37.0937 22.3515 37.3281 20.4297 37.75 C 19.7031 35.2188 19.2343 32.3359 19.1172 29.3359 Z M 29.3359 37.0234 L 29.3359 29.3359 L 36.8594 29.3359 C 36.7656 32.3359 36.2968 35.2188 35.5703 37.75 C 33.6250 37.3281 31.5390 37.0937 29.3359 37.0234 Z M 38.2422 38.4297 C 39.0390 35.7344 39.5078 32.6406 39.6250 29.3359 L 47.2422 29.3359 C 46.9843 33.5547 45.3672 37.3984 42.8125 40.4219 C 41.5234 39.6484 39.9765 38.9688 38.2422 38.4297 Z M 21.2734 40.2578 C 22.9141 39.9531 24.7187 39.7656 26.6406 39.7188 L 26.6406 47.0312 C 24.5546 46.2578 22.6562 43.7500 21.2734 40.2578 Z M 29.3359 39.7188 C 31.2812 39.7656 33.0625 39.9531 34.7031 40.2578 C 33.3437 43.7500 31.4219 46.2578 29.3359 47.0312 Z M 15.0859 42.3672 C 16.1172 41.8047 17.2890 41.3125 18.5781 40.9141 C 19.4219 43.0234 20.4297 44.8047 21.6015 46.2344 C 19.1641 45.3906 16.9609 44.0547 15.0859 42.3672 Z M 37.3984 40.9141 C 38.7109 41.3125 39.8828 41.8047 40.9141 42.3906 C 39.0390 44.0781 36.8125 45.4141 34.3750 46.2578 C 35.5468 44.8281 36.5781 43.0234 37.3984 40.9141 Z"/></svg>',
       phone: '<svg viewBox="0 0 56 56" fill="currentColor" aria-hidden="true"><path d="M 27.9999 51.9063 C 41.0546 51.9063 51.9063 41.0781 51.9063 28 C 51.9063 14.9453 41.0312 4.0937 27.9765 4.0937 C 14.8983 4.0937 4.0937 14.9453 4.0937 28 C 4.0937 41.0781 14.9218 51.9063 27.9999 51.9063 Z M 27.9999 47.9219 C 16.9374 47.9219 8.1014 39.0625 8.1014 28 C 8.1014 16.9609 16.9140 8.0781 27.9765 8.0781 C 39.0155 8.0781 47.8983 16.9609 47.9219 28 C 47.9454 39.0625 39.0390 47.9219 27.9999 47.9219 Z M 22.3749 33.5312 C 27.8358 39.0156 34.7968 42.4844 38.9218 38.3828 C 39.0858 38.2188 39.2030 38.0781 39.3202 37.9141 C 40.3983 36.7188 40.7030 35.1250 39.3202 34.0937 C 38.2421 33.3203 37.0936 32.5234 35.1483 31.1641 C 33.7890 30.2031 32.8983 30.4375 31.8436 31.4922 L 30.9062 32.4063 C 30.6249 32.6641 30.1796 32.6406 29.8749 32.4531 C 29.0546 31.9609 27.6718 30.8594 26.3593 29.5469 C 25.0702 28.2578 23.8983 26.8047 23.4530 26.0312 C 23.2890 25.7734 23.1718 25.3516 23.4999 25.0469 L 24.4140 24.0625 C 25.4687 22.9609 25.7030 22.1172 24.7187 20.7344 L 21.8358 16.6563 C 20.8514 15.2734 19.4218 15.5312 17.8514 16.7031 C 17.7343 16.7968 17.6405 16.8906 17.5468 16.9844 C 13.4218 21.1094 16.9140 28.0703 22.3749 33.5312 Z"/></svg>',
-      voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.85986V14.1499"/><path d="M9 8.42993V15.5699"/><path d="M12 7V17"/><path d="M15 8.42993V15.5699"/><path d="M18 9.85986V14.1499"/><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/></svg>',
+      /* SA-13 — picto lecture vocale EXPLICITE : haut-parleur + ondes dans le
+         même anneau que les autres CTA (l'onde abstraite se lisait mal). */
+      voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="7.2 10.3, 9 10.3, 11.4 8.1, 11.4 15.9, 9 13.7, 7.2 13.7" fill="currentColor" stroke="none"/><path d="M13.9 9.7a3.3 3.3 0 0 1 0 4.6"/><path d="M15.9 8.2a5.9 5.9 0 0 1 0 7.6"/></svg>',
+      /* SA-13 — entrée du mode conversation vocale (bouton envoyer, champ vide) */
+      vm:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4"/><path d="M8.5 7v10"/><path d="M12 4.5v15"/><path d="M15.5 7v10"/><path d="M20 10v4"/></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
       mic:   '<svg viewBox="0 0 96 96" fill="currentColor" aria-hidden="true"><path d="M84,36a6,6,0,0,0-12,0,24,24,0,0,1-48,0,6,6,0,0,0-12,0A35.9772,35.9772,0,0,0,42,71.3936V84H30a6,6,0,0,0,0,12H66a6,6,0,0,0,0-12H54V71.3936A35.9772,35.9772,0,0,0,84,36Z"/><path d="M48,48A12.0157,12.0157,0,0,0,60,36V12a12,12,0,0,0-24,0V36A12.0157,12.0157,0,0,0,48,48Z"/></svg>',
       send:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.0004 18.5816V12.5M12.7976 18.754L15.8103 19.7625C17.4511 20.3118 18.2714 20.5864 18.7773 20.3893C19.2166 20.2182 19.5499 19.8505 19.6771 19.3965C19.8236 18.8737 19.4699 18.0843 18.7624 16.5053L14.2198 6.36709C13.5279 4.82299 13.182 4.05094 12.7001 3.81172C12.2814 3.60388 11.7898 3.60309 11.3705 3.80958C10.8878 4.04726 10.5394 4.8182 9.84259 6.36006L5.25633 16.5082C4.54325 18.086 4.18671 18.875 4.33169 19.3983C4.4576 19.8528 4.78992 20.2216 5.22888 20.394C5.73435 20.5926 6.55603 20.3198 8.19939 19.7744L11.2797 18.752C11.5614 18.6585 11.7023 18.6117 11.8464 18.5933C11.9742 18.5769 12.1036 18.5771 12.2314 18.5938C12.3754 18.6126 12.5162 18.6597 12.7976 18.754Z"/></svg>'
     };
@@ -1186,9 +1392,23 @@
 
       const input = document.getElementById('sa-input');
       const send  = document.getElementById('sa-send');
-      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 104) + 'px'; });
+      // SA-13.1 — champ VIDE → le bouton d'envoi devient l'entrée du mode
+      // conversation vocale (pattern des apps d'assistant : rien à envoyer,
+      // donc la place sert à parler) ; du texte → flèche d'envoi normale.
+      const canVm = HAS_SR && HAS_WASM && !IS_EMBED;
+      function refreshSendBtn() {
+        if (!canVm) return;
+        const vm = !(input.value || '').trim();
+        if (send.dataset.mode === (vm ? 'vm' : 'send')) return;
+        send.dataset.mode = vm ? 'vm' : 'send';
+        send.innerHTML = vm ? SVG_V2.vm : SVG_V2.send;
+        send.setAttribute('aria-label', vm ? t('vmEnter') : t('send'));
+        send.title = vm ? t('vmEnter') : '';
+      }
+      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 104) + 'px'; refreshSendBtn(); });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
-      send.addEventListener('click', submit);
+      send.addEventListener('click', () => { if (send.dataset.mode === 'vm') { openVoiceMode(); return; } submit(); });
+      refreshSendBtn();
       input.addEventListener('focus', () => setTimeout(scrollDown, 250));
       if (window.visualViewport) window.visualViewport.addEventListener('resize', scrollDown);
 
@@ -1236,6 +1456,18 @@
       if (ansText) ansText.addEventListener('click', () => { const txt = ansText.dataset.text; if (txt) speakTap(txt); });
 
       if (_voiceOn && HAS_WASM) _warmPiper();
+      // SA-13.0 — préchargement INTELLIGENT : voix pas encore demandée, mais
+      // connexion correcte et pas d'économie de données → le modèle (~60 Mo,
+      // en cache navigateur 1 an ensuite) se télécharge en fond quelques
+      // secondes après l'accueil. Première écoute quasi instantanée pour la
+      // majorité, zéro impact sur les connexions fragiles (2g/3g/saveData).
+      else if (HAS_WASM) {
+        const c = navigator.connection || {};
+        if (!c.saveData && (!c.effectiveType || c.effectiveType === '4g')) {
+          const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 400));
+          setTimeout(() => idle(() => { if (!_piperMod || !_piperMod.unsupported) _warmPiper(true); }), 2500);
+        }
+      }
       _showingGreeting = true;
       setAnswerV2(greetingText());   // jamais d'écran vide ; accueil natif ou générique localisé
       input.focus();
@@ -1289,11 +1521,13 @@
       _busy = true;
       const send = document.getElementById('sa-send'); if (send) send.disabled = true;
       showTyping();
-      if (_voiceOn) _warmPiper();
+      if (_voiceOn || _vmOn) _warmPiper();
       const card = (DEMO_META.cards || []).find(c => c.question === message);
       const reply = card ? card.answer : DEMO_DEFAULT;
       setTimeout(() => {
-        hideTyping(); addBubble('agent', reply); speak(reply);
+        hideTyping(); addBubble('agent', reply);
+        if (_vmOn) vmSub(reply);
+        speak(reply);
         _busy = false; if (send) send.disabled = false;
         document.getElementById('sa-input')?.focus();
       }, 950);

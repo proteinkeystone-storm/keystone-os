@@ -67,6 +67,7 @@ const DOC_SECTIONS = [
 // non technique — les versions internes ne regardent pas l'utilisateur.
 export const DOC_CHANGELOG = [
   { date: 'Juillet 2026', items: [
+    'Smart Agent — mode conversation vocale : sur la page publique de votre agent, un bouton dédié ouvre une conversation à la voix, comme avec un assistant moderne — le visiteur parle, l\'agent répond à voix haute, et le micro se rouvre tout seul. La voix se précharge discrètement à l\'ouverture de la page (bonne connexion uniquement) et, à la toute première utilisation, un écran de préparation affiche la progression et trois conseils d\'usage.',
     'Smart Agent : vos agents parlent plus naturellement — réponses courtes qui vont à l\'essentiel, accueil des émotions de vos clients, et une question de clarification quand la demande est ambiguë plutôt qu\'une réponse à côté. Un « bonjour » ou un « merci » reçoit désormais une vraie réponse chaleureuse, instantanée et sans consommer votre budget IA.',
   ] },
   { date: 'Juin 2026', items: [
