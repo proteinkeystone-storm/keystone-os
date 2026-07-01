@@ -22,7 +22,7 @@ Keystone OS est un système d'exploitation modulaire pour TPE et indépendants :
 - IA : stratégie hybride — modèles souverains sur Cloudflare Workers AI pour l'usage courant, modèles haut de gamme via la clé de l'utilisateur (BYOK). Les agents répondent uniquement depuis un savoir validé (pas d'invention).
 
 ## Statut
-Service actif par abonnement, avec un essai gratuit de 7 jours. Le périmètre évolue régulièrement.
+Service actif par abonnement, avec un essai gratuit de 7 jours, sans carte bancaire. Le périmètre évolue régulièrement.
 
 ## Outils (détail)
 ### Smart Agent
