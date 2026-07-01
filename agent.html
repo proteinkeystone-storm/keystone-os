@@ -294,28 +294,9 @@
     .sav2-voice.is-on svg { filter: drop-shadow(0 0 6px rgba(160,160,255,.7)); }
     .sav2-voice.is-loading { animation: sav2-pulse 1s ease-in-out infinite; }
     @keyframes sav2-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
-    /* SA-11.2 — sélecteur de langue (pilule compacte, accordé au header) */
-    /* SA-11.2/11.3 — sélecteur de langue : bouton ROND BORDÉ (cohérent avec les
-       autres CTA du header) + menu déroulant CUSTOM (sombre, blur, aligné). */
-    .sav2-langwrap { position: relative; flex-shrink: 0; }
-    /* Anneau = cercle SVG en currentColor (IDENTIQUE aux boutons voix/téléphone),
-       pas une bordure CSS → même couleur, même épaisseur, même diamètre. */
-    .sav2-lang.is-open { color: #fff; }
-    .sav2-lang.is-open svg { filter: drop-shadow(0 0 6px rgba(160,160,255,.6)); }
-    .sav2-langmenu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
-      min-width: 170px; padding: 6px; display: none; flex-direction: column; gap: 2px;
-      background: rgba(16,16,32,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-      border: 1px solid rgba(164,162,255,.22); border-radius: 16px; box-shadow: 0 16px 44px rgba(0,0,0,.55); }
-    .sav2-langmenu.is-open { display: flex; animation: sav2-langpop .14s ease-out; }
-    @keyframes sav2-langpop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-    .sav2-langopt { appearance: none; border: none; cursor: pointer; text-align: left; white-space: nowrap;
-      background: transparent; color: #d7d6ff; border-radius: 11px; padding: 11px 14px;
-      font: 600 15px/1 -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: space-between; gap: 18px;
-      -webkit-tap-highlight-color: transparent; transition: background .12s; }
-    .sav2-langopt:hover { background: rgba(164,162,255,.12); }
-    .sav2-langopt.is-active { background: rgba(164,162,255,.18); color: #fff; }
-    .sav2-langtick { opacity: 0; color: #a8a6ff; font-weight: 700; }
-    .sav2-langopt.is-active .sav2-langtick { opacity: 1; }
+    /* SA-13.3 — le sélecteur de langue du header a été retiré (header allégé) :
+       l'écrit s'adapte tout seul à la langue de la question (worker), et le
+       choix explicite vit dans le mode vocal (.sav2-vm-langs ci-dessous). */
 
     /* Carrousel de cartes (slide latéral, nombre illimité) */
     .sav2-cards { display: flex; gap: 10px; padding: 12px 16px 6px; overflow-x: auto; scroll-snap-type: x proximity;
@@ -403,7 +384,17 @@
         linear-gradient(180deg,#05060f 0%,#0a0b1e 27%,#15123a 54%,#221a52 80%,#2c2160 100%);
       animation: sav2-vm-in .22s ease-out; }
     @keyframes sav2-vm-in { from { opacity: 0; } to { opacity: 1; } }
-    .sav2-vm-head { display: flex; justify-content: flex-end; padding: calc(env(safe-area-inset-top,0px) + 14px) 14px 0; }
+    .sav2-vm-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: calc(env(safe-area-inset-top,0px) + 14px) 14px 0; }
+    /* SA-13.3 — choix de langue DANS le mode vocal (seul endroit où il est
+       techniquement requis : la reconnaissance doit connaître la langue
+       à l'avance). Pré-positionné sur la langue détectée, mémorisé session. */
+    .sav2-vm-langs { display: flex; gap: 7px; }
+    .sav2-vm-langpill { min-width: 42px; height: 32px; padding: 0 10px; border-radius: 999px; cursor: pointer;
+      border: 1px solid rgba(164,162,255,.35); background: transparent; color: #c2c0ff;
+      font: 700 12.5px/1 -apple-system, system-ui, sans-serif; letter-spacing: .04em;
+      -webkit-tap-highlight-color: transparent; transition: all .14s; }
+    .sav2-vm-langpill.is-active { background: rgba(164,162,255,.22); color: #fff; border-color: rgba(164,162,255,.85); }
     .sav2-vm-close { width: 46px; height: 46px; border-radius: 50%; border: none; background: rgba(255,255,255,.08);
       color: #c2c0ff; cursor: pointer; display: flex; align-items: center; justify-content: center;
       -webkit-tap-highlight-color: transparent; transition: transform .12s; }
@@ -533,10 +524,15 @@
             vmPrepTitle: 'Ich bereite meine Stimme vor', vmPrepBody: 'Erster Besuch: Ich lade meine Stimme herunter (nur einmal). Danach ist alles sofort verfügbar.',
             vmTip1: 'Sprechen Sie natürlich — ich erkenne das Ende Ihres Satzes.', vmTip2: 'Tippen Sie auf den Kreis, um mich zu unterbrechen oder erneut zu sprechen.', vmTip3: 'Ich antworte nur aus dem Wissen des Hauses.' },
     };
-    let _lang = 'fr', _meta = null, _showingGreeting = false;
+    // SA-13.3 — _langChosen : le visiteur a EXPLICITEMENT choisi sa langue
+    // (pilules du mode vocal, ou choix mémorisé de la session). Sans choix,
+    // l'écrit est AUTO : on n'envoie pas `lang` au worker, qui répond dans
+    // la langue de la question. `_lang` continue de piloter les libellés UI,
+    // la dictée et la voix (résolu depuis le navigateur).
+    let _lang = 'fr', _langChosen = false, _meta = null, _showingGreeting = false;
     function t(k) { return (I18N[_lang] && I18N[_lang][k] != null) ? I18N[_lang][k] : (I18N.fr[k] || ''); }
     function resolveLang(metaLang) {
-      try { const s = sessionStorage.getItem('sa_lang_' + _slug); if (SA_LANGS.includes(s)) return s; } catch (_) {}
+      try { const s = sessionStorage.getItem('sa_lang_' + _slug); if (SA_LANGS.includes(s)) { _langChosen = true; return s; } } catch (_) {}
       const nav = (navigator.language || '').slice(0, 2).toLowerCase();
       if (SA_LANGS.includes(nav)) return nav;
       if (SA_LANGS.includes(metaLang)) return metaLang;
@@ -544,16 +540,13 @@
     }
     function setLang(l) {
       if (!SA_LANGS.includes(l)) return;
-      _lang = l;
+      _lang = l; _langChosen = true;
       try { sessionStorage.setItem('sa_lang_' + _slug, l); } catch (_) {}
     }
-    // Pastille de langue : MÊME anneau que les boutons voix/téléphone (cercle
-    // SVG en currentColor, viewBox 24, r=10, stroke 1.5) + le code au centre.
-    function langGlyph(code) {
-      return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">'
-        + '<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>'
-        + '<text x="12" y="12" dy=".34em" text-anchor="middle" font-size="9" font-weight="700" font-family="-apple-system, system-ui, sans-serif" fill="currentColor">' + code + '</text></svg>';
-    }
+    // SA-13.3 — langue envoyée au chat UNIQUEMENT si choisie explicitement ou
+    // en mode vocal (la reconnaissance et la voix sont verrouillées dessus) ;
+    // sinon undefined → JSON.stringify l'omet → mode AUTO côté worker.
+    function chatLang() { return (_langChosen || _vmOn) ? _lang : undefined; }
     // Accueil : message personnalisé de l'agent SI on est dans sa langue native ;
     // sinon un accueil générique localisé (le contenu propriétaire multilingue
     // viendra en SA-11.3). Évite « UI en anglais + accueil en français ».
@@ -586,8 +579,6 @@
       if (voice) voice.title = _voiceOn ? t('voiceOn') : t('voiceOff');
       const rgpd = document.querySelector('.sav2-rgpd');
       if (rgpd) rgpd.textContent = t('rgpd');
-      const langBtn = document.getElementById('sa-lang');
-      if (langBtn) { langBtn.setAttribute('aria-label', t('lang')); langBtn.title = t('lang'); langBtn.innerHTML = langGlyph(_lang.toUpperCase()); }
       if (_showingGreeting) setAnswerV2(greetingText());
       // SA-11.3 — titres des cartes (pills) dans la langue active.
       const cards = (_meta && Array.isArray(_meta.cards)) ? _meta.cards.filter(c => c && c.image) : [];
@@ -896,7 +887,11 @@
       const div = document.createElement('div');
       div.className = 'sav2-vm'; div.id = 'sav2-vm';
       div.innerHTML = `
-        <div class="sav2-vm-head"><button class="sav2-vm-close" id="sav2-vm-close" type="button" aria-label="${escape(t('vmClose'))}">${SVG_V2.close}</button></div>
+        <div class="sav2-vm-head">
+          <div class="sav2-vm-langs" role="radiogroup" aria-label="${escape(t('lang'))}">${SA_LANGS.map(l =>
+            `<button class="sav2-vm-langpill${l === _lang ? ' is-active' : ''}" type="button" role="radio" aria-checked="${l === _lang ? 'true' : 'false'}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
+          <button class="sav2-vm-close" id="sav2-vm-close" type="button" aria-label="${escape(t('vmClose'))}">${SVG_V2.close}</button>
+        </div>
         <div class="sav2-vm-center">
           <button class="sav2-vm-orb" id="sav2-vm-orb" type="button" aria-label="${escape(t('vmTap'))}"></button>
           <div class="sav2-vm-status" id="sav2-vm-status"></div>
@@ -911,6 +906,29 @@
       document.body.appendChild(div);
       document.getElementById('sav2-vm-close').addEventListener('click', closeVoiceMode);
       document.getElementById('sav2-vm-orb').addEventListener('click', vmOrbTap);
+      // SA-13.3 — bascule de langue : micro + voix + libellés suivent ; la
+      // voix de la nouvelle langue se télécharge en fond si nécessaire.
+      div.querySelectorAll('.sav2-vm-langpill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const l = pill.dataset.l;
+          if (!SA_LANGS.includes(l) || l === _lang) return;
+          setLang(l);
+          div.querySelectorAll('.sav2-vm-langpill').forEach(p => {
+            const on = p.dataset.l === l;
+            p.classList.toggle('is-active', on);
+            p.setAttribute('aria-checked', on ? 'true' : 'false');
+          });
+          applyI18n();
+          if (_vmState === 'prep') return; // préparation en cours : la langue est prise, on ne casse rien
+          try { _vmRec && _vmRec.abort(); } catch (_) {}
+          _vmRec = null;
+          if (_piperMod && _piperMod.stopSpeaking) { try { _piperMod.stopSpeaking(); } catch (_) {} }
+          if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+          _warmPiper();                    // voix de la nouvelle langue (fond)
+          vmSet('idle'); vmSub('');
+          vmListen();                      // ré-écoute dans la nouvelle langue
+        });
+      });
       try {
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (!_piperMod.isSupported()) throw new Error('wasm');
@@ -1191,7 +1209,7 @@
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: _sessionId, stream: true, lang: _lang }),
+          body: JSON.stringify({ message, session_id: _sessionId, stream: true, lang: chatLang() }),
           signal: ctrl.signal,
         });
         if (!res.ok) {
@@ -1289,7 +1307,7 @@
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: _sessionId, lang: _lang }),
+          body: JSON.stringify({ message, session_id: _sessionId, lang: chatLang() }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { addBubble('agent', data.error || t('err'), true); return true; }
@@ -1367,10 +1385,6 @@
             ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape((meta.url_label || '').trim() || prettyUrl(url))}</span></a>`
             : `<div class="sav2-top-spacer"></div>`}
           ${phone ? `<a class="sav2-top-btn" href="tel:${escape(phone.replace(/[^0-9+]/g, ''))}" aria-label="${escape(t('call'))}">${SVG_V2.phone}</a>` : ''}
-          <div class="sav2-langwrap">
-            <button class="sav2-top-btn sav2-lang" id="sa-lang" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${escape(t('lang'))}" title="${escape(t('lang'))}">${langGlyph(_lang.toUpperCase())}</button>
-            <div class="sav2-langmenu" id="sa-langmenu" role="menu">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español'], ['de', 'Deutsch']].map(([v, lbl]) => `<button class="sav2-langopt${v === _lang ? ' is-active' : ''}" type="button" role="menuitemradio" aria-checked="${v === _lang ? 'true' : 'false'}" data-l="${v}">${lbl}<span class="sav2-langtick" aria-hidden="true">✓</span></button>`).join('')}</div>
-          </div>
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? escape(t('voiceOn')) : escape(t('voiceOff'))}">${SVG_V2.voice}</button>` : ''}
         </header>
         ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
@@ -1416,36 +1430,10 @@
       if (voiceBtn) voiceBtn.addEventListener('click', toggleVoice);
       const micBtn = document.getElementById('sa-mic');
       if (micBtn) micBtn.addEventListener('click', startDictation);
-      // SA-11.2 — changement de langue : libellés + réponses + dictée suivent.
-      // SA-11.3 — sélecteur de langue : menu custom (bouton rond + liste sombre).
-      const langBtn = document.getElementById('sa-lang');
-      const langMenu = document.getElementById('sa-langmenu');
-      if (langBtn && langMenu) {
-        const closeLangMenu = () => { langMenu.classList.remove('is-open'); langBtn.classList.remove('is-open'); langBtn.setAttribute('aria-expanded', 'false'); };
-        langBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const open = !langMenu.classList.contains('is-open');
-          langMenu.classList.toggle('is-open', open);
-          langBtn.classList.toggle('is-open', open);
-          langBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        });
-        langMenu.querySelectorAll('.sav2-langopt').forEach(opt => {
-          opt.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const l = opt.dataset.l;
-            setLang(l);
-            langMenu.querySelectorAll('.sav2-langopt').forEach(o => {
-              const on = o.dataset.l === l;
-              o.classList.toggle('is-active', on);
-              o.setAttribute('aria-checked', on ? 'true' : 'false');
-            });
-            closeLangMenu();
-            applyI18n();
-            if (_voiceOn && HAS_WASM) _warmPiper();   // pré-chauffe la voix de la nouvelle langue
-          });
-        });
-        document.addEventListener('click', (e) => { if (!e.target.closest('.sav2-langwrap')) closeLangMenu(); });
-      }
+      // SA-13.3 — plus de sélecteur de langue au header (allégé : lien ·
+      // téléphone · voix). L'écrit est AUTO (langue de la question, côté
+      // worker) ; le choix explicite vit dans le mode vocal, seul endroit où
+      // la langue doit être connue à l'avance (reconnaissance + voix).
 
       if (cards.length) {
         document.querySelectorAll('.sav2-card').forEach(btn => {

@@ -18,7 +18,7 @@ import { execSync }      from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { normLang, buildChatMessages, pickFallback, validateAgentPayload,
-  sanitizeI18nMap, validateCards, publicAgentMeta }
+  sanitizeI18nMap, validateCards, publicAgentMeta, guessMsgLang }
   from '../workers/src/routes/smart-agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -123,6 +123,26 @@ console.log('\n\x1b[1m▶ Suite 6 — Contenu propriétaire multilingue (SA-11.3
   }, 'https://x');
   check('meta expose opening_i18n', meta.opening_i18n && meta.opening_i18n.en === 'Hello' && meta.opening_i18n.de === 'Hallo');
   check('meta carte expose title_i18n', meta.cards[0].title_i18n && meta.cards[0].title_i18n.en === 'Item');
+}
+
+// ════════════════════════════════════════════════════════════════
+console.log('\n\x1b[1m▶ Suite 6b — SA-13.3 : langue AUTO (langFixed) + guessMsgLang\x1b[0m');
+{
+  const base = { agentName: 'A', mission: 'm', tone: 't', fallbackText: 'X', fiches: '[1] f', message: 'q', history: [] };
+  const fixed = buildChatMessages({ ...base, lang: 'fr', langFixed: true })[0].content;
+  const auto  = buildChatMessages({ ...base, lang: 'fr', langFixed: false })[0].content;
+  const deflt = buildChatMessages({ ...base, lang: 'en' })[0].content;
+  check('langFixed:true → langue imposée', /RÉPONDS EN FRANÇAIS/.test(fixed) && !/LANGUE DE LA DERNIÈRE QUESTION/.test(fixed));
+  check('langFixed:false → langue de la question + garde anti-zigzag',
+    /LANGUE DE LA DERNIÈRE QUESTION/.test(auto) && /trop court/.test(auto) && /par défaut en français/.test(auto));
+  check('défaut = langue imposée (rétro-compat golden/sandbox)', /RÉPONDS EN ANGLAIS/.test(deflt));
+
+  check('guessMsgLang : anglais', guessMsgLang('What are the opening hours?') === 'en');
+  check('guessMsgLang : espagnol', guessMsgLang('¿Cuánto cuesta la entrada?') === 'es');
+  check('guessMsgLang : allemand', guessMsgLang('Wie viel kostet der Eintritt bitte?') === 'de');
+  check('guessMsgLang : français → null (langue par défaut)', guessMsgLang('Quels sont les horaires d\'ouverture ?') === null);
+  check('guessMsgLang : « que » français ne déclenche pas l\'espagnol', guessMsgLang('Qu\'est-ce que vous vendez ?') === null);
+  check('guessMsgLang : vide/null → null', guessMsgLang('') === null && guessMsgLang(null) === null);
 }
 
 // ════════════════════════════════════════════════════════════════
