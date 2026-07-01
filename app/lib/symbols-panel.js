@@ -46,6 +46,7 @@ function _nameOf(c) {
 }
 
 export function symbolsButtonHTML() {
+  _injectStyles();   // le bouton vit dans un render hôte AVANT toute ouverture : ses styles doivent déjà être là
   return `<button class="ksym-open" type="button" data-act="symbols" title="Bibliothèque de symboles" aria-label="Bibliothèque de symboles"><span class="ksym-omega">Ω</span> Symboles</button>`;
 }
 
@@ -230,7 +231,10 @@ function _injectStyles() {
 .ksym-omega { font-size: 14px; font-weight: 700; line-height: 1; color: #9b8cff; }
 html.light-mode .ksym-open { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.1); }
 
-.ksym-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 9600; width: min(400px, 100vw);
+/* z-index 10002 : AU-DESSUS du workspace fullscreen (.ws-app = 9999), du
+   Help-Overlay (10000) et de sa couche 10001 — piège documenté « popup
+   body.appendChild caché derrière le workspace » (cf. mémoire sdqr). */
+.ksym-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 10002; width: min(400px, 100vw);
   display: flex; flex-direction: column; background: rgba(18,18,34,.97);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   border-left: 1px solid rgba(164,162,255,.18); box-shadow: -18px 0 50px rgba(0,0,0,.45);
