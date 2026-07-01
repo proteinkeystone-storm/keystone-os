@@ -3860,6 +3860,14 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
   .sec-count       { font-size: 12px; }
   .sec-kstore-badge{ font-size: 12px; }
 
+  /* Anti-débordement horizontal (cause du "flottement" gauche/droite) :
+     la barre "Débloquez … ——— [Key-Store]" avait label + badge en nowrap
+     dont la somme dépasse l'écran. On laisse le label rétrécir/ellipser ;
+     le badge Key-Store reste entier et cliquable. */
+  .sec-hd { min-width: 0; }
+  .sec-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .sec-kstore-badge { flex-shrink: 0; }
+
   .hero-greeting   { font-size: 22px !important; }
   .hero-name       { font-size: 22px !important; }
   .hero-sub        { font-size: 13px !important; line-height: 1.5; }
