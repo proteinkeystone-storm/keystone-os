@@ -23,12 +23,12 @@ function _sm(a,b,x){x=(x-a)/(b-a);if(x<0)x=0;if(x>1)x=1;return x*x*(3-2*x);}
 const nWarp=makeNoise(21), nWave=makeNoise(99);
 
 const CFG={
-  spacing:34,        // pas de la grille (px CSS) — densité de la trame
-  warpAmp:22, warpScale:0.0016, warpSpeed:0.14, warpEvolve:0.07,  // houle (déplacement réel)
+  spacing:24,        // pas de la grille (px CSS) — maille FINE = + de croix (pas de zoom)
+  warpAmp:15, warpScale:0.0018, warpSpeed:0.14, warpEvolve:0.07,  // houle (déplacement réel)
   waveScale:0.0022, waveSpeed:0.05, waveDrift:0.45,               // vague de lumière (se balade)
-  crossStart:0.5,    // seuil point→croix (contraste net)
-  dotMin:1.1, dotAdd:1.8, armMax:8.5, armW:2.2,
-  aFloor:0.13, aRange:0.87,
+  crossStart:0.52,   // seuil point→croix (contraste net)
+  dotMin:1.0, dotAdd:1.3, armMax:6.2, armW:1.7,                   // éléments fins
+  aFloor:0.24, aRange:0.76,   // plancher relevé → trame visible PARTOUT (fini le bas noir)
   colA:[80,140,215], colB:[150,60,250]  // point cyan → croix violette (charte)
 };
 
