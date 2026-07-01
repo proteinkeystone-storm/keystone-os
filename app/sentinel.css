@@ -66,6 +66,15 @@
 .snt-btn:disabled { opacity: .5; cursor: default; }
 .snt-hint { font-size: 12px; color: var(--ws-text-muted); margin: 10px 2px 0; }
 .snt-add-locked { color: var(--ws-text-soft); font-size: 14px; gap: 8px; background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: var(--ws-radius); padding: 14px 16px; }
+/* Ergonomie 2026-07 (maquette Stéphane) : le formulaire d'ajout vit EN HAUT,
+   champ URL à liseré accent bien visible — on ne le cherche plus. Scopé
+   .snt-add-top pour ne pas toucher les autres .snt-input (email, GEO). */
+.snt-add-top .snt-input { height: 52px; border: 2px solid var(--ws-accent); border-radius: 14px; background: transparent; }
+.snt-add-top .snt-input::placeholder { color: var(--ws-text-soft); }
+.snt-add-top .snt-input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-accent) 25%, transparent); }
+.snt-add-top .snt-btn { height: 52px; border-radius: 14px; padding: 0 22px; }
+/* Trait fin entre l'ajout et la surveillance — rien ne se mélange. */
+.snt-sep { height: 1px; background: var(--ws-border); margin: 28px 0; }
 
 .snt-state { text-align: center; color: var(--ws-text-soft); padding: 60px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .snt-state h2 { font-size: 20px; font-weight: 800; color: var(--ws-text); margin: 0; }

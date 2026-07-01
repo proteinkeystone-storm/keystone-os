@@ -195,8 +195,13 @@ function _render() {
     ? `<div class="snt-grid">${_sites.map(_siteCard).join('')}</div>`
     : `<div class="snt-state">${icon('eye', 30)}<h2>Aucun site surveillé</h2><p>Ajoutez l'adresse d'un site — Sentinel détecte sa plateforme et le surveille en continu.</p></div>`;
 
+  // Ergonomie 2026-07 (maquette Stéphane) : l'AJOUT vit en haut — champ URL
+  // à liseré accent qu'on ne cherche plus — puis un trait fin sépare la
+  // surveillance, pour ne rien mélanger.
   main.innerHTML = `
     <div class="snt-wrap">
+      ${_addBlock(atLimit, limitTxt)}
+      <div class="snt-sep" role="separator"></div>
       <div class="snt-head">
         <div>
           <h1 class="snt-title">Sites surveillés</h1>
@@ -205,7 +210,6 @@ function _render() {
         ${_alertsBtn()}
       </div>
       ${list}
-      ${_addBlock(atLimit, limitTxt)}
     </div>
   `;
 }
@@ -251,7 +255,7 @@ function _siteCard(s) {
 function _addBlock(atLimit, limitTxt) {
   if (atLimit) return `<div class="snt-add snt-add-locked">${icon('lock', 18)}<span>Limite de ${limitTxt} site${_limit > 1 ? 's' : ''} atteinte pour le plan ${_esc(_plan || '—')}. Passez à un plan supérieur pour en ajouter.</span></div>`;
   return `
-    <form class="snt-add" data-form="add">
+    <form class="snt-add snt-add-top" data-form="add">
       <input class="snt-input" name="url" type="url" inputmode="url" autocomplete="off" placeholder="https://votre-site.com" required aria-label="Adresse du site" />
       <input class="snt-input snt-input-label" name="label" type="text" placeholder="Nom (optionnel)" aria-label="Nom du site" />
       <button class="snt-btn" type="submit"${_busy ? ' disabled' : ''}>${icon('plus', 16)} ${_busy ? 'Ajout…' : 'Ajouter'}</button>
