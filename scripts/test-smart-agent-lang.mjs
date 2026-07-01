@@ -140,8 +140,11 @@ console.log('\n\x1b[1m▶ Suite 6b — SA-13.3 : langue AUTO (langFixed) + guess
   check('guessMsgLang : anglais', guessMsgLang('What are the opening hours?') === 'en');
   check('guessMsgLang : espagnol', guessMsgLang('¿Cuánto cuesta la entrada?') === 'es');
   check('guessMsgLang : allemand', guessMsgLang('Wie viel kostet der Eintritt bitte?') === 'de');
-  check('guessMsgLang : français → null (langue par défaut)', guessMsgLang('Quels sont les horaires d\'ouverture ?') === null);
-  check('guessMsgLang : « que » français ne déclenche pas l\'espagnol', guessMsgLang('Qu\'est-ce que vous vendez ?') === null);
+  // SA-13.4 — le français est un indice à part entière : une vraie question
+  // française reprend la main sur un historique anglais (bug accent français).
+  check('guessMsgLang : français → fr', guessMsgLang('Quels sont les horaires d\'ouverture ?') === 'fr');
+  check('guessMsgLang : « que » français → fr, pas espagnol', guessMsgLang('Qu\'est-ce que vous vendez ?') === 'fr');
+  check('guessMsgLang : message court sans indice → null (continuité)', guessMsgLang('ok') === null && guessMsgLang('super') === null);
   check('guessMsgLang : vide/null → null', guessMsgLang('') === null && guessMsgLang(null) === null);
 }
 

@@ -530,6 +530,10 @@
     // la langue de la question. `_lang` continue de piloter les libellés UI,
     // la dictée et la voix (résolu depuis le navigateur).
     let _lang = 'fr', _langChosen = false, _meta = null, _showingGreeting = false;
+    // SA-13.4 — langue de la DERNIÈRE RÉPONSE (renvoyée par le worker en mode
+    // auto) : la voix de lecture se cale dessus, pas sur la langue de l'UI —
+    // sinon Siwis (FR) lisait une réponse anglaise « avec l'accent français ».
+    let _replyLang = null;
     function t(k) { return (I18N[_lang] && I18N[_lang][k] != null) ? I18N[_lang][k] : (I18N.fr[k] || ''); }
     function resolveLang(metaLang) {
       try { const s = sessionStorage.getItem('sa_lang_' + _slug); if (SA_LANGS.includes(s)) { _langChosen = true; return s; } } catch (_) {}
@@ -656,7 +660,7 @@
         if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
         if (_piperMod.unsupported || !_piperMod.isSupported()) throw new Error('wasm');
         if (HAS_TTS) { try { window.speechSynthesis.cancel(); } catch (_) {} }
-        await _piperMod.speakText(clean, { voiceId: _piperMod.voiceForLang(_lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
+        await _piperMod.speakText(clean, { voiceId: _piperMod.voiceForLang(_replyLang || _lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
       } catch (_) {
         setVoiceLoading(false);
         _speakRaw(clean);   // repli : voix système — mieux que le silence
@@ -1227,14 +1231,21 @@
 
         // Voix : file incrémentale (alimentée au fil des chunks) si activée
         // — ou si le mode conversation vocale est ouvert (SA-13.1).
+        // SA-13.4 — le flux voix n'est créé qu'au PREMIER chunk : l'événement
+        // `meta` (arrivé avant) porte la langue de la réponse → bonne voix
+        // (Amy pour une réponse EN…), plus la voix de la langue d'interface.
         if (_voiceOn || _vmOn) {
-          try {
-            if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js');
-            if (_piperMod.isSupported && _piperMod.isSupported() && _piperMod.createSpeechStream) {
-              speech = _piperMod.createSpeechStream({ voiceId: _piperMod.voiceForLang(_lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
-            }
-          } catch (_) { speech = null; }
+          try { if (!_piperMod) _piperMod = await import('/app/lib/piper-tts.js'); } catch (_) {}
         }
+        const _openSpeech = () => {
+          if (!(_voiceOn || _vmOn) || !_piperMod) return null;
+          try {
+            if (_piperMod.isSupported && _piperMod.isSupported() && _piperMod.createSpeechStream) {
+              return _piperMod.createSpeechStream({ voiceId: _piperMod.voiceForLang(_replyLang || _lang), onState: (st) => { setVoiceLoading(st === 'loading'); vmOnSpeech(st); } });
+            }
+          } catch (_) {}
+          return null;
+        };
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
@@ -1258,9 +1269,10 @@
                 // (sessionStorage : rien ne persiste après fermeture — RGPD).
                 try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
               }
+              if (SA_LANGS.includes(ev.lang)) _replyLang = ev.lang;   // SA-13.4 — langue de la réponse (voix de lecture)
             }
             if (ev.type === 'chunk') {
-              if (!gotChunk) { gotChunk = true; streamStart(); }
+              if (!gotChunk) { gotChunk = true; streamStart(); speech = _openSpeech(); }
               acc += ev.text || '';
               streamUpdate(acc);
               if (_vmOn) vmSub(acc);            // sous-titre du mode vocal
@@ -1315,6 +1327,7 @@
           _sessionId = data.session_id;
           try { sessionStorage.setItem('sa_sess_' + _slug, _sessionId); } catch (_) {}
         }
+        if (SA_LANGS.includes(data.lang)) _replyLang = data.lang;   // SA-13.4 — voix de lecture calée sur la réponse
         addBubble('agent', data.reply || '', !!data.gapped);
         if (_vmOn) vmSub(data.reply || '');
         speak(data.reply || '');

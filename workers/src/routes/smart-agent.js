@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-13.3';
+const SA_ENGINE_VERSION = 'SA-13.4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1475,11 +1475,17 @@ export function normLang(v, fallback = 'fr') {
 }
 
 // SA-13.3 — devine la langue d'un message par mots-indices DISTINCTIFS
-// (aucun mot partagé avec le français : « que »/« es » sont exclus d'es,
-// etc.). Sert UNIQUEMENT aux chemins SANS génération du mode langue AUTO
-// (repli non ancré, tours sociaux) — la vraie réponse suit la directive du
-// prompt, pas cette heuristique. null = pas d'indice → langue par défaut.
+// (aucun mot partagé entre les listes : « que » est exclu d'es, « des » du
+// fr — article génitif allemand, etc.). Pilote la langue de réponse du mode
+// AUTO (devinée puis IMPOSÉE au modèle) + repli non ancré + tours sociaux.
+// null = pas d'indice → continuité (historique) puis langue native.
+// SA-13.4 — liste FRANÇAISE ajoutée : sans elle, une vraie question
+// française ne pouvait jamais reprendre la main sur un historique anglais
+// (bug relevé par Stéphane : réponse EN lue avec l'accent français).
 const LANG_HINT_WORDS = {
+  fr: ['bonjour', 'bonsoir', 'merci', 'quel', 'quelle', 'quels', 'quelles', 'quand', 'pourquoi',
+    'comment', 'combien', 'est', 'sont', 'vous', 'votre', 'vos', 'les', 'une', 'ouvert',
+    'ouverture', 'horaires', 'prix', 'avez', 'peut', 'peux', 'faire', 'suis', 'aussi', 'avec'],
   en: ['hello', 'hi', 'hey', 'thanks', 'thank', 'please', 'what', 'when', 'where', 'how', 'why',
     'the', 'is', 'are', 'you', 'your', 'do', 'does', 'can', 'could', 'would', 'open', 'hours',
     'price', 'much', 'many', 'there', 'have', 'need', 'want', 'goodbye', 'bye'],
@@ -3076,12 +3082,12 @@ export async function handlePublicAgentChat(request, env, slug) {
     } catch (_) { /* best-effort */ }
     if (wantStream) {
       return _sseChatResponse(origin, async (send) => {
-        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'meta',  session_id: sessionId, lang: msgLang });
         send({ type: 'chunk', text: replyText });
-        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: false, social: true });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: false, social: true, lang: msgLang });
       });
     }
-    return json({ session_id: sessionId, reply: replyText, gapped: false, social: true }, 200, origin);
+    return json({ session_id: sessionId, reply: replyText, gapped: false, social: true, lang: msgLang }, 200, origin);
   }
 
   // Crédits débités sur le PROPRIÉTAIRE (lookup_hmac = tenant du lien), pas le
@@ -3135,12 +3141,12 @@ export async function handlePublicAgentChat(request, env, slug) {
     await _persist(replyText, true);
     if (wantStream) {
       return _sseChatResponse(origin, async (send) => {
-        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'meta',  session_id: sessionId, lang: msgLang });
         send({ type: 'chunk', text: replyText });
-        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: true });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: true, lang: msgLang });
       });
     }
-    return json({ session_id: sessionId, reply: replyText, gapped: true }, 200, origin);
+    return json({ session_id: sessionId, reply: replyText, gapped: true, lang: msgLang }, 200, origin);
   }
 
   const fiches = hits.map((h, i) => {
@@ -3172,7 +3178,7 @@ export async function handlePublicAgentChat(request, env, slug) {
     // ── SA-10.0 — variante STREAMING (canal public : zéro [n] exposé) ──
     if (wantStream) {
       return _sseChatResponse(origin, async (send) => {
-        send({ type: 'meta', session_id: sessionId });
+        send({ type: 'meta', session_id: sessionId, lang: respondLang });   // SA-13.4 — le front cale la VOIX de lecture dessus
         const emit = makeStreamEmitter('public', (text) => send({ type: 'chunk', text }));
         let rawFull;
         try {
@@ -3194,7 +3200,7 @@ export async function handlePublicAgentChat(request, env, slug) {
         // Le coffre n'est JAMAIS exposé au public (défense en profondeur).
         const publicReply = stripCitations(stripRepeatedFollowup(text, history));
         await _persist(publicReply, gapped);
-        send({ type: 'done', session_id: sessionId, reply: publicReply, gapped });
+        send({ type: 'done', session_id: sessionId, reply: publicReply, gapped, lang: respondLang });
       });
     }
 
@@ -3214,7 +3220,7 @@ export async function handlePublicAgentChat(request, env, slug) {
     // SA-8.5 — et une relance déjà posée dans la session est coupée.
     const publicReply = stripCitations(stripRepeatedFollowup(text, history));
     await _persist(publicReply, gapped);
-    return json({ session_id: sessionId, reply: publicReply, gapped }, 200, origin);
+    return json({ session_id: sessionId, reply: publicReply, gapped, lang: respondLang }, 200, origin);
   } catch (e) {
     await _refund();
     return err('Dialogue impossible — réessayez.', 502, origin);
