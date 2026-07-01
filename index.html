@@ -2026,7 +2026,7 @@ function __keystonePostHero(){
   const grid=document.getElementById('toolsGrid');
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
-    const SLUG={'A-COM-001':'smart-qr','A-COM-002':'brief-prod','A-COM-003':'brainstorming','A-COM-004':'key-form','A-COM-005':'ghost-writer','O-AGT-001':'smart-agent','O-SOC-001':'social-manager','O-GEO-001':'sentinel','O-Keyn-001':'keynapse'};
+    const SLUG={'A-COM-001':'smart-qr','A-COM-002':'brief-prod','A-COM-003':'brainstorming','A-COM-004':'key-form','A-COM-005':'ghost-writer','O-AGT-001':'smart-agent','O-SOC-001':'social-manager','O-GEO-001':'sentinel','O-Keyn-001':'keynapse','O-SEC-001':'missive'};
     grid.innerHTML=TOOLS.map(t=>'<a class="tcard" href="/outils/'+SLUG[t.app]+'" aria-label="En savoir plus sur '+t.name+'" style="--fam:'+FAM_COLOR[t.fam]+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p><span class="tcard-more">Découvrir <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>').join('');
   }
 })();
