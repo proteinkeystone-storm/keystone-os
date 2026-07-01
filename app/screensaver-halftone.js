@@ -29,7 +29,7 @@ const CFG={
   crossStart:0.52,   // seuil point→croix (contraste net)
   dotMin:1.0, dotAdd:1.3, armMax:6.2, armW:1.7,                   // éléments fins
   aFloor:0.24, aRange:0.76,   // plancher relevé → trame visible PARTOUT (fini le bas noir)
-  colA:[80,140,215], colB:[150,60,250]  // point cyan → croix violette (charte)
+  colA:[38,205,240], colB:[150,60,250]  // point CYAN franc → croix violette (charte)
 };
 
 let _raf=null, _onResize=null;
