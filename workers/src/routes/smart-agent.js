@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-11.3';
+const SA_ENGINE_VERSION = 'SA-12.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1494,6 +1494,10 @@ const GROUND_MIN_VEC   = 0.42;  // cosinus bge-m3 minimal sans accroche lexicale
 const CHAT_TOPK        = 6;     // fiches injectées dans le contexte de génération
 const CHAT_HISTORY_N   = 6;     // derniers messages de la session repassés au modèle
 const CHAT_MAX_LEN     = 1000;  // longueur max d'une question
+const CHAT_MAX_TOKENS  = 700;   // SA-12.0 — plafond de génération (était 900) :
+                                // assez pour une procédure complète, moins de
+                                // piste pour le bavardage ; la SOBRIÉTÉ du
+                                // socle savoir-être fait le reste.
 
 // ── SA-5 — exposition publique anonyme (lien/QR) ─────────────────
 const PUBLIC_SLUG_RE        = /^[0-9A-Za-z]{8}$/;  // 8 chars (alphabet shortId)
@@ -1732,6 +1736,19 @@ const OBJECTIVE_RULES = {
   conseiller: 'OBJECTIF : conseiller. Aide la personne à choisir ce qui LUI convient : reformule son besoin, compare les options présentes dans les fiches, et recommande franchement quand elles le permettent.',
   vendre:     'OBJECTIF : convertir, en excellent vendeur. Mets en avant les bénéfices présents dans les fiches, réponds aux hésitations (appuie-toi sur les fiches de type objection), et amène naturellement vers l\'action concrète : venir, réserver, demander, acheter. Conclus avec assurance — mais n\'invente JAMAIS une offre, un prix, une promesse ou une disponibilité absents des fiches.',
 };
+// SA-12.0 — SOCLE SAVOIR-ÊTRE : couche comportementale COMMUNE à tous les
+// agents (plateforme, comme POSTURE/OBJECTIVE — jamais exposée au client),
+// injectée entre la persona (qui appartient au client) et les règles
+// d'ancrage. Deux moteurs : (1) SOBRIÉTÉ — retour beta n°1 : agents trop
+// bavards, trop à lire/écouter avant de pouvoir réagir ; (2) empathie +
+// arbre d'hypothèses — UNE question discriminante quand la demande est
+// ambiguë, jamais un interrogatoire. Le savoir-être ne vit PAS dans le
+// Kortex : c'est un comportement de chaque tour, pas une fiche à citer.
+const SOCLE_SAVOIR_ETRE = `SAVOIR-ÊTRE (toujours, quel que soit le sujet) :
+- SOBRIÉTÉ : réponds en 1 à 3 phrases courtes (relance comprise). L'essentiel d'abord — le détail seulement si on te le demande. Une liste ou des étapes UNIQUEMENT pour expliquer une procédure. Jamais de formule creuse (« N'hésitez pas… », « Je reste à votre disposition… ») ni de rappel de ce qui vient d'être dit.
+- ÉCOUTE : si la personne exprime une émotion (agacement, déception, inquiétude, enthousiasme), accueille-la d'abord en quelques mots sincères, puis traite la demande.
+- CLARTÉ : si la demande peut se comprendre de plusieurs façons qui appellent des réponses différentes, pose UNE seule question courte pour trancher — jamais deux d'affilée. Si le doute est léger, réponds selon l'interprétation la plus probable en l'annonçant (« Si vous parlez de…, alors… »).
+- CHALEUR : rends les politesses avec naturel (bonjour, merci, au revoir), sans les transformer en argumentaire.`;
 // channel : 'internal' (bac à sable du propriétaire — citations [n] exigées,
 // traçabilité) | 'public' (visiteur anonyme — zéro mention des fiches : les
 // [n] étaient strippés après coup, mais leur simple évocation cassait le
@@ -1753,6 +1770,8 @@ export function buildChatMessages({ agentName, mission, tone, role, style, avoid
     objectiveRule,
   ].filter(Boolean).join('\n');
   const system = `${persona}
+
+${SOCLE_SAVOIR_ETRE}
 
 RÈGLES ABSOLUES :
 1. Réponds UNIQUEMENT à la DERNIÈRE question de l'utilisateur, à partir des FICHES fournies avec cette question. Aucune connaissance extérieure, aucune invention, aucune estimation.
@@ -1857,6 +1876,87 @@ export function isAffirmation(message) {
   if (AFFIRMATIONS.includes(t)) return true;          // « oui », « d'accord »…
   if (t.split(' ').length > 4) return false;          // une vraie phrase ≠ confirmation
   return AFFIRMATIONS.some(a => t.startsWith(a + ' ')); // « oui merci », « ok pour 4 »
+}
+
+// ── SA-12.0 — tours SOCIAUX (salutation, merci, au revoir, « ça va ? »,
+// « t'es un robot ? ») ─────────────────────────────────────────────
+// Avant : « bonjour » ne matchait aucune fiche → repli « je ne dispose pas
+// de cette information » + trou loggé. L'inverse exact de l'agent attachant.
+// Détection DÉTERMINISTE (zéro IA, zéro crédit, zéro latence) : le message
+// normalisé doit matcher ENTIÈREMENT un motif social — « Bonjour, quels sont
+// vos horaires ? » ne matche pas et suit le circuit ancré normal.
+// Ordre de test = priorité (bot > ça-va > au-revoir > merci > salutation :
+// « bonjour ça va » = ça-va, « merci au revoir » = au-revoir). Pur → testé.
+const SOCIAL_PATTERNS = [
+  { intent: 'bot', res: [
+    /^(dis moi |dites moi )?(est ce que )?(tu es|t es|vous etes|es tu|etes vous|c est|je parle a|suis je en train de parler a) (un robot|un bot|une ia|une intelligence artificielle|une machine|un humain|une vraie personne|quelqu un de reel|un vrai humain)( ou (a )?(un robot|un bot|une ia|une machine|un humain|une vraie personne))?$/,
+    /^(are you|is this|am i talking to) (a |an )?(robot|bot|ai|real person|human|machine)$/,
+    /^(eres|es usted|hablo con) (un robot|un bot|una ia|una maquina|un humano|una persona real)$/,
+    /^bist du (ein roboter|ein bot|eine ki|ein mensch|eine echte person)$/,
+  ] },
+  { intent: 'wellbeing', res: [
+    /^((salut|bonjour|bonsoir|coucou|hello|hi|hey|hola|hallo) )?(ca va|comment ca va|comment allez vous|comment vas tu|vous allez bien|tu vas bien|tout va bien|how are you( doing)?|how s it going|que tal|como estas|como esta( usted)?|wie geht es (dir|ihnen)|wie gehts)( bien)?$/,
+  ] },
+  { intent: 'bye', res: [
+    /^(merci )?(au revoir|a bientot|a plus( tard)?|a tout a l heure|a demain|bonne (journee|soiree|fin de journee|continuation)|bye( bye)?|goodbye|good night|see you( later| soon)?|ciao|adios|hasta luego|hasta pronto|tschuss|auf wiedersehen|bis bald)( merci( beaucoup)?| et merci| a vous( aussi| de meme)?| et a bientot)?$/,
+  ] },
+  { intent: 'thanks', res: [
+    /^(ok |super |parfait |top |genial |great |c est note )?(merci|mille mercis?|thanks|thank you|thx|gracias|muchas gracias|danke)( beaucoup| bien| infiniment| a vous| a toi| pour tout| pour votre aide| very much| so much| a lot| for your help| schon| sehr| vielmals)?$/,
+  ] },
+  { intent: 'greeting', res: [
+    /^(salut|bonjour|bonsoir|coucou|bjr|slt|hello|hi|hey|hey there|good (morning|afternoon|evening)|hola|buenos dias|buenas tardes|buenas noches|hallo|guten (tag|morgen|abend)|servus)( (a tous|tout le monde|everyone|monsieur|madame))?$/,
+  ] },
+];
+export function detectSocialIntent(message) {
+  const t = String(message || '')
+    .toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || t.split(' ').length > 10) return null;    // une vraie demande ≠ politesse
+  for (const { intent, res } of SOCIAL_PATTERNS) {
+    if (res.some(re => re.test(t))) return intent;
+  }
+  return null;
+}
+
+// Réponses sociales : variantes courtes, localisées, {name} = nom de l'agent.
+// Pré-écrites (pas de génération) : gratuites, instantanées, et incapables
+// d'inventer un fait — la persona fine s'exprime sur les tours ancrés.
+const SOCIAL_REPLIES = {
+  fr: {
+    greeting:  ['Bonjour ! Que puis-je faire pour vous ?', 'Bonjour, bienvenue ! Dites-moi ce que vous cherchez.', 'Bonjour ! Je vous écoute.'],
+    wellbeing: ['Très bien, merci ! Et vous-même ? Dites-moi ce que je peux faire pour vous.', 'En pleine forme, merci de demander ! Que puis-je faire pour vous ?'],
+    thanks:    ['Avec plaisir !', 'Je vous en prie, c\'était un plaisir.', 'De rien — ravi d\'avoir pu aider.'],
+    bye:       ['Au revoir, et à bientôt !', 'Merci de votre visite — belle journée à vous !', 'À bientôt !'],
+    bot:       ['Bonne question : je suis {name}, un assistant numérique — pas un humain, mais je connais bien la maison. Que puis-je faire pour vous ?', 'Je suis {name}, l\'assistant virtuel d\'ici. Un programme, oui — mais nourri du vrai savoir de l\'équipe. Je vous écoute !'],
+  },
+  en: {
+    greeting:  ['Hello! How can I help you?', 'Hi, welcome! What are you looking for?'],
+    wellbeing: ['Doing great, thanks — and you? What can I do for you?'],
+    thanks:    ['My pleasure!', 'You\'re very welcome!'],
+    bye:       ['Goodbye, see you soon!', 'Thanks for stopping by — have a lovely day!'],
+    bot:       ['Good question — I\'m {name}, a digital assistant. Not a human, but I know this place well. How can I help?'],
+  },
+  es: {
+    greeting:  ['¡Hola! ¿En qué puedo ayudarle?', '¡Hola, bienvenido! Dígame qué busca.'],
+    wellbeing: ['¡Muy bien, gracias! ¿Y usted? ¿En qué puedo ayudarle?'],
+    thanks:    ['¡Con mucho gusto!', '¡De nada, ha sido un placer!'],
+    bye:       ['¡Hasta pronto!', 'Gracias por su visita — ¡que tenga un buen día!'],
+    bot:       ['Buena pregunta: soy {name}, un asistente digital — no soy humano, pero conozco bien la casa. ¿En qué puedo ayudarle?'],
+  },
+  de: {
+    greeting:  ['Hallo! Wie kann ich Ihnen helfen?', 'Hallo, willkommen! Was suchen Sie?'],
+    wellbeing: ['Sehr gut, danke — und Ihnen? Was kann ich für Sie tun?'],
+    thanks:    ['Sehr gerne!', 'Gern geschehen!'],
+    bye:       ['Auf Wiedersehen, bis bald!', 'Danke für Ihren Besuch — einen schönen Tag noch!'],
+    bot:       ['Gute Frage: Ich bin {name}, ein digitaler Assistent — kein Mensch, aber ich kenne das Haus gut. Wie kann ich helfen?'],
+  },
+};
+export function pickSocialReply(intent, { agentName = '', lang = 'fr', rand = Math.random } = {}) {
+  const byLang = SOCIAL_REPLIES[normLang(lang)] || SOCIAL_REPLIES.fr;
+  const list = byLang[intent] || SOCIAL_REPLIES.fr[intent] || [];
+  if (!list.length) return '';
+  const t = list[Math.floor(rand() * list.length) % list.length];
+  return t.replace(/\{name\}/g, agentName || 'l\'assistant').replace(/\s{2,}/g, ' ').trim();
 }
 
 // Génère le message d'accueil d'un agent (il « parle en premier »).
@@ -2546,6 +2646,34 @@ export async function handleAgentChat(request, env, agentId) {
     content: m.content,
   }));
 
+  // ── SA-12.0 — tour purement SOCIAL (bonjour, merci, au revoir, « t'es un
+  // robot ? ») : réponse chaleureuse immédiate. Aucune récupération, aucun
+  // crédit, aucun trou loggé — un « bonjour » ne mérite ni un appel IA ni un
+  // « je ne dispose pas de cette information ».
+  const socialIntent = detectSocialIntent(message);
+  if (socialIntent) {
+    const replyText = pickSocialReply(socialIntent, { agentName: agent.name, lang: respondLang });
+    try {
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content) VALUES (?, ?, ?, 'user', ?)"
+      ).bind(generateId(), sessionId, gate.tenant, message).run();
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content, citations) VALUES (?, ?, ?, 'agent', ?, '[]')"
+      ).bind(generateId(), sessionId, gate.tenant, replyText).run();
+    } catch (_) { /* best-effort */ }
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'chunk', text: replyText });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, citations: [], grounding: null, gapped: false, social: true });
+      });
+    }
+    return json({
+      session_id: sessionId, reply: replyText, citations: [],
+      grounding: null, gapped: false, social: true,
+    }, 200, origin);
+  }
+
   // ── Crédits (DORMANT — patron extract) : 1 crédit par question ──
   let credit = null;
   const sub = gate.claims?.sub;
@@ -2658,7 +2786,7 @@ export async function handleAgentChat(request, env, agentId) {
         try {
           rawFull = await _streamAgentReply(env, {
             engine: byok.engine, apiKey: byok.apiKey,
-            system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+            system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
             fallbackOnError: false, onChunk: (t) => emit.push(t),
           });
         } catch (e) {
@@ -2689,7 +2817,7 @@ export async function handleAgentChat(request, env, agentId) {
       engine: byok.engine, apiKey: byok.apiKey,
       system: sysMsg?.content,
       messages: convMsgs,
-      max_tokens: 900,
+      max_tokens: CHAT_MAX_TOKENS,
     })).trim();
     if (!raw) { await _refund(); return err('Réponse IA vide — réessayez.', 502, origin); }
 
@@ -2883,6 +3011,29 @@ export async function handlePublicAgentChat(request, env, slug) {
   // de l'agent. Le coffre n'est jamais traduit ; bge-m3 retrouve cross-langue.
   const respondLang = normLang(b?.lang, agent.config?.identity?.lang);
 
+  // ── SA-12.0 — tour purement SOCIAL du visiteur : réponse chaleureuse
+  // immédiate, zéro récupération, zéro crédit du propriétaire, zéro trou.
+  const socialIntent = detectSocialIntent(message);
+  if (socialIntent) {
+    const replyText = pickSocialReply(socialIntent, { agentName: agent.name, lang: respondLang });
+    try {
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content) VALUES (?, ?, ?, 'user', ?)"
+      ).bind(generateId(), sessionId, tenant, message).run();
+      await env.DB.prepare(
+        "INSERT INTO sa_messages (id, session_id, tenant_id, role, content) VALUES (?, ?, ?, 'agent', ?)"
+      ).bind(generateId(), sessionId, tenant, replyText).run();
+    } catch (_) { /* best-effort */ }
+    if (wantStream) {
+      return _sseChatResponse(origin, async (send) => {
+        send({ type: 'meta',  session_id: sessionId });
+        send({ type: 'chunk', text: replyText });
+        send({ type: 'done',  session_id: sessionId, reply: replyText, gapped: false, social: true });
+      });
+    }
+    return json({ session_id: sessionId, reply: replyText, gapped: false, social: true }, 200, origin);
+  }
+
   // Crédits débités sur le PROPRIÉTAIRE (lookup_hmac = tenant du lien), pas le
   // visiteur. Flag dormant : aucun blocage tant que enforce non activé.
   // Skippés en BYOK (le proprio paie son fournisseur, D3).
@@ -2977,7 +3128,7 @@ export async function handlePublicAgentChat(request, env, slug) {
         try {
           rawFull = await _streamAgentReply(env, {
             engine: byok?.engine, apiKey: byok?.apiKey,
-            system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+            system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
             fallbackOnError: true, onChunk: (t) => emit.push(t),
           });
         } catch (e) {
@@ -2999,7 +3150,7 @@ export async function handlePublicAgentChat(request, env, slug) {
 
     const raw = (await _agentLLM(env, {
       engine: byok?.engine, apiKey: byok?.apiKey,
-      system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+      system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
       fallbackOnError: true,
     })).trim();
     if (!raw) { await _refund(); return err('Réponse indisponible — réessayez.', 502, origin); }
@@ -3300,7 +3451,7 @@ export async function handleGoldenReplay(request, env, agentId) {
         const convMsgs = messages.filter(m => m.role !== 'system');
         const raw = (await _agentLLM(env, {
           engine: byok.engine, apiKey: byok.apiKey,
-          system: sysMsg?.content, messages: convMsgs, max_tokens: 900,
+          system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
         })).trim();
         // SA-8.0 — marqueur retiré avant comptage (il n'est jamais une citation).
         llmCites = extractCitations(splitGapReply(raw, fallbackText).text, hits.length).length;

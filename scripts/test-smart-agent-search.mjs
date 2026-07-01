@@ -13,7 +13,8 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
-  gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards }
+  gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
+  detectSocialIntent, pickSocialReply }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -624,6 +625,54 @@ console.log('── parseQuestions (SA-6.1 — interview libre) ──');
   check('plafonné à 8', parseQuestions(JSON.stringify(Array.from({ length: 12 }, (_, i) => `Question numéro ${i} ?`))).length === 8);
   check('JSON cassé → []', JSON.stringify(parseQuestions('pas du json')) === '[]');
   check('vide → []', JSON.stringify(parseQuestions('')) === '[]');
+}
+
+console.log('── SA-12.0 — socle savoir-être (sobriété + arbre d\'hypothèses) ──');
+{
+  const base = { agentName: 'A', mission: 'm', tone: 't', fallbackText: 'X', fiches: '[1] f', message: 'q', history: [] };
+  const sys = buildChatMessages(base)[0].content;
+  check('socle présent dans le system', sys.includes('SAVOIR-ÊTRE'));
+  check('sobriété : 1 à 3 phrases courtes', /1 à 3 phrases courtes/.test(sys));
+  check('zéro formule creuse', /N'hésitez pas/.test(sys));
+  check('arbre d\'hypothèses : UNE question discriminante, jamais deux',
+    /UNE seule question courte pour trancher/.test(sys) && /jamais deux d'affilée/.test(sys));
+  check('écoute de l\'émotion avant la demande', /exprime une émotion/.test(sys));
+  check('le socle vit dans le system, pas dans le tour utilisateur',
+    !buildChatMessages(base)[1].content.includes('SAVOIR-ÊTRE'));
+}
+
+console.log('── SA-12.0 — detectSocialIntent (tours sociaux, zéro IA) ──');
+{
+  check('bonjour → greeting', detectSocialIntent('Bonjour !') === 'greeting');
+  check('salut variantes → greeting', detectSocialIntent('salut') === 'greeting' && detectSocialIntent('Bonsoir') === 'greeting');
+  check('bonjour ça va → wellbeing (priorité)', detectSocialIntent('Bonjour, ça va ?') === 'wellbeing');
+  check('comment allez-vous → wellbeing', detectSocialIntent('Comment allez-vous ?') === 'wellbeing');
+  check('merci beaucoup → thanks', detectSocialIntent('Merci beaucoup !') === 'thanks');
+  check('ok merci → thanks', detectSocialIntent('ok merci') === 'thanks');
+  check('merci au revoir → bye (priorité)', detectSocialIntent('merci au revoir') === 'bye');
+  check('bonne journée → bye', detectSocialIntent('Bonne journée !') === 'bye');
+  check('t\'es un robot → bot', detectSocialIntent('T\'es un robot ?') === 'bot');
+  check('vous êtes une vraie personne → bot', detectSocialIntent('Vous êtes une vraie personne ou un robot ?') === 'bot');
+  check('are you a robot → bot', detectSocialIntent('Are you a robot?') === 'bot');
+  check('anglais/espagnol/allemand', detectSocialIntent('hello') === 'greeting'
+    && detectSocialIntent('muchas gracias') === 'thanks' && detectSocialIntent('guten Tag') === 'greeting');
+  check('salutation + vraie question → null (circuit ancré)',
+    detectSocialIntent('Bonjour, quels sont vos horaires ?') === null);
+  check('question métier → null', detectSocialIntent('Quel est le tarif étudiant ?') === null);
+  check('merci suivi d\'une question → null', detectSocialIntent('merci, et pour les groupes ?') === null);
+  check('vide/null → null', detectSocialIntent('') === null && detectSocialIntent(null) === null);
+}
+
+console.log('── SA-12.0 — pickSocialReply (variantes localisées) ──');
+{
+  check('greeting fr non vide', pickSocialReply('greeting', { lang: 'fr', rand: () => 0 }).length > 0);
+  check('bot injecte le nom de l\'agent',
+    pickSocialReply('bot', { agentName: 'Léa', lang: 'fr', rand: () => 0 }).includes('Léa'));
+  check('localisé en (greeting)', pickSocialReply('greeting', { lang: 'en', rand: () => 0 }).startsWith('Hello'));
+  check('langue inconnue → repli fr', pickSocialReply('thanks', { lang: 'xx', rand: () => 0 }) === pickSocialReply('thanks', { lang: 'fr', rand: () => 0 }));
+  check('rand pilote la variante',
+    pickSocialReply('greeting', { lang: 'fr', rand: () => 0 }) !== pickSocialReply('greeting', { lang: 'fr', rand: () => 0.9 }));
+  check('intent inconnu → chaîne vide', pickSocialReply('zzz', { lang: 'fr' }) === '');
 }
 
 console.log(`\n${passed}/${passed + failed} tests OK${failed ? ` — ${failed} ÉCHEC(S)` : ''}`);
