@@ -72,7 +72,7 @@
      du bas de l'écran et remplit toute la moitié basse. Mode sombre = présence
      franche ; mode clair = 20% (cf. html.light-mode). Appliqué UNIQUEMENT sur
      body (= dashboard app.html). */
-  --dash-glow: rgba(124,58,237,.16);
+  --dash-glow: rgba(124,58,237,.10);
 }
 
 /* ══ LIGHT MODE — surcharge variables ══════════════════════════ */
