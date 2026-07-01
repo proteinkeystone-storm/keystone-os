@@ -283,8 +283,8 @@ ${editorBlock}
       <h3>Souveraineté & infrastructure</h3>
       <p>Vos données résident en Europe, sur l’infrastructure <b>Cloudflare (région WEUR)</b>. Le chiffrement au repos est en <b>AES-256-GCM</b>, l’authentification repose sur des jetons <b>JWT signés</b>. Pas de revente de données, pas de traceurs publicitaires, pas de Google Analytics.</p>
       <p>Côté intelligence artificielle, la stratégie est hybride et transparente : des modèles souverains exécutés sur Cloudflare Workers AI pour l’usage courant, et des modèles haut de gamme via votre propre clé (BYOK) quand vous le décidez. Détails dans notre <a href="/securite">page Sécurité</a>.</p>
-      <h3>Statut bêta</h3>
-      <p>Keystone OS est en phase de test ouverte. L’accès est disponible sans carte bancaire. Le périmètre fonctionnel évolue régulièrement ; nous documentons les engagements de confiance sur les pages dédiées : <a href="/securite">Sécurité</a>, <a href="/confidentialite">Confidentialité</a>, <a href="/dpa">Sous-traitants (DPA)</a> et <a href="/reversibilite">Réversibilité des données</a>.</p>`,
+      <h3>Accès au service</h3>
+      <p>Keystone OS est accessible par abonnement, avec un essai gratuit de 7 jours. Le périmètre fonctionnel évolue régulièrement ; nous documentons les engagements de confiance sur les pages dédiées : <a href="/securite">Sécurité</a>, <a href="/confidentialite">Confidentialité</a>, <a href="/dpa">Sous-traitants (DPA)</a> et <a href="/reversibilite">Réversibilité des données</a>.</p>`,
   bandTitle: 'Une question sur l’éditeur ou la conformité ?',
   bandText: 'Écrivez-nous, on répond du lundi au samedi, de 10h à 19h.',
 }));
@@ -361,15 +361,15 @@ PAGES.push(trustPage({
   body: `      <h3>1. Objet</h3>
       <p>Les présentes CGU régissent l’accès et l’utilisation de Keystone OS, suite d’outils métier modulaires éditée par ${esc(CO.editor)}.</p>
       <h3>2. Accès au service</h3>
-      <p>L’accès se fait via une licence activée par e-mail, sans carte bancaire pendant la phase bêta. Vous êtes responsable de la confidentialité de votre accès.</p>
+      <p>L’accès se fait via une licence activée par e-mail, avec un essai gratuit de 7 jours ; au-delà, un abonnement actif est requis. Vous êtes responsable de la confidentialité de votre accès.</p>
       <h3>3. Usage acceptable</h3>
       <ul>
         <li>Ne pas utiliser le service à des fins illégales, trompeuses ou portant atteinte aux droits de tiers.</li>
         <li>Ne pas tenter de contourner la sécurité, de surcharger l’infrastructure ou d’en extraire massivement les données.</li>
         <li>Vous restez responsable des contenus que vous publiez et des données que vous collectez via vos outils.</li>
       </ul>
-      <h3>4. Disponibilité (bêta)</h3>
-      <p>Le service est fourni en l’état durant la phase de test ; le périmètre fonctionnel et la disponibilité peuvent évoluer. Nous nous efforçons d’assurer la continuité et de prévenir des changements majeurs.</p>
+      <h3>4. Disponibilité</h3>
+      <p>Le service est fourni en l’état ; le périmètre fonctionnel et la disponibilité peuvent évoluer. Nous nous efforçons d’assurer la continuité et de prévenir des changements majeurs.</p>
       <h3>5. Propriété intellectuelle</h3>
       <p>Le service et ses composants restent la propriété de ${esc(CO.editor)}. Vos contenus restent les vôtres ; voir <a href="/reversibilite">Réversibilité</a> pour leur export.</p>
       <h3>6. Responsabilité</h3>
@@ -387,11 +387,11 @@ PAGES.push(trustPage({
   slug: 'cgv', crumbLabel: 'CGV',
   eyebrow: 'Légal',
   title: 'Conditions générales de vente (CGV) | Keystone OS',
-  desc: 'Conditions générales de vente de Keystone OS : abonnements, paiement via Stripe, gestion via le portail client, droit de rétractation et résiliation. Service gratuit pendant la bêta.',
+  desc: 'Conditions générales de vente de Keystone OS : abonnements, paiement via Stripe, gestion via le portail client, droit de rétractation et résiliation. Essai gratuit de 7 jours.',
   h1a: 'Conditions générales', h1b: 'de vente.',
-  lead: 'Les conditions applicables aux abonnements payants. Pendant la phase bêta, l’accès est gratuit et sans carte bancaire ; ces CGV s’appliqueront à l’ouverture des paiements.',
+  lead: 'Les conditions applicables aux abonnements. Chaque offre débute par un essai gratuit de 7 jours ; au-delà, l’accès nécessite un abonnement actif.',
   body: `      <h3>1. Offres & abonnements</h3>
-      <p>Keystone OS est proposé sous forme d’abonnements donnant accès à un ensemble d’outils. Les prix et le détail des offres sont indiqués sur la page <a href="/#plans">Tarifs</a>. Pendant la bêta, le service est accessible gratuitement.</p>
+      <p>Keystone OS est proposé sous forme d’abonnements donnant accès à un ensemble d’outils. Les prix et le détail des offres sont indiqués sur la page <a href="/#plans">Tarifs</a>. Chaque abonnement débute par un essai gratuit de 7 jours.</p>
       <h3>2. Paiement</h3>
       <p>Les paiements sont opérés via <b>Stripe</b> (prestataire de paiement sécurisé). Aucune coordonnée bancaire complète n’est stockée par l’éditeur.</p>
       <h3>3. Gestion de l’abonnement</h3>
@@ -402,7 +402,7 @@ PAGES.push(trustPage({
       <p>En cas de résiliation, vous pouvez exporter vos données avant suppression — voir <a href="/reversibilite">Réversibilité</a>.</p>
       <h3>6. Droit applicable</h3>
       <p>Droit français. Tout litige relève des tribunaux français à défaut de solution amiable.</p>
-      <div class="note"><b>Bêta.</b> Tant que la facturation n’est pas activée, aucune somme n’est prélevée. Cette page sera complétée des montants exacts à l’ouverture des paiements.</div>`,
+      <div class="note"><b>Essai gratuit.</b> Chaque abonnement débute par 7 jours d’essai. Vous pouvez résilier à tout moment depuis le portail client Stripe.</div>`,
   bandTitle: 'Une question sur la facturation ?',
   bandText: 'Écrivez-nous, nous détaillons les offres et le fonctionnement.',
 }));
@@ -474,7 +474,7 @@ PAGES.push(trustPage({
       <p>Vous pouvez récupérer vos données à tout moment dans un format structuré — voir <a href="/reversibilite">Réversibilité</a>.</p>
       <h3>Signaler une vulnérabilité</h3>
       <p>Vous pensez avoir trouvé une faille ? Écrivez à <a href="mailto:${CO.email}">${CO.email}</a>. Notre politique est publiée dans <a href="/.well-known/security.txt">/.well-known/security.txt</a>. Nous accueillons les signalements responsables et nous engageons à répondre.</p>
-      <div class="note"><b>Transparence.</b> Keystone OS est en phase bêta et n’affiche pas de certification (ex. ISO 27001, SOC 2) qu’il ne détient pas. Les mesures ci-dessus reflètent l’architecture réellement en place.</div>`,
+      <div class="note"><b>Transparence.</b> Keystone OS n’affiche pas de certification (ex. ISO 27001, SOC 2) qu’il ne détient pas. Les mesures ci-dessus reflètent l’architecture réellement en place.</div>`,
   bandTitle: 'Une question de sécurité ou un audit ?',
   bandText: 'Écrivez-nous : nous documentons volontiers notre architecture.',
 }));
@@ -607,7 +607,7 @@ Keystone OS est un système d'exploitation modulaire pour TPE et indépendants :
 - IA : stratégie hybride — modèles souverains sur Cloudflare Workers AI pour l'usage courant, modèles haut de gamme via la clé de l'utilisateur (BYOK). Les agents répondent uniquement depuis un savoir validé (pas d'invention).
 
 ## Statut
-Phase bêta ouverte, accès sans carte bancaire. Le périmètre évolue régulièrement.
+Service actif par abonnement, avec un essai gratuit de 7 jours. Le périmètre évolue régulièrement.
 
 ## Outils (détail)
 ${TOOLS.map(([s, n, d]) => `### ${n}\n${d}\nPage : ${ORIGIN}/outils/${s}`).join('\n\n')}
