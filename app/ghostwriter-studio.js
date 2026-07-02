@@ -608,14 +608,42 @@ async function _handleGenerate() {
   }
 }
 
+// Copie robuste : clipboard API, puis repli execCommand (Safari/WebView où
+// writeText rejette en silence). Feedback TOUJOURS visible — l'ancien code
+// échouait sans un mot (pas de catch), impossible à diagnostiquer pour l'user.
+async function _copyText(text, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {}
+  if (!ok) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (_) {}
+  }
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = ok ? '✓ Copié' : '✗ Échec copie';
+    setTimeout(() => { btn.textContent = orig; }, 1800);
+  }
+  if (!ok) _toast('Copie refusée par le navigateur — sélectionnez le texte manuellement', true);
+  return ok;
+}
+
 function _copyVariant(idx, btn) {
   const v = _variants?.[idx];
-  if (!v?.text) return;
-  navigator.clipboard?.writeText(v.text)?.then(() => {
-    const orig = btn.textContent;
-    btn.textContent = '✓ Copié';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  });
+  if (!v?.text) {
+    // Cartes affichées mais état perdu (ne devrait pas arriver) : dire
+    // pourquoi plutôt que d'ignorer le clic en silence.
+    _toast('Variante introuvable — relancez une génération', true);
+    return;
+  }
+  _copyText(v.text, btn);
 }
 
 function _saveVariantToLibrary(idx, btn) {
@@ -642,11 +670,7 @@ function _saveVariantToLibrary(idx, btn) {
 function _libraryCopy(uid, btn) {
   const it = _loadLibrary().find(x => x.uid === uid);
   if (!it?.text) return;
-  navigator.clipboard?.writeText(it.text)?.then(() => {
-    const orig = btn.textContent;
-    btn.textContent = '✓ Copié';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  });
+  _copyText(it.text, btn);
 }
 
 function _libraryLoad(uid) {
