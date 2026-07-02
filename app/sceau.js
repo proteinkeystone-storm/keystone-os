@@ -41,6 +41,7 @@ let _rec = null;           // session MediaRecorder en cours
 let _recTimer = null;
 let _fileSel = null;       // File choisi (mode fichier)
 let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse) | 'email'
+let _codeStyle = 'fort';   // 'fort' (16 car. ~80 bits) | 'mots' (4 mots dictables)
 let _draft = {};           // valeurs saisies, préservées entre les re-render (bascules de mode)
 
 // Capture les champs du formulaire de création AVANT un re-render (sinon une
@@ -96,6 +97,43 @@ function _genPassphrase() {
   let out = '';
   for (let i = 0; i < 16; i++) { out += A[bytes[i] % A.length]; if (i % 4 === 3 && i < 15) out += '-'; }
   return out; // ex. K7PQ-9XMR-4RTV-8WNH
+}
+
+// Variante « facile à dicter » : 4 mots français + un nombre
+// (ex. tigre-banane-orage-77). Moins d'entropie que le code fort
+// (~39 bits vs ~80) mais le verrou OPRF 3-essais protège l'attaque
+// EN LIGNE — le compromis est assumé et affiché à l'utilisateur.
+// Mots courts, sans accent, phonétiquement distincts (dictée téléphone).
+const _WORDS = (
+  'tigre lion loup ours aigle renard cerf lapin chat chien cheval vache ' +
+  'mouton chevre canard poule merle pigeon dauphin requin baleine truite crabe corail ' +
+  'banane pomme poire cerise fraise prune melon citron orange mangue kiwi raisin ' +
+  'tomate carotte radis oignon salade menthe basilic thym persil safran vanille cacao ' +
+  'orage nuage pluie neige soleil lune etoile comete aurore brume vent tonnerre ' +
+  'fleuve riviere lac ocean plage dune falaise volcan colline vallee foret prairie ' +
+  'chene sapin bouleau tilleul cedre palmier bambou roseau fougere lichen mousse cactus ' +
+  'rose tulipe jasmin lilas violette iris muguet pivoine lotus orchidee lavande mimosa ' +
+  'rubis saphir topaze jade ambre opale perle quartz granit marbre cristal cuivre ' +
+  'bronze argent nickel platine cobalt titane carbone soufre helium table chaise bureau ' +
+  'lampe miroir tapis rideau coussin vase cadre horloge bougie livre cahier crayon ' +
+  'stylo gomme regle ciseaux pinceau palette encre papier carton violon piano flute ' +
+  'harpe tambour trompette guitare banjo cymbale cloche sifflet accordeon navire voilier barque ' +
+  'radeau ancre voile phare quai ponton cargo fregate pirogue wagon tunnel viaduc ' +
+  'sentier chemin route carrefour panneau trottoir pont moulin grange hangar cabane chalet ' +
+  'igloo tente refuge manoir donjon tourelle citadelle boussole sextant carte globe jumelles ' +
+  'loupe telescope cadran levier poulie ressort engrenage farine levure brioche galette tarte ' +
+  'gateau sirop miel confiture beurre fromage yaourt velours soie coton laine feutre ' +
+  'cuir satin denim tweed chanvre zebre girafe koala panda lemur jaguar puma ' +
+  'lynx bison morse otarie manchot cigale fourmi abeille bourdon papillon libellule scarabee ' +
+  'grillon luciole mante ruche galaxie planete meteore eclipse zenith equateur tropique boreal ' +
+  'austral cosmos orbite fusee'
+).split(' ');
+
+function _genWordsPassphrase() {
+  // 256 mots pile → 1 octet aléatoire = tirage parfaitement uniforme
+  const b = crypto.getRandomValues(new Uint8Array(4));
+  const num = 10 + (b[3] % 90);
+  return `${_WORDS[b[0]]}-${_WORDS[b[1]]}-${_WORDS[b[2]]}-${num}`; // ex. tigre-banane-orage-77
 }
 
 // ── API ─────────────────────────────────────────────────────────
@@ -309,6 +347,15 @@ function _renderCreate(main) {
           <button type="button" class="sceau-mode ${_unlockMode === 'qa' ? 'on' : ''}" data-act="unlock-qa">${icon('help-circle', 15)} Question / réponse</button>
           <button type="button" class="sceau-mode ${_unlockMode === 'email' ? 'on' : ''}" data-act="unlock-email">${icon('mail', 15)} Code par email</button>
         </div>
+        ${_unlockMode === 'code' ? `
+          <div class="sceau-modesw" style="margin-top:8px;">
+            <button type="button" class="sceau-mode ${_codeStyle === 'fort' ? 'on' : ''}" data-act="code-fort">${icon('lock', 15)} Sécurité maximale</button>
+            <button type="button" class="sceau-mode ${_codeStyle === 'mots' ? 'on' : ''}" data-act="code-mots">${icon('mic', 15)} Facile à dicter</button>
+          </div>
+          ${_codeStyle === 'mots' ? `
+            <p class="sceau-note">${icon('mic', 14)} Code en <strong>3 mots + un nombre</strong> (ex. tigre-banane-orage-77) — parfait à dicter au téléphone, sans risque de faute de frappe. Un cran moins résistant que le code long, mais le verrou des <strong>3 essais</strong> protège contre les tentatives en ligne.</p>
+          ` : ''}
+        ` : ''}
         ${_unlockMode === 'qa' ? `
           <label class="sceau-label" for="sceau-q">Question (visible par le destinataire)</label>
           <input id="sceau-q" class="sceau-input" type="text" maxlength="200" placeholder="ex. Le nom de notre premier client ?" value="${_esc(d.question || '')}">
@@ -577,7 +624,7 @@ function _onClick(e) {
   if (act === 'reload-tok') return _loadTokens();
   if (act === 'tab-secrets') { _view = 'list'; _load(); return; }
   if (act === 'tab-tokens')  { _view = 'tokens'; _loadTokens(); return; }
-  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _draft = {}; _view = 'create'; _render(); return; }
+  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = 'create'; _render(); return; }
   if (act === 'newtoken') return _createToken();
   if (act === 'mode-text')  { _captureDraft(); _createMode = 'text';  _recBlob = null; _fileSel = null; _render(); return; }
   if (act === 'mode-vocal') { _captureDraft(); _createMode = 'vocal'; _fileSel = null; _render(); return; }
@@ -590,6 +637,8 @@ function _onClick(e) {
   if (act === 'unlock-code')  { _captureDraft(); _unlockMode = 'code';  _render(); return; }
   if (act === 'unlock-qa')    { _captureDraft(); _unlockMode = 'qa';    _render(); return; }
   if (act === 'unlock-email') { _captureDraft(); _unlockMode = 'email'; _render(); return; }
+  if (act === 'code-fort') { _captureDraft(); _codeStyle = 'fort'; _render(); return; }
+  if (act === 'code-mots') { _captureDraft(); _codeStyle = 'mots'; _render(); return; }
   if (act === 'qr-export') return _exportQr(t.dataset.url || _result?.url, t.dataset.fmt, t);
   if (act === 'qr-share')  return _shareQr(t.dataset.url || _result?.url, t);
   if (act === 'tolist') { _view = _tokenTarget ? 'tokens' : 'list'; _result = null; _tokenTarget = null; (_view === 'tokens' ? _loadTokens : _load)(); return; }
@@ -601,7 +650,7 @@ function _onClick(e) {
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
   if (act === 'nfc-url') return _writeNfcUrl(t.dataset.url, _root.querySelector('#sceau-rowqr-msg'));
-  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _draft = {}; _view = 'create'; _render(); return; }
+  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = 'create'; _render(); return; }
   if (act === 'tok-link') return _copy(`${API_BASE}/s/t/${tid}`, t);
   if (act === 'tok-qr')   return _toggleRowQr(`${API_BASE}/s/t/${tid}`, tid);
   if (act === 'tok-burn') return _burnToken(tid);
@@ -653,7 +702,7 @@ async function _create() {
     passphrase = _genPassphrase();
     oprfInput = passphrase;
   } else {
-    passphrase = _genPassphrase();
+    passphrase = (_codeStyle === 'mots') ? _genWordsPassphrase() : _genPassphrase();
     oprfInput = passphrase;
   }
 
