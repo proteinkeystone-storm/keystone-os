@@ -1621,10 +1621,11 @@ function _renderCustomDimsForm(d, isPx) {
   `;
 }
 
-// ── Zone 1c : PLIAGE (P3 — dépliants print papier) ────────────
-// Visible dès qu'un support print_paper avec dimensions est choisi.
-// Le savoir des plis (volets inégaux des roulés, croisé, éco…) vit
-// dans kodex-template-geometry ; ici on ne fait que choisir.
+// ── Zone 1c : PLIAGE (P3 — dépliants UNIQUEMENT) ──────────────
+// Visible seulement quand un DÉPLIANT de la bibliothèque est choisi
+// (décision Stéphane juil. 2026 : pas de pliage sur une enveloppe ou
+// une carte de visite). Le savoir des plis (volets inégaux des
+// roulés, croisé, éco…) vit dans kodex-template-geometry.
 function _renderDestFold() {
   const slot = _root?.querySelector('[data-slot="dest-fold"]');
   if (!slot) return;
@@ -1632,7 +1633,8 @@ function _renderDestFold() {
   const std = d.standard;
   const f = std?.format_fini || {};
   const hasDims = f.width_mm && f.height_mm;
-  if (d.category !== 'print_paper' || !d.support_id || !hasDims) {
+  const isDepliant = typeof d.support_id === 'string' && d.support_id.startsWith('folded-');
+  if (d.category !== 'print_paper' || !isDepliant || !hasDims) {
     slot.innerHTML = '';
     return;
   }
