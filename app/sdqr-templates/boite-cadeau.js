@@ -36,13 +36,18 @@ const TEMPLATE = {
       id: 'validite', type: 'text', label: 'Validité',
       placeholder: 'Ex: Valable jusqu\'au 14/02', span: 'full',
     },
+    // Défauts alignés sur le design de la carte (previewMini) : boîte violette,
+    // ruban vert. L'ancienne palette rouge (#7c1d1d/#e11d48) créait deux designs
+    // contradictoires entre la carte et l'aperçu « Au scan ». N'affecte que le
+    // pré-remplissage des NOUVELLES créations (les QR existants gardent leurs
+    // couleurs stockées).
     {
       id: 'couleur_boite', type: 'color', label: 'Couleur de la boîte',
-      default: '#7c1d1d',
+      default: '#4b3f86',
     },
     {
       id: 'couleur_ruban', type: 'color', label: 'Couleur du ruban',
-      default: '#e11d48',
+      default: '#7cc23f',
     },
     {
       id: 'logo_url', type: 'image', label: 'Logo (optionnel)',
@@ -50,7 +55,7 @@ const TEMPLATE = {
     },
     {
       id: 'accent_color', type: 'color', label: 'Couleur d\'accent',
-      default: '#e11d48',
+      default: '#7cc23f',
     },
   ],
 

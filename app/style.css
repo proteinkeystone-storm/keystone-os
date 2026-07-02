@@ -10696,7 +10696,14 @@ html.light-mode .sdqr-content--create .sdqr-preview-card .sdqr-btn--ghost:hover 
   background: rgba(108,108,245,.10);
   animation: sdqrExpGlow 2.4s ease-in-out infinite;
 }
-.sdqr-fam-pill.sdqr-fam-pill--exp.is-active { animation: none; }
+/* Actif : réaffirme le bloc indigo plein — le fond lavande ci-dessus (déclaré
+   plus bas dans la cascade que .is-active) l'écrasait et laissait le texte
+   blanc illisible sur fond clair. */
+.sdqr-fam-pill.sdqr-fam-pill--exp.is-active {
+  animation: none;
+  background: var(--gold, #6c6cf5);
+  border-color: var(--gold, #6c6cf5);
+}
 @media (prefers-reduced-motion: reduce) {
   .sdqr-fam-pill.sdqr-fam-pill--exp { animation: none; box-shadow: 0 0 0 1px rgba(108,108,245,.4) inset; }
 }

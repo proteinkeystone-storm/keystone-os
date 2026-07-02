@@ -1587,13 +1587,14 @@ function _renderTemplateCards(root) {
   const cgIcon     = getTemplateIconSvg('concierge') || '🛎️';
   const cgTier     = getTemplate('concierge').tier_required || 'pro';
 
-  // Sprint B — 2 cartes phares Concierge SYNTHÉTIQUES (pleine largeur) en
-  // tête : « général » (verticale generic, source keyform) PUIS « VEFA »
-  // (verticale immo, source inline/vefa). Les deux partagent template_id
-  // 'concierge' ; on les distingue par data-cg-vertical + concierge_source.
+  // Sprint B — carte phare Concierge SYNTHÉTIQUE (pleine largeur) en tête :
+  // « général » (verticale generic, source keyform). La carte « Concierge
+  // immobilier (VEFA) » a été retirée du sélecteur (2026-07-02) : plus de
+  // CRÉATION de concierge immo depuis l'UI, mais toute la chaîne immo
+  // (concierge_source inline/vefa, éditeur nesté, relai VEFA Studio, rendu
+  // Worker des QR existants) est CONSERVÉE — un concierge VEFA vit en prod.
   // Suivent les autres templates (hors concierge) en grille normale.
   const cgGeneralActive = _creating.template_id === 'concierge' && _creating.concierge_source === 'keyform';
-  const cgImmoActive    = _creating.template_id === 'concierge' && _creating.concierge_source !== 'keyform';
 
   const descriptors = [
     {
@@ -1601,12 +1602,6 @@ function _renderTemplateCards(root) {
       label: 'Concierge (général)',
       description: 'Tous métiers — accueil, offres, FAQ et chat qui répond depuis vos infos validées. 1 QR = 1 mini-site de réponses.',
       tier: cgTier, icon: cgIcon, isActive: cgGeneralActive, previewMini: null,
-    },
-    {
-      templateId: 'concierge', cgVertical: 'immo', featured: true,
-      label: 'Concierge immobilier (VEFA)',
-      description: 'Promotion immobilière — programme, lots et configurations, FAQ et chat qui répond depuis un bloc validé. 1 QR = 1 programme complet.',
-      tier: cgTier, icon: cgIcon, isActive: cgImmoActive, previewMini: null,
     },
     ...listTemplates().filter(t => t.id !== 'concierge').map(t => ({
       templateId: t.id, cgVertical: null, featured: false,
