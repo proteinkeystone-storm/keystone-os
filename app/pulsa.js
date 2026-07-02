@@ -173,9 +173,12 @@ export function openPulsa(opts = {}) {
   if (_root) return;
   _initFromStorage();
   _buildShell();
-  // Petit écran : on démarre l'aperçu replié pour laisser la place à l'éditeur
-  // (le bouton « œil » de la barre du haut le rouvre en surcouche).
-  if (window.innerWidth <= 1280) _root.classList.add('pulsa-preview-collapsed');
+  // Petit écran : aperçu replié pour laisser la place à l'éditeur (le bouton
+  // « œil » de la barre du haut le rouvre en surcouche). Suivi AU RESIZE
+  // aussi : sans ça, ouvrir en grand puis rétrécir la fenêtre laissait la
+  // surcouche fixe (media ≤1280px) ouverte PAR-DESSUS l'éditeur.
+  if (_previewMq.matches) _root.classList.add('pulsa-preview-collapsed');
+  _previewMq.addEventListener('change', _syncPreviewToViewport);
   _renderMain();
   _renderRail();
   // V1.5 — tire les Key Form livrés au client (réception transparente).
@@ -196,9 +199,18 @@ export function closePulsa() {
   clearTimeout(_previewTimer);
   _previewReady = false;     // la nouvelle iframe re-fera le handshake à la réouverture
   _previewPending = null;
+  _previewMq.removeEventListener('change', _syncPreviewToViewport);
   _root.remove();
   _root = null;
   _fieldTypeMenu = null;
+}
+
+// Aperçu ↔ viewport : replié sous 1281px (surcouche), déplié au-dessus
+// (colonne). Même seuil que le @media de pulsa.css (pulsa-preview-col fixed).
+const _previewMq = window.matchMedia('(max-width: 1280px)');
+function _syncPreviewToViewport(e) {
+  if (!_root) return;
+  _root.classList.toggle('pulsa-preview-collapsed', e.matches);
 }
 
 /**
