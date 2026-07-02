@@ -326,12 +326,12 @@ Tu parles EN DERNIER, une fois que toute l'équipe s'est exprimée : exploite la
 - Si le brief demande un LIVRABLE GÉNÉRATIF (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, des options à départager…) → tu produis une IDÉATION RICHE ET ORGANISÉE (champ "ideation"). C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite.
 - Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "ideation": null.
 
-ÉTAPE 2 — SI IDÉATION : compile + organise + complète + sélectionne
-- RÉCUPÈRE tous les candidats concrets proposés par les agents dans le débat.
-- ORGANISE-les en 4 à 5 DIRECTIONS thématiques claires (ex. "Executive / Premium", "AI-native / futuriste", "Luxe tech / 1 mot", "Control Center / opérationnel").
-- COMPLÈTE chaque direction pour atteindre 6 à 10 candidats (génère les manquants toi-même, de grande qualité).
-- SÉLECTIONNE un TOP 8-10 transversal, les plus forts, chacun avec une justification courte.
-- Total visé : 30 à 50 candidats. Sois généreux et créatif, comme un directeur de création.
+ÉTAPE 2 — SI IDÉATION : TRANCHE (refonte 2026-07 — une synthèse qui liste tout sans choisir est un échec)
+- CHOISIS 1 à 3 candidats retenus MAXIMUM (le "top"). Pour chacun, une rationale de 15-25 mots qui dit (a) pourquoi il BAT les autres et (b) à QUI on le doit — nomme l'agent ou le croisement d'agents (ex. "l'insight de Consumer Insight croisé au levier de Growth Hacker").
+- Puis EXACTEMENT 2 groupes, pas plus :
+  · {"direction": "Réserve", "items": [5 à 8 candidats solides mais battus, les meilleurs restants]}
+  · {"direction": "Écartés", "items": [3 à 5 entrées au format "Candidat — pourquoi il perd, en 5-10 mots"]}
+- INTERDIT : plus de 3 retenus, inventaire exhaustif, direction sans perdant nommé. Tu es un directeur de création qui DÉCIDE, pas un greffier qui compile.
 
 CONTRAINTES DE FORMAT STRICTES
 - Sortie JSON STRICT, AUCUN texte avant ou après.
@@ -356,8 +356,10 @@ CONTRAINTES DE FORMAT STRICTES
   }
 - "ideation" : rempli SI le brief appelle un livrable génératif, sinon null.
   Chaque "item" et "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Keystone Nexus", "Cortex", "Pulse OS"…), JAMAIS une description abstraite ("un nom évoquant la performance").
-  4-5 groups, 6-10 items chacun, top de 8-10. Ne renvoie jamais une demande de nom sans une foule de noms concrets.
-- 3 opportunities, 2 risks, 3 next_actions (toujours, ils contextualisent l'idéation).
+  top de 1 à 3 (LE choix), 2 groups exactement (Réserve, Écartés).
+- "positioning" = LE VERDICT en une phrase assumée ("On part sur X parce que Y") — jamais un résumé neutre.
+- Brief NON génératif (ideation: null) : "positioning" = LA recommandation TRANCHÉE (un parti pris, pas un panorama), "opportunities" = les 3 raisons qui la portent (créditées aux agents), "risks" = les 2 garde-fous à poser.
+- 3 opportunities, 2 risks, 3 next_actions (toujours, ils contextualisent la décision).
 - Deadlines RÉALISTES : entre J+7 et J+90 par rapport à aujourd'hui.
 - Pas de jargon corporate, pas de "synergie", pas de "leverage".
 - Ton EXÉCUTIF (note pour direction, pas pour étudiant).`;
@@ -828,7 +830,7 @@ LES 8 AGENTS (id — expertise) :
 - devil — Contradicteur : challenge les hypothèses faibles, les clichés, le consensus mou.
 
 RÈGLES STRICTES
-- Choisis 4 à 6 agents au total (strategic compte dedans, déjà inclus).
+- Choisis 4 à 5 agents au total (strategic compte dedans, déjà inclus). 6 UNIQUEMENT si le brief est réellement multi-facettes — un comité resserré débat mieux et coûte moins.
 - Inclus TOUJOURS au moins une voix critique : devil OU data.
 - Choisis pour la complémentarité des angles utiles au brief, jamais pour le nombre. Un sujet ciblé mérite un petit comité affûté.
 - N'inclus jamais d'agent hors de la liste ci-dessus.
@@ -1278,6 +1280,26 @@ export async function handleBrainstormingAgentRespond(request, env) {
       const localHistory = [...history];
       let turnsDone = 0;
       let completeReason = 'single';
+      // Refonte 2026-07 — clôture anticipée : 2 tours consécutifs redondants
+      // (Jaccard mots porteurs ≥ .55 avec un tour déjà joué) = la table n'apporte
+      // plus rien → on passe direct à la synthèse, les appels restants sont
+      // économisés. Anti-gaspillage, jamais déclenché par UN seul doublon.
+      let redundantStreak = 0;
+      const _tokSet = (s) => new Set(String(s || '').toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
+        .match(/[a-z0-9]{4,}/g) || []);
+      const _isRedundant = (txt) => {
+        const a = _tokSet(txt);
+        if (a.size < 6) return false;
+        for (const t of localHistory) {
+          if (!t || t.agent_id === 'user' || !t.content) continue;
+          const b = _tokSet(t.content);
+          if (!b.size) continue;
+          let inter = 0;
+          for (const w of a) if (b.has(w)) inter++;
+          if (inter / (a.size + b.size - inter) >= 0.55) return true;
+        }
+        return false;
+      };
       // Compteur budget IA : on accumule les tokens des tours Workers AI
       // sur toute la session puis on écrit UNE fois en fin de stream (évite
       // une écriture D1 dans la boucle chaude qui ralentirait le live).
@@ -1326,10 +1348,12 @@ export async function handleBrainstormingAgentRespond(request, env) {
           const systemPrompt = agent.systemPrompt(cognitive_mode, effectiveBrief, agentList, previousTurn, previousAgent);
 
           const messages = [{ role: 'system', content: systemPrompt }];
-          // On donne au LLM uniquement les 3 derniers tours (sinon il
-          // se disperse) — la réaction au précédent est forcée via
-          // le system prompt.
-          const recent = localHistory.slice(-3);
+          // Refonte 2026-07 (retour Stéphane « chacun parle dans son coin ») :
+          // l'agent voit TOUT le tour de table en cours (8×3 phrases ≈ 700
+          // mots, tenable), plus seulement les 3 derniers tours — le 7e
+          // intervenant ne découvrait jamais les 3 premiers, impossible de
+          // construire ensemble.
+          const recent = localHistory.slice(-12);
           for (const turn of recent) {
             if (!turn || !turn.content) continue;
             messages.push({
@@ -1344,6 +1368,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
           // amorces creuses + obligation de friction. Cf. AGENT_BEHAVIOR_DIRECTIVES.
           const isFirstTurn = localHistory.length === 0;
           const isStrategic = currentAgentId === 'strategic';
+          // Refonte 2026-07 — REBOND FORCÉ SUR CONTENU CITÉ : la vague
+          // invitation « tu peux interpeller » était ignorée par Mistral
+          // (même leçon que la directive de langue souple du Smart Agent :
+          // deviner + IMPOSER, jamais suggérer). On met la citation exacte
+          // du tour précédent SOUS LES YEUX de l'agent avec obligation d'y
+          // répondre en phrase 1.
+          const rebound = (previousTurn && previousAgent)
+            ? `RÉAGIS D'ABORD À CECI — ${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 220)} »\nTa PHRASE 1 le PROLONGE ou le CONTREDIT en nommant ${previousAgent.name} (jamais de validation polie). Ensuite seulement, ton angle.\n\n`
+            : '';
           let triggerContent;
           if (ideation) {
             // ── MODE IDÉATION : l'équipe PRODUIT des candidats et converge ──
@@ -1359,8 +1392,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - Phrase 3 : relance 2 NOUVEAUX candidats nommés dans la meilleure direction.
 - INTERDIT : validation polie, théorie abstraite.`;
             } else {
-              triggerContent = `Demande d'IDÉATION. Tu interviens comme ${agent.name} (${agent.role}). MAX 3 phrases :
-- DÉMARRE en réagissant DIRECTEMENT à un candidat déjà sur la table : nomme l'agent et conteste ou prolonge sa proposition ("Le nom de tel agent est trop générique" / "Je pars du sien et je pousse plus loin").
+              triggerContent = `${rebound}Demande d'IDÉATION. Tu interviens comme ${agent.name} (${agent.role}). MAX 3 phrases :
 - Puis propose 3 CANDIDATS concrets et NOMMÉS vus depuis TON prisme de ${agent.role} (ton angle colore le STYLE des propositions).
 - INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, valider poliment, paraphraser. DONNE DE VRAIS NOMS, directement utilisables.`;
             }
@@ -1379,7 +1411,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - INTERDIT : citer un agent par son nom, "X a raison", validation polie, résumé creux.`;
           } else {
             const directive = AGENT_BEHAVIOR_DIRECTIVES[currentAgentId] || { angle: 'apporte ton angle propre', forbid: '' };
-            triggerContent = `Tu interviens comme ${agent.name} (${agent.role}). CONTRAINTES ABSOLUES :
+            triggerContent = `${rebound}Tu interviens comme ${agent.name} (${agent.role}). CONTRAINTES ABSOLUES :
 
 MAX 3 PHRASES (90 mots TOTAL). Pas de salutation, pas de résumé, pas de liste à puces.
 
@@ -1518,6 +1550,9 @@ POSTURE
           // les chunks ont accumulé)
           send({ type: 'agent_end', agent_id: currentAgentId, full_text: cleanedText });
 
+          // Clôture anticipée — testée AVANT le push (comparaison aux tours déjà joués)
+          redundantStreak = _isRedundant(cleanedText) ? redundantStreak + 1 : 0;
+
           // Ajout à l'historique local pour le prochain tour
           localHistory.push({
             agent_id : currentAgentId,
@@ -1544,17 +1579,31 @@ POSTURE
             completeReason = 'max_turns';
             break;
           }
+          if (redundantStreak >= 2 && turnsDone >= 3) {
+            completeReason = 'converged';   // la table tourne en rond → synthèse directe, appels économisés
+            break;
+          }
           if (shouldAutoPause(localHistory, { maxAgentTurns: tableCap })) {
             completeReason = 'auto_pause';
             break;
           }
         }
 
+        // Refonte 2026-07 — tour de table ACCOMPLI pour le comité CHOISI
+        // (fix du bug « la synthèse ne se fait plus seule » : le front
+        // comparait à 8 en dur alors que le comité Auto fait 4-6).
+        const roundComplete = completeReason === 'converged'
+          || ((completeReason === 'max_turns' || completeReason === 'auto_pause') && turnsDone >= tableCap);
+
         // Sprint 4 — Extraction des insights émergents en background.
         // Sprint 7.11 — DOIT être envoyé AVANT l'event 'complete' : le
         // frontend exit sa boucle SSE dès qu'il reçoit 'complete', donc
         // tout event envoyé après est ignoré côté client.
-        if (turnsDone >= 2) {
+        // Refonte 2026-07 (économie) : quand le tour est COMPLET, la synthèse
+        // (déclenchée auto par le front) refait ce travail en mieux → on
+        // économise cet appel lourd. Les insights ne servent que les pauses
+        // intermédiaires, où aucune synthèse ne suit.
+        if (turnsDone >= 2 && !roundComplete) {
           try {
             const insights = await _extractInsights(env, brief, localHistory);
             if (insights.length > 0) {
@@ -1568,7 +1617,7 @@ POSTURE
           await recordUsage(env, 'brainstorming', { inTokens: sessionInTok, outTokens: sessionOutTok });
         }
 
-        send({ type: 'complete', reason: completeReason, turns: turnsDone });
+        send({ type: 'complete', reason: completeReason, turns: turnsDone, roster_n: rosterN, round_complete: roundComplete });
       } catch (e) {
         send({ type: 'error', message: `Stream error: ${e?.message || e}` });
       } finally {

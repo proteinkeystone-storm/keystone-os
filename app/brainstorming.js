@@ -71,6 +71,22 @@ const TYPEWRITER_CATCHUP_CHARS     = 2;     // 2 chars/tick = 40 chars/sec
 const ROUNDTABLE_FULL_TURNS = 8;
 // État de session courante (transient — Sprint 5 ajoutera la persistance)
 let _currentSession = null;
+// Refonte 2026-07 (D) — relance ciblée post-synthèse : prochain envoi adressé
+// à UN agent précis (1 appel) au lieu de relancer tout le tour de table.
+let _followUpAgent = null;
+// Refonte 2026-07 (B) — coach de brief : un brief trop maigre gaspille ~10
+// appels IA pour un débat creux. Une passe GRATUITE (heuristique) propose de
+// l'étoffer UNE fois ; « Lancer quand même » reste possible.
+let _briefCoachDismissed = false;
+function _digChipsHTML() {
+  const roster = (Array.isArray(_currentSession?.roster) && _currentSession.roster.length)
+    ? _currentSession.roster
+    : ['strategic', 'creative', 'growth', 'consumer', 'data', 'devil'];
+  return roster.filter(id => id !== 'synth').map(id => {
+    const a = getAgent(id);
+    return `<button type="button" class="wr-dig-chip" data-dig="${id}">${_esc(a?.name || id)}</button>`;
+  }).join('');
+}
 
 // Cheminement de l'écran de préparation : une SEULE étape de config visible à
 // la fois (0 = mode de réflexion, 1 = comité d'agents, 2 = amorce optionnelle).
@@ -535,6 +551,34 @@ function _bootAgents(panel) {
 // ════════════════════════════════════════════════════════════════
 // SUBMIT — l'utilisateur valide son brief
 // ════════════════════════════════════════════════════════════════
+// Refonte 2026-07 (B) — coach de brief : panneau léger AU-DESSUS de la saisie.
+// Zéro appel IA : trois chips ajoutent les éléments qui font un bon débat
+// (cible, objectif, contrainte). « Lancer quand même » respecte l'utilisateur.
+function _showBriefCoach(panel, input) {
+  _removeBriefCoach(panel);
+  const host = input.closest('.wr-inputbar') || input.parentElement;
+  if (!host || !host.parentElement) return;
+  const div = document.createElement('div');
+  div.className = 'wr-brief-coach';
+  div.innerHTML = `
+    <div class="wr-brief-coach-txt">${icon('sparkles', 14)} Un brief précis = un débat qui vaut ses crédits. Ajoutez en un clic :</div>
+    <div class="wr-brief-coach-chips">
+      <button type="button" data-add=" Pour [qui : cible précise].">+ Pour qui</button>
+      <button type="button" data-add=" Objectif : [vendre / se différencier / lancer…].">+ Objectif</button>
+      <button type="button" data-add=" Contrainte : [budget / délai / ton…].">+ Contrainte</button>
+      <button type="button" class="wr-brief-coach-go" data-go>Lancer quand même</button>
+    </div>`;
+  host.parentElement.insertBefore(div, host);
+  div.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
+    input.value = (input.value || '').trim() + b.dataset.add;
+    input.focus();
+    const p = input.value.indexOf('[');
+    if (p >= 0) { try { input.setSelectionRange(p, input.value.indexOf(']') + 1); } catch (_) {} }
+  }));
+  div.querySelector('[data-go]').addEventListener('click', () => { _removeBriefCoach(panel); _submit(panel); });
+}
+function _removeBriefCoach(panel) { panel.querySelector('.wr-brief-coach')?.remove(); }
+
 async function _submit(panel) {
   if (!_currentSession) return;
 
@@ -547,6 +591,16 @@ async function _submit(panel) {
 
   // Mémorise l'état AVANT mutation : true au tout premier brief (→ passe IA comité).
   const wasStarted = _currentSession.started;
+
+  // Refonte 2026-07 (B) — coach de brief GRATUIT avant de dépenser ~10 appels :
+  // un brief court sans cible ni objectif produit un débat creux. On propose
+  // UNE fois de l'étoffer (chips d'ajout rapide) ; jamais bloquant.
+  if (!wasStarted && !_briefCoachDismissed && text.length < 60) {
+    _briefCoachDismissed = true;   // une seule fois — le prochain envoi part
+    _showBriefCoach(panel, input);
+    return;
+  }
+  _removeBriefCoach(panel);
 
   // Sprint 7.12 — garde-fou plancher comité (manuel) avant de lancer la séance.
   if (!_currentSession.started && _rosterEnabled() && _currentSession.rosterMode === 'manual'
@@ -589,7 +643,11 @@ async function _submit(panel) {
     if (!wasStarted && _rosterEnabled() && _currentSession.rosterMode !== 'manual') {
       await _pickRosterAuto(panel);
     }
-    await _callOrchestration(panel);
+    // Refonte 2026-07 (D) — relance ciblée : la question part vers UN agent
+    // (1 appel), pas vers l'orchestrateur complet. Consommé puis remis à null.
+    const digTarget = (wasStarted && _followUpAgent) ? _followUpAgent : null;
+    _followUpAgent = null;
+    await _callOrchestration(panel, digTarget);
   } catch (e) {
     _appendErrorMessage(panel, e?.message || 'Erreur réseau');
   } finally {
@@ -852,10 +910,10 @@ async function _pickRosterAuto(panel) {
   }
 }
 
-async function _callOrchestration(panel) {
+async function _callOrchestration(panel, singleAgentId = null) {
   const url = `${_apiBase()}/api/brainstorming/agent-respond`;
   const payload = {
-    agent_id      : 'auto',                     // → orchestrateur Sprint 2
+    agent_id      : singleAgentId || 'auto',    // agent SEUL (relance ciblée) ou orchestrateur
     brief         : _currentSession.brief,
     cognitive_mode: _currentSession.mode,
     target_network: _currentSession.target_network || null,
@@ -1004,8 +1062,14 @@ async function _callOrchestration(panel) {
 
         case 'complete': {
           complete = true;
-          const isRoundComplete = (evt.reason === 'auto_pause' || evt.reason === 'max_turns')
-                                  && (evt.turns || 0) >= ROUNDTABLE_FULL_TURNS;
+          // Refonte 2026-07 — fix « la synthèse ne se fait plus seule » : le
+          // worker dit désormais lui-même si le tour de table du comité CHOISI
+          // est accompli (round_complete, comité 4-8, y c. clôture anticipée
+          // 'converged'). L'ancienne comparaison à 8 en dur reste en repli
+          // (worker pas encore redéployé).
+          const isRoundComplete = evt.round_complete === true
+                                  || ((evt.reason === 'auto_pause' || evt.reason === 'max_turns')
+                                      && (evt.turns || 0) >= ROUNDTABLE_FULL_TURNS);
           if (isRoundComplete && !_currentSession?.synthesis) {
             // Sprint 7.1 — tour de table complet : auto-synthèse
             _waitForTypewriterFlush().then(() => {
@@ -1586,6 +1650,12 @@ ${ideationSection}
         <ol class="wr-synthesis-actions-list">${actionList || '<li>—</li>'}</ol>
       </section>
 
+      <section class="wr-synthesis-section wr-synthesis-dig">
+        <div class="wr-synthesis-label">Creuser un point précis</div>
+        <div class="wr-dig-chips">${_digChipsHTML()}</div>
+        <p class="wr-dig-hint">Un seul agent répond, en connaissance de tout le débat — bien plus léger qu'un nouveau tour de table.</p>
+      </section>
+
       <footer class="wr-synthesis-foot">
         <span>Généré par Brainstorming · Keystone OS</span>
       </footer>
@@ -1597,6 +1667,19 @@ ${ideationSection}
   drawer.querySelector('[data-act="close"]').addEventListener('click', () => _closeSynthesisDrawer(panel));
   drawer.querySelector('[data-act="reprendre"]').addEventListener('click', () => _closeSynthesisDrawer(panel));
   drawer.querySelector('[data-act="export-pdf"]').addEventListener('click', () => _exportSynthesisPDF(synthesis, brief));
+  // Refonte 2026-07 (D) — relance CIBLÉE : un chip = UN agent interrogé (1 appel,
+  // pas 8). Le drawer se ferme, la saisie attend la question pour cet agent.
+  drawer.querySelectorAll('.wr-dig-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      _followUpAgent = chip.dataset.dig;
+      _closeSynthesisDrawer(panel);
+      const input = panel.querySelector('#wr-input');
+      if (input) {
+        input.placeholder = `Votre question pour ${chip.textContent.trim()}…`;
+        input.focus();
+      }
+    });
+  });
   // Esc
   const onKey = (e) => { if (e.key === 'Escape') { _closeSynthesisDrawer(panel); document.removeEventListener('keydown', onKey); } };
   document.addEventListener('keydown', onKey);
@@ -2155,10 +2238,12 @@ function _renderCenterConfig(panel) {
 
   root.innerHTML = `
     <div class="wr-setup-head">
-      <div class="wr-setup-title">Préparez la séance</div>
-      <div class="wr-setup-sub">Réglez l'angle et le comité, piochez une amorce si besoin, puis posez votre brief ci-dessous.</div>
+      <div class="wr-setup-title">Posez votre sujet, l'équipe s'occupe du reste</div>
+      <div class="wr-setup-sub">Écrivez votre brief ci-dessous et lancez — l'IA compose le comité adapté au sujet. Réglages optionnels si vous voulez affiner.</div>
     </div>
-    <div class="wr-setup-steps" data-active="${_setupStep}">
+    <details class="wr-setup-fold">
+      <summary class="wr-setup-fold-sum">${icon('settings', 14)} Affiner la séance — mode, comité, amorces <span class="wr-setup-step-opt">optionnel</span></summary>
+    <div class="wr-setup-steps is-open" data-active="${_setupStep}">
       <div class="wr-setup-step" data-step="0">
         <div class="wr-setup-step-label"><span class="wr-setup-step-num">1</span> Mode de réflexion</div>
         <div class="wr-setup-modes">${modeChips}</div>
@@ -2182,13 +2267,10 @@ function _renderCenterConfig(panel) {
         <div class="wr-seed">${_seedPickerHTML(curMode)}</div>
       </div>
     </div>
-    <div class="wr-setup-nav">
-      <button type="button" class="wr-setup-nav-btn wr-setup-prev">${icon('chevron-left', 15)}<span>Précédent</span></button>
-      <span class="wr-setup-nav-count"></span>
-      <button type="button" class="wr-setup-nav-btn wr-setup-next"><span>Suivant</span>${icon('chevron-right', 15)}</button>
-      <button type="button" class="wr-setup-nav-btn wr-setup-skip" title="Passer l'amorce et écrire votre brief directement"><span>Passer</span>${icon('arrow-right', 15)}</button>
-    </div>
+    </details>
   `;
+  // Refonte 2026-07 (friction) : le cheminement 3 étapes obligatoire est
+  // remplacé par cet accordéon replié — brief d'abord, réglages pour qui veut.
 
   // Étape 1 — sélection du mode (réutilise _applyMode, qui re-render le centre)
   root.querySelectorAll('.wr-setup-mode').forEach(btn => {
