@@ -1992,9 +1992,11 @@ html.light-mode .wr-brief-coach-chips button { color: #1c1c2e; background: rgba(
 html.light-mode .wr-dig-chip { color: #1c1c2e; background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12); }
 
 /* ═══ Ergonomie 2026-07 (retour Stéphane) ═══ */
-/* Liseré accent sur le champ de brief — l'œil tombe dessus d'un coup (patron Sentinel) */
-.wr-input-box .wr-input { border: 2px solid rgba(139,124,246,.75) !important; border-radius: 14px; }
-.wr-input-box .wr-input:focus { box-shadow: 0 0 0 3px rgba(139,124,246,.22); }
+/* Liseré accent sur le RECTANGLE conteneur du brief (pas le champ intérieur,
+   qui reste nu) — l'œil tombe dessus d'un coup (patron Sentinel). */
+.wr-input-box { border: 2px solid rgba(139,124,246,.75) !important; }
+.wr-input-box:focus-within { box-shadow: 0 0 0 3px rgba(139,124,246,.22); }
+.wr-input-box .wr-input { border: none !important; box-shadow: none !important; outline: none; }
 /* « Affiner la séance » déménage sur la ligne source → le résumé du fold central disparaît */
 .wr-setup-fold-sum { display: none; }
 .wr-setup-fold:not([open]) { border: none; background: transparent; padding: 0; }
