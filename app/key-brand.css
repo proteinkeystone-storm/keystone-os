@@ -1,0 +1,131 @@
+/* ═══════════════════════════════════════════════════════════════
+   KEY BRAND — Pad O-BRD-001 · styles (préfixe kb-)
+   Règle du musée : chrome quasi monochrome (surfaces/bordures --ws-*),
+   la SEULE couleur vive = --kb-accent (couleur primaire de la charte
+   ouverte, posée par key-brand.js ; repli = accent workspace neutre).
+   Le shell (.ws-app/.ws-topbar/.ws-main) vient de workspace.css.
+   ═══════════════════════════════════════════════════════════════ */
+
+.kb-main{
+  --kb-bg:var(--ws-bg); --kb-panel:var(--ws-surface); --kb-ink:var(--ws-text);
+  --kb-muted:var(--ws-text-soft); --kb-line:var(--ws-border);
+  /* --kb-accent est héritée de .kb-app (posée en JS) ; repli neutre. */
+  background:var(--kb-bg); color:var(--kb-ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
+  overflow-y:auto; padding:32px clamp(16px,5vw,56px) 64px;
+}
+.kb-app{ --kb-accent:var(--ws-accent); }
+
+/* ── Indicateur d'enregistrement (topbar) ── */
+.kb-savestate{display:inline-flex;align-items:center;margin-right:6px}
+.kb-save{display:inline-flex;align-items:center;gap:5px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;font-size:12px;color:var(--ws-text-soft);white-space:nowrap}
+.kb-save.is-saved{opacity:.85}
+.kb-save.is-saving{opacity:.6}
+.kb-save.is-error{color:#f59e0b}
+
+/* ── En-tête & bibliothèque ── */
+.kb-lib{max-width:980px;margin:0 auto}
+.kb-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:0 0 28px;flex-wrap:wrap}
+.kb-head h1{font:900 28px/1.1 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;letter-spacing:-0.03em;margin:0}
+.kb-sub{color:var(--kb-muted);margin:6px 0 0;font-size:14.5px;max-width:560px}
+.kb-cap-note{color:var(--kb-muted);font-size:12.5px;margin:18px 2px 0;text-align:right}
+
+.kb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.kb-card{display:flex;align-items:stretch;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;overflow:hidden;transition:border-color .15s}
+.kb-card:hover{border-color:var(--kb-accent)}
+.kb-card-open{flex:1;display:flex;align-items:center;gap:12px;padding:18px;background:none;border:0;color:var(--kb-ink);cursor:pointer;text-align:left;min-width:0}
+.kb-card-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.kb-card-dot-ghost{background:none;border:1.5px dashed var(--kb-line)}
+.kb-card-name{font-weight:700;font-size:15.5px;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-card-meta{margin-left:auto;flex-shrink:0}
+.kb-card-acts{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 10px;border-left:1px solid var(--kb-line)}
+.kb-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--kb-line);color:var(--kb-muted)}
+.kb-badge.is-live{color:var(--ws-success);border-color:color-mix(in srgb,var(--ws-success) 40%,transparent)}
+
+/* Vide bibliothèque : galerie avant vernissage, pas une base vide. */
+.kb-lib-empty{max-width:520px;margin:9vh auto 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.kb-lib-empty h2{font-weight:900;font-size:24px;line-height:1.15;letter-spacing:-0.02em;margin:8px 0 0}
+.kb-lib-empty p{color:var(--kb-muted);font-size:14.5px;margin:0 0 6px}
+.kb-lib-empty-visual{display:flex;gap:10px}
+
+/* ── Boutons ── */
+.kb-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--kb-line);border-radius:12px;background:var(--kb-panel);color:var(--kb-ink);font-weight:600;font-size:14.5px;letter-spacing:-0.01em;cursor:pointer;transition:filter .15s,border-color .15s}
+.kb-btn:hover{filter:brightness(1.1)}
+.kb-btn.primary{background:var(--kb-accent);border-color:transparent;color:#fff}
+.kb-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--kb-line);border-radius:10px;background:none;color:var(--kb-muted);cursor:pointer;transition:border-color .15s,color .15s}
+.kb-iconbtn:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
+.kb-iconbtn.danger:hover{border-color:var(--ws-danger);color:var(--ws-danger)}
+
+/* ── Workspace charte ── */
+.kb-chart{max-width:840px;margin:0 auto}
+.kb-chart-head{margin-bottom:10px}
+.kb-link-back{display:inline-flex;align-items:center;gap:4px;background:none;border:0;color:var(--kb-muted);cursor:pointer;font-size:14px;padding:0;margin-bottom:14px}
+.kb-link-back:hover{color:var(--kb-ink)}
+.kb-identity{display:flex;flex-direction:column;gap:2px}
+/* Édition inline : les champs identité SONT le titre du document. */
+.kb-name-input{width:100%;background:none;border:0;outline:none;color:var(--kb-ink);font:900 clamp(26px,4.5vw,36px)/1.1 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;letter-spacing:-0.03em;padding:2px 0;border-bottom:1.5px solid transparent;transition:border-color .15s}
+.kb-name-input:hover{border-bottom-color:var(--kb-line)}
+.kb-name-input:focus{border-bottom-color:var(--kb-accent)}
+.kb-baseline-input{width:100%;background:none;border:0;outline:none;color:var(--kb-muted);font-weight:400;font-size:15px;line-height:1.4;padding:4px 0;border-bottom:1.5px solid transparent;transition:border-color .15s}
+.kb-baseline-input::placeholder{color:var(--kb-muted);opacity:.55}
+.kb-baseline-input:hover{border-bottom-color:var(--kb-line)}
+.kb-baseline-input:focus{border-bottom-color:var(--kb-accent)}
+
+/* ── Onglets ── */
+.kb-tabs{display:flex;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--kb-line);overflow-x:auto;scrollbar-width:none}
+.kb-tabs::-webkit-scrollbar{display:none}
+.kb-tab{display:inline-flex;align-items:center;gap:7px;background:none;border:0;border-bottom:2px solid transparent;color:var(--kb-muted);font-weight:600;font-size:14px;padding:10px 12px;margin-bottom:-1px;cursor:pointer;white-space:nowrap;transition:color .15s}
+.kb-tab:hover{color:var(--kb-ink)}
+.kb-tab.on{color:var(--kb-ink);border-bottom-color:var(--kb-accent)}
+.kb-tabpane{padding:34px 0 0}
+
+/* ── Spécimens fantômes (vide premium) ── */
+.kb-ghost{max-width:560px;margin:4vh auto 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.kb-ghost h3{font-weight:900;font-size:21px;line-height:1.15;letter-spacing:-0.02em;margin:10px 0 0}
+.kb-ghost p{color:var(--kb-muted);font-size:14.5px;line-height:1.55;margin:0 0 8px}
+
+/* Logo : zone de dépôt en damier de transparence. */
+.kb-ghost-logo{width:100%;display:flex;justify-content:center}
+.kb-ghost-drop{width:min(320px,80%);aspect-ratio:16/9;border:1.5px dashed var(--kb-line);border-radius:16px;display:flex;align-items:center;justify-content:center;color:var(--kb-muted);opacity:.8;
+  background-image:linear-gradient(45deg,var(--kb-line) 25%,transparent 25%,transparent 75%,var(--kb-line) 75%),linear-gradient(45deg,var(--kb-line) 25%,transparent 25%,transparent 75%,var(--kb-line) 75%);
+  background-size:18px 18px;background-position:0 0,9px 9px;background-blend-mode:soft-light}
+
+/* Couleurs : pastilles grisées aux bons emplacements. */
+.kb-ghost-swatches{display:flex;gap:12px;justify-content:center}
+.kb-ghost-swatches span{width:52px;height:52px;border-radius:14px;border:1.5px dashed var(--kb-line)}
+.kb-ghost-swatches span:first-child{background:var(--kb-line);border-style:solid;opacity:.6}
+
+/* Typo : grand Aa + lignes squelettes. */
+.kb-ghost-type{display:flex;flex-direction:column;align-items:center;gap:10px}
+.kb-ghost-aa{font:900 64px/1 -apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;letter-spacing:-0.04em;color:var(--kb-line)}
+.kb-ghost-line{height:9px;border-radius:5px;background:var(--kb-line);opacity:.55}
+.kb-ghost-line.w70{width:190px}
+.kb-ghost-line.w50{width:130px}
+
+/* Règles : grille de vignettes fantômes barrées. */
+.kb-ghost-rules{display:grid;grid-template-columns:repeat(3,64px);gap:10px;justify-content:center}
+.kb-ghost-rules span{position:relative;width:64px;height:48px;border:1.5px dashed var(--kb-line);border-radius:10px;overflow:hidden}
+.kb-ghost-rules span::after{content:"";position:absolute;left:-8%;right:-8%;top:50%;height:1.5px;background:var(--kb-line);transform:rotate(-24deg)}
+
+/* Branding : scène vide. */
+.kb-ghost-stage{width:min(360px,84%);aspect-ratio:16/9;border:1.5px solid var(--kb-line);border-radius:18px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--kb-line) 24%,transparent))}
+.kb-ghost-dot{width:16px;height:16px;border-radius:50%;border:1.5px dashed var(--kb-line);display:inline-block}
+.kb-ghost-dot.big{width:44px;height:44px}
+
+/* ── États & toast ── */
+.kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
+.kb-state-err{color:var(--ws-danger)}
+.kb-toast{position:absolute;bottom:26px;left:50%;transform:translate(-50%,12px);background:var(--ws-surface);border:1px solid var(--ws-border);color:var(--ws-text);padding:11px 18px;border-radius:12px;font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:5;max-width:min(480px,88vw);text-align:center}
+.kb-toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ── Responsive (mobile d'abord en consultation) ── */
+@media (max-width: 640px){
+  .kb-main{padding:20px 14px 48px}
+  .kb-head{margin-bottom:18px}
+  .kb-card-acts{flex-direction:row;align-items:center;border-left:0;border-top:0;padding:0 8px}
+  .kb-card{flex-wrap:nowrap}
+  .kb-save{display:none} /* topbar étroite : l'autosave reste silencieux */
+  .kb-ghost{margin-top:2vh}
+  .kb-ghost-rules{grid-template-columns:repeat(3,56px)}
+  .kb-ghost-rules span{width:56px;height:42px}
+}

@@ -1,0 +1,44 @@
+{
+  "title": "Key Brand",
+  "tldr": "Key Brand transforme votre charte graphique en mini-site interactif : logo téléchargeable au bon format, couleurs copiables avec tests de contraste, typographies à l'essai, règles d'usage générées avec votre logo. Une charte par marque, partageable d'un lien — toujours à jour, sans PDF.",
+  "key_points": [
+    "Créer une charte : bouton « Nouvelle charte », donnez-lui le nom de la marque — la vôtre ou celle d'un client (jusqu'à 30 chartes par compte).",
+    "Cinq onglets composent la charte : Logo, Couleurs, Typographies, Règles et Branding. Remplissez seulement ce que vous avez — la charte publiée ne montre jamais de section vide.",
+    "Tout s'enregistre automatiquement pendant que vous travaillez (mention « Enregistré » en haut à droite).",
+    "Dupliquez une charte existante pour démarrer la suivante plus vite (pratique pour les graphistes multi-clients).",
+    "Aucune intelligence artificielle : Key Brand ne consomme jamais de crédits, tout est inclus.",
+    "À venir au fil des mises à jour : dépôt du logo avec aperçus et téléchargements à la carte, atelier couleurs et contrastes, testeur de typographies, interdits auto-générés, et la page publique à partager d'un lien ou d'un QR."
+  ],
+  "faq": [
+    {
+      "q": "À qui s'adresse Key Brand ?",
+      "a": "Aux entreprises qui veulent une charte simple et pratique (un logo, des couleurs, une police suffisent), comme aux graphistes et agences qui livrent des chartes complètes à leurs clients. La même charte s'adapte : elle ne montre que ce que vous y mettez."
+    },
+    {
+      "q": "Est-ce que ça remplace mon PDF de charte graphique ?",
+      "a": "C'est le but. Le PDF vieillit dès qu'il est envoyé ; votre charte Key Brand reste à jour en permanence, et ceux qui la consultent copient les codes couleur et téléchargent le logo directement, sans vous redemander les fichiers. Un export PDF restera disponible pour ceux qui en exigent un."
+    },
+    {
+      "q": "Combien de chartes puis-je créer ?",
+      "a": "Jusqu'à 30 par compte, quelle que soit votre formule. De quoi couvrir votre marque et celles de vos clients."
+    },
+    {
+      "q": "Key Brand consomme-t-il mes crédits IA ?",
+      "a": "Non, jamais. Key Brand n'utilise aucune intelligence artificielle : les aperçus, les tests de contraste et les téléchargements sont calculés directement dans votre navigateur."
+    },
+    {
+      "q": "Qui peut voir mes chartes ?",
+      "a": "Vous seul, tant que vous ne publiez pas. La page publique à partager (lien discret non référencé, ou protégé par un code) arrive dans une prochaine mise à jour."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Nouvelle charte", "desc": "Créer la charte d'une marque" },
+    { "keys": "Clic sur le nom", "desc": "Renommer directement (enregistré tout seul)" },
+    { "keys": "Échap", "desc": "Revenir aux chartes, puis au tableau de bord" }
+  ],
+  "updated_at": "2026-07-03",
+  "guide": {
+    "title": "Pourquoi une charte graphique vivante ?",
+    "body": "<p>Une charte graphique classique est un PDF de 20 à 80 pages : superbe le jour de la livraison, introuvable six mois plus tard, périmé au premier changement de couleur. Et pendant ce temps, on continue de vous demander « le logo en HD » et « les codes couleur » par e-mail.</p><p>Key Brand prend le problème autrement : votre charte devient un <strong>outil</strong> que l'on manipule. L'imprimeur télécharge lui-même le logo au format exact dont il a besoin. Le webmaster copie le code couleur en un clic. Le stagiaire voit immédiatement ce qui est interdit — avec votre vrai logo en exemple. Et quand votre identité évolue, tout le monde voit la dernière version, sans renvoyer un seul fichier.</p><p>Commencez simplement : créez la charte, nommez-la, et remplissez ce que vous avez. Un logo et trois couleurs suffisent pour une charte utile — les ateliers s'enrichissent à chaque mise à jour de Keystone.</p>"
+  }
+}

@@ -358,6 +358,33 @@
         "ephemere",
         "confidentiel"
       ]
+    },
+    {
+      "id": "O-BRD-001",
+      "padKey": null,
+      "title": "Key Brand",
+      "subtitle": "Votre charte graphique vivante — interactive, à jour, partageable d’un lien",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "Key Brand remplace le PDF de charte graphique par un mini-site interactif : le logo téléchargeable au format et à la taille qu'on vous demande, les couleurs copiables en un clic avec leurs tests de contraste, les typographies à l'essai avec votre propre texte, et les règles d'usage générées avec VOTRE logo. Créez une charte par marque — la vôtre ou celles de vos clients — et partagez-la d'un lien ou d'un QR, toujours à jour. Zéro IA, zéro crédit : tout est inclus.",
+      "icon": "keybrand",
+      "ai_optimized": null,
+      "isNew": true,
+      "published": false,
+      "tags": [
+        "artefact",
+        "communication",
+        "charte",
+        "marque",
+        "logo",
+        "couleurs",
+        "typographie",
+        "branding",
+        "graphiste",
+        "identite"
+      ]
     }
   ]
 }

@@ -26,6 +26,7 @@ import { openSmartAgent }                        from './smart-agent.js';
 import { openKeynapse }                          from './keynapse.js';
 import { openSentinel }                          from './sentinel.js';
 import { openSceau }                             from './sceau.js';
+import { openKeyBrand }                          from './key-brand.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -2221,6 +2222,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-Keyn-001') { openKeynapse(opts); return; }       // Keynapse — constellation de notes en bulles (KN-0)
     if (padId === 'O-GEO-001')  { openSentinel(opts); return; }       // Sentinel — audit web avec suivi (S0)
     if (padId === 'O-SEC-001')  { openSceau(opts); return; }          // Sceau — secret usage-unique scellé E2E+OPRF (S3)
+    if (padId === 'O-BRD-001')  { openKeyBrand(opts); return; }       // Key Brand — charte graphique vivante, zéro IA (KB-0)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(); return; }
     if (padId === 'A-COM-002') { openKodex(); return; }

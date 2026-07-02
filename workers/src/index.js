@@ -158,6 +158,11 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
          sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
 
+// ── Key Brand — charte graphique vivante (Pad O-BRD-001 · KB-0) ──
+import { handleKeyBrandHealth, handleKeyBrandList, handleKeyBrandCreate,
+         handleKeyBrandGet, handleKeyBrandUpdate, handleKeyBrandDuplicate,
+         handleKeyBrandDelete } from './routes/key-brand.js';
+
 // ── Router ────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -180,6 +185,17 @@ export default {
     const method = request.method;
 
     try {
+      // ── Key Brand (Pad O-BRD-001 · KB-0) — charte graphique vivante ──
+      if (path === '/api/keybrand/health' && method === 'GET')  return handleKeyBrandHealth(request, env);
+      if (path === '/api/keybrand/charts' && method === 'GET')  return handleKeyBrandList(request, env);
+      if (path === '/api/keybrand/charts' && method === 'POST') return handleKeyBrandCreate(request, env);
+      const kbDup = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/duplicate$/);
+      if (kbDup && method === 'POST') return handleKeyBrandDuplicate(request, env, kbDup[1]);
+      const kbChart = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)$/);
+      if (kbChart && method === 'GET')    return handleKeyBrandGet(request, env, kbChart[1]);
+      if (kbChart && method === 'PUT')    return handleKeyBrandUpdate(request, env, kbChart[1]);
+      if (kbChart && method === 'DELETE') return handleKeyBrandDelete(request, env, kbChart[1]);
+
       // ── Keynapse (Pad O-Keyn-001 · KN-0) — bulles de connaissances ──
       if (path === '/api/keynapse/health'  && method === 'GET')  return handleKeynapseHealth(request, env);
       if (path === '/api/keynapse/state'   && method === 'GET')  return handleKeynapseState(request, env);

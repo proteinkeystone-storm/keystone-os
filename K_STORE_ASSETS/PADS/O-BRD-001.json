@@ -1,0 +1,15 @@
+{
+  "id": "O-BRD-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "Key Brand",
+  "subtitle": "Votre charte graphique vivante — interactive, à jour, partageable d’un lien",
+  "category": "COM",
+  "icon": "keybrand",
+  "ai_optimized": null,
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nKey Brand est la charte graphique qu'on manipule au lieu de la lire : un mini-site interactif par marque (5 onglets — Logo, Couleurs, Typographies, Règles, Branding), multi-chartes (max 30 par compte), avec page publique /b/:slug (KB-6). Le moteur (app/key-brand.js front, workers/src/routes/key-brand.js backend) est isolé — préfixes kb- (CSS/DOM) et kb_ (D1/localStorage), routes /api/keybrand/. ZÉRO IA : tout le calcul (aperçus, contrastes WCAG, exports PNG, interdits auto-générés) est client-side — aucun métrage de crédits. Géométrie variable : le rendu ne montre que ce qui existe (mode réduit TPE / mode complet graphiste). Cadrage : KEY_BRAND_BRIEF.md ; exécution : KEY_BRAND_SPRINTS.md.\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "Key Brand remplace le PDF de charte graphique par un mini-site interactif : le logo téléchargeable au format et à la taille qu'on vous demande, les couleurs copiables en un clic avec leurs tests de contraste, les typographies à l'essai avec votre propre texte, et les règles d'usage générées avec VOTRE logo. Créez une charte par marque — la vôtre ou celles de vos clients — et partagez-la d'un lien ou d'un QR, toujours à jour. Zéro IA, zéro crédit : tout est inclus."
+}
