@@ -406,11 +406,6 @@ function _renderShell() {
           ${_iconSvg('arrow-up')}
         </button>
       </div>
-      <div class="wr-pills">
-        <button class="wr-pill" data-pill="Plus premium">Plus premium</button>
-        <button class="wr-pill" data-pill="Plus disruptif">Plus disruptif</button>
-        <button class="wr-pill" data-pill="Focus rétention">Focus rétention</button>
-      </div>
     </div>
 
     <!-- Right signals panel -->
@@ -810,7 +805,7 @@ function _renderSourceControl(panel) {
 
   root.innerHTML = `
     <details class="wr-source-add">
-      <summary class="wr-source-toggle">${_iconSvg('plus')}<span>Ajouter une source</span><em>lien, texte ou .md / .txt / .csv — optionnel</em></summary>
+      <summary class="wr-source-toggle">${_iconSvg('plus')}<span>Ajouter une source</span><em>lien, texte ou .md / .txt / .csv — optionnel</em><button type="button" class="wr-refine-btn" id="wr-refine-btn">${_iconSvg('settings')}&nbsp;Affiner la séance</button></summary>
       <div class="wr-source-panel">
         <div class="wr-source-line">
           <input type="url" class="wr-source-url" placeholder="https://… (article, page web)" autocomplete="off" spellcheck="false"/>
@@ -829,6 +824,16 @@ function _renderSourceControl(panel) {
 }
 
 function _wireSourceControl(panel, root) {
+  // Ergonomie 2026-07 — « Affiner la séance » vit sur la LIGNE SOURCE (le
+  // résumé du fold central est masqué en CSS). Le bouton est DANS un
+  // <summary> : on bloque le toggle du details source.
+  root.querySelector('#wr-refine-btn')?.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const fold = panel.querySelector('.wr-setup-fold');
+    if (!fold) return;
+    fold.open = !fold.open;
+    if (fold.open) fold.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
   const urlInput = root.querySelector('.wr-source-url');
   root.querySelector('.wr-source-fetch')?.addEventListener('click', () => _fetchSourceUrl(panel, root, (urlInput?.value || '').trim()));
   urlInput?.addEventListener('keydown', (e) => {
@@ -1236,6 +1241,21 @@ function _bindTapReact(panel, msgEl, agentId) {
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         _appendUserReaction(msgEl, btn.dataset.emoji);
+        // Ergonomie 2026-07 (retour Stéphane) — la réaction n'est plus
+        // décorative : elle entre dans l'historique comme SIGNAL CLIENT
+        // (invisible dans le feed), vue par les agents suivants ET pesée
+        // par la synthèse (lignes [Client] côté worker).
+        if (_currentSession && Array.isArray(_currentSession.history)) {
+          const em = btn.dataset.emoji;
+          const sens = (em === '💯' || em === '🔥') ? 'j\'aime cette piste, gardez-la' : 'j\'ai un doute sur cette piste';
+          const who  = getAgent(msgEl.dataset.agentId)?.name || msgEl.dataset.agentId;
+          const quote = (msgEl.querySelector('.wr-msg-text')?.textContent || '').slice(0, 120);
+          _currentSession.history.push({
+            agent_id: 'user',
+            content : `[Réaction ${em} sur l'intervention de ${who} : ${sens}] « ${quote}… »`,
+            timestamp: Date.now(),
+          });
+        }
         picker.remove();
       });
     });

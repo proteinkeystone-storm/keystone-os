@@ -1990,3 +1990,18 @@ html.light-mode .wr-brief-coach-chips button { color: #1c1c2e; background: rgba(
 .wr-dig-chip:hover { border-color: rgba(155,140,255,.6); background: rgba(155,140,255,.15); }
 .wr-dig-hint { margin: 8px 0 0; font-size: 11.5px; color: var(--text-muted, #99a); }
 html.light-mode .wr-dig-chip { color: #1c1c2e; background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12); }
+
+/* ═══ Ergonomie 2026-07 (retour Stéphane) ═══ */
+/* Liseré accent sur le champ de brief — l'œil tombe dessus d'un coup (patron Sentinel) */
+.wr-input-box .wr-input { border: 2px solid rgba(139,124,246,.75) !important; border-radius: 14px; }
+.wr-input-box .wr-input:focus { box-shadow: 0 0 0 3px rgba(139,124,246,.22); }
+/* « Affiner la séance » déménage sur la ligne source → le résumé du fold central disparaît */
+.wr-setup-fold-sum { display: none; }
+.wr-setup-fold:not([open]) { border: none; background: transparent; padding: 0; }
+.wr-source-toggle { display: flex; align-items: center; gap: 8px; }
+.wr-source-toggle em { flex: 1; }
+.wr-refine-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: var(--text-muted, #aab);
+  font: 600 12px/1 inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.wr-refine-btn:hover { border-color: rgba(155,140,255,.6); background: rgba(155,140,255,.14); color: var(--text-primary, #fff); }
+html.light-mode .wr-refine-btn { color: #334; background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12); }

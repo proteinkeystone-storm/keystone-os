@@ -322,6 +322,8 @@ Ta mission : transformer le débat en une conclusion qui RÉPOND DIRECTEMENT à 
 
 Tu parles EN DERNIER, une fois que toute l'équipe s'est exprimée : exploite la matière de TOUS les agents (pas seulement les derniers messages). Récupère chaque candidat, chaque angle, chaque objection valable qui a émergé.
 
+PRIORITÉ ABSOLUE — LES LIGNES [Client] : ce sont les interventions et réactions de l'utilisateur pendant le débat (« j'aime cette piste », « j'ai un doute »). Elles PÈSENT PLUS que tout le reste : une piste aimée par le Client remonte dans ton choix, une piste doutée se justifie ou s'écarte. Ne les ignore JAMAIS.
+
 ÉTAPE 1 — IDENTIFIE LE TYPE DE DEMANDE
 - Si le brief demande un LIVRABLE GÉNÉRATIF (trouver un NOM, un slogan, une accroche, un baseline, une liste d'IDÉES, des options à départager…) → tu produis une IDÉATION RICHE ET ORGANISÉE (champ "ideation"). C'est la PRIORITÉ ABSOLUE. Ne te réfugie JAMAIS dans la stratégie abstraite.
 - Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "ideation": null.
@@ -418,8 +420,8 @@ function _normalizeSynthesis(parsed) {
 // Pattern repris de proxy-llm.js (_proxyAnthropic).
 async function _generateSynthesisClaude(apiKey, brief, history, todayIso) {
   const dialogue = history
-    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
-    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .filter(t => t?.agent_id && t.content)
+    .map(t => `[${t.agent_id === 'user' ? 'Client' : (getAgent(t.agent_id)?.name || t.agent_id)}] ${t.content}`)
     .join('\n\n');
   if (!dialogue || dialogue.length < 50) {
     return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
@@ -481,8 +483,8 @@ async function _generateSynthesis(env, brief, history, todayIso) {
     return { error: 'Bridage IA actif — synthèse en pause (réactivable depuis l’admin).' };
   }
   const dialogue = history
-    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
-    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .filter(t => t?.agent_id && t.content)
+    .map(t => `[${t.agent_id === 'user' ? 'Client' : (getAgent(t.agent_id)?.name || t.agent_id)}] ${t.content}`)
     .join('\n\n');
   if (!dialogue || dialogue.length < 50) {
     return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
@@ -537,8 +539,8 @@ async function _generateSynthesis(env, brief, history, todayIso) {
 // Mistral) est géré par l'appelant.
 async function _generateSynthesisVendor(env, engine, apiKey, brief, history, todayIso) {
   const dialogue = history
-    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
-    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .filter(t => t?.agent_id && t.content)
+    .map(t => `[${t.agent_id === 'user' ? 'Client' : (getAgent(t.agent_id)?.name || t.agent_id)}] ${t.content}`)
     .join('\n\n');
   if (!dialogue || dialogue.length < 50) {
     return { error: 'Discussion trop courte pour une synthèse (au moins 2 tours requis)' };
@@ -577,8 +579,8 @@ async function _generatePostIdeasSynthesis(env, brief, history, network) {
   if (!env.AI || typeof env.AI.run !== 'function') return { error: 'Workers AI non disponible' };
   if (await isThrottled(env)) return { error: 'Bridage IA actif — synthèse en pause.' };
   const dialogue = history
-    .filter(t => t?.agent_id && t.agent_id !== 'user' && t.content)
-    .map(t => `[${getAgent(t.agent_id)?.name || t.agent_id}] ${t.content}`)
+    .filter(t => t?.agent_id && t.content)
+    .map(t => `[${t.agent_id === 'user' ? 'Client' : (getAgent(t.agent_id)?.name || t.agent_id)}] ${t.content}`)
     .join('\n\n');
   if (!dialogue || dialogue.length < 50) return { error: 'Débat trop court pour en tirer des idées (au moins 2 tours).' };
   const netDesc = POST_IDEAS_NETWORKS[network] || network || 'le réseau social visé';
