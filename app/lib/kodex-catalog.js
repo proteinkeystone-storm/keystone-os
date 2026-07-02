@@ -149,6 +149,35 @@ export async function getSpec(vendorId, supportId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Standard pour DIMENSIONS LIBRES (refonte P1b, juillet 2026)
+// ─────────────────────────────────────────────────────────────
+// Le générateur de gabarits doit fonctionner pour n'importe quel
+// produit, même absent de la bibliothèque. La bibliothèque sert
+// alors de base de connaissances : les `rules` du vendor pour la
+// catégorie (fond perdu, marges, dpi habituels de cet imprimeur)
+// s'appliquent aux cotes saisies ; à défaut, les défauts catégorie.
+//   unit : 'mm' (print/presse/grand format) ou 'px' (digital)
+// ═══════════════════════════════════════════════════════════════
+export async function resolveCustomStandard({ category, vendorId = null, width, height, unit = 'mm', label = '' }) {
+  if (!category || !width || !height) return null;
+  const catDefaults = await getCategoryDefaults(category);
+  const vendor = vendorId ? await getVendor(vendorId) : null;
+  const rules = vendor?.rules?.[category] || null;
+
+  const pseudoSupport = {
+    id: 'custom',
+    category,
+    label: label || 'Format personnalisé',
+    type_support: label || 'Format personnalisé',
+    default_format: unit === 'px'
+      ? { width_px: Math.round(width), height_px: Math.round(height) }
+      : { width_mm: width, height_mm: height },
+  };
+  // Les rules jouent le rôle d'une spec (même forme : bleed/safe/dpi)
+  return specToStandard(rules ? { ...rules } : null, vendor, pseudoSupport, catDefaults);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Hydratation du `standard` (objet placé dans _state.destination)
 // ─────────────────────────────────────────────────────────────
 // Priorité des sources, de la plus précise à la plus générique :
@@ -195,6 +224,10 @@ export function specToStandard(spec, vendor, support, catDefaults = {}) {
     material: '',
     // Note prioritaire : spec > support > vide
     notes: sp.notes || s.notes || '',
+
+    // P3b : géométrie roll-up (amorces mécanisme, échelle 1/4) —
+    // consommée par kodex-template-geometry pour le gabarit.
+    rollup: s.rollup || null,
   };
 }
 

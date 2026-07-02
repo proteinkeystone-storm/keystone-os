@@ -34,12 +34,17 @@ import {
   // v3 vendor-aware
   loadVendors, getVendor, getSupportsByCategory, getSupport,
   getSpec, specToStandard, getVendorsForSupport,
+  // P1b : dimensions libres (cascade règles imprimeur → catégorie)
+  resolveCustomStandard,
   // utils
   formatDimensions, formatBleed,
   // secteurs métier
   getSector, getDefaultSector, computeLegalMentions,
 } from './lib/kodex-catalog.js';
-import { computeScale, formatFileSize } from './lib/kodex-scale.js';
+// P1/P2 refonte : générateur de gabarits (géométrie partagée SVG/PDF/PSD)
+import { buildTemplateSpec, FOLD_SCHEMES } from './lib/kodex-template-geometry.js';
+import { templatePreviewSVG, templateLegendHTML } from './lib/kodex-template-svg.js';
+import { downloadTemplateKit } from './lib/kodex-template-kit.js';
 import { icon } from './lib/ui-icons.js';
 import { buildCodeMaitre, validateForGeneration } from './lib/kodex-prompt.js';
 import { exportBriefAsPDF } from './lib/kodex-pdf.js';
@@ -90,12 +95,16 @@ let _state = {
   view: 'destination',
   destination: {
     category: null,
-    support_id: null,
+    support_id: null,        // id bibliothèque OU '__custom__' (dims libres)
     vendor_id: null,
     standard: null,
     vendor_url: '',
     specs_pdf: null,
     _form_open: false,
+    // P2 refonte : dimensions libres + recto/verso
+    custom: null,            // { label, width, height } si support '__custom__'
+    two_sided: false,        // kit gabarits Recto + Verso (print)
+    fold_type: 'none',       // P3 : schéma de pliage (dépliants print)
   },
   content:     { sector: 'universal', fields: {} },
   assets: {
@@ -227,12 +236,26 @@ async function _loadDraft() {
     // au plus près de la logique de migration.
     if (dst.support_id && !dst.standard) {
       try {
-        const support = await getSupport(dst.support_id);
-        if (support) {
-          const defaults = await getCategoryDefaults(support.category);
-          const vendor = dst.vendor_id ? await getVendor(dst.vendor_id) : null;
-          const spec = await getSpec(dst.vendor_id, dst.support_id);
-          dst.standard = specToStandard(spec, vendor, support, defaults);
+        if (dst.support_id === '__custom__') {
+          // Dimensions libres : reconstruit via la cascade règles imprimeur
+          const c = dst.custom || {};
+          if (c.width && c.height) {
+            const catObj = await getCategory(dst.category);
+            dst.standard = await resolveCustomStandard({
+              category: dst.category, vendorId: dst.vendor_id,
+              width: c.width, height: c.height,
+              unit: catObj?.defaults?.unit === 'px' ? 'px' : 'mm',
+              label: c.label || '',
+            });
+          }
+        } else {
+          const support = await getSupport(dst.support_id);
+          if (support) {
+            const defaults = await getCategoryDefaults(support.category);
+            const vendor = dst.vendor_id ? await getVendor(dst.vendor_id) : null;
+            const spec = await getSpec(dst.vendor_id, dst.support_id);
+            dst.standard = specToStandard(spec, vendor, support, defaults);
+          }
         }
       } catch (_) { /* re-hydratation silencieuse : le user revoit l'étape 1 vide si KO */ }
     }
@@ -265,6 +288,7 @@ function _resetDraft() {
     destination: {
       category: null, support_id: null, vendor_id: null, standard: null,
       vendor_url: '', specs_pdf: null, _form_open: false,
+      custom: null, two_sided: false, fold_type: 'none',
     },
     content:     { sector: 'universal', fields: {} },
     assets: {
@@ -294,6 +318,7 @@ export function closeKodex() {
   _saveDraft();          // dernière sauvegarde avant fermeture
   _root.remove();
   _root = null;
+  _lastRenderedView = null;
   document.body.style.overflow = '';
 }
 
@@ -492,10 +517,14 @@ function _onClick(e) {
   // Étape Destination (refonte vendor-aware mai 2026 v3)
   if (act === 'dest-category')  return _pickCategory(t.dataset.cat);
   if (act === 'dest-support')   return _pickSupport(t.dataset.id);
+  if (act === 'dest-custom')    return _pickCustom();
   if (act === 'dest-vendor')    return _pickVendor(t.dataset.id);
   if (act === 'dest-reset')     return _destReset();
   if (act === 'dest-form-toggle') return _toggleDestForm();
+  if (act === 'dest-two-sided')   return _toggleTwoSided();
+  if (act === 'dest-fold')        return _pickFold(t.dataset.fold);
   if (act === 'dest-specs-delete') return _deleteSpecsPdf();
+  if (act === 'download-kit')   return _downloadKit();
   // Sprint Kodex-3.2 : toggle "asset déjà chez Protein"
   if (act === 'assets-toggle')  return _toggleAsset(t.dataset.key);
   // Sprint Kodex-4.1 : génération du brief
@@ -993,8 +1022,101 @@ function _pickCategory(cat) {
   d.vendor_id = null;
   d.standard = null;
   d._form_open = false;
+  d.custom = null;
+  d.two_sided = false;
+  d.fold_type = 'none';
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
+}
+
+// ── Dimensions libres : n'importe quel produit, même hors bibliothèque ─
+// La bibliothèque sert alors de base de connaissances : les règles de
+// l'imprimeur choisi (fond perdu, marges, dpi) s'appliquent aux cotes
+// saisies via resolveCustomStandard.
+function _pickCustom() {
+  const d = _state.destination;
+  if (d.support_id === '__custom__') return;
+  d.support_id = '__custom__';
+  d.preset_id = null;
+  d.custom = d.custom || { label: '', width: null, height: null };
+  d.standard = null;                 // seedé dès que les cotes sont saisies
+  d.fold_type = 'none';
+  const isPrintCategory = (d.category === 'print_paper' || d.category === 'large_format');
+  if (isPrintCategory) { if (!d.vendor_id) d.vendor_id = 'other'; }
+  else d.vendor_id = null;
+  _saveDraft();
+  _refreshDestination();
+}
+
+// Saisie des cotes libres (label / largeur / hauteur) → re-seed du standard
+async function _onCustomDimsChange() {
+  const d = _state.destination;
+  if (d.support_id !== '__custom__' || !d.custom) return;
+  const c = d.custom;
+  if (c.width > 0 && c.height > 0) {
+    const catObj = await getCategory(d.category);
+    d.standard = await resolveCustomStandard({
+      category: d.category, vendorId: d.vendor_id,
+      width: c.width, height: c.height,
+      unit: catObj?.defaults?.unit === 'px' ? 'px' : 'mm',
+      label: c.label || '',
+    });
+    if (d.standard && c.label) { d.standard.type_support = c.label; d.standard.product_name = c.label; }
+  } else {
+    d.standard = null;
+  }
+  _scheduleSave();
+  // Le récap/toggles et l'aperçu suivent la saisie ; on ne re-render PAS
+  // la zone supports (l'utilisateur est en train de taper dedans).
+  _renderDestFold();
+  await _renderDestVendors();
+  await _renderDestRecap();
+  _renderAside();
+}
+
+// ── Choix du schéma de pliage (dépliants print) ───────────────
+function _pickFold(foldId) {
+  const d = _state.destination;
+  d.fold_type = foldId || 'none';
+  // Un dépliant se conçoit recto/verso (les roulés sont asymétriques)
+  if (d.fold_type !== 'none') d.two_sided = true;
+  _saveDraft();
+  _refreshDestination();
+}
+
+// ── Recto/Verso : deux gabarits séparés dans le kit ───────────
+function _toggleTwoSided() {
+  _state.destination.two_sided = !_state.destination.two_sided;
+  _saveDraft();
+  _refreshDestination();
+}
+
+// ── Téléchargement du kit gabarits (étape 4) ──────────────────
+async function _downloadKit() {
+  const d = _state.destination;
+  const std = d.standard;
+  const f = std?.format_fini || {};
+  if (!std || !((f.width_mm && f.height_mm) || (f.width_px && f.height_px))) {
+    _toastSoon('Renseignez d\'abord le support et ses dimensions (étape 1)');
+    return;
+  }
+  try {
+    const vendor = (d.vendor_id && d.vendor_id !== 'other') ? await getVendor(d.vendor_id) : null;
+    const fileName = await downloadTemplateKit({
+      standard: std,
+      productLabel: std.type_support || std.product_name || 'Support',
+      // Pas de vendor connu → pas d'imprimeur dans le nom du kit (le
+      // pseudo-label « Je ne sais pas encore » n'a rien à y faire)
+      vendorLabel: vendor?.label || null,
+      vendor,
+      twoSided: !!d.two_sided && d.category !== 'digital' && d.category !== 'press',
+      foldType: d.category === 'print_paper' ? d.fold_type : null,
+    });
+    _toastOk(`Kit gabarits téléchargé — ${fileName}`);
+  } catch (e) {
+    console.error('[Kodex] kit failed:', e);
+    _toastSoon('Génération du kit échouée : ' + e.message);
+  }
 }
 
 // ── Clic sur un SUPPORT → pré-sélection vendor "Je ne sais pas"
@@ -1024,20 +1146,43 @@ async function _pickSupport(supportId) {
   const vendor = d.vendor_id ? await getVendor(d.vendor_id) : null;
   const spec = d.vendor_id ? await getSpec(d.vendor_id, supportId) : null;
   d.standard = specToStandard(spec, vendor, support, catDefaults);
+  // P3 : les dépliants de la bibliothèque pré-sélectionnent leur pliage
+  // (modifiable via les chips « Pliage »). Un pliage ⇒ recto/verso.
+  if (supportId === 'folded-leaflet-a4') d.fold_type = 'roule-2';
+  else if (supportId === 'folded-leaflet-a5') d.fold_type = 'central';
+  else d.fold_type = 'none';
+  if (d.fold_type !== 'none') d.two_sided = true;
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
 }
 
 // ── Clic sur un VENDOR → re-seed du standard ──────────────────
 async function _pickVendor(vendorId) {
   const d = _state.destination;
+
+  // Dimensions libres : re-seed via la cascade règles imprimeur
+  if (d.support_id === '__custom__') {
+    d.vendor_id = vendorId;
+    if (vendorId !== 'other') { d.vendor_url = ''; d.specs_pdf = null; }
+    await _onCustomDimsChange();
+    _saveDraft();
+    _refreshDestination();
+    const vendor = await getVendor(vendorId);
+    if (vendor?.rules?.[d.category]) {
+      _toastOk(`Normes ${vendor.label} appliquées à vos dimensions`);
+    } else if (vendorId === 'other') {
+      _toastOk('Standards génériques appliqués');
+    }
+    return;
+  }
+
   const support = d.support_id ? await getSupport(d.support_id) : null;
   if (!support) {
     // Sélection vendor avant support : on stocke juste l'id, le standard
     // sera seedé au prochain pick support.
     d.vendor_id = vendorId;
     _saveDraft();
-    _renderMain();
+    _refreshDestination();
     return;
   }
   const catDefaults = await getCategoryDefaults(support.category);
@@ -1051,7 +1196,7 @@ async function _pickVendor(vendorId) {
     d.specs_pdf = null;
   }
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
   // Toast info — feedback immédiat sur le changement de specs
   if (spec) {
     _toastOk(`Adapté à ${vendor.label} · fond perdu ${spec.bleed_mm} mm`);
@@ -1065,9 +1210,10 @@ function _destReset() {
   _state.destination = {
     category: null, support_id: null, vendor_id: null, standard: null,
     vendor_url: '', specs_pdf: null, _form_open: false,
+    custom: null, two_sided: false, fold_type: 'none',
   };
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
   _toastOk('Sélection annulée');
 }
 
@@ -1075,7 +1221,7 @@ function _destReset() {
 function _toggleDestForm() {
   _state.destination._form_open = !_state.destination._form_open;
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
 }
 
 // ── Suppression du PDF de specs ───────────────────────────────
@@ -1088,7 +1234,7 @@ async function _deleteSpecsPdf() {
   } catch (_) {}
   _state.destination.specs_pdf = null;
   _saveDraft();
-  _renderMain();
+  _refreshDestination();
   _toastOk('PDF retiré');
 }
 
@@ -1128,37 +1274,102 @@ function _renderRail() {
 // ═══════════════════════════════════════════════════════════════
 // Aside (panel droit) — assistance contextuelle
 // ═══════════════════════════════════════════════════════════════
-function _renderAside() {
-  const aside = _root.querySelector('[data-slot="aside"]');
+// P2 refonte : l'aside est l'APERÇU VIVANT du gabarit. Ce que
+// l'utilisateur voit ici EST ce que le kit téléchargera (même
+// géométrie que les rendus PDF/PSD). Se met à jour à chaque choix.
+async function _renderAside() {
+  const aside = _root?.querySelector('[data-slot="aside"]');
+  if (!aside) return;
+
+  const d = _state.destination;
+  const std = d.standard;
+  const f = std?.format_fini || {};
+  const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
+
+  let previewHTML;
+  if (hasDims) {
+    const vendorKnown = d.vendor_id && d.vendor_id !== 'other';
+    const spec = buildTemplateSpec(std, {
+      productLabel: std.type_support || std.product_name || 'Votre support',
+      vendorLabel: vendorKnown ? std.vendor : null,
+      foldType: d.category === 'print_paper' ? d.fold_type : null,
+    });
+    const specRows = [
+      spec.colorProfile,
+      spec.kind === 'print' ? `${spec.dpi} DPI` : null,
+      spec.scale.label ? `${spec.scale.label} (géré automatiquement)` : null,
+    ].filter(Boolean);
+    previewHTML = `
+      <div class="ws-aside-card" style="text-align:center;">
+        <div style="font-size:12.5px;font-weight:700;letter-spacing:-.01em;color:var(--ws-text);margin-bottom:2px;">
+          ${_esc(spec.productLabel)}${spec.vendorLabel ? ` · ${_esc(spec.vendorLabel)}` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--ws-text-muted);margin-bottom:10px;">${_esc(spec.dimsLabel)}${d.two_sided ? ' · recto/verso' : ''}</div>
+        <div style="display:flex;justify-content:center;margin-bottom:10px;color:var(--ws-text-muted);">
+          ${templatePreviewSVG(spec, { maxW: 232, maxH: 170 })}
+        </div>
+        <div style="text-align:left;">
+          ${templateLegendHTML(spec)}
+        </div>
+        ${specRows.length ? `
+          <div style="text-align:left;margin-top:8px;padding-top:8px;border-top:1px solid var(--ws-border);font-size:11px;color:var(--ws-text-muted);line-height:1.6;">
+            ${specRows.map(_esc).join('<br>')}
+          </div>
+        ` : ''}
+      </div>
+      <div class="ws-aside-card" style="margin-top:10px;display:flex;gap:8px;align-items:flex-start;">
+        <span style="flex-shrink:0;color:var(--ws-accent);">${icon('package', 15)}</span>
+        <span style="font-size:11.5px;line-height:1.5;">
+          ${_state.view === 'output'
+            ? 'Votre kit gabarits (PDF + PSD aux normes exactes) est prêt à télécharger ci-contre.'
+            : 'Le kit gabarits (PDF + PSD aux normes exactes) sera téléchargeable à l\'étape 4, avec le brief.'}
+        </span>
+      </div>
+    `;
+  } else {
+    previewHTML = `
+      <div class="ws-aside-card" style="text-align:center;padding:26px 16px;">
+        <div style="color:var(--ws-text-muted);margin-bottom:10px;display:flex;justify-content:center;">${icon('ruler', 26)}</div>
+        <div style="font-size:12px;color:var(--ws-text-soft);line-height:1.55;">
+          Choisissez un format — votre gabarit se dessine ici, aux normes
+          exactes de votre imprimeur, et sera joint au brief.
+        </div>
+      </div>
+    `;
+  }
+
+  // Consignes spécifiques imprimeur (niveau 1-2 uniquement)
+  let prepHTML = '';
+  if (d.vendor_id && d.vendor_id !== 'other') {
+    try {
+      const vendor = await getVendor(d.vendor_id);
+      if (vendor?.preparation_steps?.length) {
+        prepHTML = `
+          <div class="ws-aside-section">
+            <div class="ws-aside-title">À préparer chez ${_esc(vendor.label)}</div>
+            <div class="ws-aside-card">
+              <ul style="margin:0;padding-left:16px;font-size:11.5px;line-height:1.6;">
+                ${vendor.preparation_steps.map(p => `<li style="margin:3px 0;">${_esc(p)}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `;
+      }
+    } catch (_) {}
+  }
+
   aside.innerHTML = `
     <div class="ws-aside-section">
-      <div class="ws-aside-title">À quoi ça sert</div>
-      <div class="ws-aside-card">
-        Brief Prod transforme votre intention en cahier des charges précis pour
-        votre graphiste&nbsp;: format exact, charte, fichiers, mentions à respecter.
-        Vous repartez avec un brief PDF prêt à transmettre, que votre graphiste
-        pourra suivre les yeux fermés — quel que soit le support (print, digital
-        ou presse).
-      </div>
+      <div class="ws-aside-title">Votre gabarit</div>
+      ${previewHTML}
     </div>
+
+    ${prepHTML}
 
     <div class="ws-aside-section">
       <div class="ws-aside-title">Votre progression</div>
       <div class="ws-aside-card" data-slot="progress">
         <span class="ws-badge">Étape ${_currentStepIndex() + 1} sur ${STEPS.length}</span>
-      </div>
-    </div>
-
-    <div class="ws-aside-section">
-      <div class="ws-aside-title">Notre force</div>
-      <div class="ws-aside-card">
-        <strong style="color: var(--ws-text); display:block; margin-bottom:6px;">
-          ${icon('ruler', 14)} Calculateur d'échelle automatique
-        </strong>
-        Pour les grands formats (bâches, panneaux 4×3), Brief Prod calcule la
-        bonne résolution selon la distance de vue. Pour les visuels digitaux,
-        il pré-remplit les dimensions exactes du réseau social. Plus de
-        spec incertaine à transmettre à votre graphiste.
       </div>
     </div>
   `;
@@ -1167,24 +1378,30 @@ function _renderAside() {
 // ═══════════════════════════════════════════════════════════════
 // Main panel — dispatch par vue
 // ═══════════════════════════════════════════════════════════════
+// Le scroll ne remonte qu'au VRAI changement d'étape : un re-render
+// dans la même vue (toggle, changement de statut de génération…)
+// conserve la position de lecture de l'utilisateur.
+let _lastRenderedView = null;
+
 function _renderMain() {
   const main = _root.querySelector('[data-slot="main"]');
   const view = _state.view;
+  const sameView = _lastRenderedView === view;
+  const prevScroll = sameView ? main.scrollTop : 0;
   let html = '';
   if (view === 'destination') html = _viewDestination();
   else if (view === 'content') html = _viewContent();
   else if (view === 'assets')  html = _viewAssets();
   else if (view === 'output')  html = _viewOutput();
   main.innerHTML = `<div class="ws-main-inner">${html}${_stepNav()}</div>`;
-  main.scrollTop = 0;
+  main.scrollTop = prevScroll;
+  _lastRenderedView = view;
 
   // Rail mis à jour (le crumb d'étape a été retiré du hero, le rail
   // gauche reste la source de vérité de l'étape courante).
   _renderRail();
-  const progress = _root.querySelector('[data-slot="progress"]');
-  if (progress) {
-    progress.innerHTML = `<span class="ws-badge">Étape ${_currentStepIndex() + 1} / ${STEPS.length}</span>`;
-  }
+  // L'aside (aperçu vivant + progression) suit chaque changement de vue.
+  _renderAside();
 
   // Sprint 5-light : hydrate les stats de consultation Pulsa quand on est
   // sur l'étape 4 et qu'un lien actif existe. Async non-bloquant — la
@@ -1208,51 +1425,69 @@ function _renderMain() {
 //   7. Calculateur d'échelle (si grandes dimensions)
 // ═══════════════════════════════════════════════════════════════
 function _viewDestination() {
-  // Le lead s'adapte à la catégorie : on évite de parler d'imprimerie
-  // si l'utilisateur est sur Digital (réseaux sociaux) ou Press.
-  const cat = _state.destination.category;
-  let lead;
-  if (cat === 'digital') {
-    lead = `Choisissez le format de votre visuel. Brief Prod pré-remplit les
-      dimensions exactes et le profil colorimétrique adaptés au réseau social ciblé —
-      votre graphiste pourra travailler directement à la bonne taille.`;
-  } else if (cat === 'press') {
-    lead = `Choisissez le format de votre encart. Les dimensions exactes
-      seront fournies par la régie publicitaire — Brief Prod pré-remplit les standards
-      presse pour préparer le brief.`;
-  } else {
-    lead = `Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
-      Brief Prod adaptera fond perdu, marges et préparation aux exigences exactes
-      de votre imprimeur.`;
-  }
   const shell = `
     <span class="ws-eyebrow">${icon('target', 12)} 1 sur 4 · Le support</span>
     <h1 class="ws-h1">Quel format pour votre création&nbsp;?</h1>
-    <p class="ws-lead">${lead}</p>
+    <p class="ws-lead" data-slot="dest-lead">${_destLead()}</p>
 
-    <div data-slot="dest-tabs"     style="margin-bottom:14px;"></div>
-    <div data-slot="dest-supports" style="margin-bottom:28px;"></div>
-    <div data-slot="dest-vendors"  style="margin-bottom:20px;"></div>
+    <div data-slot="dest-tabs"     style="margin-bottom:18px;"></div>
+    <div data-slot="dest-supports" style="margin-bottom:24px;"></div>
+    <div data-slot="dest-fold"     style="margin-bottom:16px;"></div>
+    <div data-slot="dest-vendors"  style="margin-bottom:16px;"></div>
     <div data-slot="dest-recap"    style="margin-bottom:14px;"></div>
     <div data-slot="dest-form"     style="margin-bottom:14px;"></div>
     <div data-slot="dest-other"    style="margin-bottom:14px;"></div>
-    <div data-slot="dest-scale"></div>
   `;
 
   // Hydratation asynchrone — toutes les sous-vues
-  (async () => {
-    if (!_root) return;
-    const categories = await loadCategories();
-    _renderDestTabs(categories);
-    await _renderDestSupports();
-    await _renderDestVendors();
-    await _renderDestRecap();
-    await _renderDestForm();
-    _renderDestOther();
-    _renderDestScale();
-  })();
+  _hydrateDestSlots();
 
   return shell;
+}
+
+// Le lead s'adapte à la catégorie : on évite de parler d'imprimerie
+// si l'utilisateur est sur Digital (réseaux sociaux) ou Press.
+function _destLead() {
+  const cat = _state.destination.category;
+  if (cat === 'digital') {
+    return `Choisissez le format de votre visuel. Brief Prod pré-remplit les
+      dimensions exactes et le profil colorimétrique adaptés au réseau social ciblé —
+      votre graphiste pourra travailler directement à la bonne taille.`;
+  }
+  if (cat === 'press') {
+    return `Choisissez le format de votre encart. Les dimensions exactes
+      seront fournies par la régie publicitaire — Brief Prod pré-remplit les standards
+      presse pour préparer le brief.`;
+  }
+  return `Choisissez un format. Si vous savez où ce sera imprimé, précisez-le —
+    Brief Prod adaptera fond perdu, marges et préparation aux exigences exactes
+    de votre imprimeur.`;
+}
+
+// Remplit toutes les sous-vues de l'étape Destination dans leurs slots.
+// L'aside (aperçu vivant du gabarit) suit chaque changement.
+async function _hydrateDestSlots() {
+  if (!_root) return;
+  const categories = await loadCategories();
+  _renderDestTabs(categories);
+  await _renderDestSupports();
+  _renderDestFold();
+  await _renderDestVendors();
+  await _renderDestRecap();
+  await _renderDestForm();
+  _renderDestOther();
+  _renderAside();
+}
+
+// Rafraîchit l'étape Destination SANS reconstruire le shell : les clics
+// d'options (catégorie, support, imprimeur…) ne doivent ni faire remonter
+// la page ni faire flasher le panneau. Repli sur _renderMain() si le
+// shell n'est pas en place (autre vue, premier rendu).
+function _refreshDestination() {
+  const lead = _root?.querySelector('[data-slot="dest-lead"]');
+  if (_state.view !== 'destination' || !lead) return _renderMain();
+  lead.innerHTML = _destLead();
+  _hydrateDestSlots();
 }
 
 // ── Zone 1a : tabs catégories ─────────────────────────────────
@@ -1287,51 +1522,131 @@ async function _renderDestSupports() {
   const slot = _root?.querySelector('[data-slot="dest-supports"]');
   if (!slot) return;
   const cat = _state.destination.category;
-  if (!cat) {
-    slot.innerHTML = `
-      <div class="ws-empty" style="margin-top:8px;">
-        <div class="ws-empty-icon">${icon('target', 24)}</div>
-        <p class="ws-empty-desc">Choisissez une catégorie ci-dessus pour voir les formats associés.</p>
-      </div>
-    `;
-    return;
-  }
-  const supports = await getSupportsByCategory(cat);
-  const currentId = _state.destination.support_id;
+  if (!cat) { slot.innerHTML = ''; return; }        // dévoilement progressif
+
+  const d = _state.destination;
+  const catObj = await getCategory(cat);
+  const isPx = catObj?.defaults?.unit === 'px';
+  // Les anciens supports « custom » sont remplacés par la chip « Vos
+  // dimensions » — SAUF l'intro presse (dims fournies par la régie),
+  // qui garde son flux dédié (saisie via le formulaire technique).
+  const supports = (await getSupportsByCategory(cat))
+    .filter(s => !s.is_custom || s.is_press_intro);
+  const currentId = d.support_id;
+  const isCustom = currentId === '__custom__';
 
   slot.innerHTML = `
-    <div class="ws-card-grid">
-      ${supports.map(s => _renderSupportCard(s, currentId === s.id)).join('')}
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-bottom:10px;">
+      Quel format ?
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${supports.map(s => _renderSupportChip(s, currentId === s.id)).join('')}
+      <button class="ws-btn ${isCustom ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+              data-act="dest-custom"
+              style="padding:8px 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:8px;${isCustom ? '' : 'border-style:dashed;'}">
+        ${icon('ruler', 14)}
+        <span style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.25;">
+          <span style="font-weight:700;letter-spacing:-.008em;">Vos dimensions</span>
+          <span style="font-size:10.5px;font-weight:500;opacity:.75;">n'importe quel format</span>
+        </span>
+      </button>
+    </div>
+    ${isCustom ? _renderCustomDimsForm(d, isPx) : ''}
+  `;
+
+  // Wiring des cotes libres : saisie → re-seed du standard (cascade
+  // règles imprimeur), sans re-render de cette zone (focus préservé).
+  if (isCustom) {
+    const bind = (sel, key, numeric) => {
+      const el = slot.querySelector(sel);
+      el?.addEventListener('input', () => {
+        d.custom = d.custom || {};
+        d.custom[key] = numeric ? (el.value === '' ? null : Number(el.value)) : el.value;
+        _onCustomDimsChange();
+      });
+    };
+    bind('#kd-custom-label', 'label', false);
+    bind('#kd-custom-width', 'width', true);
+    bind('#kd-custom-height', 'height', true);
+  }
+}
+
+function _renderSupportChip(s, isActive) {
+  const dims = s.default_format
+    ? formatDimensions({ format_fini: s.default_format })
+    : (s.is_press_intro ? 'dims fournies par la régie' : 'dimensions au choix');
+  return `
+    <button class="ws-btn ${isActive ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+            data-act="dest-support" data-id="${_esc(s.id)}"
+            style="padding:8px 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:8px;">
+      ${icon(s.icon || 'printer', 14)}
+      <span style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.25;">
+        <span style="font-weight:700;letter-spacing:-.008em;">${_esc(s.label)}</span>
+        <span style="font-size:10.5px;font-weight:500;opacity:.75;">${_esc(dims)}</span>
+      </span>
+    </button>
+  `;
+}
+
+// Formulaire inline des dimensions libres (sous les chips)
+function _renderCustomDimsForm(d, isPx) {
+  const c = d.custom || {};
+  const unit = isPx ? 'px' : 'mm';
+  return `
+    <div class="ws-card" style="margin-top:12px;padding:16px 18px;border-color:var(--ws-accent);">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;align-items:end;">
+        <div class="ws-field">
+          <label class="ws-label" for="kd-custom-label">Votre produit</label>
+          <input class="ws-input" id="kd-custom-label" type="text"
+                 value="${_esc(c.label || '')}"
+                 placeholder="ex : panneau alu, set de table, totem…">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-custom-width">Largeur (${unit})</label>
+          <input class="ws-input" id="kd-custom-width" type="number" min="1" step="1"
+                 value="${_esc(c.width ?? '')}" placeholder="${isPx ? '1080' : '600'}">
+        </div>
+        <div class="ws-field">
+          <label class="ws-label" for="kd-custom-height">Hauteur (${unit})</label>
+          <input class="ws-input" id="kd-custom-height" type="number" min="1" step="1"
+                 value="${_esc(c.height ?? '')}" placeholder="${isPx ? '1080' : '400'}">
+        </div>
+      </div>
+      <p style="margin:10px 0 0 0;font-size:11.5px;color:var(--ws-text-muted);line-height:1.5;">
+        Le gabarit sera généré à ces cotes exactes, aux normes de l'imprimeur choisi ci-dessous.
+      </p>
     </div>
   `;
 }
 
-function _renderSupportCard(s, isActive) {
-  // Description courte : dimensions si connues, sinon intention.
-  let desc;
-  if (s.default_format) {
-    desc = formatDimensions({ format_fini: s.default_format });
-    if (s.type_support) desc += ` · ${s.type_support}`;
-  } else if (s.is_press_intro) {
-    desc = 'Dimensions fournies par la régie';
-  } else if (s.is_custom) {
-    desc = s.type_support || 'Dimensions au choix';
-  } else if (s.is_dim_free) {
-    desc = `Dimensions au choix${s.type_support ? ` · ${s.type_support}` : ''}`;
-  } else {
-    desc = s.type_support || '—';
+// ── Zone 1c : PLIAGE (P3 — dépliants print papier) ────────────
+// Visible dès qu'un support print_paper avec dimensions est choisi.
+// Le savoir des plis (volets inégaux des roulés, croisé, éco…) vit
+// dans kodex-template-geometry ; ici on ne fait que choisir.
+function _renderDestFold() {
+  const slot = _root?.querySelector('[data-slot="dest-fold"]');
+  if (!slot) return;
+  const d = _state.destination;
+  const std = d.standard;
+  const f = std?.format_fini || {};
+  const hasDims = f.width_mm && f.height_mm;
+  if (d.category !== 'print_paper' || !d.support_id || !hasDims) {
+    slot.innerHTML = '';
+    return;
   }
-  return `
-    <div class="ws-card is-clickable ${isActive ? 'is-selected' : ''}"
-         data-act="dest-support" data-id="${_esc(s.id)}"
-         ${s.is_custom ? 'style="border-style:dashed;"' : ''}>
-      <div class="ws-card-row">
-        <div class="ws-card-icon">${icon(s.icon || 'printer', 22)}</div>
-        <div class="ws-card-body">
-          <h3 class="ws-card-title">${_esc(s.label)}</h3>
-          <p class="ws-card-desc">${_esc(desc)}</p>
-        </div>
-      </div>
+  const current = d.fold_type || 'none';
+  slot.innerHTML = `
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--ws-text-muted);margin-bottom:10px;">
+      Pliage ? <span style="font-weight:500;text-transform:none;letter-spacing:0;">(les traits de plis seront posés sur le gabarit)</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${FOLD_SCHEMES.map(s => `
+        <button class="ws-btn ${current === s.id ? 'ws-btn--accent' : 'ws-btn--secondary'}"
+                data-act="dest-fold" data-fold="${_esc(s.id)}"
+                style="padding:7px 13px;font-size:12px;">
+          ${_esc(s.label)}
+        </button>
+      `).join('')}
     </div>
   `;
 }
@@ -1359,7 +1674,16 @@ async function _renderDestVendors() {
     return;
   }
 
-  const vendors = await getVendorsForSupport(supportId);
+  // Dimensions libres : tous les imprimeurs sont proposés (leurs règles
+  // par catégorie s'appliquent à n'importe quelles cotes). Support connu :
+  // seulement ceux qui ont une spec précise (+ « Je ne sais pas »).
+  const vendors = supportId === '__custom__'
+    ? (await loadVendors()).sort((a, b) => {
+        if (a.id === 'other') return 1;
+        if (b.id === 'other') return -1;
+        return (a.level || 99) - (b.level || 99);
+      })
+    : await getVendorsForSupport(supportId);
   const currentId = _state.destination.vendor_id;
 
   slot.innerHTML = `
@@ -1400,11 +1724,10 @@ function _renderVendorPill(v, isActive) {
   `;
 }
 
-// ── Zone 3 : CARD RECAP visuel (lecture seule, ludique) ───────
-// Apparaît une fois support + vendor sélectionnés. C'est la pièce
-// maîtresse de la nouvelle ergonomie : l'utilisateur voit tout ce qu'il
-// faut savoir en un clin d'œil, sans formulaire en face. Le form
-// détaillé est masqué dans un <details> dépliable en bas.
+// ── Zone 3 : rangée de réglages discrets (P2 refonte) ─────────
+// L'ancien gros récap est remplacé par l'APERÇU VIVANT de l'aside
+// (le gabarit se dessine à droite au fil des choix). Ici ne restent
+// que deux réglages : recto/verso et l'accès au mode expert.
 async function _renderDestRecap() {
   const slot = _root?.querySelector('[data-slot="dest-recap"]');
   if (!slot) return;
@@ -1412,83 +1735,23 @@ async function _renderDestRecap() {
   const std = d.standard;
   if (!std || !d.support_id) { slot.innerHTML = ''; return; }
 
-  const vendor = d.vendor_id ? await getVendor(d.vendor_id) : null;
-  const support = await getSupport(d.support_id);
-  const dims = formatDimensions(std);
-  const hasDims = dims && dims !== '—';
-  const isDigital = d.category === 'digital';
-
-  // Rendu en lignes "label → valeur" avec icônes parlantes.
-  // Digital (réseaux sociaux) : on masque Fond perdu / Zone de sécurité
-  // qui n'existent pas en numérique. On enlève aussi "DPI" qui n'a pas
-  // de sens pour un fichier 1080×1080 px.
-  const rows = [
-    { ic: 'ruler',  label: 'Format',          val: hasDims ? dims : 'À saisir ci-dessous' },
-    (!isDigital && std.bleed_mm != null) ? { ic: 'square',    label: 'Fond perdu',
-        val: std.bleed_mm === 0 ? 'Aucun (format fini = fichier)' : `${std.bleed_mm} mm sur chaque bord` } : null,
-    (!isDigital && std.safe_margin_mm)   ? { ic: 'shield',    label: 'Zone de sécurité',
-        val: `${std.safe_margin_mm} mm autour du visuel` } : null,
-    std.color_profile    ? { ic: 'palette',   label: 'Couleurs', val: std.color_profile } : null,
-    std.export_format    ? { ic: 'file-text', label: isDigital ? 'Format d\'export' : 'Fichier final', val: std.export_format } : null,
-    (!isDigital && std.dpi) ? { ic: 'image',  label: 'Résolution', val: `${std.dpi} DPI` } : null,
-  ].filter(Boolean);
-
-  // Préparation spécifique vendor (si niveau 1-2)
-  const prepHTML = (vendor && vendor.level !== 3 && vendor.preparation_steps?.length) ? `
-    <div style="margin-top:14px;padding:12px 14px;background:var(--ws-accent-soft);border-radius:var(--ws-radius-sm);border-left:3px solid var(--ws-accent);">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:-.008em;color:var(--ws-text);">
-        ${icon('check', 14)} À préparer chez ${_esc(vendor.label)}
-      </div>
-      <ul style="margin:0;padding-left:20px;font-size:12px;color:var(--ws-text-soft);line-height:1.6;">
-        ${vendor.preparation_steps.map(p => `<li style="margin:3px 0;">${_esc(p)}</li>`).join('')}
-      </ul>
-    </div>
-  ` : '';
-
-  const tagline = vendor?.tagline
-    ? `<div style="font-size:11.5px;color:var(--ws-text-muted);margin-top:2px;font-weight:500;">${_esc(vendor.tagline)}</div>`
-    : '';
-
+  const isPrint = d.category === 'print_paper' || d.category === 'large_format';
   const formOpen = d._form_open;
 
   slot.innerHTML = `
-    <div class="ws-card" style="padding:22px 24px;border-color:var(--ws-accent);background:linear-gradient(180deg, var(--ws-surface) 0%, var(--ws-bg) 100%);">
-      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
-        <div style="width:48px;height:48px;border-radius:var(--ws-radius);background:var(--ws-accent-soft);display:inline-flex;align-items:center;justify-content:center;color:var(--ws-accent);flex-shrink:0;">
-          ${icon(support?.icon || 'printer', 26)}
-        </div>
-        <div style="flex:1;min-width:0;">
-          <h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.014em;color:var(--ws-text);">
-            ${_esc(support?.label || '')}
-            ${vendor ? `<span style="font-weight:500;color:var(--ws-text-muted);"> · ${_esc(vendor.label)}</span>` : ''}
-          </h3>
-          ${tagline}
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px 24px;">
-        ${rows.map(r => `
-          <div style="display:flex;align-items:flex-start;gap:10px;">
-            <span style="display:inline-flex;width:24px;height:24px;border-radius:6px;background:var(--ws-surface);color:var(--ws-text-muted);align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--ws-border);">
-              ${icon(r.ic, 13)}
-            </span>
-            <div style="min-width:0;line-height:1.4;">
-              <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--ws-text-muted);">${_esc(r.label)}</div>
-              <div style="font-size:13px;font-weight:600;color:var(--ws-text);">${_esc(r.val)}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-
-      ${prepHTML}
-
-      <div style="margin-top:16px;display:flex;justify-content:flex-end;">
-        <button class="ws-btn ws-btn--ghost" data-act="dest-form-toggle"
-                style="padding:6px 12px;font-size:12px;color:var(--ws-text-muted);">
-          ${icon(formOpen ? 'chevron-up' : 'sliders', 13)}
-          ${formOpen ? 'Masquer les détails' : 'Ajuster les paramètres techniques'}
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+      ${isPrint ? `
+        <button class="ws-btn ${d.two_sided ? 'ws-btn--accent' : 'ws-btn--secondary'}" data-act="dest-two-sided"
+                style="padding:7px 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:8px;">
+          ${icon(d.two_sided ? 'check' : 'copy', 14)} Recto/verso
+          <span style="font-size:10.5px;font-weight:500;opacity:.75;">${d.two_sided ? '2 gabarits' : 'recto seul'}</span>
         </button>
-      </div>
+      ` : ''}
+      <button class="ws-btn ws-btn--ghost" data-act="dest-form-toggle"
+              style="padding:7px 12px;font-size:12px;color:var(--ws-text-muted);">
+        ${icon(formOpen ? 'chevron-up' : 'sliders', 13)}
+        ${formOpen ? 'Masquer les détails' : 'Ajuster les paramètres techniques'}
+      </button>
     </div>
   `;
 }
@@ -1706,20 +1969,6 @@ async function _renderDestForm() {
   form.addEventListener('change', _onDestFormChange);
 }
 
-// ── Zone calculateur d'échelle (si standard saisi) ────────────
-function _renderDestScale() {
-  const slot = _root?.querySelector('[data-slot="dest-scale"]');
-  if (!slot) return;
-  const std = _state.destination.standard;
-  if (!std) { slot.innerHTML = ''; return; }
-  // computeScale traite digital (px) et print (mm) automatiquement.
-  // Pour le print sans dimensions, on n'affiche pas la card.
-  const f = std.format_fini || {};
-  const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
-  if (!hasDims) { slot.innerHTML = ''; return; }
-  slot.innerHTML = _renderScaleCalculator(std);
-}
-
 // ── Form universel : update _state.destination.standard ──────
 function _onDestFormChange(e) {
   const el = e.target;
@@ -1749,93 +1998,20 @@ function _onDestFormChange(e) {
     // product_name suit type_support (utilisé par prompt/pdf)
     if (el.name === 'type_support') std.product_name = v;
   }
+
+  // Dimensions libres : les édits du mode expert restent la source des
+  // cotes persistées (le draft ne stocke pas `standard`).
+  const d = _state.destination;
+  if (d.support_id === '__custom__' && d.custom) {
+    const f2 = std.format_fini || {};
+    d.custom.width  = f2.width_mm ?? f2.width_px ?? d.custom.width;
+    d.custom.height = f2.height_mm ?? f2.height_px ?? d.custom.height;
+    if (el.name === 'type_support') d.custom.label = v;
+  }
   _scheduleSave();
 
-  // Re-render du calculateur d'échelle quand dimensions changent
-  if (el.name === 'width' || el.name === 'height') {
-    _renderDestScale();
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Sprint Kodex-3.1 — Killer feature : calculateur d'échelle
-// ═══════════════════════════════════════════════════════════════
-function _renderScaleCalculator(std) {
-  const calc = computeScale(std);
-  if (!calc) return '';
-
-  if (calc.digital) {
-    return `
-      <div class="ws-card" style="margin-top:14px;background:var(--ws-accent-soft);border-color:transparent;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${icon('sparkles', 18)}
-          <strong style="font-size:14px;letter-spacing:-.012em;color:var(--ws-text);">Format numérique</strong>
-        </div>
-        <p style="margin:8px 0 0 0;font-size:13px;color:var(--ws-text-soft);line-height:1.55;">
-          ${_esc(calc.message)}
-        </p>
-      </div>
-    `;
-  }
-
-  const wf = calc.work_format;
-  const rows = [
-    ['Résolution de sortie', `${calc.output_dpi} DPI — fixe, jamais dégradée`],
-    ['Distance de vue', `${calc.viewing_distance} (${calc.viewing_context.toLowerCase()})`],
-    ['Travail sur maquette', wf
-      ? `${wf.width_mm} × ${wf.height_mm} mm — ${calc.factor_label}`
-      : calc.factor_label],
-    ['Fichier à produire', wf
-      ? `${wf.width_px} × ${wf.height_px} px (~${formatFileSize(wf.file_bytes_work)})`
-      : '—'],
-    ['Texte titre minimum', `${calc.min_text_mm} mm de hauteur capitale`],
-    ['Logo bitmap (PNG/JPG)', calc.min_logo_px ? `${calc.min_logo_px} px de large minimum` : '—'],
-  ];
-
-  const isLarge = calc.is_large_format;
-
-  return `
-    <div class="ws-card" style="margin-top:14px;border-color:var(--ws-accent);">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        ${icon('ruler', 18)}
-        <strong style="font-size:14px;letter-spacing:-.012em;color:var(--ws-text);">
-          Calculateur d'échelle automatique
-        </strong>
-        ${isLarge ? `<span class="ws-badge ws-badge--accent" style="margin-left:auto;">Grand format</span>` : ''}
-      </div>
-      <p style="margin:0 0 12px 0;font-size:12.5px;color:var(--ws-text-muted);line-height:1.55;">
-        Voici comment travailler ce format sans erreur de fabrication.
-        ${isLarge ? 'À cette taille, votre graphiste doit travailler à l\'échelle réduite.' : ''}
-      </p>
-
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <tbody>
-          ${rows.map(([k, v]) => `
-            <tr>
-              <td style="padding:7px 0;color:var(--ws-text-muted);font-weight:500;width:42%;">${_esc(k)}</td>
-              <td style="padding:7px 0;color:var(--ws-text);font-weight:500;">${_esc(v)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      ${calc.warning ? `
-        <div style="margin-top:12px;padding:10px 12px;background:var(--danger-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text);border-left:3px solid var(--danger);">
-          <strong style="color:var(--danger);">Attention&nbsp;:</strong> ${_esc(calc.warning)}
-        </div>
-      ` : ''}
-
-      ${isLarge && wf ? `
-        <div style="margin-top:12px;padding:10px 12px;background:var(--info-soft);border-radius:var(--ws-radius-sm);font-size:12.5px;color:var(--ws-text-soft);border-left:3px solid var(--info);line-height:1.55;">
-          <strong style="color:var(--info);">Pourquoi ${calc.factor_label.toLowerCase()}&nbsp;?</strong>
-          On garde les ${calc.output_dpi}&nbsp;DPI — c'est la <em>taille du fichier</em> qu'on réduit, pas la résolution.
-          À l'échelle réelle, le fichier pèserait ~${formatFileSize(wf.file_bytes_full)} : impossible à manipuler.
-          À ${calc.factor_label.toLowerCase()}, il tombe à ~${formatFileSize(wf.file_bytes_work)} tout en restant à ${calc.output_dpi}&nbsp;DPI.
-          L'imprimeur agrandit ensuite pour la sortie.
-        </div>
-      ` : ''}
-    </div>
-  `;
+  // L'aperçu vivant suit chaque ajustement technique
+  _renderAside();
 }
 
 // ── Helper d'échappement HTML ─────────────────────────────────
@@ -2504,7 +2680,47 @@ function _viewOutput() {
         : 'Toutes vos données sont rassemblées en un brief technique infaillible. Téléchargez-le directement, ou enrichissez-le d\'un bonus créatif IA si vous le souhaitez.'
       }
     </p>
+    ${_renderKitCard()}
     ${body}
+  `;
+}
+
+// ── Card kit gabarits (P1) — le game changer ──────────────────
+// Toujours visible à l'étape 4 dès que le support a des dimensions :
+// l'utilisateur repart avec le brief ET le fichier de départ aux
+// normes exactes (PDF + PSD), quel que soit l'état de l'IA.
+function _renderKitCard() {
+  const d = _state.destination;
+  const std = d.standard;
+  const f = std?.format_fini || {};
+  const hasDims = (f.width_mm && f.height_mm) || (f.width_px && f.height_px);
+  if (!hasDims) return '';
+
+  const isDigital = d.category === 'digital';
+  const twoSided = !!d.two_sided && !isDigital && d.category !== 'press';
+  const hasFold = d.category === 'print_paper' && d.fold_type && d.fold_type !== 'none';
+  const foldLabel = hasFold ? (FOLD_SCHEMES.find(s => s.id === d.fold_type)?.label || '') : '';
+  const contents = isDigital
+    ? 'PSD + PNG aux pixels exacts, sRVB'
+    : `PDF + PSD${(twoSided || hasFold) ? ' (Recto et Verso)' : ''} — CMJN, fond perdu, coupe${hasFold ? `, plis (${foldLabel.toLowerCase()})` : ''} et zone de sécurité déjà en place`;
+
+  return `
+    <div class="ws-card" style="margin-bottom:18px;padding:18px 20px;border-color:var(--ws-accent);display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div style="width:42px;height:42px;border-radius:var(--ws-radius);background:var(--ws-accent-soft);display:inline-flex;align-items:center;justify-content:center;color:var(--ws-accent);flex-shrink:0;">
+        ${icon('package', 22)}
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <h3 style="margin:0 0 3px 0;font-size:14.5px;font-weight:800;letter-spacing:-.014em;color:var(--ws-text);">
+          Kit gabarits — le fichier de départ de votre graphiste
+        </h3>
+        <p style="margin:0;font-size:12px;color:var(--ws-text-soft);line-height:1.5;">
+          ${_esc(formatDimensions(std))} · ${contents}. Joignez-le au brief : impossible de se tromper.
+        </p>
+      </div>
+      <button class="ws-btn ws-btn--accent" data-act="download-kit" style="padding:10px 18px;font-size:13px;">
+        ${icon('download', 15)} Télécharger le kit (ZIP)
+      </button>
+    </div>
   `;
 }
 

@@ -615,6 +615,23 @@ html.light-mode .ws-topbar-logo .ws-logo-light { display: block; }
   color: var(--ws-text-soft);
 }
 
+/* ─── Aperçu vivant du gabarit (Brief Prod, aside) ─── */
+.kdx-legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ws-text-soft);
+}
+
+.kdx-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
 /* ─── Empty state ─── */
 .ws-empty {
   text-align: center;

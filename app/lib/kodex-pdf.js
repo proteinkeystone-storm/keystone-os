@@ -53,6 +53,11 @@ function _renderSpecsTable(std, destState) {
     std.export_format ? ['Export attendu', std.export_format] : null,
     std.material ? ['Matière / finition', std.material] : null,
     destState?.vendor_url ? ['Fiche officielle', destState.vendor_url] : null,
+    // P1 refonte : le kit gabarits accompagne le brief (téléchargés
+    // ensemble à l'étape 4 — le graphiste démarre sur le fichier aux normes)
+    ((std.format_fini?.width_mm && std.format_fini?.height_mm) || (std.format_fini?.width_px && std.format_fini?.height_px))
+      ? ['Annexe', 'Kit gabarits (PDF + PSD aux normes ci-dessus) généré par Brief Prod — joint à ce brief']
+      : null,
   ].filter(Boolean);
 
   let scaleRows = '';
