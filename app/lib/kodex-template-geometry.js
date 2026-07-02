@@ -323,15 +323,15 @@ function _foldPanels(schemeId, w) {
 //          sont mis en miroir au verso.
 // Retour : { vertical: [x…], horizontal: [y…], panels: [mm…],
 //            label, asymmetric } — positions relatives au TRIM.
+// Les plis sont TOUJOURS verticaux (les volets se suivent sur la
+// largeur), quelle que soit l'orientation du format — décision
+// Stéphane juil. 2026 : le pli « en hauteur » n'existe pratiquement
+// pas en imprimerie. Seul le croisé ajoute son pli horizontal (H/2).
 export function computeFolds(schemeId, w, h, face = 'recto') {
   const scheme = getFoldScheme(schemeId);
   if (!scheme || scheme.id === 'none') return null;
 
-  // Portrait : les plis traversent la largeur (empilement vertical).
-  const portrait = h > w;
-  const along = portrait ? h : w;
-
-  let panels = _foldPanels(scheme.id, along);
+  let panels = _foldPanels(scheme.id, w);
   const asymmetric = scheme.id.startsWith('roule');
   if (asymmetric && face === 'verso') panels = [...panels].reverse();
 
@@ -342,20 +342,15 @@ export function computeFolds(schemeId, w, h, face = 'recto') {
     cuts.push(Math.round(acc * 100) / 100);
   }
 
-  const out = {
+  return {
     scheme: scheme.id,
     label: scheme.label,
     asymmetric,
     panels: panels.map(p => Math.round(p * 100) / 100),
-    vertical: portrait ? [] : cuts,
-    horizontal: portrait ? cuts : [],
+    vertical: cuts,
+    // Croisé : pli perpendiculaire en plus, au milieu de la hauteur
+    horizontal: scheme.id === 'croise' ? [Math.round(h / 2 * 100) / 100] : [],
   };
-  // Croisé : pli perpendiculaire en plus, au milieu de l'autre axe
-  if (scheme.id === 'croise') {
-    if (portrait) out.vertical = [Math.round(w / 2 * 100) / 100];
-    else out.horizontal = [Math.round(h / 2 * 100) / 100];
-  }
-  return out;
 }
 
 // ── Lignes d'information du calque technique / LISEZMOI ───────
