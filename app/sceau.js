@@ -105,28 +105,32 @@ function _genPassphrase() {
 // EN LIGNE — le compromis est assumé et affiché à l'utilisateur.
 // Mots courts, sans accent, phonétiquement distincts (dictée téléphone).
 const _WORDS = (
-  'tigre lion loup ours aigle renard cerf lapin chat chien cheval vache ' +
-  'mouton chevre canard poule merle pigeon dauphin requin baleine truite crabe corail ' +
-  'banane pomme poire cerise fraise prune melon citron orange mangue kiwi raisin ' +
-  'tomate carotte radis oignon salade menthe basilic thym persil safran vanille cacao ' +
-  'orage nuage pluie neige soleil lune etoile comete aurore brume vent tonnerre ' +
-  'fleuve riviere lac ocean plage dune falaise volcan colline vallee foret prairie ' +
-  'chene sapin bouleau tilleul cedre palmier bambou roseau fougere lichen mousse cactus ' +
-  'rose tulipe jasmin lilas violette iris muguet pivoine lotus orchidee lavande mimosa ' +
-  'rubis saphir topaze jade ambre opale perle quartz granit marbre cristal cuivre ' +
-  'bronze argent nickel platine cobalt titane carbone soufre helium table chaise bureau ' +
-  'lampe miroir tapis rideau coussin vase cadre horloge bougie livre cahier crayon ' +
-  'stylo gomme regle ciseaux pinceau palette encre papier carton violon piano flute ' +
-  'harpe tambour trompette guitare banjo cymbale cloche sifflet accordeon navire voilier barque ' +
-  'radeau ancre voile phare quai ponton cargo fregate pirogue wagon tunnel viaduc ' +
-  'sentier chemin route carrefour panneau trottoir pont moulin grange hangar cabane chalet ' +
-  'igloo tente refuge manoir donjon tourelle citadelle boussole sextant carte globe jumelles ' +
-  'loupe telescope cadran levier poulie ressort engrenage farine levure brioche galette tarte ' +
-  'gateau sirop miel confiture beurre fromage yaourt velours soie coton laine feutre ' +
-  'cuir satin denim tweed chanvre zebre girafe koala panda lemur jaguar puma ' +
-  'lynx bison morse otarie manchot cigale fourmi abeille bourdon papillon libellule scarabee ' +
-  'grillon luciole mante ruche galaxie planete meteore eclipse zenith equateur tropique boreal ' +
-  'austral cosmos orbite fusee'
+  'tigre lion loup ours renard biche lapin chat chien cheval ' +
+  'poulain vache taureau mouton bouc canard poule dindon pigeon merle ' +
+  'moineau hibou chouette faucon aigle vautour corbeau cygne mouette flamant ' +
+  'belette fouine loutre vison furet blaireau castor taupe souris mulot ' +
+  'sanglier chevreuil daim renne morse phoque otarie manchot pingouin dauphin ' +
+  'requin baleine cachalot espadon saumon truite carpe brochet sardine anchois ' +
+  'crabe homard crevette oursin corail pieuvre calmar seiche tortue serpent ' +
+  'couleuvre iguane grenouille crapaud escargot limace fourmi abeille bourdon frelon ' +
+  'papillon chenille grillon cigale criquet mouche libellule luciole hanneton termite ' +
+  'banane pomme poire prune cerise fraise framboise myrtille cassis groseille ' +
+  'citron orange mandarine mangue kiwi raisin figue datte noix noisette ' +
+  'amande olive abricot melon coing tomate carotte radis navet chou ' +
+  'oignon poireau laitue endive concombre courgette potiron haricot lentille artichaut ' +
+  'asperge betterave panais persil basilic thym menthe sauge romarin laurier ' +
+  'estragon oseille safran vanille cacao cannelle muscade cumin anis fenouil ' +
+  'orage nuage pluie bruine brume vent rafale tonnerre foudre givre ' +
+  'verglas soleil lune astre aurore horizon galaxie orbite torrent ruisseau ' +
+  'cascade source fleuve lac marais lagune delta estuaire plage dune ' +
+  'falaise galet sable vague houle volcan colline vallon plaine prairie ' +
+  'plateau ravin gorge grotte caverne gouffre sommet versant glacier savane ' +
+  'jungle bois bosquet buisson haie sentier chemin piste carrefour trottoir ' +
+  'pont tunnel viaduc wagon gare orme tilleul bouleau saule peuplier ' +
+  'platane sapin palmier bambou roseau jonc mousse lichen cactus ronce ' +
+  'houx lierre vigne seigle avoine orge tournesol chanvre osier rotin ' +
+  'branche rameau racine feuille bourgeon pollen nectar sillon rose tulipe ' +
+  'jasmin lilas violette iris muguet pivoine'
 ).split(' ');
 
 function _genWordsPassphrase() {
