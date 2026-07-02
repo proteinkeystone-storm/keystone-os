@@ -196,6 +196,13 @@ export function specToStandard(spec, vendor, support, catDefaults = {}) {
   const s = support || {};
   const sp = spec || {};
 
+  // Cascade complète (refonte P1b/P3c) : spec exacte vendor×support
+  // → RULES du vendor pour la catégorie (fond perdu/marges/dpi
+  // habituels de cet imprimeur, applicables à tout support)
+  // → défauts de la catégorie. Ainsi TOUS les imprimeurs sont
+  // choisissables sur TOUS les supports, avec le bon gabarit.
+  const rules = (v.rules && s.category && v.rules[s.category]) || {};
+
   return {
     id: support?.id || null,
     type_support: s.type_support || s.label || '',
@@ -208,15 +215,15 @@ export function specToStandard(spec, vendor, support, catDefaults = {}) {
 
     bleed_mm: (sp.bleed_mm != null)
       ? sp.bleed_mm
-      : (catDefaults.bleed_mm ?? 0),
+      : (rules.bleed_mm ?? catDefaults.bleed_mm ?? 0),
 
     safe_margin_mm: (sp.safe_margin_mm != null)
       ? sp.safe_margin_mm
-      : (catDefaults.safe_margin_mm ?? 0),
+      : (rules.safe_margin_mm ?? catDefaults.safe_margin_mm ?? 0),
 
     dpi: (sp.dpi != null)
       ? sp.dpi
-      : (catDefaults.dpi ?? null),
+      : (rules.dpi ?? catDefaults.dpi ?? null),
 
     color_profile: v.color_profile || catDefaults.color_profile || '',
     export_format: v.export_format || catDefaults.export_format || '',

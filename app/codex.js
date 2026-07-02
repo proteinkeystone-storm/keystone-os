@@ -1200,6 +1200,8 @@ async function _pickVendor(vendorId) {
   // Toast info — feedback immédiat sur le changement de specs
   if (spec) {
     _toastOk(`Adapté à ${vendor.label} · fond perdu ${spec.bleed_mm} mm`);
+  } else if (vendor?.rules?.[support.category]) {
+    _toastOk(`Normes ${vendor.label} appliquées · fond perdu ${d.standard.bleed_mm} mm`);
   } else if (vendorId === 'other') {
     _toastOk('Standards génériques appliqués');
   }
@@ -1674,16 +1676,22 @@ async function _renderDestVendors() {
     return;
   }
 
-  // Dimensions libres : tous les imprimeurs sont proposés (leurs règles
-  // par catégorie s'appliquent à n'importe quelles cotes). Support connu :
-  // seulement ceux qui ont une spec précise (+ « Je ne sais pas »).
-  const vendors = supportId === '__custom__'
-    ? (await loadVendors()).sort((a, b) => {
-        if (a.id === 'other') return 1;
-        if (b.id === 'other') return -1;
-        return (a.level || 99) - (b.level || 99);
-      })
-    : await getVendorsForSupport(supportId);
+  // TOUS les imprimeurs sont proposés sur TOUS les supports (P3c) :
+  // spec exacte quand elle existe, sinon les règles de l'imprimeur
+  // pour la catégorie (cascade dans specToStandard). Le badge indique
+  // le niveau de précision. Tri : specs exactes d'abord, « Je ne sais
+  // pas » toujours en dernier.
+  const all = await loadVendors();
+  const withPrecision = await Promise.all(all.map(async v => ({
+    v,
+    hasSpec: supportId !== '__custom__' && !!(await getSpec(v.id, supportId)),
+  })));
+  withPrecision.sort((a, b) => {
+    if (a.v.id === 'other') return 1;
+    if (b.v.id === 'other') return -1;
+    if (a.hasSpec !== b.hasSpec) return a.hasSpec ? -1 : 1;
+    return (a.v.level || 99) - (b.v.level || 99);
+  });
   const currentId = _state.destination.vendor_id;
 
   slot.innerHTML = `
@@ -1698,15 +1706,15 @@ async function _renderDestVendors() {
         </span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${vendors.map(v => _renderVendorPill(v, currentId === v.id)).join('')}
+        ${withPrecision.map(({ v, hasSpec }) => _renderVendorPill(v, currentId === v.id, hasSpec)).join('')}
       </div>
     </div>
   `;
 }
 
-function _renderVendorPill(v, isActive) {
+function _renderVendorPill(v, isActive, hasSpec = false) {
   const isOther = v.id === 'other';
-  const badgeText = isOther ? 'Saisie libre' : 'Specs précises';
+  const badgeText = isOther ? 'Saisie libre' : (hasSpec ? 'Specs exactes' : 'Normes imprimeur');
   const badgeBg   = isOther ? 'transparent' : 'var(--ws-accent-soft)';
   const badgeFg   = isOther ? 'var(--ws-text-muted)' : 'var(--ws-accent)';
   return `
