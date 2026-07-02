@@ -768,9 +768,14 @@ html.light-mode .gw-fam:hover:not(.is-active) { color: #334155; background: rgba
 .gw-field-label { font-size: 11px; color: var(--text-muted, #888); font-weight: 500; }
 .gw-select {
   width: 100%; box-sizing: border-box;
-  padding: 9px 12px; border-radius: 8px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  padding: 9px 32px 9px 12px; border-radius: 8px;
+  background-color: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
   color: var(--text-primary, #fff); font-size: 13px; font-family: inherit;
+  /* Charte flat : neutralise le rendu natif bombé + chevron neutre */
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center;
 }
 .gw-select:focus { outline: 0; border-color: rgba(120,160,255,.4); }
 
@@ -881,8 +886,9 @@ html.light-mode .gw-variant-empty { background: rgba(0,0,0,.015); border-color: 
 html.light-mode .gw-tab { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.1); }
 html.light-mode .gw-tab:hover:not(.is-active) { background: rgba(0,0,0,.05); color: #334155; }
 html.light-mode .gw-tab.is-active { background: rgba(80,110,230,.12); border-color: rgba(80,110,230,.4); }
-html.light-mode .gw-source,
-html.light-mode .gw-select { background: #fff; border-color: rgba(0,0,0,.14); }
+html.light-mode .gw-source { background: #fff; border-color: rgba(0,0,0,.14); }
+/* background-color (pas le shorthand) : préserve le chevron du select */
+html.light-mode .gw-select { background-color: #fff; border-color: rgba(0,0,0,.14); color: #1e293b; }
 html.light-mode .gw-source:focus { background: #fff; border-color: rgba(80,110,230,.5); }
 html.light-mode .gw-chip { background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.08); }
 html.light-mode .gw-chip-engine { background: rgba(80,110,230,.1); border-color: rgba(80,110,230,.25); color: #4456c4; }
