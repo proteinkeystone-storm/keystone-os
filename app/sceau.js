@@ -455,15 +455,22 @@ function _renderResult(main) {
         <div class="sceau-card-lbl">${linkLbl}</div>
         <div class="sceau-linkrow"><code class="sceau-code">${_esc(r.url)}</code><button class="sceau-iconbtn" data-act="copyurl" title="Copier">${icon('copy', 17)}</button></div>
         <div class="sceau-qr" id="sceau-qr"></div>
-        <div class="sceau-qr-export">
-          <span class="sceau-qr-export-lbl">Exporter le QR</span>
-          <button class="sceau-btn" data-act="qr-export" data-fmt="png">${icon('download', 15)} PNG</button>
-          <button class="sceau-btn" data-act="qr-export" data-fmt="svg">${icon('download', 15)} SVG</button>
-          <button class="sceau-btn" data-act="qr-export" data-fmt="pdf">${icon('download', 15)} PDF</button>
-        </div>
-        <div class="sceau-nfcrow">
-          ${(typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share">${icon('share', 16)} Partager</button>` : ''}
-          <button class="sceau-btn" data-act="nfc">${icon('radio', 16)} Puce NFC</button>
+        <div class="sceau-qr-actions">
+          <div class="sceau-qr-group">
+            <span class="sceau-qr-group-lbl">Exporter le QR</span>
+            <div class="sceau-qr-group-btns">
+              <button class="sceau-btn" data-act="qr-export" data-fmt="png">${icon('download', 15)} PNG</button>
+              <button class="sceau-btn" data-act="qr-export" data-fmt="svg">${icon('download', 15)} SVG</button>
+              <button class="sceau-btn" data-act="qr-export" data-fmt="pdf">${icon('download', 15)} PDF</button>
+            </div>
+          </div>
+          <div class="sceau-qr-group">
+            <span class="sceau-qr-group-lbl">Diffuser le QR</span>
+            <div class="sceau-qr-group-btns">
+              ${(typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share">${icon('share', 16)} Partager</button>` : ''}
+              <button class="sceau-btn" data-act="nfc">${icon('radio', 16)} Puce NFC</button>
+            </div>
+          </div>
         </div>
         <span class="sceau-nfc-msg" id="sceau-nfc-msg"></span>
         ${emptyNote}
@@ -732,12 +739,20 @@ function _toggleRowQr(url, key) {
   const nfc = ('NDEFReader' in window) ? `<button class="sceau-btn" data-act="nfc-url" data-url="${u}">${icon('radio', 16)} Puce NFC</button>` : '';
   const share = (typeof navigator !== 'undefined' && navigator.share) ? `<button class="sceau-btn" data-act="qr-share" data-url="${u}">${icon('share', 16)} Partager</button>` : '';
   slot.innerHTML = `<div class="sceau-qr-pop"><div class="sceau-qr" id="sceau-rowqr"></div><code class="sceau-code">${u}</code>
-    <div class="sceau-qr-export"><span class="sceau-qr-export-lbl">Exporter le QR</span>
-      <button class="sceau-btn" data-act="qr-export" data-fmt="png" data-url="${u}">${icon('download', 15)} PNG</button>
-      <button class="sceau-btn" data-act="qr-export" data-fmt="svg" data-url="${u}">${icon('download', 15)} SVG</button>
-      <button class="sceau-btn" data-act="qr-export" data-fmt="pdf" data-url="${u}">${icon('download', 15)} PDF</button>
-    </div>
-    <div class="sceau-nfcrow">${share}${nfc}</div><span class="sceau-nfc-msg" id="sceau-rowqr-msg"></span></div>`;
+    <div class="sceau-qr-actions">
+      <div class="sceau-qr-group">
+        <span class="sceau-qr-group-lbl">Exporter le QR</span>
+        <div class="sceau-qr-group-btns">
+          <button class="sceau-btn" data-act="qr-export" data-fmt="png" data-url="${u}">${icon('download', 15)} PNG</button>
+          <button class="sceau-btn" data-act="qr-export" data-fmt="svg" data-url="${u}">${icon('download', 15)} SVG</button>
+          <button class="sceau-btn" data-act="qr-export" data-fmt="pdf" data-url="${u}">${icon('download', 15)} PDF</button>
+        </div>
+      </div>
+      ${(share || nfc) ? `<div class="sceau-qr-group">
+        <span class="sceau-qr-group-lbl">Diffuser le QR</span>
+        <div class="sceau-qr-group-btns">${share}${nfc}</div>
+      </div>` : ''}
+    </div><span class="sceau-nfc-msg" id="sceau-rowqr-msg"></span></div>`;
   _renderQr(url, slot.querySelector('#sceau-rowqr'));
 }
 

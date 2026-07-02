@@ -119,6 +119,12 @@ function _page(base, nonce, bundleHref, sri) {
   .seal svg{width:48px;height:48px;fill:#fff;stroke:none}
   .seal.cracked{animation:crack .7s ease forwards}
   @keyframes crack{40%{transform:scale(1.08) rotate(-3deg)}100%{transform:scale(.2) rotate(12deg);opacity:0}}
+  /* Après ouverture : le sceau devient la rosette Keystone (sinon il laisse
+     un trou de 92px — l'anim crack le rend invisible mais garde sa place). */
+  .seal.opened{background:none;box-shadow:none;animation:sealin .6s ease forwards}
+  .seal.opened::after{display:none}
+  .seal.opened svg{width:64px;height:64px}
+  @keyframes sealin{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
   h1{font:900 24px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif; letter-spacing:-0.03em; margin:0 0 8px}
   p{color:var(--muted); margin:0 0 22px; font-size:14.5px}
   .field{display:flex;flex-direction:column;gap:10px;text-align:left}
@@ -144,7 +150,8 @@ function _page(base, nonce, bundleHref, sri) {
     max-height:50vh; overflow:auto;
   }
   .copy-icon{position:absolute;top:50%;transform:translateY(-50%);right:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
-    background:#1b2335;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;padding:0}
+    background:#1b2335;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;padding:0;
+    margin:0}  /* ⚠ neutralise le button{margin-top:16px} global — sinon le bouton descend de 16px et déborde de la boîte */
   .copy-icon:hover{color:var(--ink);border-color:var(--accent)}
   .copy-icon.ok{color:var(--ok);border-color:var(--ok)}
   .secret-audio{width:100%;margin-top:4px}
@@ -182,6 +189,21 @@ function _page(base, nonce, bundleHref, sri) {
     const enc = new TextEncoder(), dec = new TextDecoder();
     const $ = (h) => { document.getElementById('view').innerHTML = h; };
     const seal = document.getElementById('seal');
+
+    // Rosette Keystone (keystone-puce.svg, styles convertis en attributs —
+    // la CSP style-src nonce bloquerait un <style> interne au SVG). Posée à
+    // la place du sceau craqué une fois la missive ouverte (cf sealOpened).
+    const ROSETTE =
+      '<svg viewBox="0 0 260.85 246.17" aria-hidden="true">'+
+      '<path fill="#c9b48a" d="M21,143.31c0-46.13,28.69-85.68,69.17-101.75l-7.72-19.53C34.2,41.19,0,88.33,0,143.31c0,41.61,19.59,78.73,50.03,102.63l12.94-16.52c-25.54-20.05-41.97-51.19-41.97-86.1Z"/>'+
+      '<path fill="#c9b48a" d="M179.22,22.37l-7.86,19.47c40.11,16.24,68.48,55.6,68.48,101.47,0,35.02-16.54,66.25-42.22,86.29l12.9,16.56c30.61-23.89,50.32-61.11,50.32-102.85,0-54.67-33.82-101.58-81.63-120.94Z"/>'+
+      '<path fill="#fff" d="M229.14,143.31c0-41.38-25.59-76.89-61.78-91.54l-5.62,13.92c30.69,12.43,52.4,42.52,52.4,77.62,0,26.79-12.67,50.67-32.31,66l9.23,11.85c23.16-18.08,38.09-46.25,38.09-77.85Z"/>'+
+      '<path fill="#fff" d="M46.71,143.31c0-35.29,21.96-65.53,52.93-77.82l-5.53-13.97c-36.52,14.5-62.4,50.18-62.4,91.8,0,31.5,14.83,59.59,37.87,77.68l9.26-11.82c-19.54-15.34-32.13-39.15-32.13-65.86Z"/>'+
+      '<path fill="#fff" opacity=".13" d="M130.42,106.96c-20.07,0-36.35,16.27-36.35,36.35s16.27,36.35,36.35,36.35,36.35-16.27,36.35-36.35-16.27-36.35-36.35-36.35ZM130.42,167.77c-13.51,0-24.46-10.95-24.46-24.46s10.95-24.46,24.46-24.46,24.46,10.95,24.46,24.46-10.95,24.46-24.46,24.46Z"/>'+
+      '<circle fill="#fff" cx="130.42" cy="143.31" r="24.46"/>'+
+      '<path fill="#c9b48a" d="M108.68,65.49h42.9l19.79-60.83c-27.22-6.17-54.28-6.24-81.19,0l18.51,60.83Z"/>'+
+      '</svg>';
+    function sealOpened(){ seal.innerHTML = ROSETTE; seal.classList.add('opened'); }
     const b64d = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
     // Paramètres E2E CANONIQUES — DOIVENT être identiques côté création (S3).
@@ -284,6 +306,7 @@ function _page(base, nonce, bundleHref, sri) {
       const copySvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
       const checkSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
       setTimeout(()=>{
+        sealOpened();
         $(
           '<h1>Missive ouverte</h1>'+
           '<p>Lisez maintenant — ce message ne se rouvrira pas.</p>'+
@@ -300,6 +323,7 @@ function _page(base, nonce, bundleHref, sri) {
     function revealAudio(url){
       seal.classList.add('cracked');
       setTimeout(()=>{
+        sealOpened();
         $(
           '<h1>Missive ouverte</h1>'+
           '<p>Écoutez maintenant — ce message ne se rejouera pas après fermeture.</p>'+
@@ -329,6 +353,7 @@ function _page(base, nonce, bundleHref, sri) {
       // un \/ y serait avalé → JS cassé dans la page servie.
       const isImg = type.indexOf('image/') === 0;
       setTimeout(()=>{
+        sealOpened();
         $(
           '<h1>Missive ouverte</h1>'+
           '<p>Téléchargez maintenant — ce fichier ne se rouvrira pas après fermeture.</p>'+
