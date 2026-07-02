@@ -109,6 +109,22 @@
     width: min(440px, 92vw);
     z-index: 60;
     box-shadow: -12px 0 44px rgba(0, 0, 0, .30);
+    background: var(--ws-surface, #1c2234);   /* surcouche opaque (la colonne héritait d'un fond translucide) */
+  }
+  /* Voile sombre + flou derrière la surcouche : évite la superposition
+     brute sur l'éditeur. z-index:-1 = derrière le panneau mais dans son
+     stacking context (donc au-dessus du reste de la page). Le clic sur
+     le voile referme l'aperçu (cible = la section elle-même, cf pulsa.js). */
+  .pulsa-app[data-step="structure"]  .pulsa-preview-col::before,
+  .pulsa-app[data-step="appearance"] .pulsa-preview-col::before {
+    content: '';
+    position: fixed;
+    top: var(--ws-topbar-h, 56px);
+    left: 0; right: 0; bottom: 0;
+    z-index: -1;
+    background: rgba(8, 12, 24, .48);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 }
 

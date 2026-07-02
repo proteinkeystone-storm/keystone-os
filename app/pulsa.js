@@ -317,6 +317,13 @@ function _buildShell() {
 // Délégation événements
 // ═══════════════════════════════════════════════════════════════
 function _onClick(e) {
+  // Surcouche aperçu (≤1280px) : un clic sur le voile referme l'aperçu.
+  // Le voile est le ::before de la section → la cible du clic est la
+  // section ELLE-MÊME (jamais le cas via son contenu head/stage).
+  if (_previewMq.matches && e.target.classList?.contains('pulsa-preview-col')) {
+    _root.classList.add('pulsa-preview-collapsed');
+    return;
+  }
   const t = e.target.closest('[data-act]');
   if (!t) return;
   const act = t.dataset.act;
