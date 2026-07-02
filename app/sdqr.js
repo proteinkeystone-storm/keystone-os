@@ -1286,7 +1286,7 @@ function _openCreateForm(panel, opts = {}) {
 const _TYPE_FAMILIES = [
   { id: 'liens',    label: 'Liens',    types: ['url', 'text'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
-  { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'tel'],
+  { id: 'contact',  label: 'Contact',  types: ['vcard', 'email', 'sms', 'whatsapp', 'telegram', 'tel'],
     // Pages hébergées « Contact » (templates Smart) à côté des types natifs.
     smartTypes: ['carte-visite', 'reseaux-sociaux'],
     ico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
@@ -4216,6 +4216,10 @@ function _renderStatsBody(data, qr) {
           <div class="sdqr-chart-title">Systèmes</div>
           ${_renderBarChart(data.byOs.map(r => ({ label: _osLabel(r.os), value: r.cnt })))}
         </div>
+        <div class="sdqr-chart-card">
+          <div class="sdqr-chart-title">Empreintes appareil · derniers scans</div>
+          <div id="sdqr-uahash-card"><div class="sdqr-empty-mini">Chargement…</div></div>
+        </div>
       </div>
     ` : `
       <div class="sdqr-stats-empty">
@@ -4409,7 +4413,73 @@ function _renderPrintedControl(meta) {
 }
 
 // Wiring du contrôle « imprimé » : édition inline (input date) → PATCH → reload.
+// ── Empreintes appareil (ua_hash) — carte « derniers scans » ────────
+// Se nourrit de l'export CSV existant (/api/qr/:id/scans.csv) : AUCUN
+// nouveau endpoint Worker. Le ua_hash (UA hachée tronquée 8 hex, RGPD-safe)
+// permet de repérer si les scans viennent du même appareil ou d'appareils
+// différents. Nuance affichée : même empreinte = même modèle+navigateur,
+// deux téléphones identiques peuvent donc la partager.
+function _uaHue(hash) {
+  // Hash complet (8 hex) pour répartir les teintes — 4 hex seulement
+  // rapprochait des empreintes distinctes (la légende promet l'inverse).
+  return (parseInt(String(hash), 16) || 0) % 360;
+}
+function _uaRelTime(ts) {
+  // ts CSV = UTC « YYYY-MM-DD HH:MM:SS » → ISO UTC.
+  const d = new Date(String(ts).replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return '';
+  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (s < 60)        return 'à l\'instant';
+  if (s < 3600)      return `il y a ${Math.floor(s / 60)} min`;
+  if (s < 86400)     return `il y a ${Math.floor(s / 3600)} h`;
+  if (s < 86400 * 30) return `il y a ${Math.floor(s / 86400)} j`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+async function _loadUaHashCard(content, qr) {
+  const host = content.querySelector('#sdqr-uahash-card');
+  if (!host) return;
+  try {
+    const r = await fetch(_apiScansCsvUrl(qr.id), { headers: _headers() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const lines = (await r.text()).trim().split('\n').slice(1);  // skip header
+    const RECENT = 100;
+    const recent = lines.slice(0, RECENT).map(l => {
+      const [ts, country, device, os, hash] = l.split(',');
+      return { ts, country, device, os, hash: hash || '?' };
+    }).filter(s => s.ts);
+    if (!recent.length) {
+      host.innerHTML = `<div class="sdqr-empty-mini">Aucun scan enregistré.</div>`;
+      return;
+    }
+    // Groupe par empreinte — dernier vu en premier (lignes déjà triées DESC).
+    const byHash = new Map();
+    for (const s of recent) {
+      const g = byHash.get(s.hash);
+      if (g) { g.count++; }
+      else byHash.set(s.hash, { ...s, count: 1 });
+    }
+    const groups = [...byHash.values()].slice(0, 8);
+    const rows = groups.map(g => `
+      <div class="sdqr-ua-row">
+        <span class="sdqr-ua-dot" style="background:hsl(${_uaHue(g.hash)},62%,58%)"></span>
+        <code class="sdqr-ua-hash">${_esc(g.hash)}</code>
+        <span class="sdqr-ua-count">×${g.count}</span>
+        <span class="sdqr-ua-meta">${_esc(_deviceLabel(g.device))} · ${_esc(_osLabel(g.os))}</span>
+        <span class="sdqr-ua-time">${_esc(_uaRelTime(g.ts))}</span>
+      </div>
+    `).join('');
+    host.innerHTML = `
+      <div class="sdqr-ua-summary">${byHash.size} empreinte${byHash.size > 1 ? 's' : ''} distincte${byHash.size > 1 ? 's' : ''} sur les ${recent.length} derniers scans</div>
+      ${rows}
+      <div class="sdqr-ua-hint">Empreinte = navigateur haché (anonyme, 8 hex). Même couleur = même empreinte — deux appareils identiques peuvent la partager.</div>
+    `;
+  } catch (e) {
+    host.innerHTML = `<div class="sdqr-empty-mini sdqr-empty-mini--err">Empreintes indisponibles : ${_esc(e.message)}</div>`;
+  }
+}
+
 function _wireStatsBody(content, qr) {
+  _loadUaHashCard(content, qr);
   const row = content.querySelector('.sdqr-printed-row');
   if (!row || row._wired) return;
   row._wired = true;

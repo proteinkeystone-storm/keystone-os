@@ -9133,6 +9133,43 @@ html.light-mode .sdqr-type-badge--smart { color: #4338ca; }
   gap: 12px;
 }
 
+/* Empreintes appareil (ua_hash) — carte « derniers scans » */
+.sdqr-ua-summary {
+  font-size: 12px; font-weight: 600;
+  color: rgba(220,225,240,.75);
+  margin-bottom: 10px;
+}
+.sdqr-ua-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.sdqr-ua-row:last-of-type { border-bottom: none; }
+.sdqr-ua-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  flex: 0 0 auto;
+}
+.sdqr-ua-hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: rgba(220,225,240,.9);
+  letter-spacing: .03em;
+}
+.sdqr-ua-count { font-weight: 700; color: rgba(220,225,240,.9); }
+.sdqr-ua-meta {
+  flex: 1; min-width: 0;
+  font-size: 10.5px; color: rgba(220,225,240,.45);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sdqr-ua-time {
+  font-size: 10.5px; color: rgba(220,225,240,.45);
+  flex: 0 0 auto;
+}
+.sdqr-ua-hint {
+  font-size: 10px; color: rgba(220,225,240,.35);
+  line-height: 1.45; margin-top: 10px;
+}
+
 /* Horizontal bars */
 .sdqr-bar-list { list-style: none; padding: 0; margin: 0; }
 .sdqr-bar-row {

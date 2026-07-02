@@ -74,6 +74,7 @@ export function scanPreviewHtml(cre, design) {
     case 'email'   : return _spDevice(_spEmail(p),    '#fff');
     case 'sms'     : return _spDevice(_spSms(p),      '#fff');
     case 'whatsapp': return _spDevice(_spWhatsapp(p), '#ECE5DD');
+    case 'telegram': return _spDevice(_spTelegram(p), '#fff');
     case 'tel'     : return _spDevice(_spTel(p),      '#fff');
     case 'geo'     : return _spDevice(_spGeo(p),      '#e7edf0');
     default        : return _spDevice(_spBrowser(p),  '#fff');
@@ -226,6 +227,22 @@ function _spWhatsapp(p) {
     + `</div></div>`
     + `<div class="sdqr-sp-body" style="align-items:center;justify-content:flex-start;padding:10px"><div style="background:rgba(255,255,255,.72);border-radius:8px;font-size:9px;color:#54656f;padding:3px 9px">aujourd'hui</div></div>`
     + `<div style="display:flex;align-items:flex-end;gap:7px;padding:8px 10px;background:#f4f4f4;flex:0 0 auto"><div style="flex:1;background:#fff;border-radius:16px;padding:7px 11px;font-size:11px;color:${msg ? '#1c1c1e' : '#9a9a9e'};line-height:1.4;max-height:54px;overflow:hidden;word-break:break-word">${msg ? _esc(msg) : 'Message'}</div><div style="width:28px;height:28px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;flex:0 0 auto">${_spSend('#fff')}</div></div>`;
+}
+
+// Telegram : header bleu brand, pastille pseudo, bulle de brouillon dans la
+// barre de saisie (même structure que _spWhatsapp — cohérence des messageries).
+function _spTelegram(p) {
+  const msg    = (p.message || '').trim();
+  const target = (p.target || '').trim();
+  const label  = target ? (target.startsWith('+') || /^\d/.test(target) ? target : '@' + target.replace(/^@/, '')) : 'Contact Telegram';
+  const ini    = (target.replace(/^[@+]/, '')[0] || 'T').toUpperCase();
+  return `<div style="background:#2AABEE;color:#fff">${_spStatus(true)}`
+    + `<div style="display:flex;align-items:center;gap:8px;padding:1px 12px 10px">${_SP_ICON.back}`
+      + `<div style="width:28px;height:28px;border-radius:50%;background:#1c8adb;display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:13px;font-weight:700;color:#eaf6ff">${_esc(ini)}</div>`
+      + `<div style="min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(label)}</div><div style="font-size:9px;opacity:.85">en ligne</div></div>`
+    + `</div></div>`
+    + `<div class="sdqr-sp-body" style="align-items:center;justify-content:flex-start;padding:10px;background:#e7f0f6"><div style="background:rgba(255,255,255,.85);border-radius:8px;font-size:9px;color:#5a6b7a;padding:3px 9px">aujourd'hui</div></div>`
+    + `<div style="display:flex;align-items:flex-end;gap:7px;padding:8px 10px;background:#fff;flex:0 0 auto"><div style="flex:1;background:#f1f4f7;border-radius:16px;padding:7px 11px;font-size:11px;color:${msg ? '#1c1c1e' : '#9a9a9e'};line-height:1.4;max-height:54px;overflow:hidden;word-break:break-word">${msg ? _esc(msg) : 'Message'}</div><div style="width:28px;height:28px;border-radius:50%;background:#2AABEE;display:flex;align-items:center;justify-content:center;flex:0 0 auto">${_spSend('#fff')}</div></div>`;
 }
 
 function _spTel(p) {
