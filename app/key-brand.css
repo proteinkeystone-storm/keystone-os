@@ -274,6 +274,46 @@
 .kb-font-declare{display:block;width:100%;background:none;border:0;border-top:1px solid var(--kb-line);color:var(--kb-muted);font-size:13px;padding:12px;cursor:pointer;text-align:center;transition:color .15s}
 .kb-font-declare:hover{color:var(--kb-ink)}
 
+/* ══ Onglet Règles (KB-4) — interdits auto-générés ══ */
+.kb-forbid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:14px}
+.kb-forbid-card{position:relative;margin:0;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:14px;overflow:hidden;transition:opacity .15s}
+.kb-forbid-card.is-off{opacity:.38}
+.kb-forbid-card figcaption{display:flex;align-items:center;gap:6px;padding:9px 12px;font-size:12px;font-weight:600;color:var(--kb-muted);border-top:1px solid var(--kb-line)}
+.kb-forbid-good figcaption{color:var(--ws-success)}
+.kb-forbid-card:not(.kb-forbid-good) figcaption{color:var(--ws-danger)}
+
+/* La boîte blanche où le logo est (mal)traité. */
+.kb-forbid-box{position:relative;height:120px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.kb-forbid-box img{max-width:62%;max-height:56%;object-fit:contain}
+.kb-forbid-slash{position:absolute;left:-6%;right:-6%;top:50%;height:3px;background:#e11d48;transform:rotate(-18deg);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+
+/* Les maltraitances — pures transformations CSS du VRAI logo. */
+.kb-forbid-distort img{transform:scaleX(1.7)}
+.kb-forbid-tilt img{transform:rotate(-16deg)}
+.kb-forbid-recolor img{filter:hue-rotate(120deg) saturate(1.6)}
+.kb-forbid-invert img{filter:invert(1)}
+.kb-forbid-invert{background:#1c1c22}
+.kb-forbid-shadow img{filter:drop-shadow(5px 7px 3px rgba(0,0,0,.55))}
+.kb-forbid-outline img{outline:3px solid #e11d48;outline-offset:8px}
+.kb-forbid-opacity img{opacity:.35}
+.kb-forbid-busybg{background:repeating-linear-gradient(45deg,#ffd800 0 12px,#fc5b47 12px 24px,#2300c8 24px 36px,#00bd9e 36px 48px)}
+.kb-forbid-crowd img{transform:translateX(-14%)}
+.kb-crowd-a,.kb-crowd-b{position:absolute;background:#9aa2b1;border-radius:4px}
+.kb-crowd-a{width:34%;height:10px;right:6%;top:38%}
+.kb-crowd-b{width:24%;height:10px;right:6%;top:55%}
+
+.kb-forbid-toggle{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.85);color:#3a3f4a;cursor:pointer;opacity:0;transition:opacity .15s}
+.kb-forbid-card:hover .kb-forbid-toggle,.kb-forbid-card.is-off .kb-forbid-toggle{opacity:1}
+.kb-forbid-invert .kb-forbid-toggle{background:rgba(255,255,255,.85)}
+
+/* Règles custom */
+.kb-rule-custom{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.kb-rule-custom .kb-field-input{flex:1}
+.kb-rule-custom-img{width:56px;height:42px;flex-shrink:0;border:1px solid var(--kb-line);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0}
+.kb-rule-custom-img img{width:100%;height:100%;object-fit:cover}
+.kb-rule-custom-img.is-empty{background:rgba(0,0,0,.14);color:var(--kb-muted);border-style:dashed}
+.kb-rules .kb-lab{margin-top:26px}
+
 /* ── États & toast ── */
 .kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
 .kb-state-err{color:var(--ws-danger)}

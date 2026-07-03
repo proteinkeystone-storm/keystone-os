@@ -98,6 +98,24 @@ const FONT_ROLE_HINTS = {
   substitution: 'quand la vraie police n\'est pas installée',
 };
 
+// ── Onglet Règles (KB-4) ──
+// Les ~9 interdits canoniques des chartes professionnelles (relevés dans
+// Data Terra / Cap Atlantique / UM / Nevers) — chacun est une simple
+// transformation CSS appliquée au VRAI logo de la charte. La classe CSS
+// .kb-forbid-<key> porte la maltraitance (key-brand.css).
+const INTERDITS_DEFS = [
+  ['distort', 'Ne pas déformer le logo'],
+  ['tilt',    'Ne pas l\'incliner'],
+  ['recolor', 'Ne pas changer ses couleurs'],
+  ['invert',  'Ne pas l\'inverser en négatif'],
+  ['shadow',  'Ne pas ajouter d\'ombre ni d\'effet'],
+  ['outline', 'Ne pas l\'encadrer d\'un filet'],
+  ['opacity', 'Ne pas baisser son opacité'],
+  ['busybg',  'Ne pas le poser sur un fond chargé'],
+  ['crowd',   'Ne pas envahir sa zone de protection'],
+];
+let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | { rule: id }
+
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
 const TABS = [
   { key: 'logo',   label: 'Logo',          icon: 'keybrand' },
@@ -336,7 +354,7 @@ function _onClick(e) {
 
   // ── Onglet Logo (KB-1) ──
   const vid = btn.closest('[data-vid]')?.dataset.vid;
-  if (act === 'logo-add')  { _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'logo-add')  { _pickTarget = 'logo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'logo-zip')  { _downloadKit(); return; }
   if (act === 'logo-bg')   { _logoBg = btn.dataset.bg || 'checker'; _renderChart(); return; }
   if (act === 'logo-adv')  { _logoAdv = !_logoAdv; _renderChart(); return; }
@@ -352,6 +370,14 @@ function _onClick(e) {
   if (act === 'c-adv' && cid)     { _colorAdv = _colorAdv === cid ? null : cid; _renderChart(); return; }
   if (act === 'c-del' && cid)     { _deleteColor(cid); return; }
   if (act === 'harmony-add')      { _addColor(btn.dataset.hex, btn.dataset.name); return; }
+
+  // ── Onglet Règles (KB-4) ──
+  const rid = btn.closest('[data-rid]')?.dataset.rid;
+  if (act === 'rule-toggle')     { _toggleInterdit(btn.dataset.key); return; }
+  if (act === 'rule-custom-add') { _addCustomRule(); return; }
+  if (act === 'rc-del' && rid)   { _deleteCustomRule(rid); return; }
+  if (act === 'rc-img' && rid)   { _pickTarget = { rule: rid }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'goto-logo')       { _tab = 'logo'; _renderChart(); return; }
 
   // ── Onglet Typographies (KB-3) ──
   const fid = btn.closest('[data-fid]')?.dataset.fid;
@@ -426,6 +452,13 @@ function _onInput(e) {
   }
   if (el.dataset.field === 'f-family' && f) { f.family = el.value.slice(0, 60); _scheduleSave(); _refreshSpecimens(); }
   if (el.dataset.field === 'f-buy' && f)    { f.buyUrl = el.value.slice(0, 200) || null; _scheduleSave(); }
+
+  // ── Onglet Règles (KB-4) ──
+  if (el.dataset.field === 'rc-label') {
+    const rid = el.closest('[data-rid]')?.dataset.rid;
+    const r = _chart && _rulesSection().custom.find(x => x.id === rid);
+    if (r) { r.label = el.value.slice(0, 160); _scheduleSave(); }
+  }
 }
 
 // Les <select> émettent 'change', pas 'input'.
@@ -581,7 +614,7 @@ function _renderChart() {
       <section class="kb-tabpane" role="tabpanel">${_renderTab(_tab)}</section>
     </div>`;
 
-  if (_tab === 'logo') _hydrateLogoImgs();
+  if (_tab === 'logo' || _tab === 'rules') _hydrateLogoImgs();
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -594,15 +627,7 @@ function _renderTab(key) {
 
   if (key === 'type') return _renderTypeTab();
 
-  if (key === 'rules') return `
-    <div class="kb-ghost">
-      <div class="kb-ghost-rules" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <h3>Les règles à respecter</h3>
-      <p>Dès que votre logo est déposé, les interdits classiques se génèrent tout seuls avec VOTRE logo — déformation, mauvaise couleur, fond chargé…</p>
-      <button class="kb-btn primary" data-act="soon">${icon('shield-check', 16)} Générer les interdits</button>
-    </div>`;
+  if (key === 'rules') return _renderRulesTab();
 
   return `
     <div class="kb-ghost">
@@ -801,6 +826,12 @@ async function _hydrateLogoImgs() {
 // ── Dépôt de fichiers ──
 async function _onFilesPicked(fileList) {
   if (!_chart || !fileList || !fileList.length) return;
+  // Cible « vignette de règle custom » (KB-4) : un seul fichier image.
+  if (_pickTarget && _pickTarget.rule) {
+    const target = _pickTarget; _pickTarget = 'logo';
+    await _onRuleImagePicked(fileList[0], target.rule);
+    return;
+  }
   const files = [...fileList];
   _uploading = true; _renderChart();
   let added = 0;
@@ -1306,6 +1337,132 @@ function _refreshSpecimens() {
     const out = card.querySelector('[data-slot="size-out"]');
     if (out && pref.size) out.textContent = `${pref.size} px`;
   });
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET RÈGLES (KB-4) — les interdits qui s'auto-génèrent
+// ════════════════════════════════════════════════════════════════
+function _rulesSection() {
+  if (!_chart.draft.rules || typeof _chart.draft.rules !== 'object') {
+    _chart.draft.rules = { interdits: [], custom: [] };
+  }
+  if (!Array.isArray(_chart.draft.rules.interdits)) _chart.draft.rules.interdits = [];
+  if (!Array.isArray(_chart.draft.rules.custom)) _chart.draft.rules.custom = [];
+  return _chart.draft.rules;
+}
+// Les toggles persistés : au premier passage avec un logo, tout est activé.
+function _interditState() {
+  const rules = _rulesSection();
+  if (!rules.interdits.length) {
+    rules.interdits = INTERDITS_DEFS.map(([key]) => ({ key, enabled: true }));
+    _scheduleSave();
+  }
+  const map = new Map(rules.interdits.map(r => [r.key, r]));
+  // Nouveaux interdits ajoutés dans une future version : activés par défaut.
+  for (const [key] of INTERDITS_DEFS) {
+    if (!map.has(key)) { const r = { key, enabled: true }; rules.interdits.push(r); map.set(key, r); }
+  }
+  return map;
+}
+function _toggleInterdit(key) {
+  const map = _interditState();
+  const r = map.get(key);
+  if (!r) return;
+  r.enabled = !r.enabled;
+  _scheduleSave(); _renderChart();
+}
+function _addCustomRule() {
+  _rulesSection().custom.push({
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+    label: '', assetId: null,
+  });
+  _scheduleSave(); _renderChart();
+  const inputs = _root.querySelectorAll('[data-field="rc-label"]');
+  inputs[inputs.length - 1]?.focus();
+}
+function _deleteCustomRule(rid) {
+  const rules = _rulesSection();
+  const r = rules.custom.find(x => x.id === rid);
+  if (r && r.assetId) { _api(`/assets/${encodeURIComponent(r.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  rules.custom = rules.custom.filter(x => x.id !== rid);
+  _scheduleSave(); _renderChart();
+}
+async function _onRuleImagePicked(file, rid) {
+  const rules = _rulesSection();
+  const r = rules.custom.find(x => x.id === rid);
+  if (!r || !file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext)) { _toast('Image attendue (PNG, JPG, WebP ou SVG).'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast('Image trop lourde (max 4 Mo).'); return; }
+  if (ext === 'svg' && !svgLooksSafe(await file.text())) { _toast('SVG refusé (code actif ou référence externe).'); return; }
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    if (r.assetId) { _api(`/assets/${encodeURIComponent(r.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+    r.assetId = asset.id;
+    _scheduleSave(); _renderChart();
+  } catch (e) { _toast(e.message); }
+}
+
+function _renderRulesTab() {
+  const logoVariant = _chart ? _logoSection().variants.find(v => v.ext !== 'pdf') : null;
+
+  if (!logoVariant) return `
+    <div class="kb-ghost">
+      <div class="kb-ghost-rules" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <h3>Les règles à respecter</h3>
+      <p>Dès que votre logo est déposé, les interdits classiques se génèrent tout seuls avec VOTRE logo — déformation, mauvaise couleur, fond chargé…</p>
+      <button class="kb-btn primary" data-act="goto-logo">${icon('image', 16)} Déposer d'abord un logo</button>
+    </div>`;
+
+  const map = _interditState();
+  const assetAttr = `data-asset="${_esc(logoVariant.assetId)}"`;
+
+  // Carte de référence : le bon usage, en tête.
+  const good = `
+    <figure class="kb-forbid-card kb-forbid-good">
+      <div class="kb-forbid-box"><img ${assetAttr} alt="" draggable="false"></div>
+      <figcaption>${icon('check', 13)} Le bon usage</figcaption>
+    </figure>`;
+
+  const cards = INTERDITS_DEFS.map(([key, label]) => {
+    const enabled = map.get(key)?.enabled !== false;
+    return `
+      <figure class="kb-forbid-card ${enabled ? '' : 'is-off'}">
+        <div class="kb-forbid-box kb-forbid-${key}">
+          <img ${assetAttr} alt="" draggable="false">
+          ${key === 'crowd' ? '<span class="kb-crowd-a"></span><span class="kb-crowd-b"></span>' : ''}
+          <span class="kb-forbid-slash" aria-hidden="true"></span>
+        </div>
+        <figcaption>${icon('x', 13)} ${label}</figcaption>
+        <button class="kb-forbid-toggle" data-act="rule-toggle" data-key="${key}"
+                title="${enabled ? 'Masquer cet interdit de la charte' : 'Réactiver cet interdit'}"
+                aria-pressed="${enabled}">${icon(enabled ? 'eye' : 'eye-off', 15)}</button>
+      </figure>`;
+  }).join('');
+
+  const custom = _rulesSection().custom.map(r => `
+    <div class="kb-rule-custom" data-rid="${_esc(r.id)}">
+      ${r.assetId
+        ? `<button class="kb-rule-custom-img" data-act="rc-img" title="Remplacer la vignette"><img data-asset="${_esc(r.assetId)}" alt="" draggable="false"></button>`
+        : `<button class="kb-rule-custom-img is-empty" data-act="rc-img" title="Ajouter une vignette (facultatif)">${icon('image', 18)}</button>`}
+      <input class="kb-field-input" data-field="rc-label" value="${_esc(r.label || '')}"
+             placeholder="Règle à respecter — ex. « Version bleue réservée aux partenariats »" maxlength="160" spellcheck="false">
+      <button class="kb-iconbtn danger" data-act="rc-del" title="Retirer la règle">${icon('trash-2', 16)}</button>
+    </div>`).join('');
+
+  return `
+    <div class="kb-rules">
+      <p class="kb-hint">Générés automatiquement avec votre logo — l'œil masque un interdit qui ne concerne pas votre marque.</p>
+      <div class="kb-forbid-grid">${good}${cards}</div>
+      <section class="kb-lab">
+        <h3 class="kb-lab-title">Règles propres à la marque</h3>
+        <p class="kb-hint">Ce que la charte doit préciser en plus — avec une vignette d'exemple si utile.</p>
+        ${custom || ''}
+        <button class="kb-btn" data-act="rule-custom-add">${icon('plus', 15)} Ajouter une règle</button>
+      </section>
+    </div>`;
 }
 
 // ── Toast ───────────────────────────────────────────────────────
