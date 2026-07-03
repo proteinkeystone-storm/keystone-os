@@ -114,7 +114,21 @@ const INTERDITS_DEFS = [
   ['busybg',  'Ne pas le poser sur un fond chargé'],
   ['crowd',   'Ne pas envahir sa zone de protection'],
 ];
-let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | { rule: id }
+let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | { rule: id } | 'photo'
+
+// ── Onglet Branding (KB-5) ──
+// Motions d'intro préréglées — CSS pur, sobres, respectent
+// prefers-reduced-motion. La clé = classe .kb-play-<key> (key-brand.css).
+const MOTIONS = [
+  ['none',  'Aucune',      'la marque, posée'],
+  ['fade',  'Fondu',       'apparition en douceur'],
+  ['rise',  'Lever',       'monte et se révèle'],
+  ['zoom',  'Approche',    'arrive de loin, nette'],
+  ['wipe',  'Rideau',      'balayage gauche → droite'],
+  ['float', 'Flottement',  'entre puis respire'],
+];
+const KB_SYM_MAX = 8;       // annotations de symbolique max
+const KB_PHOTO_MAX = 6;     // exemples photo max (cap brief)
 
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
 const TABS = [
@@ -337,6 +351,10 @@ function _primaryHex(kit) {
 
 // ── Événements ──────────────────────────────────────────────────
 function _onClick(e) {
+  // Symbolique du signe (KB-5) : un clic sur le logo pose une annotation.
+  const symCanvas = e.target.closest('[data-slot="sym-canvas"]');
+  if (symCanvas && !e.target.closest('[data-act]')) { _addSymbolAt(symCanvas, e); return; }
+
   const btn = e.target.closest('[data-act]');
   if (!btn || !_root.contains(btn)) return;
   const act = btn.dataset.act;
@@ -370,6 +388,13 @@ function _onClick(e) {
   if (act === 'c-adv' && cid)     { _colorAdv = _colorAdv === cid ? null : cid; _renderChart(); return; }
   if (act === 'c-del' && cid)     { _deleteColor(cid); return; }
   if (act === 'harmony-add')      { _addColor(btn.dataset.hex, btn.dataset.name); return; }
+
+  // ── Onglet Branding (KB-5) ──
+  if (act === 'brand-motion')  { _setMotion(btn.dataset.motion); return; }
+  if (act === 'brand-replay')  { _replayMotion(); return; }
+  if (act === 'sym-del')       { _deleteSymbol(parseInt(btn.dataset.idx, 10)); return; }
+  if (act === 'ph-add')        { _pickTarget = 'photo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'ph-del')        { _deletePhoto(btn.dataset.aid); return; }
 
   // ── Onglet Règles (KB-4) ──
   const rid = btn.closest('[data-rid]')?.dataset.rid;
@@ -458,6 +483,18 @@ function _onInput(e) {
     const rid = el.closest('[data-rid]')?.dataset.rid;
     const r = _chart && _rulesSection().custom.find(x => x.id === rid);
     if (r) { r.label = el.value.slice(0, 160); _scheduleSave(); }
+  }
+
+  // ── Onglet Branding (KB-5) ──
+  if (el.dataset.field === 'sym-text' && _chart) {
+    const s = _brandSection().symbolism[parseInt(el.dataset.idx, 10)];
+    if (s) { s.text = el.value.slice(0, 120); _scheduleSave(); }
+  }
+  if (el.dataset.field === 'ph-word' && _chart) {
+    const b = _brandSection();
+    b.photo = b.photo || { words: [], exampleAssetIds: [] };
+    b.photo.words[parseInt(el.dataset.idx, 10)] = el.value.slice(0, 30);
+    _scheduleSave();
   }
 }
 
@@ -614,7 +651,7 @@ function _renderChart() {
       <section class="kb-tabpane" role="tabpanel">${_renderTab(_tab)}</section>
     </div>`;
 
-  if (_tab === 'logo' || _tab === 'rules') _hydrateLogoImgs();
+  if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand') _hydrateLogoImgs();
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -629,15 +666,7 @@ function _renderTab(key) {
 
   if (key === 'rules') return _renderRulesTab();
 
-  return `
-    <div class="kb-ghost">
-      <div class="kb-ghost-stage" aria-hidden="true">
-        <span class="kb-ghost-dot big"></span>
-      </div>
-      <h3>La scène de la marque</h3>
-      <p>Une présentation animée et sobre de votre logo, l'histoire du signe, et la direction photographique — la page de garde vivante de votre charte.</p>
-      <button class="kb-btn primary" data-act="soon">${icon('sparkles', 16)} Mettre en scène</button>
-    </div>`;
+  return _renderBrandTab();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -830,6 +859,12 @@ async function _onFilesPicked(fileList) {
   if (_pickTarget && _pickTarget.rule) {
     const target = _pickTarget; _pickTarget = 'logo';
     await _onRuleImagePicked(fileList[0], target.rule);
+    return;
+  }
+  // Cible « exemples de direction photo » (KB-5).
+  if (_pickTarget === 'photo') {
+    _pickTarget = 'logo';
+    await _onPhotosPicked([...fileList]);
     return;
   }
   const files = [...fileList];
@@ -1463,6 +1498,156 @@ function _renderRulesTab() {
         <button class="kb-btn" data-act="rule-custom-add">${icon('plus', 15)} Ajouter une règle</button>
       </section>
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET BRANDING (KB-5) — la scène
+// ════════════════════════════════════════════════════════════════
+function _brandSection() {
+  if (!_chart.draft.branding || typeof _chart.draft.branding !== 'object') {
+    _chart.draft.branding = { motion: 'none', symbolism: [], photo: null };
+  }
+  const b = _chart.draft.branding;
+  if (!Array.isArray(b.symbolism)) b.symbolism = [];
+  return b;
+}
+function _titleFontCss() {
+  // Synergie KB-3 : la scène s'écrit dans la typo Titrage de la charte.
+  const f = _fontsOf().find(x => x.role === 'title' && x.source === 'google' && x.family);
+  if (!f) return null;
+  ensureFontLoaded(f.family, f.axis);
+  return `'${f.family.replace(/'/g, '')}', sans-serif`;
+}
+
+function _setMotion(key) {
+  if (!MOTIONS.some(([k]) => k === key)) return;
+  _brandSection().motion = key;
+  _scheduleSave(); _renderChart();
+}
+function _replayMotion() {
+  const stage = _root?.querySelector('[data-slot="stage-inner"]');
+  if (!stage) return;
+  const cls = [...stage.classList].find(c => c.startsWith('kb-play-'));
+  if (!cls) return;
+  stage.classList.remove(cls);
+  void stage.offsetWidth;   // reflow → l'animation repart
+  stage.classList.add(cls);
+}
+
+// ── Symbolique du signe ──
+function _addSymbolAt(canvas, e) {
+  const b = _brandSection();
+  if (b.symbolism.length >= KB_SYM_MAX) { _toast(`Maximum ${KB_SYM_MAX} annotations.`); return; }
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.min(0.98, Math.max(0.02, (e.clientX - rect.left) / rect.width));
+  const y = Math.min(0.98, Math.max(0.02, (e.clientY - rect.top) / rect.height));
+  b.symbolism.push({ x: +x.toFixed(3), y: +y.toFixed(3), text: '' });
+  _scheduleSave(); _renderChart();
+  const inputs = _root.querySelectorAll('[data-field="sym-text"]');
+  inputs[inputs.length - 1]?.focus();
+}
+function _deleteSymbol(idx) {
+  const b = _brandSection();
+  if (idx >= 0 && idx < b.symbolism.length) {
+    b.symbolism.splice(idx, 1);
+    _scheduleSave(); _renderChart();
+  }
+}
+
+// ── Direction photo ──
+async function _onPhotosPicked(files) {
+  const b = _brandSection();
+  b.photo = b.photo || { words: [], exampleAssetIds: [] };
+  if (!Array.isArray(b.photo.exampleAssetIds)) b.photo.exampleAssetIds = [];
+  for (const f of files) {
+    if (b.photo.exampleAssetIds.length >= KB_PHOTO_MAX) { _toast(`Maximum ${KB_PHOTO_MAX} exemples — la direction photo n'est pas une photothèque.`); break; }
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast(`« ${f.name} » : photo attendue (JPG, PNG, WebP).`); continue; }
+    if (f.size > KB_UPLOAD_MAX) { _toast(`« ${f.name} » : trop lourde (max 4 Mo).`); continue; }
+    try {
+      const asset = await _apiUpload(_chart.id, f, 'image');
+      b.photo.exampleAssetIds.push(asset.id);
+    } catch (e) { _toast(e.message); }
+  }
+  _scheduleSave(); _renderChart();
+}
+function _deletePhoto(aid) {
+  const b = _brandSection();
+  if (!b.photo) return;
+  b.photo.exampleAssetIds = (b.photo.exampleAssetIds || []).filter(x => x !== aid);
+  _api(`/assets/${encodeURIComponent(aid)}`, { method: 'DELETE' }).catch(() => {});
+  const url = _blobUrls.get(aid);
+  if (url) { try { URL.revokeObjectURL(url); } catch (_) {} _blobUrls.delete(aid); }
+  _scheduleSave(); _renderChart();
+}
+
+function _renderBrandTab() {
+  const b = _brandSection();
+  const logoVariant = _logoSection().variants.find(v => v.ext !== 'pdf');
+  const meta = _chart.draft.meta || {};
+  const titleFont = _titleFontCss();
+
+  // ── La scène : page de garde vivante (nom + baseline + logo, motion) ──
+  const motionCards = MOTIONS.map(([key, label, sub]) => `
+    <button class="kb-motion ${b.motion === key ? 'on' : ''}" data-act="brand-motion" data-motion="${key}">
+      <strong>${label}</strong><span>${sub}</span>
+    </button>`).join('');
+
+  const stage = `
+    <div class="kb-stage">
+      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')}" data-slot="stage-inner">
+        ${logoVariant ? `<img class="kb-stage-logo" data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">` : ''}
+        <div class="kb-stage-name" ${titleFont ? `style="font-family:${titleFont}"` : ''}>${_esc(meta.name || _chart.name)}</div>
+        ${meta.baseline ? `<div class="kb-stage-baseline">${_esc(meta.baseline)}</div>` : ''}
+      </div>
+      <button class="kb-iconbtn kb-stage-replay" data-act="brand-replay" title="Rejouer l'animation">${icon('refresh', 15)}</button>
+    </div>
+    <div class="kb-motions">${motionCards}</div>
+    <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>`;
+
+  // ── Symbolique du signe (logo requis) ──
+  const dots = b.symbolism.map((s, i) => `
+    <span class="kb-sym-dot" style="left:${(s.x * 100).toFixed(1)}%;top:${(s.y * 100).toFixed(1)}%">${i + 1}</span>`).join('');
+  const symList = b.symbolism.map((s, i) => `
+    <div class="kb-sym-row">
+      <span class="kb-sym-num">${i + 1}</span>
+      <input class="kb-field-input" data-field="sym-text" data-idx="${i}" value="${_esc(s.text || '')}"
+             placeholder="Ce que cette partie du signe raconte…" maxlength="120" spellcheck="false">
+      <button class="kb-iconbtn danger" data-act="sym-del" data-idx="${i}" title="Retirer">${icon('trash-2', 15)}</button>
+    </div>`).join('');
+  const symbolique = logoVariant ? `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">La symbolique du signe</h3>
+      <p class="kb-hint">Cliquez sur le logo pour poser un repère, puis racontez ce que cette partie représente.</p>
+      <div class="kb-sym-canvas" data-slot="sym-canvas" role="button" aria-label="Poser une annotation sur le logo">
+        <img data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">
+        ${dots}
+      </div>
+      ${symList}
+    </section>` : '';
+
+  // ── Direction photo ──
+  const photo = b.photo || { words: [], exampleAssetIds: [] };
+  const words = [0, 1, 2].map(i => `
+    <input class="kb-field-input kb-ph-word" data-field="ph-word" data-idx="${i}" value="${_esc(photo.words?.[i] || '')}"
+           placeholder="${['ex. lumineux', 'ex. authentique', 'ex. matières brutes'][i]}" maxlength="30" spellcheck="false">`).join('');
+  const examples = (photo.exampleAssetIds || []).map(aid => `
+    <figure class="kb-ph-item">
+      <img data-asset="${_esc(aid)}" alt="" draggable="false">
+      <button class="kb-iconbtn danger" data-act="ph-del" data-aid="${_esc(aid)}" title="Retirer">${icon('trash-2', 14)}</button>
+    </figure>`).join('');
+  const photoBlock = `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">Direction photographique</h3>
+      <p class="kb-hint">Le style d'images de la marque en trois mots, et quelques exemples qui donnent le ton (${KB_PHOTO_MAX} max — ce n'est pas une photothèque).</p>
+      <div class="kb-ph-words">${words}</div>
+      <div class="kb-ph-grid">
+        ${examples}
+        ${(photo.exampleAssetIds || []).length < KB_PHOTO_MAX ? `<button class="kb-ph-add" data-act="ph-add" title="Ajouter des exemples">${icon('plus', 18)}</button>` : ''}
+      </div>
+    </section>`;
+
+  return `<div class="kb-brand">${stage}${symbolique}${photoBlock}</div>`;
 }
 
 // ── Toast ───────────────────────────────────────────────────────

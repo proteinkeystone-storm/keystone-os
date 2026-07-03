@@ -314,6 +314,56 @@
 .kb-rule-custom-img.is-empty{background:rgba(0,0,0,.14);color:var(--kb-muted);border-style:dashed}
 .kb-rules .kb-lab{margin-top:26px}
 
+/* ══ Onglet Branding (KB-5) — la scène ══ */
+.kb-stage{position:relative;background:#fff;border-radius:18px;min-height:280px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--kb-line)}
+.kb-stage-inner{display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px;text-align:center}
+.kb-stage-logo{max-width:min(320px,60%);max-height:130px;object-fit:contain}
+.kb-stage-name{font-weight:900;font-size:clamp(24px,4vw,34px);letter-spacing:-0.025em;color:#15171c;line-height:1.1}
+.kb-stage-baseline{color:#5b6170;font-size:15px}
+.kb-stage-replay{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.06);color:#3a3f4a;border-color:transparent}
+
+/* Motions — sobres, 1 idée par preset. */
+@keyframes kb-fade{from{opacity:0;transform:scale(.965)}to{opacity:1;transform:scale(1)}}
+@keyframes kb-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+@keyframes kb-zoom{from{opacity:0;transform:scale(1.18);filter:blur(9px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+@keyframes kb-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes kb-float-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes kb-float-loop{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+.kb-play-fade{animation:kb-fade .9s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-rise{animation:kb-rise .95s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-zoom{animation:kb-zoom 1.05s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-wipe{animation:kb-wipe 1.1s cubic-bezier(.65,0,.35,1) both}
+.kb-play-float{animation:kb-float-in .9s cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
+@media (prefers-reduced-motion: reduce){
+  .kb-play-fade,.kb-play-rise,.kb-play-zoom,.kb-play-wipe,.kb-play-float{animation:none}
+}
+
+.kb-motions{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:14px 0 6px}
+.kb-motion{display:flex;flex-direction:column;gap:2px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:12px;color:var(--kb-ink);padding:11px 12px;cursor:pointer;text-align:left;transition:border-color .15s}
+.kb-motion:hover{border-color:var(--kb-accent)}
+.kb-motion.on{border-color:var(--kb-accent);box-shadow:0 0 0 1px var(--kb-accent) inset}
+.kb-motion strong{font-size:13.5px}
+.kb-motion span{color:var(--kb-muted);font-size:11.5px}
+
+/* Symbolique du signe */
+.kb-sym-canvas{position:relative;background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:34px;cursor:crosshair;margin:12px 0;border:1px solid var(--kb-line)}
+.kb-sym-canvas img{max-width:min(360px,70%);max-height:150px;object-fit:contain;pointer-events:none}
+.kb-sym-dot{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:var(--kb-accent);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(255,255,255,.85);pointer-events:none}
+.kb-sym-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.kb-sym-row .kb-field-input{flex:1}
+.kb-sym-num{width:22px;height:22px;flex-shrink:0;border-radius:50%;background:var(--kb-accent);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center}
+
+/* Direction photo */
+.kb-ph-words{display:flex;gap:10px;margin:10px 0 14px;flex-wrap:wrap}
+.kb-ph-word{max-width:200px}
+.kb-ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.kb-ph-item{position:relative;margin:0;border-radius:12px;overflow:hidden;aspect-ratio:4/3;border:1px solid var(--kb-line)}
+.kb-ph-item img{width:100%;height:100%;object-fit:cover}
+.kb-ph-item .kb-iconbtn{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.45);color:#fff;border-color:transparent;opacity:0;transition:opacity .15s}
+.kb-ph-item:hover .kb-iconbtn{opacity:1}
+.kb-ph-add{aspect-ratio:4/3;border:1.5px dashed var(--kb-line);border-radius:12px;background:none;color:var(--kb-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
+.kb-ph-add:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
+
 /* ── États & toast ── */
 .kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
 .kb-state-err{color:var(--ws-danger)}
