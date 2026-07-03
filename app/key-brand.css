@@ -364,6 +364,28 @@
 .kb-ph-add{aspect-ratio:4/3;border:1.5px dashed var(--kb-line);border-radius:12px;background:none;color:var(--kb-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
 .kb-ph-add:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
 
+/* ══ Publication (KB-6) ══ */
+.kb-chart-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.kb-chart-topline .kb-link-back{margin-bottom:0}
+.kb-pubbar{display:flex;align-items:center;gap:10px}
+.kb-pub-panel{border:1px solid var(--kb-line);border-radius:16px;padding:18px;margin:16px 0 4px;background:var(--kb-panel)}
+.kb-pub-cols{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.kb-pub-col h4{font-weight:900;font-size:14.5px;letter-spacing:-0.01em;margin:0 0 10px}
+.kb-access{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid var(--kb-line);border-radius:11px;margin-bottom:7px;cursor:pointer;transition:border-color .15s}
+.kb-access:hover{border-color:var(--kb-accent)}
+.kb-access.on{border-color:var(--kb-accent)}
+.kb-access input{accent-color:var(--kb-accent);margin-top:3px}
+.kb-access-txt{display:flex;flex-direction:column}
+.kb-access-txt strong{font-size:13.5px}
+.kb-access-txt span{color:var(--kb-muted);font-size:11.5px}
+.kb-pub-go{width:100%;justify-content:center;margin-top:10px}
+.kb-pub-live{border-top:1px solid var(--kb-line);margin-top:16px;padding-top:14px}
+.kb-pub-linkrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kb-pub-link{flex:1;min-width:200px;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:12.5px;padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-pub-qr{width:132px;height:132px;margin:14px 0 4px;background:#fff;border-radius:12px;padding:8px}
+.kb-pub-qr svg{width:100%;height:100%}
+@media (max-width: 640px){ .kb-pub-cols{grid-template-columns:1fr} }
+
 /* ── États & toast ── */
 .kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
 .kb-state-err{color:var(--ws-danger)}

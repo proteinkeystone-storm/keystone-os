@@ -162,7 +162,9 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
 import { handleKeyBrandHealth, handleKeyBrandList, handleKeyBrandCreate,
          handleKeyBrandGet, handleKeyBrandUpdate, handleKeyBrandDuplicate,
          handleKeyBrandDelete, handleKeyBrandAssetUpload, handleKeyBrandFileServe,
-         handleKeyBrandAssetDelete } from './routes/key-brand.js';
+         handleKeyBrandAssetDelete, handleKeyBrandPublish, handleKeyBrandAccess,
+         handleKeyBrandPublicGet, handleKeyBrandPublicFile } from './routes/key-brand.js';
+import { handleKeyBrandPage } from './routes/key-brand-page.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -194,6 +196,16 @@ export default {
       if (kbDup && method === 'POST') return handleKeyBrandDuplicate(request, env, kbDup[1]);
       const kbAssetUp = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/assets$/);
       if (kbAssetUp && method === 'POST') return handleKeyBrandAssetUpload(request, env, kbAssetUp[1]);
+      const kbPub = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/publish$/);
+      if (kbPub && method === 'POST') return handleKeyBrandPublish(request, env, kbPub[1]);
+      const kbAcc = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/access$/);
+      if (kbAcc && method === 'PUT') return handleKeyBrandAccess(request, env, kbAcc[1]);
+      const kbPubFile = path.match(/^\/api\/keybrand\/public\/([a-z0-9]+)\/file\/([A-Za-z0-9-]+)$/);
+      if (kbPubFile && method === 'GET') return handleKeyBrandPublicFile(request, env, kbPubFile[1], kbPubFile[2]);
+      const kbPubGet = path.match(/^\/api\/keybrand\/public\/([a-z0-9]+)$/);
+      if (kbPubGet && method === 'GET') return handleKeyBrandPublicGet(request, env, kbPubGet[1]);
+      const kbPage = path.match(/^\/b\/([a-z0-9]+)$/);
+      if (kbPage && (method === 'GET' || method === 'HEAD')) return handleKeyBrandPage(request, env, kbPage[1]);
       const kbFile = path.match(/^\/api\/keybrand\/file\/([A-Za-z0-9-]+)$/);
       if (kbFile && method === 'GET') return handleKeyBrandFileServe(request, env, kbFile[1]);
       const kbAsset = path.match(/^\/api\/keybrand\/assets\/([A-Za-z0-9-]+)$/);

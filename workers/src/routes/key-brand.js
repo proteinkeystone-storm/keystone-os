@@ -24,7 +24,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KB_ENGINE_VERSION = 'KB-1';
+const KB_ENGINE_VERSION = 'KB-6';
 
 const KB_MAX_CHARTS   = 30;        // plafond tranché (2026-07-03) — tous plans
 const KB_MAX_NAME     = 80;
@@ -391,6 +391,136 @@ export async function handleKeyBrandAssetDelete(request, env, id) {
   if (row && row.r2_key && env.HELP_MEDIA) { try { await env.HELP_MEDIA.delete(row.r2_key); } catch (_) {} }
   await env.DB.prepare('DELETE FROM kb_assets WHERE id = ? AND tenant_id = ?').bind(id, gate.tenant).run();
   return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ════════════════════════════════════════════════════════════════
+// KB-6 — Publication & accès public
+//
+// Brouillon ≠ publié : « Publier » fige draft_json → published_json
+// (version++, note de changelog dans kb_versions). La page /b/:slug ne
+// sert JAMAIS le brouillon. Accès : unlisted (défaut, lien non devinable)
+// | code (hash SHA-256 salé par le slug) | public. Un fichier n'est servi
+// en anonyme QUE s'il est référencé dans le snapshot publié.
+// ════════════════════════════════════════════════════════════════
+const KB_NOTE_MAX = 300;
+const KB_CODE_MIN = 4, KB_CODE_MAX = 60;
+
+async function _hashAccessCode(slug, code) {
+  const data = new TextEncoder().encode(`kb:${slug}:${code}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// POST /charts/:id/publish  { note? }
+export async function handleKeyBrandPublish(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const body = await parseBody(request) || {};
+  try {
+    const row = await _findChart(env, gate.tenant, id);
+    if (!row) return err('Charte introuvable', 404, origin);
+    const version = (row.version || 0) + 1;
+    const note = String(body.note || '').trim().slice(0, KB_NOTE_MAX);
+    await env.DB
+      .prepare(`UPDATE kb_charts SET status = 'published', published_json = draft_json,
+                version = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+      .bind(version, id, gate.tenant)
+      .run();
+    await env.DB
+      .prepare('INSERT INTO kb_versions (id, tenant_id, chart_id, version, note, snapshot_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(generateId(), gate.tenant, id, version, note || null, row.draft_json)
+      .run();
+    return json({ ok: true, version, slug: row.slug }, 200, origin);
+  } catch (e) { return err('Publication impossible', 500, origin); }
+}
+
+// PUT /charts/:id/access  { access: 'unlisted'|'code'|'public', code? }
+export async function handleKeyBrandAccess(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const body = await parseBody(request) || {};
+  const access = String(body.access || '');
+  if (!['unlisted', 'code', 'public'].includes(access)) return err('Accès invalide', 400, origin);
+  try {
+    const row = await _findChart(env, gate.tenant, id);
+    if (!row) return err('Charte introuvable', 404, origin);
+    let hash = null;
+    if (access === 'code') {
+      const code = String(body.code || '').trim();
+      if (code.length < KB_CODE_MIN || code.length > KB_CODE_MAX) {
+        return err(`Code d'accès : ${KB_CODE_MIN} à ${KB_CODE_MAX} caractères`, 400, origin);
+      }
+      hash = await _hashAccessCode(row.slug, code);
+    }
+    await env.DB
+      .prepare(`UPDATE kb_charts SET access = ?, access_code_hash = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+      .bind(access, hash, id, gate.tenant)
+      .run();
+    return json({ ok: true, access }, 200, origin);
+  } catch (e) { return err('Réglage impossible', 500, origin); }
+}
+
+// ── Gate public commun : charte publiée + code éventuel ─────────
+async function _publicGate(env, slug, code) {
+  const row = await env.DB
+    .prepare(`SELECT id, slug, name, status, access, access_code_hash, published_json, version, updated_at
+              FROM kb_charts WHERE slug = ?`)
+    .bind(String(slug || '')).first();
+  if (!row || row.status !== 'published' || !row.published_json) return { status: 404 };
+  if (row.access === 'code') {
+    if (!code) return { status: 401 };
+    const h = await _hashAccessCode(row.slug, String(code));
+    if (h !== row.access_code_hash) return { status: 401 };
+  }
+  return { status: 200, row };
+}
+
+// GET /api/keybrand/public/:slug[?code=] — le snapshot publié (anonyme).
+export async function handleKeyBrandPublicGet(request, env, slug) {
+  const origin = getAllowedOrigin(env, request);
+  const code = new URL(request.url).searchParams.get('code');
+  try {
+    const g = await _publicGate(env, slug, code);
+    if (g.status === 404) return err('Charte introuvable', 404, origin);
+    if (g.status === 401) return json({ error: 'Code requis', needCode: true }, 401, origin);
+    const row = g.row;
+    let kit = {};
+    try { kit = JSON.parse(row.published_json); } catch (_) {}
+    const versions = await env.DB
+      .prepare('SELECT version, note, published_at FROM kb_versions WHERE chart_id = ? ORDER BY version DESC LIMIT 10')
+      .bind(row.id).all();
+    return json({
+      name: row.name, version: row.version, updated_at: row.updated_at,
+      access: row.access, kit, changelog: versions.results || [],
+    }, 200, origin);
+  } catch (e) { return err('Lecture impossible', 500, origin); }
+}
+
+// GET /api/keybrand/public/:slug/file/:assetId[?code=&dl=1] — fichier du
+// snapshot publié UNIQUEMENT (un asset de brouillon ne fuit jamais).
+export async function handleKeyBrandPublicFile(request, env, slug, assetId) {
+  const origin = getAllowedOrigin(env, request);
+  const q = new URL(request.url).searchParams;
+  try {
+    const g = await _publicGate(env, slug, q.get('code'));
+    if (g.status !== 200) return err(g.status === 401 ? 'Code requis' : 'Fichier introuvable', g.status, origin);
+    if (!g.row.published_json.includes(assetId)) return err('Fichier introuvable', 404, origin);
+    const row = await env.DB
+      .prepare('SELECT r2_key, mime, name FROM kb_assets WHERE id = ? AND chart_id = ?')
+      .bind(assetId, g.row.id).first();
+    if (!row || !row.r2_key || !env.HELP_MEDIA) return err('Fichier introuvable', 404, origin);
+    const obj = await env.HELP_MEDIA.get(row.r2_key);
+    if (!obj) return err('Fichier introuvable', 404, origin);
+    const headers = {
+      'Content-Type': obj.httpMetadata?.contentType || row.mime || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=300',
+      'Access-Control-Allow-Origin': origin,
+    };
+    if (q.get('dl') === '1') headers['Content-Disposition'] = `attachment; filename="${(row.name || 'fichier').replace(/"/g, '')}"`;
+    return new Response(obj.body, { status: 200, headers });
+  } catch (e) { return err('Lecture impossible', 500, origin); }
 }
 
 export async function handleKeyBrandDelete(request, env, id) {

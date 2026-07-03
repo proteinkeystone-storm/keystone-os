@@ -130,6 +130,17 @@ const MOTIONS = [
 const KB_SYM_MAX = 8;       // annotations de symbolique max
 const KB_PHOTO_MAX = 6;     // exemples photo max (cap brief)
 
+// ── Publication (KB-6) ──
+let _pubPanel = false;      // panneau « Partager » ouvert
+let _pubBusy = false;
+let _pubAccess = null;      // choix d'accès en cours d'édition dans le panneau
+const ACCESS_OPTIONS = [
+  ['unlisted', 'Lien non répertorié', 'seuls ceux qui ont le lien y accèdent (défaut)'],
+  ['code',     'Protégé par un code', 'le lien + un code transmis à part'],
+  ['public',   'Public',              'accessible à quiconque a le lien'],
+];
+function _publicUrl() { return _chart ? `${API_BASE}/b/${_chart.slug}` : ''; }
+
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
 const TABS = [
   { key: 'logo',   label: 'Logo',          icon: 'keybrand' },
@@ -300,6 +311,7 @@ function _backToLib() {
   _dlPanel = null; _logoAdv = false; _logoBg = 'checker';
   _colorAdv = null; _pairText = null; _pairBg = null;
   _typePicker = false; _typeSearch = ''; _typeCat = 'all'; _typePrefs.clear();
+  _pubPanel = false; _pubAccess = null;
   _revokeBlobs();
   _applyAccent(null);
   _loadCharts();
@@ -388,6 +400,11 @@ function _onClick(e) {
   if (act === 'c-adv' && cid)     { _colorAdv = _colorAdv === cid ? null : cid; _renderChart(); return; }
   if (act === 'c-del' && cid)     { _deleteColor(cid); return; }
   if (act === 'harmony-add')      { _addColor(btn.dataset.hex, btn.dataset.name); return; }
+
+  // ── Publication (KB-6) ──
+  if (act === 'pub-panel') { _pubPanel = !_pubPanel; _pubAccess = null; _renderChart(); return; }
+  if (act === 'pub-go')    { _publish(); return; }
+  if (act === 'pub-open')  { window.open(_publicUrl(), '_blank', 'noopener'); return; }
 
   // ── Onglet Branding (KB-5) ──
   if (act === 'brand-motion')  { _setMotion(btn.dataset.motion); return; }
@@ -518,6 +535,9 @@ function _onChange(e) {
   if (el.dataset.field === 'pair-text') { _pairText = el.value; _renderChart(); }
   if (el.dataset.field === 'pair-bg')   { _pairBg = el.value; _renderChart(); }
 
+  // ── Publication (KB-6) : bascule d'accès → montre/cache le champ code.
+  if (el.dataset.field === 'pub-access') { _pubAccess = el.value; _renderChart(); }
+
   // ── Onglet Typographies (KB-3) ──
   const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
   if (el.dataset.field === 'f-role' && f)   { f.role = el.value; _scheduleSave(); _renderChart(); }
@@ -635,10 +655,20 @@ function _renderChart() {
       ${icon(t.icon, 16)}<span>${t.label}</span>
     </button>`).join('');
 
+  const pubBadge = _chart.status === 'published'
+    ? `<span class="kb-badge is-live">Version ${_chart.version} en ligne</span>`
+    : `<span class="kb-badge">Brouillon</span>`;
+
   main.innerHTML = `
     <div class="kb-chart">
       <div class="kb-chart-head">
-        <button class="kb-link-back" data-act="back-lib">${icon('chevron-left', 16)} Chartes</button>
+        <div class="kb-chart-topline">
+          <button class="kb-link-back" data-act="back-lib">${icon('chevron-left', 16)} Chartes</button>
+          <div class="kb-pubbar">
+            ${pubBadge}
+            <button class="kb-btn ${_pubPanel ? '' : 'primary'}" data-act="pub-panel">${icon('share-2', 15)} Partager</button>
+          </div>
+        </div>
         <div class="kb-identity">
           <input class="kb-name-input" data-field="chart-name" value="${_esc(_chart.name)}" maxlength="80"
                  aria-label="Nom de la marque" spellcheck="false">
@@ -647,9 +677,12 @@ function _renderChart() {
                  aria-label="Baseline" spellcheck="false">
         </div>
       </div>
+      ${_pubPanel ? _renderPubPanel() : ''}
       <nav class="kb-tabs" role="tablist">${tabs}</nav>
       <section class="kb-tabpane" role="tabpanel">${_renderTab(_tab)}</section>
     </div>`;
+
+  if (_pubPanel && _chart.status === 'published') _renderPubQr();
 
   if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand') _hydrateLogoImgs();
 }
@@ -1648,6 +1681,95 @@ function _renderBrandTab() {
     </section>`;
 
   return `<div class="kb-brand">${stage}${symbolique}${photoBlock}</div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PUBLICATION (KB-6) — brouillon → page publique /b/:slug
+// ════════════════════════════════════════════════════════════════
+function _renderPubPanel() {
+  const access = _pubAccess || _chart.access || 'unlisted';
+  const isLive = _chart.status === 'published';
+  const radios = ACCESS_OPTIONS.map(([k, lbl, sub]) => `
+    <label class="kb-access ${access === k ? 'on' : ''}">
+      <input type="radio" name="kb-access" data-field="pub-access" value="${k}" ${access === k ? 'checked' : ''}>
+      <span class="kb-access-txt"><strong>${lbl}</strong><span>${sub}</span></span>
+    </label>`).join('');
+
+  const live = isLive ? `
+    <div class="kb-pub-live">
+      <div class="kb-pub-linkrow">
+        <code class="kb-pub-link">${_esc(_publicUrl())}</code>
+        <button class="kb-btn" data-act="copy" data-copy="${_esc(_publicUrl())}">${icon('copy', 14)} Copier</button>
+        <button class="kb-btn" data-act="pub-open">${icon('external-link', 14)} Voir la page</button>
+      </div>
+      <div class="kb-pub-qr" data-slot="pub-qr" aria-label="QR code de la charte"></div>
+      <p class="kb-hint">Le QR pointe toujours vers la dernière version — imprimez-le sans crainte.</p>
+    </div>` : '';
+
+  return `
+    <div class="kb-pub-panel">
+      <div class="kb-pub-cols">
+        <div class="kb-pub-col">
+          <h4>Qui peut voir la charte ?</h4>
+          ${radios}
+          ${access === 'code' ? `
+          <label class="kb-field-label">Code d'accès
+            <input class="kb-field-input kb-inline" data-slot="pub-code" type="text" maxlength="60"
+                   placeholder="4 caractères minimum" spellcheck="false" autocomplete="off">
+          </label>
+          <p class="kb-hint">${isLive && _chart.access === 'code' ? 'Laissez vide pour conserver le code actuel.' : 'Transmettez-le par un autre canal que le lien.'}</p>` : ''}
+          <p class="kb-hint">La page n'est jamais référencée par les moteurs de recherche.</p>
+        </div>
+        <div class="kb-pub-col">
+          <h4>${isLive ? `Publier la version ${_chart.version + 1}` : 'Première publication'}</h4>
+          <input class="kb-field-input" data-slot="pub-note" type="text" maxlength="300"
+                 placeholder="Note de version (facultative) — ex. « Nouveau logo secondaire »" spellcheck="false">
+          <button class="kb-btn primary kb-pub-go" data-act="pub-go" ${_pubBusy ? 'disabled' : ''}>
+            ${icon('check', 15)} ${_pubBusy ? 'Publication…' : (isLive ? 'Publier la mise à jour' : 'Publier la charte')}
+          </button>
+          <p class="kb-hint">Le brouillon reste privé tant que vous ne publiez pas. Les visiteurs voient la dernière version publiée.</p>
+        </div>
+      </div>
+      ${live}
+    </div>`;
+}
+
+async function _publish() {
+  if (!_chart || _pubBusy) return;
+  const access = _pubAccess || _chart.access || 'unlisted';
+  const codeEl = _root.querySelector('[data-slot="pub-code"]');
+  const code = codeEl ? codeEl.value.trim() : '';
+  const note = _root.querySelector('[data-slot="pub-note"]')?.value.trim() || '';
+  if (access === 'code' && !code && !(_chart.status === 'published' && _chart.access === 'code')) {
+    _toast('Choisissez un code d\'accès (4 caractères minimum).'); return;
+  }
+  if (access === 'code' && code && code.length < 4) { _toast('Code trop court (4 caractères minimum).'); return; }
+  _pubBusy = true; _renderChart();
+  try {
+    await _flushSave();   // le snapshot publié = exactement ce qui est à l'écran
+    if (access !== _chart.access || (access === 'code' && code)) {
+      await _api(`/charts/${encodeURIComponent(_chart.id)}/access`, { method: 'PUT', body: { access, code: code || undefined } });
+      _chart.access = access;
+    }
+    const d = await _api(`/charts/${encodeURIComponent(_chart.id)}/publish`, { method: 'POST', body: { note } });
+    _chart.status = 'published'; _chart.version = d.version;
+    _toast(`Version ${d.version} en ligne.`);
+  } catch (e) { _toast(e.message); }
+  _pubBusy = false; _pubAccess = null;
+  _renderChart();
+}
+
+// QR : même moteur que Missive (qrcode-generator via esm.sh, autorisé CSP).
+async function _renderPubQr() {
+  const el = _root?.querySelector('[data-slot="pub-qr"]');
+  if (!el || el.dataset.done) return;
+  try {
+    const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+    const qrcode = mod.default || mod;
+    const qr = qrcode(0, 'M'); qr.addData(_publicUrl()); qr.make();
+    el.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    el.dataset.done = '1';
+  } catch (_) { el.innerHTML = `<span class="kb-hint">QR indisponible — utilisez le lien.</span>`; }
 }
 
 // ── Toast ───────────────────────────────────────────────────────

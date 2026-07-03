@@ -81,11 +81,29 @@ export async function exportLogoPng(blob, mime, { width = 1024, bg = null } = {}
     if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, w, h);
-    return await new Promise((resolve, reject) =>
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Export PNG impossible')), 'image/png'));
+    return await canvasToPngBlob(canvas);
   } finally {
     if (revoke) URL.revokeObjectURL(revoke);
   }
+}
+
+// toBlob peut ne jamais rappeler dans certains environnements (renderers
+// headless throttlés, vieux Safari) → repli synchrone toDataURL après 1,5 s.
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = b => { if (!done) { done = true; b ? resolve(b) : reject(new Error('Export PNG impossible')); } };
+    try { canvas.toBlob(b => finish(b), 'image/png'); } catch (_) { /* repli ci-dessous */ }
+    setTimeout(() => {
+      if (done) return;
+      try {
+        const bin = atob(canvas.toDataURL('image/png').split(',')[1]);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        finish(new Blob([u8], { type: 'image/png' }));
+      } catch (e) { finish(null); }
+    }, 1500);
+  });
 }
 
 // ── Archive .zip (méthode « store », sans compression) ──────────
