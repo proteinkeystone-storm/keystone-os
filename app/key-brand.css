@@ -233,6 +233,47 @@
 .kb-cb-box{width:74px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;border:1px solid var(--kb-line)}
 .kb-cb-sample figcaption{color:var(--kb-muted);font-size:11px}
 
+/* ══ Onglet Typographies (KB-3) ══ */
+.kb-type-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.kb-type-textrow{display:flex;align-items:center;gap:8px;flex:1}
+.kb-type-text{flex:1;font-size:14.5px}
+.kb-type-list{display:flex;flex-direction:column;gap:16px}
+
+.kb-font-card{background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;padding:16px 18px}
+.kb-font-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.kb-font-id{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kb-font-id-declared{flex:1;gap:8px;max-width:420px}
+.kb-font-name{font-size:21px;line-height:1.15;letter-spacing:-0.01em}
+.kb-font-src{color:var(--kb-muted);font-size:11.5px}
+.kb-font-head-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.kb-font-role{width:auto;min-width:132px}
+.kb-btn-sm{padding:8px 12px;font-size:13px;text-decoration:none}
+
+.kb-specimen{margin:16px 0 6px;line-height:1.25;word-break:break-word;min-height:1.2em;color:var(--kb-ink)}
+.kb-specimen-declared{color:var(--kb-muted)}
+.kb-specimen-declared .kb-hint{display:block;margin-top:8px;font-size:12px}
+.kb-font-ctrls{display:flex;align-items:center;gap:22px;flex-wrap:wrap;border-top:1px solid var(--kb-line);padding-top:12px;margin-top:12px}
+.kb-font-ctrls .kb-field-label{margin:0}
+.kb-inline-sm{width:auto;min-width:78px}
+.kb-font-sizectl{flex:1;min-width:220px}
+.kb-font-sizectl input[type="range"]{flex:1;accent-color:var(--kb-accent)}
+.kb-font-sizectl span{min-width:52px;text-align:right;color:var(--kb-ink);font-size:12.5px}
+
+/* Panneau de choix */
+.kb-font-picker{border:1px solid var(--kb-line);border-radius:14px;margin-bottom:18px;overflow:hidden}
+.kb-font-picker-head{display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1px solid var(--kb-line);flex-wrap:wrap}
+.kb-font-picker-head .kb-field-input{max-width:260px}
+.kb-cats{display:flex;gap:4px;flex-wrap:wrap}
+.kb-cat{background:none;border:1px solid var(--kb-line);border-radius:999px;color:var(--kb-muted);font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;transition:color .15s,border-color .15s}
+.kb-cat:hover{color:var(--kb-ink)}
+.kb-cat.on{color:var(--kb-ink);border-color:var(--kb-accent)}
+.kb-font-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px;padding:12px;max-height:280px;overflow-y:auto}
+.kb-font-item{display:flex;align-items:center;justify-content:space-between;gap:6px;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:13.5px;padding:9px 12px;cursor:pointer;text-align:left;transition:border-color .15s}
+.kb-font-item:hover:not(:disabled){border-color:var(--kb-accent)}
+.kb-font-item.is-taken{opacity:.5;cursor:default}
+.kb-font-declare{display:block;width:100%;background:none;border:0;border-top:1px solid var(--kb-line);color:var(--kb-muted);font-size:13px;padding:12px;cursor:pointer;text-align:center;transition:color .15s}
+.kb-font-declare:hover{color:var(--kb-ink)}
+
 /* ── États & toast ── */
 .kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
 .kb-state-err{color:var(--ws-danger)}
@@ -258,4 +299,7 @@
   .kb-harmony-label{width:auto}
   .kb-contrast-sample{flex-direction:column;align-items:flex-start;gap:8px}
   .kb-color-acts{opacity:1} /* pas de hover au doigt */
+  .kb-type-toolbar{flex-direction:column;align-items:stretch}
+  .kb-font-head{flex-direction:column}
+  .kb-font-items{grid-template-columns:1fr 1fr;max-height:220px}
 }

@@ -23,6 +23,7 @@ import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe,
          hexToRgb, rgbToCmyk, contrastRatio, wcagVerdict, harmonies, simulateColorBlind } from './key-brand-tools.js';
+import { GOOGLE_FONTS, FONT_CATEGORIES, fontMeta, weightsOf, ensureFontLoaded, fontSpecimenUrl, TYPE_SAMPLES } from './key-brand-fonts.js';
 
 const WORKSPACE_META = { id: 'O-BRD-001', name: 'Key Brand' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. sceau.js).
@@ -75,6 +76,26 @@ const HARMONY_LABELS = {
   triade:         ['Triade', 'équilibre à trois — vivant mais stable'],
   nuances:        ['Nuances', 'la même, du clair au profond'],
   sourdine:       ['En sourdine', 'désaturées — fonds et aplats discrets'],
+};
+
+// ── État onglet Typographies (KB-3, session seulement) ──
+let _typePicker = false;    // panneau « choisir une police » ouvert
+let _typeSearch = '';
+let _typeCat = 'all';
+let _typeText = TYPE_SAMPLES[0];   // texte du spécimen, partagé entre cartes
+let _typeSampleIdx = 0;
+const _typePrefs = new Map();      // fontId → { weight, size } (non persisté)
+const FONT_ROLES = [
+  ['title',        'Titrage'],
+  ['body',         'Texte courant'],
+  ['office',       'Bureautique'],
+  ['substitution', 'Substitution'],
+];
+const FONT_ROLE_HINTS = {
+  title: 'titres, affiches, impact',
+  body: 'paragraphes, brochures, web',
+  office: 'Word, PowerPoint, e-mails',
+  substitution: 'quand la vraie police n\'est pas installée',
 };
 
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
@@ -246,6 +267,7 @@ function _backToLib() {
   _view = 'lib'; _chart = null; _error = null;
   _dlPanel = null; _logoAdv = false; _logoBg = 'checker';
   _colorAdv = null; _pairText = null; _pairBg = null;
+  _typePicker = false; _typeSearch = ''; _typeCat = 'all'; _typePrefs.clear();
   _revokeBlobs();
   _applyAccent(null);
   _loadCharts();
@@ -330,6 +352,15 @@ function _onClick(e) {
   if (act === 'c-adv' && cid)     { _colorAdv = _colorAdv === cid ? null : cid; _renderChart(); return; }
   if (act === 'c-del' && cid)     { _deleteColor(cid); return; }
   if (act === 'harmony-add')      { _addColor(btn.dataset.hex, btn.dataset.name); return; }
+
+  // ── Onglet Typographies (KB-3) ──
+  const fid = btn.closest('[data-fid]')?.dataset.fid;
+  if (act === 'font-picker')   { _typePicker = !_typePicker; _typeSearch = ''; _renderChart(); return; }
+  if (act === 'font-cat')      { _typeCat = btn.dataset.cat || 'all'; _renderChart(); _focusTypeSearch(); return; }
+  if (act === 'font-pick')     { _addFont(btn.dataset.family); return; }
+  if (act === 'font-declare')  { _addDeclaredFont(); return; }
+  if (act === 'type-gen')      { _typeSampleIdx = (_typeSampleIdx + 1) % TYPE_SAMPLES.length; _typeText = TYPE_SAMPLES[_typeSampleIdx]; _renderChart(); return; }
+  if (act === 'f-del' && fid)  { _deleteFont(fid); return; }
 }
 
 function _onInput(e) {
@@ -382,6 +413,19 @@ function _onInput(e) {
     c.hex = el.value; _scheduleSave(); _refreshColorCard(el.closest('.kb-color-card'), c);
   }
   if (el.dataset.field === 'c-dark' && c)    { c.darkHex = el.value; _scheduleSave(); }
+
+  // ── Onglet Typographies (KB-3) ──
+  const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
+  if (el.dataset.field === 'type-search') { _typeSearch = el.value; _refreshFontPickerList(); }
+  if (el.dataset.field === 'type-text')   { _typeText = el.value; _refreshSpecimens(); }
+  if (el.dataset.field === 'f-size' && f) {
+    const p = _typePrefs.get(f.id) || {};
+    p.size = parseInt(el.value, 10) || 32;
+    _typePrefs.set(f.id, p);
+    _refreshSpecimens();
+  }
+  if (el.dataset.field === 'f-family' && f) { f.family = el.value.slice(0, 60); _scheduleSave(); _refreshSpecimens(); }
+  if (el.dataset.field === 'f-buy' && f)    { f.buyUrl = el.value.slice(0, 200) || null; _scheduleSave(); }
 }
 
 // Les <select> émettent 'change', pas 'input'.
@@ -403,6 +447,16 @@ function _onChange(e) {
   }
   if (el.dataset.field === 'pair-text') { _pairText = el.value; _renderChart(); }
   if (el.dataset.field === 'pair-bg')   { _pairBg = el.value; _renderChart(); }
+
+  // ── Onglet Typographies (KB-3) ──
+  const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
+  if (el.dataset.field === 'f-role' && f)   { f.role = el.value; _scheduleSave(); _renderChart(); }
+  if (el.dataset.field === 'f-weight' && f) {
+    const p = _typePrefs.get(f.id) || {};
+    p.weight = parseInt(el.value, 10) || 400;
+    _typePrefs.set(f.id, p);
+    _refreshSpecimens();
+  }
 }
 function _onBlur(e) {
   // Sécurise le nom : jamais vide après édition.
@@ -538,17 +592,7 @@ function _renderTab(key) {
 
   if (key === 'colors') return _renderColorsTab();
 
-  if (key === 'type') return `
-    <div class="kb-ghost">
-      <div class="kb-ghost-type" aria-hidden="true">
-        <span class="kb-ghost-aa">Aa</span>
-        <span class="kb-ghost-line w70"></span>
-        <span class="kb-ghost-line w50"></span>
-      </div>
-      <h3>Les typographies, à l'essai</h3>
-      <p>Choisissez vos polices, testez-les avec votre propre texte, et offrez leur téléchargement à ceux qui composent pour vous.</p>
-      <button class="kb-btn primary" data-act="soon">${icon('plus', 16)} Choisir une police</button>
-    </div>`;
+  if (key === 'type') return _renderTypeTab();
 
   if (key === 'rules') return `
     <div class="kb-ghost">
@@ -1070,6 +1114,198 @@ function _renderContrastLab(palette) {
       <div class="kb-cb-row">${sims}</div>
       <p class="kb-hint">Simulation daltonisme indicative — environ 1 personne sur 12 est concernée.</p>
     </section>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET TYPOGRAPHIES (KB-3) — le testeur
+// ════════════════════════════════════════════════════════════════
+function _typeSection() {
+  if (!_chart.draft.typography || typeof _chart.draft.typography !== 'object') {
+    _chart.draft.typography = { fonts: [] };
+  }
+  if (!Array.isArray(_chart.draft.typography.fonts)) _chart.draft.typography.fonts = [];
+  return _chart.draft.typography;
+}
+function _fontsOf() { return _chart ? _typeSection().fonts : []; }
+function _fontOf(fid) {
+  if (!fid || !_chart) return null;
+  return _fontsOf().find(x => x.id === fid) || null;
+}
+function _newFontId() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()); }
+function _nextFontRole() {
+  const taken = new Set(_fontsOf().map(f => f.role));
+  for (const [role] of FONT_ROLES) if (!taken.has(role)) return role;
+  return 'body';
+}
+
+function _addFont(family) {
+  const meta = fontMeta(family);
+  if (!meta) return;
+  ensureFontLoaded(meta.f, meta.w);
+  _typeSection().fonts.push({
+    id: _newFontId(), role: _nextFontRole(), source: 'google',
+    family: meta.f, axis: meta.w, buyUrl: null,
+  });
+  _typePicker = false; _typeSearch = '';
+  _scheduleSave(); _renderChart();
+}
+function _addDeclaredFont() {
+  _typeSection().fonts.push({
+    id: _newFontId(), role: _nextFontRole(), source: 'declared',
+    family: '', axis: null, buyUrl: null,
+  });
+  _typePicker = false;
+  _scheduleSave(); _renderChart();
+  _root.querySelector('.kb-font-card:last-of-type [data-field="f-family"]')?.focus();
+}
+function _deleteFont(fid) {
+  const f = _fontOf(fid); if (!f) return;
+  const ok = window.confirm(`Retirer « ${f.family || 'cette police'} » de la charte ?`);
+  if (!ok) return;
+  const t = _typeSection();
+  t.fonts = t.fonts.filter(x => x.id !== fid);
+  _typePrefs.delete(fid);
+  _scheduleSave(); _renderChart();
+}
+
+function _renderTypeTab() {
+  const fonts = _fontsOf();
+  // Charger les familles présentes (idempotent — utile après réouverture).
+  for (const f of fonts) if (f.source === 'google' && f.family) ensureFontLoaded(f.family, f.axis);
+
+  if (!fonts.length && !_typePicker) return `
+    <div class="kb-ghost">
+      <div class="kb-ghost-type" aria-hidden="true">
+        <span class="kb-ghost-aa">Aa</span>
+        <span class="kb-ghost-line w70"></span>
+        <span class="kb-ghost-line w50"></span>
+      </div>
+      <h3>Les typographies, à l'essai</h3>
+      <p>Choisissez vos polices, testez-les avec votre propre texte, et offrez leur téléchargement à ceux qui composent pour vous.</p>
+      <button class="kb-btn primary" data-act="font-picker">${icon('plus', 16)} Choisir une police</button>
+      <p class="kb-hint">Bibliothèque Google Fonts (licences libres). Police payante ? Déclarez-la avec son lien d'achat.</p>
+    </div>`;
+
+  const cards = fonts.map(f => _renderFontCard(f)).join('');
+  return `
+    <div class="kb-type">
+      <div class="kb-type-toolbar">
+        <div class="kb-type-textrow">
+          <input class="kb-field-input kb-type-text" data-field="type-text" value="${_esc(_typeText)}"
+                 placeholder="Tapez votre texte d'essai ici…" maxlength="180" aria-label="Texte d'essai">
+          <button class="kb-iconbtn" data-act="type-gen" title="Autre phrase d'essai">${icon('refresh', 15)}</button>
+        </div>
+        <button class="kb-btn primary" data-act="font-picker">${icon('plus', 15)} Ajouter</button>
+      </div>
+      ${_typePicker ? _renderFontPicker() : ''}
+      <div class="kb-type-list">${cards}</div>
+    </div>`;
+}
+
+function _renderFontCard(f) {
+  const pref = _typePrefs.get(f.id) || {};
+  const size = pref.size || 34;
+  const weights = f.source === 'google' ? weightsOf(f.axis) : [400, 700];
+  const weight = pref.weight && weights.includes(pref.weight) ? pref.weight
+    : (weights.includes(700) ? 700 : weights[Math.floor(weights.length / 2)]);
+  const roleOpts = FONT_ROLES.map(([k, lbl]) => `<option value="${k}" ${f.role === k ? 'selected' : ''}>${lbl}</option>`).join('');
+  const wOpts = weights.map(w => `<option value="${w}" ${w === weight ? 'selected' : ''}>${w}</option>`).join('');
+  const famCss = f.source === 'google'
+    ? `'${f.family.replace(/'/g, '')}', sans-serif`
+    : `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+
+  const head = f.source === 'google' ? `
+      <div class="kb-font-id">
+        <strong class="kb-font-name" style="font-family:${famCss}">${_esc(f.family)}</strong>
+        <span class="kb-font-src">Google Fonts — licence libre</span>
+      </div>` : `
+      <div class="kb-font-id kb-font-id-declared">
+        <input class="kb-field-input kb-v-label" data-field="f-family" value="${_esc(f.family)}" placeholder="Nom de la police (ex. Museo)" maxlength="60" spellcheck="false">
+        <input class="kb-field-input" data-field="f-buy" value="${_esc(f.buyUrl || '')}" placeholder="Lien d'achat / licence (https://…)" maxlength="200" spellcheck="false">
+      </div>`;
+
+  const acts = f.source === 'google' ? `
+      <a class="kb-btn kb-btn-sm" href="${fontSpecimenUrl(f.family)}" target="_blank" rel="noopener noreferrer" title="Page officielle : téléchargement + licence">${icon('download', 14)} Télécharger</a>` : `
+      ${f.buyUrl && /^https?:\/\//.test(f.buyUrl) ? `<a class="kb-btn kb-btn-sm" href="${_esc(f.buyUrl)}" target="_blank" rel="noopener noreferrer">${icon('external-link', 14)} Acheter</a>` : ''}`;
+
+  const specimen = f.source === 'google' ? `
+      <div class="kb-specimen" data-slot="specimen" style="font-family:${famCss};font-weight:${weight};font-size:${size}px">${_esc(_typeText)}</div>` : `
+      <div class="kb-specimen kb-specimen-declared" data-slot="specimen" style="font-size:${Math.min(size, 22)}px">${_esc(_typeText)}
+        <span class="kb-hint">Aperçu indisponible — police non hébergée (déclarée pour mémoire, avec son lien).</span>
+      </div>`;
+
+  return `
+    <article class="kb-font-card" data-fid="${_esc(f.id)}">
+      <div class="kb-font-head">
+        ${head}
+        <div class="kb-font-head-acts">
+          <select class="kb-select kb-font-role" data-field="f-role" title="${_esc(FONT_ROLE_HINTS[f.role] || '')}" aria-label="Rôle">${roleOpts}</select>
+          ${acts}
+          <button class="kb-iconbtn danger" data-act="f-del" title="Retirer">${icon('trash-2', 16)}</button>
+        </div>
+      </div>
+      ${specimen}
+      ${f.source === 'google' ? `
+      <div class="kb-font-ctrls">
+        <label class="kb-field-label">Graisse <select class="kb-select kb-inline-sm" data-field="f-weight">${wOpts}</select></label>
+        <label class="kb-field-label kb-font-sizectl">Corps <input type="range" min="14" max="96" step="1" value="${size}" data-field="f-size" aria-label="Corps en pixels"> <span data-slot="size-out">${size} px</span></label>
+      </div>` : ''}
+    </article>`;
+}
+
+function _renderFontPicker() {
+  const q = _typeSearch.trim().toLowerCase();
+  const list = GOOGLE_FONTS
+    .filter(x => _typeCat === 'all' || x.c === _typeCat)
+    .filter(x => !q || x.f.toLowerCase().includes(q));
+  const taken = new Set(_fontsOf().filter(f => f.source === 'google').map(f => f.family));
+  const cats = FONT_CATEGORIES.map(([k, lbl]) =>
+    `<button class="kb-cat ${_typeCat === k ? 'on' : ''}" data-act="font-cat" data-cat="${k}">${lbl}</button>`).join('');
+  const items = list.map(x => `
+    <button class="kb-font-item ${taken.has(x.f) ? 'is-taken' : ''}" data-act="font-pick" data-family="${_esc(x.f)}" ${taken.has(x.f) ? 'disabled' : ''}>
+      <span>${_esc(x.f)}</span>${taken.has(x.f) ? icon('check', 13) : ''}
+    </button>`).join('');
+  return `
+    <div class="kb-font-picker">
+      <div class="kb-font-picker-head">
+        <input class="kb-field-input" data-field="type-search" value="${_esc(_typeSearch)}" placeholder="Rechercher une police…" aria-label="Rechercher" spellcheck="false">
+        <div class="kb-cats">${cats}</div>
+      </div>
+      <div class="kb-font-items" data-slot="font-items">${items || '<p class="kb-hint">Aucune police ne correspond.</p>'}</div>
+      <button class="kb-font-declare" data-act="font-declare">${icon('plus', 14)} Ma police n'est pas là (payante / sur-mesure) — la déclarer avec son lien</button>
+    </div>`;
+}
+
+function _focusTypeSearch() {
+  const el = _root?.querySelector('[data-field="type-search"]');
+  if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+// Recherche live : ne re-render que la liste (le champ garde le focus).
+function _refreshFontPickerList() {
+  const box = _root?.querySelector('[data-slot="font-items"]');
+  if (!box) return;
+  const html = _renderFontPicker().match(/<div class="kb-font-items"[^>]*>([\s\S]*?)<\/div>/);
+  if (html) box.innerHTML = html[1];
+}
+// Texte/graisse/corps live sans re-render (focus + curseurs préservés).
+function _refreshSpecimens() {
+  if (!_root) return;
+  _root.querySelectorAll('.kb-font-card').forEach(card => {
+    const f = _fontOf(card.dataset.fid);
+    if (!f) return;
+    const pref = _typePrefs.get(f.id) || {};
+    const sp = card.querySelector('[data-slot="specimen"]');
+    if (sp) {
+      sp.childNodes[0].textContent = _typeText;
+      if (f.source === 'google') {
+        if (pref.weight) sp.style.fontWeight = pref.weight;
+        if (pref.size) sp.style.fontSize = `${pref.size}px`;
+        if (f.family) sp.style.fontFamily = `'${f.family.replace(/'/g, '')}', sans-serif`;
+      }
+    }
+    const out = card.querySelector('[data-slot="size-out"]');
+    if (out && pref.size) out.textContent = `${pref.size} px`;
+  });
 }
 
 // ── Toast ───────────────────────────────────────────────────────
