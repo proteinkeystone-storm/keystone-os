@@ -153,6 +153,108 @@ export function buildZip(files) {
   return new Blob(parts, { type: 'application/zip' });
 }
 
+// ════════════════════════════════════════════════════════════════
+// KB-2 — Théorie des couleurs, WCAG & daltonisme (pur calcul)
+// ════════════════════════════════════════════════════════════════
+
+// ── Conversions ──
+export function hexToRgb(hex) {
+  const m = String(hex || '').trim().match(/^#?([0-9a-fA-F]{6})$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+export function rgbToHex({ r, g, b }) {
+  const c = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+export function rgbToHsl({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+export function hslToRgb({ h, s, l }) {
+  h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+}
+// CMJN INDICATIF (conversion naïve sans profil ICC — le graphiste peut
+// saisir ses vraies valeurs ; l'UI doit le présenter comme approximatif).
+export function rgbToCmyk({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const k = 1 - Math.max(r, g, b);
+  if (k >= 1) return { c: 0, m: 0, y: 0, k: 100 };
+  const f = v => Math.round(((1 - v - k) / (1 - k)) * 100);
+  return { c: f(r), m: f(g), y: f(b), k: Math.round(k * 100) };
+}
+
+// ── WCAG 2.x ──
+function _lin(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+export function relLuminance(rgb) {
+  return 0.2126 * _lin(rgb.r) + 0.7152 * _lin(rgb.g) + 0.0722 * _lin(rgb.b);
+}
+/** Ratio de contraste WCAG entre deux hex (1 → 21). */
+export function contrastRatio(hexA, hexB) {
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  if (!a || !b) return null;
+  const la = relLuminance(a), lb = relLuminance(b);
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+/** Verdicts WCAG pour un ratio donné. */
+export function wcagVerdict(ratio) {
+  return {
+    aaNormal: ratio >= 4.5, aaLarge: ratio >= 3,
+    aaaNormal: ratio >= 7,  aaaLarge: ratio >= 4.5,
+  };
+}
+
+// ── Harmonies (proposées, jamais imposées) ──
+export function harmonies(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const hsl = rgbToHsl(rgb);
+  const at = (dh, ds = 0, dl = 0) => rgbToHex(hslToRgb({ h: hsl.h + dh, s: hsl.s + ds, l: hsl.l + dl }));
+  return {
+    complementaire: [at(180)],
+    analogues:      [at(-30), at(30)],
+    triade:         [at(-120), at(120)],
+    nuances:        [at(0, 0, +28), at(0, 0, +14), at(0, 0, -14), at(0, 0, -26)],
+    sourdine:       [at(0, -34, +8), at(0, -50, +18)],
+  };
+}
+
+// ── Daltonisme (simulation indicative, matrices usuelles) ──
+const CB_MATRICES = {
+  protanopia:   [0.567, 0.433, 0, 0.558, 0.442, 0, 0, 0.242, 0.758],
+  deuteranopia: [0.625, 0.375, 0, 0.700, 0.300, 0, 0, 0.300, 0.700],
+  tritanopia:   [0.950, 0.050, 0, 0, 0.433, 0.567, 0, 0.475, 0.525],
+};
+export function simulateColorBlind(hex, type) {
+  const rgb = hexToRgb(hex);
+  const m = CB_MATRICES[type];
+  if (!rgb || !m) return hex;
+  return rgbToHex({
+    r: m[0] * rgb.r + m[1] * rgb.g + m[2] * rgb.b,
+    g: m[3] * rgb.r + m[4] * rgb.g + m[5] * rgb.b,
+    b: m[6] * rgb.r + m[7] * rgb.g + m[8] * rgb.b,
+  });
+}
+
 // ── Divers ──────────────────────────────────────────────────────
 /** Déclenche le téléchargement d'un Blob sous le nom donné. */
 export function saveBlob(blob, filename) {

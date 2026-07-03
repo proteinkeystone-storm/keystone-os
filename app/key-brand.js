@@ -21,7 +21,8 @@ import { icon }                               from './lib/ui-icons.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
-import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe } from './key-brand-tools.js';
+import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe,
+         hexToRgb, rgbToCmyk, contrastRatio, wcagVerdict, harmonies, simulateColorBlind } from './key-brand-tools.js';
 
 const WORKSPACE_META = { id: 'O-BRD-001', name: 'Key Brand' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. sceau.js).
@@ -56,6 +57,25 @@ const LOGO_KINDS = [
 ];
 const KB_UPLOAD_MAX = 4 * 1024 * 1024; // miroir du cap serveur (4 Mo)
 const EXT_MIME = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pdf: 'application/pdf' };
+
+// ── État onglet Couleurs (KB-2) ──
+let _colorAdv = null;       // couleur dont le bloc avancé est ouvert
+let _pairText = null;       // test de visibilité : 'c:<id>' | '#ffffff' | '#000000'
+let _pairBg = null;
+const COLOR_ROLES = [
+  ['primary',   'Primaire'],
+  ['secondary', 'Secondaire'],
+  ['extra',     'Supplémentaire'],
+  ['bg',        'Fond'],
+  ['text',      'Texte'],
+];
+const HARMONY_LABELS = {
+  complementaire: ['Complémentaire', 'la couleur opposée — contraste maximal'],
+  analogues:      ['Analogues', 'les voisines — camaïeu naturel'],
+  triade:         ['Triade', 'équilibre à trois — vivant mais stable'],
+  nuances:        ['Nuances', 'la même, du clair au profond'],
+  sourdine:       ['En sourdine', 'désaturées — fonds et aplats discrets'],
+};
 
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
 const TABS = [
@@ -225,6 +245,7 @@ function _backToLib() {
   _flushSave();
   _view = 'lib'; _chart = null; _error = null;
   _dlPanel = null; _logoAdv = false; _logoBg = 'checker';
+  _colorAdv = null; _pairText = null; _pairBg = null;
   _revokeBlobs();
   _applyAccent(null);
   _loadCharts();
@@ -301,6 +322,14 @@ function _onClick(e) {
   if (act === 'v-dl-orig' && vid) { _downloadOriginal(vid); return; }
   if (act === 'v-dl-png' && vid)  { _downloadPng(vid, btn); return; }
   if (act === 'v-del' && vid)     { _deleteVariant(vid); return; }
+
+  // ── Onglet Couleurs (KB-2) ──
+  const cid = btn.closest('[data-cid]')?.dataset.cid;
+  if (act === 'color-add')        { _addColor(); return; }
+  if (act === 'copy')             { _copy(btn.dataset.copy); return; }
+  if (act === 'c-adv' && cid)     { _colorAdv = _colorAdv === cid ? null : cid; _renderChart(); return; }
+  if (act === 'c-del' && cid)     { _deleteColor(cid); return; }
+  if (act === 'harmony-add')      { _addColor(btn.dataset.hex, btn.dataset.name); return; }
 }
 
 function _onInput(e) {
@@ -341,6 +370,18 @@ function _onInput(e) {
     _scheduleSave();
   }
   if (el.dataset.field === 'logo-bg-custom') { _logoBg = el.value; _refreshLogoBgs(); }
+
+  // ── Onglet Couleurs (KB-2) ──
+  const c = _colorOf(el.closest('[data-cid]')?.dataset.cid);
+  if (el.dataset.field === 'c-name' && c)    { c.name = el.value.slice(0, 40); _scheduleSave(); }
+  if (el.dataset.field === 'c-pantone' && c) { c.pantone = el.value.slice(0, 30) || null; _scheduleSave(); }
+  if (el.dataset.field === 'c-story' && c)   { c.story = el.value.slice(0, 160) || null; _scheduleSave(); }
+  if (el.dataset.field === 'c-hex' && c) {
+    // Pipette live : on rafraîchit la carte sans re-render (focus préservé) ;
+    // le re-render complet (harmonies, contrastes, accent) vient au 'change'.
+    c.hex = el.value; _scheduleSave(); _refreshColorCard(el.closest('.kb-color-card'), c);
+  }
+  if (el.dataset.field === 'c-dark' && c)    { c.darkHex = el.value; _scheduleSave(); }
 }
 
 // Les <select> émettent 'change', pas 'input'.
@@ -349,6 +390,19 @@ function _onChange(e) {
   if (!el.dataset) return;
   const v = _variantOf(el.closest('[data-vid]')?.dataset.vid);
   if (el.dataset.field === 'v-kind' && v) { v.kind = el.value; _scheduleSave(); }
+
+  // ── Onglet Couleurs (KB-2) ──
+  const c = _colorOf(el.closest('[data-cid]')?.dataset.cid);
+  if (el.dataset.field === 'c-hex' && c) { _renderChart(); }
+  if (el.dataset.field === 'c-role' && c) {
+    if (el.value === 'primary') {
+      // Une seule primaire : l'ancienne redevient secondaire.
+      for (const other of _paletteOf()) if (other !== c && other.role === 'primary') other.role = 'secondary';
+    }
+    c.role = el.value; _scheduleSave(); _renderChart();
+  }
+  if (el.dataset.field === 'pair-text') { _pairText = el.value; _renderChart(); }
+  if (el.dataset.field === 'pair-bg')   { _pairBg = el.value; _renderChart(); }
 }
 function _onBlur(e) {
   // Sécurise le nom : jamais vide après édition.
@@ -482,15 +536,7 @@ function _renderChart() {
 function _renderTab(key) {
   if (key === 'logo') return _renderLogoTab();
 
-  if (key === 'colors') return `
-    <div class="kb-ghost">
-      <div class="kb-ghost-swatches" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <h3>L'atelier des couleurs</h3>
-      <p>Votre palette avec ses codes copiables en un clic, des déclinaisons harmonieuses, et le test de lisibilité des contrastes en direct.</p>
-      <button class="kb-btn primary" data-act="soon">${icon('plus', 16)} Ajouter une couleur</button>
-    </div>`;
+  if (key === 'colors') return _renderColorsTab();
 
   if (key === 'type') return `
     <div class="kb-ghost">
@@ -796,6 +842,234 @@ async function _downloadKit() {
     }
     saveBlob(buildZip(files), `${dir} — kit logos.zip`);
   } catch (e) { _toast(`Kit impossible : ${e.message}`); }
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET COULEURS (KB-2) — l'atelier
+// ════════════════════════════════════════════════════════════════
+function _colorsSection() {
+  if (!_chart.draft.colors || typeof _chart.draft.colors !== 'object') {
+    _chart.draft.colors = { palette: [], dark: null };
+  }
+  if (!Array.isArray(_chart.draft.colors.palette)) _chart.draft.colors.palette = [];
+  return _chart.draft.colors;
+}
+function _paletteOf() { return _chart ? _colorsSection().palette : []; }
+function _colorOf(cid) {
+  if (!cid || !_chart) return null;
+  return _paletteOf().find(x => x.id === cid) || null;
+}
+// Couleur d'encre lisible sur un fond donné (pour le HEX affiché sur le swatch).
+function _inkOn(hex) {
+  const r = contrastRatio(hex, '#ffffff');
+  return (r !== null && r >= 3) ? '#ffffff' : '#111318';
+}
+
+function _addColor(hex, name) {
+  const palette = _paletteOf();
+  const c = {
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+    name: (name || (palette.length === 0 ? 'Primaire' : `Couleur ${palette.length + 1}`)).slice(0, 40),
+    hex: (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) ? hex.toLowerCase() : '#3b5bdb',
+    role: palette.some(x => x.role === 'primary') ? (palette.length >= 2 ? 'extra' : 'secondary') : 'primary',
+    cmyk: null, pantone: null, story: null, darkHex: null,
+  };
+  palette.push(c);
+  _scheduleSave(); _renderChart();
+}
+
+function _deleteColor(cid) {
+  const c = _colorOf(cid); if (!c) return;
+  const ok = window.confirm(`Retirer « ${c.name || c.hex} » de la palette ?`);
+  if (!ok) return;
+  const colors = _colorsSection();
+  colors.palette = colors.palette.filter(x => x.id !== cid);
+  if (_colorAdv === cid) _colorAdv = null;
+  if (_pairText === `c:${cid}`) _pairText = null;
+  if (_pairBg === `c:${cid}`) _pairBg = null;
+  _scheduleSave(); _renderChart();
+}
+
+async function _copy(text) {
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); _toast(`${text} copié`); }
+  catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); _toast(`${text} copié`); } catch (e) { _toast('Copie impossible'); }
+    ta.remove();
+  }
+}
+
+function _renderColorsTab() {
+  const palette = _paletteOf();
+
+  if (!palette.length) return `
+    <div class="kb-ghost">
+      <div class="kb-ghost-swatches" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <h3>L'atelier des couleurs</h3>
+      <p>Votre palette avec ses codes copiables en un clic, des déclinaisons harmonieuses, et le test de lisibilité des contrastes en direct.</p>
+      <button class="kb-btn primary" data-act="color-add">${icon('plus', 16)} Ajouter une couleur</button>
+      <p class="kb-hint">Commencez par la couleur principale de la marque — l'application s'habillera avec.</p>
+    </div>`;
+
+  const cards = palette.map(c => _renderColorCard(c)).join('');
+  return `
+    <div class="kb-colors">
+      <div class="kb-colors-head">
+        <p class="kb-hint">Cliquez une pastille pour copier son code. Les valeurs CMJN sont indicatives (sans profil ICC) — saisissez les vôtres dans le bloc avancé.</p>
+        <button class="kb-btn primary" data-act="color-add">${icon('plus', 15)} Ajouter</button>
+      </div>
+      <div class="kb-colors-grid">${cards}</div>
+      ${_renderHarmonyStudio(palette)}
+      ${_renderContrastLab(palette)}
+    </div>`;
+}
+
+function _renderColorCard(c) {
+  const rgb = hexToRgb(c.hex) || { r: 0, g: 0, b: 0 };
+  const cmyk = c.cmyk || rgbToCmyk(rgb);
+  const cmykStr = `${cmyk.c} ${cmyk.m} ${cmyk.y} ${cmyk.k}`;
+  const roles = COLOR_ROLES.map(([k, lbl]) => `<option value="${k}" ${c.role === k ? 'selected' : ''}>${lbl}</option>`).join('');
+  const adv = _colorAdv === c.id ? `
+    <div class="kb-color-adv">
+      <label class="kb-field-label">Pantone <input class="kb-field-input kb-inline" data-field="c-pantone" value="${_esc(c.pantone || '')}" placeholder="ex. 2736 C" maxlength="30"></label>
+      <label class="kb-field-label">Histoire <input class="kb-field-input kb-inline" data-field="c-story" value="${_esc(c.story || '')}" placeholder="d'où vient cette couleur, en une ligne" maxlength="160"></label>
+      <label class="kb-field-label">Variante mode sombre
+        <span class="kb-darkpick"><input type="color" data-field="c-dark" value="${_esc(c.darkHex || c.hex)}" aria-label="Variante sombre"></span>
+        ${c.darkHex ? `<code>${_esc(c.darkHex)}</code>` : '<span class="kb-hint">— identique par défaut</span>'}
+      </label>
+    </div>` : '';
+
+  return `
+    <article class="kb-color-card" data-cid="${_esc(c.id)}">
+      <button class="kb-swatch" data-act="copy" data-copy="${_esc(c.hex)}" style="background:${_esc(c.hex)};color:${_inkOn(c.hex)}" title="Copier ${_esc(c.hex)}">
+        <span class="kb-swatch-hex">${_esc(c.hex)}</span>
+        <label class="kb-swatch-pick" title="Modifier la couleur" aria-label="Modifier la couleur">
+          ${icon('edit', 14)}<input type="color" data-field="c-hex" value="${_esc(c.hex)}">
+        </label>
+      </button>
+      <div class="kb-color-fields">
+        <div class="kb-color-row">
+          <input class="kb-field-input kb-v-label" data-field="c-name" value="${_esc(c.name || '')}" placeholder="Nom de la couleur" maxlength="40" spellcheck="false">
+          <select class="kb-select kb-color-role" data-field="c-role" aria-label="Rôle">${roles}</select>
+        </div>
+        <div class="kb-color-codes">
+          <button class="kb-code" data-act="copy" data-copy="${_esc(c.hex)}">HEX <strong>${_esc(c.hex)}</strong></button>
+          <button class="kb-code" data-act="copy" data-copy="${rgb.r}, ${rgb.g}, ${rgb.b}">RVB <strong>${rgb.r} ${rgb.g} ${rgb.b}</strong></button>
+          <button class="kb-code" data-act="copy" data-copy="${cmykStr}" title="Indicatif — sans profil ICC">CMJN <strong>${cmykStr}</strong></button>
+          ${c.pantone ? `<button class="kb-code" data-act="copy" data-copy="${_esc(c.pantone)}">PANTONE <strong>${_esc(c.pantone)}</strong></button>` : ''}
+        </div>
+        ${c.story ? `<p class="kb-color-story">${_esc(c.story)}</p>` : ''}
+      </div>
+      <div class="kb-color-acts">
+        <button class="kb-iconbtn ${_colorAdv === c.id ? 'on' : ''}" data-act="c-adv" title="Bloc avancé (Pantone, histoire, mode sombre)">${icon('more-horizontal', 16)}</button>
+        <button class="kb-iconbtn danger" data-act="c-del" title="Retirer">${icon('trash-2', 16)}</button>
+      </div>
+      ${adv}
+    </article>`;
+}
+
+// Rafraîchissement live d'une carte pendant l'usage de la pipette (sans re-render).
+function _refreshColorCard(card, c) {
+  if (!card) return;
+  const rgb = hexToRgb(c.hex); if (!rgb) return;
+  const cmyk = c.cmyk || rgbToCmyk(rgb);
+  const sw = card.querySelector('.kb-swatch');
+  if (sw) { sw.style.background = c.hex; sw.style.color = _inkOn(c.hex); sw.dataset.copy = c.hex; }
+  const hexEl = card.querySelector('.kb-swatch-hex'); if (hexEl) hexEl.textContent = c.hex;
+  const codes = card.querySelectorAll('.kb-code strong');
+  if (codes[0]) codes[0].textContent = c.hex;
+  if (codes[1]) codes[1].textContent = `${rgb.r} ${rgb.g} ${rgb.b}`;
+  if (codes[2]) codes[2].textContent = `${cmyk.c} ${cmyk.m} ${cmyk.y} ${cmyk.k}`;
+  if (c.role === 'primary') _applyAccent(c.hex);
+}
+
+// ── Atelier des déclinaisons (proposées, jamais imposées) ──
+function _renderHarmonyStudio(palette) {
+  const base = palette.find(c => c.role === 'primary') || palette[0];
+  const h = harmonies(base.hex);
+  if (!h) return '';
+  const inPalette = new Set(palette.map(c => c.hex.toLowerCase()));
+  const rows = Object.entries(h).map(([key, hexes]) => {
+    const [title, sub] = HARMONY_LABELS[key] || [key, ''];
+    const chips = hexes.map(hex => {
+      const taken = inPalette.has(hex.toLowerCase());
+      return `
+        <button class="kb-harmony-chip ${taken ? 'is-taken' : ''}" data-act="harmony-add"
+                data-hex="${_esc(hex)}" data-name="${_esc(title)}"
+                style="background:${_esc(hex)};color:${_inkOn(hex)}"
+                title="${taken ? 'Déjà dans la palette' : `Ajouter ${_esc(hex)} à la palette`}" ${taken ? 'disabled' : ''}>
+          ${taken ? icon('check', 14) : icon('plus', 14)}<span>${_esc(hex)}</span>
+        </button>`;
+    }).join('');
+    return `
+      <div class="kb-harmony-row">
+        <div class="kb-harmony-label"><strong>${title}</strong><span>${sub}</span></div>
+        <div class="kb-harmony-chips">${chips}</div>
+      </div>`;
+  }).join('');
+  return `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">Déclinaisons depuis « ${_esc(base.name || base.hex)} »</h3>
+      <p class="kb-hint">Des pistes calculées par théorie des couleurs — un clic les ajoute, rien n'est imposé.</p>
+      ${rows}
+    </section>`;
+}
+
+// ── Test de visibilité (WCAG + daltonisme) ──
+function _pairOptions(palette, selected) {
+  const opts = [
+    ...palette.map(c => [`c:${c.id}`, c.name || c.hex]),
+    ['#ffffff', 'Blanc'], ['#000000', 'Noir'],
+  ];
+  return opts.map(([v, lbl]) => `<option value="${_esc(v)}" ${selected === v ? 'selected' : ''}>${_esc(lbl)}</option>`).join('');
+}
+function _pairHex(v, palette) {
+  if (!v) return null;
+  if (v.startsWith('c:')) return _colorOf(v.slice(2))?.hex || null;
+  return v;
+}
+function _renderContrastLab(palette) {
+  const primary = palette.find(c => c.role === 'primary') || palette[0];
+  if (_pairText === null || !_pairHex(_pairText, palette)) _pairText = `c:${primary.id}`;
+  if (_pairBg === null || !_pairHex(_pairBg, palette)) _pairBg = '#ffffff';
+  const txt = _pairHex(_pairText, palette), bg = _pairHex(_pairBg, palette);
+  const ratio = contrastRatio(txt, bg) || 1;
+  const v = wcagVerdict(ratio);
+  const badge = (ok, lbl, hint) => `<span class="kb-wcag ${ok ? 'ok' : 'ko'}" title="${hint}">${ok ? icon('check', 12) : icon('x', 12)} ${lbl}</span>`;
+  const sims = ['protanopia', 'deuteranopia', 'tritanopia'].map(type => {
+    const st = simulateColorBlind(txt, type), sb = simulateColorBlind(bg, type);
+    const lbl = { protanopia: 'Protanopie', deuteranopia: 'Deutéranopie', tritanopia: 'Tritanopie' }[type];
+    const r = contrastRatio(st, sb) || 1;
+    return `
+      <figure class="kb-cb-sample" title="${lbl} — contraste ${r.toFixed(1)}:1">
+        <div class="kb-cb-box" style="background:${sb};color:${st}">Aa</div>
+        <figcaption>${lbl}</figcaption>
+      </figure>`;
+  }).join('');
+  return `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">Test de visibilité</h3>
+      <div class="kb-pair-row">
+        <label class="kb-field-label">Texte <select class="kb-select kb-inline" data-field="pair-text">${_pairOptions(palette, _pairText)}</select></label>
+        <label class="kb-field-label">sur fond <select class="kb-select kb-inline" data-field="pair-bg">${_pairOptions(palette, _pairBg)}</select></label>
+      </div>
+      <div class="kb-contrast-sample" style="background:${bg};color:${txt}">
+        <span class="kb-contrast-aa">Aa</span>
+        <span class="kb-contrast-text">Le vif renard brun saute par-dessus le chien paresseux.</span>
+      </div>
+      <div class="kb-contrast-verdict">
+        <strong class="kb-ratio">${ratio.toFixed(2)} : 1</strong>
+        ${badge(v.aaNormal, 'AA texte', '≥ 4,5:1 — texte courant')}
+        ${badge(v.aaLarge, 'AA grands titres', '≥ 3:1 — texte ≥ 18,5 px gras ou 24 px')}
+        ${badge(v.aaaNormal, 'AAA', '≥ 7:1 — confort maximal')}
+      </div>
+      <div class="kb-cb-row">${sims}</div>
+      <p class="kb-hint">Simulation daltonisme indicative — environ 1 personne sur 12 est concernée.</p>
+    </section>`;
 }
 
 // ── Toast ───────────────────────────────────────────────────────
