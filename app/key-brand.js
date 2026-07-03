@@ -499,7 +499,7 @@ function _onInput(e) {
     const wasEmpty = !_visHexOk(c.hex);
     c.hex = el.value; _scheduleSave();
     if (wasEmpty) { _colorPick = null; }              // roue (secondaire) : rendu complet au 'change'
-    else { _refreshColorCard(el.closest('.kb-color-card'), c); }
+    else { _refreshColorCard(el.closest('.kb-color-card'), c); _refreshHarmony(); }
   }
   // Saisie alphanumérique du code (primaire) : dès 6 caractères hex → carte remplie.
   if (el.dataset.field === 'c-hexcode' && c) {
@@ -1250,8 +1250,10 @@ function _renderHarmonyStudio(palette) {
   if (!base) return '';
   const h = harmonies(base.hex);
   if (!h) return '';
-  const inPalette = new Set(palette.map(c => c.hex.toLowerCase()));
-  const rows = Object.entries(h).map(([key, hexes]) => {
+  const inPalette = new Set(palette.map(c => (c.hex || '').toLowerCase()));
+  // On saute « Nuances » : ce clair→profond fait doublon avec l'échelle
+  // 100→900 déjà présente dans la carte. Ici, uniquement des couleurs ASSORTIES.
+  const rows = Object.entries(h).filter(([key]) => key !== 'nuances').map(([key, hexes]) => {
     const [title, sub] = HARMONY_LABELS[key] || [key, ''];
     const chips = hexes.map(hex => {
       const taken = inPalette.has(hex.toLowerCase());
@@ -1270,9 +1272,9 @@ function _renderHarmonyStudio(palette) {
       </div>`;
   }).join('');
   return `
-    <section class="kb-lab">
-      <h3 class="kb-lab-title">Déclinaisons depuis « ${_esc(base.name || base.hex)} »</h3>
-      <p class="kb-hint">Des pistes calculées par théorie des couleurs — un clic les ajoute, rien n'est imposé.</p>
+    <section class="kb-lab kb-harmonylab">
+      <h3 class="kb-lab-title">Harmonies depuis « ${_esc(base.name || base.hex)} »</h3>
+      <p class="kb-hint">Des couleurs assorties calculées par théorie des couleurs, recalculées à chaque changement — un clic les ajoute, rien n'est imposé.</p>
       ${rows}
     </section>`;
 }
@@ -1400,6 +1402,19 @@ function _refreshVisLab() {
   const note = lab.querySelector('.kb-vis-note'); if (note) note.innerHTML = _visNoteHTML(rating);
   const cb = lab.querySelector('.kb-cb-row'); if (cb) cb.innerHTML = _visCbHTML(txt, bg);
   const prev = lab.querySelector('.kb-vis-preview'); if (prev) { prev.style.background = bg; prev.style.color = txt; }
+}
+
+// Recalcule et remplace la section « Harmonies » en direct (pendant l'édition
+// de la couleur, sans attendre le 'change' du sélecteur — préserve le focus).
+function _refreshHarmony() {
+  if (!_root) return;
+  const sec = _root.querySelector('.kb-harmonylab');
+  const html = _renderHarmonyStudio(_paletteOf());
+  if (!sec || !html) return;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html.trim();
+  const fresh = tpl.content.firstElementChild;
+  if (fresh) sec.replaceWith(fresh);
 }
 
 // Ajuste la couleur de texte pour atteindre AA sur le fond courant.
