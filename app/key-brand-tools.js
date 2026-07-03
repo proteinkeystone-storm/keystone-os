@@ -241,6 +241,89 @@ export function wcagVerdict(ratio) {
   };
 }
 
+// ── Mélange & déclinaisons tonales (échelle 100→900) ──────────────
+/** Mélange linéaire RGB de deux hex (t=0 → a, t=1 → b). */
+export function mixHex(a, b, t) {
+  const ra = hexToRgb(a), rb = hexToRgb(b);
+  if (!ra || !rb) return a;
+  t = Math.max(0, Math.min(1, t));
+  return rgbToHex({
+    r: ra.r + (rb.r - ra.r) * t,
+    g: ra.g + (rb.g - ra.g) * t,
+    b: ra.b + (rb.b - ra.b) * t,
+  });
+}
+// Facteurs de mélange par palier : vers blanc (tons clairs 100-400),
+// vers noir (tons foncés 600-900). 500 = couleur de base EXACTE.
+const TONAL_MIX = {
+  100: ['#ffffff', 0.86], 200: ['#ffffff', 0.72], 300: ['#ffffff', 0.52],
+  400: ['#ffffff', 0.27], 500: null,
+  600: ['#000000', 0.12], 700: ['#000000', 0.27], 800: ['#000000', 0.44], 900: ['#000000', 0.60],
+};
+export const TONAL_STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+/** Échelle tonale { 100…900 } d'une couleur ; 500 vaut la couleur donnée. */
+export function tonalScale(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const base = rgbToHex(rgb);
+  const out = {};
+  for (const step of TONAL_STEPS) {
+    const m = TONAL_MIX[step];
+    out[step] = m ? mixHex(base, m[0], m[1]) : base;
+  }
+  return out;
+}
+
+// ── Teinte « nuit » (adaptée à un fond sombre) ────────────────────
+// On remonte la clarté des couleurs sombres pour qu'elles restent lisibles
+// sur du noir, en désaturant très légèrement. Overridable par l'utilisateur.
+export function nightVariant(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const hsl = rgbToHsl(rgb);
+  let l = hsl.l / 100, s = hsl.s / 100;
+  if (l < 0.55) l = l + (0.66 - l) * 0.75;
+  l = Math.max(0.35, Math.min(0.82, l));
+  s = s * 0.92;
+  return rgbToHex(hslToRgb({ h: hsl.h, s: s * 100, l: l * 100 }));
+}
+
+// ── Note de lisibilité (test de visibilité) ───────────────────────
+// Étoiles 0→5 + sous-notes petit/grand texte 0→3, libellés fr.
+// Seuils calés sur WCAG : 4,5:1 (texte courant), 3:1 (grand texte), 7:1 (AAA).
+export function contrastRating(ratio) {
+  const r = ratio || 1;
+  let stars, label;
+  if (r >= 12)       { stars = 5; label = 'Excellent'; }
+  else if (r >= 7)   { stars = 4; label = 'Très bon'; }
+  else if (r >= 4.5) { stars = 3; label = 'Bon'; }
+  else if (r >= 3)   { stars = 2; label = 'Moyen'; }
+  else if (r >= 2)   { stars = 1; label = 'Faible'; }
+  else               { stars = 0; label = 'Insuffisant'; }
+  const small = r >= 7 ? 3 : r >= 4.5 ? 2 : 0;
+  const large = r >= 4.5 ? 3 : r >= 3 ? 2 : 0;
+  return { stars, label, small, large };
+}
+
+// Ajuste la couleur de texte (en gardant sa teinte) jusqu'à atteindre le
+// ratio cible sur le fond donné — l'action « Améliorer » du test de visibilité.
+export function enhanceInk(textHex, bgHex, target = 4.5) {
+  const rgb = hexToRgb(textHex), bg = hexToRgb(bgHex);
+  if (!rgb || !bg) return textHex;
+  if ((contrastRatio(textHex, bgHex) || 0) >= target) return textHex;
+  const hsl = rgbToHsl(rgb);
+  const dir = relLuminance(bg) > 0.4 ? -1 : 1;   // fond clair → assombrir ; sinon éclaircir
+  let best = textHex;
+  for (let i = 1; i <= 100; i++) {
+    const l = Math.max(0, Math.min(100, hsl.l + dir * i));
+    const cand = rgbToHex(hslToRgb({ h: hsl.h, s: hsl.s, l }));
+    best = cand;
+    if ((contrastRatio(cand, bgHex) || 0) >= target) return cand;
+    if (l === 0 || l === 100) break;
+  }
+  return best;
+}
+
 // ── Harmonies (proposées, jamais imposées) ──
 export function harmonies(hex) {
   const rgb = hexToRgb(hex);

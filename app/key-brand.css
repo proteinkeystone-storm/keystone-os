@@ -189,65 +189,152 @@
 .kb-prot-zone{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:var(--kb-prot,20px);border:1.5px dashed rgba(0,0,0,.35);border-radius:4px;flex-shrink:0}
 .kb-prot-zone img{display:block;height:40px;width:auto;max-width:150px;object-fit:contain}
 
-/* ══ Onglet Couleurs (KB-2) ══ */
-.kb-colors-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}
-.kb-colors-head .kb-hint{max-width:560px}
-.kb-colors-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.kb-color-card{position:relative;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+/* ══ Onglet Couleurs (KB-2 · refonte) ══ */
+.kb-colors-head{display:flex;align-items:flex-start;justify-content:flex-end;gap:16px;margin-bottom:16px}
+/* Pill « + » discrète (couleur accent) — ajout d'un élément (Couleurs / Logo / Typo). */
+.kb-addpill{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:32px;border:0;border-radius:999px;background:var(--kb-accent);color:#fff;cursor:pointer;transition:filter .15s}
+.kb-addpill:hover{filter:brightness(1.1)}
+.kb-addpill.is-on{filter:brightness(.9)}
+.kb-addpill:disabled{opacity:.55;cursor:default}
+.kb-colors-grid{display:flex;flex-direction:column;gap:22px}
 
-/* Le swatch EST le bouton de copie. */
-.kb-swatch{position:relative;display:flex;align-items:center;justify-content:center;height:110px;border:0;cursor:pointer;transition:filter .12s;width:100%}
-.kb-swatch:hover{filter:brightness(1.05)}
-.kb-swatch:active{filter:brightness(.95)}
-.kb-swatch-hex{font-weight:800;font-size:15px;letter-spacing:.02em;opacity:0;transition:opacity .15s}
+/* Une couleur = deux panneaux jumeaux (édition | déclinaisons). */
+.kb-color-card{display:grid;grid-template-columns:1fr 1fr;gap:16px;background:none;border:0}
+.kb-cc-edit,.kb-cc-scale{position:relative;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
+
+/* Le swatch EST le bouton de copie (haut du panneau d'édition). */
+.kb-swatch{position:relative;display:flex;align-items:center;justify-content:center;height:190px;border:0;cursor:pointer;transition:filter .12s;width:100%}
+.kb-swatch:hover{filter:brightness(1.04)}
+.kb-swatch:active{filter:brightness(.96)}
+.kb-swatch-hex{font-weight:800;font-size:16px;letter-spacing:.02em;opacity:0;transition:opacity .15s}
 .kb-swatch:hover .kb-swatch-hex{opacity:.95}
-.kb-swatch-pick{position:absolute;bottom:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(0,0,0,.28);color:#fff;opacity:0;transition:opacity .15s;cursor:pointer}
+.kb-swatch-pick{position:absolute;bottom:10px;right:10px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:rgba(0,0,0,.28);color:#fff;opacity:0;transition:opacity .15s;cursor:pointer}
 .kb-swatch:hover .kb-swatch-pick{opacity:1}
 .kb-swatch-pick input{position:absolute;inset:0;opacity:0;cursor:pointer}
 
-.kb-color-fields{display:flex;flex-direction:column;gap:8px;padding:12px 14px 12px;border-top:1px solid var(--kb-line)}
-.kb-color-row{display:flex;gap:8px}
-.kb-color-row .kb-v-label{flex:1}
-.kb-color-role{width:auto;min-width:118px}
-.kb-color-codes{display:flex;flex-wrap:wrap;gap:6px}
-.kb-code{display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:8px;color:var(--kb-muted);font-size:11px;letter-spacing:.04em;padding:5px 8px;cursor:pointer;transition:border-color .15s,color .15s}
+/* Swatch VIDE : invite à saisir (damier neutre). */
+.kb-swatch.is-choose{cursor:pointer;background-color:rgba(127,127,127,.06);background-image:linear-gradient(45deg,rgba(127,127,127,.14) 25%,transparent 25%,transparent 75%,rgba(127,127,127,.14) 75%),linear-gradient(45deg,rgba(127,127,127,.14) 25%,transparent 25%,transparent 75%,rgba(127,127,127,.14) 75%);background-size:18px 18px;background-position:0 0,9px 9px}
+.kb-swatch.is-choose .kb-swatch-hex{opacity:1;color:var(--kb-muted);display:inline-flex;align-items:center;gap:7px;font-weight:700}
+/* Bloc de saisie du code (PRIMAIRE) : hex alphanumérique + roue secondaire. */
+.kb-swatch.is-picking{flex-direction:column;gap:12px;padding:0 20px;cursor:default}
+.kb-hexentry{display:flex;align-items:center;gap:8px;width:100%;max-width:280px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:12px;padding:6px 6px 6px 14px;box-shadow:0 8px 24px rgba(0,0,0,.22)}
+.kb-hexentry-hash{color:var(--kb-muted);font-weight:800;font-size:18px}
+.kb-hexentry-input{flex:1;min-width:0;background:none;border:0;padding:10px 0;color:var(--kb-ink);font-weight:800;font-size:19px;letter-spacing:.12em;text-transform:uppercase}
+.kb-hexentry-input:focus{outline:none}
+.kb-hexentry-wheel{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:9px;background:rgba(127,127,127,.14);color:var(--kb-muted);cursor:pointer;transition:color .15s}
+.kb-hexentry-wheel:hover{color:var(--kb-ink)}
+.kb-hexentry-pick{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer}
+.kb-hexentry-hint{margin:0;max-width:280px;text-align:center;color:var(--kb-muted);font-size:11.5px;line-height:1.35}
+
+/* Déclinaisons fantômes tant qu'aucune couleur n'est choisie. */
+.kb-cc-scale.is-ghost{opacity:.55}
+.kb-tone.is-ghost{background:rgba(127,127,127,.14);cursor:default}
+.kb-tone.is-ghost:hover{transform:none}
+
+.kb-color-fields{display:flex;flex-direction:column;gap:12px;padding:16px 16px 18px}
+.kb-color-row{display:flex;gap:8px;align-items:center}
+.kb-color-row .kb-v-label{flex:1;min-width:0;font-weight:700}
+.kb-color-role{width:auto;min-width:120px}
+
+/* Bascule Jour / Nuit (calcul auto de la teinte pour chaque mode). */
+.kb-daynight{display:inline-flex;gap:2px;padding:3px;border-radius:12px;background:rgba(0,0,0,.16);border:1px solid var(--kb-line);flex-shrink:0}
+.kb-dn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:30px;border:0;border-radius:9px;background:none;color:var(--kb-muted);cursor:pointer;transition:background .15s,color .15s}
+.kb-dn:hover{color:var(--kb-ink)}
+.kb-dn.on{background:var(--kb-accent);color:#fff}
+
+/* Codes copiables (label discret + valeur forte). */
+.kb-color-codes{display:flex;flex-wrap:wrap;gap:8px}
+.kb-code{display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.16);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-muted);font-size:12px;letter-spacing:.02em;padding:8px 11px;cursor:pointer;transition:border-color .15s,color .15s}
+.kb-code>span{font-size:11px;opacity:.7;letter-spacing:.06em}
 .kb-code strong{color:var(--kb-ink);font-weight:700;letter-spacing:0}
 .kb-code:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
-.kb-color-story{color:var(--kb-muted);font-size:12.5px;font-style:italic;margin:0}
-.kb-color-acts{position:absolute;top:10px;left:10px;display:flex;gap:6px;opacity:0;transition:opacity .15s}
-.kb-color-card:hover .kb-color-acts{opacity:1}
-.kb-color-acts .kb-iconbtn{background:rgba(0,0,0,.28);color:#fff;border-color:transparent}
-.kb-color-adv{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-top:1px solid var(--kb-line);background:rgba(0,0,0,.12)}
-.kb-darkpick{position:relative;display:inline-flex;width:34px;height:24px;border-radius:7px;overflow:hidden;border:1px solid var(--kb-line)}
-.kb-darkpick input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);border:0;padding:0;cursor:pointer}
-.kb-color-adv code{color:var(--kb-ink);font-size:12px}
 
-/* Laboratoires (harmonies + visibilité) */
+/* Pantone (pleine largeur, déclaratif). */
+.kb-pantone{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.16);border:1px solid var(--kb-line);border-radius:10px;padding:4px 12px}
+.kb-pantone>span{color:var(--kb-muted);font-size:12.5px;flex-shrink:0}
+.kb-pantone input{flex:1;min-width:0;background:none;border:0;padding:8px 0}
+
+.kb-color-acts{position:absolute;top:10px;left:10px;display:flex;gap:6px;opacity:0;transition:opacity .15s;z-index:2}
+.kb-cc-edit:hover .kb-color-acts{opacity:1}
+.kb-color-acts .kb-iconbtn{background:rgba(0,0,0,.32);color:#fff;border-color:transparent;width:30px;height:30px}
+.kb-color-adv{display:flex;flex-direction:column;gap:8px;margin-top:2px;padding-top:12px;border-top:1px solid var(--kb-line)}
+.kb-color-adv .kb-hint{margin:0}
+
+/* Panneau droit : déclinaisons 100 → 900 (copie au clic). */
+.kb-tone-band{display:flex;height:190px}
+.kb-tone{flex:1;border:0;padding:0;cursor:pointer;position:relative;transition:transform .12s}
+.kb-tone:first-child{border-top-left-radius:17px}
+.kb-tone:last-child{border-top-right-radius:17px}
+.kb-tone:hover{transform:scaleY(1.05);z-index:1}
+.kb-tone-nums{display:flex;padding:15px 0 17px}
+.kb-tone-num{flex:1;text-align:center;font-size:12.5px;font-weight:600;color:var(--kb-muted)}
+.kb-tone-num.is-base{color:var(--kb-ink);font-weight:900}
+
+/* Laboratoires (harmonies + visibilité). */
 .kb-lab{margin-top:30px;border:1px solid var(--kb-line);border-radius:16px;padding:18px 18px 16px}
 .kb-lab-title{font-weight:900;font-size:16.5px;letter-spacing:-0.015em;margin:0 0 4px}
-.kb-harmony-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-top:1px solid var(--kb-line);margin-top:10px}
+.kb-harmony-row{display:flex;align-items:flex-start;gap:16px;padding:12px 0;border-top:1px solid var(--kb-line);margin-top:10px}
 .kb-harmony-row:first-of-type{border-top:0}
-.kb-harmony-label{width:170px;flex-shrink:0;display:flex;flex-direction:column}
+.kb-harmony-label{width:170px;flex-shrink:0;display:flex;flex-direction:column;padding-top:4px}
 .kb-harmony-label strong{font-size:13.5px}
 .kb-harmony-label span{color:var(--kb-muted);font-size:11.5px;line-height:1.35}
-.kb-harmony-chips{display:flex;flex-wrap:wrap;gap:8px}
-.kb-harmony-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(0,0,0,.2);border-radius:10px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:transform .12s}
-.kb-harmony-chip:hover:not(:disabled){transform:translateY(-1px)}
+/* Pastilles plus carrées : la couleur prime, le code sous la vignette. */
+.kb-harmony-chips{display:flex;flex-wrap:wrap;gap:10px}
+.kb-harmony-chip{display:flex;flex-direction:column;align-items:center;gap:6px;width:64px;border:0;background:none;padding:0;cursor:pointer}
 .kb-harmony-chip.is-taken{opacity:.55;cursor:default}
+/* La couleur est TOUJOURS visible (vignette carrée) ; l'icône +/✓ apparaît au survol. */
+.kb-harmony-sw{display:flex;align-items:center;justify-content:center;width:64px;height:56px;border-radius:12px;border:1px solid rgba(0,0,0,.16);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);transition:transform .12s}
+.kb-harmony-sw .ws-icon{opacity:0;transition:opacity .12s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+.kb-harmony-chip:hover:not(:disabled) .kb-harmony-sw{transform:translateY(-2px)}
+.kb-harmony-chip:hover:not(:disabled) .kb-harmony-sw .ws-icon,
+.kb-harmony-chip.is-taken .kb-harmony-sw .ws-icon{opacity:1}
+.kb-harmony-hex{font-size:11px;font-weight:600;color:var(--kb-muted);letter-spacing:.02em}
 
-/* Test de visibilité */
-.kb-pair-row{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 12px}
-.kb-contrast-sample{display:flex;align-items:center;gap:18px;border-radius:14px;padding:20px 22px;border:1px solid var(--kb-line)}
-.kb-contrast-aa{font-weight:900;font-size:44px;line-height:1;letter-spacing:-0.03em}
-.kb-contrast-text{font-size:15px;line-height:1.45}
-.kb-contrast-verdict{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
-.kb-ratio{font-size:19px;font-weight:900;letter-spacing:-0.02em;margin-right:4px}
-.kb-wcag{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;border:1px solid var(--kb-line)}
-.kb-wcag.ok{color:var(--ws-success);border-color:color-mix(in srgb,var(--ws-success) 40%,transparent)}
-.kb-wcag.ko{color:var(--ws-danger);border-color:color-mix(in srgb,var(--ws-danger) 40%,transparent)}
-.kb-cb-row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+/* ── Test de visibilité (2 colonnes : réglages+note | aperçu) ── */
+.kb-vis{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:18px;align-items:stretch}
+.kb-vis-controls{display:flex;flex-direction:column;gap:12px}
+.kb-vis-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kb-vis-field{display:flex;flex-direction:column;gap:6px}
+.kb-vis-flabel{font-size:12.5px;color:var(--kb-muted)}
+.kb-hexinput{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.16);border:1px solid var(--kb-line);border-radius:10px;padding:4px 4px 4px 12px}
+.kb-hexinput input[data-field^="vis-text"],.kb-hexinput input[data-field^="vis-bg"]{flex:1;min-width:0;background:none;border:0;padding:8px 0;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+.kb-hexswatch{position:relative;width:34px;height:34px;border-radius:8px;flex-shrink:0;border:1px solid rgba(0,0,0,.2);cursor:pointer;overflow:hidden}
+.kb-hexswatch input{position:absolute;inset:-6px;width:calc(100% + 12px);height:calc(100% + 12px);border:0;padding:0;cursor:pointer;opacity:0}
+.kb-vis-clabel{font-size:12.5px;color:var(--kb-muted);margin-top:2px}
+
+/* Encart verdict coloré (note + étoiles + sous-notes). */
+.kb-vis-score{border-radius:14px;overflow:hidden;border:1px solid var(--kb-line)}
+.kb-vis-score-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px}
+.kb-vis-ratio{font-size:40px;font-weight:900;letter-spacing:-0.03em;line-height:1}
+.kb-vis-verdict{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.kb-vis-label{font-weight:800;font-size:14.5px}
+.kb-stars{display:inline-flex;gap:2px}
+.kb-star{color:rgba(130,130,130,.4);display:inline-flex}
+.kb-star.on{color:currentColor}
+.kb-vis-score-grid{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--kb-line)}
+.kb-vis-sub{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 18px;font-size:12.5px;font-weight:700}
+.kb-vis-sub:first-child{border-right:1px solid var(--kb-line)}
+.kb-vis-score.is-good{background:color-mix(in srgb,var(--ws-success) 15%,var(--kb-panel));color:var(--ws-success);border-color:color-mix(in srgb,var(--ws-success) 35%,transparent)}
+.kb-vis-score.is-warn{background:color-mix(in srgb,#f59e0b 14%,var(--kb-panel));color:#f59e0b;border-color:color-mix(in srgb,#f59e0b 35%,transparent)}
+.kb-vis-score.is-bad{background:color-mix(in srgb,var(--ws-danger) 13%,var(--kb-panel));color:var(--ws-danger);border-color:color-mix(in srgb,var(--ws-danger) 35%,transparent)}
+.kb-vis-note{margin:0}
+.kb-linkbtn{background:none;border:0;padding:0;color:var(--kb-accent);font:inherit;font-weight:700;cursor:pointer}
+.kb-linkbtn:hover{text-decoration:underline}
+
+/* Aperçu vivant (fond = couleur de fond, texte = couleur de texte).
+   Arrondi concentrique (< celui de la zone) ; haut aligné sur le champ « Couleur du fond ». */
+.kb-vis-preview{position:relative;margin-top:25px;border-radius:12px;border:1px solid var(--kb-line);padding:32px 32px 36px;display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:205px;text-align:center;overflow:hidden;transition:min-height .18s}
+.kb-vis-ptitle{font-weight:900;font-size:33px;letter-spacing:-0.02em;line-height:1.05;margin:0}
+.kb-vis-ptext{font-size:15.5px;line-height:1.5;margin:0;opacity:.92}
+.kb-vis-zoom{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:9px;border:0;background:rgba(127,127,127,.16);color:currentColor;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.7;transition:opacity .15s}
+.kb-vis-zoom:hover{opacity:1}
+.kb-vislab.is-big .kb-vis-preview{min-height:360px}
+.kb-vislab.is-big .kb-vis-ptitle{font-size:44px}
+
+/* Simulation daltonisme (différenciateur, sous l'encart). */
+.kb-cb-row{display:flex;gap:12px;margin-top:4px;flex-wrap:wrap}
 .kb-cb-sample{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px}
-.kb-cb-box{width:74px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;border:1px solid var(--kb-line)}
+.kb-cb-box{width:64px;height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;border:1px solid var(--kb-line)}
 .kb-cb-sample figcaption{color:var(--kb-muted);font-size:11px}
 
 /* ══ Onglet Typographies (KB-3) ══ */
@@ -423,10 +510,13 @@
   .kb-adv-body{grid-template-columns:1fr;gap:8px}
   .kb-logo-toolbar{flex-direction:column;align-items:stretch}
   .kb-logo-toolbar-acts{justify-content:flex-end}
-  .kb-colors-grid{grid-template-columns:1fr}
+  .kb-color-card{grid-template-columns:1fr}
+  .kb-cc-scale .kb-tone-band{height:120px}
+  .kb-swatch{height:150px}
   .kb-harmony-row{flex-direction:column;align-items:flex-start;gap:8px}
-  .kb-harmony-label{width:auto}
-  .kb-contrast-sample{flex-direction:column;align-items:flex-start;gap:8px}
+  .kb-harmony-label{width:auto;padding-top:0}
+  .kb-vis{grid-template-columns:1fr}
+  .kb-vis-fields{grid-template-columns:1fr 1fr}
   .kb-color-acts{opacity:1} /* pas de hover au doigt */
   .kb-type-toolbar{flex-direction:column;align-items:stretch}
   .kb-font-head{flex-direction:column}
