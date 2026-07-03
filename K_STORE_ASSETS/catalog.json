@@ -372,7 +372,7 @@
       "icon": "keybrand",
       "ai_optimized": null,
       "isNew": true,
-      "published": false,
+      "published": true,
       "tags": [
         "artefact",
         "communication",

@@ -451,12 +451,11 @@ export const CATALOG_DATA = {
         { id:'O-SEC-001', padKey:null, title:'Missive', subtitle:'Transmettez un secret qui se lit une fois, puis s’autodétruit', category:'SECURITE', plan:'STARTER', price:49, lifetimePrice:199, icon:'sceau', ai_optimized:null, isNew:true, published:true, timeSaved:10, tags:['artefact','securite','secret','mot de passe','chiffrement','e2e','nfc','qr','ephemere','confidentiel'],
           longDesc:"Missive transmet un secret — mot de passe, code, information sensible — via un lien, un QR ou une puce NFC. Le contenu est chiffré de bout en bout sur votre appareil : même nous ne pouvons pas le lire. Le destinataire l'ouvre avec un code que vous lui transmettez par un autre canal, le message se lit une seule fois, puis s'autodétruit — et meurt définitivement après quelques essais ratés. Zéro stockage en clair, aucune dépendance tierce au moment de lire. Idéal pour partager un secret sans le laisser traîner dans une messagerie." },
 
-        // ── Sprint KB-0 — Key Brand, charte graphique vivante (Pad O-BRD-001) ──
-        // ⚠ DOGFOOD : published gaté par le flag localStorage `ks_kb_dev` (='1')
-        // jusqu'à KB-7 — le pad reste invisible pour les bêta-testeurs pendant
-        // la construction (published:false = filtré par pads-loader pour TOUS,
-        // admin compris). KB-7 : remplacer par published:true.
-        { id:'O-BRD-001', padKey:null, title:'Key Brand', subtitle:'Votre charte graphique vivante — interactive, à jour, partageable d’un lien', category:'COM', plan:'STARTER', price:49, lifetimePrice:199, icon:'keybrand', ai_optimized:null, isNew:true, published:(typeof localStorage !== 'undefined' && localStorage.getItem('ks_kb_dev') === '1'), timeSaved:12, tags:['artefact','communication','charte','marque','logo','couleurs','typographie','branding','graphiste','identite'],
+        // ── Key Brand, charte graphique vivante (Pad O-BRD-001) — KB-0→KB-7 livrés ──
+        // Publié pour les bêta-testeurs (K-Store). La page marketing publique
+        // (/outils/key-brand + grille TOOLS d'index.html) reste une décision
+        // go-to-market séparée (cf. gen-tool-pages.mjs, entrée commentée).
+        { id:'O-BRD-001', padKey:null, title:'Key Brand', subtitle:'Votre charte graphique vivante — interactive, à jour, partageable d’un lien', category:'COM', plan:'STARTER', price:49, lifetimePrice:199, icon:'keybrand', ai_optimized:null, isNew:true, published:true, timeSaved:12, tags:['artefact','communication','charte','marque','logo','couleurs','typographie','branding','graphiste','identite'],
           longDesc:"Key Brand remplace le PDF de charte graphique par un mini-site interactif : le logo téléchargeable au format et à la taille qu'on vous demande, les couleurs copiables en un clic avec leurs tests de contraste, les typographies à l'essai avec votre propre texte, et les règles d'usage générées avec VOTRE logo. Créez une charte par marque — la vôtre ou celles de vos clients — et partagez-la d'un lien ou d'un QR, toujours à jour. Zéro IA, zéro crédit : tout est inclus." },
     ],
 };

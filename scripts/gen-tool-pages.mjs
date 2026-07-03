@@ -71,6 +71,14 @@ const META = [
     h1a: 'Un secret.', h1b: 'Lu une seule fois, puis disparu.',
     title: 'Missive — transmettre un secret en lecture unique, chiffré | Keystone OS',
     desc: 'Transmettez un mot de passe, un code ou une information sensible qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil — même nous ne pouvons pas le lire. Par lien, QR ou puce NFC. Sans IA, souverain.' },
+  // Key Brand (O-BRD-001) : page landing PRÊTE mais désactivée tant que le pad
+  // n'est pas dans la grille publique TOOLS d'index.html (décision go-to-market
+  // de Stéphane). Pour lancer publiquement : ajouter l'entrée TOOLS + SLUG dans
+  // index.html, décommenter ci-dessous, puis `npm run gen-pages`.
+  // { app: 'O-BRD-001', slug: 'key-brand',
+  //   h1a: 'Votre charte graphique,', h1b: 'vivante et partageable d’un lien.',
+  //   title: 'Key Brand — la charte graphique interactive qui remplace le PDF | Keystone OS',
+  //   desc: 'Réunissez logo, couleurs, typographies et règles d’usage dans un mini-site interactif : téléchargement du logo au bon format, codes couleur copiables, contrastes testés, interdits générés avec votre logo. Une charte par marque, partageable d’un lien ou d’un QR — toujours à jour, sans IA.' },
 ];
 
 // ── helpers ─────────────────────────────────────────────────────
