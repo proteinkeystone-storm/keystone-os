@@ -21,6 +21,7 @@ import { icon }                               from './lib/ui-icons.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
+import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe } from './key-brand-tools.js';
 
 const WORKSPACE_META = { id: 'O-BRD-001', name: 'Key Brand' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. sceau.js).
@@ -36,6 +37,25 @@ let _loading = false;
 let _error = null;
 let _saveTimer = null;      // debounce autosave
 let _saveState = 'idle';    // 'idle' | 'saving' | 'saved' | 'error'
+
+// ── État onglet Logo (KB-1) ──
+let _logoBg = 'checker';    // fond d'aperçu : 'checker' | 'light' | 'dark' | '#rrggbb'
+let _dlPanel = null;        // variante dont le panneau téléchargement est ouvert
+let _logoAdv = false;       // accordéon « Blocs avancés » ouvert
+let _uploading = false;
+const _blobUrls = new Map();     // assetId → objectURL (aperçus authentifiés)
+const _blobFetches = new Map();  // assetId → Promise en cours (anti-doublon)
+
+// Variantes de logo : libellés des usages canoniques (grammaire des chartes).
+const LOGO_KINDS = [
+  ['color',      'Couleur'],
+  ['negative',   'Négatif (réserve)'],
+  ['mono',       'Monochrome'],
+  ['grayscale',  'Niveaux de gris'],
+  ['simplified', 'Simplifiée (petits formats)'],
+];
+const KB_UPLOAD_MAX = 4 * 1024 * 1024; // miroir du cap serveur (4 Mo)
+const EXT_MIME = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pdf: 'application/pdf' };
 
 // Les 5 onglets du mini-site. `soon` disparaît au fil des sprints.
 const TABS = [
@@ -75,6 +95,42 @@ async function _api(path, opts = {}) {
 
 function _esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// Upload binaire (corps = octets, patron keynapse) — le nom d'origine passe
+// en query pour les téléchargements et le kit .zip.
+async function _apiUpload(chartId, file, kind = 'logo') {
+  const mime = file.type || EXT_MIME[(file.name.split('.').pop() || '').toLowerCase()] || '';
+  const res = await fetch(`${API_BASE}/api/keybrand/charts/${encodeURIComponent(chartId)}/assets?kind=${kind}&name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': mime },
+    body: file,
+  });
+  let data = null; try { data = await res.json(); } catch (_) {}
+  if (!res.ok) { const e = new Error((data && data.error) || `Erreur ${res.status}`); e.status = res.status; throw e; }
+  return data.asset;
+}
+
+// Blob authentifié d'un fichier (les <img> ne portent pas de JWT → objectURL).
+async function _assetBlob(id) {
+  const res = await fetch(`${API_BASE}/api/keybrand/file/${encodeURIComponent(id)}`, {
+    headers: { 'Authorization': `Bearer ${_jwt()}` },
+  });
+  if (!res.ok) throw new Error(`Fichier indisponible (${res.status})`);
+  return res.blob();
+}
+function _assetUrl(id) {
+  if (_blobUrls.has(id)) return Promise.resolve(_blobUrls.get(id));
+  if (!_blobFetches.has(id)) {
+    _blobFetches.set(id, _assetBlob(id)
+      .then(b => { const u = URL.createObjectURL(b); _blobUrls.set(id, u); return u; })
+      .finally(() => _blobFetches.delete(id)));
+  }
+  return _blobFetches.get(id);
+}
+function _revokeBlobs() {
+  for (const u of _blobUrls.values()) { try { URL.revokeObjectURL(u); } catch (_) {} }
+  _blobUrls.clear();
+}
+
 // ── Cycle de vie ────────────────────────────────────────────────
 export function openKeyBrand(opts = {}) {
   if (_root) return;
@@ -89,6 +145,7 @@ export function closeKeyBrand() {
   _flushSave();
   document.removeEventListener('keydown', _onKey);
   clearTimeout(_saveTimer); _saveTimer = null;
+  _revokeBlobs();
   _root.remove(); _root = null;
   document.body.style.overflow = '';
 }
@@ -126,9 +183,20 @@ function _buildShell() {
       <main class="ws-main kb-main" data-slot="main"></main>
     </div>
   `;
+  // Sélecteur de fichiers masqué (dépôt de logos, KB-1).
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.multiple = true;
+  picker.accept = '.svg,.png,.jpg,.jpeg,.webp,.pdf,image/svg+xml,image/png,image/jpeg,image/webp,application/pdf';
+  picker.style.display = 'none';
+  picker.dataset.slot = 'filepicker';
+  _root.appendChild(picker);
+  picker.addEventListener('change', () => { _onFilesPicked(picker.files); picker.value = ''; });
+
   document.body.appendChild(_root);
   _root.addEventListener('click', _onClick);
   _root.addEventListener('input', _onInput);
+  _root.addEventListener('change', _onChange);
   _root.addEventListener('focusout', _onBlur);
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindHelpButton(_root, WORKSPACE_META.id); } catch (_) {}
@@ -156,6 +224,8 @@ async function _openChart(id) {
 function _backToLib() {
   _flushSave();
   _view = 'lib'; _chart = null; _error = null;
+  _dlPanel = null; _logoAdv = false; _logoBg = 'checker';
+  _revokeBlobs();
   _applyAccent(null);
   _loadCharts();
 }
@@ -218,8 +288,19 @@ function _onClick(e) {
   if (act === 'dup' && id)    { _duplicateChart(id); return; }
   if (act === 'del' && id)    { _deleteChart(id); return; }
   if (act === 'back-lib')     { _backToLib(); return; }
-  if (act.startsWith('tab-')) { _tab = act.slice(4); _renderChart(); return; }
+  if (act.startsWith('tab-')) { _tab = act.slice(4); _dlPanel = null; _renderChart(); return; }
   if (act === 'soon')         { _toast('Cet atelier arrive au prochain sprint.'); return; }
+
+  // ── Onglet Logo (KB-1) ──
+  const vid = btn.closest('[data-vid]')?.dataset.vid;
+  if (act === 'logo-add')  { _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'logo-zip')  { _downloadKit(); return; }
+  if (act === 'logo-bg')   { _logoBg = btn.dataset.bg || 'checker'; _renderChart(); return; }
+  if (act === 'logo-adv')  { _logoAdv = !_logoAdv; _renderChart(); return; }
+  if (act === 'v-dl' && vid)      { _dlPanel = _dlPanel === vid ? null : vid; _renderChart(); return; }
+  if (act === 'v-dl-orig' && vid) { _downloadOriginal(vid); return; }
+  if (act === 'v-dl-png' && vid)  { _downloadPng(vid, btn); return; }
+  if (act === 'v-del' && vid)     { _deleteVariant(vid); return; }
 }
 
 function _onInput(e) {
@@ -234,6 +315,40 @@ function _onInput(e) {
     if (_chart.draft && _chart.draft.meta) _chart.draft.meta.baseline = el.value;
     _scheduleSave();
   }
+
+  // ── Onglet Logo (KB-1) ──
+  const v = _variantOf(el.closest('[data-vid]')?.dataset.vid);
+  if (el.dataset.field === 'v-label' && v)  { v.label = el.value.slice(0, 60); _scheduleSave(); }
+  if (el.dataset.field === 'v-usage' && v)  { v.usage = el.value.slice(0, 160); _scheduleSave(); }
+  if (el.dataset.field === 'prot-ratio' && _chart) {
+    const logo = _logoSection();
+    logo.protection = logo.protection || { ratio: 0.5, basis: 'hauteur du logo' };
+    logo.protection.ratio = Math.max(0.25, Math.min(3, parseFloat(el.value) || 0.5));
+    _scheduleSave(); _refreshProtViz();
+  }
+  if (el.dataset.field === 'prot-basis' && _chart) {
+    const logo = _logoSection();
+    logo.protection = logo.protection || { ratio: 0.5, basis: '' };
+    logo.protection.basis = el.value.slice(0, 80);
+    _scheduleSave();
+  }
+  if ((el.dataset.field === 'min-print' || el.dataset.field === 'min-px') && _chart) {
+    const logo = _logoSection();
+    logo.minSizes = logo.minSizes || { printMm: null, digitalPx: null };
+    const n = parseInt(el.value, 10);
+    if (el.dataset.field === 'min-print') logo.minSizes.printMm = Number.isFinite(n) && n > 0 ? n : null;
+    else logo.minSizes.digitalPx = Number.isFinite(n) && n > 0 ? n : null;
+    _scheduleSave();
+  }
+  if (el.dataset.field === 'logo-bg-custom') { _logoBg = el.value; _refreshLogoBgs(); }
+}
+
+// Les <select> émettent 'change', pas 'input'.
+function _onChange(e) {
+  const el = e.target;
+  if (!el.dataset) return;
+  const v = _variantOf(el.closest('[data-vid]')?.dataset.vid);
+  if (el.dataset.field === 'v-kind' && v) { v.kind = el.value; _scheduleSave(); }
 }
 function _onBlur(e) {
   // Sécurise le nom : jamais vide après édition.
@@ -357,21 +472,15 @@ function _renderChart() {
       <nav class="kb-tabs" role="tablist">${tabs}</nav>
       <section class="kb-tabpane" role="tabpanel">${_renderTab(_tab)}</section>
     </div>`;
+
+  if (_tab === 'logo') _hydrateLogoImgs();
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
 // une charte vide ressemble à une galerie avant vernissage, jamais à
 // une base de données vide. Une invitation, une action, rien d'autre.
 function _renderTab(key) {
-  if (key === 'logo') return `
-    <div class="kb-ghost">
-      <div class="kb-ghost-logo" aria-hidden="true">
-        <div class="kb-ghost-drop">${icon('image', 30)}</div>
-      </div>
-      <h3>Le logo, dans tous ses états</h3>
-      <p>Déposez vos fichiers : aperçus sur fonds clairs, sombres et colorés, zone de protection, et téléchargement au format et à la taille que votre interlocuteur demande.</p>
-      <button class="kb-btn primary" data-act="soon">${icon('plus', 16)} Déposer un logo</button>
-    </div>`;
+  if (key === 'logo') return _renderLogoTab();
 
   if (key === 'colors') return `
     <div class="kb-ghost">
@@ -414,6 +523,279 @@ function _renderTab(key) {
       <p>Une présentation animée et sobre de votre logo, l'histoire du signe, et la direction photographique — la page de garde vivante de votre charte.</p>
       <button class="kb-btn primary" data-act="soon">${icon('sparkles', 16)} Mettre en scène</button>
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET LOGO (KB-1) — « tout ce qu'il faut, au format qu'on veut »
+// ════════════════════════════════════════════════════════════════
+function _logoSection() {
+  if (!_chart.draft.logo || typeof _chart.draft.logo !== 'object') {
+    _chart.draft.logo = { variants: [], protection: null, minSizes: null };
+  }
+  if (!Array.isArray(_chart.draft.logo.variants)) _chart.draft.logo.variants = [];
+  return _chart.draft.logo;
+}
+function _variantOf(vid) {
+  if (!vid || !_chart) return null;
+  return _logoSection().variants.find(x => x.id === vid) || null;
+}
+
+function _renderLogoTab() {
+  const variants = _chart ? _logoSection().variants : [];
+
+  if (!variants.length) return `
+    <div class="kb-ghost">
+      <div class="kb-ghost-logo" aria-hidden="true">
+        <div class="kb-ghost-drop">${icon('image', 30)}</div>
+      </div>
+      <h3>Le logo, dans tous ses états</h3>
+      <p>Déposez vos fichiers : aperçus sur fonds clairs, sombres et colorés, zone de protection, et téléchargement au format et à la taille que votre interlocuteur demande.</p>
+      <button class="kb-btn primary" data-act="logo-add">${icon('plus', 16)} Déposer un logo</button>
+      <p class="kb-hint">SVG, PNG, JPG, WebP ou PDF — 4 Mo max par fichier. Le SVG donne les meilleurs exports.</p>
+    </div>`;
+
+  const palette = (_chart.draft.colors && Array.isArray(_chart.draft.colors.palette)) ? _chart.draft.colors.palette : [];
+  const bgChips = [
+    { key: 'checker', label: 'Transparent', cls: 'is-checker' },
+    { key: 'light',   label: 'Clair',       cls: 'is-light' },
+    { key: 'dark',    label: 'Sombre',      cls: 'is-dark' },
+    ...palette.filter(c => c && /^#[0-9a-fA-F]{6}$/.test(c.hex || '')).slice(0, 6)
+      .map(c => ({ key: c.hex, label: c.name || c.hex, cls: '', hex: c.hex })),
+  ];
+  const chips = bgChips.map(c => `
+    <button class="kb-bgchip ${c.cls} ${_logoBg === c.key ? 'on' : ''}" data-act="logo-bg" data-bg="${_esc(c.key)}"
+            title="${_esc(c.label)}" aria-label="Fond ${_esc(c.label)}" ${c.hex ? `style="background:${_esc(c.hex)}"` : ''}></button>`).join('');
+  const customOn = _logoBg.startsWith('#') && !bgChips.some(c => c.key === _logoBg && !c.hex);
+
+  const cards = variants.map(v => _renderVariantCard(v)).join('');
+
+  const logo = _logoSection();
+  const prot = logo.protection;
+  const mins = logo.minSizes;
+  const advFilled = !!(prot || (mins && (mins.printMm || mins.digitalPx)));
+
+  return `
+    <div class="kb-logo">
+      <div class="kb-logo-toolbar">
+        <div class="kb-bgchips" role="group" aria-label="Fond d'aperçu">
+          ${chips}
+          <label class="kb-bgchip kb-bgchip-custom ${customOn ? 'on' : ''}" title="Fond personnalisé">
+            <input type="color" data-field="logo-bg-custom" value="${customOn ? _esc(_logoBg) : '#e8e4da'}" aria-label="Fond personnalisé">
+          </label>
+        </div>
+        <div class="kb-logo-toolbar-acts">
+          <button class="kb-btn" data-act="logo-zip" ${_uploading ? 'disabled' : ''}>${icon('download', 15)} Kit .zip</button>
+          <button class="kb-btn primary" data-act="logo-add" ${_uploading ? 'disabled' : ''}>${icon('plus', 15)} ${_uploading ? 'Envoi…' : 'Ajouter'}</button>
+        </div>
+      </div>
+      <div class="kb-logo-grid">${cards}</div>
+
+      <div class="kb-adv">
+        <button class="kb-adv-head" data-act="logo-adv" aria-expanded="${_logoAdv}">
+          ${icon(_logoAdv ? 'chevron-down' : 'chevron-right', 16)}
+          <span>Blocs avancés</span>
+          <span class="kb-adv-sub">${advFilled ? 'zone de protection · tailles minimales' : 'zone de protection, tailles minimales — pour les chartes exigeantes'}</span>
+        </button>
+        ${_logoAdv ? _renderLogoAdvanced(logo, variants) : ''}
+      </div>
+    </div>`;
+}
+
+function _renderVariantCard(v) {
+  const kindOpts = LOGO_KINDS.map(([k, lbl]) => `<option value="${k}" ${v.kind === k ? 'selected' : ''}>${lbl}</option>`).join('');
+  const isPdf = v.ext === 'pdf';
+  const preview = isPdf
+    ? `<div class="kb-logo-doc">${icon('file-text', 26)}<span>PDF</span></div>`
+    : `<img data-asset="${_esc(v.assetId)}" alt="${_esc(v.label || 'logo')}" draggable="false">`;
+
+  const dl = _dlPanel === v.id ? `
+    <div class="kb-dl-panel" data-vid="${_esc(v.id)}">
+      <button class="kb-btn" data-act="v-dl-orig">${icon('download', 14)} Original (.${_esc(v.ext)})</button>
+      ${isPdf ? '' : `
+      <div class="kb-dl-png">
+        <select class="kb-select" data-slot="dl-size" aria-label="Largeur en pixels">
+          <option value="512">512 px</option>
+          <option value="1024">1024 px</option>
+          <option value="2000" selected>2000 px</option>
+          <option value="4096">4096 px</option>
+        </select>
+        <select class="kb-select" data-slot="dl-bg" aria-label="Fond de l'export">
+          <option value="">Fond transparent</option>
+          <option value="#ffffff">Fond blanc</option>
+          <option value="#0c0d10">Fond noir</option>
+        </select>
+        <button class="kb-btn primary" data-act="v-dl-png">${icon('download', 14)} PNG</button>
+      </div>`}
+    </div>` : '';
+
+  return `
+    <article class="kb-logo-card" data-vid="${_esc(v.id)}">
+      <div class="kb-logo-preview ${_logoBgClass()}" ${_logoBgStyle()}>${preview}</div>
+      <div class="kb-logo-fields">
+        <input class="kb-field-input kb-v-label" data-field="v-label" value="${_esc(v.label || '')}" placeholder="Nom de la variante" maxlength="60" spellcheck="false">
+        <select class="kb-select" data-field="v-kind" aria-label="Type de variante">${kindOpts}</select>
+        <input class="kb-field-input kb-v-usage" data-field="v-usage" value="${_esc(v.usage || '')}" placeholder="Usage — ex. « Impressions monochromes, fond blanc »" maxlength="160" spellcheck="false">
+      </div>
+      <div class="kb-logo-card-acts">
+        <button class="kb-iconbtn ${_dlPanel === v.id ? 'on' : ''}" data-act="v-dl" title="Télécharger">${icon('download', 16)}</button>
+        <button class="kb-iconbtn danger" data-act="v-del" title="Supprimer la variante">${icon('trash-2', 16)}</button>
+      </div>
+      ${dl}
+    </article>`;
+}
+
+function _renderLogoAdvanced(logo, variants) {
+  const prot = logo.protection || { ratio: 0.5, basis: 'hauteur du logo' };
+  const mins = logo.minSizes || { printMm: null, digitalPx: null };
+  const first = variants.find(v => v.ext !== 'pdf');
+  const viz = first ? `
+    <div class="kb-prot-viz-wrap">
+      <div class="kb-prot-viz" data-slot="prot-viz" style="--kb-prot:${(prot.ratio * 56).toFixed(0)}px">
+        <div class="kb-prot-zone"><img data-asset="${_esc(first.assetId)}" alt="" draggable="false"></div>
+      </div>
+      <p class="kb-hint">La zone en pointillés doit rester vide autour du logo.</p>
+    </div>` : '';
+  return `
+    <div class="kb-adv-body">
+      <div class="kb-adv-col">
+        <h4>Zone de protection</h4>
+        <label class="kb-field-label">Marge = <strong data-slot="prot-ratio-out">${prot.ratio}</strong> × <input class="kb-field-input kb-inline" data-field="prot-basis" value="${_esc(prot.basis || '')}" placeholder="hauteur du logo" maxlength="80"></label>
+        <input type="range" min="0.25" max="2" step="0.25" value="${prot.ratio}" data-field="prot-ratio" aria-label="Ratio de la zone de protection">
+        ${viz}
+      </div>
+      <div class="kb-adv-col">
+        <h4>Tailles minimales</h4>
+        <label class="kb-field-label">Impression <input class="kb-field-input kb-num" data-field="min-print" type="number" min="1" max="500" value="${mins.printMm ?? ''}" placeholder="—"> mm de large</label>
+        <label class="kb-field-label">Numérique <input class="kb-field-input kb-num" data-field="min-px" type="number" min="8" max="4000" value="${mins.digitalPx ?? ''}" placeholder="—"> px de large</label>
+        <p class="kb-hint">En dessous, le logo n'est plus lisible : la charte publique l'affichera comme un engagement.</p>
+      </div>
+    </div>`;
+}
+
+// ── Fond d'aperçu (appliqué à toutes les cartes) ──
+function _logoBgClass() {
+  if (_logoBg === 'checker') return 'is-checker';
+  if (_logoBg === 'light') return 'is-light';
+  if (_logoBg === 'dark') return 'is-dark';
+  return 'is-custom';
+}
+function _logoBgStyle() {
+  return _logoBg.startsWith('#') ? `style="background:${_esc(_logoBg)}"` : '';
+}
+function _refreshLogoBgs() {
+  if (!_root) return;
+  _root.querySelectorAll('.kb-logo-preview').forEach(el => {
+    el.className = `kb-logo-preview ${_logoBgClass()}`;
+    el.style.background = _logoBg.startsWith('#') ? _logoBg : '';
+  });
+}
+function _refreshProtViz() {
+  const logo = _logoSection();
+  const r = logo.protection?.ratio ?? 0.5;
+  const viz = _root?.querySelector('[data-slot="prot-viz"]');
+  if (viz) viz.style.setProperty('--kb-prot', `${(r * 56).toFixed(0)}px`);
+  const out = _root?.querySelector('[data-slot="prot-ratio-out"]');
+  if (out) out.textContent = r;
+}
+
+// Aperçus : les <img> reçoivent leur objectURL authentifié après le rendu.
+async function _hydrateLogoImgs() {
+  if (!_root) return;
+  const imgs = [..._root.querySelectorAll('img[data-asset]')];
+  for (const img of imgs) {
+    try { img.src = await _assetUrl(img.dataset.asset); }
+    catch (_) { img.closest('.kb-logo-preview,.kb-prot-zone')?.classList.add('is-broken'); }
+  }
+}
+
+// ── Dépôt de fichiers ──
+async function _onFilesPicked(fileList) {
+  if (!_chart || !fileList || !fileList.length) return;
+  const files = [...fileList];
+  _uploading = true; _renderChart();
+  let added = 0;
+  for (const f of files) {
+    try {
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (!EXT_MIME[ext]) { _toast(`« ${f.name} » : format non pris en charge.`); continue; }
+      if (f.size > KB_UPLOAD_MAX) { _toast(`« ${f.name} » : trop lourd (max 4 Mo).`); continue; }
+      if (ext === 'svg' && !svgLooksSafe(await f.text())) {
+        _toast(`« ${f.name} » : SVG refusé (code actif ou référence externe).`); continue;
+      }
+      const asset = await _apiUpload(_chart.id, f, 'logo');
+      const variants = _logoSection().variants;
+      variants.push({
+        id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+        label: f.name.replace(/\.[A-Za-z0-9]+$/, '').slice(0, 60),
+        usage: '',
+        kind: 'color',
+        assetId: asset.id, ext: asset.ext, mime: asset.mime, name: asset.name,
+      });
+      added++;
+    } catch (e) {
+      _toast(e.status === 409 ? e.message : `« ${f.name} » : ${e.message}`);
+    }
+  }
+  _uploading = false;
+  if (added) _scheduleSave();
+  _renderChart();
+}
+
+// ── Actions variante ──
+async function _deleteVariant(vid) {
+  const v = _variantOf(vid); if (!v) return;
+  const ok = window.confirm(`Supprimer la variante « ${v.label || v.name} » ?\nLe fichier sera retiré définitivement.`);
+  if (!ok) return;
+  try { await _api(`/assets/${encodeURIComponent(v.assetId)}`, { method: 'DELETE' }); } catch (_) { /* déjà absent */ }
+  const url = _blobUrls.get(v.assetId);
+  if (url) { try { URL.revokeObjectURL(url); } catch (_) {} _blobUrls.delete(v.assetId); }
+  const logo = _logoSection();
+  logo.variants = logo.variants.filter(x => x.id !== vid);
+  if (_dlPanel === vid) _dlPanel = null;
+  _scheduleSave(); _renderChart();
+}
+
+async function _downloadOriginal(vid) {
+  const v = _variantOf(vid); if (!v) return;
+  try {
+    const blob = await _assetBlob(v.assetId);
+    saveBlob(blob, safeFilename(v.label || v.name, 'logo') + '.' + v.ext);
+  } catch (e) { _toast(e.message); }
+}
+
+async function _downloadPng(vid, btn) {
+  const v = _variantOf(vid); if (!v || v.ext === 'pdf') return;
+  const panel = btn.closest('.kb-dl-panel');
+  const width = parseInt(panel?.querySelector('[data-slot="dl-size"]')?.value, 10) || 2000;
+  const bg = panel?.querySelector('[data-slot="dl-bg"]')?.value || null;
+  try {
+    btn.disabled = true;
+    const blob = await _assetBlob(v.assetId);
+    const png = await exportLogoPng(blob, v.mime, { width, bg });
+    saveBlob(png, `${safeFilename(v.label || v.name, 'logo')}-${width}px.png`);
+  } catch (e) { _toast(`Export impossible : ${e.message}`); }
+  finally { btn.disabled = false; }
+}
+
+// ── Kit .zip (tous les originaux) ──
+async function _downloadKit() {
+  const variants = _logoSection().variants;
+  if (!variants.length) return;
+  _toast('Préparation du kit…');
+  try {
+    const dir = safeFilename(_chart.name, 'marque');
+    const files = [];
+    const seen = new Set();
+    for (const v of variants) {
+      const blob = await _assetBlob(v.assetId);
+      let base = safeFilename(v.label || v.name, 'logo');
+      let name = `${dir}/${base}.${v.ext}`;
+      for (let i = 2; seen.has(name); i++) name = `${dir}/${base}-${i}.${v.ext}`;
+      seen.add(name);
+      files.push({ name, data: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    saveBlob(buildZip(files), `${dir} — kit logos.zip`);
+  } catch (e) { _toast(`Kit impossible : ${e.message}`); }
 }
 
 // ── Toast ───────────────────────────────────────────────────────

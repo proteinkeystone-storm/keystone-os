@@ -24,7 +24,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const KB_ENGINE_VERSION = 'KB-0';
+const KB_ENGINE_VERSION = 'KB-1';
 
 const KB_MAX_CHARTS   = 30;        // plafond tranché (2026-07-03) — tous plans
 const KB_MAX_NAME     = 80;
@@ -69,6 +69,9 @@ async function _ensureSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_kb_assets_chart ON kb_assets(tenant_id, chart_id)`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
+  // KB-1 — nom de fichier d'origine (téléchargements + kit .zip), ajouté a
+  // posteriori. SQLite n'a pas ADD COLUMN IF NOT EXISTS → ALTER tolérant.
+  try { await env.DB.prepare('ALTER TABLE kb_assets ADD COLUMN name TEXT').run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -269,6 +272,125 @@ export async function handleKeyBrandDuplicate(request, env, id) {
     const created = await _findChart(env, gate.tenant, newId);
     return json({ chart: _chartOut(created) }, 201, origin);
   } catch (e) { return err('Duplication impossible', 500, origin); }
+}
+
+// ════════════════════════════════════════════════════════════════
+// KB-1 — Fichiers (logos, exemples photo) : R2 HELP_MEDIA, clés
+// kb/<tenant>/<chartId>/<assetId>.<ext> (UUID + extension whitelistée
+// → anti-traversal par construction). Servi au PROPRIÉTAIRE uniquement
+// (blob authentifié) ; l'accès public arrive avec la page /b/ (KB-6).
+// ════════════════════════════════════════════════════════════════
+const KB_ASSET_MAX_BYTES  = 4 * 1024 * 1024;      // 4 Mo / fichier
+const KB_MAX_FILES_CHART  = 40;                    // fichiers / charte
+const KB_MAX_TENANT_BYTES = 200 * 1024 * 1024;     // 200 Mo / compte
+const KB_ASSET_KINDS = ['logo', 'image'];
+// content-type → extension (les deux whitelistés ensemble).
+const KB_MIME_EXT = {
+  'image/svg+xml':   'svg',
+  'image/png':       'png',
+  'image/jpeg':      'jpg',
+  'image/webp':      'webp',
+  'application/pdf': 'pdf',
+};
+
+// Sanitizer SVG serveur — un SVG utilisateur est du code exécutable en
+// puissance. Politique : REJET (pas de nettoyage silencieux) si le fichier
+// contient un vecteur d'exécution ou une référence externe.
+const KB_SVG_DANGERS = [
+  /<\s*script/i,                       // scripts inline
+  /\son[a-z]+\s*=/i,                   // attributs onload/onclick/…
+  /javascript\s*:/i,                   // URI js
+  /<\s*(foreignObject|iframe|embed|object)/i,
+  /href\s*=\s*["']\s*(?:https?:)?\/\//i, // use/image externes (data: et #id restent permis)
+];
+function _svgIsSafe(text) {
+  if (!text || text.length > KB_ASSET_MAX_BYTES) return false;
+  return !KB_SVG_DANGERS.some(rx => rx.test(text));
+}
+
+function _cleanFilename(v, ext) {
+  const base = String(v || 'fichier').split(/[/\\]/).pop()
+    .replace(/\.[A-Za-z0-9]+$/, '')          // extension retirée (on impose la nôtre)
+    .replace(/[^\wÀ-ſ .-]+/g, '')  // caractères sûrs (accents permis)
+    .trim().slice(0, 80) || 'fichier';
+  return `${base}.${ext}`;
+}
+
+// POST /charts/:id/assets?kind=logo|image&name=<nom>  (corps = octets)
+export async function handleKeyBrandAssetUpload(request, env, chartId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!env.HELP_MEDIA) return err('Stockage fichiers indisponible', 500, origin);
+
+  const chart = await _findChart(env, t, chartId);
+  if (!chart) return err('Charte introuvable', 404, origin);
+
+  const q = new URL(request.url).searchParams;
+  const kind = String(q.get('kind') || 'logo');
+  if (!KB_ASSET_KINDS.includes(kind)) return err('Type de fichier invalide', 400, origin);
+
+  const ct = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const ext = KB_MIME_EXT[ct];
+  if (!ext) return err('Format non pris en charge (SVG, PNG, JPG, WebP ou PDF)', 415, origin);
+
+  const buf = await request.arrayBuffer();
+  if (!buf || buf.byteLength === 0) return err('Fichier vide', 400, origin);
+  if (buf.byteLength > KB_ASSET_MAX_BYTES) return err('Fichier trop lourd (max 4 Mo)', 413, origin);
+
+  // Garde-fous volumétrie (plafonds techniques du brief §4).
+  const nb = await env.DB.prepare('SELECT COUNT(*) AS n FROM kb_assets WHERE chart_id = ? AND tenant_id = ?').bind(chartId, t).first();
+  if ((nb?.n || 0) >= KB_MAX_FILES_CHART) return err(`Limite atteinte : ${KB_MAX_FILES_CHART} fichiers par charte`, 409, origin);
+  const vol = await env.DB.prepare('SELECT COALESCE(SUM(size),0) AS s FROM kb_assets WHERE tenant_id = ?').bind(t).first();
+  if ((vol?.s || 0) + buf.byteLength > KB_MAX_TENANT_BYTES) return err('Espace de stockage du compte plein (200 Mo)', 409, origin);
+
+  // SVG = texte potentiellement actif → contrôle strict avant stockage.
+  if (ext === 'svg') {
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+    if (!_svgIsSafe(text)) return err('SVG refusé : il contient du code actif ou des références externes', 400, origin);
+  }
+
+  const id = generateId();
+  const key = `kb/${t}/${chartId}/${id}.${ext}`;
+  const name = _cleanFilename(q.get('name'), ext);
+  await env.HELP_MEDIA.put(key, buf, { httpMetadata: { contentType: ct } });
+  await env.DB
+    .prepare('INSERT INTO kb_assets (id, tenant_id, chart_id, r2_key, kind, mime, size, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, t, chartId, key, kind, ct, buf.byteLength, name)
+    .run();
+  return json({ ok: true, asset: { id, kind, mime: ct, ext, size: buf.byteLength, name } }, 201, origin);
+}
+
+// GET /file/:id[?dl=1] — sert le fichier au propriétaire (blob authentifié).
+export async function handleKeyBrandFileServe(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const row = await env.DB.prepare('SELECT r2_key, mime, name FROM kb_assets WHERE id = ? AND tenant_id = ?').bind(id, gate.tenant).first();
+  if (!row || !row.r2_key || !env.HELP_MEDIA) return err('Fichier introuvable', 404, origin);
+  const obj = await env.HELP_MEDIA.get(row.r2_key);
+  if (!obj) return err('Fichier introuvable', 404, origin);
+  const dl = new URL(request.url).searchParams.get('dl') === '1';
+  const headers = {
+    'Content-Type': obj.httpMetadata?.contentType || row.mime || 'application/octet-stream',
+    'Cache-Control': 'private, max-age=3600',
+    'Access-Control-Allow-Origin': origin,
+  };
+  if (dl) headers['Content-Disposition'] = `attachment; filename="${(row.name || 'fichier').replace(/"/g, '')}"`;
+  return new Response(obj.body, { status: 200, headers });
+}
+
+// DELETE /assets/:id — retire l'objet R2 + la ligne. Le retrait de la
+// variante dans le brand-kit est fait par le front (son autosave).
+export async function handleKeyBrandAssetDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const row = await env.DB.prepare('SELECT r2_key FROM kb_assets WHERE id = ? AND tenant_id = ?').bind(id, gate.tenant).first();
+  if (row && row.r2_key && env.HELP_MEDIA) { try { await env.HELP_MEDIA.delete(row.r2_key); } catch (_) {} }
+  await env.DB.prepare('DELETE FROM kb_assets WHERE id = ? AND tenant_id = ?').bind(id, gate.tenant).run();
+  return json({ ok: true, deleted: id }, 200, origin);
 }
 
 export async function handleKeyBrandDelete(request, env, id) {

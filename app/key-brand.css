@@ -112,6 +112,66 @@
 .kb-ghost-dot{width:16px;height:16px;border-radius:50%;border:1.5px dashed var(--kb-line);display:inline-block}
 .kb-ghost-dot.big{width:44px;height:44px}
 
+/* ══ Onglet Logo (KB-1) ══ */
+.kb-hint{color:var(--kb-muted);font-size:12.5px;margin:2px 0 0;line-height:1.5}
+.kb-logo-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.kb-logo-toolbar-acts{display:flex;gap:8px}
+
+/* Sélecteur de fond d'aperçu — pastilles matérielles, pas de libellés. */
+.kb-bgchips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kb-bgchip{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--kb-line);cursor:pointer;padding:0;transition:transform .12s,border-color .15s;position:relative;overflow:hidden}
+.kb-bgchip:hover{transform:scale(1.08)}
+.kb-bgchip.on{border-color:var(--kb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--kb-accent) 35%,transparent)}
+.kb-bgchip.is-light{background:#fff}
+.kb-bgchip.is-dark{background:#0c0d10}
+.kb-bgchip.is-checker{background-image:linear-gradient(45deg,#9a9a9a 25%,transparent 25%,transparent 75%,#9a9a9a 75%),linear-gradient(45deg,#9a9a9a 25%,#d8d8d8 25%,#d8d8d8 75%,#9a9a9a 75%);background-size:10px 10px;background-position:0 0,5px 5px}
+.kb-bgchip-custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);border:0;padding:0;cursor:pointer;background:none}
+
+/* Cartes variantes */
+.kb-logo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.kb-logo-card{position:relative;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.kb-logo-preview{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;padding:8%;transition:background .15s}
+.kb-logo-preview img{max-width:100%;max-height:100%;object-fit:contain}
+.kb-logo-preview.is-checker{background-image:linear-gradient(45deg,#b3b3b3 25%,transparent 25%,transparent 75%,#b3b3b3 75%),linear-gradient(45deg,#b3b3b3 25%,#e3e3e3 25%,#e3e3e3 75%,#b3b3b3 75%);background-size:16px 16px;background-position:0 0,8px 8px}
+.kb-logo-preview.is-light{background:#fff}
+.kb-logo-preview.is-dark{background:#0c0d10}
+.kb-logo-preview.is-broken::after{content:"Aperçu indisponible";color:var(--kb-muted);font-size:12.5px}
+.kb-logo-doc{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--kb-muted);font-size:12px;font-weight:700;letter-spacing:.06em}
+.kb-logo-fields{display:flex;flex-direction:column;gap:8px;padding:14px 14px 12px;border-top:1px solid var(--kb-line)}
+.kb-logo-card-acts{position:absolute;top:10px;right:10px;display:flex;gap:6px}
+.kb-logo-card-acts .kb-iconbtn{background:color-mix(in srgb,var(--kb-panel) 82%,transparent);backdrop-filter:blur(6px)}
+.kb-logo-card-acts .kb-iconbtn.on{border-color:var(--kb-accent);color:var(--kb-ink)}
+
+/* Champs compacts des cartes */
+.kb-field-input{width:100%;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:13.5px;padding:8px 10px;outline:none;transition:border-color .15s}
+.kb-field-input:focus{border-color:var(--kb-accent)}
+.kb-field-input::placeholder{color:var(--kb-muted);opacity:.6}
+.kb-v-label{font-weight:700}
+.kb-select{width:100%;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:13px;padding:8px 10px;outline:none;appearance:auto}
+.kb-select:focus{border-color:var(--kb-accent)}
+
+/* Panneau téléchargement à la carte */
+.kb-dl-panel{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-top:1px solid var(--kb-line);background:rgba(0,0,0,.12)}
+.kb-dl-png{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.kb-dl-png .kb-select{width:auto;flex:1;min-width:110px}
+
+/* Blocs avancés */
+.kb-adv{margin-top:26px;border:1px solid var(--kb-line);border-radius:14px;overflow:hidden}
+.kb-adv-head{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;color:var(--kb-ink);font-weight:700;font-size:14px;padding:13px 14px;cursor:pointer;text-align:left}
+.kb-adv-sub{color:var(--kb-muted);font-weight:400;font-size:12.5px;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-adv-body{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:6px 16px 18px;border-top:1px solid var(--kb-line)}
+.kb-adv-col h4{font-weight:900;font-size:14.5px;letter-spacing:-0.01em;margin:14px 0 10px}
+.kb-field-label{display:flex;align-items:center;gap:8px;color:var(--kb-muted);font-size:13px;margin:0 0 10px;flex-wrap:wrap}
+.kb-inline{width:auto;flex:1;min-width:120px}
+.kb-num{width:84px}
+.kb-adv-col input[type="range"]{width:100%;accent-color:var(--kb-accent)}
+
+/* Visualisation zone de protection : marge = ratio × hauteur du logo (56px affiché). */
+.kb-prot-viz-wrap{margin-top:14px}
+.kb-prot-viz{display:flex;align-items:center;justify-content:center;background:#fff;border-radius:12px;padding:calc(var(--kb-prot,28px) + 10px)}
+.kb-prot-zone{position:relative;padding:var(--kb-prot,28px);border:1.5px dashed rgba(0,0,0,.35);border-radius:4px}
+.kb-prot-zone img{display:block;height:56px;max-width:220px;object-fit:contain}
+
 /* ── États & toast ── */
 .kb-state{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--kb-muted);padding:70px 0}
 .kb-state-err{color:var(--ws-danger)}
@@ -128,4 +188,8 @@
   .kb-ghost{margin-top:2vh}
   .kb-ghost-rules{grid-template-columns:repeat(3,56px)}
   .kb-ghost-rules span{width:56px;height:42px}
+  .kb-logo-grid{grid-template-columns:1fr}
+  .kb-adv-body{grid-template-columns:1fr;gap:8px}
+  .kb-logo-toolbar{flex-direction:column;align-items:stretch}
+  .kb-logo-toolbar-acts{justify-content:flex-end}
 }

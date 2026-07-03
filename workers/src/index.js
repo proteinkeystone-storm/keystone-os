@@ -161,7 +161,8 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
 // ── Key Brand — charte graphique vivante (Pad O-BRD-001 · KB-0) ──
 import { handleKeyBrandHealth, handleKeyBrandList, handleKeyBrandCreate,
          handleKeyBrandGet, handleKeyBrandUpdate, handleKeyBrandDuplicate,
-         handleKeyBrandDelete } from './routes/key-brand.js';
+         handleKeyBrandDelete, handleKeyBrandAssetUpload, handleKeyBrandFileServe,
+         handleKeyBrandAssetDelete } from './routes/key-brand.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -191,6 +192,12 @@ export default {
       if (path === '/api/keybrand/charts' && method === 'POST') return handleKeyBrandCreate(request, env);
       const kbDup = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/duplicate$/);
       if (kbDup && method === 'POST') return handleKeyBrandDuplicate(request, env, kbDup[1]);
+      const kbAssetUp = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/assets$/);
+      if (kbAssetUp && method === 'POST') return handleKeyBrandAssetUpload(request, env, kbAssetUp[1]);
+      const kbFile = path.match(/^\/api\/keybrand\/file\/([A-Za-z0-9-]+)$/);
+      if (kbFile && method === 'GET') return handleKeyBrandFileServe(request, env, kbFile[1]);
+      const kbAsset = path.match(/^\/api\/keybrand\/assets\/([A-Za-z0-9-]+)$/);
+      if (kbAsset && method === 'DELETE') return handleKeyBrandAssetDelete(request, env, kbAsset[1]);
       const kbChart = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)$/);
       if (kbChart && method === 'GET')    return handleKeyBrandGet(request, env, kbChart[1]);
       if (kbChart && method === 'PUT')    return handleKeyBrandUpdate(request, env, kbChart[1]);
