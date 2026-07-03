@@ -388,6 +388,7 @@ function _onClick(e) {
   if (act === 'logo-add')  { _pickTarget = 'logo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'logo-zip')  { _downloadKit(); return; }
   if (act === 'v-bg-clear' && vid) { const v = _variantOf(vid); if (v) { v.bg = null; _scheduleSave(); _renderChart(); } return; }
+  if (act === 'v-bg-preset' && vid) { const v = _variantOf(vid); if (v) { v.bg = btn.dataset.bg; _scheduleSave(); _renderChart(); } return; }
   if (act === 'logo-adv')  { _logoAdv = !_logoAdv; _renderChart(); return; }
   if (act === 'v-dl' && vid)      { _dlPanel = _dlPanel === vid ? null : vid; _renderChart(); return; }
   if (act === 'v-dl-orig' && vid) { _downloadOriginal(vid); return; }
@@ -801,10 +802,14 @@ function _renderVariantCard(v) {
       <div class="kb-logo-preview ${_cardBgClass(v)}" ${_cardBgStyle(v)}>${preview}</div>
       <div class="kb-bgfield">
         <span class="kb-bgfield-lbl">Fond d'aperçu</span>
-        <button class="kb-bgfield-ck ${bgHex ? '' : 'on'}" data-act="v-bg-clear" title="Fond transparent" aria-label="Fond transparent"></button>
-        <div class="kb-bgfield-hex">
-          <span class="kb-bgfield-hash">#</span>
-          <input class="kb-bgfield-input" data-field="card-bg" value="${_esc(bgHex)}" placeholder="ffffff" maxlength="6" spellcheck="false" autocapitalize="off" aria-label="Code couleur du fond">
+        <div class="kb-bgfield-ctrls">
+          <button class="kb-bgfield-ck ${bgHex ? '' : 'on'}" data-act="v-bg-clear" title="Fond transparent" aria-label="Fond transparent"></button>
+          <button class="kb-bgfield-sw ${v.bg === '#ffffff' ? 'on' : ''}" data-act="v-bg-preset" data-bg="#ffffff" style="background:#fff" title="Fond blanc" aria-label="Fond blanc"></button>
+          <button class="kb-bgfield-sw ${v.bg === '#0c0d10' ? 'on' : ''}" data-act="v-bg-preset" data-bg="#0c0d10" style="background:#0c0d10" title="Fond noir" aria-label="Fond noir"></button>
+          <div class="kb-bgfield-hex">
+            <span class="kb-bgfield-hash">#</span>
+            <input class="kb-bgfield-input" data-field="card-bg" value="${_esc(bgHex)}" placeholder="ffffff" maxlength="6" spellcheck="false" autocapitalize="off" aria-label="Code couleur du fond">
+          </div>
         </div>
       </div>
       <div class="kb-logo-fields">

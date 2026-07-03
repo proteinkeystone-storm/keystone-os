@@ -118,12 +118,16 @@
 .kb-logo-toolbar .kb-hint{max-width:420px;margin:0}
 .kb-logo-toolbar-acts{display:flex;gap:8px;flex-shrink:0}
 
-/* Champ de fond d'aperçu PAR CARTE — saisie hex avec # pré-rempli. */
-.kb-bgfield{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--kb-line)}
-.kb-bgfield-lbl{color:var(--kb-muted);font-size:12px;flex:1}
+/* Champ de fond d'aperçu PAR CARTE — label au-dessus, puis raccourcis
+   (transparent/blanc/noir) + saisie hex avec # pré-rempli, sur une ligne. */
+.kb-bgfield{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-top:1px solid var(--kb-line)}
+.kb-bgfield-lbl{color:var(--kb-muted);font-size:12px}
+.kb-bgfield-ctrls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .kb-bgfield-ck{width:26px;height:26px;flex-shrink:0;border:1.5px solid var(--kb-line);border-radius:7px;cursor:pointer;padding:0;
   background-image:linear-gradient(45deg,#9a9a9a 25%,transparent 25%,transparent 75%,#9a9a9a 75%),linear-gradient(45deg,#9a9a9a 25%,#d8d8d8 25%,#d8d8d8 75%,#9a9a9a 75%);background-size:10px 10px;background-position:0 0,5px 5px}
 .kb-bgfield-ck.on{border-color:var(--kb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--kb-accent) 35%,transparent)}
+.kb-bgfield-sw{width:26px;height:26px;flex-shrink:0;border:1.5px solid var(--kb-line);border-radius:7px;cursor:pointer;padding:0;transition:border-color .15s,box-shadow .15s}
+.kb-bgfield-sw.on{border-color:var(--kb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--kb-accent) 35%,transparent)}
 .kb-bgfield-hex{display:flex;align-items:center;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;padding:0 10px;transition:border-color .15s}
 .kb-bgfield-hex:focus-within{border-color:var(--kb-accent)}
 .kb-bgfield-hash{color:var(--kb-muted);font-size:13.5px;padding-right:1px}
