@@ -147,8 +147,14 @@
 .kb-field-input:focus{border-color:var(--kb-accent)}
 .kb-field-input::placeholder{color:var(--kb-muted);opacity:.6}
 .kb-v-label{font-weight:700}
-.kb-select{width:100%;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:13px;padding:8px 10px;outline:none;appearance:auto}
+/* Flat design imposé : jamais le select natif bombé du navigateur.
+   Flèche custom (chevron SVG) inline, fond/bordure/radius = comme les inputs. */
+.kb-select{width:100%;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;color:var(--kb-ink);font-size:13px;padding:8px 32px 8px 10px;outline:none;cursor:pointer;
+  appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center}
 .kb-select:focus{border-color:var(--kb-accent)}
+.kb-select::-ms-expand{display:none}
 
 /* Panneau téléchargement à la carte */
 .kb-dl-panel{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-top:1px solid var(--kb-line);background:rgba(0,0,0,.12)}

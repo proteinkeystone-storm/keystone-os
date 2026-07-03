@@ -95,6 +95,9 @@ h2{font-weight:900;font-size:22px;letter-spacing:-0.02em;margin:0 0 4px}
 .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
 select,input[type=text]{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 10px;font-size:13.5px;font-family:inherit;outline:none}
 select:focus,input[type=text]:focus{border-color:var(--accent)}
+/* Flat design : jamais le select natif bombé — flèche chevron custom. */
+select{appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;padding-right:32px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+select::-ms-expand{display:none}
 
 /* Logo */
 .bgchips{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
