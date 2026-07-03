@@ -115,17 +115,20 @@
 /* ══ Onglet Logo (KB-1) ══ */
 .kb-hint{color:var(--kb-muted);font-size:12.5px;margin:2px 0 0;line-height:1.5}
 .kb-logo-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-.kb-logo-toolbar-acts{display:flex;gap:8px}
+.kb-logo-toolbar .kb-hint{max-width:420px;margin:0}
+.kb-logo-toolbar-acts{display:flex;gap:8px;flex-shrink:0}
 
-/* Sélecteur de fond d'aperçu — pastilles matérielles, pas de libellés. */
-.kb-bgchips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.kb-bgchip{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--kb-line);cursor:pointer;padding:0;transition:transform .12s,border-color .15s;position:relative;overflow:hidden}
-.kb-bgchip:hover{transform:scale(1.08)}
-.kb-bgchip.on{border-color:var(--kb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--kb-accent) 35%,transparent)}
-.kb-bgchip.is-light{background:#fff}
-.kb-bgchip.is-dark{background:#0c0d10}
-.kb-bgchip.is-checker{background-image:linear-gradient(45deg,#9a9a9a 25%,transparent 25%,transparent 75%,#9a9a9a 75%),linear-gradient(45deg,#9a9a9a 25%,#d8d8d8 25%,#d8d8d8 75%,#9a9a9a 75%);background-size:10px 10px;background-position:0 0,5px 5px}
-.kb-bgchip-custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);border:0;padding:0;cursor:pointer;background:none}
+/* Champ de fond d'aperçu PAR CARTE — saisie hex avec # pré-rempli. */
+.kb-bgfield{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--kb-line)}
+.kb-bgfield-lbl{color:var(--kb-muted);font-size:12px;flex:1}
+.kb-bgfield-ck{width:26px;height:26px;flex-shrink:0;border:1.5px solid var(--kb-line);border-radius:7px;cursor:pointer;padding:0;
+  background-image:linear-gradient(45deg,#9a9a9a 25%,transparent 25%,transparent 75%,#9a9a9a 75%),linear-gradient(45deg,#9a9a9a 25%,#d8d8d8 25%,#d8d8d8 75%,#9a9a9a 75%);background-size:10px 10px;background-position:0 0,5px 5px}
+.kb-bgfield-ck.on{border-color:var(--kb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--kb-accent) 35%,transparent)}
+.kb-bgfield-hex{display:flex;align-items:center;background:rgba(0,0,0,.14);border:1px solid var(--kb-line);border-radius:10px;padding:0 10px;transition:border-color .15s}
+.kb-bgfield-hex:focus-within{border-color:var(--kb-accent)}
+.kb-bgfield-hash{color:var(--kb-muted);font-size:13.5px;padding-right:1px}
+.kb-bgfield-input{width:74px;background:none;border:0;outline:none;color:var(--kb-ink);font-size:13.5px;padding:8px 2px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}
+.kb-bgfield-input::placeholder{color:var(--kb-muted);opacity:.55}
 
 /* Cartes variantes */
 .kb-logo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
@@ -172,11 +175,15 @@
 .kb-num{width:84px}
 .kb-adv-col input[type="range"]{width:100%;accent-color:var(--kb-accent)}
 
-/* Visualisation zone de protection : marge = ratio × hauteur du logo (56px affiché). */
+/* Visualisation zone de protection : le logo est CENTRÉ dans un cadre blanc
+   fixe ; la zone en pointillés = marge = ratio × hauteur du logo (var --kb-prot,
+   posée sur .kb-prot-zone uniquement). overflow:hidden coupe proprement si la
+   marge dépasse le cadre — le logo reste centré. Padding sur la ZONE seulement
+   (pas de double padding avec le cadre → plus de logo décentré/coupé). */
 .kb-prot-viz-wrap{margin-top:14px}
-.kb-prot-viz{display:flex;align-items:center;justify-content:center;background:#fff;border-radius:12px;padding:calc(var(--kb-prot,28px) + 10px)}
-.kb-prot-zone{position:relative;padding:var(--kb-prot,28px);border:1.5px dashed rgba(0,0,0,.35);border-radius:4px}
-.kb-prot-zone img{display:block;height:56px;max-width:220px;object-fit:contain}
+.kb-prot-viz{display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--kb-line);border-radius:12px;padding:22px;min-height:172px;overflow:hidden}
+.kb-prot-zone{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:var(--kb-prot,20px);border:1.5px dashed rgba(0,0,0,.35);border-radius:4px;flex-shrink:0}
+.kb-prot-zone img{display:block;height:40px;width:auto;max-width:150px;object-fit:contain}
 
 /* ══ Onglet Couleurs (KB-2) ══ */
 .kb-colors-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}

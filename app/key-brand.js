@@ -41,7 +41,8 @@ let _saveTimer = null;      // debounce autosave
 let _saveState = 'idle';    // 'idle' | 'saving' | 'saved' | 'error'
 
 // ── État onglet Logo (KB-1) ──
-let _logoBg = 'checker';    // fond d'aperçu : 'checker' | 'light' | 'dark' | '#rrggbb'
+// Le fond d'aperçu est désormais PAR CARTE (v.bg : null = transparent/damier,
+// ou '#rrggbb'), persisté sur la variante — chaque logo teste son propre fond.
 let _dlPanel = null;        // variante dont le panneau téléchargement est ouvert
 let _logoAdv = false;       // accordéon « Blocs avancés » ouvert
 let _uploading = false;
@@ -308,7 +309,7 @@ async function _openChart(id) {
 function _backToLib() {
   _flushSave();
   _view = 'lib'; _chart = null; _error = null;
-  _dlPanel = null; _logoAdv = false; _logoBg = 'checker';
+  _dlPanel = null; _logoAdv = false;
   _colorAdv = null; _pairText = null; _pairBg = null;
   _typePicker = false; _typeSearch = ''; _typeCat = 'all'; _typePrefs.clear();
   _pubPanel = false; _pubAccess = null;
@@ -386,7 +387,7 @@ function _onClick(e) {
   const vid = btn.closest('[data-vid]')?.dataset.vid;
   if (act === 'logo-add')  { _pickTarget = 'logo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'logo-zip')  { _downloadKit(); return; }
-  if (act === 'logo-bg')   { _logoBg = btn.dataset.bg || 'checker'; _renderChart(); return; }
+  if (act === 'v-bg-clear' && vid) { const v = _variantOf(vid); if (v) { v.bg = null; _scheduleSave(); _renderChart(); } return; }
   if (act === 'logo-adv')  { _logoAdv = !_logoAdv; _renderChart(); return; }
   if (act === 'v-dl' && vid)      { _dlPanel = _dlPanel === vid ? null : vid; _renderChart(); return; }
   if (act === 'v-dl-orig' && vid) { _downloadOriginal(vid); return; }
@@ -451,7 +452,7 @@ function _onInput(e) {
   if (el.dataset.field === 'prot-ratio' && _chart) {
     const logo = _logoSection();
     logo.protection = logo.protection || { ratio: 0.5, basis: 'hauteur du logo' };
-    logo.protection.ratio = Math.max(0.25, Math.min(3, parseFloat(el.value) || 0.5));
+    logo.protection.ratio = Math.max(0.25, Math.min(2, parseFloat(el.value) || 0.5));
     _scheduleSave(); _refreshProtViz();
   }
   if (el.dataset.field === 'prot-basis' && _chart) {
@@ -468,7 +469,14 @@ function _onInput(e) {
     else logo.minSizes.digitalPx = Number.isFinite(n) && n > 0 ? n : null;
     _scheduleSave();
   }
-  if (el.dataset.field === 'logo-bg-custom') { _logoBg = el.value; _refreshLogoBgs(); }
+  // Fond d'aperçu par carte : saisie hex sans le # (préfixe visuel fixe).
+  if (el.dataset.field === 'card-bg' && v) {
+    const hex = el.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);
+    if (el.value !== hex) el.value = hex;   // filtre les caractères non-hex à la volée
+    v.bg = /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex.toLowerCase()}` : (hex === '' ? null : v.bg);
+    _scheduleSave();
+    _applyCardBg(el.closest('.kb-logo-card'), v);
+  }
 
   // ── Onglet Couleurs (KB-2) ──
   const c = _colorOf(el.closest('[data-cid]')?.dataset.cid);
@@ -731,19 +739,6 @@ function _renderLogoTab() {
       <p class="kb-hint">SVG, PNG, JPG, WebP ou PDF — 4 Mo max par fichier. Le SVG donne les meilleurs exports.</p>
     </div>`;
 
-  const palette = (_chart.draft.colors && Array.isArray(_chart.draft.colors.palette)) ? _chart.draft.colors.palette : [];
-  const bgChips = [
-    { key: 'checker', label: 'Transparent', cls: 'is-checker' },
-    { key: 'light',   label: 'Clair',       cls: 'is-light' },
-    { key: 'dark',    label: 'Sombre',      cls: 'is-dark' },
-    ...palette.filter(c => c && /^#[0-9a-fA-F]{6}$/.test(c.hex || '')).slice(0, 6)
-      .map(c => ({ key: c.hex, label: c.name || c.hex, cls: '', hex: c.hex })),
-  ];
-  const chips = bgChips.map(c => `
-    <button class="kb-bgchip ${c.cls} ${_logoBg === c.key ? 'on' : ''}" data-act="logo-bg" data-bg="${_esc(c.key)}"
-            title="${_esc(c.label)}" aria-label="Fond ${_esc(c.label)}" ${c.hex ? `style="background:${_esc(c.hex)}"` : ''}></button>`).join('');
-  const customOn = _logoBg.startsWith('#') && !bgChips.some(c => c.key === _logoBg && !c.hex);
-
   const cards = variants.map(v => _renderVariantCard(v)).join('');
 
   const logo = _logoSection();
@@ -754,12 +749,7 @@ function _renderLogoTab() {
   return `
     <div class="kb-logo">
       <div class="kb-logo-toolbar">
-        <div class="kb-bgchips" role="group" aria-label="Fond d'aperçu">
-          ${chips}
-          <label class="kb-bgchip kb-bgchip-custom ${customOn ? 'on' : ''}" title="Fond personnalisé">
-            <input type="color" data-field="logo-bg-custom" value="${customOn ? _esc(_logoBg) : '#e8e4da'}" aria-label="Fond personnalisé">
-          </label>
-        </div>
+        <p class="kb-hint">Saisissez un code couleur sous chaque logo pour tester sa lisibilité sur le fond voulu.</p>
         <div class="kb-logo-toolbar-acts">
           <button class="kb-btn" data-act="logo-zip" ${_uploading ? 'disabled' : ''}>${icon('download', 15)} Kit .zip</button>
           <button class="kb-btn primary" data-act="logo-add" ${_uploading ? 'disabled' : ''}>${icon('plus', 15)} ${_uploading ? 'Envoi…' : 'Ajouter'}</button>
@@ -805,9 +795,18 @@ function _renderVariantCard(v) {
       </div>`}
     </div>` : '';
 
+  const bgHex = (v.bg && /^#[0-9a-fA-F]{6}$/.test(v.bg)) ? v.bg.slice(1) : '';
   return `
     <article class="kb-logo-card" data-vid="${_esc(v.id)}">
-      <div class="kb-logo-preview ${_logoBgClass()}" ${_logoBgStyle()}>${preview}</div>
+      <div class="kb-logo-preview ${_cardBgClass(v)}" ${_cardBgStyle(v)}>${preview}</div>
+      <div class="kb-bgfield">
+        <span class="kb-bgfield-lbl">Fond d'aperçu</span>
+        <button class="kb-bgfield-ck ${bgHex ? '' : 'on'}" data-act="v-bg-clear" title="Fond transparent" aria-label="Fond transparent"></button>
+        <div class="kb-bgfield-hex">
+          <span class="kb-bgfield-hash">#</span>
+          <input class="kb-bgfield-input" data-field="card-bg" value="${_esc(bgHex)}" placeholder="ffffff" maxlength="6" spellcheck="false" autocapitalize="off" aria-label="Code couleur du fond">
+        </div>
+      </div>
       <div class="kb-logo-fields">
         <input class="kb-field-input kb-v-label" data-field="v-label" value="${_esc(v.label || '')}" placeholder="Nom de la variante" maxlength="60" spellcheck="false">
         <select class="kb-select" data-field="v-kind" aria-label="Type de variante">${kindOpts}</select>
@@ -827,8 +826,8 @@ function _renderLogoAdvanced(logo, variants) {
   const first = variants.find(v => v.ext !== 'pdf');
   const viz = first ? `
     <div class="kb-prot-viz-wrap">
-      <div class="kb-prot-viz" data-slot="prot-viz" style="--kb-prot:${(prot.ratio * 56).toFixed(0)}px">
-        <div class="kb-prot-zone"><img data-asset="${_esc(first.assetId)}" alt="" draggable="false"></div>
+      <div class="kb-prot-viz">
+        <div class="kb-prot-zone" data-slot="prot-zone" style="--kb-prot:${Math.round(prot.ratio * KB_PROT_LOGO_H)}px"><img data-asset="${_esc(first.assetId)}" alt="" draggable="false"></div>
       </div>
       <p class="kb-hint">La zone en pointillés doit rester vide autour du logo.</p>
     </div>` : '';
@@ -849,28 +848,26 @@ function _renderLogoAdvanced(logo, variants) {
     </div>`;
 }
 
-// ── Fond d'aperçu (appliqué à toutes les cartes) ──
-function _logoBgClass() {
-  if (_logoBg === 'checker') return 'is-checker';
-  if (_logoBg === 'light') return 'is-light';
-  if (_logoBg === 'dark') return 'is-dark';
-  return 'is-custom';
+// ── Fond d'aperçu PAR CARTE (v.bg : null = transparent/damier, ou '#rrggbb') ──
+function _cardBgClass(v) { return (v.bg && /^#[0-9a-fA-F]{6}$/.test(v.bg)) ? 'is-custom' : 'is-checker'; }
+function _cardBgStyle(v) { return (v.bg && /^#[0-9a-fA-F]{6}$/.test(v.bg)) ? `style="background:${_esc(v.bg)}"` : ''; }
+// Applique le fond d'une carte en direct (sans re-render, focus préservé).
+function _applyCardBg(card, v) {
+  if (!card) return;
+  const prev = card.querySelector('.kb-logo-preview');
+  const ck = card.querySelector('.kb-bgfield-ck');
+  const on = !!(v.bg && /^#[0-9a-fA-F]{6}$/.test(v.bg));
+  if (prev) { prev.className = `kb-logo-preview ${on ? 'is-custom' : 'is-checker'}`; prev.style.background = on ? v.bg : ''; }
+  if (ck) ck.classList.toggle('on', !on);
 }
-function _logoBgStyle() {
-  return _logoBg.startsWith('#') ? `style="background:${_esc(_logoBg)}"` : '';
-}
-function _refreshLogoBgs() {
-  if (!_root) return;
-  _root.querySelectorAll('.kb-logo-preview').forEach(el => {
-    el.className = `kb-logo-preview ${_logoBgClass()}`;
-    el.style.background = _logoBg.startsWith('#') ? _logoBg : '';
-  });
-}
+// Zone de protection : le repère visuel = marge autour du logo = ratio × sa
+// hauteur. Le viz coupe (overflow) au besoin, logo toujours centré.
+const KB_PROT_LOGO_H = 40;   // hauteur de référence du logo dans le viz (px)
 function _refreshProtViz() {
   const logo = _logoSection();
   const r = logo.protection?.ratio ?? 0.5;
-  const viz = _root?.querySelector('[data-slot="prot-viz"]');
-  if (viz) viz.style.setProperty('--kb-prot', `${(r * 56).toFixed(0)}px`);
+  const zone = _root?.querySelector('[data-slot="prot-zone"]');
+  if (zone) zone.style.setProperty('--kb-prot', `${Math.round(r * KB_PROT_LOGO_H)}px`);
   const out = _root?.querySelector('[data-slot="prot-ratio-out"]');
   if (out) out.textContent = r;
 }
