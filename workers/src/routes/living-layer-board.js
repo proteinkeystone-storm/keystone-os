@@ -367,6 +367,23 @@ async function _sensorKodex(env, tenantId) {
   }
 }
 
+// Key Brand : nombre de chartes de marque en bibliothèque + combien publiées.
+// kb_charts.tenant_id suit le patron _tenantOf (= padTenant : 'default' pour
+// admin, sinon claims.sub) → aligné sur ce que le pad voit. Sans JWT → 0.
+async function _sensorKeyBrand(env, tenantId) {
+  if (!tenantId) return { charts: 0, published: 0 };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS n,
+              SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS pub
+       FROM kb_charts WHERE tenant_id = ?`
+    ).bind(tenantId).first().catch(() => null);
+    return { charts: row?.n || 0, published: row?.pub || 0 };
+  } catch (e) {
+    return { charts: 0, published: 0 };
+  }
+}
+
 // Pulsa : nombre de réponses des dernières 24h pour cet owner (si JWT)
 // sinon agrégat global.
 async function _sensorPulsa(env, ownerSub) {
@@ -616,7 +633,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -720,6 +737,14 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
       score: 47, topic: 'sentinel',
     });
   }
+  // Key Brand : inventaire des chartes de marque (état permanent, informatif).
+  if (keybrand.charts > 0) {
+    const base = `${keybrand.charts} charte${keybrand.charts > 1 ? 's' : ''} de marque dans Key Brand`;
+    candidates.push({
+      text:  keybrand.published > 0 ? `${base}, dont ${keybrand.published} en ligne.` : `${base}.`,
+      score: 45, topic: 'keybrand',
+    });
+  }
   if (ghostwriter.usedToday > 0 && ghostwriter.quotaToday != null) {
     const remaining = Math.max(0, ghostwriter.quotaToday - ghostwriter.usedToday);
     candidates.push({
@@ -768,7 +793,7 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
   const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
@@ -781,6 +806,7 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
     smartqr.scans24h   > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h au total`, topic: 'smartqr' } : null,
     smartagent.open > 0 ? { t: `Smart Agent : ${smartagent.open} question(s) à combler`, topic: 'smartagent' } : null,
     (sentinel.total > 0 && sentinel.down === 0) ? { t: `Sentinel : ${sentinel.total} site(s) surveillé(s), tous en ligne`, topic: 'sentinel' } : null,
+    keybrand.charts > 0 ? { t: `Key Brand : ${keybrand.charts} charte(s) de marque${keybrand.published > 0 ? `, ${keybrand.published} en ligne` : ''}`, topic: 'keybrand' } : null,
     ghostwriter.usedToday > 0 ? { t: `Ghost Writer : ${ghostwriter.usedToday}/${ghostwriter.quotaToday ?? '∞'} utilisé aujourd'hui`, topic: 'ghostwriter' } : null,
   ].filter(Boolean);
 
@@ -1084,7 +1110,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, pilotable, followedQr, followedSite] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, pilotable, followedQr, followedSite] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1095,12 +1121,13 @@ export async function handleLivingBoard(request, env) {
     _sensorSentinel(env, padTenant),
     _sensorSocial(env, padTenant),
     _sensorSceau(env, padTenant),
+    _sensorKeyBrand(env, padTenant),
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
     _sensorFollowedSite(env, padTenant, followedSiteId),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
@@ -1126,6 +1153,8 @@ export async function handleLivingBoard(request, env) {
     agentKnowledge:  smartagent.knowledge || 0,   // fiches de savoir validées
     keynapseNotes:   keynapse.notesCount  || 0,   // bulles/notes
     socialConnected: social.connected     || 0,   // réseaux connectés
+    keybrandCharts:    keybrand.charts    || 0,    // Key Brand : chartes en biblio
+    keybrandPublished: keybrand.published || 0,    // dont publiées (lien en ligne)
     // Suivi à l'unité : stats du QR / état du site épinglés (null si aucun
     // ou si l'entité n'appartient pas au tenant).
     followedQr:      followedQr || null,
@@ -1249,7 +1278,7 @@ export async function handleLivingBoard(request, env) {
 // Enregistre une impression (phrase affichée) ou un engagement (outil
 // ouvert après la phrase). Requiert JWT (tenant). Sans JWT → no-op.
 // Body : { topic, type: 'impression' | 'engagement' }
-const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus', 'smartagent', 'keynapse', 'sentinel', 'social'];
+const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus', 'smartagent', 'keynapse', 'sentinel', 'social', 'keybrand'];
 
 export async function handleLivingFeedback(request, env) {
   const origin = getAllowedOrigin(env, request);

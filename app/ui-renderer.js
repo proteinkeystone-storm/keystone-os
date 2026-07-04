@@ -5719,6 +5719,16 @@ function _padReadoutData(id, m) {
                                   sub: 'en attente', signal: 0, quiet: true };
             return null;
         }
+        case 'O-BRD-001': {                       // Key Brand — chartes de marque stockées
+            // Inventaire (état permanent, pas un signal d'action) → readout quiet,
+            // sans halo. Si des chartes sont publiées, on le dit (lien en ligne).
+            const v = +m.keybrandCharts || 0;
+            if (v <= 0) return null;
+            const pub = +m.keybrandPublished || 0;
+            return { label: v > 1 ? 'Chartes' : 'Charte', num: String(v),
+                     sub: pub > 0 ? (pub > 1 ? pub + ' en ligne' : '1 en ligne') : 'de marque',
+                     signal: 0, quiet: true };
+        }
         case 'A-COM-002': {                       // Brief Prod — briefs en biblio Kodex
             // Inventaire (pas un signal d'action) → readout informatif quiet,
             // sans halo nouveauté.
