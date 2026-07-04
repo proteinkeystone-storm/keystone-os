@@ -439,6 +439,7 @@ function _onClick(e) {
   if (act === 'rule-toggle')     { _toggleInterdit(btn.dataset.key); return; }
   if (act === 'rule-custom-add') { _addCustomRule(); return; }
   if (act === 'rc-del' && rid)   { _deleteCustomRule(rid); return; }
+  if (act === 'rc-kind' && rid)  { _toggleRuleKind(rid); return; }
   if (act === 'rc-img' && rid)   { _pickTarget = { rule: rid }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'goto-logo')       { _tab = 'logo'; _renderChart(); return; }
 
@@ -1765,11 +1766,18 @@ function _toggleInterdit(key) {
 function _addCustomRule() {
   _rulesSection().custom.push({
     id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
-    label: '', assetId: null,
+    label: '', assetId: null, kind: 'bad',   // 'bad' = interdit (croix rouge) · 'good' = bon usage (vert)
   });
   _scheduleSave(); _renderChart();
   const inputs = _root.querySelectorAll('[data-field="rc-label"]');
   inputs[inputs.length - 1]?.focus();
+}
+// Bascule une règle custom entre interdit (croix rouge) et bon usage (vert, sans croix).
+function _toggleRuleKind(rid) {
+  const r = _rulesSection().custom.find(x => x.id === rid);
+  if (!r) return;
+  r.kind = (r.kind === 'good') ? 'bad' : 'good';
+  _scheduleSave(); _renderChart();
 }
 function _deleteCustomRule(rid) {
   const rules = _rulesSection();
@@ -1833,15 +1841,30 @@ function _renderRulesTab() {
       </figure>`;
   }).join('');
 
-  const custom = _rulesSection().custom.map(r => `
-    <div class="kb-rule-custom" data-rid="${_esc(r.id)}">
-      ${r.assetId
-        ? `<button class="kb-rule-custom-img" data-act="rc-img" title="Remplacer la vignette"><img data-asset="${_esc(r.assetId)}" alt="" draggable="false"></button>`
-        : `<button class="kb-rule-custom-img is-empty" data-act="rc-img" title="Ajouter une vignette (facultatif)">${icon('image', 18)}</button>`}
-      <input class="kb-field-input" data-field="rc-label" value="${_esc(r.label || '')}"
-             placeholder="Règle à respecter — ex. « Version bleue réservée aux partenariats »" maxlength="160" spellcheck="false">
-      <button class="kb-iconbtn danger" data-act="rc-del" title="Retirer la règle">${icon('trash-2', 16)}</button>
-    </div>`).join('');
+  const custom = _rulesSection().custom.map(r => {
+    const isGood = r.kind === 'good';
+    const box = r.assetId
+      ? `<button class="kb-forbid-box kb-rule-box" data-act="rc-img" title="Remplacer le visuel">
+           <img data-asset="${_esc(r.assetId)}" alt="" draggable="false">
+           ${isGood ? '' : '<span class="kb-forbid-slash" aria-hidden="true"></span>'}
+         </button>`
+      : `<button class="kb-forbid-box kb-rule-box is-empty" data-act="rc-img" title="Importer un visuel">
+           ${icon('image', 20)}<span>Importer un visuel</span>
+         </button>`;
+    return `
+      <figure class="kb-forbid-card kb-rule-card ${isGood ? 'kb-forbid-good' : ''}" data-rid="${_esc(r.id)}">
+        ${box}
+        <figcaption>${icon(isGood ? 'check' : 'x', 13)}
+          <input class="kb-rule-cap" data-field="rc-label" value="${_esc(r.label || '')}"
+                 placeholder="Décrire la règle…" maxlength="160" spellcheck="false">
+        </figcaption>
+        <div class="kb-rule-tools">
+          <button data-act="rc-kind" aria-pressed="${isGood}"
+                  title="${isGood ? 'Basculer en interdit (croix rouge)' : 'Basculer en bon usage (vert)'}">${icon('refresh', 15)}</button>
+          <button class="danger" data-act="rc-del" title="Retirer la règle">${icon('trash-2', 15)}</button>
+        </div>
+      </figure>`;
+  }).join('');
 
   return `
     <div class="kb-rules">
@@ -1849,8 +1872,8 @@ function _renderRulesTab() {
       <div class="kb-forbid-grid">${good}${cards}</div>
       <section class="kb-lab">
         <h3 class="kb-lab-title">Règles propres à la marque</h3>
-        <p class="kb-hint">Ce que la charte doit préciser en plus — avec une vignette d'exemple si utile.</p>
-        ${custom || ''}
+        <p class="kb-hint">Importez un visuel : la croix rouge est posée par la carte. Basculez en « bon usage » (vert, sans croix) pour montrer l'exemple à suivre.</p>
+        ${custom ? `<div class="kb-forbid-grid kb-rule-grid">${custom}</div>` : ''}
         <button class="kb-btn" data-act="rule-custom-add">${icon('plus', 15)} Ajouter une règle</button>
       </section>
     </div>`;

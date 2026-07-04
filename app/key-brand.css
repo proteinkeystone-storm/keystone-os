@@ -435,7 +435,11 @@
 /* La boîte blanche où le logo est (mal)traité. */
 .kb-forbid-box{position:relative;height:120px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .kb-forbid-box img{max-width:62%;max-height:56%;object-fit:contain}
-.kb-forbid-slash{position:absolute;left:-6%;right:-6%;top:50%;height:3px;background:#e11d48;transform:rotate(-18deg);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+/* Le barré : une croix de deux fins traits rouges, posée par le gabarit. */
+.kb-forbid-slash{position:absolute;inset:0;pointer-events:none}
+.kb-forbid-slash::before,.kb-forbid-slash::after{content:"";position:absolute;left:-6%;right:-6%;top:50%;height:2px;background:#e11d48;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.kb-forbid-slash::before{transform:translateY(-50%) rotate(-18deg)}
+.kb-forbid-slash::after{transform:translateY(-50%) rotate(18deg)}
 
 /* Les maltraitances — pures transformations CSS du VRAI logo. */
 .kb-forbid-distort img{transform:scaleX(1.7)}
@@ -456,12 +460,20 @@
 .kb-forbid-card:hover .kb-forbid-toggle,.kb-forbid-card.is-off .kb-forbid-toggle{opacity:1}
 .kb-forbid-invert .kb-forbid-toggle{background:rgba(255,255,255,.85)}
 
-/* Règles custom */
-.kb-rule-custom{display:flex;align-items:center;gap:10px;margin:0 0 10px}
-.kb-rule-custom .kb-field-input{flex:1}
-.kb-rule-custom-img{width:56px;height:42px;flex-shrink:0;border:1px solid var(--kb-line);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0}
-.kb-rule-custom-img img{width:100%;height:100%;object-fit:cover}
-.kb-rule-custom-img.is-empty{background:rgba(0,0,0,.14);color:var(--kb-muted);border-style:dashed}
+/* Règles custom — mêmes cartes que les interdits (gabarit partagé). */
+.kb-rule-grid{margin-top:14px}
+.kb-rule-box{width:100%;border:none;padding:0;cursor:pointer;font:inherit;color:inherit}
+.kb-rule-box img{max-width:78%;max-height:70%;object-fit:contain}
+.kb-rule-box.is-empty{flex-direction:column;gap:7px;color:var(--kb-muted);font-size:12px;font-weight:600}
+.kb-rule-box.is-empty span{color:var(--kb-muted)}
+.kb-rule-card figcaption{gap:6px}
+.kb-rule-cap{flex:1;min-width:0;border:none;background:transparent;font:inherit;font-weight:600;color:inherit;padding:0}
+.kb-rule-cap:focus{outline:none}
+.kb-rule-cap::placeholder{color:var(--kb-muted);font-weight:500}
+.kb-rule-tools{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .15s}
+.kb-rule-card:hover .kb-rule-tools,.kb-rule-card:focus-within .kb-rule-tools{opacity:1}
+.kb-rule-tools button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.9);color:#3a3f4a;cursor:pointer}
+.kb-rule-tools button.danger{color:var(--ws-danger)}
 .kb-rules .kb-lab{margin-top:26px}
 
 /* ══ Onglet Branding (KB-5) — la scène ══ */

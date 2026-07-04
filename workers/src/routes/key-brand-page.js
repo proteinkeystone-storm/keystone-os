@@ -152,7 +152,10 @@ select::-ms-expand{display:none}
 .rcard{overflow:hidden;margin:0}
 .rbox{position:relative;height:110px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .rbox img{max-width:62%;max-height:56%;object-fit:contain}
-.rslash{position:absolute;left:-6%;right:-6%;top:50%;height:3px;background:var(--danger);transform:rotate(-18deg);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.rslash{position:absolute;inset:0;pointer-events:none}
+.rslash::before,.rslash::after{content:"";position:absolute;left:-6%;right:-6%;top:50%;height:2px;background:var(--danger);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.rslash::before{transform:translateY(-50%) rotate(-18deg)}
+.rslash::after{transform:translateY(-50%) rotate(18deg)}
 .rcard figcaption{display:flex;align-items:center;gap:6px;padding:8px 12px;font-size:11.5px;font-weight:600;border-top:1px solid var(--line);color:var(--danger)}
 .rcard.good figcaption{color:var(--ok)}
 .f-distort img{transform:scaleX(1.7)}.f-tilt img{transform:rotate(-16deg)}
@@ -165,9 +168,10 @@ select::-ms-expand{display:none}
 .f-crowd img{transform:translateX(-14%)}
 .crowd-a,.crowd-b{position:absolute;background:#9aa2b1;border-radius:4px}
 .crowd-a{width:34%;height:9px;right:6%;top:38%}.crowd-b{width:24%;height:9px;right:6%;top:55%}
-.rcustom{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-top:10px}
-.rcustom img{width:56px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
-.rcustom p{margin:0;font-size:13.5px}
+.rcustom-grid{margin-top:14px}
+.rcard.rtext{display:flex;align-items:center}
+.rcard.rtext figcaption{border-top:none;padding:16px 14px;font-size:13.5px;line-height:1.45}
+.rbox img.rfull{max-width:78%;max-height:70%}
 
 /* Signe & photo */
 .sym{position:relative;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center;padding:34px}
@@ -422,8 +426,17 @@ function render(){
       }
       h+='</div>';
     }
-    for(const r of customR){
-      h+='<div class="card rcustom">'+(r.assetId?'<img src="'+fileUrl(r.assetId)+'" alt="">':'')+'<p>'+esc(r.label)+'</p></div>';
+    if(customR.length){
+      h+='<div class="rgrid rcustom-grid">';
+      for(const r of customR){
+        const good=r.kind==='good', mark=good?'✓ ':'✕ ', gc=good?' good':'';
+        if(r.assetId){
+          h+='<figure class="card rcard'+gc+'"><div class="rbox"><img class="rfull" src="'+fileUrl(r.assetId)+'" alt="">'+(good?'':'<span class="rslash"></span>')+'</div><figcaption>'+mark+esc(r.label)+'</figcaption></figure>';
+        }else{
+          h+='<figure class="card rcard rtext'+gc+'"><figcaption>'+mark+esc(r.label)+'</figcaption></figure>';
+        }
+      }
+      h+='</div>';
     }
     h+='</section>';
   }
