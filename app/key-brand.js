@@ -91,8 +91,9 @@ let _typeCat = 'all';
 let _typeTitle = TITLE_SAMPLES[0]; // texte de titre du spécimen, partagé entre cartes
 let _typeBody = BODY_SAMPLES[0];   // texte de paragraphe du spécimen, partagé
 let _typeSampleIdx = 0;
-// fontId → { tW,tSize,tItal, bW,bSize,bItal,bLh,bAlign } (session seulement)
-const _typePrefs = new Map();
+// fontId → 'title'|'body' : quel niveau la barre d'outils édite (session seule).
+// Les réglages eux-mêmes vivent dans f.spec (PERSISTÉ dans la charte).
+const _typeActive = new Map();
 const FONT_ROLES = [
   ['title',        'Titrage'],
   ['body',         'Texte courant'],
@@ -319,7 +320,7 @@ function _backToLib() {
   _view = 'lib'; _chart = null; _error = null;
   _dlPanel = null; _logoAdv = false;
   _colorAdv = null; _colorPick = null; _visText = null; _visBg = null; _visBig = false; _colorMode.clear();
-  _typePicker = false; _typeSearch = ''; _typeCat = 'all'; _typePrefs.clear();
+  _typePicker = false; _typeSearch = ''; _typeCat = 'all'; _typeActive.clear();
   _pubPanel = false; _pubAccess = null;
   _revokeBlobs();
   _applyAccent(null);
@@ -449,20 +450,20 @@ function _onClick(e) {
   if (act === 'font-declare')  { _addDeclaredFont(); return; }
   if (act === 'type-gen')      { _typeSampleIdx = (_typeSampleIdx + 1) % TITLE_SAMPLES.length; _typeTitle = TITLE_SAMPLES[_typeSampleIdx]; _typeBody = BODY_SAMPLES[_typeSampleIdx % BODY_SAMPLES.length]; _renderChart(); return; }
   if (act === 'type-lorem')    { _typeTitle = loremTitle(); _typeBody = loremParagraph(); _renderChart(); return; }
+  if (act === 'ft-level' && fid) { _typeActive.set(fid, btn.dataset.level === 'body' ? 'body' : 'title'); _renderChart(); return; }
   if (act === 'ft-sz' && fid) {
     const f = _fontOf(fid); if (!f) return;
-    const t = btn.dataset.t, d = parseInt(btn.dataset.d, 10) || 0, p = _prefFor(f);
-    _setPref(fid, t === 'title' ? { tSize: Math.max(10, Math.min(160, p.tSize + d)) } : { bSize: Math.max(10, Math.min(120, p.bSize + d)) });
-    _renderChart(); return;
+    const d = parseInt(btn.dataset.d, 10) || 0;
+    const cur = _specOf(f)[_activeLevel(fid)].size;
+    _editSpec(fid, { size: Math.max(10, Math.min(160, cur + d)) }); return;
   }
   if (act === 'ft-ital' && fid) {
     const f = _fontOf(fid); if (!f) return;
-    const t = btn.dataset.t, p = _prefFor(f);
-    _setPref(fid, t === 'title' ? { tItal: !p.tItal } : { bItal: !p.bItal });
+    const cur = _specOf(f)[_activeLevel(fid)].ital;
     if (f.source === 'google') ensureFontItalic(f.family, f.axis);
-    _renderChart(); return;
+    _editSpec(fid, { ital: !cur }); return;
   }
-  if (act === 'ft-align' && fid) { _setPref(fid, { bAlign: btn.dataset.a }); _renderChart(); return; }
+  if (act === 'ft-align' && fid) { _editSpec(fid, { align: btn.dataset.a }); return; }
   if (act === 'f-del' && fid)  { _deleteFont(fid); return; }
 }
 
@@ -592,12 +593,8 @@ function _onChange(e) {
   // ── Onglet Typographies (KB-3) ──
   const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
   if (el.dataset.field === 'f-role' && f)   { f.role = el.value; _scheduleSave(); _renderChart(); }
-  if (el.dataset.field === 'ftw' && f) {
-    const w = parseInt(el.value, 10) || 400;
-    _setPref(f.id, el.dataset.t === 'title' ? { tW: w } : { bW: w });
-    _renderChart();
-  }
-  if (el.dataset.field === 'fbl' && f) { _setPref(f.id, { bLh: parseFloat(el.value) || 1.5 }); _renderChart(); }
+  if (el.dataset.field === 'ftw' && f) { _editSpec(f.id, { w: parseInt(el.value, 10) || 400 }); }
+  if (el.dataset.field === 'fbl' && f) { _editSpec(f.id, { lh: parseFloat(el.value) || 1.5 }); }
 }
 function _onBlur(e) {
   // Sécurise le nom : jamais vide après édition.
@@ -1498,28 +1495,27 @@ function _nextFontRole() {
 
 // Graisses disponibles pour une police (Google = axe réel ; déclarée = 400/700).
 function _weightsFor(f) { return f.source === 'google' ? weightsOf(f.axis) : [400, 700]; }
-// Préférences de spécimen (titre + paragraphe), avec valeurs par défaut sûres.
-function _prefFor(f) {
-  const p = _typePrefs.get(f.id) || {};
-  const ws = _weightsFor(f);
-  const has = w => ws.includes(w);
-  const heavy = has(700) ? 700 : ws[ws.length - 1];
-  const reg = has(400) ? 400 : ws[0];
-  return {
-    tW:     p.tW && has(p.tW) ? p.tW : heavy,
-    tSize:  p.tSize || 34,
-    tItal:  !!p.tItal,
-    bW:     p.bW && has(p.bW) ? p.bW : reg,
-    bSize:  p.bSize || 17,
-    bItal:  !!p.bItal,
-    bLh:    p.bLh || 1.55,
-    bAlign: p.bAlign || 'left',
-  };
+// Réglages de spécimen PERSISTÉS dans la charte (f.spec), initialisés à des
+// valeurs sûres selon les graisses réellement disponibles.
+function _specOf(f) {
+  if (!f.spec || typeof f.spec !== 'object' || !f.spec.title || !f.spec.body) {
+    const ws = _weightsFor(f);
+    const heavy = ws.includes(700) ? 700 : ws[ws.length - 1];
+    const reg = ws.includes(400) ? 400 : ws[0];
+    f.spec = {
+      title: { w: heavy, size: 34, ital: false, lh: 1.15, align: 'left' },
+      body:  { w: reg,   size: 17, ital: false, lh: 1.5,  align: 'left' },
+    };
+  }
+  return f.spec;
 }
-function _setPref(fid, patch) {
-  const p = _typePrefs.get(fid) || {};
-  Object.assign(p, patch);
-  _typePrefs.set(fid, p);
+function _activeLevel(fid) { return _typeActive.get(fid) === 'body' ? 'body' : 'title'; }
+// Applique une modif au niveau actif d'une police puis persiste + re-render.
+function _editSpec(fid, patch) {
+  const f = _fontOf(fid); if (!f) return;
+  const sp = _specOf(f);
+  Object.assign(sp[_activeLevel(fid)], patch);
+  _scheduleSave(); _renderChart();
 }
 // Pile font-family : Google chargée, ou déclarée (rendue si installée localement).
 function _famCss(f) {
@@ -1557,7 +1553,7 @@ function _deleteFont(fid) {
   if (!ok) return;
   const t = _typeSection();
   t.fonts = t.fonts.filter(x => x.id !== fid);
-  _typePrefs.delete(fid);
+  _typeActive.delete(fid);
   _scheduleSave(); _renderChart();
 }
 
@@ -1567,8 +1563,8 @@ function _renderTypeTab() {
   for (const f of fonts) {
     if (f.source !== 'google' || !f.family) continue;
     ensureFontLoaded(f.family, f.axis);
-    const p = _prefFor(f);
-    if (p.tItal || p.bItal) ensureFontItalic(f.family, f.axis);
+    const sp = _specOf(f);
+    if (sp.title.ital || sp.body.ital) ensureFontItalic(f.family, f.axis);
   }
 
   if (!fonts.length && !_typePicker) return `
@@ -1605,43 +1601,41 @@ function _renderTypeTab() {
     </div>`;
 }
 
-// Barre d'outils d'un spécimen (titre ou paragraphe) : graisse, italique,
-// taille (−/px/+), + interligne & alignement pour le paragraphe.
-function _specBar(f, t, pref) {
+// Barre d'outils UNIQUE en haut de la carte : un sélecteur Titre/Paragraphe
+// choisit le niveau édité ; graisse, italique, taille (−/px/+), interligne,
+// alignement s'appliquent à ce niveau. Réglages persistés (f.spec).
+function _specToolbar(f) {
+  const sp = _specOf(f);
+  const lvl = _activeLevel(f.id);
+  const s = sp[lvl];
   const ws = _weightsFor(f);
-  const w = t === 'title' ? pref.tW : pref.bW;
-  const size = t === 'title' ? pref.tSize : pref.bSize;
-  const ital = t === 'title' ? pref.tItal : pref.bItal;
-  const wOpts = ws.map(x => `<option value="${x}" ${x === w ? 'selected' : ''}>${_weightName(x)}</option>`).join('');
-  const stepper = `
-    <span class="kb-stepper">
-      <button class="kb-step" data-act="ft-sz" data-t="${t}" data-d="-1" title="Réduire" aria-label="Réduire">${icon('minus', 14)}</button>
-      <span class="kb-step-val" data-slot="sz-${t}">${size} px</span>
-      <button class="kb-step" data-act="ft-sz" data-t="${t}" data-d="1" title="Agrandir" aria-label="Agrandir">${icon('plus', 14)}</button>
-    </span>`;
-  const align = t === 'body' ? `
-    <span class="kb-seg" role="group" aria-label="Alignement">
-      ${['left', 'center', 'right', 'justify'].map(a =>
-        `<button class="kb-segbtn ${pref.bAlign === a ? 'on' : ''}" data-act="ft-align" data-a="${a}" title="${_alignLabel(a)}" aria-label="${_alignLabel(a)}">${icon('align-' + a, 15)}</button>`).join('')}
-    </span>` : '';
-  const lh = t === 'body' ? `
-    <label class="kb-spec-lh" title="Interligne">${icon('line-height', 15)}
-      <select class="kb-select kb-inline-sm" data-field="fbl">
-        ${[1.2, 1.35, 1.5, 1.65, 1.8, 2].map(v => `<option value="${v}" ${Math.abs(v - pref.bLh) < 0.001 ? 'selected' : ''}>${v.toFixed(2)}</option>`).join('')}
-      </select>
-    </label>` : '';
+  const wOpts = ws.map(x => `<option value="${x}" ${x === s.w ? 'selected' : ''}>${_weightName(x)}</option>`).join('');
+  const lhOpts = [1, 1.15, 1.35, 1.5, 1.7, 2].map(v => `<option value="${v}" ${Math.abs(v - s.lh) < 0.001 ? 'selected' : ''}>${v.toFixed(2)}</option>`).join('');
   return `
-    <div class="kb-spec-bar">
-      <select class="kb-select kb-inline-sm kb-spec-w" data-field="ftw" data-t="${t}" title="Graisse">${wOpts}</select>
-      <button class="kb-segbtn kb-ital ${ital ? 'on' : ''}" data-act="ft-ital" data-t="${t}" title="Italique" aria-label="Italique"><em>I</em></button>
-      ${stepper}
-      ${lh}
-      ${align}
+    <div class="kb-spec-toolbar">
+      <div class="kb-level-switch" role="group" aria-label="Niveau édité">
+        <button class="kb-levelbtn ${lvl === 'title' ? 'on' : ''}" data-act="ft-level" data-level="title">Titre</button>
+        <button class="kb-levelbtn ${lvl === 'body' ? 'on' : ''}" data-act="ft-level" data-level="body">Paragraphe</button>
+      </div>
+      <span class="kb-tbsep" aria-hidden="true"></span>
+      <select class="kb-select kb-inline-sm kb-spec-w" data-field="ftw" title="Graisse" aria-label="Graisse">${wOpts}</select>
+      <button class="kb-segbtn kb-ital ${s.ital ? 'on' : ''}" data-act="ft-ital" title="Italique" aria-label="Italique"><em>I</em></button>
+      <span class="kb-stepper">
+        <button class="kb-step" data-act="ft-sz" data-d="-1" title="Réduire" aria-label="Réduire">${icon('minus', 14)}</button>
+        <span class="kb-step-val">${s.size} px</span>
+        <button class="kb-step" data-act="ft-sz" data-d="1" title="Agrandir" aria-label="Agrandir">${icon('plus', 14)}</button>
+      </span>
+      <label class="kb-spec-lh" title="Interligne" aria-label="Interligne">${icon('line-height', 15)}
+        <select class="kb-select kb-inline-sm" data-field="fbl">${lhOpts}</select>
+      </label>
+      <span class="kb-seg" role="group" aria-label="Alignement">
+        ${['left', 'center', 'right', 'justify'].map(a =>
+          `<button class="kb-segbtn ${s.align === a ? 'on' : ''}" data-act="ft-align" data-a="${a}" title="${_alignLabel(a)}" aria-label="${_alignLabel(a)}">${icon('align-' + a, 15)}</button>`).join('')}
+      </span>
     </div>`;
 }
 
 function _renderFontCard(f) {
-  const pref = _prefFor(f);
   const famCss = _famCss(f);
   const roleOpts = FONT_ROLES.map(([k, lbl]) => `<option value="${k}" ${f.role === k ? 'selected' : ''}>${lbl}</option>`).join('');
 
@@ -1660,8 +1654,10 @@ function _renderFontCard(f) {
     : (f.buyUrl && /^https?:\/\//.test(f.buyUrl)
         ? `<a class="kb-btn kb-btn-sm" href="${_esc(f.buyUrl)}" target="_blank" rel="noopener noreferrer" title="Récupérer la police">${icon('download', 14)} Obtenir</a>` : '');
 
-  const titleStyle = `font-family:${famCss};font-weight:${pref.tW};font-size:${pref.tSize}px;font-style:${pref.tItal ? 'italic' : 'normal'}`;
-  const bodyStyle  = `font-family:${famCss};font-weight:${pref.bW};font-size:${pref.bSize}px;font-style:${pref.bItal ? 'italic' : 'normal'};line-height:${pref.bLh};text-align:${pref.bAlign}`;
+  const sp = _specOf(f);
+  const lvl = _activeLevel(f.id);
+  const tStyle = `font-family:${famCss};font-weight:${sp.title.w};font-size:${sp.title.size}px;font-style:${sp.title.ital ? 'italic' : 'normal'};line-height:${sp.title.lh};text-align:${sp.title.align}`;
+  const bStyle = `font-family:${famCss};font-weight:${sp.body.w};font-size:${sp.body.size}px;font-style:${sp.body.ital ? 'italic' : 'normal'};line-height:${sp.body.lh};text-align:${sp.body.align}`;
 
   return `
     <article class="kb-font-card" data-fid="${_esc(f.id)}">
@@ -1677,15 +1673,10 @@ function _renderFontCard(f) {
         </div>
       </div>
       <p class="kb-font-rolehint">${icon('info', 13)} ${_esc(FONT_ROLE_HINTS[f.role] || '')}</p>
-      <div class="kb-spec-block">
-        <div class="kb-spec-line">
-          <div class="kb-spec-text" data-slot="spec-title" style="${titleStyle}">${_esc(_typeTitle)}</div>
-          ${_specBar(f, 'title', pref)}
-        </div>
-        <div class="kb-spec-line">
-          <div class="kb-spec-text" data-slot="spec-body" style="${bodyStyle}">${_esc(_typeBody)}</div>
-          ${_specBar(f, 'body', pref)}
-        </div>
+      ${_specToolbar(f)}
+      <div class="kb-spec-preview">
+        <div class="kb-spec-text kb-spec-title ${lvl === 'title' ? 'is-active' : ''}" data-slot="spec-title" style="${tStyle}">${_esc(_typeTitle)}</div>
+        <div class="kb-spec-text kb-spec-body ${lvl === 'body' ? 'is-active' : ''}" data-slot="spec-body" style="${bStyle}">${_esc(_typeBody)}</div>
       </div>
       ${f.source === 'declared' ? `<p class="kb-hint kb-spec-note">Aperçu réel si la police est installée sur cet appareil, sinon repli système. Le lien permet de la récupérer.</p>` : ''}
     </article>`;
