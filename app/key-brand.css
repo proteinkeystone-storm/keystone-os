@@ -539,6 +539,19 @@
 .kb-scenewheel input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .kb-scenehint{font-size:11.5px;color:var(--kb-muted)}
 
+/* Zone de complétion EN LIGNE, ouverte à droite de la pill active
+   (les pills suivantes s'écartent — pas de rangée en dessous). */
+@keyframes kb-fillin{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.kb-scenefill{display:inline-flex;align-items:center;gap:8px;border:1.5px dashed var(--kb-accent);border-radius:12px;padding:4px 10px;animation:kb-fillin .18s ease-out}
+.kb-hexslot{display:inline-flex;align-items:center;gap:5px}
+.kb-hexmini{width:92px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;padding:6px 8px;border:1px solid var(--kb-line);background:none;color:var(--kb-ink);border-radius:8px;outline:none}
+.kb-hexmini:focus{border-color:var(--kb-accent)}
+.kb-hexmini::placeholder{color:var(--kb-muted);opacity:.6}
+.kb-fillbtn{display:inline-flex;align-items:center;gap:7px;background:none;border:none;color:var(--kb-ink);font-weight:600;font-size:13px;cursor:pointer;padding:3px 2px;font-family:inherit}
+.kb-fillbtn:hover{color:var(--kb-accent)}
+.kb-filldel{width:26px;height:26px}
+@media (prefers-reduced-motion: reduce){.kb-scenefill{animation:none}}
+
 /* ══ Planche d'ambiance (KB-9) — collage gabarits + médaillons ronds ══ */
 .kb-bd-tplrow{margin:12px 0}
 .kb-board{display:grid;grid-template-columns:minmax(200px,.85fr) 2.15fr;gap:18px;align-items:start}

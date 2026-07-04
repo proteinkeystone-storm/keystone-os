@@ -494,6 +494,13 @@ function _onClick(e) {
   if (act === 'scene-ink')     { _setSceneProp('ink', btn.dataset.v); return; }
   if (act === 'scene-dur')     { _setSceneProp('dur', btn.dataset.v); return; }
   if (act === 'scene-c')       { _setSceneColor(btn.dataset.n, btn.dataset.hex); return; }
+  if (act === 'scene-cnext')   { // pastille palette : remplit C1, puis C2 en dégradé
+    const sc = _sceneOf();
+    const ok = v => /^#[0-9a-fA-F]{6}$/.test(v || '');
+    if (sc.bgType === 'gradient' && ok(sc.c1)) _setSceneColor('2', btn.dataset.hex);
+    else _setSceneColor('1', btn.dataset.hex);
+    return;
+  }
   if (act === 'scene-media')     { _pickTarget = 'scene-media'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'scene-media-del') { _deleteSceneMedia(); return; }
   if (act === 'sym-del')       { _deleteSymbol(parseInt(btn.dataset.idx, 10)); return; }
@@ -637,6 +644,12 @@ function _onInput(e) {
   // ── Planche d'ambiance (KB-9) : titre + paragraphe, saisis en place ──
   if (el.dataset.field === 'bd-title') { _boardOf().title = el.value.slice(0, 80); _scheduleSave(); }
   if (el.dataset.field === 'bd-text')  { _boardOf().text = el.value.slice(0, 500); _scheduleSave(); }
+
+  // ── Scène (KB-8) : saisie hex en ligne — commit à 6 caractères valides.
+  if (el.dataset.field === 'scene-hex1' || el.dataset.field === 'scene-hex2') {
+    const m = el.value.trim().match(/^#?([0-9a-fA-F]{6})$/);
+    if (m) _setSceneColor(el.dataset.field.endsWith('2') ? '2' : '1', '#' + m[1]);
+  }
 
   // ── Identité & ton de voix (KB-13) ──
   if (el.dataset.field === 'id-mission') { _identityOf().mission = el.value.slice(0, 160); _scheduleSave(); }
@@ -2385,29 +2398,38 @@ function _renderBrandTab() {
   const chips = (defs, cur, act) => defs.map(([k, lbl]) =>
     `<button class="kb-chip ${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${lbl}</button>`).join('');
   const palette = _paletteOf().filter(c => c.hex);
-  const colorRow = (n, cur) => `
-    <div class="kb-scenegrp">
-      <span class="kb-scenelbl">Couleur ${n}</span>
-      ${palette.map(c => `<button class="kb-scenesw ${cur === c.hex ? 'on' : ''}" data-act="scene-c" data-n="${n}"
-        data-hex="${_esc(c.hex)}" style="background:${_esc(c.hex)}" title="${_esc(c.name || c.hex)}"></button>`).join('')}
-      <label class="kb-scenewheel" title="Autre couleur">${icon('palette', 13)}
-        <input type="color" data-field="scene-cw${n}" value="${_esc(cur || '#ffffff')}"></label>
-    </div>`;
-  const pickerRows =
-    s.bgType === 'color'    ? colorRow('1', s.c1) :
-    s.bgType === 'gradient' ? colorRow('1', s.c1) + colorRow('2', s.c2) :
-    (s.bgType === 'image' || s.bgType === 'video') ? `
-    <div class="kb-scenegrp">
-      <span class="kb-scenelbl">Média</span>
-      <button class="kb-btn" data-act="scene-media">${icon(s.bgType === 'video' ? 'film' : 'image', 15)} ${s.assetId ? 'Remplacer' : (s.bgType === 'video' ? 'Choisir une vidéo' : 'Choisir une photo')}</button>
-      ${s.assetId ? `<button class="kb-iconbtn danger" data-act="scene-media-del" title="Retirer le média">${icon('trash-2', 15)}</button>` : ''}
-      <span class="kb-scenehint">${s.bgType === 'video' ? '4 Mo max — boucle courte, muette' : '4 Mo max'}</span>
-    </div>` : '';
+
+  // La zone de complétion s'ouvre EN LIGNE, à droite de la pill active
+  // (retour Stéphane : pas de rangée en dessous). Hex d'abord, palette ensuite.
+  const hexSlot = (n, val) => `
+    <span class="kb-hexslot">
+      <input class="kb-hexmini" data-field="scene-hex${n}" value="${_esc(val || '')}"
+             placeholder="#0055aa" maxlength="7" spellcheck="false" aria-label="Couleur ${n} (hex)">
+      <label class="kb-scenewheel" title="Roue chromatique">${icon('palette', 12)}
+        <input type="color" data-field="scene-cw${n}" value="${_esc(val || '#ffffff')}"></label>
+    </span>`;
+  const fillZone = (() => {
+    if (s.bgType === 'color' || s.bgType === 'gradient') {
+      const sws = palette.map(c => `<button class="kb-scenesw ${(s.c1 === c.hex || (s.bgType === 'gradient' && s.c2 === c.hex)) ? 'on' : ''}"
+        data-act="scene-cnext" data-hex="${_esc(c.hex)}" style="background:${_esc(c.hex)}" title="${_esc(c.name || c.hex)}"></button>`).join('');
+      return `<span class="kb-scenefill">${hexSlot('1', s.c1)}${s.bgType === 'gradient' ? hexSlot('2', s.c2) : ''}${sws}</span>`;
+    }
+    if (s.bgType === 'image' || s.bgType === 'video') {
+      return `<span class="kb-scenefill">
+        <button class="kb-fillbtn" data-act="scene-media">${icon(s.bgType === 'video' ? 'film' : 'image', 14)} ${s.assetId ? 'Remplacer' : (s.bgType === 'video' ? 'Choisir une vidéo' : 'Choisir une photo')}</button>
+        <span class="kb-scenehint">${s.bgType === 'video' ? '4 Mo max · muette, en boucle' : '4 Mo max'}</span>
+        ${s.assetId ? `<button class="kb-iconbtn danger kb-filldel" data-act="scene-media-del" title="Retirer le média">${icon('trash-2', 14)}</button>` : ''}
+      </span>`;
+    }
+    return '';
+  })();
+  const bgChips = SCENE_BG_TYPES.map(([k, lbl]) =>
+    `<button class="kb-chip ${s.bgType === k ? 'on' : ''}" data-act="scene-bgtype" data-v="${k}">${lbl}</button>` +
+    (s.bgType === k ? fillZone : '')).join('');
 
   const sceneBar = `
     <div class="kb-scenebar">
-      <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${chips(SCENE_BG_TYPES, s.bgType, 'scene-bgtype')}</div>
-      ${pickerRows}
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${bgChips}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Tempo</span>${chips(SCENE_DURS.map(([k, l]) => [k, l]), s.dur, 'scene-dur')}</div>
