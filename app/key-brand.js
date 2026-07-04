@@ -162,6 +162,15 @@ const SCENE_DURS = [          // multiplicateur de durée des motions (--kb-mo)
   ['normal', 'Posé',  1],
   ['slow',   'Ample', 1.8],
 ];
+// KB-9 — planche d'ambiance : gabarits de collage (cellules photo/vidéo
+// + médaillon rond imbriqué par cellule, positionné au clic).
+const BOARD_TPLS = [
+  ['duo',     'Duo',      ['a', 'b']],
+  ['atelier', 'Atelier',  ['a', 'b', 'c']],   // 2 carrés + pleine largeur (la capture)
+  ['galerie', 'Galerie',  ['a', 'b', 'c']],   // grande à gauche + 2 empilées
+  ['mosaic',  'Mosaïque', ['a', 'b', 'c', 'd']],
+  ['pano',    'Panorama', ['a']],
+];
 const KB_SYM_MAX = 8;       // annotations de symbolique max
 const KB_PHOTO_MAX = 6;     // exemples photo max (cap brief)
 
@@ -408,6 +417,10 @@ function _onClick(e) {
   const symCanvas = e.target.closest('[data-slot="sym-canvas"]');
   if (symCanvas && !e.target.closest('[data-act]')) { _addSymbolAt(symCanvas, e); return; }
 
+  // Planche d'ambiance (KB-9) : clic sur la photo d'une cellule → place le médaillon.
+  const bdCell = e.target.closest('[data-slot="bd-cell"]');
+  if (bdCell && !e.target.closest('[data-act]')) { _placeBoardMed(bdCell, e); return; }
+
   const btn = e.target.closest('[data-act]');
   if (!btn || !_root.contains(btn)) return;
   const act = btn.dataset.act;
@@ -467,6 +480,13 @@ function _onClick(e) {
   if (act === 'sym-del')       { _deleteSymbol(parseInt(btn.dataset.idx, 10)); return; }
   if (act === 'ph-add')        { _pickTarget = 'photo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'ph-del')        { _deletePhoto(btn.dataset.aid); return; }
+  // ── Planche d'ambiance (KB-9) ──
+  const slot = btn.closest('[data-cell]')?.dataset.cell;
+  if (act === 'board-tpl')            { const bd = _boardOf(); bd.template = btn.dataset.v; _scheduleSave(); _renderChart(); return; }
+  if (act === 'bd-cell-add' && slot)  { _pickTarget = { bdCell: slot }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'bd-cell-del' && slot)  { _deleteBoardCell(slot); return; }
+  if (act === 'bd-med-add' && slot)   { _pickTarget = { bdMed: slot }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'bd-med-del' && slot)   { _deleteBoardMed(slot); return; }
 
   // ── Onglet Règles (KB-4) ──
   const rid = btn.closest('[data-rid]')?.dataset.rid;
@@ -583,6 +603,10 @@ function _onInput(e) {
     if (card) card.querySelectorAll('[data-slot="spec-title"],[data-slot="spec-body"]').forEach(s => { s.style.fontFamily = _famCss(f); });
   }
   if (el.dataset.field === 'f-buy' && f)    { f.buyUrl = el.value.slice(0, 200) || null; _scheduleSave(); }
+
+  // ── Planche d'ambiance (KB-9) : titre + paragraphe, saisis en place ──
+  if (el.dataset.field === 'bd-title') { _boardOf().title = el.value.slice(0, 80); _scheduleSave(); }
+  if (el.dataset.field === 'bd-text')  { _boardOf().text = el.value.slice(0, 500); _scheduleSave(); }
 
   // ── Onglet Règles (KB-4) ──
   if (el.dataset.field === 'rc-label') {
@@ -1005,6 +1029,17 @@ async function _onFilesPicked(fileList) {
   if (_pickTarget === 'scene-media') {
     _pickTarget = 'logo';
     await _onSceneMediaPicked(fileList[0]);
+    return;
+  }
+  // Cibles « planche d'ambiance » (KB-9) : cellule (photo/vidéo) ou médaillon (photo).
+  if (_pickTarget && _pickTarget.bdCell) {
+    const target = _pickTarget; _pickTarget = 'logo';
+    await _onBoardCellPicked(fileList[0], target.bdCell);
+    return;
+  }
+  if (_pickTarget && _pickTarget.bdMed) {
+    const target = _pickTarget; _pickTarget = 'logo';
+    await _onBoardMedPicked(fileList[0], target.bdMed);
     return;
   }
   const files = [...fileList];
@@ -2010,6 +2045,75 @@ function _deleteSceneMedia() {
   _scheduleSave(); _renderChart();
 }
 
+// ── KB-9 : planche d'ambiance (collage gabarits + médaillons ronds) ──
+function _boardOf() {
+  const b = _brandSection();
+  if (!b.board || typeof b.board !== 'object') b.board = {};
+  const bd = b.board;
+  if (!BOARD_TPLS.some(([k]) => k === bd.template)) bd.template = 'atelier';
+  if (typeof bd.title !== 'string') bd.title = '';
+  if (typeof bd.text !== 'string')  bd.text = '';
+  if (!bd.cells || typeof bd.cells !== 'object') bd.cells = {};
+  return bd;
+}
+function _boardSlots() { return BOARD_TPLS.find(([k]) => k === _boardOf().template)[2]; }
+async function _onBoardCellPicked(file, slot) {
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const isVideo = ['mp4', 'webm'].includes(ext);
+  if (!isVideo && !['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast('Photo (PNG, JPG, WebP) ou vidéo (MP4, WebM) attendue.'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast(isVideo ? 'Vidéo trop lourde (max 4 Mo) — boucle courte compressée.' : 'Image trop lourde (max 4 Mo).'); return; }
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    const cells = _boardOf().cells;
+    const prev = cells[slot];
+    if (prev?.assetId) { _api(`/assets/${encodeURIComponent(prev.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+    cells[slot] = { assetId: asset.id, video: isVideo, med: prev?.med || null };
+    _scheduleSave(); _renderChart();
+  } catch (e) { _toast(e.message); }
+}
+async function _onBoardMedPicked(file, slot) {
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast('Photo attendue pour le médaillon (PNG, JPG, WebP).'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast('Image trop lourde (max 4 Mo).'); return; }
+  const cell = _boardOf().cells[slot];
+  if (!cell?.assetId) return;
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    if (cell.med?.assetId) { _api(`/assets/${encodeURIComponent(cell.med.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+    cell.med = { assetId: asset.id, x: 0.5, y: 0.5 };
+    _scheduleSave(); _renderChart();
+    _toast('Cliquez sur l\'image pour placer le médaillon.');
+  } catch (e) { _toast(e.message); }
+}
+function _deleteBoardCell(slot) {
+  const cells = _boardOf().cells;
+  const c = cells[slot];
+  if (!c) return;
+  if (c.assetId)      { _api(`/assets/${encodeURIComponent(c.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  if (c.med?.assetId) { _api(`/assets/${encodeURIComponent(c.med.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  delete cells[slot];
+  _scheduleSave(); _renderChart();
+}
+function _deleteBoardMed(slot) {
+  const c = _boardOf().cells[slot];
+  if (!c?.med) return;
+  if (c.med.assetId) { _api(`/assets/${encodeURIComponent(c.med.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  c.med = null;
+  _scheduleSave(); _renderChart();
+}
+// Clic sur la photo d'une cellule → repositionne son médaillon (fractions x/y).
+function _placeBoardMed(cellEl, e) {
+  const slot = cellEl.dataset.cell;
+  const c = _boardOf().cells[slot];
+  if (!c?.med) return;
+  const rect = cellEl.getBoundingClientRect();
+  c.med.x = +Math.min(0.94, Math.max(0.06, (e.clientX - rect.left) / rect.width)).toFixed(3);
+  c.med.y = +Math.min(0.92, Math.max(0.08, (e.clientY - rect.top) / rect.height)).toFixed(3);
+  _scheduleSave(); _renderChart();
+}
+
 function _setMotion(key) {
   if (!MOTIONS.some(([k]) => k === key)) return;
   _brandSection().motion = key;
@@ -2174,7 +2278,35 @@ function _renderBrandTab() {
       ${symList}
     </section>` : '';
 
-  // ── Direction photo ──
+  // ── Planche d'ambiance (KB-9) + direction photo fusionnée ──
+  const bd = _boardOf();
+  const tplChips = BOARD_TPLS.map(([k, lbl]) =>
+    `<button class="kb-chip ${bd.template === k ? 'on' : ''}" data-act="board-tpl" data-v="${k}">${lbl}</button>`).join('');
+  const cellHtml = _boardSlots().map(sl => {
+    const c = bd.cells[sl];
+    if (!c?.assetId) return `
+      <button class="kb-bd-cell is-empty" data-slot="bd-cell" data-cell="${sl}" data-act="bd-cell-add" title="Photo ou vidéo (4 Mo max)">
+        ${icon('image', 20)}<span>Photo ou vidéo</span>
+      </button>`;
+    const media = c.video
+      ? `<video data-asset="${_esc(c.assetId)}" muted loop autoplay playsinline></video>`
+      : `<img data-asset="${_esc(c.assetId)}" alt="" draggable="false">`;
+    const med = c.med?.assetId ? `
+      <span class="kb-bd-med" style="left:${(c.med.x * 100).toFixed(1)}%;top:${(c.med.y * 100).toFixed(1)}%">
+        <img data-asset="${_esc(c.med.assetId)}" alt="" draggable="false">
+        <button class="kb-bd-med-del" data-act="bd-med-del" title="Retirer le médaillon">${icon('x', 12)}</button>
+      </span>` : '';
+    return `
+      <div class="kb-bd-cell ${c.med ? 'has-med' : ''}" data-slot="bd-cell" data-cell="${sl}">
+        ${media}${med}
+        <span class="kb-bd-tools">
+          ${c.med?.assetId ? '' : `<button data-act="bd-med-add" title="Imbriquer un médaillon rond">${icon('plus-circle', 15)}</button>`}
+          <button data-act="bd-cell-add" title="Remplacer">${icon('refresh', 14)}</button>
+          <button class="danger" data-act="bd-cell-del" title="Retirer">${icon('trash-2', 14)}</button>
+        </span>
+      </div>`;
+  }).join('');
+
   const photo = b.photo || { words: [], exampleAssetIds: [] };
   const words = [0, 1, 2].map(i => `
     <input class="kb-field-input kb-ph-word" data-field="ph-word" data-idx="${i}" value="${_esc(photo.words?.[i] || '')}"
@@ -2184,18 +2316,32 @@ function _renderBrandTab() {
       <img data-asset="${_esc(aid)}" alt="" draggable="false">
       <button class="kb-iconbtn danger" data-act="ph-del" data-aid="${_esc(aid)}" title="Retirer">${icon('trash-2', 14)}</button>
     </figure>`).join('');
-  const photoBlock = `
+
+  const boardBlock = `
     <section class="kb-lab">
-      <h3 class="kb-lab-title">Direction photographique</h3>
-      <p class="kb-hint">Le style d'images de la marque en trois mots, et quelques exemples qui donnent le ton (${KB_PHOTO_MAX} max — ce n'est pas une photothèque).</p>
-      <div class="kb-ph-words">${words}</div>
-      <div class="kb-ph-grid">
-        ${examples}
-        ${(photo.exampleAssetIds || []).length < KB_PHOTO_MAX ? `<button class="kb-ph-add" data-act="ph-add" title="Ajouter des exemples">${icon('plus', 18)}</button>` : ''}
+      <h3 class="kb-lab-title">Planche d'ambiance & direction photo</h3>
+      <p class="kb-hint">Composez l'atmosphère : un gabarit, vos photos ou boucles vidéo, et un médaillon rond imbriqué par image (posé au clic). Le style en trois mots légende la planche.</p>
+      <div class="kb-scenegrp kb-bd-tplrow"><span class="kb-scenelbl">Gabarit</span>${tplChips}</div>
+      <div class="kb-board">
+        <div class="kb-bd-txt">
+          <input class="kb-bd-title" data-field="bd-title" value="${_esc(bd.title)}" maxlength="80"
+                 placeholder="Textures et atmosphère" spellcheck="false" ${titleFont ? `style="font-family:${titleFont}"` : ''}>
+          <textarea class="kb-bd-text" data-field="bd-text" maxlength="500" rows="6" spellcheck="false"
+                    placeholder="Ce que les images doivent raconter — matières, lumière, émotions…">${_esc(bd.text)}</textarea>
+          <div class="kb-ph-words">${words}</div>
+        </div>
+        <div class="kb-bd-grid tpl-${_esc(bd.template)}">${cellHtml}</div>
+      </div>
+      <div class="kb-bd-examples">
+        <p class="kb-hint">Exemples en vrac (${KB_PHOTO_MAX} max — ce n'est pas une photothèque).</p>
+        <div class="kb-ph-grid">
+          ${examples}
+          ${(photo.exampleAssetIds || []).length < KB_PHOTO_MAX ? `<button class="kb-ph-add" data-act="ph-add" title="Ajouter des exemples">${icon('plus', 18)}</button>` : ''}
+        </div>
       </div>
     </section>`;
 
-  return `<div class="kb-brand">${stage}${symbolique}${photoBlock}</div>`;
+  return `<div class="kb-brand">${stage}${boardBlock}${symbolique}</div>`;
 }
 
 // ════════════════════════════════════════════════════════════════

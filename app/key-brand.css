@@ -538,6 +538,43 @@
 .kb-scenewheel input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .kb-scenehint{font-size:11.5px;color:var(--kb-muted)}
 
+/* ══ Planche d'ambiance (KB-9) — collage gabarits + médaillons ronds ══ */
+.kb-bd-tplrow{margin:12px 0}
+.kb-board{display:grid;grid-template-columns:minmax(200px,.85fr) 2.15fr;gap:18px;align-items:start}
+.kb-bd-txt{display:flex;flex-direction:column;gap:10px;padding-top:4px}
+.kb-bd-title{border:none;background:transparent;color:var(--kb-ink);font-weight:900;font-size:22px;letter-spacing:-0.02em;padding:2px 0;width:100%}
+.kb-bd-title:focus{outline:none}
+.kb-bd-title::placeholder{color:var(--kb-muted);opacity:.55}
+.kb-bd-text{border:none;background:transparent;color:var(--kb-muted);font:inherit;font-size:13.5px;line-height:1.55;resize:vertical;min-height:96px;padding:0;width:100%}
+.kb-bd-text:focus{outline:none;color:var(--kb-ink)}
+.kb-bd-text::placeholder{color:var(--kb-muted);opacity:.55}
+.kb-bd-txt .kb-ph-words{margin:2px 0 0;flex-direction:column;align-items:stretch}
+.kb-bd-txt .kb-ph-word{max-width:none}
+.kb-bd-grid{display:grid;gap:12px}
+.kb-bd-grid.tpl-duo{grid-template-columns:1fr 1fr}
+.kb-bd-grid.tpl-atelier{grid-template-columns:1fr 1fr}
+.kb-bd-grid.tpl-atelier [data-cell="c"]{grid-column:1/-1;aspect-ratio:21/9}
+.kb-bd-grid.tpl-galerie{grid-template-columns:2fr 1fr;grid-auto-rows:minmax(120px,19vh)}
+.kb-bd-grid.tpl-galerie .kb-bd-cell{aspect-ratio:auto}
+.kb-bd-grid.tpl-galerie [data-cell="a"]{grid-row:span 2}
+.kb-bd-grid.tpl-mosaic{grid-template-columns:1fr 1fr}
+.kb-bd-grid.tpl-pano{grid-template-columns:1fr}
+.kb-bd-grid.tpl-pano [data-cell="a"]{aspect-ratio:21/8}
+.kb-bd-cell{position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;border:1px solid var(--kb-line);background:var(--kb-panel);padding:0}
+.kb-bd-cell img,.kb-bd-cell video{width:100%;height:100%;object-fit:cover;display:block}
+.kb-bd-cell.has-med{cursor:crosshair}
+.kb-bd-cell.is-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-style:dashed;color:var(--kb-muted);font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
+.kb-bd-cell.is-empty:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
+.kb-bd-med{position:absolute;transform:translate(-50%,-50%);width:44%;aspect-ratio:1;border-radius:50%;overflow:hidden;box-shadow:0 4px 22px rgba(0,0,0,.28);pointer-events:none}
+.kb-bd-med img{width:100%;height:100%;object-fit:cover}
+.kb-bd-med-del{position:absolute;top:6%;right:6%;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .15s;pointer-events:auto}
+.kb-bd-cell:hover .kb-bd-med-del{opacity:1}
+.kb-bd-tools{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .15s}
+.kb-bd-cell:hover .kb-bd-tools{opacity:1}
+.kb-bd-tools button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.9);color:#3a3f4a;cursor:pointer}
+.kb-bd-tools button.danger{color:var(--ws-danger)}
+.kb-bd-examples{margin-top:18px}
+
 .kb-motions{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:14px 0 6px}
 .kb-motion{display:flex;flex-direction:column;gap:2px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:12px;color:var(--kb-ink);padding:11px 12px;cursor:pointer;text-align:left;transition:border-color .15s}
 .kb-motion:hover{border-color:var(--kb-accent)}
@@ -615,6 +652,9 @@
   .kb-vis-fields{grid-template-columns:1fr 1fr}
   .kb-color-acts{opacity:1} /* pas de hover au doigt */
   .kb-type-toolbar{flex-direction:column;align-items:stretch}
+  .kb-board{grid-template-columns:1fr}
+  .kb-bd-tools,.kb-bd-med-del{opacity:1} /* pas de hover au doigt */
+  .kb-scenelbl{width:100%}
   .kb-font-head{flex-direction:column}
   .kb-font-items{grid-template-columns:1fr 1fr;max-height:220px}
 }

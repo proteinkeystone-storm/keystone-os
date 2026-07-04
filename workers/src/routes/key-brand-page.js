@@ -203,8 +203,28 @@ select::-ms-expand{display:none}
 .sym-list .n{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .phwords{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .phword{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;font-size:13.5px;font-weight:600}
-.phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:16px}
 .phgrid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+
+/* Planche d'ambiance (KB-9) */
+.bboard{display:grid;gap:18px;align-items:start;margin-top:6px}
+.bboard.has-txt{grid-template-columns:minmax(190px,.85fr) 2.15fr}
+.bb-txt .phwords{flex-direction:column;align-items:flex-start}
+.bb-title{font-weight:900;font-size:clamp(20px,2.6vw,26px);letter-spacing:-0.02em;margin:0 0 10px;line-height:1.15}
+.bb-text{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 14px;white-space:pre-line}
+.bb-grid{display:grid;gap:12px}
+.bb-grid.tpl-duo,.bb-grid.tpl-atelier,.bb-grid.tpl-mosaic{grid-template-columns:1fr 1fr}
+.bb-grid.tpl-atelier [data-cell="c"]{grid-column:1/-1;aspect-ratio:21/9}
+.bb-grid.tpl-galerie{grid-template-columns:2fr 1fr;grid-auto-rows:minmax(120px,20vh)}
+.bb-grid.tpl-galerie .bb-cell{aspect-ratio:auto}
+.bb-grid.tpl-galerie [data-cell="a"]{grid-row:span 2}
+.bb-grid.tpl-pano{grid-template-columns:1fr}
+.bb-grid.tpl-pano [data-cell="a"]{aspect-ratio:21/8}
+.bb-cell{position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.bb-cell img,.bb-cell video{width:100%;height:100%;object-fit:cover;display:block}
+.bb-med{position:absolute;transform:translate(-50%,-50%);width:44%;aspect-ratio:1;border-radius:50%;overflow:hidden;box-shadow:0 4px 22px rgba(0,0,0,.28)}
+.bb-med img{width:100%;height:100%;object-fit:cover}
+@media (max-width:640px){.bboard.has-txt{grid-template-columns:1fr}}
 
 /* Changelog + footer + états */
 details.chlog{margin-top:10px}
@@ -493,10 +513,31 @@ function render(){
     h+='</section>';
   }
 
-  // Direction photo
-  if(phWords.length||phIds.length){
-    h+='<section id="photo"><h2>Direction photographique</h2>';
-    if(phWords.length){h+='<div class="phwords">';for(const w of phWords)h+='<span class="phword">'+esc(w)+'</span>';h+='</div>'}
+  // Direction photo & planche d'ambiance (KB-9)
+  const BD=(kit.branding&&kit.branding.board)||{};
+  const BD_SLOTS={duo:['a','b'],atelier:['a','b','c'],galerie:['a','b','c'],mosaic:['a','b','c','d'],pano:['a']};
+  const bdTpl=BD_SLOTS[BD.template]?BD.template:'atelier';
+  const bdCells=BD_SLOTS[bdTpl].map(sl=>[sl,BD.cells&&BD.cells[sl]]).filter(p=>p[1]&&p[1].assetId);
+  const wordChips=phWords.length?'<div class="phwords">'+phWords.map(w=>'<span class="phword">'+esc(w)+'</span>').join('')+'</div>':'';
+  if(bdCells.length||phWords.length||phIds.length){
+    h+='<section id="photo"><h2>Direction photographique</h2><p class="sub">L\\'atmosphère visuelle de la marque.</p>';
+    if(bdCells.length){
+      const hasTxt=!!(BD.title||BD.text||phWords.length);
+      h+='<div class="bboard'+(hasTxt?' has-txt':'')+'">';
+      if(hasTxt){
+        h+='<div class="bb-txt">'+
+           (BD.title?'<h3 class="bb-title"'+(titleFont?' style="font-family:\\''+esc(titleFont.family)+'\\',sans-serif"':'')+'>'+esc(BD.title)+'</h3>':'')+
+           (BD.text?'<p class="bb-text">'+esc(BD.text)+'</p>':'')+wordChips+'</div>';
+      }
+      h+='<div class="bb-grid tpl-'+esc(bdTpl)+'">';
+      for(const[sl,c]of bdCells){
+        h+='<div class="bb-cell" data-cell="'+sl+'">'+
+           (c.video?'<video src="'+fileUrl(c.assetId)+'" muted loop autoplay playsinline></video>':'<img src="'+fileUrl(c.assetId)+'" alt="" loading="lazy">');
+        if(c.med&&c.med.assetId)h+='<span class="bb-med" style="left:'+(+c.med.x*100).toFixed(1)+'%;top:'+(+c.med.y*100).toFixed(1)+'%"><img src="'+fileUrl(c.med.assetId)+'" alt=""></span>';
+        h+='</div>';
+      }
+      h+='</div></div>';
+    } else if(phWords.length){h+=wordChips}
     if(phIds.length){h+='<div class="phgrid">';for(const id of phIds)h+='<img src="'+fileUrl(id)+'" alt="" loading="lazy">';h+='</div>'}
     h+='</section>';
   }
