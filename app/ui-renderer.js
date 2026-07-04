@@ -5725,9 +5725,11 @@ function _padReadoutData(id, m) {
             const v = +m.keybrandCharts || 0;
             if (v <= 0) return null;
             const pub = +m.keybrandPublished || 0;
+            // Sous-texte : ne PAS répéter le nombre déjà affiché en gros.
+            // Toutes en ligne → « en ligne » ; partiel → « K en ligne » ; aucune → « de marque ».
+            const sub = pub <= 0 ? 'de marque' : (pub >= v ? 'en ligne' : pub + ' en ligne');
             return { label: v > 1 ? 'Chartes' : 'Charte', num: String(v),
-                     sub: pub > 0 ? (pub > 1 ? pub + ' en ligne' : '1 en ligne') : 'de marque',
-                     signal: 0, quiet: true };
+                     sub, signal: 0, quiet: true };
         }
         case 'A-COM-002': {                       // Brief Prod — briefs en biblio Kodex
             // Inventaire (pas un signal d'action) → readout informatif quiet,

@@ -79,7 +79,10 @@
 .kb-baseline-input:focus{border-bottom-color:var(--kb-accent)}
 
 /* ── Onglets ── */
-.kb-tabs{display:flex;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--kb-line);overflow-x:auto;scrollbar-width:none}
+/* touch-action:pan-x → un glissement vertical du doigt SUR la barre scrolle
+   la page (pas la barre) ; overscroll-behavior-x → pas de rubber-band chaîné.
+   Sans ça, sur mobile la barre débordante « accroche » le geste et flotte. */
+.kb-tabs{display:flex;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--kb-line);overflow-x:auto;scrollbar-width:none;touch-action:pan-x;overscroll-behavior-x:contain}
 .kb-tabs::-webkit-scrollbar{display:none}
 .kb-tab{display:inline-flex;align-items:center;gap:7px;background:none;border:0;border-bottom:2px solid transparent;color:var(--kb-muted);font-weight:600;font-size:14px;padding:10px 12px;margin-bottom:-1px;cursor:pointer;white-space:nowrap;transition:color .15s}
 .kb-tab:hover{color:var(--kb-ink)}
