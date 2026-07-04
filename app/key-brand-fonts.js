@@ -122,10 +122,47 @@ export function ensureFontLoaded(family, axis) {
   document.head.appendChild(link);
 }
 
+/** URL des VRAIES italiques (faces ital=1) — pas d'oblique synthétique. */
+export function fontItalicHref(family, axis) {
+  const fam = encodeURIComponent(family).replace(/%20/g, '+');
+  let spec;
+  if (!axis || axis === '400')      spec = ':ital@1';
+  else if (axis.includes('..'))     spec = `:ital,wght@1,${axis}`;
+  else                              spec = ':ital,wght@' + axis.split(';').map(w => `1,${w}`).join(';');
+  return `https://fonts.googleapis.com/css2?family=${fam}${spec}&display=swap`;
+}
+
+/** Charge les italiques d'une famille à la demande (au 1er clic sur « italique »). */
+export function ensureFontItalic(family, axis) {
+  const id = 'kb-fonti-' + family.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = fontItalicHref(family, axis);
+  document.head.appendChild(link);
+}
+
 /** Page officielle (téléchargement légal + licence). */
 export function fontSpecimenUrl(family) {
   return `https://fonts.google.com/specimen/${encodeURIComponent(family).replace(/%20/g, '+')}`;
 }
+
+// ── Générateurs de spécimen (fr, textes originaux) ──
+// Titres courts (rôle Titrage) + paragraphes (rôle Texte courant), cyclés ensemble.
+export const TITLE_SAMPLES = [
+  'Une identité qui se remarque',
+  'L\'art du détail juste',
+  'Créer, révéler, durer',
+  'Le style à l\'état pur',
+  'Votre marque, en majesté',
+];
+export const BODY_SAMPLES = [
+  'Depuis sa création, la maison cultive un savoir-faire précis et une exigence tranquille. Chaque projet avance au rythme du soin qu\'on lui porte, sans jamais rien céder à la facilité.',
+  'Une bonne typographie se remarque à peine : elle guide l\'œil, installe le ton et laisse le message respirer. C\'est là tout son travail, discret et décisif.',
+  'Réservez dès aujourd\'hui et découvrez une sélection pensée pour durer. Nos équipes vous accompagnent, du premier échange jusqu\'à la livraison finale.',
+  'Les mots comptent, leur forme aussi. En choisissant vos polices avec soin, vous donnez à votre marque une voix reconnaissable au premier regard.',
+  'Zéphyr, ambigu, jonquille, kiwi : quelques mots pour voir vivre les accents, les ligatures et la ponctuation — 0123456789 & @ €.',
+];
 
 // ── Générateur de phrases du spécimen (fr) ──
 export const TYPE_SAMPLES = [
