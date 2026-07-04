@@ -182,6 +182,15 @@ const SUPPORT_DEFS = [
   ['social', 'Réseaux sociaux'],
 ];
 const KB_GALLERY_MAX = 8;   // photos de réalisations max
+// KB-13 — identité de marque & ton de voix (audit référentiel Canva :
+// « présentation » et « identité verbale » manquaient). Tout déclaratif.
+const VOICE_REGS = [
+  ['',                'Non défini'],
+  ['vous-sobre',      'Vouvoiement, sobre'],
+  ['vous-chaleureux', 'Vouvoiement, chaleureux'],
+  ['tu-complice',     'Tutoiement, complice'],
+  ['tu-direct',       'Tutoiement, direct'],
+];
 
 // ── Publication (KB-6) ──
 let _pubPanel = false;      // panneau « Partager » ouvert
@@ -503,6 +512,8 @@ function _onClick(e) {
   if (act === 'sup-shot-del') { _deleteSupportShot(btn.dataset.k); return; }
   if (act === 'sup-gal-add')  { _pickTarget = 'sup-gallery'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'sup-gal-del')  { _deleteGalleryItem(btn.dataset.aid); return; }
+  // ── Ton de voix (KB-13) ──
+  if (act === 'vo-reg')    { _identityOf().voice.reg = btn.dataset.v || ''; _scheduleSave(); _renderChart(); return; }
   // ── Édition publiée (KB-12) ──
   if (act === 'pub-mode')  { _pubThemeOf().mode = btn.dataset.v === 'dark' ? 'dark' : 'light'; _scheduleSave(); _renderChart(); return; }
   if (act === 'pub-tint')  { _pubThemeOf().tint = btn.dataset.hex || null; _scheduleSave(); _renderChart(); return; }
@@ -626,6 +637,21 @@ function _onInput(e) {
   // ── Planche d'ambiance (KB-9) : titre + paragraphe, saisis en place ──
   if (el.dataset.field === 'bd-title') { _boardOf().title = el.value.slice(0, 80); _scheduleSave(); }
   if (el.dataset.field === 'bd-text')  { _boardOf().text = el.value.slice(0, 500); _scheduleSave(); }
+
+  // ── Identité & ton de voix (KB-13) ──
+  if (el.dataset.field === 'id-mission') { _identityOf().mission = el.value.slice(0, 160); _scheduleSave(); }
+  if (el.dataset.field === 'id-story')   { _identityOf().story = el.value.slice(0, 600); _scheduleSave(); }
+  if (el.dataset.field === 'id-value') {
+    const i = parseInt(el.dataset.idx, 10);
+    if (i >= 0 && i < 5) { _identityOf().values[i] = el.value.slice(0, 24); _scheduleSave(); }
+  }
+  if (el.dataset.field === 'vo-principle') {
+    const i = parseInt(el.dataset.idx, 10);
+    if (i >= 0 && i < 3) { _identityOf().voice.principles[i] = el.value.slice(0, 80); _scheduleSave(); }
+  }
+  if (el.dataset.field === 'vo-use')     { _identityOf().voice.use = el.value.slice(0, 160); _scheduleSave(); }
+  if (el.dataset.field === 'vo-avoid')   { _identityOf().voice.avoid = el.value.slice(0, 160); _scheduleSave(); }
+  if (el.dataset.field === 'vo-example') { _identityOf().voice.example = el.value.slice(0, 240); _scheduleSave(); }
 
   // ── Onglet Supports (KB-11) : domaine + carte de visite ──
   // Mise à jour chirurgicale du mockup (re-render = focus perdu en pleine frappe).
@@ -2157,6 +2183,23 @@ function _deleteBoardMed(slot) {
   c.med = null;
   _scheduleSave(); _renderChart();
 }
+// ── KB-13 : identité de marque & ton de voix ──
+function _identityOf() {
+  if (!_chart.draft.identity || typeof _chart.draft.identity !== 'object') _chart.draft.identity = {};
+  const idn = _chart.draft.identity;
+  if (typeof idn.mission !== 'string') idn.mission = '';
+  if (typeof idn.story !== 'string')   idn.story = '';
+  if (!Array.isArray(idn.values))      idn.values = [];
+  if (!idn.voice || typeof idn.voice !== 'object') idn.voice = {};
+  const v = idn.voice;
+  if (!VOICE_REGS.some(([k]) => k === v.reg)) v.reg = '';
+  if (!Array.isArray(v.principles)) v.principles = [];
+  if (typeof v.use !== 'string')     v.use = '';
+  if (typeof v.avoid !== 'string')   v.avoid = '';
+  if (typeof v.example !== 'string') v.example = '';
+  return idn;
+}
+
 // ── KB-11 : supports de communication (mockups auto-composés) ──
 function _supportsOf() {
   if (!_chart.draft.supports || typeof _chart.draft.supports !== 'object') _chart.draft.supports = {};
@@ -2407,6 +2450,44 @@ function _renderBrandTab() {
       ${symList}
     </section>` : '';
 
+  // ── Identité de marque & ton de voix (KB-13) ──
+  const idn = _identityOf();
+  const vo = idn.voice;
+  const identityBlock = `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">L'identité de marque</h3>
+      <p class="kb-hint">Ce que la marque est — la charte publiée s'ouvre là-dessus. Tout est facultatif : seul le rempli s'affiche.</p>
+      <label class="kb-field-label">Mission
+        <input class="kb-field-input" data-field="id-mission" value="${_esc(idn.mission)}" maxlength="160"
+               placeholder="Ce que la marque fait, pour qui — en une phrase." spellcheck="false"></label>
+      <label class="kb-field-label">Valeurs (5 max)</label>
+      <div class="kb-id-values">${[0, 1, 2, 3, 4].map(i => `
+        <input class="kb-field-input" data-field="id-value" data-idx="${i}" value="${_esc(idn.values[i] || '')}"
+               maxlength="24" placeholder="${['ex. exigence', 'ex. proximité', 'ex. audace', '', ''][i] || ''}" spellcheck="false">`).join('')}</div>
+      <label class="kb-field-label">L'histoire
+        <textarea class="kb-field-input kb-id-story" data-field="id-story" maxlength="600" rows="3"
+                  placeholder="D'où vient la marque, en quelques lignes." spellcheck="false">${_esc(idn.story)}</textarea></label>
+    </section>
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">Le ton de voix</h3>
+      <p class="kb-hint">L'identité verbale — comment la marque parle, partout.</p>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Registre</span>
+        ${VOICE_REGS.map(([k, lbl]) => `<button class="kb-chip ${vo.reg === k ? 'on' : ''}" data-act="vo-reg" data-v="${k}">${lbl}</button>`).join('')}</div>
+      <label class="kb-field-label">Trois principes d'écriture</label>
+      <div class="kb-id-values kb-vo-principles">${[0, 1, 2].map(i => `
+        <input class="kb-field-input" data-field="vo-principle" data-idx="${i}" value="${_esc(vo.principles[i] || '')}"
+               maxlength="80" placeholder="${['ex. des phrases courtes', 'ex. concret avant tout', 'ex. jamais de jargon'][i]}" spellcheck="false">`).join('')}</div>
+      <div class="kb-vo-cols">
+        <label class="kb-field-label">Mots à privilégier
+          <input class="kb-field-input" data-field="vo-use" value="${_esc(vo.use)}" maxlength="160" placeholder="ex. atelier, savoir-faire, sur-mesure" spellcheck="false"></label>
+        <label class="kb-field-label">Mots à éviter
+          <input class="kb-field-input" data-field="vo-avoid" value="${_esc(vo.avoid)}" maxlength="160" placeholder="ex. pas cher, leader, révolutionnaire" spellcheck="false"></label>
+      </div>
+      <label class="kb-field-label">Une phrase, à la manière de la marque
+        <textarea class="kb-field-input" data-field="vo-example" maxlength="240" rows="2"
+                  placeholder="ex. « On prend le temps de bien faire — votre projet mérite mieux qu'un gabarit. »" spellcheck="false">${_esc(vo.example)}</textarea></label>
+    </section>`;
+
   // ── Planche d'ambiance (KB-9) + direction photo fusionnée ──
   const bd = _boardOf();
   const tplChips = BOARD_TPLS.map(([k, lbl]) =>
@@ -2470,7 +2551,7 @@ function _renderBrandTab() {
       </div>
     </section>`;
 
-  return `<div class="kb-brand">${stage}${boardBlock}${symbolique}</div>`;
+  return `<div class="kb-brand">${stage}${identityBlock}${boardBlock}${symbolique}</div>`;
 }
 
 // ════════════════════════════════════════════════════════════════

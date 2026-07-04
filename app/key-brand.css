@@ -576,6 +576,13 @@
 .kb-bd-tools button.danger{color:var(--ws-danger)}
 .kb-bd-examples{margin-top:18px}
 
+/* Identité de marque & ton de voix (KB-13). */
+.kb-id-values{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.kb-vo-principles{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.kb-vo-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+.kb-id-story{resize:vertical}
+@media (max-width:640px){.kb-vo-cols{grid-template-columns:1fr}}
+
 /* Mise en page de l'édition publiée (KB-12) — dans le panneau Partager. */
 .kb-pub-theme{border-top:1px solid var(--kb-line);margin-top:18px;padding-top:16px;display:flex;flex-direction:column;gap:10px}
 .kb-pub-theme h4{margin:0 0 2px;font-size:13.5px}

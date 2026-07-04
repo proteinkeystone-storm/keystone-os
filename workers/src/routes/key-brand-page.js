@@ -151,6 +151,22 @@ section>h2{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:up
 .cdot{width:clamp(104px,14vw,150px);aspect-ratio:1;border-radius:50%;border:0;cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
 .cinfo{display:flex;flex-direction:column;gap:9px;min-width:min(300px,100%)}
 .talpha{font-size:clamp(21px,3.2vw,32px);line-height:1.4;margin:20px 0 8px;word-break:break-word}
+
+/* La marque — intention & ton de voix (KB-13). */
+.idmission{font-weight:900;font-size:clamp(22px,3.4vw,34px);letter-spacing:-0.02em;line-height:1.25;margin:20px 0 18px;max-width:28ch}
+.idvals{margin:0 0 16px}
+.idstory{color:var(--muted);font-size:15px;line-height:1.7;max-width:62ch;white-space:pre-line;margin:0}
+.vo-reg{font-weight:800;font-size:15px;margin:16px 0 4px}
+.vo-list{margin:14px 0;padding:0;list-style:none;counter-reset:vo}
+.vo-list li{counter-increment:vo;font-size:15px;margin:9px 0;display:flex;gap:14px;align-items:baseline}
+.vo-list li::before{content:counter(vo,decimal-leading-zero);font-weight:800;color:var(--accent);font-size:13px}
+.vo-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+.vo-col{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--panel)}
+.vo-col b{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em}
+.vo-col.ok b{color:var(--ok)}.vo-col.ko b{color:var(--danger)}
+.vo-col p{margin:8px 0 0;font-size:14px;line-height:1.55}
+.vo-ex{margin:20px 0 0;padding:14px 22px;border-left:3px solid var(--accent);font-size:17px;font-style:italic}
+@media (max-width:560px){.vo-cols{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px}
 .hint{color:var(--muted);font-size:12.5px}
 .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .15s}
@@ -474,7 +490,17 @@ function render(){
   const TINTINK=inkOn(TINT);
   const TINTSOFT=TINTINK==='#fff'?'rgba(255,255,255,.55)':'rgba(0,0,0,.45)';
 
+  // Identité & ton de voix (KB-13) — le chapitre d'ouverture de l'édition.
+  const IDN=(kit.identity&&typeof kit.identity==='object')?kit.identity:{};
+  const IDV=(Array.isArray(IDN.values)?IDN.values:[]).filter(Boolean);
+  const VO=(IDN.voice&&typeof IDN.voice==='object')?IDN.voice:{};
+  const VOP=(Array.isArray(VO.principles)?VO.principles:[]).filter(Boolean);
+  const showIdent=!!(IDN.mission||IDV.length||IDN.story);
+  const showVoice=!!(VO.reg||VOP.length||VO.use||VO.avoid||VO.example);
+  const showMarque=showIdent||showVoice;
+
   const navLinks=[];
+  if(showMarque)navLinks.push(['#marque','La marque']);
   if(variants.length)navLinks.push(['#logo','Logotype']);
   if(palette.length)navLinks.push(['#couleurs','Couleurs']);
   if(fonts.length)navLinks.push(['#typos','Typographies']);
@@ -544,7 +570,30 @@ function render(){
     h+='</ol></div></div>';
   }
 
-  // Chapitre 01 — Logotype
+  // Chapitre — La marque (identité + ton de voix, KB-13)
+  if(showMarque){
+    h+=chap('marque','La marque');
+    if(showIdent){
+      h+='<section><h2>L\\'intention</h2>';
+      if(IDN.mission)h+='<p class="idmission"'+(titleFont?' style="font-family:\\''+esc(titleFont.family)+'\\',sans-serif"':'')+'>'+esc(IDN.mission)+'</p>';
+      if(IDV.length)h+='<div class="phwords idvals">'+IDV.map(v=>'<span class="phword">'+esc(v)+'</span>').join('')+'</div>';
+      if(IDN.story)h+='<p class="idstory">'+esc(IDN.story)+'</p>';
+      h+='</section>';
+    }
+    if(showVoice){
+      const REGL={'vous-sobre':'Vouvoiement, ton sobre','vous-chaleureux':'Vouvoiement, ton chaleureux','tu-complice':'Tutoiement, ton complice','tu-direct':'Tutoiement, ton direct'};
+      h+='<section><h2>Le ton de voix</h2><p class="sub">Comment la marque parle — partout, à tous.</p>';
+      if(REGL[VO.reg])h+='<p class="vo-reg">'+REGL[VO.reg]+'</p>';
+      if(VOP.length){h+='<ol class="vo-list">';for(const p of VOP)h+='<li>'+esc(p)+'</li>';h+='</ol>'}
+      if(VO.use||VO.avoid){h+='<div class="vo-cols">'+
+        (VO.use?'<div class="vo-col ok"><b>À privilégier</b><p>'+esc(VO.use)+'</p></div>':'')+
+        (VO.avoid?'<div class="vo-col ko"><b>À éviter</b><p>'+esc(VO.avoid)+'</p></div>':'')+'</div>'}
+      if(VO.example)h+='<blockquote class="vo-ex">«&nbsp;'+esc(VO.example)+'&nbsp;»</blockquote>';
+      h+='</section>';
+    }
+  }
+
+  // Chapitre — Logotype
   if(variants.length){
     h+=chap('logo','Logotype');
     if(heroLogo){
