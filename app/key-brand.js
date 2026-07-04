@@ -191,6 +191,12 @@ const VOICE_REGS = [
   ['tu-complice',     'Tutoiement, complice'],
   ['tu-direct',       'Tutoiement, direct'],
 ];
+// KB-14 — iconographie (dernier écart du référentiel Canva) : style
+// déclaré en trois axes + set d'exemples déposés (SVG/PNG, 12 max).
+const ICON_STROKES = [['', '—'], ['outline', 'Filaire'], ['filled', 'Plein'], ['duotone', 'Bicolore']];
+const ICON_CORNERS = [['', '—'], ['rounded', 'Arrondis'], ['sharp', 'Vifs']];
+const ICON_WEIGHTS = [['', '—'], ['fine', 'Fin'], ['regular', 'Régulier'], ['bold', 'Épais']];
+const KB_ICONS_MAX = 12;
 
 // ── Publication (KB-6) ──
 let _pubPanel = false;      // panneau « Partager » ouvert
@@ -521,6 +527,15 @@ function _onClick(e) {
   if (act === 'sup-gal-del')  { _deleteGalleryItem(btn.dataset.aid); return; }
   // ── Ton de voix (KB-13) ──
   if (act === 'vo-reg')    { _identityOf().voice.reg = btn.dataset.v || ''; _scheduleSave(); _renderChart(); return; }
+  // ── Iconographie (KB-14) ──
+  if (act === 'ic-stroke')  { _iconsOf().stroke = btn.dataset.v || ''; _scheduleSave(); _renderChart(); return; }
+  if (act === 'ic-corners') { _iconsOf().corners = btn.dataset.v || ''; _scheduleSave(); _renderChart(); return; }
+  if (act === 'ic-weight')  { _iconsOf().weight = btn.dataset.v || ''; _scheduleSave(); _renderChart(); return; }
+  if (act === 'ic-add')     { _pickTarget = 'icons'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'ic-del')     { _deleteIcon(btn.dataset.aid); return; }
+  // ── Symbolique v2 (KB-10) : calque de construction ──
+  if (act === 'con-add')    { _pickTarget = 'construction'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'con-del')    { _deleteConstruction(); return; }
   // ── Édition publiée (KB-12) ──
   if (act === 'pub-mode')  { _pubThemeOf().mode = btn.dataset.v === 'dark' ? 'dark' : 'light'; _scheduleSave(); _renderChart(); return; }
   if (act === 'pub-tint')  { _pubThemeOf().tint = btn.dataset.hex || null; _scheduleSave(); _renderChart(); return; }
@@ -693,6 +708,20 @@ function _onInput(e) {
   if (el.dataset.field === 'sym-text' && _chart) {
     const s = _brandSection().symbolism[parseInt(el.dataset.idx, 10)];
     if (s) { s.text = el.value.slice(0, 120); _scheduleSave(); }
+  }
+  if (el.dataset.field === 'sym-title' && _chart) {
+    const s = _brandSection().symbolism[parseInt(el.dataset.idx, 10)];
+    if (s) { s.title = el.value.slice(0, 28); _scheduleSave(); }
+  }
+  // Iconographie (KB-14) : note libre.
+  if (el.dataset.field === 'ic-note' && _chart) { _iconsOf().note = el.value.slice(0, 200); _scheduleSave(); }
+  // Calque de construction (KB-10) : opacité live, sans re-render.
+  if (el.dataset.field === 'con-op' && _chart) {
+    const v = Math.min(1, Math.max(0.1, parseFloat(el.value) || 0.5));
+    _constructionOf().opacity = v;
+    const ov = _root.querySelector('[data-slot="con-overlay"]');
+    if (ov) ov.style.opacity = v;
+    _scheduleSave();
   }
   if (el.dataset.field === 'ph-word' && _chart) {
     const b = _brandSection();
@@ -1133,6 +1162,17 @@ async function _onFilesPicked(fileList) {
   if (_pickTarget === 'sup-gallery') {
     _pickTarget = 'logo';
     await _onGalleryPicked([...fileList]);
+    return;
+  }
+  // Cibles « iconographie » (KB-14) et « calque de construction » (KB-10).
+  if (_pickTarget === 'icons') {
+    _pickTarget = 'logo';
+    await _onIconsPicked([...fileList]);
+    return;
+  }
+  if (_pickTarget === 'construction') {
+    _pickTarget = 'logo';
+    await _onConstructionPicked(fileList[0]);
     return;
   }
   const files = [...fileList];
@@ -2213,6 +2253,68 @@ function _identityOf() {
   return idn;
 }
 
+// ── KB-14 : iconographie ──
+function _iconsOf() {
+  if (!_chart.draft.icons || typeof _chart.draft.icons !== 'object') _chart.draft.icons = {};
+  const ic = _chart.draft.icons;
+  if (!ICON_STROKES.some(([k]) => k === ic.stroke))  ic.stroke = '';
+  if (!ICON_CORNERS.some(([k]) => k === ic.corners)) ic.corners = '';
+  if (!ICON_WEIGHTS.some(([k]) => k === ic.weight))  ic.weight = '';
+  if (typeof ic.note !== 'string') ic.note = '';
+  if (!Array.isArray(ic.assetIds)) ic.assetIds = [];
+  return ic;
+}
+async function _onIconsPicked(files) {
+  const ic = _iconsOf();
+  for (const f of files) {
+    if (ic.assetIds.length >= KB_ICONS_MAX) { _toast(`Maximum ${KB_ICONS_MAX} pictos.`); break; }
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!['svg', 'png', 'webp'].includes(ext)) { _toast(`« ${f.name} » : SVG, PNG ou WebP attendu.`); continue; }
+    if (f.size > KB_UPLOAD_MAX) { _toast(`« ${f.name} » : trop lourd (max 4 Mo).`); continue; }
+    if (ext === 'svg' && !svgLooksSafe(await f.text())) { _toast(`« ${f.name} » : SVG refusé (code actif).`); continue; }
+    try {
+      const asset = await _apiUpload(_chart.id, f, 'image');
+      ic.assetIds.push(asset.id);
+    } catch (e) { _toast(e.message); }
+  }
+  _scheduleSave(); _renderChart();
+}
+function _deleteIcon(aid) {
+  const ic = _iconsOf();
+  ic.assetIds = ic.assetIds.filter(x => x !== aid);
+  _api(`/assets/${encodeURIComponent(aid)}`, { method: 'DELETE' }).catch(() => {});
+  _scheduleSave(); _renderChart();
+}
+
+// ── KB-10 : calque de construction du logo (symbolique v2) ──
+function _constructionOf() {
+  const b = _brandSection();
+  if (!b.construction || typeof b.construction !== 'object') b.construction = { assetId: null, opacity: 0.5 };
+  const c = b.construction;
+  if (typeof c.opacity !== 'number' || !(c.opacity >= 0.1 && c.opacity <= 1)) c.opacity = 0.5;
+  return c;
+}
+async function _onConstructionPicked(file) {
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['svg', 'png', 'webp', 'jpg', 'jpeg'].includes(ext)) { _toast('Image attendue (SVG, PNG, WebP, JPG).'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast('Image trop lourde (max 4 Mo).'); return; }
+  if (ext === 'svg' && !svgLooksSafe(await file.text())) { _toast('SVG refusé (code actif ou référence externe).'); return; }
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    const c = _constructionOf();
+    if (c.assetId) { _api(`/assets/${encodeURIComponent(c.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+    c.assetId = asset.id;
+    _scheduleSave(); _renderChart();
+  } catch (e) { _toast(e.message); }
+}
+function _deleteConstruction() {
+  const c = _constructionOf();
+  if (c.assetId) { _api(`/assets/${encodeURIComponent(c.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  c.assetId = null;
+  _scheduleSave(); _renderChart();
+}
+
 // ── KB-11 : supports de communication (mockups auto-composés) ──
 function _supportsOf() {
   if (!_chart.draft.supports || typeof _chart.draft.supports !== 'object') _chart.draft.supports = {};
@@ -2316,7 +2418,7 @@ function _addSymbolAt(canvas, e) {
   const rect = canvas.getBoundingClientRect();
   const x = Math.min(0.98, Math.max(0.02, (e.clientX - rect.left) / rect.width));
   const y = Math.min(0.98, Math.max(0.02, (e.clientY - rect.top) / rect.height));
-  b.symbolism.push({ x: +x.toFixed(3), y: +y.toFixed(3), text: '' });
+  b.symbolism.push({ x: +x.toFixed(3), y: +y.toFixed(3), title: '', text: '' });
   _scheduleSave(); _renderChart();
   const inputs = _root.querySelectorAll('[data-field="sym-text"]');
   inputs[inputs.length - 1]?.focus();
@@ -2451,12 +2553,15 @@ function _renderBrandTab() {
     <div class="kb-motions">${motionCards}</div>
     <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>`;
 
-  // ── Symbolique du signe (logo requis) ──
+  // ── Symbolique du signe v2 (KB-10) : titre + récit par repère, calque ──
+  const con = _constructionOf();
   const dots = b.symbolism.map((s, i) => `
     <span class="kb-sym-dot" style="left:${(s.x * 100).toFixed(1)}%;top:${(s.y * 100).toFixed(1)}%">${i + 1}</span>`).join('');
   const symList = b.symbolism.map((s, i) => `
     <div class="kb-sym-row">
       <span class="kb-sym-num">${i + 1}</span>
+      <input class="kb-field-input kb-sym-title" data-field="sym-title" data-idx="${i}" value="${_esc(s.title || '')}"
+             placeholder="Titre — ex. « Le cercle »" maxlength="28" spellcheck="false">
       <input class="kb-field-input" data-field="sym-text" data-idx="${i}" value="${_esc(s.text || '')}"
              placeholder="Ce que cette partie du signe raconte…" maxlength="120" spellcheck="false">
       <button class="kb-iconbtn danger" data-act="sym-del" data-idx="${i}" title="Retirer">${icon('trash-2', 15)}</button>
@@ -2464,13 +2569,46 @@ function _renderBrandTab() {
   const symbolique = logoVariant ? `
     <section class="kb-lab">
       <h3 class="kb-lab-title">La symbolique du signe</h3>
-      <p class="kb-hint">Cliquez sur le logo pour poser un repère, puis racontez ce que cette partie représente.</p>
+      <p class="kb-hint">Cliquez sur le logo pour poser un repère, puis nommez et racontez ce que cette partie représente. Sur la page publiée, chaque repère se visite d'un clic.</p>
       <div class="kb-sym-canvas" data-slot="sym-canvas" role="button" aria-label="Poser une annotation sur le logo">
         <img data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">
+        ${con.assetId ? `<img class="kb-con-overlay" data-slot="con-overlay" data-asset="${_esc(con.assetId)}" style="opacity:${con.opacity}" alt="" draggable="false">` : ''}
         ${dots}
+      </div>
+      <div class="kb-scenegrp kb-con-row">
+        <span class="kb-scenelbl">Construction</span>
+        <button class="kb-btn" data-act="con-add">${icon('image', 14)} ${con.assetId ? 'Remplacer la grille' : 'Déposer la grille de construction'}</button>
+        ${con.assetId ? `
+          <input type="range" class="kb-con-range" data-field="con-op" min="0.1" max="1" step="0.05" value="${con.opacity}" aria-label="Opacité du calque">
+          <button class="kb-iconbtn danger" data-act="con-del" title="Retirer le calque">${icon('trash-2', 15)}</button>` : `
+          <span class="kb-scenehint">le tracé régulateur du graphiste, en calque sur le logo</span>`}
       </div>
       ${symList}
     </section>` : '';
+
+  // ── Iconographie (KB-14) ──
+  const ic = _iconsOf();
+  const icChips = (defs, cur, act) => defs.map(([k, lbl]) =>
+    `<button class="kb-chip ${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${lbl}</button>`).join('');
+  const icTiles = ic.assetIds.map(aid => `
+    <figure class="kb-ic-tile">
+      <img data-asset="${_esc(aid)}" alt="" draggable="false">
+      <button class="kb-iconbtn danger" data-act="ic-del" data-aid="${_esc(aid)}" title="Retirer">${icon('trash-2', 13)}</button>
+    </figure>`).join('');
+  const iconoBlock = `
+    <section class="kb-lab">
+      <h3 class="kb-lab-title">Iconographie & pictogrammes</h3>
+      <p class="kb-hint">Le style des pictos de la marque — déclaré en trois axes, illustré par vos exemples (${KB_ICONS_MAX} max).</p>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Trait</span>${icChips(ICON_STROKES, ic.stroke, 'ic-stroke')}</div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Angles</span>${icChips(ICON_CORNERS, ic.corners, 'ic-corners')}</div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Graisse</span>${icChips(ICON_WEIGHTS, ic.weight, 'ic-weight')}</div>
+      <input class="kb-field-input kb-ic-note" data-field="ic-note" value="${_esc(ic.note)}" maxlength="200"
+             placeholder="Règle libre — ex. « toujours posés sur un rond de la couleur primaire »" spellcheck="false">
+      <div class="kb-ic-grid">
+        ${icTiles}
+        ${ic.assetIds.length < KB_ICONS_MAX ? `<button class="kb-ic-add" data-act="ic-add" title="Ajouter des pictos (SVG, PNG)">${icon('plus', 16)}</button>` : ''}
+      </div>
+    </section>`;
 
   // ── Identité de marque & ton de voix (KB-13) ──
   const idn = _identityOf();
@@ -2573,7 +2711,7 @@ function _renderBrandTab() {
       </div>
     </section>`;
 
-  return `<div class="kb-brand">${stage}${identityBlock}${boardBlock}${symbolique}</div>`;
+  return `<div class="kb-brand">${stage}${identityBlock}${boardBlock}${symbolique}${iconoBlock}</div>`;
 }
 
 // ════════════════════════════════════════════════════════════════

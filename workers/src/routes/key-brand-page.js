@@ -256,9 +256,22 @@ select::-ms-expand{display:none}
 .sym{position:relative;background:#fff;border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center;padding:34px}
 .sym img{max-width:min(340px,70%);max-height:140px;object-fit:contain}
 .sym-dot{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(255,255,255,.9)}
+.sym-dot{border:none;cursor:pointer;transition:transform .15s}
+.sym-dot:hover,.sym-dot.hl{transform:translate(-50%,-50%) scale(1.35)}
+.con-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:34px;pointer-events:none}
 .sym-list{margin:12px 0 0;padding:0;list-style:none}
-.sym-list li{display:flex;gap:10px;align-items:baseline;font-size:14px;margin-bottom:6px}
+.sym-list li{display:flex;gap:10px;align-items:baseline;font-size:14px;margin-bottom:6px;padding:6px 10px;border-radius:10px;cursor:pointer;transition:background .15s}
+.sym-list li.hl{background:var(--panel);box-shadow:0 0 0 1px var(--accent) inset}
 .sym-list .n{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.sym-t{font-weight:800}
+.ic-note{color:var(--muted);font-size:13.5px;font-style:italic;margin:4px 0 14px}
+.icgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px;margin-top:14px}
+.ic-tile{margin:0;aspect-ratio:1;background:#fff;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:18%}
+.ic-tile img{max-width:100%;max-height:100%;object-fit:contain}
+.tset{border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0;background:var(--panel)}
+.tset-t{margin-bottom:10px;word-break:break-word}
+.tset-b{color:var(--ink);max-width:60ch}
+.tset-note{color:var(--muted);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;margin:12px 0 0}
 .phwords{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .phword{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;font-size:13.5px;font-weight:600}
 .phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:16px}
@@ -480,7 +493,11 @@ function render(){
   const BD_SLOTS={duo:['a','b'],atelier:['a','b','c'],galerie:['a','b','c'],mosaic:['a','b','c','d'],pano:['a']};
   const bdTpl=BD_SLOTS[BD.template]?BD.template:'atelier';
   const bdCells=BD_SLOTS[bdTpl].map(sl=>[sl,BD.cells&&BD.cells[sl]]).filter(p=>p[1]&&p[1].assetId);
-  const showBrand=bdCells.length>0||(sym.length&&rasterV.length)||phWords.length>0||phIds.length>0;
+  // Iconographie (KB-14)
+  const IC=(kit.icons&&typeof kit.icons==='object')?kit.icons:{};
+  const icIds=(Array.isArray(IC.assetIds)?IC.assetIds:[]).filter(Boolean);
+  const showIcons=!!(IC.stroke||IC.corners||IC.weight||IC.note||icIds.length);
+  const showBrand=bdCells.length>0||(sym.length&&rasterV.length)||phWords.length>0||phIds.length>0||showIcons;
 
   // Édition (KB-12) : thème publié — fond clair/sombre + teinte des
   // intercalaires (réglage éditeur ; défaut = couleur primaire).
@@ -663,6 +680,16 @@ function render(){
          (gg?'<a class="btn" href="https://fonts.google.com/specimen/'+encodeURIComponent(f.family).replace(/%20/g,'+')+'" target="_blank" rel="noopener noreferrer">Télécharger</a>'
             :(f.buyUrl&&/^https?:/.test(f.buyUrl)?'<a class="btn" href="'+esc(f.buyUrl)+'" target="_blank" rel="noopener noreferrer">Où l\\'obtenir</a>':''))+'</div>'+
          (gg?'<div class="talpha" style="font-family:'+fam+';font-weight:'+w0+'">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm nopqrstuvwxyz<br>0123456789</div>'+
+             // Réglages prescrits par le graphiste (f.spec, persistés dans la charte).
+             (f.spec&&f.spec.title?'<div class="tset"><div class="tset-t" style="font-family:'+fam+
+               ';font-weight:'+(+f.spec.title.w||700)+';font-size:'+Math.min(60,+f.spec.title.size||34)+'px'+
+               (f.spec.title.ital?';font-style:italic':'')+';line-height:'+(+f.spec.title.lh||1.15)+
+               ';text-align:'+esc(f.spec.title.align||'left')+'">'+esc(meta.baseline||DATA.name)+'</div>'+
+               '<div class="tset-b" style="font-family:'+fam+';font-weight:'+(+f.spec.body.w||400)+
+               ';font-size:'+Math.min(24,+f.spec.body.size||17)+'px'+(f.spec.body.ital?';font-style:italic':'')+
+               ';line-height:'+(+f.spec.body.lh||1.5)+';text-align:'+esc(f.spec.body.align||'left')+
+               '">Voici comment cette police compose un paragraphe : la graisse, le corps, l\\'interligne et l\\'alignement prescrits par la charte, appliqués à un texte courant.</div>'+
+               '<p class="tset-note">Titrage '+(+f.spec.title.w||700)+' · '+(+f.spec.title.size||34)+' px — Courant '+(+f.spec.body.w||400)+' · '+(+f.spec.body.size||17)+' px · interligne '+(+f.spec.body.lh||1.5)+'</p></div>':'')+
              '<div class="tspec" data-spec style="font-family:'+fam+';font-weight:'+w0+';font-size:30px">Portez ce vieux whisky au juge blond qui fume.</div>'+
              '<div class="tctl">Graisse <select data-w>'+ws.map(w=>'<option'+(w===w0?' selected':'')+'>'+w+'</option>').join('')+'</select></div>'
             :'<p class="hint">Police déclarée — aperçu indisponible (non hébergée).</p>')+
@@ -703,12 +730,26 @@ function render(){
   if(showBrand){
     h+=chap('univers','Univers de marque');
     if(sym.length&&heroLogo){
-      h+='<section><h2>La symbolique du signe</h2><p class="sub">Ce que raconte le logo.</p><div class="sym">'+
+      const CON=(kit.branding&&kit.branding.construction)||{};
+      h+='<section><h2>La symbolique du signe</h2><p class="sub">Ce que raconte le logo — cliquez un repère pour le visiter.</p><div class="sym">'+
          '<img src="'+fileUrl(heroLogo.assetId)+'" alt="">';
-      sym.forEach((s,i)=>{h+='<span class="sym-dot" style="left:'+(s.x*100).toFixed(1)+'%;top:'+(s.y*100).toFixed(1)+'%">'+(i+1)+'</span>'});
-      h+='</div><ul class="sym-list">';
-      sym.forEach((s,i)=>{h+='<li><span class="n">'+(i+1)+'</span> '+esc(s.text)+'</li>'});
+      if(CON.assetId)h+='<img class="con-overlay" id="conov" src="'+fileUrl(CON.assetId)+'" style="opacity:'+(+CON.opacity||0.5)+'" alt="">';
+      sym.forEach((s,i)=>{h+='<button class="sym-dot" data-sym="'+i+'" style="left:'+(s.x*100).toFixed(1)+'%;top:'+(s.y*100).toFixed(1)+'%">'+(i+1)+'</button>'});
+      h+='</div>';
+      if(CON.assetId)h+='<p class="no-print" style="margin:10px 0 0"><button class="btn" id="conbtn">Masquer la construction</button></p>';
+      h+='<ul class="sym-list">';
+      sym.forEach((s,i)=>{h+='<li data-sym="'+i+'"><span class="n">'+(i+1)+'</span><span>'+(s.title?'<b class="sym-t">'+esc(s.title)+'</b> — ':'')+esc(s.text)+'</span></li>'});
       h+='</ul></section>';
+    }
+    // Iconographie & pictogrammes (KB-14)
+    if(showIcons){
+      const ICL={outline:'Filaire',filled:'Plein',duotone:'Bicolore',rounded:'Angles arrondis',sharp:'Angles vifs',fine:'Trait fin',regular:'Trait régulier',bold:'Trait épais'};
+      const traits=[ICL[IC.stroke],ICL[IC.corners],ICL[IC.weight]].filter(Boolean);
+      h+='<section><h2>Iconographie & pictogrammes</h2><p class="sub">Le style des pictos de la marque.</p>';
+      if(traits.length)h+='<div class="phwords">'+traits.map(t=>'<span class="phword">'+t+'</span>').join('')+'</div>';
+      if(IC.note)h+='<p class="ic-note">'+esc(IC.note)+'</p>';
+      if(icIds.length){h+='<div class="icgrid">';for(const id of icIds)h+='<figure class="ic-tile"><img src="'+fileUrl(id)+'" alt="" loading="lazy"></figure>';h+='</div>'}
+      h+='</section>';
     }
   }
   if(bdCells.length||phWords.length||phIds.length){
@@ -807,9 +848,18 @@ function render(){
 // ── Interactions ──
 function bind(variants){
   document.getElementById('printbtn')?.addEventListener('click',()=>window.print());
+  // Symbolique v2 : bascule du calque de construction.
+  const conbtn=document.getElementById('conbtn'),conov=document.getElementById('conov');
+  if(conbtn&&conov)conbtn.addEventListener('click',()=>{const off=conov.style.display==='none';conov.style.display=off?'':'none';conbtn.textContent=off?'Masquer la construction':'Afficher la construction'});
   app.addEventListener('click',async e=>{
     const cp=e.target.closest('[data-copy]');
     if(cp){copy(cp.dataset.copy);return}
+    // Symbolique v2 : visite d'un repère — re-clic = éteint.
+    const sd=e.target.closest('[data-sym]');
+    if(sd){const i=sd.dataset.sym,was=sd.classList.contains('hl');
+      app.querySelectorAll('[data-sym]').forEach(el=>el.classList.toggle('hl',!was&&el.dataset.sym===i));
+      if(!was&&sd.tagName==='BUTTON'){const li=app.querySelector('li[data-sym="'+i+'"]');if(li)li.scrollIntoView({block:'nearest',behavior:'smooth'})}
+      return}
     const bgb=e.target.closest('[data-bg]');
     if(bgb){BG=bgb.dataset.bg;
       app.querySelectorAll('[data-bg]').forEach(b=>b.classList.toggle('on',b===bgb));
