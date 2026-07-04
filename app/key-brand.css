@@ -356,6 +356,8 @@
    → les deux champs s'élargissent. */
 .kb-type-toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
 .kb-type-row{display:flex;align-items:center;gap:8px}
+/* Ligne du paragraphe : « + » collé en bas → même écart vers la carte que le bas du champ. */
+.kb-type-toolbar .kb-type-row:last-child{align-items:flex-end}
 .kb-type-row>.kb-field-input{flex:1;min-width:0}
 .kb-type-row-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .kb-type-title{font-size:15px;font-weight:600}
