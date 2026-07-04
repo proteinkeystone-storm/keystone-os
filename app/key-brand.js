@@ -2304,9 +2304,14 @@ function _renderBrandTab() {
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
   const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
   const brandName = meta.name || _chart.name;
-  // Motion « lettre à lettre » : chaque caractère du nom anime avec son délai.
+  // Motion « lettre à lettre » : chaque caractère anime avec son délai,
+  // MAIS regroupé par mot insécable (.kb-w) — sinon le navigateur coupe
+  // les mots entre deux lettres et le nom « saute » de ligne en ligne.
+  let _li = 0;
   const nameHtml = b.motion === 'letters'
-    ? [...brandName].map((ch, i) => `<span class="kb-l" style="--i:${i}">${ch === ' ' ? '&nbsp;' : _esc(ch)}</span>`).join('')
+    ? brandName.split(' ').filter(w => w.length).map(w =>
+        `<span class="kb-w">${[...w].map(ch => `<span class="kb-l" style="--i:${_li++}">${_esc(ch)}</span>`).join('')}</span>`
+      ).join(' ')
     : _esc(brandName);
   const inked = s.bgType !== 'white';   // fond custom → encre pilotée
 

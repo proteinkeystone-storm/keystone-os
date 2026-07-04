@@ -516,6 +516,7 @@
 .kb-play-iris{animation:kb-iris calc(1.15s*var(--kb-mo,1)) cubic-bezier(.65,0,.35,1) both}
 .kb-play-blur{animation:kb-blurin calc(1.15s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
 .kb-play-letters .kb-stage-logo{animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-stage-name .kb-w{display:inline-block;white-space:nowrap} /* le mot reste entier, la ligne casse ENTRE les mots */
 .kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter calc(.5s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*.045s*var(--kb-mo,1))}
 .kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(.55s*var(--kb-mo,1))}
 @media (prefers-reduced-motion: reduce){

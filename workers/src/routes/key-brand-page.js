@@ -98,6 +98,7 @@ button{font-family:inherit}
 .m-iris{animation:kiris calc(1.15s*var(--mo,1)) cubic-bezier(.65,0,.35,1) both}
 .m-blur{animation:kblur calc(1.15s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
 .m-letters>img{animation:kfade calc(.7s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.hero-name .hw{display:inline-block;white-space:nowrap}
 .m-letters .hero-name .hl{display:inline-block;opacity:0;animation:kletter calc(.5s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*.045s*var(--mo,1))}
 .m-letters .hero-base{opacity:0;animation:kfade calc(.7s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(.55s*var(--mo,1))}
 @media (prefers-reduced-motion:reduce){
@@ -448,7 +449,9 @@ function render(){
   else if(scBg==='gradient'&&SC.c1&&SC.c2)heroStyle=' style="background:linear-gradient(135deg,'+esc(SC.c1)+','+esc(SC.c2)+')"';
   const rawName=String(meta.name||DATA.name);
   let nameHtml=esc(rawName);
-  if(motion==='letters'){nameHtml='';for(let i=0;i<rawName.length;i++)nameHtml+='<span class="hl" style="--i:'+i+'">'+(rawName[i]===' '?'&nbsp;':esc(rawName[i]))+'</span>'}
+  // Lettre à lettre : lettres groupées par mot insécable (.hw), sinon le
+  // navigateur coupe les mots entre deux lettres (le nom « saute »).
+  if(motion==='letters'){let li=0;nameHtml=rawName.split(' ').filter(w=>w.length).map(w=>{let s='<span class="hw">';for(const ch of w)s+='<span class="hl" style="--i:'+(li++)+'">'+esc(ch)+'</span>';return s+'</span>'}).join(' ')}
   let nmSt='';
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
   if(inkName)nmSt+='color:'+inkName;
