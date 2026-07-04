@@ -176,10 +176,10 @@ const _rand = n => Math.floor(Math.random() * n);
 function _loremWords(n) { const out = []; for (let i = 0; i < n; i++) out.push(LOREM_WORDS[_rand(LOREM_WORDS.length)]); return out; }
 /** Titre lorem ipsum (3–6 mots). */
 export function loremTitle() { return _cap(_loremWords(3 + _rand(4)).join(' ')); }
-/** Paragraphe lorem ipsum (2–4 phrases). */
+/** Paragraphe lorem ipsum (3–5 phrases). */
 export function loremParagraph() {
   const out = [];
-  const n = 2 + _rand(3);
+  const n = 3 + _rand(3);
   for (let s = 0; s < n; s++) {
     const len = 7 + _rand(9);
     const words = _loremWords(len);

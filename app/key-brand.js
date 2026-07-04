@@ -1584,15 +1584,17 @@ function _renderTypeTab() {
   return `
     <div class="kb-type">
       <div class="kb-type-toolbar">
-        <div class="kb-type-texts">
+        <div class="kb-type-row">
           <input class="kb-field-input kb-type-title" data-field="type-title" value="${_esc(_typeTitle)}"
                  placeholder="Votre titre d'essai…" maxlength="120" aria-label="Titre d'essai" spellcheck="false">
-          <textarea class="kb-field-input kb-type-para" data-field="type-body" rows="2"
-                    placeholder="Votre paragraphe d'essai…" maxlength="400" aria-label="Paragraphe d'essai" spellcheck="false">${_esc(_typeBody)}</textarea>
+          <div class="kb-type-row-acts">
+            <button class="kb-btn kb-btn-sm kb-lorem-btn" data-act="type-lorem" title="Remplir avec du faux-texte (lorem ipsum)">Lorem</button>
+            <button class="kb-iconbtn" data-act="type-gen" title="Autres phrases d'essai (français)">${icon('refresh', 15)}</button>
+          </div>
         </div>
-        <div class="kb-type-toolbar-acts">
-          <button class="kb-btn kb-btn-sm kb-lorem-btn" data-act="type-lorem" title="Remplir avec du faux-texte (lorem ipsum)">Lorem</button>
-          <button class="kb-iconbtn" data-act="type-gen" title="Autres phrases d'essai (français)">${icon('refresh', 15)}</button>
+        <div class="kb-type-row">
+          <textarea class="kb-field-input kb-type-para" data-field="type-body" rows="3"
+                    placeholder="Votre paragraphe d'essai…" maxlength="700" aria-label="Paragraphe d'essai" spellcheck="false">${_esc(_typeBody)}</textarea>
           <button class="kb-addpill ${_typePicker ? 'is-on' : ''}" data-act="font-picker" title="Ajouter une police" aria-label="Ajouter une police">${icon('plus', 18)}</button>
         </div>
       </div>

@@ -352,11 +352,14 @@
 .kb-cb-sample figcaption{color:var(--kb-muted);font-size:11px}
 
 /* ══ Onglet Typographies (KB-3) ══ */
-.kb-type-toolbar{display:flex;align-items:flex-end;gap:12px;margin-bottom:18px}
-.kb-type-texts{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+/* Barre : une ligne par champ ; boutons à droite (Lorem+↻ au titre, + au paragraphe)
+   → les deux champs s'élargissent. */
+.kb-type-toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.kb-type-row{display:flex;align-items:center;gap:8px}
+.kb-type-row>.kb-field-input{flex:1;min-width:0}
+.kb-type-row-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .kb-type-title{font-size:15px;font-weight:600}
-.kb-type-para{font-size:13.5px;line-height:1.5;resize:vertical;min-height:44px;font-family:inherit}
-.kb-type-toolbar-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.kb-type-para{font-size:13.5px;line-height:1.5;resize:vertical;min-height:64px;font-family:inherit}
 .kb-type-list{display:flex;flex-direction:column;gap:16px}
 
 .kb-font-card{background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;padding:16px 18px}
