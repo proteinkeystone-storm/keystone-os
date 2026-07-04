@@ -420,11 +420,33 @@ function _renderSaveState() {
 // ── Règle du musée : l'app s'habille de la charte ouverte ───────
 // Dès qu'une couleur primaire existe dans le kit, les micro-accents de
 // l'UI la prennent. Sinon, accent neutre du workspace.
+// L'accent du CHROME doit rester lisible : une primaire marine sur le
+// workspace sombre disparaissait (textes/filets accent illisibles). On
+// glisse sur l'échelle tonale de la MÊME teinte jusqu'à ≥ 3:1 avec le
+// fond réel — la couleur exacte de la marque reste montrée dans le canvas.
+function _chromeAccent(hex) {
+  let bg = '#12141c';
+  try {
+    const raw = getComputedStyle(_root.querySelector('.kb-main') || _root).backgroundColor;
+    const m = raw.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (m) bg = '#' + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, '0')).join('');
+  } catch (_) {}
+  if ((contrastRatio(hex, bg) || 0) >= 3) return hex;
+  const scale = tonalScale(hex) || {};
+  const darkBg = relLuminance(hexToRgb(bg) || { r: 18, g: 20, b: 28 }) < 0.4;
+  const steps = darkBg ? [400, 300, 200, 100] : [600, 700, 800, 900];
+  for (const st of steps) {
+    const c = scale[st];
+    if (c && (contrastRatio(c, bg) || 0) >= 3) return c;
+  }
+  return (darkBg ? scale[100] : scale[900]) || hex;
+}
 function _applyAccent(hex) {
   if (!_root) return;
   if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) {
-    _root.style.setProperty('--kb-accent', hex);
-    _root.style.setProperty('--kb-accent-ink', _inkOn(hex));   // encre lisible sur l'accent (clair→sombre)
+    const ui = _chromeAccent(hex);
+    _root.style.setProperty('--kb-accent', ui);
+    _root.style.setProperty('--kb-accent-ink', _inkOn(ui));   // encre lisible sur l'accent (clair→sombre)
   } else {
     _root.style.removeProperty('--kb-accent');
     _root.style.removeProperty('--kb-accent-ink');
