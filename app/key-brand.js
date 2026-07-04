@@ -531,6 +531,7 @@ function _onClick(e) {
   }
   if (act === 'scene-media')     { _pickTarget = 'scene-media'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'scene-media-del') { _deleteSceneMedia(); return; }
+  if (act === 'scene-logo')      { _setSceneProp('logoId', btn.dataset.v === 'none' ? 'none' : btn.dataset.v); return; }
   if (act === 'sym-del')       { _deleteSymbol(parseInt(btn.dataset.idx, 10)); return; }
   if (act === 'ph-add')        { _pickTarget = 'photo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'ph-del')        { _deletePhoto(btn.dataset.aid); return; }
@@ -2149,7 +2150,14 @@ function _sceneOf() {
   if (!SCENE_LAYOUTS.some(([k]) => k === s.layout))   s.layout = 'center';
   if (!SCENE_INKS.some(([k]) => k === s.ink))         s.ink = 'auto';
   if (!SCENE_DURS.some(([k]) => k === s.dur))         s.dur = 'normal';
+  if (s.logoId != null && typeof s.logoId !== 'string') s.logoId = null;   // assetId | 'none' | null (= 1re variante)
   return s;
+}
+// Quelle variante du logo ouvre la scène ? (logo complet, picto, logo puce…)
+function _sceneLogoVariant(s) {
+  const vars = _logoSection().variants.filter(v => v.ext !== 'pdf');
+  if (s.logoId === 'none') return null;
+  return vars.find(v => v.assetId === s.logoId) || vars[0] || null;
 }
 // Encre lisible sur le fond choisi. Auto : luminance de la couleur (ou
 // claire sur photo/vidéo, avec voile de lisibilité). Jamais de gris moyen.
@@ -2513,10 +2521,11 @@ function _renderBrandTab() {
     ? `<video class="kb-stage-media" data-asset="${_esc(s.assetId)}" muted loop autoplay playsinline></video>`
     : `<img class="kb-stage-media" data-asset="${_esc(s.assetId)}" alt="" draggable="false">`);
 
+  const sceneLogo = _sceneLogoVariant(s);
   const stageInner = `
       <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)}" data-slot="stage-inner" style="--kb-mo:${mo}">
-        ${logoVariant ? `<img class="kb-stage-logo" data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">` : ''}
-        ${s.layout === 'split' && logoVariant ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
+        ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
+        ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">
           <div class="kb-stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${nameHtml}</div>
           ${meta.baseline ? `<div class="kb-stage-baseline" ${inked ? `style="color:${ink.base}"` : ''}>${_esc(meta.baseline)}</div>` : ''}
@@ -2556,9 +2565,19 @@ function _renderBrandTab() {
     `<button class="kb-chip ${s.bgType === k ? 'on' : ''}" data-act="scene-bgtype" data-v="${k}">${lbl}</button>` +
     (s.bgType === k ? fillZone : '')).join('');
 
+  // Choix du logo de la scène : une chip par variante déposée + « Sans ».
+  const sceneVars = _logoSection().variants.filter(v => v.ext !== 'pdf');
+  const logoRow = sceneVars.length ? `
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Logo</span>
+        ${sceneVars.map((v, i) => `<button class="kb-chip ${sceneLogo && sceneLogo.assetId === v.assetId ? 'on' : ''}"
+          data-act="scene-logo" data-v="${_esc(v.assetId)}">${_esc((v.label || v.name || 'Logo ' + (i + 1)).slice(0, 18))}</button>`).join('')}
+        <button class="kb-chip ${s.logoId === 'none' ? 'on' : ''}" data-act="scene-logo" data-v="none">Sans</button>
+      </div>` : '';
+
   const sceneBar = `
     <div class="kb-scenebar">
       <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${bgChips}</div>
+      ${logoRow}
       <div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Tempo</span>${chips(SCENE_DURS.map(([k, l]) => [k, l]), s.dur, 'scene-dur')}</div>

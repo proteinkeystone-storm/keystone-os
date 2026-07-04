@@ -566,14 +566,16 @@ function render(){
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
   if(inkName)nmSt+='color:'+inkName;
   // Couverture pleine page (scène KB-8) + mention façon PDF de charte.
+  // Le graphiste choisit QUELLE variante ouvre la scène (logo, picto, puce…).
+  const coverLogo=SC.logoId==='none'?null:(rasterV.find(v=>v.assetId===SC.logoId)||heroLogo);
   h+='<div class="hero cover'+(scMedia?' has-media':'')+' hlay-'+scLay+'"'+heroStyle+'>'+
      (scMedia?(scBg==='video'
        ?'<video class="hero-media" src="'+fileUrl(scMedia)+'" muted loop autoplay playsinline></video>'
        :'<img class="hero-media" src="'+fileUrl(scMedia)+'" alt="">'):'')+
      (scMedia&&scInk==='light'?'<span class="hero-scrim"></span>':'')+
      '<div class="hero-inner m-'+esc(motion)+'" style="--mo:'+scMo+'">'+
-     (heroLogo?'<img src="'+fileUrl(heroLogo.assetId)+'" alt="'+esc(DATA.name)+'">':'')+
-     (scLay==='split'&&heroLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
+     (coverLogo?'<img src="'+fileUrl(coverLogo.assetId)+'" alt="'+esc(DATA.name)+'">':'')+
+     (scLay==='split'&&coverLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
      (meta.baseline?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(meta.baseline)+'</div>':'')+
      '</div></div>'+
