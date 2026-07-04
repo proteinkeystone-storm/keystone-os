@@ -25,7 +25,7 @@ import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe,
          hexToRgb, rgbToCmyk, contrastRatio, wcagVerdict, harmonies, simulateColorBlind,
          tonalScale, TONAL_STEPS, nightVariant, contrastRating, enhanceInk } from './key-brand-tools.js';
 import { GOOGLE_FONTS, FONT_CATEGORIES, fontMeta, weightsOf, ensureFontLoaded, ensureFontItalic,
-         fontSpecimenUrl, TYPE_SAMPLES, TITLE_SAMPLES, BODY_SAMPLES } from './key-brand-fonts.js';
+         fontSpecimenUrl, TYPE_SAMPLES, TITLE_SAMPLES, BODY_SAMPLES, loremTitle, loremParagraph } from './key-brand-fonts.js';
 
 const WORKSPACE_META = { id: 'O-BRD-001', name: 'Key Brand' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. sceau.js).
@@ -448,6 +448,7 @@ function _onClick(e) {
   if (act === 'font-pick')     { _addFont(btn.dataset.family); return; }
   if (act === 'font-declare')  { _addDeclaredFont(); return; }
   if (act === 'type-gen')      { _typeSampleIdx = (_typeSampleIdx + 1) % TITLE_SAMPLES.length; _typeTitle = TITLE_SAMPLES[_typeSampleIdx]; _typeBody = BODY_SAMPLES[_typeSampleIdx % BODY_SAMPLES.length]; _renderChart(); return; }
+  if (act === 'type-lorem')    { _typeTitle = loremTitle(); _typeBody = loremParagraph(); _renderChart(); return; }
   if (act === 'ft-sz' && fid) {
     const f = _fontOf(fid); if (!f) return;
     const t = btn.dataset.t, d = parseInt(btn.dataset.d, 10) || 0, p = _prefFor(f);
@@ -1594,7 +1595,8 @@ function _renderTypeTab() {
                     placeholder="Votre paragraphe d'essai…" maxlength="400" aria-label="Paragraphe d'essai" spellcheck="false">${_esc(_typeBody)}</textarea>
         </div>
         <div class="kb-type-toolbar-acts">
-          <button class="kb-iconbtn" data-act="type-gen" title="Autres textes d'essai">${icon('refresh', 15)}</button>
+          <button class="kb-btn kb-btn-sm kb-lorem-btn" data-act="type-lorem" title="Remplir avec du faux-texte (lorem ipsum)">Lorem</button>
+          <button class="kb-iconbtn" data-act="type-gen" title="Autres phrases d'essai (français)">${icon('refresh', 15)}</button>
           <button class="kb-addpill ${_typePicker ? 'is-on' : ''}" data-act="font-picker" title="Ajouter une police" aria-label="Ajouter une police">${icon('plus', 18)}</button>
         </div>
       </div>

@@ -164,6 +164,31 @@ export const BODY_SAMPLES = [
   'Zéphyr, ambigu, jonquille, kiwi : quelques mots pour voir vivre les accents, les ligatures et la ponctuation — 0123456789 & @ €.',
 ];
 
+// ── Générateur de faux-texte (lorem ipsum) — quand on n'a pas d'idées ──
+// Texte de remplissage standard (latin brouillé, libre de droits).
+const LOREM_WORDS = ('lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor '
+  + 'incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation '
+  + 'ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate '
+  + 'velit esse cillum eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt '
+  + 'culpa qui officia deserunt mollit anim id est laborum').split(' ');
+const _cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const _rand = n => Math.floor(Math.random() * n);
+function _loremWords(n) { const out = []; for (let i = 0; i < n; i++) out.push(LOREM_WORDS[_rand(LOREM_WORDS.length)]); return out; }
+/** Titre lorem ipsum (3–6 mots). */
+export function loremTitle() { return _cap(_loremWords(3 + _rand(4)).join(' ')); }
+/** Paragraphe lorem ipsum (2–4 phrases). */
+export function loremParagraph() {
+  const out = [];
+  const n = 2 + _rand(3);
+  for (let s = 0; s < n; s++) {
+    const len = 7 + _rand(9);
+    const words = _loremWords(len);
+    if (len > 9) words[3 + _rand(3)] += ',';   // une virgule pour le rythme
+    out.push(_cap(words.join(' ')) + '.');
+  }
+  return out.join(' ');
+}
+
 // ── Générateur de phrases du spécimen (fr) ──
 export const TYPE_SAMPLES = [
   'Portez ce vieux whisky au juge blond qui fume.',
