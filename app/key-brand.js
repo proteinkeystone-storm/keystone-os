@@ -357,8 +357,13 @@ function _renderSaveState() {
 // l'UI la prennent. Sinon, accent neutre du workspace.
 function _applyAccent(hex) {
   if (!_root) return;
-  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) _root.style.setProperty('--kb-accent', hex);
-  else _root.style.removeProperty('--kb-accent');
+  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) {
+    _root.style.setProperty('--kb-accent', hex);
+    _root.style.setProperty('--kb-accent-ink', _inkOn(hex));   // encre lisible sur l'accent (clair→sombre)
+  } else {
+    _root.style.removeProperty('--kb-accent');
+    _root.style.removeProperty('--kb-accent-ink');
+  }
 }
 function _primaryHex(kit) {
   const p = kit && kit.colors && Array.isArray(kit.colors.palette) ? kit.colors.palette : [];
@@ -1208,10 +1213,16 @@ function _renderColorCard(c) {
     `<button class="kb-tone ${step === 500 ? 'is-base' : ''}" data-act="copy" data-copy="${_esc(scale[step])}" style="background:${_esc(scale[step])}" title="Copier ${_esc(scale[step])} (${step})" aria-label="Copier ${_esc(scale[step])} palier ${step}"></button>`).join('');
   const nums = TONAL_STEPS.map(step =>
     `<span class="kb-tone-num ${step === 500 ? 'is-base' : ''}">${step}</span>`).join('');
+  // Barre de dégradé continue (mêmes teintes que la bande), 500 = milieu → ligne guide centrée.
+  const gradStops = TONAL_STEPS.map((step, i) => `${scale[step]} ${(i / (TONAL_STEPS.length - 1) * 100).toFixed(2)}%`).join(', ');
   const scalePanel = `
     <div class="kb-cc-scale" aria-label="Déclinaisons de la couleur">
       <div class="kb-tone-band">${band}</div>
       <div class="kb-tone-nums">${nums}</div>
+      <div class="kb-tone-plot">
+        <span class="kb-tone-guide" aria-hidden="true"></span>
+        <div class="kb-tone-gradient" style="background:linear-gradient(90deg, ${gradStops})" aria-hidden="true"></div>
+      </div>
     </div>`;
 
   return `

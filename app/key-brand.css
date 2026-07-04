@@ -51,7 +51,7 @@
 /* ── Boutons ── */
 .kb-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--kb-line);border-radius:12px;background:var(--kb-panel);color:var(--kb-ink);font-weight:600;font-size:14.5px;letter-spacing:-0.01em;cursor:pointer;transition:filter .15s,border-color .15s}
 .kb-btn:hover{filter:brightness(1.1)}
-.kb-btn.primary{background:var(--kb-accent);border-color:transparent;color:#fff}
+.kb-btn.primary{background:var(--kb-accent);border-color:transparent;color:var(--kb-accent-ink,#fff)}
 .kb-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--kb-line);border-radius:10px;background:none;color:var(--kb-muted);cursor:pointer;transition:border-color .15s,color .15s}
 .kb-iconbtn:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
 .kb-iconbtn.danger:hover{border-color:var(--ws-danger);color:var(--ws-danger)}
@@ -192,7 +192,7 @@
 /* ══ Onglet Couleurs (KB-2 · refonte) ══ */
 .kb-colors-head{display:flex;align-items:flex-start;justify-content:flex-end;gap:16px;margin-bottom:16px}
 /* Pill « + » discrète (couleur accent) — ajout d'un élément (Couleurs / Logo / Typo). */
-.kb-addpill{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:32px;border:0;border-radius:999px;background:var(--kb-accent);color:#fff;cursor:pointer;transition:filter .15s}
+.kb-addpill{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:32px;border:0;border-radius:999px;background:var(--kb-accent);color:var(--kb-accent-ink,#fff);cursor:pointer;transition:filter .15s}
 .kb-addpill:hover{filter:brightness(1.1)}
 .kb-addpill.is-on{filter:brightness(.9)}
 .kb-addpill:disabled{opacity:.55;cursor:default}
@@ -240,7 +240,7 @@
 .kb-daynight{display:inline-flex;gap:2px;padding:3px;border-radius:12px;background:rgba(0,0,0,.16);border:1px solid var(--kb-line);flex-shrink:0}
 .kb-dn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:30px;border:0;border-radius:9px;background:none;color:var(--kb-muted);cursor:pointer;transition:background .15s,color .15s}
 .kb-dn:hover{color:var(--kb-ink)}
-.kb-dn.on{background:var(--kb-accent);color:#fff}
+.kb-dn.on{background:var(--kb-accent);color:var(--kb-accent-ink,#fff)}
 
 /* Codes copiables (label discret + valeur forte). */
 .kb-color-codes{display:flex;flex-wrap:wrap;gap:8px}
@@ -269,6 +269,12 @@
 .kb-tone-nums{display:flex;padding:15px 0 17px}
 .kb-tone-num{flex:1;text-align:center;font-size:12.5px;font-weight:600;color:var(--kb-muted)}
 .kb-tone-num.is-base{color:var(--kb-ink);font-weight:900}
+/* Barre de dégradé continue + ligne guide (500 = milieu). Hauteur calée sur
+   le bloc pilles→Pantone de la carte gauche (les panneaux ont même hauteur). */
+.kb-cc-scale{--kb-grad-h:86px}
+.kb-tone-plot{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:flex-end;padding:0 18px 18px}
+.kb-tone-guide{position:absolute;left:50%;top:2px;bottom:calc(18px + var(--kb-grad-h));width:2px;transform:translateX(-50%);border-radius:2px;background:var(--kb-line)}
+.kb-tone-gradient{width:100%;height:var(--kb-grad-h);border-radius:12px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
 
 /* Laboratoires (harmonies + visibilité). */
 .kb-lab{margin-top:30px;border:1px solid var(--kb-line);border-radius:16px;padding:18px 18px 16px}
