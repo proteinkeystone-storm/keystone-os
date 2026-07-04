@@ -198,6 +198,9 @@ footer a{color:inherit}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
 @media print{
+  /* Sans ceci, le navigateur n'imprime PAS les couleurs de fond :
+     croix rouges, pastilles de couleur et aplats disparaîtraient du PDF. */
+  *,*::before,*::after{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
   .nav,.ldl,.bgchips,.trow,.tctl,.print,.no-print{display:none !important}
   body{background:#fff}
   .card,.hero{border-color:#ddd;break-inside:avoid}
