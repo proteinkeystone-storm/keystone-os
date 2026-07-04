@@ -30,15 +30,22 @@
 .kb-sub{color:var(--kb-muted);margin:6px 0 0;font-size:14.5px;max-width:560px}
 .kb-cap-note{color:var(--kb-muted);font-size:12.5px;margin:18px 2px 0;text-align:right}
 
-.kb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+/* Cartes pleine largeur : bord droit aligné sur le CTA « Nouvelle charte »,
+   nom lisible en entier, actions alignées horizontalement. */
+.kb-grid{display:grid;grid-template-columns:1fr;gap:12px}
 .kb-card{display:flex;align-items:stretch;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;overflow:hidden;transition:border-color .15s}
 .kb-card:hover{border-color:var(--kb-accent)}
-.kb-card-open{flex:1;display:flex;align-items:center;gap:12px;padding:18px;background:none;border:0;color:var(--kb-ink);cursor:pointer;text-align:left;min-width:0}
+.kb-card-open{flex:1;display:flex;align-items:center;gap:14px;padding:16px 20px;background:none;border:0;color:var(--kb-ink);cursor:pointer;text-align:left;min-width:0}
 .kb-card-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
 .kb-card-dot-ghost{background:none;border:1.5px dashed var(--kb-line)}
-.kb-card-name{font-weight:700;font-size:15.5px;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-card-name{font-weight:700;font-size:15.5px;letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .kb-card-meta{margin-left:auto;flex-shrink:0}
-.kb-card-acts{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 10px;border-left:1px solid var(--kb-line)}
+.kb-card-status{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--ws-success)}
+.kb-card-status.is-draft{color:var(--kb-muted)}
+.kb-card-acts{display:flex;flex-direction:row;align-items:center;gap:8px;padding:0 14px;border-left:1px solid var(--kb-line)}
+/* Point vert pulsant « en ligne » (cf. dashboard). */
+.kb-livedot{display:inline-block;width:9px;height:9px;flex-shrink:0;border-radius:50%;background:var(--ws-success);animation:kb-pulse-g 2.5s ease-in-out infinite}
+@keyframes kb-pulse-g{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ws-success) 55%,transparent)}60%{box-shadow:0 0 0 5px color-mix(in srgb,var(--ws-success) 4%,transparent)}}
 .kb-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--kb-line);color:var(--kb-muted)}
 .kb-badge.is-live{color:var(--ws-success);border-color:color-mix(in srgb,var(--ws-success) 40%,transparent)}
 
@@ -273,7 +280,8 @@
    le bloc pilles→Pantone de la carte gauche (les panneaux ont même hauteur). */
 .kb-cc-scale{--kb-grad-h:86px}
 .kb-tone-plot{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:flex-end;padding:0 18px 18px}
-.kb-tone-guide{position:absolute;left:50%;top:2px;bottom:calc(18px + var(--kb-grad-h));width:2px;transform:translateX(-50%);border-radius:2px;background:var(--kb-line)}
+.kb-tone-guide{position:absolute;left:50%;top:2px;bottom:calc(18px + var(--kb-grad-h));width:2px;transform:translateX(-50%);border-radius:2px;background:var(--kb-muted);pointer-events:none}
+.kb-tone-gradient{cursor:ew-resize}
 .kb-tone-gradient{width:100%;height:var(--kb-grad-h);border-radius:12px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
 
 /* Laboratoires (harmonies + visibilité). */

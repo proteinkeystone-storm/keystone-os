@@ -287,6 +287,7 @@ function _buildShell() {
   _root.addEventListener('input', _onInput);
   _root.addEventListener('change', _onChange);
   _root.addEventListener('focusout', _onBlur);
+  _root.addEventListener('mousemove', _onMove);
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindHelpButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindBurger(_root); } catch (_) {}
@@ -592,6 +593,24 @@ function _onBlur(e) {
   }
 }
 
+// Trait guide des déclinaisons : suit le curseur sur la bande de teintes OU
+// sur le dégradé ; revient au centre (500) quand on quitte la zone.
+let _activeGuide = null;
+function _onMove(e) {
+  const zone = e.target.closest && e.target.closest('.kb-tone-band, .kb-tone-gradient');
+  if (!zone) {
+    if (_activeGuide) { _activeGuide.style.left = ''; _activeGuide = null; }
+    return;
+  }
+  const scale = zone.closest('.kb-cc-scale');
+  const plot  = scale && scale.querySelector('.kb-tone-plot');
+  const guide = scale && scale.querySelector('.kb-tone-guide');
+  if (!plot || !guide) return;
+  const r = plot.getBoundingClientRect();
+  guide.style.left = `${Math.max(0, Math.min(r.width, e.clientX - r.left))}px`;
+  _activeGuide = guide;
+}
+
 // ── Actions bibliothèque ────────────────────────────────────────
 async function _createChart() {
   try {
@@ -636,8 +655,8 @@ function _renderLib(main) {
       ? `<span class="kb-card-dot" style="background:${_esc(c.primary_hex)}"></span>`
       : `<span class="kb-card-dot kb-card-dot-ghost"></span>`;
     const status = c.status === 'published'
-      ? `<span class="kb-badge is-live">Version ${c.version} en ligne</span>`
-      : `<span class="kb-badge">Brouillon</span>`;
+      ? `<span class="kb-card-status"><span class="kb-livedot"></span>En ligne</span>`
+      : `<span class="kb-card-status is-draft">Brouillon</span>`;
     return `
       <article class="kb-card" data-id="${_esc(c.id)}">
         <button class="kb-card-open" data-act="open" title="Ouvrir la charte">
@@ -689,7 +708,7 @@ function _renderChart() {
     </button>`).join('');
 
   const pubBadge = _chart.status === 'published'
-    ? `<span class="kb-badge is-live">Version ${_chart.version} en ligne</span>`
+    ? `<span class="kb-livedot" title="Version ${_chart.version} en ligne" aria-label="Version ${_chart.version} en ligne"></span>`
     : `<span class="kb-badge">Brouillon</span>`;
 
   main.innerHTML = `
