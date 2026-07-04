@@ -556,7 +556,7 @@
 .kb-bd-tplrow{margin:12px 0}
 .kb-board{display:grid;grid-template-columns:minmax(200px,.85fr) 2.15fr;gap:18px;align-items:start}
 .kb-bd-txt{display:flex;flex-direction:column;gap:10px;padding-top:4px}
-.kb-bd-title{border:none;background:transparent;color:var(--kb-ink);font-weight:900;font-size:22px;letter-spacing:-0.02em;padding:2px 0;width:100%}
+.kb-bd-title{border:none;background:transparent;color:var(--kb-ink);font-weight:900;font-size:22px;letter-spacing:-0.02em;line-height:1.18;padding:2px 0;width:100%;resize:none;overflow:hidden;font-family:inherit}
 .kb-bd-title:focus{outline:none}
 .kb-bd-title::placeholder{color:var(--kb-muted);opacity:.55}
 .kb-bd-text{border:none;background:transparent;color:var(--kb-muted);font:inherit;font-size:13.5px;line-height:1.55;resize:vertical;min-height:96px;padding:0;width:100%}

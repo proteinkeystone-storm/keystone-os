@@ -679,7 +679,10 @@ function _onInput(e) {
   if (el.dataset.field === 'f-buy' && f)    { f.buyUrl = el.value.slice(0, 200) || null; _scheduleSave(); }
 
   // ── Planche d'ambiance (KB-9) : titre + paragraphe, saisis en place ──
-  if (el.dataset.field === 'bd-title') { _boardOf().title = el.value.slice(0, 80); _scheduleSave(); }
+  if (el.dataset.field === 'bd-title') {
+    _boardOf().title = el.value.slice(0, 80); _scheduleSave();
+    el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px';   // le titre s'enroule, jamais coupé
+  }
   if (el.dataset.field === 'bd-text')  { _boardOf().text = el.value.slice(0, 500); _scheduleSave(); }
 
   // ── Scène (KB-8) : saisie hex en ligne — commit à 6 caractères valides.
@@ -945,6 +948,8 @@ function _renderChart() {
   if (_pubPanel && _chart.status === 'published') _renderPubQr();
 
   if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand' || _tab === 'supports') _hydrateLogoImgs();
+  // Titre de la planche : hauteur ajustée au contenu dès le rendu.
+  _root.querySelectorAll('.kb-bd-title').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -2716,8 +2721,8 @@ function _renderBrandTab() {
       <div class="kb-scenegrp kb-bd-tplrow"><span class="kb-scenelbl">Gabarit</span>${tplChips}</div>
       <div class="kb-board">
         <div class="kb-bd-txt">
-          <input class="kb-bd-title" data-field="bd-title" value="${_esc(bd.title)}" maxlength="80"
-                 placeholder="Textures et atmosphère" spellcheck="false" ${titleFont ? `style="font-family:${titleFont}"` : ''}>
+          <textarea class="kb-bd-title" data-field="bd-title" maxlength="80" rows="1"
+                    placeholder="Textures et atmosphère" spellcheck="false" ${titleFont ? `style="font-family:${titleFont}"` : ''}>${_esc(bd.title)}</textarea>
           <textarea class="kb-bd-text" data-field="bd-text" maxlength="500" rows="6" spellcheck="false"
                     placeholder="Ce que les images doivent raconter — matières, lumière, émotions…">${_esc(bd.text)}</textarea>
           <div class="kb-ph-words">${words}</div>
