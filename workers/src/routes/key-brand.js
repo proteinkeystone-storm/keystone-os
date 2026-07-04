@@ -291,6 +291,10 @@ const KB_MIME_EXT = {
   'image/jpeg':      'jpg',
   'image/webp':      'webp',
   'application/pdf': 'pdf',
+  // KB-8 — fond vidéo de la scène d'ouverture (boucle courte ≤ 4 Mo).
+  // Stockée kind='image' (le CHECK D1 ne connaît que logo|image ; le mime fait foi).
+  'video/mp4':       'mp4',
+  'video/webm':      'webm',
 };
 
 // Sanitizer SVG serveur — un SVG utilisateur est du code exécutable en
@@ -333,7 +337,7 @@ export async function handleKeyBrandAssetUpload(request, env, chartId) {
 
   const ct = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   const ext = KB_MIME_EXT[ct];
-  if (!ext) return err('Format non pris en charge (SVG, PNG, JPG, WebP ou PDF)', 415, origin);
+  if (!ext) return err('Format non pris en charge (SVG, PNG, JPG, WebP, PDF, MP4 ou WebM)', 415, origin);
 
   const buf = await request.arrayBuffer();
   if (!buf || buf.byteLength === 0) return err('Fichier vide', 400, origin);

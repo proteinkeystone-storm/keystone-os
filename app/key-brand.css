@@ -481,27 +481,62 @@
 
 /* ══ Onglet Branding (KB-5) — la scène ══ */
 .kb-stage{position:relative;background:#fff;border-radius:18px;min-height:280px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--kb-line)}
-.kb-stage-inner{display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px;text-align:center}
+.kb-stage.has-media{min-height:340px}
+.kb-stage-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.kb-stage-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.46));pointer-events:none}
+.kb-stage-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px;text-align:center}
+.kb-stage-txt{display:flex;flex-direction:column;gap:8px;align-items:center}
 .kb-stage-logo{max-width:min(320px,60%);max-height:130px;object-fit:contain}
 .kb-stage-name{font-weight:900;font-size:clamp(24px,4vw,34px);letter-spacing:-0.025em;color:#15171c;line-height:1.1}
 .kb-stage-baseline{color:#5b6170;font-size:15px}
-.kb-stage-replay{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.06);color:#3a3f4a;border-color:transparent}
+.kb-stage-replay{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.06);color:#3a3f4a;border-color:transparent;z-index:2}
 
-/* Motions — sobres, 1 idée par preset. */
+/* Mises en scène (KB-8) : centré (défaut) · bas gauche · côte à côte. */
+.kb-lay-corner{margin-top:auto;margin-right:auto;align-items:flex-start;text-align:left}
+.kb-lay-corner .kb-stage-txt{align-items:flex-start}
+.kb-lay-split{flex-direction:row;gap:26px;text-align:left}
+.kb-lay-split .kb-stage-txt{align-items:flex-start}
+.kb-stage-vr{width:1px;align-self:stretch;background:rgba(0,0,0,.18)}
+
+/* Motions — sobres, 1 idée par preset. Tempo : --kb-mo (×.6/1/1.8). */
 @keyframes kb-fade{from{opacity:0;transform:scale(.965)}to{opacity:1;transform:scale(1)}}
 @keyframes kb-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
 @keyframes kb-zoom{from{opacity:0;transform:scale(1.18);filter:blur(9px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
 @keyframes kb-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes kb-float-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes kb-float-loop{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-.kb-play-fade{animation:kb-fade .9s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-rise{animation:kb-rise .95s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-zoom{animation:kb-zoom 1.05s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-wipe{animation:kb-wipe 1.1s cubic-bezier(.65,0,.35,1) both}
-.kb-play-float{animation:kb-float-in .9s cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
+@keyframes kb-iris{from{clip-path:circle(0% at 50% 50%);opacity:.5}to{clip-path:circle(75% at 50% 50%);opacity:1}}
+@keyframes kb-letter{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:translateY(0)}}
+@keyframes kb-blurin{from{opacity:0;filter:blur(16px);transform:scale(1.04)}to{opacity:1;filter:blur(0);transform:scale(1)}}
+.kb-play-fade{animation:kb-fade calc(.9s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-play-rise{animation:kb-rise calc(.95s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-play-zoom{animation:kb-zoom calc(1.05s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-play-wipe{animation:kb-wipe calc(1.1s*var(--kb-mo,1)) cubic-bezier(.65,0,.35,1) both}
+.kb-play-float{animation:kb-float-in calc(.9s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
+.kb-play-iris{animation:kb-iris calc(1.15s*var(--kb-mo,1)) cubic-bezier(.65,0,.35,1) both}
+.kb-play-blur{animation:kb-blurin calc(1.15s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-play-letters .kb-stage-logo{animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+.kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter calc(.5s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*.045s*var(--kb-mo,1))}
+.kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(.55s*var(--kb-mo,1))}
 @media (prefers-reduced-motion: reduce){
-  .kb-play-fade,.kb-play-rise,.kb-play-zoom,.kb-play-wipe,.kb-play-float{animation:none}
+  .kb-play-fade,.kb-play-rise,.kb-play-zoom,.kb-play-wipe,.kb-play-float,.kb-play-iris,.kb-play-blur,
+  .kb-play-letters .kb-stage-logo,.kb-play-letters .kb-stage-baseline{animation:none}
+  .kb-play-letters .kb-stage-name .kb-l{animation:none;opacity:1}
 }
+
+/* Barre de réglages de la scène (KB-8) — chips plates groupées. */
+.kb-scenebar{display:flex;flex-direction:column;gap:10px;margin:14px 0 4px;padding:14px 16px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:14px}
+.kb-scenegrp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kb-scenelbl{width:104px;flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--kb-muted);text-transform:uppercase;letter-spacing:.05em}
+.kb-chip{border:1px solid var(--kb-line);background:none;color:var(--kb-ink);border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s}
+.kb-chip:hover{border-color:var(--kb-accent)}
+.kb-chip.on{border-color:var(--kb-accent);box-shadow:0 0 0 1px var(--kb-accent) inset}
+.kb-scenesw{width:26px;height:26px;border-radius:8px;border:1px solid var(--kb-line);cursor:pointer;padding:0}
+.kb-scenesw.on{box-shadow:0 0 0 2px var(--kb-accent)}
+.kb-scenewheel{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px dashed var(--kb-line);border-radius:8px;color:var(--kb-muted);cursor:pointer}
+.kb-scenewheel:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
+.kb-scenewheel input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.kb-scenehint{font-size:11.5px;color:var(--kb-muted)}
 
 .kb-motions{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:14px 0 6px}
 .kb-motion{display:flex;flex-direction:column;gap:2px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:12px;color:var(--kb-ink);padding:11px 12px;cursor:pointer;text-align:left;transition:border-color .15s}

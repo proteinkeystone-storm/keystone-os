@@ -22,7 +22,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { exportLogoPng, buildZip, saveBlob, safeFilename, svgLooksSafe,
-         hexToRgb, rgbToCmyk, contrastRatio, wcagVerdict, harmonies, simulateColorBlind,
+         hexToRgb, rgbToCmyk, contrastRatio, wcagVerdict, harmonies, simulateColorBlind, relLuminance,
          tonalScale, TONAL_STEPS, nightVariant, contrastRating, enhanceInk } from './key-brand-tools.js';
 import { GOOGLE_FONTS, FONT_CATEGORIES, fontMeta, weightsOf, ensureFontLoaded, ensureFontItalic,
          fontSpecimenUrl, TYPE_SAMPLES, TITLE_SAMPLES, BODY_SAMPLES, loremTitle, loremParagraph } from './key-brand-fonts.js';
@@ -129,12 +129,38 @@ let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | 
 // Motions d'intro préréglées — CSS pur, sobres, respectent
 // prefers-reduced-motion. La clé = classe .kb-play-<key> (key-brand.css).
 const MOTIONS = [
-  ['none',  'Aucune',      'la marque, posée'],
-  ['fade',  'Fondu',       'apparition en douceur'],
-  ['rise',  'Lever',       'monte et se révèle'],
-  ['zoom',  'Approche',    'arrive de loin, nette'],
-  ['wipe',  'Rideau',      'balayage gauche → droite'],
-  ['float', 'Flottement',  'entre puis respire'],
+  ['none',    'Aucune',          'la marque, posée'],
+  ['fade',    'Fondu',           'apparition en douceur'],
+  ['rise',    'Lever',           'monte et se révèle'],
+  ['zoom',    'Approche',        'arrive de loin, nette'],
+  ['wipe',    'Rideau',          'balayage gauche → droite'],
+  ['float',   'Flottement',      'entre puis respire'],
+  ['iris',    'Iris',            's\'ouvre en cercle'],
+  ['letters', 'Lettre à lettre', 'le nom s\'écrit'],
+  ['blur',    'Mise au point',   'flou, puis net'],
+];
+// KB-8 — réglages de la scène d'ouverture (fond, mise en scène, encre, tempo).
+const SCENE_BG_TYPES = [
+  ['white',    'Blanc'],
+  ['color',    'Couleur'],
+  ['gradient', 'Dégradé'],
+  ['image',    'Photo'],
+  ['video',    'Vidéo'],
+];
+const SCENE_LAYOUTS = [
+  ['center', 'Centré'],
+  ['corner', 'Bas gauche'],
+  ['split',  'Côte à côte'],
+];
+const SCENE_INKS = [
+  ['auto',  'Auto'],
+  ['light', 'Claire'],
+  ['dark',  'Sombre'],
+];
+const SCENE_DURS = [          // multiplicateur de durée des motions (--kb-mo)
+  ['fast',   'Vif',   0.6],
+  ['normal', 'Posé',  1],
+  ['slow',   'Ample', 1.8],
 ];
 const KB_SYM_MAX = 8;       // annotations de symbolique max
 const KB_PHOTO_MAX = 6;     // exemples photo max (cap brief)
@@ -280,7 +306,7 @@ function _buildShell() {
   const picker = document.createElement('input');
   picker.type = 'file';
   picker.multiple = true;
-  picker.accept = '.svg,.png,.jpg,.jpeg,.webp,.pdf,image/svg+xml,image/png,image/jpeg,image/webp,application/pdf';
+  picker.accept = '.svg,.png,.jpg,.jpeg,.webp,.pdf,.mp4,.webm,image/svg+xml,image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/webm';
   picker.style.display = 'none';
   picker.dataset.slot = 'filepicker';
   _root.appendChild(picker);
@@ -430,6 +456,14 @@ function _onClick(e) {
   // ── Onglet Branding (KB-5) ──
   if (act === 'brand-motion')  { _setMotion(btn.dataset.motion); return; }
   if (act === 'brand-replay')  { _replayMotion(); return; }
+  // ── Scène d'ouverture (KB-8) ──
+  if (act === 'scene-bgtype')  { _setSceneProp('bgType', btn.dataset.v); return; }
+  if (act === 'scene-lay')     { _setSceneProp('layout', btn.dataset.v); return; }
+  if (act === 'scene-ink')     { _setSceneProp('ink', btn.dataset.v); return; }
+  if (act === 'scene-dur')     { _setSceneProp('dur', btn.dataset.v); return; }
+  if (act === 'scene-c')       { _setSceneColor(btn.dataset.n, btn.dataset.hex); return; }
+  if (act === 'scene-media')     { _pickTarget = 'scene-media'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'scene-media-del') { _deleteSceneMedia(); return; }
   if (act === 'sym-del')       { _deleteSymbol(parseInt(btn.dataset.idx, 10)); return; }
   if (act === 'ph-add')        { _pickTarget = 'photo'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'ph-del')        { _deletePhoto(btn.dataset.aid); return; }
@@ -590,6 +624,10 @@ function _onChange(e) {
 
   // ── Publication (KB-6) : bascule d'accès → montre/cache le champ code.
   if (el.dataset.field === 'pub-access') { _pubAccess = el.value; _renderChart(); }
+
+  // ── Scène d'ouverture (KB-8) : roues chromatiques du fond.
+  if (el.dataset.field === 'scene-cw1') { _setSceneColor('1', el.value); }
+  if (el.dataset.field === 'scene-cw2') { _setSceneColor('2', el.value); }
 
   // ── Onglet Typographies (KB-3) ──
   const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
@@ -938,10 +976,13 @@ function _refreshProtViz() {
 // Aperçus : les <img> reçoivent leur objectURL authentifié après le rendu.
 async function _hydrateLogoImgs() {
   if (!_root) return;
-  const imgs = [..._root.querySelectorAll('img[data-asset]')];
-  for (const img of imgs) {
-    try { img.src = await _assetUrl(img.dataset.asset); }
-    catch (_) { img.closest('.kb-logo-preview,.kb-prot-zone')?.classList.add('is-broken'); }
+  const media = [..._root.querySelectorAll('img[data-asset],video[data-asset]')];
+  for (const el of media) {
+    try {
+      el.src = await _assetUrl(el.dataset.asset);
+      if (el.tagName === 'VIDEO') el.play().catch(() => {});   // autoplay muet (KB-8)
+    }
+    catch (_) { el.closest('.kb-logo-preview,.kb-prot-zone')?.classList.add('is-broken'); }
   }
 }
 
@@ -958,6 +999,12 @@ async function _onFilesPicked(fileList) {
   if (_pickTarget === 'photo') {
     _pickTarget = 'logo';
     await _onPhotosPicked([...fileList]);
+    return;
+  }
+  // Cible « fond de la scène d'ouverture » (KB-8) : une photo ou une vidéo.
+  if (_pickTarget === 'scene-media') {
+    _pickTarget = 'logo';
+    await _onSceneMediaPicked(fileList[0]);
     return;
   }
   const files = [...fileList];
@@ -1898,6 +1945,71 @@ function _titleFontCss() {
   return `'${f.family.replace(/'/g, '')}', sans-serif`;
 }
 
+// ── KB-8 : la scène d'ouverture (fond, mise en scène, encre, tempo) ──
+function _sceneOf() {
+  const b = _brandSection();
+  if (!b.scene || typeof b.scene !== 'object') b.scene = {};
+  const s = b.scene;
+  if (!SCENE_BG_TYPES.some(([k]) => k === s.bgType))  s.bgType = 'white';
+  if (!SCENE_LAYOUTS.some(([k]) => k === s.layout))   s.layout = 'center';
+  if (!SCENE_INKS.some(([k]) => k === s.ink))         s.ink = 'auto';
+  if (!SCENE_DURS.some(([k]) => k === s.dur))         s.dur = 'normal';
+  return s;
+}
+// Encre lisible sur le fond choisi. Auto : luminance de la couleur (ou
+// claire sur photo/vidéo, avec voile de lisibilité). Jamais de gris moyen.
+function _sceneInk(s) {
+  let mode = s.ink;
+  if (mode === 'auto') {
+    if (s.bgType === 'image' || s.bgType === 'video') mode = 'light';
+    else if ((s.bgType === 'color' || s.bgType === 'gradient') && s.c1) {
+      const rgb = hexToRgb(s.c1);
+      mode = rgb && relLuminance(rgb) < 0.45 ? 'light' : 'dark';
+    } else mode = 'dark';
+  }
+  return mode === 'light'
+    ? { name: '#ffffff', base: 'rgba(255,255,255,.78)', scrim: (s.bgType === 'image' || s.bgType === 'video') }
+    : { name: '#15171c', base: '#5b6170', scrim: false };
+}
+function _sceneBgCss(s) {
+  if (s.bgType === 'color'    && s.c1)         return `background:${s.c1}`;
+  if (s.bgType === 'gradient' && s.c1 && s.c2) return `background:linear-gradient(135deg,${s.c1},${s.c2})`;
+  return '';   // blanc par défaut ; photo/vidéo = élément média
+}
+function _setSceneProp(prop, v) {
+  const s = _sceneOf();
+  s[prop] = v;
+  _scheduleSave(); _renderChart();
+}
+function _setSceneColor(n, hex) {
+  const m = String(hex || '').match(/^#?([0-9a-fA-F]{6})$/);
+  if (!m) return;
+  _sceneOf()[n === '2' ? 'c2' : 'c1'] = '#' + m[1].toLowerCase();
+  _scheduleSave(); _renderChart();
+}
+async function _onSceneMediaPicked(file) {
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const isVideo = ['mp4', 'webm'].includes(ext);
+  if (!isVideo && !['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast('Photo (PNG, JPG, WebP) ou vidéo (MP4, WebM) attendue.'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast(isVideo ? 'Vidéo trop lourde (max 4 Mo) — exportez une boucle courte compressée.' : 'Image trop lourde (max 4 Mo).'); return; }
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    const s = _sceneOf();
+    if (s.assetId) { _api(`/assets/${encodeURIComponent(s.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+    s.assetId = asset.id;
+    s.bgType = isVideo ? 'video' : 'image';   // le fichier réel fait foi
+    _scheduleSave(); _renderChart();
+  } catch (e) { _toast(e.message); }
+}
+function _deleteSceneMedia() {
+  const s = _sceneOf();
+  if (s.assetId) { _api(`/assets/${encodeURIComponent(s.assetId)}`, { method: 'DELETE' }).catch(() => {}); }
+  s.assetId = null;
+  s.bgType = 'white';
+  _scheduleSave(); _renderChart();
+}
+
 function _setMotion(key) {
   if (!MOTIONS.some(([k]) => k === key)) return;
   _brandSection().motion = key;
@@ -1966,21 +2078,78 @@ function _renderBrandTab() {
   const meta = _chart.draft.meta || {};
   const titleFont = _titleFontCss();
 
-  // ── La scène : page de garde vivante (nom + baseline + logo, motion) ──
+  // ── La scène : page de garde vivante (KB-8 : fond, mise en scène, encre, tempo) ──
+  const s = _sceneOf();
+  const ink = _sceneInk(s);
+  const bgCss = _sceneBgCss(s);
+  const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
+  const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
+  const brandName = meta.name || _chart.name;
+  // Motion « lettre à lettre » : chaque caractère du nom anime avec son délai.
+  const nameHtml = b.motion === 'letters'
+    ? [...brandName].map((ch, i) => `<span class="kb-l" style="--i:${i}">${ch === ' ' ? '&nbsp;' : _esc(ch)}</span>`).join('')
+    : _esc(brandName);
+  const inked = s.bgType !== 'white';   // fond custom → encre pilotée
+
+  const mediaEl = !hasMedia ? '' : (s.bgType === 'video'
+    ? `<video class="kb-stage-media" data-asset="${_esc(s.assetId)}" muted loop autoplay playsinline></video>`
+    : `<img class="kb-stage-media" data-asset="${_esc(s.assetId)}" alt="" draggable="false">`);
+
+  const stageInner = `
+      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)}" data-slot="stage-inner" style="--kb-mo:${mo}">
+        ${logoVariant ? `<img class="kb-stage-logo" data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">` : ''}
+        ${s.layout === 'split' && logoVariant ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
+        <div class="kb-stage-txt">
+          <div class="kb-stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${nameHtml}</div>
+          ${meta.baseline ? `<div class="kb-stage-baseline" ${inked ? `style="color:${ink.base}"` : ''}>${_esc(meta.baseline)}</div>` : ''}
+        </div>
+      </div>`;
+
+  // Barre de réglages — chips plates, groupées par intention.
+  const chips = (defs, cur, act) => defs.map(([k, lbl]) =>
+    `<button class="kb-chip ${cur === k ? 'on' : ''}" data-act="${act}" data-v="${k}">${lbl}</button>`).join('');
+  const palette = _paletteOf().filter(c => c.hex);
+  const colorRow = (n, cur) => `
+    <div class="kb-scenegrp">
+      <span class="kb-scenelbl">Couleur ${n}</span>
+      ${palette.map(c => `<button class="kb-scenesw ${cur === c.hex ? 'on' : ''}" data-act="scene-c" data-n="${n}"
+        data-hex="${_esc(c.hex)}" style="background:${_esc(c.hex)}" title="${_esc(c.name || c.hex)}"></button>`).join('')}
+      <label class="kb-scenewheel" title="Autre couleur">${icon('palette', 13)}
+        <input type="color" data-field="scene-cw${n}" value="${_esc(cur || '#ffffff')}"></label>
+    </div>`;
+  const pickerRows =
+    s.bgType === 'color'    ? colorRow('1', s.c1) :
+    s.bgType === 'gradient' ? colorRow('1', s.c1) + colorRow('2', s.c2) :
+    (s.bgType === 'image' || s.bgType === 'video') ? `
+    <div class="kb-scenegrp">
+      <span class="kb-scenelbl">Média</span>
+      <button class="kb-btn" data-act="scene-media">${icon(s.bgType === 'video' ? 'film' : 'image', 15)} ${s.assetId ? 'Remplacer' : (s.bgType === 'video' ? 'Choisir une vidéo' : 'Choisir une photo')}</button>
+      ${s.assetId ? `<button class="kb-iconbtn danger" data-act="scene-media-del" title="Retirer le média">${icon('trash-2', 15)}</button>` : ''}
+      <span class="kb-scenehint">${s.bgType === 'video' ? '4 Mo max — boucle courte, muette' : '4 Mo max'}</span>
+    </div>` : '';
+
+  const sceneBar = `
+    <div class="kb-scenebar">
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${chips(SCENE_BG_TYPES, s.bgType, 'scene-bgtype')}</div>
+      ${pickerRows}
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Tempo</span>${chips(SCENE_DURS.map(([k, l]) => [k, l]), s.dur, 'scene-dur')}</div>
+    </div>`;
+
   const motionCards = MOTIONS.map(([key, label, sub]) => `
     <button class="kb-motion ${b.motion === key ? 'on' : ''}" data-act="brand-motion" data-motion="${key}">
       <strong>${label}</strong><span>${sub}</span>
     </button>`).join('');
 
   const stage = `
-    <div class="kb-stage">
-      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')}" data-slot="stage-inner">
-        ${logoVariant ? `<img class="kb-stage-logo" data-asset="${_esc(logoVariant.assetId)}" alt="" draggable="false">` : ''}
-        <div class="kb-stage-name" ${titleFont ? `style="font-family:${titleFont}"` : ''}>${_esc(meta.name || _chart.name)}</div>
-        ${meta.baseline ? `<div class="kb-stage-baseline">${_esc(meta.baseline)}</div>` : ''}
-      </div>
+    <div class="kb-stage ${hasMedia ? 'has-media' : ''}" ${bgCss ? `style="${bgCss}"` : ''}>
+      ${mediaEl}
+      ${hasMedia && ink.scrim ? '<span class="kb-stage-scrim" aria-hidden="true"></span>' : ''}
+      ${stageInner}
       <button class="kb-iconbtn kb-stage-replay" data-act="brand-replay" title="Rejouer l'animation">${icon('refresh', 15)}</button>
     </div>
+    ${sceneBar}
     <div class="kb-motions">${motionCards}</div>
     <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>`;
 
