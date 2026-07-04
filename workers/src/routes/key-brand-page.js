@@ -106,10 +106,51 @@ button{font-family:inherit}
   .m-letters .hero-name .hl{animation:none;opacity:1}
 }
 
-/* Sections */
-section{margin-top:38px}
-h2{font-weight:900;font-size:22px;letter-spacing:-0.02em;margin:0 0 4px}
-.sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+/* ══ Édition (KB-12) — le rythme d'une charte imprimée ══ */
+/* Thème sombre optionnel (réglage de l'éditeur). */
+body.dark{--ink:#f2f3f7;--muted:#9aa2b1;--line:#262b37;--bg:#0e1016;--panel:#161923}
+body.dark .nav{background:rgba(14,16,22,.9)}
+body.dark .code,body.dark .ldl{background:#12141c}
+body.dark .toast{background:#f2f3f7;color:#15171c}
+
+/* Couverture pleine page (la scène d'ouverture devient la couverture).
+   Annule le style « carte » du .hero : pleine largeur, sans cadre. */
+.cover,.hero.cover{border:none;border-radius:0;margin-top:0;position:relative;min-height:82vh;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:64px 24px 110px}
+.cover.has-media{min-height:86vh}
+.cover-foot{position:absolute;bottom:34px;left:0;right:0;text-align:center;font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;opacity:.92}
+.cover-foot::after{content:"";display:block;width:200px;height:1px;margin:14px auto 0;background:currentColor;opacity:.45}
+
+/* Sommaire sur aplat. */
+.toc{padding:70px 24px}
+.toc-in{max-width:940px;margin:0 auto}
+.toc-title{font-weight:900;font-size:clamp(26px,4vw,36px);letter-spacing:-0.02em;text-transform:uppercase;margin:0 0 34px}
+.toc ol{list-style:none;margin:0;padding:0;columns:2;column-gap:44px}
+.toc li{margin:0 0 12px;break-inside:avoid}
+.toc a{color:inherit;text-decoration:none;font-size:15px;font-weight:700}
+.toc a:hover{text-decoration:underline}
+.toc .tn{font-weight:800;margin-right:10px;opacity:.75}
+@media (max-width:560px){.toc ol{columns:1}}
+
+/* Intercalaire de chapitre — pleine couleur, une respiration. */
+.chap{padding:clamp(90px,16vh,150px) 24px}
+.chap-in{max-width:940px;margin:0 auto;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+.chap-n{font-weight:300;font-size:clamp(28px,4.6vw,44px);letter-spacing:.02em}
+.chap h2{font-weight:900;font-size:clamp(28px,4.6vw,44px);letter-spacing:-0.02em;text-transform:uppercase;margin:0}
+
+/* Planche : filet + libellé tout-caps, une idée à la fois, de l'air. */
+section{max-width:940px;margin:0 auto;padding:64px 24px 10px}
+section>h2{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--ink);border-top:1px solid var(--ink);padding-top:14px;margin:0 0 6px}
+.sub{color:var(--muted);font-size:13.5px;margin:0 0 22px;max-width:52ch}
+.pl-solo{background:#fff;border:1px solid var(--line);border-radius:18px;display:flex;align-items:center;justify-content:center;padding:9% 8%;margin-top:26px}
+.pl-solo img{max-width:min(440px,66%);max-height:210px;object-fit:contain}
+.pl-tail{max-width:940px;margin:0 auto;padding:26px 24px 0}
+
+/* Couleurs en pastilles rondes (édition). */
+.crows{display:flex;flex-direction:column;gap:38px;margin-top:30px}
+.crow{display:flex;gap:34px;align-items:center;flex-wrap:wrap}
+.cdot{width:clamp(104px,14vw,150px);aspect-ratio:1;border-radius:50%;border:0;cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
+.cinfo{display:flex;flex-direction:column;gap:9px;min-width:min(300px,100%)}
+.talpha{font-size:clamp(21px,3.2vw,32px);line-height:1.4;margin:20px 0 8px;word-break:break-word}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px}
 .hint{color:var(--muted);font-size:12.5px}
 .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:11px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .15s}
@@ -299,8 +340,12 @@ footer a{color:inherit}
   *,*::before,*::after{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
   .nav,.ldl,.bgchips,.trow,.tctl,.print,.no-print{display:none !important}
   body{background:#fff}
-  .card,.hero{border-color:#ddd;break-inside:avoid}
-  section{margin-top:22px}
+  .card,.hero,.pl-solo{border-color:#ddd;break-inside:avoid}
+  /* Édition paginée : couverture et intercalaires = une page chacun. */
+  .cover{min-height:96vh;page-break-after:always}
+  .toc{page-break-after:always;padding:60px 24px}
+  .chap{page-break-before:always;padding:110px 24px}
+  section{padding:34px 24px 6px}
 }
 @media (max-width:560px){
   .hero{padding:40px 18px}
@@ -414,12 +459,31 @@ function render(){
   const supGallery=SUP&&Array.isArray(SUP.gallery)?SUP.gallery.filter(Boolean):[];
   const showSupports=!!SUP&&(supOn('web')||supOn('phone')||supOn('card')||supOn('social')||supGallery.length>0);
 
+  // Planche d'ambiance — calculée tôt (elle décide du chapitre « Univers »).
+  const BD=(kit.branding&&kit.branding.board)||{};
+  const BD_SLOTS={duo:['a','b'],atelier:['a','b','c'],galerie:['a','b','c'],mosaic:['a','b','c','d'],pano:['a']};
+  const bdTpl=BD_SLOTS[BD.template]?BD.template:'atelier';
+  const bdCells=BD_SLOTS[bdTpl].map(sl=>[sl,BD.cells&&BD.cells[sl]]).filter(p=>p[1]&&p[1].assetId);
+  const showBrand=bdCells.length>0||(sym.length&&rasterV.length)||phWords.length>0||phIds.length>0;
+
+  // Édition (KB-12) : thème publié — fond clair/sombre + teinte des
+  // intercalaires (réglage éditeur ; défaut = couleur primaire).
+  const PUB=(kit.settings&&kit.settings.pub)||{};
+  if(PUB.mode==='dark')document.body.classList.add('dark');else document.body.classList.remove('dark');
+  const TINT=(hexToRgb(PUB.tint)?PUB.tint:null)||(primary?primary.hex:null)||'#23252d';
+  const TINTINK=inkOn(TINT);
+  const TINTSOFT=TINTINK==='#fff'?'rgba(255,255,255,.55)':'rgba(0,0,0,.45)';
+
   const navLinks=[];
-  if(variants.length)navLinks.push(['#logo','Logo']);
+  if(variants.length)navLinks.push(['#logo','Logotype']);
   if(palette.length)navLinks.push(['#couleurs','Couleurs']);
   if(fonts.length)navLinks.push(['#typos','Typographies']);
   if((rasterV.length&&inter.length)||customR.length)navLinks.push(['#regles','Règles']);
+  if(showBrand)navLinks.push(['#univers','Univers']);
   if(showSupports)navLinks.push(['#supports','Supports']);
+  // Intercalaire de chapitre — numérotation dynamique (géométrie variable).
+  let chapN=0;
+  const chap=(id,title)=>{chapN++;return '<div class="chap" id="'+id+'" style="background:'+TINT+'"><div class="chap-in"><span class="chap-n" style="color:'+TINTSOFT+'">'+String(chapN).padStart(2,'0')+'</span><h2 style="color:'+TINTINK+'">'+title+'</h2></div></div>'};
 
   const FLABELS={distort:'Ne pas déformer le logo',tilt:'Ne pas l\\'incliner',recolor:'Ne pas changer ses couleurs',invert:'Ne pas l\\'inverser en négatif',shadow:'Ne pas ajouter d\\'ombre ni d\\'effet',outline:'Ne pas l\\'encadrer d\\'un filet',opacity:'Ne pas baisser son opacité',busybg:'Ne pas le poser sur un fond chargé',crowd:'Ne pas envahir sa zone de protection'};
   const ROLES={primary:'Primaire',secondary:'Secondaire',extra:'Supplémentaire',bg:'Fond',text:'Texte'};
@@ -429,7 +493,7 @@ function render(){
   let h='<div class="nav"><div class="nav-in"><span class="nav-name">'+esc(DATA.name)+'</span>';
   for(const[a,l]of navLinks)h+='<a href="'+a+'">'+l+'</a>';
   h+='<span class="sp"></span><span class="vbadge">Version '+DATA.version+' — '+new Date(DATA.updated_at+'Z').toLocaleDateString('fr-FR')+'</span>'+
-     '<button class="print" id="printbtn">Exporter en PDF</button></div></div><div class="wrap">';
+     '<button class="print" id="printbtn">Exporter en PDF</button></div></div>';
 
   // Héros — scène d'ouverture (KB-8 : fond, mise en scène, encre, tempo)
   const SC=(kit.branding&&kit.branding.scene)||{};
@@ -438,15 +502,18 @@ function render(){
   const scMo=SC.dur==='fast'?0.6:SC.dur==='slow'?1.8:1;
   const scMedia=(scBg==='image'||scBg==='video')&&SC.assetId?SC.assetId:null;
   const relL=c=>{const r=hexToRgb(c);return r?.2126*lin(r.r)+.7152*lin(r.g)+.0722*lin(r.b):1};
-  // Encre : auto = claire sur média ou couleur sombre ; fond blanc = thème.
+  // Encre : auto = claire sur média ou couleur sombre ; scène sans fond
+  // défini → la couverture prend la TEINTE de l'édition (encre assortie).
   let scInk=['light','dark'].includes(SC.ink)?SC.ink:'auto';
-  if(scBg==='white')scInk='theme';
+  if(scBg==='white')scInk=(TINTINK==='#fff'?'light':'dark');
   else if(scInk==='auto')scInk=scMedia?'light':(SC.c1&&relL(SC.c1)<.45?'light':'dark');
   const inkName=scInk==='light'?'#ffffff':scInk==='dark'?'#15171c':null;
   const inkBase=scInk==='light'?'rgba(255,255,255,.78)':scInk==='dark'?'#5b6170':null;
   let heroStyle='';
   if(scBg==='color'&&SC.c1)heroStyle=' style="background:'+esc(SC.c1)+'"';
   else if(scBg==='gradient'&&SC.c1&&SC.c2)heroStyle=' style="background:linear-gradient(135deg,'+esc(SC.c1)+','+esc(SC.c2)+')"';
+  // Édition : scène sans fond défini → la couverture prend la TEINTE.
+  if(scBg==='white')heroStyle=' style="background:'+TINT+'"';
   const rawName=String(meta.name||DATA.name);
   let nameHtml=esc(rawName);
   // Lettre à lettre : lettres groupées par mot insécable (.hw), sinon le
@@ -455,7 +522,8 @@ function render(){
   let nmSt='';
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
   if(inkName)nmSt+='color:'+inkName;
-  h+='<div class="hero'+(scMedia?' has-media':'')+' hlay-'+scLay+'"'+heroStyle+'>'+
+  // Couverture pleine page (scène KB-8) + mention façon PDF de charte.
+  h+='<div class="hero cover'+(scMedia?' has-media':'')+' hlay-'+scLay+'"'+heroStyle+'>'+
      (scMedia?(scBg==='video'
        ?'<video class="hero-media" src="'+fileUrl(scMedia)+'" muted loop autoplay playsinline></video>'
        :'<img class="hero-media" src="'+fileUrl(scMedia)+'" alt="">'):'')+
@@ -465,16 +533,25 @@ function render(){
      (scLay==='split'&&heroLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
      (meta.baseline?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(meta.baseline)+'</div>':'')+
-     '</div></div></div>';
-  if(DATA.changelog&&DATA.changelog.length>1||DATA.changelog&&DATA.changelog[0]&&DATA.changelog[0].note){
-    h+='<details class="chlog no-print"><summary>Historique des versions</summary><ul>';
-    for(const v of DATA.changelog)h+='<li>Version '+v.version+' — '+new Date(v.published_at+'Z').toLocaleDateString('fr-FR')+(v.note?' · '+esc(v.note):'')+'</li>';
-    h+='</ul></details>';
+     '</div></div>'+
+     '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
+     '</div>';
+
+  // Sommaire sur aplat (numéros = mêmes chapitres que la nav).
+  if(navLinks.length>1){
+    h+='<div class="toc" style="background:'+TINT+';color:'+TINTINK+'"><div class="toc-in"><p class="toc-title">Sommaire</p><ol>';
+    navLinks.forEach(([a,l],i)=>{h+='<li><a href="'+a+'"><span class="tn" style="color:'+TINTSOFT+'">'+String(i+1).padStart(2,'0')+'</span>'+l+'</a></li>'});
+    h+='</ol></div></div>';
   }
 
-  // Logo
+  // Chapitre 01 — Logotype
   if(variants.length){
-    h+='<section id="logo"><h2>Logo</h2><p class="sub">Cliquez un fond pour tester la lisibilité — téléchargez le format exact qu\\'il vous faut.</p>';
+    h+=chap('logo','Logotype');
+    if(heroLogo){
+      h+='<section><h2>Le logotype</h2><p class="sub">La version de référence — à reproduire sans modification.</p>'+
+         '<div class="pl-solo"><img src="'+fileUrl(heroLogo.assetId)+'" alt="'+esc(DATA.name)+'"></div></section>';
+    }
+    h+='<section><h2>Déclinaisons</h2><p class="sub">Cliquez un fond pour tester la lisibilité — téléchargez le format exact qu\\'il vous faut.</p>';
     h+='<div class="bgchips no-print"><button class="bgchip ck on" data-bg="ck" title="Transparent"></button><button class="bgchip" data-bg="#ffffff" style="background:#fff" title="Clair"></button><button class="bgchip" data-bg="#0c0d10" style="background:#0c0d10" title="Sombre"></button>';
     for(const c of palette.slice(0,6))h+='<button class="bgchip" data-bg="'+esc(c.hex)+'" style="background:'+esc(c.hex)+'" title="'+esc(c.name||c.hex)+'"></button>';
     h+='</div><div class="lgrid">';
@@ -491,35 +568,26 @@ function render(){
     }
     h+='</div>';
     if(variants.length>1)h+='<p class="no-print" style="margin-top:12px"><button class="btn" id="zipbtn">Télécharger le kit (.zip)</button></p>';
+    h+='</section>';
     if((prot&&prot.ratio)||mins&&(mins.printMm||mins.digitalPx)){
-      h+='<div class="card protec">';
+      h+='<section><h2>Zone de protection & taille minimale</h2><p class="sub">L\\'espace vital du logotype — rien ne doit y entrer.</p><div class="card protec">';
       if(prot&&prot.ratio&&heroLogo)h+='<div class="protec-viz" style="--pm:'+Math.round(prot.ratio*48)+'px"><div class="protec-zone"><img src="'+fileUrl(heroLogo.assetId)+'" alt=""></div></div>';
       h+='<div class="mins">'+(prot&&prot.ratio?'<div><b>Zone de protection</b> : '+prot.ratio+' × '+esc(prot.basis||'hauteur du logo')+' — aucun élément dans la zone en pointillés.</div>':'');
       if(mins&&mins.printMm)h+='<div><b>Taille minimale impression</b> : '+mins.printMm+' mm de large</div>';
       if(mins&&mins.digitalPx)h+='<div><b>Taille minimale numérique</b> : '+mins.digitalPx+' px de large</div>';
-      h+='</div></div>';
+      h+='</div></div></section>';
     }
-    h+='</section>';
   }
 
-  // Symbolique
-  if(sym.length&&heroLogo){
-    h+='<section id="signe"><h2>Le signe</h2><p class="sub">Ce que raconte le logo.</p><div class="sym">'+
-       '<img src="'+fileUrl(heroLogo.assetId)+'" alt="">';
-    sym.forEach((s,i)=>{h+='<span class="sym-dot" style="left:'+(s.x*100).toFixed(1)+'%;top:'+(s.y*100).toFixed(1)+'%">'+(i+1)+'</span>'});
-    h+='</div><ul class="sym-list">';
-    sym.forEach((s,i)=>{h+='<li><span class="n">'+(i+1)+'</span> '+esc(s.text)+'</li>'});
-    h+='</ul></section>';
-  }
-
-  // Couleurs
+  // Chapitre — Couleurs (pastilles rondes, façon édition)
   if(palette.length){
-    h+='<section id="couleurs"><h2>Couleurs</h2><p class="sub">Cliquez une pastille ou un code pour le copier. CMJN indicatif.</p><div class="cgrid">';
+    h+=chap('couleurs','Couleurs');
+    h+='<section><h2>Les couleurs</h2><p class="sub">Cliquez une pastille ou un code pour le copier. CMJN indicatif.</p><div class="crows">';
     for(const c of palette){
       const rgb=hexToRgb(c.hex);
       const rw=contrast(c.hex,'#ffffff'),rb=contrast(c.hex,'#000000');
-      h+='<div class="card ccard"><button class="csw" data-copy="'+esc(c.hex)+'" style="background:'+esc(c.hex)+';color:'+inkOn(c.hex)+'"><span>'+esc(c.hex)+'</span></button>'+
-        '<div class="cbody"><div class="crow1"><b>'+esc(c.name||c.hex)+'</b><span class="crole">'+(ROLES[c.role]||'')+'</span></div>'+
+      h+='<div class="crow"><button class="cdot" data-copy="'+esc(c.hex)+'" title="Copier '+esc(c.hex)+'" style="background:'+esc(c.hex)+'"></button>'+
+        '<div class="cinfo"><div class="crow1"><b>'+esc(c.name||c.hex)+'</b><span class="crole">'+(ROLES[c.role]||'')+'</span></div>'+
         '<div class="codes"><button class="code" data-copy="'+esc(c.hex)+'">HEX <b>'+esc(c.hex)+'</b></button>'+
         '<button class="code" data-copy="'+rgb.r+', '+rgb.g+', '+rgb.b+'">RVB <b>'+rgb.r+' '+rgb.g+' '+rgb.b+'</b></button>'+
         '<button class="code" data-copy="'+cmyk(c.hex)+'">CMJN <b>'+cmyk(c.hex)+'</b></button>'+
@@ -531,9 +599,10 @@ function render(){
     h+='</div></section>';
   }
 
-  // Typographies
+  // Chapitre — Typographies (alphabet complet + spécimen à essayer)
   if(fonts.length){
-    h+='<section id="typos"><h2>Typographies</h2><p class="sub">Essayez-les avec votre propre texte.</p>'+
+    h+=chap('typos','Typographies');
+    h+='<section><h2>La typographie</h2><p class="sub">L\\'alphabet complet de chaque police — et votre propre texte pour l\\'essayer.</p>'+
        '<div class="trow no-print"><input type="text" id="spectext" maxlength="180" value="Portez ce vieux whisky au juge blond qui fume." aria-label="Texte d\\'essai"></div>';
     for(const f of fonts){
       const gg=f.source==='google';
@@ -544,7 +613,8 @@ function render(){
          '<span class="role">'+(FROLES[f.role]||'')+'</span>'+
          (gg?'<a class="btn" href="https://fonts.google.com/specimen/'+encodeURIComponent(f.family).replace(/%20/g,'+')+'" target="_blank" rel="noopener noreferrer">Télécharger</a>'
             :(f.buyUrl&&/^https?:/.test(f.buyUrl)?'<a class="btn" href="'+esc(f.buyUrl)+'" target="_blank" rel="noopener noreferrer">Où l\\'obtenir</a>':''))+'</div>'+
-         (gg?'<div class="tspec" data-spec style="font-family:'+fam+';font-weight:'+w0+';font-size:30px">Portez ce vieux whisky au juge blond qui fume.</div>'+
+         (gg?'<div class="talpha" style="font-family:'+fam+';font-weight:'+w0+'">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm nopqrstuvwxyz<br>0123456789</div>'+
+             '<div class="tspec" data-spec style="font-family:'+fam+';font-weight:'+w0+';font-size:30px">Portez ce vieux whisky au juge blond qui fume.</div>'+
              '<div class="tctl">Graisse <select data-w>'+ws.map(w=>'<option'+(w===w0?' selected':'')+'>'+w+'</option>').join('')+'</select></div>'
             :'<p class="hint">Police déclarée — aperçu indisponible (non hébergée).</p>')+
          '</div>';
@@ -552,9 +622,10 @@ function render(){
     h+='</section>';
   }
 
-  // Règles
+  // Chapitre — Règles d'usage
   if((rasterV.length&&inter.length)||customR.length){
-    h+='<section id="regles"><h2>Règles d\\'usage</h2><p class="sub">Ce qui protège l\\'identité de la marque.</p>';
+    h+=chap('regles','Règles d\\'usage');
+    h+='<section><h2>Les interdits</h2><p class="sub">Ce qui protège l\\'identité de la marque.</p>';
     if(rasterV.length&&inter.length){
       const lg=fileUrl(rasterV[0].assetId);
       h+='<div class="rgrid"><figure class="card rcard good"><div class="rbox"><img src="'+lg+'" alt=""></div><figcaption>✓ Le bon usage</figcaption></figure>';
@@ -578,12 +649,19 @@ function render(){
     h+='</section>';
   }
 
-  // Direction photo & planche d'ambiance (KB-9)
-  const BD=(kit.branding&&kit.branding.board)||{};
-  const BD_SLOTS={duo:['a','b'],atelier:['a','b','c'],galerie:['a','b','c'],mosaic:['a','b','c','d'],pano:['a']};
-  const bdTpl=BD_SLOTS[BD.template]?BD.template:'atelier';
-  const bdCells=BD_SLOTS[bdTpl].map(sl=>[sl,BD.cells&&BD.cells[sl]]).filter(p=>p[1]&&p[1].assetId);
+  // Chapitre — Univers de marque (symbolique + ambiance + direction photo)
   const wordChips=phWords.length?'<div class="phwords">'+phWords.map(w=>'<span class="phword">'+esc(w)+'</span>').join('')+'</div>':'';
+  if(showBrand){
+    h+=chap('univers','Univers de marque');
+    if(sym.length&&heroLogo){
+      h+='<section><h2>La symbolique du signe</h2><p class="sub">Ce que raconte le logo.</p><div class="sym">'+
+         '<img src="'+fileUrl(heroLogo.assetId)+'" alt="">';
+      sym.forEach((s,i)=>{h+='<span class="sym-dot" style="left:'+(s.x*100).toFixed(1)+'%;top:'+(s.y*100).toFixed(1)+'%">'+(i+1)+'</span>'});
+      h+='</div><ul class="sym-list">';
+      sym.forEach((s,i)=>{h+='<li><span class="n">'+(i+1)+'</span> '+esc(s.text)+'</li>'});
+      h+='</ul></section>';
+    }
+  }
   if(bdCells.length||phWords.length||phIds.length){
     h+='<section id="photo"><h2>Direction photographique</h2><p class="sub">L\\'atmosphère visuelle de la marque.</p>';
     if(bdCells.length){
@@ -622,7 +700,8 @@ function render(){
     const blk=P?'background:color-mix(in srgb, '+P+' 10%, #ffffff)':'background:#f1f3f6';
     const dom=esc((SUP.domain||'').trim()||nm.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30)+'.fr');
     const cardD=SUP.card||{};
-    h+='<section id="supports"><h2>Supports de communication</h2><p class="sub">La marque en situation — composée avec la charte, rien d\\'autre.</p><div class="supgrid">';
+    h+=chap('supports','Supports de communication');
+    h+='<section><h2>La marque en situation</h2><p class="sub">Composée avec la charte, rien d\\'autre.</p><div class="supgrid">';
     if(supOn('web')){
       h+='<div class="supitem supwide"><h3>Site web</h3><div class="mk-browser"><div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span><span class="mk-url">'+(P?'<i class="mk-fav" style="background:'+P+'"></i>':'')+dom+'</span></div>';
       h+=SUP.webShotId?'<img class="mk-shot" src="'+fileUrl(SUP.webShotId)+'" alt="">':
@@ -660,7 +739,14 @@ function render(){
     h+='</section>';
   }
 
-  // Footer
+  // Fin d'édition : historique des versions + footer (dans leur conteneur —
+  // plus de .wrap global, les chapitres sont pleine largeur).
+  h+='<div class="pl-tail">';
+  if(DATA.changelog&&DATA.changelog.length>1||DATA.changelog&&DATA.changelog[0]&&DATA.changelog[0].note){
+    h+='<details class="chlog no-print"><summary>Historique des versions</summary><ul>';
+    for(const v of DATA.changelog)h+='<li>Version '+v.version+' — '+new Date(v.published_at+'Z').toLocaleDateString('fr-FR')+(v.note?' · '+esc(v.note):'')+'</li>';
+    h+='</ul></details>';
+  }
   const credit=meta.credit&&meta.credit.label;
   h+='<footer><span>'+(credit?'Direction artistique : '+esc(credit)+' · ':'')+'Version '+DATA.version+'</span>'+
      '<span>'+esc((kit.settings&&kit.settings.footer)||'Réalisé par Protein Keystone Studio')+'</span></footer></div>';

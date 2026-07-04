@@ -503,6 +503,9 @@ function _onClick(e) {
   if (act === 'sup-shot-del') { _deleteSupportShot(btn.dataset.k); return; }
   if (act === 'sup-gal-add')  { _pickTarget = 'sup-gallery'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'sup-gal-del')  { _deleteGalleryItem(btn.dataset.aid); return; }
+  // ── Édition publiée (KB-12) ──
+  if (act === 'pub-mode')  { _pubThemeOf().mode = btn.dataset.v === 'dark' ? 'dark' : 'light'; _scheduleSave(); _renderChart(); return; }
+  if (act === 'pub-tint')  { _pubThemeOf().tint = btn.dataset.hex || null; _scheduleSave(); _renderChart(); return; }
 
   // ── Onglet Règles (KB-4) ──
   const rid = btn.closest('[data-rid]')?.dataset.rid;
@@ -684,6 +687,12 @@ function _onChange(e) {
   // ── Scène d'ouverture (KB-8) : roues chromatiques du fond.
   if (el.dataset.field === 'scene-cw1') { _setSceneColor('1', el.value); }
   if (el.dataset.field === 'scene-cw2') { _setSceneColor('2', el.value); }
+
+  // ── Édition publiée (KB-12) : roue de la teinte.
+  if (el.dataset.field === 'pub-tintwheel') {
+    const m = String(el.value || '').match(/^#[0-9a-fA-F]{6}$/);
+    if (m) { _pubThemeOf().tint = el.value.toLowerCase(); _scheduleSave(); _renderChart(); }
+  }
 
   // ── Onglet Typographies (KB-3) ──
   const f = _fontOf(el.closest('[data-fid]')?.dataset.fid);
@@ -2604,6 +2613,17 @@ function _renderSupportsTab() {
 // ════════════════════════════════════════════════════════════════
 // PUBLICATION (KB-6) — brouillon → page publique /b/:slug
 // ════════════════════════════════════════════════════════════════
+// KB-12 — thème de l'édition publiée : fond des planches + teinte des
+// intercalaires (défaut = couleur primaire). Vit dans draft.settings.pub.
+function _pubThemeOf() {
+  if (!_chart.draft.settings || typeof _chart.draft.settings !== 'object') _chart.draft.settings = {};
+  const st = _chart.draft.settings;
+  if (!st.pub || typeof st.pub !== 'object') st.pub = {};
+  if (!['light', 'dark'].includes(st.pub.mode)) st.pub.mode = 'light';
+  if (st.pub.tint != null && !/^#[0-9a-fA-F]{6}$/.test(st.pub.tint)) st.pub.tint = null;
+  return st.pub;
+}
+
 function _renderPubPanel() {
   const access = _pubAccess || _chart.access || 'unlisted';
   const isLive = _chart.status === 'published';
@@ -2623,6 +2643,26 @@ function _renderPubPanel() {
       <div class="kb-pub-qr" data-slot="pub-qr" aria-label="QR code de la charte"></div>
       <p class="kb-hint">Le QR pointe toujours vers la dernière version — imprimez-le sans crainte.</p>
     </div>` : '';
+
+  // KB-12 — mise en page de l'édition publiée.
+  const theme = _pubThemeOf();
+  const tpal = _paletteOf().filter(c => c.hex);
+  const themeBlock = `
+    <div class="kb-pub-theme">
+      <h4>Mise en page de l'édition</h4>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Planches</span>
+        <button class="kb-chip ${theme.mode === 'light' ? 'on' : ''}" data-act="pub-mode" data-v="light">Claires</button>
+        <button class="kb-chip ${theme.mode === 'dark' ? 'on' : ''}" data-act="pub-mode" data-v="dark">Sombres</button>
+      </div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Teinte</span>
+        <button class="kb-chip ${!theme.tint ? 'on' : ''}" data-act="pub-tint" data-hex="">Primaire</button>
+        ${tpal.map(c => `<button class="kb-scenesw ${theme.tint === c.hex ? 'on' : ''}" data-act="pub-tint"
+          data-hex="${_esc(c.hex)}" style="background:${_esc(c.hex)}" title="${_esc(c.name || c.hex)}"></button>`).join('')}
+        <label class="kb-scenewheel" title="Autre couleur">${icon('palette', 13)}
+          <input type="color" data-field="pub-tintwheel" value="${_esc(theme.tint || '#23252d')}"></label>
+      </div>
+      <p class="kb-hint">Couverture, sommaire et pages de chapitre prennent la teinte. Republiez pour appliquer.</p>
+    </div>`;
 
   return `
     <div class="kb-pub-panel">
@@ -2648,6 +2688,7 @@ function _renderPubPanel() {
           <p class="kb-hint">Le brouillon reste privé tant que vous ne publiez pas. Les visiteurs voient la dernière version publiée.</p>
         </div>
       </div>
+      ${themeBlock}
       ${live}
     </div>`;
 }

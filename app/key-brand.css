@@ -576,6 +576,10 @@
 .kb-bd-tools button.danger{color:var(--ws-danger)}
 .kb-bd-examples{margin-top:18px}
 
+/* Mise en page de l'édition publiée (KB-12) — dans le panneau Partager. */
+.kb-pub-theme{border-top:1px solid var(--kb-line);margin-top:18px;padding-top:16px;display:flex;flex-direction:column;gap:10px}
+.kb-pub-theme h4{margin:0 0 2px;font-size:13.5px}
+
 /* ══ Onglet Supports (KB-11) — mockups auto-composés (préfixe mk-) ══ */
 .kb-supports{display:flex;flex-direction:column;gap:26px}
 .kb-sup{background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:16px;padding:18px 20px;transition:opacity .15s}
