@@ -173,6 +173,15 @@ const BOARD_TPLS = [
 ];
 const KB_SYM_MAX = 8;       // annotations de symbolique max
 const KB_PHOTO_MAX = 6;     // exemples photo max (cap brief)
+// KB-11 — onglet Supports : mockups AUTO-COMPOSÉS en CSS avec la charte
+// réelle (zéro IA, zéro image générée). L'œil masque un support.
+const SUPPORT_DEFS = [
+  ['web',    'Site web'],
+  ['phone',  'Smartphone'],
+  ['card',   'Carte de visite'],
+  ['social', 'Réseaux sociaux'],
+];
+const KB_GALLERY_MAX = 8;   // photos de réalisations max
 
 // ── Publication (KB-6) ──
 let _pubPanel = false;      // panneau « Partager » ouvert
@@ -192,6 +201,7 @@ const TABS = [
   { key: 'type',   label: 'Typographies',  icon: 'type' },
   { key: 'rules',  label: 'Règles',        icon: 'shield-check' },
   { key: 'brand',  label: 'Branding',      icon: 'sparkles' },
+  { key: 'supports', label: 'Supports',    icon: 'monitor' },
 ];
 
 // Squelette du brand-kit (géométrie variable : TOUT optionnel sauf meta.name).
@@ -487,6 +497,12 @@ function _onClick(e) {
   if (act === 'bd-cell-del' && slot)  { _deleteBoardCell(slot); return; }
   if (act === 'bd-med-add' && slot)   { _pickTarget = { bdMed: slot }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
   if (act === 'bd-med-del' && slot)   { _deleteBoardMed(slot); return; }
+  // ── Onglet Supports (KB-11) ──
+  if (act === 'sup-toggle')   { const s = _supportsOf(); s.enabled[btn.dataset.k] = !s.enabled[btn.dataset.k]; _scheduleSave(); _renderChart(); return; }
+  if (act === 'sup-shot')     { _pickTarget = { supShot: btn.dataset.k }; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'sup-shot-del') { _deleteSupportShot(btn.dataset.k); return; }
+  if (act === 'sup-gal-add')  { _pickTarget = 'sup-gallery'; _root.querySelector('[data-slot="filepicker"]')?.click(); return; }
+  if (act === 'sup-gal-del')  { _deleteGalleryItem(btn.dataset.aid); return; }
 
   // ── Onglet Règles (KB-4) ──
   const rid = btn.closest('[data-rid]')?.dataset.rid;
@@ -607,6 +623,22 @@ function _onInput(e) {
   // ── Planche d'ambiance (KB-9) : titre + paragraphe, saisis en place ──
   if (el.dataset.field === 'bd-title') { _boardOf().title = el.value.slice(0, 80); _scheduleSave(); }
   if (el.dataset.field === 'bd-text')  { _boardOf().text = el.value.slice(0, 500); _scheduleSave(); }
+
+  // ── Onglet Supports (KB-11) : domaine + carte de visite ──
+  // Mise à jour chirurgicale du mockup (re-render = focus perdu en pleine frappe).
+  if (el.dataset.field === 'sup-domain') {
+    _supportsOf().domain = el.value.slice(0, 60); _scheduleSave();
+    const url = _root.querySelector('[data-mk="url"]');
+    if (url) url.textContent = _supportsOf().domain.trim() || _slugDomain(_brandKit().name);
+  }
+  if (el.dataset.field?.startsWith('sup-card-')) {
+    const k = el.dataset.field.slice(9);   // name | role | tel | email
+    if (['name', 'role', 'tel', 'email'].includes(k)) {
+      _supportsOf().card[k] = el.value.slice(0, 80); _scheduleSave();
+      const t = _root.querySelector(`[data-mk="card-${k}"]`);
+      if (t) t.textContent = _supportsOf().card[k] || t.dataset.fallback || '';
+    }
+  }
 
   // ── Onglet Règles (KB-4) ──
   if (el.dataset.field === 'rc-label') {
@@ -813,7 +845,7 @@ function _renderChart() {
 
   if (_pubPanel && _chart.status === 'published') _renderPubQr();
 
-  if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand') _hydrateLogoImgs();
+  if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand' || _tab === 'supports') _hydrateLogoImgs();
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -827,6 +859,8 @@ function _renderTab(key) {
   if (key === 'type') return _renderTypeTab();
 
   if (key === 'rules') return _renderRulesTab();
+
+  if (key === 'supports') return _renderSupportsTab();
 
   return _renderBrandTab();
 }
@@ -1040,6 +1074,17 @@ async function _onFilesPicked(fileList) {
   if (_pickTarget && _pickTarget.bdMed) {
     const target = _pickTarget; _pickTarget = 'logo';
     await _onBoardMedPicked(fileList[0], target.bdMed);
+    return;
+  }
+  // Cibles « supports » (KB-11) : capture d'écran ou photos de réalisations.
+  if (_pickTarget && _pickTarget.supShot) {
+    const target = _pickTarget; _pickTarget = 'logo';
+    await _onSupportShotPicked(fileList[0], target.supShot);
+    return;
+  }
+  if (_pickTarget === 'sup-gallery') {
+    _pickTarget = 'logo';
+    await _onGalleryPicked([...fileList]);
     return;
   }
   const files = [...fileList];
@@ -2103,6 +2148,76 @@ function _deleteBoardMed(slot) {
   c.med = null;
   _scheduleSave(); _renderChart();
 }
+// ── KB-11 : supports de communication (mockups auto-composés) ──
+function _supportsOf() {
+  if (!_chart.draft.supports || typeof _chart.draft.supports !== 'object') _chart.draft.supports = {};
+  const s = _chart.draft.supports;
+  if (!s.enabled || typeof s.enabled !== 'object') s.enabled = {};
+  for (const [k] of SUPPORT_DEFS) if (typeof s.enabled[k] !== 'boolean') s.enabled[k] = true;
+  if (typeof s.domain !== 'string') s.domain = '';
+  if (!s.card || typeof s.card !== 'object') s.card = { name: '', role: '', tel: '', email: '' };
+  if (!Array.isArray(s.gallery)) s.gallery = [];
+  return s;
+}
+// Le kit de marque tel qu'il existe — les mockups ne montrent que ça.
+function _brandKit() {
+  const meta = _chart.draft.meta || {};
+  const palette = _paletteOf().filter(c => c.hex);
+  const primary = (palette.find(c => c.role === 'primary') || palette[0])?.hex || null;
+  const second  = palette.map(c => c.hex).find(h => h !== primary) || null;
+  const logo = _logoSection().variants.find(v => v.ext !== 'pdf') || null;
+  return { name: meta.name || _chart.name, baseline: meta.baseline || '',
+           primary, second, logo, titleFont: _titleFontCss() };
+}
+// Encre lisible sur une couleur de marque : _inkOn (déjà défini, onglet Couleurs).
+function _slugDomain(name) {
+  const base = String(name || 'marque').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'marque';
+  return base + '.fr';
+}
+async function _onSupportShotPicked(file, kind) {
+  if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast('Capture d\'écran attendue (PNG, JPG, WebP).'); return; }
+  if (file.size > KB_UPLOAD_MAX) { _toast('Image trop lourde (max 4 Mo).'); return; }
+  try {
+    const asset = await _apiUpload(_chart.id, file, 'image');
+    const s = _supportsOf();
+    const key = kind === 'phone' ? 'phoneShotId' : 'webShotId';
+    if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
+    s[key] = asset.id;
+    _scheduleSave(); _renderChart();
+  } catch (e) { _toast(e.message); }
+}
+function _deleteSupportShot(kind) {
+  const s = _supportsOf();
+  const key = kind === 'phone' ? 'phoneShotId' : 'webShotId';
+  if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
+  s[key] = null;
+  _scheduleSave(); _renderChart();
+}
+async function _onGalleryPicked(files) {
+  const s = _supportsOf();
+  for (const f of files) {
+    if (s.gallery.length >= KB_GALLERY_MAX) { _toast(`Maximum ${KB_GALLERY_MAX} réalisations.`); break; }
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) { _toast(`« ${f.name} » : photo attendue.`); continue; }
+    if (f.size > KB_UPLOAD_MAX) { _toast(`« ${f.name} » : trop lourde (max 4 Mo).`); continue; }
+    try {
+      const asset = await _apiUpload(_chart.id, f, 'image');
+      s.gallery.push(asset.id);
+    } catch (e) { _toast(e.message); }
+  }
+  _scheduleSave(); _renderChart();
+}
+function _deleteGalleryItem(aid) {
+  const s = _supportsOf();
+  s.gallery = s.gallery.filter(x => x !== aid);
+  _api(`/assets/${encodeURIComponent(aid)}`, { method: 'DELETE' }).catch(() => {});
+  _scheduleSave(); _renderChart();
+}
+
 // Clic sur la photo d'une cellule → repositionne son médaillon (fractions x/y).
 function _placeBoardMed(cellEl, e) {
   const slot = cellEl.dataset.cell;
@@ -2342,6 +2457,143 @@ function _renderBrandTab() {
     </section>`;
 
   return `<div class="kb-brand">${stage}${boardBlock}${symbolique}</div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ONGLET SUPPORTS (KB-11) — mockups auto-composés avec la charte
+// ════════════════════════════════════════════════════════════════
+function _renderSupportsTab() {
+  const s = _supportsOf();
+  const kit = _brandKit();
+  const on = k => s.enabled[k] !== false;
+  const tf = kit.titleFont ? `font-family:${kit.titleFont};` : '';
+  const p = kit.primary;
+  const btnBg = p || '#15171c', btnInk = _inkOn(btnBg);
+  const heroBg = p ? (kit.second ? `background:linear-gradient(135deg,${p},${kit.second})` : `background:${p}`) : 'background:#eef0f4';
+  const heroInk = p ? _inkOn(p) : '#15171c';
+  const blockBg = p ? `background:color-mix(in srgb, ${p} 10%, #ffffff)` : 'background:#f1f3f6';
+  const domain = s.domain.trim() || _slugDomain(kit.name);
+  const logoImg = kit.logo ? `<img data-asset="${_esc(kit.logo.assetId)}" alt="" draggable="false">` : '';
+  const wordmark = `<b style="${tf}">${_esc(kit.name)}</b>`;
+  const eye = k => `
+    <button class="kb-sup-eye" data-act="sup-toggle" data-k="${k}" aria-pressed="${on(k)}"
+            title="${on(k) ? 'Masquer ce support de la charte' : 'Réactiver ce support'}">${icon(on(k) ? 'eye' : 'eye-off', 15)}</button>`;
+
+  // ── Site web : cadre navigateur + hero composé ──
+  const webPage = s.webShotId
+    ? `<img class="mk-shot" data-asset="${_esc(s.webShotId)}" alt="" draggable="false">`
+    : `<div class="mk-page">
+        <div class="mk-nav">
+          ${logoImg ? `<span class="mk-navlogo">${logoImg}</span>` : wordmark}
+          <span class="mk-links"><i>Accueil</i><i>Offre</i><i>Contact</i></span>
+          <span class="mk-btn" style="background:${btnBg};color:${btnInk}">Contact</span>
+        </div>
+        <div class="mk-hero" style="${heroBg}">
+          <strong style="${tf}color:${heroInk}">${_esc(kit.baseline || kit.name)}</strong>
+          <span class="mk-btn mk-cta" style="background:${heroInk === '#ffffff' ? 'rgba(255,255,255,.94)' : '#15171c'};color:${heroInk === '#ffffff' ? (p || '#15171c') : '#ffffff'}">Découvrir</span>
+        </div>
+        <div class="mk-blocks"><i style="${blockBg}"></i><i style="${blockBg}"></i><i style="${blockBg}"></i></div>
+      </div>`;
+  const web = `
+    <section class="kb-sup ${on('web') ? '' : 'is-off'}">
+      <div class="kb-sup-head">
+        <h3 class="kb-lab-title">Site web</h3>
+        <input class="kb-field-input kb-sup-domain" data-field="sup-domain" value="${_esc(s.domain)}"
+               placeholder="${_esc(_slugDomain(kit.name))}" maxlength="60" spellcheck="false">
+        <button class="kb-btn" data-act="sup-shot" data-k="web">${icon('image', 14)} ${s.webShotId ? 'Remplacer la capture' : 'Capture du vrai site'}</button>
+        ${s.webShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="web" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${eye('web')}
+      </div>
+      <div class="mk-browser">
+        <div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span>
+          <span class="mk-url">${p ? `<i class="mk-fav" style="background:${p}"></i>` : ''}<span data-mk="url">${_esc(domain)}</span></span></div>
+        ${webPage}
+      </div>
+    </section>`;
+
+  // ── Smartphone ──
+  const phoneScreen = s.phoneShotId
+    ? `<img class="mk-shot" data-asset="${_esc(s.phoneShotId)}" alt="" draggable="false">`
+    : `<div class="mk-mpage">
+        <div class="mk-mnav">${logoImg ? `<span class="mk-navlogo">${logoImg}</span>` : wordmark}</div>
+        <div class="mk-mhero" style="${heroBg}">
+          <strong style="${tf}color:${heroInk}">${_esc(kit.name)}</strong>
+          ${kit.baseline ? `<span style="color:${heroInk}">${_esc(kit.baseline)}</span>` : ''}
+        </div>
+        <div class="mk-mrows"><i style="${blockBg}"></i><i style="${blockBg}"></i></div>
+        <span class="mk-btn mk-mcta" style="background:${btnBg};color:${btnInk}">Nous contacter</span>
+      </div>`;
+  const phone = `
+    <section class="kb-sup ${on('phone') ? '' : 'is-off'}">
+      <div class="kb-sup-head">
+        <h3 class="kb-lab-title">Smartphone</h3>
+        <button class="kb-btn" data-act="sup-shot" data-k="phone">${icon('image', 14)} ${s.phoneShotId ? 'Remplacer la capture' : 'Capture du vrai site'}</button>
+        ${s.phoneShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="phone" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${eye('phone')}
+      </div>
+      <div class="mk-phone"><div class="mk-notch"></div><div class="mk-screen">${phoneScreen}</div></div>
+    </section>`;
+
+  // ── Carte de visite : recto (clair) + verso (couleur) ──
+  const cardEmail = s.card.email || ('contact@' + domain);
+  const card = `
+    <section class="kb-sup ${on('card') ? '' : 'is-off'}">
+      <div class="kb-sup-head"><h3 class="kb-lab-title">Carte de visite</h3>${eye('card')}</div>
+      <div class="mk-bizrow">
+        <div class="mk-biz mk-recto">
+          ${logoImg ? `<span class="mk-bizlogo">${logoImg}</span>` : ''}
+          <b style="${tf}">${_esc(kit.name)}</b>
+          ${kit.baseline ? `<span>${_esc(kit.baseline)}</span>` : ''}
+        </div>
+        <div class="mk-biz mk-verso" style="background:${btnBg};color:${btnInk}">
+          <b data-mk="card-name" data-fallback="${_esc(kit.name)}">${_esc(s.card.name || kit.name)}</b>
+          <span data-mk="card-role">${_esc(s.card.role || 'Fonction')}</span>
+          <span data-mk="card-tel">${_esc(s.card.tel || '01 23 45 67 89')}</span>
+          <span data-mk="card-email" data-fallback="${_esc('contact@' + domain)}">${_esc(cardEmail)}</span>
+        </div>
+      </div>
+      <div class="kb-sup-fields">
+        <input class="kb-field-input" data-field="sup-card-name" value="${_esc(s.card.name)}" placeholder="Nom" maxlength="80" spellcheck="false">
+        <input class="kb-field-input" data-field="sup-card-role" value="${_esc(s.card.role)}" placeholder="Fonction" maxlength="80" spellcheck="false">
+        <input class="kb-field-input" data-field="sup-card-tel" value="${_esc(s.card.tel)}" placeholder="Téléphone" maxlength="80" spellcheck="false">
+        <input class="kb-field-input" data-field="sup-card-email" value="${_esc(s.card.email)}" placeholder="E-mail" maxlength="80" spellcheck="false">
+      </div>
+    </section>`;
+
+  // ── Réseaux sociaux : avatar rond + bannière ──
+  const social = `
+    <section class="kb-sup ${on('social') ? '' : 'is-off'}">
+      <div class="kb-sup-head"><h3 class="kb-lab-title">Réseaux sociaux</h3>${eye('social')}</div>
+      <div class="mk-socialrow">
+        <div class="mk-avatar">${logoImg || `<b style="${tf}">${_esc(kit.name.charAt(0).toUpperCase())}</b>`}</div>
+        <div class="mk-banner" style="${heroBg}">
+          ${logoImg ? `<span class="mk-bannerlogo">${logoImg}</span>` : ''}
+          <span style="${tf}color:${heroInk}">${_esc(kit.baseline || kit.name)}</span>
+        </div>
+      </div>
+    </section>`;
+
+  // ── Réalisations : photos de la marque en vrai ──
+  const gal = s.gallery.map(aid => `
+    <figure class="kb-ph-item">
+      <img data-asset="${_esc(aid)}" alt="" draggable="false">
+      <button class="kb-iconbtn danger" data-act="sup-gal-del" data-aid="${_esc(aid)}" title="Retirer">${icon('trash-2', 14)}</button>
+    </figure>`).join('');
+  const gallery = `
+    <section class="kb-sup">
+      <div class="kb-sup-head"><h3 class="kb-lab-title">Réalisations</h3></div>
+      <p class="kb-hint">La marque en vrai — enseigne, packaging, véhicule, vitrine… (${KB_GALLERY_MAX} max).</p>
+      <div class="kb-ph-grid">
+        ${gal}
+        ${s.gallery.length < KB_GALLERY_MAX ? `<button class="kb-ph-add" data-act="sup-gal-add" title="Ajouter des photos">${icon('plus', 18)}</button>` : ''}
+      </div>
+    </section>`;
+
+  return `
+    <div class="kb-supports">
+      <p class="kb-hint">Ces mockups se composent tout seuls avec votre charte — logo, couleurs, typographies. Rien n'est généré : tout est calculé. L'œil masque un support de la page publiée.</p>
+      ${web}${phone}${card}${social}${gallery}
+    </div>`;
 }
 
 // ════════════════════════════════════════════════════════════════

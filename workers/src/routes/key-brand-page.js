@@ -226,6 +226,60 @@ select::-ms-expand{display:none}
 .bb-med img{width:100%;height:100%;object-fit:cover}
 @media (max-width:640px){.bboard.has-txt{grid-template-columns:1fr}}
 
+/* Supports de communication (KB-11) — mockups mk- */
+.supgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;margin-top:8px}
+.supitem h3{font-size:14px;font-weight:800;margin:0 0 10px;letter-spacing:-0.01em}
+.supitem.supwide{grid-column:1/-1}
+.supgal-title{font-size:14px;font-weight:800;margin:26px 0 0;letter-spacing:-0.01em}
+.mk-browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;max-width:760px}
+.mk-bar{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#eceef2;border-bottom:1px solid #dfe2e8}
+.mk-dots{display:inline-flex;gap:5px}
+.mk-dots i{width:9px;height:9px;border-radius:50%;background:#c9ced8}
+.mk-url{display:inline-flex;align-items:center;gap:7px;background:#fff;border-radius:8px;padding:4px 12px;font-size:11px;color:#5b6170;flex:1;max-width:340px}
+.mk-fav{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.mk-page{background:#fff}
+.mk-nav{display:flex;align-items:center;gap:14px;padding:12px 18px}
+.mk-navlogo img{height:22px;max-width:110px;object-fit:contain;display:block}
+.mk-nav>b{font-size:14px;color:#15171c;letter-spacing:-0.02em}
+.mk-links{display:inline-flex;gap:14px;margin-left:auto}
+.mk-links i{font-style:normal;font-size:11px;color:#5b6170;font-weight:600}
+.mk-btn{display:inline-flex;align-items:center;border-radius:8px;padding:5px 13px;font-size:11px;font-weight:700;white-space:nowrap}
+.mk-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:38px 26px;text-align:center}
+.mk-hero strong{font-size:clamp(16px,2.4vw,24px);font-weight:900;letter-spacing:-0.02em;line-height:1.2;max-width:26ch}
+.mk-cta{padding:7px 18px;font-size:12px}
+.mk-blocks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:16px 18px}
+.mk-blocks i{height:52px;border-radius:9px}
+.mk-shot{width:100%;display:block}
+.mk-phone{position:relative;width:230px;border:1.5px solid var(--line);border-radius:30px;padding:9px;background:#0e0f13;box-shadow:0 10px 34px rgba(0,0,0,.35)}
+.mk-notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:74px;height:16px;background:#0e0f13;border-radius:0 0 11px 11px;z-index:2}
+.mk-screen{border-radius:21px;overflow:hidden;background:#fff;min-height:380px;display:flex;flex-direction:column}
+.mk-mpage{display:flex;flex-direction:column;flex:1}
+.mk-mnav{display:flex;justify-content:center;padding:22px 12px 10px}
+.mk-mnav .mk-navlogo img{height:20px;max-width:100px}
+.mk-mnav b{font-size:13px;color:#15171c}
+.mk-mhero{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:26px 16px;text-align:center;margin:0 10px;border-radius:12px}
+.mk-mhero strong{font-size:16px;font-weight:900;letter-spacing:-0.02em}
+.mk-mhero span{font-size:10.5px;opacity:.85}
+.mk-mrows{display:flex;flex-direction:column;gap:8px;padding:12px 10px 0}
+.mk-mrows i{height:34px;border-radius:8px}
+.mk-mcta{align-self:center;margin:14px 0 18px;padding:7px 18px;font-size:11.5px}
+.mk-bizrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,270px));gap:16px}
+.mk-biz{aspect-ratio:856/540;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;text-align:center;box-shadow:0 6px 22px rgba(0,0,0,.2)}
+.mk-recto{background:#fff;border:1px solid var(--line)}
+.mk-bizlogo img{height:34px;max-width:130px;object-fit:contain;display:block;margin-bottom:4px}
+.mk-recto b{font-size:16px;color:#15171c;font-weight:900;letter-spacing:-0.02em}
+.mk-recto span{font-size:10.5px;color:#5b6170}
+.mk-verso b{font-size:14px;font-weight:800}
+.mk-verso span{font-size:10.5px;opacity:.88}
+.mk-socialrow{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.mk-avatar{width:84px;height:84px;border-radius:50%;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.mk-avatar img{width:66%;height:66%;object-fit:contain}
+.mk-avatar b{font-size:30px;color:#15171c}
+.mk-banner{flex:1;min-width:240px;aspect-ratio:3.4/1;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 20px;overflow:hidden}
+.mk-bannerlogo img{height:30px;max-width:110px;object-fit:contain;display:block}
+.mk-banner>span{font-size:clamp(13px,1.8vw,17px);font-weight:800;letter-spacing:-0.02em}
+@media (max-width:760px){.supgrid{grid-template-columns:1fr}.mk-links{display:none}}
+
 /* Changelog + footer + états */
 details.chlog{margin-top:10px}
 details.chlog summary{cursor:pointer;color:var(--muted);font-size:13px}
@@ -352,11 +406,19 @@ function render(){
   for(const f of fonts)if(f.source==='google')loadFont(f.family,f.axis);
   const heroLogo=rasterV[0];
 
+  // Supports (KB-11) — présent SEULEMENT si le snapshot contient kit.supports
+  // (opt-in : l'onglet a été ouvert puis la charte republiée).
+  const SUP=(kit.supports&&typeof kit.supports==='object')?kit.supports:null;
+  const supOn=k=>SUP&&(!SUP.enabled||SUP.enabled[k]!==false);
+  const supGallery=SUP&&Array.isArray(SUP.gallery)?SUP.gallery.filter(Boolean):[];
+  const showSupports=!!SUP&&(supOn('web')||supOn('phone')||supOn('card')||supOn('social')||supGallery.length>0);
+
   const navLinks=[];
   if(variants.length)navLinks.push(['#logo','Logo']);
   if(palette.length)navLinks.push(['#couleurs','Couleurs']);
   if(fonts.length)navLinks.push(['#typos','Typographies']);
   if((rasterV.length&&inter.length)||customR.length)navLinks.push(['#regles','Règles']);
+  if(showSupports)navLinks.push(['#supports','Supports']);
 
   const FLABELS={distort:'Ne pas déformer le logo',tilt:'Ne pas l\\'incliner',recolor:'Ne pas changer ses couleurs',invert:'Ne pas l\\'inverser en négatif',shadow:'Ne pas ajouter d\\'ombre ni d\\'effet',outline:'Ne pas l\\'encadrer d\\'un filet',opacity:'Ne pas baisser son opacité',busybg:'Ne pas le poser sur un fond chargé',crowd:'Ne pas envahir sa zone de protection'};
   const ROLES={primary:'Primaire',secondary:'Secondaire',extra:'Supplémentaire',bg:'Fond',text:'Texte'};
@@ -539,6 +601,59 @@ function render(){
       h+='</div></div>';
     } else if(phWords.length){h+=wordChips}
     if(phIds.length){h+='<div class="phgrid">';for(const id of phIds)h+='<img src="'+fileUrl(id)+'" alt="" loading="lazy">';h+='</div>'}
+    h+='</section>';
+  }
+
+  // Supports de communication (KB-11) — mockups composés avec la charte
+  if(showSupports){
+    const P=primary?primary.hex:null;
+    const P2=P?palette.map(c=>c.hex).find(x=>x!==P)||null:null;
+    const supLogo=rasterV[0]||null;
+    const lgIm=supLogo?'<img src="'+fileUrl(supLogo.assetId)+'" alt="">':'';
+    const nm=esc(meta.name||DATA.name), bl=meta.baseline?esc(meta.baseline):'';
+    const tfSt=titleFont?'font-family:\\''+esc(titleFont.family)+'\\',sans-serif;':'';
+    const wm='<b style="'+tfSt+'">'+nm+'</b>';
+    const hBg=P?(P2?'background:linear-gradient(135deg,'+P+','+P2+')':'background:'+P):'background:#eef0f4';
+    const hInk=P?inkOn(P):'#15171c';
+    const bBg=P||'#15171c',bInk=inkOn(bBg);
+    const blk=P?'background:color-mix(in srgb, '+P+' 10%, #ffffff)':'background:#f1f3f6';
+    const dom=esc((SUP.domain||'').trim()||nm.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30)+'.fr');
+    const cardD=SUP.card||{};
+    h+='<section id="supports"><h2>Supports de communication</h2><p class="sub">La marque en situation — composée avec la charte, rien d\\'autre.</p><div class="supgrid">';
+    if(supOn('web')){
+      h+='<div class="supitem supwide"><h3>Site web</h3><div class="mk-browser"><div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span><span class="mk-url">'+(P?'<i class="mk-fav" style="background:'+P+'"></i>':'')+dom+'</span></div>';
+      h+=SUP.webShotId?'<img class="mk-shot" src="'+fileUrl(SUP.webShotId)+'" alt="">':
+        '<div class="mk-page"><div class="mk-nav">'+(lgIm?'<span class="mk-navlogo">'+lgIm+'</span>':wm)+'<span class="mk-links"><i>Accueil</i><i>Offre</i><i>Contact</i></span><span class="mk-btn" style="background:'+bBg+';color:'+bInk+'">Contact</span></div>'+
+        '<div class="mk-hero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</strong><span class="mk-btn mk-cta" style="background:'+(hInk==='#ffffff'?'rgba(255,255,255,.94)':'#15171c')+';color:'+(hInk==='#ffffff'?(P||'#15171c'):'#ffffff')+'">Découvrir</span></div>'+
+        '<div class="mk-blocks"><i style="'+blk+'"></i><i style="'+blk+'"></i><i style="'+blk+'"></i></div></div>';
+      h+='</div></div>';
+    }
+    if(supOn('phone')){
+      h+='<div class="supitem"><h3>Smartphone</h3><div class="mk-phone"><div class="mk-notch"></div><div class="mk-screen">';
+      h+=SUP.phoneShotId?'<img class="mk-shot" src="'+fileUrl(SUP.phoneShotId)+'" alt="">':
+        '<div class="mk-mpage"><div class="mk-mnav">'+(lgIm?'<span class="mk-navlogo">'+lgIm+'</span>':wm)+'</div>'+
+        '<div class="mk-mhero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+nm+'</strong>'+(bl?'<span style="color:'+hInk+'">'+bl+'</span>':'')+'</div>'+
+        '<div class="mk-mrows"><i style="'+blk+'"></i><i style="'+blk+'"></i></div><span class="mk-btn mk-mcta" style="background:'+bBg+';color:'+bInk+'">Nous contacter</span></div>';
+      h+='</div></div></div>';
+    }
+    if(supOn('card')){
+      h+='<div class="supitem"><h3>Carte de visite</h3><div class="mk-bizrow">'+
+        '<div class="mk-biz mk-recto">'+(lgIm?'<span class="mk-bizlogo">'+lgIm+'</span>':'')+'<b style="'+tfSt+'">'+nm+'</b>'+(bl?'<span>'+bl+'</span>':'')+'</div>'+
+        '<div class="mk-biz mk-verso" style="background:'+bBg+';color:'+bInk+'"><b>'+esc(cardD.name||meta.name||DATA.name)+'</b>'+
+        (cardD.role?'<span>'+esc(cardD.role)+'</span>':'')+(cardD.tel?'<span>'+esc(cardD.tel)+'</span>':'')+
+        '<span>'+esc(cardD.email||'contact@'+((SUP.domain||'').trim()||dom))+'</span></div></div></div>';
+    }
+    if(supOn('social')){
+      h+='<div class="supitem supwide"><h3>Réseaux sociaux</h3><div class="mk-socialrow">'+
+        '<div class="mk-avatar">'+(lgIm||'<b style="'+tfSt+'">'+esc((meta.name||DATA.name).charAt(0).toUpperCase())+'</b>')+'</div>'+
+        '<div class="mk-banner" style="'+hBg+'">'+(lgIm?'<span class="mk-bannerlogo">'+lgIm+'</span>':'')+'<span style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</span></div></div></div>';
+    }
+    h+='</div>';
+    if(supGallery.length){
+      h+='<h3 class="supgal-title">Réalisations</h3><div class="phgrid">';
+      for(const id of supGallery)h+='<img src="'+fileUrl(id)+'" alt="" loading="lazy">';
+      h+='</div>';
+    }
     h+='</section>';
   }
 
