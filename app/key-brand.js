@@ -2343,6 +2343,10 @@ function _supportsOf() {
   if (typeof s.domain !== 'string') s.domain = '';
   if (!s.card || typeof s.card !== 'object') s.card = { name: '', role: '', tel: '', email: '' };
   if (!Array.isArray(s.gallery)) s.gallery = [];
+  // Migration : le visuel unique de carte (cardShotId, éphémère) devient le
+  // recto — désormais recto ET verso sont remplaçables séparément.
+  if (s.cardShotId && !s.cardRectoId && !s.cardVersoId) s.cardRectoId = s.cardShotId;
+  delete s.cardShotId;
   return s;
 }
 // Le kit de marque tel qu'il existe — les mockups ne montrent que ça.
@@ -2370,7 +2374,7 @@ async function _onSupportShotPicked(file, kind) {
   try {
     const asset = await _apiUpload(_chart.id, file, 'image');
     const s = _supportsOf();
-    const key = ({ web: 'webShotId', phone: 'phoneShotId', card: 'cardShotId', social: 'socialShotId' })[kind];
+    const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', social: 'socialShotId' })[kind];
     if (!key) return;
     if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
     s[key] = asset.id;
@@ -2379,7 +2383,7 @@ async function _onSupportShotPicked(file, kind) {
 }
 function _deleteSupportShot(kind) {
   const s = _supportsOf();
-  const key = ({ web: 'webShotId', phone: 'phoneShotId', card: 'cardShotId', social: 'socialShotId' })[kind];
+  const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', social: 'socialShotId' })[kind];
   if (!key) return;
   if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
   s[key] = null;
@@ -2806,30 +2810,34 @@ function _renderSupportsTab() {
     </section>`;
 
   // ── Carte de visite : recto (clair) + verso (couleur) ──
+  // Chaque face est remplaçable INDÉPENDAMMENT par votre propre visuel.
   const cardEmail = s.card.email || ('contact@' + domain);
-  const cardVisual = s.cardShotId
-    ? `<img class="mk-shot mk-supshot" data-asset="${_esc(s.cardShotId)}" alt="" draggable="false">`
-    : `<div class="mk-bizrow">
-        <div class="mk-biz mk-recto">
-          ${logoImg ? `<span class="mk-bizlogo">${logoImg}</span>` : ''}
-          <b style="${tf}">${_esc(kit.name)}</b>
-          ${kit.baseline ? `<span>${_esc(kit.baseline)}</span>` : ''}
-        </div>
-        <div class="mk-biz mk-verso" style="background:${btnBg};color:${btnInk}">
-          <b data-mk="card-name" data-fallback="${_esc(kit.name)}">${_esc(s.card.name || kit.name)}</b>
-          <span data-mk="card-role">${_esc(s.card.role || 'Fonction')}</span>
-          <span data-mk="card-tel">${_esc(s.card.tel || '01 23 45 67 89')}</span>
-          <span data-mk="card-email" data-fallback="${_esc('contact@' + domain)}">${_esc(cardEmail)}</span>
-        </div>
+  const cardRectoCell = s.cardRectoId
+    ? `<img class="mk-shot mk-bizshot" data-asset="${_esc(s.cardRectoId)}" alt="Recto de la carte" draggable="false">`
+    : `<div class="mk-biz mk-recto">
+        ${logoImg ? `<span class="mk-bizlogo">${logoImg}</span>` : ''}
+        <b style="${tf}">${_esc(kit.name)}</b>
+        ${kit.baseline ? `<span>${_esc(kit.baseline)}</span>` : ''}
       </div>`;
+  const cardVersoCell = s.cardVersoId
+    ? `<img class="mk-shot mk-bizshot" data-asset="${_esc(s.cardVersoId)}" alt="Verso de la carte" draggable="false">`
+    : `<div class="mk-biz mk-verso" style="background:${btnBg};color:${btnInk}">
+        <b data-mk="card-name" data-fallback="${_esc(kit.name)}">${_esc(s.card.name || kit.name)}</b>
+        <span data-mk="card-role">${_esc(s.card.role || 'Fonction')}</span>
+        <span data-mk="card-tel">${_esc(s.card.tel || '01 23 45 67 89')}</span>
+        <span data-mk="card-email" data-fallback="${_esc('contact@' + domain)}">${_esc(cardEmail)}</span>
+      </div>`;
+  const cardSideCtl = (k, has, label) =>
+    `<button class="kb-btn" data-act="sup-shot" data-k="${k}">${icon('image', 14)} ${has ? 'Remplacer le ' + label : label.charAt(0).toUpperCase() + label.slice(1)}</button>` +
+    (has ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="${k}" title="Revenir à la face composée">${icon('trash-2', 15)}</button>` : '');
   const card = `
     <section class="kb-sup ${on('card') ? '' : 'is-off'}">
       <div class="kb-sup-head"><h3 class="kb-lab-title">Carte de visite</h3>
-        <button class="kb-btn" data-act="sup-shot" data-k="card">${icon('image', 14)} ${s.cardShotId ? 'Remplacer le visuel' : 'Votre visuel de carte'}</button>
-        ${s.cardShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="card" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${cardSideCtl('cardRecto', !!s.cardRectoId, 'recto')}
+        ${cardSideCtl('cardVerso', !!s.cardVersoId, 'verso')}
         ${eye('card')}</div>
-      ${cardVisual}
-      ${s.cardShotId ? '' : `<div class="kb-sup-fields">
+      <div class="mk-bizrow">${cardRectoCell}${cardVersoCell}</div>
+      ${s.cardVersoId ? '' : `<div class="kb-sup-fields">
         <input class="kb-field-input" data-field="sup-card-name" value="${_esc(s.card.name)}" placeholder="Nom" maxlength="80" spellcheck="false">
         <input class="kb-field-input" data-field="sup-card-role" value="${_esc(s.card.role)}" placeholder="Fonction" maxlength="80" spellcheck="false">
         <input class="kb-field-input" data-field="sup-card-tel" value="${_esc(s.card.tel)}" placeholder="Téléphone" maxlength="80" spellcheck="false">

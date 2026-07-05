@@ -301,6 +301,7 @@ select::-ms-expand{display:none}
 .mk-blocks i{height:52px;border-radius:9px}
 .mk-shot{width:100%;display:block}
 .mk-supshot{border-radius:14px}
+.mk-bizshot{aspect-ratio:856/540;object-fit:cover;border-radius:12px;box-shadow:0 6px 22px rgba(0,0,0,.2)}
 .mk-phone{position:relative;width:230px;border:1.5px solid var(--line);border-radius:30px;padding:9px;background:#0e0f13;box-shadow:0 10px 34px rgba(0,0,0,.35)}
 .mk-notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:74px;height:16px;background:#0e0f13;border-radius:0 0 11px 11px;z-index:2}
 .mk-screen{border-radius:21px;overflow:hidden;background:#fff;min-height:380px;display:flex;flex-direction:column}
@@ -785,14 +786,16 @@ function render(){
       h+='</div></div></div>';
     }
     if(supOn('card')){
-      h+='<div class="supitem"><h3>Carte de visite</h3>';
-      h+=SUP.cardShotId?'<img class="mk-shot mk-supshot" src="'+fileUrl(SUP.cardShotId)+'" alt="">':
-        '<div class="mk-bizrow">'+
-        '<div class="mk-biz mk-recto">'+(lgIm?'<span class="mk-bizlogo">'+lgIm+'</span>':'')+'<b style="'+tfSt+'">'+nm+'</b>'+(bl?'<span>'+bl+'</span>':'')+'</div>'+
+      // Recto et verso remplaçables séparément (repli : ancien cardShotId = recto).
+      const cRecto=SUP.cardRectoId||SUP.cardShotId, cVerso=SUP.cardVersoId;
+      h+='<div class="supitem"><h3>Carte de visite</h3><div class="mk-bizrow">';
+      h+=cRecto?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cRecto)+'" alt="Recto de la carte">':
+        '<div class="mk-biz mk-recto">'+(lgIm?'<span class="mk-bizlogo">'+lgIm+'</span>':'')+'<b style="'+tfSt+'">'+nm+'</b>'+(bl?'<span>'+bl+'</span>':'')+'</div>';
+      h+=cVerso?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cVerso)+'" alt="Verso de la carte">':
         '<div class="mk-biz mk-verso" style="background:'+bBg+';color:'+bInk+'"><b>'+esc(cardD.name||meta.name||DATA.name)+'</b>'+
         (cardD.role?'<span>'+esc(cardD.role)+'</span>':'')+(cardD.tel?'<span>'+esc(cardD.tel)+'</span>':'')+
-        '<span>'+esc(cardD.email||'contact@'+((SUP.domain||'').trim()||dom))+'</span></div></div>';
-      h+='</div>';
+        '<span>'+esc(cardD.email||'contact@'+((SUP.domain||'').trim()||dom))+'</span></div>';
+      h+='</div></div>';
     }
     if(supOn('social')){
       h+='<div class="supitem supwide"><h3>Réseaux sociaux</h3>';
