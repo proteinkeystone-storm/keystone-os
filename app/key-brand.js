@@ -160,11 +160,14 @@ const SCENE_INKS = [
   ['light', 'Claire'],
   ['dark',  'Sombre'],
 ];
-const SCENE_DURS = [          // multiplicateur de durée des motions (--kb-mo)
+const SCENE_DURS = [          // multiplicateur de durée des motions
   ['fast',   'Vif',   0.6],
   ['normal', 'Posé',  1],
   ['slow',   'Ample', 1.8],
 ];
+// Durées de base (s) par motion — le tempo est appliqué en JS et posé en
+// inline (PAS de calc(var()) CSS : Safari le rejette sur les animations).
+const MOTION_BASE = { fade: .9, rise: .95, zoom: 1.05, wipe: 1.1, float: .9, iris: 1.15, blur: 1.15 };
 // KB-9 — planche d'ambiance : gabarits de collage (cellules photo/vidéo
 // + médaillon rond imbriqué par cellule, positionné au clic).
 const BOARD_TPLS = [
@@ -2510,13 +2513,15 @@ function _renderBrandTab() {
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
   const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
   const brandName = meta.name || _chart.name;
-  // Motion « lettre à lettre » : chaque caractère anime avec son délai,
-  // MAIS regroupé par mot insécable (.kb-w) — sinon le navigateur coupe
-  // les mots entre deux lettres et le nom « saute » de ligne en ligne.
+  // Motion « lettre à lettre » : chaque caractère anime avec son délai
+  // (posé en INLINE, calculé en JS), regroupé par mot insécable (.kb-w) —
+  // sinon le navigateur coupe les mots entre deux lettres.
   let _li = 0;
+  const _lDur = (0.5 * mo).toFixed(2);
   const nameHtml = b.motion === 'letters'
     ? brandName.split(' ').filter(w => w.length).map(w =>
-        `<span class="kb-w">${[...w].map(ch => `<span class="kb-l" style="--i:${_li++}">${_esc(ch)}</span>`).join('')}</span>`
+        `<span class="kb-w">${[...w].map(ch =>
+          `<span class="kb-l" style="animation-delay:${(_li++ * 0.045 * mo).toFixed(3)}s;animation-duration:${_lDur}s">${_esc(ch)}</span>`).join('')}</span>`
       ).join(' ')
     : _esc(brandName);
   const inked = s.bgType !== 'white';   // fond custom → encre pilotée
@@ -2527,13 +2532,16 @@ function _renderBrandTab() {
 
   const sceneLogo = _sceneLogoVariant(s);
   const playNow = _scenePlay; _scenePlay = false;   // consommé : le prochain re-render de réglage restera posé
+  // Tempo en inline (durées réelles, pas de calc CSS).
+  const durInline = MOTION_BASE[b.motion] ? `animation-duration:${(MOTION_BASE[b.motion] * mo).toFixed(2)}s${b.motion === 'float' ? ',5.5s' : ''};` : '';
+  const blStyle = (b.motion === 'letters' ? `animation-delay:${(0.55 * mo).toFixed(2)}s;animation-duration:${(0.7 * mo).toFixed(2)}s;` : '') + (inked ? `color:${ink.base}` : '');
   const stageInner = `
-      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)} ${playNow ? '' : 'kb-still'}" data-slot="stage-inner" style="--kb-mo:${mo}">
+      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)} ${playNow ? '' : 'kb-still'}" data-slot="stage-inner" style="${durInline}">
         ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
         ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">
           <div class="kb-stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${nameHtml}</div>
-          ${meta.baseline ? `<div class="kb-stage-baseline" ${inked ? `style="color:${ink.base}"` : ''}>${_esc(meta.baseline)}</div>` : ''}
+          ${meta.baseline ? `<div class="kb-stage-baseline" ${blStyle ? `style="${blStyle}"` : ''}>${_esc(meta.baseline)}</div>` : ''}
         </div>
       </div>`;
 

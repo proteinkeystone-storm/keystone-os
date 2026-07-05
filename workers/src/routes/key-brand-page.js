@@ -90,17 +90,19 @@ button{font-family:inherit}
 @keyframes kiris{from{clip-path:circle(0% at 50% 50%);opacity:.5}to{clip-path:circle(75% at 50% 50%);opacity:1}}
 @keyframes kletter{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:translateY(0)}}
 @keyframes kblur{from{opacity:0;filter:blur(16px);transform:scale(1.04)}to{opacity:1;filter:blur(0);transform:scale(1)}}
-.m-fade{animation:kfade calc(.9s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.m-rise{animation:krise calc(.95s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.m-zoom{animation:kzoom calc(1.05s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.m-wipe{animation:kwipe calc(1.1s*var(--mo,1)) cubic-bezier(.65,0,.35,1) both}
-.m-float{animation:krise calc(.9s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both,kfloat 5.5s ease-in-out 1s infinite}
-.m-iris{animation:kiris calc(1.15s*var(--mo,1)) cubic-bezier(.65,0,.35,1) both}
-.m-blur{animation:kblur calc(1.15s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.m-letters>img{animation:kfade calc(.7s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both}
+/* Durées de base fixes — tempo posé en inline par le JS (pas de calc(var())
+   d'animation : Safari les rejette → animations mortes). */
+.m-fade{animation:kfade .9s cubic-bezier(.2,.7,.2,1) both}
+.m-rise{animation:krise .95s cubic-bezier(.2,.7,.2,1) both}
+.m-zoom{animation:kzoom 1.05s cubic-bezier(.2,.7,.2,1) both}
+.m-wipe{animation:kwipe 1.1s cubic-bezier(.65,0,.35,1) both}
+.m-float{animation:krise .9s cubic-bezier(.2,.7,.2,1) both,kfloat 5.5s ease-in-out 1s infinite}
+.m-iris{animation:kiris 1.15s cubic-bezier(.65,0,.35,1) both}
+.m-blur{animation:kblur 1.15s cubic-bezier(.2,.7,.2,1) both}
+.m-letters>img{animation:kfade .7s cubic-bezier(.2,.7,.2,1) both}
 .hero-name .hw{display:inline-block;white-space:nowrap}
-.m-letters .hero-name .hl{display:inline-block;opacity:0;animation:kletter calc(.5s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*.045s*var(--mo,1))}
-.m-letters .hero-base{opacity:0;animation:kfade calc(.7s*var(--mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(.55s*var(--mo,1))}
+.m-letters .hero-name .hl{display:inline-block;opacity:0;animation:kletter .5s cubic-bezier(.2,.7,.2,1) both}
+.m-letters .hero-base{opacity:0;animation:kfade .7s cubic-bezier(.2,.7,.2,1) both}
 @media (prefers-reduced-motion:reduce){
   .m-fade,.m-rise,.m-zoom,.m-wipe,.m-float,.m-iris,.m-blur,.m-letters>img,.m-letters .hero-base{animation:none}
   .m-letters .hero-name .hl{animation:none;opacity:1}
@@ -543,6 +545,7 @@ function render(){
   const scBg=['white','color','gradient','image','video'].includes(SC.bgType)?SC.bgType:'white';
   const scLay=['center','corner','split'].includes(SC.layout)?SC.layout:'center';
   const scMo=SC.dur==='fast'?0.6:SC.dur==='slow'?1.8:1;
+  const MB={fade:.9,rise:.95,zoom:1.05,wipe:1.1,float:.9,iris:1.15,blur:1.15};   // durées de base (tempo inline, pas de calc CSS)
   const scMedia=(scBg==='image'||scBg==='video')&&SC.assetId?SC.assetId:null;
   const relL=c=>{const r=hexToRgb(c);return r?.2126*lin(r.r)+.7152*lin(r.g)+.0722*lin(r.b):1};
   // Encre : auto = claire sur média ou couleur sombre ; scène sans fond
@@ -559,9 +562,12 @@ function render(){
   if(scBg==='white')heroStyle=' style="background:'+TINT+'"';
   const rawName=String(meta.name||DATA.name);
   let nameHtml=esc(rawName);
-  // Lettre à lettre : lettres groupées par mot insécable (.hw), sinon le
-  // navigateur coupe les mots entre deux lettres (le nom « saute »).
-  if(motion==='letters'){let li=0;nameHtml=rawName.split(' ').filter(w=>w.length).map(w=>{let s='<span class="hw">';for(const ch of w)s+='<span class="hl" style="--i:'+(li++)+'">'+esc(ch)+'</span>';return s+'</span>'}).join(' ')}
+  // Lettre à lettre : délais/durées INLINE (pas de calc CSS), lettres
+  // groupées par mot insécable (.hw) pour ne jamais couper un mot.
+  if(motion==='letters'){let li=0;const lDur=(0.5*scMo).toFixed(2);
+    nameHtml=rawName.split(' ').filter(w=>w.length).map(w=>{let s='<span class="hw">';
+      for(const ch of w){s+='<span class="hl" style="animation-delay:'+(li*0.045*scMo).toFixed(3)+'s;animation-duration:'+lDur+'s">'+esc(ch)+'</span>';li++}
+      return s+'</span>'}).join(' ')}
   let nmSt='';
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
   if(inkName)nmSt+='color:'+inkName;
@@ -573,11 +579,11 @@ function render(){
        ?'<video class="hero-media" src="'+fileUrl(scMedia)+'" muted loop autoplay playsinline></video>'
        :'<img class="hero-media" src="'+fileUrl(scMedia)+'" alt="">'):'')+
      (scMedia&&scInk==='light'?'<span class="hero-scrim"></span>':'')+
-     '<div class="hero-inner m-'+esc(motion)+'" style="--mo:'+scMo+'">'+
+     '<div class="hero-inner m-'+esc(motion)+'" style="'+(MB[motion]?'animation-duration:'+(MB[motion]*scMo).toFixed(2)+'s'+(motion==='float'?',5.5s':'')+';':'')+'">'+
      (coverLogo?'<img src="'+fileUrl(coverLogo.assetId)+'" alt="'+esc(DATA.name)+'">':'')+
      (scLay==='split'&&coverLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
-     (meta.baseline?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(meta.baseline)+'</div>':'')+
+     (meta.baseline?'<div class="hero-base" style="'+(motion==='letters'?'animation-delay:'+(0.55*scMo).toFixed(2)+'s;animation-duration:'+(0.7*scMo).toFixed(2)+'s;':'')+(inkBase?'color:'+inkBase:'')+'">'+esc(meta.baseline)+'</div>':'')+
      '</div></div>'+
      '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
      '</div>';

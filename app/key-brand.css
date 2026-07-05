@@ -508,17 +508,20 @@
 @keyframes kb-iris{from{clip-path:circle(0% at 50% 50%);opacity:.5}to{clip-path:circle(75% at 50% 50%);opacity:1}}
 @keyframes kb-letter{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:translateY(0)}}
 @keyframes kb-blurin{from{opacity:0;filter:blur(16px);transform:scale(1.04)}to{opacity:1;filter:blur(0);transform:scale(1)}}
-.kb-play-fade{animation:kb-fade calc(.9s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.kb-play-rise{animation:kb-rise calc(.95s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.kb-play-zoom{animation:kb-zoom calc(1.05s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.kb-play-wipe{animation:kb-wipe calc(1.1s*var(--kb-mo,1)) cubic-bezier(.65,0,.35,1) both}
-.kb-play-float{animation:kb-float-in calc(.9s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
-.kb-play-iris{animation:kb-iris calc(1.15s*var(--kb-mo,1)) cubic-bezier(.65,0,.35,1) both}
-.kb-play-blur{animation:kb-blurin calc(1.15s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
-.kb-play-letters .kb-stage-logo{animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both}
+/* Durées de base FIXES — le tempo est posé en inline par le JS (plus
+   aucun calc(var()) d'animation : rejeté par endroits sur Safari
+   → durées nulles → « les animations ne font rien »). */
+.kb-play-fade{animation:kb-fade .9s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-rise{animation:kb-rise .95s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-zoom{animation:kb-zoom 1.05s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-wipe{animation:kb-wipe 1.1s cubic-bezier(.65,0,.35,1) both}
+.kb-play-float{animation:kb-float-in .9s cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
+.kb-play-iris{animation:kb-iris 1.15s cubic-bezier(.65,0,.35,1) both}
+.kb-play-blur{animation:kb-blurin 1.15s cubic-bezier(.2,.7,.2,1) both}
+.kb-play-letters .kb-stage-logo{animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both}
 .kb-stage-name .kb-w{display:inline-block;white-space:nowrap} /* le mot reste entier, la ligne casse ENTRE les mots */
-.kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter calc(.5s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*.045s*var(--kb-mo,1))}
-.kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade calc(.7s*var(--kb-mo,1)) cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(.55s*var(--kb-mo,1))}
+.kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter .5s cubic-bezier(.2,.7,.2,1) both} /* delay+durée inline (JS) */
+.kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both} /* delay inline (JS) */
 @media (prefers-reduced-motion: reduce){
   .kb-play-fade,.kb-play-rise,.kb-play-zoom,.kb-play-wipe,.kb-play-float,.kb-play-iris,.kb-play-blur,
   .kb-play-letters .kb-stage-logo,.kb-play-letters .kb-stage-baseline{animation:none}
