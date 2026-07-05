@@ -162,6 +162,9 @@ select::-ms-expand{display:none}
 .bgchip{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);cursor:pointer;padding:0}
 .bgchip.on{box-shadow:0 0 0 2px var(--accent)}
 .bgchip.ck{background-image:linear-gradient(45deg,#b3b3b3 25%,transparent 25%,transparent 75%,#b3b3b3 75%),linear-gradient(45deg,#b3b3b3 25%,#e3e3e3 25%,#e3e3e3 75%,#b3b3b3 75%);background-size:10px 10px;background-position:0 0,5px 5px}
+/* Pastilles de fond DANS chaque carte (fond d'essai indépendant par carte). */
+.lcard .bgchips{margin:0;padding:11px 14px;gap:7px;border-bottom:1px solid var(--line)}
+.lcard .bgchip{width:24px;height:24px}
 .lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
 .lcard{overflow:hidden;display:flex;flex-direction:column}
 .lprev{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;padding:8%}
@@ -596,12 +599,19 @@ function render(){
       h+='<section><h2>Le logotype</h2><p class="sub">La version de référence — à reproduire sans modification.</p>'+
          '<div class="pl-solo"><img src="'+fileUrl(heroLogo.assetId)+'" alt="'+esc(DATA.name)+'"></div></section>';
     }
-    h+='<section><h2>Déclinaisons</h2><p class="sub">Cliquez un fond pour tester la lisibilité — téléchargez le format exact qu\\'il vous faut.</p>';
-    h+='<div class="bgchips no-print"><button class="bgchip ck on" data-bg="ck" title="Transparent"></button><button class="bgchip" data-bg="#ffffff" style="background:#fff" title="Clair"></button><button class="bgchip" data-bg="#0c0d10" style="background:#0c0d10" title="Sombre"></button>';
-    for(const c of palette.slice(0,6))h+='<button class="bgchip" data-bg="'+esc(c.hex)+'" style="background:'+esc(c.hex)+'" title="'+esc(c.name||c.hex)+'"></button>';
-    h+='</div><div class="lgrid">';
+    h+='<section><h2>Déclinaisons</h2><p class="sub">Chaque carte a son propre fond d\\'essai — cliquez pour tester la lisibilité, puis téléchargez le format qu\\'il vous faut.</p>';
+    h+='<div class="lgrid">';
     for(const v of variants){
-      h+='<div class="card lcard"><div class="lprev" data-prev>'+(v.ext==='pdf'?'<span class="hint">PDF — téléchargeable</span>':'<img src="'+fileUrl(v.assetId)+'" alt="">')+'</div>'+
+      // Fond initial = celui choisi dans l'éditeur (v.bg) ; pastilles PROPRES
+      // à la carte → fond indépendant à gauche et à droite.
+      const vbg=/^#[0-9a-fA-F]{6}$/.test(v.bg||'')?v.bg:'ck';
+      let chips='<div class="bgchips no-print">'
+        +'<button class="bgchip ck'+(vbg==='ck'?' on':'')+'" data-bg="ck" title="Transparent"></button>'
+        +'<button class="bgchip'+(vbg==='#ffffff'?' on':'')+'" data-bg="#ffffff" style="background:#fff" title="Clair"></button>'
+        +'<button class="bgchip'+(vbg==='#0c0d10'?' on':'')+'" data-bg="#0c0d10" style="background:#0c0d10" title="Sombre"></button>';
+      for(const c of palette.slice(0,6))chips+='<button class="bgchip'+((vbg||'').toLowerCase()===c.hex.toLowerCase()?' on':'')+'" data-bg="'+esc(c.hex)+'" style="background:'+esc(c.hex)+'" title="'+esc(c.name||c.hex)+'"></button>';
+      chips+='</div>';
+      h+='<div class="card lcard">'+chips+'<div class="lprev" data-prev data-initbg="'+esc(vbg)+'">'+(v.ext==='pdf'?'<span class="hint">PDF — téléchargeable</span>':'<img src="'+fileUrl(v.assetId)+'" alt="">')+'</div>'+
         '<div class="lmeta"><b>'+esc(v.label||v.name||'Logo')+'</b> <span class="hint">· '+(KINDS[v.kind]||'')+'</span>'+(v.usage?'<div class="lusage">'+esc(v.usage)+'</div>':'')+'</div>'+
         '<div class="ldl"><a class="btn" href="'+fileUrl(v.assetId,true)+'">Original (.'+esc(v.ext)+')</a>';
       if(v.ext!=='pdf'){
@@ -854,11 +864,12 @@ function bind(variants){
       if(!was&&sd.tagName==='BUTTON'){const li=app.querySelector('li[data-sym="'+i+'"]');if(li)li.scrollIntoView({block:'nearest',behavior:'smooth'})}
       return}
     const bgb=e.target.closest('[data-bg]');
-    if(bgb){BG=bgb.dataset.bg;
-      app.querySelectorAll('[data-bg]').forEach(b=>b.classList.toggle('on',b===bgb));
-      app.querySelectorAll('[data-prev]').forEach(p=>{
-        if(BG==='ck'){p.style.background='';p.classList.add('ck-prev');p.style.backgroundImage='linear-gradient(45deg,#b3b3b3 25%,transparent 25%,transparent 75%,#b3b3b3 75%),linear-gradient(45deg,#b3b3b3 25%,#e3e3e3 25%,#e3e3e3 75%,#b3b3b3 75%)';p.style.backgroundSize='16px 16px';p.style.backgroundPosition='0 0,8px 8px'}
-        else{p.style.backgroundImage='none';p.style.background=BG}});
+    if(bgb){
+      // Fond INDÉPENDANT par carte : le clic ne touche que sa propre carte.
+      const card=bgb.closest('.lcard')||app;
+      card.querySelectorAll('[data-bg]').forEach(b=>b.classList.toggle('on',b===bgb));
+      const p=card.querySelector('[data-prev]');
+      if(p)setPrevBg(p,bgb.dataset.bg);
       return}
     const png=e.target.closest('[data-png]');
     if(png){
@@ -886,8 +897,14 @@ function bind(variants){
   st?.addEventListener('input',()=>{app.querySelectorAll('[data-spec]').forEach(s=>{s.textContent=st.value})});
   app.querySelectorAll('[data-w]').forEach(sel=>{sel.addEventListener('change',()=>{
     sel.closest('[data-font]').querySelector('[data-spec]').style.fontWeight=sel.value})});
-  // Fonds : damier par défaut appliqué aux aperçus
-  app.querySelectorAll('[data-prev]').forEach(p=>{p.style.backgroundImage='linear-gradient(45deg,#b3b3b3 25%,transparent 25%,transparent 75%,#b3b3b3 75%),linear-gradient(45deg,#b3b3b3 25%,#e3e3e3 25%,#e3e3e3 75%,#b3b3b3 75%)';p.style.backgroundSize='16px 16px';p.style.backgroundPosition='0 0,8px 8px'});
+  // Fond initial de chaque aperçu = data-initbg (celui choisi dans l'éditeur),
+  // damier si transparent — chaque carte est indépendante.
+  app.querySelectorAll('[data-prev]').forEach(p=>setPrevBg(p,p.dataset.initbg||'ck'));
+}
+// Applique un fond à un aperçu logo : 'ck' = damier transparent, sinon aplat.
+function setPrevBg(p,bg){
+  if(bg==='ck'){p.classList.add('ck-prev');p.style.background='';p.style.backgroundImage='linear-gradient(45deg,#b3b3b3 25%,transparent 25%,transparent 75%,#b3b3b3 75%),linear-gradient(45deg,#b3b3b3 25%,#e3e3e3 25%,#e3e3e3 75%,#b3b3b3 75%)';p.style.backgroundSize='16px 16px';p.style.backgroundPosition='0 0,8px 8px'}
+  else{p.classList.remove('ck-prev');p.style.backgroundImage='none';p.style.background=bg}
 }
 
 boot();
