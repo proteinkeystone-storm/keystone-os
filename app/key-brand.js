@@ -165,9 +165,20 @@ const SCENE_DURS = [          // multiplicateur de durée des motions
   ['normal', 'Posé',  1],
   ['slow',   'Ample', 1.8],
 ];
-// Durées de base (s) par motion — le tempo est appliqué en JS et posé en
-// inline (PAS de calc(var()) CSS : Safari le rejette sur les animations).
-const MOTION_BASE = { fade: .9, rise: .95, zoom: 1.05, wipe: 1.1, float: .9, iris: 1.15, blur: 1.15 };
+// Aperçu de l'atelier : motions jouées en PUR JavaScript (Web Animations
+// API) — indépendant de la CSS chargée, des media queries, du réglage
+// « réduire les animations » et de toute règle externe. La page publique
+// /b/, elle, reste en animations CSS standard (et respecte reduced-motion).
+const EASE_SOFT = 'cubic-bezier(.2,.7,.2,1)';
+const MOTION_FRAMES = {
+  fade:  { d: .9,  e: EASE_SOFT, frames: [{ opacity: 0, transform: 'scale(.965)' }, { opacity: 1, transform: 'scale(1)' }] },
+  rise:  { d: .95, e: EASE_SOFT, frames: [{ opacity: 0, transform: 'translateY(26px)' }, { opacity: 1, transform: 'translateY(0)' }] },
+  zoom:  { d: 1.05, e: EASE_SOFT, frames: [{ opacity: 0, transform: 'scale(1.18)', filter: 'blur(9px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' }] },
+  wipe:  { d: 1.1, e: 'cubic-bezier(.65,0,.35,1)', frames: [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }] },
+  float: { d: .9,  e: EASE_SOFT, frames: [{ opacity: 0, transform: 'translateY(18px)' }, { opacity: 1, transform: 'translateY(0)' }] },
+  iris:  { d: 1.15, e: 'cubic-bezier(.65,0,.35,1)', frames: [{ clipPath: 'circle(0% at 50% 50%)', opacity: .5 }, { clipPath: 'circle(75% at 50% 50%)', opacity: 1 }] },
+  blur:  { d: 1.15, e: EASE_SOFT, frames: [{ opacity: 0, filter: 'blur(16px)', transform: 'scale(1.04)' }, { opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' }] },
+};
 // KB-9 — planche d'ambiance : gabarits de collage (cellules photo/vidéo
 // + médaillon rond imbriqué par cellule, positionné au clic).
 const BOARD_TPLS = [
@@ -957,6 +968,11 @@ function _renderChart() {
   if (_tab === 'logo' || _tab === 'rules' || _tab === 'brand' || _tab === 'supports') _hydrateLogoImgs();
   // Titre de la planche : hauteur ajustée au contenu dès le rendu.
   _root.querySelectorAll('.kb-bd-title').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
+  // Scène : la motion joue en JS après le rendu, seulement aux bons moments.
+  if (_tab === 'brand' && _scenePlay) {
+    _scenePlay = false;
+    requestAnimationFrame(() => _playSceneMotion());
+  }
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -2443,15 +2459,36 @@ function _setMotion(key) {
   _scenePlay = true;   // changer de motion = la voir tout de suite
   _scheduleSave(); _renderChart();
 }
-function _replayMotion() {
-  const stage = _root?.querySelector('[data-slot="stage-inner"]');
-  if (!stage) return;
-  const cls = [...stage.classList].find(c => c.startsWith('kb-play-'));
-  if (!cls) return;
-  stage.classList.remove(cls, 'kb-still');
-  void stage.offsetWidth;   // reflow → l'animation repart
-  stage.classList.add(cls);
+// Joue la motion de la scène en Web Animations API (element.animate) —
+// aucun recours aux classes/keyframes CSS, donc insensible à tout ce qui
+// peut les neutraliser (réglages système, règles externes, cache CSS).
+function _playSceneMotion() {
+  const inner = _root?.querySelector('[data-slot="stage-inner"]');
+  if (!inner || typeof inner.animate !== 'function') return;
+  inner.getAnimations({ subtree: true }).forEach(a => a.cancel());
+  const motion = _brandSection().motion || 'none';
+  if (motion === 'none') return;
+  const s = _sceneOf();
+  const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
+  if (motion === 'letters') {
+    inner.querySelectorAll('.kb-stage-name .kb-l').forEach((l, i) =>
+      l.animate([{ opacity: 0, transform: 'translateY(.35em)' }, { opacity: 1, transform: 'translateY(0)' }],
+        { duration: 500 * mo, delay: i * 45 * mo, easing: EASE_SOFT, fill: 'both' }));
+    inner.querySelector('.kb-stage-logo')?.animate([{ opacity: 0 }, { opacity: 1 }],
+      { duration: 700 * mo, easing: EASE_SOFT, fill: 'both' });
+    inner.querySelector('.kb-stage-baseline')?.animate([{ opacity: 0 }, { opacity: 1 }],
+      { duration: 700 * mo, delay: 550 * mo, easing: EASE_SOFT, fill: 'both' });
+    return;
+  }
+  const def = MOTION_FRAMES[motion];
+  if (!def) return;
+  inner.animate(def.frames, { duration: def.d * 1000 * mo, easing: def.e, fill: 'both' });
+  if (motion === 'float') {
+    inner.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-7px)' }, { transform: 'translateY(0)' }],
+      { duration: 5500, delay: 1000 + 900 * mo, iterations: Infinity, easing: 'ease-in-out' });
+  }
 }
+function _replayMotion() { _playSceneMotion(); }
 
 // ── Symbolique du signe ──
 function _addSymbolAt(canvas, e) {
@@ -2511,17 +2548,13 @@ function _renderBrandTab() {
   const ink = _sceneInk(s);
   const bgCss = _sceneBgCss(s);
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
-  const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
   const brandName = meta.name || _chart.name;
-  // Motion « lettre à lettre » : chaque caractère anime avec son délai
-  // (posé en INLINE, calculé en JS), regroupé par mot insécable (.kb-w) —
-  // sinon le navigateur coupe les mots entre deux lettres.
-  let _li = 0;
-  const _lDur = (0.5 * mo).toFixed(2);
+  // Motion « lettre à lettre » : les lettres sont animées en JS (WAAPI)
+  // après le rendu — regroupées par mot insécable (.kb-w) pour ne jamais
+  // couper un mot entre deux lettres.
   const nameHtml = b.motion === 'letters'
     ? brandName.split(' ').filter(w => w.length).map(w =>
-        `<span class="kb-w">${[...w].map(ch =>
-          `<span class="kb-l" style="animation-delay:${(_li++ * 0.045 * mo).toFixed(3)}s;animation-duration:${_lDur}s">${_esc(ch)}</span>`).join('')}</span>`
+        `<span class="kb-w">${[...w].map(ch => `<span class="kb-l">${_esc(ch)}</span>`).join('')}</span>`
       ).join(' ')
     : _esc(brandName);
   const inked = s.bgType !== 'white';   // fond custom → encre pilotée
@@ -2531,12 +2564,12 @@ function _renderBrandTab() {
     : `<img class="kb-stage-media" data-asset="${_esc(s.assetId)}" alt="" draggable="false">`);
 
   const sceneLogo = _sceneLogoVariant(s);
-  const playNow = _scenePlay; _scenePlay = false;   // consommé : le prochain re-render de réglage restera posé
-  // Tempo en inline (durées réelles, pas de calc CSS).
-  const durInline = MOTION_BASE[b.motion] ? `animation-duration:${(MOTION_BASE[b.motion] * mo).toFixed(2)}s${b.motion === 'float' ? ',5.5s' : ''};` : '';
-  const blStyle = (b.motion === 'letters' ? `animation-delay:${(0.55 * mo).toFixed(2)}s;animation-duration:${(0.7 * mo).toFixed(2)}s;` : '') + (inked ? `color:${ink.base}` : '');
+  // Plus AUCUNE classe/style d'animation CSS ici : la scène est rendue à
+  // l'état final, et _playSceneMotion() (WAAPI) anime après le rendu quand
+  // c'est le moment (arrivée sur l'onglet, changement de motion, rejouer).
+  const blStyle = inked ? `color:${ink.base}` : '';
   const stageInner = `
-      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)} ${playNow ? '' : 'kb-still'}" data-slot="stage-inner" style="${durInline}">
+      <div class="kb-stage-inner kb-lay-${_esc(s.layout)}" data-slot="stage-inner">
         ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
         ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">

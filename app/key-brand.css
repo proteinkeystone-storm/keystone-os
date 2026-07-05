@@ -521,6 +521,7 @@
 .kb-play-blur{animation:kb-blurin 1.15s cubic-bezier(.2,.7,.2,1) both}
 .kb-play-letters .kb-stage-logo{animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both}
 .kb-stage-name .kb-w{display:inline-block;white-space:nowrap} /* le mot reste entier, la ligne casse ENTRE les mots */
+.kb-stage-name .kb-l{display:inline-block} /* transform sur inline = sans effet ; requis pour l'anim JS */
 .kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter .5s cubic-bezier(.2,.7,.2,1) both} /* delay+durée inline (JS) */
 .kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both} /* delay inline (JS) */
 /* ⚠ PAS de coupe prefers-reduced-motion ICI : l'éditeur est un outil de
