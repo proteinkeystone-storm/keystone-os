@@ -478,19 +478,16 @@
 .kb-rule-tools button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.9);color:#3a3f4a;cursor:pointer}
 .kb-rule-tools button.danger{color:var(--ws-danger)}
 .kb-rules .kb-lab{margin-top:26px}
-.kb-rm-note{display:flex;align-items:center;gap:7px;border:1px solid var(--kb-line);border-radius:10px;padding:9px 12px;margin-top:8px}
 
 /* ══ Onglet Branding (KB-5) — la scène ══ */
 .kb-stage{position:relative;background:#fff;border-radius:18px;min-height:280px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--kb-line)}
 .kb-stage.has-media{min-height:340px}
 .kb-stage-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.kb-stage-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.46));pointer-events:none}
 .kb-stage-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:14px;padding:36px;text-align:center}
 .kb-stage-txt{display:flex;flex-direction:column;gap:8px;align-items:center}
 .kb-stage-logo{max-width:min(320px,60%);max-height:130px;object-fit:contain}
 .kb-stage-name{font-weight:900;font-size:clamp(24px,4vw,34px);letter-spacing:-0.025em;color:#15171c;line-height:1.1}
 .kb-stage-baseline{color:#5b6170;font-size:15px}
-.kb-stage-replay{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.06);color:#3a3f4a;border-color:transparent;z-index:2}
 
 /* Mises en scène (KB-8) : centré (défaut) · bas gauche · côte à côte. */
 .kb-lay-corner{margin-top:auto;margin-right:auto;align-items:flex-start;text-align:left}
@@ -499,41 +496,8 @@
 .kb-lay-split .kb-stage-txt{align-items:flex-start}
 .kb-stage-vr{width:1px;align-self:stretch;background:rgba(0,0,0,.18)}
 
-/* Motions — sobres, 1 idée par preset. Tempo : --kb-mo (×.6/1/1.8). */
-@keyframes kb-fade{from{opacity:0;transform:scale(.965)}to{opacity:1;transform:scale(1)}}
-@keyframes kb-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
-@keyframes kb-zoom{from{opacity:0;transform:scale(1.18);filter:blur(9px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
-@keyframes kb-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
-@keyframes kb-float-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-@keyframes kb-float-loop{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-@keyframes kb-iris{from{clip-path:circle(0% at 50% 50%);opacity:.5}to{clip-path:circle(75% at 50% 50%);opacity:1}}
-@keyframes kb-letter{from{opacity:0;transform:translateY(.35em)}to{opacity:1;transform:translateY(0)}}
-@keyframes kb-blurin{from{opacity:0;filter:blur(16px);transform:scale(1.04)}to{opacity:1;filter:blur(0);transform:scale(1)}}
-/* Durées de base FIXES — le tempo est posé en inline par le JS (plus
-   aucun calc(var()) d'animation : rejeté par endroits sur Safari
-   → durées nulles → « les animations ne font rien »). */
-.kb-play-fade{animation:kb-fade .9s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-rise{animation:kb-rise .95s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-zoom{animation:kb-zoom 1.05s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-wipe{animation:kb-wipe 1.1s cubic-bezier(.65,0,.35,1) both}
-.kb-play-float{animation:kb-float-in .9s cubic-bezier(.2,.7,.2,1) both,kb-float-loop 5.5s ease-in-out 1s infinite}
-.kb-play-iris{animation:kb-iris 1.15s cubic-bezier(.65,0,.35,1) both}
-.kb-play-blur{animation:kb-blurin 1.15s cubic-bezier(.2,.7,.2,1) both}
-.kb-play-letters .kb-stage-logo{animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both}
-.kb-stage-name .kb-w{display:inline-block;white-space:nowrap} /* le mot reste entier, la ligne casse ENTRE les mots */
-.kb-stage-name .kb-l{display:inline-block} /* transform sur inline = sans effet ; requis pour l'anim JS */
-.kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter .5s cubic-bezier(.2,.7,.2,1) both} /* delay+durée inline (JS) */
-.kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both} /* delay inline (JS) */
-/* ⚠ PAS de coupe prefers-reduced-motion ICI : l'éditeur est un outil de
-   création — le graphiste doit VOIR la motion qu'il règle (piège vécu :
-   « Réduire les animations » macOS actif → toutes les motions semblaient
-   mortes dans l'atelier). La page publique /b/, elle, respecte le réglage
-   chez les visiteurs. Une note s'affiche dans l'atelier le cas échéant. */
-/* État « posé » : pendant les réglages, la scène ne rejoue pas — elle
-   reste à l'état final (l'animation ne joue qu'à l'arrivée, au changement
-   de motion et au bouton rejouer). */
-.kb-stage-inner.kb-still,.kb-still .kb-stage-logo,.kb-still .kb-stage-baseline,.kb-still .kb-stage-name .kb-l{animation:none !important}
-.kb-still .kb-stage-name .kb-l,.kb-still .kb-stage-baseline{opacity:1}
+/* Scène STATIQUE — le système de motions a été supprimé (2026-07-05) :
+   une couverture animée = la vidéo du graphiste, plein cadre. */
 
 /* Barre de réglages de la scène (KB-8) — chips plates groupées. */
 .kb-scenebar{display:flex;flex-direction:column;gap:10px;margin:14px 0 4px;padding:14px 16px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:14px}
@@ -697,12 +661,6 @@
   .kb-sup-eye{opacity:1}
 }
 
-.kb-motions{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:14px 0 6px}
-.kb-motion{display:flex;flex-direction:column;gap:2px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:12px;color:var(--kb-ink);padding:11px 12px;cursor:pointer;text-align:left;transition:border-color .15s}
-.kb-motion:hover{border-color:var(--kb-accent)}
-.kb-motion.on{border-color:var(--kb-accent);box-shadow:0 0 0 1px var(--kb-accent) inset}
-.kb-motion strong{font-size:13.5px}
-.kb-motion span{color:var(--kb-muted);font-size:11.5px}
 
 /* Symbolique du signe */
 .kb-sym-canvas{position:relative;background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:34px;cursor:crosshair;margin:12px 0;border:1px solid var(--kb-line)}

@@ -124,25 +124,14 @@ const INTERDITS_DEFS = [
   ['crowd',   'Ne pas envahir sa zone de protection'],
 ];
 let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | { rule: id } | 'photo'
-let _scenePlay = true;      // l'animation de la scène ne joue qu'aux bons moments
-                            // (arrivée sur l'onglet, changement de motion, rejouer)
-                            // — pas à chaque réglage, sinon elle « clignote ».
 
-// ── Onglet Branding (KB-5) ──
-// Motions d'intro préréglées — CSS pur, sobres, respectent
-// prefers-reduced-motion. La clé = classe .kb-play-<key> (key-brand.css).
-const MOTIONS = [
-  ['none',    'Aucune',          'la marque, posée'],
-  ['fade',    'Fondu',           'apparition en douceur'],
-  ['rise',    'Lever',           'monte et se révèle'],
-  ['zoom',    'Approche',        'arrive de loin, nette'],
-  ['wipe',    'Rideau',          'balayage gauche → droite'],
-  ['float',   'Flottement',      'entre puis respire'],
-  ['iris',    'Iris',            's\'ouvre en cercle'],
-  ['letters', 'Lettre à lettre', 'le nom s\'écrit'],
-  ['blur',    'Mise au point',   'flou, puis net'],
-];
-// KB-8 — réglages de la scène d'ouverture (fond, mise en scène, encre, tempo).
+// ── Onglet Branding ──
+// La scène d'ouverture est STATIQUE (décision Stéphane 2026-07-05 : le
+// système de motions préréglées a été SUPPRIMÉ — trop d'allers-retours).
+// Une couverture animée = le graphiste dépose SA vidéo (Fond → Vidéo),
+// affichée PLEIN CADRE sans rien par-dessus. Pareil pour une photo.
+// Sans média : couverture composée (fond, logo, nom, baseline), posée.
+// KB-8 — réglages de la scène d'ouverture (fond, mise en scène, encre).
 const SCENE_BG_TYPES = [
   ['white',    'Blanc'],
   ['color',    'Couleur'],
@@ -160,60 +149,6 @@ const SCENE_INKS = [
   ['light', 'Claire'],
   ['dark',  'Sombre'],
 ];
-const SCENE_DURS = [          // multiplicateur de durée des motions
-  ['fast',   'Vif',   0.6],
-  ['normal', 'Posé',  1],
-  ['slow',   'Ample', 1.8],
-];
-// Aperçu de l'atelier : motions jouées en PUR JavaScript (Web Animations
-// API) — indépendant de la CSS chargée, des media queries, du réglage
-// « réduire les animations » et de toute règle externe. La page publique
-// /b/, elle, reste en animations CSS standard (et respecte reduced-motion).
-// Chorégraphies PAR ÉLÉMENT (logo / filet / nom / baseline décalés) —
-// retour Stéphane 2026-07-05 : un fondu global se lisait comme un simple
-// rechargement, pas comme une motion de marque. Miroir CSS obligatoire
-// dans key-brand-page.js (règle : MOTIONS + chorégraphie + CSS m-*).
-const EASE_SOFT   = 'cubic-bezier(.2,.7,.2,1)';
-const EASE_SPRING = 'cubic-bezier(.3,1.45,.45,1)';   // dépasse puis se pose
-const EASE_CINE   = 'cubic-bezier(.65,0,.28,1)';     // élan fort, freinage long
-// Chaque étape : sel (défaut = la scène entière), frames WAAPI, d/delay en
-// secondes au tempo 1 (multipliés par le tempo), e = easing.
-const MOTION_CHOREO = {
-  fade: [   // l'option sobre — mais orchestrée, plus un aplat uniforme
-    { frames: [{ opacity: 0 }, { opacity: 1 }], d: .9 },
-    { sel: '.kb-stage-logo', frames: [{ transform: 'scale(.88)' }, { transform: 'scale(1)' }], d: 1.15 },
-    { sel: '.kb-stage-name', frames: [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0)' }], d: 1, delay: .12 },
-    { sel: '.kb-stage-baseline', frames: [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], d: .8, delay: .38 },
-  ],
-  rise: [   // tout monte en escalier, avec un ressort qui dépasse puis se pose
-    { frames: [{ opacity: 0 }, { opacity: 1 }], d: .5 },
-    { sel: '.kb-stage-logo', frames: [{ opacity: 0, transform: 'translateY(64px) scale(.92)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], d: .95, e: EASE_SPRING },
-    { sel: '.kb-stage-vr', frames: [{ opacity: 0, transform: 'scaleY(.2)' }, { opacity: 1, transform: 'scaleY(1)' }], d: .7, delay: .22 },
-    { sel: '.kb-stage-name', frames: [{ opacity: 0, transform: 'translateY(84px)' }, { opacity: 1, transform: 'translateY(0)' }], d: 1.05, delay: .1, e: EASE_SPRING },
-    { sel: '.kb-stage-baseline', frames: [{ opacity: 0, transform: 'translateY(34px)' }, { opacity: 1, transform: 'translateY(0)' }], d: .9, delay: .3, e: EASE_SPRING },
-  ],
-  zoom: [   // vraie arrivée de loin : ×2.35 flouté → net, baseline ensuite
-    { frames: [{ opacity: 0, transform: 'scale(2.35)', filter: 'blur(22px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' }], d: 1.15, e: EASE_CINE },
-    { sel: '.kb-stage-baseline', frames: [{ opacity: 0 }, { opacity: 1 }], d: .6, delay: .55 },
-  ],
-  wipe: [   // le rideau tire aussi le contenu (clip + glissement combinés)
-    { frames: [{ clipPath: 'inset(0 100% 0 0)', transform: 'translateX(-5%)' }, { clipPath: 'inset(0 0 0 0)', transform: 'translateX(0)' }], d: 1.1, e: EASE_CINE },
-  ],
-  float: [  // entrée à ressort ; la respiration (boucle) est posée à part
-    { frames: [{ opacity: 0, transform: 'translateY(36px) scale(.95)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], d: .9, e: EASE_SPRING },
-  ],
-  iris: [   // le cercle s'ouvre PENDANT que la scène recule (2 anims composées)
-    { frames: [{ clipPath: 'circle(0% at 50% 50%)', opacity: .4 }, { clipPath: 'circle(75% at 50% 50%)', opacity: 1 }], d: 1.15, e: EASE_CINE },
-    { frames: [{ transform: 'scale(1.22)' }, { transform: 'scale(1)' }], d: 1.3 },
-  ],
-  blur: [   // tirage de point en deux temps : dégrossi vite, net lentement
-    { frames: [
-      { opacity: 0, filter: 'blur(26px) saturate(.5)', transform: 'scale(1.1)' },
-      { opacity: .95, filter: 'blur(7px) saturate(.85)', transform: 'scale(1.03)', offset: .55 },
-      { opacity: 1, filter: 'blur(0px) saturate(1)', transform: 'scale(1)' },
-    ], d: 1.3 },
-  ],
-};
 // KB-9 — planche d'ambiance : gabarits de collage (cellules photo/vidéo
 // + médaillon rond imbriqué par cellule, positionné au clic).
 const BOARD_TPLS = [
@@ -532,7 +467,7 @@ function _onClick(e) {
   if (act === 'dup' && id)    { _duplicateChart(id); return; }
   if (act === 'del' && id)    { _deleteChart(id); return; }
   if (act === 'back-lib')     { _backToLib(); return; }
-  if (act.startsWith('tab-')) { _tab = act.slice(4); _dlPanel = null; if (_tab === 'brand') _scenePlay = true; _renderChart(); return; }
+  if (act.startsWith('tab-')) { _tab = act.slice(4); _dlPanel = null; _renderChart(); return; }
   if (act === 'soon')         { _toast('Cet atelier arrive au prochain sprint.'); return; }
 
   // ── Onglet Logo (KB-1) ──
@@ -566,13 +501,10 @@ function _onClick(e) {
   if (act === 'pub-open')  { window.open(_publicUrl(), '_blank', 'noopener'); return; }
 
   // ── Onglet Branding (KB-5) ──
-  if (act === 'brand-motion')  { _setMotion(btn.dataset.motion); return; }
-  if (act === 'brand-replay')  { _replayMotion(); return; }
   // ── Scène d'ouverture (KB-8) ──
   if (act === 'scene-bgtype')  { _setSceneProp('bgType', btn.dataset.v); return; }
   if (act === 'scene-lay')     { _setSceneProp('layout', btn.dataset.v); return; }
   if (act === 'scene-ink')     { _setSceneProp('ink', btn.dataset.v); return; }
-  if (act === 'scene-dur')     { _setSceneProp('dur', btn.dataset.v); return; }
   if (act === 'scene-c')       { _setSceneColor(btn.dataset.n, btn.dataset.hex); return; }
   if (act === 'scene-cnext')   { // pastille palette : remplit C1, puis C2 en dégradé
     const sc = _sceneOf();
@@ -1004,10 +936,6 @@ function _renderChart() {
   // Titre de la planche : hauteur ajustée au contenu dès le rendu.
   _root.querySelectorAll('.kb-bd-title').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
   // Scène : la motion joue en JS après le rendu, seulement aux bons moments.
-  if (_tab === 'brand' && _scenePlay) {
-    _scenePlay = false;
-    requestAnimationFrame(() => _playSceneMotion());
-  }
 }
 
 // Spécimens fantômes — l'état le plus important de l'app (brief §6) :
@@ -2206,7 +2134,6 @@ function _sceneOf() {
   if (!SCENE_BG_TYPES.some(([k]) => k === s.bgType))  s.bgType = 'white';
   if (!SCENE_LAYOUTS.some(([k]) => k === s.layout))   s.layout = 'center';
   if (!SCENE_INKS.some(([k]) => k === s.ink))         s.ink = 'auto';
-  if (!SCENE_DURS.some(([k]) => k === s.dur))         s.dur = 'normal';
   if (s.logoId != null && typeof s.logoId !== 'string') s.logoId = null;   // assetId | 'none' | null (= 1re variante)
   return s;
 }
@@ -2488,71 +2415,6 @@ function _placeBoardMed(cellEl, e) {
   _scheduleSave(); _renderChart();
 }
 
-function _setMotion(key) {
-  if (!MOTIONS.some(([k]) => k === key)) return;
-  _brandSection().motion = key;
-  _scheduleSave();
-  // CHIRURGICAL, pas de re-render : le panneau entier qui clignotait au
-  // clic faisait passer la motion pour un rechargement de page (retour
-  // Stéphane 2026-07-05). On bascule la carte active et on rejoue — rien
-  // d'autre ne bouge. (Possible car le nom est TOUJOURS splitté en .kb-l.)
-  _root?.querySelectorAll('[data-act="brand-motion"]').forEach(c =>
-    c.classList.toggle('on', c.dataset.motion === key));
-  _playSceneMotion();
-}
-// Joue la motion de la scène en Web Animations API (element.animate) —
-// aucun recours aux classes/keyframes CSS, donc insensible à tout ce qui
-// peut les neutraliser (réglages système, règles externes, cache CSS).
-function _playSceneMotion() {
-  const inner = _root?.querySelector('[data-slot="stage-inner"]');
-  if (!inner || typeof inner.animate !== 'function') return;
-  inner.getAnimations({ subtree: true }).forEach(a => a.cancel());
-  const motion = _brandSection().motion || 'none';
-  if (motion === 'none') return;
-  const s = _sceneOf();
-  const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
-  if (motion === 'letters') {
-    // Le nom s'écrit : chaque lettre retombe de haut, grosse puis à sa
-    // taille, avec un ressort ; le logo glisse depuis la gauche ; la
-    // baseline attend la DERNIÈRE lettre (délai calé sur leur nombre).
-    const letters = inner.querySelectorAll('.kb-stage-name .kb-l');
-    letters.forEach((l, i) =>
-      l.animate([
-        { opacity: 0, transform: 'translateY(.7em) scale(1.45)', filter: 'blur(5px)' },
-        { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0px)' },
-      ], { duration: 620 * mo, delay: i * 45 * mo, easing: EASE_SPRING, fill: 'both' }));
-    inner.querySelector('.kb-stage-logo')?.animate(
-      [{ opacity: 0, transform: 'translateX(-34px)' }, { opacity: 1, transform: 'translateX(0)' }],
-      { duration: 900 * mo, easing: EASE_SOFT, fill: 'both' });
-    inner.querySelector('.kb-stage-vr')?.animate(
-      [{ opacity: 0, transform: 'scaleY(.2)' }, { opacity: 1, transform: 'scaleY(1)' }],
-      { duration: 600 * mo, delay: 250 * mo, easing: EASE_SOFT, fill: 'both' });
-    inner.querySelector('.kb-stage-baseline')?.animate(
-      [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
-      { duration: 700 * mo, delay: (letters.length * 45 + 250) * mo, easing: EASE_SOFT, fill: 'both' });
-    return;
-  }
-  const steps = MOTION_CHOREO[motion];
-  if (!steps) return;
-  for (const st of steps) {
-    const el = st.sel ? inner.querySelector(st.sel) : inner;
-    if (!el) continue;
-    el.animate(st.frames, {
-      duration: st.d * 1000 * mo,
-      delay: (st.delay || 0) * 1000 * mo,
-      easing: st.e || EASE_SOFT,
-      fill: 'both',
-    });
-  }
-  if (motion === 'float') {   // la respiration, plus ample qu'avant (10px + zoom léger)
-    inner.animate([
-      { transform: 'translateY(0) scale(1)' },
-      { transform: 'translateY(-10px) scale(1.012)', offset: .5 },
-      { transform: 'translateY(0) scale(1)' },
-    ], { duration: 5500, delay: 1000 + 900 * mo, iterations: Infinity, easing: 'ease-in-out' });
-  }
-}
-function _replayMotion() { _playSceneMotion(); }
 
 // ── Symbolique du signe ──
 function _addSymbolAt(canvas, e) {
@@ -2607,28 +2469,23 @@ function _renderBrandTab() {
   const meta = _chart.draft.meta || {};
   const titleFont = _titleFontCss();
 
-  // ── La scène : page de garde vivante (KB-8 : fond, mise en scène, encre, tempo) ──
+  // ── La scène : page de garde STATIQUE (fond, mise en scène, encre) ──
   const s = _sceneOf();
   const ink = _sceneInk(s);
   const bgCss = _sceneBgCss(s);
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
   const brandName = meta.name || _chart.name;
-  // Le nom est TOUJOURS splitté en lettres (.kb-l, groupées par mot
-  // insécable .kb-w) — rendu statique identique, et ça permet de changer
-  // de motion SANS re-render (clic carte = rejouer, zéro clignotement).
-  const nameHtml = brandName.split(' ').filter(w => w.length).map(w =>
-    `<span class="kb-w">${[...w].map(ch => `<span class="kb-l">${_esc(ch)}</span>`).join('')}</span>`
-  ).join(' ');
-  const inked = s.bgType !== 'white';   // fond custom → encre pilotée
+  const nameHtml = _esc(brandName);
+  // Encre pilotée si le fond existe VRAIMENT (couleur/dégradé, ou média
+  // déposé) — sinon Photo/Vidéo sans fichier = encre claire sur blanc.
+  const inked = s.bgType === 'color' || s.bgType === 'gradient' || !!hasMedia;
 
   const mediaEl = !hasMedia ? '' : (s.bgType === 'video'
     ? `<video class="kb-stage-media" data-asset="${_esc(s.assetId)}" muted loop autoplay playsinline></video>`
     : `<img class="kb-stage-media" data-asset="${_esc(s.assetId)}" alt="" draggable="false">`);
 
   const sceneLogo = _sceneLogoVariant(s);
-  // Plus AUCUNE classe/style d'animation CSS ici : la scène est rendue à
-  // l'état final, et _playSceneMotion() (WAAPI) anime après le rendu quand
-  // c'est le moment (arrivée sur l'onglet, changement de motion, rejouer).
+  // Scène STATIQUE. Avec un média : plein cadre, stageInner n'est PAS rendu.
   const blStyle = inked ? `color:${ink.base}` : '';
   const stageInner = `
       <div class="kb-stage-inner kb-lay-${_esc(s.layout)}" data-slot="stage-inner">
@@ -2663,7 +2520,7 @@ function _renderBrandTab() {
     if (s.bgType === 'image' || s.bgType === 'video') {
       return `<span class="kb-scenefill">
         <button class="kb-fillbtn" data-act="scene-media">${icon(s.bgType === 'video' ? 'film' : 'image', 14)} ${s.assetId ? 'Remplacer' : (s.bgType === 'video' ? 'Choisir une vidéo' : 'Choisir une photo')}</button>
-        <span class="kb-scenehint">${s.bgType === 'video' ? '4 Mo max · muette, en boucle' : '4 Mo max'}</span>
+        <span class="kb-scenehint">${s.bgType === 'video' ? 'MP4 ou WebM · 1920×1080 (16:9) · 6–12 s en boucle · sans son · 4 Mo max' : 'JPG ou WebP · 2560×1440 conseillé (16:9) · 4 Mo max'}</span>
         ${s.assetId ? `<button class="kb-iconbtn danger kb-filldel" data-act="scene-media-del" title="Retirer le média">${icon('trash-2', 14)}</button>` : ''}
       </span>`;
     }
@@ -2682,32 +2539,24 @@ function _renderBrandTab() {
         <button class="kb-chip ${s.logoId === 'none' ? 'on' : ''}" data-act="scene-logo" data-v="none">Sans</button>
       </div>` : '';
 
+  // Avec un média : plein cadre → les réglages de composition n'ont plus d'objet.
   const sceneBar = `
     <div class="kb-scenebar">
       <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${bgChips}</div>
-      ${logoRow}
-      <div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
-      <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>
-      <div class="kb-scenegrp"><span class="kb-scenelbl">Tempo</span>${chips(SCENE_DURS.map(([k, l]) => [k, l]), s.dur, 'scene-dur')}</div>
+      ${hasMedia ? '' : logoRow}
+      ${hasMedia ? '' : `<div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
+      <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>`}
     </div>`;
-
-  const motionCards = MOTIONS.map(([key, label, sub]) => `
-    <button class="kb-motion ${b.motion === key ? 'on' : ''}" data-act="brand-motion" data-motion="${key}">
-      <strong>${label}</strong><span>${sub}</span>
-    </button>`).join('');
 
   const stage = `
     <div class="kb-stage ${hasMedia ? 'has-media' : ''}" ${bgCss ? `style="${bgCss}"` : ''}>
       ${mediaEl}
-      ${hasMedia && ink.scrim ? '<span class="kb-stage-scrim" aria-hidden="true"></span>' : ''}
-      ${stageInner}
-      <button class="kb-iconbtn kb-stage-replay" data-act="brand-replay" title="Rejouer l'animation">${icon('refresh', 15)}</button>
+      ${hasMedia ? '' : stageInner}
     </div>
     ${sceneBar}
-    <div class="kb-motions">${motionCards}</div>
-    <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>
-    ${(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? `
-    <p class="kb-hint kb-rm-note">${icon('info', 13)} Votre système demande de « réduire les animations » : l'aperçu ci-dessus les joue quand même pour que vous puissiez les régler — la page publiée respectera ce réglage chez les visiteurs concernés.</p>` : ''}`;
+    <p class="kb-hint">${hasMedia
+      ? 'Votre média occupe toute la couverture de la charte publique — rien n\'est affiché par-dessus.'
+      : 'Cette scène ouvre la charte publique, telle quelle. Pour une ouverture animée, déposez votre propre vidéo (Fond → Vidéo) : elle sera affichée plein cadre.'}</p>`;
 
   // ── Symbolique du signe v2 (KB-10) : titre + récit par repère, calque ──
   const con = _constructionOf();
