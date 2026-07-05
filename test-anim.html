@@ -70,8 +70,10 @@
     var B = getComputedStyle(document.getElementById('sqB')).animationDuration;
     var L5 = mot.children[5] ? getComputedStyle(mot.children[5]).animationDelay : '?';
     var calcOK = parseFloat(B) > 0;
+    var rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     document.getElementById('verdict').textContent =
       '=== À COPIER-COLLER POUR CLAUDE ===\n' +
+      'Réduire les animations (réglage système) : ' + (rm ? 'ACTIVÉ ← explique tout' : 'désactivé') + '\n' +
       'Navigateur : ' + navigator.userAgent + '\n' +
       'A (durée fixe) : ' + A + '\n' +
       'B (calc) : ' + B + (calcOK ? '  → calc() ACCEPTÉ' : '  → calc() REJETÉ (cause du bug)') + '\n' +

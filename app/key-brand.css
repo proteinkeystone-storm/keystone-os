@@ -478,6 +478,7 @@
 .kb-rule-tools button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.9);color:#3a3f4a;cursor:pointer}
 .kb-rule-tools button.danger{color:var(--ws-danger)}
 .kb-rules .kb-lab{margin-top:26px}
+.kb-rm-note{display:flex;align-items:center;gap:7px;border:1px solid var(--kb-line);border-radius:10px;padding:9px 12px;margin-top:8px}
 
 /* ══ Onglet Branding (KB-5) — la scène ══ */
 .kb-stage{position:relative;background:#fff;border-radius:18px;min-height:280px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--kb-line)}
@@ -522,11 +523,11 @@
 .kb-stage-name .kb-w{display:inline-block;white-space:nowrap} /* le mot reste entier, la ligne casse ENTRE les mots */
 .kb-play-letters .kb-stage-name .kb-l{display:inline-block;opacity:0;animation:kb-letter .5s cubic-bezier(.2,.7,.2,1) both} /* delay+durée inline (JS) */
 .kb-play-letters .kb-stage-baseline{opacity:0;animation:kb-fade .7s cubic-bezier(.2,.7,.2,1) both} /* delay inline (JS) */
-@media (prefers-reduced-motion: reduce){
-  .kb-play-fade,.kb-play-rise,.kb-play-zoom,.kb-play-wipe,.kb-play-float,.kb-play-iris,.kb-play-blur,
-  .kb-play-letters .kb-stage-logo,.kb-play-letters .kb-stage-baseline{animation:none}
-  .kb-play-letters .kb-stage-name .kb-l{animation:none;opacity:1}
-}
+/* ⚠ PAS de coupe prefers-reduced-motion ICI : l'éditeur est un outil de
+   création — le graphiste doit VOIR la motion qu'il règle (piège vécu :
+   « Réduire les animations » macOS actif → toutes les motions semblaient
+   mortes dans l'atelier). La page publique /b/, elle, respecte le réglage
+   chez les visiteurs. Une note s'affiche dans l'atelier le cas échéant. */
 /* État « posé » : pendant les réglages, la scène ne rejoue pas — elle
    reste à l'état final (l'animation ne joue qu'à l'arrivée, au changement
    de motion et au bouton rejouer). */

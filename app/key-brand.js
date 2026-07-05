@@ -2610,7 +2610,9 @@ function _renderBrandTab() {
     </div>
     ${sceneBar}
     <div class="kb-motions">${motionCards}</div>
-    <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>`;
+    <p class="kb-hint">L'animation ouvre la charte publique — sobre, et coupée pour les visiteurs qui préfèrent réduire les mouvements.</p>
+    ${(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? `
+    <p class="kb-hint kb-rm-note">${icon('info', 13)} Votre système demande de « réduire les animations » : l'aperçu ci-dessus les joue quand même pour que vous puissiez les régler — la page publiée respectera ce réglage chez les visiteurs concernés.</p>` : ''}`;
 
   // ── Symbolique du signe v2 (KB-10) : titre + récit par repère, calque ──
   const con = _constructionOf();
