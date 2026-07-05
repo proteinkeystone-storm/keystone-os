@@ -2370,7 +2370,8 @@ async function _onSupportShotPicked(file, kind) {
   try {
     const asset = await _apiUpload(_chart.id, file, 'image');
     const s = _supportsOf();
-    const key = kind === 'phone' ? 'phoneShotId' : 'webShotId';
+    const key = ({ web: 'webShotId', phone: 'phoneShotId', card: 'cardShotId', social: 'socialShotId' })[kind];
+    if (!key) return;
     if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
     s[key] = asset.id;
     _scheduleSave(); _renderChart();
@@ -2378,7 +2379,8 @@ async function _onSupportShotPicked(file, kind) {
 }
 function _deleteSupportShot(kind) {
   const s = _supportsOf();
-  const key = kind === 'phone' ? 'phoneShotId' : 'webShotId';
+  const key = ({ web: 'webShotId', phone: 'phoneShotId', card: 'cardShotId', social: 'socialShotId' })[kind];
+  if (!key) return;
   if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
   s[key] = null;
   _scheduleSave(); _renderChart();
@@ -2805,10 +2807,9 @@ function _renderSupportsTab() {
 
   // ── Carte de visite : recto (clair) + verso (couleur) ──
   const cardEmail = s.card.email || ('contact@' + domain);
-  const card = `
-    <section class="kb-sup ${on('card') ? '' : 'is-off'}">
-      <div class="kb-sup-head"><h3 class="kb-lab-title">Carte de visite</h3>${eye('card')}</div>
-      <div class="mk-bizrow">
+  const cardVisual = s.cardShotId
+    ? `<img class="mk-shot mk-supshot" data-asset="${_esc(s.cardShotId)}" alt="" draggable="false">`
+    : `<div class="mk-bizrow">
         <div class="mk-biz mk-recto">
           ${logoImg ? `<span class="mk-bizlogo">${logoImg}</span>` : ''}
           <b style="${tf}">${_esc(kit.name)}</b>
@@ -2820,26 +2821,39 @@ function _renderSupportsTab() {
           <span data-mk="card-tel">${_esc(s.card.tel || '01 23 45 67 89')}</span>
           <span data-mk="card-email" data-fallback="${_esc('contact@' + domain)}">${_esc(cardEmail)}</span>
         </div>
-      </div>
-      <div class="kb-sup-fields">
+      </div>`;
+  const card = `
+    <section class="kb-sup ${on('card') ? '' : 'is-off'}">
+      <div class="kb-sup-head"><h3 class="kb-lab-title">Carte de visite</h3>
+        <button class="kb-btn" data-act="sup-shot" data-k="card">${icon('image', 14)} ${s.cardShotId ? 'Remplacer le visuel' : 'Votre visuel de carte'}</button>
+        ${s.cardShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="card" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${eye('card')}</div>
+      ${cardVisual}
+      ${s.cardShotId ? '' : `<div class="kb-sup-fields">
         <input class="kb-field-input" data-field="sup-card-name" value="${_esc(s.card.name)}" placeholder="Nom" maxlength="80" spellcheck="false">
         <input class="kb-field-input" data-field="sup-card-role" value="${_esc(s.card.role)}" placeholder="Fonction" maxlength="80" spellcheck="false">
         <input class="kb-field-input" data-field="sup-card-tel" value="${_esc(s.card.tel)}" placeholder="Téléphone" maxlength="80" spellcheck="false">
         <input class="kb-field-input" data-field="sup-card-email" value="${_esc(s.card.email)}" placeholder="E-mail" maxlength="80" spellcheck="false">
-      </div>
+      </div>`}
     </section>`;
 
   // ── Réseaux sociaux : avatar rond + bannière ──
-  const social = `
-    <section class="kb-sup ${on('social') ? '' : 'is-off'}">
-      <div class="kb-sup-head"><h3 class="kb-lab-title">Réseaux sociaux</h3>${eye('social')}</div>
-      <div class="mk-socialrow">
+  const socialVisual = s.socialShotId
+    ? `<img class="mk-shot mk-supshot" data-asset="${_esc(s.socialShotId)}" alt="" draggable="false">`
+    : `<div class="mk-socialrow">
         <div class="mk-avatar">${logoImg || `<b style="${tf}">${_esc(kit.name.charAt(0).toUpperCase())}</b>`}</div>
         <div class="mk-banner" style="${heroBg}">
           ${logoImg ? `<span class="mk-bannerlogo">${logoImg}</span>` : ''}
           <span style="${tf}color:${heroInk}">${_esc(kit.baseline || kit.name)}</span>
         </div>
-      </div>
+      </div>`;
+  const social = `
+    <section class="kb-sup ${on('social') ? '' : 'is-off'}">
+      <div class="kb-sup-head"><h3 class="kb-lab-title">Réseaux sociaux</h3>
+        <button class="kb-btn" data-act="sup-shot" data-k="social">${icon('image', 14)} ${s.socialShotId ? 'Remplacer le visuel' : 'Votre visuel'}</button>
+        ${s.socialShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="social" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${eye('social')}</div>
+      ${socialVisual}
     </section>`;
 
   // ── Réalisations : photos de la marque en vrai ──

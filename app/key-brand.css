@@ -622,6 +622,7 @@
 .mk-blocks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:16px 18px}
 .mk-blocks i{height:52px;border-radius:9px}
 .mk-shot{width:100%;display:block}
+.mk-supshot{border-radius:14px}
 
 /* Smartphone */
 .mk-phone{position:relative;width:230px;border:1.5px solid var(--kb-line);border-radius:30px;padding:9px;background:#0e0f13;box-shadow:0 10px 34px rgba(0,0,0,.25)}
