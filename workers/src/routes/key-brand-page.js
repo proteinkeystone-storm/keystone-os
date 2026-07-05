@@ -199,13 +199,10 @@ select::-ms-expand{display:none}
 .wcag.ko{color:var(--danger);border-color:#f6c6d2}
 
 /* Typographies */
-.trow{display:flex;gap:8px;margin-bottom:14px}
-.trow input{flex:1}
 .tcard{padding:16px 18px;margin-bottom:12px}
 .thead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .thead .fam{font-size:19px;font-weight:700}
 .thead .role{color:var(--muted);font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
-.tspec{margin:14px 0 4px;line-height:1.25;word-break:break-word}
 .tctl{display:flex;gap:16px;align-items:center;margin:12px 0 2px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
 .tctl-g{display:inline-flex;align-items:center;gap:6px}
 .tcolors{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -357,7 +354,7 @@ footer a{color:inherit}
   /* Sans ceci, le navigateur n'imprime PAS les couleurs de fond :
      croix rouges, pastilles de couleur et aplats disparaîtraient du PDF. */
   *,*::before,*::after{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
-  .nav,.ldl,.bgchips,.trow,.tctl,.print,.no-print{display:none !important}
+  .nav,.ldl,.bgchips,.tctl,.print,.no-print{display:none !important}
   body{background:#fff}
   .card,.hero,.pl-solo{border-color:#ddd;break-inside:avoid}
   /* Édition paginée : couverture et intercalaires = une page chacun. */
