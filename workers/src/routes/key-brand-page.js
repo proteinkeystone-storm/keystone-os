@@ -129,7 +129,7 @@ section>h2{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:up
 .crow{display:flex;gap:34px;align-items:center;flex-wrap:wrap}
 .cdot{width:clamp(104px,14vw,150px);aspect-ratio:1;border-radius:50%;border:0;cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
 .cinfo{display:flex;flex-direction:column;gap:9px;min-width:min(300px,100%)}
-.talpha{font-size:clamp(21px,3.2vw,32px);line-height:1.4;margin:20px 0 8px;word-break:break-word}
+.talpha{font-size:clamp(21px,3.2vw,32px);line-height:1.4;margin:10px 0 8px;word-break:break-word}
 
 /* La marque — intention & ton de voix (KB-13). */
 .idmission{font-weight:900;font-size:clamp(22px,3.4vw,34px);letter-spacing:-0.02em;line-height:1.25;margin:20px 0 18px;max-width:28ch}
@@ -206,7 +206,11 @@ select::-ms-expand{display:none}
 .thead .fam{font-size:19px;font-weight:700}
 .thead .role{color:var(--muted);font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
 .tspec{margin:14px 0 4px;line-height:1.25;word-break:break-word}
-.tctl{display:flex;gap:16px;align-items:center;border-top:1px solid var(--line);margin-top:12px;padding-top:10px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.tctl{display:flex;gap:16px;align-items:center;margin:12px 0 2px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.tctl-g{display:inline-flex;align-items:center;gap:6px}
+.tcolors{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tcsw{width:22px;height:22px;border-radius:7px;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+.tcsw.on{box-shadow:0 0 0 2px var(--accent)}
 
 /* Règles */
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
@@ -661,18 +665,27 @@ function render(){
     const hexOk=v=>/^#[0-9a-fA-F]{6}$/.test(v||'');
     const tcBg=hexOk(TC.bg)?TC.bg:'#ffffff',tcTitle=hexOk(TC.title)?TC.title:'#15171c',tcBody=hexOk(TC.body)?TC.body:'#15171c';
     h+=chap('typos','Typographies');
-    h+='<section><h2>La typographie</h2><p class="sub">L\\'alphabet complet de chaque police — et votre propre texte pour l\\'essayer.</p>'+
-       '<div class="trow no-print"><input type="text" id="spectext" maxlength="180" value="Portez ce vieux whisky au juge blond qui fume." aria-label="Texte d\\'essai"></div>';
+    h+='<section><h2>La typographie</h2><p class="sub">L\\'alphabet complet de chaque police — réglez la graisse et la couleur pour l\\'essayer.</p>';
     for(const f of fonts){
       const gg=f.source==='google';
       const fam=gg?'\\''+esc(f.family)+'\\', sans-serif':'inherit';
       const ws=gg?weightsOf(f.axis):[400];
       const w0=ws.includes(700)?700:ws[Math.floor(ws.length/2)];
+      // Contrôles interactifs en TÊTE de carte : graisse + couleur d'essai de
+      // l'alphabet, limitée aux couleurs de la charte (+ encre par défaut).
+      let ctl='';
+      if(gg){
+        ctl='<div class="tctl no-print"><label class="tctl-g">Graisse <select data-w>'+ws.map(w=>'<option'+(w===w0?' selected':'')+'>'+w+'</option>').join('')+'</select></label>'+
+          '<span class="tcolors"><button class="tcsw on" data-tc="#15171c" style="background:#15171c" title="Encre" aria-label="Encre"></button>';
+        for(const c of palette.slice(0,8))ctl+='<button class="tcsw" data-tc="'+esc(c.hex)+'" style="background:'+esc(c.hex)+'" title="'+esc(c.name||c.hex)+'" aria-label="'+esc(c.name||c.hex)+'"></button>';
+        ctl+='</span></div>';
+      }
       h+='<div class="card tcard" data-font><div class="thead"><span class="fam"'+(gg?' style="font-family:'+fam+'"':'')+'>'+esc(f.family)+'</span>'+
          '<span class="role">'+(FROLES[f.role]||'')+'</span>'+
          (gg?'<a class="btn" href="https://fonts.google.com/specimen/'+encodeURIComponent(f.family).replace(/%20/g,'+')+'" target="_blank" rel="noopener noreferrer">Télécharger</a>'
             :(f.buyUrl&&/^https?:/.test(f.buyUrl)?'<a class="btn" href="'+esc(f.buyUrl)+'" target="_blank" rel="noopener noreferrer">Où l\\'obtenir</a>':''))+'</div>'+
-         (gg?'<div class="talpha" style="font-family:'+fam+';font-weight:'+w0+'">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm nopqrstuvwxyz<br>0123456789</div>'+
+         ctl+
+         (gg?'<div class="talpha" data-alpha style="font-family:'+fam+';font-weight:'+w0+';color:#15171c">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm nopqrstuvwxyz<br>0123456789</div>'+
              // Réglages prescrits par le graphiste (f.spec, persistés dans la charte).
              (f.spec&&f.spec.title?'<div class="tset" style="background:'+tcBg+'"><div class="tset-t" style="font-family:'+fam+
                ';font-weight:'+(+f.spec.title.w||700)+';font-size:'+Math.min(60,+f.spec.title.size||34)+'px'+
@@ -682,9 +695,7 @@ function render(){
                ';font-size:'+Math.min(24,+f.spec.body.size||17)+'px'+(f.spec.body.ital?';font-style:italic':'')+
                ';line-height:'+(+f.spec.body.lh||1.5)+';text-align:'+esc(f.spec.body.align||'left')+';color:'+tcBody+
                '">Voici comment cette police compose un paragraphe : la graisse, le corps, l\\'interligne et l\\'alignement prescrits par la charte, appliqués à un texte courant.</div>'+
-               '<p class="tset-note">Titrage '+(+f.spec.title.w||700)+' · '+(+f.spec.title.size||34)+' px — Courant '+(+f.spec.body.w||400)+' · '+(+f.spec.body.size||17)+' px · interligne '+(+f.spec.body.lh||1.5)+'</p></div>':'')+
-             '<div class="tspec" data-spec style="font-family:'+fam+';font-weight:'+w0+';font-size:30px">Portez ce vieux whisky au juge blond qui fume.</div>'+
-             '<div class="tctl">Graisse <select data-w>'+ws.map(w=>'<option'+(w===w0?' selected':'')+'>'+w+'</option>').join('')+'</select></div>'
+               '<p class="tset-note">Titrage '+(+f.spec.title.w||700)+' · '+(+f.spec.title.size||34)+' px — Courant '+(+f.spec.body.w||400)+' · '+(+f.spec.body.size||17)+' px · interligne '+(+f.spec.body.lh||1.5)+'</p></div>':'')
             :'<p class="hint">Police déclarée — aperçu indisponible (non hébergée).</p>')+
          '</div>';
     }
@@ -871,6 +882,12 @@ function bind(variants){
       const p=card.querySelector('[data-prev]');
       if(p)setPrevBg(p,bgb.dataset.bg);
       return}
+    // Couleur d'essai de l'alphabet (couleurs de la charte) — par carte typo.
+    const tcsw=e.target.closest('[data-tc]');
+    if(tcsw){const card=tcsw.closest('.tcard');
+      if(card){card.querySelectorAll('[data-tc]').forEach(b=>b.classList.toggle('on',b===tcsw));
+        const a=card.querySelector('[data-alpha]');if(a)a.style.color=tcsw.dataset.tc}
+      return}
     const png=e.target.closest('[data-png]');
     if(png){
       const card=png.closest('.lcard');
@@ -893,10 +910,9 @@ function bind(variants){
       saveBlob(buildZip(files),safeName(DATA.name)+' — kit logos.zip')}
     catch(err){toast('Kit impossible : '+err.message)}
   });
-  const st=document.getElementById('spectext');
-  st?.addEventListener('input',()=>{app.querySelectorAll('[data-spec]').forEach(s=>{s.textContent=st.value})});
+  // Graisse : pilote l'alphabet complet de la carte.
   app.querySelectorAll('[data-w]').forEach(sel=>{sel.addEventListener('change',()=>{
-    sel.closest('[data-font]').querySelector('[data-spec]').style.fontWeight=sel.value})});
+    const a=sel.closest('[data-font]').querySelector('[data-alpha]');if(a)a.style.fontWeight=sel.value})});
   // Fond initial de chaque aperçu = data-initbg (celui choisi dans l'éditeur),
   // damier si transparent — chaque carte est indépendante.
   app.querySelectorAll('[data-prev]').forEach(p=>setPrevBg(p,p.dataset.initbg||'ck'));
