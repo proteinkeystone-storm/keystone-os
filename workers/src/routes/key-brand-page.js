@@ -281,9 +281,20 @@ select::-ms-expand{display:none}
 @media (max-width:640px){.bboard.has-txt{grid-template-columns:1fr}}
 
 /* Supports de communication (KB-11) — mockups mk- */
-.supgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;margin-top:8px}
-.supitem h3{font-size:14px;font-weight:800;margin:0 0 10px;letter-spacing:-0.01em}
-.supitem.supwide{grid-column:1/-1}
+/* Supports : plateaux (stages) de HAUTEUR ALIGNÉE — mockup centré, en-tête
+   avec bouton de téléchargement. align-items:stretch = pièces d'une même
+   rangée à la même hauteur → mise en page nette, plus « fouillis ». */
+.supgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:stretch;margin-top:8px}
+.supband{display:flex;flex-direction:column;min-width:0}
+.supband.supwide{grid-column:1/-1}
+.supband-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 10px}
+.supband-head h3{font-size:14px;font-weight:800;margin:0;letter-spacing:-0.01em}
+.supdl{display:inline-flex;align-items:center;font-size:12px;padding:6px 12px}
+.supstage{flex:1;display:flex;align-items:center;justify-content:center;padding:32px 28px;background:var(--bg);border:1px solid var(--line);border-radius:18px;min-width:0}
+.supcap{width:100%;min-width:0}
+.supcap .mk-browser,.supcap .mk-phone{margin-left:auto;margin-right:auto}
+.supcap .mk-bizrow{justify-content:center}
+.supzip-row{margin:28px 0 0;text-align:center}
 .supgal-title{font-size:14px;font-weight:800;margin:26px 0 0;letter-spacing:-0.01em}
 .mk-browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;max-width:760px}
 .mk-bar{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#eceef2;border-bottom:1px solid #dfe2e8}
@@ -379,6 +390,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const app = document.getElementById('app');
 let CODE = sessionStorage.getItem('kb_code_' + SLUG) || '';
 let DATA = null, BG = 'ck';
+const DL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="margin-right:6px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 
 const fileUrl = (id, dl) => API + '/file/' + encodeURIComponent(id) + '?x=1' + (CODE ? '&code=' + encodeURIComponent(CODE) : '') + (dl ? '&dl=1' : '');
 
@@ -393,6 +405,37 @@ async function copy(txt){try{await navigator.clipboard.writeText(txt);toast(txt+
 function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
 function safeName(n){return(String(n||'').replace(/[/\\\\:*?"<>|]+/g,' ').replace(/\\s+/g,' ').trim().slice(0,80))||'fichier'}
 function loadImg(u){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Image illisible'));i.src=u})}
+// Rasterisation DOM→PNG (charte interactive) : capture un support TEL QU'AFFICHÉ
+// — mockup composé OU visuel importé. On garde les classes et on EMBARQUE la
+// feuille de styles de la page dans le foreignObject (inliner tous les styles
+// calculés donnait un SVG énorme et invalide) + variables :root sur la racine
+// + images en data-URI (sinon non rendues).
+let _pageCss=null;
+function pageCss(){if(_pageCss==null)_pageCss=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\\n');return _pageCss}
+async function _inlineImgs(src,dst){
+  const si=src.querySelectorAll('img'),di=dst.querySelectorAll('img');
+  for(let i=0;i<si.length;i++){
+    try{const r=await fetch(si[i].currentSrc||si[i].src);const b=await r.blob();
+      const d=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(b)});
+      if(di[i])di[i].setAttribute('src',d);
+    }catch(_){}}
+}
+async function captureSupport(cap){
+  const rect=cap.getBoundingClientRect();
+  const w=Math.max(1,Math.ceil(rect.width)),h=Math.max(1,Math.ceil(rect.height));
+  const clone=cap.cloneNode(true);
+  await _inlineImgs(cap,clone);
+  const rc=getComputedStyle(document.documentElement);
+  clone.style.margin='0';
+  ['--ink','--muted','--line','--bg','--panel','--accent','--danger','--ok'].forEach(v=>clone.style.setProperty(v,rc.getPropertyValue(v)));
+  const inner=new XMLSerializer().serializeToString(clone);
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><foreignObject x="0" y="0" width="'+w+'" height="'+h+'"><div xmlns="http://www.w3.org/1999/xhtml"><style><![CDATA['+pageCss()+']]></style>'+inner+'</div></foreignObject></svg>';
+  const img=await loadImg('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));
+  const scale=2,cv=document.createElement('canvas');cv.width=w*scale;cv.height=h*scale;
+  const ctx=cv.getContext('2d');ctx.setTransform(scale,0,0,scale,0,0);
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+  return await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('rendu vide')),'image/png'));
+}
 async function exportPng(blob,mime,w,bg){
   w=Math.max(16,Math.min(6000,Math.round(w)));let url,h=null;
   if(mime==='image/svg+xml'){let t=await blob.text();const vb=t.match(/viewBox\\s*=\\s*["']\\s*([\\d.eE+-]+)[ ,]+([\\d.eE+-]+)[ ,]+([\\d.eE+-]+)[ ,]+([\\d.eE+-]+)/);let ratio=1;if(vb){const W=parseFloat(vb[3]),H=parseFloat(vb[4]);if(W>0&&H>0)ratio=H/W}
@@ -792,46 +835,54 @@ function render(){
     const dom=esc((SUP.domain||'').trim()||nm.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30)+'.fr');
     const cardD=SUP.card||{};
     h+=chap('supports','Supports de communication');
-    h+='<section><h2>La marque en situation</h2><p class="sub">Composée avec la charte, rien d\\'autre.</p><div class="supgrid">';
+    h+='<section><h2>La marque en situation</h2><p class="sub">Composée avec la charte — téléchargez chaque pièce, ou tout d\\'un coup.</p><div class="supgrid">';
+    // Chaque support = un « plateau » (stage) de hauteur alignée, avec un
+    // bouton de téléchargement (rasterisé en PNG côté client).
+    const band=(wide,title,inner)=>'<div class="supband'+(wide?' supwide':'')+'"><div class="supband-head"><h3>'+title+'</h3><button class="btn supdl no-print" data-supdl>'+DL_ICON+'PNG</button></div><div class="supstage"><div class="supcap" data-supcap="'+esc(title)+'">'+inner+'</div></div></div>';
     if(supOn('web')){
-      h+='<div class="supitem supwide"><h3>Site web</h3><div class="mk-browser"><div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span><span class="mk-url">'+(P?'<i class="mk-fav" style="background:'+P+'"></i>':'')+dom+'</span></div>';
-      h+=SUP.webShotId?'<img class="mk-shot" src="'+fileUrl(SUP.webShotId)+'" alt="">':
+      let inner='<div class="mk-browser"><div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span><span class="mk-url">'+(P?'<i class="mk-fav" style="background:'+P+'"></i>':'')+dom+'</span></div>';
+      inner+=SUP.webShotId?'<img class="mk-shot" src="'+fileUrl(SUP.webShotId)+'" alt="">':
         '<div class="mk-page"><div class="mk-nav">'+(lgIm?'<span class="mk-navlogo">'+lgIm+'</span>':wm)+'<span class="mk-links"><i>Accueil</i><i>Offre</i><i>Contact</i></span><span class="mk-btn" style="background:'+bBg+';color:'+bInk+'">Contact</span></div>'+
         '<div class="mk-hero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</strong><span class="mk-btn mk-cta" style="background:'+(hInk==='#ffffff'?'rgba(255,255,255,.94)':'#15171c')+';color:'+(hInk==='#ffffff'?(P||'#15171c'):'#ffffff')+'">Découvrir</span></div>'+
         '<div class="mk-blocks"><i style="'+blk+'"></i><i style="'+blk+'"></i><i style="'+blk+'"></i></div></div>';
-      h+='</div></div>';
+      inner+='</div>';
+      h+=band(true,'Site web',inner);
     }
     if(supOn('phone')){
-      h+='<div class="supitem"><h3>Smartphone</h3><div class="mk-phone"><div class="mk-notch"></div><div class="mk-screen">';
-      h+=SUP.phoneShotId?'<img class="mk-shot" src="'+fileUrl(SUP.phoneShotId)+'" alt="">':
+      let inner='<div class="mk-phone"><div class="mk-notch"></div><div class="mk-screen">';
+      inner+=SUP.phoneShotId?'<img class="mk-shot" src="'+fileUrl(SUP.phoneShotId)+'" alt="">':
         '<div class="mk-mpage"><div class="mk-mnav">'+(lgIm?'<span class="mk-navlogo">'+lgIm+'</span>':wm)+'</div>'+
         '<div class="mk-mhero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+nm+'</strong>'+(bl?'<span style="color:'+hInk+'">'+bl+'</span>':'')+'</div>'+
         '<div class="mk-mrows"><i style="'+blk+'"></i><i style="'+blk+'"></i></div><span class="mk-btn mk-mcta" style="background:'+bBg+';color:'+bInk+'">Nous contacter</span></div>';
-      h+='</div></div></div>';
+      inner+='</div></div>';
+      h+=band(false,'Smartphone',inner);
     }
     if(supOn('card')){
       // Recto et verso remplaçables séparément (repli : ancien cardShotId = recto).
       const cRecto=SUP.cardRectoId||SUP.cardShotId, cVerso=SUP.cardVersoId;
-      h+='<div class="supitem"><h3>Carte de visite</h3><div class="mk-bizrow">';
-      h+=cRecto?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cRecto)+'" alt="Recto de la carte">':
+      let inner='<div class="mk-bizrow">';
+      inner+=cRecto?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cRecto)+'" alt="Recto de la carte">':
         '<div class="mk-biz mk-recto">'+(lgIm?'<span class="mk-bizlogo">'+lgIm+'</span>':'')+'<b style="'+tfSt+'">'+nm+'</b>'+(bl?'<span>'+bl+'</span>':'')+'</div>';
-      h+=cVerso?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cVerso)+'" alt="Verso de la carte">':
+      inner+=cVerso?'<img class="mk-shot mk-bizshot" src="'+fileUrl(cVerso)+'" alt="Verso de la carte">':
         '<div class="mk-biz mk-verso" style="background:'+bBg+';color:'+bInk+'"><b>'+esc(cardD.name||meta.name||DATA.name)+'</b>'+
         (cardD.role?'<span>'+esc(cardD.role)+'</span>':'')+(cardD.tel?'<span>'+esc(cardD.tel)+'</span>':'')+
         '<span>'+esc(cardD.email||'contact@'+((SUP.domain||'').trim()||dom))+'</span></div>';
-      h+='</div></div>';
+      inner+='</div>';
+      h+=band(false,'Carte de visite',inner);
     }
     if(supOn('social')){
       // Photo de profil et bannière remplaçables séparément (repli : ancien socialShotId = bannière).
       const sAv=SUP.socialAvatarId, sBan=SUP.socialBannerId||SUP.socialShotId;
-      h+='<div class="supitem supwide"><h3>Réseaux sociaux</h3><div class="mk-socialrow">';
-      h+=sAv?'<img class="mk-shot mk-avatarshot" src="'+fileUrl(sAv)+'" alt="Photo de profil">':
+      let inner='<div class="mk-socialrow">';
+      inner+=sAv?'<img class="mk-shot mk-avatarshot" src="'+fileUrl(sAv)+'" alt="Photo de profil">':
         '<div class="mk-avatar">'+(lgIm||'<b style="'+tfSt+'">'+esc((meta.name||DATA.name).charAt(0).toUpperCase())+'</b>')+'</div>';
-      h+=sBan?'<img class="mk-shot mk-bannershot" src="'+fileUrl(sBan)+'" alt="Bannière">':
+      inner+=sBan?'<img class="mk-shot mk-bannershot" src="'+fileUrl(sBan)+'" alt="Bannière">':
         '<div class="mk-banner" style="'+hBg+'">'+(lgIm?'<span class="mk-bannerlogo">'+lgIm+'</span>':'')+'<span style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</span></div>';
-      h+='</div></div>';
+      inner+='</div>';
+      h+=band(true,'Réseaux sociaux',inner);
     }
     h+='</div>';
+    h+='<p class="no-print supzip-row"><button class="btn primary" id="supzip">'+DL_ICON+'Télécharger tous les supports (.zip)</button></p>';
     if(supGallery.length){
       h+='<h3 class="supgal-title">Réalisations</h3><div class="phgrid">';
       for(const id of supGallery)h+='<img src="'+fileUrl(id)+'" alt="" loading="lazy">';
@@ -885,6 +936,14 @@ function bind(variants){
       if(card){card.querySelectorAll('[data-tc]').forEach(b=>b.classList.toggle('on',b===tcsw));
         const a=card.querySelector('[data-alpha]');if(a)a.style.color=tcsw.dataset.tc}
       return}
+    // Téléchargement d'un support (rasterisé en PNG).
+    const sdl=e.target.closest('[data-supdl]');
+    if(sdl){const band=sdl.closest('.supband'),cap=band&&band.querySelector('[data-supcap]');
+      if(cap){sdl.disabled=true;const old=sdl.innerHTML;sdl.textContent='…';
+        try{const blob=await captureSupport(cap);saveBlob(blob,safeName(DATA.name+' — '+cap.dataset.supcap)+'.png')}
+        catch(err){toast('Téléchargement impossible : '+err.message)}
+        sdl.disabled=false;sdl.innerHTML=old}
+      return}
     const png=e.target.closest('[data-png]');
     if(png){
       const card=png.closest('.lcard');
@@ -910,6 +969,18 @@ function bind(variants){
   // Graisse : pilote l'alphabet complet de la carte.
   app.querySelectorAll('[data-w]').forEach(sel=>{sel.addEventListener('change',()=>{
     const a=sel.closest('[data-font]').querySelector('[data-alpha]');if(a)a.style.fontWeight=sel.value})});
+  // « Télécharger tous les supports (.zip) » — chaque plateau rasterisé en PNG.
+  document.getElementById('supzip')?.addEventListener('click',async()=>{
+    const caps=[...app.querySelectorAll('[data-supcap]')];if(!caps.length)return;
+    toast('Préparation des supports…');
+    try{const files=[],seen=new Set();
+      for(const cap of caps){const blob=await captureSupport(cap);
+        let base=safeName(cap.dataset.supcap),n=safeName(DATA.name)+'/'+base+'.png';
+        for(let i=2;seen.has(n);i++)n=safeName(DATA.name)+'/'+base+'-'+i+'.png';seen.add(n);
+        files.push({name:n,data:new Uint8Array(await blob.arrayBuffer())})}
+      saveBlob(buildZip(files),safeName(DATA.name)+' — supports.zip')}
+    catch(err){toast('Kit impossible : '+err.message)}
+  });
   // Fond initial de chaque aperçu = data-initbg (celui choisi dans l'éditeur),
   // damier si transparent — chaque carte est indépendante.
   app.querySelectorAll('[data-prev]').forEach(p=>setPrevBg(p,p.dataset.initbg||'ck'));
