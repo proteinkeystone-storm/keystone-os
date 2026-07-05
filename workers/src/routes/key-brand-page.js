@@ -328,6 +328,8 @@ select::-ms-expand{display:none}
 .mk-avatar img{width:66%;height:66%;object-fit:contain}
 .mk-avatar b{font-size:30px;color:#15171c}
 .mk-banner{flex:1;min-width:240px;aspect-ratio:3.4/1;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 20px;overflow:hidden}
+.mk-avatarshot{width:84px;height:84px;border-radius:50%;object-fit:cover;border:1px solid var(--line);flex-shrink:0}
+.mk-bannershot{flex:1;min-width:240px;aspect-ratio:3.4/1;object-fit:cover;border-radius:14px}
 .mk-bannerlogo img{height:30px;max-width:110px;object-fit:contain;display:block}
 .mk-banner>span{font-size:clamp(13px,1.8vw,17px);font-weight:800;letter-spacing:-0.02em}
 @media (max-width:760px){.supgrid{grid-template-columns:1fr}.mk-links{display:none}}
@@ -644,6 +646,10 @@ function render(){
 
   // Chapitre — Typographies (alphabet complet + spécimen à essayer)
   if(fonts.length){
+    // Couleurs d'essai du spécimen (fond/titre/paragraphe) — palette + noir/blanc.
+    const TC=(kit.typography&&kit.typography.specColors)||{};
+    const hexOk=v=>/^#[0-9a-fA-F]{6}$/.test(v||'');
+    const tcBg=hexOk(TC.bg)?TC.bg:'#ffffff',tcTitle=hexOk(TC.title)?TC.title:'#15171c',tcBody=hexOk(TC.body)?TC.body:'#15171c';
     h+=chap('typos','Typographies');
     h+='<section><h2>La typographie</h2><p class="sub">L\\'alphabet complet de chaque police — et votre propre texte pour l\\'essayer.</p>'+
        '<div class="trow no-print"><input type="text" id="spectext" maxlength="180" value="Portez ce vieux whisky au juge blond qui fume." aria-label="Texte d\\'essai"></div>';
@@ -658,13 +664,13 @@ function render(){
             :(f.buyUrl&&/^https?:/.test(f.buyUrl)?'<a class="btn" href="'+esc(f.buyUrl)+'" target="_blank" rel="noopener noreferrer">Où l\\'obtenir</a>':''))+'</div>'+
          (gg?'<div class="talpha" style="font-family:'+fam+';font-weight:'+w0+'">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm nopqrstuvwxyz<br>0123456789</div>'+
              // Réglages prescrits par le graphiste (f.spec, persistés dans la charte).
-             (f.spec&&f.spec.title?'<div class="tset"><div class="tset-t" style="font-family:'+fam+
+             (f.spec&&f.spec.title?'<div class="tset" style="background:'+tcBg+'"><div class="tset-t" style="font-family:'+fam+
                ';font-weight:'+(+f.spec.title.w||700)+';font-size:'+Math.min(60,+f.spec.title.size||34)+'px'+
                (f.spec.title.ital?';font-style:italic':'')+';line-height:'+(+f.spec.title.lh||1.15)+
-               ';text-align:'+esc(f.spec.title.align||'left')+'">'+esc(meta.baseline||DATA.name)+'</div>'+
+               ';text-align:'+esc(f.spec.title.align||'left')+';color:'+tcTitle+'">'+esc(meta.baseline||DATA.name)+'</div>'+
                '<div class="tset-b" style="font-family:'+fam+';font-weight:'+(+f.spec.body.w||400)+
                ';font-size:'+Math.min(24,+f.spec.body.size||17)+'px'+(f.spec.body.ital?';font-style:italic':'')+
-               ';line-height:'+(+f.spec.body.lh||1.5)+';text-align:'+esc(f.spec.body.align||'left')+
+               ';line-height:'+(+f.spec.body.lh||1.5)+';text-align:'+esc(f.spec.body.align||'left')+';color:'+tcBody+
                '">Voici comment cette police compose un paragraphe : la graisse, le corps, l\\'interligne et l\\'alignement prescrits par la charte, appliqués à un texte courant.</div>'+
                '<p class="tset-note">Titrage '+(+f.spec.title.w||700)+' · '+(+f.spec.title.size||34)+' px — Courant '+(+f.spec.body.w||400)+' · '+(+f.spec.body.size||17)+' px · interligne '+(+f.spec.body.lh||1.5)+'</p></div>':'')+
              '<div class="tspec" data-spec style="font-family:'+fam+';font-weight:'+w0+';font-size:30px">Portez ce vieux whisky au juge blond qui fume.</div>'+
@@ -798,12 +804,14 @@ function render(){
       h+='</div></div>';
     }
     if(supOn('social')){
-      h+='<div class="supitem supwide"><h3>Réseaux sociaux</h3>';
-      h+=SUP.socialShotId?'<img class="mk-shot mk-supshot" src="'+fileUrl(SUP.socialShotId)+'" alt="">':
-        '<div class="mk-socialrow">'+
-        '<div class="mk-avatar">'+(lgIm||'<b style="'+tfSt+'">'+esc((meta.name||DATA.name).charAt(0).toUpperCase())+'</b>')+'</div>'+
-        '<div class="mk-banner" style="'+hBg+'">'+(lgIm?'<span class="mk-bannerlogo">'+lgIm+'</span>':'')+'<span style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</span></div></div>';
-      h+='</div>';
+      // Photo de profil et bannière remplaçables séparément (repli : ancien socialShotId = bannière).
+      const sAv=SUP.socialAvatarId, sBan=SUP.socialBannerId||SUP.socialShotId;
+      h+='<div class="supitem supwide"><h3>Réseaux sociaux</h3><div class="mk-socialrow">';
+      h+=sAv?'<img class="mk-shot mk-avatarshot" src="'+fileUrl(sAv)+'" alt="Photo de profil">':
+        '<div class="mk-avatar">'+(lgIm||'<b style="'+tfSt+'">'+esc((meta.name||DATA.name).charAt(0).toUpperCase())+'</b>')+'</div>';
+      h+=sBan?'<img class="mk-shot mk-bannershot" src="'+fileUrl(sBan)+'" alt="Bannière">':
+        '<div class="mk-banner" style="'+hBg+'">'+(lgIm?'<span class="mk-bannerlogo">'+lgIm+'</span>':'')+'<span style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</span></div>';
+      h+='</div></div>';
     }
     h+='</div>';
     if(supGallery.length){

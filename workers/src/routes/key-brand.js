@@ -150,17 +150,22 @@ async function _countCharts(env, tenant) {
 }
 async function _findChart(env, tenant, id) {
   return env.DB
-    .prepare(`SELECT ${CHART_COLS}, draft_json FROM kb_charts WHERE id = ? AND tenant_id = ?`)
+    .prepare(`SELECT ${CHART_COLS}, draft_json, published_json FROM kb_charts WHERE id = ? AND tenant_id = ?`)
     .bind(id, tenant).first();
 }
 function _chartOut(row) {
   let draft = null;
   try { draft = JSON.parse(row.draft_json || '{}'); } catch (_) { draft = {}; }
+  // dirty = le brouillon diffère de la dernière version publiée → il y a des
+  // modifications non publiées (la page /b/ ne les montre pas encore).
+  const dirty = row.status === 'published'
+    ? (typeof row.published_json === 'string' ? row.published_json !== row.draft_json : true)
+    : false;
   return {
     id: row.id, slug: row.slug, name: row.name, status: row.status,
     access: row.access, version: row.version,
     created_at: row.created_at, updated_at: row.updated_at,
-    draft,
+    dirty, draft,
   };
 }
 

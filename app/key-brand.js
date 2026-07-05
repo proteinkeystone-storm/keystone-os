@@ -375,8 +375,27 @@ function _backToLib() {
 }
 
 // ── Autosave (debounce 900 ms + flush à la sortie) ──────────────
+// Barre de publication (badge + bouton Partager). Extraite pour pouvoir la
+// rafraîchir seule quand l'état « modifications non publiées » apparaît, sans
+// re-render de tout l'écran (qui volerait le focus d'un champ en cours).
+function _pubBarHtml() {
+  const isDirty = _chart.status === 'published' && !!_chart.dirty;
+  const badge = _chart.status === 'published'
+    ? (isDirty
+        ? `<button class="kb-pubwarn" data-act="pub-panel" title="Vos dernières modifications ne sont pas encore en ligne. Cliquez pour publier.">${icon('alert-triangle', 14)} Modifications non publiées</button>`
+        : `<span class="kb-livedot" title="Version ${_chart.version} en ligne" aria-label="Version ${_chart.version} en ligne"></span>`)
+    : `<span class="kb-badge">Brouillon</span>`;
+  return `${badge}
+    <button class="kb-btn ${_pubPanel ? '' : (isDirty ? 'primary kb-btn-pulse' : 'primary')}" data-act="pub-panel">${icon('share-2', 15)} Partager</button>`;
+}
+function _refreshPubBar() {
+  const bar = _root && _root.querySelector('.kb-pubbar');
+  if (bar) bar.innerHTML = _pubBarHtml();
+}
 function _scheduleSave() {
   if (!_chart) return;
+  // Toute modif d'une charte publiée la rend « non publiée » jusqu'à republier.
+  if (_chart.status === 'published' && !_chart.dirty) { _chart.dirty = true; _refreshPubBar(); }
   _saveState = 'saving'; _renderSaveState();
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_flushSave, 900);
@@ -564,6 +583,7 @@ function _onClick(e) {
   if (act === 'font-declare')  { _addDeclaredFont(); return; }
   if (act === 'type-gen')      { _typeSampleIdx = (_typeSampleIdx + 1) % TITLE_SAMPLES.length; _typeTitle = TITLE_SAMPLES[_typeSampleIdx]; _typeBody = BODY_SAMPLES[_typeSampleIdx % BODY_SAMPLES.length]; _renderChart(); return; }
   if (act === 'type-lorem')    { _typeTitle = loremTitle(); _typeBody = loremParagraph(); _renderChart(); return; }
+  if (act === 'type-color')    { const t = _typeSection(); const tgt = btn.dataset.target; if (['bg', 'title', 'body'].includes(tgt)) { t.specColors[tgt] = btn.dataset.hex; _scheduleSave(); _renderChart(); } return; }
   if (act === 'ft-level' && fid) { _typeActive.set(fid, btn.dataset.level === 'body' ? 'body' : 'title'); _renderChart(); return; }
   if (act === 'ft-sz' && fid) {
     const f = _fontOf(fid); if (!f) return;
@@ -903,19 +923,12 @@ function _renderChart() {
       ${icon(t.icon, 16)}<span>${t.label}</span>
     </button>`).join('');
 
-  const pubBadge = _chart.status === 'published'
-    ? `<span class="kb-livedot" title="Version ${_chart.version} en ligne" aria-label="Version ${_chart.version} en ligne"></span>`
-    : `<span class="kb-badge">Brouillon</span>`;
-
   main.innerHTML = `
     <div class="kb-chart">
       <div class="kb-chart-head">
         <div class="kb-chart-topline">
           <button class="kb-link-back" data-act="back-lib">${icon('chevron-left', 16)} Chartes</button>
-          <div class="kb-pubbar">
-            ${pubBadge}
-            <button class="kb-btn ${_pubPanel ? '' : 'primary'}" data-act="pub-panel">${icon('share-2', 15)} Partager</button>
-          </div>
+          <div class="kb-pubbar">${_pubBarHtml()}</div>
         </div>
         <div class="kb-identity">
           <input class="kb-name-input" data-field="chart-name" value="${_esc(_chart.name)}" maxlength="80"
@@ -1708,7 +1721,11 @@ function _typeSection() {
     _chart.draft.typography = { fonts: [] };
   }
   if (!Array.isArray(_chart.draft.typography.fonts)) _chart.draft.typography.fonts = [];
-  return _chart.draft.typography;
+  // Couleurs d'essai du spécimen (fond derrière la typo, couleur du titre et
+  // du paragraphe) — limitées à la palette de la charte + noir/blanc.
+  const t = _chart.draft.typography;
+  if (!t.specColors || typeof t.specColors !== 'object') t.specColors = { bg: '#ffffff', title: '#15171c', body: '#15171c' };
+  return t;
 }
 function _fontsOf() { return _chart ? _typeSection().fonts : []; }
 function _fontOf(fid) {
@@ -1826,10 +1843,32 @@ function _renderTypeTab() {
                     placeholder="Votre paragraphe d'essai…" maxlength="700" aria-label="Paragraphe d'essai" spellcheck="false">${_esc(_typeBody)}</textarea>
           <button class="kb-addpill ${_typePicker ? 'is-on' : ''}" data-act="font-picker" title="Ajouter une police" aria-label="Ajouter une police">${icon('plus', 18)}</button>
         </div>
+        ${_typeColorBar()}
       </div>
       ${_typePicker ? _renderFontPicker() : ''}
       <div class="kb-type-list">${cards}</div>
     </div>`;
+}
+
+// Couleurs d'essai du spécimen : Fond / Titre / Paragraphe. Le nuancier se
+// limite aux couleurs de la charte (onglet Couleurs) + noir et blanc.
+function _typeSwatches() {
+  const seen = new Set();
+  const out = [];
+  const add = (hex, name) => { const h = (hex || '').toLowerCase(); if (!h || seen.has(h)) return; seen.add(h); out.push([hex, name]); };
+  add('#ffffff', 'Blanc');
+  add('#15171c', 'Noir');
+  for (const c of _paletteOf()) if (c.hex) add(c.hex, c.name || c.hex);
+  return out;
+}
+function _typeColorBar() {
+  const tc = _typeSection().specColors;
+  const sws = _typeSwatches();
+  const row = (target) => sws.map(([hex, name]) =>
+    `<button class="kb-tc-sw ${(tc[target] || '').toLowerCase() === hex.toLowerCase() ? 'on' : ''}" data-act="type-color"
+       data-target="${target}" data-hex="${_esc(hex)}" style="background:${_esc(hex)}" title="${_esc(name)}" aria-label="${_esc(name)}"></button>`).join('');
+  const grp = (target, label) => `<div class="kb-tc-group"><span class="kb-tc-lbl">${label}</span><span class="kb-tc-sws">${row(target)}</span></div>`;
+  return `<div class="kb-type-colors">${grp('bg', 'Fond')}${grp('title', 'Titre')}${grp('body', 'Paragraphe')}</div>`;
 }
 
 // Barre d'outils UNIQUE en haut de la carte : un sélecteur Titre/Paragraphe
@@ -1887,8 +1926,9 @@ function _renderFontCard(f) {
 
   const sp = _specOf(f);
   const lvl = _activeLevel(f.id);
-  const tStyle = `font-family:${famCss};font-weight:${sp.title.w};font-size:${sp.title.size}px;font-style:${sp.title.ital ? 'italic' : 'normal'};line-height:${sp.title.lh};text-align:${sp.title.align}`;
-  const bStyle = `font-family:${famCss};font-weight:${sp.body.w};font-size:${sp.body.size}px;font-style:${sp.body.ital ? 'italic' : 'normal'};line-height:${sp.body.lh};text-align:${sp.body.align}`;
+  const tc = _typeSection().specColors;
+  const tStyle = `font-family:${famCss};font-weight:${sp.title.w};font-size:${sp.title.size}px;font-style:${sp.title.ital ? 'italic' : 'normal'};line-height:${sp.title.lh};text-align:${sp.title.align};color:${tc.title}`;
+  const bStyle = `font-family:${famCss};font-weight:${sp.body.w};font-size:${sp.body.size}px;font-style:${sp.body.ital ? 'italic' : 'normal'};line-height:${sp.body.lh};text-align:${sp.body.align};color:${tc.body}`;
 
   return `
     <article class="kb-font-card" data-fid="${_esc(f.id)}">
@@ -1905,7 +1945,7 @@ function _renderFontCard(f) {
       </div>
       <p class="kb-font-rolehint">${icon('info', 13)} ${_esc(FONT_ROLE_HINTS[f.role] || '')}</p>
       ${_specToolbar(f)}
-      <div class="kb-spec-preview">
+      <div class="kb-spec-preview" style="background:${tc.bg}">
         <div class="kb-spec-text kb-spec-title ${lvl === 'title' ? 'is-active' : ''}" data-slot="spec-title" style="${tStyle}">${_esc(_typeTitle)}</div>
         <div class="kb-spec-text kb-spec-body ${lvl === 'body' ? 'is-active' : ''}" data-slot="spec-body" style="${bStyle}">${_esc(_typeBody)}</div>
       </div>
@@ -2343,10 +2383,12 @@ function _supportsOf() {
   if (typeof s.domain !== 'string') s.domain = '';
   if (!s.card || typeof s.card !== 'object') s.card = { name: '', role: '', tel: '', email: '' };
   if (!Array.isArray(s.gallery)) s.gallery = [];
-  // Migration : le visuel unique de carte (cardShotId, éphémère) devient le
-  // recto — désormais recto ET verso sont remplaçables séparément.
+  // Migration : les visuels uniques éphémères (cardShotId/socialShotId)
+  // deviennent le recto / la bannière — désormais chaque face est séparée.
   if (s.cardShotId && !s.cardRectoId && !s.cardVersoId) s.cardRectoId = s.cardShotId;
   delete s.cardShotId;
+  if (s.socialShotId && !s.socialAvatarId && !s.socialBannerId) s.socialBannerId = s.socialShotId;
+  delete s.socialShotId;
   return s;
 }
 // Le kit de marque tel qu'il existe — les mockups ne montrent que ça.
@@ -2374,7 +2416,7 @@ async function _onSupportShotPicked(file, kind) {
   try {
     const asset = await _apiUpload(_chart.id, file, 'image');
     const s = _supportsOf();
-    const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', social: 'socialShotId' })[kind];
+    const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', socialAvatar: 'socialAvatarId', socialBanner: 'socialBannerId' })[kind];
     if (!key) return;
     if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
     s[key] = asset.id;
@@ -2383,7 +2425,7 @@ async function _onSupportShotPicked(file, kind) {
 }
 function _deleteSupportShot(kind) {
   const s = _supportsOf();
-  const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', social: 'socialShotId' })[kind];
+  const key = ({ web: 'webShotId', phone: 'phoneShotId', cardRecto: 'cardRectoId', cardVerso: 'cardVersoId', socialAvatar: 'socialAvatarId', socialBanner: 'socialBannerId' })[kind];
   if (!key) return;
   if (s[key]) { _api(`/assets/${encodeURIComponent(s[key])}`, { method: 'DELETE' }).catch(() => {}); }
   s[key] = null;
@@ -2845,23 +2887,28 @@ function _renderSupportsTab() {
       </div>`}
     </section>`;
 
-  // ── Réseaux sociaux : avatar rond + bannière ──
-  const socialVisual = s.socialShotId
-    ? `<img class="mk-shot mk-supshot" data-asset="${_esc(s.socialShotId)}" alt="" draggable="false">`
-    : `<div class="mk-socialrow">
-        <div class="mk-avatar">${logoImg || `<b style="${tf}">${_esc(kit.name.charAt(0).toUpperCase())}</b>`}</div>
-        <div class="mk-banner" style="${heroBg}">
-          ${logoImg ? `<span class="mk-bannerlogo">${logoImg}</span>` : ''}
-          <span style="${tf}color:${heroInk}">${_esc(kit.baseline || kit.name)}</span>
-        </div>
+  // ── Réseaux sociaux : photo de profil (ronde) + bannière ──
+  // Chacune remplaçable INDÉPENDAMMENT (la photo de profil RESTE quand on
+  // pose une bannière ; on peut aussi mettre sa propre photo de profil).
+  const socialAvatarCell = s.socialAvatarId
+    ? `<img class="mk-shot mk-avatarshot" data-asset="${_esc(s.socialAvatarId)}" alt="Photo de profil" draggable="false">`
+    : `<div class="mk-avatar">${logoImg || `<b style="${tf}">${_esc(kit.name.charAt(0).toUpperCase())}</b>`}</div>`;
+  const socialBannerCell = s.socialBannerId
+    ? `<img class="mk-shot mk-bannershot" data-asset="${_esc(s.socialBannerId)}" alt="Bannière" draggable="false">`
+    : `<div class="mk-banner" style="${heroBg}">
+        ${logoImg ? `<span class="mk-bannerlogo">${logoImg}</span>` : ''}
+        <span style="${tf}color:${heroInk}">${_esc(kit.baseline || kit.name)}</span>
       </div>`;
+  const socialSideCtl = (k, has, label) =>
+    `<button class="kb-btn" data-act="sup-shot" data-k="${k}">${icon('image', 14)} ${has ? 'Remplacer' : label}</button>` +
+    (has ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="${k}" title="Revenir à l'élément composé">${icon('trash-2', 15)}</button>` : '');
   const social = `
     <section class="kb-sup ${on('social') ? '' : 'is-off'}">
       <div class="kb-sup-head"><h3 class="kb-lab-title">Réseaux sociaux</h3>
-        <button class="kb-btn" data-act="sup-shot" data-k="social">${icon('image', 14)} ${s.socialShotId ? 'Remplacer le visuel' : 'Votre visuel'}</button>
-        ${s.socialShotId ? `<button class="kb-iconbtn danger" data-act="sup-shot-del" data-k="social" title="Revenir au mockup composé">${icon('trash-2', 15)}</button>` : ''}
+        ${socialSideCtl('socialAvatar', !!s.socialAvatarId, 'Photo de profil')}
+        ${socialSideCtl('socialBanner', !!s.socialBannerId, 'Bannière')}
         ${eye('social')}</div>
-      ${socialVisual}
+      <div class="mk-socialrow">${socialAvatarCell}${socialBannerCell}</div>
     </section>`;
 
   // ── Réalisations : photos de la marque en vrai ──
@@ -2941,8 +2988,15 @@ function _renderPubPanel() {
       <p class="kb-hint">Couverture, sommaire et pages de chapitre prennent la teinte. Republiez pour appliquer.</p>
     </div>`;
 
+  // Rappel bien visible quand le brouillon a changé depuis la dernière publication.
+  const dirtyBanner = (isLive && _chart.dirty) ? `
+    <div class="kb-pub-dirty">${icon('alert-triangle', 16)}
+      <span>Vous avez des modifications non publiées. La charte en ligne (et son PDF) ne les montrera qu'après avoir cliqué <strong>Publier la mise à jour</strong>.</span>
+    </div>` : '';
+
   return `
     <div class="kb-pub-panel">
+      ${dirtyBanner}
       <div class="kb-pub-cols">
         <div class="kb-pub-col">
           <h4>Qui peut voir la charte ?</h4>
@@ -2988,7 +3042,7 @@ async function _publish() {
       _chart.access = access;
     }
     const d = await _api(`/charts/${encodeURIComponent(_chart.id)}/publish`, { method: 'POST', body: { note } });
-    _chart.status = 'published'; _chart.version = d.version;
+    _chart.status = 'published'; _chart.version = d.version; _chart.dirty = false;
     _toast(`Version ${d.version} en ligne.`);
   } catch (e) { _toast(e.message); }
   _pubBusy = false; _pubAccess = null;
