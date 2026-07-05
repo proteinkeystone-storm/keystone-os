@@ -169,15 +169,50 @@ const SCENE_DURS = [          // multiplicateur de durée des motions
 // API) — indépendant de la CSS chargée, des media queries, du réglage
 // « réduire les animations » et de toute règle externe. La page publique
 // /b/, elle, reste en animations CSS standard (et respecte reduced-motion).
-const EASE_SOFT = 'cubic-bezier(.2,.7,.2,1)';
-const MOTION_FRAMES = {
-  fade:  { d: .9,  e: EASE_SOFT, frames: [{ opacity: 0, transform: 'scale(.965)' }, { opacity: 1, transform: 'scale(1)' }] },
-  rise:  { d: .95, e: EASE_SOFT, frames: [{ opacity: 0, transform: 'translateY(26px)' }, { opacity: 1, transform: 'translateY(0)' }] },
-  zoom:  { d: 1.05, e: EASE_SOFT, frames: [{ opacity: 0, transform: 'scale(1.18)', filter: 'blur(9px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' }] },
-  wipe:  { d: 1.1, e: 'cubic-bezier(.65,0,.35,1)', frames: [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }] },
-  float: { d: .9,  e: EASE_SOFT, frames: [{ opacity: 0, transform: 'translateY(18px)' }, { opacity: 1, transform: 'translateY(0)' }] },
-  iris:  { d: 1.15, e: 'cubic-bezier(.65,0,.35,1)', frames: [{ clipPath: 'circle(0% at 50% 50%)', opacity: .5 }, { clipPath: 'circle(75% at 50% 50%)', opacity: 1 }] },
-  blur:  { d: 1.15, e: EASE_SOFT, frames: [{ opacity: 0, filter: 'blur(16px)', transform: 'scale(1.04)' }, { opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' }] },
+// Chorégraphies PAR ÉLÉMENT (logo / filet / nom / baseline décalés) —
+// retour Stéphane 2026-07-05 : un fondu global se lisait comme un simple
+// rechargement, pas comme une motion de marque. Miroir CSS obligatoire
+// dans key-brand-page.js (règle : MOTIONS + chorégraphie + CSS m-*).
+const EASE_SOFT   = 'cubic-bezier(.2,.7,.2,1)';
+const EASE_SPRING = 'cubic-bezier(.3,1.45,.45,1)';   // dépasse puis se pose
+const EASE_CINE   = 'cubic-bezier(.65,0,.28,1)';     // élan fort, freinage long
+// Chaque étape : sel (défaut = la scène entière), frames WAAPI, d/delay en
+// secondes au tempo 1 (multipliés par le tempo), e = easing.
+const MOTION_CHOREO = {
+  fade: [   // l'option sobre — mais orchestrée, plus un aplat uniforme
+    { frames: [{ opacity: 0 }, { opacity: 1 }], d: .9 },
+    { sel: '.kb-stage-logo', frames: [{ transform: 'scale(.88)' }, { transform: 'scale(1)' }], d: 1.15 },
+    { sel: '.kb-stage-name', frames: [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0)' }], d: 1, delay: .12 },
+    { sel: '.kb-stage-baseline', frames: [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], d: .8, delay: .38 },
+  ],
+  rise: [   // tout monte en escalier, avec un ressort qui dépasse puis se pose
+    { frames: [{ opacity: 0 }, { opacity: 1 }], d: .5 },
+    { sel: '.kb-stage-logo', frames: [{ opacity: 0, transform: 'translateY(64px) scale(.92)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], d: .95, e: EASE_SPRING },
+    { sel: '.kb-stage-vr', frames: [{ opacity: 0, transform: 'scaleY(.2)' }, { opacity: 1, transform: 'scaleY(1)' }], d: .7, delay: .22 },
+    { sel: '.kb-stage-name', frames: [{ opacity: 0, transform: 'translateY(84px)' }, { opacity: 1, transform: 'translateY(0)' }], d: 1.05, delay: .1, e: EASE_SPRING },
+    { sel: '.kb-stage-baseline', frames: [{ opacity: 0, transform: 'translateY(34px)' }, { opacity: 1, transform: 'translateY(0)' }], d: .9, delay: .3, e: EASE_SPRING },
+  ],
+  zoom: [   // vraie arrivée de loin : ×2.35 flouté → net, baseline ensuite
+    { frames: [{ opacity: 0, transform: 'scale(2.35)', filter: 'blur(22px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' }], d: 1.15, e: EASE_CINE },
+    { sel: '.kb-stage-baseline', frames: [{ opacity: 0 }, { opacity: 1 }], d: .6, delay: .55 },
+  ],
+  wipe: [   // le rideau tire aussi le contenu (clip + glissement combinés)
+    { frames: [{ clipPath: 'inset(0 100% 0 0)', transform: 'translateX(-5%)' }, { clipPath: 'inset(0 0 0 0)', transform: 'translateX(0)' }], d: 1.1, e: EASE_CINE },
+  ],
+  float: [  // entrée à ressort ; la respiration (boucle) est posée à part
+    { frames: [{ opacity: 0, transform: 'translateY(36px) scale(.95)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], d: .9, e: EASE_SPRING },
+  ],
+  iris: [   // le cercle s'ouvre PENDANT que la scène recule (2 anims composées)
+    { frames: [{ clipPath: 'circle(0% at 50% 50%)', opacity: .4 }, { clipPath: 'circle(75% at 50% 50%)', opacity: 1 }], d: 1.15, e: EASE_CINE },
+    { frames: [{ transform: 'scale(1.22)' }, { transform: 'scale(1)' }], d: 1.3 },
+  ],
+  blur: [   // tirage de point en deux temps : dégrossi vite, net lentement
+    { frames: [
+      { opacity: 0, filter: 'blur(26px) saturate(.5)', transform: 'scale(1.1)' },
+      { opacity: .95, filter: 'blur(7px) saturate(.85)', transform: 'scale(1.03)', offset: .55 },
+      { opacity: 1, filter: 'blur(0px) saturate(1)', transform: 'scale(1)' },
+    ], d: 1.3 },
+  ],
 };
 // KB-9 — planche d'ambiance : gabarits de collage (cellules photo/vidéo
 // + médaillon rond imbriqué par cellule, positionné au clic).
@@ -2456,8 +2491,14 @@ function _placeBoardMed(cellEl, e) {
 function _setMotion(key) {
   if (!MOTIONS.some(([k]) => k === key)) return;
   _brandSection().motion = key;
-  _scenePlay = true;   // changer de motion = la voir tout de suite
-  _scheduleSave(); _renderChart();
+  _scheduleSave();
+  // CHIRURGICAL, pas de re-render : le panneau entier qui clignotait au
+  // clic faisait passer la motion pour un rechargement de page (retour
+  // Stéphane 2026-07-05). On bascule la carte active et on rejoue — rien
+  // d'autre ne bouge. (Possible car le nom est TOUJOURS splitté en .kb-l.)
+  _root?.querySelectorAll('[data-act="brand-motion"]').forEach(c =>
+    c.classList.toggle('on', c.dataset.motion === key));
+  _playSceneMotion();
 }
 // Joue la motion de la scène en Web Animations API (element.animate) —
 // aucun recours aux classes/keyframes CSS, donc insensible à tout ce qui
@@ -2471,21 +2512,44 @@ function _playSceneMotion() {
   const s = _sceneOf();
   const mo = SCENE_DURS.find(([k]) => k === s.dur)?.[2] ?? 1;
   if (motion === 'letters') {
-    inner.querySelectorAll('.kb-stage-name .kb-l').forEach((l, i) =>
-      l.animate([{ opacity: 0, transform: 'translateY(.35em)' }, { opacity: 1, transform: 'translateY(0)' }],
-        { duration: 500 * mo, delay: i * 45 * mo, easing: EASE_SOFT, fill: 'both' }));
-    inner.querySelector('.kb-stage-logo')?.animate([{ opacity: 0 }, { opacity: 1 }],
-      { duration: 700 * mo, easing: EASE_SOFT, fill: 'both' });
-    inner.querySelector('.kb-stage-baseline')?.animate([{ opacity: 0 }, { opacity: 1 }],
-      { duration: 700 * mo, delay: 550 * mo, easing: EASE_SOFT, fill: 'both' });
+    // Le nom s'écrit : chaque lettre retombe de haut, grosse puis à sa
+    // taille, avec un ressort ; le logo glisse depuis la gauche ; la
+    // baseline attend la DERNIÈRE lettre (délai calé sur leur nombre).
+    const letters = inner.querySelectorAll('.kb-stage-name .kb-l');
+    letters.forEach((l, i) =>
+      l.animate([
+        { opacity: 0, transform: 'translateY(.7em) scale(1.45)', filter: 'blur(5px)' },
+        { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0px)' },
+      ], { duration: 620 * mo, delay: i * 45 * mo, easing: EASE_SPRING, fill: 'both' }));
+    inner.querySelector('.kb-stage-logo')?.animate(
+      [{ opacity: 0, transform: 'translateX(-34px)' }, { opacity: 1, transform: 'translateX(0)' }],
+      { duration: 900 * mo, easing: EASE_SOFT, fill: 'both' });
+    inner.querySelector('.kb-stage-vr')?.animate(
+      [{ opacity: 0, transform: 'scaleY(.2)' }, { opacity: 1, transform: 'scaleY(1)' }],
+      { duration: 600 * mo, delay: 250 * mo, easing: EASE_SOFT, fill: 'both' });
+    inner.querySelector('.kb-stage-baseline')?.animate(
+      [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+      { duration: 700 * mo, delay: (letters.length * 45 + 250) * mo, easing: EASE_SOFT, fill: 'both' });
     return;
   }
-  const def = MOTION_FRAMES[motion];
-  if (!def) return;
-  inner.animate(def.frames, { duration: def.d * 1000 * mo, easing: def.e, fill: 'both' });
-  if (motion === 'float') {
-    inner.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-7px)' }, { transform: 'translateY(0)' }],
-      { duration: 5500, delay: 1000 + 900 * mo, iterations: Infinity, easing: 'ease-in-out' });
+  const steps = MOTION_CHOREO[motion];
+  if (!steps) return;
+  for (const st of steps) {
+    const el = st.sel ? inner.querySelector(st.sel) : inner;
+    if (!el) continue;
+    el.animate(st.frames, {
+      duration: st.d * 1000 * mo,
+      delay: (st.delay || 0) * 1000 * mo,
+      easing: st.e || EASE_SOFT,
+      fill: 'both',
+    });
+  }
+  if (motion === 'float') {   // la respiration, plus ample qu'avant (10px + zoom léger)
+    inner.animate([
+      { transform: 'translateY(0) scale(1)' },
+      { transform: 'translateY(-10px) scale(1.012)', offset: .5 },
+      { transform: 'translateY(0) scale(1)' },
+    ], { duration: 5500, delay: 1000 + 900 * mo, iterations: Infinity, easing: 'ease-in-out' });
   }
 }
 function _replayMotion() { _playSceneMotion(); }
@@ -2549,14 +2613,12 @@ function _renderBrandTab() {
   const bgCss = _sceneBgCss(s);
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
   const brandName = meta.name || _chart.name;
-  // Motion « lettre à lettre » : les lettres sont animées en JS (WAAPI)
-  // après le rendu — regroupées par mot insécable (.kb-w) pour ne jamais
-  // couper un mot entre deux lettres.
-  const nameHtml = b.motion === 'letters'
-    ? brandName.split(' ').filter(w => w.length).map(w =>
-        `<span class="kb-w">${[...w].map(ch => `<span class="kb-l">${_esc(ch)}</span>`).join('')}</span>`
-      ).join(' ')
-    : _esc(brandName);
+  // Le nom est TOUJOURS splitté en lettres (.kb-l, groupées par mot
+  // insécable .kb-w) — rendu statique identique, et ça permet de changer
+  // de motion SANS re-render (clic carte = rejouer, zéro clignotement).
+  const nameHtml = brandName.split(' ').filter(w => w.length).map(w =>
+    `<span class="kb-w">${[...w].map(ch => `<span class="kb-l">${_esc(ch)}</span>`).join('')}</span>`
+  ).join(' ');
   const inked = s.bgType !== 'white';   // fond custom → encre pilotée
 
   const mediaEl = !hasMedia ? '' : (s.bgType === 'video'
