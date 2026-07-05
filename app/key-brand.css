@@ -512,6 +512,7 @@
 .kb-scenewheel:hover{border-color:var(--kb-accent);color:var(--kb-ink)}
 .kb-scenewheel input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .kb-scenehint{font-size:11.5px;color:var(--kb-muted)}
+.kb-mediaspecs{font-size:12px;opacity:.75;margin:2px 0 0}
 
 /* Zone de complétion EN LIGNE, ouverte à droite de la pill active
    (les pills suivantes s'écartent — pas de rangée en dessous). */

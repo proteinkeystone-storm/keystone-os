@@ -2520,7 +2520,7 @@ function _renderBrandTab() {
     if (s.bgType === 'image' || s.bgType === 'video') {
       return `<span class="kb-scenefill">
         <button class="kb-fillbtn" data-act="scene-media">${icon(s.bgType === 'video' ? 'film' : 'image', 14)} ${s.assetId ? 'Remplacer' : (s.bgType === 'video' ? 'Choisir une vidéo' : 'Choisir une photo')}</button>
-        <span class="kb-scenehint">${s.bgType === 'video' ? 'MP4 ou WebM · 1920×1080 (16:9) · 6–12 s en boucle · sans son · 4 Mo max' : 'JPG ou WebP · 2560×1440 conseillé (16:9) · 4 Mo max'}</span>
+        <span class="kb-scenehint">≤ 4 Mo</span>
         ${s.assetId ? `<button class="kb-iconbtn danger kb-filldel" data-act="scene-media-del" title="Retirer le média">${icon('trash-2', 14)}</button>` : ''}
       </span>`;
     }
@@ -2548,12 +2548,21 @@ function _renderBrandTab() {
       <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>`}
     </div>`;
 
+  // Specs optimales — ligne DISCRÈTE sous la barre, seulement quand
+  // Photo/Vidéo est choisi (le bouton de dépôt ne garde que « ≤ 4 Mo »).
+  const specsLine = s.bgType === 'video'
+    ? `<p class="kb-hint kb-mediaspecs">Optimal : MP4 ou WebM · 1920 × 1080 (16:9) · 6–12 s en boucle · sans son (lecture muette) · 4 Mo max. Le cadre est recadré selon l'écran — gardez logo et texte au centre.</p>`
+    : s.bgType === 'image'
+    ? `<p class="kb-hint kb-mediaspecs">Optimal : JPG ou WebP · 2560 × 1440 (16:9) · 4 Mo max. Le cadre est recadré selon l'écran — gardez l'essentiel au centre.</p>`
+    : '';
+
   const stage = `
     <div class="kb-stage ${hasMedia ? 'has-media' : ''}" ${bgCss ? `style="${bgCss}"` : ''}>
       ${mediaEl}
       ${hasMedia ? '' : stageInner}
     </div>
     ${sceneBar}
+    ${specsLine}
     <p class="kb-hint">${hasMedia
       ? 'Votre média occupe toute la couverture de la charte publique — rien n\'est affiché par-dessus.'
       : 'Cette scène ouvre la charte publique, telle quelle. Pour une ouverture animée, déposez votre propre vidéo (Fond → Vidéo) : elle sera affichée plein cadre.'}</p>`;
