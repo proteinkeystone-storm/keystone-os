@@ -124,6 +124,9 @@ const INTERDITS_DEFS = [
   ['crowd',   'Ne pas envahir sa zone de protection'],
 ];
 let _pickTarget = 'logo';   // destination du sélecteur de fichiers : 'logo' | { rule: id } | 'photo'
+let _scenePlay = true;      // l'animation de la scène ne joue qu'aux bons moments
+                            // (arrivée sur l'onglet, changement de motion, rejouer)
+                            // — pas à chaque réglage, sinon elle « clignote ».
 
 // ── Onglet Branding (KB-5) ──
 // Motions d'intro préréglées — CSS pur, sobres, respectent
@@ -480,7 +483,7 @@ function _onClick(e) {
   if (act === 'dup' && id)    { _duplicateChart(id); return; }
   if (act === 'del' && id)    { _deleteChart(id); return; }
   if (act === 'back-lib')     { _backToLib(); return; }
-  if (act.startsWith('tab-')) { _tab = act.slice(4); _dlPanel = null; _renderChart(); return; }
+  if (act.startsWith('tab-')) { _tab = act.slice(4); _dlPanel = null; if (_tab === 'brand') _scenePlay = true; _renderChart(); return; }
   if (act === 'soon')         { _toast('Cet atelier arrive au prochain sprint.'); return; }
 
   // ── Onglet Logo (KB-1) ──
@@ -2434,6 +2437,7 @@ function _placeBoardMed(cellEl, e) {
 function _setMotion(key) {
   if (!MOTIONS.some(([k]) => k === key)) return;
   _brandSection().motion = key;
+  _scenePlay = true;   // changer de motion = la voir tout de suite
   _scheduleSave(); _renderChart();
 }
 function _replayMotion() {
@@ -2441,7 +2445,7 @@ function _replayMotion() {
   if (!stage) return;
   const cls = [...stage.classList].find(c => c.startsWith('kb-play-'));
   if (!cls) return;
-  stage.classList.remove(cls);
+  stage.classList.remove(cls, 'kb-still');
   void stage.offsetWidth;   // reflow → l'animation repart
   stage.classList.add(cls);
 }
@@ -2522,8 +2526,9 @@ function _renderBrandTab() {
     : `<img class="kb-stage-media" data-asset="${_esc(s.assetId)}" alt="" draggable="false">`);
 
   const sceneLogo = _sceneLogoVariant(s);
+  const playNow = _scenePlay; _scenePlay = false;   // consommé : le prochain re-render de réglage restera posé
   const stageInner = `
-      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)}" data-slot="stage-inner" style="--kb-mo:${mo}">
+      <div class="kb-stage-inner kb-play-${_esc(b.motion || 'none')} kb-lay-${_esc(s.layout)} ${playNow ? '' : 'kb-still'}" data-slot="stage-inner" style="--kb-mo:${mo}">
         ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
         ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">

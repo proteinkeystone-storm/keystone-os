@@ -524,6 +524,11 @@
   .kb-play-letters .kb-stage-logo,.kb-play-letters .kb-stage-baseline{animation:none}
   .kb-play-letters .kb-stage-name .kb-l{animation:none;opacity:1}
 }
+/* État « posé » : pendant les réglages, la scène ne rejoue pas — elle
+   reste à l'état final (l'animation ne joue qu'à l'arrivée, au changement
+   de motion et au bouton rejouer). */
+.kb-stage-inner.kb-still,.kb-still .kb-stage-logo,.kb-still .kb-stage-baseline,.kb-still .kb-stage-name .kb-l{animation:none !important}
+.kb-still .kb-stage-name .kb-l,.kb-still .kb-stage-baseline{opacity:1}
 
 /* Barre de réglages de la scène (KB-8) — chips plates groupées. */
 .kb-scenebar{display:flex;flex-direction:column;gap:10px;margin:14px 0 4px;padding:14px 16px;background:var(--kb-panel);border:1px solid var(--kb-line);border-radius:14px}
