@@ -673,10 +673,15 @@ try {
     ok('source : transmise dans le payload du débat');
   else ko('source : absente du payload débat', '');
 
-  // Transport vers Ghost Writer en ARGUMENT (hors rail, effacé hors post-ideas)
-  if (fbs.includes('openGhostwriterChained?.(text.trim(), _currentSession?.source'))
-    ok('source : portée à Ghost Writer en argument (pas via le rail)');
-  else ko('source : non transmise à GW', '');
+  // Transport vers Ghost Writer en ARGUMENT (hors rail, effacé hors post-ideas).
+  // Depuis le fix « fuite aval » (2026-07-06), la source client garde la
+  // PRIORITÉ et le DOSSIER MAISON du Gest fait repli (un angle nu ne suffit
+  // pas pour rédiger).
+  if (fbs.includes('openGhostwriterChained?.(text.trim(), source)')
+      && /const source = _currentSession\?\.source\s*\n?\s*\|\|/.test(fbs)
+      && fbs.includes('_currentSession?.gestDossier'))
+    ok('source : portée à GW en argument — priorité client, repli dossier maison (Gest)');
+  else ko('source : non transmise à GW (ou priorité client/repli dossier cassés)', '');
   if (fgw.includes('_chainedSource') && /openGhostwriterChained\(initialText\s*=\s*'',\s*source/.test(fgw) && /source\s*:\s*_chainedSource/.test(fgw))
     ok('source : Ghost Writer la reçoit + l\'injecte dans le body (_callReal), nettoyée à la fermeture');
   else ko('source : GW ne consomme pas la source', '');

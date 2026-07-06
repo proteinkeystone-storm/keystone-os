@@ -1072,6 +1072,11 @@ async function _callOrchestration(panel, singleAgentId = null) {
             const shown = evt.titles.slice(0, 4).join(' · ');
             const extra = evt.titles.length > 4 ? ` (+${evt.titles.length - 4})` : '';
             _appendOrchestrationNote(panel, `Gest — savoir maison convoqué${evt.agent_name ? ` (${evt.agent_name})` : ''} : ${shown}${extra}`);
+            // Fix « fuite aval » : mémorise le dossier pour le relayer à Ghost
+            // Writer comme SOURCE (un angle nu ne suffit pas pour rédiger).
+            if (_currentSession && typeof evt.grounding === 'string' && evt.grounding.trim()) {
+              _currentSession.gestDossier = { text: evt.grounding, agentName: evt.agent_name || '' };
+            }
           } else if (!evt.ok) {
             const why = ({
               'no-hits':      'aucune fiche ne correspond à ce sujet',
@@ -1174,7 +1179,14 @@ async function _relayToGhostwriter(text) {
     // ambiant) : le réseau porté est préservé, le quota serveur reste le plafond.
     // La SOURCE éventuelle (lien/texte/fichier) voyage en argument → Ghost Writer
     // ancre la rédaction dessus, comme le débat l'a été.
-    m.openGhostwriterChained?.(text.trim(), _currentSession?.source || null);
+    // Fix « fuite aval » (test live 4) : sans source client, le DOSSIER MAISON
+    // du Gest fait source — un angle nu ne suffit pas pour rédiger un post
+    // pertinent, GW inventait du générique. La source explicite du client
+    // garde la priorité (geste volontaire > ancrage automatique).
+    const gd = _currentSession?.gestDossier;
+    const source = _currentSession?.source
+      || ((gd && gd.text) ? { text: gd.text, ref: `Savoir maison (Kortex)${gd.agentName ? ` — ${gd.agentName}` : ''}` } : null);
+    m.openGhostwriterChained?.(text.trim(), source);
   } catch (err) {
     console.error('[Brainstorming] openGhostwriter', err);
   }

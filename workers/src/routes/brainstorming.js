@@ -1339,7 +1339,10 @@ export async function handleBrainstormingAgentRespond(request, env) {
       if (g.ok) {
         gestDossier = g.grounding;
         debateBrief = `${effectiveBrief}\n\nDOSSIER MAISON (savoir documenté et validé de l'entreprise — ce que le produit EST réellement. Tout le débat s'appuie sur CES FAITS ; n'invente jamais une nature ou des fonctions que le dossier ne décrit pas) :\n"""\n${gestDossier}\n"""`;
-        gestDossierInfo = { ok: true, titles: g.titles || [], agent_name: g.agentName || '' };
+        // grounding voyage jusqu'au front : relayé à Ghost Writer comme SOURCE
+        // (fix « fuite aval » : GW ne recevait qu'un titre nu, impossible
+        // d'écrire un post pertinent — retour Stéphane test live 4).
+        gestDossierInfo = { ok: true, titles: g.titles || [], agent_name: g.agentName || '', grounding: gestDossier };
       } else {
         gestDossierInfo = { ok: false, reason: g.reason || 'error', agent_name: g.agentName || '' };
       }
