@@ -1892,7 +1892,10 @@ textarea.pulsa-input {
 
 /* ── Aperçu flottant d'un type de champ (survol desktop / focus) ── */
 .pulsa-type-preview {
-  position: fixed; z-index: 1100; left: 0; top: 0; width: 232px;
+  /* Posé sur <body> mais le pad tourne dans un workspace fullscreen à
+     z-index 9999 → il FAUT passer au-dessus, sinon l'aperçu s'affiche
+     derrière l'overlay (invisible). cf. incident popup/overlay. */
+  position: fixed; z-index: 10002; left: 0; top: 0; width: 232px;
   padding: 12px 13px;
   background: var(--navy2);
   border: 1px solid var(--ws-border, var(--bd));
