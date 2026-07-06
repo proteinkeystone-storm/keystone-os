@@ -289,7 +289,8 @@ select::-ms-expand{display:none}
 .supband.supwide{grid-column:1/-1}
 .supband-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 10px}
 .supband-head h3{font-size:14px;font-weight:800;margin:0;letter-spacing:-0.01em}
-.supdl{display:inline-flex;align-items:center;font-size:12px;padding:6px 12px}
+.supdls{display:inline-flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.supdl{display:inline-flex;align-items:center;font-size:12px;padding:6px 12px;text-decoration:none}
 .supstage{flex:1;display:flex;align-items:center;justify-content:center;padding:32px 28px;background:var(--bg);border:1px solid var(--line);border-radius:18px;min-width:0}
 .supcap{width:100%;min-width:0}
 .supcap .mk-browser,.supcap .mk-phone{margin-left:auto;margin-right:auto}
@@ -421,18 +422,18 @@ async function _inlineImgs(src,dst){
       if(di[i])di[i].setAttribute('src',d);
     }catch(_){}}
 }
-async function captureSupport(cap){
-  const rect=cap.getBoundingClientRect();
+async function captureNode(node){
+  const rect=node.getBoundingClientRect();
   const w=Math.max(1,Math.ceil(rect.width)),h=Math.max(1,Math.ceil(rect.height));
-  const clone=cap.cloneNode(true);
-  await _inlineImgs(cap,clone);
+  const clone=node.cloneNode(true);
+  await _inlineImgs(node,clone);
   const rc=getComputedStyle(document.documentElement);
   clone.style.margin='0';
   ['--ink','--muted','--line','--bg','--panel','--accent','--danger','--ok'].forEach(v=>clone.style.setProperty(v,rc.getPropertyValue(v)));
   const inner=new XMLSerializer().serializeToString(clone);
   const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><foreignObject x="0" y="0" width="'+w+'" height="'+h+'"><div xmlns="http://www.w3.org/1999/xhtml"><style><![CDATA['+pageCss()+']]></style>'+inner+'</div></foreignObject></svg>';
   const img=await loadImg('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));
-  const scale=2,cv=document.createElement('canvas');cv.width=w*scale;cv.height=h*scale;
+  const scale=3,cv=document.createElement('canvas');cv.width=w*scale;cv.height=h*scale;
   const ctx=cv.getContext('2d');ctx.setTransform(scale,0,0,scale,0,0);
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
   return await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('rendu vide')),'image/png'));
@@ -836,10 +837,14 @@ function render(){
     const dom=esc((SUP.domain||'').trim()||nm.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30)+'.fr');
     const cardD=SUP.card||{};
     h+=chap('supports','Supports de communication');
-    h+='<section><h2>La marque en situation</h2><p class="sub">Composée avec la charte — téléchargez chaque pièce, ou tout d\\'un coup.</p><div class="supgrid">';
-    // Chaque support = un « plateau » (stage) de hauteur alignée, avec un
-    // bouton de téléchargement (rasterisé en PNG côté client).
-    const band=(wide,title,inner)=>'<div class="supband'+(wide?' supwide':'')+'"><div class="supband-head"><h3>'+title+'</h3><button class="btn supdl no-print" data-supdl>'+DL_ICON+'PNG</button></div><div class="supstage"><div class="supcap" data-supcap="'+esc(title)+'">'+inner+'</div></div></div>';
+    h+='<section><h2>La marque en situation</h2><p class="sub">Téléchargez le FICHIER de chaque pièce — les visuels que vous avez importés en original, sinon un rendu de la composition.</p><div class="supgrid">';
+    // Chaque pièce téléchargeable : si un visuel a été importé → son FICHIER
+    // d'origine (dl=1, dimensions/format réels) ; sinon → rasterisation de la
+    // pièce NUE (sans cadre ni mockup). data-capsel = élément composé à capturer.
+    const dlCtl=(text,name,asset,capsel)=> asset
+      ? '<a class="btn supdl no-print" href="'+fileUrl(asset,true)+'" download data-dlasset="'+esc(asset)+'" data-dlname="'+esc(name)+'">'+DL_ICON+esc(text)+'</a>'
+      : '<button class="btn supdl no-print" data-supdl data-capsel="'+esc(capsel)+'" data-dlname="'+esc(name)+'">'+DL_ICON+esc(text)+'</button>';
+    const band=(wide,title,ctls,inner)=>'<div class="supband'+(wide?' supwide':'')+'"><div class="supband-head"><h3>'+title+'</h3><span class="supdls">'+ctls+'</span></div><div class="supstage"><div class="supcap">'+inner+'</div></div></div>';
     if(supOn('web')){
       let inner='<div class="mk-browser"><div class="mk-bar"><span class="mk-dots"><i></i><i></i><i></i></span><span class="mk-url">'+(P?'<i class="mk-fav" style="background:'+P+'"></i>':'')+dom+'</span></div>';
       inner+=SUP.webShotId?'<img class="mk-shot" src="'+fileUrl(SUP.webShotId)+'" alt="">':
@@ -847,7 +852,7 @@ function render(){
         '<div class="mk-hero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</strong><span class="mk-btn mk-cta" style="background:'+(hInk==='#ffffff'?'rgba(255,255,255,.94)':'#15171c')+';color:'+(hInk==='#ffffff'?(P||'#15171c'):'#ffffff')+'">Découvrir</span></div>'+
         '<div class="mk-blocks"><i style="'+blk+'"></i><i style="'+blk+'"></i><i style="'+blk+'"></i></div></div>';
       inner+='</div>';
-      h+=band(true,'Site web',inner);
+      h+=band(true,'Site web',dlCtl('Télécharger','Site web',SUP.webShotId,'.mk-page'),inner);
     }
     if(supOn('phone')){
       let inner='<div class="mk-phone"><div class="mk-notch"></div><div class="mk-screen">';
@@ -856,7 +861,7 @@ function render(){
         '<div class="mk-mhero" style="'+hBg+'"><strong style="'+tfSt+'color:'+hInk+'">'+nm+'</strong>'+(bl?'<span style="color:'+hInk+'">'+bl+'</span>':'')+'</div>'+
         '<div class="mk-mrows"><i style="'+blk+'"></i><i style="'+blk+'"></i></div><span class="mk-btn mk-mcta" style="background:'+bBg+';color:'+bInk+'">Nous contacter</span></div>';
       inner+='</div></div>';
-      h+=band(false,'Smartphone',inner);
+      h+=band(false,'Smartphone',dlCtl('Télécharger','Smartphone',SUP.phoneShotId,'.mk-mpage'),inner);
     }
     if(supOn('card')){
       // Recto et verso remplaçables séparément (repli : ancien cardShotId = recto).
@@ -869,7 +874,7 @@ function render(){
         (cardD.role?'<span>'+esc(cardD.role)+'</span>':'')+(cardD.tel?'<span>'+esc(cardD.tel)+'</span>':'')+
         '<span>'+esc(cardD.email||'contact@'+((SUP.domain||'').trim()||dom))+'</span></div>';
       inner+='</div>';
-      h+=band(false,'Carte de visite',inner);
+      h+=band(false,'Carte de visite',dlCtl('Recto','Carte de visite — recto',cRecto,'.mk-recto')+dlCtl('Verso','Carte de visite — verso',cVerso,'.mk-verso'),inner);
     }
     if(supOn('social')){
       // Photo de profil et bannière remplaçables séparément (repli : ancien socialShotId = bannière).
@@ -880,7 +885,7 @@ function render(){
       inner+=sBan?'<img class="mk-shot mk-bannershot" src="'+fileUrl(sBan)+'" alt="Bannière">':
         '<div class="mk-banner" style="'+hBg+'">'+(lgIm?'<span class="mk-bannerlogo">'+lgIm+'</span>':'')+'<span style="'+tfSt+'color:'+hInk+'">'+(bl||nm)+'</span></div>';
       inner+='</div>';
-      h+=band(true,'Réseaux sociaux',inner);
+      h+=band(true,'Réseaux sociaux',dlCtl('Photo de profil','Photo de profil',sAv,'.mk-avatar')+dlCtl('Bannière','Bannière',sBan,'.mk-banner'),inner);
     }
     h+='</div>';
     h+='<p class="no-print supzip-row"><button class="btn primary" id="supzip">'+DL_ICON+'Télécharger tous les supports (.zip)</button></p>';
@@ -937,11 +942,12 @@ function bind(variants){
       if(card){card.querySelectorAll('[data-tc]').forEach(b=>b.classList.toggle('on',b===tcsw));
         const a=card.querySelector('[data-alpha]');if(a)a.style.color=tcsw.dataset.tc}
       return}
-    // Téléchargement d'un support (rasterisé en PNG).
+    // Téléchargement d'une pièce COMPOSÉE (pas de visuel importé) → rendu PNG
+    // de la pièce nue. Les pièces importées sont des <a download> (fichier réel).
     const sdl=e.target.closest('[data-supdl]');
-    if(sdl){const band=sdl.closest('.supband'),cap=band&&band.querySelector('[data-supcap]');
-      if(cap){sdl.disabled=true;const old=sdl.innerHTML;sdl.textContent='…';
-        try{const blob=await captureSupport(cap);saveBlob(blob,safeName(DATA.name+' — '+cap.dataset.supcap)+'.png')}
+    if(sdl){const band=sdl.closest('.supband'),node=band&&band.querySelector(sdl.dataset.capsel);
+      if(node){sdl.disabled=true;const old=sdl.innerHTML;sdl.textContent='…';
+        try{const blob=await captureNode(node);saveBlob(blob,safeName(DATA.name+' — '+sdl.dataset.dlname)+'.png')}
         catch(err){toast('Téléchargement impossible : '+err.message)}
         sdl.disabled=false;sdl.innerHTML=old}
       return}
@@ -970,15 +976,19 @@ function bind(variants){
   // Graisse : pilote l'alphabet complet de la carte.
   app.querySelectorAll('[data-w]').forEach(sel=>{sel.addEventListener('change',()=>{
     const a=sel.closest('[data-font]').querySelector('[data-alpha]');if(a)a.style.fontWeight=sel.value})});
-  // « Télécharger tous les supports (.zip) » — chaque plateau rasterisé en PNG.
+  // « Télécharger tous les supports (.zip) » — visuels importés en ORIGINAL,
+  // pièces composées rasterisées ; une entrée par pièce (recto/verso séparés…).
   document.getElementById('supzip')?.addEventListener('click',async()=>{
-    const caps=[...app.querySelectorAll('[data-supcap]')];if(!caps.length)return;
+    const ctls=[...app.querySelectorAll('.supband [data-dlasset],.supband [data-capsel]')];if(!ctls.length)return;
     toast('Préparation des supports…');
     try{const files=[],seen=new Set();
-      for(const cap of caps){const blob=await captureSupport(cap);
-        let base=safeName(cap.dataset.supcap),n=safeName(DATA.name)+'/'+base+'.png';
-        for(let i=2;seen.has(n);i++)n=safeName(DATA.name)+'/'+base+'-'+i+'.png';seen.add(n);
-        files.push({name:n,data:new Uint8Array(await blob.arrayBuffer())})}
+      const add=(base,ext,data)=>{let n=safeName(DATA.name)+'/'+safeName(base)+'.'+ext;for(let i=2;seen.has(n);i++)n=safeName(DATA.name)+'/'+safeName(base)+'-'+i+'.'+ext;seen.add(n);files.push({name:n,data})};
+      for(const c of ctls){const name=c.dataset.dlname||'support';
+        if(c.dataset.dlasset){const r=await fetch(fileUrl(c.dataset.dlasset,true));const b=await r.blob();
+          const ext=(b.type.split('/')[1]||'png').replace('jpeg','jpg').replace('svg+xml','svg');
+          add(name,ext,new Uint8Array(await b.arrayBuffer()))}
+        else{const node=c.closest('.supband').querySelector(c.dataset.capsel);
+          if(node){const blob=await captureNode(node);add(name,'png',new Uint8Array(await blob.arrayBuffer()))}}}
       saveBlob(buildZip(files),safeName(DATA.name)+' — supports.zip')}
     catch(err){toast('Kit impossible : '+err.message)}
   });
