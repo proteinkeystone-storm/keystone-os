@@ -1903,7 +1903,7 @@ textarea.pulsa-input {
   transition: opacity .13s ease, transform .13s ease;
 }
 .pulsa-type-preview.is-visible { opacity: 1; transform: none; }
-@media (hover: none) { .pulsa-type-preview { display: none; } }
+@media (any-hover: none) { .pulsa-type-preview { display: none; } }
 .pulsa-type-preview-h {
   font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   opacity: .5; margin-bottom: 9px; color: var(--ws-text, var(--text));

@@ -2368,7 +2368,11 @@ function _filterFieldTypes(q) {
 
 // ── Aperçu au survol (desktop) / focus clavier ──────────────────────
 function _hoverOk() {
-  try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+  // `any-*` et pas `hover/pointer` : sur un portable/PC tactile (ou hybride),
+  // le pointeur PRIMAIRE est « coarse » même avec une souris branchée →
+  // `(hover:hover) and (pointer:fine)` renvoie false et bloquait l'aperçu.
+  // `(any-hover:hover) and (any-pointer:fine)` = « une souris existe-t-elle ? ».
+  try { return window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches; }
   catch { return false; }
 }
 function _ensureTypePreview() {
