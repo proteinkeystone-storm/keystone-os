@@ -632,12 +632,28 @@ export async function handleBrainstormingSynthesize(request, env) {
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') return err('Body JSON requis', 400, origin);
 
-  const { brief, history = [], engine, apiKey, mode = 'exploration', target_network = null } = body;
+  const { brief, history = [], engine, apiKey, mode = 'exploration', target_network = null, gest_agent_id = null } = body;
   if (typeof brief !== 'string' || brief.trim().length < MIN_BRIEF) {
     return err(`brief requis (${MIN_BRIEF} caractères min)`, 400, origin);
   }
   if (!Array.isArray(history) || history.length < 2) {
     return err('history requis (au moins 2 tours)', 400, origin);
+  }
+
+  // P2.1 Gest — la synthèse reçoit le MÊME dossier maison que le débat : sans
+  // lui, le Synthesizer ne lit que les répliques et peut re-broder autour du
+  // produit. On enrichit le brief transmis aux générateurs (les 3 chemins +
+  // post-ideas y passent). Best-effort : sans fiches, synthèse inchangée.
+  let synthBrief = brief;
+  if (typeof gest_agent_id === 'string' && gest_agent_id) {
+    try {
+      const g = await kortexGroundingForGest(env, request, claims, {
+        agentId: gest_agent_id, query: brief, topk: 6,
+      });
+      if (g.ok) {
+        synthBrief = `${brief}\n\nDOSSIER MAISON (savoir documenté de l'entreprise — la synthèse doit rester cohérente avec CES FAITS ; écarte ou signale toute piste du débat qui les contredit) :\n"""\n${g.grounding}\n"""`;
+      }
+    } catch (_) { /* synthèse sans dossier */ }
   }
 
   // BYOK (D1/D3) : flag + moteur + clé → synthèse sur le moteur du client,
@@ -661,7 +677,7 @@ export async function handleBrainstormingSynthesize(request, env) {
   // Mode « Idées de Posts » : la synthèse n'est pas un plan d'actions mais
   // 5 idées de posts (angle + accroche) TIRÉES du débat, pour le réseau cible.
   if (mode === 'post-ideas') {
-    const out = await _generatePostIdeasSynthesis(env, brief, history, target_network);
+    const out = await _generatePostIdeasSynthesis(env, synthBrief, history, target_network);
     if (out.error) return json({ error: out.error, raw: out.raw }, 422, origin);
     return json({ ideas: out.ideas, network: target_network, generated_at: new Date().toISOString() }, 200, origin);
   }
@@ -674,11 +690,11 @@ export async function handleBrainstormingSynthesize(request, env) {
   let engineUsed = 'mistral';
   if (useByok) {
     // Flag ON : synthèse sur N'IMPORTE QUEL moteur du client via callLLM.
-    synthesis = await _generateSynthesisVendor(env, engine, apiKey, brief, history, todayIso);
+    synthesis = await _generateSynthesisVendor(env, engine, apiKey, synthBrief, history, todayIso);
     engineUsed = engine;
     if (synthesis.error) {   // repli transparent Mistral
       const vErr = synthesis.error;
-      synthesis = await _generateSynthesis(env, brief, history, todayIso);
+      synthesis = await _generateSynthesis(env, synthBrief, history, todayIso);
       engineUsed = 'mistral-fallback';
       if (synthesis.error) {
         return json({ error: `${engine} KO (${vErr}) + Mistral KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
@@ -686,19 +702,19 @@ export async function handleBrainstormingSynthesize(request, env) {
     }
   } else if (engine === 'claude' && typeof apiKey === 'string' && apiKey.length > 10) {
     // Flag OFF : chemin Claude existant INCHANGÉ (Sprint 7.9).
-    synthesis = await _generateSynthesisClaude(apiKey, brief, history, todayIso);
+    synthesis = await _generateSynthesisClaude(apiKey, synthBrief, history, todayIso);
     engineUsed = 'claude';
     // En cas d'échec Claude (clé invalide, quota...), fallback transparent sur Mistral
     if (synthesis.error) {
       const claudeErr = synthesis.error;
-      synthesis = await _generateSynthesis(env, brief, history, todayIso);
+      synthesis = await _generateSynthesis(env, synthBrief, history, todayIso);
       engineUsed = 'mistral-fallback';
       if (synthesis.error) {
         return json({ error: `Claude KO (${claudeErr}) + Mistral KO (${synthesis.error})`, raw: synthesis.raw }, 422, origin);
       }
     }
   } else {
-    synthesis = await _generateSynthesis(env, brief, history, todayIso);
+    synthesis = await _generateSynthesis(env, synthBrief, history, todayIso);
   }
 
   if (synthesis.error) {
@@ -1287,6 +1303,28 @@ export async function handleBrainstormingAgentRespond(request, env) {
     }
   }
 
+  // ── P2.1 Gest — DOSSIER MAISON partagé (fix test live 2026-07-06) ──
+  // Leçon du 1er test : grounder le SEUL Gest ne suffit pas. Les 8 généralistes,
+  // aveugles au Kortex, inventaient le produit (« Keynapse = outil de réunion »)
+  // et le Gest (2 prises) ne pouvait pas rattraper un cadre faux posé par 8.
+  // Fix : UNE requête Kortex sur le brief, injectée dans le brief vu par TOUS
+  // les agents — les FAITS sont partagés (ce qu'EST le produit), chaque agent
+  // garde son ANGLE (la divergence survit, l'hallucination meurt). Best-effort :
+  // sans fiches/plan MAX, le débat part comme avant (byte-identique sans Gest).
+  let debateBrief = effectiveBrief;
+  let gestDossier = '';   // conservé en repli pour les prises de parole du Gest
+  if (gestInvited && gest_agent_id) {
+    try {
+      const g = await kortexGroundingForGest(env, request, claims, {
+        agentId: gest_agent_id, query: brief, topk: 6,
+      });
+      if (g.ok) {
+        gestDossier = g.grounding;
+        debateBrief = `${effectiveBrief}\n\nDOSSIER MAISON (savoir documenté et validé de l'entreprise — ce que le produit EST réellement. Tout le débat s'appuie sur CES FAITS ; n'invente jamais une nature ou des fonctions que le dossier ne décrit pas) :\n"""\n${gestDossier}\n"""`;
+      }
+    } catch (_) { /* best-effort : le débat démarre sans dossier */ }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Stream custom multi-agent
   // ─────────────────────────────────────────────────────────────
@@ -1407,19 +1445,22 @@ export async function handleBrainstormingAgentRespond(request, env) {
           const agentList    = getAgentNamesForPrompt(currentAgentId, debateRoster);
           // P2 Gest — grounding Kortex : avant que l'invité parle, on interroge
           // le coffre du Smart Agent choisi et on injecte les faits dans son
-          // prompt. Échec/indispo (pas MAX, coffre vide, 0 hit) → grounding ''
-          // → le Gest retombe proprement en persona de terrain (jamais bloqué).
+          // prompt. Requête CIBLÉE sur le débat en cours (brief BRUT + derniers
+          // tours — pas debateBrief, qui contient déjà le dossier et fausserait
+          // la recherche). Échec/0 hit → repli sur le DOSSIER MAISON partagé
+          // (gestDossier) ; sinon persona de terrain (jamais bloqué).
           let gestGrounding = '';
           if (currentAgentId === 'gest' && gest_agent_id) {
             try {
               const g = await kortexGroundingForGest(env, request, claims, {
                 agentId: gest_agent_id,
-                query:   _buildGestQuery(effectiveBrief, localHistory),
+                query:   _buildGestQuery(brief, localHistory),
               });
               if (g.ok) gestGrounding = g.grounding;
             } catch (_) { /* ancrage best-effort : le Gest parle quand même */ }
+            if (!gestGrounding && gestDossier) gestGrounding = gestDossier;
           }
-          const systemPrompt = agent.systemPrompt(cognitive_mode, effectiveBrief, agentList, previousTurn, previousAgent, gestGrounding);
+          const systemPrompt = agent.systemPrompt(cognitive_mode, debateBrief, agentList, previousTurn, previousAgent, gestGrounding);
 
           const messages = [{ role: 'system', content: systemPrompt }];
           // Refonte 2026-07 (retour Stéphane « chacun parle dans son coin ») :

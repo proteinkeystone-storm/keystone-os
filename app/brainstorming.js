@@ -86,7 +86,11 @@ function _digChipsHTML() {
   const roster = (Array.isArray(_currentSession?.roster) && _currentSession.roster.length)
     ? _currentSession.roster
     : ['strategic', 'creative', 'growth', 'consumer', 'data', 'devil'];
-  return roster.filter(id => id !== 'synth').map(id => {
+  const ids = roster.filter(id => id !== 'synth');
+  // P2.1 Gest — s'il est invité, on peut aussi le creuser en relance ciblée
+  // (1 appel ; le worker groundera sa réponse sur le Kortex via gest_agent_id).
+  if (_currentSession?.inviteGest) ids.push('gest');
+  return ids.map(id => {
     const a = getAgent(id);
     return `<button type="button" class="wr-dig-chip" data-dig="${id}">${_esc(a?.name || id)}</button>`;
   }).join('');
@@ -1519,6 +1523,9 @@ async function _callSynthesize(panel) {
       history: _currentSession.history,
       mode:    _currentSession.mode,
       target_network: _currentSession.target_network || null,
+      // P2.1 Gest — la synthèse reçoit le même dossier maison que le débat
+      // (le worker re-interroge le Kortex ; null ⇒ synthèse inchangée).
+      gest_agent_id: (_currentSession.inviteGest && _currentSession.gestAgentId) ? _currentSession.gestAgentId : null,
       // BYOK : moteur ACTIF + sa clé (fin du « claude » en dur). {} si pas de
       // clé → Mistral. Le flag BYOK_ROUTING tranche côté worker.
       ...byokRequestFields(),
