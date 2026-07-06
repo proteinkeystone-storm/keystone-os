@@ -648,7 +648,7 @@ export async function handleBrainstormingSynthesize(request, env) {
   if (typeof gest_agent_id === 'string' && gest_agent_id) {
     try {
       const g = await kortexGroundingForGest(env, request, claims, {
-        agentId: gest_agent_id, query: brief, topk: 6,
+        agentId: gest_agent_id, query: brief, topk: 8, focusTerms: _gestFocusTerms(brief),
       });
       if (g.ok) {
         synthBrief = `${brief}\n\nDOSSIER MAISON (savoir documenté de l'entreprise — la synthèse doit rester cohérente avec CES FAITS ; écarte ou signale toute piste du débat qui les contredit) :\n"""\n${g.grounding}\n"""`;
@@ -1058,6 +1058,23 @@ function _isIdeationBrief(brief) {
   return _IDEATION_RE.test(String(brief || ''));
 }
 
+// P2.2 Gest — noms propres du brief (fix « dossier hors-sujet ») : sur un brief
+// long multi-thèmes, bm25 plat noie le nom du produit sous les mots d'action.
+// Les mots capitalisés HORS début de phrase (Keynapse, Missive, LinkedIn…) sont
+// LE signal produit → requête focus fusionnée en RRF côté smart-agent.
+export function _gestFocusTerms(brief) {   // exporté pour les tests (cf. parsePostIdeas)
+  const terms = new Set();
+  for (const sentence of String(brief || '').split(/[.!?\n]+/)) {
+    const words = sentence.trim().split(/\s+/);
+    words.forEach((w, i) => {
+      if (i === 0) return;   // début de phrase = majuscule grammaticale, pas un nom propre
+      const m = w.match(/^[«"'(]?(\p{Lu}[\p{L}\p{N}-]{2,})/u);
+      if (m) terms.add(m[1]);
+    });
+  }
+  return [...terms].slice(0, 6);
+}
+
 // P2 Gest — requête de retrieval : le brief ancre, les derniers tours ciblent
 // ce qui se discute là, maintenant (pour que le crible retrouve les fiches
 // pertinentes du débat en cours, pas juste du sujet global).
@@ -1312,15 +1329,19 @@ export async function handleBrainstormingAgentRespond(request, env) {
   // garde son ANGLE (la divergence survit, l'hallucination meurt). Best-effort :
   // sans fiches/plan MAX, le débat part comme avant (byte-identique sans Gest).
   let debateBrief = effectiveBrief;
-  let gestDossier = '';   // conservé en repli pour les prises de parole du Gest
+  let gestDossier = '';    // conservé en repli pour les prises de parole du Gest
+  let gestDossierInfo = null;   // transparence → event SSE 'gest_dossier' (feed)
   if (gestInvited && gest_agent_id) {
     try {
       const g = await kortexGroundingForGest(env, request, claims, {
-        agentId: gest_agent_id, query: brief, topk: 6,
+        agentId: gest_agent_id, query: brief, topk: 8, focusTerms: _gestFocusTerms(brief),
       });
       if (g.ok) {
         gestDossier = g.grounding;
         debateBrief = `${effectiveBrief}\n\nDOSSIER MAISON (savoir documenté et validé de l'entreprise — ce que le produit EST réellement. Tout le débat s'appuie sur CES FAITS ; n'invente jamais une nature ou des fonctions que le dossier ne décrit pas) :\n"""\n${gestDossier}\n"""`;
+        gestDossierInfo = { ok: true, titles: g.titles || [], agent_name: g.agentName || '' };
+      } else {
+        gestDossierInfo = { ok: false, reason: g.reason || 'error', agent_name: g.agentName || '' };
       }
     } catch (_) { /* best-effort : le débat démarre sans dossier */ }
   }
@@ -1342,6 +1363,10 @@ export async function handleBrainstormingAgentRespond(request, env) {
         } catch (e) { /* stream may be closed */ }
       };
 
+      // Transparence Gest — dit au client CE QUI a été convoqué (ou pourquoi
+      // rien) AVANT le premier tour. Fini le diagnostic à l'aveugle.
+      if (gestDossierInfo) send({ type: 'gest_dossier', ...gestDossierInfo });
+
       // Working copy de l'historique (on appendera au fur et à mesure)
       const localHistory = [...history];
       let turnsDone = 0;
@@ -1362,8 +1387,11 @@ export async function handleBrainstormingAgentRespond(request, env) {
       };
       // Marqueur : une condition d'arrêt a été atteinte mais le Gest doit
       // encore livrer son crible → on force UN tour de plus (le Gest), puis on
-      // clôture réellement au passage suivant.
+      // clôture INCONDITIONNELLEMENT (fix test live 2 : Devil parlait APRÈS le
+      // crible quand la redondance se réarmait — le crible doit être le dernier
+      // mot). On mémorise la raison d'arrêt d'origine pour l'event complete.
       let pendingGestClose = false;
+      let pendingCloseReason = null;
       // Refonte 2026-07 — clôture anticipée : 2 tours consécutifs redondants
       // (Jaccard mots porteurs ≥ .55 avec un tour déjà joué) = la table n'apporte
       // plus rien → on passe direct à la synthèse, les appels restants sont
@@ -1399,11 +1427,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
           if (isAuto) {
             const gestDone = gestInvited ? gestSpokeThisRound() : 0;
             const lastId   = localHistory.length ? localHistory[localHistory.length - 1].agent_id : null;
+            // Fix test live 2 (radotage) : l'ouverture ne se joue qu'UNE fois
+            // par SÉANCE — le Gest re-déroulait sa note de contexte (verbatim)
+            // après chaque intervention client. Le crible, lui, reste par tour.
+            const gestOpenedEver = gestInvited && localHistory.some(t => t && t.agent_id === 'gest');
             if (gestInvited && pendingGestClose && gestDone < 2) {
               // Crible du réel : dernier mot avant la synthèse.
               currentAgentId = 'gest';
               gestPhase = 'close';
-            } else if (gestInvited && gestDone === 0 && lastId === 'strategic') {
+            } else if (gestInvited && !gestOpenedEver && lastId === 'strategic') {
               // Ouverture : note de contexte juste après le cadrage de Strategic Lead.
               currentAgentId = 'gest';
               gestPhase = 'open';
@@ -1455,6 +1487,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
               const g = await kortexGroundingForGest(env, request, claims, {
                 agentId: gest_agent_id,
                 query:   _buildGestQuery(brief, localHistory),
+                focusTerms: _gestFocusTerms(brief),
               });
               if (g.ok) gestGrounding = g.grounding;
             } catch (_) { /* ancrage best-effort : le Gest parle quand même */ }
@@ -1489,9 +1522,18 @@ export async function handleBrainstormingAgentRespond(request, env) {
           // deviner + IMPOSER, jamais suggérer). On met la citation exacte
           // du tour précédent SOUS LES YEUX de l'agent avec obligation d'y
           // répondre en phrase 1.
-          const rebound = (previousTurn && previousAgent)
-            ? `RÉAGIS D'ABORD À CECI — ${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 220)} »\nTa PHRASE 1 le PROLONGE ou le CONTREDIT en nommant ${previousAgent.name} (jamais de validation polie). Ensuite seulement, ton angle.\n\n`
+          // Voix du client (fix test live 2 : la correction « Keynapse = carte
+          // mentale » était IGNORÉE — Strategic re-proposait ses angles). Quand
+          // le dernier message est du client, c'est LUI la vérité prioritaire :
+          // même leçon que la langue du Smart Agent — avec Mistral, on IMPOSE
+          // la consigne sous les yeux, on ne compte pas sur l'historique.
+          const lastTurn = localHistory[localHistory.length - 1] || null;
+          const clientNote = (lastTurn && lastTurn.agent_id === 'user')
+            ? `LE CLIENT VIENT DE DIRE : « ${String(lastTurn.content).slice(0, 300)} »\nC'est la VÉRITÉ PRIORITAIRE — elle PRÉVAUT sur le brief et sur tout ce que la table a dit avant. Ta PHRASE 1 en tient compte EXPLICITEMENT ; ABANDONNE toute piste qu'elle invalide (ne les re-propose pas).\n\n`
             : '';
+          const rebound = clientNote || ((previousTurn && previousAgent)
+            ? `RÉAGIS D'ABORD À CECI — ${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 220)} »\nTa PHRASE 1 le PROLONGE ou le CONTREDIT en nommant ${previousAgent.name} (jamais de validation polie). Ensuite seulement, ton angle.\n\n`
+            : '');
           let triggerContent;
           if (currentAgentId === 'gest') {
             // Socle Gest — prompt piloté par la PHASE de tour (ouverture / crible).
@@ -1500,12 +1542,12 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - Phrase 1 : ce qui, dans ce qui vient d'être dit, TIENT face au terrain réel (nomme la piste).
 - Phrase 2 : ce qui SE HEURTE au réel connu (une contrainte concrète : coût, délai, ce qui a déjà échoué ici) — SANS enterrer l'idée.
 - Phrase 3 (optionnelle) : la frontière à explorer (« hors de ce qu'on sait, donc à tester », JAMAIS un veto).
-- INTERDIT : refaire la synthèse (ce n'est pas ton job), théoriser, valider poliment, tuer une idée neuve parce qu'elle sort du connu.`;
+- INTERDIT : refaire la synthèse (ce n'est pas ton job), théoriser, valider poliment, tuer une idée neuve parce qu'elle sort du connu, RÉPÉTER ta note d'ouverture ou toute phrase déjà dite — ton crible porte UNIQUEMENT sur ce que la table vient de produire.`;
             } else {
               triggerContent = `Tu prends la parole juste après le cadrage, comme expert maison qui connaît le terrain. Tu ANCRES sans RÉTRÉCIR. MAX 3 phrases :
 - Phrase 1-2 : UNE note de contexte terrain utile (ce qui est vrai ici : une contrainte, un fait d'usage, ce qui a déjà marché/coincé) — factuel, concret.
 - Phrase 3 : rends la main à la table SANS imposer d'angle ni fermer la question (la divergence doit rester ouverte).
-- INTERDIT : cadrer/orienter le débat vers une seule direction, donner des idées créatives (pas ton rôle), théoriser.`;
+- INTERDIT : cadrer/orienter le débat vers une seule direction, donner des idées créatives (pas ton rôle), théoriser, répéter quoi que ce soit que tu aurais déjà dit dans cette discussion.`;
             }
           } else if (ideation) {
             // ── MODE IDÉATION : l'équipe PRODUIT des candidats et converge ──
@@ -1515,15 +1557,15 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - Phrases 2-3 : LANCE immédiatement 3 candidats concrets et NOMMÉS (de vraies propositions, pas des descriptions).
 - INTERDIT : théoriser sur ce que le livrable "devrait évoquer", citer un agent, "Bonjour".`;
             } else if (isStrategic) {
-              triggerContent = `IDÉATION en cours. Tu RECADRES pour faire converger. MAX 3 phrases :
+              triggerContent = `${clientNote}IDÉATION en cours. Tu RECADRES pour faire converger. MAX 3 phrases :
 - Phrase 1 : pointe les 1-2 directions les plus prometteuses parmi les candidats déjà sur la table (nomme l'agent dont la piste tient le mieux).
 - Phrase 2 : écarte la piste la plus faible (dis pourquoi en 4 mots).
 - Phrase 3 : relance 2 NOUVEAUX candidats nommés dans la meilleure direction.
-- INTERDIT : validation polie, théorie abstraite.`;
+- INTERDIT : validation polie, théorie abstraite, re-proposer un candidat déjà écarté ou déjà cité.`;
             } else {
               triggerContent = `${rebound}Demande d'IDÉATION. Tu interviens comme ${agent.name} (${agent.role}). MAX 3 phrases :
 - Puis propose 3 CANDIDATS concrets et NOMMÉS vus depuis TON prisme de ${agent.role} (ton angle colore le STYLE des propositions).
-- INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, valider poliment, paraphraser. DONNE DE VRAIS NOMS, directement utilisables.`;
+- INTERDIT ABSOLU : théoriser sur ce que le nom "devrait" être, valider poliment, paraphraser, répéter un candidat déjà proposé. DONNE DE VRAIS NOMS, directement utilisables.`;
             }
           } else if (isFirstTurn) {
             triggerContent = `Le brief vient d'être posé. OUVRE la discussion en MAX 3 PHRASES.
@@ -1532,12 +1574,12 @@ export async function handleBrainstormingAgentRespond(request, env) {
 - Phrase 3 : Pose UNE question stratégique précise qui appelle un type d'expertise (ex. "où se cache l'audience qui paierait DÈS LE PREMIER JOUR ?", "quel angle marque résiste à 5 ans ?").
 - INTERDIT : citer un agent par son nom, généraliser le brief, "Bonjour", "Excellente question".`;
           } else if (isStrategic) {
-            triggerContent = `Tu interviens comme Strategic Lead pour RE-CADRER après un échange. CONTRAINTES :
+            triggerContent = `${clientNote}Tu interviens comme Strategic Lead pour RE-CADRER après un échange. CONTRAINTES :
 - MAX 3 phrases.
 - Phrase 1 : POINTE LA TENSION qui émerge (ex. "Deux directions se dessinent : X vs Y").
 - Phrase 2 : ARBITRE ou tranche : laquelle prioriser et pourquoi.
 - Phrase 3 : Pose UNE question précise qui ouvre l'étape suivante.
-- INTERDIT : citer un agent par son nom, "X a raison", validation polie, résumé creux.`;
+- INTERDIT : citer un agent par son nom, "X a raison", validation polie, résumé creux, re-proposer un angle déjà avancé (surtout un angle que le client a invalidé).`;
           } else {
             const directive = AGENT_BEHAVIOR_DIRECTIVES[currentAgentId] || { angle: 'apporte ton angle propre', forbid: '' };
             triggerContent = `${rebound}Tu interviens comme ${agent.name} (${agent.role}). CONTRAINTES ABSOLUES :
@@ -1552,6 +1594,7 @@ INTERDICTIONS DE FORMULATION (le post-process serveur tronque ou rejette sinon)
 - JAMAIS commencer par "Ce qui vient d'être dit", "Cela me fait penser", "Cela me rappelle", "Je propose de", "Nous devrions", "Nous pourrions". Démarre par TON ANGLE concret OU par l'interpellation directe de l'agent précédent.
 - JAMAIS valider poliment ("X a raison", "Je rejoins Y", "Comme Z l'a dit"). Si tu cites un agent, c'est pour le CONTREDIRE ou PROLONGER, jamais pour l'approuver.
 - JAMAIS paraphraser le précédent — apporte UN ÉLÉMENT QUI N'A PAS ÉTÉ DIT.
+- JAMAIS répéter une phrase ou un argument que TOI ou un autre avez déjà prononcé dans la discussion (relis l'historique) — du NEUF, ou change d'angle.
 
 INTERACTION (c'est un débat vivant, pas des monologues)
 - Tu PEUX et tu DOIS interpeller les autres agents par leur nom pour rebondir/contredire ("Non, l'angle de tel agent ignore…", "Là où tel autre s'arrête, je pousse…").
@@ -1699,6 +1742,14 @@ POSTURE
             turns_total: tableCap,
           });
 
+          // Le crible vient d'être livré → clôture INCONDITIONNELLE (le crible
+          // est le dernier mot ; sans ce break, la redondance pouvait se
+          // réarmer et relancer des tours après lui — vu au test live 2).
+          if (gestPhase === 'close') {
+            completeReason = pendingCloseReason || 'max_turns';
+            break;
+          }
+
           // Conditions d'arrêt
           let stopReason = null;
           if (!isAuto)                                     stopReason = 'single';
@@ -1711,7 +1762,8 @@ POSTURE
             // crible du réel (un tour de plus). Jamais en mode 1-agent.
             if (isAuto && gestInvited && !pendingGestClose && gestSpokeThisRound() < 2 && localHistory.length) {
               pendingGestClose = true;
-              continue;   // le prochain tour = crible du Gest, puis on clôture
+              pendingCloseReason = stopReason;
+              continue;   // le prochain tour = crible du Gest, puis clôture forcée
             }
             completeReason = stopReason;
             break;

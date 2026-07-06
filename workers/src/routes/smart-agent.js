@@ -158,17 +158,49 @@ export function gapMergeTarget(matches, minScore = GAP_MERGE_MIN) {
 // Exportées (pures) : testées par scripts/test-smart-agent-search.mjs.
 // ftsMatchQuery : tokens nettoyés (accents pliés — le tokenizer unicode61
 // de FTS5 plie aussi les siens), quotés, joints par OR. null si vide.
+// Stopwords français (forme PLIÉE, post-NFKD : « où »→ou, « très »→tres…).
+// Leçon du Gest Brainstorming (2026-07-06) : la requête gardait les 8 PREMIERS
+// mots du texte, stopwords compris — « Je voudrai faire un Post pour LinkedIn
+// au… » consommait toute la fenêtre et le nom du produit (10e mot) n'atteignait
+// JAMAIS l'index → dossier hors-sujet. On filtre les mots-outils pour que la
+// fenêtre ne porte que des mots discriminants.
+const FTS_STOPWORDS = new Set([
+  'le','la','les','un','une','des','du','de','au','aux','et','ou','mais','donc','car','ni','or',
+  'je','tu','il','elle','on','nous','vous','ils','elles','se','sa','son','ses','mon','ma','mes',
+  'ton','ta','tes','notre','votre','leur','leurs','ce','cet','cette','ces','qui','que','quoi','dont',
+  'quel','quelle','quels','quelles','est','sont','suis','es','sommes','etes','etait','etaient',
+  'sera','seront','etre','ai','as','avons','avez','ont','avait','avaient','aura','auront','avoir',
+  'pour','par','sur','sous','dans','en','vers','avec','sans','chez','entre','depuis','pendant',
+  'ne','pas','plus','moins','tres','trop','peu','tout','toute','tous','toutes',
+  'si','oui','non','comme','aussi','alors','ainsi','deja','encore',
+  'faire','fait','faut','veux','veut','voudrais','voudrai','peux','peut','puis',
+]);
+
 export function ftsMatchQuery(q) {
-  const tokens = String(q || '')
+  const raw = String(q || '')
     .toLowerCase()
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')              // plie l'accent SANS couper le mot (é → e+◌́ → e)
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')   // neutralise opérateurs FTS et ponctuation
     .split(/\s+/)
-    .filter(t => t.length >= 2)
-    .slice(0, 8);
-  if (!tokens.length) return null;
-  return tokens.map(t => `"${t}"`).join(' OR ');
+    .filter(t => t.length >= 2);
+  // Dédup (ordre préservé) — un brief répète souvent le nom du produit.
+  const seen = new Set();
+  const dedup = [];
+  for (const t of raw) { if (!seen.has(t)) { seen.add(t); dedup.push(t); } }
+  let kept = dedup.filter(t => !FTS_STOPWORDS.has(t));
+  // Requête 100 % mots-outils (ex. « tout ») : repli sur l'ancien comportement
+  // plutôt que zéro résultat.
+  if (!kept.length) kept = dedup;
+  // Fenêtre élargie 8 → 12 ; si ça déborde encore, privilégie les mots les
+  // plus longs (heuristique : longs = discriminants — noms propres, métier).
+  if (kept.length > 12) {
+    const byLen = [...kept].sort((a, b) => b.length - a.length).slice(0, 12);
+    const keep = new Set(byLen);
+    kept = kept.filter(t => keep.has(t));
+  }
+  if (!kept.length) return null;
+  return kept.map(t => `"${t}"`).join(' OR ');
 }
 
 // rrfFuse : lists = tableaux d'ids classés par pertinence décroissante.
@@ -1311,22 +1343,38 @@ export async function handleGapStructure(request, env, gapId) {
 //    l'agent). vaultIds = coffres LUS (privé ∪ partagés du dossier,
 //    SA-4.4). Retourne des LIGNES brutes (rows D1) + la provenance ;
 //    les handlers façonnent la sortie.
-async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [] } = {}) {
+async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [], focusMatches = [] } = {}) {
   // ── Liste lexicale (FTS5 — index global ; le cloisonnement par coffre
   //    est appliqué à la jointure D1 ci-dessous via vault_id).
+  const _ftsList = async (m) => {
+    const { results } = await env.DB.prepare(`
+      SELECT unit_id, bm25(kortex_units_fts) AS rank
+        FROM kortex_units_fts
+       WHERE kortex_units_fts MATCH ?
+       ORDER BY rank
+       LIMIT ${FETCH_TOPK}
+    `).bind(m).all();
+    return results.map(r => r.unit_id);
+  };
   let lexIds = [];
   const match = ftsMatchQuery(q);
   if (match) {
+    try { lexIds = await _ftsList(match); }
+    catch (_) { /* requête FTS rejetée → liste lexicale vide */ }
+  }
+  // ── Listes lexicales FOCUS (optionnelles — fix dossier Gest 2026-07-06) :
+  //    sur un texte long multi-thèmes, bm25 « plat » noie les noms de produits
+  //    sous les mots d'action. L'appelant fournit UNE requête MATCH PAR nom
+  //    propre du brief : chaque produit domine SA liste, et la fusion RRF
+  //    équilibre (validé sur le brief test : mono-liste ⇒ Missive trustait
+  //    6/9 rangs ; par-terme ⇒ 3 fiches Keynapse descriptives au top 8).
+  //    [] (défaut) ⇒ recherche du pad et chat agent strictement inchangés.
+  const focusLists = [];
+  for (const fm of (Array.isArray(focusMatches) ? focusMatches.slice(0, 4) : [])) {
     try {
-      const { results } = await env.DB.prepare(`
-        SELECT unit_id, bm25(kortex_units_fts) AS rank
-          FROM kortex_units_fts
-         WHERE kortex_units_fts MATCH ?
-         ORDER BY rank
-         LIMIT ${FETCH_TOPK}
-      `).bind(match).all();
-      lexIds = results.map(r => r.unit_id);
-    } catch (_) { /* requête FTS rejetée → liste lexicale vide */ }
+      const ids = await _ftsList(fm);
+      if (ids.length) focusLists.push(ids);
+    } catch (_) { /* focus rejeté → ignoré */ }
   }
 
   // ── Liste sémantique (Vectorize). Un coffre = un namespace (tenant::vault) ;
@@ -1354,7 +1402,7 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [] } =
   // ── Fusion RRF + jointure D1 (revérifie tenant + COFFRES + statut validé).
   //    On fuse plus large car le filtre vault_id écarte ensuite les fiches
   //    d'autres coffres remontées par l'index lexical global.
-  const fused = rrfFuse([lexIds, vecIds], vaultIds.length ? topk * 2 : topk);
+  const fused = rrfFuse([lexIds, ...focusLists, vecIds], vaultIds.length ? topk * 2 : topk);
   let hits = [];
   if (fused.length) {
     const ph = fused.map(() => '?').join(',');
@@ -1391,7 +1439,7 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [] } =
 // (le socle reste fonctionnel si le savoir manque). reason ∈ no-agent /
 // no-query / not-entitled / no-tenant / agent-not-found / empty-vault /
 // no-hits / error.
-export async function kortexGroundingForGest(env, request, claims, { agentId, query, topk = 4 } = {}) {
+export async function kortexGroundingForGest(env, request, claims, { agentId, query, topk = 4, focusTerms = [] } = {}) {
   try {
     if (!agentId || typeof agentId !== 'string')                return { ok: false, reason: 'no-agent' };
     if (!query || typeof query !== 'string' || query.trim().length < 3) return { ok: false, reason: 'no-query' };
@@ -1409,7 +1457,13 @@ export async function kortexGroundingForGest(env, request, claims, { agentId, qu
     const agentName = (ar[0].name || 'Expert maison').slice(0, 80);
     const vaultIds = await _vaultsForAgent(env, tenant, agentId);
     if (!vaultIds.length) return { ok: false, reason: 'empty-vault', agentName };
-    const { hits } = await _retrieve(env, tenant, query.trim().slice(0, 500), { topk, vaultIds });
+    // focusTerms (noms propres du brief) → requête MATCH resserrée : sur un
+    // brief long, c'est elle qui fait remonter les fiches DU produit nommé.
+    const focusMatches = (Array.isArray(focusTerms) ? focusTerms : [])
+      .map(t => String(t).toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(t => t.length >= 3).slice(0, 4)
+      .map(t => `"${t}"`);   // UNE requête MATCH par nom propre (cf. _retrieve)
+    const { hits } = await _retrieve(env, tenant, query.trim().slice(0, 500), { topk, vaultIds, focusMatches });
     if (!hits.length) return { ok: false, reason: 'no-hits', agentName };
     // Bloc compact et borné (le prompt du Gest a un budget serré).
     const grounding = hits.map((h, i) => {
@@ -1417,7 +1471,10 @@ export async function kortexGroundingForGest(env, request, claims, { agentId, qu
       const b = String(h.row?.body_text || '').replace(/\s+/g, ' ').trim().slice(0, 240);
       return `${i + 1}. ${t ? t + ' — ' : ''}${b}`;
     }).join('\n');
-    return { ok: true, grounding, agentName, count: hits.length };
+    // titles = transparence côté client (le feed affiche CE QUI a été convoqué
+    // — leçon des 2 tests live : la dérive silencieuse rend le diagnostic aveugle).
+    const titles = hits.map(h => String(h.row?.title || '').replace(/\s+/g, ' ').trim().slice(0, 80)).filter(Boolean);
+    return { ok: true, grounding, agentName, count: hits.length, titles };
   } catch (_) {
     return { ok: false, reason: 'error' };
   }

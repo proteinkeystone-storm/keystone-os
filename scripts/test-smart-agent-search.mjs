@@ -24,8 +24,10 @@ function check(name, cond) {
 }
 
 console.log('── ftsMatchQuery ──');
-check('français + apostrophes → tokens quotés OR',
-  ftsMatchQuery("Quels sont les horaires d'ouverture ?") === '"quels" OR "sont" OR "les" OR "horaires" OR "ouverture"');
+check('français + apostrophes → tokens quotés OR, stopwords filtrés (fix Gest 2026-07-06)',
+  ftsMatchQuery("Quels sont les horaires d'ouverture ?") === '"horaires" OR "ouverture"');
+check('le nom du produit en 10e position atteint la requête (cause racine dossier hors-sujet)',
+  (ftsMatchQuery("Je voudrai faire un Post pour LinkedIn au sujet de l'application Keystone Keynapse") || '').includes('"keynapse"'));
 // NB : « œ » n'a PAS de décomposition NFKD — il reste « œ » à l'indexation
 // FTS5 comme à la requête (cohérent des deux côtés = match garanti).
 check('accents pliés (NFKD) — désactivée → desactivee ; œ conservé tel quel',
@@ -34,8 +36,10 @@ check('caractères spéciaux FTS neutralisés (pas d\'injection MATCH)',
   ftsMatchQuery('test* AND "x" NEAR(') === '"test" OR "and" OR "near"');
 check('vide / trop court → null',
   ftsMatchQuery('a !') === null && ftsMatchQuery('') === null);
-check('cap à 8 tokens',
-  (ftsMatchQuery('un deux trois quatre cinq six sept huit neuf dix') || '').split(' OR ').length === 8);
+check('cap à 12 tokens (fenêtre élargie), « un » filtré (stopword)',
+  (ftsMatchQuery('un deux trois quatre cinq six sept huit neuf dix') || '').split(' OR ').length === 9);
+check('requête 100 % stopwords → repli ancien comportement (pas de zéro résultat)',
+  ftsMatchQuery('tout pour le tout') === '"tout" OR "pour" OR "le"');
 
 console.log('── rrfFuse ──');
 {

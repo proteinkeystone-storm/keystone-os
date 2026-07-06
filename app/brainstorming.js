@@ -1064,6 +1064,25 @@ async function _callOrchestration(panel, singleAgentId = null) {
           break;
         }
 
+        // P2.2 Gest — transparence du savoir convoqué : le worker dit CE QUE
+        // le dossier maison contient (titres de fiches) ou POURQUOI il est
+        // vide. Fini le diagnostic à l'aveugle (leçon des tests live 1 & 2).
+        case 'gest_dossier': {
+          if (evt.ok && Array.isArray(evt.titles) && evt.titles.length) {
+            const shown = evt.titles.slice(0, 4).join(' · ');
+            const extra = evt.titles.length > 4 ? ` (+${evt.titles.length - 4})` : '';
+            _appendOrchestrationNote(panel, `Gest — savoir maison convoqué${evt.agent_name ? ` (${evt.agent_name})` : ''} : ${shown}${extra}`);
+          } else if (!evt.ok) {
+            const why = ({
+              'no-hits':      'aucune fiche ne correspond à ce sujet',
+              'empty-vault':  'le coffre de cet agent est vide',
+              'not-entitled': 'savoir maison réservé au plan MAX',
+            })[evt.reason] || 'savoir maison indisponible';
+            _appendOrchestrationNote(panel, `Gest — ${why} : il parlera en expert de terrain, sans fiches.`);
+          }
+          break;
+        }
+
         // Sprint 3 — Réaction emoji posée par un agent sur le message
         // précédent. Envoyé par le Worker AVANT le prochain agent_start.
         case 'agent_react': {
