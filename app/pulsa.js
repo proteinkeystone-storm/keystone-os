@@ -61,6 +61,8 @@ let _state = _initState();
 let _root  = null;
 let _currentStepId = 'structure';
 let _fieldTypeMenu = null; // { sectionId } quand ouvert
+let _typePreviewEl = null;    // popup d'aperçu (survol) — réutilisé, sur <body>
+let _typePreviewTimer = null; // délai avant affichage de l'aperçu
 let _lastSavedAt = null;
 let _saveIndicatorTimer = null;
 
@@ -308,6 +310,10 @@ function _buildShell() {
   _root.addEventListener('input', _onInput);
   _root.addEventListener('change', _onInput);
   _root.addEventListener('keydown', _onKeydown);
+  // Aperçu d'un type de champ au survol (desktop) / focus clavier
+  _root.addEventListener('pointerover', _onTypeHover);
+  _root.addEventListener('pointerout', _onTypeHoverOut);
+  _root.addEventListener('focusin', _onTypeFocus);
   bindRatingButton(_root, WORKSPACE_META.id);
   bindHelpButton(_root, WORKSPACE_META.id);
   bindBurger(_root);
@@ -405,6 +411,8 @@ function _onInput(e) {
     if (file) _uploadLogo(file);
     return;
   }
+  // Recherche dans la modale « Ajouter un champ » — filtrage live, pas de state
+  if (e.target.id === 'pulsa-type-search') { _filterFieldTypes(e.target.value); return; }
   const t = e.target.closest('[data-bind]');
   if (t) {
     _applyBinding(t);
@@ -414,10 +422,21 @@ function _onInput(e) {
 }
 
 function _onKeydown(e) {
-  if (e.key === 'Escape') {
-    if (_fieldTypeMenu) return _closeModal();
-    return closePulsa();
+  if (_fieldTypeMenu) {
+    const search = _root?.querySelector('#pulsa-type-search');
+    // Entrée dans la recherche → ajoute le 1er type visible
+    if (e.key === 'Enter' && search && document.activeElement === search) {
+      const first = _root.querySelector('.pulsa-type-card:not([hidden])');
+      if (first) { e.preventDefault(); return _addField(_fieldTypeMenu.sectionId, first.dataset.type); }
+      return;
+    }
+    // Échap : d'abord vider la recherche, sinon fermer la modale
+    if (e.key === 'Escape') {
+      if (search && search.value) { search.value = ''; _filterFieldTypes(''); return; }
+      return _closeModal();
+    }
   }
+  if (e.key === 'Escape') return closePulsa();
 }
 
 /**
@@ -956,6 +975,7 @@ function _openFieldTypeMenu(sectionId) {
 }
 
 function _closeModal() {
+  _hideTypePreview();
   _fieldTypeMenu = null;
   const m = _root?.querySelector('[data-slot="modal"]');
   if (m) { m.hidden = true; m.innerHTML = ''; }
@@ -2299,6 +2319,157 @@ function _renderField(sectionId, field) {
   `;
 }
 
+// ── Recherche de types de champ (tolérante : label + sous-titre + synonymes) ──
+// Mots-clés additionnels par type : le client ne connaît pas notre vocabulaire.
+const _TYPE_KEYWORDS = {
+  'text-short'  : 'nom prenom texte input ligne reponse question',
+  'text-long'   : 'paragraphe message commentaire zone texte area description avis',
+  'email'       : 'mail e-mail courriel adresse contact',
+  'website'     : 'url lien site web http adresse',
+  'social-links': 'reseaux sociaux instagram linkedin facebook twitter x tiktok youtube',
+  'chips'       : 'boutons choix unique tag etiquette pilule pastille',
+  'cards'       : 'cartes choix multiple options tool selection',
+  'yes-no'      : 'oui non binaire booleen switch vrai faux',
+  'rank-top3'   : 'classement priorite ordre top podium preferences',
+  'date'        : 'date calendrier jour anniversaire rendez-vous rdv echeance',
+  'amount'      : 'montant prix euro argent monnaie budget devise somme cout',
+  'url-external': 'lien externe fichier wetransfer drive dropbox vimeo youtube upload hd media',
+  'signature'   : 'signature signer manuscrite paraphe accord consentement',
+  'nps'         : 'nps recommandation note satisfaction score promoteur',
+  'slider'      : 'curseur echelle slider glissiere valeur jauge',
+  'image-picker': 'image visuel photo mood ambiance style choix image',
+  'likert'      : 'likert accord echelle satisfaction opinion enquete',
+};
+
+function _normSearch(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function _typeHaystack(type, def) {
+  return _normSearch([def.label, def.sub, _TYPE_KEYWORDS[type] || ''].join(' '));
+}
+
+function _filterFieldTypes(q) {
+  const m = _root?.querySelector('[data-slot="modal"]');
+  if (!m) return;
+  const nq = _normSearch(String(q).trim());
+  let visible = 0;
+  m.querySelectorAll('.pulsa-type-card').forEach(card => {
+    const hit = !nq || (card.dataset.search || '').includes(nq);
+    card.hidden = !hit;
+    if (hit) visible++;
+  });
+  m.querySelectorAll('.pulsa-type-group').forEach(g => {
+    g.hidden = !g.querySelector('.pulsa-type-card:not([hidden])');
+  });
+  const nr = m.querySelector('.pulsa-type-noresult');
+  if (nr) nr.hidden = !(nq && visible === 0);
+  _hideTypePreview();
+}
+
+// ── Aperçu au survol (desktop) / focus clavier ──────────────────────
+function _hoverOk() {
+  try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+  catch { return false; }
+}
+function _ensureTypePreview() {
+  if (!_typePreviewEl) {
+    _typePreviewEl = document.createElement('div');
+    _typePreviewEl.className = 'pulsa-type-preview';
+    _typePreviewEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(_typePreviewEl);
+  }
+  return _typePreviewEl;
+}
+function _showTypePreview(card) {
+  const type = card?.dataset?.type;
+  const def = FIELD_TYPES[type];
+  if (!def) return;
+  const pv = _ensureTypePreview();
+  pv.innerHTML =
+    `<div class="pulsa-type-preview-h">${_escape(def.label)}</div>` +
+    `<div class="pulsa-type-preview-body">${_fieldPreviewHTML(type, def)}</div>`;
+  pv.style.visibility = 'hidden';
+  pv.classList.add('is-visible');
+  // Positionnement : à droite de la carte, bascule à gauche si ça déborde,
+  // clampé au viewport (aperçu sur <body>, donc jamais rogné par la modale).
+  const cr = card.getBoundingClientRect();
+  const pw = pv.offsetWidth, ph = pv.offsetHeight, gap = 10, pad = 8;
+  let left = cr.right + gap;
+  if (left + pw > window.innerWidth - pad) left = cr.left - gap - pw;
+  left = Math.max(pad, Math.min(left, window.innerWidth - pw - pad));
+  let top = cr.top + cr.height / 2 - ph / 2;
+  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
+  pv.style.left = Math.round(left) + 'px';
+  pv.style.top = Math.round(top) + 'px';
+  pv.style.visibility = '';
+}
+function _hideTypePreview() {
+  clearTimeout(_typePreviewTimer);
+  if (_typePreviewEl) _typePreviewEl.classList.remove('is-visible');
+}
+function _onTypeHover(e) {
+  if (!_fieldTypeMenu || !_hoverOk()) return;
+  const card = e.target.closest?.('.pulsa-type-card');
+  if (!card) return;
+  clearTimeout(_typePreviewTimer);
+  _typePreviewTimer = setTimeout(() => _showTypePreview(card), 600);
+}
+function _onTypeHoverOut(e) {
+  if (!_fieldTypeMenu) return;
+  const card = e.target.closest?.('.pulsa-type-card');
+  if (!card) return;
+  if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+  _hideTypePreview();
+}
+function _onTypeFocus(e) {
+  if (!_fieldTypeMenu) return;
+  const card = e.target.closest?.('.pulsa-type-card');
+  if (card) { clearTimeout(_typePreviewTimer); _showTypePreview(card); }
+  else _hideTypePreview();
+}
+
+// Mini-rendu flat représentatif d'un type de champ (aperçu, non interactif).
+function _fieldPreviewHTML(type, def) {
+  const d = def.defaults || {};
+  const esc = _escape;
+  const line = (txt) => `<div class="tpv-input">${esc(txt || '')}</div>`;
+  switch (type) {
+    case 'text-short':   return line(d.placeholder || 'Votre réponse');
+    case 'email':        return line(d.placeholder || 'prenom.nom@exemple.fr');
+    case 'website':      return line(d.placeholder || 'https://votre-site.com');
+    case 'url-external': return line(d.placeholder || 'https://wetransfer.com/…');
+    case 'text-long':
+      return `<div class="tpv-textarea">${esc(d.placeholder || 'Votre réponse détaillée')}</div>` +
+             `<div class="tpv-counter">0 / ${d.max_chars || 500}</div>`;
+    case 'amount':
+      return `<div class="tpv-input tpv-amount"><span>0,00</span><em>${esc(d.currency || 'EUR')}</em></div>`;
+    case 'date':
+      return `<div class="tpv-input tpv-date">${icon('history', 15)}<span>JJ / MM / AAAA</span></div>`;
+    case 'yes-no':
+      return `<div class="tpv-btns"><span class="tpv-btn tpv-btn-on">${esc(d.yes_label || 'Oui')}</span><span class="tpv-btn">${esc(d.no_label || 'Non')}</span></div>`;
+    case 'chips':
+      return `<div class="tpv-chips">${(d.choices || []).slice(0, 3).map((c, i) => `<span class="tpv-chip${i === 0 ? ' tpv-chip-on' : ''}">${esc(c.label)}</span>`).join('')}</div>`;
+    case 'cards':
+      return `<div class="tpv-cards">${(d.choices || []).slice(0, 2).map(c => `<span class="tpv-card2">${icon(c.ico || 'package', 16)}<b>${esc(c.label)}</b></span>`).join('')}</div>`;
+    case 'image-picker':
+      return `<div class="tpv-imgs"><span class="tpv-img">${icon('image', 18)}</span><span class="tpv-img tpv-img-on">${icon('image', 18)}</span></div>`;
+    case 'rank-top3':
+      return `<div class="tpv-rank">${[1, 2, 3].map(n => `<div class="tpv-rank-row"><em>${n}</em><span>${esc(d.placeholder || 'Priorité')}</span></div>`).join('')}</div>`;
+    case 'likert':
+      return `<div class="tpv-likert">${(d.choices || []).map((c, i) => `<span class="tpv-dot${i === 2 ? ' tpv-dot-on' : ''}"></span>`).join('')}</div><div class="tpv-scale-lbl"><span>Pas d'accord</span><span>Tout à fait</span></div>`;
+    case 'nps':
+      return `<div class="tpv-nps">${Array.from({ length: 11 }, (_, i) => `<span class="tpv-nps-n${i === 8 ? ' tpv-nps-on' : ''}">${i}</span>`).join('')}</div>`;
+    case 'slider':
+      return `<div class="tpv-slider"><span class="tpv-slider-fill"></span><span class="tpv-slider-knob"></span></div>`;
+    case 'signature':
+      return `<div class="tpv-sign">${icon('edit', 16)}<span>Signez ici</span></div>`;
+    case 'social-links':
+      return `<div class="tpv-social">${(d.networks || []).filter(n => n.enabled).slice(0, 3).map(n => `<div class="tpv-social-row"><b>${esc(n.label)}</b><span>${esc(n.placeholder)}</span></div>`).join('')}</div>`;
+    default:
+      return `<div class="tpv-hint">${esc(def.sub || '')}</div>`;
+  }
+}
+
 function _renderFieldTypeMenu() {
   const m = _root?.querySelector('[data-slot="modal"]');
   if (!m) return;
@@ -2310,7 +2481,8 @@ function _renderFieldTypeMenu() {
         <h3 class="pulsa-type-group-title">${g.label}</h3>
         <div class="pulsa-type-grid">
           ${types.map(([type, def]) => `
-            <button class="pulsa-type-card" data-act="pick-field-type" data-type="${type}">
+            <button class="pulsa-type-card" data-act="pick-field-type" data-type="${type}"
+                    data-search="${_escape(_typeHaystack(type, def))}">
               <span class="pulsa-type-card-ico">${icon(def.ico, 20)}</span>
               <span class="pulsa-type-card-body">
                 <span class="pulsa-type-card-label">${def.label}</span>
@@ -2332,12 +2504,22 @@ function _renderFieldTypeMenu() {
           ${icon('x', 16)}
         </button>
       </header>
+      <div class="pulsa-type-search">
+        ${icon('search', 16)}
+        <input type="text" id="pulsa-type-search" class="pulsa-type-search-input"
+               placeholder="Rechercher un champ… (email, note, date…)"
+               autocomplete="off" spellcheck="false" aria-label="Rechercher un type de champ">
+      </div>
       <div class="pulsa-modal-body">
         ${groups}
+        <p class="pulsa-type-noresult" hidden>Aucun champ ne correspond à votre recherche.</p>
       </div>
     </div>
   `;
   m.hidden = false;
+  // Auto-focus de la recherche sur desktop uniquement (évite d'ouvrir le
+  // clavier logiciel sur mobile à chaque ajout de champ).
+  if (_hoverOk()) m.querySelector('#pulsa-type-search')?.focus();
 }
 
 function _renderAside() {
