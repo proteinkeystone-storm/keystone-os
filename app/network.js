@@ -33,6 +33,8 @@ const EASE = {
   cubic: t => 1 - Math.pow(1 - t, 3),
 };
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MOBILE_BP = 820;   // en-dessous : pas de 3ᵉ colonne, la catégorie ouvre une liste plein écran
+function _isMobile() { return (_stage ? _stage.getBoundingClientRect().width : window.innerWidth) < MOBILE_BP; }
 
 // ── Couche données (API worker + cache) ─────────────────────────
 const API_BASE  = 'https://keystone-os-api.keystone-os.workers.dev';
@@ -103,6 +105,9 @@ const timeouts = [];
 let _zoom = 1, _panX = 0, _panY = 0;
 let _drag = null;
 let _overlay = null, _popover = null;   // modale de formulaire / menu contextuel
+let _fiche = null, _ficheId = null, _ficheTabId = 'resume';   // fiche contact (NK-4)
+let _catList = null, _catListId = null;                        // liste catégorie plein écran (mobile)
+let _noteTimer = null;
 
 function later(fn, ms) { const t = setTimeout(fn, ms); timeouts.push(t); return t; }
 function clearTimers() { timeouts.forEach(clearTimeout); timeouts.length = 0; }
@@ -120,12 +125,13 @@ export function openNetwork(opts = {}) {
 export function closeNetwork() {
   if (!_root) return;
   clearTimers(); jobs.clear(); rafId = null;
-  _closePopover();
+  _closePopover(); clearTimeout(_noteTimer);
   document.removeEventListener('keydown', _onKey);
   window.removeEventListener('resize', _onResize);
   _root.remove();
   _root = _stage = _wires = _nodes = _scene = null;
-  _overlay = _popover = null;
+  _overlay = _popover = _fiche = _catList = null;
+  _ficheId = _catListId = null; _ficheTabId = 'resume';
   openCat = null; _zoom = 1; _panX = _panY = 0;
   document.body.style.overflow = '';
 }
@@ -236,14 +242,17 @@ function _dims() {
 }
 function layout() {
   const { w, h } = _dims();
-  const mobile = w < 700;
+  const mobile = w < MOBILE_BP;
+  if (mobile) {
+    // Mobile : « Vous » à gauche + pills catégories empilées, PAS de colonne
+    // contact (elle ouvre une liste plein écran). catX serré pour tenir l'écran.
+    return { you: { x: 44, y: h * .5 }, catX: 110, perX: 0, catGap: 66, perGap: 0, h, mobile };
+  }
   return {
-    you:  { x: mobile ? 54 : Math.max(90, w * .10), y: h * .5 },
-    catX: mobile ? Math.min(190, w * .38) : Math.max(300, w * .30),
-    perX: mobile ? Math.min(w - 225, 320) : Math.max(560, w * .30 + 330),
-    catGap: mobile ? 62 : 74,
-    perGap: mobile ? 62 : 66,
-    h, mobile
+    you:  { x: Math.max(90, w * .10), y: h * .5 },
+    catX: Math.max(300, w * .30),
+    perX: Math.max(560, w * .30 + 330),
+    catGap: 74, perGap: 66, h, mobile
   };
 }
 function bezier(x0, y0, x1, y1) {
@@ -641,6 +650,8 @@ async function _refresh(animated = false) {
     _writeCache(data);
     _cats = _buildCats(data.categories, data.contacts);
     render(animated);
+    if (_catListId) { const id = _catListId; _openCatList(id); }        // re-liste (contact ajouté/modifié)
+    if (_ficheId) { const c = _contactById(_ficheId); c ? _renderFiche(c) : _closeFiche(); }
     return true;
   } catch (e) { return false; }
 }
@@ -710,6 +721,139 @@ async function _moveCategory(id, dir) {
   } catch (err) { _toast('Réorganisation impossible', 'error'); }
 }
 
+// ══════════════════ NK-4 — LISTE MOBILE & FICHE CONTACT ══════════════════
+function _parseArr(v) { try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch (_) { return []; } }
+
+// ── Liste plein écran d'une catégorie (mobile : remplace la 3ᵉ colonne) ──
+function _openCatList(catId) {
+  const c = _cats.find(x => String(x.id) === String(catId));
+  if (!c) return;
+  _closeCatList();
+  _catListId = catId;
+  const rows = c._all || [];
+  const panel = document.createElement('div');
+  panel.className = 'nk-fullpanel';
+  panel.innerHTML =
+    `<div class="nk-fp-hd">
+       <button class="nk-fp-icon" data-act="nk-catlist-close" aria-label="Retour">${icon('chevron-left', 26)}</button>
+       <div class="nk-fp-title">${esc(c.label)} <span>${c.count}</span></div>
+       <button class="nk-fp-icon" data-act="nk-catlist-add" data-cat="${esc(catId)}" aria-label="Ajouter">${icon('plus', 22)}</button>
+     </div>
+     <div class="nk-fp-body">${rows.length
+      ? rows.map(ct => `<button class="nk-list-row" data-id="${esc(ct.id)}"><span class="nk-av" style="background:hsl(${hue(ct.name)} 42% 38% / .85)">${esc(initials(ct.name))}</span><span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>${icon('chevron-right', 18)}</button>`).join('')
+      : `<div class="nk-fp-empty">${icon('users', 44)}<p>Aucun contact dans « ${esc(c.label)} »</p><button class="nk-btn nk-btn-primary" data-act="nk-catlist-add" data-cat="${esc(catId)}">Ajouter un contact</button></div>`}</div>`;
+  _root.appendChild(panel);
+  requestAnimationFrame(() => panel.classList.add('nk-fullpanel-in'));
+  _catList = panel;
+}
+function _closeCatList() { if (_catList) { _catList.remove(); _catList = null; _catListId = null; } }
+
+// ── Fiche contact (panneau glissant desktop / plein écran mobile) ──
+const SHORTCUTS = [
+  { pad: 'O-SEC-001', icon: 'sceau',       t1: 'Envoyer',  t2: 'une Missive' },
+  { pad: 'A-COM-002', icon: 'kodex',       t1: 'Générer',  t2: 'un Brief' },
+  { pad: 'O-AGT-001', icon: 'smart-agent', t1: 'Ouvrir',   t2: 'Smart Agent' },
+  { pad: 'O-SOC-001', icon: 'user',        t1: 'Publier',  t2: 'pour ce client' },
+];
+const FICHE_TABS = [['resume', 'Résumé'], ['activite', 'Activité'], ['notes', 'Notes']];
+
+function _openFiche(contact) {
+  if (!contact || !contact.id) return;
+  _closeCatList();
+  _ficheId = contact.id; _ficheTabId = 'resume';
+  const el = document.createElement('div');
+  el.className = 'nk-fiche';
+  _root.appendChild(el);
+  _fiche = el;
+  requestAnimationFrame(() => el.classList.add('nk-fiche-open'));
+  _renderFiche(contact);
+}
+function _closeFiche() {
+  if (!_fiche) return;
+  const el = _fiche; _fiche = null; _ficheId = null;
+  el.classList.remove('nk-fiche-open');
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 260);
+}
+function _ficheTab(id) { _ficheTabId = id; const c = _contactById(_ficheId); if (c) _renderFiche(c); }
+
+function _actionBtn(ic, href, label) {
+  return href
+    ? `<a class="nk-fiche-act" href="${href}" aria-label="${label}">${icon(ic, 20)}</a>`
+    : `<span class="nk-fiche-act nk-fiche-act-off" aria-label="${label} indisponible">${icon(ic, 20)}</span>`;
+}
+function _chip(field, val, cls) {
+  return `<span class="nk-chip ${cls}">${esc(val)}<button class="nk-chip-x" data-act="nk-${field === 'roles' ? 'role' : 'tag'}-del" data-val="${esc(val)}" aria-label="Retirer">${icon('x', 12)}</button></span>`;
+}
+function _renderFiche(c) {
+  if (!_fiche) return;
+  const roles = _parseArr(c.roles), tags = _parseArr(c.tags);
+  const av = `<span class="nk-fiche-av" style="background:hsl(${hue(c.name)} 42% 38% / .9)">${esc(initials(c.name))}</span>`;
+  const badge = roles[0] ? `<span class="nk-fiche-badge">${esc(roles[0])}</span>` : `<span class="nk-fiche-badge nk-fiche-badge-soft">${KIND_LABELS[c.kind] || 'Contact'}</span>`;
+  const tabs = FICHE_TABS.map(([id, lbl]) => `<button class="nk-fiche-tab${id === _ficheTabId ? ' nk-sel' : ''}" data-act="nk-fiche-tab" data-tab="${id}">${lbl}</button>`).join('');
+
+  let body = '';
+  if (_ficheTabId === 'resume') {
+    body =
+      `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Activité récente</div><div class="nk-fiche-empty">${icon('history', 22)}<span>Le journal d'activité arrive bientôt.</span></div></div>
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Raccourcis</div><div class="nk-shortcuts">${SHORTCUTS.map(s => `<button class="nk-shortcut" data-act="nk-shortcut" data-pad="${s.pad}">${icon(s.icon, 20)}<span><b>${s.t1}</b>${s.t2}</span></button>`).join('')}</div></div>`;
+  } else if (_ficheTabId === 'notes') {
+    body = `<textarea class="nk-fiche-note" placeholder="Vos notes sur ${esc(c.name)}…" maxlength="8000">${esc(c.notes || '')}</textarea>`;
+  } else {
+    body = `<div class="nk-fiche-empty nk-fiche-empty-lg">${icon('history', 30)}<span>Le journal d'activité (appels, e-mails, RDV, devis…) arrive au prochain sprint.</span></div>`;
+  }
+
+  const tel = c.phone ? 'tel:' + encodeURIComponent(c.phone) : '';
+  const mail = c.email ? 'mailto:' + encodeURIComponent(c.email) : '';
+  const sms = c.phone ? 'sms:' + encodeURIComponent(c.phone) : '';
+
+  _fiche.innerHTML =
+    `<div class="nk-fiche-hd">
+       <button class="nk-fiche-x" data-act="nk-fiche-close" aria-label="Fermer">${icon('x', 18)}</button>
+       <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${badge}${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
+       <div class="nk-fiche-acts">
+         ${_actionBtn('phone', tel, 'Appeler')}${_actionBtn('mail', mail, 'E-mail')}${_actionBtn('message', sms, 'Message')}
+         <button class="nk-fiche-act" data-act="nk-fiche-edit" aria-label="Modifier">${icon('settings', 20)}</button>
+       </div>
+       <div class="nk-fiche-tabs">${tabs}</div>
+     </div>
+     <div class="nk-fiche-body">${body}</div>`;
+}
+
+async function _patchField(id, field, value) {
+  try {
+    await _api('/contact/' + id, { method: 'PATCH', body: { [field]: value } });
+    await _refresh();
+  } catch (e) { _toast('Enregistrement impossible', 'error'); }
+}
+async function _addChip(field) {
+  const c = _contactById(_ficheId); if (!c) return;
+  const v = prompt(field === 'roles' ? 'Ajouter un rôle' : 'Ajouter un tag');
+  if (!v || !v.trim()) return;
+  const arr = _parseArr(c[field]); const val = v.trim().slice(0, 40);
+  if (arr.includes(val)) return;
+  arr.push(val); _patchField(c.id, field, arr);
+}
+function _delChip(field, val) {
+  const c = _contactById(_ficheId); if (!c) return;
+  _patchField(c.id, field, _parseArr(c[field]).filter(x => x !== val));
+}
+async function _saveNote(id, text) {
+  try {
+    await _api('/contact/' + id, { method: 'PATCH', body: { notes: text } });
+    const c = _contactById(id); if (c) c.notes = text;
+    const cache = _readCache();
+    if (cache) { const cc = (cache.contacts || []).find(x => String(x.id) === String(id)); if (cc) { cc.notes = text; _writeCache(cache); } }
+  } catch (e) { /* silencieux : réessaie au prochain frappe */ }
+}
+async function _openShortcut(padId) {
+  // NK-6 ajoutera le pré-remplissage (opts.nkContact). Ici : ouverture simple.
+  // Fermer le workspace networK AVANT (piège z-index/overlay documenté).
+  closeNetwork();
+  try { const m = await import('./ui-renderer.js'); m.openTool(padId, {}); } catch (_) {}
+}
+
 // ── Événements ──────────────────────────────────────────────────
 function _onClick(e) {
   // Sélecteur d'icône (formulaire catégorie) — géré avant tout
@@ -730,13 +874,16 @@ function _onClick(e) {
   if (act === 'nk-cat-menu') { e.stopPropagation(); return _openCatMenu(actEl.dataset.cat, actEl); }
 
   const person = e.target.closest('.nk-person');
-  if (person && !actEl) return _openContactForm(_contactById(person.dataset.id) || {});   // interim (NK-4 = fiche)
+  if (person && !actEl) return _openFiche(_contactById(person.dataset.id));
+
+  const listRow = e.target.closest('.nk-list-row');
+  if (listRow && !actEl) return _openFiche(_contactById(listRow.dataset.id));
 
   const searchItem = e.target.closest('.nk-search-item');
-  if (searchItem) { _clearSearch(); return _openContactForm(_contactById(searchItem.dataset.id) || {}); }
+  if (searchItem) { const c = _contactById(searchItem.dataset.id); _clearSearch(); return _openFiche(c); }
 
   const catEl = e.target.closest('.nk-cat');
-  if (catEl && !actEl) return toggle(catEl.dataset.cat);
+  if (catEl && !actEl) return _isMobile() ? _openCatList(catEl.dataset.cat) : toggle(catEl.dataset.cat);
 
   if (!act) return;
   switch (act) {
@@ -753,6 +900,16 @@ function _onClick(e) {
     case 'nk-cat-del':     { _closePopover(); return _deleteCategory(actEl.dataset.cat || actEl.dataset.id); }
     case 'nk-cat-up':      { _closePopover(); return _moveCategory(actEl.dataset.cat, -1); }
     case 'nk-cat-down':    { _closePopover(); return _moveCategory(actEl.dataset.cat, +1); }
+    case 'nk-catlist-close': return _closeCatList();
+    case 'nk-catlist-add': return _openContactForm({ category_id: actEl.dataset.cat });
+    case 'nk-fiche-close': return _closeFiche();
+    case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
+    case 'nk-fiche-tab':   return _ficheTab(actEl.dataset.tab);
+    case 'nk-role-add':    return _addChip('roles');
+    case 'nk-role-del':    return _delChip('roles', actEl.dataset.val);
+    case 'nk-tag-add':     return _addChip('tags');
+    case 'nk-tag-del':     return _delChip('tags', actEl.dataset.val);
+    case 'nk-shortcut':    return _openShortcut(actEl.dataset.pad);
     case 'nk-zoom-in':     return _setZoom(_zoom * 1.15);
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
     case 'nk-zoom-reset':  return _setZoom(1);
@@ -770,16 +927,26 @@ function _onSubmit(e) {
 
 let _searchTimer = null;
 function _onInput(e) {
-  if (!e.target.classList || !e.target.classList.contains('nk-search-input')) return;
-  const v = e.target.value.trim();
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(() => _renderSearch(v), 120);
+  const cls = e.target.classList;
+  if (cls && cls.contains('nk-search-input')) {
+    const v = e.target.value.trim();
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => _renderSearch(v), 120);
+    return;
+  }
+  if (cls && cls.contains('nk-fiche-note')) {   // autosave des notes (debounce, sans re-render)
+    const id = _ficheId, val = e.target.value;
+    clearTimeout(_noteTimer);
+    _noteTimer = setTimeout(() => _saveNote(id, val), 700);
+  }
 }
 
 function _onKey(e) {
   if (e.key !== 'Escape') return;
   if (_popover) return _closePopover();
   if (_overlay)  return _closeOverlay();
+  if (_fiche)    return _closeFiche();
+  if (_catList)  return _closeCatList();
   const dd = _root && _root.querySelector('.nk-search-results');
   if (dd) return _clearSearch();
   if (openCat) return toggle(openCat);

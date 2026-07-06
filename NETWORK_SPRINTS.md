@@ -126,8 +126,22 @@ minimal, zéro fonctionnel encore.
 - État vide soigné (premier lancement : « Vous » seul + invite).
 - ✅ Test : parcours complet sans toucher au code.
 
-## NK-4 — Fiche contact (panneau glissant droite)
+## NK-4 — Fiche contact (panneau glissant droite)  ✅ CODÉ+DÉPLOYÉ 2026-07-07
 **But** : la fiche des maquettes, consultable et éditable.
+> Livré (déclenché par le retour iPhone de Stéphane : mobile cassé + fiche absente) :
+> **fiche** `_openFiche` — desktop = panneau glissant droite 400px ; mobile = plein
+> écran. Header (avatar initiales+teinte, nom, badge=1er rôle ou kind, entreprise,
+> fonction), actions tel:/mailto:/sms: + edit, onglets Résumé/Activité/Notes, RÔLES
+> & TAGS (chips add/remove via API), Activité = empty state (NK-5), RACCOURCIS 4
+> cartes (Missive/Brief/Smart Agent/Publier — ouverture simple, prefill=NK-6), Notes
+> textarea autosave debounce. Person/search/list click → fiche (plus le form interim).
+> **+ FIX MOBILE (NK-7 avancé)** : breakpoint 820px ; sous 820 la 3ᵉ colonne
+> n'existe plus (elle chevauchait — bug prod) → taper une catégorie ouvre une
+> **liste plein écran** `_openCatList` (maquette écran 2) → taper un contact = fiche
+> plein écran. Pills catégories : `max-width:calc(100vw-122px)` + label tronqué.
+> Pictos `phone`/`message` ajoutés au registre. SW v5.28.224, CSS ?v=4. Vérifié
+> preview desktop + mobile 375px (pills tiennent, liste, fiche) — 0 erreur.
+> **Front-only (worker déjà déployé)** → push main.
 - Panneau glissant droite (~400px desktop, plein écran mobile), ✕, n'écrase pas l'arbre.
 - En-tête : photo/initiales (avatar = initiales, teinte dérivée du nom), nom, badge
   rôle, entreprise, fonction.
