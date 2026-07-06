@@ -354,7 +354,8 @@ details.chlog{margin-top:10px}
 details.chlog summary{cursor:pointer;color:var(--muted);font-size:13px}
 .chlog li{font-size:13px;color:var(--muted);margin:4px 0}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
-footer a{color:inherit}
+footer a{color:inherit;text-decoration:none}
+footer a:hover{text-decoration:underline}
 .state{max-width:420px;margin:16vh auto;text-align:center;padding:0 20px}
 .state h1{font-weight:900;letter-spacing:-0.02em}
 .state input{width:100%;margin:10px 0;padding:12px;font-size:15px;text-align:center}
@@ -901,7 +902,7 @@ function render(){
   }
   const credit=meta.credit&&meta.credit.label;
   h+='<footer><span>'+(credit?'Direction artistique : '+esc(credit)+' · ':'')+'Version '+DATA.version+'</span>'+
-     '<span>'+esc((kit.settings&&kit.settings.footer)||'Réalisé par Protein Keystone Studio')+'</span></footer></div>';
+     '<span><a href="https://protein-keystone.com" target="_blank" rel="noopener noreferrer">'+esc((kit.settings&&kit.settings.footer)||'Réalisé par Protein Keystone Studio')+'</a></span></footer></div>';
 
   app.innerHTML=h;
   bind(variants);
