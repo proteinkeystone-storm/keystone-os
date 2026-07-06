@@ -2180,9 +2180,12 @@ function _renderGestAgents(box, cache) {
   }
   box.innerHTML = `
     <label class="wr-gest-agents-label">Savoir maison à convoquer</label>
-    <select class="wr-gest-agents-select">
-      ${agents.map(a => `<option value="${_esc(a.id)}"${a.id === _currentSession.gestAgentId ? ' selected' : ''}>${_esc(a.name || 'Agent')}</option>`).join('')}
-    </select>`;
+    <div class="wr-gest-agents-field">
+      <select class="wr-gest-agents-select">
+        ${agents.map(a => `<option value="${_esc(a.id)}"${a.id === _currentSession.gestAgentId ? ' selected' : ''}>${_esc(a.name || 'Agent')}</option>`).join('')}
+      </select>
+      <span class="wr-gest-agents-chevron" aria-hidden="true">${_iconSvg('chevron-down')}</span>
+    </div>`;
   box.querySelector('.wr-gest-agents-select')?.addEventListener('change', (e) => {
     _currentSession.gestAgentId = e.target.value;
     _saveRosterPref();

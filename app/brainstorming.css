@@ -1457,14 +1457,26 @@
   display: block; font-size: 11px; font-weight: 700; letter-spacing: -0.005em;
   color: var(--wr-text-muted); margin-bottom: 6px;
 }
+/* Champ de sélection — flat design charte Keystone : on retire le chrome
+   natif du <select> (flèche système macOS 3D) et on pose un chevron outline
+   monochrome cohérent avec le registre de pictos. */
+.wr-gest-agents-field { position: relative; width: 100%; max-width: 320px; }
 .wr-gest-agents-select {
-  width: 100%; max-width: 320px;
-  padding: 8px 10px; border-radius: 9px;
+  width: 100%;
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  padding: 8px 34px 8px 10px; border-radius: 9px;
   background: var(--wr-bg-elevated); color: var(--wr-text);
   border: 1px solid var(--wr-border-strong);
   font-size: 12.5px; font-weight: 600; cursor: pointer;
+  letter-spacing: -0.01em;
 }
 .wr-gest-agents-select:focus { outline: none; border-color: var(--ks-agent-gest); }
+.wr-gest-agents-chevron {
+  position: absolute; top: 50%; right: 11px; transform: translateY(-50%);
+  display: flex; pointer-events: none; color: var(--wr-text-muted);
+}
+.wr-gest-agents-chevron svg { width: 15px; height: 15px; }
+.wr-gest-agents-field:focus-within .wr-gest-agents-chevron { color: var(--ks-agent-gest); }
 
 /* ═════════════════════════════════════════════════════════════════
    ÉCRAN DE PRÉPARATION CENTRAL — Sprint 7.12 (mode + comité avant brief)
