@@ -385,6 +385,33 @@
         "graphiste",
         "identite"
       ]
+    },
+    {
+      "id": "O-NET-001",
+      "padKey": null,
+      "title": "networK",
+      "subtitle": "Votre réseau relationnel vivant — vos contacts en carte mentale, pas en base de données",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "networK n'est pas un carnet d'adresses de plus : c'est votre réseau relationnel vivant. Vous êtes au centre, et vos relations se déploient en carte mentale — clients, fournisseurs, partenaires, équipe, presse — dans des catégories que vous créez librement. Chaque contact ouvre une fiche claire : coordonnées, rôles, tags, notes et un journal d'activité qui raconte votre relation comme une histoire. Et depuis chaque fiche, continuez votre travail sans ressaisir : envoyez une Missive, générez un Brief, ouvrez votre Smart Agent — tout part déjà pré-rempli. Zéro IA, zéro crédit : votre réseau vous appartient.",
+      "icon": "network",
+      "ai_optimized": null,
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "contacts",
+        "reseau",
+        "relations",
+        "crm",
+        "carte mentale",
+        "clients",
+        "fournisseurs",
+        "partenaires",
+        "network"
+      ]
     }
   ]
 }

@@ -144,6 +144,10 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleVoiceUpload, handleReminderCreate,
          handleRemindersList, handleReminderUpdate, handleReminderDelete,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
+// networK (Pad O-NET-001 · NK-2) — réseau relationnel vivant, V1 manuelle, zéro IA.
+import { handleNetworkHealth, handleNetworkBootstrap,
+         handleCategoryCreate, handleCategoryUpdate, handleCategoryDelete,
+         handleContactCreate, handleContactUpdate, handleContactDelete } from './routes/network.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -266,6 +270,18 @@ export default {
       if (knBubbleMatch && method === 'GET')    return handleBubbleDetail(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'PATCH')  return handleBubbleUpdate(request, env, knBubbleMatch[1]);
       if (knBubbleMatch && method === 'DELETE') return handleBubbleDelete(request, env, knBubbleMatch[1]);
+
+      // ── networK (Pad O-NET-001 · NK-2) — réseau relationnel manuel ──
+      if (path === '/api/network/health'    && method === 'GET')  return handleNetworkHealth(request, env);
+      if (path === '/api/network/bootstrap' && method === 'GET')  return handleNetworkBootstrap(request, env);
+      if (path === '/api/network/category'  && method === 'POST') return handleCategoryCreate(request, env);
+      const nkCat = path.match(/^\/api\/network\/category\/([A-Za-z0-9-]+)$/);
+      if (nkCat && method === 'PATCH')  return handleCategoryUpdate(request, env, nkCat[1]);
+      if (nkCat && method === 'DELETE') return handleCategoryDelete(request, env, nkCat[1]);
+      if (path === '/api/network/contact'   && method === 'POST') return handleContactCreate(request, env);
+      const nkContact = path.match(/^\/api\/network\/contact\/([A-Za-z0-9-]+)$/);
+      if (nkContact && method === 'PATCH')  return handleContactUpdate(request, env, nkContact[1]);
+      if (nkContact && method === 'DELETE') return handleContactDelete(request, env, nkContact[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);

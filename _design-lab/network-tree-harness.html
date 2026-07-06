@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>networK — harnais Keystone Tree</title>
+<style>
+/* ============================================================
+   networK — harnais d'animation « Keystone Tree »
+   Autonome (zéro import projet). Données factices.
+   Objectif : régler le « waou » (fluide, organique, véloce,
+   puis immobilité TOTALE) avant d'écrire l'app.
+   ============================================================ */
+:root {
+  --bg: #07070c;
+  --ink: #f2f2f7;
+  --ink-dim: rgba(242,242,247,.55);
+  --ink-faint: rgba(242,242,247,.34);
+  --violet: #8b5cf6;
+  --violet-soft: rgba(139,92,246,.38);
+  --pill-bg: rgba(255,255,255,.035);
+  --pill-bd: rgba(255,255,255,.09);
+  --pill-bg-hover: rgba(255,255,255,.07);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; overflow:hidden; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.02em;
+  user-select: none; -webkit-user-select: none;
+}
+/* Halo d'ambiance très discret (statique, ne bouge jamais) */
+body::before {
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(900px 600px at 18% 45%, rgba(139,92,246,.07), transparent 60%),
+    radial-gradient(700px 500px at 75% 20%, rgba(88,101,242,.04), transparent 60%);
+}
+
+/* ---------- Chrome minimal ---------- */
+header {
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between;
+  padding: max(14px, env(safe-area-inset-top)) 20px 10px;
+  pointer-events:none;
+}
+.logo { font-size:22px; font-weight:900; pointer-events:auto; }
+.logo b { color:var(--violet); font-weight:900; }
+.hint { font-size:12px; color:var(--ink-faint); pointer-events:none; }
+
+/* ---------- Scène ---------- */
+#stage { position:fixed; inset:0; }
+#wires { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+#wires path {
+  fill:none;
+  stroke: var(--violet-soft);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+#wires path.lit { stroke: rgba(139,92,246,.75); filter: drop-shadow(0 0 6px rgba(139,92,246,.35)); }
+#wires path { transition: stroke .4s ease; }
+
+/* Circulation : impulsions qui voyagent sur le chemin ACTIF (Vous → destination).
+   Le reste du réseau se désature → la relation ouverte est « vivante ». */
+/* Une seule « bulle » ovoïde par fil : segment court, épais, bouts ronds,
+   qui glisse du départ à la destination puis reboucle. pathLength=100
+   normalise tous les fils → mêmes keyframes partout. Le fil (1.5px)
+   semble se GONFLER au passage de la bulle (4.5px + halo). */
+#wires path.flow {
+  stroke: rgba(214,199,255,.9);   /* cœur clair… */
+  stroke-width: 4;
+  stroke-dasharray: 1.2 200;      /* …quasi ponctuel, bouts ronds */
+  stroke-linecap: round;
+  opacity: var(--flowop, .35);
+  /* …flouté + halo : une goutte de LUMIÈRE qui voyage dans le fil (fibre optique) */
+  filter: blur(1.8px) drop-shadow(0 0 5px rgba(139,92,246,.85));
+  animation: nkflow 3.4s cubic-bezier(.45,.05,.55,.95) infinite;
+  pointer-events: none;
+}
+/* fils du circuit actif (catégorie → contacts) : colorés, sans halo */
+#wires path.live { stroke: rgba(139,92,246,.5); }
+@keyframes nkflow {
+  from { stroke-dashoffset: 1.2; }   /* goutte juste avant le départ */
+  to   { stroke-dashoffset: -100; }  /* sortie complète à destination */
+}
+body.focus #wires path:not(.lit):not(.flow):not(.live) { stroke: rgba(255,255,255,.05); }
+body.focus .cat:not(.active) { opacity:.22; filter: grayscale(1); }
+.cat { transition: background .18s ease, border-color .18s ease, opacity .4s ease, filter .4s ease; }
+@media (prefers-reduced-motion: reduce) { #wires path.flow { display:none; } }
+
+#nodes { position:absolute; inset:0; }
+.node { position:absolute; transform: translate(-0%, -50%); }
+
+/* « Vous » */
+.you {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  transform: translate(-50%, -50%);
+}
+.you-avatar {
+  width:78px; height:78px; border-radius:50%;
+  display:grid; place-items:center;
+  background: radial-gradient(circle at 35% 30%, rgba(139,92,246,.16), rgba(255,255,255,.03));
+  border: 1.5px solid rgba(139,92,246,.55);
+  box-shadow: 0 0 0 7px rgba(139,92,246,.06), 0 0 34px rgba(139,92,246,.18);
+}
+.you-avatar svg { width:30px; height:30px; stroke: var(--ink-dim); }
+.you-label { font-size:15px; font-weight:700; color: var(--ink-dim); }
+
+/* Pill catégorie */
+.cat {
+  display:flex; align-items:center; gap:11px;
+  height:52px; padding: 0 10px 0 16px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-bd);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  cursor:pointer; white-space:nowrap;
+  transition: background .18s ease, border-color .18s ease;
+}
+.cat:hover { background: var(--pill-bg-hover); }
+.cat.active {
+  border-color: rgba(139,92,246,.65);
+  background: rgba(139,92,246,.09);
+  box-shadow: 0 0 24px rgba(139,92,246,.14);
+}
+.cat .ic { width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  background: rgba(255,255,255,.05); flex:none; }
+.cat .ic svg { width:16px; height:16px; stroke: var(--ink-dim); }
+.cat .lbl { font-size:15px; font-weight:700; }
+.cat .cnt { font-size:13px; color: var(--ink-faint); font-weight:600; }
+.cat .plus {
+  width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  border:1px solid var(--pill-bd); margin-left:6px; flex:none;
+  color: var(--ink-faint); font-size:16px; font-weight:400; line-height:1;
+}
+
+/* Ligne contact */
+.person {
+  display:flex; align-items:center; gap:12px;
+  width: 236px; height:56px; padding: 0 12px;
+  border-radius: 16px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-bd);
+  cursor:pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+.person:hover { background: var(--pill-bg-hover); }
+.person .av {
+  width:36px; height:36px; border-radius:50%; flex:none;
+  display:grid; place-items:center;
+  font-size:13px; font-weight:800; color: rgba(255,255,255,.92);
+}
+.person .who { min-width:0; }
+.person .nm { font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.person .co { font-size:12px; color: var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.more {
+  display:flex; align-items:center; gap:7px;
+  font-size:13px; font-weight:600; color: var(--violet);
+  cursor:pointer; padding:8px 4px; background:none; border:none;
+  font-family:inherit; letter-spacing:inherit;
+}
+.more svg { width:12px; height:12px; stroke: var(--violet); }
+
+/* Entrées animées : état initial posé en JS, transition dynamique */
+.enter { opacity:0; will-change: transform, opacity; }
+
+/* ---------- Panneau de réglages ---------- */
+#panel {
+  position:fixed; right:14px; bottom:14px; z-index:30;
+  width: 268px;
+  background: rgba(13,13,20,.88);
+  border: 1px solid var(--pill-bd);
+  border-radius: 18px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  padding: 14px 16px 16px;
+  font-size: 12px;
+  transition: transform .25s ease;
+}
+#panel.folded { transform: translateY(calc(100% - 46px)); }
+#panel h2 {
+  font-size:13px; font-weight:900; display:flex; justify-content:space-between; align-items:center;
+  cursor:pointer; padding-bottom:8px;
+}
+#panel h2 .fps { font-weight:600; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.ctl { margin-top:9px; }
+.ctl label { display:flex; justify-content:space-between; color: var(--ink-dim); margin-bottom:4px; }
+.ctl label output { color: var(--ink); font-weight:700; font-variant-numeric: tabular-nums; }
+.ctl input[type=range] {
+  width:100%; appearance:none; -webkit-appearance:none; height:22px; background:none;
+}
+.ctl input[type=range]::-webkit-slider-runnable-track {
+  height:3px; border-radius:2px; background: rgba(255,255,255,.14);
+}
+.ctl input[type=range]::-webkit-slider-thumb {
+  appearance:none; -webkit-appearance:none;
+  width:16px; height:16px; border-radius:50%; background: var(--violet);
+  margin-top:-6.5px; border:none; box-shadow: 0 0 8px rgba(139,92,246,.5);
+}
+.row { display:flex; gap:8px; margin-top:12px; }
+.btn {
+  flex:1; height:36px; border-radius:11px; border:1px solid var(--pill-bd);
+  background: rgba(255,255,255,.05); color: var(--ink);
+  font-family:inherit; font-size:13px; font-weight:700; letter-spacing:inherit;
+  cursor:pointer;
+}
+.btn.primary { background: var(--violet); border-color: var(--violet); }
+.btn:active { transform: scale(.97); }
+.seg { display:flex; gap:5px; margin-top:9px; }
+.seg button {
+  flex:1; height:28px; border-radius:8px; border:1px solid var(--pill-bd);
+  background:none; color:var(--ink-dim); font-family:inherit; font-size:11px; font-weight:700;
+  cursor:pointer; letter-spacing:inherit;
+}
+.seg button.on { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.5); color: var(--ink); }
+
+@media (max-width: 700px) {
+  .hint { display:none; }
+  #panel { width: calc(100vw - 28px); }
+  .person { width: 205px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Le JS bascule en fondu simple ; ici on coupe les transitions décoratives */
+  .cat, .person { transition:none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">networ<b>K</b> <span style="font-size:11px;font-weight:700;color:#8b5cf6;vertical-align:middle;border:1px solid rgba(139,92,246,.5);border-radius:99px;padding:2px 8px;margin-left:8px;">v3 · bulle</span></div>
+  <div class="hint">Clique une catégorie · panneau de réglages en bas à droite</div>
+</header>
+
+<div id="stage">
+  <svg id="wires" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="nodes"></div>
+</div>
+
+<div id="panel">
+  <h2 id="panelHead">Réglages animation <span class="fps" id="fps">— fps</span></h2>
+  <div id="panelBody">
+    <div class="ctl"><label>Durée du tracé <output id="o-dur">550 ms</output></label>
+      <input type="range" id="c-dur" min="200" max="1000" step="10" value="550"></div>
+    <div class="ctl"><label>Cascade (stagger) <output id="o-stag">45 ms</output></label>
+      <input type="range" id="c-stag" min="0" max="120" step="5" value="45"></div>
+    <div class="ctl"><label>Rebond (overshoot) <output id="o-ov">25 %</output></label>
+      <input type="range" id="c-ov" min="0" max="60" step="5" value="25"></div>
+    <div class="ctl"><label>Courbure des branches <output id="o-cur">45 %</output></label>
+      <input type="range" id="c-cur" min="10" max="90" step="5" value="45"></div>
+    <div class="ctl"><label>Départ pill (sur le tracé) <output id="o-pd">65 %</output></label>
+      <input type="range" id="c-pd" min="30" max="100" step="5" value="65"></div>
+    <div class="ctl"><label>Circulation <output id="o-fl">30 %</output></label>
+      <input type="range" id="c-fl" min="0" max="100" step="5" value="30"></div>
+    <div class="seg" id="easeSeg">
+      <button data-e="expo" class="on">Expo</button>
+      <button data-e="quint">Quint</button>
+      <button data-e="cubic">Cubic</button>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="replay">Rejouer</button>
+      <button class="btn" id="toggleCat">Ouvrir Clients</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================= Données factices ================= */
+const ICONS = {
+  users:  '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  box:    '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+  hands:  '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.36 8.87 8.5a2.13 2.13 0 0 0 3 3L14 9.36l4.5 4.5"/><path d="m18 13 2-2a2.12 2.12 0 0 0 0-3l-4-4a2.12 2.12 0 0 0-3 0l-1 1"/><path d="m6 15-2-2a2.12 2.12 0 0 1 0-3l4-4"/><path d="m8 17 2 2a2.12 2.12 0 0 0 3 0"/></svg>',
+  team:   '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20v-1a6 6 0 0 1 12 0v1"/><path d="M16 20v-.5a4.5 4.5 0 0 1 6-4.24"/></svg>',
+  press:  '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V9"/><path d="M12 6h6"/><path d="M12 10h6"/><path d="M12 14h6"/><path d="M12 18h6"/></svg>',
+  bank:   '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22h18"/><path d="M5 22V10"/><path d="M19 22V10"/><path d="M12 2 2 8h20Z"/><path d="M9 22v-8h6v8"/></svg>',
+  tag:    '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42Z"/><circle cx="7.5" cy="7.5" r=".5"/></svg>',
+  user:   '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  chev:   '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+};
+const CATS = [
+  { id:'clients',  label:'Clients',        icon:'users', contacts:[
+    ['Jean Dupont','ACME'], ['Sophie Bernard','Boulangerie L’Artisan'], ['Lucas Moreau','LM Conseil'],
+    ['Camille Roux','Studio J'], ['Marc Petit','Petit Events'], ['Julie Mercier','Agence Com & Co'],
+    ['Thomas Leroy','Leroy Architecture'], ['Émilie Fontaine','Fontaine Création']], extra:16 },
+  { id:'fourn',    label:'Fournisseurs',   icon:'box',   contacts:[
+    ['Paul Girard','Imprimerie Girard'], ['Nina Costa','PapierPlus'], ['Hugo Blanc','Blanc Livraison'],
+    ['Léa Martin','Studio Photo ML']], extra:3 },
+  { id:'part',     label:'Partenaires',    icon:'hands', contacts:[
+    ['Sarah Klein','Klein & Associés'], ['David Noel','Agence Nova'], ['Inès Perrot','Perrot Digital'],
+    ['Yann Guyot','GY Studio'], ['Clara Simon','Maison Simon']], extra:4 },
+  { id:'equipe',   label:'Équipe',         icon:'team',  contacts:[
+    ['Alex Rivière','Design'], ['Manon Faure','Compta'], ['Théo Lambert','Dev']], extra:3 },
+  { id:'presse',   label:'Presse & médias',icon:'press', contacts:[
+    ['Claire Dubois','La Provence'], ['Romain Vidal','Radio Sud'], ['Eva Roche','Web TV 13']], extra:2 },
+  { id:'insti',    label:'Institutions',   icon:'bank',  contacts:[
+    ['Mairie','Service culture'], ['CCI','Aix-Marseille']], extra:2 },
+  { id:'divers',   label:'Divers',         icon:'tag',   contacts:[
+    ['Bruno Lopez','Voisin atelier'], ['Katia Meyer','Rencontre salon']], extra:6 },
+];
+CATS.forEach(c => c.count = c.contacts.length + c.extra);
+
+/* ================= Paramètres (curseurs) ================= */
+const P = { dur:550, stag:45, ov:25, cur:45, pd:65, ease:'expo', pillDur:360 };
+const EASE = {
+  expo:  t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+  quint: t => 1 - Math.pow(1 - t, 5),
+  cubic: t => 1 - Math.pow(1 - t, 3),
+};
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================= Moteur d'animation =================
+   Un seul rAF. Chaque « job » anime le dashoffset d'un path.
+   Quand la file est vide → arrêt TOTAL (immobilité, exigence brief). */
+const jobs = new Set();
+let rafId = null, fpsEl = null, frames = 0, fpsT0 = 0;
+function tick(now) {
+  frames++;
+  if (now - fpsT0 >= 500) {
+    fpsEl.textContent = Math.round(frames * 1000 / (now - fpsT0)) + ' fps';
+    frames = 0; fpsT0 = now;
+  }
+  for (const j of jobs) {
+    const t = Math.max(0, Math.min(1, (now - j.t0) / j.dur));  // clamp : un départ différé reste invisible
+    const e = EASE[P.ease](t);
+    j.step(e, t);
+    if (t >= 1) { jobs.delete(j); j.done && j.done(); }
+  }
+  if (jobs.size) rafId = requestAnimationFrame(tick);
+  else { rafId = null; fpsEl.textContent = '— fps'; }   // silence : plus AUCUN rAF
+}
+function addPathJob(path, len, dur, delay, done) {
+  path.style.strokeDasharray = len;
+  path.style.strokeDashoffset = len;
+  const t0 = performance.now() + delay;
+  jobs.add({
+    t0, dur,
+    step: (e, t) => { path.style.strokeDashoffset = len * (1 - e); },
+    done
+  });
+  if (!rafId) { fpsT0 = performance.now(); frames = 0; rafId = requestAnimationFrame(tick); }
+}
+/* Correction des jobs à départ différé : clamp t>=0 */
+const _origTick = tick;
+
+/* ================= Scène ================= */
+const stage = document.getElementById('stage');
+const wires = document.getElementById('wires');
+const nodesEl = document.getElementById('nodes');
+const SVGNS = 'http://www.w3.org/2000/svg';
+let openCat = null;          // id de la catégorie dépliée (une seule profondeur)
+let showAll = false;         // « Voir les N autres » (non déplié en V1 harnais)
+let seq = 0;                 // invalide les timeouts d'une séquence précédente
+const timeouts = [];
+function later(fn, ms) { timeouts.push(setTimeout(fn, ms)); }
+function clearTimers() { timeouts.forEach(clearTimeout); timeouts.length = 0; }
+
+function layout() {
+  const w = innerWidth, h = innerHeight;
+  const mobile = w < 700;
+  return {
+    you:  { x: mobile ? 54 : Math.max(90, w * .10), y: h * .52 },
+    catX: mobile ? Math.min(190, w * .38) : Math.max(300, w * .30),
+    perX: mobile ? Math.min(w - 225, 320) : Math.max(560, w * .30 + 330),
+    catGap: mobile ? 62 : 74,
+    perGap: mobile ? 62 : 66,
+    h, mobile
+  };
+}
+function bezier(x0, y0, x1, y1) {
+  const dx = Math.max(40, (x1 - x0) * (P.cur / 100) * 2);
+  return `M ${x0} ${y0} C ${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}`;
+}
+function hue(name) { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+/* Le centrage vertical vit dans le transform → les transforms animés doivent
+   TOUJOURS le réintégrer, sinon la pill saute d'une demi-hauteur. */
+function baseTx(el) { return el.classList.contains('you') ? '-50%' : '0px'; }
+
+/* Apparition d'une pill : spring CSS (overshoot paramétré) — transform/opacity only */
+function reveal(el, delay) {
+  const b = baseTx(el);
+  if (REDUCED) {
+    el.style.transition = 'opacity .3s ease';
+    later(() => { el.style.opacity = 1; }, delay);
+    return;
+  }
+  const ov = P.ov / 100;
+  el.style.transform = `translate(calc(${b} - 14px), -50%) scale(.92)`;
+  el.style.transitionProperty = 'none';
+  later(() => {
+    // double rAF : garantit que l'état initial est peint avant la transition
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition =
+        `transform ${P.pillDur}ms cubic-bezier(.30, ${1 + ov}, .40, 1), opacity 240ms ease-out`;
+      el.style.transform = `translate(${b}, -50%) scale(1)`;
+      el.style.opacity = 1;
+      el.addEventListener('transitionend', () => { el.style.willChange = 'auto'; }, { once:true });
+    }));
+  }, delay);
+}
+/* Disparition rapide (fermeture) */
+function vanish(el) {
+  el.style.transition = 'transform 160ms ease-in, opacity 140ms ease-in';
+  el.style.transform = `translate(calc(${baseTx(el)} - 8px), -50%) scale(.95)`;
+  el.style.opacity = 0;
+}
+function retract(path, len) {
+  const t0 = performance.now();
+  jobs.add({ t0, dur: 190,
+    step: e => { path.style.strokeDashoffset = len * e; } });
+  if (!rafId) { fpsT0 = performance.now(); frames = 0; rafId = requestAnimationFrame(tick); }
+}
+
+/* ---------- Rendu complet + séquence d'ouverture ---------- */
+function render(animated = true) {
+  seq++; clearTimers();
+  jobs.clear();
+  document.body.classList.remove('focus');   // spawnContacts le remettra si besoin
+  wires.innerHTML = ''; nodesEl.innerHTML = '';
+  const L = layout();
+  const my = seq;
+
+  /* « Vous » */
+  const you = document.createElement('div');
+  you.className = 'node you enter';
+  you.style.left = L.you.x + 'px'; you.style.top = L.you.y + 'px';
+  you.innerHTML = `<div class="you-avatar">${ICONS.user}</div><div class="you-label">Vous</div>`;
+  nodesEl.appendChild(you);
+
+  /* Catégories : positions verticales centrées */
+  const n = CATS.length;
+  const yTop = L.you.y - ((n - 1) / 2) * L.catGap;
+  const catStag = Math.max(P.stag, 30) * 1.4;
+
+  CATS.forEach((c, i) => {
+    const y = yTop + i * L.catGap;
+    const el = document.createElement('div');
+    el.className = 'node cat enter' + (openCat === c.id ? ' active' : '');
+    el.style.left = L.catX + 'px'; el.style.top = y + 'px';
+    el.innerHTML = `<span class="ic">${ICONS[c.icon]}</span>` +
+      `<span class="lbl">${esc(c.label)}</span><span class="cnt">${c.count}</span>` +
+      `<span class="plus">+</span>`;
+    el.addEventListener('click', () => toggle(c.id));
+    nodesEl.appendChild(el);
+    c._y = y; c._el = el;
+
+    /* Branche Vous → catégorie */
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', bezier(L.you.x + 46, L.you.y, L.catX - 6, y));
+    if (openCat === c.id) p.classList.add('lit');
+    wires.appendChild(p);
+    const len = p.getTotalLength();
+    c._path = p; c._len = len;
+
+    if (animated && !REDUCED) {
+      const delay = 120 + i * catStag;
+      addPathJob(p, len, P.dur, delay);
+      reveal(el, delay + P.dur * (P.pd / 100));
+    } else {
+      p.style.strokeDasharray = 'none';
+      if (animated) reveal(el, 60 + i * 40);        // reduced-motion : fondu simple
+      else el.style.opacity = 1;                     // resize : état final direct
+    }
+  });
+
+  /* « Vous » apparaît en premier */
+  if (animated) reveal(you, 0); else you.style.opacity = 1;
+
+  /* Contacts de la catégorie ouverte : ils partent juste après le « pop »
+     de leur pill catégorie — l'énergie circule, jamais tout d'un coup. */
+  if (openCat) {
+    const c = CATS.find(x => x.id === openCat);
+    const anim = animated && !REDUCED;
+    const baseDelay = anim
+      ? 120 + CATS.indexOf(c) * catStag + P.dur * (P.pd / 100) + 80
+      : 0;
+    later(() => { if (my === seq) spawnContacts(c, L, anim); }, baseDelay);
+  }
+}
+
+/* Impulsion de circulation : clone .flow par-dessus un path existant.
+   Ne se crée qu'une fois le tracé posé (jamais pendant le dessin). */
+function addFlow(srcPath, idx = 0, delayMs = 0) {
+  if (REDUCED || !srcPath || P.fl === 0) return;
+  const f = document.createElementNS(SVGNS, 'path');
+  f.setAttribute('d', srcPath.getAttribute('d'));
+  f.setAttribute('pathLength', '100');           // normalise : mêmes keyframes pour tous
+  f.classList.add('flow');
+  f.dataset.flow = '1';
+  /* Créée EN MÊME TEMPS que le fil, mais invisible tant que le circuit n'est
+     pas complet : offset inline = goutte hors tracé, et le délai d'animation
+     (positif) retient le départ. Zéro setTimeout → zéro course. */
+  f.style.strokeDashoffset = '1.2';
+  f.style.animationDuration = (3.4 + (idx % 4) * .3) + 's';
+  f.style.animationDelay = (delayMs + idx * 140) + 'ms';
+  if (srcPath.dataset.contact) f.dataset.contact = srcPath.dataset.contact;
+  wires.appendChild(f);
+}
+function clearFlows() { wires.querySelectorAll('path[data-flow]').forEach(e => e.remove()); }
+
+/* Déplie les contacts d'une catégorie (cascade haut → bas) */
+function spawnContacts(c, L, animated) {
+  const my = seq;
+  document.body.classList.add('focus');
+  /* la circulation ne DÉMARRE qu'une fois tout le circuit tracé (délai CSS) */
+  const circuitDone = (animated && !REDUCED)
+    ? (c.contacts.length - 1) * P.stag + P.dur * .85 + 250
+    : 0;
+  addFlow(c._path, 0, circuitDone);
+  const list = c.contacts;
+  const yTop = Math.max(70, Math.min(
+      c._y - ((list.length - 1) / 2) * L.perGap,
+      L.h - 70 - (list.length - 1) * L.perGap - (c.extra ? 44 : 0)));
+  /* offsetWidth ignore le transform : point de départ stable même si la
+     pill est en plein rebond au moment de la mesure */
+  const catRightX = L.catX + c._el.offsetWidth + 4;
+
+  list.forEach((p, i) => {
+    const y = Math.max(70, yTop + i * L.perGap);
+    const el = document.createElement('div');
+    el.className = 'node person enter';
+    el.dataset.contact = c.id;
+    el.style.left = L.perX + 'px'; el.style.top = y + 'px';
+    const h = hue(p[0]);
+    const init = p[0].split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    el.innerHTML =
+      `<span class="av" style="background:hsl(${h} 42% 38% / .85)">${init}</span>` +
+      `<span class="who"><div class="nm">${esc(p[0])}</div><div class="co">${esc(p[1])}</div></span>`;
+    nodesEl.appendChild(el);
+
+    const path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', bezier(catRightX, c._y, L.perX - 6, y));
+    path.dataset.contact = c.id;
+    path.classList.add('live');                      // fil du circuit actif : reste coloré
+    wires.appendChild(path);
+    const len = path.getTotalLength();
+    addFlow(path, i + 1, circuitDone);
+
+    if (animated && !REDUCED) {
+      const delay = i * P.stag;
+      addPathJob(path, len, P.dur * .85, delay);
+      reveal(el, delay + P.dur * .85 * (P.pd / 100));
+    } else {
+      path.style.strokeDasharray = 'none';
+      if (animated) reveal(el, i * 30);              // reduced-motion : fondu en cascade
+      else el.style.opacity = 1;
+    }
+  });
+
+
+  if (c.extra) {
+    const y = Math.max(70, yTop + list.length * L.perGap) - 8;
+    const more = document.createElement('button');
+    more.className = 'node more enter';
+    more.style.left = L.perX + 'px'; more.style.top = y + 'px';
+    more.dataset.contact = c.id;
+    more.innerHTML = `${ICONS.chev} Voir les ${c.extra} autres`;
+    nodesEl.appendChild(more);
+    reveal(more, animated && !REDUCED ? list.length * P.stag + P.dur * .6 : 0);
+  }
+}
+
+/* Ouvre/ferme une catégorie — une seule profondeur visible.
+   seq invalide toute séquence en cours (anti double-clic rapide). */
+function toggle(id) {
+  seq++; const my = seq;
+  const btn = document.getElementById('toggleCat');
+  clearFlows();
+  document.body.classList.remove('focus');
+  /* fermeture rapide de l'existant */
+  nodesEl.querySelectorAll('[data-contact]').forEach(vanish);
+  wires.querySelectorAll('path[data-contact]').forEach(p => {
+    const len = p.getTotalLength();
+    p.style.strokeDasharray = len; retract(p, len);
+  });
+  CATS.forEach(c => c._el && c._el.classList.remove('active'));
+  wires.querySelectorAll('path.lit').forEach(p => p.classList.remove('lit'));
+
+  const closing = (openCat === id);
+  openCat = closing ? null : id;
+  btn.textContent = (openCat === 'clients') ? 'Fermer la catégorie' : 'Ouvrir Clients';
+
+  const purge = () => {
+    nodesEl.querySelectorAll('[data-contact]').forEach(e => e.remove());
+    wires.querySelectorAll('path[data-contact]').forEach(e => e.remove());
+  };
+  if (!closing) {
+    const c = CATS.find(x => x.id === id);
+    c._el.classList.add('active');
+    c._path.classList.add('lit');
+    const L = layout();
+    later(() => { if (my !== seq) return; purge(); spawnContacts(c, L, true); }, 170);
+  } else {
+    later(() => { if (my === seq) purge(); }, 220);
+  }
+}
+
+/* ================= Panneau ================= */
+function bind(id, out, fmt, key) {
+  const inp = document.getElementById(id), o = document.getElementById(out);
+  inp.addEventListener('input', () => { P[key] = +inp.value; o.textContent = fmt(inp.value); });
+}
+bind('c-dur',  'o-dur',  v => v + ' ms', 'dur');
+bind('c-stag', 'o-stag', v => v + ' ms', 'stag');
+bind('c-ov',   'o-ov',   v => v + ' %',  'ov');
+bind('c-cur',  'o-cur',  v => v + ' %',  'cur');
+bind('c-pd',   'o-pd',   v => v + ' %',  'pd');
+P.fl = 30;
+bind('c-fl',   'o-fl',   v => v + ' %',  'fl');
+document.getElementById('c-fl').addEventListener('input', () =>
+  document.documentElement.style.setProperty('--flowop', P.fl / 100));
+document.getElementById('easeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  P.ease = b.dataset.e;
+  document.querySelectorAll('#easeSeg button').forEach(x => x.classList.toggle('on', x === b));
+});
+document.getElementById('replay').addEventListener('click', () => render(true));
+document.getElementById('toggleCat').addEventListener('click', () => toggle('clients'));
+document.getElementById('panelHead').addEventListener('click', () =>
+  document.getElementById('panel').classList.toggle('folded'));
+fpsEl = document.getElementById('fps');
+
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => render(false), 150); });
+
+/* Premier lancement : le « waou » */
+render(true);
+</script>
+</body>
+</html>

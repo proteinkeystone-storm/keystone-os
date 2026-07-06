@@ -1,0 +1,15 @@
+{
+  "id": "O-NET-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "networK",
+  "subtitle": "Votre réseau relationnel vivant — vos contacts en carte mentale, pas en base de données",
+  "category": "COM",
+  "icon": "network",
+  "ai_optimized": null,
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nRéseau relationnel vivant (PAS un CRM) : « Vous » au centre-gauche, puis les catégories libres, puis les contacts — une carte mentale qui se déploie de gauche à droite. V1 100 % manuelle (aucune IA, aucun crédit). Le moteur front (app/network.js, workers/src/routes/network.js) est 100 % isolé — préfixe nk_, aucune table ni route partagée avec les autres pads.\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "networK n'est pas un carnet d'adresses de plus : c'est votre réseau relationnel vivant. Vous êtes au centre, et vos relations se déploient en carte mentale — clients, fournisseurs, partenaires, équipe, presse — dans des catégories que vous créez librement. Chaque contact ouvre une fiche claire : coordonnées, rôles, tags, notes et un journal d'activité qui raconte votre relation comme une histoire. Et depuis chaque fiche, continuez votre travail sans ressaisir : envoyez une Missive, générez un Brief, ouvrez votre Smart Agent — tout part déjà pré-rempli. Zéro IA, zéro crédit : votre réseau vous appartient."
+}

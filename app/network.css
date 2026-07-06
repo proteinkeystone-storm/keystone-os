@@ -1,0 +1,325 @@
+/* ═══════════════════════════════════════════════════════════════
+   networK — Pad O-NET-001 · NK-1. Styles propres (nk-*).
+   Coquille = workspace.css (ws-*). Palette Keystone — navy + indigo.
+   Arbre « Keystone Tree » : tracé SVG animé + pills spring + gouttes
+   de lumière (circulation) + désaturation du hors-circuit. Épuré, calme.
+   ═══════════════════════════════════════════════════════════════ */
+
+.nk-main { position: relative; padding: 0; overflow: hidden; }
+
+.nk-canvas {
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 120% at 18% 45%, #1a2034 0%, var(--navy, #131826) 70%);
+  --nk-violet: #8b5cf6;
+  --nk-violet-soft: rgba(139, 92, 246, .38);
+  --nk-pill-bg: rgba(255, 255, 255, .035);
+  --nk-pill-bd: rgba(255, 255, 255, .09);
+  --nk-flowop: .3;
+}
+
+/* ── Chrome networK : recherche + Ajouter (flotte sur le canvas) ── */
+.nk-chrome {
+  position: absolute; top: 16px; left: 0; right: 0; z-index: 6;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 0 20px; pointer-events: none;
+}
+.nk-chrome > * { pointer-events: auto; }
+.nk-search {
+  display: flex; align-items: center; gap: 10px;
+  width: min(460px, 60%); height: 46px; padding: 0 16px;
+  border-radius: 999px;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: var(--text-dim, rgba(248,250,252,.55));
+}
+.nk-search svg { flex: none; opacity: .7; }
+.nk-search-input {
+  flex: 1; min-width: 0; height: 100%;
+  background: none; border: none; outline: none;
+  color: var(--text, #f8fafc); font-family: inherit; font-size: 15px; letter-spacing: -0.02em;
+}
+.nk-search-input::placeholder { color: var(--text-dim, rgba(248,250,252,.45)); }
+.nk-add-btn {
+  display: flex; align-items: center; gap: 8px;
+  height: 46px; padding: 0 18px 0 14px;
+  border-radius: 999px; border: 1px solid var(--bd, rgba(255,255,255,.1));
+  background: var(--navy2, #1c2234); color: var(--text, #f8fafc);
+  font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.02em;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background .18s ease, border-color .18s ease;
+}
+.nk-add-btn:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.5); }
+
+/* ── Viewport (pan/zoom) + scène ─────────────────────────────────── */
+.nk-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.nk-scene { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+
+.nk-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.nk-wires path {
+  fill: none; stroke: var(--nk-violet-soft); stroke-width: 1.5; stroke-linecap: round;
+  transition: stroke .4s ease;
+}
+.nk-wires path.nk-lit  { stroke: rgba(139,92,246,.75); filter: drop-shadow(0 0 6px rgba(139,92,246,.35)); }
+.nk-wires path.nk-live { stroke: rgba(139,92,246,.5); }
+
+/* Circulation : goutte de lumière (fibre optique) sur le circuit actif */
+.nk-wires path.nk-flow {
+  stroke: rgba(214,199,255,.9); stroke-width: 4; stroke-dasharray: 1.2 200; stroke-linecap: round;
+  opacity: var(--nk-flowop, .3);
+  filter: blur(1.8px) drop-shadow(0 0 5px rgba(139,92,246,.85));
+  animation: nk-flow 3.4s cubic-bezier(.45,.05,.55,.95) infinite; pointer-events: none;
+}
+@keyframes nk-flow { from { stroke-dashoffset: 1.2; } to { stroke-dashoffset: -100; } }
+
+/* Désaturation : hors-circuit éteint quand une catégorie est ouverte */
+.nk-focus .nk-wires path:not(.nk-lit):not(.nk-flow):not(.nk-live) { stroke: rgba(255,255,255,.05); }
+.nk-focus .nk-cat:not(.nk-active) { opacity: .22; filter: grayscale(1); }
+
+/* ── Nœuds ───────────────────────────────────────────────────────── */
+.nk-nodes { position: absolute; inset: 0; }
+.nk-node { position: absolute; transform: translate(0, -50%); }
+.nk-enter { opacity: 0; will-change: transform, opacity; }
+
+/* « Vous » (dans l'arbre) */
+.nk-you2 { display: flex; flex-direction: column; align-items: center; gap: 10px; transform: translate(-50%, -50%); }
+.nk-you2-avatar {
+  width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, rgba(139,92,246,.16), rgba(255,255,255,.03));
+  border: 1.5px solid rgba(139,92,246,.55);
+  box-shadow: 0 0 0 7px rgba(139,92,246,.06), 0 0 34px rgba(139,92,246,.18);
+  color: var(--text-dim, rgba(248,250,252,.7));
+}
+.nk-you2-label { font-size: 15px; font-weight: 700; color: var(--text-dim, rgba(248,250,252,.6)); }
+
+/* Pill catégorie */
+.nk-cat {
+  display: flex; align-items: center; gap: 11px; height: 52px; padding: 0 10px 0 16px;
+  border-radius: 999px; background: var(--nk-pill-bg); border: 1px solid var(--nk-pill-bd);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  cursor: pointer; white-space: nowrap;
+  transition: background .18s ease, border-color .18s ease, opacity .4s ease, filter .4s ease;
+}
+.nk-cat:hover { background: rgba(255,255,255,.07); }
+.nk-cat.nk-active {
+  border-color: rgba(139,92,246,.65); background: rgba(139,92,246,.09);
+  box-shadow: 0 0 24px rgba(139,92,246,.14);
+}
+.nk-cat-ic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(255,255,255,.05); flex: none; color: var(--text-dim, rgba(248,250,252,.65)); }
+.nk-cat-lbl { font-size: 15px; font-weight: 700; color: var(--text, #f8fafc); }
+.nk-cat-cnt { font-size: 13px; color: rgba(248,250,252,.4); font-weight: 600; }
+.nk-cat-plus {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--nk-pill-bd); margin-left: 6px; flex: none;
+  color: rgba(248,250,252,.45); transition: background .15s ease, color .15s ease;
+}
+.nk-cat-plus:hover { background: rgba(139,92,246,.18); color: var(--text, #f8fafc); }
+
+/* Ligne contact */
+.nk-person {
+  display: flex; align-items: center; gap: 12px; width: 236px; height: 56px; padding: 0 12px;
+  border-radius: 16px; background: var(--nk-pill-bg); border: 1px solid var(--nk-pill-bd);
+  cursor: pointer; transition: background .18s ease, border-color .18s ease;
+}
+.nk-person:hover { background: rgba(255,255,255,.07); border-color: rgba(139,92,246,.4); }
+.nk-av { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 13px; font-weight: 800; color: rgba(255,255,255,.92); }
+.nk-who { min-width: 0; display: flex; flex-direction: column; }
+.nk-nm { font-size: 14px; font-weight: 700; color: var(--text, #f8fafc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nk-co { font-size: 12px; color: rgba(248,250,252,.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* « Voir les N autres » */
+.nk-more {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+  color: var(--nk-violet); cursor: pointer; padding: 8px 4px; background: none; border: none;
+  font-family: inherit; letter-spacing: -0.01em;
+}
+.nk-more svg { color: var(--nk-violet); }
+
+/* ── Toolbar (zoom / recentrer) ──────────────────────────────────── */
+.nk-toolbar {
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: 2px; padding: 5px;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1));
+  border-radius: 14px; box-shadow: var(--ws-shadow-2, 0 4px 12px rgba(0,0,0,.4));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.nk-tool {
+  min-width: 38px; height: 38px; padding: 0 6px; border: none; border-radius: 10px;
+  background: none; color: var(--text-dim, rgba(248,250,252,.65));
+  display: grid; place-items: center; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: -0.01em;
+  transition: background .15s ease, color .15s ease;
+}
+.nk-tool:hover { background: rgba(255,255,255,.06); color: var(--text, #f8fafc); }
+.nk-tool-pct { min-width: 56px; font-variant-numeric: tabular-nums; }
+
+/* ── État vide (0 catégorie) ─────────────────────────────────────── */
+.nk-empty {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 24px;
+}
+.nk-empty[hidden] { display: none; }
+.nk-you { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 10px; }
+.nk-you-avatar {
+  width: 86px; height: 86px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, rgba(139,92,246,.18), rgba(255,255,255,.03));
+  border: 1.5px solid rgba(139,92,246,.55);
+  box-shadow: 0 0 0 8px rgba(139,92,246,.06), 0 0 40px rgba(139,92,246,.18);
+  color: var(--text-dim, rgba(248,250,252,.7));
+}
+.nk-you-label { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-dim, rgba(248,250,252,.6)); }
+.nk-empty-title { font-size: 20px; font-weight: 900; letter-spacing: -0.02em; color: var(--text, #f8fafc); max-width: 30ch; }
+.nk-empty-sub { font-size: 15px; letter-spacing: -0.01em; color: var(--text-dim, rgba(248,250,252,.5)); max-width: 40ch; }
+
+/* ── Bouton « ⋯ » gestion catégorie (dans la pill) ───────────────── */
+.nk-cat-menu {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  color: rgba(248,250,252,.4); flex: none; margin-left: 2px;
+  opacity: 0; transition: opacity .15s ease, background .15s ease, color .15s ease;
+}
+.nk-cat:hover .nk-cat-menu, .nk-cat.nk-active .nk-cat-menu { opacity: 1; }
+.nk-cat-menu:hover { background: rgba(255,255,255,.08); color: var(--text, #f8fafc); }
+@media (hover: none) { .nk-cat-menu { opacity: 1; } }   /* tactile : toujours visible */
+
+/* ── Overlay + sheet (formulaires) ───────────────────────────────── */
+.nk-overlay {
+  position: absolute; inset: 0; z-index: 40;
+  background: rgba(6,8,14,.6); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 7vh 20px 20px; overflow-y: auto;
+  animation: nk-fade .16s ease;
+}
+@keyframes nk-fade { from { opacity: 0; } }
+.nk-sheet {
+  width: 100%; max-width: 460px;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  border-radius: 20px; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+  animation: nk-rise .22s cubic-bezier(.22,1,.36,1);
+}
+@keyframes nk-rise { from { transform: translateY(14px); opacity: 0; } }
+.nk-sheet-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 12px; font-size: 18px; font-weight: 900; letter-spacing: -0.02em;
+  color: var(--text, #f8fafc);
+}
+.nk-sheet-x {
+  width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,.05);
+  color: var(--text-dim, rgba(248,250,252,.6)); display: grid; place-items: center; cursor: pointer;
+  transition: background .15s ease;
+}
+.nk-sheet-x:hover { background: rgba(255,255,255,.1); }
+
+/* ── Menu « Ajouter » ────────────────────────────────────────────── */
+.nk-menu { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.nk-menu-item {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 12px;
+  background: none; border: none; border-radius: 12px; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--text, #f8fafc); text-align: left;
+  transition: background .15s ease;
+}
+.nk-menu-item:hover { background: rgba(255,255,255,.05); }
+.nk-menu-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: rgba(139,92,246,.12); color: var(--text, #f8fafc); flex: none; }
+.nk-menu-lbl { flex: 1; }
+.nk-menu-item > svg:last-child { color: rgba(248,250,252,.3); }
+
+/* ── Formulaire ──────────────────────────────────────────────────── */
+.nk-form { padding: 4px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
+.nk-field { display: flex; flex-direction: column; gap: 6px; }
+.nk-field > span { font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--text-dim, rgba(248,250,252,.55)); text-transform: uppercase; }
+.nk-field input, .nk-field select {
+  height: 44px; padding: 0 14px; border-radius: 12px;
+  background: rgba(0,0,0,.22); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  color: var(--text, #f8fafc); font-family: inherit; font-size: 15px; letter-spacing: -0.01em;
+  outline: none; transition: border-color .15s ease, background .15s ease;
+}
+.nk-field input:focus, .nk-field select:focus { border-color: rgba(139,92,246,.6); background: rgba(0,0,0,.32); }
+.nk-field select { appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, rgba(248,250,252,.4) 50%), linear-gradient(135deg, rgba(248,250,252,.4) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px; background-size: 5px 5px; background-repeat: no-repeat; }
+
+.nk-icon-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.nk-icon-opt {
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; cursor: pointer;
+  background: rgba(0,0,0,.22); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  color: var(--text-dim, rgba(248,250,252,.6)); transition: all .15s ease;
+}
+.nk-icon-opt:hover { color: var(--text, #f8fafc); }
+.nk-icon-opt.nk-sel { border-color: rgba(139,92,246,.7); background: rgba(139,92,246,.14); color: var(--text, #f8fafc); }
+
+.nk-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.nk-btn {
+  height: 44px; padding: 0 20px; border-radius: 12px; border: 1px solid transparent; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.02em;
+  transition: filter .15s ease, background .15s ease;
+}
+.nk-btn:disabled { opacity: .6; cursor: default; }
+.nk-btn-primary { background: var(--nk-violet, #8b5cf6); color: #fff; margin-left: auto; }
+.nk-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.nk-btn-danger { background: none; border-color: rgba(224,92,92,.4); color: #e05c5c; }
+.nk-btn-danger:hover { background: rgba(224,92,92,.12); }
+
+/* ── Popover (menu catégorie ⋯) ──────────────────────────────────── */
+.nk-popover {
+  position: fixed; z-index: 45; min-width: 190px; padding: 6px;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,.5);
+  animation: nk-fade .12s ease;
+}
+.nk-pop-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px;
+  background: none; border: none; border-radius: 9px; cursor: pointer; text-align: left;
+  font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text, #f8fafc); transition: background .12s ease;
+}
+.nk-pop-item:hover { background: rgba(255,255,255,.06); }
+.nk-pop-item:disabled { opacity: .35; cursor: default; }
+.nk-pop-item svg { color: rgba(248,250,252,.55); flex: none; }
+.nk-pop-danger { color: #e05c5c; } .nk-pop-danger svg { color: #e05c5c; }
+
+/* ── Recherche : liste de résultats ──────────────────────────────── */
+.nk-search { position: relative; }
+.nk-search-results {
+  position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 30;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  border-radius: 16px; box-shadow: 0 14px 40px rgba(0,0,0,.5); padding: 6px; overflow: hidden;
+}
+.nk-search-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px;
+  background: none; border: none; border-radius: 11px; cursor: pointer; text-align: left;
+  font-family: inherit; transition: background .12s ease;
+}
+.nk-search-item:hover { background: rgba(255,255,255,.06); }
+.nk-av-sm { width: 32px; height: 32px; font-size: 12px; }
+.nk-search-empty { padding: 14px; text-align: center; font-size: 14px; color: var(--text-dim, rgba(248,250,252,.45)); }
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+.nk-toast {
+  position: absolute; bottom: 80px; left: 50%; z-index: 50;
+  transform: translate(-50%, 12px); opacity: 0;
+  padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.14));
+  color: var(--text, #f8fafc); box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  transition: transform .25s cubic-bezier(.22,1,.36,1), opacity .25s ease;
+}
+.nk-toast-in { transform: translate(-50%, 0); opacity: 1; }
+.nk-toast-error { border-color: rgba(224,92,92,.5); }
+.nk-toast-error::before { content: ''; }
+
+/* ── Reduced-motion : pas de circulation, transitions calmes ─────── */
+@media (prefers-reduced-motion: reduce) {
+  .nk-wires path.nk-flow { display: none; }
+  .nk-cat, .nk-person { transition: opacity .3s ease; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .nk-chrome { gap: 8px; padding: 0 12px; }
+  .nk-search { width: 100%; }
+  .nk-add-btn span { display: none; }
+  .nk-add-btn { padding: 0 14px; }
+  .nk-person { width: 205px; }
+}
