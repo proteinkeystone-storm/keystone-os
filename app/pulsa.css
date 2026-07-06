@@ -28,6 +28,15 @@
   .pulsa-app.is-responses .ws-main {
     padding: 20px;
   }
+  /* En-tête bibliothèque : sur mobile le titre + sous-titre prennent toute
+     la largeur (plus de titre cassé ni de sous-titre écrasé), les boutons
+     passent en dessous et peuvent revenir à la ligne. */
+  .pulsa-lib-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .pulsa-lib-head > div:last-child { flex-wrap: wrap; }
 }
 
 /* ═══════════════════════════════════════════════════════

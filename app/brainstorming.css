@@ -1954,6 +1954,33 @@ html.light-mode .wr-agents-modal { background: rgba(15, 23, 42, 0.32); }
 
 @media (max-width: 720px) {
   .wr-source-chip-label { max-width: 180px; }
+
+  /* Bandeau de mode : sur mobile on laisse le libellé passer sur plusieurs
+     lignes au lieu de le tronquer par « … », pastille alignée en haut. */
+  .wr-subheader-mode { align-items: flex-start; }
+  .wr-subheader-dot { margin-top: 5px; }
+  .wr-subheader-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.3;
+  }
+
+  /* Ligne « Ajouter une source » : le flex ne tenait pas sur une ligne et le
+     texte d'aide chevauchait les boutons. On empile franchement :
+     label → aide → bouton, chacun sur sa propre ligne. */
+  .wr-source-toggle { flex-wrap: wrap; }
+  /* shorthand + spécificité renforcée pour battre un `flex:1` concurrent */
+  .wr-source-add .wr-source-toggle em {
+    order: 1;
+    flex: 0 0 100%;
+    margin-left: 0;
+    margin-top: 3px;
+  }
+  .wr-source-add .wr-source-toggle .wr-refine-btn {
+    order: 2;
+    margin-top: 8px;
+  }
 }
 
 /* ═══ Refonte 2026-07 — brief d'abord, décision en sortie ═══ */
