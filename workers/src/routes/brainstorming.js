@@ -38,6 +38,8 @@ import { budgetGuard, recordUsage, estimateTokens, isThrottled } from '../lib/ai
 import { isEnforceEnabled, consumeCredits } from '../lib/ai-credits.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 import { streamLLM } from '../lib/llm-stream.js';
+// P2 Gest — grounding Kortex (savoir maison) pour l'invité « expert maison ».
+import { kortexGroundingForGest } from './smart-agent.js';
 
 // Sprint 2 fix v3 (26/05/2026 soir) — switch Llama 3.3 fp8-fast → Llama 3.1 8B.
 // Pourquoi : Llama 3.3 70B en fp8-fast sortait un artefact alphabétique
@@ -1028,6 +1030,7 @@ async function _extractInsights(env, brief, history) {
 const SUPPORTED_AGENTS = new Set([
   'strategic', 'creative', 'growth', 'consumer', 'brand',
   'cultural', 'data', 'devil', 'synth', 'auto',
+  'gest',   // invité « expert maison » (opt-in, placé par phase de tour)
 ]);
 
 // ── Détection d'un brief d'IDÉATION (2026-05-28) ──────────────────
@@ -1037,6 +1040,17 @@ const SUPPORTED_AGENTS = new Set([
 const _IDEATION_RE = /\b(nom|noms|nommer|appeler|baptiser|rebaptiser|renommer|slogan|baseline|accroche|tagline|signature|punchline|id[ée]e|id[ée]es|trouve[rz]?|propose[rz]?|sugg[èe]re|sugg[ée]rer|brainstorm|liste de|des options|des pistes|titres?)\b/i;
 function _isIdeationBrief(brief) {
   return _IDEATION_RE.test(String(brief || ''));
+}
+
+// P2 Gest — requête de retrieval : le brief ancre, les derniers tours ciblent
+// ce qui se discute là, maintenant (pour que le crible retrouve les fiches
+// pertinentes du débat en cours, pas juste du sujet global).
+function _buildGestQuery(brief, history) {
+  const recent = (Array.isArray(history) ? history.slice(-4) : [])
+    .filter(t => t && t.content)
+    .map(t => String(t.content))
+    .join(' ');
+  return `${brief}\n${recent}`.slice(0, 500);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1171,6 +1185,8 @@ export async function handleBrainstormingAgentRespond(request, env) {
     history        = [],
     max_turns      = DEFAULT_MAX_TURNS,
     active_agents,                   // Sprint 7.12 — comité de débat choisi (sélecteur d'agents)
+    invite_gest = false,             // Socle Gest (2026-07-06) — invité « expert maison » opt-in
+    gest_agent_id = null,            // P2 Gest — Smart Agent dont on convoque le savoir Kortex
     apiKey,                          // BYOK Claude (LEGACY) — agent premium Devil's Advocate, flag-OFF
     byok,                            // BYOK universel (nesté) — { engine, apiKey } du moteur ACTIF
     target_network = null,           // Mode « Idées de Posts » — réseau social cible
@@ -1213,7 +1229,17 @@ export async function handleBrainstormingAgentRespond(request, env) {
     ? normalizeDebateRoster(active_agents)
     : null;
   const rosterN  = debateRoster ? debateRoster.length : 8;
-  const tableCap = debateRoster ? Math.min(turnsCap, rosterN) : turnsCap;
+  let   tableCap = debateRoster ? Math.min(turnsCap, rosterN) : turnsCap;
+
+  // Socle Gest — invité « expert maison » opt-in, placé par PHASE de tour :
+  // 2 prises de parole EXTRA (ouverture après le cadrage + crible avant la
+  // synthèse), HORS comité de débat. Le tour d'ouverture consomme un slot →
+  // on élargit le plafond de +1 pour ne pas rogner le tour de table ; le
+  // crible de clôture est appended après la condition d'arrêt (cf. boucle).
+  // Mode 'auto' uniquement : en relance ciblée (1 agent) le Gest n'a pas de
+  // sens (isAuto est redéclaré plus bas — on teste agent_id directement ici).
+  const gestInvited = agent_id === 'auto' && invite_gest === true && SUPPORTED_AGENTS.has('gest');
+  if (gestInvited) tableCap = Math.min(11, tableCap + 1);
 
   // Mode « Idées de Posts » : on injecte le RÉSEAU CIBLE dans le brief vu par les
   // agents (sans toucher le brief affiché/historisé côté front). null sinon.
@@ -1282,6 +1308,24 @@ export async function handleBrainstormingAgentRespond(request, env) {
       const localHistory = [...history];
       let turnsDone = 0;
       let completeReason = 'single';
+
+      // ── Socle Gest — placement par phase de tour ──────────────────
+      // Le Gest parle 2× par TOUR DE TABLE : (1) ouverture, juste après le
+      // cadrage de Strategic Lead ; (2) crible du réel, en dernier avant la
+      // synthèse. On compte ses prises DEPUIS le dernier reset user (chaque
+      // intervention humaine ouvre un nouveau tour → le Gest re-ancre).
+      const gestSpokeThisRound = () => {
+        let n = 0;
+        for (let i = localHistory.length - 1; i >= 0; i--) {
+          if (localHistory[i].agent_id === 'user') break;
+          if (localHistory[i].agent_id === 'gest') n++;
+        }
+        return n;
+      };
+      // Marqueur : une condition d'arrêt a été atteinte mais le Gest doit
+      // encore livrer son crible → on force UN tour de plus (le Gest), puis on
+      // clôture réellement au passage suivant.
+      let pendingGestClose = false;
       // Refonte 2026-07 — clôture anticipée : 2 tours consécutifs redondants
       // (Jaccard mots porteurs ≥ .55 avec un tour déjà joué) = la table n'apporte
       // plus rien → on passe direct à la synthèse, les appels restants sont
@@ -1312,8 +1356,22 @@ export async function handleBrainstormingAgentRespond(request, env) {
         while (true) {
           // Déterminer l'agent qui va parler maintenant
           let currentAgentId;
+          // Phase du Gest ce tour ('open' | 'close' | null) — pilote son prompt.
+          let gestPhase = null;
           if (isAuto) {
-            currentAgentId = pickNextAgent(localHistory, cognitive_mode, debateRoster);
+            const gestDone = gestInvited ? gestSpokeThisRound() : 0;
+            const lastId   = localHistory.length ? localHistory[localHistory.length - 1].agent_id : null;
+            if (gestInvited && pendingGestClose && gestDone < 2) {
+              // Crible du réel : dernier mot avant la synthèse.
+              currentAgentId = 'gest';
+              gestPhase = 'close';
+            } else if (gestInvited && gestDone === 0 && lastId === 'strategic') {
+              // Ouverture : note de contexte juste après le cadrage de Strategic Lead.
+              currentAgentId = 'gest';
+              gestPhase = 'open';
+            } else {
+              currentAgentId = pickNextAgent(localHistory, cognitive_mode, debateRoster);
+            }
           } else {
             // Mode "1 agent unique" — on s'arrête après ce tour
             currentAgentId = agent_id;
@@ -1347,7 +1405,21 @@ export async function handleBrainstormingAgentRespond(request, env) {
           send({ type: 'agent_start', agent_id: currentAgentId });
 
           const agentList    = getAgentNamesForPrompt(currentAgentId, debateRoster);
-          const systemPrompt = agent.systemPrompt(cognitive_mode, effectiveBrief, agentList, previousTurn, previousAgent);
+          // P2 Gest — grounding Kortex : avant que l'invité parle, on interroge
+          // le coffre du Smart Agent choisi et on injecte les faits dans son
+          // prompt. Échec/indispo (pas MAX, coffre vide, 0 hit) → grounding ''
+          // → le Gest retombe proprement en persona de terrain (jamais bloqué).
+          let gestGrounding = '';
+          if (currentAgentId === 'gest' && gest_agent_id) {
+            try {
+              const g = await kortexGroundingForGest(env, request, claims, {
+                agentId: gest_agent_id,
+                query:   _buildGestQuery(effectiveBrief, localHistory),
+              });
+              if (g.ok) gestGrounding = g.grounding;
+            } catch (_) { /* ancrage best-effort : le Gest parle quand même */ }
+          }
+          const systemPrompt = agent.systemPrompt(cognitive_mode, effectiveBrief, agentList, previousTurn, previousAgent, gestGrounding);
 
           const messages = [{ role: 'system', content: systemPrompt }];
           // Refonte 2026-07 (retour Stéphane « chacun parle dans son coin ») :
@@ -1380,7 +1452,21 @@ export async function handleBrainstormingAgentRespond(request, env) {
             ? `RÉAGIS D'ABORD À CECI — ${previousAgent.name} vient de dire : « ${String(previousTurn.content).slice(0, 220)} »\nTa PHRASE 1 le PROLONGE ou le CONTREDIT en nommant ${previousAgent.name} (jamais de validation polie). Ensuite seulement, ton angle.\n\n`
             : '';
           let triggerContent;
-          if (ideation) {
+          if (currentAgentId === 'gest') {
+            // Socle Gest — prompt piloté par la PHASE de tour (ouverture / crible).
+            if (gestPhase === 'close') {
+              triggerContent = `Le tour de table est terminé. Tu intervien(s) EN DERNIER, comme expert maison, avant la synthèse. MAX 3 phrases :
+- Phrase 1 : ce qui, dans ce qui vient d'être dit, TIENT face au terrain réel (nomme la piste).
+- Phrase 2 : ce qui SE HEURTE au réel connu (une contrainte concrète : coût, délai, ce qui a déjà échoué ici) — SANS enterrer l'idée.
+- Phrase 3 (optionnelle) : la frontière à explorer (« hors de ce qu'on sait, donc à tester », JAMAIS un veto).
+- INTERDIT : refaire la synthèse (ce n'est pas ton job), théoriser, valider poliment, tuer une idée neuve parce qu'elle sort du connu.`;
+            } else {
+              triggerContent = `Tu prends la parole juste après le cadrage, comme expert maison qui connaît le terrain. Tu ANCRES sans RÉTRÉCIR. MAX 3 phrases :
+- Phrase 1-2 : UNE note de contexte terrain utile (ce qui est vrai ici : une contrainte, un fait d'usage, ce qui a déjà marché/coincé) — factuel, concret.
+- Phrase 3 : rends la main à la table SANS imposer d'angle ni fermer la question (la divergence doit rester ouverte).
+- INTERDIT : cadrer/orienter le débat vers une seule direction, donner des idées créatives (pas ton rôle), théoriser.`;
+            }
+          } else if (ideation) {
             // ── MODE IDÉATION : l'équipe PRODUIT des candidats et converge ──
             if (isFirstTurn) {
               triggerContent = `Demande d'IDÉATION. Tu OUVRES l'atelier. MAX 3 phrases :
@@ -1573,20 +1659,20 @@ POSTURE
           });
 
           // Conditions d'arrêt
-          if (!isAuto) {
-            completeReason = 'single';
-            break;
-          }
-          if (turnsDone >= tableCap) {
-            completeReason = 'max_turns';
-            break;
-          }
-          if (redundantStreak >= 2 && turnsDone >= 3) {
-            completeReason = 'converged';   // la table tourne en rond → synthèse directe, appels économisés
-            break;
-          }
-          if (shouldAutoPause(localHistory, { maxAgentTurns: tableCap })) {
-            completeReason = 'auto_pause';
+          let stopReason = null;
+          if (!isAuto)                                     stopReason = 'single';
+          else if (turnsDone >= tableCap)                  stopReason = 'max_turns';
+          else if (redundantStreak >= 2 && turnsDone >= 3) stopReason = 'converged';   // la table tourne en rond → synthèse directe
+          else if (shouldAutoPause(localHistory, { maxAgentTurns: tableCap })) stopReason = 'auto_pause';
+
+          if (stopReason) {
+            // Socle Gest — avant de clôturer, laisse l'expert maison livrer son
+            // crible du réel (un tour de plus). Jamais en mode 1-agent.
+            if (isAuto && gestInvited && !pendingGestClose && gestSpokeThisRound() < 2 && localHistory.length) {
+              pendingGestClose = true;
+              continue;   // le prochain tour = crible du Gest, puis on clôture
+            }
+            completeReason = stopReason;
             break;
           }
         }

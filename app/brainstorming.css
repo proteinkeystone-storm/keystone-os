@@ -30,6 +30,7 @@
   --ks-agent-data     : #94a3b8;  /* slate-400 (bleu acier) */
   --ks-agent-devil    : #e05c5c;  /* danger Keystone (rouge brique) */
   --ks-agent-synth    : #14b8a6;  /* teal-500 */
+  --ks-agent-gest     : #d6a15e;  /* bronze/or — invité « expert maison », distinct du brand amber */
 
   /* ── Sprint 7 — Couleurs des 7 modes cognitifs ──────────────────── */
   /* Source unique de vérité : app/lib/brainstorming-agents.js (COGNITIVE_MODES) */
@@ -291,6 +292,13 @@
 .wr-agent-cell.wr-agent-cell--off { opacity: 0.3; filter: grayscale(0.85); }
 .wr-agent-cell--off .wr-agent-icon { box-shadow: none !important; border-style: dashed; }
 .wr-agent-cell--off .wr-agent-label { color: var(--wr-text-dim); }
+
+/* Socle Gest — cellule « invité » : liseré discret pour la distinguer des
+   membres permanents du comité (elle n'est présente que si invitée). */
+.wr-agent-cell--gest .wr-agent-icon {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--ks-agent-gest) 55%, transparent);
+}
 
 /* ═════════════════════════════════════════════════════════════════
    FEED — discussion live
@@ -1402,6 +1410,61 @@
 .wr-roster-warn { font-size: 11.5px; color: #f59e0b; letter-spacing: -0.005em; }
 .wr-roster-warn.flash { animation: wrWarnFlash 0.5s ease; }
 @keyframes wrWarnFlash { 0%, 100% { opacity: 1; } 30% { opacity: 0.25; } }
+
+/* ── Socle Gest — bloc « Inviter un Gest » (expert maison) ───────── */
+.wr-gest-invite {
+  margin-top: 12px;
+  border: 1px solid var(--wr-border);
+  border-radius: 12px;
+  background: rgba(214, 161, 94, 0.05);   /* bronze très léger */
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.wr-gest-invite.active {
+  border-color: color-mix(in srgb, var(--ks-agent-gest) 45%, transparent);
+  background: color-mix(in srgb, var(--ks-agent-gest) 9%, transparent);
+}
+.wr-gest-toggle {
+  display: flex; align-items: flex-start; gap: 12px;
+  width: 100%; padding: 12px 14px;
+  background: none; border: none; cursor: pointer; text-align: left;
+  color: var(--wr-text);
+}
+.wr-gest-toggle-track {
+  flex: 0 0 auto; margin-top: 2px;
+  width: 38px; height: 22px; border-radius: 999px;
+  background: var(--wr-border-strong);
+  position: relative; transition: background 0.2s ease;
+}
+.wr-gest-invite.active .wr-gest-toggle-track { background: var(--ks-agent-gest); }
+.wr-gest-toggle-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.wr-gest-invite.active .wr-gest-toggle-thumb { transform: translateX(16px); }
+.wr-gest-toggle-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wr-gest-toggle-name {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 700; letter-spacing: -0.01em;
+}
+.wr-gest-toggle-name svg { width: 15px; height: 15px; color: var(--ks-agent-gest); flex: 0 0 auto; }
+.wr-gest-toggle-hint { font-size: 11.5px; color: var(--wr-text-muted); line-height: 1.45; }
+/* P2 — picker du savoir maison (Smart Agent) sous le toggle */
+.wr-gest-agents { padding: 0 14px 12px 64px; }
+.wr-gest-agents-msg { font-size: 11.5px; color: var(--wr-text-muted); line-height: 1.45; }
+.wr-gest-agents-label {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: -0.005em;
+  color: var(--wr-text-muted); margin-bottom: 6px;
+}
+.wr-gest-agents-select {
+  width: 100%; max-width: 320px;
+  padding: 8px 10px; border-radius: 9px;
+  background: var(--wr-bg-elevated); color: var(--wr-text);
+  border: 1px solid var(--wr-border-strong);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.wr-gest-agents-select:focus { outline: none; border-color: var(--ks-agent-gest); }
 
 /* ═════════════════════════════════════════════════════════════════
    ÉCRAN DE PRÉPARATION CENTRAL — Sprint 7.12 (mode + comité avant brief)

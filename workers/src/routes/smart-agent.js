@@ -1380,6 +1380,49 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [] } =
   return { semantic, hits };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// P2 — Grounding Kortex pour le Gest du Brainstorming (invité maison)
+// ═══════════════════════════════════════════════════════════════════
+// Point d'entrée UNIQUE exposé au pad Brainstorming (couplage minimal : il
+// n'importe que cette fonction). Encapsule entitlement + tenant + coffres de
+// l'agent choisi + retrieval hybride + formatage borné. Le Gest confronte
+// alors le débat au savoir RÉELLEMENT documenté du client — plus une persona.
+// Ne JETTE jamais : renvoie { ok:false, reason } et le Gest retombe en persona
+// (le socle reste fonctionnel si le savoir manque). reason ∈ no-agent /
+// no-query / not-entitled / no-tenant / agent-not-found / empty-vault /
+// no-hits / error.
+export async function kortexGroundingForGest(env, request, claims, { agentId, query, topk = 4 } = {}) {
+  try {
+    if (!agentId || typeof agentId !== 'string')                return { ok: false, reason: 'no-agent' };
+    if (!query || typeof query !== 'string' || query.trim().length < 3) return { ok: false, reason: 'no-query' };
+    // Smart Agent = MAX/ADMIN/BETA — sinon pas d'ancrage (Gest reste persona).
+    if (claims && !_entitled(claims) && !requireAdmin(request, env)) return { ok: false, reason: 'not-entitled' };
+    const tenant = _tenantOf(request, env, claims);
+    if (!tenant) return { ok: false, reason: 'no-tenant' };
+    await ensureSmartAgentSchema(env);
+    // L'agent doit appartenir au tenant authentifié (jamais un paramètre client
+    // de confiance) — on récupère son nom au passage.
+    const { results: ar } = await env.DB
+      .prepare('SELECT id, name FROM sa_agents WHERE id = ? AND tenant_id = ?')
+      .bind(agentId, tenant).all();
+    if (!ar.length) return { ok: false, reason: 'agent-not-found' };
+    const agentName = (ar[0].name || 'Expert maison').slice(0, 80);
+    const vaultIds = await _vaultsForAgent(env, tenant, agentId);
+    if (!vaultIds.length) return { ok: false, reason: 'empty-vault', agentName };
+    const { hits } = await _retrieve(env, tenant, query.trim().slice(0, 500), { topk, vaultIds });
+    if (!hits.length) return { ok: false, reason: 'no-hits', agentName };
+    // Bloc compact et borné (le prompt du Gest a un budget serré).
+    const grounding = hits.map((h, i) => {
+      const t = String(h.row?.title || '').replace(/\s+/g, ' ').trim();
+      const b = String(h.row?.body_text || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+      return `${i + 1}. ${t ? t + ' — ' : ''}${b}`;
+    }).join('\n');
+    return { ok: true, grounding, agentName, count: hits.length };
+  } catch (_) {
+    return { ok: false, reason: 'error' };
+  }
+}
+
 export async function handleKortexSearch(request, env) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin);

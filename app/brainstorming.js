@@ -23,6 +23,7 @@ import { burgerHTML, bindBurger } from './lib/topbar-burger.js';
 import { byokRequestFields } from './lib/engines.js';
 import {
   AGENTS,
+  GEST_AGENT,
   getAgent,
   getAgentNamesForPrompt,
   COGNITIVE_MODES,
@@ -74,6 +75,9 @@ let _currentSession = null;
 // Refonte 2026-07 (D) — relance ciblée post-synthèse : prochain envoi adressé
 // à UN agent précis (1 appel) au lieu de relancer tout le tour de table.
 let _followUpAgent = null;
+// P2 Gest — cache de session de la liste des Smart Agents (savoirs maison) pour
+// le picker. Rempli au 1er fetch, remis à null à l'ouverture d'une séance.
+let _gestAgentsCache = null;
 // Refonte 2026-07 (B) — coach de brief : un brief trop maigre gaspille ~10
 // appels IA pour un débat creux. Une passe GRATUITE (heuristique) propose de
 // l'étoffer UNE fois ; « Lancer quand même » reste possible.
@@ -279,7 +283,12 @@ export function openBrainstorming(opts = {}) {
     rosterMode:   _rosterPref?.mode || 'auto',
     manualRoster: [...MANDATORY_DEBATE_AGENTS],
     roster:       [],   // résolu juste après (dépend de mode + rosterMode)
+    // Socle Gest — invité « expert maison » opt-in (préf persistée).
+    inviteGest:   _rosterPref?.inviteGest === true,
+    // P2 Gest — Smart Agent dont on convoque le savoir (résolu via le picker).
+    gestAgentId:  (typeof _rosterPref?.gestAgentId === 'string') ? _rosterPref.gestAgentId : null,
   };
+  _gestAgentsCache = null;   // picker rechargé pour cette séance
   _currentSession.roster = _resolveRoster();
   _setupStep = 0;   // cheminement de préparation : démarre sur l'étape 1 (mode)
 
@@ -292,6 +301,8 @@ export function openBrainstorming(opts = {}) {
   _bootAgents(panel);
   // Sprint 7.12 — écran de préparation au centre (mode + comité)
   _renderCenterConfig(panel);
+  // Socle Gest — reflète l'état d'invitation (préf persistée) dans la rangée du haut.
+  _syncGestCell(panel);
 
   // Relais entrant (ex. Social Manager → Brainstorming) : pré-remplit le sujet.
   if (opts && typeof opts.brief === 'string' && opts.brief.trim()) {
@@ -932,6 +943,10 @@ async function _callOrchestration(panel, singleAgentId = null) {
     // Chaîne de contenu — DOSSIER SOURCE (lien/texte/fichier) : ancre le débat
     // sur des faits. null si l'utilisateur n'a pas joint de source.
     source        : _currentSession.source ? { text: _currentSession.source.text, ref: _currentSession.source.ref } : null,
+    // Socle Gest — invité « expert maison » opt-in (placé par phase côté worker).
+    invite_gest   : _currentSession.inviteGest === true,
+    // P2 Gest — Smart Agent dont on convoque le savoir Kortex (null ⇒ persona).
+    gest_agent_id : _currentSession.inviteGest ? (_currentSession.gestAgentId || null) : null,
   };
   // Sprint 7.12 — comité réduit : on transmet le comité de débat actif au
   // worker. Le tour de table = la taille du comité (sinon le serveur vise 8).
@@ -1989,6 +2004,8 @@ function _saveRosterPref() {
     localStorage.setItem(ROSTER_KEY, JSON.stringify({
       mode: _currentSession.rosterMode,
       manualRoster: Array.isArray(_currentSession.manualRoster) ? _currentSession.manualRoster : null,
+      inviteGest: _currentSession.inviteGest === true,
+      gestAgentId: _currentSession.gestAgentId || null,
     }));
   } catch (e) { /* quota */ }
 }
@@ -2011,8 +2028,126 @@ function _applyRosterToCells(panel) {
   const roster = new Set(_currentSession.roster || []);
   panel.querySelectorAll('.wr-agent-cell').forEach(cell => {
     const id = cell.dataset.agentId;
-    const present = id === ALWAYS_PRESENT_AGENT || roster.has(id);
+    // gest = invité hors comité → jamais grisé (comme synth/strategic).
+    const present = id === ALWAYS_PRESENT_AGENT || id === 'gest' || roster.has(id);
     cell.classList.toggle('wr-agent-cell--off', !present);
+  });
+}
+
+// Socle Gest — ajoute/retire la cellule « invité » dans la rangée du haut selon
+// l'état d'invitation. Rendue à la volée (pas de cellule fantôme quand non
+// invitée → l'auto-centrage first/last-child de la rangée reste propre).
+function _syncGestCell(panel) {
+  if (!panel) return;
+  const row = panel.querySelector('.wr-agents-row');
+  if (!row) return;
+  const on = _currentSession?.inviteGest === true;
+  panel.classList.toggle('gest-invited', on);
+  let cell = row.querySelector('.wr-agent-cell[data-agent-id="gest"]');
+  if (on && !cell) {
+    cell = document.createElement('div');
+    cell.className = 'wr-agent-cell wr-agent-cell--gest lit';
+    cell.dataset.agentId = 'gest';
+    cell.style.setProperty('--agent-color', GEST_AGENT.color);
+    cell.style.setProperty('--agent-glow', `${GEST_AGENT.color}40`);
+    cell.title = `${GEST_AGENT.fullTitle} — ${GEST_AGENT.role}`;
+    cell.innerHTML = `<div class="wr-agent-icon">${_iconSvg(GEST_AGENT.icon)}</div><div class="wr-agent-label">${GEST_AGENT.name}</div>`;
+    row.appendChild(cell);
+    cell.classList.remove('igniting'); void cell.offsetWidth; cell.classList.add('igniting');
+    setTimeout(() => cell.classList.remove('igniting'), 750);
+  } else if (!on && cell) {
+    cell.remove();
+  }
+}
+
+// ── Bloc « Inviter un Gest » — partagé écran de préparation + modale du rail ──
+function _gestInviteHTML() {
+  const on = _currentSession?.inviteGest === true;
+  return `
+    <div class="wr-gest-invite${on ? ' active' : ''}">
+      <button type="button" class="wr-gest-toggle" role="switch" aria-checked="${on}" data-gest-toggle>
+        <span class="wr-gest-toggle-track"><span class="wr-gest-toggle-thumb"></span></span>
+        <span class="wr-gest-toggle-txt">
+          <span class="wr-gest-toggle-name">${_iconSvg('agent-gest')} Inviter un Gest — expert maison</span>
+          <span class="wr-gest-toggle-hint">Gardien du réel : ancre le débat à l'ouverture, passe la conclusion au crible. En plus du comité.</span>
+        </span>
+      </button>
+      <div class="wr-gest-agents"${on ? '' : ' hidden'}></div>
+    </div>`;
+}
+
+function _wireGestInvite(root, panel) {
+  const btn = root.querySelector('[data-gest-toggle]');
+  if (!btn || !_currentSession) return;
+  const wrap = btn.closest('.wr-gest-invite');
+  const box  = wrap?.querySelector('.wr-gest-agents');
+  // Déjà invité au render → peupler le picker de savoirs maison.
+  if (_currentSession.inviteGest && box) _loadGestAgents(box);
+  btn.addEventListener('click', () => {
+    _currentSession.inviteGest = !(_currentSession.inviteGest === true);
+    _saveRosterPref();
+    if (wrap) wrap.classList.toggle('active', _currentSession.inviteGest);
+    btn.setAttribute('aria-checked', String(_currentSession.inviteGest));
+    _syncGestCell(panel);
+    if (box) {
+      box.hidden = !_currentSession.inviteGest;
+      if (_currentSession.inviteGest) _loadGestAgents(box);
+    }
+  });
+}
+
+// P2 Gest — picker du Smart Agent dont on convoque le savoir Kortex. Le retrieval
+// réel exige un plan MAX (403) ET au moins un agent maison ; sinon le Gest reste
+// un expert de terrain (persona), sans jamais bloquer la séance.
+async function _loadGestAgents(box) {
+  if (!box) return;
+  // Cache de session : évite un refetch à chaque re-render de l'écran de prépa.
+  if (_gestAgentsCache) { _renderGestAgents(box, _gestAgentsCache); return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="wr-gest-agents-msg">Chargement des experts maison…</div>`;
+  try {
+    const res = await fetch(`${_apiBase()}/api/smart-agent/agents`, { headers: _authHeaders() });
+    if (res.status === 403) {
+      _gestAgentsCache = { forbidden: true, agents: [] };
+    } else if (!res.ok) {
+      throw new Error(String(res.status));
+    } else {
+      const data = await res.json().catch(() => ({}));
+      _gestAgentsCache = { forbidden: false, agents: Array.isArray(data.agents) ? data.agents : [] };
+    }
+  } catch (_) {
+    _gestAgentsCache = { error: true, agents: [] };
+  }
+  _renderGestAgents(box, _gestAgentsCache);
+}
+
+function _renderGestAgents(box, cache) {
+  if (!box || !cache) return;
+  if (cache.forbidden) {
+    box.innerHTML = `<div class="wr-gest-agents-msg">Le Gest branché sur votre savoir maison est réservé au plan MAX. Il débattra en expert de terrain.</div>`;
+    return;
+  }
+  if (cache.error) {
+    box.innerHTML = `<div class="wr-gest-agents-msg">Experts maison indisponibles — le Gest débattra en expert de terrain.</div>`;
+    return;
+  }
+  const agents = cache.agents || [];
+  if (!agents.length) {
+    box.innerHTML = `<div class="wr-gest-agents-msg">Aucun agent maison trouvé. Le Gest débattra en expert de terrain — créez un Smart Agent pour l'ancrer sur votre savoir.</div>`;
+    return;
+  }
+  // Pré-sélection : agent mémorisé s'il existe encore, sinon le premier.
+  if (!_currentSession.gestAgentId || !agents.some(a => a.id === _currentSession.gestAgentId)) {
+    _currentSession.gestAgentId = agents[0].id;
+  }
+  box.innerHTML = `
+    <label class="wr-gest-agents-label">Savoir maison à convoquer</label>
+    <select class="wr-gest-agents-select">
+      ${agents.map(a => `<option value="${_esc(a.id)}"${a.id === _currentSession.gestAgentId ? ' selected' : ''}>${_esc(a.name || 'Agent')}</option>`).join('')}
+    </select>`;
+  box.querySelector('.wr-gest-agents-select')?.addEventListener('change', (e) => {
+    _currentSession.gestAgentId = e.target.value;
+    _saveRosterPref();
   });
 }
 
@@ -2178,11 +2313,13 @@ function _renderAgentsSelector(panel, modal) {
       ${selectorOn ? _rosterModeBarHTML(rosterMode, modeLabel) : '<div class="wr-roster-disabled">Comité complet — sélecteur désactivé.</div>'}
       <div class="wr-agents-grid${rosterMode === 'manual' ? '' : ' is-auto'}">${_rosterAgentCardsHTML()}</div>
       <div class="wr-roster-foot">${_rosterFootHTML()}</div>
+      ${_gestInviteHTML()}
     </div>
   `;
   modal.querySelector('.wr-agents-close').addEventListener('click', (e) => { e.stopPropagation(); modal.remove(); });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   if (selectorOn) _wireRosterControls(modal, panel, () => _renderAgentsSelector(panel, modal));
+  _wireGestInvite(modal, panel);
 }
 
 // ── Amorces par mode (Phase 2) — phrases à compléter ─────────────
@@ -2281,6 +2418,7 @@ function _renderCenterConfig(panel) {
         ${selectorOn ? _rosterModeBarHTML(rosterMode, mode.label) : '<div class="wr-roster-disabled">Comité complet.</div>'}
         <div class="wr-agents-grid wr-setup-grid${rosterMode === 'manual' ? '' : ' is-auto'}">${_rosterAgentCardsHTML()}</div>
         <div class="wr-roster-foot">${_rosterFootHTML()}</div>
+        ${_gestInviteHTML()}
       </div>
       <div class="wr-setup-step" data-step="2">
         <div class="wr-setup-step-label"><span class="wr-setup-step-num">3</span> Une amorce pour démarrer <span class="wr-setup-step-opt">optionnel</span></div>
@@ -2311,6 +2449,8 @@ function _renderCenterConfig(panel) {
   });
   // Étape 2 — comité (barre Auto/Manuel + toggles en manuel)
   if (selectorOn) _wireRosterControls(root, panel, () => _renderCenterConfig(panel));
+  // Étape 2bis — invitation du Gest (expert maison), en plus du comité
+  _wireGestInvite(root, panel);
   // Amorces — bascule de grappe (segmented)
   root.querySelectorAll('.wr-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {

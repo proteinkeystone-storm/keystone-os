@@ -157,6 +157,8 @@ export const ICONS = {
   'agent-data'     : '<line x1="3" y1="20.5" x2="21" y2="20.5"/><line x1="6.5" y1="20.5" x2="6.5" y2="14"/><line x1="12" y1="20.5" x2="12" y2="9"/><line x1="17.5" y1="20.5" x2="17.5" y2="11.5"/>',
   'agent-devil'    : '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   'agent-synth'    : '<path d="M12 3l1.6 4.4 4.4 1.6-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M18 16l.7 1.9 1.9.7-1.9.7L18 21l-.7-1.9L15.4 18.6l1.9-.7L18 16z"/>',
+  // Gest — invité « expert maison / gardien du réel ». Ancre = ancrage au réel.
+  'agent-gest'     : '<circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/>',
   'alert-triangle' : '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   'threads'        : '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/>',
   'telegram'       : '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',

@@ -351,8 +351,34 @@ Tu n'as PAS d'opinion personnelle. Tu condenses ce que les autres ont dit.`,
   },
 ];
 
+// ═════════════════════════════════════════════════════════════════
+// GEST — invité « expert maison / gardien du réel » (socle 2026-07-06)
+// ═════════════════════════════════════════════════════════════════
+// HORS du tableau AGENTS À DESSEIN : le Gest n'est PAS un membre permanent
+// du comité. C'est un INVITÉ opt-in (toggle dans l'écran de préparation),
+// placé par PHASE de tour (ouverture + crible), jamais par le roster ni le
+// scoring de l'orchestrateur. Le garder hors d'AGENTS garantit qu'il
+// n'apparaît ni dans les listes de pairs (getAgentNamesForPrompt), ni dans
+// les comités (normalizeDebateRoster), ni comme cellule permanente.
+// Socle = PERSONA (pas encore de requête Kortex réelle) : voir le prompt
+// worker (workers/src/lib/brainstorming-agents.js) — l'injection du savoir
+// documenté est l'étape 2 (retrieval). Côté front, seuls les champs de
+// rendu comptent (le systemPrompt n'est appelé que côté worker).
+export const GEST_AGENT = {
+  id: 'gest',
+  name: 'Gest',
+  fullTitle: 'Gest — expert maison',
+  icon: 'agent-gest',
+  color: '#d6a15e',
+  colorVar: '--ks-agent-gest',
+  personality: ['ancré', 'concret', 'lucide'],
+  role: 'Gardien du réel',
+  function: 'Confronte le débat à la réalité opérationnelle (invité)',
+};
+
 // ── Helpers ──────────────────────────────────────────────────────
 export function getAgent(id) {
+  if (id === GEST_AGENT.id) return GEST_AGENT;
   return AGENTS.find(a => a.id === id) || null;
 }
 
