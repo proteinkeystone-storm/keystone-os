@@ -349,6 +349,7 @@ function _onClick(e) {
     // ── Coffre (onglet Savoir) : liste ──
     if (act === 'kx-new')       { _openEditor(null); return; }
     if (act === 'kx-extract')   { _openExtract(); return; }
+    if (act === 'kx-reindex')   { _reindexKortex(actEl); return; }
     // SA-9 — pack métier : choix, installation, interview curée, validation
     if (act === 'pk-pick')      { _kx.packId = actEl.dataset.v; _renderMainKeepScroll(); return; }
     if (act === 'pk-install')   { _installPack(); return; }
@@ -2316,6 +2317,9 @@ function _kortexViewHTML() {
           <p class="sa-kx-sub">${c.total} fiche${c.total > 1 ? 's' : ''} · ${c.validated} validée${c.validated > 1 ? 's' : ''} · ${isShared ? 'commun au dossier' : 'propre à cet agent'}</p>
         </div>
         <div class="sa-kx-acts">
+          <button class="sa-btn" data-act="kx-reindex" title="Recalcule la recherche par le SENS sur tout le savoir. À lancer après avoir ajouté beaucoup de fiches, pour que l'agent (et le Gest du Brainstorming) retrouve la bonne fiche même quand la question ne reprend pas les mots exacts.">
+            ${icon('refresh-cw', 16)} Réindexer
+          </button>
           <button class="sa-btn" data-act="kx-extract" title="Coller un texte, lire une page web ou un fichier → fiches proposées (1 crédit IA)">
             ${icon('sparkles', 16)} Nourrir le coffre
           </button>
@@ -2401,6 +2405,31 @@ function _searchResultsHTML() {
 function _bindKortexInputs(main) {
     const q = main.querySelector('[data-slot="kx-q"]');
     if (q) q.addEventListener('keydown', e => { if (e.key === 'Enter') _runSearch(); });
+}
+
+// Réindexation sémantique du coffre (POST /kortex/reindex, tenant entier).
+// Un clic = tout le savoir ré-embeddé pour la recherche PAR LE SENS. Auth via
+// la session (_api porte le JWT) : pas de mot de passe à saisir. Idempotent,
+// re-lançable sans risque. Un feedback clair sur le bouton + un toast bilan.
+async function _reindexKortex(btn) {
+    if (!btn || btn.dataset.busy === '1') return;
+    btn.dataset.busy = '1';
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = `${icon('refresh-cw', 16)} Réindexation…`;
+    _toast('Réindexation du savoir en cours… (quelques secondes)');
+    try {
+        const res = await _api('/kortex/reindex', { method: 'POST' });
+        const n = (res && typeof res.indexed === 'number') ? res.indexed : 0;
+        const failed = (res && res.failed) ? ` · ${res.failed} en échec` : '';
+        _toast(`Savoir réindexé — ${n} fiche${n > 1 ? 's' : ''} comprises par le sens${failed}.`, failed ? 'error' : 'ok');
+    } catch (e) {
+        _toast(`Réindexation impossible : ${e.message}`, 'error');
+    } finally {
+        btn.dataset.busy = '';
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
 }
 
 async function _runSearch() {
