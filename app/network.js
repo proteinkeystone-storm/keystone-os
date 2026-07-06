@@ -201,6 +201,7 @@ function _buildShell() {
   _scene    = _root.querySelector('[data-slot="scene"]');
   const vp  = _root.querySelector('[data-slot="viewport"]');
 
+  if (window.innerWidth < MOBILE_BP) { const si = _root.querySelector('.nk-search-input'); if (si) si.placeholder = 'Rechercher'; }
   _root.addEventListener('click', _onClick);
   _root.addEventListener('submit', _onSubmit);
   _root.addEventListener('input', _onInput);
@@ -706,7 +707,7 @@ async function _deleteContact(id) {
 }
 async function _deleteCategory(id) {
   if (!confirm('Supprimer cette catégorie ? Les contacts qu\'elle contient ne seront PAS supprimés (ils deviennent sans catégorie).')) return;
-  try { await _api('/category/' + id, { method: 'DELETE' }); if (openCat === id) openCat = null; await _refresh(); _closeOverlay(); _toast('Catégorie supprimée'); }
+  try { await _api('/category/' + id, { method: 'DELETE' }); if (openCat === id) openCat = null; if (_catListId === id) _closeCatList(); await _refresh(); _closeOverlay(); _toast('Catégorie supprimée'); }
   catch (err) { _toast('Suppression impossible', 'error'); }
 }
 async function _moveCategory(id, dir) {
@@ -737,6 +738,7 @@ function _openCatList(catId) {
     `<div class="nk-fp-hd">
        <button class="nk-fp-icon" data-act="nk-catlist-close" aria-label="Retour">${icon('chevron-left', 26)}</button>
        <div class="nk-fp-title">${esc(c.label)} <span>${c.count}</span></div>
+       <button class="nk-fp-icon" data-act="nk-catlist-menu" data-cat="${esc(catId)}" aria-label="Gérer la catégorie">${icon('more-horizontal', 22)}</button>
        <button class="nk-fp-icon" data-act="nk-catlist-add" data-cat="${esc(catId)}" aria-label="Ajouter">${icon('plus', 22)}</button>
      </div>
      <div class="nk-fp-body">${rows.length
@@ -809,12 +811,16 @@ function _renderFiche(c) {
   const sms = c.phone ? 'sms:' + encodeURIComponent(c.phone) : '';
 
   _fiche.innerHTML =
-    `<div class="nk-fiche-hd">
+    `<div class="nk-fiche-nav">
+       <button class="nk-fiche-navbtn" data-act="nk-fiche-close" aria-label="Retour">${icon('chevron-left', 26)}</button>
+       <button class="nk-fiche-navbtn" data-act="nk-fiche-edit" aria-label="Modifier">${icon('more-horizontal', 22)}</button>
+     </div>
+     <div class="nk-fiche-hd">
        <button class="nk-fiche-x" data-act="nk-fiche-close" aria-label="Fermer">${icon('x', 18)}</button>
        <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${badge}${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
        <div class="nk-fiche-acts">
          ${_actionBtn('phone', tel, 'Appeler')}${_actionBtn('mail', mail, 'E-mail')}${_actionBtn('message', sms, 'Message')}
-         <button class="nk-fiche-act" data-act="nk-fiche-edit" aria-label="Modifier">${icon('settings', 20)}</button>
+         <button class="nk-fiche-act nk-fiche-act-edit" data-act="nk-fiche-edit" aria-label="Modifier">${icon('settings', 20)}</button>
        </div>
        <div class="nk-fiche-tabs">${tabs}</div>
      </div>
@@ -901,6 +907,7 @@ function _onClick(e) {
     case 'nk-cat-up':      { _closePopover(); return _moveCategory(actEl.dataset.cat, -1); }
     case 'nk-cat-down':    { _closePopover(); return _moveCategory(actEl.dataset.cat, +1); }
     case 'nk-catlist-close': return _closeCatList();
+    case 'nk-catlist-menu': return _openCatMenu(actEl.dataset.cat, actEl);
     case 'nk-catlist-add': return _openContactForm({ category_id: actEl.dataset.cat });
     case 'nk-fiche-close': return _closeFiche();
     case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
