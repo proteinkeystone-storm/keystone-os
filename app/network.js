@@ -106,7 +106,6 @@ let _zoom = 1, _panX = 0, _panY = 0;
 let _drag = null;
 let _overlay = null, _popover = null;   // modale de formulaire / menu contextuel
 let _fiche = null, _ficheId = null, _ficheTabId = 'resume';   // fiche contact (NK-4)
-let _catList = null, _catListId = null;                        // liste catégorie plein écran (mobile)
 let _noteTimer = null;
 
 function later(fn, ms) { const t = setTimeout(fn, ms); timeouts.push(t); return t; }
@@ -130,8 +129,8 @@ export function closeNetwork() {
   window.removeEventListener('resize', _onResize);
   _root.remove();
   _root = _stage = _wires = _nodes = _scene = null;
-  _overlay = _popover = _fiche = _catList = null;
-  _ficheId = _catListId = null; _ficheTabId = 'resume';
+  _overlay = _popover = _fiche = null;
+  _ficheId = null; _ficheTabId = 'resume';
   openCat = null; _zoom = 1; _panX = _panY = 0;
   document.body.style.overflow = '';
 }
@@ -245,9 +244,9 @@ function layout() {
   const { w, h } = _dims();
   const mobile = w < MOBILE_BP;
   if (mobile) {
-    // Mobile : « Vous » à gauche + pills catégories empilées, PAS de colonne
-    // contact (elle ouvre une liste plein écran). catX serré pour tenir l'écran.
-    return { you: { x: 44, y: h * .5 }, catX: 110, perX: 0, catGap: 66, perGap: 0, h, mobile };
+    // Mobile : MÊME graphe que desktop, navigué par glissement horizontal.
+    // Colonne contacts hors écran à droite → auto-pan pour la révéler (_focusOpenCategory).
+    return { you: { x: 44, y: h * .5 }, catX: 110, perX: 392, catGap: 66, perGap: 62, h, mobile };
   }
   return {
     you:  { x: Math.max(90, w * .10), y: h * .5 },
@@ -372,6 +371,8 @@ function render(animated = true) {
       later(() => { if (my === seq) spawnContacts(c, L, anim); }, baseDelay);
     }
   }
+  // Pan mobile : suit la catégorie ouverte, sinon revient à l'arbre (desktop : drag manuel préservé).
+  if (_isMobile()) { if (openCat) _focusOpenCategory(false); else _panTo(0, 0, false); }
 }
 
 // Déplie les contacts d'une catégorie (cascade haut → bas).
@@ -456,8 +457,10 @@ function toggle(id) {
     c._path.classList.add('nk-lit');
     const L = layout();
     later(() => { if (my !== seq) return; purge(); spawnContacts(c, L, true); }, 170);
+    _focusOpenCategory(true);   // mobile : glisse vers la colonne contacts
   } else {
     later(() => { if (my === seq) purge(); }, 220);
+    if (_isMobile()) _panTo(0, 0, true);   // mobile : retour à l'arbre
   }
 }
 
@@ -468,6 +471,25 @@ function _applyTransform() {
   if (pct) pct.textContent = Math.round(_zoom * 100) + ' %';
 }
 function _setZoom(z) { _zoom = Math.max(0.5, Math.min(1.5, z)); _applyTransform(); }
+
+// Glissement de la scène (navigation horizontale mobile). La transition vit en
+// CSS ; ici on décide juste animé (classe retirée) ou instantané (nk-nofx).
+function _panTo(x, y, animate) {
+  if (!_scene) return;
+  _panX = x; if (y != null) _panY = y;
+  if (animate) { _scene.classList.remove('nk-nofx'); _applyTransform(); }
+  else { _scene.classList.add('nk-nofx'); _applyTransform(); requestAnimationFrame(() => { if (_scene) _scene.classList.remove('nk-nofx'); }); }
+}
+// Mobile : recentre la vue sur la catégorie ouverte (colonne contacts révélée,
+// catégorie active en amorce à gauche). Sur desktop : rien (tout tient à l'écran).
+function _focusOpenCategory(animate) {
+  if (!_isMobile() || !openCat) return;
+  const c = _cats.find(x => String(x.id) === String(openCat));
+  const L = layout();
+  const catRight = L.catX + (c && c._el ? c._el.offsetWidth : 210);
+  // amorce ~52px de la catégorie active à gauche + colonne contacts révélée à droite.
+  _panTo(52 - catRight, 0, animate);
+}
 function _onWheel(e) {
   if (!e.ctrlKey && Math.abs(e.deltaY) < 2) return;
   e.preventDefault();
@@ -477,6 +499,7 @@ function _onPanStart(e) {
   if (e.target.closest('.nk-node, .nk-toolbar, .nk-chrome')) return;   // pan = fond seulement
   _drag = { x: e.clientX, y: e.clientY, px: _panX, py: _panY };
   _scene.style.cursor = 'grabbing';
+  _scene.classList.add('nk-nofx');   // drag = instantané (pas de transition)
   window.addEventListener('pointermove', _onPanMove);
   window.addEventListener('pointerup', _onPanEnd, { once: true });
 }
@@ -486,7 +509,7 @@ function _onPanMove(e) {
   _panY = _drag.py + (e.clientY - _drag.y);
   _applyTransform();
 }
-function _onPanEnd() { _drag = null; if (_scene) _scene.style.cursor = ''; window.removeEventListener('pointermove', _onPanMove); }
+function _onPanEnd() { _drag = null; if (_scene) { _scene.style.cursor = ''; _scene.classList.remove('nk-nofx'); } window.removeEventListener('pointermove', _onPanMove); }
 
 // ══════════════════ NK-3 — CRUD MANUEL ══════════════════
 const KIND_LABELS  = { person: 'Personne', company: 'Entreprise', place: 'Établissement', group: 'Groupe' };
@@ -651,7 +674,6 @@ async function _refresh(animated = false) {
     _writeCache(data);
     _cats = _buildCats(data.categories, data.contacts);
     render(animated);
-    if (_catListId) { const id = _catListId; _openCatList(id); }        // re-liste (contact ajouté/modifié)
     if (_ficheId) { const c = _contactById(_ficheId); c ? _renderFiche(c) : _closeFiche(); }
     return true;
   } catch (e) { return false; }
@@ -707,7 +729,7 @@ async function _deleteContact(id) {
 }
 async function _deleteCategory(id) {
   if (!confirm('Supprimer cette catégorie ? Les contacts qu\'elle contient ne seront PAS supprimés (ils deviennent sans catégorie).')) return;
-  try { await _api('/category/' + id, { method: 'DELETE' }); if (openCat === id) openCat = null; if (_catListId === id) _closeCatList(); await _refresh(); _closeOverlay(); _toast('Catégorie supprimée'); }
+  try { await _api('/category/' + id, { method: 'DELETE' }); if (openCat === id) openCat = null; await _refresh(); _closeOverlay(); _toast('Catégorie supprimée'); }
   catch (err) { _toast('Suppression impossible', 'error'); }
 }
 async function _moveCategory(id, dir) {
@@ -722,33 +744,8 @@ async function _moveCategory(id, dir) {
   } catch (err) { _toast('Réorganisation impossible', 'error'); }
 }
 
-// ══════════════════ NK-4 — LISTE MOBILE & FICHE CONTACT ══════════════════
+// ══════════════════ NK-4 — FICHE CONTACT ══════════════════
 function _parseArr(v) { try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch (_) { return []; } }
-
-// ── Liste plein écran d'une catégorie (mobile : remplace la 3ᵉ colonne) ──
-function _openCatList(catId) {
-  const c = _cats.find(x => String(x.id) === String(catId));
-  if (!c) return;
-  _closeCatList();
-  _catListId = catId;
-  const rows = c._all || [];
-  const panel = document.createElement('div');
-  panel.className = 'nk-fullpanel';
-  panel.innerHTML =
-    `<div class="nk-fp-hd">
-       <button class="nk-fp-icon" data-act="nk-catlist-close" aria-label="Retour">${icon('chevron-left', 26)}</button>
-       <div class="nk-fp-title">${esc(c.label)} <span>${c.count}</span></div>
-       <button class="nk-fp-icon" data-act="nk-catlist-menu" data-cat="${esc(catId)}" aria-label="Gérer la catégorie">${icon('more-horizontal', 22)}</button>
-       <button class="nk-fp-icon" data-act="nk-catlist-add" data-cat="${esc(catId)}" aria-label="Ajouter">${icon('plus', 22)}</button>
-     </div>
-     <div class="nk-fp-body">${rows.length
-      ? rows.map(ct => `<button class="nk-list-row" data-id="${esc(ct.id)}"><span class="nk-av" style="background:hsl(${hue(ct.name)} 42% 38% / .85)">${esc(initials(ct.name))}</span><span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>${icon('chevron-right', 18)}</button>`).join('')
-      : `<div class="nk-fp-empty">${icon('users', 44)}<p>Aucun contact dans « ${esc(c.label)} »</p><button class="nk-btn nk-btn-primary" data-act="nk-catlist-add" data-cat="${esc(catId)}">Ajouter un contact</button></div>`}</div>`;
-  _root.appendChild(panel);
-  requestAnimationFrame(() => panel.classList.add('nk-fullpanel-in'));
-  _catList = panel;
-}
-function _closeCatList() { if (_catList) { _catList.remove(); _catList = null; _catListId = null; } }
 
 // ── Fiche contact (panneau glissant desktop / plein écran mobile) ──
 const SHORTCUTS = [
@@ -761,7 +758,6 @@ const FICHE_TABS = [['resume', 'Résumé'], ['activite', 'Activité'], ['notes',
 
 function _openFiche(contact) {
   if (!contact || !contact.id) return;
-  _closeCatList();
   _ficheId = contact.id; _ficheTabId = 'resume';
   const el = document.createElement('div');
   el.className = 'nk-fiche';
@@ -882,14 +878,11 @@ function _onClick(e) {
   const person = e.target.closest('.nk-person');
   if (person && !actEl) return _openFiche(_contactById(person.dataset.id));
 
-  const listRow = e.target.closest('.nk-list-row');
-  if (listRow && !actEl) return _openFiche(_contactById(listRow.dataset.id));
-
   const searchItem = e.target.closest('.nk-search-item');
   if (searchItem) { const c = _contactById(searchItem.dataset.id); _clearSearch(); return _openFiche(c); }
 
   const catEl = e.target.closest('.nk-cat');
-  if (catEl && !actEl) return _isMobile() ? _openCatList(catEl.dataset.cat) : toggle(catEl.dataset.cat);
+  if (catEl && !actEl) return toggle(catEl.dataset.cat);   // desktop ET mobile : inline + auto-pan mobile
 
   if (!act) return;
   switch (act) {
@@ -906,9 +899,6 @@ function _onClick(e) {
     case 'nk-cat-del':     { _closePopover(); return _deleteCategory(actEl.dataset.cat || actEl.dataset.id); }
     case 'nk-cat-up':      { _closePopover(); return _moveCategory(actEl.dataset.cat, -1); }
     case 'nk-cat-down':    { _closePopover(); return _moveCategory(actEl.dataset.cat, +1); }
-    case 'nk-catlist-close': return _closeCatList();
-    case 'nk-catlist-menu': return _openCatMenu(actEl.dataset.cat, actEl);
-    case 'nk-catlist-add': return _openContactForm({ category_id: actEl.dataset.cat });
     case 'nk-fiche-close': return _closeFiche();
     case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
     case 'nk-fiche-tab':   return _ficheTab(actEl.dataset.tab);
@@ -953,7 +943,6 @@ function _onKey(e) {
   if (_popover) return _closePopover();
   if (_overlay)  return _closeOverlay();
   if (_fiche)    return _closeFiche();
-  if (_catList)  return _closeCatList();
   const dd = _root && _root.querySelector('.nk-search-results');
   if (dd) return _clearSearch();
   if (openCat) return toggle(openCat);
