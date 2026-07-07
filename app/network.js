@@ -21,6 +21,7 @@ import { icon }                               from './lib/ui-icons.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
+import { getOwnedIds }                        from './pads-loader.js';   // NK-6 : gating raccourcis
 
 const WORKSPACE_META = { id: 'O-NET-001', name: 'networK' };
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -822,13 +823,27 @@ async function _moveCategory(id, dir) {
 // ══════════════════ NK-4 — FICHE CONTACT ══════════════════
 function _parseArr(v) { try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch (_) { return []; } }
 
-// ── Fiche contact (panneau glissant desktop / plein écran mobile) ──
-const SHORTCUTS = [
-  { pad: 'O-SEC-001', icon: 'sceau',       t1: 'Envoyer',  t2: 'une Missive' },
-  { pad: 'A-COM-002', icon: 'kodex',       t1: 'Générer',  t2: 'un Brief' },
-  { pad: 'O-AGT-001', icon: 'smart-agent', t1: 'Ouvrir',   t2: 'Smart Agent' },
-  { pad: 'O-SOC-001', icon: 'user',        t1: 'Publier',  t2: 'pour ce client' },
-];
+// ── Raccourcis « Continuer avec… » (NK-6) ───────────────────────
+// Définition par pad : picto, libellé, et phrase d'usage (mode suggestion si
+// non possédé). Le pré-remplissage réel se fait dans _openShortcut.
+const SHORTCUT_DEFS = {
+  'O-SEC-001': { icon: 'sceau',       t1: 'Envoyer', t2: 'une Missive',   suggest: 'Transmettez un mot de passe ou un document qui s\'autodétruit après lecture.' },
+  'A-COM-002': { icon: 'kodex',       t1: 'Générer', t2: 'un Brief',       suggest: 'Rédigez le brief print ou digital parfait, prêt pour votre imprimeur.' },
+  'A-COM-005': { icon: 'ghostwriter', t1: 'Écrire',  t2: 'un message',     suggest: 'Réécrivez vos e-mails et textes en trois variantes calibrées.' },
+  'O-SOC-001': { icon: 'user',        t1: 'Publier', t2: 'pour ce client', suggest: 'Composez et publiez sur Facebook, Instagram et LinkedIn.' },
+  'O-AGT-001': { icon: 'smart-agent', t1: 'Ouvrir',  t2: 'Smart Agent',    suggest: 'Créez un assistant qui répond à ce client, par chat ou QR code.' },
+};
+// Raccourcis affichés selon le rôle du contact (le contexte décide, cf. brief).
+function _shortcutsFor(c) {
+  const roles = _parseArr(c.roles).map(r => String(r).toLowerCase());
+  const isClient = roles.some(r => r.includes('client') || r.includes('prospect'));
+  return isClient
+    ? ['O-SEC-001', 'A-COM-002', 'O-AGT-001', 'O-SOC-001']    // client : maquette (Missive/Brief/Smart Agent/Publier)
+    : ['O-SEC-001', 'A-COM-002', 'A-COM-005', 'O-SOC-001'];   // défaut : Missive/Brief/Ghost Writer/Publier
+}
+// Possédé ? getOwnedIds() : null = tout (MAX/ADMIN/démo), sinon liste blanche.
+function _isOwned(padId) { const o = getOwnedIds(); return o === null || (Array.isArray(o) && o.includes(padId)); }
+
 const FICHE_TABS = [['resume', 'Résumé'], ['activite', 'Activité'], ['notes', 'Notes']];
 
 function _openFiche(contact) {
@@ -881,8 +896,12 @@ function _renderFiche(c) {
     body =
       `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
-       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Activité récente</div>${recent}</div>
-       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Raccourcis</div><div class="nk-shortcuts">${SHORTCUTS.map(s => `<button class="nk-shortcut" data-act="nk-shortcut" data-pad="${s.pad}">${icon(s.icon, 20)}<span><b>${s.t1}</b>${s.t2}</span></button>`).join('')}</div></div>`;
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
+         const d = SHORTCUT_DEFS[id]; if (!d) return '';
+         return _isOwned(id)
+           ? `<button class="nk-shortcut" data-act="nk-shortcut" data-pad="${id}">${icon(d.icon, 20)}<span><b>${d.t1}</b>${d.t2}</span></button>`
+           : `<button class="nk-shortcut nk-shortcut-sug" data-act="nk-discover" data-pad="${id}">${icon(d.icon, 20)}<span><b>${esc(d.t1 + ' ' + d.t2)}</b><i>${esc(d.suggest)}</i></span><span class="nk-sc-tag">Découvrir</span></button>`;
+       }).join('')}</div></div>`;
   } else if (_ficheTabId === 'notes') {
     body = `<textarea class="nk-fiche-note" placeholder="Vos notes sur ${esc(c.name)}…" maxlength="8000">${esc(c.notes || '')}</textarea>`;
   } else {
@@ -941,10 +960,28 @@ async function _saveNote(id, text) {
   } catch (e) { /* silencieux : réessaie au prochain frappe */ }
 }
 async function _openShortcut(padId) {
-  // NK-6 ajoutera le pré-remplissage (opts.nkContact). Ici : ouverture simple.
-  // Fermer le workspace networK AVANT (piège z-index/overlay documenté).
+  const c = _contactById(_ficheId);
+  // Contrat inter-pads : le contact voyage dans opts.nkContact. Chaque pad
+  // cible lit ce qui l'intéresse et ignore le reste (aujourd'hui : Social).
+  const nkContact = c ? {
+    id: c.id, name: c.name, company: c.company, title: c.title,
+    email: c.email, phone: c.phone, roles: _parseArr(c.roles),
+  } : null;
+  const opts = { nkContact };
+  // Pré-remplissage réel via la voie EXISTANTE et éprouvée du composer Social
+  // (même relais que Ghost Writer → Social). Zéro modif du pad cible.
+  if (padId === 'O-SOC-001' && c) {
+    const who = c.company ? `${c.name} (${c.company})` : c.name;
+    opts.compose = { text: `Pour ${who} :\n\n` };
+  }
+  // Fermer le workspace networK AVANT d'ouvrir la cible (piège z-index/overlay).
   closeNetwork();
-  try { const m = await import('./ui-renderer.js'); m.openTool(padId, {}); } catch (_) {}
+  try { const m = await import('./ui-renderer.js'); m.openTool(padId, opts); } catch (_) {}
+}
+// Mode suggestion (pad non possédé) : ouvrir sa fiche dans le K-Store.
+async function _discover(padId) {
+  closeNetwork();
+  try { const m = await import('./ui-renderer.js'); m.openKStoreAppDetail(padId); } catch (_) {}
 }
 
 // ── Ajout / suppression d'activité (NK-5) ───────────────────────
@@ -1055,6 +1092,7 @@ function _onClick(e) {
     case 'nk-act-del':     return _deleteActivity(actEl.dataset.id);
     case 'nk-expand':      return _expandCategory(actEl.dataset.cat || openCat);
     case 'nk-shortcut':    return _openShortcut(actEl.dataset.pad);
+    case 'nk-discover':    return _discover(actEl.dataset.pad);
     case 'nk-zoom-in':     return _setZoom(_zoom * 1.15);
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
     case 'nk-zoom-reset':  return _setZoom(1);
