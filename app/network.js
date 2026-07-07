@@ -63,7 +63,34 @@ async function _api(path, opts = {}) {
   return data;
 }
 function _readCache() { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch (_) { return null; } }
-function _writeCache(d) { try { localStorage.setItem(CACHE_KEY, JSON.stringify({ categories: d.categories, contacts: d.contacts })); } catch (_) {} }
+function _writeCache(d) { try { localStorage.setItem(CACHE_KEY, JSON.stringify({ categories: d.categories, contacts: d.contacts, activity: d.activity || [] })); } catch (_) {} }
+
+// ── Activité (NK-5) ─────────────────────────────────────────────
+const ACTIVITY_TYPES = [
+  { key: 'call',    label: 'Appel',    icon: 'phone' },
+  { key: 'email',   label: 'E-mail',   icon: 'mail' },
+  { key: 'meeting', label: 'RDV',      icon: 'calendar' },
+  { key: 'quote',   label: 'Devis',    icon: 'file-text' },
+  { key: 'doc',     label: 'Document', icon: 'paperclip' },
+  { key: 'note',    label: 'Note',     icon: 'edit-3' },
+  { key: 'other',   label: 'Autre',    icon: 'zap' },
+];
+function _actMeta(type) { return ACTIVITY_TYPES.find(t => t.key === type) || ACTIVITY_TYPES[ACTIVITY_TYPES.length - 1]; }
+function _contactActivity(id) {
+  return _activity.filter(a => String(a.contact_id) === String(id))
+    .sort((a, b) => String(b.happened_at || '').localeCompare(String(a.happened_at || '')));
+}
+// Date relative (« Aujourd'hui », « Hier », « Il y a N jours », sinon date courte).
+function _relDate(iso) {
+  if (!iso) return '';
+  const d = new Date(String(iso).replace(' ', 'T') + (String(iso).length <= 10 ? 'T00:00:00' : ''));
+  if (isNaN(d)) return String(iso).slice(0, 10);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "Aujourd'hui";
+  if (days === 1) return 'Hier';
+  if (days < 30) return `Il y a ${days} jours`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 // Groupe les contacts par catégorie → structure de rendu de l'arbre.
 function _buildCats(categories, contacts) {
@@ -82,20 +109,22 @@ function _defaultCats() {
 // Cache d'abord (rendu instantané), puis rafraîchit depuis l'API.
 async function _boot() {
   const cached = _readCache();
-  if (cached) { _cats = _buildCats(cached.categories, cached.contacts); render(true); }
+  if (cached) { _cats = _buildCats(cached.categories, cached.contacts); _activity = cached.activity || []; render(true); }
   try {
     const data = await _api('/bootstrap');
     _writeCache(data);
     _cats = _buildCats(data.categories, data.contacts);
+    _activity = data.activity || [];
     render(!cached);   // n'anime que si rien n'a encore été peint depuis le cache
   } catch (e) {
-    if (!cached && _root) { _cats = _defaultCats(); render(true); }   // hors-ligne / pré-deploy : squelette
+    if (!cached && _root) { _cats = _defaultCats(); _activity = []; render(true); }   // hors-ligne / pré-deploy : squelette
   }
 }
 
 // ── État module ─────────────────────────────────────────────────
 let _root = null, _stage = null, _wires = null, _nodes = null, _scene = null;
-let _cats = [];                 // catégories courantes (mock en NK-1)
+let _cats = [];                 // catégories courantes
+let _activity = [];             // journal d'activité du tenant (NK-5)
 let openCat = null;             // id de la catégorie dépliée (une seule profondeur)
 let seq = 0;                    // invalide les séquences en cours (anti double-clic)
 const jobs = new Set();
@@ -673,6 +702,7 @@ async function _refresh(animated = false) {
     const data = await _api('/bootstrap');
     _writeCache(data);
     _cats = _buildCats(data.categories, data.contacts);
+    _activity = data.activity || [];
     render(animated);
     if (_ficheId) { const c = _contactById(_ficheId); c ? _renderFiche(c) : _closeFiche(); }
     return true;
@@ -782,6 +812,13 @@ function _actionBtn(ic, href, label) {
 function _chip(field, val, cls) {
   return `<span class="nk-chip ${cls}">${esc(val)}<button class="nk-chip-x" data-act="nk-${field === 'roles' ? 'role' : 'tag'}-del" data-val="${esc(val)}" aria-label="Retirer">${icon('x', 12)}</button></span>`;
 }
+function _actRow(a, deletable) {
+  const m = _actMeta(a.type);
+  return `<div class="nk-act-row"><span class="nk-act-ic">${icon(m.icon, 16)}</span>` +
+    `<span class="nk-act-body"><span class="nk-act-lbl">${esc(a.label)}</span><span class="nk-act-date">${esc(_relDate(a.happened_at))}</span></span>` +
+    (deletable ? `<button class="nk-act-del" data-act="nk-act-del" data-id="${esc(a.id)}" aria-label="Supprimer">${icon('x', 14)}</button>` : '') +
+    `</div>`;
+}
 function _renderFiche(c) {
   if (!_fiche) return;
   const roles = _parseArr(c.roles), tags = _parseArr(c.tags);
@@ -789,17 +826,26 @@ function _renderFiche(c) {
   const badge = roles[0] ? `<span class="nk-fiche-badge">${esc(roles[0])}</span>` : `<span class="nk-fiche-badge nk-fiche-badge-soft">${KIND_LABELS[c.kind] || 'Contact'}</span>`;
   const tabs = FICHE_TABS.map(([id, lbl]) => `<button class="nk-fiche-tab${id === _ficheTabId ? ' nk-sel' : ''}" data-act="nk-fiche-tab" data-tab="${id}">${lbl}</button>`).join('');
 
+  const acts = _contactActivity(c.id);
   let body = '';
   if (_ficheTabId === 'resume') {
+    const recent = acts.length
+      ? `<div class="nk-act-list">${acts.slice(0, 5).map(a => _actRow(a, false)).join('')}</div>` +
+        (acts.length > 5 ? `<button class="nk-act-more" data-act="nk-fiche-tab" data-tab="activite">Voir toute l'activité</button>` : '')
+      : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
       `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
-       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Activité récente</div><div class="nk-fiche-empty">${icon('history', 22)}<span>Le journal d'activité arrive bientôt.</span></div></div>
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Activité récente</div>${recent}</div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Raccourcis</div><div class="nk-shortcuts">${SHORTCUTS.map(s => `<button class="nk-shortcut" data-act="nk-shortcut" data-pad="${s.pad}">${icon(s.icon, 20)}<span><b>${s.t1}</b>${s.t2}</span></button>`).join('')}</div></div>`;
   } else if (_ficheTabId === 'notes') {
     body = `<textarea class="nk-fiche-note" placeholder="Vos notes sur ${esc(c.name)}…" maxlength="8000">${esc(c.notes || '')}</textarea>`;
   } else {
-    body = `<div class="nk-fiche-empty nk-fiche-empty-lg">${icon('history', 30)}<span>Le journal d'activité (appels, e-mails, RDV, devis…) arrive au prochain sprint.</span></div>`;
+    body =
+      `<button class="nk-btn nk-btn-primary nk-act-addbtn" data-act="nk-act-add">${icon('plus', 16)} Ajouter une activité</button>
+       <div class="nk-act-list">${acts.length
+        ? acts.map(a => _actRow(a, true)).join('')
+        : `<div class="nk-fiche-empty nk-fiche-empty-lg">${icon('history', 30)}<span>Aucune activité. Notez appels, e-mails, RDV, devis… pour raconter la relation.</span></div>`}</div>`;
   }
 
   const tel = c.phone ? 'tel:' + encodeURIComponent(c.phone) : '';
@@ -856,6 +902,50 @@ async function _openShortcut(padId) {
   try { const m = await import('./ui-renderer.js'); m.openTool(padId, {}); } catch (_) {}
 }
 
+// ── Ajout / suppression d'activité (NK-5) ───────────────────────
+function _openActivityForm() {
+  if (!_ficheId) return;
+  const d = new Date();
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const types = ACTIVITY_TYPES.map((t, i) =>
+    `<button type="button" class="nk-acttype${i === 0 ? ' nk-sel' : ''}" data-act="nk-act-type" data-type="${t.key}">${icon(t.icon, 18)}<span>${t.label}</span></button>`).join('');
+  _openOverlay(
+    `<div class="nk-sheet-hd">Ajouter une activité<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
+     <form class="nk-form" data-form="activity">
+       <div class="nk-field"><span>Type</span><input type="hidden" name="type" value="call"><div class="nk-acttypes">${types}</div></div>
+       <label class="nk-field"><span>Libellé</span><input name="label" required maxlength="200" placeholder="Ex. Appel de suivi, devis envoyé…" autocomplete="off"></label>
+       <label class="nk-field"><span>Date</span><input name="happened_at" type="date" value="${iso}"></label>
+       <div class="nk-form-actions"><span></span><button type="submit" class="nk-btn nk-btn-primary">Ajouter</button></div>
+     </form>`,
+    ov => { const i = ov.querySelector('input[name="label"]'); if (i) i.focus(); }
+  );
+}
+async function _submitActivity(form) {
+  const fd = new FormData(form);
+  const payload = {
+    contact_id: _ficheId,
+    type: fd.get('type') || 'other',
+    label: String(fd.get('label') || '').trim(),
+    happened_at: fd.get('happened_at') || undefined,
+  };
+  if (!payload.label) { _toast('Le libellé est requis', 'error'); return; }
+  const btn = form.querySelector('[type="submit"]');
+  if (btn) { btn.disabled = true; btn.dataset.lbl = btn.textContent; btn.textContent = '…'; }
+  try {
+    await _api('/activity', { method: 'POST', body: payload });
+    await _refresh();
+    _closeOverlay();
+    _toast('Activité ajoutée');
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.lbl || 'Ajouter'; }
+    _toast(err.status === 401 ? 'Session expirée — reconnectez-vous' : 'Enregistrement impossible', 'error');
+  }
+}
+async function _deleteActivity(id) {
+  try { await _api('/activity/' + id, { method: 'DELETE' }); await _refresh(); _toast('Activité supprimée'); }
+  catch (err) { _toast('Suppression impossible', 'error'); }
+}
+
 // ── Événements ──────────────────────────────────────────────────
 function _onClick(e) {
   // Sélecteur d'icône (formulaire catégorie) — géré avant tout
@@ -865,6 +955,15 @@ function _onClick(e) {
     iconOpt.classList.add('nk-sel');
     const hid = _overlay.querySelector('input[name="icon"]');
     if (hid) hid.value = iconOpt.dataset.icon;
+    return;
+  }
+  // Sélecteur de type d'activité (formulaire activité)
+  const actType = e.target.closest('.nk-acttype');
+  if (actType && _overlay) {
+    _overlay.querySelectorAll('.nk-acttype').forEach(o => o.classList.remove('nk-sel'));
+    actType.classList.add('nk-sel');
+    const hid = _overlay.querySelector('input[name="type"]');
+    if (hid) hid.value = actType.dataset.type;
     return;
   }
 
@@ -906,6 +1005,8 @@ function _onClick(e) {
     case 'nk-role-del':    return _delChip('roles', actEl.dataset.val);
     case 'nk-tag-add':     return _addChip('tags');
     case 'nk-tag-del':     return _delChip('tags', actEl.dataset.val);
+    case 'nk-act-add':     return _openActivityForm();
+    case 'nk-act-del':     return _deleteActivity(actEl.dataset.id);
     case 'nk-shortcut':    return _openShortcut(actEl.dataset.pad);
     case 'nk-zoom-in':     return _setZoom(_zoom * 1.15);
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
@@ -920,6 +1021,7 @@ function _onSubmit(e) {
   e.preventDefault();
   if (form.dataset.form === 'contact') _submitContact(form);
   else if (form.dataset.form === 'category') _submitCategory(form);
+  else if (form.dataset.form === 'activity') _submitActivity(form);
 }
 
 let _searchTimer = null;

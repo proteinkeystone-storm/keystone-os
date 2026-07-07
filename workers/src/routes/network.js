@@ -104,6 +104,8 @@ async function _gate(request, env, origin) {
 // ── Helpers ─────────────────────────────────────────────────────
 const CAT_COLS     = 'id, label, icon, position, created_at';
 const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, roles, tags, notes, position, created_at, updated_at';
+const ACT_COLS     = 'id, contact_id, type, label, source, happened_at, created_at';
+const ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];
 function _s(v, max) { return v == null ? null : String(v).slice(0, max); }
 function _jsonArr(v) {                          // valide un tableau JSON, sinon '[]'
   if (Array.isArray(v)) { try { return JSON.stringify(v).slice(0, 4000); } catch (_) { return '[]'; } }
@@ -147,7 +149,10 @@ export async function handleNetworkBootstrap(request, env) {
     const contacts = (await env.DB.prepare(
       `SELECT ${CONTACT_COLS} FROM nk_contacts WHERE tenant_id = ? ORDER BY position, name`).bind(t).all()).results || [];
 
-    return json({ ok: true, engine: NK_ENGINE_VERSION, categories, contacts }, 200, origin);
+    const activity = (await env.DB.prepare(
+      `SELECT ${ACT_COLS} FROM nk_activity WHERE tenant_id = ? ORDER BY happened_at DESC LIMIT 3000`).bind(t).all()).results || [];
+
+    return json({ ok: true, engine: NK_ENGINE_VERSION, categories, contacts, activity }, 200, origin);
   } catch (e) {
     return err('Lecture impossible : ' + (e && e.message || 'erreur'), 500, origin);
   }
@@ -300,5 +305,60 @@ export async function handleContactDelete(request, env, id) {
   if (!existing) return err('Contact introuvable', 404, origin);
   await env.DB.prepare('DELETE FROM nk_activity WHERE contact_id = ? AND tenant_id = ?').bind(id, t).run();
   await env.DB.prepare('DELETE FROM nk_contacts WHERE id = ? AND tenant_id = ?').bind(id, t).run();
+  return json({ ok: true, deleted: id }, 200, origin);
+}
+
+// ── Journal d'activité (NK-5, manuel — source='manual') ─────────
+export async function handleActivityList(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const contact = new URL(request.url).searchParams.get('contact');
+  try {
+    const activity = contact
+      ? (await env.DB.prepare(`SELECT ${ACT_COLS} FROM nk_activity WHERE tenant_id = ? AND contact_id = ? ORDER BY happened_at DESC`).bind(t, contact).all()).results || []
+      : (await env.DB.prepare(`SELECT ${ACT_COLS} FROM nk_activity WHERE tenant_id = ? ORDER BY happened_at DESC LIMIT 3000`).bind(t).all()).results || [];
+    return json({ ok: true, activity }, 200, origin);
+  } catch (e) { return err('Lecture impossible : ' + (e && e.message || 'erreur'), 500, origin); }
+}
+
+export async function handleActivityCreate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const body = await parseBody(request);
+
+  const contactId = body.contact_id ? String(body.contact_id).slice(0, 64) : null;
+  if (!contactId) return err('Contact requis', 400, origin);
+  const c = await env.DB.prepare('SELECT id FROM nk_contacts WHERE id = ? AND tenant_id = ?').bind(contactId, t).first();
+  if (!c) return err('Contact introuvable', 404, origin);
+
+  const label = String(body.label || '').trim();
+  if (!label) return err('Libellé requis', 400, origin);
+  const type = ACT_TYPES.includes(body.type) ? body.type : 'other';
+  // happened_at : 'YYYY-MM-DD' accepté (validé), sinon maintenant.
+  let happened = null;
+  if (typeof body.happened_at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.happened_at)) happened = body.happened_at.slice(0, 19);
+
+  const id = generateId();
+  await env.DB.prepare(
+    `INSERT INTO nk_activity (id, tenant_id, contact_id, type, label, source, happened_at)
+     VALUES (?, ?, ?, ?, ?, 'manual', COALESCE(?, datetime('now')))`
+  ).bind(id, t, contactId, type, _s(label, MAX_FIELD_LEN), happened).run();
+
+  const activity = await env.DB.prepare(`SELECT ${ACT_COLS} FROM nk_activity WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
+  return json({ ok: true, activity }, 200, origin);
+}
+
+export async function handleActivityDelete(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const t = gate.tenant;
+  const existing = await env.DB.prepare('SELECT id FROM nk_activity WHERE id = ? AND tenant_id = ?').bind(id, t).first();
+  if (!existing) return err('Activité introuvable', 404, origin);
+  await env.DB.prepare('DELETE FROM nk_activity WHERE id = ? AND tenant_id = ?').bind(id, t).run();
   return json({ ok: true, deleted: id }, 200, origin);
 }

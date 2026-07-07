@@ -147,7 +147,8 @@ import { handleKeynapseHealth, handleKeynapseState,
 // networK (Pad O-NET-001 · NK-2) — réseau relationnel vivant, V1 manuelle, zéro IA.
 import { handleNetworkHealth, handleNetworkBootstrap,
          handleCategoryCreate, handleCategoryUpdate, handleCategoryDelete,
-         handleContactCreate, handleContactUpdate, handleContactDelete } from './routes/network.js';
+         handleContactCreate, handleContactUpdate, handleContactDelete,
+         handleActivityList, handleActivityCreate, handleActivityDelete } from './routes/network.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -282,6 +283,10 @@ export default {
       const nkContact = path.match(/^\/api\/network\/contact\/([A-Za-z0-9-]+)$/);
       if (nkContact && method === 'PATCH')  return handleContactUpdate(request, env, nkContact[1]);
       if (nkContact && method === 'DELETE') return handleContactDelete(request, env, nkContact[1]);
+      if (path === '/api/network/activity'  && method === 'GET')  return handleActivityList(request, env);
+      if (path === '/api/network/activity'  && method === 'POST') return handleActivityCreate(request, env);
+      const nkAct = path.match(/^\/api\/network\/activity\/([A-Za-z0-9-]+)$/);
+      if (nkAct && method === 'DELETE') return handleActivityDelete(request, env, nkAct[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);

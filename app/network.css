@@ -391,6 +391,36 @@
   font-family: inherit; font-size: 15px; line-height: 1.6; letter-spacing: -0.01em; outline: none; }
 .nk-fiche-note:focus { border-color: rgba(139,92,246,.5); }
 
+/* ── Journal d'activité (NK-5) ───────────────────────────────────── */
+.nk-act-list { display: flex; flex-direction: column; }
+.nk-act-row { display: flex; align-items: center; gap: 12px; padding: 9px 2px; }
+.nk-act-ic { width: 34px; height: 34px; border-radius: 10px; flex: none; display: grid; place-items: center;
+  background: rgba(255,255,255,.04); color: var(--nk-violet, #8b5cf6); }
+.nk-act-body { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.nk-act-lbl { font-size: 14px; font-weight: 600; color: var(--text, #f8fafc); letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nk-act-date { font-size: 12px; color: var(--text-dim, rgba(248,250,252,.45)); margin-top: 1px; }
+.nk-act-del { width: 26px; height: 26px; border-radius: 50%; border: none; background: none; flex: none;
+  color: var(--text-dim, rgba(248,250,252,.4)); display: grid; place-items: center; cursor: pointer;
+  opacity: 0; transition: opacity .15s ease, background .15s ease; }
+.nk-act-row:hover .nk-act-del { opacity: 1; }
+.nk-act-del:hover { background: rgba(224,92,92,.16); color: #e05c5c; }
+@media (hover: none) { .nk-act-del { opacity: .6; } }
+.nk-act-more { margin-top: 6px; padding: 8px 2px; background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--nk-violet, #8b5cf6); letter-spacing: -0.01em; text-align: left; }
+.nk-act-addbtn { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+
+/* Sélecteur de type d'activité (formulaire) */
+.nk-acttypes { display: flex; flex-wrap: wrap; gap: 6px; }
+.nk-acttype { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 11px; cursor: pointer;
+  background: rgba(0,0,0,.22); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  color: var(--text-dim, rgba(248,250,252,.65)); font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
+  transition: all .15s ease; }
+.nk-acttype svg { color: var(--nk-violet, #8b5cf6); }
+.nk-acttype:hover { color: var(--text, #f8fafc); }
+.nk-acttype.nk-sel { border-color: rgba(139,92,246,.7); background: rgba(139,92,246,.14); color: var(--text, #f8fafc); }
+.nk-field input[type="date"] { color-scheme: dark; }
+
 /* ── Reduced-motion : pas de circulation, transitions calmes ─────── */
 @media (prefers-reduced-motion: reduce) {
   .nk-wires path.nk-flow { display: none; }
