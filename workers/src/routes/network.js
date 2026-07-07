@@ -23,7 +23,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const NK_ENGINE_VERSION = 'NK-2';
+const NK_ENGINE_VERSION = 'NK-7';
 
 const MAX_NAME_LEN   = 200;
 const MAX_FIELD_LEN  = 200;

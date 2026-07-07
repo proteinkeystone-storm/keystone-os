@@ -1,0 +1,40 @@
+{
+  "title": "networK",
+  "tldr": "Votre réseau relationnel vivant — pas un carnet d'adresses de plus. Vous êtes au centre, et vos relations se déploient en carte mentale : des catégories libres (Clients, Fournisseurs, Partenaires…) d'où partent vos contacts. Un clic sur une catégorie la déplie ; un clic sur un contact ouvre sa fiche, où vous retrouvez ses coordonnées, ses rôles, ses tags, vos notes, et un journal d'activité qui raconte votre relation. Et depuis chaque fiche, vous continuez votre travail sans ressaisir : « Continuer avec… » ouvre une Missive, un Brief ou votre Smart Agent, déjà mis en contexte. Tout est à vous, rien n'est publié.",
+  "key_points": [
+    "Ajouter : le bouton « + Ajouter » crée une personne, une entreprise, un établissement, un groupe ou une nouvelle catégorie. Le « + » sur une catégorie ajoute directement un contact à l'intérieur.",
+    "Naviguer : cliquez une catégorie pour voir ses contacts. Sur ordinateur ils se déploient à droite ; sur mobile, le réseau glisse vers eux — touchez la catégorie à nouveau pour revenir. Glissez le fond pour vous déplacer, la molette (ou les boutons +/−) pour zoomer.",
+    "La fiche d'un contact : cliquez un contact pour ouvrir sa fiche. Boutons d'appel, e-mail et message en un tap ; onglets Résumé, Activité et Notes ; rôles et tags que vous ajoutez ou retirez ; et le « … » (ou la roue crantée) pour modifier ou supprimer le contact.",
+    "Le journal d'activité : dans l'onglet Activité, « Ajouter une activité » note un appel, un e-mail, un RDV, un devis… avec sa date. Les cinq plus récentes s'affichent dans le Résumé — la relation se raconte au fil du temps.",
+    "Continuer avec… : en bas de chaque fiche, les raccourcis ouvrent l'outil adapté (Missive, Brief, Smart Agent, Social) avec le contact déjà en contexte. Un outil que vous n'avez pas encore apparaît en suggestion « Découvrir », jamais imposé.",
+    "Ranger : le « … » d'une catégorie permet de la renommer, changer son icône, la monter/descendre ou la supprimer. Supprimer une catégorie ne supprime pas ses contacts : ils rejoignent « Sans catégorie »."
+  ],
+  "faq": [
+    {
+      "q": "Est-ce un CRM ? Mes contacts sont-ils privés ?",
+      "a": "networK n'est pas un CRM classique : pas de tunnel de vente ni de saisie obligatoire, juste votre réseau tel que vous le voyez. Vos contacts, notes et activités sont rangés dans votre espace Keystone, rattachés à votre compte — jamais publics ni partagés."
+    },
+    {
+      "q": "Consomme-t-il des crédits IA ?",
+      "a": "Non. networK est 100 % manuel et sans intelligence artificielle : aucune action ne puise dans votre compteur de crédits. Vous ajoutez et organisez vos relations vous-même."
+    },
+    {
+      "q": "Que veut dire « Continuer avec… » et « pré-rempli » ?",
+      "a": "Depuis une fiche, ces raccourcis ouvrent un autre outil Keystone en lui passant déjà les infos du contact. Par exemple « Publier pour ce client » ouvre Social Manager avec le message déjà amorcé à son nom — vous n'avez rien à ressaisir. Les outils que vous ne possédez pas s'affichent en suggestion, sans jamais bloquer."
+    },
+    {
+      "q": "J'ai supprimé une catégorie : où sont passés ses contacts ?",
+      "a": "Ils ne sont jamais supprimés avec la catégorie. Ils réapparaissent dans un panier « Sans catégorie » à la racine de votre réseau, d'où vous pouvez les rouvrir et les reclasser."
+    },
+    {
+      "q": "Pourquoi certains contacts sont-ils cachés derrière « Voir les N autres » ?",
+      "a": "Pour garder l'arbre lisible, une catégorie affiche ses premiers contacts puis un bouton « Voir les N autres » qui déplie le reste. La recherche en haut, elle, retrouve n'importe quel contact instantanément, même hors de sa catégorie."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Clic catégorie", "desc": "Déplier / replier ses contacts" },
+    { "keys": "Clic contact", "desc": "Ouvrir sa fiche" },
+    { "keys": "Glisser", "desc": "Déplacer la vue ; molette pour zoomer" },
+    { "keys": "Échap", "desc": "Fermer la fiche, un menu, ou revenir à l'arbre" }
+  ]
+}

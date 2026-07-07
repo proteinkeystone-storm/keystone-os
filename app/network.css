@@ -383,6 +383,9 @@
 .nk-chip-add { width: 30px; height: 30px; border-radius: 50%; border: 1px dashed var(--bd, rgba(255,255,255,.18));
   background: none; color: var(--text-dim, rgba(248,250,252,.5)); display: grid; place-items: center; cursor: pointer; transition: all .15s ease; }
 .nk-chip-add:hover { border-color: rgba(139,92,246,.5); color: var(--text, #f8fafc); }
+.nk-chip-input { width: 110px; height: 30px; padding: 0 12px; border-radius: 999px;
+  background: rgba(0,0,0,.28); border: 1px solid rgba(139,92,246,.55); color: var(--text, #f8fafc);
+  font-family: inherit; font-size: 13px; font-weight: 600; outline: none; }
 
 .nk-fiche-empty { display: flex; align-items: center; gap: 10px; padding: 14px 0; color: var(--text-dim, rgba(248,250,252,.4)); font-size: 14px; }
 .nk-fiche-empty svg { color: rgba(139,92,246,.4); flex: none; }

@@ -68,8 +68,10 @@ export async function handlePurgeTenant(request, env) {
   ).bind(tenantId).run();
   counts.user_vaults = r3.meta.changes || 0;
 
-  // 4-10. Tables tenant-scoped directes
-  for (const table of ['screenshots', 'messages', 'pads', 'catalog', 'api_keys_vault', 'entities', 'devices']) {
+  // 4-N. Tables tenant-scoped directes (nk_* = networK : activité → contacts →
+  //       catégories ; données personnelles → doivent partir à l'effacement).
+  for (const table of ['screenshots', 'messages', 'pads', 'catalog', 'api_keys_vault', 'entities',
+                       'nk_activity', 'nk_contacts', 'nk_categories', 'devices']) {
     try {
       const r = await env.DB.prepare(`DELETE FROM ${table} WHERE tenant_id = ?`).bind(tenantId).run();
       counts[table] = r.meta.changes || 0;

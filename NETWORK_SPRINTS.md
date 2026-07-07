@@ -151,8 +151,17 @@ minimal, zéro fonctionnel encore.
 - Résumé : rôles (chips + ajout), tags (chips colorées + ajout), notes (autosave debounce).
 - ✅ Test : ouvrir/éditer/fermer, chips persistées.
 
-## NK-5 — Journal d'activité manuel (« c'est une histoire »)
+## NK-5 — Journal d'activité manuel (« c'est une histoire »)  ✅ DÉPLOYÉ 2026-07-07
 **But** : la timeline manuelle, visuellement comme la maquette.
+> Livré (commit `3b13aa0`, worker version 97173c9b, SW v5.28.230, CSS ?v=10) :
+> Backend routes `GET/POST/DELETE /api/network/activity` + `bootstrap` renvoie
+> l'activité (table `nk_activity` déjà en NK-2). Front : `_activity` state (cache),
+> `_contactActivity` + `_relDate` (Aujourd'hui/Hier/Il y a N jours). Fiche Résumé =
+> 5 dernières (picto par type + date) + « Voir toute l'activité » → onglet Activité
+> (journal complet, suppr par ligne, bouton Ajouter). Formulaire `_openActivityForm`
+> 7 types (call/email/meeting/quote/doc/note/other) + libellé + date (défaut auj.).
+> `source='manual'`. Picto `edit-3` ajouté. Vérifié preview + prod (route 401=OK).
+> ⚠ NK_ENGINE_VERSION worker resté 'NK-2' (label cosmétique, non bumpé).
 - Onglet Activité : ajout 2 clics = type (appel/email/rdv/devis/document/note/autre,
   chacun son picto outline) + libellé court + date (défaut aujourd'hui),
   `source:'manual'`.
@@ -160,8 +169,21 @@ minimal, zéro fonctionnel encore.
 - Résumé : les 5 dernières + « Voir toute l'activité ».
 - ✅ Test : plusieurs entrées, ordre + libellés relatifs corrects.
 
-## NK-6 — Raccourcis « Continuer avec… » (connexion à l'écosystème)
+## NK-6 — Raccourcis « Continuer avec… » (connexion à l'écosystème)  ✅ DÉPLOYÉ 2026-07-07
 **But** : la fiche pousse vers les autres pads, pré-remplis.
+> Livré (commit `6cc6d4f`, front-only, SW v5.28.232, CSS ?v=12) :
+> - **Contrat** `opts.nkContact` {id,name,company,title,email,phone,roles} sur chaque
+>   raccourci ; `closeNetwork()` AVANT `openTool` (piège z-index).
+> - **Mode suggestion** : `_isOwned` via `getOwnedIds` (pads-loader) → pad non possédé
+>   = carte « Découvrir » (phrase d'usage, non agressif) → `openKStoreAppDetail`.
+> - **Raccourcis contextuels par rôle** (`_shortcutsFor` : client → Missive/Brief/
+>   Smart Agent/Publier ; défaut → Missive/Brief/Ghost Writer/Publier).
+> - **Pré-remplissage RÉEL** via la voie éprouvée `opts.compose` de Social Manager
+>   (« Pour {nom} ({entreprise}) : ») — vérifié bout-en-bout, zéro modif du pad cible.
+> ⚠ **Brief (Kodex) NON pré-rempli VOLONTAIREMENT** : `openKodex` charge un brouillon
+>   existant (injection = clobber du travail en cours) + champs `content.fields`
+>   dépendants du secteur (mapping fragile). Les autres pads reçoivent `nkContact`
+>   mais ne le lisent pas encore (hooks récepteurs = suite si besoin).
 - Contrat : `openTool(padId, { nkContact:{ id,name,company,title,email,phone } })`.
   **Fermer/minimiser le workspace networK AVANT** d'ouvrir la cible (piège z-index).
 - Brief Prod : `openTool(id, { prefillData:{…} })` (mécanisme `_prefillForm` existant,
@@ -175,8 +197,18 @@ minimal, zéro fonctionnel encore.
 - ✅ Test : chaque raccourci owned ET locked ; prod-critiques (Key Form/Smart
   Agent/SDQR) intacts.
 
-## NK-7 — Finition & livraison
+## NK-7 — Finition & livraison  ✅ CODÉ 2026-07-07 (attend deploy worker RGPD)
 **But** : prod-ready.
+> Livré : **RGPD purge Art.17** — `nk_activity/nk_contacts/nk_categories` ajoutées à
+> la boucle de `handlePurgeTenant` (admin.js) → l'effacement d'un tenant emporte les
+> données personnelles networK (avant : laissées derrière). Export Art.20 global
+> inchangé (licences+devices ; outillage export par-outil différé, cf. backlog).
+> **Notice HELP** `K_STORE_ASSETS/HELP/O-NET-001.json` (4 zones, vérifiée). **Doc user**
+> : ligne changelog networK (keystone-doc.js, juillet 2026). **Polish** : rôles/tags
+> via champ inline (plus de `prompt()` natif ; Échap n'annule que le champ, pas la
+> fiche) ; `_moveCategory` PATCH concurrents + réconciliation + garde panier orphelins ;
+> `NK_ENGINE_VERSION`→'NK-7'. SW v5.28.233, CSS ?v=13.
+> **RESTE : deploy worker (RGPD) — garde-fou** + push front + Admin→Catalogue→Synchroniser.
 - Responsive mobile complet (arbre compacté, fiche plein écran, bottom-sheet).
 - XSS : audit échappement toutes saisies. RGPD : ajouter `nk_*` à l'export Art.20 et
   la purge tenant Art.17.

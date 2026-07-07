@@ -711,10 +711,12 @@ function _openCatMenu(catId, anchor) {
   const c = _cats.find(x => String(x.id) === String(catId));
   if (!c) return;
   const i = _cats.indexOf(c);
+  const canUp = i > 0 && !_cats[i - 1]._orphan;
+  const canDown = i < _cats.length - 1 && !_cats[i + 1]._orphan;
   _openPopover(
     `<button class="nk-pop-item" data-act="nk-cat-edit" data-cat="${esc(catId)}">${icon('settings', 16)} Renommer / icône</button>
-     <button class="nk-pop-item" data-act="nk-cat-up"   data-cat="${esc(catId)}"${i === 0 ? ' disabled' : ''}>${icon('chevron-up', 16)} Monter</button>
-     <button class="nk-pop-item" data-act="nk-cat-down" data-cat="${esc(catId)}"${i === _cats.length - 1 ? ' disabled' : ''}>${icon('chevron-down', 16)} Descendre</button>
+     <button class="nk-pop-item" data-act="nk-cat-up"   data-cat="${esc(catId)}"${canUp ? '' : ' disabled'}>${icon('chevron-up', 16)} Monter</button>
+     <button class="nk-pop-item" data-act="nk-cat-down" data-cat="${esc(catId)}"${canDown ? '' : ' disabled'}>${icon('chevron-down', 16)} Descendre</button>
      <button class="nk-pop-item nk-pop-danger" data-act="nk-cat-del" data-cat="${esc(catId)}">${icon('trash-2', 16)} Supprimer</button>`,
     anchor
   );
@@ -813,11 +815,15 @@ async function _moveCategory(id, dir) {
   const j = i + dir;
   if (i < 0 || j < 0 || j >= _cats.length) return;
   const a = _cats[i], b = _cats[j];
+  if (a._orphan || b._orphan) return;   // le panier « Sans catégorie » ne se réordonne pas
   try {
-    await _api('/category/' + a.id, { method: 'PATCH', body: { position: j } });
-    await _api('/category/' + b.id, { method: 'PATCH', body: { position: i } });
+    // PATCH concurrents ; en cas d'échec, _refresh réconcilie avec la vérité serveur.
+    await Promise.all([
+      _api('/category/' + a.id, { method: 'PATCH', body: { position: j } }),
+      _api('/category/' + b.id, { method: 'PATCH', body: { position: i } }),
+    ]);
     await _refresh();
-  } catch (err) { _toast('Réorganisation impossible', 'error'); }
+  } catch (err) { await _refresh(); _toast('Réorganisation impossible', 'error'); }
 }
 
 // ══════════════════ NK-4 — FICHE CONTACT ══════════════════
@@ -894,8 +900,8 @@ function _renderFiche(c) {
         (acts.length > 5 ? `<button class="nk-act-more" data-act="nk-fiche-tab" data-tab="activite">Voir toute l'activité</button>` : '')
       : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
-      `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
-       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
+      `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
+       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
          const d = SHORTCUT_DEFS[id]; if (!d) return '';
          return _isOwned(id)
@@ -939,13 +945,34 @@ async function _patchField(id, field, value) {
     await _refresh();
   } catch (e) { _toast('Enregistrement impossible', 'error'); }
 }
-async function _addChip(field) {
-  const c = _contactById(_ficheId); if (!c) return;
-  const v = prompt(field === 'roles' ? 'Ajouter un rôle' : 'Ajouter un tag');
-  if (!v || !v.trim()) return;
-  const arr = _parseArr(c[field]); const val = v.trim().slice(0, 40);
-  if (arr.includes(val)) return;
-  arr.push(val); _patchField(c.id, field, arr);
+// Ajout d'un rôle/tag via un champ inline (charte : pas de prompt() natif).
+function _addChip(field) {
+  const wrap = _fiche && _fiche.querySelector(`[data-chips="${field}"]`);
+  if (!wrap || wrap.querySelector('.nk-chip-input')) return;
+  const addBtn = wrap.querySelector('.nk-chip-add');
+  const inp = document.createElement('input');
+  inp.className = 'nk-chip-input';
+  inp.maxLength = 40;
+  inp.placeholder = field === 'roles' ? 'Rôle…' : 'Tag…';
+  wrap.insertBefore(inp, addBtn);
+  inp.focus();
+  let done = false;
+  const commit = (save) => {
+    if (done) return; done = true;
+    const v = inp.value.trim().slice(0, 40);
+    inp.remove();
+    if (!save || !v) return;
+    const c = _contactById(_ficheId); if (!c) return;
+    const arr = _parseArr(c[field]);
+    if (arr.includes(v)) return;
+    arr.push(v); _patchField(c.id, field, arr);
+  };
+  inp.addEventListener('keydown', e => {
+    e.stopPropagation();   // ne pas laisser Échap fermer la fiche
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+  });
+  inp.addEventListener('blur', () => { setTimeout(() => commit(true), 120); });
 }
 function _delChip(field, val) {
   const c = _contactById(_ficheId); if (!c) return;
