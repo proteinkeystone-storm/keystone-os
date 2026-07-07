@@ -107,6 +107,10 @@ const ICONS = {
     'ghostwriter':    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="17" y2="9"/><line x1="3" y1="13" x2="20" y2="13"/><line x1="3" y1="17" x2="13" y2="17"/><line x1="19" y1="3" x2="19" y2="7"/><line x1="17" y1="5" x2="21" y2="5"/></svg>`,
     // user : silhouette humaine minimaliste (tête + épaules) — picto du Social Manager (O-SOC-001).
     'user':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/></svg>`,
+    // network : constellation « Vous » → 3 contacts en branches courbes (networK,
+    // O-NET-001). CE registre-ci (ICONS local) alimente les tuiles dashboard + K-Store ;
+    // doit rester en phase avec 'network' de lib/ui-icons.js (topbar).
+    'network':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11 Q13 5.5 16.6 5.7"/><path d="M6.3 12 H17.4"/><path d="M6 13 Q13 18.5 16.6 18.3"/><circle cx="4" cy="12" r="2.3" fill="currentColor" stroke="none"/><circle cx="18.4" cy="5.6" r="1.9" fill="currentColor" stroke="none"/><circle cx="19.4" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="18.4" cy="18.4" r="1.9" fill="currentColor" stroke="none"/></svg>`,
     // smart-agent : tête de robot + étincelle de savoir — picto du Smart Agent (O-AGT-001).
     // Tracés IDENTIQUES à ui-icons.js 'smart-agent' (le robot de la topbar du pad),
     // au style brand 1.8 du dashboard → robot partout (tuile, K-Store, fiche détail).
