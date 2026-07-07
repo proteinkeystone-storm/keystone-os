@@ -58,9 +58,10 @@ export const ICONS = {
   'kortex'     : '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
   // Keynapse (O-Keyn-001) — constellation de bulles reliées (synapse).
   'keynapse'   : '<circle cx="6" cy="7" r="2.4"/><circle cx="17.5" cy="6" r="2"/><circle cx="13.5" cy="17" r="2.7"/><path d="M7.7 8.6l4.6 6.4"/><path d="M8.3 6.4l7.2-.2"/>',
-  // networK (O-NET-001) — hub relationnel : « Vous » (nœud gauche) relié à 3
-  // contacts (droite). Métaphore exacte de l'arbre qui se déploie G→D.
-  'network'    : '<circle cx="4.5" cy="12" r="2.2"/><circle cx="18.5" cy="5" r="2"/><circle cx="18.5" cy="12" r="2"/><circle cx="18.5" cy="19" r="2"/><path d="M6.6 11.1l9.9-4.9"/><path d="M6.7 12h9.6"/><path d="M6.6 12.9l9.9 4.9"/>',
+  // networK (O-NET-001) — constellation « Vous » : un nœud à gauche rayonne vers
+  // 3 contacts par des branches COURBES (l'écho exact de l'arbre de l'app).
+  // Nœuds pleins (fill), branches en trait. Piste B validée par Stéphane.
+  'network'    : '<circle cx="4" cy="12" r="2.3" fill="currentColor"/><circle cx="18.4" cy="5.6" r="1.8" fill="currentColor"/><circle cx="19.4" cy="12" r="1.8" fill="currentColor"/><circle cx="18.4" cy="18.4" r="1.8" fill="currentColor"/><path d="M6 11 Q13 5.5 16.6 5.7"/><path d="M6.3 12 H17.4"/><path d="M6 13 Q13 18.5 16.6 18.3"/>',
   // Catégories & entités networK (O-NET-001) — outline Lucide, réutilisables
   // pour la création de catégories (NK-3) et les entités (personne/entreprise…).
   'users'      : '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
