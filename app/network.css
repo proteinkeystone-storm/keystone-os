@@ -444,6 +444,36 @@
 .nk-acttype.nk-sel { border-color: rgba(139,92,246,.7); background: rgba(139,92,246,.14); color: var(--text, #f8fafc); }
 .nk-field input[type="date"] { color-scheme: dark; }
 
+/* ══════════════ Réglages animation (panneau flottant) ══════════════ */
+.nk-animpanel {
+  position: absolute; right: 16px; bottom: 16px; z-index: 30; width: 300px; max-width: calc(100vw - 32px);
+  background: rgba(13,13,20,.92); border: 1px solid var(--bd, rgba(255,255,255,.12));
+  border-radius: 18px; padding: 14px 16px 16px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5); animation: nk-rise .2s cubic-bezier(.22,1,.36,1);
+}
+.nk-animpanel-hd { display: flex; align-items: center; justify-content: space-between;
+  font-size: 14px; font-weight: 900; letter-spacing: -0.02em; color: var(--text, #f8fafc); padding-bottom: 10px; }
+.nk-animpanel-x { width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,.06);
+  color: var(--text-dim, rgba(248,250,252,.6)); display: grid; place-items: center; cursor: pointer; }
+.nk-animpanel-x:hover { background: rgba(255,255,255,.12); }
+.nk-anim-ctrl { margin-top: 9px; }
+.nk-anim-ctrl label { display: flex; justify-content: space-between; font-size: 12px;
+  color: var(--text-dim, rgba(248,250,252,.55)); margin-bottom: 4px; }
+.nk-anim-ctrl output { color: var(--text, #f8fafc); font-weight: 700; font-variant-numeric: tabular-nums; }
+.nk-anim-ctrl input[type="range"] { width: 100%; appearance: none; -webkit-appearance: none; height: 20px; background: none; cursor: pointer; }
+.nk-anim-ctrl input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.14); }
+.nk-anim-ctrl input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 15px; height: 15px;
+  border-radius: 50%; background: var(--nk-violet, #8b5cf6); margin-top: -6px; box-shadow: 0 0 8px rgba(139,92,246,.5); }
+.nk-anim-ctrl input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.14); }
+.nk-anim-ctrl input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: var(--nk-violet, #8b5cf6); }
+.nk-anim-seg { display: flex; gap: 5px; margin-top: 12px; }
+.nk-anim-seg button { flex: 1; height: 30px; border-radius: 9px; border: 1px solid var(--bd, rgba(255,255,255,.12));
+  background: none; color: var(--text-dim, rgba(248,250,252,.6)); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.nk-anim-seg button.nk-sel { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.5); color: var(--text, #f8fafc); }
+.nk-anim-row { display: flex; gap: 8px; margin-top: 12px; }
+.nk-anim-row .nk-btn { flex: 1; height: 38px; }
+
 /* ── Reduced-motion : pas de circulation, transitions calmes ─────── */
 @media (prefers-reduced-motion: reduce) {
   .nk-wires path.nk-flow { display: none; }

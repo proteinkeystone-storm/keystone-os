@@ -26,8 +26,22 @@ import { getOwnedIds }                        from './pads-loader.js';   // NK-6
 const WORKSPACE_META = { id: 'O-NET-001', name: 'networK' };
 const SVGNS = 'http://www.w3.org/2000/svg';
 
-// Paramètres d'animation FIGÉS (réglés au harnais, validés Stéphane).
+// Paramètres d'animation. Valeurs réglées au harnais (défauts) ; ajustables en
+// direct via le panneau « Réglages animation » et persistés (localStorage nk_anim).
 const P = { dur: 550, stag: 45, ov: 25, cur: 45, pd: 65, ease: 'expo', pillDur: 360, fl: 30 };
+const DEFAULT_ANIM = { dur: 550, stag: 45, ov: 25, cur: 45, pd: 65, ease: 'expo', fl: 30 };
+const ANIM_KEY = 'nk_anim';
+const ANIM_CTRLS = [
+  { key: 'dur',  label: 'Durée du tracé',            min: 200, max: 1000, step: 10, unit: ' ms' },
+  { key: 'stag', label: 'Cascade (stagger)',         min: 0,   max: 120,  step: 5,  unit: ' ms' },
+  { key: 'ov',   label: 'Rebond (overshoot)',        min: 0,   max: 60,   step: 5,  unit: ' %' },
+  { key: 'cur',  label: 'Courbure des branches',     min: 10,  max: 90,   step: 5,  unit: ' %' },
+  { key: 'pd',   label: 'Départ pill (sur le tracé)', min: 30, max: 100,  step: 5,  unit: ' %' },
+  { key: 'fl',   label: 'Circulation',               min: 0,   max: 100,  step: 5,  unit: ' %' },
+];
+function _loadAnim() { try { const s = JSON.parse(localStorage.getItem(ANIM_KEY) || 'null'); if (s && typeof s === 'object') Object.assign(P, s); } catch (_) {} }
+function _saveAnim() { try { localStorage.setItem(ANIM_KEY, JSON.stringify({ dur: P.dur, stag: P.stag, ov: P.ov, cur: P.cur, pd: P.pd, ease: P.ease, fl: P.fl })); } catch (_) {} }
+function _applyFlowOpacity() { if (_stage) _stage.style.setProperty('--nk-flowop', P.fl / 100); }
 const EASE = {
   expo:  t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
   quint: t => 1 - Math.pow(1 - t, 5),
@@ -153,6 +167,7 @@ let _zoom = 1, _panX = 0, _panY = 0;
 let _drag = null;
 let _overlay = null, _popover = null;   // modale de formulaire / menu contextuel
 let _fiche = null, _ficheId = null, _ficheTabId = 'resume';   // fiche contact (NK-4)
+let _animPanel = null;   // panneau « Réglages animation »
 let _noteTimer = null;
 
 function later(fn, ms) { const t = setTimeout(fn, ms); timeouts.push(t); return t; }
@@ -162,7 +177,9 @@ function clearTimers() { timeouts.forEach(clearTimeout); timeouts.length = 0; }
 export function openNetwork(opts = {}) {
   if (_root) return;
   _cats = [];
+  _loadAnim();          // réglages animation persistés (avant le 1er rendu)
   _buildShell();
+  _applyFlowOpacity();   // circulation au niveau réglé
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
   window.addEventListener('resize', _onResize);
@@ -176,7 +193,7 @@ export function closeNetwork() {
   window.removeEventListener('resize', _onResize);
   _root.remove();
   _root = _stage = _wires = _nodes = _scene = null;
-  _overlay = _popover = _fiche = null;
+  _overlay = _popover = _fiche = _animPanel = null;
   _ficheId = null; _ficheTabId = 'resume';
   openCat = null; _expandAll = false; _zoom = 1; _panX = _panY = 0;
   document.body.style.overflow = '';
@@ -201,6 +218,7 @@ function _buildShell() {
       </div>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
+        <button class="ws-iconbtn nk-anim-btn" data-act="nk-anim-open" aria-label="Réglages de l'animation" title="Réglages de l'animation">${icon('sliders', 20)}</button>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
       </div>
@@ -585,6 +603,22 @@ function _onPanMove(e) {
   _applyTransform();
 }
 function _onPanEnd() { _drag = null; if (_scene) { _scene.style.cursor = ''; _scene.classList.remove('nk-nofx'); } window.removeEventListener('pointermove', _onPanMove); }
+
+// ── Panneau « Réglages animation » (flottant, live, persisté) ───
+function _openAnimSettings() {
+  if (_animPanel) { _closeAnimSettings(); return; }
+  const panel = document.createElement('div');
+  panel.className = 'nk-animpanel';
+  panel.innerHTML =
+    `<div class="nk-animpanel-hd">Réglages animation<button class="nk-animpanel-x" data-act="nk-anim-close" aria-label="Fermer">${icon('x', 16)}</button></div>
+     ${ANIM_CTRLS.map(c => `<div class="nk-anim-ctrl"><label>${c.label}<output>${P[c.key]}${c.unit}</output></label><input type="range" data-anim="${c.key}" data-unit="${c.unit}" min="${c.min}" max="${c.max}" step="${c.step}" value="${P[c.key]}"></div>`).join('')}
+     <div class="nk-anim-seg" data-anim-ease>${['expo', 'quint', 'cubic'].map(e => `<button type="button" data-ease="${e}"${P.ease === e ? ' class="nk-sel"' : ''}>${e[0].toUpperCase() + e.slice(1)}</button>`).join('')}</div>
+     <div class="nk-anim-row"><button class="nk-btn nk-btn-primary" data-act="nk-anim-replay">Rejouer</button><button class="nk-btn" data-act="nk-anim-reset">Défaut</button></div>`;
+  _root.appendChild(panel);
+  _animPanel = panel;
+}
+function _closeAnimSettings() { if (_animPanel) { _animPanel.remove(); _animPanel = null; } }
+function _resetAnim() { Object.assign(P, DEFAULT_ANIM); _saveAnim(); _applyFlowOpacity(); _closeAnimSettings(); _openAnimSettings(); render(true); }
 
 // ══════════════════ NK-3 — CRUD MANUEL ══════════════════
 const KIND_LABELS  = { person: 'Personne', company: 'Entreprise', place: 'Établissement', group: 'Groupe' };
@@ -1067,6 +1101,14 @@ function _onClick(e) {
     if (hid) hid.value = iconOpt.dataset.icon;
     return;
   }
+  // Sélecteur d'easing (panneau réglages animation)
+  const easeBtn = e.target.closest('[data-ease]');
+  if (easeBtn && _animPanel) {
+    P.ease = easeBtn.dataset.ease;
+    _animPanel.querySelectorAll('[data-ease]').forEach(b => b.classList.toggle('nk-sel', b === easeBtn));
+    _saveAnim();
+    return;
+  }
   // Sélecteur de type d'activité (formulaire activité)
   const actType = e.target.closest('.nk-acttype');
   if (actType && _overlay) {
@@ -1124,6 +1166,10 @@ function _onClick(e) {
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
     case 'nk-zoom-reset':  return _setZoom(1);
     case 'nk-fit':         _panX = _panY = 0; return _setZoom(1);
+    case 'nk-anim-open':   return _openAnimSettings();
+    case 'nk-anim-close':  return _closeAnimSettings();
+    case 'nk-anim-replay': return render(true);
+    case 'nk-anim-reset':  return _resetAnim();
   }
 }
 
@@ -1149,11 +1195,21 @@ function _onInput(e) {
     const id = _ficheId, val = e.target.value;
     clearTimeout(_noteTimer);
     _noteTimer = setTimeout(() => _saveNote(id, val), 700);
+    return;
+  }
+  if (e.target.dataset && e.target.dataset.anim) {   // curseur réglages animation (live)
+    const key = e.target.dataset.anim, v = +e.target.value;
+    P[key] = v;
+    const out = e.target.closest('.nk-anim-ctrl')?.querySelector('output');
+    if (out) out.textContent = v + (e.target.dataset.unit || '');
+    if (key === 'fl') _applyFlowOpacity();
+    _saveAnim();
   }
 }
 
 function _onKey(e) {
   if (e.key !== 'Escape') return;
+  if (_animPanel) return _closeAnimSettings();
   if (_popover) return _closePopover();
   if (_overlay)  return _closeOverlay();
   if (_fiche)    return _closeFiche();
