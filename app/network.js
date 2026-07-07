@@ -52,11 +52,21 @@ const _DEFAULTS = [
 
 function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
 async function _api(path, opts = {}) {
-  const res = await fetch(API_BASE + '/api/network' + path, {
-    method: opts.method || 'GET',
-    headers: { 'Authorization': 'Bearer ' + _jwt(), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);   // pas de requête qui pend indéfiniment
+  let res;
+  try {
+    res = await fetch(API_BASE + '/api/network' + path, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': 'Bearer ' + _jwt(), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError') ? new Error('Le serveur met trop de temps à répondre — réessayez.') : e;
+  }
+  clearTimeout(timer);
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) { const e = new Error(data.error || ('Erreur ' + res.status)); e.status = res.status; throw e; }
@@ -86,9 +96,11 @@ function _relDate(iso) {
   const d = new Date(String(iso).replace(' ', 'T') + (String(iso).length <= 10 ? 'T00:00:00' : ''));
   if (isNaN(d)) return String(iso).slice(0, 10);
   const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if (days <= 0) return "Aujourd'hui";
+  if (days === 0) return "Aujourd'hui";
   if (days === 1) return 'Hier';
-  if (days < 30) return `Il y a ${days} jours`;
+  if (days === -1) return 'Demain';
+  if (days > 1 && days < 30) return `Il y a ${days} jours`;
+  if (days < -1 && days > -30) return `Dans ${-days} jours`;
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
@@ -96,11 +108,15 @@ function _relDate(iso) {
 function _buildCats(categories, contacts) {
   const byCat = {};
   (contacts || []).forEach(ct => { const k = ct.category_id || '_none'; (byCat[k] = byCat[k] || []).push(ct); });
-  return (categories || []).map(c => {
-    const all = byCat[c.id] || [];
-    return { id: c.id, label: c.label, icon: c.icon, count: all.length,
-             contacts: all.slice(0, PER_PAGE), extra: Math.max(0, all.length - PER_PAGE), _all: all };
-  });
+  const mk = (id, label, icon, all, orphan) => ({ id, label, icon, count: all.length,
+    contacts: all.slice(0, PER_PAGE), extra: Math.max(0, all.length - PER_PAGE), _all: all, _orphan: orphan });
+  const cats = (categories || []).map(c => mk(c.id, c.label, c.icon, byCat[c.id] || [], false));
+  // Orphelins : sans catégorie OU rattachés à une catégorie supprimée → panier virtuel
+  // (sinon ils disparaissent de l'arbre ET de la recherche). Non renommable/supprimable.
+  const known = new Set((categories || []).map(c => String(c.id)));
+  const orphans = (contacts || []).filter(ct => !ct.category_id || !known.has(String(ct.category_id)));
+  if (orphans.length) cats.push(mk('__none__', 'Sans catégorie', 'folder', orphans, true));
+  return cats;
 }
 function _defaultCats() {
   return _DEFAULTS.map((d, i) => ({ id: 'def-' + i, label: d.label, icon: d.icon, count: 0, contacts: [], extra: 0, _all: [] }));
@@ -126,6 +142,7 @@ let _root = null, _stage = null, _wires = null, _nodes = null, _scene = null;
 let _cats = [];                 // catégories courantes
 let _activity = [];             // journal d'activité du tenant (NK-5)
 let openCat = null;             // id de la catégorie dépliée (une seule profondeur)
+let _expandAll = false;         // « Voir les N autres » : affiche tous les contacts de la catégorie ouverte
 let seq = 0;                    // invalide les séquences en cours (anti double-clic)
 const jobs = new Set();
 let rafId = null;
@@ -160,7 +177,7 @@ export function closeNetwork() {
   _root = _stage = _wires = _nodes = _scene = null;
   _overlay = _popover = _fiche = null;
   _ficheId = null; _ficheTabId = 'resume';
-  openCat = null; _zoom = 1; _panX = _panY = 0;
+  openCat = null; _expandAll = false; _zoom = 1; _panX = _panY = 0;
   document.body.style.overflow = '';
 }
 
@@ -367,7 +384,7 @@ function render(animated = true) {
       `<span class="nk-cat-ic">${icon(c.icon || 'folder', 16)}</span>` +
       `<span class="nk-cat-lbl">${esc(c.label)}</span>` +
       `<span class="nk-cat-cnt">${c.count}</span>` +
-      `<span class="nk-cat-menu" data-act="nk-cat-menu" data-cat="${esc(c.id)}" aria-label="Gérer la catégorie">${icon('more-horizontal', 16)}</span>` +
+      (c._orphan ? '' : `<span class="nk-cat-menu" data-act="nk-cat-menu" data-cat="${esc(c.id)}" aria-label="Gérer la catégorie">${icon('more-horizontal', 16)}</span>`) +
       `<span class="nk-cat-plus" data-act="nk-cat-add" data-cat="${esc(c.id)}" aria-label="Ajouter un contact">${icon('plus', 15)}</span>`;
     _nodes.appendChild(el);
     c._y = y; c._el = el;
@@ -408,10 +425,24 @@ function render(animated = true) {
 function spawnContacts(c, L, animated) {
   const my = seq;
   _stage.classList.add('nk-focus');
-  const circuitDone = (animated && !REDUCED) ? (c.contacts.length - 1) * P.stag + P.dur * .85 + 250 : 0;
+  const list = _expandAll ? (c._all || c.contacts) : c.contacts;
+  const circuitDone = (animated && !REDUCED) ? Math.max(0, list.length - 1) * P.stag + P.dur * .85 + 250 : 0;
   addFlow(c._path, 0, circuitDone);
 
-  const list = c.contacts;
+  // Catégorie vide : une amorce « Ajouter un contact » dans la colonne (sinon on
+  // glisse vers du vide, surtout en mobile). Vaut aussi pour desktop.
+  if (!list.length) {
+    const empty = document.createElement('button');
+    empty.className = 'nk-node nk-col-empty nk-enter';
+    empty.dataset.contact = c.id;
+    empty.dataset.act = 'nk-cat-add'; empty.dataset.cat = c.id;
+    empty.style.left = L.perX + 'px'; empty.style.top = c._y + 'px';
+    empty.innerHTML = `${icon('plus', 16)} Ajouter un contact`;
+    _nodes.appendChild(empty);
+    reveal(empty, animated && !REDUCED ? 180 : 0);
+    return;
+  }
+
   const yTop = Math.max(70, Math.min(
     c._y - ((list.length - 1) / 2) * L.perGap,
     L.h - 70 - (list.length - 1) * L.perGap - (c.extra ? 44 : 0)));
@@ -449,21 +480,35 @@ function spawnContacts(c, L, animated) {
     }
   });
 
-  if (c.extra) {
+  if (!_expandAll && c.extra) {
     const y = Math.max(70, yTop + list.length * L.perGap) - 8;
     const more = document.createElement('button');
     more.className = 'nk-node nk-more nk-enter';
     more.style.left = L.perX + 'px'; more.style.top = y + 'px';
     more.dataset.contact = c.id;
+    more.dataset.act = 'nk-expand'; more.dataset.cat = c.id;
     more.innerHTML = `${icon('chevron-down', 14)} Voir les ${c.extra} autres`;
     _nodes.appendChild(more);
     reveal(more, animated && !REDUCED ? list.length * P.stag + P.dur * .6 : 0);
   }
 }
 
+// « Voir les N autres » : ré-affiche la catégorie ouverte avec TOUS ses contacts.
+function _expandCategory(id) {
+  const c = _cats.find(x => String(x.id) === String(id || openCat));
+  if (!c || !c._el) return;
+  _expandAll = true;
+  clearFlows();
+  _nodes.querySelectorAll('[data-contact]').forEach(e => e.remove());
+  _wires.querySelectorAll('path[data-contact]').forEach(e => e.remove());
+  spawnContacts(c, layout(), true);
+  _focusOpenCategory(false);
+}
+
 // Ouvre/ferme une catégorie — une seule profondeur visible.
 function toggle(id) {
   seq++; const my = seq;
+  _expandAll = false;   // toute nouvelle ouverture repart en pagination
   clearFlows();
   _stage.classList.remove('nk-focus');
   _nodes.querySelectorAll('[data-contact]').forEach(vanish);
@@ -547,7 +592,7 @@ const NK_CAT_ICONS = ['users', 'briefcase', 'handshake', 'newspaper', 'landmark'
 
 function _allContacts() { return _cats.flatMap(c => c._all || []); }
 function _contactById(id) { return _allContacts().find(c => String(c.id) === String(id)) || null; }
-function _realCats() { return _cats.filter(c => !String(c.id).startsWith('def-')); }   // exclut le squelette hors-ligne
+function _realCats() { return _cats.filter(c => !c._orphan && !String(c.id).startsWith('def-')); }   // vraies catégories (ni squelette hors-ligne, ni panier orphelins)
 function _tagsText(c) { try { return (Array.isArray(c.tags) ? c.tags : JSON.parse(c.tags || '[]')).join(' '); } catch (_) { return ''; } }
 
 // ── Overlay (modale de formulaire ; bottom-sheet en mobile via CSS) ──
@@ -942,6 +987,7 @@ async function _submitActivity(form) {
   }
 }
 async function _deleteActivity(id) {
+  if (!confirm('Supprimer cette entrée du journal ?')) return;
   try { await _api('/activity/' + id, { method: 'DELETE' }); await _refresh(); _toast('Activité supprimée'); }
   catch (err) { _toast('Suppression impossible', 'error'); }
 }
@@ -1007,6 +1053,7 @@ function _onClick(e) {
     case 'nk-tag-del':     return _delChip('tags', actEl.dataset.val);
     case 'nk-act-add':     return _openActivityForm();
     case 'nk-act-del':     return _deleteActivity(actEl.dataset.id);
+    case 'nk-expand':      return _expandCategory(actEl.dataset.cat || openCat);
     case 'nk-shortcut':    return _openShortcut(actEl.dataset.pad);
     case 'nk-zoom-in':     return _setZoom(_zoom * 1.15);
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
