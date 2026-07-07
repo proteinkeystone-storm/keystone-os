@@ -243,16 +243,49 @@
 .nk-field { display: flex; flex-direction: column; gap: 6px; }
 .nk-field > span { font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
   color: var(--text-dim, rgba(248,250,252,.55)); text-transform: uppercase; }
-.nk-field input, .nk-field select {
+.nk-field input, .nk-field select, .nk-field textarea {
   height: 44px; padding: 0 14px; border-radius: 12px;
   background: rgba(0,0,0,.22); border: 1px solid var(--bd, rgba(255,255,255,.12));
   color: var(--text, #f8fafc); font-family: inherit; font-size: 15px; letter-spacing: -0.01em;
   outline: none; transition: border-color .15s ease, background .15s ease;
 }
-.nk-field input:focus, .nk-field select:focus { border-color: rgba(139,92,246,.6); background: rgba(0,0,0,.32); }
+.nk-field input:focus, .nk-field select:focus, .nk-field textarea:focus { border-color: rgba(139,92,246,.6); background: rgba(0,0,0,.32); }
+.nk-field textarea { height: auto; min-height: 62px; padding: 12px 14px; line-height: 1.4; resize: vertical; }
 .nk-field select { appearance: none; -webkit-appearance: none; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, rgba(248,250,252,.4) 50%), linear-gradient(135deg, rgba(248,250,252,.4) 50%, transparent 50%);
   background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px; background-size: 5px 5px; background-repeat: no-repeat; }
+
+/* ── Éditeur « Réseaux sociaux » (formulaire) ── */
+.nk-socials-edit { display: flex; flex-direction: column; gap: 8px; }
+.nk-socials-edit:empty { display: none; }
+.nk-social-row { display: flex; gap: 8px; align-items: center; }
+.nk-social-row .nk-social-type { flex: 0 0 38%; padding-right: 26px; }
+.nk-social-row .nk-social-url { flex: 1 1 auto; min-width: 0; }
+.nk-social-del { flex: none; width: 40px; height: 44px; border-radius: 12px; display: grid; place-items: center; cursor: pointer;
+  background: rgba(0,0,0,.22); border: 1px solid var(--bd, rgba(255,255,255,.12)); color: var(--text-dim, rgba(248,250,252,.5)); transition: all .15s ease; }
+.nk-social-del:hover { color: #fca5a5; border-color: rgba(248,113,113,.4); }
+.nk-social-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
+  padding: 7px 12px; border-radius: 10px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+  background: transparent; border: 1px dashed var(--bd, rgba(255,255,255,.18)); color: var(--text-dim, rgba(248,250,252,.6)); transition: all .15s ease; }
+.nk-social-add:hover { border-color: rgba(139,92,246,.5); color: var(--text, #f8fafc); }
+
+/* ── Bloc « Coordonnées » (fiche) ── */
+.nk-coord-list { display: flex; flex-direction: column; gap: 8px; }
+.nk-coord { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(0,0,0,.18); border: 1px solid var(--bd, rgba(255,255,255,.08));
+  color: var(--text, #f8fafc); text-decoration: none; font-size: 14px; letter-spacing: -0.01em; transition: all .15s ease; }
+a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.3); }
+.nk-coord svg { flex: none; color: var(--nk-violet, #8b5cf6); }
+.nk-coord-tx { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nk-coord-addr { align-items: flex-start; flex-wrap: wrap; }
+.nk-coord-addr .nk-coord-tx { white-space: normal; }
+.nk-coord-map { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 100%; margin-top: 2px; padding-left: 28px;
+  font-size: 12.5px; font-weight: 600; color: var(--nk-violet, #8b5cf6); text-decoration: none; }
+.nk-coord-map:hover { text-decoration: underline; }
+.nk-coord-socials { display: flex; flex-wrap: wrap; gap: 8px; }
+.nk-social-link { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: rgba(0,0,0,.18); border: 1px solid var(--bd, rgba(255,255,255,.1)); color: var(--text, #f8fafc); transition: all .15s ease; }
+.nk-social-link:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.4); }
 
 .nk-icon-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .nk-icon-opt {

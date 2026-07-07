@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS nk_contacts (
   kind TEXT NOT NULL DEFAULT 'person',       -- person | company | place | group
   name TEXT NOT NULL,
   company TEXT, title TEXT, email TEXT, phone TEXT,
+  phone2 TEXT,                               -- 2ᵉ téléphone
+  website TEXT,                              -- URL de site
+  address TEXT,                              -- adresse / lieu (map via lien maps)
+  socials TEXT NOT NULL DEFAULT '[]',        -- JSON [{"type":"linkedin","url":"…"}, …]
   roles TEXT NOT NULL DEFAULT '[]',          -- JSON ["Client", …]
   tags  TEXT NOT NULL DEFAULT '[]',          -- JSON ["Important", …]
   notes TEXT NOT NULL DEFAULT '',
@@ -47,6 +51,15 @@ CREATE TABLE IF NOT EXISTS nk_contacts (
 );
 CREATE INDEX IF NOT EXISTS idx_nk_contacts_tenant ON nk_contacts(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_nk_contacts_cat ON nk_contacts(tenant_id, category_id);
+
+-- ── Migration additive (tables déjà en prod) : ADD COLUMN idempotent ──
+-- SQLite n'a pas « ADD COLUMN IF NOT EXISTS » ; côté route, _ensureSchema
+-- teste PRAGMA table_info avant d'ajouter. En SQL manuel, ignorer l'erreur
+-- « duplicate column » si la colonne existe déjà.
+--   ALTER TABLE nk_contacts ADD COLUMN phone2 TEXT;
+--   ALTER TABLE nk_contacts ADD COLUMN website TEXT;
+--   ALTER TABLE nk_contacts ADD COLUMN address TEXT;
+--   ALTER TABLE nk_contacts ADD COLUMN socials TEXT NOT NULL DEFAULT '[]';
 
 -- ── Journal d'activité (manuel en V1 ; source prêt pour l'auto en couche 2) ──
 CREATE TABLE IF NOT EXISTS nk_activity (

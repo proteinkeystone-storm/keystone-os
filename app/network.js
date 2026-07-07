@@ -625,6 +625,26 @@ const KIND_LABELS  = { person: 'Personne', company: 'Entreprise', place: 'Établ
 const KIND_DEFAULT_ICON = { person: 'user', company: 'building', place: 'landmark', group: 'users' };
 const NK_CAT_ICONS = ['users', 'briefcase', 'handshake', 'newspaper', 'landmark', 'tag', 'building', 'folder', 'network', 'user'];
 
+// Réseaux sociaux : type connu → picto du registre ui-icons (jamais d'emoji).
+// Les types sans picto dédié retombent sur 'link' (le libellé reste explicite).
+const SOCIAL_TYPES = [
+  { key: 'linkedin',  label: 'LinkedIn',    icon: 'linkedin' },
+  { key: 'instagram', label: 'Instagram',   icon: 'instagram' },
+  { key: 'facebook',  label: 'Facebook',    icon: 'facebook' },
+  { key: 'threads',   label: 'Threads',     icon: 'threads' },
+  { key: 'telegram',  label: 'Telegram',    icon: 'telegram' },
+  { key: 'pinterest', label: 'Pinterest',   icon: 'pinterest' },
+  { key: 'x',         label: 'X (Twitter)', icon: 'link' },
+  { key: 'youtube',   label: 'YouTube',     icon: 'play' },
+  { key: 'tiktok',    label: 'TikTok',      icon: 'link' },
+  { key: 'whatsapp',  label: 'WhatsApp',    icon: 'message' },
+  { key: 'other',     label: 'Autre lien',  icon: 'globe' },
+];
+function _socialMeta(key) { return SOCIAL_TYPES.find(s => s.key === key) || SOCIAL_TYPES[SOCIAL_TYPES.length - 1]; }
+// href sûr : conserve un schéma explicite (mailto:, tel:, https:…), sinon https://.
+function _href(u) { u = String(u || '').trim(); if (!u) return ''; return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u; }
+function _mapUrl(addr) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(addr || '').trim()); }
+
 function _allContacts() { return _cats.flatMap(c => c._all || []); }
 function _contactById(id) { return _allContacts().find(c => String(c.id) === String(id)) || null; }
 function _realCats() { return _cats.filter(c => !c._orphan && !String(c.id).startsWith('def-')); }   // vraies catégories (ni squelette hors-ligne, ni panier orphelins)
@@ -692,6 +712,17 @@ function _openAddMenu() {
   );
 }
 
+// Une ligne d'édition « réseau social » (type + URL + retrait).
+function _socialRowHTML(s = {}) {
+  const cur = s.type || 'linkedin';
+  const opts = SOCIAL_TYPES.map(x => `<option value="${x.key}"${x.key === cur ? ' selected' : ''}>${x.label}</option>`).join('');
+  return `<div class="nk-social-row">
+    <select class="nk-social-type" aria-label="Réseau">${opts}</select>
+    <input class="nk-social-url" type="url" inputmode="url" placeholder="https://…" maxlength="400" value="${esc(s.url || '')}" autocomplete="off">
+    <button type="button" class="nk-social-del" data-act="nk-social-del" aria-label="Retirer ce réseau">${icon('x', 15)}</button>
+  </div>`;
+}
+
 // ── Formulaire contact (création / édition) ──
 // seed = contact existant (édition si seed.id) OU { kind, category_id } (création)
 function _openContactForm(seed = {}) {
@@ -701,6 +732,7 @@ function _openContactForm(seed = {}) {
     `<option value="${esc(c.id)}"${String(seed.category_id) === String(c.id) ? ' selected' : ''}>${esc(c.label)}</option>`).join('');
   const kindOpts = Object.entries(KIND_LABELS).map(([k, l]) =>
     `<option value="${k}"${k === kind ? ' selected' : ''}>${l}</option>`).join('');
+  const socials = _parseArr(seed.socials);
   _openOverlay(
     `<div class="nk-sheet-hd">${isEdit ? 'Modifier le contact' : 'Nouveau contact'}<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
      <form class="nk-form" data-form="contact"${isEdit ? ` data-id="${esc(seed.id)}"` : ''}>
@@ -710,6 +742,13 @@ function _openContactForm(seed = {}) {
        <label class="nk-field"><span>Fonction</span><input name="title" maxlength="200" value="${esc(seed.title || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>E-mail</span><input name="email" type="email" maxlength="200" value="${esc(seed.email || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Téléphone</span><input name="phone" type="tel" maxlength="200" value="${esc(seed.phone || '')}" autocomplete="off"></label>
+       <label class="nk-field"><span>Téléphone 2</span><input name="phone2" type="tel" maxlength="200" value="${esc(seed.phone2 || '')}" autocomplete="off"></label>
+       <label class="nk-field"><span>Site web</span><input name="website" type="url" inputmode="url" maxlength="400" placeholder="https://…" value="${esc(seed.website || '')}" autocomplete="off"></label>
+       <label class="nk-field"><span>Adresse</span><textarea name="address" maxlength="400" rows="2" placeholder="N°, rue, code postal, ville…" autocomplete="off">${esc(seed.address || '')}</textarea></label>
+       <div class="nk-field"><span>Réseaux sociaux</span>
+         <div class="nk-socials-edit" data-socials>${socials.map(_socialRowHTML).join('')}</div>
+         <button type="button" class="nk-social-add" data-act="nk-social-add">${icon('plus', 14)} Ajouter un réseau</button>
+       </div>
        <label class="nk-field"><span>Catégorie</span><select name="category_id"><option value="">— Aucune —</option>${catOpts}</select></label>
        <div class="nk-form-actions">
          ${isEdit ? `<button type="button" class="nk-btn nk-btn-danger" data-act="nk-contact-del" data-id="${esc(seed.id)}">Supprimer</button>` : '<span></span>'}
@@ -795,6 +834,10 @@ async function _refresh(animated = false) {
 async function _submitContact(form) {
   const fd = new FormData(form);
   const id = form.dataset.id || null;
+  const socials = [...form.querySelectorAll('.nk-social-row')].map(r => ({
+    type: (r.querySelector('.nk-social-type') || {}).value || 'other',
+    url:  ((r.querySelector('.nk-social-url') || {}).value || '').trim(),
+  })).filter(s => s.url);
   const payload = {
     name: String(fd.get('name') || '').trim(),
     kind: fd.get('kind') || 'person',
@@ -802,6 +845,10 @@ async function _submitContact(form) {
     title: String(fd.get('title') || '').trim(),
     email: String(fd.get('email') || '').trim(),
     phone: String(fd.get('phone') || '').trim(),
+    phone2: String(fd.get('phone2') || '').trim(),
+    website: String(fd.get('website') || '').trim(),
+    address: String(fd.get('address') || '').trim(),
+    socials,
     category_id: fd.get('category_id') || null,
   };
   if (!payload.name) { _toast('Le nom est requis', 'error'); return; }
@@ -912,6 +959,23 @@ function _actionBtn(ic, href, label) {
 function _chip(field, val, cls) {
   return `<span class="nk-chip ${cls}">${esc(val)}<button class="nk-chip-x" data-act="nk-${field === 'roles' ? 'role' : 'tag'}-del" data-val="${esc(val)}" aria-label="Retirer">${icon('x', 12)}</button></span>`;
 }
+// Bloc « Coordonnées » de la fiche : 2ᵉ tel, site web, adresse (+ lien carte),
+// réseaux sociaux. Rendu seulement si au moins un champ est renseigné.
+function _coordSection(c) {
+  const rows = [];
+  const site = c.website ? _href(c.website) : '';
+  if (site) rows.push(`<a class="nk-coord" href="${esc(site)}" target="_blank" rel="noopener noreferrer">${icon('globe', 18)}<span class="nk-coord-tx">${esc(c.website)}</span>${icon('external-link', 14)}</a>`);
+  if (c.phone2) rows.push(`<a class="nk-coord" href="tel:${encodeURIComponent(c.phone2)}">${icon('phone', 18)}<span class="nk-coord-tx">${esc(c.phone2)}</span></a>`);
+  if (c.address) rows.push(`<div class="nk-coord nk-coord-addr">${icon('pin', 18)}<span class="nk-coord-tx">${esc(c.address)}</span><a class="nk-coord-map" href="${esc(_mapUrl(c.address))}" target="_blank" rel="noopener noreferrer">${icon('compass', 14)} Voir sur la carte</a></div>`);
+  const socials = _parseArr(c.socials);
+  if (socials.length) {
+    const links = socials.map(s => { const m = _socialMeta(s.type);
+      return `<a class="nk-social-link" href="${esc(_href(s.url))}" target="_blank" rel="noopener noreferrer" title="${esc(m.label)}" aria-label="${esc(m.label)}">${icon(m.icon, 18)}</a>`; }).join('');
+    rows.push(`<div class="nk-coord-socials">${links}</div>`);
+  }
+  if (!rows.length) return '';
+  return `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Coordonnées</div><div class="nk-coord-list">${rows.join('')}</div></div>`;
+}
 function _actRow(a, deletable) {
   const m = _actMeta(a.type);
   return `<div class="nk-act-row"><span class="nk-act-ic">${icon(m.icon, 16)}</span>` +
@@ -934,6 +998,7 @@ function _renderFiche(c) {
         (acts.length > 5 ? `<button class="nk-act-more" data-act="nk-fiche-tab" data-tab="activite">Voir toute l'activité</button>` : '')
       : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
+      _coordSection(c) +
       `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
@@ -955,6 +1020,7 @@ function _renderFiche(c) {
   const tel = c.phone ? 'tel:' + encodeURIComponent(c.phone) : '';
   const mail = c.email ? 'mailto:' + encodeURIComponent(c.email) : '';
   const sms = c.phone ? 'sms:' + encodeURIComponent(c.phone) : '';
+  const site = c.website ? _href(c.website) : '';
 
   _fiche.innerHTML =
     `<div class="nk-fiche-nav">
@@ -966,6 +1032,7 @@ function _renderFiche(c) {
        <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${badge}${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
        <div class="nk-fiche-acts">
          ${_actionBtn('phone', tel, 'Appeler')}${_actionBtn('mail', mail, 'E-mail')}${_actionBtn('message', sms, 'Message')}
+         ${site ? `<a class="nk-fiche-act" href="${esc(site)}" target="_blank" rel="noopener noreferrer" aria-label="Site web">${icon('globe', 20)}</a>` : ''}
          <button class="nk-fiche-act nk-fiche-act-edit" data-act="nk-fiche-edit" aria-label="Modifier">${icon('settings', 20)}</button>
        </div>
        <div class="nk-fiche-tabs">${tabs}</div>
@@ -1026,7 +1093,8 @@ async function _openShortcut(padId) {
   // cible lit ce qui l'intéresse et ignore le reste (aujourd'hui : Social).
   const nkContact = c ? {
     id: c.id, name: c.name, company: c.company, title: c.title,
-    email: c.email, phone: c.phone, roles: _parseArr(c.roles),
+    email: c.email, phone: c.phone, phone2: c.phone2, website: c.website,
+    address: c.address, socials: _parseArr(c.socials), roles: _parseArr(c.roles),
   } : null;
   const opts = { nkContact };
   // Pré-remplissage réel via la voie EXISTANTE et éprouvée du composer Social
@@ -1145,6 +1213,8 @@ function _onClick(e) {
     case 'nk-new-place':   _closeOverlay(); return _openContactForm({ kind: 'place' });
     case 'nk-new-group':   _closeOverlay(); return _openContactForm({ kind: 'group' });
     case 'nk-new-cat':     _closeOverlay(); return _openCategoryForm(null);
+    case 'nk-social-add':  { const w = _overlay && _overlay.querySelector('[data-socials]'); if (w) { w.insertAdjacentHTML('beforeend', _socialRowHTML()); w.lastElementChild.querySelector('.nk-social-url')?.focus(); } return; }
+    case 'nk-social-del':  { const row = actEl.closest('.nk-social-row'); if (row) row.remove(); return; }
     case 'nk-contact-del': return _deleteContact(actEl.dataset.id);
     case 'nk-cat-edit':    { _closePopover(); const c = _cats.find(x => String(x.id) === String(actEl.dataset.cat)); return _openCategoryForm(c); }
     case 'nk-cat-del':     { _closePopover(); return _deleteCategory(actEl.dataset.cat || actEl.dataset.id); }
