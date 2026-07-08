@@ -169,6 +169,7 @@ let _overlay = null, _popover = null;   // modale de formulaire / menu contextue
 let _fiche = null, _ficheId = null, _ficheTabId = 'resume';   // fiche contact (NK-4)
 let _animPanel = null;   // panneau « Réglages animation »
 let _noteTimer = null;
+let _lpTimer = null, _lpFired = false;   // appui long sur les actions de fiche (copie)
 
 function later(fn, ms) { const t = setTimeout(fn, ms); timeouts.push(t); return t; }
 function clearTimers() { timeouts.forEach(clearTimeout); timeouts.length = 0; }
@@ -188,7 +189,7 @@ export function openNetwork(opts = {}) {
 export function closeNetwork() {
   if (!_root) return;
   clearTimers(); jobs.clear(); rafId = null;
-  _closePopover(); clearTimeout(_noteTimer);
+  _closePopover(); clearTimeout(_noteTimer); clearTimeout(_lpTimer); _lpFired = false;
   document.removeEventListener('keydown', _onKey);
   window.removeEventListener('resize', _onResize);
   _root.remove();
@@ -234,6 +235,9 @@ function _buildShell() {
             <button class="nk-add-btn" data-act="nk-add" aria-label="Ajouter au réseau">
               ${icon('plus', 18)}<span>Ajouter</span>
             </button>
+            <button class="nk-io-btn" data-act="nk-io" aria-label="Importer / Exporter" title="Importer / Exporter">
+              ${icon('download', 18)}
+            </button>
           </div>
 
           <div class="nk-viewport" data-slot="viewport">
@@ -269,6 +273,7 @@ function _buildShell() {
   _root.addEventListener('click', _onClick);
   _root.addEventListener('submit', _onSubmit);
   _root.addEventListener('input', _onInput);
+  _root.addEventListener('pointerdown', _onFicheActDown);
   vp.addEventListener('pointerdown', _onPanStart);
   vp.addEventListener('wheel', _onWheel, { passive: false });
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
@@ -917,16 +922,17 @@ const SHORTCUT_DEFS = {
   'O-SEC-001': { icon: 'sceau',       t1: 'Envoyer', t2: 'une Missive',   suggest: 'Transmettez un mot de passe ou un document qui s\'autodétruit après lecture.' },
   'A-COM-002': { icon: 'kodex',       t1: 'Générer', t2: 'un Brief',       suggest: 'Rédigez le brief print ou digital parfait, prêt pour votre imprimeur.' },
   'A-COM-005': { icon: 'ghostwriter', t1: 'Écrire',  t2: 'un message',     suggest: 'Réécrivez vos e-mails et textes en trois variantes calibrées.' },
+  'O-Keyn-001':{ icon: 'keynapse',    t1: 'Noter',   t2: 'dans Keynapse',  suggest: 'Capturez idées, tâches et rappels dans une constellation de bulles.' },
+  'A-COM-001': { icon: 'sdqr',        t1: 'Créer',   t2: 'un QR code',     suggest: 'Générez un QR code (vCard, lien…) tracké et souverain.' },
+  'O-GEO-001': { icon: 'sentinel',    t1: 'Auditer', t2: 'un site',        suggest: 'Auditez et surveillez la présence web de ce contact.' },
+  'O-BRD-001': { icon: 'keybrand',    t1: 'Ouvrir',  t2: 'une charte',     suggest: 'Composez une charte graphique vivante, partageable d\'un lien.' },
+  'A-COM-004': { icon: 'pulsa',       t1: 'Créer',   t2: 'un formulaire',  suggest: 'Bâtissez un formulaire intelligent à partager en un lien.' },
   'O-SOC-001': { icon: 'user',        t1: 'Publier', t2: 'pour ce client', suggest: 'Composez et publiez sur Facebook, Instagram et LinkedIn.' },
   'O-AGT-001': { icon: 'smart-agent', t1: 'Ouvrir',  t2: 'Smart Agent',    suggest: 'Créez un assistant qui répond à ce client, par chat ou QR code.' },
 };
-// Raccourcis affichés selon le rôle du contact (le contexte décide, cf. brief).
+// Raccourcis « Continuer avec… » : ensemble fixe des pads reliés à un contact.
 function _shortcutsFor(c) {
-  const roles = _parseArr(c.roles).map(r => String(r).toLowerCase());
-  const isClient = roles.some(r => r.includes('client') || r.includes('prospect'));
-  return isClient
-    ? ['O-SEC-001', 'A-COM-002', 'O-AGT-001', 'O-SOC-001']    // client : maquette (Missive/Brief/Smart Agent/Publier)
-    : ['O-SEC-001', 'A-COM-002', 'A-COM-005', 'O-SOC-001'];   // défaut : Missive/Brief/Ghost Writer/Publier
+  return ['O-SEC-001', 'A-COM-002', 'A-COM-005', 'O-Keyn-001', 'A-COM-001', 'O-GEO-001', 'O-BRD-001', 'A-COM-004'];
 }
 // Possédé ? getOwnedIds() : null = tout (MAX/ADMIN/démo), sinon liste blanche.
 function _isOwned(padId) { const o = getOwnedIds(); return o === null || (Array.isArray(o) && o.includes(padId)); }
@@ -956,25 +962,74 @@ function _actionBtn(ic, href, label) {
     ? `<a class="nk-fiche-act" href="${href}" aria-label="${label}">${icon(ic, 20)}</a>`
     : `<span class="nk-fiche-act nk-fiche-act-off" aria-label="${label} indisponible">${icon(ic, 20)}</span>`;
 }
+// Bouton d'action de fiche : lien si `href`, sinon état inactif grisé. `copy` =
+// valeur brute copiée à l'appui long (voir _onFicheActDown). `newTab` pour le web.
+function _ficheAct(ic, href, label, copy, newTab) {
+  if (!href) return `<span class="nk-fiche-act nk-fiche-act-off" aria-label="${esc(label)} indisponible">${icon(ic, 20)}</span>`;
+  const tgt = newTab ? ' target="_blank" rel="noopener noreferrer"' : '';
+  const cp  = copy ? ` data-copy="${esc(copy)}"` : '';
+  return `<a class="nk-fiche-act" href="${esc(href)}"${tgt}${cp} aria-label="${esc(label)}" title="${esc(label)} · appui long = copier">${icon(ic, 20)}</a>`;
+}
+
+// Presse-papiers (Clipboard API + repli execCommand pour les WebView anciennes).
+async function _copyText(t) {
+  if (!t) return;
+  try { await navigator.clipboard.writeText(t); _toast('Copié'); return; } catch (_) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); ta.remove(); _toast('Copié');
+  } catch (_) { _toast('Copie impossible', 'error'); }
+}
+// Appui long (≥ 480 ms) sur une action de fiche → copie la valeur brute (data-copy)
+// au lieu de suivre le lien. Le clic qui suit le relâchement est avalé dans _onClick.
+function _onFicheActDown(e) {
+  const a = e.target.closest('.nk-fiche-act[data-copy]');
+  if (!a) return;
+  _lpFired = false;
+  clearTimeout(_lpTimer);
+  _lpTimer = setTimeout(() => {
+    _lpFired = true;
+    _copyText(a.getAttribute('data-copy'));
+    a.classList.add('nk-copied');
+    setTimeout(() => a.classList.remove('nk-copied'), 900);
+  }, 480);
+  const cancel = () => {
+    clearTimeout(_lpTimer);
+    window.removeEventListener('pointerup', cancel);
+    window.removeEventListener('pointercancel', cancel);
+    a.removeEventListener('pointerleave', cancel);
+  };
+  window.addEventListener('pointerup', cancel);
+  window.addEventListener('pointercancel', cancel);
+  a.addEventListener('pointerleave', cancel);
+}
 function _chip(field, val, cls) {
   return `<span class="nk-chip ${cls}">${esc(val)}<button class="nk-chip-x" data-act="nk-${field === 'roles' ? 'role' : 'tag'}-del" data-val="${esc(val)}" aria-label="Retirer">${icon('x', 12)}</button></span>`;
 }
-// Bloc « Coordonnées » de la fiche : 2ᵉ tel, site web, adresse (+ lien carte),
-// réseaux sociaux. Rendu seulement si au moins un champ est renseigné.
+// Bloc « Coordonnées » de la fiche : adresse + carte embarquée (Google Maps
+// keyless, `output=embed` — pas de clé/géocodage) et réseaux sociaux. Tél/mail/
+// site vivent désormais dans la barre d'actions du haut. Rendu si au moins un
+// champ renseigné.
 function _coordSection(c) {
-  const rows = [];
-  const site = c.website ? _href(c.website) : '';
-  if (site) rows.push(`<a class="nk-coord" href="${esc(site)}" target="_blank" rel="noopener noreferrer">${icon('globe', 18)}<span class="nk-coord-tx">${esc(c.website)}</span>${icon('external-link', 14)}</a>`);
-  if (c.phone2) rows.push(`<a class="nk-coord" href="tel:${encodeURIComponent(c.phone2)}">${icon('phone', 18)}<span class="nk-coord-tx">${esc(c.phone2)}</span></a>`);
-  if (c.address) rows.push(`<div class="nk-coord nk-coord-addr">${icon('pin', 18)}<span class="nk-coord-tx">${esc(c.address)}</span><a class="nk-coord-map" href="${esc(_mapUrl(c.address))}" target="_blank" rel="noopener noreferrer">${icon('compass', 14)} Voir sur la carte</a></div>`);
   const socials = _parseArr(c.socials);
+  const hasAddr = !!(c.address && c.address.trim());
+  if (!hasAddr && !socials.length) return '';
+  let inner = '';
+  if (hasAddr) {
+    const embed = `https://maps.google.com/maps?q=${encodeURIComponent(c.address.trim())}&z=15&output=embed`;
+    inner +=
+      `<div class="nk-coord nk-coord-addr">${icon('pin', 18)}<span class="nk-coord-tx">${esc(c.address)}</span>` +
+      `<a class="nk-coord-map" href="${esc(_mapUrl(c.address))}" target="_blank" rel="noopener noreferrer">${icon('compass', 14)} Ouvrir en grand</a></div>` +
+      `<div class="nk-map"><iframe title="Carte — ${esc(c.address)}" src="${esc(embed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allow="fullscreen"></iframe></div>`;
+  }
   if (socials.length) {
     const links = socials.map(s => { const m = _socialMeta(s.type);
       return `<a class="nk-social-link" href="${esc(_href(s.url))}" target="_blank" rel="noopener noreferrer" title="${esc(m.label)}" aria-label="${esc(m.label)}">${icon(m.icon, 18)}</a>`; }).join('');
-    rows.push(`<div class="nk-coord-socials">${links}</div>`);
+    inner += `<div class="nk-coord-socials">${links}</div>`;
   }
-  if (!rows.length) return '';
-  return `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Coordonnées</div><div class="nk-coord-list">${rows.join('')}</div></div>`;
+  return `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Coordonnées</div><div class="nk-coord-list">${inner}</div></div>`;
 }
 function _actRow(a, deletable) {
   const m = _actMeta(a.type);
@@ -999,8 +1054,10 @@ function _renderFiche(c) {
       : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
       _coordSection(c) +
-      `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
-       <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
+      `<div class="nk-fiche-row2">
+         <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
+         <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
+       </div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
          const d = SHORTCUT_DEFS[id]; if (!d) return '';
          return _isOwned(id)
@@ -1017,9 +1074,11 @@ function _renderFiche(c) {
         : `<div class="nk-fiche-empty nk-fiche-empty-lg">${icon('history', 30)}<span>Aucune activité. Notez appels, e-mails, RDV, devis… pour raconter la relation.</span></div>`}</div>`;
   }
 
-  const tel = c.phone ? 'tel:' + encodeURIComponent(c.phone) : '';
-  const mail = c.email ? 'mailto:' + encodeURIComponent(c.email) : '';
-  const sms = c.phone ? 'sms:' + encodeURIComponent(c.phone) : '';
+  const tel  = c.phone  ? 'tel:' + encodeURIComponent(c.phone)  : '';
+  const tel2 = c.phone2 ? 'tel:' + encodeURIComponent(c.phone2) : '';
+  const mail = c.email  ? 'mailto:' + encodeURIComponent(c.email) : '';
+  const smsNum = c.phone2 || c.phone;                 // SMS de préférence sur le mobile
+  const sms  = smsNum ? 'sms:' + encodeURIComponent(smsNum) : '';
   const site = c.website ? _href(c.website) : '';
 
   _fiche.innerHTML =
@@ -1031,8 +1090,11 @@ function _renderFiche(c) {
        <button class="nk-fiche-x" data-act="nk-fiche-close" aria-label="Fermer">${icon('x', 18)}</button>
        <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${badge}${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
        <div class="nk-fiche-acts">
-         ${_actionBtn('phone', tel, 'Appeler')}${_actionBtn('mail', mail, 'E-mail')}${_actionBtn('message', sms, 'Message')}
-         ${site ? `<a class="nk-fiche-act" href="${esc(site)}" target="_blank" rel="noopener noreferrer" aria-label="Site web">${icon('globe', 20)}</a>` : ''}
+         ${_ficheAct('phone', tel, 'Appeler (fixe)', c.phone)}
+         ${_ficheAct('smartphone', tel2, 'Appeler (mobile)', c.phone2)}
+         ${_ficheAct('mail', mail, 'E-mail', c.email)}
+         ${_ficheAct('message', sms, 'Message', smsNum)}
+         ${_ficheAct('globe', site, 'Site web', c.website, true)}
          <button class="nk-fiche-act nk-fiche-act-edit" data-act="nk-fiche-edit" aria-label="Modifier">${icon('settings', 20)}</button>
        </div>
        <div class="nk-fiche-tabs">${tabs}</div>
@@ -1158,8 +1220,182 @@ async function _deleteActivity(id) {
   catch (err) { _toast('Suppression impossible', 'error'); }
 }
 
+// ══════════════════ IMPORT / EXPORT ══════════════════
+// Export = fichiers standards lisibles par les outils tiers : CSV (tableur,
+// triable) + vCard 3.0 (carnet d'adresses iPhone/Google/Outlook). Import = CSV
+// à en-têtes tolérants (alias FR/EN). 100 % client (Blob), zéro serveur tiers.
+
+function _openIOMenu() {
+  _openOverlay(
+    `<div class="nk-sheet-hd">Importer / Exporter<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
+     <div class="nk-menu">
+       <button class="nk-menu-item" data-act="nk-export-csv"><span class="nk-menu-ic">${icon('download', 20)}</span><span class="nk-menu-lbl">Exporter en CSV<small>Tableur — Excel, Sheets, Numbers</small></span>${icon('chevron-right', 16)}</button>
+       <button class="nk-menu-item" data-act="nk-export-vcf"><span class="nk-menu-ic">${icon('users', 20)}</span><span class="nk-menu-lbl">Exporter en vCard<small>Carnet d'adresses — iPhone, Google, Outlook</small></span>${icon('chevron-right', 16)}</button>
+       <button class="nk-menu-item" data-act="nk-import-csv"><span class="nk-menu-ic">${icon('upload-cloud', 20)}</span><span class="nk-menu-lbl">Importer un CSV<small>Ajoutez une liste de contacts</small></span>${icon('chevron-right', 16)}</button>
+     </div>`
+  );
+}
+
+function _download(name, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function _catLabelMap() { const m = {}; _cats.forEach(c => { m[String(c.id)] = c.label; }); return m; }
+
+// ── Export CSV ──
+function _csvCell(v) { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function _exportCSV() {
+  const labels = _catLabelMap();
+  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'socials', 'roles', 'tags', 'category', 'notes'];
+  const lines = [cols.join(',')];
+  for (const c of _allContacts()) {
+    const socials = _parseArr(c.socials).map(s => `${s.type}:${s.url}`).join(' | ');
+    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address,
+      socials, _parseArr(c.roles).join(' | '), _parseArr(c.tags).join(' | '), labels[String(c.category_id)] || '', c.notes];
+    lines.push(row.map(_csvCell).join(','));
+  }
+  _download('networK-contacts.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  _closeOverlay(); _toast('Export CSV téléchargé');
+}
+
+// ── Export vCard 3.0 ──
+function _vc(v) { return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
+function _vcardOf(c) {
+  const L = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:' + _vc(c.name), 'N:' + _vc(c.name) + ';;;;'];
+  if (c.company) L.push('ORG:' + _vc(c.company));
+  if (c.title)   L.push('TITLE:' + _vc(c.title));
+  if (c.email)   L.push('EMAIL;TYPE=INTERNET:' + _vc(c.email));
+  if (c.phone)   L.push('TEL;TYPE=VOICE:' + _vc(c.phone));
+  if (c.phone2)  L.push('TEL;TYPE=CELL:' + _vc(c.phone2));
+  if (c.website) L.push('URL:' + _vc(_href(c.website)));
+  if (c.address) L.push('ADR;TYPE=WORK:;;' + _vc(c.address) + ';;;;');
+  _parseArr(c.socials).forEach(s => { if (s.url) L.push('URL:' + _vc(_href(s.url))); });
+  const cats = _parseArr(c.roles).concat(_parseArr(c.tags));
+  if (cats.length) L.push('CATEGORIES:' + cats.map(_vc).join(','));
+  if (c.notes)   L.push('NOTE:' + _vc(c.notes));
+  L.push('END:VCARD');
+  return L.join('\r\n');
+}
+function _exportVCF() {
+  const all = _allContacts();
+  if (!all.length) { _toast('Aucun contact à exporter', 'error'); return; }
+  _download('networK-contacts.vcf', all.map(_vcardOf).join('\r\n') + '\r\n', 'text/vcard;charset=utf-8');
+  _closeOverlay(); _toast('Export vCard téléchargé');
+}
+
+// ── Import CSV ──
+const IMPORT_ALIASES = {
+  name:    ['name', 'nom', 'fullname', 'full name', 'display name', 'nom complet', 'contact'],
+  first:   ['first name', 'prénom', 'prenom', 'firstname', 'given name'],
+  last:    ['last name', 'nom de famille', 'lastname', 'surname', 'family name'],
+  company: ['company', 'société', 'societe', 'organization', 'organisation', 'org', 'entreprise', 'company name'],
+  title:   ['title', 'job title', 'fonction', 'poste', 'intitulé', 'intitule'],
+  email:   ['email', 'e-mail', 'email address', 'e-mail address', 'courriel', 'mail', 'adresse e-mail', 'adresse email'],
+  phone:   ['phone', 'phone number', 'téléphone', 'telephone', 'tel', 'fixe', 'landline', 'primary phone', 'business phone', 'téléphone fixe'],
+  phone2:  ['phone2', 'mobile', 'mobile phone', 'portable', 'cell', 'cellphone', 'secondary phone', 'téléphone mobile', 'téléphone 2', 'gsm'],
+  website: ['website', 'web', 'web page', 'site', 'site web', 'url', 'site internet'],
+  address: ['address', 'adresse', 'street address', 'adresse postale', 'location', 'lieu'],
+  category:['category', 'catégorie', 'categorie', 'group', 'groupe', 'liste', 'list'],
+  roles:   ['roles', 'rôles', 'role', 'rôle'],
+  tags:    ['tags', 'tag', 'étiquettes', 'etiquettes', 'labels'],
+  socials: ['socials', 'réseaux sociaux', 'reseaux sociaux', 'social'],
+  notes:   ['notes', 'note', 'remarques', 'commentaire', 'comments'],
+};
+function _splitMulti(v) { return String(v || '').split(/[|;]/).map(x => x.trim()).filter(Boolean); }
+function _socialsCell(v) {
+  return _splitMulti(v).map(tok => { const i = tok.indexOf(':'); if (i < 0) return null;
+    return { type: tok.slice(0, i).trim() || 'other', url: tok.slice(i + 1).trim() }; }).filter(s => s && s.url);
+}
+// Parseur CSV robuste : guillemets, "" échappé, CRLF, délimiteur , ou ; (auto).
+function _parseCSV(text) {
+  text = String(text).replace(/^﻿/, '');
+  const nl = text.indexOf('\n'); const head = nl < 0 ? text : text.slice(0, nl);
+  const delim = (head.split(';').length > head.split(',').length) ? ';' : ',';
+  const rows = []; let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += ch;
+    } else if (ch === '"') { inQ = true; }
+    else if (ch === delim) { row.push(field); field = ''; }
+    else if (ch === '\r') { /* skip */ }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+function _openImportPicker() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.csv,text/csv,text/plain';
+  input.addEventListener('change', async () => {
+    const f = input.files && input.files[0]; if (!f) return;
+    try { const text = await f.text(); await _importCSV(text); }
+    catch (_) { _toast('Lecture du fichier impossible', 'error'); }
+  });
+  input.click();
+}
+async function _importCSV(text) {
+  const rows = _parseCSV(text);
+  if (rows.length < 2) { _toast('CSV vide ou illisible', 'error'); return; }
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+  const colField = {};
+  headers.forEach((h, idx) => { for (const f in IMPORT_ALIASES) { if (IMPORT_ALIASES[f].includes(h)) { colField[idx] = f; break; } } });
+  const get = (arr, f) => { for (const idx in colField) if (colField[idx] === f) return (arr[idx] || '').trim(); return ''; };
+
+  const contacts = [], labels = new Set();
+  for (const r of rows.slice(1, 501)) {
+    let name = get(r, 'name');
+    if (!name) name = (get(r, 'first') + ' ' + get(r, 'last')).trim();
+    if (!name) continue;
+    const cat = get(r, 'category'); if (cat) labels.add(cat);
+    contacts.push({ name, cat,
+      company: get(r, 'company'), title: get(r, 'title'), email: get(r, 'email'),
+      phone: get(r, 'phone'), phone2: get(r, 'phone2'), website: get(r, 'website'), address: get(r, 'address'),
+      roles: _splitMulti(get(r, 'roles')), tags: _splitMulti(get(r, 'tags')),
+      socials: _socialsCell(get(r, 'socials')), notes: get(r, 'notes') });
+  }
+  if (!contacts.length) { _toast('Aucun contact valide (colonne « nom » requise)', 'error'); return; }
+  if (!confirm(`Importer ${contacts.length} contact(s) depuis ce fichier ?`)) return;
+  _closeOverlay();
+  _toast(`Import de ${contacts.length} contact(s)…`);
+
+  // Catégories référencées : réutilise l'existant (par libellé), crée le manquant.
+  const map = {};
+  _cats.forEach(c => { if (!c._orphan && !String(c.id).startsWith('def-')) map[c.label.toLowerCase()] = c.id; });
+  for (const lbl of labels) {
+    if (map[lbl.toLowerCase()]) continue;
+    try { const r = await _api('/category', { method: 'POST', body: { label: lbl, icon: 'folder' } }); if (r && r.category) map[lbl.toLowerCase()] = r.category.id; } catch (_) {}
+  }
+
+  let ok = 0;
+  for (const c of contacts) {
+    try {
+      await _api('/contact', { method: 'POST', body: {
+        name: c.name, kind: 'person', company: c.company, title: c.title, email: c.email,
+        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address,
+        roles: c.roles, tags: c.tags, socials: c.socials,
+        category_id: c.cat ? (map[c.cat.toLowerCase()] || null) : null,
+      } });
+      ok++;
+    } catch (_) {}
+  }
+  await _refresh(true);
+  _toast(`${ok}/${contacts.length} contact(s) importé(s)`, ok ? 'ok' : 'error');
+}
+
 // ── Événements ──────────────────────────────────────────────────
 function _onClick(e) {
+  // Appui long qui vient de copier → avaler le clic (pas de navigation du lien).
+  if (_lpFired) {
+    _lpFired = false;
+    if (e.target.closest('.nk-fiche-act[data-copy]')) { e.preventDefault(); e.stopPropagation(); return; }
+  }
   // Sélecteur d'icône (formulaire catégorie) — géré avant tout
   const iconOpt = e.target.closest('.nk-icon-opt');
   if (iconOpt && _overlay) {
@@ -1207,6 +1443,10 @@ function _onClick(e) {
   switch (act) {
     case 'close':          return closeNetwork();
     case 'nk-add':         return _openAddMenu();
+    case 'nk-io':          return _openIOMenu();
+    case 'nk-export-csv':  return _exportCSV();
+    case 'nk-export-vcf':  return _exportVCF();
+    case 'nk-import-csv':  return _openImportPicker();
     case 'nk-ov-close':    return _closeOverlay();
     case 'nk-new-person':  _closeOverlay(); return _openContactForm({ kind: 'person' });
     case 'nk-new-company': _closeOverlay(); return _openContactForm({ kind: 'company' });

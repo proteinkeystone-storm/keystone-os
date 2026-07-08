@@ -49,6 +49,14 @@
   transition: background .18s ease, border-color .18s ease;
 }
 .nk-add-btn:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.5); }
+.nk-io-btn {
+  flex: none; width: 46px; height: 46px; border-radius: 999px; display: grid; place-items: center;
+  border: 1px solid var(--bd, rgba(255,255,255,.1)); background: var(--navy2, #1c2234);
+  color: var(--text-dim, rgba(248,250,252,.7)); cursor: pointer;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.nk-io-btn:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.5); color: var(--text, #f8fafc); }
 
 /* ── Viewport (pan/zoom) + scène ─────────────────────────────────── */
 .nk-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
@@ -235,8 +243,9 @@
 .nk-menu-item:hover { background: rgba(255,255,255,.05); }
 .nk-menu-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
   background: rgba(139,92,246,.12); color: var(--text, #f8fafc); flex: none; }
-.nk-menu-lbl { flex: 1; }
-.nk-menu-item > svg:last-child { color: rgba(248,250,252,.3); }
+.nk-menu-lbl { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.nk-menu-lbl small { font-size: 12px; font-weight: 500; color: var(--text-dim, rgba(248,250,252,.5)); letter-spacing: 0; }
+.nk-menu-item > svg:last-child { color: rgba(248,250,252,.3); flex: none; }
 
 /* ── Formulaire ──────────────────────────────────────────────────── */
 .nk-form { padding: 4px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -286,6 +295,14 @@ a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,24
 .nk-social-link { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   background: rgba(0,0,0,.18); border: 1px solid var(--bd, rgba(255,255,255,.1)); color: var(--text, #f8fafc); transition: all .15s ease; }
 .nk-social-link:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.4); }
+
+/* Carte embarquée (Google Maps keyless) sous l'adresse */
+.nk-map { border-radius: 14px; overflow: hidden; border: 1px solid var(--bd, rgba(255,255,255,.1)); background: rgba(0,0,0,.25); }
+.nk-map iframe { display: block; width: 100%; height: 200px; border: 0; filter: saturate(.9) brightness(.92); }
+
+/* Rôles + Tags côte à côte */
+.nk-fiche-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.nk-fiche-row2 .nk-fiche-sec { margin-bottom: 22px; min-width: 0; }
 
 .nk-icon-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .nk-icon-opt {
@@ -388,12 +405,14 @@ a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,24
 .nk-fiche-org { font-size: 15px; font-weight: 600; color: var(--text, #f8fafc); margin-top: 8px; }
 .nk-fiche-fn { font-size: 14px; color: var(--text-dim, rgba(248,250,252,.55)); margin-top: 2px; }
 
-.nk-fiche-acts { display: flex; gap: 10px; margin: 20px 0 4px; }
+.nk-fiche-acts { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 4px; }
 .nk-fiche-act { width: 46px; height: 46px; border-radius: 14px; border: 1px solid var(--bd, rgba(255,255,255,.1));
   background: rgba(255,255,255,.02); color: var(--text, #f8fafc); display: grid; place-items: center; cursor: pointer;
-  text-decoration: none; transition: background .15s ease, border-color .15s ease; }
+  text-decoration: none; transition: background .15s ease, border-color .15s ease, transform .12s ease;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 .nk-fiche-act:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.4); }
 .nk-fiche-act-off { opacity: .3; pointer-events: none; }
+.nk-fiche-act.nk-copied { background: rgba(52,211,153,.18); border-color: rgba(52,211,153,.6); transform: scale(.92); }
 
 .nk-fiche-tabs { display: flex; gap: 4px; margin-top: 18px; border-bottom: 1px solid var(--bd, rgba(255,255,255,.08)); }
 .nk-fiche-tab { padding: 10px 4px; margin-right: 18px; background: none; border: none; cursor: pointer;
@@ -520,6 +539,8 @@ a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,24
   .nk-search { flex: 1; width: auto; height: 44px; }
   .nk-add-btn span { display: none; }
   .nk-add-btn { width: 44px; height: 44px; padding: 0; justify-content: center; flex: none; }
+  .nk-io-btn { width: 44px; height: 44px; }
+  .nk-map iframe { height: 170px; }
   /* Pills catégories : compactes, label COMPLET (gestion ⋯ déplacée dans l'écran liste) */
   .nk-cat { max-width: calc(100vw - 118px); height: 50px; gap: 9px; padding: 0 6px 0 12px; }
   .nk-cat-ic { width: 30px; height: 30px; }
