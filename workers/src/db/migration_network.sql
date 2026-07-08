@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS nk_contacts (
   photo TEXT,                                -- photo manuelle = data URL image base64 (~200px)
                                              --   (auto : logo société via domaine, calculé côté client, non stocké)
   birthday TEXT,                             -- 'YYYY-MM-DD' (option) ; rappel annuel (mois+jour) dans le Living Layer
+  birthday_remind INTEGER NOT NULL DEFAULT 0, -- opt-in : 1 = rappel dans le Living Layer (à la demande)
   roles TEXT NOT NULL DEFAULT '[]',          -- JSON ["Client", …]
   tags  TEXT NOT NULL DEFAULT '[]',          -- JSON ["Important", …]
   notes TEXT NOT NULL DEFAULT '',
@@ -65,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_nk_contacts_cat ON nk_contacts(tenant_id, categor
 --   ALTER TABLE nk_contacts ADD COLUMN socials TEXT NOT NULL DEFAULT '[]';
 --   ALTER TABLE nk_contacts ADD COLUMN photo TEXT;
 --   ALTER TABLE nk_contacts ADD COLUMN birthday TEXT;
+--   ALTER TABLE nk_contacts ADD COLUMN birthday_remind INTEGER NOT NULL DEFAULT 0;
 
 -- ── Journal d'activité (manuel en V1 ; source prêt pour l'auto en couche 2) ──
 CREATE TABLE IF NOT EXISTS nk_activity (

@@ -516,9 +516,10 @@ async function _sensorNetworkBirthdays(env, tenantId) {
     const window = [];   // [{ md:'MM-DD', offset:0..7 }]
     for (let i = 0; i <= 7; i++) window.push({ md: fmt.format(new Date(base + i * 86400000)).slice(5), offset: i });
     const keys = window.map(w => w.md);
+    // birthday_remind = 1 : rappel opt-in (à la demande) — sans ce flag, aucun rappel.
     const rows = (await env.DB.prepare(
       `SELECT name, substr(birthday, 6, 5) AS md FROM nk_contacts
-       WHERE tenant_id = ? AND birthday IS NOT NULL AND birthday != ''
+       WHERE tenant_id = ? AND birthday_remind = 1 AND birthday IS NOT NULL AND birthday != ''
          AND substr(birthday, 6, 5) IN (${keys.map(() => '?').join(',')})`
     ).bind(tenantId, ...keys).all().catch(() => null))?.results || [];
     const offOf = md => (window.find(w => w.md === md) || {}).offset;

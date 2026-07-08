@@ -327,6 +327,16 @@ a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,24
   font-size: 13.5px; color: var(--text, #f8fafc); }
 .nk-fiche-bday svg { color: var(--nk-violet, #8b5cf6); flex: none; }
 .nk-fiche-bday.nk-bday-soon { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.45); }
+.nk-bday-bell { margin-left: 2px; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; cursor: pointer;
+  border: none; background: transparent; color: var(--text-dim, rgba(248,250,252,.4)); transition: all .15s ease; }
+.nk-bday-bell svg { color: inherit; }
+.nk-bday-bell:hover { color: var(--text, #f8fafc); background: rgba(255,255,255,.07); }
+.nk-bday-bell.nk-on { color: var(--nk-violet, #8b5cf6); }
+
+/* Case à cocher (formulaire) */
+.nk-check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin: -2px 0 2px; font-size: 13.5px; color: var(--text-dim, rgba(248,250,252,.72)); }
+.nk-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--nk-violet, #8b5cf6); cursor: pointer; flex: none; }
+.nk-check span { line-height: 1.35; }
 
 /* Rôles + Tags côte à côte */
 .nk-fiche-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }

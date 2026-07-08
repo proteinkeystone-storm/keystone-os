@@ -64,7 +64,7 @@ async function _ensureSchema(env) {
        category_id TEXT, kind TEXT NOT NULL DEFAULT 'person',
        name TEXT NOT NULL, company TEXT, title TEXT, email TEXT, phone TEXT,
        phone2 TEXT, website TEXT, address TEXT, socials TEXT NOT NULL DEFAULT '[]',
-       photo TEXT, birthday TEXT,
+       photo TEXT, birthday TEXT, birthday_remind INTEGER NOT NULL DEFAULT 0,
        roles TEXT NOT NULL DEFAULT '[]', tags TEXT NOT NULL DEFAULT '[]',
        notes TEXT NOT NULL DEFAULT '', photo_key TEXT, position INTEGER NOT NULL DEFAULT 0,
        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
@@ -92,6 +92,7 @@ async function _ensureSchema(env) {
   if (!have.has('socials')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN socials TEXT NOT NULL DEFAULT '[]'`).run();
   if (!have.has('photo'))    await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN photo TEXT`).run();
   if (!have.has('birthday')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday TEXT`).run();
+  if (!have.has('birthday_remind')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday_remind INTEGER NOT NULL DEFAULT 0`).run();
 
   _schemaReady = true;
 }
@@ -122,7 +123,7 @@ async function _gate(request, env, origin) {
 
 // ── Helpers ─────────────────────────────────────────────────────
 const CAT_COLS     = 'id, label, icon, position, created_at';
-const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, roles, tags, notes, position, created_at, updated_at';
+const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, birthday_remind, roles, tags, notes, position, created_at, updated_at';
 const ACT_COLS     = 'id, contact_id, type, label, source, happened_at, created_at';
 const ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];
 function _s(v, max) { return v == null ? null : String(v).slice(0, max); }
@@ -150,6 +151,7 @@ function _birthday(v) {
   if (s === '') return '';
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
+function _bool01(v) { return (v === 1 || v === '1' || v === true) ? 1 : 0; }   // rappel anniversaire (opt-in)
 function _socials(v) {
   let arr = v;
   if (typeof v === 'string') { try { arr = JSON.parse(v); } catch (_) { arr = []; } }
@@ -297,13 +299,13 @@ export async function handleContactCreate(request, env) {
   const kind = KINDS.includes(body.kind) ? body.kind : 'person';
   const id = generateId();
   await env.DB.prepare(
-    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, roles, tags, notes, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, birthday_remind, roles, tags, notes, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, t, categoryId, kind, name,
     _s(body.company, MAX_FIELD_LEN), _s(body.title, MAX_FIELD_LEN),
     _s(body.email, MAX_FIELD_LEN), _s(body.phone, MAX_FIELD_LEN),
     _s(body.phone2, MAX_FIELD_LEN), _s(body.website, MAX_URL_LEN), _s(body.address, MAX_ADDR_LEN), _socials(body.socials),
-    _photo(body.photo), _birthday(body.birthday),
+    _photo(body.photo), _birthday(body.birthday), _bool01(body.birthday_remind),
     _jsonArr(body.roles), _jsonArr(body.tags), _s(body.notes, MAX_NOTES_LEN) || '',
     Number.isFinite(body.position) ? Number(body.position) : count).run();
 
@@ -341,6 +343,7 @@ export async function handleContactUpdate(request, env, id) {
   if ('socials' in body) { sets.push('socials = ?'); vals.push(_socials(body.socials)); }
   if ('photo' in body) { const p = _photo(body.photo); if (p !== null) { sets.push('photo = ?'); vals.push(p); } }   // null = data invalide → on ignore
   if ('birthday' in body) { const b = _birthday(body.birthday); if (b !== null) { sets.push('birthday = ?'); vals.push(b); } }
+  if ('birthday_remind' in body) { sets.push('birthday_remind = ?'); vals.push(_bool01(body.birthday_remind)); }
   if ('roles' in body) { sets.push('roles = ?'); vals.push(_jsonArr(body.roles)); }
   if ('tags'  in body) { sets.push('tags = ?');  vals.push(_jsonArr(body.tags)); }
   if (typeof body.notes === 'string') { sets.push('notes = ?'); vals.push(_s(body.notes, MAX_NOTES_LEN) || ''); }

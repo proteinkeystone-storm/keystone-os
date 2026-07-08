@@ -835,7 +835,8 @@ function _openContactForm(seed = {}) {
        <label class="nk-field"><span>E-mail</span><input name="email" type="email" maxlength="200" value="${esc(seed.email || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Téléphone</span><input name="phone" type="tel" maxlength="200" value="${esc(seed.phone || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Téléphone 2</span><input name="phone2" type="tel" maxlength="200" value="${esc(seed.phone2 || '')}" autocomplete="off"></label>
-       <label class="nk-field"><span>Anniversaire <em class="nk-opt">· optionnel, rappel annuel</em></span><input name="birthday" type="date" value="${esc(seed.birthday || '')}"></label>
+       <label class="nk-field"><span>Anniversaire <em class="nk-opt">· optionnel</em></span><input name="birthday" type="date" value="${esc(seed.birthday || '')}"></label>
+       <label class="nk-check"><input type="checkbox" name="birthday_remind" value="1"${seed.birthday_remind ? ' checked' : ''}><span>Me le rappeler dans le Living Layer <em class="nk-opt">· à la demande</em></span></label>
        <label class="nk-field"><span>Site web</span><input name="website" type="url" inputmode="url" maxlength="400" placeholder="https://…" value="${esc(seed.website || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Adresse</span><textarea name="address" maxlength="400" rows="2" placeholder="N°, rue, code postal, ville…" autocomplete="off">${esc(seed.address || '')}</textarea></label>
        <div class="nk-field"><span>Réseaux sociaux</span>
@@ -944,6 +945,7 @@ async function _submitContact(form) {
     socials,
     photo: String(fd.get('photo') || ''),
     birthday: String(fd.get('birthday') || ''),
+    birthday_remind: fd.get('birthday_remind') ? 1 : 0,
     category_id: fd.get('category_id') || null,
   };
   if (!payload.name) { _toast('Le nom est requis', 'error'); return; }
@@ -1131,7 +1133,10 @@ function _birthdaySection(c) {
   if (b.days === 0) bits.push("aujourd'hui !");
   else if (b.days === 1) bits.push('demain');
   else if (b.days <= 7) bits.push(`dans ${b.days} jours`);
-  return `<div class="nk-fiche-bday${b.days <= 7 ? ' nk-bday-soon' : ''}">${icon('calendar', 15)}<span>${esc(bits.join(' · '))}</span></div>`;
+  const on = c.birthday_remind ? 1 : 0;
+  // Cloche = rappel Living Layer OPT-IN (à la demande), bascule en un clic.
+  const bell = `<button class="nk-bday-bell${on ? ' nk-on' : ''}" data-act="nk-bday-remind" aria-pressed="${on ? 'true' : 'false'}" aria-label="${on ? 'Rappel activé — cliquer pour désactiver' : 'Activer le rappel annuel dans le Living Layer'}" title="${on ? 'Rappel annuel activé' : 'Activer le rappel annuel'}">${icon('bell', 15)}</button>`;
+  return `<div class="nk-fiche-bday${b.days <= 7 ? ' nk-bday-soon' : ''}">${icon('calendar', 15)}<span>${esc(bits.join(' · '))}</span>${bell}</div>`;
 }
 
 // Bloc « Coordonnées » de la fiche : adresse + carte embarquée (Google Maps
@@ -1377,11 +1382,11 @@ function _catLabelMap() { const m = {}; _cats.forEach(c => { m[String(c.id)] = c
 function _csvCell(v) { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function _exportCSV() {
   const labels = _catLabelMap();
-  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'birthday', 'socials', 'roles', 'tags', 'category', 'notes'];
+  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'birthday', 'reminder', 'socials', 'roles', 'tags', 'category', 'notes'];
   const lines = [cols.join(',')];
   for (const c of _allContacts()) {
     const socials = _parseArr(c.socials).map(s => `${s.type}:${s.url}`).join(' | ');
-    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address, c.birthday || '',
+    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address, c.birthday || '', c.birthday_remind ? '1' : '0',
       socials, _parseArr(c.roles).join(' | '), _parseArr(c.tags).join(' | '), labels[String(c.category_id)] || '', c.notes];
     lines.push(row.map(_csvCell).join(','));
   }
@@ -1430,6 +1435,7 @@ const IMPORT_ALIASES = {
   website: ['website', 'web', 'web page', 'site', 'site web', 'url', 'site internet'],
   address: ['address', 'adresse', 'street address', 'adresse postale', 'location', 'lieu'],
   birthday:['birthday', 'anniversaire', 'date de naissance', 'naissance', 'bday', 'birth date', 'birthdate', 'né(e) le', 'ne le'],
+  reminder:['reminder', 'rappel', 'birthday_remind', 'rappel anniversaire'],
   category:['category', 'catégorie', 'categorie', 'group', 'groupe', 'liste', 'list'],
   roles:   ['roles', 'rôles', 'role', 'rôle'],
   tags:    ['tags', 'tag', 'étiquettes', 'etiquettes', 'labels'],
@@ -1499,6 +1505,7 @@ async function _importCSV(text) {
       company: get(r, 'company'), title: get(r, 'title'), email: get(r, 'email'),
       phone: get(r, 'phone'), phone2: get(r, 'phone2'), website: get(r, 'website'), address: get(r, 'address'),
       birthday: _normDate(get(r, 'birthday')),
+      birthday_remind: /^(1|oui|yes|true|x|vrai)$/i.test(get(r, 'reminder')) ? 1 : 0,
       roles: _splitMulti(get(r, 'roles')), tags: _splitMulti(get(r, 'tags')),
       socials: _socialsCell(get(r, 'socials')), notes: get(r, 'notes') });
   }
@@ -1520,7 +1527,7 @@ async function _importCSV(text) {
     try {
       await _api('/contact', { method: 'POST', body: {
         name: c.name, kind: 'person', company: c.company, title: c.title, email: c.email,
-        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address, birthday: c.birthday,
+        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address, birthday: c.birthday, birthday_remind: c.birthday_remind,
         roles: c.roles, tags: c.tags, socials: c.socials,
         category_id: c.cat ? (map[c.cat.toLowerCase()] || null) : null,
       } });
@@ -1607,6 +1614,7 @@ function _onClick(e) {
     case 'nk-fiche-close': return _closeFiche();
     case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
     case 'nk-fiche-tab':   return _ficheTab(actEl.dataset.tab);
+    case 'nk-bday-remind': { const c = _contactById(_ficheId); if (!c) return; const nv = c.birthday_remind ? 0 : 1; _patchField(c.id, 'birthday_remind', nv); _toast(nv ? 'Rappel activé' : 'Rappel désactivé'); return; }
     case 'nk-role-add':    return _addChip('roles');
     case 'nk-role-del':    return _delChip('roles', actEl.dataset.val);
     case 'nk-tag-add':     return _addChip('tags');
