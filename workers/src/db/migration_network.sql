@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS nk_contacts (
   website TEXT,                              -- URL de site
   address TEXT,                              -- adresse / lieu (map via lien maps)
   socials TEXT NOT NULL DEFAULT '[]',        -- JSON [{"type":"linkedin","url":"…"}, …]
+  vat_intra TEXT,                            -- n° TVA intracommunautaire (option, B2B)
   photo TEXT,                                -- photo manuelle = data URL image base64 (~200px)
                                              --   (auto : logo société via domaine, calculé côté client, non stocké)
   birthday TEXT,                             -- 'YYYY-MM-DD' (option) ; rappel annuel (mois+jour) dans le Living Layer
@@ -67,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_nk_contacts_cat ON nk_contacts(tenant_id, categor
 --   ALTER TABLE nk_contacts ADD COLUMN photo TEXT;
 --   ALTER TABLE nk_contacts ADD COLUMN birthday TEXT;
 --   ALTER TABLE nk_contacts ADD COLUMN birthday_remind INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE nk_contacts ADD COLUMN vat_intra TEXT;
 
 -- ── Journal d'activité (manuel en V1 ; source prêt pour l'auto en couche 2) ──
 CREATE TABLE IF NOT EXISTS nk_activity (

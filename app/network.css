@@ -301,8 +301,11 @@
 .nk-coord { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
   background: rgba(0,0,0,.18); border: 1px solid var(--bd, rgba(255,255,255,.08));
   color: var(--text, #f8fafc); text-decoration: none; font-size: 14px; letter-spacing: -0.01em; transition: all .15s ease; }
-a.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.3); }
+a.nk-coord:hover, button.nk-coord:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.3); }
 .nk-coord svg { flex: none; color: var(--nk-violet, #8b5cf6); }
+button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.nk-coord-copy svg:last-child { color: var(--text-dim, rgba(248,250,252,.4)); }
+.nk-coord-copy:hover svg:last-child { color: var(--nk-violet, #8b5cf6); }
 .nk-coord-tx { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nk-coord-addr { align-items: flex-start; flex-wrap: wrap; }
 .nk-coord-addr .nk-coord-tx { white-space: normal; }

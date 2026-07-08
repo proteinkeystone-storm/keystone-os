@@ -64,7 +64,7 @@ async function _ensureSchema(env) {
        category_id TEXT, kind TEXT NOT NULL DEFAULT 'person',
        name TEXT NOT NULL, company TEXT, title TEXT, email TEXT, phone TEXT,
        phone2 TEXT, website TEXT, address TEXT, socials TEXT NOT NULL DEFAULT '[]',
-       photo TEXT, birthday TEXT, birthday_remind INTEGER NOT NULL DEFAULT 0,
+       vat_intra TEXT, photo TEXT, birthday TEXT, birthday_remind INTEGER NOT NULL DEFAULT 0,
        roles TEXT NOT NULL DEFAULT '[]', tags TEXT NOT NULL DEFAULT '[]',
        notes TEXT NOT NULL DEFAULT '', photo_key TEXT, position INTEGER NOT NULL DEFAULT 0,
        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
@@ -93,6 +93,7 @@ async function _ensureSchema(env) {
   if (!have.has('photo'))    await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN photo TEXT`).run();
   if (!have.has('birthday')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday TEXT`).run();
   if (!have.has('birthday_remind')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday_remind INTEGER NOT NULL DEFAULT 0`).run();
+  if (!have.has('vat_intra')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN vat_intra TEXT`).run();
 
   _schemaReady = true;
 }
@@ -123,7 +124,7 @@ async function _gate(request, env, origin) {
 
 // ── Helpers ─────────────────────────────────────────────────────
 const CAT_COLS     = 'id, label, icon, position, created_at';
-const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, birthday_remind, roles, tags, notes, position, created_at, updated_at';
+const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, roles, tags, notes, position, created_at, updated_at';
 const ACT_COLS     = 'id, contact_id, type, label, source, happened_at, created_at';
 const ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];
 function _s(v, max) { return v == null ? null : String(v).slice(0, max); }
@@ -299,12 +300,13 @@ export async function handleContactCreate(request, env) {
   const kind = KINDS.includes(body.kind) ? body.kind : 'person';
   const id = generateId();
   await env.DB.prepare(
-    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, birthday, birthday_remind, roles, tags, notes, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, roles, tags, notes, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, t, categoryId, kind, name,
     _s(body.company, MAX_FIELD_LEN), _s(body.title, MAX_FIELD_LEN),
     _s(body.email, MAX_FIELD_LEN), _s(body.phone, MAX_FIELD_LEN),
     _s(body.phone2, MAX_FIELD_LEN), _s(body.website, MAX_URL_LEN), _s(body.address, MAX_ADDR_LEN), _socials(body.socials),
+    _s(body.vat_intra, MAX_FIELD_LEN),
     _photo(body.photo), _birthday(body.birthday), _bool01(body.birthday_remind),
     _jsonArr(body.roles), _jsonArr(body.tags), _s(body.notes, MAX_NOTES_LEN) || '',
     Number.isFinite(body.position) ? Number(body.position) : count).run();
@@ -335,7 +337,7 @@ export async function handleContactUpdate(request, env, id) {
     sets.push('category_id = ?'); vals.push(cid);
   }
   if (KINDS.includes(body.kind)) { sets.push('kind = ?'); vals.push(body.kind); }
-  for (const f of ['company', 'title', 'email', 'phone', 'phone2']) {
+  for (const f of ['company', 'title', 'email', 'phone', 'phone2', 'vat_intra']) {
     if (typeof body[f] === 'string') { sets.push(`${f} = ?`); vals.push(_s(body[f], MAX_FIELD_LEN)); }
   }
   if (typeof body.website === 'string') { sets.push('website = ?'); vals.push(_s(body.website, MAX_URL_LEN)); }

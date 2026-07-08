@@ -839,6 +839,7 @@ function _openContactForm(seed = {}) {
        <label class="nk-check"><input type="checkbox" name="birthday_remind" value="1"${seed.birthday_remind ? ' checked' : ''}><span>Me le rappeler dans le Living Layer <em class="nk-opt">· à la demande</em></span></label>
        <label class="nk-field"><span>Site web</span><input name="website" type="url" inputmode="url" maxlength="400" placeholder="https://…" value="${esc(seed.website || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Adresse</span><textarea name="address" maxlength="400" rows="2" placeholder="N°, rue, code postal, ville…" autocomplete="off">${esc(seed.address || '')}</textarea></label>
+       <label class="nk-field"><span>TVA intracommunautaire <em class="nk-opt">· optionnel</em></span><input name="vat_intra" maxlength="64" value="${esc(seed.vat_intra || '')}" placeholder="FR00 000000000" autocomplete="off"></label>
        <div class="nk-field"><span>Réseaux sociaux</span>
          <div class="nk-socials-edit" data-socials>${socials.map(_socialRowHTML).join('')}</div>
          <button type="button" class="nk-social-add" data-act="nk-social-add">${icon('plus', 14)} Ajouter un réseau</button>
@@ -942,6 +943,7 @@ async function _submitContact(form) {
     phone2: String(fd.get('phone2') || '').trim(),
     website: String(fd.get('website') || '').trim(),
     address: String(fd.get('address') || '').trim(),
+    vat_intra: String(fd.get('vat_intra') || '').trim().toUpperCase(),
     socials,
     photo: String(fd.get('photo') || ''),
     birthday: String(fd.get('birthday') || ''),
@@ -1146,8 +1148,13 @@ function _birthdaySection(c) {
 function _coordSection(c) {
   const socials = _parseArr(c.socials);
   const hasAddr = !!(c.address && c.address.trim());
-  if (!hasAddr && !socials.length) return '';
+  const hasVat = !!(c.vat_intra && c.vat_intra.trim());
+  if (!hasAddr && !socials.length && !hasVat) return '';
   let inner = '';
+  if (hasVat) {
+    inner += `<button class="nk-coord nk-coord-copy" data-act="nk-copy" data-copy="${esc(c.vat_intra)}" title="Copier le n° de TVA">` +
+      `${icon('file-text', 18)}<span class="nk-coord-tx">TVA ${esc(c.vat_intra)}</span>${icon('copy', 15)}</button>`;
+  }
   if (hasAddr) {
     const embed = `https://maps.google.com/maps?q=${encodeURIComponent(c.address.trim())}&z=15&output=embed`;
     inner +=
@@ -1382,11 +1389,11 @@ function _catLabelMap() { const m = {}; _cats.forEach(c => { m[String(c.id)] = c
 function _csvCell(v) { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function _exportCSV() {
   const labels = _catLabelMap();
-  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'birthday', 'reminder', 'socials', 'roles', 'tags', 'category', 'notes'];
+  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'vat_intra', 'birthday', 'reminder', 'socials', 'roles', 'tags', 'category', 'notes'];
   const lines = [cols.join(',')];
   for (const c of _allContacts()) {
     const socials = _parseArr(c.socials).map(s => `${s.type}:${s.url}`).join(' | ');
-    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address, c.birthday || '', c.birthday_remind ? '1' : '0',
+    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address, c.vat_intra || '', c.birthday || '', c.birthday_remind ? '1' : '0',
       socials, _parseArr(c.roles).join(' | '), _parseArr(c.tags).join(' | '), labels[String(c.category_id)] || '', c.notes];
     lines.push(row.map(_csvCell).join(','));
   }
@@ -1406,6 +1413,7 @@ function _vcardOf(c) {
   if (c.website) L.push('URL:' + _vc(_href(c.website)));
   if (c.address) L.push('ADR;TYPE=WORK:;;' + _vc(c.address) + ';;;;');
   if (/^\d{4}-\d{2}-\d{2}$/.test(c.birthday || '')) L.push('BDAY:' + c.birthday);
+  if (c.vat_intra) L.push('X-VAT:' + _vc(c.vat_intra));
   _parseArr(c.socials).forEach(s => { if (s.url) L.push('URL:' + _vc(_href(s.url))); });
   const cats = _parseArr(c.roles).concat(_parseArr(c.tags));
   if (cats.length) L.push('CATEGORIES:' + cats.map(_vc).join(','));
@@ -1434,6 +1442,7 @@ const IMPORT_ALIASES = {
   phone2:  ['phone2', 'mobile', 'mobile phone', 'portable', 'cell', 'cellphone', 'secondary phone', 'téléphone mobile', 'téléphone 2', 'gsm'],
   website: ['website', 'web', 'web page', 'site', 'site web', 'url', 'site internet'],
   address: ['address', 'adresse', 'street address', 'adresse postale', 'location', 'lieu'],
+  vat_intra:['vat_intra', 'vat', 'tva', 'tva intracommunautaire', 'vat number', 'n° tva', 'numéro de tva', 'numero de tva', 'vat id'],
   birthday:['birthday', 'anniversaire', 'date de naissance', 'naissance', 'bday', 'birth date', 'birthdate', 'né(e) le', 'ne le'],
   reminder:['reminder', 'rappel', 'birthday_remind', 'rappel anniversaire'],
   category:['category', 'catégorie', 'categorie', 'group', 'groupe', 'liste', 'list'],
@@ -1504,6 +1513,7 @@ async function _importCSV(text) {
     contacts.push({ name, cat,
       company: get(r, 'company'), title: get(r, 'title'), email: get(r, 'email'),
       phone: get(r, 'phone'), phone2: get(r, 'phone2'), website: get(r, 'website'), address: get(r, 'address'),
+      vat_intra: get(r, 'vat_intra'),
       birthday: _normDate(get(r, 'birthday')),
       birthday_remind: /^(1|oui|yes|true|x|vrai)$/i.test(get(r, 'reminder')) ? 1 : 0,
       roles: _splitMulti(get(r, 'roles')), tags: _splitMulti(get(r, 'tags')),
@@ -1527,7 +1537,7 @@ async function _importCSV(text) {
     try {
       await _api('/contact', { method: 'POST', body: {
         name: c.name, kind: 'person', company: c.company, title: c.title, email: c.email,
-        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address, birthday: c.birthday, birthday_remind: c.birthday_remind,
+        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address, vat_intra: c.vat_intra, birthday: c.birthday, birthday_remind: c.birthday_remind,
         roles: c.roles, tags: c.tags, socials: c.socials,
         category_id: c.cat ? (map[c.cat.toLowerCase()] || null) : null,
       } });
@@ -1615,6 +1625,7 @@ function _onClick(e) {
     case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
     case 'nk-fiche-tab':   return _ficheTab(actEl.dataset.tab);
     case 'nk-bday-remind': { const c = _contactById(_ficheId); if (!c) return; const nv = c.birthday_remind ? 0 : 1; _patchField(c.id, 'birthday_remind', nv); _toast(nv ? 'Rappel activé' : 'Rappel désactivé'); return; }
+    case 'nk-copy':        return _copyText(actEl.dataset.copy);
     case 'nk-role-add':    return _addChip('roles');
     case 'nk-role-del':    return _delChip('roles', actEl.dataset.val);
     case 'nk-tag-add':     return _addChip('tags');
