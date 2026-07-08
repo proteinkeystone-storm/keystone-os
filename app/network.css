@@ -255,6 +255,8 @@
 /* ── Formulaire ──────────────────────────────────────────────────── */
 .nk-form { padding: 4px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
 .nk-field { display: flex; flex-direction: column; gap: 6px; }
+.nk-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.nk-field-row .nk-field { min-width: 0; }
 .nk-field > span { font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
   color: var(--text-dim, rgba(248,250,252,.55)); text-transform: uppercase; }
 .nk-field input, .nk-field select, .nk-field textarea {

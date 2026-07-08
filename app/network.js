@@ -678,6 +678,8 @@ const SOCIAL_TYPES = [
 function _socialMeta(key) { return SOCIAL_TYPES.find(s => s.key === key) || SOCIAL_TYPES[SOCIAL_TYPES.length - 1]; }
 // href sûr : conserve un schéma explicite (mailto:, tel:, https:…), sinon https://.
 function _href(u) { u = String(u || '').trim(); if (!u) return ''; return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u; }
+// URL saisie : un schéma seul (« https:// » prérempli mais non complété) = vide.
+function _cleanUrl(v) { v = String(v || '').trim(); return /^https?:\/\/$/i.test(v) ? '' : v; }
 function _mapUrl(addr) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(addr || '').trim()); }
 
 function _allContacts() { return _cats.flatMap(c => c._all || []); }
@@ -802,7 +804,7 @@ function _socialRowHTML(s = {}) {
   const opts = SOCIAL_TYPES.map(x => `<option value="${x.key}"${x.key === cur ? ' selected' : ''}>${x.label}</option>`).join('');
   return `<div class="nk-social-row">
     <select class="nk-social-type" aria-label="Réseau">${opts}</select>
-    <input class="nk-social-url" type="url" inputmode="url" placeholder="https://…" maxlength="400" value="${esc(s.url || '')}" autocomplete="off">
+    <input class="nk-social-url" type="text" inputmode="url" placeholder="https://…" maxlength="400" value="${esc(s.url || 'https://')}" autocomplete="off">
     <button type="button" class="nk-social-del" data-act="nk-social-del" aria-label="Retirer ce réseau">${icon('x', 15)}</button>
   </div>`;
 }
@@ -829,7 +831,10 @@ function _openContactForm(seed = {}) {
          <input type="hidden" name="photo" value="${esc(seed.photo || '')}">
        </div>
        <label class="nk-field"><span>Nom</span><input name="name" required maxlength="200" value="${esc(seed.name || '')}" autocomplete="off"></label>
-       <label class="nk-field"><span>Type</span><select name="kind">${kindOpts}</select></label>
+       <div class="nk-field-row">
+         <label class="nk-field"><span>Type</span><select name="kind">${kindOpts}</select></label>
+         <label class="nk-field"><span>Catégorie</span><select name="category_id"><option value="">— Aucune —</option>${catOpts}</select></label>
+       </div>
        <label class="nk-field"><span>Entreprise</span><input name="company" maxlength="200" value="${esc(seed.company || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Fonction</span><input name="title" maxlength="200" value="${esc(seed.title || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>E-mail</span><input name="email" type="email" maxlength="200" value="${esc(seed.email || '')}" autocomplete="off"></label>
@@ -837,14 +842,13 @@ function _openContactForm(seed = {}) {
        <label class="nk-field"><span>Téléphone 2</span><input name="phone2" type="tel" maxlength="200" value="${esc(seed.phone2 || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Anniversaire <em class="nk-opt">· optionnel</em></span><input name="birthday" type="date" value="${esc(seed.birthday || '')}"></label>
        <label class="nk-check"><input type="checkbox" name="birthday_remind" value="1"${seed.birthday_remind ? ' checked' : ''}><span>Me le rappeler dans le Living Layer <em class="nk-opt">· à la demande</em></span></label>
-       <label class="nk-field"><span>Site web</span><input name="website" type="url" inputmode="url" maxlength="400" placeholder="https://…" value="${esc(seed.website || '')}" autocomplete="off"></label>
+       <label class="nk-field"><span>Site web</span><input name="website" type="text" inputmode="url" maxlength="400" placeholder="https://exemple.com" value="${esc(seed.website || 'https://')}" autocomplete="off"></label>
        <label class="nk-field"><span>Adresse</span><textarea name="address" maxlength="400" rows="2" placeholder="N°, rue, code postal, ville…" autocomplete="off">${esc(seed.address || '')}</textarea></label>
        <label class="nk-field"><span>TVA intracommunautaire <em class="nk-opt">· optionnel</em></span><input name="vat_intra" maxlength="64" value="${esc(seed.vat_intra || '')}" placeholder="FR00 000000000" autocomplete="off"></label>
        <div class="nk-field"><span>Réseaux sociaux</span>
          <div class="nk-socials-edit" data-socials>${socials.map(_socialRowHTML).join('')}</div>
          <button type="button" class="nk-social-add" data-act="nk-social-add">${icon('plus', 14)} Ajouter un réseau</button>
        </div>
-       <label class="nk-field"><span>Catégorie</span><select name="category_id"><option value="">— Aucune —</option>${catOpts}</select></label>
        <div class="nk-form-actions">
          ${isEdit ? `<button type="button" class="nk-btn nk-btn-danger" data-act="nk-contact-del" data-id="${esc(seed.id)}">Supprimer</button>` : '<span></span>'}
          <button type="submit" class="nk-btn nk-btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
@@ -931,7 +935,7 @@ async function _submitContact(form) {
   const id = form.dataset.id || null;
   const socials = [...form.querySelectorAll('.nk-social-row')].map(r => ({
     type: (r.querySelector('.nk-social-type') || {}).value || 'other',
-    url:  ((r.querySelector('.nk-social-url') || {}).value || '').trim(),
+    url:  _cleanUrl((r.querySelector('.nk-social-url') || {}).value),
   })).filter(s => s.url);
   const payload = {
     name: String(fd.get('name') || '').trim(),
@@ -941,7 +945,7 @@ async function _submitContact(form) {
     email: String(fd.get('email') || '').trim(),
     phone: String(fd.get('phone') || '').trim(),
     phone2: String(fd.get('phone2') || '').trim(),
-    website: String(fd.get('website') || '').trim(),
+    website: _cleanUrl(fd.get('website')),
     address: String(fd.get('address') || '').trim(),
     vat_intra: String(fd.get('vat_intra') || '').trim().toUpperCase(),
     socials,
