@@ -128,10 +128,14 @@
 /* Ligne contact */
 .nk-person {
   display: flex; align-items: center; gap: 12px; width: 236px; height: 56px; padding: 0 12px;
-  border-radius: 16px; background: var(--nk-pill-bg); border: 1px solid var(--nk-pill-bd);
-  cursor: pointer; transition: background .18s ease, border-color .18s ease;
+  border-radius: 16px; border: 1px solid var(--nk-pill-bd);
+  /* Fond OPAQUE : les fils qui rejoignent les colonnes de droite passent DERRIÈRE
+     les pills de gauche sans transparaître (glass léger conservé par le dégradé). */
+  background-color: #171d2b;
+  background-image: linear-gradient(rgba(255,255,255,.05), rgba(255,255,255,.015));
+  cursor: pointer; transition: background-color .18s ease, border-color .18s ease;
 }
-.nk-person:hover { background: rgba(255,255,255,.07); border-color: rgba(139,92,246,.4); }
+.nk-person:hover { background-color: #20273b; border-color: rgba(139,92,246,.4); }
 .nk-av { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center;
   font-size: 13px; font-weight: 800; color: rgba(255,255,255,.92); position: relative; overflow: hidden; }
 /* Photo/logo superposé sur l'avatar à initiales (repli si l'image échoue) */
