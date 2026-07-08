@@ -288,12 +288,17 @@ function _alertsBtn() {
     ${_alertsMsg ? `<span class="snt-alerts-msg">${_esc(_alertsMsg)}</span>` : ''}
   </div>`;
 }
-// Attend le service worker actif, mais PAS indéfiniment : sans garde-fou, un SW
-// non contrôlant fait « pendre » l'activation → le bouton reste grisé sans erreur.
-function _swReadyTimeout(ms) {
+// Borne DURE sur une promesse : sans ça, `pushManager.subscribe()` peut pendre
+// indéfiniment (service push injoignable : VPN, réseau/FCM bloqué, config vie
+// privée) → le bouton reste coincé sur « Activation… ». Le label identifie
+// l'étape fautive dans le message affiché.
+function _withTimeout(promise, ms, label) {
   let t;
-  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error('service worker indisponible — rechargez la page')), ms); });
-  return Promise.race([navigator.serviceWorker.ready.then(r => { clearTimeout(t); return r; }), timeout]);
+  const to = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(label + ' : délai dépassé (' + Math.round(ms / 1000) + 's)')), ms); });
+  return Promise.race([
+    Promise.resolve(promise).then(v => { clearTimeout(t); return v; }, e => { clearTimeout(t); throw e; }),
+    to,
+  ]);
 }
 function _vapidBytes() {
   const s = SNT_VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
@@ -332,18 +337,22 @@ async function _toggleAlerts() {
   }
   _alertsBusy = true; _alertsMsg = ''; _render();
   try {
+    // 1) Permission (généreux : l'humain doit avoir le temps de cliquer « Autoriser »).
     let perm = Notification.permission;
-    if (perm === 'default') perm = await Notification.requestPermission();
+    if (perm === 'default') perm = await _withTimeout(Notification.requestPermission(), 60000, 'autorisation');
     if (perm !== 'granted') { _alertsMsg = 'Autorisez les notifications pour recevoir les alertes.'; _alertsBusy = false; _render(); return; }
-    const reg = await _swReadyTimeout(8000);
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidBytes() });
+    // 2) Service worker actif.
+    const reg = await _withTimeout(navigator.serviceWorker.ready, 8000, 'service worker');
+    // 3) Abonnement push — l'étape qui peut réellement pendre (service push injoignable).
+    let sub = await _withTimeout(reg.pushManager.getSubscription(), 8000, 'lecture abonnement');
+    if (!sub) sub = await _withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidBytes() }), 15000, 'abonnement push');
+    // 4) Enregistrement côté serveur (déjà borné à 30s par _api).
     const j = sub.toJSON();
     if (j && j.keys) await _api('/push/subscribe', { method: 'POST', body: { endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth } });
     _alerts = true; _alertsMsg = '';
   } catch (e) {
     console.warn('[sentinel] activation des alertes échouée :', e);   // trace réelle pour diagnostic
-    _alertsMsg = 'Activation impossible : ' + (e && e.message ? e.message : 'erreur inconnue') + '.';
+    _alertsMsg = 'Activation impossible — ' + (e && e.message ? e.message : 'erreur inconnue') + '.';
   }
   _alertsBusy = false;
   _render();
