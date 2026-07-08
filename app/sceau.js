@@ -163,6 +163,17 @@ export function openSceau(opts = {}) {
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
   _load();
+  // Deep-link networK (« Envoyer une Missive » depuis un contact) : ouvrir
+  // directement le formulaire, email du destinataire pré-rempli. L'email n'a de
+  // sens qu'en mode « Code par email » (seul mode qui affiche le champ) → on l'y
+  // place ; l'avertissement « mode plus faible » reste affiché, choix éclairé.
+  if (opts && opts.prefillEmail) {
+    _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null;
+    _unlockMode = 'email'; _codeStyle = 'fort';
+    _draft = { email: String(opts.prefillEmail) };
+    _view = 'create';
+    _render();
+  }
 }
 export function closeSceau() {
   if (!_root) return;

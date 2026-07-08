@@ -1443,6 +1443,9 @@ async function _openShortcut(padId) {
   // Charte graphique : si une charte est liée à ce contact, l'ouvrir directement
   // (sinon Key Brand s'ouvre sur la bibliothèque, comportement d'origine).
   if (padId === 'O-BRD-001' && c && c.brand_id) opts.chartId = c.brand_id;
+  // Missive (Sceau) : pré-remplit l'email du destinataire (ouvre le formulaire
+  // en mode « Code par email », seul mode qui expose ce champ).
+  if (padId === 'O-SEC-001' && c && c.email) opts.prefillEmail = c.email;
   // Fermer le workspace networK AVANT d'ouvrir la cible (piège z-index/overlay).
   closeNetwork();
   try { const m = await import('./ui-renderer.js'); m.openTool(padId, opts); } catch (_) {}
