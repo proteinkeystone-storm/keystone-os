@@ -345,7 +345,9 @@ async function _toggleAlerts() {
     const reg = await _withTimeout(navigator.serviceWorker.ready, 8000, 'service worker');
     // 3) Abonnement push — l'étape qui peut réellement pendre (service push injoignable).
     let sub = await _withTimeout(reg.pushManager.getSubscription(), 8000, 'lecture abonnement');
-    if (!sub) sub = await _withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidBytes() }), 15000, 'abonnement push');
+    // 30s : le PREMIER enregistrement APNs de Safari est lent (>15s observé) — un
+    // délai trop court coupe à tort alors que l'abonnement aboutit en arrière-plan.
+    if (!sub) sub = await _withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidBytes() }), 30000, 'abonnement push');
     // 4) Enregistrement côté serveur (déjà borné à 30s par _api).
     const j = sub.toJSON();
     if (j && j.keys) await _api('/push/subscribe', { method: 'POST', body: { endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth } });
