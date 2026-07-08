@@ -248,6 +248,9 @@ export function openSDQR(opts = {}) {
   // Deep-link Smart Agent (CTA « Designer le QR ») : QR dynamique pointant sur
   // l'URL publique de l'agent, prêt à styler + tracker. URL + nom pré-remplis.
   if (opts && opts.createUrl) { _openCreateForm(panel, { presetUrl: opts.createUrl, presetName: opts.presetName }); return; }
+  // Deep-link networK (raccourci « Créer un QR code ») : vCard pré-remplie avec
+  // la fiche du contact — carte de visite scannable prête à styler.
+  if (opts && opts.createVcard) { _openCreateForm(panel, { presetVcard: opts.createVcard, presetName: opts.presetName }); return; }
   // Concierge VEFA (S7) — si VEFA Studio vient de relayer un programme frais.
   _maybeAutoOpenVefaConcierge(panel);
 }
@@ -1104,6 +1107,14 @@ function _openCreateForm(panel, opts = {}) {
     _creating.mode    = 'dynamic';
     _creating.type    = 'url';
     _creating.payload = { url: opts.presetUrl };
+    if (opts.presetName) _creating.name = opts.presetName;
+  } else if (opts && opts.presetVcard) {
+    // Deep-link depuis networK : carte de visite. Type vCard STATIQUE (la carte
+    // est encodée dans le QR, pas de redirection à tracker), payload = fiche du
+    // contact (clés == champs vCard de sdqr-types.js). Le nom interne aide au tri.
+    _creating.mode    = 'static';
+    _creating.type    = 'vcard';
+    _creating.payload = { ...opts.presetVcard };
     if (opts.presetName) _creating.name = opts.presetName;
   }
 

@@ -350,6 +350,19 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
   background: transparent; border: 1px dashed var(--bd, rgba(255,255,255,.2)); color: var(--text-dim, rgba(248,250,252,.72)); transition: all .15s ease; }
 .nk-relance-btn:hover { border-color: rgba(139,92,246,.55); color: var(--text, #f8fafc); background: rgba(139,92,246,.08); }
 .nk-relance-btn svg { color: var(--nk-violet, #8b5cf6); }
+
+/* Charte graphique liée (raccourci Key Brand) — ligne fiche + sélecteur en feuille */
+.nk-brand-row .nk-coord-tx { font-weight: 600; }
+.nk-brand-list { display: flex; flex-direction: column; gap: 8px; }
+.nk-brand-opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px; border-radius: 12px; cursor: pointer;
+  font: inherit; text-align: left; font-size: 14px; color: var(--text, #f8fafc);
+  background: rgba(0,0,0,.18); border: 1px solid var(--bd, rgba(255,255,255,.08)); transition: all .15s ease; }
+.nk-brand-opt:hover { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.3); }
+.nk-brand-opt svg { flex: none; color: var(--nk-violet, #8b5cf6); }
+.nk-brand-opt.nk-on { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.45); }
+.nk-brand-clear { color: var(--text-dim, rgba(248,250,252,.72)); }
+.nk-brand-clear svg { color: var(--text-dim, rgba(248,250,252,.5)) !important; }
+.nk-brand-empty { padding: 14px 4px; font-size: 13.5px; line-height: 1.5; color: var(--text-dim, rgba(248,250,252,.6)); }
 .nk-fiche-relance { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; padding: 9px 8px 9px 13px;
   border-radius: 999px; cursor: pointer; font-size: 13.5px; color: var(--text, #f8fafc);
   background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.3); transition: all .15s ease; }

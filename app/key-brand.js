@@ -278,7 +278,11 @@ export function openKeyBrand(opts = {}) {
   _buildShell();
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
-  _loadCharts();
+  // Deep-link (raccourci networK « Ouvrir une charte ») : ouvre directement la
+  // charte liée au contact. _loadCharts en fond pour que « retour » ait la
+  // bibliothèque prête ; en cas d'échec _openChart retombe sur la biblio.
+  if (opts && opts.chartId) { _loadCharts().then(() => _openChart(opts.chartId)); }
+  else { _loadCharts(); }
 }
 export function closeKeyBrand() {
   if (!_root) return;

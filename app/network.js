@@ -119,17 +119,26 @@ function _relDate(iso) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Tri alphabétique fr, insensible à la casse/aux accents (« é » = « e »),
+// par nom puis, à défaut, par société. Un contact sans nom passe en fin.
+function _byName(a, b) {
+  const ka = String(a.name || a.company || '￿');
+  const kb = String(b.name || b.company || '￿');
+  return ka.localeCompare(kb, 'fr', { sensitivity: 'base', numeric: true });
+}
+
 // Groupe les contacts par catégorie → structure de rendu de l'arbre.
 function _buildCats(categories, contacts) {
   const byCat = {};
   (contacts || []).forEach(ct => { const k = ct.category_id || '_none'; (byCat[k] = byCat[k] || []).push(ct); });
+  Object.values(byCat).forEach(list => list.sort(_byName));   // liste par ordre alphabétique
   const mk = (id, label, icon, all, orphan) => ({ id, label, icon, count: all.length,
     contacts: all.slice(0, PER_PAGE), extra: Math.max(0, all.length - PER_PAGE), _all: all, _orphan: orphan });
   const cats = (categories || []).map(c => mk(c.id, c.label, c.icon, byCat[c.id] || [], false));
   // Orphelins : sans catégorie OU rattachés à une catégorie supprimée → panier virtuel
   // (sinon ils disparaissent de l'arbre ET de la recherche). Non renommable/supprimable.
   const known = new Set((categories || []).map(c => String(c.id)));
-  const orphans = (contacts || []).filter(ct => !ct.category_id || !known.has(String(ct.category_id)));
+  const orphans = (contacts || []).filter(ct => !ct.category_id || !known.has(String(ct.category_id))).sort(_byName);
   if (orphans.length) cats.push(mk('__none__', 'Sans catégorie', 'folder', orphans, true));
   return cats;
 }
@@ -1076,6 +1085,9 @@ function _openFiche(contact) {
   // Anti-empilement : retirer toute fiche orpheline (une seule fiche à la fois).
   _root.querySelectorAll('.nk-fiche').forEach(e => { if (e !== _fiche) e.remove(); });
   _ficheId = contact.id; _ficheTabId = 'resume';
+  // Charte liée : charge la liste Key Brand puis rafraîchit la fiche pour afficher
+  // le NOM de la charte (et non son id). Silencieux si Key Brand est indispo.
+  _loadBrands().then(() => { if (_fiche && _ficheId === contact.id) { const cc = _contactById(_ficheId); if (cc) _renderFiche(cc); } });
   if (_fiche) { _renderFiche(contact); return; }   // panneau déjà ouvert → mise à jour en place (pas de flash)
   const el = document.createElement('div');
   el.className = 'nk-fiche';
@@ -1206,6 +1218,44 @@ function _relanceSection(c) {
     `<button class="nk-relance-x" data-act="nk-relance-clear" aria-label="Retirer la relance">${icon('x', 13)}</button></div>`;
 }
 
+// ── Charte graphique liée (O-BRD-001) ───────────────────────────
+// La liste des chartes vit dans Key Brand ; networK ne fait que la lire (même
+// JWT, même tenant) pour proposer un lien depuis la fiche. Cache mémoire.
+let _brands = null;
+async function _loadBrands(force) {
+  if (_brands && !force) return _brands;
+  try {
+    const res = await fetch(API_BASE + '/api/keybrand/charts', { headers: { 'Authorization': 'Bearer ' + _jwt() } });
+    const d = await res.json().catch(() => ({}));
+    _brands = (res.ok && Array.isArray(d.items)) ? d.items : [];
+  } catch (_) { _brands = []; }
+  return _brands;
+}
+function _brandName(id) { const b = (_brands || []).find(x => String(x.id) === String(id)); return b ? b.name : null; }
+// Section fiche : charte liée (clic = changer/délier) ou invite à en associer une.
+function _brandSection(c) {
+  const linked = c.brand_id ? _brandName(c.brand_id) : null;   // null si déliée OU charte supprimée
+  const inner = linked
+    ? `<button class="nk-coord nk-brand-row" data-act="nk-brand-pick" title="Changer ou délier la charte">${icon('keybrand', 18)}<span class="nk-coord-tx">${esc(linked)}</span>${icon('chevron-right', 15)}</button>`
+    : `<button class="nk-relance-btn" data-act="nk-brand-pick">${icon('keybrand', 15)} Associer une charte graphique</button>`;
+  return `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Charte graphique</div><div class="nk-coord-list">${inner}</div></div>`;
+}
+async function _openBrandPicker() {
+  const c = _contactById(_ficheId); if (!c) return;
+  const brands = await _loadBrands(true);   // liste fraîche à l'ouverture du sélecteur
+  const rows = brands.length
+    ? brands.map(b => {
+        const on = String(b.id) === String(c.brand_id);
+        return `<button class="nk-brand-opt${on ? ' nk-on' : ''}" data-act="nk-brand-set" data-id="${esc(b.id)}">${icon('keybrand', 18)}<span class="nk-coord-tx">${esc(b.name)}</span>${on ? icon('check', 16) : ''}</button>`;
+      }).join('')
+    : `<p class="nk-brand-empty">Aucune charte pour l'instant. Créez-en une dans Key Brand — elle apparaîtra ici.</p>`;
+  const clear = c.brand_id ? `<button class="nk-brand-opt nk-brand-clear" data-act="nk-brand-set" data-id="">${icon('x', 16)}<span class="nk-coord-tx">Délier la charte</span></button>` : '';
+  _openOverlay(
+    `<div class="nk-sheet-hd">Charte graphique<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
+     <div class="nk-brand-list">${rows}${clear}</div>`
+  );
+}
+
 // Bloc « Coordonnées » de la fiche : adresse + carte embarquée (Google Maps
 // keyless, `output=embed` — pas de clé/géocodage) et réseaux sociaux. Tél/mail/
 // site vivent désormais dans la barre d'actions du haut. Rendu si au moins un
@@ -1258,6 +1308,7 @@ function _renderFiche(c) {
       _birthdaySection(c) +
       _relanceSection(c) +
       _coordSection(c) +
+      _brandSection(c) +
       `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
          const d = SHORTCUT_DEFS[id]; if (!d) return '';
@@ -1350,6 +1401,24 @@ async function _saveNote(id, text) {
     if (cache) { const cc = (cache.contacts || []).find(x => String(x.id) === String(id)); if (cc) { cc.notes = text; _writeCache(cache); } }
   } catch (e) { /* silencieux : réessaie au prochain frappe */ }
 }
+// Fiche contact → payload vCard SDQR (clés identiques aux champs de
+// sdqr-types.js). Le nom est scindé : dernier mot = Nom, le reste = Prénom
+// (un seul mot → tout en Prénom). Réseaux sociaux mappés par type.
+function _vcardPrefill(c) {
+  const parts = String(c.name || '').trim().split(/\s+/).filter(Boolean);
+  const lastName  = parts.length > 1 ? parts.pop() : '';
+  const firstName = parts.join(' ') || (c.name || '');
+  const socials = _parseArr(c.socials);
+  const soc = (k) => { const s = socials.find(x => x && x.type === k); return s ? _href(s.url) : ''; };
+  return {
+    firstName, lastName,
+    org: c.company || '', title: c.title || '',
+    phone: c.phone || c.phone2 || '', email: c.email || '',
+    address: c.address || '',
+    website: c.website ? _href(c.website) : '',
+    linkedin: soc('linkedin'), instagram: soc('instagram'),
+  };
+}
 async function _openShortcut(padId) {
   const c = _contactById(_ficheId);
   // Contrat inter-pads : le contact voyage dans opts.nkContact. Chaque pad
@@ -1368,6 +1437,12 @@ async function _openShortcut(padId) {
   }
   // Sentinel : pré-remplit le champ « ajouter un site » avec le site du contact.
   if (padId === 'O-GEO-001' && c && c.website) opts.prefillUrl = _href(c.website);
+  // QR code : carte de visite vCard pré-remplie avec toute la fiche (SDQR lit
+  // opts.createVcard, clés == champs vCard de sdqr-types.js).
+  if (padId === 'A-COM-001' && c) { opts.createVcard = _vcardPrefill(c); opts.presetName = c.name; }
+  // Charte graphique : si une charte est liée à ce contact, l'ouvrir directement
+  // (sinon Key Brand s'ouvre sur la bibliothèque, comportement d'origine).
+  if (padId === 'O-BRD-001' && c && c.brand_id) opts.chartId = c.brand_id;
   // Fermer le workspace networK AVANT d'ouvrir la cible (piège z-index/overlay).
   closeNetwork();
   try { const m = await import('./ui-renderer.js'); m.openTool(padId, opts); } catch (_) {}
@@ -1740,6 +1815,8 @@ function _onClick(e) {
     case 'nk-expand':      return _expandCategory(actEl.dataset.cat || openCat);
     case 'nk-shortcut':    return _openShortcut(actEl.dataset.pad);
     case 'nk-discover':    return _discover(actEl.dataset.pad);
+    case 'nk-brand-pick':  return _openBrandPicker();
+    case 'nk-brand-set':   { const c = _contactById(_ficheId); if (!c) return; _closeOverlay(); const id = actEl.dataset.id || ''; _patchField(c.id, 'brand_id', id || null); _toast(id ? 'Charte liée' : 'Charte déliée'); return; }
     case 'nk-zoom-in':     return _setZoom(_zoom * 1.15);
     case 'nk-zoom-out':    return _setZoom(_zoom * 0.87);
     case 'nk-zoom-reset':  return _setZoom(1);

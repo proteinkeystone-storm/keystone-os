@@ -2235,7 +2235,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-BRD-001')  { openKeyBrand(opts); return; }       // Key Brand — charte graphique vivante, zéro IA (KB-0)
     if (padId === 'O-NET-001')  { openNetwork(opts); return; }        // networK — réseau relationnel vivant, V1 manuelle (NK-0)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
-    if (padId === 'A-COM-001') { openSDQR(); return; }
+    if (padId === 'A-COM-001') { openSDQR(opts); return; }   // opts.createVcard = handoff networK → QR vCard
     if (padId === 'A-COM-002') { openKodex(); return; }
     if (padId === 'A-COM-003') { openBrainstorming();  return; }
     if (padId === 'A-COM-004') { openPulsa(); return; }
