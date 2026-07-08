@@ -274,6 +274,7 @@ function _buildShell() {
   _root.addEventListener('submit', _onSubmit);
   _root.addEventListener('input', _onInput);
   _root.addEventListener('pointerdown', _onFicheActDown);
+  _root.addEventListener('error', _onImgError, true);   // capture : les erreurs <img> ne bouillonnent pas
   vp.addEventListener('pointerdown', _onPanStart);
   vp.addEventListener('wheel', _onWheel, { passive: false });
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
@@ -332,6 +333,35 @@ function bezier(x0, y0, x1, y1) {
 function hue(name) { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function initials(name) { return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(); }
+
+// ── Avatar : photo manuelle > logo société (domaine) > initiales ──
+// Messageries grand public : leur domaine N'EST PAS l'entreprise du contact → ignoré.
+const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'outlook.fr', 'hotmail.com', 'hotmail.fr',
+  'live.com', 'live.fr', 'msn.com', 'yahoo.com', 'yahoo.fr', 'ymail.com', 'icloud.com', 'me.com', 'mac.com',
+  'free.fr', 'orange.fr', 'wanadoo.fr', 'sfr.fr', 'neuf.fr', 'laposte.net', 'bbox.fr', 'aol.com',
+  'protonmail.com', 'proton.me', 'gmx.com', 'gmx.fr', 'yandex.com', 'zoho.com', 'tutanota.com']);
+function _logoDomain(c) {
+  let d = '';
+  if (c.website) { try { d = new URL(_href(c.website)).hostname; } catch (_) {} }
+  if (!d && c.email && c.email.includes('@')) {
+    const dom = c.email.split('@').pop().toLowerCase().trim();
+    if (dom && !FREEMAIL.has(dom)) d = dom;
+  }
+  return d.replace(/^www\./, '');
+}
+// Source d'avatar : photo (data URL) sinon logo société via le favicon souverain de
+// DuckDuckGo (pas de clé, pas de donnée perso — juste un domaine public). '' si aucune.
+function _avatarSrc(c) {
+  if (c.photo) return c.photo;
+  const d = _logoDomain(c);
+  return d ? `https://icons.duckduckgo.com/ip3/${d}.ico` : '';
+}
+// <img> à superposer sur l'avatar à initiales ; retiré à l'erreur (_onImgError) → repli initiales.
+function _avatarImg(c) {
+  const src = _avatarSrc(c);
+  if (!src) return '';
+  return `<img class="nk-av-img${c.photo ? '' : ' nk-av-logo'}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+}
 
 // Le centrage vertical vit dans le transform : tout transform animé le réintègre.
 function baseTx(el) { return el.classList.contains('nk-you2') ? '-50%' : '0px'; }
@@ -481,7 +511,7 @@ function spawnContacts(c, L, animated) {
     el.style.left = L.perX + 'px'; el.style.top = y + 'px';
     const h = hue(ct.name);
     el.innerHTML =
-      `<span class="nk-av" style="background:hsl(${h} 42% 38% / .85)">${esc(initials(ct.name))}</span>` +
+      `<span class="nk-av" style="background:hsl(${h} 42% 38% / .85)">${esc(initials(ct.name))}${_avatarImg(ct)}</span>` +
       `<span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>`;
     _nodes.appendChild(el);
 
@@ -717,6 +747,55 @@ function _openAddMenu() {
   );
 }
 
+// Aperçu photo du formulaire : image si présente, sinon initiales, sinon picto.
+function _photoPrevInner(seed) {
+  if (seed.photo) return `<img class="nk-av-img" src="${esc(seed.photo)}" alt="">`;
+  const nm = (seed.name || '').trim();
+  return nm ? esc(initials(nm)) : icon('user', 26);
+}
+// Redimensionne + recadre carré (~200px) côté navigateur → data URL JPEG légère.
+const PHOTO_SIZE = 200;
+function _resizePhoto(file, cb) {
+  const reader = new FileReader();
+  reader.onerror = () => cb(null);
+  reader.onload = () => {
+    const img = new Image();
+    img.onerror = () => cb(null);
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = PHOTO_SIZE;
+        const scale = Math.max(PHOTO_SIZE / img.width, PHOTO_SIZE / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, (PHOTO_SIZE - w) / 2, (PHOTO_SIZE - h) / 2, w, h);   // recadrage centré (cover)
+        cb(cv.toDataURL('image/jpeg', 0.82));
+      } catch (_) { cb(null); }
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function _pickPhoto() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if (!f) return;
+    _resizePhoto(f, url => url ? _setFormPhoto(url) : _toast('Image illisible', 'error')); };
+  inp.click();
+}
+function _setFormPhoto(url) {
+  if (!_overlay) return;
+  const hid = _overlay.querySelector('input[name="photo"]');
+  const prev = _overlay.querySelector('[data-photo-prev]');
+  const rm = _overlay.querySelector('[data-act="nk-photo-clear"]');
+  const btn = _overlay.querySelector('[data-act="nk-photo-pick"]');
+  const nm = (_overlay.querySelector('input[name="name"]') || {}).value || '';
+  if (hid) hid.value = url;
+  if (prev) prev.innerHTML = url ? `<img class="nk-av-img" src="${esc(url)}" alt="">` : (nm.trim() ? esc(initials(nm)) : icon('user', 26));
+  if (rm) rm.hidden = !url;
+  if (btn) btn.innerHTML = `${icon('image', 15)} ${url ? 'Changer la photo' : 'Ajouter une photo'}`;
+}
+
 // Une ligne d'édition « réseau social » (type + URL + retrait).
 function _socialRowHTML(s = {}) {
   const cur = s.type || 'linkedin';
@@ -741,6 +820,14 @@ function _openContactForm(seed = {}) {
   _openOverlay(
     `<div class="nk-sheet-hd">${isEdit ? 'Modifier le contact' : 'Nouveau contact'}<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
      <form class="nk-form" data-form="contact"${isEdit ? ` data-id="${esc(seed.id)}"` : ''}>
+       <div class="nk-photo-field">
+         <div class="nk-photo-prev" data-photo-prev>${_photoPrevInner(seed)}</div>
+         <div class="nk-photo-acts">
+           <button type="button" class="nk-photo-btn" data-act="nk-photo-pick">${icon('image', 15)} ${seed.photo ? 'Changer la photo' : 'Ajouter une photo'}</button>
+           <button type="button" class="nk-photo-rm" data-act="nk-photo-clear"${seed.photo ? '' : ' hidden'}>Retirer</button>
+         </div>
+         <input type="hidden" name="photo" value="${esc(seed.photo || '')}">
+       </div>
        <label class="nk-field"><span>Nom</span><input name="name" required maxlength="200" value="${esc(seed.name || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Type</span><select name="kind">${kindOpts}</select></label>
        <label class="nk-field"><span>Entreprise</span><input name="company" maxlength="200" value="${esc(seed.company || '')}" autocomplete="off"></label>
@@ -813,7 +900,7 @@ function _renderSearch(q) {
     _tagsText(c).toLowerCase().includes(ql)).slice(0, 8);
   if (!dd) { dd = document.createElement('div'); dd.className = 'nk-search-results'; box.appendChild(dd); }
   dd.innerHTML = hits.length
-    ? hits.map(c => `<button class="nk-search-item" data-id="${esc(c.id)}"><span class="nk-av nk-av-sm" style="background:hsl(${hue(c.name)} 42% 38% / .85)">${esc(initials(c.name))}</span><span class="nk-who"><span class="nk-nm">${esc(c.name)}</span><span class="nk-co">${esc(c.company || '')}</span></span></button>`).join('')
+    ? hits.map(c => `<button class="nk-search-item" data-id="${esc(c.id)}"><span class="nk-av nk-av-sm" style="background:hsl(${hue(c.name)} 42% 38% / .85)">${esc(initials(c.name))}${_avatarImg(c)}</span><span class="nk-who"><span class="nk-nm">${esc(c.name)}</span><span class="nk-co">${esc(c.company || '')}</span></span></button>`).join('')
     : `<div class="nk-search-empty">Aucun résultat</div>`;
 }
 function _clearSearch() {
@@ -854,6 +941,7 @@ async function _submitContact(form) {
     website: String(fd.get('website') || '').trim(),
     address: String(fd.get('address') || '').trim(),
     socials,
+    photo: String(fd.get('photo') || ''),
     category_id: fd.get('category_id') || null,
   };
   if (!payload.name) { _toast('Le nom est requis', 'error'); return; }
@@ -984,6 +1072,11 @@ async function _copyText(t) {
 }
 // Appui long (≥ 480 ms) sur une action de fiche → copie la valeur brute (data-copy)
 // au lieu de suivre le lien. Le clic qui suit le relâchement est avalé dans _onClick.
+// Logo/photo introuvable → on retire l'<img>, l'avatar à initiales dessous réapparaît.
+function _onImgError(e) {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains('nk-av-img')) t.remove();
+}
 function _onFicheActDown(e) {
   const a = e.target.closest('.nk-fiche-act[data-copy]');
   if (!a) return;
@@ -1041,7 +1134,7 @@ function _actRow(a, deletable) {
 function _renderFiche(c) {
   if (!_fiche) return;
   const roles = _parseArr(c.roles), tags = _parseArr(c.tags);
-  const av = `<span class="nk-fiche-av" style="background:hsl(${hue(c.name)} 42% 38% / .9)">${esc(initials(c.name))}</span>`;
+  const av = `<span class="nk-fiche-av" style="background:hsl(${hue(c.name)} 42% 38% / .9)">${esc(initials(c.name))}${_avatarImg(c)}</span>`;
   const badge = roles[0] ? `<span class="nk-fiche-badge">${esc(roles[0])}</span>` : `<span class="nk-fiche-badge nk-fiche-badge-soft">${KIND_LABELS[c.kind] || 'Contact'}</span>`;
   const tabs = FICHE_TABS.map(([id, lbl]) => `<button class="nk-fiche-tab${id === _ficheTabId ? ' nk-sel' : ''}" data-act="nk-fiche-tab" data-tab="${id}">${lbl}</button>`).join('');
 
@@ -1277,6 +1370,8 @@ function _vcardOf(c) {
   const cats = _parseArr(c.roles).concat(_parseArr(c.tags));
   if (cats.length) L.push('CATEGORIES:' + cats.map(_vc).join(','));
   if (c.notes)   L.push('NOTE:' + _vc(c.notes));
+  if (c.photo) { const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/i.exec(c.photo);
+    if (m) L.push('PHOTO;ENCODING=b;TYPE=' + m[1].toUpperCase().replace('JPG', 'JPEG') + ':' + m[2]); }
   L.push('END:VCARD');
   return L.join('\r\n');
 }
@@ -1455,6 +1550,8 @@ function _onClick(e) {
     case 'nk-new-cat':     _closeOverlay(); return _openCategoryForm(null);
     case 'nk-social-add':  { const w = _overlay && _overlay.querySelector('[data-socials]'); if (w) { w.insertAdjacentHTML('beforeend', _socialRowHTML()); w.lastElementChild.querySelector('.nk-social-url')?.focus(); } return; }
     case 'nk-social-del':  { const row = actEl.closest('.nk-social-row'); if (row) row.remove(); return; }
+    case 'nk-photo-pick':  return _pickPhoto();
+    case 'nk-photo-clear': return _setFormPhoto('');
     case 'nk-contact-del': return _deleteContact(actEl.dataset.id);
     case 'nk-cat-edit':    { _closePopover(); const c = _cats.find(x => String(x.id) === String(actEl.dataset.cat)); return _openCategoryForm(c); }
     case 'nk-cat-del':     { _closePopover(); return _deleteCategory(actEl.dataset.cat || actEl.dataset.id); }

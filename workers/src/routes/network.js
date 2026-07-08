@@ -30,6 +30,7 @@ const MAX_FIELD_LEN  = 200;
 const MAX_ADDR_LEN   = 400;   // adresse (lieu) : peut tenir sur plusieurs lignes
 const MAX_URL_LEN    = 400;   // site web / liens réseaux sociaux
 const MAX_SOCIALS    = 20;
+const MAX_PHOTO_LEN  = 300000; // photo manuelle = data URL base64 (~200px JPEG ≈ 20-30 Ko)
 const MAX_NOTES_LEN  = 8000;
 const MAX_CONTACTS   = 5000;   // garde-fou par tenant
 const MAX_CATEGORIES = 100;
@@ -63,6 +64,7 @@ async function _ensureSchema(env) {
        category_id TEXT, kind TEXT NOT NULL DEFAULT 'person',
        name TEXT NOT NULL, company TEXT, title TEXT, email TEXT, phone TEXT,
        phone2 TEXT, website TEXT, address TEXT, socials TEXT NOT NULL DEFAULT '[]',
+       photo TEXT,
        roles TEXT NOT NULL DEFAULT '[]', tags TEXT NOT NULL DEFAULT '[]',
        notes TEXT NOT NULL DEFAULT '', photo_key TEXT, position INTEGER NOT NULL DEFAULT 0,
        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
@@ -88,6 +90,7 @@ async function _ensureSchema(env) {
   if (!have.has('website')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN website TEXT`).run();
   if (!have.has('address')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN address TEXT`).run();
   if (!have.has('socials')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN socials TEXT NOT NULL DEFAULT '[]'`).run();
+  if (!have.has('photo'))   await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN photo TEXT`).run();
 
   _schemaReady = true;
 }
@@ -118,7 +121,7 @@ async function _gate(request, env, origin) {
 
 // ── Helpers ─────────────────────────────────────────────────────
 const CAT_COLS     = 'id, label, icon, position, created_at';
-const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, roles, tags, notes, position, created_at, updated_at';
+const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, roles, tags, notes, position, created_at, updated_at';
 const ACT_COLS     = 'id, contact_id, type, label, source, happened_at, created_at';
 const ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];
 function _s(v, max) { return v == null ? null : String(v).slice(0, max); }
@@ -129,6 +132,15 @@ function _jsonArr(v) {                          // valide un tableau JSON, sinon
 }
 // Réseaux sociaux : JSON [{type, url}, …] assaini (type court, url plafonnée,
 // entrées vides ignorées, plafond MAX_SOCIALS). Stocké en TEXT comme roles/tags.
+// Photo manuelle : accepte UNIQUEMENT une data URL image (base64), plafonnée.
+// '' = effacement explicite. Tout le reste (URL distante, non-image) → null (ignoré).
+function _photo(v) {
+  if (v == null) return null;
+  const s = String(v);
+  if (s === '') return '';
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(s)) return null;
+  return s.length > MAX_PHOTO_LEN ? null : s;
+}
 function _socials(v) {
   let arr = v;
   if (typeof v === 'string') { try { arr = JSON.parse(v); } catch (_) { arr = []; } }
@@ -276,12 +288,13 @@ export async function handleContactCreate(request, env) {
   const kind = KINDS.includes(body.kind) ? body.kind : 'person';
   const id = generateId();
   await env.DB.prepare(
-    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, roles, tags, notes, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, photo, roles, tags, notes, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, t, categoryId, kind, name,
     _s(body.company, MAX_FIELD_LEN), _s(body.title, MAX_FIELD_LEN),
     _s(body.email, MAX_FIELD_LEN), _s(body.phone, MAX_FIELD_LEN),
     _s(body.phone2, MAX_FIELD_LEN), _s(body.website, MAX_URL_LEN), _s(body.address, MAX_ADDR_LEN), _socials(body.socials),
+    _photo(body.photo),
     _jsonArr(body.roles), _jsonArr(body.tags), _s(body.notes, MAX_NOTES_LEN) || '',
     Number.isFinite(body.position) ? Number(body.position) : count).run();
 
@@ -317,6 +330,7 @@ export async function handleContactUpdate(request, env, id) {
   if (typeof body.website === 'string') { sets.push('website = ?'); vals.push(_s(body.website, MAX_URL_LEN)); }
   if (typeof body.address === 'string') { sets.push('address = ?'); vals.push(_s(body.address, MAX_ADDR_LEN)); }
   if ('socials' in body) { sets.push('socials = ?'); vals.push(_socials(body.socials)); }
+  if ('photo' in body) { const p = _photo(body.photo); if (p !== null) { sets.push('photo = ?'); vals.push(p); } }   // null = data invalide → on ignore
   if ('roles' in body) { sets.push('roles = ?'); vals.push(_jsonArr(body.roles)); }
   if ('tags'  in body) { sets.push('tags = ?');  vals.push(_jsonArr(body.tags)); }
   if (typeof body.notes === 'string') { sets.push('notes = ?'); vals.push(_s(body.notes, MAX_NOTES_LEN) || ''); }
