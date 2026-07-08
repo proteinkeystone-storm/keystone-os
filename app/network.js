@@ -170,6 +170,7 @@ let _fiche = null, _ficheId = null, _ficheTabId = 'resume';   // fiche contact (
 let _animPanel = null;   // panneau « Réglages animation »
 let _noteTimer = null;
 let _lpTimer = null, _lpFired = false;   // appui long sur les actions de fiche (copie)
+let _autoFit = false;                    // cadrage auto quand une catégorie déborde (multi-colonnes)
 
 function later(fn, ms) { const t = setTimeout(fn, ms); timeouts.push(t); return t; }
 function clearTimers() { timeouts.forEach(clearTimeout); timeouts.length = 0; }
@@ -196,7 +197,7 @@ export function closeNetwork() {
   _root = _stage = _wires = _nodes = _scene = null;
   _overlay = _popover = _fiche = _animPanel = null;
   _ficheId = null; _ficheTabId = 'resume';
-  openCat = null; _expandAll = false; _zoom = 1; _panX = _panY = 0;
+  openCat = null; _expandAll = false; _zoom = 1; _panX = _panY = 0; _autoFit = false;
   document.body.style.overflow = '';
 }
 
@@ -473,6 +474,7 @@ function render(animated = true) {
   }
   // Pan mobile : suit la catégorie ouverte, sinon revient à l'arbre (desktop : drag manuel préservé).
   if (_isMobile()) { if (openCat) _focusOpenCategory(false); else _panTo(0, 0, false); }
+  else if (!openCat && _autoFit) { _autoFit = false; _zoom = 1; _panX = _panY = 0; _applyTransform(); }
 }
 
 // Déplie les contacts d'une catégorie (cascade haut → bas).
@@ -497,18 +499,27 @@ function spawnContacts(c, L, animated) {
     return;
   }
 
-  const yTop = Math.max(70, Math.min(
-    c._y - ((list.length - 1) / 2) * L.perGap,
-    L.h - 70 - (list.length - 1) * L.perGap - (c.extra ? 44 : 0)));
+  // ── Disposition en colonnes : remplit la hauteur puis déborde à droite ──
+  // (desktop) ; mobile reste en colonne unique (navigation par glissement).
+  const PILL_W = 236, COL_W = PILL_W + 28;                       // largeur d'une colonne
+  const maxPerCol = L.mobile ? list.length : Math.max(4, Math.floor((L.h - 140) / L.perGap));
+  const nCols = Math.max(1, Math.ceil(list.length / maxPerCol));
+  const perCol = Math.ceil(list.length / nCols);                // colonnes équilibrées
+  // Grille centrée verticalement sur la catégorie, calée pour rester à l'écran.
+  const gridTop = Math.max(70, Math.min(
+    c._y - ((perCol - 1) / 2) * L.perGap,
+    L.h - 70 - (perCol - 1) * L.perGap - (c.extra ? 44 : 0)));
   const catRightX = L.catX + c._el.offsetWidth + 4;   // offsetWidth ignore le transform → départ stable
 
   list.forEach((ct, i) => {
-    const y = Math.max(70, yTop + i * L.perGap);
+    const col = Math.floor(i / perCol), row = i % perCol;
+    const x = L.perX + col * COL_W;
+    const y = Math.max(70, gridTop + row * L.perGap);
     const el = document.createElement('div');
     el.className = 'nk-node nk-person nk-enter';
     el.dataset.contact = c.id;
     if (ct.id) el.dataset.id = ct.id;     // NK-4 : ouverture de la fiche
-    el.style.left = L.perX + 'px'; el.style.top = y + 'px';
+    el.style.left = x + 'px'; el.style.top = y + 'px';
     const h = hue(ct.name);
     el.innerHTML =
       `<span class="nk-av" style="background:hsl(${h} 42% 38% / .85)">${esc(initials(ct.name))}${_avatarImg(ct)}</span>` +
@@ -516,9 +527,10 @@ function spawnContacts(c, L, animated) {
     _nodes.appendChild(el);
 
     const path = document.createElementNS(SVGNS, 'path');
-    path.setAttribute('d', bezier(catRightX, c._y, L.perX - 6, y));
+    path.setAttribute('d', bezier(catRightX, c._y, x - 6, y));
     path.dataset.contact = c.id;
     path.classList.add('nk-live');   // fil du circuit actif : reste coloré
+    if (col > 0) path.style.opacity = col === 1 ? '0.6' : '0.42';   // colonnes du fond plus discrètes
     _wires.appendChild(path);
     const len = path.getTotalLength();
     addFlow(path, i + 1, circuitDone);
@@ -535,7 +547,7 @@ function spawnContacts(c, L, animated) {
   });
 
   if (!_expandAll && c.extra) {
-    const y = Math.max(70, yTop + list.length * L.perGap) - 8;
+    const y = Math.max(70, gridTop + Math.min(perCol, list.length) * L.perGap) - 8;
     const more = document.createElement('button');
     more.className = 'nk-node nk-more nk-enter';
     more.style.left = L.perX + 'px'; more.style.top = y + 'px';
@@ -544,6 +556,27 @@ function spawnContacts(c, L, animated) {
     more.innerHTML = `${icon('chevron-down', 14)} Voir les ${c.extra} autres`;
     _nodes.appendChild(more);
     reveal(more, animated && !REDUCED ? list.length * P.stag + P.dur * .6 : 0);
+  }
+
+  // Cadrage auto (desktop) : si les colonnes débordent, dézoome juste ce qu'il faut
+  // pour que « Vous » → catégories → toutes les colonnes tiennent à l'écran.
+  if (!L.mobile) {
+    const vw = _dims().w;   // largeur réelle de la scène (layout() ne renvoie pas w)
+    const leftEdge  = L.you.x - 70;
+    const rightEdge = L.perX + (nCols - 1) * COL_W + PILL_W + 30;
+    const topEdge   = Math.min(gridTop, 60);
+    const botEdge   = Math.max(gridTop + (perCol - 1) * L.perGap + 56, L.h - 60);
+    const contentW  = rightEdge - leftEdge, contentH = botEdge - topEdge;
+    const fit = Math.min(1, (vw - 40) / contentW, (L.h - 40) / contentH);
+    if (fit < 0.995) {
+      _autoFit = true;
+      _zoom = Math.max(0.5, fit);
+      _panX = (vw - contentW * _zoom) / 2 - leftEdge * _zoom;
+      _panY = (L.h - contentH * _zoom) / 2 - topEdge * _zoom;
+      _applyTransform();
+    } else if (_autoFit) {   // ça tient de nouveau → on défait le cadrage
+      _autoFit = false; _zoom = 1; _panX = _panY = 0; _applyTransform();
+    }
   }
 }
 
@@ -589,6 +622,7 @@ function toggle(id) {
   } else {
     later(() => { if (my === seq) purge(); }, 220);
     if (_isMobile()) _panTo(0, 0, true);   // mobile : retour à l'arbre
+    else if (_autoFit) { _autoFit = false; _zoom = 1; _panX = _panY = 0; _applyTransform(); }   // desktop : défait le cadrage auto
   }
 }
 
