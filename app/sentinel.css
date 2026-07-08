@@ -13,6 +13,9 @@
 .snt-alerts { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ws-text-soft); background: transparent; border: 1px solid var(--ws-border); border-radius: 999px; padding: 7px 14px; cursor: pointer; white-space: nowrap; }
 .snt-alerts:hover { border-color: var(--ws-accent); color: var(--ws-accent); }
 .snt-alerts.on { color: var(--ws-accent); background: var(--ws-accent-soft); border-color: transparent; }
+.snt-alerts[disabled] { opacity: .6; cursor: default; }
+.snt-alerts-wrap { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 340px; }
+.snt-alerts-msg { font-size: 12px; line-height: 1.45; color: #f0b429; text-align: right; }
 
 .snt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(252px, 1fr)); gap: 14px; margin-bottom: 28px; }
 

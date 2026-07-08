@@ -47,6 +47,8 @@ let _auditing = new Set();
 let _poll = null;
 let _alerts = false;
 let _alertsSupported = false;
+let _alertsBusy = false;   // activation en cours (feedback immédiat, anti-double-clic)
+let _alertsMsg = '';       // message inline (échec/raison) — PAS d'alert() : suppr. en PWA installée
 let _panel = null;
 let _emailEnabled = false;   // S4.1 — l'envoi webmaster n'est exposé que si le serveur l'a câblé
 let _geoEnabled = false;     // S5 — la visibilité IA (GEO) n'est exposée que si une clé Gemini est câblée
@@ -280,7 +282,18 @@ function _addBlock(atLimit, limitTxt) {
 // ── Alertes web push (S1.5) ─────────────────────────────────────
 function _alertsBtn() {
   if (!_alertsSupported) return '';
-  return `<button class="snt-alerts ${_alerts ? 'on' : ''}" data-act="alerts">${icon('bell', 15)} ${_alerts ? 'Alertes activées' : 'Activer les alertes'}</button>`;
+  const label = _alertsBusy ? 'Activation…' : (_alerts ? 'Alertes activées' : 'Activer les alertes');
+  return `<div class="snt-alerts-wrap">
+    <button class="snt-alerts ${_alerts ? 'on' : ''}" data-act="alerts"${_alertsBusy ? ' disabled' : ''}>${icon('bell', 15)} ${label}</button>
+    ${_alertsMsg ? `<span class="snt-alerts-msg">${_esc(_alertsMsg)}</span>` : ''}
+  </div>`;
+}
+// Attend le service worker actif, mais PAS indéfiniment : sans garde-fou, un SW
+// non contrôlant fait « pendre » l'activation → le bouton reste grisé sans erreur.
+function _swReadyTimeout(ms) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error('service worker indisponible — rechargez la page')), ms); });
+  return Promise.race([navigator.serviceWorker.ready.then(r => { clearTimeout(t); return r; }), timeout]);
 }
 function _vapidBytes() {
   const s = SNT_VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
@@ -297,22 +310,42 @@ async function _initAlerts() {
   _render();
 }
 async function _toggleAlerts() {
-  if (!_alertsSupported) return;
+  if (!_alertsSupported || _alertsBusy) return;
+
+  // ── Désactivation ──
   if (_alerts) {
-    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) { try { await _api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }); } catch (_) {} await sub.unsubscribe(); } } catch (_) {}
-    _alerts = false; _render(); return;
+    _alertsBusy = true; _alertsMsg = ''; _render();
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { try { await _api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }); } catch (_) {} await sub.unsubscribe(); }
+    } catch (_) { /* on désactive côté UI quoi qu'il arrive */ }
+    _alerts = false; _alertsBusy = false; _render(); return;
   }
-  let perm = Notification.permission;
-  if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (_) {} }
-  if (perm !== 'granted') { alert('Autorisez les notifications dans votre navigateur pour recevoir les alertes.'); return; }
+
+  // ── Activation ──
+  // 'denied' = l'utilisateur (ou le navigateur) a bloqué : JS ne PEUT PLUS
+  // redemander la permission → message actionnable, pas un clic dans le vide.
+  if (Notification.permission === 'denied') {
+    _alertsMsg = 'Notifications bloquées pour ce site. Réactivez-les via le cadenas 🔒 dans la barre d\'adresse (ou les réglages du navigateur), puis rechargez.';
+    _render(); return;
+  }
+  _alertsBusy = true; _alertsMsg = ''; _render();
   try {
-    const reg = await navigator.serviceWorker.ready;
+    let perm = Notification.permission;
+    if (perm === 'default') perm = await Notification.requestPermission();
+    if (perm !== 'granted') { _alertsMsg = 'Autorisez les notifications pour recevoir les alertes.'; _alertsBusy = false; _render(); return; }
+    const reg = await _swReadyTimeout(8000);
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidBytes() });
     const j = sub.toJSON();
     if (j && j.keys) await _api('/push/subscribe', { method: 'POST', body: { endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth } });
-    _alerts = true;
-  } catch (e) { alert('Activation impossible : ' + (e.message || e)); }
+    _alerts = true; _alertsMsg = '';
+  } catch (e) {
+    console.warn('[sentinel] activation des alertes échouée :', e);   // trace réelle pour diagnostic
+    _alertsMsg = 'Activation impossible : ' + (e && e.message ? e.message : 'erreur inconnue') + '.';
+  }
+  _alertsBusy = false;
   _render();
 }
 
