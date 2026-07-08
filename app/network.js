@@ -274,7 +274,8 @@ function _buildShell() {
   _root.addEventListener('submit', _onSubmit);
   _root.addEventListener('input', _onInput);
   _root.addEventListener('pointerdown', _onFicheActDown);
-  _root.addEventListener('error', _onImgError, true);   // capture : les erreurs <img> ne bouillonnent pas
+  _root.addEventListener('error', _onImgError, true);   // capture : erreurs/chargements <img> ne bouillonnent pas
+  _root.addEventListener('load', _onImgLoad, true);
   vp.addEventListener('pointerdown', _onPanStart);
   vp.addEventListener('wheel', _onWheel, { passive: false });
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
@@ -349,18 +350,17 @@ function _logoDomain(c) {
   }
   return d.replace(/^www\./, '');
 }
-// Source d'avatar : photo (data URL) sinon logo société via le favicon souverain de
-// DuckDuckGo (pas de clé, pas de donnée perso — juste un domaine public). '' si aucune.
-function _avatarSrc(c) {
-  if (c.photo) return c.photo;
-  const d = _logoDomain(c);
-  return d ? `https://icons.duckduckgo.com/ip3/${d}.ico` : '';
-}
-// <img> à superposer sur l'avatar à initiales ; retiré à l'erreur (_onImgError) → repli initiales.
+// <img> superposé à l'avatar à initiales.
+//  · photo manuelle (data URL) : affichée telle quelle.
+//  · logo société : favicon souverain DuckDuckGo (sans clé, juste un domaine public).
+//    Marqué data-logo + masqué (opacity 0) : il n'apparaît QUE s'il est franc —
+//    validé à _onImgLoad (≥ 32px, pas le placeholder 48×48 « pas de favicon »).
+//    Sinon (petit/blanc/erreur) il est retiré → les initiales restent. Zéro rond blanc.
 function _avatarImg(c) {
-  const src = _avatarSrc(c);
-  if (!src) return '';
-  return `<img class="nk-av-img${c.photo ? '' : ' nk-av-logo'}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  if (c.photo) return `<img class="nk-av-img" src="${esc(c.photo)}" alt="">`;
+  const d = _logoDomain(c);
+  if (!d) return '';
+  return `<img class="nk-av-img nk-av-logo" data-logo="1" src="https://icons.duckduckgo.com/ip3/${encodeURIComponent(d)}.ico" alt="" loading="lazy" referrerpolicy="no-referrer">`;
 }
 
 // Le centrage vertical vit dans le transform : tout transform animé le réintègre.
@@ -1082,6 +1082,16 @@ async function _copyText(t) {
 function _onImgError(e) {
   const t = e.target;
   if (t && t.classList && t.classList.contains('nk-av-img')) t.remove();
+}
+// Logo chargé : ne l'afficher que s'il est FRANC. DuckDuckGo renvoie un placeholder
+// 48×48 quand le domaine n'a pas de favicon, et les favicons blancs/inutiles sont des
+// 16×16 → on les rejette (repli initiales). Un vrai logo (≥ 32px) reçoit .nk-ok (fade-in).
+function _onImgLoad(e) {
+  const t = e.target;
+  if (!t || !t.classList || !t.classList.contains('nk-av-logo')) return;   // photos manuelles = non filtrées
+  const w = t.naturalWidth, h = t.naturalHeight;
+  if (!w || w < 32 || (w === 48 && h === 48)) { t.remove(); return; }
+  t.classList.add('nk-ok');
 }
 function _onFicheActDown(e) {
   const a = e.target.closest('.nk-fiche-act[data-copy]');
