@@ -84,6 +84,19 @@ export function openSentinel(opts = {}) {
   _load();
   _initAlerts();
   _startPoll();
+  // Handoff (ex. networK → « Auditer un site ») : pré-remplit le champ d'ajout.
+  if (opts && opts.prefillUrl) _prefillAddUrl(String(opts.prefillUrl));
+}
+// Le formulaire d'ajout est toujours rendu en tête de liste ; on attend qu'il
+// existe (après le _load async) puis on injecte l'URL et on donne le focus.
+function _prefillAddUrl(url) {
+  let tries = 0;
+  const set = () => {
+    const i = _root && _root.querySelector('.snt-add [name="url"]');
+    if (i) { i.value = url; try { i.focus(); } catch (_) {} return; }
+    if (++tries < 12) setTimeout(set, 120);
+  };
+  set();
 }
 export function closeSentinel() {
   if (!_root) return;

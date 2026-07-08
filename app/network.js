@@ -1192,6 +1192,20 @@ function _birthdaySection(c) {
   return `<div class="nk-fiche-bday${b.days <= 7 ? ' nk-bday-soon' : ''}">${icon('calendar', 15)}<span>${esc(bits.join(' · '))}</span>${bell}</div>`;
 }
 
+// Relance (rappel de recontact) : bouton « Programmer » si vide, sinon la relance
+// datée (clic = éditer, croix = retirer). Surlignée si due (aujourd'hui/en retard).
+function _relanceSection(c) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(c.relance_at || '');
+  if (!m) return `<button class="nk-relance-btn" data-act="nk-relance-edit">${icon('clock', 15)} Programmer une relance</button>`;
+  const label = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const now = new Date(), todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((new Date(+m[1], +m[2] - 1, +m[3]) - todayMid) / 86400000);
+  const when = days < 0 ? `en retard de ${-days} j` : days === 0 ? "aujourd'hui" : days === 1 ? 'demain' : `dans ${days} j`;
+  return `<div class="nk-fiche-relance${days <= 0 ? ' nk-relance-due' : ''}" data-act="nk-relance-edit">${icon('clock', 15)}` +
+    `<span class="nk-coord-tx">Recontacter ${label} · ${when}${c.relance_note ? ' · ' + esc(c.relance_note) : ''}</span>` +
+    `<button class="nk-relance-x" data-act="nk-relance-clear" aria-label="Retirer la relance">${icon('x', 13)}</button></div>`;
+}
+
 // Bloc « Coordonnées » de la fiche : adresse + carte embarquée (Google Maps
 // keyless, `output=embed` — pas de clé/géocodage) et réseaux sociaux. Tél/mail/
 // site vivent désormais dans la barre d'actions du haut. Rendu si au moins un
@@ -1243,6 +1257,7 @@ function _renderFiche(c) {
       : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
       _birthdaySection(c) +
+      _relanceSection(c) +
       _coordSection(c) +
       `<div class="nk-fiche-row2">
          <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
@@ -1355,6 +1370,8 @@ async function _openShortcut(padId) {
     const who = c.company ? `${c.name} (${c.company})` : c.name;
     opts.compose = { text: `Pour ${who} :\n\n` };
   }
+  // Sentinel : pré-remplit le champ « ajouter un site » avec le site du contact.
+  if (padId === 'O-GEO-001' && c && c.website) opts.prefillUrl = _href(c.website);
   // Fermer le workspace networK AVANT d'ouvrir la cible (piège z-index/overlay).
   closeNetwork();
   try { const m = await import('./ui-renderer.js'); m.openTool(padId, opts); } catch (_) {}
@@ -1363,6 +1380,45 @@ async function _openShortcut(padId) {
 async function _discover(padId) {
   closeNetwork();
   try { const m = await import('./ui-renderer.js'); m.openKStoreAppDetail(padId); } catch (_) {}
+}
+
+// ── Relance (rappel de recontact) ───────────────────────────────
+function _openRelanceForm() {
+  const c = _contactById(_ficheId); if (!c) return;
+  const d = new Date();
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  _openOverlay(
+    `<div class="nk-sheet-hd">Programmer une relance<button class="nk-sheet-x" data-act="nk-ov-close" aria-label="Fermer">${icon('x', 18)}</button></div>
+     <form class="nk-form" data-form="relance">
+       <label class="nk-field"><span>Recontacter le</span><input name="relance_at" type="date" value="${esc(c.relance_at || iso)}"></label>
+       <label class="nk-field"><span>Note <em class="nk-opt">· optionnel</em></span><input name="relance_note" maxlength="200" value="${esc(c.relance_note || '')}" placeholder="Ex. relancer sur le devis" autocomplete="off"></label>
+       <div class="nk-form-actions">${c.relance_at ? `<button type="button" class="nk-btn nk-btn-danger" data-act="nk-relance-clear">Retirer</button>` : '<span></span>'}<button type="submit" class="nk-btn nk-btn-primary">Programmer</button></div>
+     </form>`,
+    ov => { const i = ov.querySelector('input[name="relance_at"]'); if (i) i.focus(); }
+  );
+}
+async function _submitRelance(form) {
+  const fd = new FormData(form);
+  const at = String(fd.get('relance_at') || '').trim();
+  if (!at) { _toast('Choisissez une date', 'error'); return; }
+  const btn = form.querySelector('[type="submit"]');
+  if (btn) { btn.disabled = true; btn.dataset.lbl = btn.textContent; btn.textContent = '…'; }
+  try {
+    await _api('/contact/' + _ficheId, { method: 'PATCH', body: { relance_at: at, relance_note: String(fd.get('relance_note') || '').trim() } });
+    await _refresh();
+    _closeOverlay();
+    _toast('Relance programmée');
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.lbl || 'Programmer'; }
+    _toast(err.status === 401 ? 'Session expirée — reconnectez-vous' : 'Enregistrement impossible', 'error');
+  }
+}
+async function _clearRelance() {
+  const id = _ficheId; if (!id) return;
+  try {
+    await _api('/contact/' + id, { method: 'PATCH', body: { relance_at: '', relance_note: '' } });
+    await _refresh(); _closeOverlay(); _toast('Relance retirée');
+  } catch (err) { _toast('Suppression impossible', 'error'); }
 }
 
 // ── Ajout / suppression d'activité (NK-5) ───────────────────────
@@ -1676,6 +1732,8 @@ function _onClick(e) {
     case 'nk-fiche-edit':  { const c = _contactById(_ficheId); if (c) _openContactForm(c); return; }
     case 'nk-fiche-tab':   return _ficheTab(actEl.dataset.tab);
     case 'nk-bday-remind': { const c = _contactById(_ficheId); if (!c) return; const nv = c.birthday_remind ? 0 : 1; _patchField(c.id, 'birthday_remind', nv); _toast(nv ? 'Rappel activé' : 'Rappel désactivé'); return; }
+    case 'nk-relance-edit':  return _openRelanceForm();
+    case 'nk-relance-clear': return _clearRelance();
     case 'nk-copy':        return _copyText(actEl.dataset.copy);
     case 'nk-role-add':    return _addChip('roles');
     case 'nk-role-del':    return _delChip('roles', actEl.dataset.val);
@@ -1704,6 +1762,7 @@ function _onSubmit(e) {
   if (form.dataset.form === 'contact') _submitContact(form);
   else if (form.dataset.form === 'category') _submitCategory(form);
   else if (form.dataset.form === 'activity') _submitActivity(form);
+  else if (form.dataset.form === 'relance') _submitRelance(form);
 }
 
 let _searchTimer = null;

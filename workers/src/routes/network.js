@@ -65,6 +65,7 @@ async function _ensureSchema(env) {
        name TEXT NOT NULL, company TEXT, title TEXT, email TEXT, phone TEXT,
        phone2 TEXT, website TEXT, address TEXT, socials TEXT NOT NULL DEFAULT '[]',
        vat_intra TEXT, photo TEXT, birthday TEXT, birthday_remind INTEGER NOT NULL DEFAULT 0,
+       relance_at TEXT, relance_note TEXT,
        roles TEXT NOT NULL DEFAULT '[]', tags TEXT NOT NULL DEFAULT '[]',
        notes TEXT NOT NULL DEFAULT '', photo_key TEXT, position INTEGER NOT NULL DEFAULT 0,
        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
@@ -94,6 +95,8 @@ async function _ensureSchema(env) {
   if (!have.has('birthday')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday TEXT`).run();
   if (!have.has('birthday_remind')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN birthday_remind INTEGER NOT NULL DEFAULT 0`).run();
   if (!have.has('vat_intra')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN vat_intra TEXT`).run();
+  if (!have.has('relance_at')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN relance_at TEXT`).run();
+  if (!have.has('relance_note')) await env.DB.prepare(`ALTER TABLE nk_contacts ADD COLUMN relance_note TEXT`).run();
 
   _schemaReady = true;
 }
@@ -124,7 +127,7 @@ async function _gate(request, env, origin) {
 
 // ── Helpers ─────────────────────────────────────────────────────
 const CAT_COLS     = 'id, label, icon, position, created_at';
-const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, roles, tags, notes, position, created_at, updated_at';
+const CONTACT_COLS = 'id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, relance_at, relance_note, roles, tags, notes, position, created_at, updated_at';
 const ACT_COLS     = 'id, contact_id, type, label, source, happened_at, created_at';
 const ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];
 function _s(v, max) { return v == null ? null : String(v).slice(0, max); }
@@ -300,14 +303,15 @@ export async function handleContactCreate(request, env) {
   const kind = KINDS.includes(body.kind) ? body.kind : 'person';
   const id = generateId();
   await env.DB.prepare(
-    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, roles, tags, notes, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO nk_contacts (id, tenant_id, category_id, kind, name, company, title, email, phone, phone2, website, address, socials, vat_intra, photo, birthday, birthday_remind, relance_at, relance_note, roles, tags, notes, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, t, categoryId, kind, name,
     _s(body.company, MAX_FIELD_LEN), _s(body.title, MAX_FIELD_LEN),
     _s(body.email, MAX_FIELD_LEN), _s(body.phone, MAX_FIELD_LEN),
     _s(body.phone2, MAX_FIELD_LEN), _s(body.website, MAX_URL_LEN), _s(body.address, MAX_ADDR_LEN), _socials(body.socials),
     _s(body.vat_intra, MAX_FIELD_LEN),
     _photo(body.photo), _birthday(body.birthday), _bool01(body.birthday_remind),
+    _birthday(body.relance_at), _s(body.relance_note, MAX_FIELD_LEN),
     _jsonArr(body.roles), _jsonArr(body.tags), _s(body.notes, MAX_NOTES_LEN) || '',
     Number.isFinite(body.position) ? Number(body.position) : count).run();
 
@@ -346,6 +350,8 @@ export async function handleContactUpdate(request, env, id) {
   if ('photo' in body) { const p = _photo(body.photo); if (p !== null) { sets.push('photo = ?'); vals.push(p); } }   // null = data invalide → on ignore
   if ('birthday' in body) { const b = _birthday(body.birthday); if (b !== null) { sets.push('birthday = ?'); vals.push(b); } }
   if ('birthday_remind' in body) { sets.push('birthday_remind = ?'); vals.push(_bool01(body.birthday_remind)); }
+  if ('relance_at' in body) { const r = _birthday(body.relance_at); if (r !== null) { sets.push('relance_at = ?'); vals.push(r); } }
+  if ('relance_note' in body) { sets.push('relance_note = ?'); vals.push(_s(body.relance_note, MAX_FIELD_LEN)); }
   if ('roles' in body) { sets.push('roles = ?'); vals.push(_jsonArr(body.roles)); }
   if ('tags'  in body) { sets.push('tags = ?');  vals.push(_jsonArr(body.tags)); }
   if (typeof body.notes === 'string') { sets.push('notes = ?'); vals.push(_s(body.notes, MAX_NOTES_LEN) || ''); }

@@ -536,6 +536,31 @@ async function _sensorNetworkBirthdays(env, tenantId) {
   } catch (e) { return { today: [], todayCount: 0, soon: null, soonCount: 0 }; }
 }
 
+// networK : relances (recontact) dues — en retard, aujourd'hui, ou sous 7 jours.
+// relance_at 'YYYY-MM-DD' comparé au jour Europe/Paris. La plus urgente d'abord.
+async function _sensorNetworkRelances(env, tenantId) {
+  if (!tenantId) return { due: null, overdueCount: 0, dueCount: 0 };
+  try {
+    const today = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const horizon = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 7 * 86400000));
+    const rows = (await env.DB.prepare(
+      `SELECT name, relance_at, relance_note FROM nk_contacts
+       WHERE tenant_id = ? AND relance_at IS NOT NULL AND relance_at != '' AND relance_at <= ?
+       ORDER BY relance_at ASC LIMIT 50`
+    ).bind(tenantId, horizon).all().catch(() => null))?.results || [];
+    if (!rows.length) return { due: null, overdueCount: 0, dueCount: 0 };
+    let overdueCount = 0, dueCount = 0;
+    for (const r of rows) { if (r.relance_at < today) overdueCount++; else if (r.relance_at === today) dueCount++; }
+    const top = rows[0];   // la plus ancienne / urgente
+    const days = Math.round((new Date(top.relance_at + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000);
+    return {
+      due: { name: (top.name || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 60),
+             note: (top.relance_note || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 60), days },
+      overdueCount, dueCount,
+    };
+  } catch (e) { return { due: null, overdueCount: 0, dueCount: 0 }; }
+}
+
 // Sentinel : sites surveillés + combien hors ligne (last_ok = 0).
 async function _sensorSentinel(env, tenantId) {
   if (!tenantId) return { total: 0, down: 0, downLabel: '' };
@@ -664,7 +689,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -697,6 +722,20 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
       text: `Rappel bientôt : ${keynapse.soonLabel}.`,
       score: 91, topic: 'keynapse',
     });
+  }
+  // networK : relance (recontact) due — en retard / aujourd'hui = action forte.
+  if (relances.due) {
+    const d = relances.due.days, who = relances.due.name, note = relances.due.note;
+    const tail = note ? ` (${note})` : '';
+    if (d < 0) {
+      candidates.push({ text: relances.overdueCount > 1
+        ? `${relances.overdueCount} relances en retard, dont ${who}${tail}.`
+        : `Relance en retard : recontacter ${who}${tail}.`, score: 92, topic: 'network' });
+    } else if (d === 0) {
+      candidates.push({ text: `À recontacter aujourd'hui : ${who}${tail}.`, score: 90, topic: 'network' });
+    } else {
+      candidates.push({ text: `Relance prévue ${d === 1 ? 'demain' : 'dans ' + d + ' jours'} : ${who}${tail}.`, score: 56, topic: 'network' });
+    }
   }
   // networK : anniversaire d'un contact aujourd'hui (chaleureux, à ne pas manquer).
   if (network.todayCount === 1) {
@@ -838,7 +877,7 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
   const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
@@ -1155,7 +1194,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, pilotable, followedQr, followedSite] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1168,12 +1207,13 @@ export async function handleLivingBoard(request, env) {
     _sensorSceau(env, padTenant),
     _sensorKeyBrand(env, padTenant),
     _sensorNetworkBirthdays(env, padTenant),
+    _sensorNetworkRelances(env, padTenant),
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
     _sensorFollowedSite(env, padTenant, followedSiteId),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).

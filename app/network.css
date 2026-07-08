@@ -344,6 +344,23 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .nk-bday-bell:hover { color: var(--text, #f8fafc); background: rgba(255,255,255,.07); }
 .nk-bday-bell.nk-on { color: var(--nk-violet, #8b5cf6); }
 
+/* Relance (rappel de recontact) — fiche */
+.nk-relance-btn { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px; padding: 9px 14px;
+  border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 13.5px; font-weight: 600;
+  background: transparent; border: 1px dashed var(--bd, rgba(255,255,255,.2)); color: var(--text-dim, rgba(248,250,252,.72)); transition: all .15s ease; }
+.nk-relance-btn:hover { border-color: rgba(139,92,246,.55); color: var(--text, #f8fafc); background: rgba(139,92,246,.08); }
+.nk-relance-btn svg { color: var(--nk-violet, #8b5cf6); }
+.nk-fiche-relance { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; padding: 9px 8px 9px 13px;
+  border-radius: 999px; cursor: pointer; font-size: 13.5px; color: var(--text, #f8fafc);
+  background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.3); transition: all .15s ease; }
+.nk-fiche-relance:hover { border-color: rgba(139,92,246,.5); }
+.nk-fiche-relance > svg { color: var(--nk-violet, #8b5cf6); flex: none; }
+.nk-fiche-relance.nk-relance-due { background: rgba(251,146,60,.15); border-color: rgba(251,146,60,.5); }
+.nk-fiche-relance.nk-relance-due > svg { color: #fb923c; }
+.nk-relance-x { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  border: none; background: transparent; color: var(--text-dim, rgba(248,250,252,.5)); transition: all .15s ease; }
+.nk-relance-x:hover { background: rgba(255,255,255,.1); color: var(--text, #f8fafc); }
+
 /* Case à cocher (formulaire) */
 .nk-check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin: -2px 0 2px; font-size: 13.5px; color: var(--text-dim, rgba(248,250,252,.72)); }
 .nk-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--nk-violet, #8b5cf6); cursor: pointer; flex: none; }
